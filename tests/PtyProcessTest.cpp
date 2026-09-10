@@ -191,18 +191,21 @@ void PtyProcessTest::controlCInterruptsForegroundCommand() {
     process.send(QByteArray("printf '__KETPLUS_READY__\\n'\n"));
     QTRY_VERIFY_WITH_TIMEOUT(output.contains("__KETPLUS_READY__"), 5000);
     output.clear();
-    process.send(QByteArray("sleep 30; printf '__SLEEP_COMPLETED__\\n'\n"));
-    QTest::qWait(100);
+    process.send(QByteArray(
+        "printf '__SLEEP_STARTED__\\n'; sleep 30; printf '__SLEEP_COMPLETED__\\n'\n"));
+    QTRY_VERIFY_WITH_TIMEOUT(output.contains("__SLEEP_STARTED__"), 5000);
+    output.clear();
 #if defined(Q_OS_MACOS)
     QTest::keyClick(&terminal, Qt::Key_C, Qt::MetaModifier);
 #else
     QTest::keyClick(&terminal, Qt::Key_C, Qt::ControlModifier);
 #endif
-    QTest::qWait(100);
-    process.send(QByteArray("printf '__AFTER_INTERRUPT__\\n'; exit\n"));
+    process.send(QByteArray("printf '__AFTER_INTERRUPT__\\n'\n"));
+    QTRY_VERIFY_WITH_TIMEOUT(output.contains("__AFTER_INTERRUPT__"), 7000);
+    process.send(QByteArray("exit\n"));
 
     QTRY_VERIFY_WITH_TIMEOUT(!exitSpy.isEmpty(), 7000);
-    QVERIFY2(output.contains("__AFTER_INTERRUPT__"), output.constData());
+    QVERIFY2(!output.contains("__SLEEP_COMPLETED__"), output.constData());
 #else
     QSKIP("The first PTY backend targets macOS and Linux.");
 #endif
