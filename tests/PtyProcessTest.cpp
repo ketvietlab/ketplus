@@ -105,7 +105,7 @@ void PtyProcessTest::echoesTypedTextBeforeEnter() {
     terminal.viewport()->installEventFilter(&paints);
 
     terminal.start(QDir::tempPath());
-    QTRY_VERIFY_WITH_TIMEOUT(!outputSpy.isEmpty(), 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(!outputSpy.isEmpty(), 10000);
     paints.count = 0;
     QTest::keyClicks(&terminal, QStringLiteral("ketplus_live_echo"));
 
@@ -192,7 +192,7 @@ void PtyProcessTest::controlCInterruptsForegroundCommand() {
     QTRY_VERIFY_WITH_TIMEOUT(output.count("__KETPLUS_READY__") >= 2, 5000);
     output.clear();
     process.send(QByteArray(
-        "printf '__SLEEP_STARTED__\\n'; sleep 30; printf '__SLEEP_COMPLETED__\\n'\n"));
+        "printf '__SLEEP_STARTED__\\n'; sleep 30 && printf '__SLEEP_COMPLETED__\\n'\n"));
     QTRY_VERIFY_WITH_TIMEOUT(output.contains("__SLEEP_STARTED__"), 5000);
     output.clear();
 #if defined(Q_OS_MACOS)

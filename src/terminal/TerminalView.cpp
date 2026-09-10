@@ -243,6 +243,7 @@ void TerminalView::resizeEvent(QResizeEvent* event) {
 }
 
 void TerminalView::keyPressEvent(QKeyEvent* event) {
+#if defined(Q_OS_MACOS)
     if (event->matches(QKeySequence::Paste)) {
         pasteClipboard();
         event->accept();
@@ -252,6 +253,21 @@ void TerminalView::keyPressEvent(QKeyEvent* event) {
         event->accept();
         return;
     }
+#else
+    const auto modifiers = event->modifiers();
+    const bool terminalClipboardShortcut =
+        (modifiers & (Qt::ControlModifier | Qt::ShiftModifier)) ==
+        (Qt::ControlModifier | Qt::ShiftModifier);
+    if (terminalClipboardShortcut && event->key() == Qt::Key_V) {
+        pasteClipboard();
+        event->accept();
+        return;
+    }
+    if (terminalClipboardShortcut && event->key() == Qt::Key_C) {
+        event->accept();
+        return;
+    }
+#endif
     if (!process_.isRunning()) {
         QAbstractScrollArea::keyPressEvent(event);
         return;
