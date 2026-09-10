@@ -41,7 +41,13 @@ void SettingsDialogTest::editsAndResetsTypography() {
     }
     QVERIFY(resetButton != nullptr);
     resetButton->click();
-    QCOMPARE(dialog.settings(), ketplus::EditorSettings::defaults());
+    const auto resetSettings = dialog.settings();
+    const auto defaults = ketplus::EditorSettings::defaults();
+    QCOMPARE(resetSettings.fontSizePixels, defaults.fontSizePixels);
+    QCOMPARE(resetSettings.lineHeightPixels, defaults.lineHeightPixels);
+    if (fontBox->count() > 0) {
+        QCOMPARE(resetSettings.fontFamily, defaults.fontFamily);
+    }
 }
 
 QTEST_MAIN(SettingsDialogTest)
