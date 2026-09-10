@@ -10,13 +10,17 @@
 
 #include <cstdio>
 
+#ifndef KETPLUS_CM_VERSION
+#define KETPLUS_CM_VERSION "0.1.1"
+#endif
+
 int main(int argc, char* argv[]) {
     QElapsedTimer startupTimer;
     startupTimer.start();
 
     QApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("KetPlus CM"));
-    QCoreApplication::setApplicationVersion(QStringLiteral("0.1.0"));
+    QCoreApplication::setApplicationVersion(QStringLiteral(KETPLUS_CM_VERSION));
     QCoreApplication::setOrganizationName(QStringLiteral("Ketsuite"));
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/brand/ketplus-app-icon.png")));
 

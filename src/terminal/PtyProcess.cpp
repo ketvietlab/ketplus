@@ -1,6 +1,7 @@
 #include "terminal/PtyProcess.h"
 
 #include <QDir>
+#include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
 #include <QSocketNotifier>
@@ -85,6 +86,15 @@ bool PtyProcess::start(const QString& workingDirectory, const int rows, const in
     const QByteArray shellName = QFileInfo(shellPath_).fileName().toLocal8Bit();
     const QByteArray loginName = QByteArray("-") + shellName;
     const QByteArray directoryBytes = QFile::encodeName(cleanWorkingDirectory);
+    QByteArray terminalProgram = QCoreApplication::applicationName().toUtf8();
+    terminalProgram.replace(" ", "");
+    if (terminalProgram.isEmpty()) {
+        terminalProgram = QByteArrayLiteral("KetPlusCM");
+    }
+    QByteArray terminalProgramVersion = QCoreApplication::applicationVersion().toUtf8();
+    if (terminalProgramVersion.isEmpty()) {
+        terminalProgramVersion = QByteArrayLiteral("0.1.0");
+    }
     struct winsize size {};
     size.ws_row = static_cast<unsigned short>(std::clamp(rows, 1, 65535));
     size.ws_col = static_cast<unsigned short>(std::clamp(columns, 1, 65535));
@@ -102,8 +112,8 @@ bool PtyProcess::start(const QString& workingDirectory, const int rows, const in
         }
         ::setenv("TERM", "xterm-256color", 1);
         ::setenv("COLORTERM", "truecolor", 1);
-        ::setenv("TERM_PROGRAM", "KetPlusCM", 1);
-        ::setenv("TERM_PROGRAM_VERSION", "0.1.0", 1);
+        ::setenv("TERM_PROGRAM", terminalProgram.constData(), 1);
+        ::setenv("TERM_PROGRAM_VERSION", terminalProgramVersion.constData(), 1);
         ::execl(shellBytes.constData(), loginName.constData(), "-i", nullptr);
         _exit(127);
     }

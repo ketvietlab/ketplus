@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.24)
 
 project(
     KetPlusCM
-    VERSION 0.1.0
+    VERSION 0.1.1
     DESCRIPTION "A fast, lightweight, cross-platform text editor"
     LANGUAGES C CXX
 )
@@ -210,6 +210,9 @@ if(KETPLUS_CM_BUILD_APP)
             KetPlusCM::terminal
             KetPlusCM::ui
             KetPlusCM::workspace
+    )
+    target_compile_definitions(ketplus_cm PRIVATE
+        KETPLUS_CM_VERSION="${PROJECT_VERSION}"
     )
     ketplus_enable_warnings(ketplus_cm)
     ketplus_cm_add_font_resources(ketplus_cm)
