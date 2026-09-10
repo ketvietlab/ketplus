@@ -17,9 +17,12 @@ jobs:
 
       - uses: jurplel/install-qt-action@v4
         with:
-          version: "6.8.*"
+          version: "6.11.1"
           modules: qt5compat
           cache: true
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
 
       - uses: seanmiddleditch/gha-setup-ninja@v5
 

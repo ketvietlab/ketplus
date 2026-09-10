@@ -111,7 +111,9 @@ void PtyProcessTest::echoesTypedTextBeforeEnter() {
 
     QTRY_VERIFY_WITH_TIMEOUT(terminal.visibleText().contains("ketplus_live_echo"), 1000);
     QTRY_VERIFY_WITH_TIMEOUT(paints.count > 0, 200);
-    process.send(QByteArray(1, '\x03') + QByteArray("exit\n"));
+    process.send(QByteArray(1, '\x03'));
+    QTest::qWait(100);
+    process.send(QByteArray("exit\n"));
     QTRY_VERIFY_WITH_TIMEOUT(!exitSpy.isEmpty(), 10000);
 #else
     QSKIP("The first PTY backend targets macOS and Linux.");
@@ -196,6 +198,7 @@ void PtyProcessTest::controlCInterruptsForegroundCommand() {
 #else
     QTest::keyClick(&terminal, Qt::Key_C, Qt::ControlModifier);
 #endif
+    QTest::qWait(100);
     process.send(QByteArray("printf '__AFTER_INTERRUPT__\\n'; exit\n"));
 
     QTRY_VERIFY_WITH_TIMEOUT(!exitSpy.isEmpty(), 7000);
