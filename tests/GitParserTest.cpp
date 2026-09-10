@@ -55,7 +55,8 @@ void GitParserTest::parsesPorcelainV2Status() {
     });
 
     const auto snapshot = ketplus::git_parser::parseStatus(output, QStringLiteral("/repo"));
-    QCOMPARE(snapshot.repositoryRoot, QStringLiteral("/repo"));
+    QCOMPARE(snapshot.repositoryRoot,
+             QDir::cleanPath(QFileInfo(QStringLiteral("/repo")).absoluteFilePath()));
     QCOMPARE(snapshot.head, QStringLiteral("0123456789abcdef"));
     QCOMPARE(snapshot.branch, QStringLiteral("feature/git"));
     QCOMPARE(snapshot.upstream, QStringLiteral("origin/feature/git"));
@@ -223,7 +224,7 @@ void GitParserTest::discoversWorktreesAndProducesDiffs() {
     service.requestDiff(untrackedPath, ketplus::GitDiffMode::Unstaged);
     QTRY_VERIFY_WITH_TIMEOUT(untrackedFinished, 5000);
     QVERIFY2(untrackedError.isEmpty(), qPrintable(untrackedError));
-    QVERIFY(untrackedDiff.contains(QStringLiteral("+new")));
+    QVERIFY2(untrackedDiff.contains(QStringLiteral("+new")), qPrintable(untrackedDiff));
 }
 
 QTEST_MAIN(GitParserTest)

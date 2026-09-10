@@ -42,6 +42,14 @@ bool isInside(const QString& path, const QString& root) {
 
 QString literalPathspec(const QString& path) { return QStringLiteral(":(literal)%1").arg(path); }
 
+QString nullDeviceForGit() {
+#if defined(Q_OS_WIN)
+    return QStringLiteral("NUL");
+#else
+    return QProcess::nullDevice();
+#endif
+}
+
 } // namespace
 
 GitService::GitService(QObject* parent)
@@ -164,7 +172,7 @@ void GitService::requestDiff(const QString& filePath, const GitDiffMode mode) {
     int acceptedDifferenceExitCode = 0;
     if (isUntracked(relativePath)) {
         arguments.append({QStringLiteral("--no-index"), QStringLiteral("--"),
-                          QProcess::nullDevice(), absolutePath});
+                          nullDeviceForGit(), absolutePath});
         acceptedDifferenceExitCode = 1;
     } else {
         arguments.append(QStringLiteral("--find-renames"));
