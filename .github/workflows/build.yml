@@ -46,3 +46,14 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure --verbose
+
+      - name: Diagnose Windows test failures
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          & build/ketplus_settings_tests.exe -o settings-test.txt,txt
+          if (Test-Path settings-test.txt) { Get-Content settings-test.txt }
+          & build/ketplus_git_tests.exe -o git-test.txt,txt
+          if (Test-Path git-test.txt) { Get-Content git-test.txt }
+          exit 0

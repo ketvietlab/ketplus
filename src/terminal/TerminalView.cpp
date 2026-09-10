@@ -254,9 +254,9 @@ void TerminalView::keyPressEvent(QKeyEvent* event) {
         return;
     }
 #else
-    const auto modifiers = event->modifiers();
+    const auto keyModifiers = event->modifiers();
     const bool terminalClipboardShortcut =
-        (modifiers & (Qt::ControlModifier | Qt::ShiftModifier)) ==
+        (keyModifiers & (Qt::ControlModifier | Qt::ShiftModifier)) ==
         (Qt::ControlModifier | Qt::ShiftModifier);
     if (terminalClipboardShortcut && event->key() == Qt::Key_V) {
         pasteClipboard();
