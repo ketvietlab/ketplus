@@ -264,17 +264,28 @@ if(KETPLUS_CM_BUILD_TESTS)
     enable_testing()
     find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
 
+    function(ketplus_cm_add_test test_name target)
+        if(WIN32)
+            add_test(
+                NAME ${test_name}
+                COMMAND ${target} -o "${CMAKE_BINARY_DIR}/${test_name}.txt,txt"
+            )
+        else()
+            add_test(NAME ${test_name} COMMAND ${target} -o -,txt)
+        endif()
+    endfunction()
+
     add_executable(ketplus_tests tests/DocumentTest.cpp)
     target_link_libraries(ketplus_tests PRIVATE Qt6::Test ketplus_core)
     ketplus_enable_warnings(ketplus_tests)
 
-    add_test(NAME ketplus_tests COMMAND ketplus_tests -o -,txt)
+    ketplus_cm_add_test(ketplus_tests ketplus_tests)
 
     add_executable(ketplus_editor_tests tests/EditorWidgetTest.cpp)
     target_link_libraries(ketplus_editor_tests PRIVATE Qt6::Test ketplus_editor ketplus_lexilla)
     ketplus_enable_warnings(ketplus_editor_tests)
 
-    add_test(NAME ketplus_editor_tests COMMAND ketplus_editor_tests -o -,txt)
+    ketplus_cm_add_test(ketplus_editor_tests ketplus_editor_tests)
     set_tests_properties(ketplus_editor_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     add_executable(ketplus_settings_tests
@@ -285,7 +296,7 @@ if(KETPLUS_CM_BUILD_TESTS)
     )
     ketplus_enable_warnings(ketplus_settings_tests)
 
-    add_test(NAME ketplus_settings_tests COMMAND ketplus_settings_tests -o -,txt)
+    ketplus_cm_add_test(ketplus_settings_tests ketplus_settings_tests)
     set_tests_properties(ketplus_settings_tests PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     )
@@ -294,7 +305,7 @@ if(KETPLUS_CM_BUILD_TESTS)
     target_link_libraries(ketplus_workspace_tests PRIVATE Qt6::Test ketplus_workspace)
     ketplus_enable_warnings(ketplus_workspace_tests)
 
-    add_test(NAME ketplus_workspace_tests COMMAND ketplus_workspace_tests -o -,txt)
+    ketplus_cm_add_test(ketplus_workspace_tests ketplus_workspace_tests)
     set_tests_properties(ketplus_workspace_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     add_executable(ketplus_terminal_tests tests/PtyProcessTest.cpp)
@@ -303,7 +314,7 @@ if(KETPLUS_CM_BUILD_TESTS)
     )
     ketplus_enable_warnings(ketplus_terminal_tests)
 
-    add_test(NAME ketplus_terminal_tests COMMAND ketplus_terminal_tests -o -,txt)
+    ketplus_cm_add_test(ketplus_terminal_tests ketplus_terminal_tests)
     set_tests_properties(ketplus_terminal_tests PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     )
@@ -312,7 +323,7 @@ if(KETPLUS_CM_BUILD_TESTS)
     target_link_libraries(ketplus_git_tests PRIVATE Qt6::Test ketplus_git)
     ketplus_enable_warnings(ketplus_git_tests)
 
-    add_test(NAME ketplus_git_tests COMMAND ketplus_git_tests -o -,txt)
+    ketplus_cm_add_test(ketplus_git_tests ketplus_git_tests)
 
     add_executable(ketplus_git_diff_view_tests
         tests/GitDiffViewTest.cpp
@@ -322,7 +333,7 @@ if(KETPLUS_CM_BUILD_TESTS)
     )
     ketplus_enable_warnings(ketplus_git_diff_view_tests)
 
-    add_test(NAME ketplus_git_diff_view_tests COMMAND ketplus_git_diff_view_tests -o -,txt)
+    ketplus_cm_add_test(ketplus_git_diff_view_tests ketplus_git_diff_view_tests)
     set_tests_properties(ketplus_git_diff_view_tests PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     )
@@ -331,6 +342,6 @@ if(KETPLUS_CM_BUILD_TESTS)
     target_link_libraries(ketplus_preview_tests PRIVATE Qt6::Test ketplus_preview)
     ketplus_enable_warnings(ketplus_preview_tests)
 
-    add_test(NAME ketplus_preview_tests COMMAND ketplus_preview_tests -o -,txt)
+    ketplus_cm_add_test(ketplus_preview_tests ketplus_preview_tests)
     set_tests_properties(ketplus_preview_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()
