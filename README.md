@@ -28,6 +28,7 @@ application chrome.
 - Ninja
 - Qt 6.5+ with `Core5Compat`, `Svg`, and `SvgWidgets`
 - A C++20 compiler
+- Optional: `sccache` or `ccache` for persistent local compiler caching
 
 On macOS with Homebrew:
 
@@ -43,6 +44,10 @@ cmake --preset dev
 cmake --build --preset dev
 ctest --preset dev
 ```
+
+All presets share downloaded sources through `.cache/fetchcontent`. CMake uses
+`sccache` or `ccache` automatically when either executable is available. Set
+`-DKETPLUS_USE_COMPILER_CACHE=OFF` to disable the compiler cache.
 
 Run the development build:
 

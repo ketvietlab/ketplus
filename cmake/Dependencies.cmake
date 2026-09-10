@@ -1,5 +1,12 @@
 include(FetchContent)
 
+if(NOT DEFINED FETCHCONTENT_BASE_DIR)
+    set(FETCHCONTENT_BASE_DIR
+        "${CMAKE_SOURCE_DIR}/.cache/fetchcontent"
+        CACHE PATH "Shared KetPlus FetchContent cache"
+    )
+endif()
+
 # Pin both projects so builds remain reproducible. They can be upgraded together.
 FetchContent_Declare(
     scintilla

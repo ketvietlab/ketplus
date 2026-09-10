@@ -188,8 +188,8 @@ void PtyProcessTest::controlCInterruptsForegroundCommand() {
     QSignalSpy exitSpy(&process, &PtyProcess::exited);
 
     terminal.start(QDir::tempPath());
-    process.send(QByteArray("printf '__KETPLUS_READY__\\n'\n"));
-    QTRY_VERIFY_WITH_TIMEOUT(output.contains("__KETPLUS_READY__"), 5000);
+    process.send(QByteArray("stty -echo; printf '__KETPLUS_READY__\\n'\n"));
+    QTRY_VERIFY_WITH_TIMEOUT(output.count("__KETPLUS_READY__") >= 2, 5000);
     output.clear();
     process.send(QByteArray(
         "printf '__SLEEP_STARTED__\\n'; sleep 30; printf '__SLEEP_COMPLETED__\\n'\n"));

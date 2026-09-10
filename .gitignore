@@ -1,5 +1,6 @@
 /build/
 /.cache/
+/.cache/
 /.idea/
 /.vscode/
 .DS_Store
