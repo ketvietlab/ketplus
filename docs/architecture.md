@@ -36,6 +36,11 @@ Qt application shell
   separate files and targets. They must not be added behind compile flags in
   this repository or implemented by modifying CM files without publishing those
   modifications under MPL 2.0.
+- Reusable CMake targets are exposed through the `KetPlusCM::` namespace. The
+  public app is optional through `KETPLUS_CM_BUILD_APP`, so a proprietary
+  consumer does not compile or package the CM shell.
+- `develop` is the integration branch. Production consumers pin a commit from
+  `main`, preferably the commit identified by an immutable `cm-v*` release tag.
 - Terminal creation is lazy. Hiding its panel only detaches the visible area; it
   does not stop the shell. The first implementation retains one session, while
   the planned session registry will retain one or more sessions per worktree.

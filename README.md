@@ -47,10 +47,36 @@ ctest --preset dev
 Run the development build:
 
 ```sh
-open build/dev/KetPlusCM.app       # macOS
-./build/dev/KetPlusCM              # Linux
+open "build/dev/KetPlus CM.app"   # macOS
+./build/dev/ketplus-cm             # Linux
 build\\dev\\KetPlusCM.exe        # Windows
 ```
+
+## Use as a CMake dependency
+
+KetPlus CM can also be embedded without building its application or tests:
+
+```cmake
+set(KETPLUS_CM_BUILD_APP OFF CACHE BOOL "" FORCE)
+set(KETPLUS_CM_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(KETPLUS_CM_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
+add_subdirectory(vendor/ketplus-cm EXCLUDE_FROM_ALL)
+
+target_link_libraries(my_app PRIVATE
+    KetPlusCM::core
+    KetPlusCM::editor
+    KetPlusCM::git
+    KetPlusCM::git_ui
+    KetPlusCM::preview
+    KetPlusCM::settings_ui
+    KetPlusCM::terminal
+    KetPlusCM::ui
+    KetPlusCM::workspace
+)
+```
+
+Consumers should pin an immutable release commit or tag. `develop` is the
+integration branch; `main` and `cm-v*` tags identify production revisions.
 
 Mermaid blocks in Markdown preview are optional. To enable them, install the
 official Mermaid CLI and restart KetPlus CM (or edit the document again):
