@@ -1,0 +1,717 @@
+KetPlus benchmark raw results
+timestamp_utc=20260909T055034Z
+commit=54d3c2a
+os=Darwin 25.2.0 Darwin Kernel Version 25.2.0: Tue Nov 18 21:09:40 PST 2025; root:xnu-12377.61.12~1/RELEASE_ARM64_T6000 arm64 arm
+hardware=Apple M1 Pro
+memory_bytes=34359738368
+
+[editor-engine]
+qt.qpa.fonts: Populating font family aliases took 336 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost.
+METRIC set_text_1_mib median_ms=0.553 min_ms=0.526 max_ms=1.218 iterations=15 mib=1.0 throughput_mib_s=1807.4
+METRIC set_text_10_mib median_ms=5.542 min_ms=5.328 max_ms=9.319 iterations=9 mib=10.0 throughput_mib_s=1804.6
+METRIC set_text_50_mib median_ms=28.916 min_ms=28.019 max_ms=46.578 iterations=5 mib=50.0 throughput_mib_s=1729.2
+METRIC find_at_end_10_mib median_ms=1.385 min_ms=1.342 max_ms=1.708 iterations=15 mib=10.0 throughput_mib_s=7220.2
+METRIC replace_all_10_mib median_ms=158.291 min_ms=157.508 max_ms=160.294 iterations=5 mib=10.0 throughput_mib_s=63.2
+DETAIL replace_all_matches=145636
+
+[app-startup-native]
+CASE=empty RUN=1
+KETPLUS_STARTUP_MS=359.605
+        0.49 real         0.19 user         0.05 sys
+           130367488  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               10453  page reclaims
+                 103  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                  49  voluntary context switches
+                1253  involuntary context switches
+          1859283198  instructions retired
+           778731622  cycles elapsed
+            46434624  peak memory footprint
+CASE=empty RUN=2
+KETPLUS_STARTUP_MS=476.675
+        0.61 real         0.20 user         0.06 sys
+           129138688  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               10511  page reclaims
+                  41  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   0  voluntary context switches
+                1395  involuntary context switches
+          1837641193  instructions retired
+           790537078  cycles elapsed
+            46352832  peak memory footprint
+CASE=empty RUN=3
+KETPLUS_STARTUP_MS=542.242
+        0.65 real         0.19 user         0.05 sys
+           114163712  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+                9559  page reclaims
+                  43  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   0  voluntary context switches
+                1327  involuntary context switches
+          1768231209  instructions retired
+           743310780  cycles elapsed
+            32868800  peak memory footprint
+CASE=empty RUN=4
+KETPLUS_STARTUP_MS=677.068
+        1.20 real         0.23 user         0.07 sys
+           129646592  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               10534  page reclaims
+                  42  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   5  voluntary context switches
+                2733  involuntary context switches
+          1873747318  instructions retired
+           902231285  cycles elapsed
+            46844224  peak memory footprint
+CASE=empty RUN=5
+KETPLUS_STARTUP_MS=667.210
+        0.75 real         0.21 user         0.06 sys
+           114507776  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+                9546  page reclaims
+                  92  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                  16  voluntary context switches
+                1673  involuntary context switches
+          1777528265  instructions retired
+           815843449  cycles elapsed
+            33114496  peak memory footprint
+CASE=empty RUN=6
+KETPLUS_STARTUP_MS=394.592
+        0.46 real         0.18 user         0.05 sys
+           113885184  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+                9546  page reclaims
+                  43  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   3  voluntary context switches
+                1309  involuntary context switches
+          1769784306  instructions retired
+           722998345  cycles elapsed
+            32459072  peak memory footprint
+CASE=empty RUN=7
+KETPLUS_STARTUP_MS=515.264
+        0.69 real         0.21 user         0.06 sys
+           129761280  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               10547  page reclaims
+                  41  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   0  voluntary context switches
+                1764  involuntary context switches
+          1841250045  instructions retired
+           845584954  cycles elapsed
+            46991744  peak memory footprint
+CASE=1mib_txt RUN=1
+KETPLUS_STARTUP_MS=670.169
+        1.17 real         0.21 user         0.07 sys
+           119128064  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+                9883  page reclaims
+                  62  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   7  voluntary context switches
+                2721  involuntary context switches
+          1840940408  instructions retired
+           860430666  cycles elapsed
+            37767488  peak memory footprint
+CASE=1mib_txt RUN=2
+KETPLUS_STARTUP_MS=789.697
+        1.24 real         0.22 user         0.06 sys
+           134578176  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               10879  page reclaims
+                  55  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   3  voluntary context switches
+                1729  involuntary context switches
+          1966663389  instructions retired
+           879589968  cycles elapsed
+            51939648  peak memory footprint
+CASE=1mib_txt RUN=3
+KETPLUS_STARTUP_MS=732.279
+        1.14 real         0.21 user         0.06 sys
+           134250496  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               10849  page reclaims
+                  42  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   0  voluntary context switches
+                1418  involuntary context switches
+          1965944255  instructions retired
+           856414806  cycles elapsed
+            51382656  peak memory footprint
+CASE=1mib_txt RUN=4
+KETPLUS_STARTUP_MS=656.239
+        1.07 real         0.21 user         0.06 sys
+           134332416  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               10808  page reclaims
+                  93  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                  18  voluntary context switches
+                1455  involuntary context switches
+          1954378509  instructions retired
+           839688865  cycles elapsed
+            51480960  peak memory footprint
+CASE=1mib_txt RUN=5
+KETPLUS_STARTUP_MS=668.169
+        1.08 real         0.22 user         0.05 sys
+           134332416  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               10845  page reclaims
+                  48  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   6  voluntary context switches
+                1699  involuntary context switches
+          1944964623  instructions retired
+           844595825  cycles elapsed
+            51415360  peak memory footprint
+CASE=1mib_txt RUN=6
+KETPLUS_STARTUP_MS=652.356
+        1.05 real         0.19 user         0.06 sys
+           119062528  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+                9868  page reclaims
+                  55  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   2  voluntary context switches
+                1383  involuntary context switches
+          1845888289  instructions retired
+           776615555  cycles elapsed
+            37423424  peak memory footprint
+CASE=1mib_txt RUN=7
+KETPLUS_STARTUP_MS=643.664
+        0.98 real         0.19 user         0.05 sys
+           119046144  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+                9863  page reclaims
+                  55  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   2  voluntary context switches
+                1399  involuntary context switches
+          1842423903  instructions retired
+           750031636  cycles elapsed
+            37439808  peak memory footprint
+CASE=10mib_txt RUN=1
+KETPLUS_STARTUP_MS=711.153
+        1.20 real         0.23 user         0.07 sys
+           172720128  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               13222  page reclaims
+                  43  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   1  voluntary context switches
+                1745  involuntary context switches
+          2076647813  instructions retired
+           905440755  cycles elapsed
+            90311232  peak memory footprint
+CASE=10mib_txt RUN=2
+KETPLUS_STARTUP_MS=671.785
+        1.10 real         0.22 user         0.07 sys
+           173621248  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               13202  page reclaims
+                  92  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                  18  voluntary context switches
+                1605  involuntary context switches
+          2073258839  instructions retired
+           898248772  cycles elapsed
+            90786304  peak memory footprint
+CASE=10mib_txt RUN=3
+KETPLUS_STARTUP_MS=690.749
+        1.16 real         0.20 user         0.06 sys
+           158154752  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               12265  page reclaims
+                  48  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   6  voluntary context switches
+                1410  involuntary context switches
+          1928295002  instructions retired
+           808961693  cycles elapsed
+            76581312  peak memory footprint
+CASE=10mib_txt RUN=4
+KETPLUS_STARTUP_MS=751.868
+        1.18 real         0.23 user         0.07 sys
+           172703744  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               13215  page reclaims
+                  55  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   2  voluntary context switches
+                1824  involuntary context switches
+          2069339325  instructions retired
+           905214697  cycles elapsed
+            90311040  peak memory footprint
+CASE=10mib_txt RUN=5
+KETPLUS_STARTUP_MS=712.711
+        1.09 real         0.21 user         0.06 sys
+           158564352  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               12279  page reclaims
+                  55  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   2  voluntary context switches
+                1620  involuntary context switches
+          1952093085  instructions retired
+           843896768  cycles elapsed
+            76958208  peak memory footprint
+CASE=10mib_txt RUN=6
+KETPLUS_STARTUP_MS=719.814
+        1.11 real         0.20 user         0.05 sys
+           158351360  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               12270  page reclaims
+                  48  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   0  voluntary context switches
+                1337  involuntary context switches
+          1944750103  instructions retired
+           790243413  cycles elapsed
+            76761600  peak memory footprint
+CASE=10mib_txt RUN=7
+KETPLUS_STARTUP_MS=641.578
+        1.02 real         0.20 user         0.06 sys
+           158662656  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               12245  page reclaims
+                  89  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                  19  voluntary context switches
+                1504  involuntary context switches
+          1955543771  instructions retired
+           821605697  cycles elapsed
+            77105728  peak memory footprint
+CASE=50mib_txt RUN=1
+KETPLUS_STARTUP_MS=968.742
+        1.42 real         0.26 user         0.12 sys
+           337936384  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               23835  page reclaims
+                  48  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   7  voluntary context switches
+                3518  involuntary context switches
+          2575560663  instructions retired
+          1178627390  cycles elapsed
+           263457600  peak memory footprint
+CASE=50mib_txt RUN=2
+KETPLUS_STARTUP_MS=750.582
+        1.12 real         0.22 user         0.08 sys
+           332382208  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               22887  page reclaims
+                  55  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   2  voluntary context switches
+                1401  involuntary context switches
+          2390587152  instructions retired
+           930276336  cycles elapsed
+           250907456  peak memory footprint
+CASE=50mib_txt RUN=3
+KETPLUS_STARTUP_MS=733.198
+        1.24 real         0.25 user         0.10 sys
+           345243648  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               23713  page reclaims
+                  55  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   2  voluntary context switches
+                1608  involuntary context switches
+          2532822266  instructions retired
+          1065135178  cycles elapsed
+           262490944  peak memory footprint
+CASE=50mib_txt RUN=4
+KETPLUS_STARTUP_MS=707.775
+        1.10 real         0.24 user         0.09 sys
+           346505216  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               23792  page reclaims
+                  49  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   0  voluntary context switches
+                1545  involuntary context switches
+          2534763725  instructions retired
+          1025881760  cycles elapsed
+           263703296  peak memory footprint
+CASE=50mib_txt RUN=5
+KETPLUS_STARTUP_MS=792.500
+        1.27 real         0.25 user         0.11 sys
+           345931776  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               23712  page reclaims
+                  88  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                  19  voluntary context switches
+                2378  involuntary context switches
+          2549253987  instructions retired
+          1083446606  cycles elapsed
+           263113536  peak memory footprint
+CASE=50mib_txt RUN=6
+KETPLUS_STARTUP_MS=833.576
+        1.11 real         0.22 user         0.11 sys
+           328974336  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               23491  page reclaims
+                  57  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   8  voluntary context switches
+                2636  involuntary context switches
+          2401963860  instructions retired
+           990521683  cycles elapsed
+           248449856  peak memory footprint
+CASE=50mib_txt RUN=7
+KETPLUS_STARTUP_MS=670.479
+        1.15 real         0.25 user         0.10 sys
+           346292224  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               23791  page reclaims
+                  46  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   1  voluntary context switches
+                2080  involuntary context switches
+          2536222634  instructions retired
+          1082138035  cycles elapsed
+           263490368  peak memory footprint
+CASE=10mib_cpp RUN=1
+KETPLUS_STARTUP_MS=1050.732
+        1.40 real         0.57 user         0.06 sys
+           161513472  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               12456  page reclaims
+                  61  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   2  voluntary context switches
+                1572  involuntary context switches
+          7677757995  instructions retired
+          1958732458  cycles elapsed
+            79661568  peak memory footprint
+CASE=10mib_cpp RUN=2
+KETPLUS_STARTUP_MS=1258.167
+        1.71 real         0.62 user         0.08 sys
+           176422912  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               13380  page reclaims
+                  93  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                  16  voluntary context switches
+                2035  involuntary context switches
+          7823405986  instructions retired
+          2144904514  cycles elapsed
+            93260224  peak memory footprint
+CASE=10mib_cpp RUN=3
+KETPLUS_STARTUP_MS=1208.254
+        1.94 real         0.61 user         0.08 sys
+           173686784  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               13420  page reclaims
+                  52  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   9  voluntary context switches
+                2885  involuntary context switches
+          7821848862  instructions retired
+          2129326924  cycles elapsed
+            92801472  peak memory footprint
+CASE=10mib_cpp RUN=4
+KETPLUS_STARTUP_MS=1306.696
+        1.92 real         0.66 user         0.09 sys
+           171753472  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               13476  page reclaims
+                  61  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   3  voluntary context switches
+                2840  involuntary context switches
+          7824594034  instructions retired
+          2299335687  cycles elapsed
+            92850752  peak memory footprint
+CASE=10mib_cpp RUN=5
+KETPLUS_STARTUP_MS=1068.507
+        1.44 real         0.59 user         0.06 sys
+           161103872  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               12393  page reclaims
+                  92  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                  16  voluntary context switches
+                1811  involuntary context switches
+          7681097267  instructions retired
+          2013650095  cycles elapsed
+            79219200  peak memory footprint
+CASE=10mib_cpp RUN=6
+KETPLUS_STARTUP_MS=1061.059
+        1.44 real         0.57 user         0.07 sys
+           161480704  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               12453  page reclaims
+                  58  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                  10  voluntary context switches
+                1680  involuntary context switches
+          7679186532  instructions retired
+          1984930826  cycles elapsed
+            79596096  peak memory footprint
+CASE=10mib_cpp RUN=7
+KETPLUS_STARTUP_MS=1032.487
+        1.42 real         0.59 user         0.07 sys
+           175800320  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               13366  page reclaims
+                  52  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   2  messages sent
+                   0  messages received
+                   0  signals received
+                   0  voluntary context switches
+                2058  involuntary context switches
+          7808844089  instructions retired
+          2042991657  cycles elapsed
+            92604928  peak memory footprint
