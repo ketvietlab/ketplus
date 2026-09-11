@@ -81,6 +81,7 @@ class SettingsDialog final : public QDialog {
     QCheckBox* followSystem_{nullptr};
     QListWidget* themeList_{nullptr};
     QFontComboBox* editorFontBox_{nullptr};
+    QString editorFontFamily_;
     QSpinBox* interfaceFontSizeBox_{nullptr};
     QSpinBox* editorFontSizeBox_{nullptr};
     QSpinBox* editorLineHeightBox_{nullptr};

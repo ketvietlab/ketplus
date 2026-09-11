@@ -326,7 +326,8 @@ QWidget* SettingsDialog::createTypographyCard() {
             updateDirtyState();
         });
     }
-    connect(editorFontBox_, &QFontComboBox::currentFontChanged, this, [this] {
+    connect(editorFontBox_, &QFontComboBox::currentFontChanged, this, [this](const QFont& font) {
+        editorFontFamily_ = font.family();
         updatePreview();
         updateDirtyState();
     });
