@@ -17,8 +17,8 @@ namespace ketplus {
 
 TerminalPanel::TerminalPanel(QWidget* parent)
     : QWidget(parent), process_(new PtyProcess(this)), terminal_(new TerminalView(*process_, this)),
-      titleLabel_(new QLabel(QStringLiteral("TERMINAL"), this)),
-      pathLabel_(new QLabel(this)), closeButton_(new QToolButton(this)) {
+      titleLabel_(new QLabel(QStringLiteral("TERMINAL"), this)), pathLabel_(new QLabel(this)),
+      closeButton_(new QToolButton(this)) {
     setProperty("kvRole", QStringLiteral("terminalPanel"));
     setMinimumHeight(120);
     setFocusPolicy(Qt::StrongFocus);
@@ -51,9 +51,8 @@ TerminalPanel::TerminalPanel(QWidget* parent)
     connect(closeButton_, &QToolButton::clicked, this, &TerminalPanel::closeRequested);
     connect(terminal_, &TerminalView::statusMessageRequested, this,
             &TerminalPanel::statusMessageRequested);
-    connect(terminal_, &TerminalView::titleChanged, this, [this](const QString& title) {
-        titleLabel_->setToolTip(title);
-    });
+    connect(terminal_, &TerminalView::titleChanged, this,
+            [this](const QString& title) { titleLabel_->setToolTip(title); });
     connect(process_, &PtyProcess::started, this, [this] {
         titleLabel_->setText(QStringLiteral("TERMINAL"));
         titleLabel_->setProperty("terminalState", QStringLiteral("running"));
@@ -69,14 +68,13 @@ TerminalPanel::TerminalPanel(QWidget* parent)
 }
 
 void TerminalPanel::start(const QString& workingDirectory) {
-    workingDirectory_ = QDir::cleanPath(workingDirectory.isEmpty() ? QDir::homePath()
-                                                                   : workingDirectory);
+    workingDirectory_ =
+        QDir::cleanPath(workingDirectory.isEmpty() ? QDir::homePath() : workingDirectory);
     const QString homeRelative = QDir::home().relativeFilePath(workingDirectory_);
-    pathLabel_->setText(homeRelative == QStringLiteral(".")
-                            ? QStringLiteral("~")
-                            : homeRelative.startsWith(QStringLiteral("../"))
-                                  ? workingDirectory_
-                                  : QStringLiteral("~/%1").arg(homeRelative));
+    pathLabel_->setText(homeRelative == QStringLiteral(".") ? QStringLiteral("~")
+                        : homeRelative.startsWith(QStringLiteral("../"))
+                            ? workingDirectory_
+                            : QStringLiteral("~/%1").arg(homeRelative));
     pathLabel_->setToolTip(workingDirectory_);
     if (!process_->isRunning()) {
         terminal_->start(workingDirectory_);
@@ -98,6 +96,10 @@ void TerminalPanel::focusTerminal() {
 }
 
 void TerminalPanel::applyTheme(const ThemePalette& palette) { terminal_->applyTheme(palette); }
+
+void TerminalPanel::setTypography(const int fontSizePixels, const int lineHeightPixels) {
+    terminal_->setTypography(fontSizePixels, lineHeightPixels);
+}
 
 bool TerminalPanel::isSessionRunning() const { return process_->isRunning(); }
 

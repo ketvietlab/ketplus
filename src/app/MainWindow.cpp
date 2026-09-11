@@ -50,7 +50,7 @@ QString normalizedPath(const QString& path) {
 } // namespace
 
 MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
-    : QMainWindow(parent), theme_(theme), editorSettings_(EditorSettings::load()),
+    : QMainWindow(parent), theme_(theme), appearanceSettings_(AppearanceSettings::load()),
       mainSplit_(new QSplitter(Qt::Vertical, this)),
       workspaceSplit_(new QSplitter(Qt::Horizontal, mainSplit_)),
       editorSplit_(new QSplitter(Qt::Horizontal, workspaceSplit_)), tabs_(new QTabWidget),
@@ -60,6 +60,7 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
       lineEndingLabel_(new QLabel(QStringLiteral("LF"), this)),
       documentStateLabel_(new QLabel(QStringLiteral("New"), this)),
       gitButton_(new QToolButton(this)) {
+    theme_.setInterfaceFontSizePixels(appearanceSettings_.interfaceFontSizePixels);
     setWindowTitle(QStringLiteral("KetPlus CM"));
     resize(1100, 720);
     setMinimumSize(680, 420);
@@ -197,8 +198,7 @@ void MainWindow::openFile(const QString& filePath) {
     tabs_->setCurrentIndex(index);
     if (editor->isLargeFileMode()) {
         statusBar()->showMessage(
-            QStringLiteral("Large file mode: syntax highlighting and undo are disabled"),
-            5000);
+            QStringLiteral("Large file mode: syntax highlighting and undo are disabled"), 5000);
     }
 }
 

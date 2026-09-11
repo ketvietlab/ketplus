@@ -100,7 +100,7 @@ add_library(ketplus_terminal STATIC
     src/terminal/TerminalView.cpp
     src/terminal/TerminalView.h
 )
-target_link_libraries(ketplus_terminal PUBLIC Qt6::Widgets ketplus_vterm)
+target_link_libraries(ketplus_terminal PUBLIC Qt6::Widgets ketplus_vterm ketplus_ui)
 if(UNIX AND NOT APPLE)
     target_link_libraries(ketplus_terminal PRIVATE util)
 endif()
@@ -166,7 +166,10 @@ ketplus_enable_warnings(ketplus_git_ui)
 add_library(KetPlusCM::git_ui ALIAS ketplus_git_ui)
 
 add_library(ketplus_settings_ui STATIC
+    src/app/AppearanceSettings.cpp
+    src/app/AppearanceSettings.h
     src/app/SettingsDialog.cpp
+    src/app/SettingsDialogAppearance.cpp
     src/app/SettingsDialog.h
 )
 target_link_libraries(ketplus_settings_ui PUBLIC Qt6::Widgets ketplus_editor ketplus_ui)

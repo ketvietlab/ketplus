@@ -20,6 +20,7 @@ class TerminalPanel final : public QWidget {
     void start(const QString& workingDirectory);
     void focusTerminal();
     void applyTheme(const ThemePalette& palette);
+    void setTypography(int fontSizePixels, int lineHeightPixels);
     [[nodiscard]] bool isSessionRunning() const;
 
   signals:

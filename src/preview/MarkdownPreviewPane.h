@@ -22,9 +22,9 @@ class MarkdownPreviewPane final : public QWidget {
   public:
     explicit MarkdownPreviewPane(QWidget* parent = nullptr);
 
-    void setSource(const QString& markdown, const QString& filePath,
-                   const ThemePalette& palette);
+    void setSource(const QString& markdown, const QString& filePath, const ThemePalette& palette);
     void showEmpty(const ThemePalette& palette);
+    void setTypography(int fontSizePixels, int lineHeightPixels);
 
   signals:
     void closeRequested();
@@ -62,6 +62,8 @@ class MarkdownPreviewPane final : public QWidget {
     ThemePalette palette_;
     QHash<QString, QString> diagramFiles_;
     bool hasSource_{false};
+    int fontSizePixels_{14};
+    int lineHeightPixels_{22};
 };
 
 } // namespace ketplus

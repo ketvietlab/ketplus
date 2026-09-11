@@ -102,14 +102,14 @@ ThemeManager::Mode modeFromName(const QString& name) {
     return ThemeManager::Mode::System;
 }
 
-QString styleSheetFor(const ThemePalette& palette, const QString& fontFamily) {
-    const QString terminalFontFamily =
-        QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
+QString styleSheetFor(const ThemePalette& palette, const QString& fontFamily,
+                      const int interfaceFontSizePixels) {
+    const QString terminalFontFamily = QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
     QString style = QStringLiteral(R"QSS(
 QWidget {
     color: {{textMain}};
     font-family: "{{fontFamily}}";
-    font-size: 14px;
+    font-size: {{interfaceFontSize}}px;
     selection-background-color: {{accentMuted}};
     selection-color: {{textMain}};
 }
@@ -588,6 +588,81 @@ QDialog[kvRole="settingsDialog"] {
     background: {{pageBackground}};
 }
 
+QWidget[kvRole="settingsHeader"], QWidget[kvRole="settingsFooter"] {
+    min-height: 54px;
+    border-bottom: 1px solid {{border}};
+    background: {{panelSubtle}};
+}
+
+QWidget[kvRole="settingsFooter"] {
+    min-height: 48px;
+    border-top: 1px solid {{border}};
+    border-bottom: 0;
+}
+
+QLabel[kvRole="settingsHeaderTitle"] {
+    color: {{textMain}};
+    font-size: 14px;
+    font-weight: 650;
+}
+
+QListWidget#settingsNavigation {
+    padding: 12px 9px;
+    border: 0;
+    border-right: 1px solid {{border}};
+    background: {{sidebarBackground}};
+    outline: 0;
+}
+
+QListWidget#settingsNavigation::item {
+    min-height: 34px;
+    padding: 0 10px;
+    border-radius: 5px;
+    color: {{textSecondary}};
+}
+
+QListWidget#settingsNavigation::item:hover {
+    background: {{surfaceHover}};
+    color: {{textMain}};
+}
+
+QListWidget#settingsNavigation::item:selected {
+    border-left: 2px solid {{focus}};
+    background: {{accentSubtle}};
+    color: {{tabActiveText}};
+}
+
+QScrollArea#appearanceSettingsScroll {
+    border: 0;
+    background: {{pageBackground}};
+}
+
+QListWidget[kvRole="themeList"] {
+    padding: 4px;
+    border: 1px solid {{border}};
+    border-radius: 6px;
+    background: {{panelSubtle}};
+    outline: 0;
+}
+
+QListWidget[kvRole="themeList"]::item {
+    min-height: 38px;
+    padding: 3px 9px;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    color: {{textSecondary}};
+}
+
+QListWidget[kvRole="themeList"]::item:hover {
+    background: {{surfaceHover}};
+}
+
+QListWidget[kvRole="themeList"]::item:selected {
+    border-color: {{accentMuted}};
+    background: {{accentSubtle}};
+    color: {{textMain}};
+}
+
 QLabel[kvRole="settingsEyebrow"] {
     color: {{textMuted}};
     font-size: 10px;
@@ -625,6 +700,15 @@ QLabel[kvRole="settingsFieldHelp"] {
     font-size: 10px;
 }
 
+QLabel[kvRole="settingsAutomaticValue"] {
+    min-height: 30px;
+    border: 1px solid {{border}};
+    border-radius: 5px;
+    background: {{panelSubtle}};
+    color: {{textMuted}};
+    font-size: 10px;
+}
+
 QWidget[kvRole="settingsPreview"] {
     border: 1px solid {{border}};
     border-radius: 8px;
@@ -643,6 +727,12 @@ QPushButton[kvRole="primaryAction"]:hover {
     border-color: {{accentHover}};
     background: {{accentHover}};
     color: #FFFFFF;
+}
+
+QPushButton[kvRole="primaryAction"]:disabled {
+    border-color: {{border}};
+    background: {{accentMuted}};
+    color: {{textMuted}};
 }
 
 QPushButton[kvRole="settingsReset"] {
@@ -752,6 +842,7 @@ QToolButton[kvRole="sidebarAction"]:hover {
     const std::pair<const char*, QString> replacements[] = {
         {"{{fontFamily}}", fontFamily},
         {"{{terminalFontFamily}}", terminalFontFamily},
+        {"{{interfaceFontSize}}", QString::number(interfaceFontSizePixels)},
         {"{{pageBackground}}", palette.pageBackground},
         {"{{panelBackground}}", palette.panelBackground},
         {"{{panelSubtle}}", palette.panelSubtle},
@@ -795,7 +886,7 @@ ThemeManager::ThemeManager(QApplication& application, QObject* parent)
 
     connect(application_.styleHints(), &QStyleHints::colorSchemeChanged, this,
             [this](Qt::ColorScheme) {
-                if (mode_ == Mode::System) {
+                if (effectiveMode() == Mode::System) {
                     apply();
                 }
             });
@@ -806,12 +897,44 @@ ThemeManager::Mode ThemeManager::mode() const noexcept { return mode_; }
 
 const ThemePalette& ThemeManager::palette() const noexcept { return palette_; }
 
+int ThemeManager::interfaceFontSizePixels() const noexcept { return interfaceFontSizePixels_; }
+
 void ThemeManager::setMode(const Mode mode) {
-    if (mode_ == mode) {
+    const bool needsApply = mode_ != mode || previewMode_.has_value();
+    mode_ = mode;
+    previewMode_.reset();
+    QSettings().setValue(QStringLiteral("appearance/theme"), modeName(mode_));
+    if (!needsApply) {
         return;
     }
-    mode_ = mode;
-    QSettings().setValue(QStringLiteral("appearance/theme"), modeName(mode_));
+    apply();
+}
+
+void ThemeManager::previewMode(const Mode mode) {
+    if (previewMode_ == mode) {
+        return;
+    }
+    previewMode_ = mode;
+    apply();
+}
+
+void ThemeManager::cancelPreview() {
+    if (!previewMode_.has_value()) {
+        return;
+    }
+    previewMode_.reset();
+    apply();
+}
+
+void ThemeManager::setInterfaceFontSizePixels(const int fontSizePixels) {
+    const int normalized = qBound(8, fontSizePixels, 24);
+    if (interfaceFontSizePixels_ == normalized) {
+        return;
+    }
+    interfaceFontSizePixels_ = normalized;
+    QFont font = application_.font();
+    font.setPixelSize(interfaceFontSizePixels_);
+    application_.setFont(font);
     apply();
 }
 
@@ -829,19 +952,23 @@ void ThemeManager::apply() {
     nativePalette.setColor(QPalette::Highlight, QColor(palette_.accentMuted));
     nativePalette.setColor(QPalette::HighlightedText, QColor(palette_.textMain));
     application_.setPalette(nativePalette);
-    application_.setStyleSheet(styleSheetFor(palette_, uiFontFamily_));
+    application_.setStyleSheet(styleSheetFor(palette_, uiFontFamily_, interfaceFontSizePixels_));
 
     emit themeChanged();
 }
 
 bool ThemeManager::useDarkPalette() const {
-    if (mode_ == Mode::Dark) {
+    if (effectiveMode() == Mode::Dark) {
         return true;
     }
-    if (mode_ == Mode::Light) {
+    if (effectiveMode() == Mode::Light) {
         return false;
     }
     return application_.styleHints()->colorScheme() == Qt::ColorScheme::Dark;
+}
+
+ThemeManager::Mode ThemeManager::effectiveMode() const noexcept {
+    return previewMode_.value_or(mode_);
 }
 
 void ThemeManager::loadInterFont() {
@@ -854,7 +981,7 @@ void ThemeManager::loadInterFont() {
     }
 
     QFont font(uiFontFamily_);
-    font.setPixelSize(14);
+    font.setPixelSize(interfaceFontSizePixels_);
     font.setWeight(QFont::Normal);
     application_.setFont(font);
 }

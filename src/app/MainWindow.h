@@ -1,6 +1,6 @@
 #pragma once
 
-#include "editor/EditorSettings.h"
+#include "app/AppearanceSettings.h"
 #include "git/GitTypes.h"
 
 #include <QHash>
@@ -74,7 +74,7 @@ class MainWindow final : public QMainWindow {
     void replaceCurrentMatch();
     void replaceAllMatches();
     void showSettings();
-    void applyEditorSettings(const EditorSettings& settings);
+    void applyAppearanceSettings(const AppearanceSettings& settings);
     void applyThemeToEditors();
     MarkdownPreviewPane* ensureMarkdownPreview();
     void setMarkdownPreviewVisible(bool visible);
@@ -88,8 +88,7 @@ class MainWindow final : public QMainWindow {
     GitChangesPanel* ensureGitChanges();
     void setSourceControlVisible(bool visible);
     void requestCurrentFileDiff();
-    void requestFileDiff(const QString& filePath,
-                         GitDiffMode mode = GitDiffMode::Combined);
+    void requestFileDiff(const QString& filePath, GitDiffMode mode = GitDiffMode::Combined);
     void showDiff(const QString& filePath, GitDiffMode mode, const QString& diff);
     void updateGitSnapshot(const GitSnapshot& snapshot);
     void updateWorktrees(const QVector<GitWorktree>& worktrees);
@@ -100,7 +99,7 @@ class MainWindow final : public QMainWindow {
     [[nodiscard]] QString currentWorkspaceRelativeFile() const;
 
     ThemeManager& theme_;
-    EditorSettings editorSettings_;
+    AppearanceSettings appearanceSettings_;
     QSplitter* mainSplit_{nullptr};
     QSplitter* workspaceSplit_{nullptr};
     QSplitter* editorSplit_{nullptr};
