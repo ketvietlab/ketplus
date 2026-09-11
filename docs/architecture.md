@@ -35,6 +35,9 @@ Qt application shell
 - `src/terminal` owns the embedded terminal surface, VT state, scrollback, and
   process transport. `PtyProcess` isolates platform process creation from the
   renderer so a ConPTY backend can be added without changing terminal UI code.
+- `src/preview` keeps Mermaid output as SVG through the full-size diagram viewer;
+  mouse-wheel and native trackpad pinch gestures zoom the vector scene without
+  rasterizing it.
 - Proprietary KetPlus features consume a pinned KetPlus CM revision and live in
   separate files and targets. They must not be added behind compile flags in
   this repository or implemented by modifying CM files without publishing those

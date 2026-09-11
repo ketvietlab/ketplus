@@ -5,8 +5,11 @@
 
 #include <QDir>
 #include <QFile>
+#include <QGraphicsSvgItem>
 #include <QGraphicsView>
 #include <QLabel>
+#include <QNativeGestureEvent>
+#include <QPointingDevice>
 #include <QPushButton>
 #include <QTemporaryDir>
 #include <QTextBlock>
@@ -330,9 +333,19 @@ void MarkdownPreviewPaneTest::opensVectorDiagramWithPanControls() {
     QVERIFY(zoomIn != nullptr);
     QCOMPARE(view->dragMode(), QGraphicsView::ScrollHandDrag);
     QVERIFY(!view->scene()->items().isEmpty());
+    QVERIFY(dynamic_cast<QGraphicsSvgItem*>(view->scene()->items().constFirst()) != nullptr);
     const qreal initialScale = view->transform().m11();
     zoomIn->click();
     QVERIFY(view->transform().m11() > initialScale);
+
+    const QPointF position = view->viewport()->rect().center();
+    QNativeGestureEvent pinch(Qt::ZoomNativeGesture, QPointingDevice::primaryPointingDevice(), 2,
+                              position, position, view->viewport()->mapToGlobal(position.toPoint()),
+                              0.25, QPointF{});
+    const qreal buttonScale = view->transform().m11();
+    QApplication::sendEvent(view->viewport(), &pinch);
+    QVERIFY(pinch.isAccepted());
+    QVERIFY(view->transform().m11() > buttonScale);
 }
 
 QTEST_MAIN(MarkdownPreviewPaneTest)

@@ -1,19 +1,22 @@
 #include "preview/MermaidDiagramDialog.h"
 
+#include <QGraphicsPixmapItem>
 #include <QGraphicsScene>
 #include <QGraphicsSvgItem>
-#include <QGraphicsPixmapItem>
-#include <QImageReader>
 #include <QGraphicsView>
 #include <QHBoxLayout>
+#include <QImageReader>
 #include <QLabel>
+#include <QNativeGestureEvent>
 #include <QPainter>
 #include <QPushButton>
+#include <QScrollBar>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWheelEvent>
 
 #include <cmath>
+#include <algorithm>
 
 namespace ketplus {
 namespace {
@@ -22,7 +25,8 @@ class MermaidDiagramView final : public QGraphicsView {
   public:
     MermaidDiagramView(const QString& svgPath, const ThemePalette& palette, QWidget* parent)
         : QGraphicsView(parent), scene_(new QGraphicsScene(this)) {
-        if (QImageReader(svgPath).format() == "svg") diagram_ = new QGraphicsSvgItem(svgPath);
+        if (QImageReader(svgPath).format() == "svg")
+            diagram_ = new QGraphicsSvgItem(svgPath);
         else {
             QPixmap pixmap(svgPath);
             pixmap.setDevicePixelRatio(2);
@@ -55,26 +59,46 @@ class MermaidDiagramView final : public QGraphicsView {
         centerOn(diagram_);
     }
 
-    void zoomIn() { zoomBy(1.25); }
+    void zoomIn() { zoomBy(1.25, viewport()->rect().center()); }
 
-    void zoomOut() { zoomBy(0.8); }
+    void zoomOut() { zoomBy(0.8, viewport()->rect().center()); }
 
   protected:
+    bool viewportEvent(QEvent* event) override {
+        if (event->type() == QEvent::NativeGesture) {
+            auto* gesture = static_cast<QNativeGestureEvent*>(event);
+            if (gesture->gestureType() == Qt::ZoomNativeGesture) {
+                zoomBy(std::exp(gesture->value()), gesture->position());
+                gesture->accept();
+                return true;
+            }
+        }
+        return QGraphicsView::viewportEvent(event);
+    }
+
     void wheelEvent(QWheelEvent* event) override {
-        const int delta = event->angleDelta().y() != 0 ? event->angleDelta().y()
-                                                       : event->pixelDelta().y() * 4;
-        zoomBy(std::pow(1.0015, delta));
+        const int delta =
+            event->angleDelta().y() != 0 ? event->angleDelta().y() : event->pixelDelta().y() * 4;
+        zoomBy(std::pow(1.0015, delta), event->position());
         event->accept();
     }
 
   private:
-    void zoomBy(const double factor) {
-        const double nextScale = currentScale_ * factor;
-        if (nextScale < 0.08 || nextScale > 24.0) {
+    void zoomBy(const double factor, const QPointF& viewportPosition) {
+        constexpr double minimumScale = 0.08;
+        constexpr double maximumScale = 24.0;
+        const double nextScale = std::clamp(currentScale_ * factor, minimumScale, maximumScale);
+        const double appliedFactor = nextScale / currentScale_;
+        if (qFuzzyCompare(appliedFactor, 1.0))
             return;
-        }
-        scale(factor, factor);
+
+        const QPointF scenePosition = mapToScene(viewportPosition.toPoint());
+        scale(appliedFactor, appliedFactor);
         currentScale_ = nextScale;
+        const QPointF anchoredPosition = mapFromScene(scenePosition);
+        const QPointF offset = anchoredPosition - viewportPosition;
+        horizontalScrollBar()->setValue(horizontalScrollBar()->value() + qRound(offset.x()));
+        verticalScrollBar()->setValue(verticalScrollBar()->value() + qRound(offset.y()));
     }
 
     QGraphicsScene* scene_{nullptr};
@@ -84,15 +108,15 @@ class MermaidDiagramView final : public QGraphicsView {
 
 } // namespace
 
-MermaidDiagramDialog::MermaidDiagramDialog(const QString& svgPath,
-                                           const ThemePalette& palette, QWidget* parent)
+MermaidDiagramDialog::MermaidDiagramDialog(const QString& svgPath, const ThemePalette& palette,
+                                           QWidget* parent)
     : QDialog(parent) {
     setAttribute(Qt::WA_DeleteOnClose);
     setWindowTitle(QStringLiteral("Mermaid Diagram"));
     resize(920, 700);
     setMinimumSize(520, 380);
 
-    auto* hint = new QLabel(QStringLiteral("Scroll to zoom • Drag to pan"), this);
+    auto* hint = new QLabel(QStringLiteral("Pinch or scroll to zoom • Drag to pan"), this);
     hint->setProperty("kvRole", QStringLiteral("previewHint"));
     auto* zoomOutButton = new QPushButton(QString::fromUtf8("−"), this);
     zoomOutButton->setObjectName(QStringLiteral("mermaidZoomOut"));
@@ -125,8 +149,7 @@ MermaidDiagramDialog::MermaidDiagramDialog(const QString& svgPath,
     connect(zoomOutButton, &QPushButton::clicked, view, &MermaidDiagramView::zoomOut);
     connect(zoomInButton, &QPushButton::clicked, view, &MermaidDiagramView::zoomIn);
     connect(fitButton, &QPushButton::clicked, view, &MermaidDiagramView::fitDiagram);
-    connect(actualSizeButton, &QPushButton::clicked, view,
-            &MermaidDiagramView::actualSize);
+    connect(actualSizeButton, &QPushButton::clicked, view, &MermaidDiagramView::actualSize);
     connect(closeButton, &QPushButton::clicked, this, &QDialog::close);
     QTimer::singleShot(0, view, [view] { view->fitDiagram(); });
 }
