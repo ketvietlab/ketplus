@@ -38,6 +38,7 @@ class PtyProcessTest final : public QObject {
     void runsInteractiveShellInRequestedDirectory();
     void rendersAnsiOutputThroughVterm();
     void usesSystemFixedFont();
+    void appliesTerminalTypography();
     void echoesTypedTextBeforeEnter();
     void restoresFocusAfterAnActionMenuCloses();
     void rendersInputMethodPreedit();
@@ -91,6 +92,13 @@ void PtyProcessTest::usesSystemFixedFont() {
     terminal.ensurePolished();
     QCOMPARE(QFontInfo(terminal.font()).family(),
              QFontInfo(QFontDatabase::systemFont(QFontDatabase::FixedFont)).family());
+}
+
+void PtyProcessTest::appliesTerminalTypography() {
+    PtyProcess process;
+    TerminalView terminal(process);
+    terminal.setTypography(17, 29);
+    QCOMPARE(terminal.font().pixelSize(), 17);
 }
 
 void PtyProcessTest::echoesTypedTextBeforeEnter() {
@@ -172,8 +180,7 @@ void PtyProcessTest::coalescesStreamingPaints() {
 
     QVERIFY(paints.count > 0);
     QVERIFY2(paints.count <= 8,
-             qPrintable(QStringLiteral("120 output chunks caused %1 paints")
-                            .arg(paints.count)));
+             qPrintable(QStringLiteral("120 output chunks caused %1 paints").arg(paints.count)));
 }
 
 void PtyProcessTest::controlCInterruptsForegroundCommand() {
@@ -191,8 +198,8 @@ void PtyProcessTest::controlCInterruptsForegroundCommand() {
     process.send(QByteArray("stty -echo; printf '__KETPLUS_READY__\\n'\n"));
     QTRY_VERIFY_WITH_TIMEOUT(output.count("__KETPLUS_READY__") >= 2, 5000);
     output.clear();
-    process.send(QByteArray(
-        "printf '__SLEEP_STARTED__\\n'; sleep 30 && printf '__SLEEP_COMPLETED__\\n'\n"));
+    process.send(
+        QByteArray("printf '__SLEEP_STARTED__\\n'; sleep 30 && printf '__SLEEP_COMPLETED__\\n'\n"));
     QTRY_VERIFY_WITH_TIMEOUT(output.contains("__SLEEP_STARTED__"), 5000);
     output.clear();
 #if defined(Q_OS_MACOS)

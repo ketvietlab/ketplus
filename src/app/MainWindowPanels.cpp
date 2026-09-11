@@ -44,13 +44,14 @@ MarkdownPreviewPane* MainWindow::ensureMarkdownPreview() {
     }
 
     markdownPreview_ = new MarkdownPreviewPane(editorSplit_);
+    markdownPreview_->setTypography(appearanceSettings_.preview.fontSizePixels,
+                                    appearanceSettings_.preview.lineHeightPixels);
     editorSplit_->addWidget(markdownPreview_);
     editorSplit_->setStretchFactor(0, 1);
     editorSplit_->setStretchFactor(1, 1);
     connect(markdownPreview_, &MarkdownPreviewPane::closeRequested, this,
             [this] { setMarkdownPreviewVisible(false); });
-    connect(markdownPreview_, &MarkdownPreviewPane::fileOpenRequested, this,
-            &MainWindow::openFile);
+    connect(markdownPreview_, &MarkdownPreviewPane::fileOpenRequested, this, &MainWindow::openFile);
     connect(markdownPreview_, &MarkdownPreviewPane::statusMessageRequested, this,
             [this](const QString& message) { statusBar()->showMessage(message, 7000); });
     return markdownPreview_;
@@ -87,8 +88,8 @@ void MainWindow::updateMarkdownPreview() {
         markdownPreview_->showEmpty(theme_.palette());
         return;
     }
-    markdownPreview_->setSource(QString::fromUtf8(editor->text()),
-                                editor->document().filePath(), theme_.palette());
+    markdownPreview_->setSource(QString::fromUtf8(editor->text()), editor->document().filePath(),
+                                theme_.palette());
 }
 
 TerminalPanel* MainWindow::ensureTerminal() {
@@ -98,11 +99,12 @@ TerminalPanel* MainWindow::ensureTerminal() {
 
     terminal_ = new TerminalPanel(mainSplit_);
     terminal_->applyTheme(theme_.palette());
+    terminal_->setTypography(appearanceSettings_.terminal.fontSizePixels,
+                             appearanceSettings_.terminal.lineHeightPixels);
     mainSplit_->addWidget(terminal_);
     mainSplit_->setStretchFactor(mainSplit_->indexOf(workspaceSplit_), 1);
     mainSplit_->setStretchFactor(mainSplit_->indexOf(terminal_), 0);
-    connect(terminal_, &TerminalPanel::closeRequested, this,
-            [this] { setTerminalVisible(false); });
+    connect(terminal_, &TerminalPanel::closeRequested, this, [this] { setTerminalVisible(false); });
     connect(terminal_, &TerminalPanel::statusMessageRequested, this,
             [this](const QString& message) { statusBar()->showMessage(message, 5000); });
     return terminal_;
@@ -132,9 +134,7 @@ void MainWindow::setTerminalVisible(const bool visible) {
     }
 }
 
-void MainWindow::focusTerminal() {
-    setTerminalVisible(true);
-}
+void MainWindow::focusTerminal() { setTerminalVisible(true); }
 
 ExplorerPanel* MainWindow::ensureExplorer() {
     if (explorer_ != nullptr) {
@@ -167,8 +167,7 @@ void MainWindow::setExplorerVisible(const bool visible) {
         explorer->show();
         QList<int> sizes(workspaceSplit_->count(), 0);
         sizes[workspaceSplit_->indexOf(explorer)] = 260;
-        sizes[workspaceSplit_->indexOf(editorSplit_)] =
-            qMax(420, workspaceSplit_->width() - 260);
+        sizes[workspaceSplit_->indexOf(editorSplit_)] = qMax(420, workspaceSplit_->width() - 260);
         workspaceSplit_->setSizes(sizes);
         const QSignalBlocker explorerBlocker(explorerAction_);
         const QSignalBlocker sourceControlBlocker(sourceControlAction_);
@@ -185,9 +184,7 @@ void MainWindow::setExplorerVisible(const bool visible) {
     }
 }
 
-void MainWindow::focusExplorer() {
-    setExplorerVisible(true);
-}
+void MainWindow::focusExplorer() { setExplorerVisible(true); }
 
 GitChangesPanel* MainWindow::ensureGitChanges() {
     if (gitChanges_ != nullptr) {
@@ -199,9 +196,7 @@ GitChangesPanel* MainWindow::ensureGitChanges() {
     workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(gitChanges_), 0);
     workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(editorSplit_), 1);
     connect(gitChanges_, &GitChangesPanel::diffRequested, this,
-            [this](const QString& path, const GitDiffMode mode) {
-                requestFileDiff(path, mode);
-            });
+            [this](const QString& path, const GitDiffMode mode) { requestFileDiff(path, mode); });
     connect(gitChanges_, &GitChangesPanel::fileOpenRequested, this, &MainWindow::openFile);
     connect(gitChanges_, &GitChangesPanel::refreshRequested, git_, &GitService::refresh);
     connect(gitChanges_, &GitChangesPanel::hideRequested, this,
@@ -219,8 +214,7 @@ void MainWindow::setSourceControlVisible(const bool visible) {
         changes->show();
         QList<int> sizes(workspaceSplit_->count(), 0);
         sizes[workspaceSplit_->indexOf(changes)] = 280;
-        sizes[workspaceSplit_->indexOf(editorSplit_)] =
-            qMax(420, workspaceSplit_->width() - 280);
+        sizes[workspaceSplit_->indexOf(editorSplit_)] = qMax(420, workspaceSplit_->width() - 280);
         workspaceSplit_->setSizes(sizes);
         const QSignalBlocker explorerBlocker(explorerAction_);
         const QSignalBlocker sourceControlBlocker(sourceControlAction_);

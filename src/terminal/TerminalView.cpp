@@ -50,7 +50,9 @@ TerminalView::TerminalView(PtyProcess& process, QWidget* parent)
     setFrameShape(QFrame::NoFrame);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+    QFont terminalFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    terminalFont.setPixelSize(13);
+    setFont(terminalFont);
 
     vterm_set_utf8(terminal_, 1);
     vterm_output_set_callback(terminal_, &TerminalView::outputCallback, this);
@@ -134,6 +136,15 @@ void TerminalView::applyTheme(const ThemePalette& palette) {
     viewport()->update();
 }
 
+void TerminalView::setTypography(const int fontSizePixels, const int lineHeightPixels) {
+    QFont terminalFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    terminalFont.setPixelSize(qBound(8, fontSizePixels, 48));
+    setFont(terminalFont);
+    lineHeightPixels_ = qBound(qMax(12, terminalFont.pixelSize()), lineHeightPixels, 96);
+    updateGeometryFromViewport();
+    viewport()->update();
+}
+
 void TerminalView::start(const QString& workingDirectory) {
     updateGeometryFromViewport();
     if (!process_.start(workingDirectory, rows_, columns_)) {
@@ -182,7 +193,8 @@ void TerminalView::paintEvent(QPaintEvent* event) {
 
     const int offset = historyOffset();
     const QFont baseFont = font();
-    const int baseline = QFontMetrics(baseFont).ascent();
+    const QFontMetrics baseMetrics(baseFont);
+    const int baseline = baseMetrics.ascent() + qMax(0, (cellHeight_ - baseMetrics.height()) / 2);
     for (int row = 0; row < rows_; ++row) {
         const int y = topPadding_ + row * cellHeight_;
         if (y >= viewport()->height()) {
@@ -195,8 +207,7 @@ void TerminalView::paintEvent(QPaintEvent* event) {
             if (cell.attrs.reverse != 0U) {
                 std::swap(foreground, background);
             }
-            const QRect cellRect(leftPadding_ + column * cellWidth_, y, cellWidth_,
-                                 cellHeight_);
+            const QRect cellRect(leftPadding_ + column * cellWidth_, y, cellWidth_, cellHeight_);
             if (background != background_) {
                 painter.fillRect(cellRect, background);
             }
@@ -360,8 +371,8 @@ void TerminalView::keyPressEvent(QKeyEvent* event) {
 
     const QList<uint> characters = event->text().toUcs4();
     if (!characters.isEmpty()) {
-        const VTermModifier modifiers = static_cast<VTermModifier>(
-            terminalModifiers & (VTERM_MOD_CTRL | VTERM_MOD_ALT));
+        const VTermModifier modifiers =
+            static_cast<VTermModifier>(terminalModifiers & (VTERM_MOD_CTRL | VTERM_MOD_ALT));
         for (const uint character : characters) {
             vterm_keyboard_unichar(terminal_, character, modifiers);
         }
@@ -382,8 +393,7 @@ void TerminalView::inputMethodEvent(QInputMethodEvent* event) {
     preeditCursor_ = preeditText_.size();
     for (const QInputMethodEvent::Attribute& attribute : event->attributes()) {
         if (attribute.type == QInputMethodEvent::Cursor) {
-            preeditCursor_ =
-                std::clamp(attribute.start, 0, static_cast<int>(preeditText_.size()));
+            preeditCursor_ = std::clamp(attribute.start, 0, static_cast<int>(preeditText_.size()));
             break;
         }
     }
@@ -435,8 +445,7 @@ int TerminalView::damageCallback(VTermRect, void* user) {
     return 1;
 }
 
-int TerminalView::cursorCallback(const VTermPos position, VTermPos, const int visible,
-                                 void* user) {
+int TerminalView::cursorCallback(const VTermPos position, VTermPos, const int visible, void* user) {
     auto* view = static_cast<TerminalView*>(user);
     view->cursor_ = position;
     view->cursorVisible_ = visible != 0;
@@ -456,8 +465,8 @@ int TerminalView::propertyCallback(const VTermProp property, VTermValue* value, 
         if (fragment.initial) {
             view->pendingTitle_.clear();
         }
-        view->pendingTitle_.append(QString::fromUtf8(fragment.str,
-                                                     static_cast<qsizetype>(fragment.len)));
+        view->pendingTitle_.append(
+            QString::fromUtf8(fragment.str, static_cast<qsizetype>(fragment.len)));
         if (fragment.final) {
             emit view->titleChanged(view->pendingTitle_);
         }
@@ -482,8 +491,7 @@ int TerminalView::scrollbackPushCallback(const int columns, const VTermScreenCel
     const bool wasAtBottom =
         view->verticalScrollBar()->value() == view->verticalScrollBar()->maximum();
     QVector<VTermScreenCell> line(columns);
-    std::memcpy(line.data(), cells,
-                static_cast<size_t>(columns) * sizeof(VTermScreenCell));
+    std::memcpy(line.data(), cells, static_cast<size_t>(columns) * sizeof(VTermScreenCell));
     view->history_.append(std::move(line));
     if (view->history_.size() > maximumScrollbackLines) {
         view->history_.remove(0, view->history_.size() - maximumScrollbackLines);
@@ -492,8 +500,7 @@ int TerminalView::scrollbackPushCallback(const int columns, const VTermScreenCel
     return 1;
 }
 
-int TerminalView::scrollbackPopCallback(const int columns, VTermScreenCell* cells,
-                                        void* user) {
+int TerminalView::scrollbackPopCallback(const int columns, VTermScreenCell* cells, void* user) {
     auto* view = static_cast<TerminalView*>(user);
     if (view->history_.isEmpty()) {
         return 0;
@@ -528,8 +535,7 @@ void TerminalView::consumeOutput(const QByteArray& bytes) {
 void TerminalView::trackSynchronizedOutput(const QByteArray& bytes) {
     static const QByteArray beginSequence("\x1b[?2026h");
     static const QByteArray endSequence("\x1b[?2026l");
-    const qsizetype maximumSequenceLength =
-        std::max(beginSequence.size(), endSequence.size());
+    const qsizetype maximumSequenceLength = std::max(beginSequence.size(), endSequence.size());
 
     for (const char byte : bytes) {
         synchronizedOutputScan_.append(byte);
@@ -546,8 +552,8 @@ void TerminalView::trackSynchronizedOutput(const QByteArray& bytes) {
             continue;
         }
         if (synchronizedOutputScan_.size() > maximumSequenceLength) {
-            synchronizedOutputScan_.remove(
-                0, synchronizedOutputScan_.size() - maximumSequenceLength);
+            synchronizedOutputScan_.remove(0,
+                                           synchronizedOutputScan_.size() - maximumSequenceLength);
         }
     }
     if (synchronizedOutput_) {
@@ -569,7 +575,7 @@ void TerminalView::requestRender() {
 void TerminalView::updateGeometryFromViewport() {
     const QFontMetrics metrics(font());
     cellWidth_ = std::max(1, metrics.horizontalAdvance(QLatin1Char('M')));
-    cellHeight_ = std::max(1, metrics.height() + 2);
+    cellHeight_ = std::max(metrics.height(), lineHeightPixels_);
     const int availableWidth = std::max(1, viewport()->width() - leftPadding_ * 2);
     const int availableHeight = std::max(1, viewport()->height() - topPadding_ * 2);
     const int nextColumns = std::max(2, availableWidth / cellWidth_);
@@ -625,9 +631,8 @@ QColor TerminalView::colorFor(VTermColor color, const bool foreground) const {
     return QColor(color.rgb.red, color.rgb.green, color.rgb.blue);
 }
 
-VTermScreenCell TerminalView::cellAtVisiblePosition(const int displayRow,
-                                                    const int column) const {
-    VTermScreenCell cell {};
+VTermScreenCell TerminalView::cellAtVisiblePosition(const int displayRow, const int column) const {
+    VTermScreenCell cell{};
     cell.fg.type = VTERM_COLOR_DEFAULT_FG;
     cell.bg.type = VTERM_COLOR_DEFAULT_BG;
     const int absoluteRow = historyOffset() + displayRow;
@@ -651,9 +656,8 @@ QString TerminalView::textForCell(const VTermScreenCell& cell) const {
     while (length < VTERM_MAX_CHARS_PER_CELL && cell.chars[length] != 0U) {
         ++length;
     }
-    return length == 0
-               ? QString()
-               : QString::fromUcs4(reinterpret_cast<const char32_t*>(cell.chars), length);
+    return length == 0 ? QString()
+                       : QString::fromUcs4(reinterpret_cast<const char32_t*>(cell.chars), length);
 }
 
 int TerminalView::historyOffset() const {

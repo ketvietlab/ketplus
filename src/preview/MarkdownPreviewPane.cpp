@@ -10,8 +10,8 @@
 #include <QFontDatabase>
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QPainter>
 #include <QPaintEvent>
+#include <QPainter>
 #include <QRegularExpression>
 #include <QResizeEvent>
 #include <QScrollBar>
@@ -153,13 +153,12 @@ class PreviewBrowser final : public QTextBrowser {
                     const qreal startX = line.cursorToX(start);
                     const qreal endX = line.cursorToX(end);
                     QRectF pill(blockRect.left() + qMin(startX, endX) - 4.0,
-                                blockRect.top() + line.y() + 1.0,
-                                qAbs(endX - startX) + 8.0, line.height() - 2.0);
+                                blockRect.top() + line.y() + 1.0, qAbs(endX - startX) + 8.0,
+                                line.height() - 2.0);
                     pill.translate(offset);
                     painter.setPen(QPen(border, 1.0));
                     painter.setBrush(fill);
-                    painter.drawRoundedRect(pill.adjusted(0.5, 0.5, -0.5, -0.5), 4.0,
-                                            4.0);
+                    painter.drawRoundedRect(pill.adjusted(0.5, 0.5, -0.5, -0.5), 4.0, 4.0);
                 }
             }
         }
@@ -174,9 +173,6 @@ namespace {
 constexpr int previewDebounceMilliseconds = 150;
 constexpr qreal previewDocumentPadding = 28.0;
 constexpr qreal previewDocumentMaxWidth = 760.0;
-constexpr qreal previewBodyLineHeight = 150.0;
-constexpr qreal previewHeadingLineHeight = 120.0;
-
 bool isClosingFence(const QString& line, const QString& openingFence) {
     const QString value = line.trimmed();
     if (value.size() < openingFence.size()) {
@@ -264,8 +260,8 @@ MarkdownPreviewPane::MarkdownPreviewPane(QWidget* parent)
             return;
         }
         if (url.isRelative() && !filePath_.isEmpty()) {
-            url = QUrl::fromLocalFile(QFileInfo(filePath_).absoluteDir().absoluteFilePath(
-                url.toString()));
+            url = QUrl::fromLocalFile(
+                QFileInfo(filePath_).absoluteDir().absoluteFilePath(url.toString()));
         }
         if (url.isLocalFile()) {
             emit fileOpenRequested(url.toLocalFile());
@@ -299,6 +295,17 @@ void MarkdownPreviewPane::showEmpty(const ThemePalette& palette) {
     setNotice({});
 }
 
+void MarkdownPreviewPane::setTypography(const int fontSizePixels, const int lineHeightPixels) {
+    fontSizePixels_ = qBound(8, fontSizePixels, 48);
+    lineHeightPixels_ = qBound(qMax(12, fontSizePixels_), lineHeightPixels, 96);
+    if (hasSource_) {
+        renderTimer_->start(0);
+        return;
+    }
+    applyDocumentStyle();
+    applyBlockTypography();
+}
+
 void MarkdownPreviewPane::resizeEvent(QResizeEvent* event) {
     QWidget::resizeEvent(event);
     QTimer::singleShot(0, this, [this] { updateDocumentMargin(); });
@@ -316,13 +323,12 @@ void MarkdownPreviewPane::renderNow() {
     PreparedDocument prepared = prepareDocument();
     browser_->setImages(std::move(prepared.images));
     diagramFiles_ = std::move(prepared.diagramFiles);
-    browser_->document()->setBaseUrl(filePath_.isEmpty()
-                                         ? QUrl()
-                                         : QUrl::fromLocalFile(
-                                               QFileInfo(filePath_).absolutePath() + QLatin1Char('/')));
+    browser_->document()->setBaseUrl(
+        filePath_.isEmpty()
+            ? QUrl()
+            : QUrl::fromLocalFile(QFileInfo(filePath_).absolutePath() + QLatin1Char('/')));
     applyDocumentStyle();
-    auto markdownFeatures =
-        QTextDocument::MarkdownFeatures(QTextDocument::MarkdownDialectGitHub);
+    auto markdownFeatures = QTextDocument::MarkdownFeatures(QTextDocument::MarkdownDialectGitHub);
     markdownFeatures.setFlag(QTextDocument::MarkdownNoHTML);
     browser_->document()->setMarkdown(prepared.markdown, markdownFeatures);
     applyBlockTypography();
@@ -360,8 +366,7 @@ MarkdownPreviewPane::PreparedDocument MarkdownPreviewPane::prepareDocument() {
 
         const QString openingFence = match.captured(1);
         qsizetype closingLine = lineIndex + 1;
-        while (closingLine < lines.size() &&
-               !isClosingFence(lines[closingLine], openingFence)) {
+        while (closingLine < lines.size() && !isClosingFence(lines[closingLine], openingFence)) {
             ++closingLine;
         }
         if (closingLine >= lines.size()) {
@@ -379,8 +384,7 @@ MarkdownPreviewPane::PreparedDocument MarkdownPreviewPane::prepareDocument() {
                 prepared.images.insert(url, image);
                 prepared.diagramFiles.insert(result.cacheKey, result.filePath);
                 output.append(QStringLiteral("[![Mermaid diagram](<%1>)](<%2>)")
-                                  .arg(url.toString(),
-                                       diagramOpenUrl(result.cacheKey).toString()));
+                                  .arg(url.toString(), diagramOpenUrl(result.cacheKey).toString()));
             } else {
                 prepared.rendererError = QStringLiteral("mmdc produced an unreadable SVG");
                 output.append(lines.mid(lineIndex, closingLine - lineIndex + 1));
@@ -431,17 +435,17 @@ void MarkdownPreviewPane::applyDocumentStyle() {
     browser_->setDecorationPalette(palette_);
 
     QFont bodyFont = browser_->font();
-    bodyFont.setPixelSize(14);
+    bodyFont.setPixelSize(fontSizePixels_);
     browser_->document()->setDefaultFont(bodyFont);
 
     const QString codeFont = QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
-    browser_->document()->setDefaultStyleSheet(QStringLiteral(R"(
+    QString documentStyle = QStringLiteral(R"(
         body {
             color: %1;
             background-color: %2;
             font-family: "%9";
-            font-size: 14px;
-            line-height: 1.55;
+            font-size: {{bodyFontSize}}px;
+            line-height: {{bodyLineHeight}}px;
             margin: 0;
         }
         p { margin: 0 0 12px; }
@@ -451,18 +455,18 @@ void MarkdownPreviewPane::applyDocumentStyle() {
             margin: 0;
         }
         h1 {
-            font-size: 26px;
+            font-size: {{headingOneSize}}px;
             border-bottom: 1px solid %3;
             padding-bottom: 9px;
         }
         h2 {
-            font-size: 20px;
+            font-size: {{headingTwoSize}}px;
             border-bottom: 1px solid %3;
             padding-bottom: 7px;
         }
-        h3 { font-size: 16px; }
-        h4 { font-size: 14px; }
-        h5, h6 { color: %7; font-size: 13px; }
+        h3 { font-size: {{headingThreeSize}}px; }
+        h4 { font-size: {{bodyFontSize}}px; }
+        h5, h6 { color: %7; font-size: {{smallFontSize}}px; }
         a { color: %4; text-decoration: none; }
         strong { font-weight: 650; }
         pre {
@@ -470,8 +474,8 @@ void MarkdownPreviewPane::applyDocumentStyle() {
             background-color: %5;
             border: 1px solid %3;
             font-family: "%8";
-            font-size: 13px;
-            line-height: 1.5;
+            font-size: {{codeFontSize}}px;
+            line-height: {{codeLineHeight}}px;
             margin: 8px 0 18px;
             padding: 14px 16px;
             white-space: pre-wrap;
@@ -480,7 +484,7 @@ void MarkdownPreviewPane::applyDocumentStyle() {
             color: %4;
             background-color: %5;
             font-family: "%8";
-            font-size: 13px;
+            font-size: {{codeFontSize}}px;
             padding: 1px 4px;
         }
         pre code { color: %1; background-color: transparent; padding: 0; }
@@ -498,16 +502,25 @@ void MarkdownPreviewPane::applyDocumentStyle() {
         th { color: %1; background-color: %5; font-weight: 650; }
         hr { color: %3; margin: 24px 0; }
         img { margin: 8px 0 16px; }
-    )")
-                                                   .arg(palette_.textMain,
-                                                        palette_.panelBackground,
-                                                        palette_.border,
-                                                        palette_.accent,
-                                                        palette_.panelSubtle,
-                                                        palette_.accentMuted,
-                                                        palette_.textSecondary,
-                                                        codeFont,
-                                                        bodyFont.family()));
+    )");
+    documentStyle = documentStyle.arg(palette_.textMain, palette_.panelBackground, palette_.border,
+                                      palette_.accent, palette_.panelSubtle, palette_.accentMuted,
+                                      palette_.textSecondary, codeFont, bodyFont.family());
+    const int codeFontSize = qMax(8, fontSizePixels_ - 1);
+    const std::pair<const char*, int> typographyTokens[] = {
+        {"{{bodyFontSize}}", fontSizePixels_},
+        {"{{bodyLineHeight}}", lineHeightPixels_},
+        {"{{headingOneSize}}", fontSizePixels_ + 12},
+        {"{{headingTwoSize}}", fontSizePixels_ + 6},
+        {"{{headingThreeSize}}", fontSizePixels_ + 2},
+        {"{{smallFontSize}}", qMax(8, fontSizePixels_ - 1)},
+        {"{{codeFontSize}}", codeFontSize},
+        {"{{codeLineHeight}}", qMax(codeFontSize, lineHeightPixels_ - 1)},
+    };
+    for (const auto& [token, value] : typographyTokens) {
+        documentStyle.replace(QString::fromLatin1(token), QString::number(value));
+    }
+    browser_->document()->setDefaultStyleSheet(documentStyle);
     browser_->setStyleSheet(QStringLiteral("QTextBrowser { background: %1; color: %2; border: 0; }")
                                 .arg(palette_.panelBackground, palette_.textMain));
 }
@@ -544,24 +557,22 @@ void MarkdownPreviewPane::applyBlockTypography() {
             tables.append(table);
         }
 
+        const int codeFontSize = qMax(8, fontSizePixels_ - 1);
         if (containsImage) {
             format.setLineHeight(24.0, QTextBlockFormat::MinimumHeight);
         } else if (isCodeBlock) {
-            format.setLineHeight(145.0, QTextBlockFormat::ProportionalHeight);
+            format.setLineHeight(qMax(codeFontSize, lineHeightPixels_ - 1),
+                                 QTextBlockFormat::FixedHeight);
         } else {
-            format.setLineHeight(headingLevel > 0 ? previewHeadingLineHeight
-                                                  : previewBodyLineHeight,
-                                 QTextBlockFormat::ProportionalHeight);
+            format.setLineHeight(headingLevel > 0 ? lineHeightPixels_ + 2 : lineHeightPixels_,
+                                 QTextBlockFormat::FixedHeight);
         }
 
         if (headingLevel > 0) {
-            static constexpr qreal headingTopMargins[] = {0.0, 28.0, 26.0, 22.0,
-                                                          18.0, 18.0, 18.0};
-            static constexpr qreal headingBottomMargins[] = {0.0, 14.0, 12.0, 9.0,
-                                                             8.0, 8.0, 8.0};
+            static constexpr qreal headingTopMargins[] = {0.0, 28.0, 26.0, 22.0, 18.0, 18.0, 18.0};
+            static constexpr qreal headingBottomMargins[] = {0.0, 14.0, 12.0, 9.0, 8.0, 8.0, 8.0};
             const int marginIndex = qBound(1, headingLevel, 6);
-            format.setTopMargin(block.position() == 0 ? 0.0
-                                                      : headingTopMargins[marginIndex]);
+            format.setTopMargin(block.position() == 0 ? 0.0 : headingTopMargins[marginIndex]);
             format.setBottomMargin(headingBottomMargins[marginIndex]);
         } else if (table != nullptr) {
             format.setTopMargin(0.0);
@@ -576,9 +587,8 @@ void MarkdownPreviewPane::applyBlockTypography() {
                 (previous.blockFormat().hasProperty(QTextFormat::BlockCodeLanguage) ||
                  previous.blockFormat().hasProperty(QTextFormat::BlockCodeFence));
             const bool nextIsCode =
-                next.isValid() &&
-                (next.blockFormat().hasProperty(QTextFormat::BlockCodeLanguage) ||
-                 next.blockFormat().hasProperty(QTextFormat::BlockCodeFence));
+                next.isValid() && (next.blockFormat().hasProperty(QTextFormat::BlockCodeLanguage) ||
+                                   next.blockFormat().hasProperty(QTextFormat::BlockCodeFence));
             format.setTopMargin(previousIsCode ? 0.0 : 20.0);
             format.setBottomMargin(nextIsCode ? 0.0 : 20.0);
             format.setLeftMargin(18.0);
@@ -605,7 +615,13 @@ void MarkdownPreviewPane::applyBlockTypography() {
         blockCursor.setBlockFormat(format);
 
         if (headingLevel > 0) {
-            static constexpr int headingSizes[] = {14, 26, 20, 16, 14, 13, 13};
+            const int headingSizes[] = {fontSizePixels_,
+                                        fontSizePixels_ + 12,
+                                        fontSizePixels_ + 6,
+                                        fontSizePixels_ + 2,
+                                        fontSizePixels_,
+                                        qMax(8, fontSizePixels_ - 1),
+                                        qMax(8, fontSizePixels_ - 1)};
             QFont headingFont = browser_->document()->defaultFont();
             headingFont.setPixelSize(headingSizes[qBound(1, headingLevel, 6)]);
             headingFont.setWeight(QFont::DemiBold);
@@ -628,7 +644,7 @@ void MarkdownPreviewPane::applyBlockTypography() {
                                 sourceFormat.font().family() == QStringLiteral("monospace");
             if (isCode) {
                 QFont styledCodeFont = codeFont;
-                styledCodeFont.setPixelSize(13);
+                styledCodeFont.setPixelSize(codeFontSize);
                 fragmentFormat.setFont(styledCodeFont,
                                        QTextCharFormat::FontPropertiesSpecifiedOnly);
                 fragmentFormat.setForeground(
@@ -667,8 +683,8 @@ void MarkdownPreviewPane::applyBlockTypography() {
                 QTextTableCell cell = table->cellAt(row, column);
                 QTextCharFormat cellFormat = cell.format();
                 cellFormat.setVerticalAlignment(QTextCharFormat::AlignMiddle);
-                cellFormat.setBackground(QColor(row == 0 ? palette_.panelSubtle
-                                                         : palette_.panelBackground));
+                cellFormat.setBackground(
+                    QColor(row == 0 ? palette_.panelSubtle : palette_.panelBackground));
                 cell.setFormat(cellFormat);
 
                 QTextCursor cellCursor = cell.firstCursorPosition();
@@ -721,8 +737,8 @@ void MarkdownPreviewPane::linkMermaidImages() {
 void MarkdownPreviewPane::setNotice(const QString& message, const bool error) {
     notice_->setVisible(!message.isEmpty());
     notice_->setText(message);
-    notice_->setProperty("noticeState", error ? QStringLiteral("error")
-                                               : QStringLiteral("warning"));
+    notice_->setProperty("noticeState",
+                         error ? QStringLiteral("error") : QStringLiteral("warning"));
     notice_->style()->unpolish(notice_);
     notice_->style()->polish(notice_);
     if (!message.isEmpty() && message != lastStatusMessage_) {

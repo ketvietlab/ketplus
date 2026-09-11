@@ -3,6 +3,8 @@
 #include <QObject>
 #include <QString>
 
+#include <optional>
+
 class QApplication;
 
 namespace ketplus {
@@ -53,22 +55,29 @@ class ThemeManager final : public QObject {
 
     [[nodiscard]] Mode mode() const noexcept;
     [[nodiscard]] const ThemePalette& palette() const noexcept;
+    [[nodiscard]] int interfaceFontSizePixels() const noexcept;
 
   public slots:
     void setMode(Mode mode);
+    void previewMode(Mode mode);
+    void cancelPreview();
+    void setInterfaceFontSizePixels(int fontSizePixels);
 
   signals:
     void themeChanged();
 
   private:
     void apply();
+    [[nodiscard]] Mode effectiveMode() const noexcept;
     [[nodiscard]] bool useDarkPalette() const;
     void loadInterFont();
 
     QApplication& application_;
     Mode mode_{Mode::System};
+    std::optional<Mode> previewMode_;
     ThemePalette palette_;
     QString uiFontFamily_;
+    int interfaceFontSizePixels_{14};
 };
 
 } // namespace ketplus

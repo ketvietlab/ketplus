@@ -104,8 +104,7 @@ bool MainWindow::saveEditor(EditorWidget* editor, const bool choosePath) {
     git_->scheduleRefresh();
     if (editor->isLargeFileMode()) {
         statusBar()->showMessage(
-            QStringLiteral("Large file mode: syntax highlighting and undo are disabled"),
-            5000);
+            QStringLiteral("Large file mode: syntax highlighting and undo are disabled"), 5000);
     }
     return true;
 }
@@ -233,8 +232,7 @@ QAction* MainWindow::addMarkdownPreviewContextAction(QMenu& menu, EditorWidget* 
     auto* action = menu.addAction(QStringLiteral("Markdown Preview"));
     action->setCheckable(true);
     action->setChecked(markdownPreview_ != nullptr && markdownPreview_->isVisible());
-    action->setEnabled(editor != nullptr &&
-                       editor->syntaxName() == QStringLiteral("markdown"));
+    action->setEnabled(editor != nullptr && editor->syntaxName() == QStringLiteral("markdown"));
     action->setShortcut(markdownPreviewAction_->shortcut());
     return action;
 }
@@ -275,22 +273,19 @@ void MainWindow::configureTabCloseButton(const int index, QWidget* tab,
 
 EditorWidget* MainWindow::createEditor() {
     auto* editor = new EditorWidget(this);
-    editor->setEditorSettings(editorSettings_);
+    editor->setEditorSettings(appearanceSettings_.editor);
     editor->applyTheme(theme_.palette());
     connect(editor, &EditorWidget::contextMenuRequested, this,
-            [this, editor](const QPoint& position) {
-                showEditorContextMenu(editor, position);
-            });
-    connect(editor, &EditorWidget::dirtyStateChanged, this,
-            [this, editor](const bool dirty) {
-                updateTabTitle(editor);
-                if (currentEditor() == editor) {
-                    updateDocumentState();
-                }
-                if (!dirty) {
-                    enforceTabResourcePolicy();
-                }
-            });
+            [this, editor](const QPoint& position) { showEditorContextMenu(editor, position); });
+    connect(editor, &EditorWidget::dirtyStateChanged, this, [this, editor](const bool dirty) {
+        updateTabTitle(editor);
+        if (currentEditor() == editor) {
+            updateDocumentState();
+        }
+        if (!dirty) {
+            enforceTabResourcePolicy();
+        }
+    });
     connect(editor, &EditorWidget::cursorPositionChanged, this,
             [this, editor](const int line, const int column) {
                 if (currentEditor() == editor) {
@@ -352,10 +347,9 @@ void MainWindow::updateDocumentState() {
     }
 
     const bool dirty = editor->document().isModified();
-    documentStateLabel_->setText(dirty ? QStringLiteral("● Modified")
-                                       : editor->document().isUntitled()
-                                             ? QStringLiteral("New")
-                                             : QStringLiteral("Saved"));
+    documentStateLabel_->setText(dirty                             ? QStringLiteral("● Modified")
+                                 : editor->document().isUntitled() ? QStringLiteral("New")
+                                                                   : QStringLiteral("Saved"));
     documentStateLabel_->setToolTip(
         dirty ? QStringLiteral("This tab has unsaved changes and will remain in memory")
               : QStringLiteral("This tab has no unsaved changes"));
@@ -404,8 +398,7 @@ void MainWindow::enforceTabResourcePolicy() {
 
     std::ranges::sort(candidates, {}, &EditorWidget::lastActivated);
     for (auto* editor : candidates) {
-        if (residentCount <= maximumResidentTabCount &&
-            residentBytes <= residentTextBudgetBytes) {
+        if (residentCount <= maximumResidentTabCount && residentBytes <= residentTextBudgetBytes) {
             break;
         }
         const qsizetype releasedBytes = editor->residentBytes();
@@ -418,8 +411,7 @@ void MainWindow::enforceTabResourcePolicy() {
 
 void MainWindow::rememberRecentFolder(const QString& path) {
     QSettings settings;
-    QStringList folders =
-        settings.value(QStringLiteral("workspace/recentFolders")).toStringList();
+    QStringList folders = settings.value(QStringLiteral("workspace/recentFolders")).toStringList();
     folders.removeAll(path);
     folders.prepend(path);
     while (folders.size() > maximumRecentFolderCount) {
@@ -502,30 +494,39 @@ void MainWindow::replaceAllMatches() {
 }
 
 void MainWindow::showSettings() {
-    SettingsDialog dialog(editorSettings_, this);
-    connect(&dialog, &SettingsDialog::settingsSaved, this,
-            &MainWindow::applyEditorSettings);
+    SettingsDialog dialog(appearanceSettings_, theme_, this);
+    connect(&dialog, &SettingsDialog::appearanceSettingsSaved, this,
+            &MainWindow::applyAppearanceSettings);
     dialog.exec();
 }
 
-void MainWindow::applyEditorSettings(const EditorSettings& settings) {
-    editorSettings_ = settings.normalized();
-    editorSettings_.save();
+void MainWindow::applyAppearanceSettings(const AppearanceSettings& settings) {
+    appearanceSettings_ = settings.normalized();
+    appearanceSettings_.save();
+    theme_.setInterfaceFontSizePixels(appearanceSettings_.interfaceFontSizePixels);
 
     auto* activeEditor = currentEditor();
     for (int index = 0; index < tabs_->count(); ++index) {
         if (auto* editor = qobject_cast<EditorWidget*>(tabs_->widget(index))) {
-            editor->setEditorSettings(editorSettings_);
+            editor->setEditorSettings(appearanceSettings_.editor);
             if (editor == activeEditor && !editor->isHibernated()) {
                 editor->applyTheme(theme_.palette());
             } else {
                 editor->markThemePending();
             }
         } else if (auto* diffView = qobject_cast<GitDiffView*>(tabs_->widget(index))) {
-            diffView->applyEditorSettings(editorSettings_);
+            diffView->applyEditorSettings(appearanceSettings_.editor);
         }
     }
-    statusBar()->showMessage(QStringLiteral("Editor typography updated"), 2500);
+    if (terminal_ != nullptr) {
+        terminal_->setTypography(appearanceSettings_.terminal.fontSizePixels,
+                                 appearanceSettings_.terminal.lineHeightPixels);
+    }
+    if (markdownPreview_ != nullptr) {
+        markdownPreview_->setTypography(appearanceSettings_.preview.fontSizePixels,
+                                        appearanceSettings_.preview.lineHeightPixels);
+    }
+    statusBar()->showMessage(QStringLiteral("Appearance settings updated"), 2500);
 }
 
 void MainWindow::applyThemeToEditors() {

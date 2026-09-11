@@ -17,6 +17,9 @@ Qt application shell
         -> PTY process backend
             -> forkpty (macOS/Linux)
             -> ConPTY (future Windows backend)
+    -> reusable settings shell
+        -> public appearance settings and built-in theme selection
+        -> consumer-owned pages through a narrow extension contract
 ```
 
 - `src/app` owns windows, menus, tabs, and user interaction.
@@ -44,6 +47,10 @@ Qt application shell
 - Terminal creation is lazy. Hiding its panel only detaches the visible area; it
   does not stop the shell. The first implementation retains one session, while
   the planned session registry will retain one or more sessions per worktree.
+- `src/app/SettingsDialog` owns the reusable tabbed settings shell. Public
+  appearance values are applied as one normalized snapshot; proprietary
+  consumers may add self-owned pages without moving their storage or behavior
+  into CM. See `settings.md`.
 
 ## Principles
 

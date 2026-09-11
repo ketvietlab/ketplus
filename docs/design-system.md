@@ -19,6 +19,10 @@ copying web-specific implementation details.
 `ThemeManager` owns the semantic light and dark palettes, applies the Qt palette
 and stylesheet, and follows the operating system by default. The selected mode
 is persisted through `QSettings` and can be changed from `View > Appearance`.
+Settings can change the interface base font size while component hierarchy stays
+derived from Két density tokens. Editor, terminal, and preview typography use
+independent font-size and line-height values; control line height remains
+automatic so typography changes do not distort navigation or button geometry.
 
 Scintilla receives the same surface, selection, focus, and semantic colors. The
 Lexilla themes cover C-family languages, JavaScript/TypeScript, Python, HTML,

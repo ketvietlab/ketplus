@@ -31,6 +31,7 @@ class TerminalView final : public QAbstractScrollArea {
     ~TerminalView() override;
 
     void applyTheme(const ThemePalette& palette);
+    void setTypography(int fontSizePixels, int lineHeightPixels);
     void start(const QString& workingDirectory);
     void pasteClipboard();
 
@@ -54,13 +55,11 @@ class TerminalView final : public QAbstractScrollArea {
   private:
     static void outputCallback(const char* bytes, size_t length, void* user);
     static int damageCallback(VTermRect rect, void* user);
-    static int cursorCallback(VTermPos position, VTermPos oldPosition, int visible,
-                              void* user);
+    static int cursorCallback(VTermPos position, VTermPos oldPosition, int visible, void* user);
     static int propertyCallback(VTermProp property, VTermValue* value, void* user);
     static int bellCallback(void* user);
     static int resizeCallback(int rows, int columns, void* user);
-    static int scrollbackPushCallback(int columns, const VTermScreenCell* cells,
-                                      void* user);
+    static int scrollbackPushCallback(int columns, const VTermScreenCell* cells, void* user);
     static int scrollbackPopCallback(int columns, VTermScreenCell* cells, void* user);
     static int scrollbackClearCallback(void* user);
 
@@ -84,6 +83,7 @@ class TerminalView final : public QAbstractScrollArea {
     int columns_{80};
     int cellWidth_{8};
     int cellHeight_{17};
+    int lineHeightPixels_{20};
     int leftPadding_{10};
     int topPadding_{8};
     VTermPos cursor_{0, 0};

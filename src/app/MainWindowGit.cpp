@@ -75,8 +75,7 @@ void MainWindow::requestFileDiff(const QString& filePath, const GitDiffMode mode
     git_->requestDiff(filePath, mode);
 }
 
-void MainWindow::showDiff(const QString& filePath, const GitDiffMode mode,
-                          const QString& diff) {
+void MainWindow::showDiff(const QString& filePath, const GitDiffMode mode, const QString& diff) {
     const QString absolutePath = normalizedPath(filePath);
     for (int index = 0; index < tabs_->count(); ++index) {
         auto* existing = qobject_cast<GitDiffView*>(tabs_->widget(index));
@@ -90,7 +89,7 @@ void MainWindow::showDiff(const QString& filePath, const GitDiffMode mode,
     }
 
     auto* diffView = new GitDiffView(this);
-    diffView->applyEditorSettings(editorSettings_);
+    diffView->applyEditorSettings(appearanceSettings_.editor);
     diffView->setDiff(absolutePath, mode, diff, theme_.palette());
     connect(diffView, &GitDiffView::openFileRequested, this, &MainWindow::openFile);
     connect(diffView, &GitDiffView::refreshRequested, this,
@@ -132,10 +131,9 @@ void MainWindow::updateGitSnapshot(const GitSnapshot& snapshot) {
         text.append(QStringLiteral(" ↓%1").arg(snapshot.behind));
     }
     gitButton_->setText(text);
-    gitButton_->setToolTip(
-        QStringLiteral("%1\n%2 changed file(s)")
-            .arg(snapshot.repositoryRoot)
-            .arg(snapshot.files.size()));
+    gitButton_->setToolTip(QStringLiteral("%1\n%2 changed file(s)")
+                               .arg(snapshot.repositoryRoot)
+                               .arg(snapshot.files.size()));
     gitButton_->show();
     updateGitActions();
 }

@@ -1,68 +1,21 @@
 #include "app/SettingsDialog.h"
 
+#include "ui/Theme.h"
+
+#include <QCheckBox>
 #include <QDialogButtonBox>
 #include <QFontComboBox>
-#include <QFontMetrics>
 #include <QFrame>
-#include <QGridLayout>
+#include <QHBoxLayout>
 #include <QLabel>
-#include <QPainter>
-#include <QPaintEvent>
+#include <QListWidget>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QSpinBox>
-#include <QStyle>
-#include <QStyleOption>
+#include <QStackedWidget>
 #include <QVBoxLayout>
 
 namespace ketplus {
-
-class TypographyPreview final : public QWidget {
-  public:
-    using QWidget::QWidget;
-
-    void setEditorSettings(const EditorSettings& settings) {
-        settings_ = settings.normalized();
-        setMinimumHeight(qBound(116, settings_.lineHeightPixels * 3 + 36, 300));
-        update();
-    }
-
-  protected:
-    void paintEvent(QPaintEvent* event) override {
-        Q_UNUSED(event)
-        QStyleOption option;
-        option.initFrom(this);
-        QPainter painter(this);
-        style()->drawPrimitive(QStyle::PE_Widget, &option, &painter, this);
-
-        painter.setRenderHint(QPainter::TextAntialiasing, true);
-        const QFont codeFont = settings_.font();
-        painter.setFont(codeFont);
-        const QFontMetrics metrics(codeFont);
-        const QColor codeColor = palette().color(QPalette::Text);
-        const QColor gutterColor = palette().color(QPalette::PlaceholderText);
-        const QStringList lines = {
-            QStringLiteral("const editor = \"KetPlus\";"),
-            QStringLiteral("// Clear type. Calm rhythm."),
-            QStringLiteral("editor.open();"),
-        };
-
-        const int gutterWidth = metrics.horizontalAdvance(QStringLiteral("00")) + 18;
-        int baseline = 18 + metrics.ascent();
-        for (qsizetype index = 0; index < lines.size(); ++index) {
-            painter.setPen(gutterColor);
-            painter.drawText(QRect(12, baseline - metrics.ascent(), gutterWidth - 8,
-                                   settings_.lineHeightPixels),
-                             Qt::AlignRight | Qt::AlignTop,
-                             QString::number(index + 1));
-            painter.setPen(codeColor);
-            painter.drawText(gutterWidth + 14, baseline, lines.at(index));
-            baseline += settings_.lineHeightPixels;
-        }
-    }
-
-  private:
-    EditorSettings settings_{EditorSettings::defaults()};
-};
 
 namespace {
 
@@ -73,125 +26,255 @@ QLabel* makeLabel(const QString& text, const QString& role, QWidget* parent) {
     return label;
 }
 
+QWidget* makePageHeading(const QString& eyebrow, const QString& title, const QString& description,
+                         QWidget* parent) {
+    auto* heading = new QWidget(parent);
+    auto* layout = new QVBoxLayout(heading);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(5);
+    layout->addWidget(makeLabel(eyebrow, QStringLiteral("settingsEyebrow"), heading));
+    layout->addWidget(makeLabel(title, QStringLiteral("settingsTitle"), heading));
+    layout->addWidget(makeLabel(description, QStringLiteral("settingsDescription"), heading));
+    return heading;
+}
+
 } // namespace
 
-SettingsDialog::SettingsDialog(const EditorSettings& settings, QWidget* parent)
-    : QDialog(parent), fontBox_(new QFontComboBox(this)),
-      fontSizeBox_(new QSpinBox(this)), lineHeightBox_(new QSpinBox(this)),
-      preview_(new TypographyPreview(this)) {
+SettingsPage::SettingsPage(QString id, QString title, QWidget* parent)
+    : QWidget(parent), id_(std::move(id)), title_(std::move(title)) {}
+
+const QString& SettingsPage::id() const noexcept { return id_; }
+
+const QString& SettingsPage::title() const noexcept { return title_; }
+
+bool SettingsPage::hasChanges() const { return false; }
+
+void SettingsPage::resetToDefaults() {}
+
+void SettingsPage::apply() {}
+
+SettingsDialog::SettingsDialog(const AppearanceSettings& settings, ThemeManager& theme,
+                               QWidget* parent)
+    : QDialog(parent), theme_(&theme), initialThemeMode_(static_cast<int>(theme.mode())),
+      selectedThemeMode_(initialThemeMode_) {
+    initialize(settings);
+}
+
+SettingsDialog::SettingsDialog(const EditorSettings& settings, QWidget* parent) : QDialog(parent) {
+    auto appearance = AppearanceSettings::defaults();
+    appearance.editor = settings;
+    initialize(appearance);
+}
+
+void SettingsDialog::initialize(const AppearanceSettings& settings) {
+    initialSettings_ = settings.normalized();
     setWindowTitle(QStringLiteral("Settings"));
     setProperty("kvRole", QStringLiteral("settingsDialog"));
     setModal(true);
-    setMinimumWidth(520);
+    resize(920, 650);
+    setMinimumSize(760, 560);
 
-    auto* heading = makeLabel(QStringLiteral("EDITOR"), QStringLiteral("settingsEyebrow"), this);
-    auto* title =
-        makeLabel(QStringLiteral("Typography"), QStringLiteral("settingsTitle"), this);
-    auto* description = makeLabel(
-        QStringLiteral("Tune the editor for comfortable reading. Changes also apply to Git diffs."),
-        QStringLiteral("settingsDescription"), this);
+    auto* header = new QWidget(this);
+    header->setProperty("kvRole", QStringLiteral("settingsHeader"));
+    auto* headerLayout = new QHBoxLayout(header);
+    headerLayout->setContentsMargins(18, 0, 14, 0);
+    headerLayout->addWidget(
+        makeLabel(QStringLiteral("Settings"), QStringLiteral("settingsHeaderTitle"), header));
+    headerLayout->addStretch(1);
 
-    fontBox_->setObjectName(QStringLiteral("editorFontFamily"));
-    fontBox_->setFontFilters(QFontComboBox::MonospacedFonts);
+    navigation_ = new QListWidget(this);
+    navigation_->setObjectName(QStringLiteral("settingsNavigation"));
+    navigation_->setProperty("kvRole", QStringLiteral("settingsNavigation"));
+    navigation_->setFixedWidth(196);
+    navigation_->setSpacing(2);
 
-    fontSizeBox_->setObjectName(QStringLiteral("editorFontSize"));
-    fontSizeBox_->setRange(EditorSettings::minimumFontSizePixels,
-                           EditorSettings::maximumFontSizePixels);
-    fontSizeBox_->setSuffix(QStringLiteral(" px"));
+    pages_ = new QStackedWidget(this);
+    pages_->setObjectName(QStringLiteral("settingsPages"));
+    addNavigationPage(QStringLiteral("general"), QStringLiteral("General"), createGeneralPage());
+    addNavigationPage(QStringLiteral("appearance"), QStringLiteral("Appearance"),
+                      createAppearancePage());
 
-    lineHeightBox_->setObjectName(QStringLiteral("editorLineHeight"));
-    lineHeightBox_->setRange(EditorSettings::minimumLineHeightPixels,
-                             EditorSettings::maximumLineHeightPixels);
-    lineHeightBox_->setSuffix(QStringLiteral(" px"));
+    auto* body = new QWidget(this);
+    auto* bodyLayout = new QHBoxLayout(body);
+    bodyLayout->setContentsMargins(0, 0, 0, 0);
+    bodyLayout->setSpacing(0);
+    bodyLayout->addWidget(navigation_);
+    bodyLayout->addWidget(pages_, 1);
 
-    auto* card = new QFrame(this);
-    card->setProperty("kvRole", QStringLiteral("settingsCard"));
-    auto* form = new QGridLayout(card);
-    form->setContentsMargins(16, 14, 16, 16);
-    form->setHorizontalSpacing(18);
-    form->setVerticalSpacing(6);
-    form->setColumnStretch(1, 1);
+    buttons_ = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
+    resetButton_ =
+        buttons_->addButton(QStringLiteral("Reset defaults"), QDialogButtonBox::ResetRole);
+    resetButton_->setProperty("kvRole", QStringLiteral("settingsReset"));
+    saveButton_ = buttons_->addButton(QStringLiteral("Save changes"), QDialogButtonBox::AcceptRole);
+    saveButton_->setProperty("kvRole", QStringLiteral("primaryAction"));
+    saveButton_->setDefault(true);
 
-    auto addField = [form](const int row, const QString& labelText, const QString& helpText,
-                           QWidget* field) {
-        auto* label = makeLabel(labelText, QStringLiteral("settingsFieldLabel"), field->parentWidget());
-        auto* help = makeLabel(helpText, QStringLiteral("settingsFieldHelp"), field->parentWidget());
-        label->setBuddy(field);
-        form->addWidget(label, row * 2, 0, Qt::AlignTop);
-        form->addWidget(field, row * 2, 1);
-        form->addWidget(help, row * 2 + 1, 1);
-    };
-
-    addField(0, QStringLiteral("Font"), QStringLiteral("Installed monospaced fonts"), fontBox_);
-    addField(1, QStringLiteral("Font size"), QStringLiteral("8–48 pixels"), fontSizeBox_);
-    addField(2, QStringLiteral("Line height"),
-             QStringLiteral("Vertical space reserved for each line"), lineHeightBox_);
-
-    auto* previewLabel =
-        makeLabel(QStringLiteral("PREVIEW"), QStringLiteral("settingsEyebrow"), this);
-    preview_->setProperty("kvRole", QStringLiteral("settingsPreview"));
-    preview_->setAttribute(Qt::WA_StyledBackground, true);
-    preview_->setMinimumHeight(116);
-
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
-    auto* resetButton = buttons->addButton(QStringLiteral("Reset Defaults"),
-                                           QDialogButtonBox::ResetRole);
-    resetButton->setProperty("kvRole", QStringLiteral("settingsReset"));
-    auto* saveButton = buttons->addButton(QStringLiteral("Save"), QDialogButtonBox::AcceptRole);
-    saveButton->setProperty("kvRole", QStringLiteral("primaryAction"));
-    saveButton->setDefault(true);
+    auto* footer = new QWidget(this);
+    footer->setProperty("kvRole", QStringLiteral("settingsFooter"));
+    auto* footerLayout = new QHBoxLayout(footer);
+    footerLayout->setContentsMargins(14, 9, 14, 9);
+    footerLayout->addWidget(buttons_);
 
     auto* layout = new QVBoxLayout(this);
-    layout->setContentsMargins(24, 22, 24, 20);
-    layout->setSpacing(10);
-    layout->addWidget(heading);
-    layout->addWidget(title);
-    layout->addWidget(description);
-    layout->addSpacing(6);
-    layout->addWidget(card);
-    layout->addSpacing(6);
-    layout->addWidget(previewLabel);
-    layout->addWidget(preview_);
-    layout->addSpacing(4);
-    layout->addWidget(buttons);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+    layout->addWidget(header);
+    layout->addWidget(body, 1);
+    layout->addWidget(footer);
 
-    connect(fontBox_, &QFontComboBox::currentFontChanged, this,
-            [this] { updatePreview(); });
-    connect(fontSizeBox_, &QSpinBox::valueChanged, this, [this](const int fontSize) {
-        lineHeightBox_->setMinimum(qMax(EditorSettings::minimumLineHeightPixels, fontSize));
-        updatePreview();
+    connect(navigation_, &QListWidget::currentRowChanged, pages_, &QStackedWidget::setCurrentIndex);
+    connect(buttons_, &QDialogButtonBox::rejected, this, &SettingsDialog::reject);
+    connect(resetButton_, &QPushButton::clicked, this, [this] {
+        setAppearanceSettings(AppearanceSettings::defaults());
+        selectThemeMode(static_cast<int>(ThemeManager::Mode::System));
+        for (SettingsPage* page : std::as_const(extensionPages_)) {
+            page->resetToDefaults();
+        }
+        updateDirtyState();
     });
-    connect(lineHeightBox_, &QSpinBox::valueChanged, this, [this] { updatePreview(); });
-    connect(resetButton, &QPushButton::clicked, this,
-            [this] { setSettings(EditorSettings::defaults()); });
-    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    connect(saveButton, &QPushButton::clicked, this, [this] {
-        emit settingsSaved(this->settings());
+    connect(saveButton_, &QPushButton::clicked, this, [this] {
+        const auto appearance = appearanceSettings();
+        for (SettingsPage* page : std::as_const(extensionPages_)) {
+            page->apply();
+        }
+        if (theme_ != nullptr) {
+            theme_->setMode(static_cast<ThemeManager::Mode>(selectedThemeMode_));
+        }
+        emit appearanceSettingsSaved(appearance);
+        emit settingsSaved(appearance.editor);
         accept();
     });
 
-    setSettings(settings);
+    setAppearanceSettings(initialSettings_);
+    navigation_->setCurrentRow(1);
+    updateThemePreview();
+    updateDirtyState();
 }
 
-EditorSettings SettingsDialog::settings() const {
-    return EditorSettings{
-        .fontFamily = fontBox_->currentFont().family(),
-        .fontSizePixels = fontSizeBox_->value(),
-        .lineHeightPixels = lineHeightBox_->value(),
+QWidget* SettingsDialog::createGeneralPage() {
+    auto* page = new QWidget(this);
+    auto* layout = new QVBoxLayout(page);
+    layout->setContentsMargins(30, 26, 30, 30);
+    layout->setSpacing(18);
+    layout->addWidget(makePageHeading(
+        QStringLiteral("GENERAL"), QStringLiteral("Application preferences"),
+        QStringLiteral("Shared startup, workspace and update settings will appear here."), page));
+    auto* card = new QFrame(page);
+    card->setProperty("kvRole", QStringLiteral("settingsCard"));
+    auto* cardLayout = new QVBoxLayout(card);
+    cardLayout->setContentsMargins(18, 20, 18, 20);
+    cardLayout->addWidget(makeLabel(QStringLiteral("No general preferences are configurable yet."),
+                                    QStringLiteral("settingsDescription"), card));
+    layout->addWidget(card);
+    layout->addStretch(1);
+    return page;
+}
+
+void SettingsDialog::addNavigationPage(const QString& id, const QString& title, QWidget* page) {
+    auto* item = new QListWidgetItem(title, navigation_);
+    item->setData(Qt::UserRole, id);
+    pages_->addWidget(page);
+}
+
+void SettingsDialog::addPage(SettingsPage* page) {
+    if (page == nullptr) {
+        return;
+    }
+    extensionPages_.append(page);
+    addNavigationPage(page->id(), page->title(), page);
+    connect(page, &SettingsPage::changed, this, &SettingsDialog::updateDirtyState);
+    updateDirtyState();
+}
+
+AppearanceSettings SettingsDialog::appearanceSettings() const {
+    return AppearanceSettings{
+        .interfaceFontSizePixels = interfaceFontSizeBox_->value(),
+        .editor =
+            EditorSettings{
+                .fontFamily = editorFontBox_->count() > 0 ? editorFontBox_->currentFont().family()
+                                                          : editorFontFamily_,
+                .fontSizePixels = editorFontSizeBox_->value(),
+                .lineHeightPixels = editorLineHeightBox_->value(),
+            },
+        .terminal =
+            TextTypographySettings{terminalFontSizeBox_->value(), terminalLineHeightBox_->value()},
+        .preview =
+            TextTypographySettings{previewFontSizeBox_->value(), previewLineHeightBox_->value()},
     }
         .normalized();
 }
 
-void SettingsDialog::setSettings(const EditorSettings& settings) {
+EditorSettings SettingsDialog::settings() const { return appearanceSettings().editor; }
+
+void SettingsDialog::setAppearanceSettings(const AppearanceSettings& settings) {
     const auto value = settings.normalized();
-    fontBox_->setCurrentFont(QFont(value.fontFamily));
-    fontSizeBox_->setValue(value.fontSizePixels);
-    lineHeightBox_->setMinimum(
-        qMax(EditorSettings::minimumLineHeightPixels, value.fontSizePixels));
-    lineHeightBox_->setValue(value.lineHeightPixels);
+    editorFontFamily_ = value.editor.fontFamily;
+    if (editorFontBox_->count() > 0) {
+        editorFontBox_->setCurrentFont(QFont(editorFontFamily_));
+    }
+    interfaceFontSizeBox_->setValue(value.interfaceFontSizePixels);
+    editorFontSizeBox_->setValue(value.editor.fontSizePixels);
+    editorLineHeightBox_->setMinimum(
+        qMax(EditorSettings::minimumLineHeightPixels, value.editor.fontSizePixels));
+    editorLineHeightBox_->setValue(value.editor.lineHeightPixels);
+    terminalFontSizeBox_->setValue(value.terminal.fontSizePixels);
+    terminalLineHeightBox_->setMinimum(
+        qMax(TextTypographySettings::minimumLineHeightPixels, value.terminal.fontSizePixels));
+    terminalLineHeightBox_->setValue(value.terminal.lineHeightPixels);
+    previewFontSizeBox_->setValue(value.preview.fontSizePixels);
+    previewLineHeightBox_->setMinimum(
+        qMax(TextTypographySettings::minimumLineHeightPixels, value.preview.fontSizePixels));
+    previewLineHeightBox_->setValue(value.preview.lineHeightPixels);
     updatePreview();
 }
 
-void SettingsDialog::updatePreview() { preview_->setEditorSettings(settings()); }
+void SettingsDialog::updateDirtyState() {
+    if (saveButton_ == nullptr) {
+        return;
+    }
+    bool extensionChanged = false;
+    for (const SettingsPage* page : std::as_const(extensionPages_)) {
+        extensionChanged = extensionChanged || page->hasChanges();
+    }
+    const bool changed = appearanceSettings() != initialSettings_ ||
+                         selectedThemeMode_ != initialThemeMode_ || extensionChanged;
+    saveButton_->setEnabled(changed);
+}
+
+void SettingsDialog::updateThemePreview() {
+    const bool followsSystem = selectedThemeMode_ == static_cast<int>(ThemeManager::Mode::System);
+    {
+        const QSignalBlocker blocker(followSystem_);
+        followSystem_->setChecked(followsSystem);
+    }
+    themeList_->setEnabled(!followsSystem && theme_ != nullptr);
+    for (int index = 0; index < themeList_->count(); ++index) {
+        auto* item = themeList_->item(index);
+        if (item->data(Qt::UserRole).toInt() == selectedThemeMode_) {
+            const QSignalBlocker blocker(themeList_);
+            themeList_->setCurrentItem(item);
+            break;
+        }
+    }
+    if (theme_ != nullptr) {
+        theme_->previewMode(static_cast<ThemeManager::Mode>(selectedThemeMode_));
+    } else {
+        followSystem_->setEnabled(false);
+        themeList_->setEnabled(false);
+    }
+}
+
+void SettingsDialog::selectThemeMode(const int mode) {
+    selectedThemeMode_ = mode;
+    updateThemePreview();
+    updateDirtyState();
+}
+
+void SettingsDialog::reject() {
+    if (theme_ != nullptr) {
+        theme_->cancelPreview();
+    }
+    QDialog::reject();
+}
 
 } // namespace ketplus

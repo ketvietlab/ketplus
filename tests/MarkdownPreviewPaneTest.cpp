@@ -3,8 +3,8 @@
 #include "preview/MermaidRenderer.h"
 #include "ui/Theme.h"
 
-#include <QFile>
 #include <QDir>
+#include <QFile>
 #include <QGraphicsView>
 #include <QLabel>
 #include <QPushButton>
@@ -24,6 +24,7 @@ class MarkdownPreviewPaneTest final : public QObject {
   private slots:
     void rendersMarkdownFromTheLiveBuffer();
     void appliesReadableDocumentTypography();
+    void appliesCustomDocumentTypography();
     void explainsHowToInstallMissingMmdc();
     void discoversMmdcInstalledByNvm();
     void rendersMermaidAndOpensThePopup();
@@ -86,7 +87,7 @@ preview.applyTheme(theme.palette());
     QCOMPARE(browser->document()->documentMargin(), 28.0);
     const QString style = browser->document()->defaultStyleSheet();
     QVERIFY(style.contains(QStringLiteral("font-size: 14px")));
-    QVERIFY(style.contains(QStringLiteral("line-height: 1.55")));
+    QVERIFY(style.contains(QStringLiteral("line-height: 22px")));
     QVERIFY(style.contains(QStringLiteral("font-size: 26px")));
     QVERIFY(style.contains(QStringLiteral("font-size: 20px")));
     QVERIFY(style.contains(QStringLiteral("border-bottom: 1px solid")));
@@ -99,19 +100,17 @@ preview.applyTheme(theme.palette());
     QTextTable* table = nullptr;
     for (QTextBlock block = browser->document()->begin(); block.isValid(); block = block.next()) {
         const bool isHeading = block.blockFormat().headingLevel() > 0;
-        const bool isCodeBlock =
-            block.blockFormat().hasProperty(QTextFormat::BlockCodeLanguage) ||
-            block.blockFormat().hasProperty(QTextFormat::BlockCodeFence);
+        const bool isCodeBlock = block.blockFormat().hasProperty(QTextFormat::BlockCodeLanguage) ||
+                                 block.blockFormat().hasProperty(QTextFormat::BlockCodeFence);
         QTextTable* currentTable = QTextCursor(block).currentTable();
-        const bool isTableBlock = currentTable != nullptr;
+        const bool isEmptySpacer = block.text().isEmpty() && currentTable == nullptr;
         table = table != nullptr ? table : currentTable;
         const qreal expectedLineHeight =
-            isHeading ? 120.0
-                      : (isCodeBlock ? 145.0
-                                     : (block.text().isEmpty() && !isTableBlock ? 60.0 : 150.0));
+            isHeading ? 24.0 : (isCodeBlock ? 21.0 : (isEmptySpacer ? 60.0 : 22.0));
         QCOMPARE(block.blockFormat().lineHeight(), expectedLineHeight);
-        QCOMPARE(block.blockFormat().lineHeightType(),
-                 static_cast<int>(QTextBlockFormat::ProportionalHeight));
+        const auto expectedLineHeightType =
+            isEmptySpacer ? QTextBlockFormat::ProportionalHeight : QTextBlockFormat::FixedHeight;
+        QCOMPARE(block.blockFormat().lineHeightType(), static_cast<int>(expectedLineHeightType));
         if (isCodeBlock) {
             sawCodeBlock = true;
             QCOMPARE(block.blockFormat().background().style(), Qt::NoBrush);
@@ -126,8 +125,7 @@ preview.applyTheme(theme.palette());
         }
         if (block.blockFormat().intProperty(QTextFormat::BlockQuoteLevel) > 0) {
             sawQuote = true;
-            QCOMPARE(block.blockFormat().background().color(),
-                     QColor(QStringLiteral("#F7F5F5")));
+            QCOMPARE(block.blockFormat().background().color(), QColor(QStringLiteral("#F7F5F5")));
         }
         for (auto fragment = block.begin(); !fragment.atEnd(); ++fragment) {
             if (fragment.fragment().text() == QStringLiteral("inline code")) {
@@ -145,6 +143,36 @@ preview.applyTheme(theme.palette());
     QCOMPARE(table->format().width().rawValue(), 100.0);
 }
 
+void MarkdownPreviewPaneTest::appliesCustomDocumentTypography() {
+    ketplus::MarkdownPreviewPane preview;
+    preview.setTypography(17, 29);
+    preview.setSource(QStringLiteral("# Heading\n\nParagraph\n\n```cpp\nreturn 0;\n```"),
+                      QStringLiteral("/tmp/README.md"), previewTestPalette());
+
+    auto* browser = preview.findChild<QTextBrowser*>(QStringLiteral("markdownPreviewBrowser"));
+    QVERIFY(browser != nullptr);
+    QTRY_VERIFY(browser->toPlainText().contains(QStringLiteral("Paragraph")));
+    const QString style = browser->document()->defaultStyleSheet();
+    QVERIFY(style.contains(QStringLiteral("font-size: 17px")));
+    QVERIFY(style.contains(QStringLiteral("line-height: 29px")));
+    QVERIFY(style.contains(QStringLiteral("font-size: 29px")));
+    QVERIFY(style.contains(QStringLiteral("font-size: 23px")));
+
+    for (QTextBlock block = browser->document()->begin(); block.isValid(); block = block.next()) {
+        const bool isCodeBlock = block.blockFormat().hasProperty(QTextFormat::BlockCodeLanguage) ||
+                                 block.blockFormat().hasProperty(QTextFormat::BlockCodeFence);
+        const bool isEmptySpacer =
+            block.text().isEmpty() && QTextCursor(block).currentTable() == nullptr;
+        const qreal expectedLineHeight = block.blockFormat().headingLevel() > 0
+                                             ? 31.0
+                                             : (isCodeBlock ? 28.0 : (isEmptySpacer ? 60.0 : 29.0));
+        QCOMPARE(block.blockFormat().lineHeight(), expectedLineHeight);
+        const auto expectedLineHeightType =
+            isEmptySpacer ? QTextBlockFormat::ProportionalHeight : QTextBlockFormat::FixedHeight;
+        QCOMPARE(block.blockFormat().lineHeightType(), static_cast<int>(expectedLineHeightType));
+    }
+}
+
 void MarkdownPreviewPaneTest::explainsHowToInstallMissingMmdc() {
     const bool overrideWasSet = qEnvironmentVariableIsSet("KETPLUS_MMDC");
     const QByteArray previousOverride = qgetenv("KETPLUS_MMDC");
@@ -154,10 +182,8 @@ void MarkdownPreviewPaneTest::explainsHowToInstallMissingMmdc() {
         preview.setSource(QStringLiteral("```mermaid\nflowchart LR\nA --> B\n```"),
                           QStringLiteral("/tmp/diagram.md"), ketplus::ThemePalette{});
 
-        auto* notice =
-            preview.findChild<QLabel*>(QStringLiteral("markdownPreviewNotice"));
-        auto* browser =
-            preview.findChild<QTextBrowser*>(QStringLiteral("markdownPreviewBrowser"));
+        auto* notice = preview.findChild<QLabel*>(QStringLiteral("markdownPreviewNotice"));
+        auto* browser = preview.findChild<QTextBrowser*>(QStringLiteral("markdownPreviewBrowser"));
         QVERIFY(notice != nullptr);
         QVERIFY(browser != nullptr);
         QTRY_VERIFY(!notice->isHidden());
@@ -249,28 +275,28 @@ printf '%s' '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="160"><r
         ketplus::ThemePalette darkPalette;
         darkPalette.dark = true;
         const QString uniqueNode = QUuid::createUuid().toString(QUuid::WithoutBraces);
-        preview.setSource(QStringLiteral("```mermaid\nflowchart LR\nA[%1] --> B\n```")
-                              .arg(uniqueNode),
-                          temporaryDirectory.filePath(QStringLiteral("diagram.md")),
-                          darkPalette);
+        preview.setSource(
+            QStringLiteral("```mermaid\nflowchart LR\nA[%1] --> B\n```").arg(uniqueNode),
+            temporaryDirectory.filePath(QStringLiteral("diagram.md")), darkPalette);
 
-        auto* browser =
-            preview.findChild<QTextBrowser*>(QStringLiteral("markdownPreviewBrowser"));
+        auto* browser = preview.findChild<QTextBrowser*>(QStringLiteral("markdownPreviewBrowser"));
         QVERIFY(browser != nullptr);
         QString diagramLink;
-        QTRY_VERIFY_WITH_TIMEOUT([&] {
-            for (QTextBlock block = browser->document()->begin(); block.isValid();
-                 block = block.next()) {
-                for (auto fragment = block.begin(); !fragment.atEnd(); ++fragment) {
-                    const QTextCharFormat format = fragment.fragment().charFormat();
-                    if (format.isImageFormat() && format.isAnchor()) {
-                        diagramLink = format.anchorHref();
-                        return diagramLink.startsWith(QStringLiteral("ketplus-mermaid-open:"));
+        QTRY_VERIFY_WITH_TIMEOUT(
+            [&] {
+                for (QTextBlock block = browser->document()->begin(); block.isValid();
+                     block = block.next()) {
+                    for (auto fragment = block.begin(); !fragment.atEnd(); ++fragment) {
+                        const QTextCharFormat format = fragment.fragment().charFormat();
+                        if (format.isImageFormat() && format.isAnchor()) {
+                            diagramLink = format.anchorHref();
+                            return diagramLink.startsWith(QStringLiteral("ketplus-mermaid-open:"));
+                        }
                     }
                 }
-            }
-            return false;
-        }(), 5000);
+                return false;
+            }(),
+            5000);
 
         QVERIFY(QMetaObject::invokeMethod(browser, "anchorClicked", Qt::DirectConnection,
                                           Q_ARG(QUrl, QUrl(diagramLink))));
@@ -290,7 +316,8 @@ void MarkdownPreviewPaneTest::opensVectorDiagramWithPanControls() {
     const QString svgPath = temporaryDirectory.filePath(QStringLiteral("diagram.svg"));
     QFile svg(svgPath);
     QVERIFY(svg.open(QIODevice::WriteOnly));
-    const QByteArray svgContents = R"(<svg xmlns="http://www.w3.org/2000/svg" width="320" height="160">
+    const QByteArray svgContents =
+        R"(<svg xmlns="http://www.w3.org/2000/svg" width="320" height="160">
         <rect x="10" y="10" width="300" height="140" fill="#8b5cf6"/>
     </svg>)";
     QVERIFY(svg.write(svgContents) > 0);
