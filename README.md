@@ -117,8 +117,8 @@ KetPlus CM also checks `KETPLUS_MMDC` when a custom `mmdc` executable path is ne
   hiding the panel keeps the shell session alive
 - KetJS-inspired compact visual system with matching semantic color tokens
 - System, light, and dark appearance modes under `View > Appearance`
-- Persistent editor font, font-size, and line-height settings under `Settings…`
-  (`Ctrl/Cmd+,`)
+- Persistent interface, editor, terminal, and Markdown preview typography under
+  `Settings…` (`Ctrl/Cmd+,`), with Save/Cancel theme preview
 - Open files passed on the command line
 - Open workspace folders from the command line or with `Ctrl/Cmd+K, Ctrl/Cmd+O`
 - Open or focus the embedded terminal with Ctrl/Cmd+Backtick and
