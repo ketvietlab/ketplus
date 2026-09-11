@@ -2,8 +2,8 @@
 #include "ui/Theme.h"
 
 #include <QApplication>
+#include <QComboBox>
 #include <QDialogButtonBox>
-#include <QFontComboBox>
 #include <QListWidget>
 #include <QPushButton>
 #include <QSettings>
@@ -50,7 +50,7 @@ void SettingsDialogTest::editsAndResetsTypography() {
     initial.lineHeightPixels = 28;
     ketplus::SettingsDialog dialog(initial);
 
-    auto* fontBox = dialog.findChild<QFontComboBox*>(QStringLiteral("editorFontFamily"));
+    auto* fontBox = dialog.findChild<QComboBox*>(QStringLiteral("editorFontFamily"));
     auto* fontSizeBox = dialog.findChild<QSpinBox*>(QStringLiteral("editorFontSize"));
     auto* lineHeightBox = dialog.findChild<QSpinBox*>(QStringLiteral("editorLineHeight"));
     auto* interfaceSizeBox = dialog.findChild<QSpinBox*>(QStringLiteral("interfaceFontSize"));
@@ -66,6 +66,8 @@ void SettingsDialogTest::editsAndResetsTypography() {
     QVERIFY(terminalLineBox != nullptr);
     QVERIFY(previewSizeBox != nullptr);
     QVERIFY(previewLineBox != nullptr);
+    QCOMPARE(fontBox->property("fontListLoaded").toBool(), false);
+    QCOMPARE(fontBox->count(), 1);
     QCOMPARE(fontSizeBox->value(), 15);
     QCOMPARE(lineHeightBox->value(), 28);
 
@@ -81,6 +83,11 @@ void SettingsDialogTest::editsAndResetsTypography() {
     QCOMPARE(dialog.appearanceSettings().interfaceFontSizePixels, 16);
     QCOMPARE(dialog.appearanceSettings().terminal, (ketplus::TextTypographySettings{14, 23}));
     QCOMPARE(dialog.appearanceSettings().preview, (ketplus::TextTypographySettings{17, 27}));
+
+    fontBox->showPopup();
+    QCOMPARE(fontBox->property("fontListLoaded").toBool(), true);
+    QVERIFY(fontBox->count() >= 1);
+    fontBox->hidePopup();
 
     QPushButton* resetButton = nullptr;
     for (auto* button : dialog.findChildren<QPushButton*>()) {

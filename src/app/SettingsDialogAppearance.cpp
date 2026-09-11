@@ -3,7 +3,7 @@
 #include "ui/Theme.h"
 
 #include <QCheckBox>
-#include <QFontComboBox>
+#include <QComboBox>
 #include <QFontDatabase>
 #include <QFontMetrics>
 #include <QFrame>
@@ -16,11 +16,48 @@
 #include <QPaintEvent>
 #include <QPainter>
 #include <QScrollArea>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QToolButton>
 #include <QVBoxLayout>
 
 namespace ketplus {
+
+namespace {
+
+class LazyFontComboBox final : public QComboBox {
+  public:
+    using QComboBox::QComboBox;
+
+    void showPopup() override {
+        if (!fontsLoaded_) {
+            const QString selectedFont = currentText();
+            QStringList monospacedFonts;
+            for (const QString& family : QFontDatabase::families()) {
+                if (QFontDatabase::isFixedPitch(family)) {
+                    monospacedFonts.append(family);
+                }
+            }
+            monospacedFonts.sort(Qt::CaseInsensitive);
+
+            const QSignalBlocker blocker(this);
+            clear();
+            addItems(monospacedFonts);
+            if (!selectedFont.isEmpty() && findText(selectedFont) < 0) {
+                addItem(selectedFont);
+            }
+            setCurrentText(selectedFont);
+            fontsLoaded_ = true;
+            setProperty("fontListLoaded", true);
+        }
+        QComboBox::showPopup();
+    }
+
+  private:
+    bool fontsLoaded_{false};
+};
+
+} // namespace
 
 class TypographyPreview final : public QWidget {
   public:
@@ -234,9 +271,9 @@ QWidget* SettingsDialog::createTypographyCard() {
     grid->addWidget(makeLabel(QStringLiteral("Line"), QStringLiteral("settingsFieldHelp"), fields),
                     0, 2);
 
-    editorFontBox_ = new QFontComboBox(fields);
+    editorFontBox_ = new LazyFontComboBox(fields);
     editorFontBox_->setObjectName(QStringLiteral("editorFontFamily"));
-    editorFontBox_->setFontFilters(QFontComboBox::MonospacedFonts);
+    editorFontBox_->setProperty("fontListLoaded", false);
     grid->addWidget(
         makeLabel(QStringLiteral("Editor font"), QStringLiteral("settingsFieldLabel"), fields), 1,
         0);
@@ -326,8 +363,8 @@ QWidget* SettingsDialog::createTypographyCard() {
             updateDirtyState();
         });
     }
-    connect(editorFontBox_, &QFontComboBox::currentFontChanged, this, [this](const QFont& font) {
-        editorFontFamily_ = font.family();
+    connect(editorFontBox_, &QComboBox::currentTextChanged, this, [this](const QString& family) {
+        editorFontFamily_ = family;
         updatePreview();
         updateDirtyState();
     });
