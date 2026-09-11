@@ -7,7 +7,7 @@
 
 class QCheckBox;
 class QDialogButtonBox;
-class QFontComboBox;
+class QComboBox;
 class QLineEdit;
 class QListWidget;
 class QPushButton;
@@ -80,7 +80,7 @@ class SettingsDialog final : public QDialog {
     QLineEdit* themeSearch_{nullptr};
     QCheckBox* followSystem_{nullptr};
     QListWidget* themeList_{nullptr};
-    QFontComboBox* editorFontBox_{nullptr};
+    QComboBox* editorFontBox_{nullptr};
     QString editorFontFamily_;
     QSpinBox* interfaceFontSizeBox_{nullptr};
     QSpinBox* editorFontSizeBox_{nullptr};

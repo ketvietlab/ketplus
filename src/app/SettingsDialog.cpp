@@ -4,7 +4,7 @@
 
 #include <QCheckBox>
 #include <QDialogButtonBox>
-#include <QFontComboBox>
+#include <QComboBox>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -191,8 +191,9 @@ AppearanceSettings SettingsDialog::appearanceSettings() const {
         .interfaceFontSizePixels = interfaceFontSizeBox_->value(),
         .editor =
             EditorSettings{
-                .fontFamily = editorFontBox_->count() > 0 ? editorFontBox_->currentFont().family()
-                                                          : editorFontFamily_,
+                .fontFamily = editorFontBox_->currentText().isEmpty()
+                                  ? editorFontFamily_
+                                  : editorFontBox_->currentText(),
                 .fontSizePixels = editorFontSizeBox_->value(),
                 .lineHeightPixels = editorLineHeightBox_->value(),
             },
@@ -209,9 +210,11 @@ EditorSettings SettingsDialog::settings() const { return appearanceSettings().ed
 void SettingsDialog::setAppearanceSettings(const AppearanceSettings& settings) {
     const auto value = settings.normalized();
     editorFontFamily_ = value.editor.fontFamily;
-    if (editorFontBox_->count() > 0) {
-        editorFontBox_->setCurrentFont(QFont(editorFontFamily_));
+    const int existingFont = editorFontBox_->findText(editorFontFamily_);
+    if (existingFont < 0) {
+        editorFontBox_->addItem(editorFontFamily_);
     }
+    editorFontBox_->setCurrentText(editorFontFamily_);
     interfaceFontSizeBox_->setValue(value.interfaceFontSizePixels);
     editorFontSizeBox_->setValue(value.editor.fontSizePixels);
     editorLineHeightBox_->setMinimum(
