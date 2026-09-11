@@ -226,6 +226,7 @@ void MainWindow::createActions() {
                                          const QString& label, const ThemeManager::Mode mode) {
         auto* action = appearanceMenu->addAction(label);
         action->setCheckable(true);
+        action->setData(static_cast<int>(mode));
         action->setChecked(theme_.mode() == mode);
         appearanceGroup->addAction(action);
         connect(action, &QAction::triggered, this, [this, mode] { theme_.setMode(mode); });
@@ -234,5 +235,10 @@ void MainWindow::createActions() {
     addAppearanceAction(QStringLiteral("System"), ThemeManager::Mode::System);
     addAppearanceAction(QStringLiteral("Light"), ThemeManager::Mode::Light);
     addAppearanceAction(QStringLiteral("Dark"), ThemeManager::Mode::Dark);
+    connect(&theme_, &ThemeManager::themeChanged, this, [this, appearanceGroup] {
+        for (auto* action : appearanceGroup->actions()) {
+            action->setChecked(action->data().toInt() == static_cast<int>(theme_.mode()));
+        }
+    });
 }
 } // namespace ketplus
