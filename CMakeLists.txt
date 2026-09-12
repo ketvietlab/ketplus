@@ -304,6 +304,19 @@ if(KETPLUS_CM_BUILD_TESTS)
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     )
 
+    add_executable(ketplus_refactor_wave_1_tests
+        tests/RefactorWave1ContractTest.cpp
+    )
+    target_link_libraries(ketplus_refactor_wave_1_tests
+        PRIVATE Qt6::Test KetPlusCM::settings_ui KetPlusCM::git
+    )
+    ketplus_enable_warnings(ketplus_refactor_wave_1_tests)
+
+    ketplus_cm_add_test(ketplus_refactor_wave_1_tests ketplus_refactor_wave_1_tests)
+    set_tests_properties(ketplus_refactor_wave_1_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
+
     add_executable(ketplus_workspace_tests tests/ExplorerPanelTest.cpp)
     target_link_libraries(ketplus_workspace_tests PRIVATE Qt6::Test ketplus_workspace)
     ketplus_enable_warnings(ketplus_workspace_tests)
