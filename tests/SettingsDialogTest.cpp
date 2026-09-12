@@ -15,7 +15,9 @@ namespace {
 
 class TestSettingsPage final : public ketplus::SettingsPage {
   public:
-    TestSettingsPage() : SettingsPage(QStringLiteral("test"), QStringLiteral("Test page")) {}
+    TestSettingsPage(QString id = QStringLiteral("test"),
+                     QString title = QStringLiteral("Test page"), QWidget* parent = nullptr)
+        : SettingsPage(std::move(id), std::move(title), parent) {}
 
     [[nodiscard]] bool hasChanges() const override { return dirty; }
     void apply() override {
@@ -42,6 +44,9 @@ class SettingsDialogTest final : public QObject {
     void persistsAndNormalizesAppearance();
     void previewsAndCancelsThemeSelection();
     void extensionPagesDriveDirtyState();
+    void validatesPageRegistrationWithoutTransferringFailedOwnership();
+    void ordersAndSelectsRegisteredPagesByStableIdentity();
+    void removesDestroyedPageAndFallsBackToGeneral();
 };
 
 void SettingsDialogTest::editsAndResetsTypography() {
@@ -182,6 +187,86 @@ void SettingsDialogTest::extensionPagesDriveDirtyState() {
     QVERIFY(save->isEnabled());
     save->click();
     QCOMPARE(page->applyCount, 1);
+}
+
+void SettingsDialogTest::validatesPageRegistrationWithoutTransferringFailedOwnership() {
+    ketplus::SettingsDialog dialog(ketplus::EditorSettings::defaults());
+    QCOMPARE(dialog.registerPage({{}, nullptr}), ketplus::SettingsRegistrationResult::MissingPage);
+
+    auto* invalid = new TestSettingsPage(QStringLiteral("Bad//Id"), QStringLiteral("Invalid"));
+    QCOMPARE(dialog.registerPage({{invalid->id(), invalid->title(), {}, 0}, invalid}),
+             ketplus::SettingsRegistrationResult::InvalidId);
+    QVERIFY(invalid->parent() == nullptr);
+    delete invalid;
+
+    auto* reserved = new TestSettingsPage(QStringLiteral("general"), QStringLiteral("General"));
+    QCOMPARE(dialog.registerPage({{reserved->id(), reserved->title(), {}, 0}, reserved}),
+             ketplus::SettingsRegistrationResult::DuplicateId);
+    QVERIFY(reserved->parent() == nullptr);
+    delete reserved;
+
+    auto* mismatch = new TestSettingsPage(QStringLiteral("private/archive"),
+                                          QStringLiteral("Archived"));
+    QCOMPARE(dialog.registerPage({{mismatch->id(), QStringLiteral("Other"), {}, 0}, mismatch}),
+             ketplus::SettingsRegistrationResult::MetadataMismatch);
+    QVERIFY(mismatch->parent() == nullptr);
+    delete mismatch;
+
+    QWidget owner;
+    auto* parented = new TestSettingsPage(QStringLiteral("private/owned"),
+                                          QStringLiteral("Owned"), &owner);
+    QCOMPARE(dialog.registerPage({{parented->id(), parented->title(), {}, 0}, parented}),
+             ketplus::SettingsRegistrationResult::AlreadyParented);
+
+    auto* page = new TestSettingsPage(QStringLiteral("private/archive"),
+                                      QStringLiteral("Archived"));
+    QCOMPARE(dialog.registerPage({{page->id(), page->title(), {}, 10}, page}),
+             ketplus::SettingsRegistrationResult::Registered);
+    QVERIFY(page->parent() != nullptr);
+    QCOMPARE(dialog.registerPage({{page->id(), page->title(), {}, 10}, page}),
+             ketplus::SettingsRegistrationResult::PointerAlreadyRegistered);
+
+    auto* duplicate = new TestSettingsPage(QStringLiteral("private/archive"),
+                                           QStringLiteral("Duplicate"));
+    QCOMPARE(dialog.registerPage({{duplicate->id(), duplicate->title(), {}, 0}, duplicate}),
+             ketplus::SettingsRegistrationResult::DuplicateId);
+    QVERIFY(duplicate->parent() == nullptr);
+    delete duplicate;
+}
+
+void SettingsDialogTest::ordersAndSelectsRegisteredPagesByStableIdentity() {
+    ketplus::SettingsDialog dialog(ketplus::EditorSettings::defaults());
+    auto* later = new TestSettingsPage(QStringLiteral("private/later"), QStringLiteral("Later"));
+    auto* first = new TestSettingsPage(QStringLiteral("private/first"), QStringLiteral("First"));
+    auto* tied = new TestSettingsPage(QStringLiteral("private/tied"), QStringLiteral("Tied"));
+    QCOMPARE(dialog.registerPage({{later->id(), later->title(), {}, 20}, later}),
+             ketplus::SettingsRegistrationResult::Registered);
+    QCOMPARE(dialog.registerPage({{first->id(), first->title(), {}, -1}, first}),
+             ketplus::SettingsRegistrationResult::Registered);
+    QCOMPARE(dialog.registerPage({{tied->id(), tied->title(), {}, 20}, tied}),
+             ketplus::SettingsRegistrationResult::Registered);
+
+    auto* navigation = dialog.findChild<QListWidget*>();
+    QVERIFY(navigation != nullptr);
+    QCOMPARE(navigation->count(), 5);
+    QCOMPARE(navigation->item(2)->data(Qt::UserRole).toString(), QStringLiteral("private/first"));
+    QCOMPARE(navigation->item(3)->data(Qt::UserRole).toString(), QStringLiteral("private/later"));
+    QCOMPARE(navigation->item(4)->data(Qt::UserRole).toString(), QStringLiteral("private/tied"));
+    QVERIFY(dialog.selectPage(QStringLiteral("private/tied")));
+    QCOMPARE(dialog.selectedPageId(), QStringLiteral("private/tied"));
+    QVERIFY(!dialog.selectPage(QStringLiteral("missing")));
+    QCOMPARE(dialog.selectedPageId(), QStringLiteral("private/tied"));
+}
+
+void SettingsDialogTest::removesDestroyedPageAndFallsBackToGeneral() {
+    ketplus::SettingsDialog dialog(ketplus::EditorSettings::defaults());
+    auto* page = new TestSettingsPage(QStringLiteral("private/archive"), QStringLiteral("Archived"));
+    QCOMPARE(dialog.registerPage({{page->id(), page->title(), {}, 0}, page}),
+             ketplus::SettingsRegistrationResult::Registered);
+    QVERIFY(dialog.selectPage(page->id()));
+    delete page;
+    QCOMPARE(dialog.selectedPageId(), QStringLiteral("general"));
+    QVERIFY(!dialog.selectPage(QStringLiteral("private/archive")));
 }
 
 QTEST_MAIN(SettingsDialogTest)

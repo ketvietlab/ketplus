@@ -42,7 +42,7 @@ creation, commit, rebase, or remote mutation is introduced.
 
 ## Smallest next runtime slice
 
-Implement **settings registration validation only**, while preserving current
+Implemented in the runtime-foundations slice: **settings registration validation**, while preserving current
 Save/apply-all and dialog-wide Reset behavior.
 
 Allowed files:
