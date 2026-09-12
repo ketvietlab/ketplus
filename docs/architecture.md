@@ -52,8 +52,10 @@ Qt application shell
   the planned session registry will retain one or more sessions per worktree.
 - `src/app/SettingsDialog` owns the reusable tabbed settings shell. Public
   appearance values are applied as one normalized snapshot; proprietary
-  consumers may add self-owned pages without moving their storage or behavior
-  into CM. See `settings.md`.
+  consumers register self-owned pages through `SettingsHost`, with validated
+  stable identity, deterministic ordering and ownership transfer only after a
+  successful registration. Their storage and behavior remain outside CM. See
+  `settings.md`.
 
 ## Principles
 

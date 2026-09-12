@@ -10,10 +10,14 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QVBoxLayout>
+
+#include <algorithm>
+#include <utility>
 
 namespace ketplus {
 
@@ -64,6 +68,14 @@ SettingsDialog::SettingsDialog(const EditorSettings& settings, QWidget* parent) 
     auto appearance = AppearanceSettings::defaults();
     appearance.editor = settings;
     initialize(appearance);
+}
+
+SettingsDialog::~SettingsDialog() {
+    for (SettingsPage* page : std::as_const(extensionPages_)) {
+        disconnect(page, nullptr, this, nullptr);
+    }
+    registeredPages_.clear();
+    extensionPages_.clear();
 }
 
 void SettingsDialog::initialize(const AppearanceSettings& settings) {
@@ -180,10 +192,101 @@ void SettingsDialog::addPage(SettingsPage* page) {
     if (page == nullptr) {
         return;
     }
+    registerPage({SettingsPageDescriptor{page->id(), page->title(), {}, 0}, page});
+}
+
+SettingsRegistrationResult SettingsDialog::registerPage(SettingsPageRegistration registration) {
+    SettingsPage* page = registration.page;
+    if (page == nullptr) {
+        return SettingsRegistrationResult::MissingPage;
+    }
+    if (std::any_of(registeredPages_.cbegin(), registeredPages_.cend(),
+                    [page](const RegisteredPage& value) { return value.page == page; })) {
+        return SettingsRegistrationResult::PointerAlreadyRegistered;
+    }
+    if (page->parent() != nullptr) {
+        return SettingsRegistrationResult::AlreadyParented;
+    }
+
+    static const QRegularExpression validId(
+        QStringLiteral("^[a-z0-9][a-z0-9_-]*(/[a-z0-9][a-z0-9_-]*)*$"));
+    const QString& id = registration.descriptor.id;
+    if (!validId.match(id).hasMatch()) {
+        return SettingsRegistrationResult::InvalidId;
+    }
+    if (id == QStringLiteral("general") || id == QStringLiteral("appearance") ||
+        std::any_of(registeredPages_.cbegin(), registeredPages_.cend(),
+                    [&id](const RegisteredPage& value) { return value.descriptor.id == id; })) {
+        return SettingsRegistrationResult::DuplicateId;
+    }
+    if (registration.descriptor.id != page->id() ||
+        registration.descriptor.title != page->title()) {
+        return SettingsRegistrationResult::MetadataMismatch;
+    }
+
+    const QString registeredId = registration.descriptor.id;
+    registeredPages_.append(
+        RegisteredPage{std::move(registration.descriptor), page, nextRegistrationSequence_++});
     extensionPages_.append(page);
-    addNavigationPage(page->id(), page->title(), page);
     connect(page, &SettingsPage::changed, this, &SettingsDialog::updateDirtyState);
+    connect(page, &QObject::destroyed, this, [this, page, registeredId] {
+        const bool selectedWasDestroyed = selectedPageId() == registeredId;
+        extensionPages_.removeAll(page);
+        registeredPages_.erase(
+            std::remove_if(registeredPages_.begin(), registeredPages_.end(),
+                           [page](const RegisteredPage& value) { return value.page == page; }),
+            registeredPages_.end());
+        rebuildExtensionNavigation();
+        if (selectedWasDestroyed && navigation_->count() > 0) {
+            navigation_->setCurrentRow(0);
+        }
+        updateDirtyState();
+    });
+    rebuildExtensionNavigation();
     updateDirtyState();
+    return SettingsRegistrationResult::Registered;
+}
+
+bool SettingsDialog::selectPage(const QString& id) {
+    for (int index = 0; index < navigation_->count(); ++index) {
+        if (navigation_->item(index)->data(Qt::UserRole).toString() == id) {
+            navigation_->setCurrentRow(index);
+            return true;
+        }
+    }
+    return false;
+}
+
+QString SettingsDialog::selectedPageId() const {
+    const QListWidgetItem* item = navigation_ == nullptr ? nullptr : navigation_->currentItem();
+    return item == nullptr ? QString{} : item->data(Qt::UserRole).toString();
+}
+
+void SettingsDialog::rebuildExtensionNavigation() {
+    const QString selection = selectedPageId();
+    while (navigation_->count() > 2) {
+        delete navigation_->takeItem(2);
+    }
+    for (int index = pages_->count() - 1; index >= 2; --index) {
+        pages_->removeWidget(pages_->widget(index));
+    }
+
+    std::stable_sort(registeredPages_.begin(), registeredPages_.end(),
+                     [](const RegisteredPage& left, const RegisteredPage& right) {
+                         if (left.descriptor.order != right.descriptor.order) {
+                             return left.descriptor.order < right.descriptor.order;
+                         }
+                         return left.sequence < right.sequence;
+                     });
+    for (const RegisteredPage& value : std::as_const(registeredPages_)) {
+        addNavigationPage(value.descriptor.id, value.descriptor.title, value.page);
+    }
+    if (!selection.isEmpty() && selectPage(selection)) {
+        return;
+    }
+    if (navigation_->currentRow() < 0 && navigation_->count() > 0) {
+        navigation_->setCurrentRow(0);
+    }
 }
 
 AppearanceSettings SettingsDialog::appearanceSettings() const {
