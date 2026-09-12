@@ -1,111 +1,118 @@
 # Token and metric mapping
 
-Source: public Két Design System `0.1.7`,
-`6f923d1e13958ce740e50bccab45efc56ccd2f84`,
-`packages/design-system/src/foundations/tokens.css`.
+## Source pin and interpretation
 
-This file separates canonical KDS tokens from observed native implementation.
-Observed implementation values are not a blessed visual baseline unless marked
-approved by Integration/QA.
+- Package: `@ketvietlab/design-system` `0.1.7`
+- Repository revision: `6f923d1e13958ce740e50bccab45efc56ccd2f84`
+- Source file: `packages/design-system/src/foundations/tokens.css`
+- Git blob: `032e5af9eaf27a46a00fab2c8cdac94c4a407c26`
+- SHA-256: `f01c77596ac50cfba55d271e2b32fbe90bc60c238affebc46fea5cd4eb8149c1`
 
-## Color roles
+The pinned CSS file is the canonical source for KDS values. Native values in
+`src/ui/Theme.cpp`, QSS, or widget layout code are observations, never promoted
+to canonical KDS truth by this document or a baseline test.
 
-| KDS semantic/component role | Current native field/use | Qt palette/QSS destination | Status |
+Resolver rules for a future Qt snapshot:
+
+1. Parse the pinned declaration graph and recursively resolve `var()` aliases;
+   cycles, missing references, and unsupported syntax are errors rather than
+   silent fallbacks.
+2. Resolve `light-dark(light, dark)` using the requested native colour scheme,
+   including nested aliases before conversion.
+3. Convert hex/rgb values to `QColor`. Preserve alpha from forms such as
+   `rgb(89 104 223 / 14%)`; do not pre-composite it against a guessed surface.
+4. Record source token name and resolved source value separately from any native
+   adaptation. The mapping fixture, when implemented, must carry the source
+   revision and blob/hash above and fail on unreviewed drift.
+
+## Evidence statuses
+
+| Status | Meaning | Can baseline assert it? |
+| --- | --- | --- |
+| Canonical source value | Directly resolved from the pinned KDS file | Yes, with provenance fixture |
+| Observed native value | Value currently found in public Qt code | Yes, as a current-native regression only |
+| Intentional adaptation | Deliberate Qt/platform adjustment with rationale | Yes, once the adaptation is reviewed |
+| Unresolved drift | Source and native differ without approval | Assert the difference in a drift fixture; do not bless either as parity |
+| QA approved | Native measurement accepted by Integration/QA with recorded evidence | Yes, against that approved evidence |
+
+No item in this Wave 1 document has native visual-measurement QA approval.
+
+## Colour examples
+
+| KDS role | Canonical KDS 0.1.7 (light / dark) | Observed native | Classification |
 | --- | --- | --- | --- |
-| `--kv-page-bg` | `ThemePalette::pageBackground` | `QPalette::Window`, `QMainWindow`, `QDialog`, tab background | Implemented |
-| `--kv-app-bg` | `ThemePalette::appBackground` | Reserved/native app background | Implemented field, limited use |
-| `--kv-sidebar-bg` | `sidebarBackground` | Activity bar, explorer, settings navigation | Implemented |
-| `--kv-panel-bg` | `panelBackground` | `QPalette::Base`, panels, tables, dialogs, cards | Implemented |
-| `--kv-panel-bg-subtle` | `panelSubtle` | Terminal/preview headers, status areas, footer/header bands | Implemented |
-| `--kv-surface-raised` | `surfaceRaised` | Menus, tooltips, labels | Implemented |
-| `--kv-surface-hover` | `surfaceHover` | Hover states, splitter hover alternatives | Implemented |
-| `--kv-text-main` | `textMain` | `QPalette::WindowText`, `Text`, default widget text | Implemented |
-| `--kv-text-secondary` | `textSecondary` | Button text, labels, headings | Implemented |
-| `--kv-text-muted` | `textMuted` | Status, hints, secondary paths | Implemented |
-| `--kv-text-disabled` | `textDisabled` | Disabled activity/primary states | Implemented |
-| `--kv-panel-border` | `border` | Dividers, panel borders, table borders | Implemented |
-| `--kv-border-strong` | `borderStrong` | Menus, inputs, tooltips, scroll handles | Implemented |
-| `--kv-interactive-bg` | `interactiveBackground` | `QPalette::Button`, controls | Implemented |
-| `--kv-interactive-hover` | `interactiveHover` | Control hover states | Implemented |
-| `--kv-interactive-active` | `interactiveActive` | Pressed controls | Implemented |
-| `--kv-interactive-disabled` | Proposed `interactiveDisabled` | Disabled controls | Proposed |
-| `--kv-accent` | `accent` | Active tabs, checked navigation, primary actions | Implemented |
-| `--kv-accent-hover` | `accentHover` | Primary hover | Implemented |
-| `--kv-accent-active` | `accentActive` | Selected/menu text, pressed accent | Implemented |
-| `--kv-accent-subtle` | `accentSubtle` | Selected rows, menu hover, notices | Implemented |
-| `--kv-accent-muted` | `accentMuted` | Selection background, primary disabled | Implemented |
-| `--kv-accent-border` | Proposed `accentBorder` | Selection/focus border variants | Proposed |
-| `--kv-focus-border` | `focus` | Focus border/splitter hover | Implemented |
-| `--kv-focus-ring` | No QSS ring equivalent | Future custom painting if needed | Proposed |
-| `--kv-positive` | `positive` | Staged diff scope | Implemented |
-| `--kv-warning` | `warning` | Warning states | Implemented field |
-| `--kv-danger` | `danger` | Errors, destructive hover, diff removal | Implemented |
-| `--kv-info` | `info` | Info states | Implemented field |
+| `--kv-page-bg` | `#f7f5f5` / `#1b1f24` | `#F7F5F5` / `#1B1F24` | Equivalent observed value; source fixture not implemented |
+| `--kv-panel-bg` | `#ffffff` / `#1d2228` | `#FFFFFF` / `#1D2228` | Equivalent observed value; source fixture not implemented |
+| `--kv-text-main` | `#24262a` / `#f2f4f7` | `#24262A` / `#CDD2D8` | Dark unresolved drift |
+| `--kv-accent` | `#5167c4` / `#5968df` | `#5968DF` / `#5968DF` | Light unresolved drift |
+| `--kv-panel-border` | `#e9e7e8` / `rgb(255 255 255 / 5.5%)` | Concrete native border fields | Mapping/alpha parity unresolved |
+| `--kv-focus-ring` | shadow using `#dde2f7` / `rgb(89 104 223 / 16%)` | Border-only focus in current QSS | Intentional mechanism candidate, pending QA |
 
-Known drift:
-
-- KDS light `--kv-accent` is `#5167c4`; current native light `accent` is
-  `#5968DF`. This should remain an audit finding until QA confirms whether CM
-  keeps the native value for cross-platform contrast or aligns to KDS.
-- KDS dark text main maps to `#f2f4f7`; current native dark `textMain` is
-  `#CDD2D8`. Treat this as Pending QA, not a blessed baseline.
+The same classification process applies to sidebar, surface, text, interactive,
+accent-state, positive, warning, danger, and info roles. Absence from the example
+table does not imply parity or approval.
 
 ## Typography
 
-| KDS token | Current native behavior | Status |
-| --- | --- | --- |
-| `--kv-font-sans` | Inter is loaded from app resources; fallback family is `Inter`. | Implemented |
-| `--kv-font-mono` | Uses `QFontDatabase::systemFont(QFontDatabase::FixedFont)`. | Implemented native adaptation |
-| `--kv-text-2xs` `10px` | Terminal heading and settings eyebrow use 10px. | Observed |
-| `--kv-text-xs` `11px` | Preview hint, status, path labels use 11px. | Observed |
-| `--kv-text-sm` `12px` | Tree, checkbox, field labels use 12px. | Observed |
-| `--kv-text-md` `13px` | Diff file and editor default nearby. | Observed |
-| `--kv-text-base` `14px` | Interface default font size and preview default. | Implemented |
-| `--kv-text-xl` `22px` | Settings title uses 22px. | Observed drift from KDS 18px `--kv-text-xl`; Pending QA |
-| `--kv-leading-tight/normal/relaxed` | Document-like line heights are explicit pixels; interface controls stay automatic. | Implemented native adaptation |
-| `--kv-weight-normal/medium/semibold/bold` | QSS uses 400, 500, 600/650, 700 in selected roles. | Observed |
+At the canonical CSS root baseline of 16 CSS px:
 
-Rules:
+| KDS token | Canonical value | 16px-root equivalent | Current native observation | Classification |
+| --- | ---: | ---: | --- | --- |
+| `--kv-text-2xs` | `0.625rem` | 10px | 10px in compact labels | Observed native value |
+| `--kv-text-xs` | `0.6875rem` | 11px | 11px in hints/status | Observed native value |
+| `--kv-text-sm` | `0.75rem` | 12px | 12px in trees/fields | Observed native value |
+| `--kv-text-md` | `0.8125rem` | 13px | 13px near editor/diff defaults | Observed native value |
+| `--kv-text-base` | `0.875rem` | 14px | 14px interface default | Observed native value |
+| `--kv-text-lg` | `1rem` | 16px | No contract claim | Unmapped |
+| `--kv-text-xl` | `1.125rem` | **18px** | No 18px mapping established | Unmapped |
+| `--kv-text-2xl` | `1.375rem` | **22px** | Settings title uses 22px | Observed match candidate, pending mapping review |
 
-- Interface font size remains bounded to 8-24px.
-- Editor/terminal/preview line heights remain at least their font size.
-- Control line height remains automatic; geometry comes from density metrics.
+`--kv-font-sans` is a CSS fallback list; current Widgets load Inter and use a
+native fallback. `--kv-font-mono` likewise resolves to the platform fixed font
+for Widgets. These are platform adaptations, not proof that the selected font
+face or metrics are pixel-identical. KDS leading values are unitless multipliers;
+current document-like panes often store pixel line heights, while general
+Widgets use native layout/font metrics.
 
-## Metrics and QSS destinations
+## Units, scaling, density, and rounding
 
-| KDS token | Pixel equivalent at 16px root | Current native destination | Status |
+- Canonical `rem` conversion starts from a 16 CSS px baseline. The source value
+  stays in rem; the table's px number is a reference conversion, not a mandate
+  to ignore user font scaling.
+- The proposed Qt metric values are logical pixels (`qreal`). Qt applies device
+  pixel ratio during rendering; callers must not multiply the logical value by
+  DPR again.
+- User interface font scaling affects resolved typography. It does not
+  implicitly scale spacing/control density unless a separately reviewed density
+  policy says so. Platform accessibility/font behavior must remain usable even
+  where it prevents exact CSS geometry.
+- Preserve fractional logical metrics through layout/style resolution. Round
+  only at the final API boundary that requires an integer: use `qRound` for
+  nonnegative spacing/radius values and `qCeil` for minimum text/control extents
+  to avoid clipping. Tests compare logical values with suitable
+  tolerance; they do not compare pre-multiplied device pixels.
+- A density variant is an explicit resolver input. It must not be inferred from
+  DPR, screen resolution, or platform name.
+
+## Canonical metrics and observed native values
+
+| KDS token | Canonical logical px at 16px root | Observed native use | Classification |
 | --- | ---: | --- | --- |
-| `--kv-space-1` | 4 | Small margins, menu separators approximate 5px | Observed |
-| `--kv-space-2` | 8 | Tooltip padding 6/8, notices 8/12 | Observed |
-| `--kv-space-3` | 12 | Button horizontal padding, settings nav padding | Observed |
-| `--kv-space-4` | 16 | Several layout gaps in widget code, not globally tokenized | Pending QA |
-| `--kv-control-height-xs` | 26 | Diff scope 18px currently smaller | Pending QA |
-| `--kv-control-height-sm` | 30 | Status/compact controls 22-26px currently smaller | Pending QA |
-| `--kv-control-height-md` | 34 | Generic controls use min-height 32px | Pending QA |
-| `--kv-control-height-lg` | 40 | Tabs use 40px min-height | Observed |
-| `--kv-sidebar-item-height` | 30 | Tree row 26px, settings nav 34px | Pending QA |
-| `--kv-table-row-height` | 52 | Diff table rows 23px because editor diff is dense | Native adaptation, Pending QA |
-| `--kv-radius-xs` | 3 | Scrollbar handle radius 3px | Observed |
-| `--kv-radius-sm` | 5 | Menus, buttons, nav items | Implemented |
-| `--kv-radius-md` | 7 | Menu border radius 7px | Observed |
-| `--kv-radius-lg` | 9 | Native cards use 8px | Pending QA |
-| `--kv-radius-app-region` | 0 | Main shell/tab/page regions are unrounded | Implemented |
+| `--kv-space-1/2/3/4` | 4 / 8 / 12 / 16 | Several approximate margins/gaps | Observed; mapping unresolved |
+| `--kv-control-height-xs/sm/md/lg` | 26 / 30 / 34 / 40 | Compact controls 18-26, generic min 32, tabs 40 | Mixed drift; pending QA |
+| `--kv-sidebar-item-height` | 30 | Tree 26, settings navigation 34 | Unresolved drift |
+| `--kv-table-header-height` | 42 | No reviewed mapping | Unmapped |
+| `--kv-table-row-height` | 52 | Dense diff rows about 23 | Intentional adaptation candidate, pending QA |
+| `--kv-radius-xs/sm/md/lg` | 3 / 5 / 7 / 9 | Several 3/5/7 values; cards use 8 | Mixed observed/drift |
+| `--kv-page-padding-x/y` | 28 / 24 | Settings pages currently use 30 / 26-30 | Unresolved drift |
 
-## Focus, disabled, error, and reduced motion
+## Widgets and future QML
 
-- Focus: current native QSS uses border-color `focus`. KDS also has a ring
-  token; a custom focus ring is proposed only if QA requires stronger visibility.
-- Disabled: current primary disabled state uses `accentMuted` and `textMuted`;
-  generic disabled controls should map to `interactiveDisabled` once exported.
-- Error: current error text maps to `danger`; field-level error border/background
-  should map to `--kv-danger-border`/`--kv-danger-bg` in a later component slice.
-- Reduced motion: KDS reduces durations to near-zero under
-  `prefers-reduced-motion`. Native CM currently has no exported motion token.
-  Proposed native token snapshots should include effective reduced-motion state
-  before adding animations.
+Qt Widgets should consume the resolved snapshot through palette, QSS generation,
+and layout helpers. A future QML adapter should expose that same snapshot as
+value types/singleton data, preserving provenance and logical units. It must not
+reparse CSS independently or create a second canonical palette. No QML module or
+dependency is required by this documentation slice.
 
-## QML
-
-KetPlus CM currently uses Qt Widgets, not QML. If a QML surface is added later,
-it should consume the same `NativeDesignTokens` snapshot rather than reading CSS
-tokens directly or inventing a second palette.
+The current offscreen tests are behavioral/native-value regressions. They are
+not screenshots, pixel QA, font-rendering evidence, or proof of KDS parity.

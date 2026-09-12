@@ -13,15 +13,15 @@ This matrix records the implemented public CM surface observed at base
 | Diff | `KetPlusCM::git_ui`, `src/git/GitDiffView.h`; `KetPlusCM::git`, parser/types | Staged/unstaged/combined diff rendering, header metadata, theme/settings application, parser coverage, and synthetic Git temp-repo tests. | Read-only; no staging/checkout/commit. | Add public linked-worktree operation preflight/outcome API before any mutating workflow is considered. |
 | Terminal | `KetPlusCM::terminal`, `src/terminal/TerminalPanel.h`, `PtyProcess.h`, `TerminalView.h` | Lazy PTY-backed terminal on Unix-like platforms, theme and typography application, close/status signals. | Terminal workflows remain user-owned source of truth for repository mutation. | No Wave 1 API expansion beyond documenting typography and theme mapping. |
 | Workspace | `KetPlusCM::workspace`, `src/workspace/ExplorerPanel.h` | Lazy filesystem tree, open folder, create/rename/reveal/copy path, move-to-trash UI. | Destructive action uses native trash, not delete. | Keep destructive tests inside disposable repositories/directories only. |
-| Git primitives | `KetPlusCM::git`, `src/git/GitService.h`, `GitTypes.h` | Git CLI availability, repository discovery, status, scoped diffs, worktree list parsing, async bounded commands. | Git support is read-only except opening a different already-existing worktree as workspace. | Introduce safe linked-worktree operation interface with target identity, guards, cancellation, and revalidation. |
+| Git primitives | `KetPlusCM::git`, `src/git/GitService.h`, `GitTypes.h` | Git CLI availability, repository discovery, status, scoped diffs, worktree list parsing, async bounded commands. | Git support is read-only; existing workspace selection is not a repository mutation. | Introduce linked-worktree observation and operation-specific policy with Git common-dir identity, cancellation, and revalidation. |
 | Preview | `KetPlusCM::preview`, Markdown/Mermaid headers | Native Markdown preview and Mermaid SVG rendering/viewer. | Not a primary Wave 1 API focus, but typography/theme settings include preview. | No new public contract in Wave 1. |
 | Build/package | `CMakeLists.txt` aliases | `KetPlusCM::*` alias targets exist for build-tree consumers. | No `include/` tree or installed CMake package files were observed. | Release slices should separate build-tree compatibility from installable SDK work. |
 
 Implemented capability vs proposed API:
 
-- Implemented: everything in the "Implemented capability" column, plus the
-  synthetic contract tests added for current settings composition and parser
-  guard fixtures.
+- Implemented: everything in the "Implemented capability" column, plus focused
+  baselines for current settings composition/persistence behavior, current
+  native palette values, and worktree parser flags.
 - Proposed: native token model, richer settings host registration, and
   linked-worktree operation interface. These are not implemented in production
   in Wave 1.

@@ -1,64 +1,86 @@
-# Release slices
+# Review and release slices
 
-These slices keep implementation reviewable and prevent private product UI from
-driving public API shape.
+This plan separates verified evidence from proposed contracts and runtime work.
+No proposal is approved merely by landing this documentation slice.
 
-## Slice 0: Audit and proposal
+## A. Source and baseline verified in R01-B
 
-Status: implemented in Wave 1.
+- KDS package/revision/source file and content hashes are recorded.
+- `--kv-text-xl` is 18px and `--kv-text-2xl` is 22px at the 16px root.
+- Canonical source values, native observations, adaptations, unresolved drift,
+  and QA approval are distinct evidence classes.
+- Focused current SettingsDialog behavior is covered with isolated synthetic
+  persistence: Cancel, Reset-before-Save, ThemeManager preview rollback, and
+  apply-all across multiple pages.
+- Current palette values and parser flags are baseline observations only.
 
-- Document current `KetPlusCM::*` targets and public headers.
-- Map public KDS semantic tokens to Qt palette/QSS/native metrics.
-- Document settings host and linked-worktree operation proposals.
-- Add generic synthetic tests that do not change product behavior.
+## B. API proposal pending approval
 
-## Slice 1: Native design token snapshots
+- Native source-pinned token snapshot and resolver contract.
+- Generic settings registration results, identity, ordering, ownership,
+  selection, and compatibility semantics.
+- Linked-worktree observation, per-operation policy, Git identity, request,
+  lifecycle, cancellation, timeout, and terminal outcome contracts.
 
-Proposed.
+Approval must explicitly settle the remaining choices listed in the handoff;
+documentation merge alone does not settle them.
 
-- Add a public native token snapshot type.
-- Expose token source version/revision in docs or API metadata.
-- Keep `ThemePalette` compatibility.
-- Add unit tests for light/dark token mapping.
-- Do not add screenshot baselines until Integration/QA supplies approved
-  measurements.
+## C. Native visual measurements pending QA
 
-## Slice 2: Settings host stabilization
+- Cross-platform typography/font metrics and accessibility scaling.
+- Control, navigation, table, padding, radius, focus, and dense-view adaptations.
+- Light/dark drift decisions and any pixel/screenshot references.
 
-Proposed.
+There is no screenshot evidence or pixel-perfect gate in this slice. Offscreen
+behavioral tests do not satisfy this category.
 
-- Introduce `SettingsPageDescriptor` and registration validation.
-- Add stable page selection by id.
-- Preserve `SettingsDialog::addPage(SettingsPage*)` compatibility.
-- Add duplicate id, ordering, Save/Cancel/Reset, and theme-preview tests.
-- Avoid private page ids or private storage contracts.
+## D. Runtime implementation not started
 
-## Slice 3: Linked-worktree preflight
+No production token resolver, settings host, or worktree operation API is added
+here. Default behavior stays read-only, and no delete, checkout, prune, branch
+creation, commit, rebase, or remote mutation is introduced.
 
-Proposed.
+## Smallest next runtime slice
 
-- Add public target identity, preflight result, guard vocabulary, and async
-  outcome types.
-- Implement read-only preflight against disposable repository fixtures.
-- Keep existing switch-worktree behavior unless a clean target passes
-  revalidation.
-- Do not add destructive worktree deletion, pruning, checkout, branch creation,
-  commit, rebase, or remote operations.
+Implement **settings registration validation only**, while preserving current
+Save/apply-all and dialog-wide Reset behavior.
 
-## Slice 4: Build/install SDK hardening
+Allowed files:
 
-Proposed.
+- `src/app/SettingsDialog.h`
+- `src/app/SettingsDialog.cpp`
+- `tests/SettingsDialogTest.cpp` or a single focused settings-host test file
+- minimal `CMakeLists.txt` registration only if a new test target is used
+- `docs/refactor-wave-1/**` for accepted-contract updates
 
-- Decide whether public headers move to `include/ketplus/...` or remain build
-  tree only.
-- Add generated CMake package exports if installable SDK support is approved.
-- Document source/binary compatibility expectations per `cm-v*` release.
+Required tests:
+
+- valid registration and descriptor source-of-truth;
+- invalid/duplicate id, same pointer, null, and already-parented failure results;
+- stable order ties;
+- unknown and pre-registration selection rejection;
+- QObject ownership/destruction and signal disconnection;
+- compatibility adapter retains existing constructors/signals, apply-all Save,
+  dialog-wide buffered Reset, Cancel, and ThemeManager preview rollback.
+
+Dependencies: Qt Core/Widgets/Test and existing `KetPlusCM::settings_ui` only.
+No token resolver or Git operation dependency should enter this slice.
+
+## Later independent slices
+
+1. Source-pinned native token resolver plus mapping fixture (no visual claims).
+2. Read-only linked-worktree observation/preflight using disposable repositories
+   and Git common-dir identity; open/select policy only after API approval.
+3. Native visual adaptation after Integration/QA supplies approved evidence.
+4. Optional installable SDK hardening if install/export support is requested.
+
+Installable SDK work is not a blocker for current build-tree consumers of
+exported `KetPlusCM::*` targets.
 
 ## Release gate
 
-Private teams may depend on a new implementation only after:
-
-- public API is approved;
-- public CM release/tag is cut from `main`;
-- private integration pins the exact public release through the integration gate;
-- no private source/spec/screenshot/transcript/credential has entered public CM.
+A runtime consumer may pin a new implementation only after its public API slice
+is approved, implemented and tested; the relevant visual gate is satisfied where
+applicable; a public release is cut through the normal process; and the consumer
+pins that exact release. This task does not merge, tag, release, deploy, or
+upgrade any external gitlink.

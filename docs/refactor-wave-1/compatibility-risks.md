@@ -1,15 +1,37 @@
-# Compatibility risks
+# Finding resolution and compatibility risks
 
-| Risk | Impact | Mitigation |
+## Review finding resolution
+
+| Finding | Resolution in R01-B | Remaining gate |
 | --- | --- | --- |
-| Headers are exposed from `src/` build-tree paths, not a stable installed `include/` tree. | Consumers may depend on private layout or break when files move. | Keep Wave 1 docs explicit; add install/export package as a later release slice. |
-| `ThemePalette` stores concrete colors, not token ids. | Consumers can treat observed values as canonical and resist KDS updates. | Introduce value snapshots with source revision metadata; document drift and QA status. |
-| QSS role names are de facto public because tests and consumers can find them. | Renaming `kvRole` selectors can break downstream UI composition. | Promote only reviewed roles; keep internal roles undocumented until stabilized. |
-| `SettingsDialog::addPage` currently accepts raw page pointers and only id/title. | Page id collisions or unclear ownership can make composed settings brittle. | Proposed registration API validates ids, ownership, order, and duplicate handling. |
-| Save/Cancel/Reset behavior spans built-in and extension pages. | A private page could persist on Cancel or skip reset semantics. | Contract requires buffered pages, dirty reporting, and no persistence before Save. |
-| Existing editor-only settings constructor is still public. | Consumers may miss newer appearance-wide settings. | Keep compatibility but document preferred constructor and signal. |
-| Git service is read-only today, while linked-worktree workflows can imply mutation. | Accidental checkout/delete/prune behavior would violate public CM constraints. | Require explicit operation interface, blocking guards, cancellation, and disposable test repos. |
-| Worktree identity can change between menu display and operation. | Opening or operating on the wrong branch/head. | Revalidate target path, branch, head, repository root, and lock state immediately before outcome. |
-| Dirty/untracked policy varies by workflow. | Integrator uncertainty about whether a target is safe. | Surface dirty and untracked guards separately; let callers decide only after public API approval. |
-| Visual measurements from current QSS may differ from KDS 0.1.7. | Premature screenshots/baselines could bless accidental drift. | Mark unresolved measurements Pending QA and avoid screenshot baselines in Wave 1. |
-| Private concepts could leak through generic public extension points. | Public API becomes a container for product-specific names or behavior. | Ban private session, daemon, cloud, transcript, entitlement, and account semantics in CM contracts. |
+| Worktree observations were treated as universal blockers | Observation and per-operation policy are separate; open/select allows current/main, dirty, untracked, and locked states with truthful warnings | API approval and runtime tests |
+| Repository identity used path-shape assumptions | Proposal uses canonical Git common-dir plus registered git-dir; linked worktrees may live anywhere | Cross-platform implementation evidence |
+| Worktree lifecycle and TOCTOU were underspecified | Canonicalization, case/symlink rules, detached/unborn, missing/prunable/bare, reuse, thread/ownership/correlation/timeout/cancellation/exactly-once outcome, and non-atomic revalidation limit are documented | API approval |
+| Settings host embedded namespace policy | Only existing built-in ids `general` and `appearance` are reserved; no prefixes; consumer ids are opaque | API approval |
+| Descriptor/page identity and ownership were ambiguous | Descriptor is post-registration source of truth; mismatch rejects; ownership, re-registration, destruction, connection lifetime, results, tie order, and selection behavior are explicit | API approval |
+| Proposed dirty-only Save was described as compatible | Current apply-all behavior is baseline-tested; dirty-only is called out as a separate migration/change | Migration decision |
+| Reset/Cancel/preview/failure semantics were open | Reset is dialog-wide and buffered; reject paths do not apply; only ThemeManager preview has guaranteed rollback; `void apply()` is non-transactional | Future result/hook API only if required |
+| `--kv-text-xl` mapping was wrong | Corrected to 18px; 22px is `--kv-text-2xl` at 16px root | None for source fact |
+| Native values were at risk of becoming KDS truth | Provenance, resolver rules, status categories, units/scaling/rounding, drift and QA gates are separated | Mapping fixture and QA |
+| Parser/palette tests overstated enforcement/parity | Renamed as parser observation/current-native baselines; current SettingsDialog behavior gets isolated synthetic storage coverage | Proposed API tests remain planned |
+| Installable SDK was presented as a release blocker | Kept as an optional independent scope; build-tree `KetPlusCM::*` consumers remain supported | Separate SDK decision |
+
+## Compatibility risks
+
+| Risk | Impact | Mitigation / decision |
+| --- | --- | --- |
+| Headers are consumed from build-tree `src/` paths | Moving headers may break consumers | Do not couple runtime slices to install/export work; scope SDK hardening separately |
+| `ThemePalette` contains concrete values | Consumers may mistake native observations for canonical tokens | Retain it during migration; add source-pinned snapshot and drift fixture before claiming mapping |
+| QSS role names are de facto integration points | Renames can alter downstream composition | Stabilize only reviewed roles; do not infer public status from a hard-coded baseline |
+| Current `addPage` accepts raw pointers and duplicate ids | Composition and ownership can be brittle | New typed registration result and ownership rules; retain old path as an adapter |
+| Current Save applies clean and dirty pages | Dirty-only conversion can remove relied-on calls | Baseline apply-all now; require explicit compatibility decision before changing it |
+| Extension `apply()` is `void` and stores are independent | Validation/partial persistence cannot be represented atomically | Make no transaction guarantee; design a result API only if a concrete need is approved |
+| Extension preview has no rollback hook | Cancel cannot guarantee reversal of external preview side effects | Guarantee rollback only for existing ThemeManager; keep extension previews local for now |
+| Worktree state can change after checks | Operation may act on stale identity/state | Revalidate identity immediately before use, scope commands, return truthful failures; do not claim atomicity |
+| Dirty/locked policy differs by operation | A universal blocker would prevent safe selection and risk UI data loss | Preserve observation facts; map them per operation and preserve tabs/unsaved work |
+| Filesystem case/symlink behavior varies | String comparisons can select the wrong registration | Use canonical Git identity and filesystem-aware comparison, with platform tests |
+| Visual native values differ from KDS | Accidental drift could be blessed | Keep native measurements Pending QA and source mapping independently verifiable |
+
+Deferred generic Git behavior remains eligible for public CM ownership when it
+receives its own scope. Product policy belongs in its consumer and is not encoded
+in this public contract.
