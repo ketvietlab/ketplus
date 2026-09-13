@@ -16,7 +16,7 @@ constexpr auto lineHeightKey = "editor/lineHeightPixels";
 EditorSettings EditorSettings::defaults() {
     return {
         .fontFamily = QFontDatabase::systemFont(QFontDatabase::FixedFont).family(),
-        .fontSizePixels = 13,
+        .fontSizePixels = 12,
         .lineHeightPixels = 24,
     };
 }

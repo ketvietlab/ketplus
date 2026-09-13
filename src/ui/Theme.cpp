@@ -384,6 +384,24 @@ QLabel[kvRole="sidebarFolder"] {
     font-size: 11px;
 }
 
+QLabel[kvRole="sourceControlHeading"] {
+    color: {{textMain}};
+    font-size: 11px;
+    font-weight: 600;
+}
+
+QLabel[kvRole="gitRepositoryName"] {
+    color: {{textMain}};
+    font-size: 14px;
+    font-weight: 600;
+}
+
+QLabel[kvRole="gitRepositoryBranch"] {
+    color: {{textMuted}};
+    font-size: 12px;
+    font-weight: 400;
+}
+
 QLabel[kvRole="emptyTitle"] {
     color: {{textMuted}};
     font-size: 12px;

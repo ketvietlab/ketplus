@@ -54,11 +54,11 @@ void GitDiffViewTest::rendersStructuredInlineDiff() {
     QVERIFY(table != nullptr);
     QCOMPARE(table->font().family(),
              QFontDatabase::systemFont(QFontDatabase::FixedFont).family());
-    QCOMPARE(table->font().pixelSize(), 13);
+    QCOMPARE(table->font().pixelSize(), 12);
     const QFont renderedCodeFont = table->model()->index(1, 3).data(Qt::FontRole).value<QFont>();
     QCOMPARE(renderedCodeFont.family(),
              QFontDatabase::systemFont(QFontDatabase::FixedFont).family());
-    QCOMPARE(renderedCodeFont.pixelSize(), 13);
+    QCOMPARE(renderedCodeFont.pixelSize(), 12);
     QVERIFY(renderedCodeFont.family() != QStringLiteral("Helvetica"));
     QCOMPARE(table->verticalHeader()->defaultSectionSize(), 24);
     QCOMPARE(table->model()->rowCount(), 4);

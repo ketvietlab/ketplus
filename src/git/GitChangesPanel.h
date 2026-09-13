@@ -33,7 +33,9 @@ class GitChangesPanel final : public QWidget {
     void requestItemDiff(QTreeWidgetItem* item);
     void openItem(QTreeWidgetItem* item);
 
+    QLabel* repositoryLabel_{nullptr};
     QLabel* branchLabel_{nullptr};
+    QWidget* repositorySummary_{nullptr};
     QLabel* emptyLabel_{nullptr};
     QStackedWidget* pages_{nullptr};
     QTreeWidget* tree_{nullptr};

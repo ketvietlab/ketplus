@@ -14,7 +14,7 @@ struct EditorSettings final {
     static constexpr int maximumLineHeightPixels = 96;
 
     QString fontFamily;
-    int fontSizePixels{13};
+    int fontSizePixels{12};
     int lineHeightPixels{24};
 
     [[nodiscard]] static EditorSettings defaults();

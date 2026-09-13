@@ -118,7 +118,7 @@ void EditorWidgetTest::matchesEditorTypography() {
     ketplus::EditorWidget editor;
     editor.applyTheme(ketplus::ThemePalette{});
 
-    const int expectedSizeHundredthPoints = qRound(13.0 * 72.0 * 100.0 / editor.logicalDpiY());
+    const int expectedSizeHundredthPoints = qRound(12.0 * 72.0 * 100.0 / editor.logicalDpiY());
     QCOMPARE(editor.send(message(Scintilla::Message::StyleGetSizeFractional), STYLE_DEFAULT),
              expectedSizeHundredthPoints);
     QCOMPARE(editor.send(message(Scintilla::Message::TextHeight), 0), 24);
