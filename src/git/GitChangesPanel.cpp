@@ -144,7 +144,7 @@ class SourceControlDelegate final : public QStyledItemDelegate {
 
             const QRect textRect = option.rect.adjusted(36, 6, -8, -5);
             QFont title = option.font;
-            title.setPixelSize(13);
+            title.setPixelSize(12);
             title.setWeight(QFont::Normal);
             painter->setFont(title);
             painter->setPen(selected ? QColor(QStringLiteral("#5968DF"))
@@ -262,7 +262,8 @@ GitChangesPanel::GitChangesPanel(QWidget* parent)
     tree_->setColumnCount(2);
     tree_->header()->setStretchLastSection(false);
     tree_->header()->setSectionResizeMode(0, QHeaderView::Stretch);
-    tree_->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    tree_->header()->setSectionResizeMode(1, QHeaderView::Fixed);
+    tree_->header()->resizeSection(1, 32);
 
     pages_->addWidget(emptyLabel_);
     pages_->addWidget(tree_);

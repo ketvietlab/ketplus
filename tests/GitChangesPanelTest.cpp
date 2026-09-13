@@ -56,6 +56,7 @@ void GitChangesPanelTest::rendersRepositoryAndGroupedFiles() {
              QStringLiteral("modules/ai/src/agent/qml"));
     QCOMPARE(changes->child(0)->text(1), QStringLiteral("M"));
     QCOMPARE(staged->child(0)->text(1), QStringLiteral("M"));
+    QCOMPARE(tree->columnWidth(1), 32);
     QCOMPARE(tree->itemDelegate()->sizeHint({}, tree->model()->index(0, 0)).height(), 40);
     QCOMPARE(tree->itemDelegate()->sizeHint({}, tree->model()->index(0, 0, tree->model()->index(0, 0)))
                  .height(),
