@@ -60,7 +60,7 @@ void GitChangesPanelTest::rendersRepositoryAndGroupedFiles() {
     QCOMPARE(tree->itemDelegate()->sizeHint({}, tree->model()->index(0, 0)).height(), 40);
     QCOMPARE(tree->itemDelegate()->sizeHint({}, tree->model()->index(0, 0, tree->model()->index(0, 0)))
                  .height(),
-             54);
+             52);
 
     panel.focusChanges();
     QCOMPARE(tree->currentItem(), changes->child(0));

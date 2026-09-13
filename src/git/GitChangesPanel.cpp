@@ -59,7 +59,7 @@ class SourceControlDelegate final : public QStyledItemDelegate {
     using QStyledItemDelegate::QStyledItemDelegate;
 
     QSize sizeHint(const QStyleOptionViewItem&, const QModelIndex& index) const override {
-        return QSize(0, index.parent().isValid() ? 54 : 40);
+        return QSize(0, index.parent().isValid() ? 52 : 40);
     }
 
     void paint(QPainter* painter, const QStyleOptionViewItem& option,
@@ -142,7 +142,7 @@ class SourceControlDelegate final : public QStyledItemDelegate {
             painter->drawLine(QPointF(x + 10.5, y + 9.5), QPointF(x + 8.5, y + 11.5));
             painter->drawLine(QPointF(x + 8.5, y + 11.5), QPointF(x + 10.5, y + 13.5));
 
-            const QRect textRect = option.rect.adjusted(36, 6, -8, -5);
+            const QRect textRect = option.rect.adjusted(36, 5, -8, -4);
             QFont title = option.font;
             title.setPixelSize(12);
             title.setWeight(QFont::Normal);
@@ -376,7 +376,7 @@ void GitChangesPanel::addGroup(const QString& title,
         item->setToolTip(1, mode == GitDiffMode::Staged
                                 ? QStringLiteral("Staged change")
                                 : QStringLiteral("Working tree change"));
-        item->setSizeHint(0, QSize(0, 54));
+        item->setSizeHint(0, QSize(0, 52));
     }
 }
 
