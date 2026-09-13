@@ -354,6 +354,19 @@ if(KETPLUS_CM_BUILD_TESTS)
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     )
 
+    add_executable(ketplus_git_changes_panel_tests
+        tests/GitChangesPanelTest.cpp
+    )
+    target_link_libraries(ketplus_git_changes_panel_tests
+        PRIVATE Qt6::Test KetPlusCM::git_ui
+    )
+    ketplus_enable_warnings(ketplus_git_changes_panel_tests)
+
+    ketplus_cm_add_test(ketplus_git_changes_panel_tests ketplus_git_changes_panel_tests)
+    set_tests_properties(ketplus_git_changes_panel_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
+
     add_executable(ketplus_preview_tests tests/MarkdownPreviewPaneTest.cpp)
     target_link_libraries(ketplus_preview_tests PRIVATE Qt6::Test ketplus_preview)
     ketplus_enable_warnings(ketplus_preview_tests)
