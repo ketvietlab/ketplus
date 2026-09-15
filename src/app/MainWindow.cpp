@@ -125,6 +125,7 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
         updateDocumentState();
         updateGitActions();
         updateMarkdownPreview();
+        trackNavigation(currentEditor());
         if (findBar_->isVisible() && highlightTimer_ != nullptr) {
             highlightTimer_->start();
         }
@@ -261,6 +262,7 @@ void MainWindow::openFolder(const QString& folderPath) {
     rememberActiveFileForWorktree();
     workspaceRoot_ = normalizedPath(folder.absoluteFilePath());
     rememberRecentFolder(workspaceRoot_);
+    workspaceFilesIndexedAt_ = 0;
     auto* explorer = ensureExplorer();
     explorer->setRootPath(workspaceRoot_);
     setExplorerVisible(true);

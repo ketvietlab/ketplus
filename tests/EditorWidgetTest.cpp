@@ -404,6 +404,11 @@ void EditorWidgetTest::editsLinesAsUndoableSteps() {
     editor.goToLine(1);
     editor.joinLines();
     QCOMPARE(editor.text(), QByteArray("  one two\nthree"));
+
+    editor.setText("one\r\ntwo");
+    editor.goToLine(1);
+    editor.duplicateLines();
+    QCOMPARE(editor.text(), QByteArray("one\r\none\r\ntwo"));
 }
 
 void EditorWidgetTest::sortsAndTrimsLines() {

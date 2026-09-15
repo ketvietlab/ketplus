@@ -3,12 +3,17 @@
 #include "app/AppearanceSettings.h"
 #include "editor/EditorViewOptions.h"
 #include "git/GitTypes.h"
+#include "workspace/WorkspaceFileIndex.h"
 
 #include <QHash>
+#include <QList>
 #include <QMainWindow>
+#include <QPointer>
 #include <QStringList>
 
+#include <atomic>
 #include <cstdint>
+#include <memory>
 
 class QCloseEvent;
 class QEvent;
@@ -20,10 +25,14 @@ class QSplitter;
 class QString;
 class QTabWidget;
 class QShortcut;
+class QThread;
 class QTimer;
 class QToolButton;
+class QVariant;
 
 namespace ketplus {
+
+class QuickOpenPopup;
 
 struct SearchOptions;
 
@@ -41,6 +50,7 @@ class MainWindow final : public QMainWindow {
 
   public:
     explicit MainWindow(ThemeManager& theme, QWidget* parent = nullptr);
+    ~MainWindow() override;
 
     void openFile(const QString& filePath);
     void openFolder(const QString& folderPath);
@@ -98,6 +108,15 @@ class MainWindow final : public QMainWindow {
     void setDistractionFree(bool enabled);
     void changeZoom(int delta);
     void syncEditorZoom(EditorWidget* editor);
+    void showCommandPalette();
+    void showGoToFile();
+    void showGoToSymbol();
+    QuickOpenPopup* ensureQuickOpen();
+    [[nodiscard]] QString quickOpenStyleSheet() const;
+    void activateQuickOpenItem(const QVariant& data);
+    void refreshWorkspaceFileIndex(bool force);
+    void finishWorkspaceFileIndex(const QString& root, const WorkspaceFileList& files);
+    void updateGoToFileItems();
     void showSettings();
     void applyAppearanceSettings(const AppearanceSettings& settings);
     void applyThemeToEditors();
@@ -123,6 +142,22 @@ class MainWindow final : public QMainWindow {
     void rememberActiveFileForWorktree();
     [[nodiscard]] QString currentWorkspaceRelativeFile() const;
 
+    struct NavigationLocation final {
+        QPointer<EditorWidget> editor;
+        QString filePath;
+        qint64 position{0};
+        int line{0};
+    };
+    enum class QuickOpenMode { Commands, Files, Symbols };
+
+    [[nodiscard]] NavigationLocation locationOf(EditorWidget* editor) const;
+    [[nodiscard]] bool isLocationAvailable(const NavigationLocation& location) const;
+    void trackNavigation(EditorWidget* editor);
+    void pushNavigationLocation(const NavigationLocation& location);
+    void navigateHistory(bool back);
+    void restoreLocation(const NavigationLocation& location);
+    void updateNavigationActions();
+
     ThemeManager& theme_;
     AppearanceSettings appearanceSettings_;
     EditorViewOptions viewOptions_;
@@ -144,6 +179,24 @@ class MainWindow final : public QMainWindow {
     QAction* fullScreenAction_{nullptr};
     QAction* distractionFreeAction_{nullptr};
     QShortcut* exitFullScreenShortcut_{nullptr};
+    QuickOpenPopup* quickOpen_{nullptr};
+    QuickOpenMode quickOpenMode_{QuickOpenMode::Commands};
+    QAction* commandPaletteAction_{nullptr};
+    QAction* backAction_{nullptr};
+    QAction* forwardAction_{nullptr};
+    QList<QPointer<QAction>> paletteActions_;
+    QPointer<EditorWidget> symbolEditor_;
+    QStringList workspaceFiles_;
+    QString workspaceFilesRoot_;
+    qint64 workspaceFilesIndexedAt_{0};
+    bool workspaceFilesTruncated_{false};
+    bool workspaceIndexing_{false};
+    QPointer<QThread> workspaceIndexThread_;
+    std::shared_ptr<std::atomic_bool> workspaceIndexCancelled_;
+    QList<NavigationLocation> backLocations_;
+    QList<NavigationLocation> forwardLocations_;
+    NavigationLocation lastLocation_;
+    bool restoringNavigation_{false};
     struct DistractionFreeRestore final {
         bool explorer{false};
         bool sourceControl{false};
