@@ -140,6 +140,8 @@ add_library(KetPlusCM::preview ALIAS ketplus_preview)
 add_library(ketplus_editor STATIC
     src/editor/EditorSettings.cpp
     src/editor/EditorSettings.h
+    src/editor/EditorSplitPane.cpp
+    src/editor/EditorSplitPane.h
     src/editor/EditorViewOptions.cpp
     src/editor/EditorViewOptions.h
     src/editor/EditorWidget.cpp
