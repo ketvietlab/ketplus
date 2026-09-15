@@ -11,6 +11,8 @@
 #include <QTemporaryDir>
 #include <QtTest>
 
+#include <atomic>
+
 class NavigationTest final : public QObject {
     Q_OBJECT
 
@@ -78,6 +80,11 @@ void NavigationTest::collectsWorkspaceFiles() {
     const auto limited = ketplus::collectWorkspaceFiles(directory.path(), 1);
     QCOMPARE(limited.relativePaths.size(), 1);
     QVERIFY(limited.truncated);
+
+    const std::atomic_bool cancelled{true};
+    const auto stopped = ketplus::collectWorkspaceFiles(directory.path(), 100, &cancelled);
+    QVERIFY(stopped.relativePaths.isEmpty());
+    QVERIFY(stopped.truncated);
 }
 
 void NavigationTest::extractsCppSymbols() {

@@ -178,21 +178,33 @@ void MainWindow::refreshWorkspaceFileIndex(const bool force) {
     workspaceIndexing_ = true;
     updateGoToFileItems();
     const QString root = workspaceRoot_;
-    const QPointer<MainWindow> window(this);
-    // Walk the tree off the UI thread; large workspaces can take a moment.
-    auto* thread = QThread::create([window, root] {
-        const WorkspaceFileList files = collectWorkspaceFiles(root);
+    workspaceIndexCancelled_ = std::make_shared<std::atomic_bool>(false);
+    const auto cancelled = workspaceIndexCancelled_;
+    // Walk the tree off the UI thread; large workspaces can take a moment. The destructor
+    // cancels and waits, so `this` outlives the worker, and a queued call to a destroyed
+    // receiver is discarded.
+    auto* thread = QThread::create([this, root, cancelled] {
+        const WorkspaceFileList files =
+            collectWorkspaceFiles(root, defaultWorkspaceFileLimit, cancelled.get());
+        if (cancelled->load()) {
+            return;
+        }
         QMetaObject::invokeMethod(
-            qApp,
-            [window, root, files] {
-                if (window != nullptr) {
-                    window->finishWorkspaceFileIndex(root, files);
-                }
-            },
+            this, [this, root, files] { finishWorkspaceFileIndex(root, files); },
             Qt::QueuedConnection);
     });
     connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+    workspaceIndexThread_ = thread;
     thread->start(QThread::LowPriority);
+}
+
+MainWindow::~MainWindow() {
+    if (workspaceIndexCancelled_ != nullptr) {
+        workspaceIndexCancelled_->store(true);
+    }
+    if (workspaceIndexThread_ != nullptr) {
+        workspaceIndexThread_->wait();
+    }
 }
 
 void MainWindow::finishWorkspaceFileIndex(const QString& root, const WorkspaceFileList& files) {
@@ -298,7 +310,13 @@ MainWindow::NavigationLocation MainWindow::locationOf(EditorWidget* editor) cons
 
 bool MainWindow::isLocationAvailable(const NavigationLocation& location) const {
     const EditorWidget* editor = location.editor;
-    if (editor != nullptr && (tabs_->indexOf(location.editor) >= 0 || editor == splitEditor_)) {
+    if (editor != nullptr && tabs_->indexOf(location.editor) >= 0) {
+        return true;
+    }
+    // The split view is reused for other files, so it only matches while it still shows
+    // the file the location was recorded in.
+    if (editor != nullptr && editor == splitEditor_ && splitSource_ != nullptr &&
+        !location.filePath.isEmpty() && splitSource_->document().filePath() == location.filePath) {
         return true;
     }
     return !location.filePath.isEmpty() && QFileInfo(location.filePath).isFile();
@@ -361,10 +379,16 @@ void MainWindow::navigateHistory(const bool back) {
 void MainWindow::restoreLocation(const NavigationLocation& location) {
     restoringNavigation_ = true;
     EditorWidget* editor = location.editor;
-    if (editor != nullptr && editor == splitEditor_) {
+    const bool splitShowsLocation = editor != nullptr && editor == splitEditor_ &&
+                                    splitSource_ != nullptr &&
+                                    splitSource_->document().filePath() == location.filePath;
+    if (splitShowsLocation) {
         splitEditor_->setFocus();
     } else if (editor != nullptr && tabs_->indexOf(editor) >= 0) {
         tabs_->setCurrentWidget(editor);
+    } else if (location.filePath.isEmpty()) {
+        restoringNavigation_ = false;
+        return;
     } else {
         openFile(location.filePath);
         editor = currentEditor();

@@ -22,7 +22,8 @@ bool isSkippedDirectory(const QString& name) {
 
 } // namespace
 
-WorkspaceFileList collectWorkspaceFiles(const QString& rootPath, const int maximumFiles) {
+WorkspaceFileList collectWorkspaceFiles(const QString& rootPath, const int maximumFiles,
+                                        const std::atomic_bool* cancelled) {
     WorkspaceFileList result;
     const QDir root(rootPath);
     if (!root.exists()) {
@@ -31,6 +32,10 @@ WorkspaceFileList collectWorkspaceFiles(const QString& rootPath, const int maxim
 
     QStringList pendingDirectories{root.absolutePath()};
     while (!pendingDirectories.isEmpty()) {
+        if (cancelled != nullptr && cancelled->load()) {
+            result.truncated = true;
+            break;
+        }
         const QDir directory(pendingDirectories.takeLast());
         const auto entries = directory.entryInfoList(
             QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden | QDir::NoSymLinks,

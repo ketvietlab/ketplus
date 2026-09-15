@@ -11,7 +11,9 @@
 #include <QPointer>
 #include <QStringList>
 
+#include <atomic>
 #include <cstdint>
+#include <memory>
 
 class QCloseEvent;
 class QEvent;
@@ -23,6 +25,7 @@ class QSplitter;
 class QString;
 class QTabWidget;
 class QShortcut;
+class QThread;
 class QTimer;
 class QToolButton;
 class QVariant;
@@ -47,6 +50,7 @@ class MainWindow final : public QMainWindow {
 
   public:
     explicit MainWindow(ThemeManager& theme, QWidget* parent = nullptr);
+    ~MainWindow() override;
 
     void openFile(const QString& filePath);
     void openFolder(const QString& folderPath);
@@ -187,6 +191,8 @@ class MainWindow final : public QMainWindow {
     qint64 workspaceFilesIndexedAt_{0};
     bool workspaceFilesTruncated_{false};
     bool workspaceIndexing_{false};
+    QPointer<QThread> workspaceIndexThread_;
+    std::shared_ptr<std::atomic_bool> workspaceIndexCancelled_;
     QList<NavigationLocation> backLocations_;
     QList<NavigationLocation> forwardLocations_;
     NavigationLocation lastLocation_;

@@ -215,6 +215,13 @@ void EditorWidget::setText(const QByteArray& text) {
     internalMutation_ = true;
     updateLargeFileMode(text.size());
     send(message(Scintilla::Message::SetUndoCollection), largeFileMode_ ? 0 : 1);
+    // New line breaks follow the file's existing style instead of the platform default
+    // (CRLF on Windows), so edits never mix line endings.
+    const qsizetype firstLineFeed = text.indexOf('\n');
+    const int endOfLineMode = firstLineFeed > 0 && text.at(firstLineFeed - 1) == '\r' ? SC_EOL_CRLF
+                              : firstLineFeed < 0 && text.contains('\r')              ? SC_EOL_CR
+                                                                                      : SC_EOL_LF;
+    send(message(Scintilla::Message::SetEOLMode), static_cast<uptr_t>(endOfLineMode));
     sends(message(Scintilla::Message::SetText), 0, text.constData());
     send(message(Scintilla::Message::EmptyUndoBuffer));
     markSaved();
