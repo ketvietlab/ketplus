@@ -19,6 +19,7 @@
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QInputDialog>
 #include <QKeySequence>
 #include <QLabel>
 #include <QList>
@@ -31,6 +32,7 @@
 #include <QStatusBar>
 #include <QTabBar>
 #include <QTabWidget>
+#include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -42,6 +44,19 @@ namespace {
 constexpr int maximumResidentTabCount = 12;
 constexpr qsizetype residentTextBudgetBytes = 64 * 1024 * 1024;
 constexpr int maximumRecentFolderCount = 10;
+constexpr int maximumRecentFileCount = 15;
+constexpr int maximumClosedTabCount = 20;
+
+void rememberRecentPath(const QString& key, const QString& path, const int maximumCount) {
+    QSettings settings;
+    QStringList paths = settings.value(key).toStringList();
+    paths.removeAll(path);
+    paths.prepend(path);
+    while (paths.size() > maximumCount) {
+        paths.removeLast();
+    }
+    settings.setValue(key, paths);
+}
 } // namespace
 
 void MainWindow::createNewDocument() {
@@ -78,6 +93,40 @@ bool MainWindow::saveCurrentDocumentAs() {
     return editor == nullptr || saveEditor(editor, true);
 }
 
+bool MainWindow::saveAllDocuments() {
+    int savedCount = 0;
+    for (int index = 0; index < tabs_->count(); ++index) {
+        auto* editor = qobject_cast<EditorWidget*>(tabs_->widget(index));
+        if (editor == nullptr || !editor->document().isModified()) {
+            continue;
+        }
+        if (editor->document().isUntitled()) {
+            // Show which tab the save dialog belongs to.
+            tabs_->setCurrentIndex(index);
+        }
+        if (!saveEditor(editor, false)) {
+            return false;
+        }
+        ++savedCount;
+    }
+    statusBar()->showMessage(savedCount == 0
+                                 ? QStringLiteral("No unsaved changes")
+                                 : QStringLiteral("Saved %1 file(s)").arg(savedCount),
+                             2500);
+    return true;
+}
+
+void MainWindow::reopenClosedTab() {
+    while (!closedFilePaths_.isEmpty()) {
+        const QString path = closedFilePaths_.takeLast();
+        if (QFileInfo(path).isFile()) {
+            openFile(path);
+            break;
+        }
+    }
+    reopenClosedTabAction_->setEnabled(!closedFilePaths_.isEmpty());
+}
+
 bool MainWindow::saveEditor(EditorWidget* editor, const bool choosePath) {
     auto& document = editor->document();
     QString path = document.filePath();
@@ -96,6 +145,7 @@ bool MainWindow::saveEditor(EditorWidget* editor, const bool choosePath) {
     }
 
     editor->markSaved();
+    rememberRecentFile(path);
     editor->configureLexerForPath(path);
     editor->applyTheme(theme_.palette());
     updateTabTitle(editor);
@@ -136,6 +186,16 @@ bool MainWindow::closeTab(const int index, const bool createReplacement) {
     auto* editor = qobject_cast<EditorWidget*>(tabs_->widget(index));
     if (editor != nullptr && !maybeCloseEditor(editor)) {
         return false;
+    }
+
+    if (editor != nullptr && !editor->document().isUntitled()) {
+        const QString path = editor->document().filePath();
+        closedFilePaths_.removeAll(path);
+        closedFilePaths_.append(path);
+        if (closedFilePaths_.size() > maximumClosedTabCount) {
+            closedFilePaths_.removeFirst();
+        }
+        reopenClosedTabAction_->setEnabled(true);
     }
 
     tabs_->removeTab(index);
@@ -274,6 +334,7 @@ void MainWindow::configureTabCloseButton(const int index, QWidget* tab,
 EditorWidget* MainWindow::createEditor() {
     auto* editor = new EditorWidget(this);
     editor->setEditorSettings(appearanceSettings_.editor);
+    editor->setViewOptions(viewOptions_);
     editor->applyTheme(theme_.palette());
     connect(editor, &EditorWidget::contextMenuRequested, this,
             [this, editor](const QPoint& position) { showEditorContextMenu(editor, position); });
@@ -410,14 +471,40 @@ void MainWindow::enforceTabResourcePolicy() {
 }
 
 void MainWindow::rememberRecentFolder(const QString& path) {
+    rememberRecentPath(QStringLiteral("workspace/recentFolders"), path, maximumRecentFolderCount);
+}
+
+void MainWindow::rememberRecentFile(const QString& path) {
+    rememberRecentPath(QStringLiteral("workspace/recentFiles"), path, maximumRecentFileCount);
+}
+
+void MainWindow::rebuildRecentFilesMenu() {
+    recentFilesMenu_->clear();
     QSettings settings;
-    QStringList folders = settings.value(QStringLiteral("workspace/recentFolders")).toStringList();
-    folders.removeAll(path);
-    folders.prepend(path);
-    while (folders.size() > maximumRecentFolderCount) {
-        folders.removeLast();
+    const QStringList storedFiles =
+        settings.value(QStringLiteral("workspace/recentFiles")).toStringList();
+    QStringList availableFiles;
+    for (const QString& path : storedFiles) {
+        if (QFileInfo(path).isFile() && !availableFiles.contains(path)) {
+            availableFiles.append(path);
+            auto* action = recentFilesMenu_->addAction(path);
+            connect(action, &QAction::triggered, this, [this, path] { openFile(path); });
+        }
     }
-    settings.setValue(QStringLiteral("workspace/recentFolders"), folders);
+    settings.setValue(QStringLiteral("workspace/recentFiles"), availableFiles);
+
+    if (availableFiles.isEmpty()) {
+        auto* emptyAction = recentFilesMenu_->addAction(QStringLiteral("No Recent Files"));
+        emptyAction->setEnabled(false);
+        return;
+    }
+
+    recentFilesMenu_->addSeparator();
+    auto* clearAction = recentFilesMenu_->addAction(QStringLiteral("Clear Recent Files"));
+    connect(clearAction, &QAction::triggered, this, [this] {
+        QSettings().remove(QStringLiteral("workspace/recentFiles"));
+        rebuildRecentFilesMenu();
+    });
 }
 
 void MainWindow::rebuildRecentFoldersMenu() {
@@ -452,6 +539,7 @@ void MainWindow::rebuildRecentFoldersMenu() {
 void MainWindow::openFindBar(const bool replaceMode) {
     const auto* editor = currentEditor();
     findBar_->open(replaceMode, editor == nullptr ? QString() : editor->selectedText());
+    highlightTimer_->start();
 }
 
 void MainWindow::findNext(const bool backwards) {
@@ -464,8 +552,7 @@ void MainWindow::findNext(const bool backwards) {
         return;
     }
 
-    const auto result = editor->findText(findBar_->query(), backwards, findBar_->matchCase(),
-                                         findBar_->wholeWord());
+    const auto result = editor->findText(findBar_->query(), backwards, searchOptions());
     findBar_->showSearchResult(result.found, result.wrapped);
 }
 
@@ -475,11 +562,12 @@ void MainWindow::replaceCurrentMatch() {
         return;
     }
 
-    const bool replaced = editor->replaceSelection(findBar_->query(), findBar_->replacement(),
-                                                   findBar_->matchCase(), findBar_->wholeWord());
-    const auto result =
-        editor->findText(findBar_->query(), false, findBar_->matchCase(), findBar_->wholeWord());
+    const auto options = searchOptions();
+    const bool replaced =
+        editor->replaceSelection(findBar_->query(), findBar_->replacement(), options);
+    const auto result = editor->findText(findBar_->query(), false, options);
     findBar_->showSearchResult(result.found, replaced ? result.wrapped : false);
+    refreshMatchHighlights(false);
 }
 
 void MainWindow::replaceAllMatches() {
@@ -488,9 +576,70 @@ void MainWindow::replaceAllMatches() {
         return;
     }
 
-    const int replacements = editor->replaceAll(findBar_->query(), findBar_->replacement(),
-                                                findBar_->matchCase(), findBar_->wholeWord());
+    const int replacements =
+        editor->replaceAll(findBar_->query(), findBar_->replacement(), searchOptions());
     findBar_->showReplacementCount(replacements);
+    refreshMatchHighlights(false);
+}
+
+SearchOptions MainWindow::searchOptions() const {
+    return {.matchCase = findBar_->matchCase(),
+            .wholeWord = findBar_->wholeWord(),
+            .regex = findBar_->regex(),
+            .inSelection = findBar_->inSelection()};
+}
+
+void MainWindow::refreshMatchHighlights(const bool updateCount) {
+    auto* editor = currentEditor();
+    if (editor == nullptr || !findBar_->isVisible()) {
+        return;
+    }
+    const int count = editor->highlightMatches(findBar_->query(), searchOptions());
+    if (updateCount && !findBar_->query().isEmpty()) {
+        findBar_->showMatchCount(count, count >= EditorWidget::highlightMatchLimit);
+    }
+}
+
+void MainWindow::clearMatchHighlights() {
+    for (int index = 0; index < tabs_->count(); ++index) {
+        if (auto* editor = qobject_cast<EditorWidget*>(tabs_->widget(index))) {
+            editor->clearMatchHighlights();
+            editor->clearSearchScope();
+        }
+    }
+}
+
+void MainWindow::applyViewOptions(const EditorViewOptions& options) {
+    viewOptions_ = options.normalized();
+    viewOptions_.save();
+    for (int index = 0; index < tabs_->count(); ++index) {
+        if (auto* editor = qobject_cast<EditorWidget*>(tabs_->widget(index))) {
+            editor->setViewOptions(viewOptions_);
+        }
+    }
+    const auto* editor = currentEditor();
+    if (editor != nullptr && editor->isLargeFileMode() &&
+        (viewOptions_.wordWrap || viewOptions_.codeFolding)) {
+        statusBar()->showMessage(
+            QStringLiteral("Large file mode: word wrap and code folding stay off for this file"),
+            4000);
+    }
+}
+
+void MainWindow::goToLine() {
+    auto* editor = currentEditor();
+    if (editor == nullptr || editor->isHibernated()) {
+        return;
+    }
+    bool accepted = false;
+    const int line = QInputDialog::getInt(
+        this, QStringLiteral("Go to Line"),
+        QStringLiteral("Line number (1–%1):").arg(editor->lineCount()), editor->currentLine(), 1,
+        editor->lineCount(), 1, &accepted);
+    if (accepted) {
+        editor->goToLine(line);
+        editor->setFocus();
+    }
 }
 
 void MainWindow::showSettings() {

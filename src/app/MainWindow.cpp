@@ -31,6 +31,7 @@
 #include <QStatusBar>
 #include <QTabBar>
 #include <QTabWidget>
+#include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -51,6 +52,7 @@ QString normalizedPath(const QString& path) {
 
 MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     : QMainWindow(parent), theme_(theme), appearanceSettings_(AppearanceSettings::load()),
+      viewOptions_(EditorViewOptions::load()),
       mainSplit_(new QSplitter(Qt::Vertical, this)),
       workspaceSplit_(new QSplitter(Qt::Horizontal, mainSplit_)),
       editorSplit_(new QSplitter(Qt::Horizontal, workspaceSplit_)), tabs_(new QTabWidget),
@@ -117,14 +119,39 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
         updateDocumentState();
         updateGitActions();
         updateMarkdownPreview();
+        if (findBar_->isVisible() && highlightTimer_ != nullptr) {
+            highlightTimer_->start();
+        }
     });
     connect(findBar_, &FindReplaceBar::findRequested, this, &MainWindow::findNext);
     connect(findBar_, &FindReplaceBar::replaceRequested, this, &MainWindow::replaceCurrentMatch);
     connect(findBar_, &FindReplaceBar::replaceAllRequested, this, &MainWindow::replaceAllMatches);
     connect(findBar_, &FindReplaceBar::closeRequested, this, [this] {
+        highlightTimer_->stop();
+        clearMatchHighlights();
         if (auto* editor = currentEditor()) {
             editor->setFocus();
         }
+    });
+
+    // Debounce match highlighting so typing a query never rescans on every key.
+    highlightTimer_ = new QTimer(this);
+    highlightTimer_->setSingleShot(true);
+    highlightTimer_->setInterval(200);
+    connect(highlightTimer_, &QTimer::timeout, this, [this] { refreshMatchHighlights(); });
+    connect(findBar_, &FindReplaceBar::queryChanged, highlightTimer_,
+            qOverload<>(&QTimer::start));
+    connect(findBar_, &FindReplaceBar::searchOptionsChanged, this, [this] {
+        if (auto* editor = currentEditor()) {
+            if (findBar_->inSelection()) {
+                if (!editor->hasSearchScope()) {
+                    editor->setSearchScopeToSelection();
+                }
+            } else {
+                editor->clearSearchScope();
+            }
+        }
+        highlightTimer_->start();
     });
     connect(QApplication::clipboard(), &QClipboard::dataChanged, this,
             &MainWindow::updateEditorActions);
@@ -196,6 +223,7 @@ void MainWindow::openFile(const QString& filePath) {
     const int index = tabs_->addTab(editor, editor->document().displayName());
     configureTabCloseButton(index, editor);
     tabs_->setCurrentIndex(index);
+    rememberRecentFile(absolutePath);
     if (editor->isLargeFileMode()) {
         statusBar()->showMessage(
             QStringLiteral("Large file mode: syntax highlighting and undo are disabled"), 5000);

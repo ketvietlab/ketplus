@@ -36,6 +36,7 @@
 #include <QWidget>
 
 #include <algorithm>
+#include <functional>
 
 namespace ketplus {
 void MainWindow::createActions() {
@@ -57,9 +58,17 @@ void MainWindow::createActions() {
     connect(recentFoldersMenu_, &QMenu::aboutToShow, this,
             &MainWindow::rebuildRecentFoldersMenu);
 
+    recentFilesMenu_ = fileMenu->addMenu(QStringLiteral("Open Recent File"));
+    connect(recentFilesMenu_, &QMenu::aboutToShow, this, &MainWindow::rebuildRecentFilesMenu);
+
     auto* closeTabAction = fileMenu->addAction(QStringLiteral("&Close Tab"));
     closeTabAction->setShortcut(QKeySequence::Close);
     connect(closeTabAction, &QAction::triggered, this, &MainWindow::closeCurrentTab);
+
+    reopenClosedTabAction_ = fileMenu->addAction(QStringLiteral("&Reopen Closed Tab"));
+    reopenClosedTabAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+T")));
+    reopenClosedTabAction_->setEnabled(false);
+    connect(reopenClosedTabAction_, &QAction::triggered, this, &MainWindow::reopenClosedTab);
 
     fileMenu->addSeparator();
 
@@ -70,6 +79,10 @@ void MainWindow::createActions() {
     auto* saveAsAction = fileMenu->addAction(QStringLiteral("Save &As…"));
     saveAsAction->setShortcut(QKeySequence::SaveAs);
     connect(saveAsAction, &QAction::triggered, this, &MainWindow::saveCurrentDocumentAs);
+
+    auto* saveAllAction = fileMenu->addAction(QStringLiteral("Save A&ll"));
+    saveAllAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Alt+S")));
+    connect(saveAllAction, &QAction::triggered, this, &MainWindow::saveAllDocuments);
 
     fileMenu->addSeparator();
     auto* quitAction = fileMenu->addAction(QStringLiteral("&Quit"));
@@ -151,6 +164,76 @@ void MainWindow::createActions() {
     replaceAction->setShortcut(QKeySequence::Replace);
     connect(replaceAction, &QAction::triggered, this, [this] { openFindBar(true); });
 
+    const auto addEditorAction = [this](QMenu* menu, const QString& label,
+                                        const QKeySequence& shortcut,
+                                        const std::function<void(EditorWidget&)>& handler) {
+        auto* action = menu->addAction(label);
+        action->setShortcut(shortcut);
+        connect(action, &QAction::triggered, this, [this, handler] {
+            if (auto* editor = currentEditor(); editor != nullptr && !editor->isHibernated()) {
+                handler(*editor);
+            }
+        });
+        return action;
+    };
+    const auto addViewOption = [this](QMenu* menu, const QString& label,
+                                      const QKeySequence& shortcut,
+                                      bool EditorViewOptions::*field) {
+        auto* action = menu->addAction(label);
+        action->setCheckable(true);
+        action->setChecked(viewOptions_.*field);
+        action->setShortcut(shortcut);
+        connect(action, &QAction::toggled, this, [this, field](const bool checked) {
+            auto options = viewOptions_;
+            options.*field = checked;
+            applyViewOptions(options);
+        });
+        return action;
+    };
+
+    editMenu->addSeparator();
+    auto* lineMenu = editMenu->addMenu(QStringLiteral("&Line"));
+    addEditorAction(lineMenu, QStringLiteral("&Duplicate Line"),
+                    QKeySequence(QStringLiteral("Ctrl+Shift+D")),
+                    [](EditorWidget& editor) { editor.duplicateLines(); });
+    addEditorAction(lineMenu, QStringLiteral("Move Line &Up"), QKeySequence(QStringLiteral("Alt+Up")),
+                    [](EditorWidget& editor) { editor.moveLinesUp(); });
+    addEditorAction(lineMenu, QStringLiteral("Move Line Dow&n"),
+                    QKeySequence(QStringLiteral("Alt+Down")),
+                    [](EditorWidget& editor) { editor.moveLinesDown(); });
+    addEditorAction(lineMenu, QStringLiteral("De&lete Line"),
+                    QKeySequence(QStringLiteral("Ctrl+Shift+K")),
+                    [](EditorWidget& editor) { editor.deleteLines(); });
+    addEditorAction(lineMenu, QStringLiteral("&Join Lines"), QKeySequence(QStringLiteral("Ctrl+J")),
+                    [](EditorWidget& editor) { editor.joinLines(); });
+    lineMenu->addSeparator();
+    addEditorAction(lineMenu, QStringLiteral("&Sort Lines"), {},
+                    [](EditorWidget& editor) { editor.sortLines(false); });
+    addEditorAction(lineMenu, QStringLiteral("Sort Lines and &Remove Duplicates"), {},
+                    [](EditorWidget& editor) { editor.sortLines(true); });
+    addEditorAction(lineMenu, QStringLiteral("&Trim Trailing Whitespace"), {},
+                    [](EditorWidget& editor) { editor.trimTrailingWhitespace(); });
+
+    addEditorAction(editMenu, QStringLiteral("Toggle &Comment"),
+                    QKeySequence(QStringLiteral("Ctrl+/")), [this](EditorWidget& editor) {
+                        if (!editor.toggleComment()) {
+                            statusBar()->showMessage(
+                                QStringLiteral("Comments are not available for this file type"),
+                                2500);
+                        }
+                    });
+    auto* caseMenu = editMenu->addMenu(QStringLiteral("Convert Ca&se"));
+    addEditorAction(caseMenu, QStringLiteral("&UPPERCASE"),
+                    QKeySequence(QStringLiteral("Ctrl+K, Ctrl+U")),
+                    [](EditorWidget& editor) { editor.convertCase(true); });
+    addEditorAction(caseMenu, QStringLiteral("&lowercase"),
+                    QKeySequence(QStringLiteral("Ctrl+K, Ctrl+L")),
+                    [](EditorWidget& editor) { editor.convertCase(false); });
+    editMenu->addSeparator();
+    addViewOption(editMenu, QStringLiteral("Auto-Close Brackets"), {},
+                  &EditorViewOptions::autoCloseBrackets);
+    addViewOption(editMenu, QStringLiteral("Auto-Indent"), {}, &EditorViewOptions::autoIndent);
+
     editMenu->addSeparator();
     auto* settingsAction = editMenu->addAction(QStringLiteral("Settings…"));
     settingsAction->setMenuRole(QAction::PreferencesRole);
@@ -158,6 +241,38 @@ void MainWindow::createActions() {
     connect(settingsAction, &QAction::triggered, this, &MainWindow::showSettings);
 
     connect(editMenu, &QMenu::aboutToShow, this, &MainWindow::updateEditorActions);
+
+    auto* goMenu = menuBar()->addMenu(QStringLiteral("&Go"));
+    auto* goToLineAction = goMenu->addAction(QStringLiteral("Go to &Line…"));
+    goToLineAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+L")));
+    connect(goToLineAction, &QAction::triggered, this, &MainWindow::goToLine);
+    addEditorAction(goMenu, QStringLiteral("Jump to Matching &Bracket"),
+                    QKeySequence(QStringLiteral("Ctrl+Shift+\\")), [this](EditorWidget& editor) {
+                        if (!editor.jumpToMatchingBrace()) {
+                            statusBar()->showMessage(
+                                QStringLiteral("No matching bracket at the cursor"), 2500);
+                        }
+                    });
+    goMenu->addSeparator();
+    addEditorAction(goMenu, QStringLiteral("&Toggle Bookmark"),
+                    QKeySequence(QStringLiteral("Ctrl+F2")),
+                    [](EditorWidget& editor) { editor.toggleBookmark(); });
+    const auto reportMissingBookmarks = [this](const bool found) {
+        if (!found) {
+            statusBar()->showMessage(QStringLiteral("No bookmarks in this file"), 2500);
+        }
+    };
+    addEditorAction(goMenu, QStringLiteral("&Next Bookmark"), QKeySequence(QStringLiteral("F2")),
+                    [reportMissingBookmarks](EditorWidget& editor) {
+                        reportMissingBookmarks(editor.goToNextBookmark());
+                    });
+    addEditorAction(goMenu, QStringLiteral("&Previous Bookmark"),
+                    QKeySequence(QStringLiteral("Shift+F2")),
+                    [reportMissingBookmarks](EditorWidget& editor) {
+                        reportMissingBookmarks(editor.goToPreviousBookmark());
+                    });
+    addEditorAction(goMenu, QStringLiteral("&Clear Bookmarks"), {},
+                    [](EditorWidget& editor) { editor.clearBookmarks(); });
 
     gitMenu_ = menuBar()->addMenu(QStringLiteral("&Git"));
     sourceControlAction_ = gitMenu_->addAction(QStringLiteral("Source Control"));
@@ -216,6 +331,37 @@ void MainWindow::createActions() {
     auto* previousTabAction = viewMenu->addAction(QStringLiteral("Previous Tab"));
     previousTabAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+Tab")));
     connect(previousTabAction, &QAction::triggered, this, [this] { activateAdjacentTab(-1); });
+
+    viewMenu->addSeparator();
+    addViewOption(viewMenu, QStringLiteral("Word Wrap"), QKeySequence(QStringLiteral("Alt+Z")),
+                  &EditorViewOptions::wordWrap);
+    addViewOption(viewMenu, QStringLiteral("Show Whitespace"), {},
+                  &EditorViewOptions::showWhitespace);
+    addViewOption(viewMenu, QStringLiteral("Indent Guides"), {}, &EditorViewOptions::indentGuides);
+    addViewOption(viewMenu, QStringLiteral("Column Ruler"), {}, &EditorViewOptions::showRuler);
+    addViewOption(viewMenu, QStringLiteral("Code Folding"), {}, &EditorViewOptions::codeFolding);
+    addEditorAction(viewMenu, QStringLiteral("Fold All"), {},
+                    [](EditorWidget& editor) { editor.setAllFoldsExpanded(false); });
+    addEditorAction(viewMenu, QStringLiteral("Unfold All"), {},
+                    [](EditorWidget& editor) { editor.setAllFoldsExpanded(true); });
+
+    auto* indentationMenu = viewMenu->addMenu(QStringLiteral("Indentation"));
+    addViewOption(indentationMenu, QStringLiteral("Indent Using Tabs"), {},
+                  &EditorViewOptions::useTabs);
+    indentationMenu->addSeparator();
+    auto* tabWidthGroup = new QActionGroup(this);
+    tabWidthGroup->setExclusive(true);
+    for (const int width : {2, 4, 8}) {
+        auto* action = indentationMenu->addAction(QStringLiteral("Tab Width: %1").arg(width));
+        action->setCheckable(true);
+        action->setChecked(viewOptions_.tabWidth == width);
+        tabWidthGroup->addAction(action);
+        connect(action, &QAction::triggered, this, [this, width] {
+            auto options = viewOptions_;
+            options.tabWidth = width;
+            applyViewOptions(options);
+        });
+    }
 
     viewMenu->addSeparator();
     auto* appearanceMenu = viewMenu->addMenu(QStringLiteral("Appearance"));

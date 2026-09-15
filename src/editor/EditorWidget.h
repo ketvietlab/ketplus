@@ -2,11 +2,15 @@
 
 #include "core/Document.h"
 #include "editor/EditorSettings.h"
+#include "editor/EditorViewOptions.h"
 
 #include <ScintillaEditBase.h>
 
+#include <QList>
+
 #include <cstdint>
 #include <memory>
+#include <utility>
 
 class QContextMenuEvent;
 class QPoint;
@@ -20,11 +24,19 @@ struct FindResult final {
     bool wrapped{false};
 };
 
+struct SearchOptions final {
+    bool matchCase{false};
+    bool wholeWord{false};
+    bool regex{false};
+    bool inSelection{false};
+};
+
 class EditorWidget final : public ScintillaEditBase {
     Q_OBJECT
 
   public:
     static constexpr qsizetype largeFileThresholdBytes = 10 * 1024 * 1024;
+    static constexpr int highlightMatchLimit = 5000;
 
     explicit EditorWidget(QWidget* parent = nullptr);
 
@@ -54,6 +66,8 @@ class EditorWidget final : public ScintillaEditBase {
     void configureLexerForPath(const QString& filePath);
     void setEditorSettings(const EditorSettings& settings);
     [[nodiscard]] const EditorSettings& editorSettings() const noexcept;
+    void setViewOptions(const EditorViewOptions& options);
+    [[nodiscard]] const EditorViewOptions& viewOptions() const noexcept;
     void applyTheme(const ThemePalette& palette);
     void undoEdit();
     void redoEdit();
@@ -62,11 +76,42 @@ class EditorWidget final : public ScintillaEditBase {
     void pasteClipboard();
     void deleteSelection();
     void selectAllText();
+
+    void duplicateLines();
+    void moveLinesUp();
+    void moveLinesDown();
+    void deleteLines();
+    void joinLines();
+    void sortLines(bool removeDuplicates);
+    void trimTrailingWhitespace();
+    void convertCase(bool upper);
+    bool toggleComment();
+
+    [[nodiscard]] int lineCount() const;
+    [[nodiscard]] int currentLine() const;
+    void goToLine(int line);
+    bool jumpToMatchingBrace();
+    void toggleBookmark();
+    [[nodiscard]] bool hasBookmark(int line) const;
+    bool goToNextBookmark();
+    bool goToPreviousBookmark();
+    void clearBookmarks();
+    void setAllFoldsExpanded(bool expanded);
+
     FindResult findText(const QString& query, bool backwards, bool matchCase, bool wholeWord);
+    FindResult findText(const QString& query, bool backwards, const SearchOptions& options);
     bool replaceSelection(const QString& query, const QString& replacement, bool matchCase,
                           bool wholeWord);
+    bool replaceSelection(const QString& query, const QString& replacement,
+                          const SearchOptions& options);
     int replaceAll(const QString& query, const QString& replacement, bool matchCase,
                    bool wholeWord);
+    int replaceAll(const QString& query, const QString& replacement, const SearchOptions& options);
+    void setSearchScopeToSelection();
+    void clearSearchScope() noexcept;
+    [[nodiscard]] bool hasSearchScope() const noexcept;
+    int highlightMatches(const QString& query, const SearchOptions& options);
+    void clearMatchHighlights();
 
   signals:
     void dirtyStateChanged(bool dirty);
@@ -85,24 +130,50 @@ class EditorWidget final : public ScintillaEditBase {
         sptr_t horizontalOffset{0};
     };
 
+    struct LineRange final {
+        sptr_t first{0};
+        sptr_t last{0};
+    };
+
     void configureEditor();
     void updateLineNumberMarginWidth();
     void updateLargeFileMode(qsizetype contentSize);
     void restoreViewState();
     void applyLexerTheme(const ThemePalette& palette);
-    void setSearchOptions(bool matchCase, bool wholeWord);
-    bool selectionMatches(const QByteArray& query, bool matchCase, bool wholeWord);
+    bool applyViewOptions();
+    void updateBraceHighlight();
+    void handleCharAdded(int character);
+    void autoIndentCurrentLine();
+    void toggleBookmarkAtLine(sptr_t line);
+    void setSearchOptions(const SearchOptions& options);
+    bool selectionMatches(const QByteArray& query, const SearchOptions& options);
+    [[nodiscard]] std::pair<sptr_t, sptr_t> searchBounds(const SearchOptions& options) const;
+    sptr_t replaceTarget(const QByteArray& replacement, bool regex);
+    void adjustSearchScope(sptr_t delta);
+    [[nodiscard]] int charAt(sptr_t position) const;
+    [[nodiscard]] QByteArray textRange(sptr_t start, sptr_t end) const;
+    [[nodiscard]] QByteArray endOfLine() const;
+    [[nodiscard]] LineRange selectedLineRange(bool wholeDocumentWhenEmpty) const;
+    [[nodiscard]] QList<QByteArray> linesInRange(LineRange range) const;
+    void replaceLines(LineRange range, const QList<QByteArray>& lines);
 
     std::unique_ptr<Document> document_;
     EditorSettings editorSettings_{EditorSettings::defaults()};
+    EditorViewOptions viewOptions_;
     QString lexerName_;
     QString syntaxName_;
     ViewState hibernatedViewState_;
     std::uint64_t lastActivated_{0};
+    sptr_t searchScopeStart_{0};
+    sptr_t searchScopeEnd_{0};
+    sptr_t highlightedBrace_{-1};
+    sptr_t highlightedBraceMatch_{-1};
     bool largeFileMode_{false};
     bool hibernated_{false};
     bool themePending_{false};
     bool internalMutation_{false};
+    bool foldingEnabled_{false};
+    bool searchScopeActive_{false};
     int lineNumberDigits_{0};
 };
 

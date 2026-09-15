@@ -1,10 +1,12 @@
 #pragma once
 
 #include "app/AppearanceSettings.h"
+#include "editor/EditorViewOptions.h"
 #include "git/GitTypes.h"
 
 #include <QHash>
 #include <QMainWindow>
+#include <QStringList>
 
 #include <cstdint>
 
@@ -16,9 +18,12 @@ class QPoint;
 class QSplitter;
 class QString;
 class QTabWidget;
+class QTimer;
 class QToolButton;
 
 namespace ketplus {
+
+struct SearchOptions;
 
 class EditorWidget;
 class FindReplaceBar;
@@ -48,7 +53,9 @@ class MainWindow final : public QMainWindow {
     void chooseFolder();
     bool saveCurrentDocument();
     bool saveCurrentDocumentAs();
+    bool saveAllDocuments();
     bool saveEditor(EditorWidget* editor, bool choosePath);
+    void reopenClosedTab();
     bool maybeCloseEditor(EditorWidget* editor);
     bool closeTab(int index, bool createReplacement = true);
     void closeOtherTabs(int keepIndex);
@@ -69,10 +76,17 @@ class MainWindow final : public QMainWindow {
     void enforceTabResourcePolicy();
     void rememberRecentFolder(const QString& path);
     void rebuildRecentFoldersMenu();
+    void rememberRecentFile(const QString& path);
+    void rebuildRecentFilesMenu();
     void openFindBar(bool replaceMode);
     void findNext(bool backwards = false);
     void replaceCurrentMatch();
     void replaceAllMatches();
+    [[nodiscard]] SearchOptions searchOptions() const;
+    void refreshMatchHighlights(bool updateCount = true);
+    void clearMatchHighlights();
+    void applyViewOptions(const EditorViewOptions& options);
+    void goToLine();
     void showSettings();
     void applyAppearanceSettings(const AppearanceSettings& settings);
     void applyThemeToEditors();
@@ -100,6 +114,7 @@ class MainWindow final : public QMainWindow {
 
     ThemeManager& theme_;
     AppearanceSettings appearanceSettings_;
+    EditorViewOptions viewOptions_;
     QSplitter* mainSplit_{nullptr};
     QSplitter* workspaceSplit_{nullptr};
     QSplitter* editorSplit_{nullptr};
@@ -110,6 +125,7 @@ class MainWindow final : public QMainWindow {
     QLabel* lineEndingLabel_{nullptr};
     QLabel* documentStateLabel_{nullptr};
     QToolButton* gitButton_{nullptr};
+    QTimer* highlightTimer_{nullptr};
     QAction* undoAction_{nullptr};
     QAction* redoAction_{nullptr};
     QAction* cutAction_{nullptr};
@@ -125,6 +141,9 @@ class MainWindow final : public QMainWindow {
     QMenu* gitMenu_{nullptr};
     QMenu* worktreeMenu_{nullptr};
     QMenu* recentFoldersMenu_{nullptr};
+    QMenu* recentFilesMenu_{nullptr};
+    QAction* reopenClosedTabAction_{nullptr};
+    QStringList closedFilePaths_;
     ExplorerPanel* explorer_{nullptr};
     GitChangesPanel* gitChanges_{nullptr};
     MarkdownPreviewPane* markdownPreview_{nullptr};
