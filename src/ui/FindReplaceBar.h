@@ -19,16 +19,21 @@ class FindReplaceBar final : public QWidget {
     [[nodiscard]] QString replacement() const;
     [[nodiscard]] bool matchCase() const;
     [[nodiscard]] bool wholeWord() const;
+    [[nodiscard]] bool regex() const;
+    [[nodiscard]] bool inSelection() const;
 
     void open(bool showReplace, const QString& selectedText = {});
     void showSearchResult(bool found, bool wrapped);
     void showReplacementCount(int count);
+    void showMatchCount(int count, bool limitReached);
 
   signals:
     void findRequested(bool backwards);
     void replaceRequested();
     void replaceAllRequested();
     void closeRequested();
+    void queryChanged();
+    void searchOptionsChanged();
 
   protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -40,6 +45,8 @@ class FindReplaceBar final : public QWidget {
     QLineEdit* replaceEdit_{nullptr};
     QCheckBox* matchCaseCheck_{nullptr};
     QCheckBox* wholeWordCheck_{nullptr};
+    QCheckBox* regexCheck_{nullptr};
+    QCheckBox* inSelectionCheck_{nullptr};
     QLabel* resultLabel_{nullptr};
     QWidget* replaceRow_{nullptr};
 };

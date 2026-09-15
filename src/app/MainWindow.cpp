@@ -26,11 +26,14 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QSettings>
+#include <QShortcut>
+#include <QWindowStateChangeEvent>
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QTabBar>
 #include <QTabWidget>
+#include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -51,6 +54,7 @@ QString normalizedPath(const QString& path) {
 
 MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     : QMainWindow(parent), theme_(theme), appearanceSettings_(AppearanceSettings::load()),
+      viewOptions_(EditorViewOptions::load()),
       mainSplit_(new QSplitter(Qt::Vertical, this)),
       workspaceSplit_(new QSplitter(Qt::Horizontal, mainSplit_)),
       editorSplit_(new QSplitter(Qt::Horizontal, workspaceSplit_)), tabs_(new QTabWidget),
@@ -75,7 +79,11 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     auto* centralLayout = new QVBoxLayout(editorPane);
     centralLayout->setContentsMargins(0, 0, 0, 0);
     centralLayout->setSpacing(0);
-    centralLayout->addWidget(tabs_, 1);
+    documentSplit_ = new QSplitter(Qt::Horizontal, editorPane);
+    documentSplit_->setChildrenCollapsible(false);
+    documentSplit_->setHandleWidth(1);
+    documentSplit_->addWidget(tabs_);
+    centralLayout->addWidget(documentSplit_, 1);
     centralLayout->addWidget(findBar_);
     editorSplit_->setChildrenCollapsible(false);
     editorSplit_->setHandleWidth(1);
@@ -117,13 +125,53 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
         updateDocumentState();
         updateGitActions();
         updateMarkdownPreview();
+        trackNavigation(currentEditor());
+        if (findBar_->isVisible() && highlightTimer_ != nullptr) {
+            highlightTimer_->start();
+        }
     });
     connect(findBar_, &FindReplaceBar::findRequested, this, &MainWindow::findNext);
     connect(findBar_, &FindReplaceBar::replaceRequested, this, &MainWindow::replaceCurrentMatch);
     connect(findBar_, &FindReplaceBar::replaceAllRequested, this, &MainWindow::replaceAllMatches);
     connect(findBar_, &FindReplaceBar::closeRequested, this, [this] {
+        highlightTimer_->stop();
+        clearMatchHighlights();
         if (auto* editor = currentEditor()) {
             editor->setFocus();
+        }
+    });
+
+    // Debounce match highlighting so typing a query never rescans on every key.
+    highlightTimer_ = new QTimer(this);
+    highlightTimer_->setSingleShot(true);
+    highlightTimer_->setInterval(200);
+    connect(highlightTimer_, &QTimer::timeout, this, [this] { refreshMatchHighlights(); });
+    connect(findBar_, &FindReplaceBar::queryChanged, highlightTimer_,
+            qOverload<>(&QTimer::start));
+    connect(findBar_, &FindReplaceBar::searchOptionsChanged, this, [this] {
+        if (auto* editor = activeEditor()) {
+            if (findBar_->inSelection()) {
+                if (!editor->hasSearchScope()) {
+                    editor->setSearchScopeToSelection();
+                }
+            } else {
+                editor->clearSearchScope();
+            }
+        }
+        highlightTimer_->start();
+    });
+
+    // Editing commands follow whichever editor view the user focused last.
+    connect(qApp, &QApplication::focusChanged, this, [this](QWidget*, QWidget* now) {
+        if (now == nullptr) {
+            return;
+        }
+        if (splitEditor_ != nullptr && (now == splitEditor_ || splitEditor_->isAncestorOf(now))) {
+            splitFocused_ = true;
+            updateEditorActions();
+        } else if (now == tabs_ || tabs_->isAncestorOf(now)) {
+            splitFocused_ = false;
+            updateEditorActions();
         }
     });
     connect(QApplication::clipboard(), &QClipboard::dataChanged, this,
@@ -196,6 +244,7 @@ void MainWindow::openFile(const QString& filePath) {
     const int index = tabs_->addTab(editor, editor->document().displayName());
     configureTabCloseButton(index, editor);
     tabs_->setCurrentIndex(index);
+    rememberRecentFile(absolutePath);
     if (editor->isLargeFileMode()) {
         statusBar()->showMessage(
             QStringLiteral("Large file mode: syntax highlighting and undo are disabled"), 5000);
@@ -213,12 +262,33 @@ void MainWindow::openFolder(const QString& folderPath) {
     rememberActiveFileForWorktree();
     workspaceRoot_ = normalizedPath(folder.absoluteFilePath());
     rememberRecentFolder(workspaceRoot_);
+    workspaceFilesIndexedAt_ = 0;
     auto* explorer = ensureExplorer();
     explorer->setRootPath(workspaceRoot_);
     setExplorerVisible(true);
     setWindowTitle(QStringLiteral("%1 — KetPlus CM").arg(folder.fileName()));
     statusBar()->showMessage(QStringLiteral("Opened %1").arg(workspaceRoot_), 2500);
     git_->setWorkspacePath(workspaceRoot_);
+}
+
+void MainWindow::changeEvent(QEvent* event) {
+    QMainWindow::changeEvent(event);
+    if (event->type() != QEvent::WindowStateChange || fullScreenAction_ == nullptr) {
+        return;
+    }
+    const auto previousState = static_cast<QWindowStateChangeEvent*>(event)->oldState();
+    if (isFullScreen() && !previousState.testFlag(Qt::WindowFullScreen)) {
+        // Entering full screen clears the maximized flag, so remember it for the way back.
+        maximizedBeforeFullScreen_ = previousState.testFlag(Qt::WindowMaximized);
+    }
+    {
+        const QSignalBlocker blocker(fullScreenAction_);
+        fullScreenAction_->setChecked(isFullScreen());
+    }
+    exitFullScreenShortcut_->setEnabled(isFullScreen());
+    if (!isFullScreen() && distractionFree_) {
+        setDistractionFree(false);
+    }
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {

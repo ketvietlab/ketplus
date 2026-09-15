@@ -84,6 +84,12 @@ add_library(KetPlusCM::git ALIAS ketplus_git)
 add_library(ketplus_workspace STATIC
     src/workspace/ExplorerPanel.cpp
     src/workspace/ExplorerPanel.h
+    src/workspace/FuzzyMatcher.cpp
+    src/workspace/FuzzyMatcher.h
+    src/workspace/QuickOpenPopup.cpp
+    src/workspace/QuickOpenPopup.h
+    src/workspace/WorkspaceFileIndex.cpp
+    src/workspace/WorkspaceFileIndex.h
 )
 target_link_libraries(ketplus_workspace PUBLIC Qt6::Widgets)
 target_include_directories(ketplus_workspace PUBLIC
@@ -130,8 +136,12 @@ add_library(KetPlusCM::preview ALIAS ketplus_preview)
 add_library(ketplus_editor STATIC
     src/editor/EditorSettings.cpp
     src/editor/EditorSettings.h
+    src/editor/EditorViewOptions.cpp
+    src/editor/EditorViewOptions.h
     src/editor/EditorWidget.cpp
     src/editor/EditorWidget.h
+    src/editor/SymbolExtractor.cpp
+    src/editor/SymbolExtractor.h
     src/editor/SyntaxDefinition.cpp
     src/editor/SyntaxDefinition.h
 )
@@ -198,6 +208,7 @@ if(KETPLUS_CM_BUILD_APP)
         src/app/MainWindowDocuments.cpp
         src/app/MainWindowGit.cpp
         src/app/MainWindow.h
+        src/app/MainWindowNavigation.cpp
         src/app/MainWindowPanels.cpp
         src/main.cpp
         ${ketplus_platform_sources}
@@ -323,6 +334,17 @@ if(KETPLUS_CM_BUILD_TESTS)
 
     ketplus_cm_add_test(ketplus_workspace_tests ketplus_workspace_tests)
     set_tests_properties(ketplus_workspace_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    add_executable(ketplus_navigation_tests tests/NavigationTest.cpp)
+    target_link_libraries(ketplus_navigation_tests
+        PRIVATE Qt6::Test ketplus_editor ketplus_workspace ketplus_lexilla
+    )
+    ketplus_enable_warnings(ketplus_navigation_tests)
+
+    ketplus_cm_add_test(ketplus_navigation_tests ketplus_navigation_tests)
+    set_tests_properties(ketplus_navigation_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
 
     add_executable(ketplus_terminal_tests tests/PtyProcessTest.cpp)
     target_link_libraries(ketplus_terminal_tests

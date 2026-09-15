@@ -19,6 +19,7 @@
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QInputDialog>
 #include <QKeySequence>
 #include <QLabel>
 #include <QList>
@@ -31,6 +32,7 @@
 #include <QStatusBar>
 #include <QTabBar>
 #include <QTabWidget>
+#include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -42,6 +44,19 @@ namespace {
 constexpr int maximumResidentTabCount = 12;
 constexpr qsizetype residentTextBudgetBytes = 64 * 1024 * 1024;
 constexpr int maximumRecentFolderCount = 10;
+constexpr int maximumRecentFileCount = 15;
+constexpr int maximumClosedTabCount = 20;
+
+void rememberRecentPath(const QString& key, const QString& path, const int maximumCount) {
+    QSettings settings;
+    QStringList paths = settings.value(key).toStringList();
+    paths.removeAll(path);
+    paths.prepend(path);
+    while (paths.size() > maximumCount) {
+        paths.removeLast();
+    }
+    settings.setValue(key, paths);
+}
 } // namespace
 
 void MainWindow::createNewDocument() {
@@ -78,6 +93,40 @@ bool MainWindow::saveCurrentDocumentAs() {
     return editor == nullptr || saveEditor(editor, true);
 }
 
+bool MainWindow::saveAllDocuments() {
+    int savedCount = 0;
+    for (int index = 0; index < tabs_->count(); ++index) {
+        auto* editor = qobject_cast<EditorWidget*>(tabs_->widget(index));
+        if (editor == nullptr || !editor->document().isModified()) {
+            continue;
+        }
+        if (editor->document().isUntitled()) {
+            // Show which tab the save dialog belongs to.
+            tabs_->setCurrentIndex(index);
+        }
+        if (!saveEditor(editor, false)) {
+            return false;
+        }
+        ++savedCount;
+    }
+    statusBar()->showMessage(savedCount == 0
+                                 ? QStringLiteral("No unsaved changes")
+                                 : QStringLiteral("Saved %1 file(s)").arg(savedCount),
+                             2500);
+    return true;
+}
+
+void MainWindow::reopenClosedTab() {
+    while (!closedFilePaths_.isEmpty()) {
+        const QString path = closedFilePaths_.takeLast();
+        if (QFileInfo(path).isFile()) {
+            openFile(path);
+            break;
+        }
+    }
+    reopenClosedTabAction_->setEnabled(!closedFilePaths_.isEmpty());
+}
+
 bool MainWindow::saveEditor(EditorWidget* editor, const bool choosePath) {
     auto& document = editor->document();
     QString path = document.filePath();
@@ -96,8 +145,14 @@ bool MainWindow::saveEditor(EditorWidget* editor, const bool choosePath) {
     }
 
     editor->markSaved();
+    rememberRecentFile(path);
     editor->configureLexerForPath(path);
     editor->applyTheme(theme_.palette());
+    if (editor == splitSource_ && splitEditor_ != nullptr) {
+        // Save As may pick a new lexer, so refresh the split view's styles.
+        splitEditor_->shareDocumentWith(*editor);
+        splitEditor_->applyTheme(theme_.palette());
+    }
     updateTabTitle(editor);
     updateMarkdownPreview();
     statusBar()->showMessage(QStringLiteral("Saved %1").arg(path), 2500);
@@ -136,6 +191,19 @@ bool MainWindow::closeTab(const int index, const bool createReplacement) {
     auto* editor = qobject_cast<EditorWidget*>(tabs_->widget(index));
     if (editor != nullptr && !maybeCloseEditor(editor)) {
         return false;
+    }
+
+    if (editor != nullptr && editor == splitSource_) {
+        closeSplit();
+    }
+    if (editor != nullptr && !editor->document().isUntitled()) {
+        const QString path = editor->document().filePath();
+        closedFilePaths_.removeAll(path);
+        closedFilePaths_.append(path);
+        if (closedFilePaths_.size() > maximumClosedTabCount) {
+            closedFilePaths_.removeFirst();
+        }
+        reopenClosedTabAction_->setEnabled(true);
     }
 
     tabs_->removeTab(index);
@@ -185,6 +253,13 @@ void MainWindow::showTabContextMenu(const QPoint& position) {
     auto* editor = qobject_cast<EditorWidget*>(tabs_->widget(index));
     QMenu menu(this);
     auto* previewAction = addMarkdownPreviewContextAction(menu, editor);
+    QAction* splitRightAction = nullptr;
+    QAction* splitDownAction = nullptr;
+    if (editor != nullptr) {
+        menu.addSeparator();
+        splitRightAction = menu.addAction(QStringLiteral("Open in Split Right"));
+        splitDownAction = menu.addAction(QStringLiteral("Open in Split Down"));
+    }
     menu.addSeparator();
     auto* closeAction = menu.addAction(QStringLiteral("Close"));
     auto* closeOthersAction = menu.addAction(QStringLiteral("Close Other Tabs"));
@@ -195,6 +270,10 @@ void MainWindow::showTabContextMenu(const QPoint& position) {
     if (selected == previewAction) {
         tabs_->setCurrentIndex(index);
         setMarkdownPreviewVisible(previewAction->isChecked());
+    } else if (selected != nullptr && selected == splitRightAction) {
+        openSplit(editor, Qt::Horizontal);
+    } else if (selected != nullptr && selected == splitDownAction) {
+        openSplit(editor, Qt::Vertical);
     } else if (selected == closeAction) {
         closeTab(index);
     } else if (selected == closeOthersAction) {
@@ -274,7 +353,9 @@ void MainWindow::configureTabCloseButton(const int index, QWidget* tab,
 EditorWidget* MainWindow::createEditor() {
     auto* editor = new EditorWidget(this);
     editor->setEditorSettings(appearanceSettings_.editor);
+    editor->setViewOptions(viewOptions_);
     editor->applyTheme(theme_.palette());
+    syncEditorZoom(editor);
     connect(editor, &EditorWidget::contextMenuRequested, this,
             [this, editor](const QPoint& position) { showEditorContextMenu(editor, position); });
     connect(editor, &EditorWidget::dirtyStateChanged, this, [this, editor](const bool dirty) {
@@ -288,9 +369,10 @@ EditorWidget* MainWindow::createEditor() {
     });
     connect(editor, &EditorWidget::cursorPositionChanged, this,
             [this, editor](const int line, const int column) {
-                if (currentEditor() == editor) {
+                if (activeEditor() == editor) {
                     cursorPositionLabel_->setText(
                         QStringLiteral("Ln %1, Col %2").arg(line).arg(column));
+                    trackNavigation(editor);
                 }
             });
     connect(editor, &EditorWidget::editorStateChanged, this, [this, editor] {
@@ -324,7 +406,7 @@ void MainWindow::updateTabTitle(EditorWidget* editor) {
 }
 
 void MainWindow::updateEditorActions() {
-    const auto* editor = currentEditor();
+    const auto* editor = activeEditor();
     const bool hasEditor = editor != nullptr;
     const bool hasSelection = hasEditor && editor->hasSelection();
 
@@ -390,7 +472,7 @@ void MainWindow::enforceTabResourcePolicy() {
         }
         ++residentCount;
         residentBytes += editor->residentBytes();
-        if (editor != activeEditor && !editor->document().isUntitled() &&
+        if (editor != activeEditor && editor != splitSource_ && !editor->document().isUntitled() &&
             !editor->document().isModified()) {
             candidates.append(editor);
         }
@@ -410,14 +492,40 @@ void MainWindow::enforceTabResourcePolicy() {
 }
 
 void MainWindow::rememberRecentFolder(const QString& path) {
+    rememberRecentPath(QStringLiteral("workspace/recentFolders"), path, maximumRecentFolderCount);
+}
+
+void MainWindow::rememberRecentFile(const QString& path) {
+    rememberRecentPath(QStringLiteral("workspace/recentFiles"), path, maximumRecentFileCount);
+}
+
+void MainWindow::rebuildRecentFilesMenu() {
+    recentFilesMenu_->clear();
     QSettings settings;
-    QStringList folders = settings.value(QStringLiteral("workspace/recentFolders")).toStringList();
-    folders.removeAll(path);
-    folders.prepend(path);
-    while (folders.size() > maximumRecentFolderCount) {
-        folders.removeLast();
+    const QStringList storedFiles =
+        settings.value(QStringLiteral("workspace/recentFiles")).toStringList();
+    QStringList availableFiles;
+    for (const QString& path : storedFiles) {
+        if (QFileInfo(path).isFile() && !availableFiles.contains(path)) {
+            availableFiles.append(path);
+            auto* action = recentFilesMenu_->addAction(path);
+            connect(action, &QAction::triggered, this, [this, path] { openFile(path); });
+        }
     }
-    settings.setValue(QStringLiteral("workspace/recentFolders"), folders);
+    settings.setValue(QStringLiteral("workspace/recentFiles"), availableFiles);
+
+    if (availableFiles.isEmpty()) {
+        auto* emptyAction = recentFilesMenu_->addAction(QStringLiteral("No Recent Files"));
+        emptyAction->setEnabled(false);
+        return;
+    }
+
+    recentFilesMenu_->addSeparator();
+    auto* clearAction = recentFilesMenu_->addAction(QStringLiteral("Clear Recent Files"));
+    connect(clearAction, &QAction::triggered, this, [this] {
+        QSettings().remove(QStringLiteral("workspace/recentFiles"));
+        rebuildRecentFilesMenu();
+    });
 }
 
 void MainWindow::rebuildRecentFoldersMenu() {
@@ -450,12 +558,13 @@ void MainWindow::rebuildRecentFoldersMenu() {
 }
 
 void MainWindow::openFindBar(const bool replaceMode) {
-    const auto* editor = currentEditor();
+    const auto* editor = activeEditor();
     findBar_->open(replaceMode, editor == nullptr ? QString() : editor->selectedText());
+    highlightTimer_->start();
 }
 
 void MainWindow::findNext(const bool backwards) {
-    auto* editor = currentEditor();
+    auto* editor = activeEditor();
     if (editor == nullptr) {
         return;
     }
@@ -464,33 +573,261 @@ void MainWindow::findNext(const bool backwards) {
         return;
     }
 
-    const auto result = editor->findText(findBar_->query(), backwards, findBar_->matchCase(),
-                                         findBar_->wholeWord());
+    const auto result = editor->findText(findBar_->query(), backwards, searchOptions());
     findBar_->showSearchResult(result.found, result.wrapped);
 }
 
 void MainWindow::replaceCurrentMatch() {
-    auto* editor = currentEditor();
+    auto* editor = activeEditor();
     if (editor == nullptr || findBar_->query().isEmpty()) {
         return;
     }
 
-    const bool replaced = editor->replaceSelection(findBar_->query(), findBar_->replacement(),
-                                                   findBar_->matchCase(), findBar_->wholeWord());
-    const auto result =
-        editor->findText(findBar_->query(), false, findBar_->matchCase(), findBar_->wholeWord());
+    const auto options = searchOptions();
+    const bool replaced =
+        editor->replaceSelection(findBar_->query(), findBar_->replacement(), options);
+    const auto result = editor->findText(findBar_->query(), false, options);
     findBar_->showSearchResult(result.found, replaced ? result.wrapped : false);
+    refreshMatchHighlights(false);
 }
 
 void MainWindow::replaceAllMatches() {
-    auto* editor = currentEditor();
+    auto* editor = activeEditor();
     if (editor == nullptr || findBar_->query().isEmpty()) {
         return;
     }
 
-    const int replacements = editor->replaceAll(findBar_->query(), findBar_->replacement(),
-                                                findBar_->matchCase(), findBar_->wholeWord());
+    const int replacements =
+        editor->replaceAll(findBar_->query(), findBar_->replacement(), searchOptions());
     findBar_->showReplacementCount(replacements);
+    refreshMatchHighlights(false);
+}
+
+SearchOptions MainWindow::searchOptions() const {
+    return {.matchCase = findBar_->matchCase(),
+            .wholeWord = findBar_->wholeWord(),
+            .regex = findBar_->regex(),
+            .inSelection = findBar_->inSelection()};
+}
+
+void MainWindow::refreshMatchHighlights(const bool updateCount) {
+    auto* editor = activeEditor();
+    if (editor == nullptr || !findBar_->isVisible()) {
+        return;
+    }
+    const int count = editor->highlightMatches(findBar_->query(), searchOptions());
+    if (updateCount && !findBar_->query().isEmpty()) {
+        findBar_->showMatchCount(count, count >= EditorWidget::highlightMatchLimit);
+    }
+}
+
+void MainWindow::clearMatchHighlights() {
+    for (int index = 0; index < tabs_->count(); ++index) {
+        if (auto* editor = qobject_cast<EditorWidget*>(tabs_->widget(index))) {
+            editor->clearMatchHighlights();
+            editor->clearSearchScope();
+        }
+    }
+    if (splitEditor_ != nullptr) {
+        splitEditor_->clearMatchHighlights();
+        splitEditor_->clearSearchScope();
+    }
+}
+
+void MainWindow::applyViewOptions(const EditorViewOptions& options) {
+    viewOptions_ = options.normalized();
+    viewOptions_.save();
+    for (int index = 0; index < tabs_->count(); ++index) {
+        if (auto* editor = qobject_cast<EditorWidget*>(tabs_->widget(index))) {
+            editor->setViewOptions(viewOptions_);
+        }
+    }
+    if (splitEditor_ != nullptr) {
+        splitEditor_->setViewOptions(viewOptions_);
+    }
+    const auto* editor = currentEditor();
+    if (editor != nullptr && editor->isLargeFileMode() &&
+        (viewOptions_.wordWrap || viewOptions_.codeFolding)) {
+        statusBar()->showMessage(
+            QStringLiteral("Large file mode: word wrap and code folding stay off for this file"),
+            4000);
+    }
+}
+
+void MainWindow::goToLine() {
+    auto* editor = activeEditor();
+    if (editor == nullptr || editor->isHibernated()) {
+        return;
+    }
+    bool accepted = false;
+    const int line = QInputDialog::getInt(
+        this, QStringLiteral("Go to Line"),
+        QStringLiteral("Line number (1–%1):").arg(editor->lineCount()), editor->currentLine(), 1,
+        editor->lineCount(), 1, &accepted);
+    if (accepted) {
+        pushNavigationLocation(locationOf(editor));
+        editor->goToLine(line);
+        editor->setFocus();
+    }
+}
+
+EditorWidget* MainWindow::activeEditor() const {
+    if (splitEditor_ != nullptr && splitFocused_ && splitEditor_->isVisible()) {
+        return splitEditor_;
+    }
+    return currentEditor();
+}
+
+void MainWindow::openSplit(EditorWidget* source, const Qt::Orientation orientation) {
+    if (source == nullptr) {
+        return;
+    }
+    // The active tab is never hibernated, so its document is loaded before sharing.
+    tabs_->setCurrentWidget(source);
+    if (source->isHibernated()) {
+        return;
+    }
+
+    if (splitEditor_ == nullptr) {
+        splitEditor_ = new EditorWidget(documentSplit_);
+        splitEditor_->setEditorSettings(appearanceSettings_.editor);
+        syncEditorZoom(splitEditor_);
+        connect(splitEditor_, &EditorWidget::contextMenuRequested, this,
+                [this](const QPoint& position) { showEditorContextMenu(splitEditor_, position); });
+        connect(splitEditor_, &EditorWidget::editorStateChanged, this, [this] {
+            if (activeEditor() == splitEditor_) {
+                updateEditorActions();
+            }
+        });
+        connect(splitEditor_, &EditorWidget::cursorPositionChanged, this,
+                [this](const int line, const int column) {
+                    if (activeEditor() == splitEditor_) {
+                        cursorPositionLabel_->setText(
+                            QStringLiteral("Ln %1, Col %2").arg(line).arg(column));
+                        trackNavigation(splitEditor_);
+                    }
+                });
+        documentSplit_->addWidget(splitEditor_);
+    }
+
+    splitSource_ = source;
+    splitEditor_->setViewOptions(viewOptions_);
+    splitEditor_->shareDocumentWith(*source);
+    splitEditor_->applyTheme(theme_.palette());
+    documentSplit_->setOrientation(orientation);
+    splitEditor_->show();
+    const int extent =
+        orientation == Qt::Horizontal ? documentSplit_->width() : documentSplit_->height();
+    documentSplit_->setSizes({extent / 2, extent - extent / 2});
+    closeSplitAction_->setEnabled(true);
+    splitEditor_->setFocus();
+}
+
+void MainWindow::closeSplit() {
+    if (splitEditor_ == nullptr) {
+        return;
+    }
+    // Deleting the view releases its reference to the shared Scintilla document.
+    splitEditor_->hide();
+    splitEditor_->deleteLater();
+    splitEditor_ = nullptr;
+    splitSource_ = nullptr;
+    splitFocused_ = false;
+    closeSplitAction_->setEnabled(false);
+    if (auto* editor = currentEditor()) {
+        editor->setFocus();
+    }
+    updateEditorActions();
+}
+
+void MainWindow::focusOtherView() {
+    if (splitEditor_ == nullptr) {
+        return;
+    }
+    if (activeEditor() == splitEditor_) {
+        if (auto* editor = currentEditor()) {
+            editor->setFocus();
+        }
+    } else {
+        splitEditor_->setFocus();
+    }
+}
+
+void MainWindow::setFullScreen(const bool fullScreen) {
+    if (fullScreen == isFullScreen()) {
+        return;
+    }
+    if (fullScreen) {
+        showFullScreen();
+    } else if (maximizedBeforeFullScreen_) {
+        showMaximized();
+    } else {
+        showNormal();
+    }
+}
+
+void MainWindow::setDistractionFree(const bool enabled) {
+    if (enabled != distractionFree_) {
+        if (enabled) {
+            distractionFreeRestore_ = {
+                .explorer = explorerAction_->isChecked(),
+                .sourceControl = sourceControlAction_->isChecked(),
+                .terminal = terminalAction_->isChecked(),
+                .markdownPreview = markdownPreviewAction_->isChecked(),
+                .fullScreen = isFullScreen(),
+            };
+            distractionFree_ = true;
+            setExplorerVisible(false);
+            setSourceControlVisible(false);
+            setTerminalVisible(false);
+            setMarkdownPreviewVisible(false);
+            statusBar()->hide();
+            tabs_->tabBar()->hide();
+            setFullScreen(true);
+        } else {
+            distractionFree_ = false;
+            statusBar()->show();
+            tabs_->tabBar()->show();
+            if (distractionFreeRestore_.explorer) {
+                setExplorerVisible(true);
+            }
+            if (distractionFreeRestore_.sourceControl) {
+                setSourceControlVisible(true);
+            }
+            if (distractionFreeRestore_.terminal) {
+                setTerminalVisible(true);
+            }
+            if (distractionFreeRestore_.markdownPreview) {
+                setMarkdownPreviewVisible(true);
+            }
+            if (!distractionFreeRestore_.fullScreen) {
+                setFullScreen(false);
+            }
+        }
+    }
+
+    const QSignalBlocker blocker(distractionFreeAction_);
+    distractionFreeAction_->setChecked(distractionFree_);
+    if (auto* editor = activeEditor()) {
+        editor->setFocus();
+    }
+}
+
+void MainWindow::changeZoom(const int delta) {
+    auto options = viewOptions_;
+    options.zoom += delta;
+    applyViewOptions(options);
+}
+
+void MainWindow::syncEditorZoom(EditorWidget* editor) {
+    // Ctrl+wheel zooms one Scintilla view; mirror it to every editor and persist it.
+    connect(editor, &ScintillaEditBase::zoom, this, [this](const int zoom) {
+        if (zoom != viewOptions_.zoom) {
+            auto options = viewOptions_;
+            options.zoom = zoom;
+            applyViewOptions(options);
+        }
+    });
 }
 
 void MainWindow::showSettings() {
@@ -518,6 +855,10 @@ void MainWindow::applyAppearanceSettings(const AppearanceSettings& settings) {
             diffView->applyEditorSettings(appearanceSettings_.editor);
         }
     }
+    if (splitEditor_ != nullptr) {
+        splitEditor_->setEditorSettings(appearanceSettings_.editor);
+        splitEditor_->applyTheme(theme_.palette());
+    }
     if (terminal_ != nullptr) {
         terminal_->setTypography(appearanceSettings_.terminal.fontSizePixels,
                                  appearanceSettings_.terminal.lineHeightPixels);
@@ -543,6 +884,9 @@ void MainWindow::applyThemeToEditors() {
         if (auto* diffView = qobject_cast<GitDiffView*>(tabs_->widget(index))) {
             diffView->applyTheme(theme_.palette());
         }
+    }
+    if (splitEditor_ != nullptr) {
+        splitEditor_->applyTheme(theme_.palette());
     }
     if (terminal_ != nullptr) {
         terminal_->applyTheme(theme_.palette());

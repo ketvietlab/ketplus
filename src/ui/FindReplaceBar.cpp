@@ -17,6 +17,8 @@ FindReplaceBar::FindReplaceBar(QWidget* parent)
     : QWidget(parent), findEdit_(new QLineEdit(this)), replaceEdit_(new QLineEdit(this)),
       matchCaseCheck_(new QCheckBox(QStringLiteral("Match case"), this)),
       wholeWordCheck_(new QCheckBox(QStringLiteral("Whole word"), this)),
+      regexCheck_(new QCheckBox(QStringLiteral("Regex"), this)),
+      inSelectionCheck_(new QCheckBox(QStringLiteral("In selection"), this)),
       resultLabel_(new QLabel(this)), replaceRow_(new QWidget(this)) {
     setProperty("kvRole", QStringLiteral("findBar"));
     setAttribute(Qt::WA_StyledBackground, true);
@@ -50,6 +52,8 @@ FindReplaceBar::FindReplaceBar(QWidget* parent)
     findRow->addWidget(nextButton);
     findRow->addWidget(matchCaseCheck_);
     findRow->addWidget(wholeWordCheck_);
+    findRow->addWidget(regexCheck_);
+    findRow->addWidget(inSelectionCheck_);
     findRow->addWidget(resultLabel_);
     findRow->addWidget(closeButton);
 
@@ -77,7 +81,13 @@ FindReplaceBar::FindReplaceBar(QWidget* parent)
     connect(replaceButton, &QPushButton::clicked, this, &FindReplaceBar::replaceRequested);
     connect(replaceAllButton, &QPushButton::clicked, this, &FindReplaceBar::replaceAllRequested);
     connect(closeButton, &QPushButton::clicked, this, &FindReplaceBar::dismiss);
-    connect(findEdit_, &QLineEdit::textChanged, this, [this] { resultLabel_->clear(); });
+    connect(findEdit_, &QLineEdit::textChanged, this, [this] {
+        resultLabel_->clear();
+        emit queryChanged();
+    });
+    for (QCheckBox* check : {matchCaseCheck_, wholeWordCheck_, regexCheck_, inSelectionCheck_}) {
+        connect(check, &QCheckBox::toggled, this, &FindReplaceBar::searchOptionsChanged);
+    }
 
     findEdit_->installEventFilter(this);
     replaceEdit_->installEventFilter(this);
@@ -91,6 +101,10 @@ QString FindReplaceBar::replacement() const { return replaceEdit_->text(); }
 bool FindReplaceBar::matchCase() const { return matchCaseCheck_->isChecked(); }
 
 bool FindReplaceBar::wholeWord() const { return wholeWordCheck_->isChecked(); }
+
+bool FindReplaceBar::regex() const { return regexCheck_->isChecked(); }
+
+bool FindReplaceBar::inSelection() const { return inSelectionCheck_->isChecked(); }
 
 void FindReplaceBar::open(const bool showReplace, const QString& selectedText) {
     replaceRow_->setVisible(showReplace);
@@ -134,7 +148,27 @@ void FindReplaceBar::showReplacementCount(const int count) {
     resultLabel_->style()->polish(resultLabel_);
 }
 
+void FindReplaceBar::showMatchCount(const int count, const bool limitReached) {
+    if (count == 0) {
+        resultLabel_->setText(QStringLiteral("No results"));
+        resultLabel_->setProperty("searchState", QStringLiteral("empty"));
+    } else {
+        resultLabel_->setText(limitReached ? QStringLiteral("%1+ matches").arg(count)
+                              : count == 1 ? QStringLiteral("1 match")
+                                           : QStringLiteral("%1 matches").arg(count));
+        resultLabel_->setProperty("searchState", QString());
+    }
+    resultLabel_->style()->unpolish(resultLabel_);
+    resultLabel_->style()->polish(resultLabel_);
+}
+
 bool FindReplaceBar::eventFilter(QObject* watched, QEvent* event) {
+    if (event->type() == QEvent::ShortcutOverride &&
+        static_cast<QKeyEvent*>(event)->key() == Qt::Key_Escape) {
+        // Claim Escape so it closes the search bar before any window shortcut sees it.
+        event->accept();
+        return true;
+    }
     if (event->type() == QEvent::KeyPress) {
         const auto* keyEvent = static_cast<QKeyEvent*>(event);
         if (keyEvent->key() == Qt::Key_Escape) {

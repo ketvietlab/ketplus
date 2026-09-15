@@ -1,14 +1,22 @@
 #pragma once
 
 #include "app/AppearanceSettings.h"
+#include "editor/EditorViewOptions.h"
 #include "git/GitTypes.h"
+#include "workspace/WorkspaceFileIndex.h"
 
 #include <QHash>
+#include <QList>
 #include <QMainWindow>
+#include <QPointer>
+#include <QStringList>
 
+#include <atomic>
 #include <cstdint>
+#include <memory>
 
 class QCloseEvent;
+class QEvent;
 class QAction;
 class QLabel;
 class QMenu;
@@ -16,9 +24,17 @@ class QPoint;
 class QSplitter;
 class QString;
 class QTabWidget;
+class QShortcut;
+class QThread;
+class QTimer;
 class QToolButton;
+class QVariant;
 
 namespace ketplus {
+
+class QuickOpenPopup;
+
+struct SearchOptions;
 
 class EditorWidget;
 class FindReplaceBar;
@@ -34,11 +50,13 @@ class MainWindow final : public QMainWindow {
 
   public:
     explicit MainWindow(ThemeManager& theme, QWidget* parent = nullptr);
+    ~MainWindow() override;
 
     void openFile(const QString& filePath);
     void openFolder(const QString& folderPath);
 
   protected:
+    void changeEvent(QEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
 
   private:
@@ -48,7 +66,9 @@ class MainWindow final : public QMainWindow {
     void chooseFolder();
     bool saveCurrentDocument();
     bool saveCurrentDocumentAs();
+    bool saveAllDocuments();
     bool saveEditor(EditorWidget* editor, bool choosePath);
+    void reopenClosedTab();
     bool maybeCloseEditor(EditorWidget* editor);
     bool closeTab(int index, bool createReplacement = true);
     void closeOtherTabs(int keepIndex);
@@ -69,10 +89,34 @@ class MainWindow final : public QMainWindow {
     void enforceTabResourcePolicy();
     void rememberRecentFolder(const QString& path);
     void rebuildRecentFoldersMenu();
+    void rememberRecentFile(const QString& path);
+    void rebuildRecentFilesMenu();
     void openFindBar(bool replaceMode);
     void findNext(bool backwards = false);
     void replaceCurrentMatch();
     void replaceAllMatches();
+    [[nodiscard]] SearchOptions searchOptions() const;
+    void refreshMatchHighlights(bool updateCount = true);
+    void clearMatchHighlights();
+    void applyViewOptions(const EditorViewOptions& options);
+    void goToLine();
+    [[nodiscard]] EditorWidget* activeEditor() const;
+    void openSplit(EditorWidget* source, Qt::Orientation orientation);
+    void closeSplit();
+    void focusOtherView();
+    void setFullScreen(bool fullScreen);
+    void setDistractionFree(bool enabled);
+    void changeZoom(int delta);
+    void syncEditorZoom(EditorWidget* editor);
+    void showCommandPalette();
+    void showGoToFile();
+    void showGoToSymbol();
+    QuickOpenPopup* ensureQuickOpen();
+    [[nodiscard]] QString quickOpenStyleSheet() const;
+    void activateQuickOpenItem(const QVariant& data);
+    void refreshWorkspaceFileIndex(bool force);
+    void finishWorkspaceFileIndex(const QString& root, const WorkspaceFileList& files);
+    void updateGoToFileItems();
     void showSettings();
     void applyAppearanceSettings(const AppearanceSettings& settings);
     void applyThemeToEditors();
@@ -98,8 +142,25 @@ class MainWindow final : public QMainWindow {
     void rememberActiveFileForWorktree();
     [[nodiscard]] QString currentWorkspaceRelativeFile() const;
 
+    struct NavigationLocation final {
+        QPointer<EditorWidget> editor;
+        QString filePath;
+        qint64 position{0};
+        int line{0};
+    };
+    enum class QuickOpenMode { Commands, Files, Symbols };
+
+    [[nodiscard]] NavigationLocation locationOf(EditorWidget* editor) const;
+    [[nodiscard]] bool isLocationAvailable(const NavigationLocation& location) const;
+    void trackNavigation(EditorWidget* editor);
+    void pushNavigationLocation(const NavigationLocation& location);
+    void navigateHistory(bool back);
+    void restoreLocation(const NavigationLocation& location);
+    void updateNavigationActions();
+
     ThemeManager& theme_;
     AppearanceSettings appearanceSettings_;
+    EditorViewOptions viewOptions_;
     QSplitter* mainSplit_{nullptr};
     QSplitter* workspaceSplit_{nullptr};
     QSplitter* editorSplit_{nullptr};
@@ -110,6 +171,42 @@ class MainWindow final : public QMainWindow {
     QLabel* lineEndingLabel_{nullptr};
     QLabel* documentStateLabel_{nullptr};
     QToolButton* gitButton_{nullptr};
+    QTimer* highlightTimer_{nullptr};
+    QSplitter* documentSplit_{nullptr};
+    EditorWidget* splitEditor_{nullptr};
+    EditorWidget* splitSource_{nullptr};
+    QAction* closeSplitAction_{nullptr};
+    QAction* fullScreenAction_{nullptr};
+    QAction* distractionFreeAction_{nullptr};
+    QShortcut* exitFullScreenShortcut_{nullptr};
+    QuickOpenPopup* quickOpen_{nullptr};
+    QuickOpenMode quickOpenMode_{QuickOpenMode::Commands};
+    QAction* commandPaletteAction_{nullptr};
+    QAction* backAction_{nullptr};
+    QAction* forwardAction_{nullptr};
+    QList<QPointer<QAction>> paletteActions_;
+    QPointer<EditorWidget> symbolEditor_;
+    QStringList workspaceFiles_;
+    QString workspaceFilesRoot_;
+    qint64 workspaceFilesIndexedAt_{0};
+    bool workspaceFilesTruncated_{false};
+    bool workspaceIndexing_{false};
+    QPointer<QThread> workspaceIndexThread_;
+    std::shared_ptr<std::atomic_bool> workspaceIndexCancelled_;
+    QList<NavigationLocation> backLocations_;
+    QList<NavigationLocation> forwardLocations_;
+    NavigationLocation lastLocation_;
+    bool restoringNavigation_{false};
+    struct DistractionFreeRestore final {
+        bool explorer{false};
+        bool sourceControl{false};
+        bool terminal{false};
+        bool markdownPreview{false};
+        bool fullScreen{false};
+    } distractionFreeRestore_;
+    bool splitFocused_{false};
+    bool distractionFree_{false};
+    bool maximizedBeforeFullScreen_{false};
     QAction* undoAction_{nullptr};
     QAction* redoAction_{nullptr};
     QAction* cutAction_{nullptr};
@@ -125,6 +222,9 @@ class MainWindow final : public QMainWindow {
     QMenu* gitMenu_{nullptr};
     QMenu* worktreeMenu_{nullptr};
     QMenu* recentFoldersMenu_{nullptr};
+    QMenu* recentFilesMenu_{nullptr};
+    QAction* reopenClosedTabAction_{nullptr};
+    QStringList closedFilePaths_;
     ExplorerPanel* explorer_{nullptr};
     GitChangesPanel* gitChanges_{nullptr};
     MarkdownPreviewPane* markdownPreview_{nullptr};
