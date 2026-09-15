@@ -31,6 +31,11 @@ EditorViewOptions EditorViewOptions::load(const QSettings& settings) {
     options.wordCompletion =
         settings.value(QStringLiteral("editorView/wordCompletion"), defaults.wordCompletion)
             .toBool();
+    options.highlightSelectionMatches =
+        settings
+            .value(QStringLiteral("editorView/highlightSelectionMatches"),
+                   defaults.highlightSelectionMatches)
+            .toBool();
     options.useTabs =
         settings.value(QStringLiteral("editorView/useTabs"), defaults.useTabs).toBool();
     options.tabWidth =
@@ -55,6 +60,8 @@ void EditorViewOptions::save(QSettings& settings) const {
     settings.setValue(QStringLiteral("editorView/autoCloseBrackets"), options.autoCloseBrackets);
     settings.setValue(QStringLiteral("editorView/autoIndent"), options.autoIndent);
     settings.setValue(QStringLiteral("editorView/wordCompletion"), options.wordCompletion);
+    settings.setValue(QStringLiteral("editorView/highlightSelectionMatches"),
+                      options.highlightSelectionMatches);
     settings.setValue(QStringLiteral("editorView/useTabs"), options.useTabs);
     settings.setValue(QStringLiteral("editorView/tabWidth"), options.tabWidth);
     settings.setValue(QStringLiteral("editorView/zoom"), options.zoom);

@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstddef>
+#include <vector>
 
 class QString;
 
@@ -15,6 +16,15 @@ struct SyntaxDefinition final {
     std::array<const char*, syntaxKeywordSetCount> keywordSets;
 };
 
+struct SyntaxChoice final {
+    const char* name;
+    const char* displayName;
+};
+
 [[nodiscard]] const SyntaxDefinition& syntaxDefinitionForPath(const QString& filePath);
+[[nodiscard]] const SyntaxDefinition* syntaxDefinitionByName(const QString& name);
+// Languages users can pick manually, sorted by display name.
+[[nodiscard]] const std::vector<SyntaxChoice>& syntaxChoices();
+[[nodiscard]] QString syntaxDisplayName(const QString& name);
 
 } // namespace ketplus

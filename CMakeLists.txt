@@ -88,8 +88,12 @@ add_library(ketplus_workspace STATIC
     src/workspace/FuzzyMatcher.h
     src/workspace/QuickOpenPopup.cpp
     src/workspace/QuickOpenPopup.h
+    src/workspace/SearchPanel.cpp
+    src/workspace/SearchPanel.h
     src/workspace/WorkspaceFileIndex.cpp
     src/workspace/WorkspaceFileIndex.h
+    src/workspace/WorkspaceSearch.cpp
+    src/workspace/WorkspaceSearch.h
 )
 target_link_libraries(ketplus_workspace PUBLIC Qt6::Widgets)
 target_include_directories(ketplus_workspace PUBLIC
@@ -206,10 +210,12 @@ if(KETPLUS_CM_BUILD_APP)
         src/app/MainWindow.cpp
         src/app/MainWindowActions.cpp
         src/app/MainWindowDocuments.cpp
+        src/app/MainWindowFormat.cpp
         src/app/MainWindowGit.cpp
         src/app/MainWindow.h
         src/app/MainWindowNavigation.cpp
         src/app/MainWindowPanels.cpp
+        src/app/MainWindowSearch.cpp
         src/main.cpp
         ${ketplus_platform_sources}
     )
@@ -343,6 +349,17 @@ if(KETPLUS_CM_BUILD_TESTS)
 
     ketplus_cm_add_test(ketplus_navigation_tests ketplus_navigation_tests)
     set_tests_properties(ketplus_navigation_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
+
+    add_executable(ketplus_search_view_tests tests/SearchViewTest.cpp)
+    target_link_libraries(ketplus_search_view_tests
+        PRIVATE Qt6::Test ketplus_editor ketplus_workspace ketplus_lexilla
+    )
+    ketplus_enable_warnings(ketplus_search_view_tests)
+
+    ketplus_cm_add_test(ketplus_search_view_tests ketplus_search_view_tests)
+    set_tests_properties(ketplus_search_view_tests PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     )
 

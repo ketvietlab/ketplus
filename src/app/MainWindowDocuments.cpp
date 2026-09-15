@@ -155,6 +155,7 @@ bool MainWindow::saveEditor(EditorWidget* editor, const bool choosePath) {
     }
     updateTabTitle(editor);
     updateMarkdownPreview();
+    updateFormatIndicators();
     statusBar()->showMessage(QStringLiteral("Saved %1").arg(path), 2500);
     git_->scheduleRefresh();
     if (editor->isLargeFileMode()) {
@@ -420,6 +421,7 @@ void MainWindow::updateEditorActions() {
 }
 
 void MainWindow::updateDocumentState() {
+    updateFormatIndicators();
     const auto* editor = currentEditor();
     if (editor == nullptr) {
         documentStateLabel_->setText(qobject_cast<GitDiffView*>(tabs_->currentWidget()) != nullptr

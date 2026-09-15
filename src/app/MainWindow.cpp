@@ -60,8 +60,6 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
       editorSplit_(new QSplitter(Qt::Horizontal, workspaceSplit_)), tabs_(new QTabWidget),
       findBar_(new FindReplaceBar),
       cursorPositionLabel_(new QLabel(QStringLiteral("Ln 1, Col 1"), this)),
-      encodingLabel_(new QLabel(QStringLiteral("UTF-8"), this)),
-      lineEndingLabel_(new QLabel(QStringLiteral("LF"), this)),
       documentStateLabel_(new QLabel(QStringLiteral("New"), this)),
       gitButton_(new QToolButton(this)) {
     theme_.setInterfaceFontSizePixels(appearanceSettings_.interfaceFontSizePixels);
@@ -108,11 +106,23 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     gitButton_->setAccessibleName(QStringLiteral("Git repository and worktrees"));
     gitButton_->hide();
     statusBar()->addPermanentWidget(gitButton_);
-    for (QLabel* label :
-         {documentStateLabel_, cursorPositionLabel_, encodingLabel_, lineEndingLabel_}) {
+    for (QLabel* label : {documentStateLabel_, cursorPositionLabel_}) {
         label->setProperty("kvRole", QStringLiteral("status"));
         statusBar()->addPermanentWidget(label);
     }
+    const auto addStatusButton = [this](QMenu* menu, const QString& accessibleName) {
+        auto* button = new QToolButton(this);
+        button->setProperty("kvRole", QStringLiteral("statusButton"));
+        button->setPopupMode(QToolButton::InstantPopup);
+        button->setMenu(menu);
+        button->setToolTip(accessibleName);
+        button->setAccessibleName(accessibleName);
+        statusBar()->addPermanentWidget(button);
+        return button;
+    };
+    encodingButton_ = addStatusButton(encodingMenu_, QStringLiteral("File encoding"));
+    lineEndingButton_ = addStatusButton(lineEndingMenu_, QStringLiteral("Line endings"));
+    languageButton_ = addStatusButton(languageMenu_, QStringLiteral("Language"));
 
     connect(tabs_, &QTabWidget::tabCloseRequested, this,
             [this](const int index) { closeTab(index); });

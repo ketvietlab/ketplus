@@ -199,6 +199,7 @@ void MainWindow::refreshWorkspaceFileIndex(const bool force) {
 }
 
 MainWindow::~MainWindow() {
+    cancelWorkspaceSearch();
     if (workspaceIndexCancelled_ != nullptr) {
         workspaceIndexCancelled_->store(true);
     }

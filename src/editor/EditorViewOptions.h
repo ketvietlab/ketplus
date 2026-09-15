@@ -21,6 +21,7 @@ struct EditorViewOptions final {
     bool autoCloseBrackets{true};
     bool autoIndent{true};
     bool wordCompletion{true};
+    bool highlightSelectionMatches{true};
     bool useTabs{false};
     int tabWidth{4};
     int zoom{0};
