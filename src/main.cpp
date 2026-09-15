@@ -11,7 +11,7 @@
 #include <cstdio>
 
 #ifndef KETPLUS_CM_VERSION
-#define KETPLUS_CM_VERSION "0.1.6"
+#define KETPLUS_CM_VERSION "0.2.0"
 #endif
 
 int main(int argc, char* argv[]) {
