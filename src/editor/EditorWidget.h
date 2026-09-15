@@ -8,6 +8,7 @@
 
 #include <QList>
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <utility>
@@ -166,6 +167,7 @@ class EditorWidget final : public ScintillaEditBase {
     void updateLargeFileMode(qsizetype contentSize);
     void restoreViewState();
     void applyLexerTheme(const ThemePalette& palette);
+    void updateEmbeddedStyleHighlight();
     bool applyViewOptions();
     void updateBraceHighlight();
     void handleCharAdded(int character);
@@ -202,7 +204,13 @@ class EditorWidget final : public ScintillaEditBase {
     bool foldingEnabled_{false};
     bool searchScopeActive_{false};
     bool selectionMatchesActive_{false};
+    bool embeddedStyleActive_{false};
+    // The last colored range; text edits and theme or lexer changes force a rescan.
+    bool embeddedStyleDirty_{true};
+    sptr_t embeddedStyleStart_{-1};
+    sptr_t embeddedStyleEnd_{-1};
     int lineNumberDigits_{0};
+    std::array<int, 11> embeddedStyleColors_{};
 };
 
 } // namespace ketplus

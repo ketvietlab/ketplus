@@ -39,6 +39,7 @@ class SearchPanel;
 
 struct SearchOptions;
 
+class EditorSplitPane;
 class EditorWidget;
 class FindReplaceBar;
 class ExplorerPanel;
@@ -203,6 +204,7 @@ class MainWindow final : public QMainWindow {
     QToolButton* gitButton_{nullptr};
     QTimer* highlightTimer_{nullptr};
     QSplitter* documentSplit_{nullptr};
+    EditorSplitPane* splitPane_{nullptr};
     EditorWidget* splitEditor_{nullptr};
     EditorWidget* splitSource_{nullptr};
     QAction* closeSplitAction_{nullptr};

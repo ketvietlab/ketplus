@@ -12,6 +12,9 @@
 #include <QByteArrayList>
 #include <QColor>
 #include <QContextMenuEvent>
+#include <QImage>
+#include <QPainter>
+#include <QPolygonF>
 #include <QSet>
 #include <QStringList>
 #include <QtMath>
@@ -53,11 +56,50 @@ constexpr int bookmarkMarker = 24;
 constexpr int bookmarkMask = 1 << bookmarkMarker;
 constexpr uptr_t findIndicator = INDICATOR_CONTAINER;
 constexpr uptr_t selectionIndicator = INDICATOR_CONTAINER + 1;
+constexpr uptr_t embeddedStyleIndicator = INDICATOR_CONTAINER + 2;
 constexpr sptr_t symbolMarginWidth = 14;
+// How far back a <style> block may open and still color the visible CSS.
+constexpr sptr_t embeddedStyleLookBehind = 256 * 1024;
 
 constexpr uptr_t marker(const Scintilla::MarkerOutline value) {
     return static_cast<uptr_t>(value);
 }
+
+// Draws a thin, antialiased chevron in Scintilla's RGBA byte order.
+QByteArray chevronPixels(const int size, const qreal scale, const QColor& color, const bool open) {
+    const int pixels = qMax(1, qRound(size * scale));
+    QImage image(pixels, pixels, QImage::Format_RGBA8888);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.scale(scale, scale);
+    QPen pen(color, 1.4);
+    pen.setCapStyle(Qt::RoundCap);
+    pen.setJoinStyle(Qt::RoundJoin);
+    painter.setPen(pen);
+    const qreal middle = size / 2.0;
+    const qreal arm = size * 0.22;
+    if (open) {
+        painter.drawPolyline(QPolygonF{QPointF(middle - arm * 1.5, middle - arm * 0.75),
+                                       QPointF(middle, middle + arm * 0.75),
+                                       QPointF(middle + arm * 1.5, middle - arm * 0.75)});
+    } else {
+        painter.drawPolyline(QPolygonF{QPointF(middle - arm * 0.75, middle - arm * 1.5),
+                                       QPointF(middle + arm * 0.75, middle),
+                                       QPointF(middle - arm * 0.75, middle + arm * 1.5)});
+    }
+    painter.end();
+    return QByteArray(reinterpret_cast<const char*>(image.constBits()),
+                      static_cast<qsizetype>(image.sizeInBytes()));
+}
+
+bool isCssNameCharacter(const char character) {
+    return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') ||
+           (character >= '0' && character <= '9') || character == '-' || character == '_' ||
+           static_cast<unsigned char>(character) >= 0x80;
+}
+
+bool isDigit(const char character) { return character >= '0' && character <= '9'; }
 
 bool isWordCharacter(const int character) {
     // Scintilla returns UTF-8 continuation bytes as negative values.
@@ -90,7 +132,34 @@ CommentTokens commentTokensForSyntax(const QString& syntax) {
     static const QStringList hashSyntaxes{
         QStringLiteral("python"), QStringLiteral("shell"),    QStringLiteral("dockerfile"),
         QStringLiteral("yaml"),   QStringLiteral("toml"),     QStringLiteral("ruby"),
-        QStringLiteral("cmake"),  QStringLiteral("makefile"), QStringLiteral("properties")};
+        QStringLiteral("cmake"),  QStringLiteral("makefile"), QStringLiteral("properties"),
+        QStringLiteral("perl"),   QStringLiteral("r"),        QStringLiteral("powershell"),
+        QStringLiteral("tcl"),    QStringLiteral("julia"),    QStringLiteral("nim"),
+        QStringLiteral("coffeescript"), QStringLiteral("gdscript")};
+    if (syntax == QStringLiteral("haskell") || syntax == QStringLiteral("vhdl")) {
+        return {QByteArrayLiteral("--"), {}};
+    }
+    if (syntax == QStringLiteral("erlang") || syntax == QStringLiteral("latex")) {
+        return {QByteArrayLiteral("%"), {}};
+    }
+    if (syntax == QStringLiteral("lisp") || syntax == QStringLiteral("assembly")) {
+        return {QByteArrayLiteral(";"), {}};
+    }
+    if (syntax == QStringLiteral("batch")) {
+        return {QByteArrayLiteral("::"), {}};
+    }
+    if (syntax == QStringLiteral("visual-basic")) {
+        return {QByteArrayLiteral("'"), {}};
+    }
+    if (syntax == QStringLiteral("fortran")) {
+        return {QByteArrayLiteral("!"), {}};
+    }
+    if (syntax == QStringLiteral("ocaml")) {
+        return {QByteArrayLiteral("(*"), QByteArrayLiteral("*)")};
+    }
+    if (syntax == QStringLiteral("scss") || syntax == QStringLiteral("less")) {
+        return {QByteArrayLiteral("/*"), QByteArrayLiteral("*/")};
+    }
     static const QStringList markupSyntaxes{QStringLiteral("html"), QStringLiteral("xml"),
                                             QStringLiteral("markdown")};
     static const QStringList uncommentableSyntaxes{
@@ -139,8 +208,24 @@ EditorWidget::EditorWidget(QWidget* parent)
         if ((static_cast<int>(updated) & selectionMatchTriggers) != 0) {
             highlightSelectionMatches();
         }
+        constexpr int embeddedStyleTriggers = static_cast<int>(Scintilla::Update::Content) |
+                                              static_cast<int>(Scintilla::Update::VScroll);
+        if ((static_cast<int>(updated) & embeddedStyleTriggers) != 0) {
+            updateEmbeddedStyleHighlight();
+        }
         emit editorStateChanged();
     });
+    connect(this, &ScintillaEditBase::modified, this,
+            [this](const Scintilla::ModificationFlags type, Scintilla::Position, Scintilla::Position,
+                   Scintilla::Position, const QByteArray&, Scintilla::Position,
+                   Scintilla::FoldLevel, Scintilla::FoldLevel) {
+                constexpr int textChanges =
+                    static_cast<int>(Scintilla::ModificationFlags::InsertText) |
+                    static_cast<int>(Scintilla::ModificationFlags::DeleteText);
+                if ((static_cast<int>(type) & textChanges) != 0) {
+                    embeddedStyleDirty_ = true;
+                }
+            });
     connect(this, &ScintillaEditBase::linesAdded, this,
             [this](Scintilla::Position) { updateLineNumberMarginWidth(); });
     connect(this, &ScintillaEditBase::charAdded, this, &EditorWidget::handleCharAdded);
@@ -331,8 +416,15 @@ void EditorWidget::configureLexerForPath(const QString& filePath) {
         sends(message(Scintilla::Message::SetKeyWords), static_cast<uptr_t>(index),
               keywords == nullptr ? "" : keywords);
     }
+    if (syntaxName_ == QStringLiteral("scss") || syntaxName_ == QStringLiteral("less")) {
+        const QByteArray key = "lexer.css." + syntaxName_.toLatin1() + ".language";
+        sends(message(Scintilla::Message::SetProperty), reinterpret_cast<uptr_t>(key.constData()),
+              "1");
+    }
     applyViewOptions();
     send(message(Scintilla::Message::Colourise), 0, -1);
+    embeddedStyleDirty_ = true;
+    updateEmbeddedStyleHighlight();
 }
 
 void EditorWidget::setEditorSettings(const EditorSettings& settings) {
@@ -492,6 +584,7 @@ void EditorWidget::shareDocumentWith(const EditorWidget& source) {
     foldingEnabled_ = source.foldingEnabled_;
     highlightedBrace_ = -1;
     highlightedBraceMatch_ = -1;
+    embeddedStyleDirty_ = true;
     lineNumberDigits_ = 0;
     updateLineNumberMarginWidth();
     applyViewOptions();
@@ -547,16 +640,37 @@ void EditorWidget::applyTheme(const ThemePalette& palette) {
          scintillaColor(palette.accent));
     send(message(Scintilla::Message::MarkerSetBack), bookmarkMarker,
          scintillaColor(palette.accent));
+    const qreal scale = qMax<qreal>(1.0, devicePixelRatioF());
+    const int markerSize = static_cast<int>(symbolMarginWidth);
+    const int markerPixels = qMax(1, qRound(markerSize * scale));
+    send(message(Scintilla::Message::RGBAImageSetWidth), static_cast<uptr_t>(markerPixels));
+    send(message(Scintilla::Message::RGBAImageSetHeight), static_cast<uptr_t>(markerPixels));
+    send(message(Scintilla::Message::RGBAImageSetScale), static_cast<uptr_t>(qRound(scale * 100)));
+    const QColor foldColor(palette.textMuted);
+    const QByteArray closedChevron = chevronPixels(markerSize, scale, foldColor, false);
+    const QByteArray openChevron = chevronPixels(markerSize, scale, foldColor, true);
     for (const auto outline :
-         {Scintilla::MarkerOutline::Folder, Scintilla::MarkerOutline::FolderOpen,
-          Scintilla::MarkerOutline::FolderEnd, Scintilla::MarkerOutline::FolderOpenMid,
-          Scintilla::MarkerOutline::FolderMidTail, Scintilla::MarkerOutline::FolderSub,
-          Scintilla::MarkerOutline::FolderTail}) {
-        send(message(Scintilla::Message::MarkerSetFore), marker(outline),
-             scintillaColor(palette.panelBackground));
-        send(message(Scintilla::Message::MarkerSetBack), marker(outline),
-             scintillaColor(palette.textMuted));
+         {Scintilla::MarkerOutline::Folder, Scintilla::MarkerOutline::FolderEnd}) {
+        sends(message(Scintilla::Message::MarkerDefineRGBAImage), marker(outline),
+              closedChevron.constData());
     }
+    for (const auto outline :
+         {Scintilla::MarkerOutline::FolderOpen, Scintilla::MarkerOutline::FolderOpenMid}) {
+        sends(message(Scintilla::Message::MarkerDefineRGBAImage), marker(outline),
+              openChevron.constData());
+    }
+    applyStyle(*this, STYLE_FOLDDISPLAYTEXT, palette.textMuted);
+    send(message(Scintilla::Message::StyleSetBack), STYLE_FOLDDISPLAYTEXT,
+         scintillaColor(palette.panelSubtle));
+    embeddedStyleColors_ = {
+        scintillaColor(palette.textMuted), scintillaColor(palette.positive),
+        scintillaColor(palette.accent),    scintillaColor(palette.danger),
+        scintillaColor(palette.warning),   scintillaColor(palette.info),
+        scintillaColor(palette.positive),  scintillaColor(palette.info),
+        scintillaColor(palette.accent),    scintillaColor(palette.info),
+        scintillaColor(palette.warning),
+    };
+    embeddedStyleDirty_ = true;
     send(message(Scintilla::Message::IndicSetFore), findIndicator,
          scintillaColor(palette.warning));
     send(message(Scintilla::Message::IndicSetFore), selectionIndicator,
@@ -564,7 +678,208 @@ void EditorWidget::applyTheme(const ThemePalette& palette) {
 
     applyLexerTheme(palette);
     send(message(Scintilla::Message::Colourise), 0, -1);
+    updateEmbeddedStyleHighlight();
     themePending_ = false;
+}
+
+void EditorWidget::updateEmbeddedStyleHighlight() {
+    // Lexilla's HTML lexer leaves <style> bodies unstyled, so the visible CSS is colored with
+    // a value-colored text indicator. Only the lines on screen are scanned.
+    const bool active = lexerName_ == QStringLiteral("hypertext") && !largeFileMode_ && !hibernated_;
+    send(message(Scintilla::Message::SetIndicatorCurrent), embeddedStyleIndicator);
+    const auto length = send(message(Scintilla::Message::GetLength));
+    if (!active) {
+        if (embeddedStyleActive_) {
+            send(message(Scintilla::Message::IndicatorClearRange), 0, length);
+            embeddedStyleActive_ = false;
+        }
+        return;
+    }
+    embeddedStyleActive_ = true;
+
+    const auto firstDisplayLine = send(message(Scintilla::Message::GetFirstVisibleLine));
+    const auto linesOnScreen = send(message(Scintilla::Message::LinesOnScreen));
+    const auto firstLine = send(message(Scintilla::Message::DocLineFromVisible),
+                                static_cast<uptr_t>(firstDisplayLine));
+    const auto lastLine = send(message(Scintilla::Message::DocLineFromVisible),
+                               static_cast<uptr_t>(firstDisplayLine + linesOnScreen + 1));
+    const sptr_t visibleStart =
+        send(message(Scintilla::Message::PositionFromLine), static_cast<uptr_t>(firstLine));
+    const sptr_t visibleEnd = qMin(
+        length, send(message(Scintilla::Message::GetLineEndPosition), static_cast<uptr_t>(lastLine)));
+    if (visibleStart < 0 || visibleEnd <= visibleStart) {
+        return;
+    }
+    // Filling indicators repaints and reports another UI update, so unchanged ranges stop here.
+    if (!embeddedStyleDirty_ && visibleStart == embeddedStyleStart_ &&
+        visibleEnd == embeddedStyleEnd_) {
+        return;
+    }
+    embeddedStyleDirty_ = false;
+    embeddedStyleStart_ = visibleStart;
+    embeddedStyleEnd_ = visibleEnd;
+    send(message(Scintilla::Message::IndicatorClearRange), static_cast<uptr_t>(visibleStart),
+         visibleEnd - visibleStart);
+
+    const sptr_t base = qMax<sptr_t>(0, visibleStart - embeddedStyleLookBehind);
+    const QByteArray text = textRange(base, visibleEnd);
+    const QByteArray lower = text.toLower();
+    const qsizetype size = text.size();
+
+    enum Token { Comment, String, AtRule, Important, Number, Function, Value, Property,
+                 Selector, ClassName, Pseudo };
+    const auto fill = [&](const qsizetype from, const qsizetype to, const Token token) {
+        const sptr_t start = qMax(base + from, visibleStart);
+        const sptr_t end = qMin(base + to, visibleEnd);
+        if (end > start) {
+            send(message(Scintilla::Message::SetIndicatorValue),
+                 static_cast<uptr_t>(embeddedStyleColors_[token] | SC_INDICVALUEBIT));
+            send(message(Scintilla::Message::IndicatorFillRange), static_cast<uptr_t>(start),
+                 end - start);
+        }
+    };
+    const auto nameEnd = [&](qsizetype index) {
+        while (index < size && isCssNameCharacter(text.at(index))) {
+            ++index;
+        }
+        return index;
+    };
+
+    const auto colorBlock = [&](const qsizetype blockStart, const qsizetype blockEnd) {
+        int depth = 0;
+        bool inValue = false;
+        qsizetype index = blockStart;
+        while (index < blockEnd) {
+            const char character = text.at(index);
+            const char next = index + 1 < blockEnd ? text.at(index + 1) : '\0';
+            if (character == '/' && next == '*') {
+                const qsizetype close = text.indexOf("*/", index + 2);
+                const qsizetype end = close < 0 || close >= blockEnd ? blockEnd : close + 2;
+                fill(index, end, Comment);
+                index = end;
+            } else if (character == '"' || character == '\'') {
+                qsizetype end = index + 1;
+                while (end < blockEnd && text.at(end) != character && text.at(end) != '\n') {
+                    end += text.at(end) == '\\' ? 2 : 1;
+                }
+                end = qMin(end + 1, blockEnd);
+                fill(index, end, String);
+                index = end;
+            } else if (character == '{') {
+                ++depth;
+                inValue = false;
+                ++index;
+            } else if (character == '}') {
+                depth = qMax(0, depth - 1);
+                inValue = false;
+                ++index;
+            } else if (character == ';') {
+                inValue = false;
+                ++index;
+            } else if (character == '@') {
+                const qsizetype end = nameEnd(index + 1);
+                fill(index, end, AtRule);
+                index = end;
+            } else if (character == '!') {
+                const qsizetype end = nameEnd(index + 1);
+                fill(index, end, Important);
+                index = qMax(end, index + 1);
+            } else if (inValue) {
+                if (character == '#' || isDigit(character) ||
+                    ((character == '.' || character == '-') && isDigit(next))) {
+                    qsizetype end = index + 1;
+                    while (end < blockEnd && (isCssNameCharacter(text.at(end)) ||
+                                              text.at(end) == '.' || text.at(end) == '%')) {
+                        ++end;
+                    }
+                    fill(index, end, Number);
+                    index = end;
+                } else if (isCssNameCharacter(character)) {
+                    const qsizetype end = nameEnd(index);
+                    fill(index, end, end < blockEnd && text.at(end) == '(' ? Function : Value);
+                    index = end;
+                } else {
+                    ++index;
+                }
+            } else if (isCssNameCharacter(character)) {
+                const qsizetype end = nameEnd(index);
+                bool property = false;
+                if (depth > 0) {
+                    // Inside a rule a name followed by ':' is a property, unless a '{' shows
+                    // it is a nested selector such as `a:hover {`.
+                    qsizetype scan = end;
+                    while (scan < blockEnd && text.at(scan) != ';' && text.at(scan) != '{' &&
+                           text.at(scan) != '}') {
+                        ++scan;
+                    }
+                    qsizetype colon = end;
+                    while (colon < blockEnd && (text.at(colon) == ' ' || text.at(colon) == '\t')) {
+                        ++colon;
+                    }
+                    property = colon < blockEnd && text.at(colon) == ':' &&
+                               (scan >= blockEnd || text.at(scan) != '{');
+                    if (property) {
+                        fill(index, end, Property);
+                        inValue = true;
+                        index = colon + 1;
+                        continue;
+                    }
+                }
+                fill(index, end, Selector);
+                index = end;
+            } else if ((character == '.' || character == '#') && isCssNameCharacter(next)) {
+                const qsizetype end = nameEnd(index + 1);
+                fill(index, end, ClassName);
+                index = end;
+            } else if (character == ':') {
+                qsizetype start = index + 1;
+                if (start < blockEnd && text.at(start) == ':') {
+                    ++start;
+                }
+                const qsizetype end = nameEnd(start);
+                fill(index, end, Pseudo);
+                index = qMax(end, index + 1);
+            } else {
+                ++index;
+            }
+        }
+    };
+
+    qsizetype searchFrom = 0;
+    while (searchFrom < size) {
+        const qsizetype open = lower.indexOf("<style", searchFrom);
+        if (open < 0) {
+            break;
+        }
+        const char after = open + 6 < size ? lower.at(open + 6) : '\0';
+        const qsizetype tagEnd = lower.indexOf('>', open);
+        if (tagEnd < 0) {
+            break;
+        }
+        if (after != '>' && after != ' ' && after != '\t' && after != '\n' && after != '\r') {
+            searchFrom = open + 6;
+            continue;
+        }
+        // Skip "<style" text inside scripts, strings or comments.
+        const sptr_t tagPosition = base + open + 1;
+        send(message(Scintilla::Message::Colourise), static_cast<uptr_t>(tagPosition),
+             tagPosition + 1);
+        const auto tagStyle =
+            send(message(Scintilla::Message::GetStyleAt), static_cast<uptr_t>(tagPosition));
+        if (tagStyle != SCE_H_TAG && tagStyle != SCE_H_TAGUNKNOWN) {
+            searchFrom = open + 6;
+            continue;
+        }
+        const qsizetype close = lower.indexOf("</style", tagEnd + 1);
+        const qsizetype blockEnd = close < 0 ? size : close;
+        if (base + blockEnd > visibleStart) {
+            colorBlock(tagEnd + 1, blockEnd);
+        }
+        if (close < 0) {
+            break;
+        }
+        searchFrom = close + 7;
+    }
 }
 
 void EditorWidget::undoEdit() { send(message(Scintilla::Message::Undo)); }
@@ -1253,26 +1568,28 @@ void EditorWidget::configureEditor() {
     send(message(Scintilla::Message::SetMarginMaskN), foldMargin, Scintilla::MaskFolders);
     send(message(Scintilla::Message::SetMarginWidthN), foldMargin, 0);
     send(message(Scintilla::Message::SetMarginSensitiveN), foldMargin, 1);
-    const auto defineFoldMarker = [this](const Scintilla::MarkerOutline outline,
-                                         const Scintilla::MarkerSymbol symbol) {
+    // Fold headers get chevrons drawn in applyTheme; the body of a block stays unmarked so
+    // the margin reads as quiet as an editor gutter rather than a tree outline.
+    for (const auto outline :
+         {Scintilla::MarkerOutline::FolderMidTail, Scintilla::MarkerOutline::FolderSub,
+          Scintilla::MarkerOutline::FolderTail}) {
         send(message(Scintilla::Message::MarkerDefine), marker(outline),
-             static_cast<sptr_t>(symbol));
-    };
-    defineFoldMarker(Scintilla::MarkerOutline::Folder, Scintilla::MarkerSymbol::BoxPlus);
-    defineFoldMarker(Scintilla::MarkerOutline::FolderOpen, Scintilla::MarkerSymbol::BoxMinus);
-    defineFoldMarker(Scintilla::MarkerOutline::FolderEnd,
-                     Scintilla::MarkerSymbol::BoxPlusConnected);
-    defineFoldMarker(Scintilla::MarkerOutline::FolderOpenMid,
-                     Scintilla::MarkerSymbol::BoxMinusConnected);
-    defineFoldMarker(Scintilla::MarkerOutline::FolderMidTail, Scintilla::MarkerSymbol::TCorner);
-    defineFoldMarker(Scintilla::MarkerOutline::FolderSub, Scintilla::MarkerSymbol::VLine);
-    defineFoldMarker(Scintilla::MarkerOutline::FolderTail, Scintilla::MarkerSymbol::LCorner);
+             static_cast<sptr_t>(Scintilla::MarkerSymbol::Empty));
+    }
     send(message(Scintilla::Message::SetAutomaticFold),
          static_cast<uptr_t>(Scintilla::AutomaticFold::Show) |
              static_cast<uptr_t>(Scintilla::AutomaticFold::Click) |
              static_cast<uptr_t>(Scintilla::AutomaticFold::Change));
-    send(message(Scintilla::Message::SetFoldFlags),
-         static_cast<uptr_t>(Scintilla::FoldFlag::LineAfterContracted));
+    // A collapsed block shows a small boxed ellipsis instead of a full-width rule.
+    send(message(Scintilla::Message::SetFoldFlags), 0);
+    sends(message(Scintilla::Message::SetDefaultFoldDisplayText), 0, "\xE2\x80\xA6");
+    send(message(Scintilla::Message::FoldDisplayTextSetStyle),
+         static_cast<uptr_t>(Scintilla::FoldDisplayTextStyle::Boxed));
+
+    send(message(Scintilla::Message::IndicSetStyle), embeddedStyleIndicator,
+         static_cast<sptr_t>(Scintilla::IndicatorStyle::TextFore));
+    send(message(Scintilla::Message::IndicSetFlags), embeddedStyleIndicator,
+         static_cast<sptr_t>(Scintilla::IndicFlag::ValueFore));
 
     send(message(Scintilla::Message::IndicSetStyle), findIndicator,
          static_cast<sptr_t>(Scintilla::IndicatorStyle::RoundBox));
@@ -1867,6 +2184,249 @@ void EditorWidget::applyLexerTheme(const ThemePalette& palette) {
         applyStyle(*this, SCE_CMAKE_PARAMETERS, palette.info);
         applyStyle(*this, SCE_CMAKE_VARIABLE, palette.warning);
         applyStyle(*this, SCE_CMAKE_NUMBER, palette.info);
+    } else if (lexerName_ == QStringLiteral("perl")) {
+        setStyles(*this, {SCE_PL_COMMENTLINE, SCE_PL_POD, SCE_PL_POD_VERB}, palette.textMuted,
+                  false, true);
+        applyStyle(*this, SCE_PL_WORD, palette.accent, true);
+        applyStyle(*this, SCE_PL_NUMBER, palette.info);
+        setStyles(*this,
+                  {SCE_PL_STRING, SCE_PL_CHARACTER, SCE_PL_STRING_Q, SCE_PL_STRING_QQ,
+                   SCE_PL_STRING_QW, SCE_PL_HERE_Q, SCE_PL_HERE_QQ, SCE_PL_BACKTICKS},
+                  palette.positive);
+        setStyles(*this, {SCE_PL_SCALAR, SCE_PL_ARRAY, SCE_PL_HASH, SCE_PL_SYMBOLTABLE},
+                  palette.warning);
+        setStyles(*this, {SCE_PL_REGEX, SCE_PL_REGSUBST, SCE_PL_STRING_QR}, palette.info);
+        applyStyle(*this, SCE_PL_ERROR, palette.danger);
+    } else if (lexerName_ == QStringLiteral("r")) {
+        applyStyle(*this, SCE_R_COMMENT, palette.textMuted, false, true);
+        setStyles(*this, {SCE_R_KWORD, SCE_R_BASEKWORD}, palette.accent, true);
+        applyStyle(*this, SCE_R_OTHERKWORD, palette.info);
+        applyStyle(*this, SCE_R_NUMBER, palette.info);
+        setStyles(*this,
+                  {SCE_R_STRING, SCE_R_STRING2, SCE_R_RAWSTRING, SCE_R_RAWSTRING2,
+                   SCE_R_ESCAPESEQUENCE},
+                  palette.positive);
+        setStyles(*this, {SCE_R_INFIX, SCE_R_BACKTICKS}, palette.warning);
+    } else if (lexerName_ == QStringLiteral("batch")) {
+        applyStyle(*this, SCE_BAT_COMMENT, palette.textMuted, false, true);
+        applyStyle(*this, SCE_BAT_WORD, palette.accent, true);
+        applyStyle(*this, SCE_BAT_LABEL, palette.info, true);
+        setStyles(*this, {SCE_BAT_HIDE, SCE_BAT_COMMAND}, palette.info);
+        applyStyle(*this, SCE_BAT_IDENTIFIER, palette.warning);
+    } else if (lexerName_ == QStringLiteral("powershell")) {
+        setStyles(*this, {SCE_POWERSHELL_COMMENT, SCE_POWERSHELL_COMMENTSTREAM},
+                  palette.textMuted, false, true);
+        applyStyle(*this, SCE_POWERSHELL_KEYWORD, palette.accent, true);
+        setStyles(*this, {SCE_POWERSHELL_CMDLET, SCE_POWERSHELL_ALIAS, SCE_POWERSHELL_FUNCTION},
+                  palette.info);
+        applyStyle(*this, SCE_POWERSHELL_NUMBER, palette.info);
+        setStyles(*this,
+                  {SCE_POWERSHELL_STRING, SCE_POWERSHELL_CHARACTER, SCE_POWERSHELL_HERE_STRING,
+                   SCE_POWERSHELL_HERE_CHARACTER},
+                  palette.positive);
+        applyStyle(*this, SCE_POWERSHELL_VARIABLE, palette.warning);
+    } else if (lexerName_ == QStringLiteral("haskell")) {
+        setStyles(*this,
+                  {SCE_HA_COMMENTLINE, SCE_HA_COMMENTBLOCK, SCE_HA_COMMENTBLOCK2,
+                   SCE_HA_COMMENTBLOCK3},
+                  palette.textMuted, false, true);
+        setStyles(*this, {SCE_HA_KEYWORD, SCE_HA_IMPORT}, palette.accent, true);
+        applyStyle(*this, SCE_HA_NUMBER, palette.info);
+        setStyles(*this, {SCE_HA_STRING, SCE_HA_CHARACTER}, palette.positive);
+        setStyles(*this, {SCE_HA_CLASS, SCE_HA_MODULE, SCE_HA_CAPITAL, SCE_HA_DATA,
+                          SCE_HA_INSTANCE},
+                  palette.info);
+        setStyles(*this, {SCE_HA_PRAGMA, SCE_HA_PREPROCESSOR}, palette.warning);
+        applyStyle(*this, SCE_HA_STRINGEOL, palette.danger);
+    } else if (lexerName_ == QStringLiteral("erlang")) {
+        setStyles(*this,
+                  {SCE_ERLANG_COMMENT, SCE_ERLANG_COMMENT_FUNCTION, SCE_ERLANG_COMMENT_MODULE,
+                   SCE_ERLANG_COMMENT_DOC},
+                  palette.textMuted, false, true);
+        applyStyle(*this, SCE_ERLANG_KEYWORD, palette.accent, true);
+        applyStyle(*this, SCE_ERLANG_NUMBER, palette.info);
+        setStyles(*this, {SCE_ERLANG_STRING, SCE_ERLANG_CHARACTER}, palette.positive);
+        setStyles(*this, {SCE_ERLANG_FUNCTION_NAME, SCE_ERLANG_BIFS, SCE_ERLANG_MODULES},
+                  palette.info);
+        setStyles(*this, {SCE_ERLANG_VARIABLE, SCE_ERLANG_MACRO, SCE_ERLANG_RECORD,
+                          SCE_ERLANG_PREPROC},
+                  palette.warning);
+        applyStyle(*this, SCE_ERLANG_UNKNOWN, palette.danger);
+    } else if (lexerName_ == QStringLiteral("lisp")) {
+        setStyles(*this, {SCE_LISP_COMMENT, SCE_LISP_MULTI_COMMENT}, palette.textMuted, false,
+                  true);
+        setStyles(*this, {SCE_LISP_KEYWORD, SCE_LISP_KEYWORD_KW}, palette.accent, true);
+        applyStyle(*this, SCE_LISP_NUMBER, palette.info);
+        applyStyle(*this, SCE_LISP_STRING, palette.positive);
+        setStyles(*this, {SCE_LISP_SYMBOL, SCE_LISP_SPECIAL}, palette.warning);
+        applyStyle(*this, SCE_LISP_STRINGEOL, palette.danger);
+    } else if (lexerName_ == QStringLiteral("pascal")) {
+        setStyles(*this, {SCE_PAS_COMMENT, SCE_PAS_COMMENT2, SCE_PAS_COMMENTLINE},
+                  palette.textMuted, false, true);
+        applyStyle(*this, SCE_PAS_WORD, palette.accent, true);
+        setStyles(*this, {SCE_PAS_NUMBER, SCE_PAS_HEXNUMBER}, palette.info);
+        setStyles(*this, {SCE_PAS_STRING, SCE_PAS_CHARACTER, SCE_PAS_MULTILINESTRING},
+                  palette.positive);
+        setStyles(*this, {SCE_PAS_PREPROCESSOR, SCE_PAS_PREPROCESSOR2}, palette.warning);
+        applyStyle(*this, SCE_PAS_STRINGEOL, palette.danger);
+    } else if (lexerName_ == QStringLiteral("fortran")) {
+        applyStyle(*this, SCE_F_COMMENT, palette.textMuted, false, true);
+        applyStyle(*this, SCE_F_WORD, palette.accent, true);
+        setStyles(*this, {SCE_F_WORD2, SCE_F_WORD3}, palette.info);
+        applyStyle(*this, SCE_F_NUMBER, palette.info);
+        setStyles(*this, {SCE_F_STRING1, SCE_F_STRING2}, palette.positive);
+        setStyles(*this, {SCE_F_PREPROCESSOR, SCE_F_LABEL}, palette.warning);
+        applyStyle(*this, SCE_F_STRINGEOL, palette.danger);
+    } else if (lexerName_ == QStringLiteral("tcl")) {
+        setStyles(*this,
+                  {SCE_TCL_COMMENT, SCE_TCL_COMMENTLINE, SCE_TCL_COMMENT_BOX,
+                   SCE_TCL_BLOCK_COMMENT},
+                  palette.textMuted, false, true);
+        setStyles(*this, {SCE_TCL_WORD, SCE_TCL_WORD2, SCE_TCL_WORD3}, palette.accent, true);
+        applyStyle(*this, SCE_TCL_NUMBER, palette.info);
+        setStyles(*this, {SCE_TCL_IN_QUOTE, SCE_TCL_WORD_IN_QUOTE}, palette.positive);
+        setStyles(*this, {SCE_TCL_SUBSTITUTION, SCE_TCL_SUB_BRACE}, palette.warning);
+        applyStyle(*this, SCE_TCL_MODIFIER, palette.info);
+    } else if (lexerName_ == QStringLiteral("vb")) {
+        setStyles(*this, {SCE_B_COMMENT, SCE_B_COMMENTBLOCK, SCE_B_DOCLINE, SCE_B_DOCBLOCK},
+                  palette.textMuted, false, true);
+        setStyles(*this, {SCE_B_KEYWORD, SCE_B_KEYWORD2}, palette.accent, true);
+        setStyles(*this, {SCE_B_KEYWORD3, SCE_B_KEYWORD4, SCE_B_CONSTANT}, palette.info);
+        setStyles(*this, {SCE_B_NUMBER, SCE_B_HEXNUMBER, SCE_B_BINNUMBER, SCE_B_DATE},
+                  palette.info);
+        applyStyle(*this, SCE_B_STRING, palette.positive);
+        setStyles(*this, {SCE_B_PREPROCESSOR, SCE_B_LABEL}, palette.warning);
+        setStyles(*this, {SCE_B_STRINGEOL, SCE_B_ERROR}, palette.danger);
+    } else if (lexerName_ == QStringLiteral("d")) {
+        setStyles(*this,
+                  {SCE_D_COMMENT, SCE_D_COMMENTLINE, SCE_D_COMMENTDOC, SCE_D_COMMENTNESTED,
+                   SCE_D_COMMENTLINEDOC},
+                  palette.textMuted, false, true);
+        applyStyle(*this, SCE_D_WORD, palette.accent, true);
+        setStyles(*this, {SCE_D_WORD2, SCE_D_WORD3, SCE_D_TYPEDEF}, palette.info);
+        applyStyle(*this, SCE_D_NUMBER, palette.info);
+        setStyles(*this, {SCE_D_STRING, SCE_D_CHARACTER, SCE_D_STRINGB, SCE_D_STRINGR},
+                  palette.positive);
+        setStyles(*this, {SCE_D_STRINGEOL, SCE_D_COMMENTDOCKEYWORDERROR}, palette.danger);
+    } else if (lexerName_ == QStringLiteral("julia")) {
+        setStyles(*this, {SCE_JULIA_COMMENT, SCE_JULIA_DOCSTRING}, palette.textMuted, false,
+                  true);
+        applyStyle(*this, SCE_JULIA_KEYWORD1, palette.accent, true);
+        setStyles(*this, {SCE_JULIA_KEYWORD2, SCE_JULIA_KEYWORD3, SCE_JULIA_KEYWORD4,
+                          SCE_JULIA_TYPEANNOT},
+                  palette.info);
+        applyStyle(*this, SCE_JULIA_NUMBER, palette.info);
+        setStyles(*this,
+                  {SCE_JULIA_STRING, SCE_JULIA_CHAR, SCE_JULIA_STRINGLITERAL, SCE_JULIA_COMMAND,
+                   SCE_JULIA_COMMANDLITERAL},
+                  palette.positive);
+        setStyles(*this, {SCE_JULIA_MACRO, SCE_JULIA_SYMBOL, SCE_JULIA_STRINGINTERP},
+                  palette.warning);
+        applyStyle(*this, SCE_JULIA_LEXERROR, palette.danger);
+    } else if (lexerName_ == QStringLiteral("nim")) {
+        setStyles(*this,
+                  {SCE_NIM_COMMENT, SCE_NIM_COMMENTDOC, SCE_NIM_COMMENTLINE,
+                   SCE_NIM_COMMENTLINEDOC},
+                  palette.textMuted, false, true);
+        applyStyle(*this, SCE_NIM_WORD, palette.accent, true);
+        applyStyle(*this, SCE_NIM_NUMBER, palette.info);
+        setStyles(*this,
+                  {SCE_NIM_STRING, SCE_NIM_CHARACTER, SCE_NIM_TRIPLE, SCE_NIM_TRIPLEDOUBLE,
+                   SCE_NIM_BACKTICKS},
+                  palette.positive);
+        applyStyle(*this, SCE_NIM_FUNCNAME, palette.info, true);
+        setStyles(*this, {SCE_NIM_STRINGEOL, SCE_NIM_NUMERROR}, palette.danger);
+    } else if (lexerName_ == QStringLiteral("latex")) {
+        setStyles(*this, {SCE_L_COMMENT, SCE_L_COMMENT2}, palette.textMuted, false, true);
+        setStyles(*this, {SCE_L_COMMAND, SCE_L_SHORTCMD}, palette.accent, true);
+        setStyles(*this, {SCE_L_TAG, SCE_L_TAG2}, palette.info);
+        setStyles(*this, {SCE_L_MATH, SCE_L_MATH2}, palette.warning);
+        setStyles(*this, {SCE_L_VERBATIM, SCE_L_CMDOPT}, palette.positive);
+        applyStyle(*this, SCE_L_ERROR, palette.danger);
+    } else if (lexerName_ == QStringLiteral("asm")) {
+        setStyles(*this, {SCE_ASM_COMMENT, SCE_ASM_COMMENTBLOCK, SCE_ASM_COMMENTDIRECTIVE},
+                  palette.textMuted, false, true);
+        setStyles(*this,
+                  {SCE_ASM_CPUINSTRUCTION, SCE_ASM_MATHINSTRUCTION, SCE_ASM_EXTINSTRUCTION},
+                  palette.accent, true);
+        applyStyle(*this, SCE_ASM_REGISTER, palette.info);
+        setStyles(*this, {SCE_ASM_DIRECTIVE, SCE_ASM_DIRECTIVEOPERAND}, palette.warning);
+        applyStyle(*this, SCE_ASM_NUMBER, palette.info);
+        setStyles(*this, {SCE_ASM_STRING, SCE_ASM_CHARACTER, SCE_ASM_STRINGBACKQUOTE},
+                  palette.positive);
+        applyStyle(*this, SCE_ASM_STRINGEOL, palette.danger);
+    } else if (lexerName_ == QStringLiteral("coffeescript")) {
+        setStyles(*this,
+                  {SCE_COFFEESCRIPT_COMMENT, SCE_COFFEESCRIPT_COMMENTLINE,
+                   SCE_COFFEESCRIPT_COMMENTDOC, SCE_COFFEESCRIPT_COMMENTBLOCK,
+                   SCE_COFFEESCRIPT_COMMENTLINEDOC},
+                  palette.textMuted, false, true);
+        setStyles(*this, {SCE_COFFEESCRIPT_WORD, SCE_COFFEESCRIPT_WORD2}, palette.accent, true);
+        applyStyle(*this, SCE_COFFEESCRIPT_NUMBER, palette.info);
+        setStyles(*this,
+                  {SCE_COFFEESCRIPT_STRING, SCE_COFFEESCRIPT_CHARACTER,
+                   SCE_COFFEESCRIPT_VERBATIM, SCE_COFFEESCRIPT_REGEX,
+                   SCE_COFFEESCRIPT_STRINGRAW},
+                  palette.positive);
+        setStyles(*this, {SCE_COFFEESCRIPT_GLOBALCLASS, SCE_COFFEESCRIPT_INSTANCEPROPERTY},
+                  palette.warning);
+        applyStyle(*this, SCE_COFFEESCRIPT_STRINGEOL, palette.danger);
+    } else if (lexerName_ == QStringLiteral("verilog")) {
+        setStyles(*this, {SCE_V_COMMENT, SCE_V_COMMENTLINE, SCE_V_COMMENTLINEBANG},
+                  palette.textMuted, false, true);
+        applyStyle(*this, SCE_V_WORD, palette.accent, true);
+        setStyles(*this, {SCE_V_WORD2, SCE_V_WORD3, SCE_V_USER}, palette.info);
+        applyStyle(*this, SCE_V_NUMBER, palette.info);
+        applyStyle(*this, SCE_V_STRING, palette.positive);
+        setStyles(*this, {SCE_V_PREPROCESSOR, SCE_V_INPUT, SCE_V_OUTPUT, SCE_V_INOUT},
+                  palette.warning);
+        applyStyle(*this, SCE_V_STRINGEOL, palette.danger);
+    } else if (lexerName_ == QStringLiteral("vhdl")) {
+        setStyles(*this, {SCE_VHDL_COMMENT, SCE_VHDL_COMMENTLINEBANG, SCE_VHDL_BLOCK_COMMENT},
+                  palette.textMuted, false, true);
+        applyStyle(*this, SCE_VHDL_KEYWORD, palette.accent, true);
+        setStyles(*this,
+                  {SCE_VHDL_STDOPERATOR, SCE_VHDL_STDFUNCTION, SCE_VHDL_STDPACKAGE,
+                   SCE_VHDL_STDTYPE, SCE_VHDL_USERWORD},
+                  palette.info);
+        applyStyle(*this, SCE_VHDL_ATTRIBUTE, palette.warning);
+        applyStyle(*this, SCE_VHDL_NUMBER, palette.info);
+        applyStyle(*this, SCE_VHDL_STRING, palette.positive);
+        applyStyle(*this, SCE_VHDL_STRINGEOL, palette.danger);
+    } else if (lexerName_ == QStringLiteral("caml")) {
+        setStyles(*this,
+                  {SCE_CAML_COMMENT, SCE_CAML_COMMENT1, SCE_CAML_COMMENT2, SCE_CAML_COMMENT3},
+                  palette.textMuted, false, true);
+        applyStyle(*this, SCE_CAML_KEYWORD, palette.accent, true);
+        setStyles(*this, {SCE_CAML_KEYWORD2, SCE_CAML_KEYWORD3, SCE_CAML_TAGNAME},
+                  palette.info);
+        applyStyle(*this, SCE_CAML_NUMBER, palette.info);
+        setStyles(*this, {SCE_CAML_STRING, SCE_CAML_CHAR}, palette.positive);
+        applyStyle(*this, SCE_CAML_LINENUM, palette.warning);
+    } else if (lexerName_ == QStringLiteral("fsharp")) {
+        setStyles(*this, {SCE_FSHARP_COMMENT, SCE_FSHARP_COMMENTLINE}, palette.textMuted, false,
+                  true);
+        applyStyle(*this, SCE_FSHARP_KEYWORD, palette.accent, true);
+        setStyles(*this,
+                  {SCE_FSHARP_KEYWORD2, SCE_FSHARP_KEYWORD3, SCE_FSHARP_KEYWORD4,
+                   SCE_FSHARP_KEYWORD5},
+                  palette.info);
+        applyStyle(*this, SCE_FSHARP_NUMBER, palette.info);
+        setStyles(*this,
+                  {SCE_FSHARP_STRING, SCE_FSHARP_CHARACTER, SCE_FSHARP_VERBATIM,
+                   SCE_FSHARP_QUOTATION, SCE_FSHARP_FORMAT_SPEC},
+                  palette.positive);
+        setStyles(*this, {SCE_FSHARP_PREPROCESSOR, SCE_FSHARP_ATTRIBUTE}, palette.warning);
+    } else if (lexerName_ == QStringLiteral("gdscript")) {
+        setStyles(*this, {SCE_GD_COMMENTLINE, SCE_GD_COMMENTBLOCK}, palette.textMuted, false,
+                  true);
+        setStyles(*this, {SCE_GD_WORD, SCE_GD_WORD2}, palette.accent, true);
+        applyStyle(*this, SCE_GD_NUMBER, palette.info);
+        setStyles(*this, {SCE_GD_STRING, SCE_GD_CHARACTER, SCE_GD_TRIPLE, SCE_GD_TRIPLEDOUBLE},
+                  palette.positive);
+        setStyles(*this, {SCE_GD_CLASSNAME, SCE_GD_FUNCNAME}, palette.info, true);
+        setStyles(*this, {SCE_GD_ANNOTATION, SCE_GD_NODEPATH}, palette.warning);
+        applyStyle(*this, SCE_GD_STRINGEOL, palette.danger);
     }
 }
 

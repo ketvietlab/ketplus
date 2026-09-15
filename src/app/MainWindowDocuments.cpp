@@ -1,6 +1,7 @@
 #include "app/MainWindow.h"
 
 #include "app/SettingsDialog.h"
+#include "editor/EditorSplitPane.h"
 #include "editor/EditorWidget.h"
 #include "git/GitChangesPanel.h"
 #include "git/GitDiffView.h"
@@ -148,10 +149,9 @@ bool MainWindow::saveEditor(EditorWidget* editor, const bool choosePath) {
     rememberRecentFile(path);
     editor->configureLexerForPath(path);
     editor->applyTheme(theme_.palette());
-    if (editor == splitSource_ && splitEditor_ != nullptr) {
+    if (splitPane_ != nullptr && editor == splitSource_) {
         // Save As may pick a new lexer, so refresh the split view's styles.
-        splitEditor_->shareDocumentWith(*editor);
-        splitEditor_->applyTheme(theme_.palette());
+        splitPane_->refreshCurrentSource();
     }
     updateTabTitle(editor);
     updateMarkdownPreview();
@@ -194,8 +194,8 @@ bool MainWindow::closeTab(const int index, const bool createReplacement) {
         return false;
     }
 
-    if (editor != nullptr && editor == splitSource_) {
-        closeSplit();
+    if (editor != nullptr && splitPane_ != nullptr) {
+        splitPane_->removeSource(editor);
     }
     if (editor != nullptr && !editor->document().isUntitled()) {
         const QString path = editor->document().filePath();
@@ -268,7 +268,7 @@ void MainWindow::showTabContextMenu(const QPoint& position) {
     closeOthersAction->setEnabled(tabs_->count() > 1);
 
     QAction* selected = menu.exec(tabs_->tabBar()->mapToGlobal(position));
-    if (selected == previewAction) {
+    if (selected != nullptr && selected == previewAction) {
         tabs_->setCurrentIndex(index);
         setMarkdownPreviewVisible(previewAction->isChecked());
     } else if (selected != nullptr && selected == splitRightAction) {
@@ -300,19 +300,42 @@ void MainWindow::showEditorContextMenu(EditorWidget* editor, const QPoint& posit
     menu.addSeparator();
     menu.addAction(selectAllAction_);
     menu.addSeparator();
-    auto* previewAction = addMarkdownPreviewContextAction(menu, editor);
+    // The split view edits its source tab's document, so split from that tab.
+    auto* source = editor == splitEditor_ && splitSource_ != nullptr ? splitSource_ : editor;
+    auto* splitRightAction = menu.addAction(QStringLiteral("Split Right"));
+    splitRightAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+\\")));
+    auto* splitDownAction = menu.addAction(QStringLiteral("Split Down"));
+    splitDownAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+K, Ctrl+\\")));
+    if (splitPane_ != nullptr) {
+        menu.addAction(closeSplitAction_);
+    }
+    QAction* previewAction = nullptr;
+    if (editor->syntaxName() == QStringLiteral("markdown")) {
+        menu.addSeparator();
+        previewAction = addMarkdownPreviewContextAction(menu, editor);
+    }
 
     QAction* selected = menu.exec(editor->mapToGlobal(position));
+    if (selected == nullptr) {
+        return;
+    }
     if (selected == previewAction) {
         setMarkdownPreviewVisible(previewAction->isChecked());
+    } else if (selected == splitRightAction) {
+        openSplit(source, Qt::Horizontal);
+    } else if (selected == splitDownAction) {
+        openSplit(source, Qt::Vertical);
     }
 }
 
 QAction* MainWindow::addMarkdownPreviewContextAction(QMenu& menu, EditorWidget* editor) {
+    // Only Markdown documents offer a preview.
+    if (editor == nullptr || editor->syntaxName() != QStringLiteral("markdown")) {
+        return nullptr;
+    }
     auto* action = menu.addAction(QStringLiteral("Markdown Preview"));
     action->setCheckable(true);
     action->setChecked(markdownPreview_ != nullptr && markdownPreview_->isVisible());
-    action->setEnabled(editor != nullptr && editor->syntaxName() == QStringLiteral("markdown"));
     action->setShortcut(markdownPreviewAction_->shortcut());
     return action;
 }
@@ -390,6 +413,9 @@ EditorWidget* MainWindow::createEditor() {
 }
 
 void MainWindow::updateTabTitle(EditorWidget* editor) {
+    if (splitPane_ != nullptr) {
+        splitPane_->updateSourceTitle(editor);
+    }
     const int index = tabs_->indexOf(editor);
     if (index < 0) {
         return;
@@ -474,7 +500,8 @@ void MainWindow::enforceTabResourcePolicy() {
         }
         ++residentCount;
         residentBytes += editor->residentBytes();
-        if (editor != activeEditor && editor != splitSource_ && !editor->document().isUntitled() &&
+        const bool shownInSplit = splitPane_ != nullptr && splitPane_->containsSource(editor);
+        if (editor != activeEditor && !shownInSplit && !editor->document().isUntitled() &&
             !editor->document().isModified()) {
             candidates.append(editor);
         }
@@ -690,9 +717,18 @@ void MainWindow::openSplit(EditorWidget* source, const Qt::Orientation orientati
         return;
     }
 
-    if (splitEditor_ == nullptr) {
-        splitEditor_ = new EditorWidget(documentSplit_);
+    const bool created = splitPane_ == nullptr;
+    if (created) {
+        splitPane_ = new EditorSplitPane(documentSplit_);
+        splitEditor_ = splitPane_->editor();
         splitEditor_->setEditorSettings(appearanceSettings_.editor);
+        connect(splitPane_, &EditorSplitPane::currentSourceChanged, this,
+                [this](EditorWidget* current) {
+                    splitSource_ = current;
+                    splitEditor_->applyTheme(theme_.palette());
+                    updateEditorActions();
+                });
+        connect(splitPane_, &EditorSplitPane::emptied, this, &MainWindow::closeSplit);
         syncEditorZoom(splitEditor_);
         connect(splitEditor_, &EditorWidget::contextMenuRequested, this,
                 [this](const QPoint& position) { showEditorContextMenu(splitEditor_, position); });
@@ -709,29 +745,30 @@ void MainWindow::openSplit(EditorWidget* source, const Qt::Orientation orientati
                         trackNavigation(splitEditor_);
                     }
                 });
-        documentSplit_->addWidget(splitEditor_);
+        documentSplit_->addWidget(splitPane_);
     }
 
-    splitSource_ = source;
     splitEditor_->setViewOptions(viewOptions_);
-    splitEditor_->shareDocumentWith(*source);
-    splitEditor_->applyTheme(theme_.palette());
-    documentSplit_->setOrientation(orientation);
-    splitEditor_->show();
-    const int extent =
-        orientation == Qt::Horizontal ? documentSplit_->width() : documentSplit_->height();
-    documentSplit_->setSizes({extent / 2, extent - extent / 2});
+    splitPane_->showSource(source);
+    splitPane_->show();
+    if (created || documentSplit_->orientation() != orientation) {
+        documentSplit_->setOrientation(orientation);
+        const int extent =
+            orientation == Qt::Horizontal ? documentSplit_->width() : documentSplit_->height();
+        documentSplit_->setSizes({extent / 2, extent - extent / 2});
+    }
     closeSplitAction_->setEnabled(true);
     splitEditor_->setFocus();
 }
 
 void MainWindow::closeSplit() {
-    if (splitEditor_ == nullptr) {
+    if (splitPane_ == nullptr) {
         return;
     }
     // Deleting the view releases its reference to the shared Scintilla document.
-    splitEditor_->hide();
-    splitEditor_->deleteLater();
+    splitPane_->hide();
+    splitPane_->deleteLater();
+    splitPane_ = nullptr;
     splitEditor_ = nullptr;
     splitSource_ = nullptr;
     splitFocused_ = false;

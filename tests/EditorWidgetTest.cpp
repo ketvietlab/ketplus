@@ -1,12 +1,16 @@
+#include "editor/EditorSplitPane.h"
 #include "editor/EditorWidget.h"
 #include "ui/Theme.h"
 
 #include <SciLexer.h>
+#include <Scintilla.h>
 #include <ScintillaMessages.h>
 #include <QColor>
 #include <QContextMenuEvent>
 #include <QFile>
 #include <QSettings>
+#include <QSignalSpy>
+#include <QTabBar>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -39,6 +43,8 @@ class EditorWidgetTest final : public QObject {
     void highlightsGenericCode();
     void highlightsPopularLanguages_data();
     void highlightsPopularLanguages();
+    void colorsCssInsideHtmlStyleBlocks();
+    void splitPaneSwitchesBetweenSources();
     void colorsYamlValuesOrange();
     void usesLargeFileModeAtThreshold();
     void hibernatesAndRestoresCleanFiles();
@@ -215,6 +221,15 @@ void EditorWidgetTest::selectsSyntaxFromPath_data() {
     QTest::newRow("make") << QStringLiteral("Makefile") << QStringLiteral("makefile");
     QTest::newRow("properties") << QStringLiteral(".env") << QStringLiteral("properties");
     QTest::newRow("diff") << QStringLiteral("change.patch") << QStringLiteral("diff");
+    QTest::newRow("scss") << QStringLiteral("theme.scss") << QStringLiteral("scss");
+    QTest::newRow("perl") << QStringLiteral("tool.pl") << QStringLiteral("perl");
+    QTest::newRow("powershell") << QStringLiteral("setup.ps1") << QStringLiteral("powershell");
+    QTest::newRow("haskell") << QStringLiteral("Main.hs") << QStringLiteral("haskell");
+    QTest::newRow("clojure") << QStringLiteral("core.clj") << QStringLiteral("lisp");
+    QTest::newRow("latex") << QStringLiteral("paper.tex") << QStringLiteral("latex");
+    QTest::newRow("scala") << QStringLiteral("App.scala") << QStringLiteral("scala");
+    QTest::newRow("objective-c") << QStringLiteral("View.mm") << QStringLiteral("objective-c");
+    QTest::newRow("gemfile") << QStringLiteral("Gemfile") << QStringLiteral("ruby");
 }
 
 void EditorWidgetTest::selectsSyntaxFromPath() {
@@ -269,6 +284,72 @@ void EditorWidgetTest::highlightsPopularLanguages_data() {
                           << SCE_DART_KW_PRIMARY;
     QTest::newRow("zig") << QStringLiteral("main.zig") << QByteArray("const value = 1;")
                          << SCE_ZIG_KW_PRIMARY;
+    QTest::newRow("perl") << QStringLiteral("tool.pl") << QByteArray("my $value = 1;")
+                          << SCE_PL_WORD;
+    QTest::newRow("powershell") << QStringLiteral("run.ps1") << QByteArray("function Get-Value {}")
+                                << SCE_POWERSHELL_KEYWORD;
+    QTest::newRow("haskell") << QStringLiteral("Main.hs") << QByteArray("module Main where")
+                             << SCE_HA_KEYWORD;
+    QTest::newRow("pascal") << QStringLiteral("app.pas") << QByteArray("begin end.")
+                            << SCE_PAS_WORD;
+    QTest::newRow("julia") << QStringLiteral("main.jl") << QByteArray("function f() end")
+                           << SCE_JULIA_KEYWORD1;
+}
+
+void EditorWidgetTest::colorsCssInsideHtmlStyleBlocks() {
+    const QByteArray code =
+        "<style>\n:root { --app: #15181d; }\n.panel { color: red; }\n</style>\n<p>color: red;</p>\n";
+    ketplus::ThemePalette palette;
+    palette.info = QStringLiteral("#3B82F6");
+    palette.warning = QStringLiteral("#E5A93C");
+    palette.positive = QStringLiteral("#22C55E");
+    ketplus::EditorWidget editor;
+    editor.resize(600, 300);
+    editor.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&editor));
+    editor.setText(code);
+    editor.configureLexerForPath(QStringLiteral("index.html"));
+    editor.applyTheme(palette);
+
+    const auto valueAt = [&editor](const qsizetype position) {
+        return editor.send(message(Scintilla::Message::IndicatorValueAt), INDICATOR_CONTAINER + 2,
+                           static_cast<sptr_t>(position));
+    };
+    const auto colored = [](const QString& color) {
+        return static_cast<sptr_t>(scintillaColor(color) | SC_INDICVALUEBIT);
+    };
+    QCOMPARE(valueAt(code.indexOf("--app")), colored(palette.info));
+    QCOMPARE(valueAt(code.indexOf("#15181d")), colored(palette.warning));
+    QCOMPARE(valueAt(code.indexOf(".panel")), colored(palette.info));
+    QCOMPARE(valueAt(code.indexOf("red")), colored(palette.positive));
+    // Text outside the <style> block keeps the HTML lexer colors.
+    QCOMPARE(valueAt(code.lastIndexOf("red")), 0);
+}
+
+void EditorWidgetTest::splitPaneSwitchesBetweenSources() {
+    ketplus::EditorWidget first;
+    first.setText("first");
+    ketplus::EditorWidget second;
+    second.setText("second");
+
+    ketplus::EditorSplitPane pane;
+    QSignalSpy emptied(&pane, &ketplus::EditorSplitPane::emptied);
+    pane.showSource(&first);
+    pane.showSource(&second);
+    QCOMPARE(pane.tabBar()->count(), 2);
+    QCOMPARE(pane.currentSource(), &second);
+    QCOMPARE(pane.editor()->text(), QByteArray("second"));
+
+    pane.tabBar()->setCurrentIndex(0);
+    QCOMPARE(pane.currentSource(), &first);
+    QCOMPARE(pane.editor()->text(), QByteArray("first"));
+
+    pane.removeSource(&first);
+    QCOMPARE(pane.currentSource(), &second);
+    QCOMPARE(pane.editor()->text(), QByteArray("second"));
+    QCOMPARE(emptied.count(), 0);
+    pane.removeSource(&second);
+    QCOMPARE(emptied.count(), 1);
 }
 
 void EditorWidgetTest::highlightsPopularLanguages() {

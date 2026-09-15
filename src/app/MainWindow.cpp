@@ -1,6 +1,7 @@
 #include "app/MainWindow.h"
 
 #include "app/SettingsDialog.h"
+#include "editor/EditorSplitPane.h"
 #include "editor/EditorWidget.h"
 #include "git/GitChangesPanel.h"
 #include "git/GitDiffView.h"
@@ -101,9 +102,25 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     statusBar()->showMessage(QStringLiteral("Ready"));
     gitButton_->setProperty("kvRole", QStringLiteral("statusGit"));
     gitButton_->setPopupMode(QToolButton::InstantPopup);
-    gitButton_->setMenu(gitMenu_);
-    gitButton_->setToolTip(QStringLiteral("Git repository and worktrees"));
-    gitButton_->setAccessibleName(QStringLiteral("Git repository and worktrees"));
+    // The status bar keeps Git status actions; switching worktrees stays in the Git menu.
+    auto* statusGitMenu = new QMenu(this);
+    connect(statusGitMenu, &QMenu::aboutToShow, this, [this, statusGitMenu] {
+        updateGitActions();
+        git_->scheduleRefresh(0);
+        statusGitMenu->clear();
+        for (QAction* action : gitMenu_->actions()) {
+            if (action != worktreeMenu_->menuAction()) {
+                statusGitMenu->addAction(action);
+            }
+        }
+        const auto actions = statusGitMenu->actions();
+        if (!actions.isEmpty() && actions.last()->isSeparator()) {
+            statusGitMenu->removeAction(actions.last());
+        }
+    });
+    gitButton_->setMenu(statusGitMenu);
+    gitButton_->setToolTip(QStringLiteral("Git repository"));
+    gitButton_->setAccessibleName(QStringLiteral("Git repository"));
     gitButton_->hide();
     statusBar()->addPermanentWidget(gitButton_);
     for (QLabel* label : {documentStateLabel_, cursorPositionLabel_}) {
@@ -176,7 +193,7 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
         if (now == nullptr) {
             return;
         }
-        if (splitEditor_ != nullptr && (now == splitEditor_ || splitEditor_->isAncestorOf(now))) {
+        if (splitPane_ != nullptr && (now == splitPane_ || splitPane_->isAncestorOf(now))) {
             splitFocused_ = true;
             updateEditorActions();
         } else if (now == tabs_ || tabs_->isAncestorOf(now)) {
