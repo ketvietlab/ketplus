@@ -101,6 +101,8 @@ class EditorWidget final : public ScintillaEditBase {
     [[nodiscard]] int lineCount() const;
     [[nodiscard]] int currentLine() const;
     void goToLine(int line);
+    [[nodiscard]] sptr_t caretPosition() const;
+    void setCaretPosition(sptr_t position);
     bool jumpToMatchingBrace();
     void toggleBookmark();
     [[nodiscard]] bool hasBookmark(int line) const;

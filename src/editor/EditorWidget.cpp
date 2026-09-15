@@ -785,6 +785,19 @@ void EditorWidget::goToLine(const int line) {
     send(message(Scintilla::Message::GotoLine), static_cast<uptr_t>(target));
 }
 
+sptr_t EditorWidget::caretPosition() const {
+    return send(message(Scintilla::Message::GetCurrentPos));
+}
+
+void EditorWidget::setCaretPosition(const sptr_t position) {
+    const sptr_t target =
+        std::clamp<sptr_t>(position, 0, send(message(Scintilla::Message::GetLength)));
+    send(message(Scintilla::Message::EnsureVisibleEnforcePolicy),
+         static_cast<uptr_t>(
+             send(message(Scintilla::Message::LineFromPosition), static_cast<uptr_t>(target))));
+    send(message(Scintilla::Message::GotoPos), static_cast<uptr_t>(target));
+}
+
 bool EditorWidget::jumpToMatchingBrace() {
     const auto caret = send(message(Scintilla::Message::GetCurrentPos));
     sptr_t brace = -1;

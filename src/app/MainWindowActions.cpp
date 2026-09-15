@@ -279,6 +279,30 @@ void MainWindow::createActions() {
     connect(editMenu, &QMenu::aboutToShow, this, &MainWindow::updateEditorActions);
 
     auto* goMenu = menuBar()->addMenu(QStringLiteral("&Go"));
+    commandPaletteAction_ = goMenu->addAction(QStringLiteral("Command &Palette…"));
+    commandPaletteAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+P")));
+    connect(commandPaletteAction_, &QAction::triggered, this, &MainWindow::showCommandPalette);
+    auto* goToFileAction = goMenu->addAction(QStringLiteral("Go to &File…"));
+    goToFileAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+P")));
+    connect(goToFileAction, &QAction::triggered, this, &MainWindow::showGoToFile);
+    auto* goToSymbolAction = goMenu->addAction(QStringLiteral("Go to &Symbol…"));
+    goToSymbolAction->setShortcuts(
+        {QKeySequence(QStringLiteral("Ctrl+Shift+O")), QKeySequence(QStringLiteral("Ctrl+R"))});
+    connect(goToSymbolAction, &QAction::triggered, this, &MainWindow::showGoToSymbol);
+    goMenu->addSeparator();
+    backAction_ = goMenu->addAction(QStringLiteral("Bac&k"));
+    forwardAction_ = goMenu->addAction(QStringLiteral("For&ward"));
+#ifdef Q_OS_MACOS
+    backAction_->setShortcut(QKeySequence(QStringLiteral("Meta+-")));
+    forwardAction_->setShortcut(QKeySequence(QStringLiteral("Meta+Shift+-")));
+#else
+    backAction_->setShortcut(QKeySequence(QStringLiteral("Alt+Left")));
+    forwardAction_->setShortcut(QKeySequence(QStringLiteral("Alt+Right")));
+#endif
+    connect(backAction_, &QAction::triggered, this, [this] { navigateHistory(true); });
+    connect(forwardAction_, &QAction::triggered, this, [this] { navigateHistory(false); });
+    updateNavigationActions();
+    goMenu->addSeparator();
     auto* goToLineAction = goMenu->addAction(QStringLiteral("Go to &Line…"));
     goToLineAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+L")));
     connect(goToLineAction, &QAction::triggered, this, &MainWindow::goToLine);

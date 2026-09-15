@@ -369,9 +369,10 @@ EditorWidget* MainWindow::createEditor() {
     });
     connect(editor, &EditorWidget::cursorPositionChanged, this,
             [this, editor](const int line, const int column) {
-                if (currentEditor() == editor) {
+                if (activeEditor() == editor) {
                     cursorPositionLabel_->setText(
                         QStringLiteral("Ln %1, Col %2").arg(line).arg(column));
+                    trackNavigation(editor);
                 }
             });
     connect(editor, &EditorWidget::editorStateChanged, this, [this, editor] {
@@ -664,6 +665,7 @@ void MainWindow::goToLine() {
         QStringLiteral("Line number (1–%1):").arg(editor->lineCount()), editor->currentLine(), 1,
         editor->lineCount(), 1, &accepted);
     if (accepted) {
+        pushNavigationLocation(locationOf(editor));
         editor->goToLine(line);
         editor->setFocus();
     }
@@ -702,6 +704,7 @@ void MainWindow::openSplit(EditorWidget* source, const Qt::Orientation orientati
                     if (activeEditor() == splitEditor_) {
                         cursorPositionLabel_->setText(
                             QStringLiteral("Ln %1, Col %2").arg(line).arg(column));
+                        trackNavigation(splitEditor_);
                     }
                 });
         documentSplit_->addWidget(splitEditor_);
