@@ -17,6 +17,8 @@ struct WorkspaceSearchOptions final {
     bool regex{false};
     // Comma-separated globs such as "*.cpp, src/**"; empty searches every file.
     QString includePatterns;
+
+    bool operator==(const WorkspaceSearchOptions&) const = default;
 };
 
 struct WorkspaceSearchMatch final {
@@ -58,7 +60,7 @@ inline constexpr int maximumSearchPreviewLength = 300;
 
 using WorkspaceSearchFileCallback = std::function<void(const WorkspaceSearchFileResult&)>;
 
-// Scans workspace files from disk without any content index. `openBuffers` maps cleaned
+// Scans workspace files from disk without any content index. `openBuffers` maps canonical
 // absolute paths to unsaved editor text that replaces the file on disk. Safe to call from
 // a worker thread; `onFile` runs on that thread.
 [[nodiscard]] WorkspaceSearchSummary searchWorkspace(

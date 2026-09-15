@@ -1,9 +1,19 @@
+#include "core/Document.h"
 #include "editor/EditorWidget.h"
+#include "editor/SymbolExtractor.h"
 #include "ui/Theme.h"
+#include "workspace/FuzzyMatcher.h"
+#include "workspace/WorkspaceFileIndex.h"
+#include "workspace/WorkspaceSearch.h"
+
+#include <ScintillaMessages.h>
 
 #include <QApplication>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
+#include <QTemporaryDir>
 #include <QTextStream>
 
 #include <algorithm>
@@ -111,6 +121,23 @@ int main(int argc, char* argv[]) {
         }),
         15, oneMebibyte.size());
 
+    // Same work with code folding off, to separate fold-level cost from theme cost.
+    auto foldingOff = editor.viewOptions();
+    foldingOff.codeFolding = false;
+    editor.setViewOptions(foldingOff);
+    printMetric(
+        output, QStringLiteral("apply_typography_no_folding_1_mib"),
+        measure(15, [&] {
+            useAlternateTypography = !useAlternateTypography;
+            typography.fontSizePixels = useAlternateTypography ? 14 : 13;
+            typography.lineHeightPixels = useAlternateTypography ? 25 : 24;
+            editor.setEditorSettings(typography);
+            editor.applyTheme(palette);
+        }),
+        15, oneMebibyte.size());
+    foldingOff.codeFolding = true;
+    editor.setViewOptions(foldingOff);
+
     editor.setText(tenMebibytes);
     printMetric(output, QStringLiteral("set_text_10_mib"),
                 measure(9, [&] { editor.setText(tenMebibytes); }), 9, tenMebibytes.size());
@@ -139,6 +166,132 @@ int main(int argc, char* argv[]) {
     printMetric(output, QStringLiteral("replace_all_10_mib"), replaceSample, 5,
                 tenMebibytes.size());
     output << "DETAIL replace_all_matches=" << replacementCount << '\n';
+
+    // Features added after 0.1.6. Baseline builds do not have these metrics.
+    editor.setText(oneMebibyte);
+    printMetric(output, QStringLiteral("configure_lexer_folding_1_mib"),
+                measure(9, [&] { editor.configureLexerForPath(QStringLiteral("benchmark.cpp")); }),
+                9, oneMebibyte.size());
+
+    int highlightCount = 0;
+    printMetric(output, QStringLiteral("highlight_matches_1_mib"), measure(9, [&] {
+                    highlightCount = editor.highlightMatches(
+                        QStringLiteral("alpha"), ketplus::SearchOptions{.matchCase = true});
+                }),
+                9, oneMebibyte.size());
+    output << "DETAIL highlight_matches_capped=" << highlightCount << '\n';
+
+    // Selection highlights only scan visible lines, so give the editor a real viewport.
+    editor.resize(1200, 900);
+    editor.show();
+    QApplication::processEvents();
+    editor.setCaretPosition(0);
+    editor.send(static_cast<unsigned int>(Scintilla::Message::SetSel), 6, 11);
+    int selectionMatches = 0;
+    printMetric(output, QStringLiteral("selection_highlight_1_mib"),
+                measure(15, [&] { selectionMatches = editor.highlightSelectionMatches(); }), 15,
+                oneMebibyte.size());
+    output << "DETAIL selection_matches_visible=" << selectionMatches
+           << " lines_on_screen="
+           << editor.send(static_cast<unsigned int>(Scintilla::Message::LinesOnScreen)) << '\n';
+    editor.hide();
+
+    editor.setCaretPosition(oneMebibyte.size() / 2);
+    editor.send(static_cast<unsigned int>(Scintilla::Message::AddText), 3,
+                reinterpret_cast<sptr_t>("alp"));
+    printMetric(output, QStringLiteral("word_completion_1_mib"), measure(15, [&] {
+                    editor.showWordCompletions(true);
+                    editor.send(static_cast<unsigned int>(Scintilla::Message::AutoCCancel));
+                }),
+                15, oneMebibyte.size());
+
+    printMetric(output, QStringLiteral("sort_lines_1_mib"),
+                measure(5, [&] { editor.sortLines(true); }, [&] { editor.setText(oneMebibyte); }),
+                5, oneMebibyte.size());
+    printMetric(output, QStringLiteral("toggle_comment_1_mib"), measure(
+                    5, [&] { editor.toggleComment(); },
+                    [&] {
+                        editor.setText(oneMebibyte);
+                        editor.configureLexerForPath(QStringLiteral("benchmark.cpp"));
+                        editor.selectAllText();
+                    }),
+                5, oneMebibyte.size());
+    printMetric(output, QStringLiteral("trim_trailing_whitespace_1_mib"),
+                measure(5, [&] { editor.trimTrailingWhitespace(); },
+                        [&] { editor.setText(oneMebibyte); }),
+                5, oneMebibyte.size());
+
+    int symbolCount = 0;
+    printMetric(output, QStringLiteral("extract_symbols_1_mib"), measure(9, [&] {
+                    symbolCount = static_cast<int>(
+                        ketplus::extractDocumentSymbols(oneMebibyte, QStringLiteral("c-cpp")).size());
+                }),
+                9, oneMebibyte.size());
+    output << "DETAIL symbols=" << symbolCount << '\n';
+
+    printMetric(output, QStringLiteral("detect_encoding_10_mib"),
+                measure(9, [&] { static_cast<void>(ketplus::Document::detectEncoding(tenMebibytes)); }),
+                9, tenMebibytes.size());
+
+    QStringList paths;
+    for (int index = 0; index < 50000; ++index) {
+        paths.append(QStringLiteral("src/module%1/component%2/SourceFile%3.cpp")
+                         .arg(index % 40)
+                         .arg(index % 400)
+                         .arg(index));
+    }
+    int fuzzyMatches = 0;
+    printMetric(output, QStringLiteral("fuzzy_match_50k_paths"), measure(9, [&] {
+                    fuzzyMatches = 0;
+                    for (const QString& path : paths) {
+                        fuzzyMatches += ketplus::fuzzyMatchScore(u"cmpsrc123", path) >= 0 ? 1 : 0;
+                    }
+                }),
+                9);
+    output << "DETAIL fuzzy_matches=" << fuzzyMatches << '\n';
+
+    QTemporaryDir workspace;
+    if (workspace.isValid()) {
+        constexpr int workspaceFileCount = 2000;
+        constexpr qsizetype workspaceFileBytes = 20 * 1024;
+        const QByteArray fileContent = makeDocument(workspaceFileBytes);
+        const QDir root(workspace.path());
+        for (int index = 0; index < workspaceFileCount; ++index) {
+            const QString relative = QStringLiteral("dir%1/file%2.ts").arg(index % 50).arg(index);
+            root.mkpath(QFileInfo(root.filePath(relative)).path());
+            QFile file(root.filePath(relative));
+            if (file.open(QIODevice::WriteOnly)) {
+                file.write(fileContent);
+            }
+        }
+        const qsizetype workspaceBytes = workspaceFileCount * workspaceFileBytes;
+
+        printMetric(output, QStringLiteral("collect_workspace_files_2k"),
+                    measure(5, [&] { static_cast<void>(ketplus::collectWorkspaceFiles(root.path())); }),
+                    5);
+
+        const ketplus::WorkspaceSearchOptions options{.query = QStringLiteral("gamma"),
+                                                      .matchCase = true};
+        QString error;
+        const QRegularExpression expression = ketplus::buildSearchExpression(options, &error);
+        ketplus::WorkspaceSearchSummary summary;
+        printMetric(output, QStringLiteral("search_workspace_2k_files_40_mib"), measure(3, [&] {
+                        summary = ketplus::searchWorkspace(root.path(), options, expression, {},
+                                                           nullptr, {});
+                    }),
+                    3, workspaceBytes);
+        output << "DETAIL workspace_search_files=" << summary.fileCount
+               << " matches=" << summary.matchCount << " truncated=" << summary.truncated << '\n';
+
+        const ketplus::WorkspaceSearchOptions rareOptions{.query = QStringLiteral("NOT_PRESENT_\\d+"),
+                                                          .regex = true};
+        const QRegularExpression rareExpression = ketplus::buildSearchExpression(rareOptions, &error);
+        printMetric(output, QStringLiteral("search_workspace_regex_no_match_40_mib"), measure(3, [&] {
+                        summary = ketplus::searchWorkspace(root.path(), rareOptions, rareExpression,
+                                                           {}, nullptr, {});
+                    }),
+                    3, workspaceBytes);
+    }
 
     return 0;
 }

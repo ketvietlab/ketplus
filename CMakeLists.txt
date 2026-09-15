@@ -276,7 +276,9 @@ endif()
 
 if(KETPLUS_CM_BUILD_BENCHMARKS)
     qt_add_executable(ketplus_editor_benchmark benchmarks/EditorBenchmark.cpp)
-    target_link_libraries(ketplus_editor_benchmark PRIVATE Qt6::Widgets ketplus_editor)
+    target_link_libraries(ketplus_editor_benchmark
+        PRIVATE Qt6::Widgets ketplus_editor ketplus_workspace
+    )
     ketplus_enable_warnings(ketplus_editor_benchmark)
 endif()
 

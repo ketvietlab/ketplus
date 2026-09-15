@@ -4,12 +4,31 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QStringDecoder>
+
+#include <utility>
 
 namespace ketplus {
 namespace {
 
 constexpr qsizetype binaryProbeBytes = 8192;
+
+// Returns the position and length of the next LF, CRLF or lone CR at or after `from`,
+// or {text size, 0} when the last line has no line break.
+std::pair<qsizetype, qsizetype> nextLineBreak(const QString& text, const qsizetype from) {
+    for (qsizetype index = from; index < text.size(); ++index) {
+        const QChar character = text.at(index);
+        if (character == u'\n') {
+            return {index, 1};
+        }
+        if (character == u'\r') {
+            const bool crlf = index + 1 < text.size() && text.at(index + 1) == u'\n';
+            return {index, crlf ? 2 : 1};
+        }
+    }
+    return {text.size(), 0};
+}
 
 QRegularExpression globToExpression(const QString& glob) {
     QString pattern;
@@ -54,22 +73,27 @@ QString expandReplacement(const QString& replacement, const QRegularExpressionMa
     return expanded;
 }
 
-QString replaceInLine(const QString& line, const QRegularExpression& expression,
+QString replaceInLine(const QStringView line, const QRegularExpression& expression,
                       const QString& replacement, const bool regex, int* replacements) {
     QString result;
     qsizetype copiedUpTo = 0;
-    auto iterator = expression.globalMatch(line);
+    auto iterator = expression.globalMatchView(line);
     while (iterator.hasNext()) {
         const auto match = iterator.next();
-        result += QStringView(line).mid(copiedUpTo, match.capturedStart() - copiedUpTo);
+        // Search never lists empty matches, so replace must not touch them either;
+        // otherwise a pattern like "a*" would insert text between every character.
+        if (match.capturedLength() == 0) {
+            continue;
+        }
+        result += line.mid(copiedUpTo, match.capturedStart() - copiedUpTo);
         result += regex ? expandReplacement(replacement, match) : replacement;
         copiedUpTo = match.capturedEnd();
         ++*replacements;
     }
     if (copiedUpTo == 0 && result.isEmpty()) {
-        return line;
+        return line.toString();
     }
-    result += QStringView(line).mid(copiedUpTo);
+    result += line.mid(copiedUpTo);
     return result;
 }
 
@@ -127,20 +151,12 @@ QList<WorkspaceSearchMatch> searchText(const QString& text, const QRegularExpres
     QList<WorkspaceSearchMatch> matches;
     qsizetype lineStart = 0;
     int lineNumber = 0;
-    while (lineStart <= text.size() && matches.size() < maximumMatches) {
+    while (matches.size() < maximumMatches) {
         ++lineNumber;
-        qsizetype lineEnd = text.indexOf(u'\n', lineStart);
-        const bool lastLine = lineEnd < 0;
-        if (lastLine) {
-            lineEnd = text.size();
-        }
-        qsizetype contentEnd = lineEnd;
-        if (contentEnd > lineStart && text.at(contentEnd - 1) == u'\r') {
-            --contentEnd;
-        }
-
-        const QString line = text.mid(lineStart, contentEnd - lineStart);
-        auto iterator = expression.globalMatch(line);
+        const auto [breakAt, breakLength] = nextLineBreak(text, lineStart);
+        // Views avoid copying every line; only lines with matches allocate a preview.
+        const QStringView line = QStringView(text).mid(lineStart, breakAt - lineStart);
+        auto iterator = expression.globalMatchView(line);
         while (iterator.hasNext() && matches.size() < maximumMatches) {
             const auto match = iterator.next();
             if (match.capturedLength() == 0) {
@@ -148,12 +164,12 @@ QList<WorkspaceSearchMatch> searchText(const QString& text, const QRegularExpres
             }
             matches.append({lineNumber, static_cast<int>(match.capturedStart()),
                             static_cast<int>(match.capturedLength()),
-                            line.left(maximumSearchPreviewLength)});
+                            line.left(maximumSearchPreviewLength).toString()});
         }
-        if (lastLine) {
+        if (breakLength == 0) {
             break;
         }
-        lineStart = lineEnd + 1;
+        lineStart = breakAt + breakLength;
     }
     return matches;
 }
@@ -184,23 +200,14 @@ QString replaceInText(const QString& text, const QRegularExpression& expression,
     result.reserve(text.size());
     qsizetype lineStart = 0;
     while (true) {
-        qsizetype lineEnd = text.indexOf(u'\n', lineStart);
-        const bool lastLine = lineEnd < 0;
-        if (lastLine) {
-            lineEnd = text.size();
-        }
-        qsizetype contentEnd = lineEnd;
-        if (contentEnd > lineStart && text.at(contentEnd - 1) == u'\r') {
-            --contentEnd;
-        }
-        result += replaceInLine(text.mid(lineStart, contentEnd - lineStart), expression,
+        const auto [breakAt, breakLength] = nextLineBreak(text, lineStart);
+        result += replaceInLine(QStringView(text).mid(lineStart, breakAt - lineStart), expression,
                                 replacement, regex, replacements);
-        result += QStringView(text).mid(contentEnd, lineEnd - contentEnd);
-        if (lastLine) {
+        if (breakLength == 0) {
             break;
         }
-        result += u'\n';
-        lineStart = lineEnd + 1;
+        result += QStringView(text).mid(breakAt, breakLength);
+        lineStart = breakAt + breakLength;
     }
     return result;
 }
@@ -217,7 +224,9 @@ WorkspaceSearchSummary searchWorkspace(const QString& rootPath,
     const WorkspaceFileList files =
         collectWorkspaceFiles(rootPath, defaultWorkspaceFileLimit, cancelled);
     summary.truncated = files.truncated;
-    const QDir root(rootPath);
+    // Canonical paths line up with the keys of `openBuffers` even through symlinks.
+    const QString canonicalRoot = QFileInfo(rootPath).canonicalFilePath();
+    const QDir root(canonicalRoot.isEmpty() ? rootPath : canonicalRoot);
 
     for (const QString& relativePath : files.relativePaths) {
         if (isCancelled()) {

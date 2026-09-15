@@ -110,6 +110,7 @@ void MainWindow::startWorkspaceSearch() {
     }
 
     cancelWorkspaceSearch();
+    lastSearchOptions_ = options;
     panel->clearResults();
     panel->setSearching(true);
     panel->setStatusText(QStringLiteral("Searching…"));
@@ -119,7 +120,7 @@ void MainWindow::startWorkspaceSearch() {
     for (int index = 0; index < tabs_->count(); ++index) {
         auto* editor = qobject_cast<EditorWidget*>(tabs_->widget(index));
         if (editor != nullptr && !editor->isHibernated() && !editor->document().isUntitled()) {
-            openBuffers.insert(QDir::cleanPath(editor->document().filePath()),
+            openBuffers.insert(comparablePath(editor->document().filePath()),
                                QString::fromUtf8(editor->text()));
         }
     }
@@ -211,7 +212,13 @@ void MainWindow::replaceInWorkspace() {
     if (paths.isEmpty() || panel->isSearching()) {
         return;
     }
-    const WorkspaceSearchOptions options = panel->options();
+    // Replace with exactly what produced the listed results, never a query edited since.
+    const WorkspaceSearchOptions options = lastSearchOptions_;
+    if (panel->options() != options) {
+        panel->setStatusText(
+            QStringLiteral("The search changed. Search again before replacing."));
+        return;
+    }
     QString error;
     const QRegularExpression expression = buildSearchExpression(options, &error);
     if (!error.isEmpty()) {

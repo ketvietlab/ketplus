@@ -199,6 +199,7 @@ class MainWindow final : public QMainWindow {
     QPointer<QThread> searchThread_;
     std::shared_ptr<std::atomic_bool> searchCancelled_;
     quint64 searchGeneration_{0};
+    WorkspaceSearchOptions lastSearchOptions_;
     QToolButton* gitButton_{nullptr};
     QTimer* highlightTimer_{nullptr};
     QSplitter* documentSplit_{nullptr};

@@ -93,11 +93,23 @@ void SearchViewTest::replacesTextLineByLine() {
              QStringLiteral("#12 12 #3 3\nnone"));
     QCOMPARE(replacements, 2);
 
-    const auto lineStart =
-        ketplus::buildSearchExpression({.query = QStringLiteral("^"), .regex = true}, &error);
-    QCOMPARE(ketplus::replaceInText(QStringLiteral("a\nb"), lineStart, QStringLiteral("> "), true,
-                                    &replacements),
-             QStringLiteral("> a\n> b"));
+    // Empty matches are never listed by search, so replace leaves them alone.
+    const auto emptyMatches =
+        ketplus::buildSearchExpression({.query = QStringLiteral("x*"), .regex = true}, &error);
+    QCOMPARE(ketplus::replaceInText(QStringLiteral("abc\nxx"), emptyMatches, QStringLiteral("-"),
+                                    true, &replacements),
+             QStringLiteral("abc\n-"));
+    QCOMPARE(replacements, 1);
+
+    // A lone CR is a line break too, and is written back unchanged.
+    const auto word = ketplus::buildSearchExpression({.query = QStringLiteral("two")}, &error);
+    QCOMPARE(ketplus::replaceInText(QStringLiteral("one\rtwo\r\ntwo"), word, QStringLiteral("2"),
+                                    false, &replacements),
+             QStringLiteral("one\r2\r\n2"));
+    const auto classicMac = ketplus::searchText(QStringLiteral("one\rtwo"), word, 10);
+    QCOMPARE(classicMac.size(), 1);
+    QCOMPARE(classicMac.first().line, 2);
+    QCOMPARE(classicMac.first().column, 0);
 }
 
 void SearchViewTest::filtersIncludePatterns() {
@@ -141,8 +153,10 @@ void SearchViewTest::searchesWorkspaceWithOpenBuffers() {
     QString error;
     const ketplus::WorkspaceSearchOptions options{.query = QStringLiteral("hello")};
     const auto expression = ketplus::buildSearchExpression(options, &error);
+    // Keys are canonical paths, as MainWindow builds them; macOS temp folders are symlinks.
     const QHash<QString, QString> buffers{
-        {QDir::cleanPath(root.absoluteFilePath(QStringLiteral("src/b.cpp"))), QStringLiteral("bye")}};
+        {QFileInfo(root.absoluteFilePath(QStringLiteral("src/b.cpp"))).canonicalFilePath(),
+         QStringLiteral("bye")}};
 
     QStringList found;
     const auto summary = ketplus::searchWorkspace(
