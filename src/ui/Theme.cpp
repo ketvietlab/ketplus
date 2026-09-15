@@ -450,7 +450,13 @@ QLabel[kvRole="status"] {
     font-size: 11px;
 }
 
-QToolButton[kvRole="statusGit"] {
+QToolButton[kvRole="statusButton"]::menu-indicator {
+    image: none;
+    width: 0;
+}
+
+QToolButton[kvRole="statusGit"],
+QToolButton[kvRole="statusButton"] {
     min-width: 0;
     min-height: 22px;
     max-height: 22px;
@@ -465,7 +471,9 @@ QToolButton[kvRole="statusGit"] {
 }
 
 QToolButton[kvRole="statusGit"]:hover,
-QToolButton[kvRole="statusGit"]:pressed {
+QToolButton[kvRole="statusGit"]:pressed,
+QToolButton[kvRole="statusButton"]:hover,
+QToolButton[kvRole="statusButton"]:pressed {
     background: {{surfaceHover}};
     color: {{textMain}};
 }

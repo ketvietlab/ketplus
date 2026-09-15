@@ -1,5 +1,7 @@
 #include "app/MainWindow.h"
 
+#include "workspace/SearchPanel.h"
+
 #include "app/SettingsDialog.h"
 #include "editor/EditorWidget.h"
 #include "git/GitChangesPanel.h"
@@ -164,6 +166,11 @@ void MainWindow::setExplorerVisible(const bool visible) {
         if (gitChanges_ != nullptr) {
             gitChanges_->hide();
         }
+        if (searchPanel_ != nullptr) {
+            searchPanel_->hide();
+            const QSignalBlocker searchBlocker(searchPanelAction_);
+            searchPanelAction_->setChecked(false);
+        }
         explorer->show();
         QList<int> sizes(workspaceSplit_->count(), 0);
         sizes[workspaceSplit_->indexOf(explorer)] = 260;
@@ -210,6 +217,11 @@ void MainWindow::setSourceControlVisible(const bool visible) {
         auto* changes = ensureGitChanges();
         if (explorer_ != nullptr) {
             explorer_->hide();
+        }
+        if (searchPanel_ != nullptr) {
+            searchPanel_->hide();
+            const QSignalBlocker searchBlocker(searchPanelAction_);
+            searchPanelAction_->setChecked(false);
         }
         changes->show();
         QList<int> sizes(workspaceSplit_->count(), 0);

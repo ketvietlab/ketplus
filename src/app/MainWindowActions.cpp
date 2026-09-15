@@ -364,6 +364,11 @@ void MainWindow::createActions() {
 
     viewMenu->addAction(sourceControlAction_);
 
+    searchPanelAction_ = viewMenu->addAction(QStringLiteral("Search in Files"));
+    searchPanelAction_->setCheckable(true);
+    searchPanelAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+F")));
+    connect(searchPanelAction_, &QAction::toggled, this, &MainWindow::setSearchPanelVisible);
+
     auto* focusExplorerAction = viewMenu->addAction(QStringLiteral("Focus Explorer"));
     focusExplorerAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+E")));
     connect(focusExplorerAction, &QAction::triggered, this, &MainWindow::focusExplorer);
@@ -483,6 +488,12 @@ void MainWindow::createActions() {
             setFullScreen(false);
         }
     });
+
+    viewMenu->addSeparator();
+    languageMenu_ = viewMenu->addMenu(QStringLiteral("Language"));
+    lineEndingMenu_ = viewMenu->addMenu(QStringLiteral("Line Endings"));
+    encodingMenu_ = viewMenu->addMenu(QStringLiteral("Encoding"));
+    populateFormatMenus();
 
     viewMenu->addSeparator();
     auto* appearanceMenu = viewMenu->addMenu(QStringLiteral("Appearance"));

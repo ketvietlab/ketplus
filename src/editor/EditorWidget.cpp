@@ -52,6 +52,7 @@ constexpr uptr_t foldMargin = 2;
 constexpr int bookmarkMarker = 24;
 constexpr int bookmarkMask = 1 << bookmarkMarker;
 constexpr uptr_t findIndicator = INDICATOR_CONTAINER;
+constexpr uptr_t selectionIndicator = INDICATOR_CONTAINER + 1;
 constexpr sptr_t symbolMarginWidth = 14;
 
 constexpr uptr_t marker(const Scintilla::MarkerOutline value) {
@@ -126,12 +127,18 @@ EditorWidget::EditorWidget(QWidget* parent)
         document_->setModified(dirty);
         emit dirtyStateChanged(dirty);
     });
-    connect(this, &ScintillaEditBase::updateUi, this, [this](Scintilla::Update) {
+    connect(this, &ScintillaEditBase::updateUi, this, [this](const Scintilla::Update updated) {
         const auto position = send(message(Scintilla::Message::GetCurrentPos));
         const auto line = send(message(Scintilla::Message::LineFromPosition), position);
         const auto column = send(message(Scintilla::Message::GetColumn), position);
         emit cursorPositionChanged(static_cast<int>(line + 1), static_cast<int>(column + 1));
         updateBraceHighlight();
+        constexpr int selectionMatchTriggers = static_cast<int>(Scintilla::Update::Content) |
+                                               static_cast<int>(Scintilla::Update::Selection) |
+                                               static_cast<int>(Scintilla::Update::VScroll);
+        if ((static_cast<int>(updated) & selectionMatchTriggers) != 0) {
+            highlightSelectionMatches();
+        }
         emit editorStateChanged();
     });
     connect(this, &ScintillaEditBase::linesAdded, this,
@@ -248,7 +255,7 @@ Document::Result EditorWidget::restoreFromDisk() {
     }
 
     const auto path = document_->filePath();
-    auto result = document_->load(path);
+    auto result = document_->load(path, document_->textEncoding());
     if (!result.ok) {
         return {false, result.error};
     }
@@ -310,7 +317,10 @@ void EditorWidget::configureLexerForPath(const QString& filePath) {
         return;
     }
 
-    const auto& definition = syntaxDefinitionForPath(filePath);
+    const SyntaxDefinition* chosenDefinition =
+        syntaxOverride_.isEmpty() ? nullptr : syntaxDefinitionByName(syntaxOverride_);
+    const auto& definition =
+        chosenDefinition != nullptr ? *chosenDefinition : syntaxDefinitionForPath(filePath);
     lexerName_ = QString::fromLatin1(definition.lexer);
     syntaxName_ = QString::fromLatin1(definition.name);
     Scintilla::ILexer5* lexer = CreateLexer(definition.lexer);
@@ -341,6 +351,131 @@ void EditorWidget::setViewOptions(const EditorViewOptions& options) {
 }
 
 const EditorViewOptions& EditorWidget::viewOptions() const noexcept { return viewOptions_; }
+
+void EditorWidget::setSyntaxOverride(const QString& syntaxName) {
+    syntaxOverride_ = syntaxDefinitionByName(syntaxName) != nullptr ? syntaxName : QString();
+    configureLexerForPath(document_->filePath());
+}
+
+QString EditorWidget::syntaxOverride() const { return syntaxOverride_; }
+
+LineEnding EditorWidget::lineEnding() const {
+    switch (send(message(Scintilla::Message::GetEOLMode))) {
+    case SC_EOL_CRLF:
+        return LineEnding::CrLf;
+    case SC_EOL_CR:
+        return LineEnding::Cr;
+    default:
+        return LineEnding::Lf;
+    }
+}
+
+void EditorWidget::setLineEnding(const LineEnding lineEnding) {
+    const int mode = lineEnding == LineEnding::CrLf ? SC_EOL_CRLF
+                     : lineEnding == LineEnding::Cr ? SC_EOL_CR
+                                                    : SC_EOL_LF;
+    send(message(Scintilla::Message::SetEOLMode), static_cast<uptr_t>(mode));
+    send(message(Scintilla::Message::ConvertEOLs), static_cast<uptr_t>(mode));
+}
+
+Document::Result EditorWidget::reloadWithEncoding(const TextEncoding encoding) {
+    if (document_->isUntitled()) {
+        return {false, QStringLiteral("Save the file before reopening it with another encoding.")};
+    }
+    auto result = document_->load(document_->filePath(), encoding);
+    if (!result.ok) {
+        return {false, result.error};
+    }
+    setText(result.content);
+    configureLexerForPath(document_->filePath());
+    return {true, {}};
+}
+
+void EditorWidget::replaceAllText(const QByteArray& text) {
+    send(message(Scintilla::Message::SetTargetStart), 0);
+    send(message(Scintilla::Message::SetTargetEnd),
+         static_cast<uptr_t>(send(message(Scintilla::Message::GetLength))));
+    sends(message(Scintilla::Message::ReplaceTarget), static_cast<uptr_t>(text.size()),
+          text.constData());
+}
+
+void EditorWidget::selectTextRange(const int line, const int column, const int length) {
+    const sptr_t lastLine = send(message(Scintilla::Message::GetLineCount)) - 1;
+    const sptr_t lineIndex = std::clamp<sptr_t>(line - 1, 0, lastLine);
+    const auto lineStart =
+        send(message(Scintilla::Message::PositionFromLine), static_cast<uptr_t>(lineIndex));
+    const QString lineText = QString::fromUtf8(textRange(
+        lineStart,
+        send(message(Scintilla::Message::GetLineEndPosition), static_cast<uptr_t>(lineIndex))));
+    // Search results count UTF-16 characters; Scintilla positions are UTF-8 bytes.
+    const auto from = lineStart + lineText.left(qMax(0, column)).toUtf8().size();
+    const auto to = lineStart + lineText.left(qMax(0, column + length)).toUtf8().size();
+    send(message(Scintilla::Message::EnsureVisibleEnforcePolicy), static_cast<uptr_t>(lineIndex));
+    send(message(Scintilla::Message::SetSel), static_cast<uptr_t>(from), to);
+    send(message(Scintilla::Message::ScrollCaret));
+}
+
+int EditorWidget::highlightSelectionMatches() {
+    if (selectionMatchesActive_) {
+        send(message(Scintilla::Message::SetIndicatorCurrent), selectionIndicator);
+        send(message(Scintilla::Message::IndicatorClearRange), 0,
+             send(message(Scintilla::Message::GetLength)));
+        selectionMatchesActive_ = false;
+    }
+    if (!viewOptions_.highlightSelectionMatches || hibernated_ || selectionCount() != 1) {
+        return 0;
+    }
+
+    const auto selectionStart = send(message(Scintilla::Message::GetSelectionStart));
+    const auto selectionEnd = send(message(Scintilla::Message::GetSelectionEnd));
+    constexpr sptr_t minimumWordLength = 2;
+    constexpr sptr_t maximumWordLength = 200;
+    if (selectionEnd - selectionStart < minimumWordLength ||
+        selectionEnd - selectionStart > maximumWordLength) {
+        return 0;
+    }
+    // Only a selection that is exactly one whole word lights up its other occurrences.
+    if (send(message(Scintilla::Message::WordStartPosition), static_cast<uptr_t>(selectionStart),
+             1) != selectionStart ||
+        send(message(Scintilla::Message::WordEndPosition), static_cast<uptr_t>(selectionStart),
+             1) != selectionEnd) {
+        return 0;
+    }
+
+    const QByteArray word = textRange(selectionStart, selectionEnd);
+    // Mark only the visible lines, so the cost does not grow with the file.
+    const auto firstLine = send(message(Scintilla::Message::DocLineFromVisible),
+                                static_cast<uptr_t>(
+                                    send(message(Scintilla::Message::GetFirstVisibleLine))));
+    const auto lastLine = qMin(firstLine + send(message(Scintilla::Message::LinesOnScreen)) + 1,
+                               send(message(Scintilla::Message::GetLineCount)) - 1);
+    auto searchStart =
+        send(message(Scintilla::Message::PositionFromLine), static_cast<uptr_t>(firstLine));
+    const auto searchEnd =
+        send(message(Scintilla::Message::GetLineEndPosition), static_cast<uptr_t>(lastLine));
+
+    setSearchOptions(SearchOptions{.matchCase = true, .wholeWord = true});
+    send(message(Scintilla::Message::SetIndicatorCurrent), selectionIndicator);
+    int count = 0;
+    while (searchStart < searchEnd && count < selectionMatchLimit) {
+        send(message(Scintilla::Message::SetTargetStart), static_cast<uptr_t>(searchStart));
+        send(message(Scintilla::Message::SetTargetEnd), static_cast<uptr_t>(searchEnd));
+        if (sends(message(Scintilla::Message::SearchInTarget), static_cast<uptr_t>(word.size()),
+                  word.constData()) < 0) {
+            break;
+        }
+        const auto matchStart = send(message(Scintilla::Message::GetTargetStart));
+        const auto matchEnd = send(message(Scintilla::Message::GetTargetEnd));
+        if (matchStart != selectionStart) {
+            send(message(Scintilla::Message::IndicatorFillRange), static_cast<uptr_t>(matchStart),
+                 matchEnd - matchStart);
+            ++count;
+        }
+        searchStart = matchEnd > matchStart ? matchEnd : matchStart + 1;
+    }
+    selectionMatchesActive_ = count > 0;
+    return count;
+}
 
 void EditorWidget::shareDocumentWith(const EditorWidget& source) {
     const auto documentPointer = source.send(message(Scintilla::Message::GetDocPointer));
@@ -424,6 +559,8 @@ void EditorWidget::applyTheme(const ThemePalette& palette) {
     }
     send(message(Scintilla::Message::IndicSetFore), findIndicator,
          scintillaColor(palette.warning));
+    send(message(Scintilla::Message::IndicSetFore), selectionIndicator,
+         scintillaColor(palette.accent));
 
     applyLexerTheme(palette);
     send(message(Scintilla::Message::Colourise), 0, -1);
@@ -1142,6 +1279,11 @@ void EditorWidget::configureEditor() {
     send(message(Scintilla::Message::IndicSetAlpha), findIndicator, 70);
     send(message(Scintilla::Message::IndicSetOutlineAlpha), findIndicator, 160);
     send(message(Scintilla::Message::IndicSetUnder), findIndicator, 1);
+    send(message(Scintilla::Message::IndicSetStyle), selectionIndicator,
+         static_cast<sptr_t>(Scintilla::IndicatorStyle::RoundBox));
+    send(message(Scintilla::Message::IndicSetAlpha), selectionIndicator, 40);
+    send(message(Scintilla::Message::IndicSetOutlineAlpha), selectionIndicator, 110);
+    send(message(Scintilla::Message::IndicSetUnder), selectionIndicator, 1);
     applyViewOptions();
 }
 

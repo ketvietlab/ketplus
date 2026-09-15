@@ -3,6 +3,7 @@
 #include <QFileInfo>
 #include <QString>
 
+#include <algorithm>
 #include <initializer_list>
 
 namespace ketplus {
@@ -167,6 +168,44 @@ constexpr SyntaxDefinition makeDefinition{"makefile", "makefile", {}};
 constexpr SyntaxDefinition propertiesDefinition{"properties", "props", {}};
 constexpr SyntaxDefinition diffDefinition{"diff", "diff", {}};
 
+struct NamedDefinition final {
+    const SyntaxDefinition* definition;
+    const char* displayName;
+};
+
+constexpr NamedDefinition namedDefinitions[] = {
+    {&genericDefinition, "Generic Code"},
+    {&plainDefinition, "Plain Text"},
+    {&cppDefinition, "C / C++"},
+    {&javascriptDefinition, "JavaScript / TypeScript"},
+    {&javaDefinition, "Java"},
+    {&csharpDefinition, "C#"},
+    {&goDefinition, "Go"},
+    {&swiftDefinition, "Swift"},
+    {&kotlinDefinition, "Kotlin"},
+    {&pythonDefinition, "Python"},
+    {&htmlDefinition, "HTML"},
+    {&xmlDefinition, "XML"},
+    {&phpDefinition, "PHP"},
+    {&jsonDefinition, "JSON"},
+    {&markdownDefinition, "Markdown"},
+    {&cssDefinition, "CSS"},
+    {&shellDefinition, "Shell"},
+    {&dockerDefinition, "Dockerfile"},
+    {&yamlDefinition, "YAML"},
+    {&tomlDefinition, "TOML"},
+    {&sqlDefinition, "SQL"},
+    {&rustDefinition, "Rust"},
+    {&rubyDefinition, "Ruby"},
+    {&luaDefinition, "Lua"},
+    {&dartDefinition, "Dart"},
+    {&zigDefinition, "Zig"},
+    {&cmakeDefinition, "CMake"},
+    {&makeDefinition, "Makefile"},
+    {&propertiesDefinition, "INI / Properties"},
+    {&diffDefinition, "Diff"},
+};
+
 bool matches(const QString& value, const std::initializer_list<const char*> candidates) {
     for (const char* candidate : candidates) {
         if (value == QLatin1String(candidate)) {
@@ -177,6 +216,44 @@ bool matches(const QString& value, const std::initializer_list<const char*> cand
 }
 
 } // namespace
+
+const SyntaxDefinition* syntaxDefinitionByName(const QString& name) {
+    for (const auto& named : namedDefinitions) {
+        if (name == QLatin1String(named.definition->name)) {
+            return named.definition;
+        }
+    }
+    return nullptr;
+}
+
+const std::vector<SyntaxChoice>& syntaxChoices() {
+    static const std::vector<SyntaxChoice> choices = [] {
+        std::vector<SyntaxChoice> sorted;
+        for (const auto& named : namedDefinitions) {
+            sorted.push_back({named.definition->name, named.displayName});
+        }
+        std::sort(sorted.begin(), sorted.end(),
+                  [](const SyntaxChoice& left, const SyntaxChoice& right) {
+                      return QLatin1String(left.displayName)
+                                 .compare(QLatin1String(right.displayName),
+                                          Qt::CaseInsensitive) < 0;
+                  });
+        return sorted;
+    }();
+    return choices;
+}
+
+QString syntaxDisplayName(const QString& name) {
+    if (name == QStringLiteral("large-file")) {
+        return QStringLiteral("Large File");
+    }
+    for (const auto& named : namedDefinitions) {
+        if (name == QLatin1String(named.definition->name)) {
+            return QString::fromLatin1(named.displayName);
+        }
+    }
+    return name;
+}
 
 const SyntaxDefinition& syntaxDefinitionForPath(const QString& filePath) {
     const QFileInfo file(filePath);

@@ -37,6 +37,7 @@ class EditorWidget final : public ScintillaEditBase {
   public:
     static constexpr qsizetype largeFileThresholdBytes = 10 * 1024 * 1024;
     static constexpr int highlightMatchLimit = 5000;
+    static constexpr int selectionMatchLimit = 500;
     static constexpr int minimumCompletionPrefix = 3;
     static constexpr int maximumCompletionItems = 100;
 
@@ -66,6 +67,18 @@ class EditorWidget final : public ScintillaEditBase {
     void markActivated(std::uint64_t sequence) noexcept;
     void markSaved();
     void configureLexerForPath(const QString& filePath);
+    // Forces a language by syntax name; an empty name returns to detection by file name.
+    void setSyntaxOverride(const QString& syntaxName);
+    [[nodiscard]] QString syntaxOverride() const;
+    [[nodiscard]] LineEnding lineEnding() const;
+    // Converts every line break in the document as one undo step.
+    void setLineEnding(LineEnding lineEnding);
+    [[nodiscard]] Document::Result reloadWithEncoding(TextEncoding encoding);
+    // Replaces the whole text as one undo step, keeping the document open.
+    void replaceAllText(const QByteArray& text);
+    // Selects `length` UTF-16 characters starting at a 1-based line and 0-based column.
+    void selectTextRange(int line, int column, int length);
+    int highlightSelectionMatches();
     void setEditorSettings(const EditorSettings& settings);
     [[nodiscard]] const EditorSettings& editorSettings() const noexcept;
     void setViewOptions(const EditorViewOptions& options);
@@ -175,6 +188,7 @@ class EditorWidget final : public ScintillaEditBase {
     EditorViewOptions viewOptions_;
     QString lexerName_;
     QString syntaxName_;
+    QString syntaxOverride_;
     ViewState hibernatedViewState_;
     std::uint64_t lastActivated_{0};
     sptr_t searchScopeStart_{0};
@@ -187,6 +201,7 @@ class EditorWidget final : public ScintillaEditBase {
     bool internalMutation_{false};
     bool foldingEnabled_{false};
     bool searchScopeActive_{false};
+    bool selectionMatchesActive_{false};
     int lineNumberDigits_{0};
 };
 

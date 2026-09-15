@@ -1,9 +1,11 @@
 #pragma once
 
 #include "app/AppearanceSettings.h"
+#include "core/Document.h"
 #include "editor/EditorViewOptions.h"
 #include "git/GitTypes.h"
 #include "workspace/WorkspaceFileIndex.h"
+#include "workspace/WorkspaceSearch.h"
 
 #include <QHash>
 #include <QList>
@@ -33,6 +35,7 @@ class QVariant;
 namespace ketplus {
 
 class QuickOpenPopup;
+class SearchPanel;
 
 struct SearchOptions;
 
@@ -117,6 +120,22 @@ class MainWindow final : public QMainWindow {
     void refreshWorkspaceFileIndex(bool force);
     void finishWorkspaceFileIndex(const QString& root, const WorkspaceFileList& files);
     void updateGoToFileItems();
+    SearchPanel* ensureSearchPanel();
+    void setSearchPanelVisible(bool visible);
+    void startWorkspaceSearch();
+    void cancelWorkspaceSearch();
+    void finishWorkspaceSearch(const WorkspaceSearchSummary& summary, bool cancelled);
+    void replaceInWorkspace();
+    void openSearchMatch(const QString& path, int line, int column, int length);
+    [[nodiscard]] EditorWidget* documentOwner() const;
+    [[nodiscard]] EditorWidget* openEditorForPath(const QString& path) const;
+    void populateFormatMenus();
+    void syncFormatMenus();
+    void updateFormatIndicators();
+    void setEditorSyntax(const QString& syntaxName);
+    void setDocumentLineEnding(LineEnding lineEnding);
+    void reopenWithEncoding(TextEncoding encoding);
+    void saveWithEncoding(TextEncoding encoding);
     void showSettings();
     void applyAppearanceSettings(const AppearanceSettings& settings);
     void applyThemeToEditors();
@@ -167,9 +186,20 @@ class MainWindow final : public QMainWindow {
     QTabWidget* tabs_{nullptr};
     FindReplaceBar* findBar_{nullptr};
     QLabel* cursorPositionLabel_{nullptr};
-    QLabel* encodingLabel_{nullptr};
-    QLabel* lineEndingLabel_{nullptr};
     QLabel* documentStateLabel_{nullptr};
+    QToolButton* encodingButton_{nullptr};
+    QToolButton* lineEndingButton_{nullptr};
+    QToolButton* languageButton_{nullptr};
+    QMenu* languageMenu_{nullptr};
+    QMenu* lineEndingMenu_{nullptr};
+    QMenu* encodingMenu_{nullptr};
+    QMenu* saveEncodingMenu_{nullptr};
+    SearchPanel* searchPanel_{nullptr};
+    QAction* searchPanelAction_{nullptr};
+    QPointer<QThread> searchThread_;
+    std::shared_ptr<std::atomic_bool> searchCancelled_;
+    quint64 searchGeneration_{0};
+    WorkspaceSearchOptions lastSearchOptions_;
     QToolButton* gitButton_{nullptr};
     QTimer* highlightTimer_{nullptr};
     QSplitter* documentSplit_{nullptr};
