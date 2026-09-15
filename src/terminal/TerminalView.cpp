@@ -253,6 +253,18 @@ void TerminalView::resizeEvent(QResizeEvent* event) {
     updateGeometryFromViewport();
 }
 
+bool TerminalView::event(QEvent* event) {
+    if (event->type() == QEvent::ShortcutOverride) {
+        const auto* keyEvent = static_cast<QKeyEvent*>(event);
+        if (keyEvent->key() == Qt::Key_Escape && keyEvent->modifiers() == Qt::NoModifier) {
+            // Escape belongs to the shell (vim, less, readline), not to window shortcuts.
+            event->accept();
+            return true;
+        }
+    }
+    return QAbstractScrollArea::event(event);
+}
+
 void TerminalView::keyPressEvent(QKeyEvent* event) {
 #if defined(Q_OS_MACOS)
     if (event->matches(QKeySequence::Paste)) {

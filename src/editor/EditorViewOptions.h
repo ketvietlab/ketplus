@@ -9,6 +9,8 @@ struct EditorViewOptions final {
     static constexpr int maximumTabWidth = 16;
     static constexpr int minimumRulerColumn = 1;
     static constexpr int maximumRulerColumn = 400;
+    static constexpr int minimumZoom = -10;
+    static constexpr int maximumZoom = 20;
 
     bool wordWrap{false};
     bool showWhitespace{false};
@@ -18,8 +20,10 @@ struct EditorViewOptions final {
     bool codeFolding{true};
     bool autoCloseBrackets{true};
     bool autoIndent{true};
+    bool wordCompletion{true};
     bool useTabs{false};
     int tabWidth{4};
+    int zoom{0};
 
     [[nodiscard]] static EditorViewOptions load();
     [[nodiscard]] static EditorViewOptions load(const QSettings& settings);

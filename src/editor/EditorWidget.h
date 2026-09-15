@@ -37,6 +37,8 @@ class EditorWidget final : public ScintillaEditBase {
   public:
     static constexpr qsizetype largeFileThresholdBytes = 10 * 1024 * 1024;
     static constexpr int highlightMatchLimit = 5000;
+    static constexpr int minimumCompletionPrefix = 3;
+    static constexpr int maximumCompletionItems = 100;
 
     explicit EditorWidget(QWidget* parent = nullptr);
 
@@ -68,6 +70,7 @@ class EditorWidget final : public ScintillaEditBase {
     [[nodiscard]] const EditorSettings& editorSettings() const noexcept;
     void setViewOptions(const EditorViewOptions& options);
     [[nodiscard]] const EditorViewOptions& viewOptions() const noexcept;
+    void shareDocumentWith(const EditorWidget& source);
     void applyTheme(const ThemePalette& palette);
     void undoEdit();
     void redoEdit();
@@ -87,9 +90,19 @@ class EditorWidget final : public ScintillaEditBase {
     void convertCase(bool upper);
     bool toggleComment();
 
+    [[nodiscard]] int selectionCount() const;
+    void addNextOccurrence();
+    void selectAllOccurrences();
+    void addCursorVertically(bool above);
+    void splitSelectionIntoLines();
+    void collapseToMainSelection();
+    bool showWordCompletions(bool explicitRequest);
+
     [[nodiscard]] int lineCount() const;
     [[nodiscard]] int currentLine() const;
     void goToLine(int line);
+    [[nodiscard]] sptr_t caretPosition() const;
+    void setCaretPosition(sptr_t position);
     bool jumpToMatchingBrace();
     void toggleBookmark();
     [[nodiscard]] bool hasBookmark(int line) const;

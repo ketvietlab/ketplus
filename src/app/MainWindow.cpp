@@ -26,6 +26,8 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QSettings>
+#include <QShortcut>
+#include <QWindowStateChangeEvent>
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QStatusBar>
@@ -77,7 +79,11 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     auto* centralLayout = new QVBoxLayout(editorPane);
     centralLayout->setContentsMargins(0, 0, 0, 0);
     centralLayout->setSpacing(0);
-    centralLayout->addWidget(tabs_, 1);
+    documentSplit_ = new QSplitter(Qt::Horizontal, editorPane);
+    documentSplit_->setChildrenCollapsible(false);
+    documentSplit_->setHandleWidth(1);
+    documentSplit_->addWidget(tabs_);
+    centralLayout->addWidget(documentSplit_, 1);
     centralLayout->addWidget(findBar_);
     editorSplit_->setChildrenCollapsible(false);
     editorSplit_->setHandleWidth(1);
@@ -119,6 +125,7 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
         updateDocumentState();
         updateGitActions();
         updateMarkdownPreview();
+        trackNavigation(currentEditor());
         if (findBar_->isVisible() && highlightTimer_ != nullptr) {
             highlightTimer_->start();
         }
@@ -142,7 +149,7 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     connect(findBar_, &FindReplaceBar::queryChanged, highlightTimer_,
             qOverload<>(&QTimer::start));
     connect(findBar_, &FindReplaceBar::searchOptionsChanged, this, [this] {
-        if (auto* editor = currentEditor()) {
+        if (auto* editor = activeEditor()) {
             if (findBar_->inSelection()) {
                 if (!editor->hasSearchScope()) {
                     editor->setSearchScopeToSelection();
@@ -152,6 +159,20 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
             }
         }
         highlightTimer_->start();
+    });
+
+    // Editing commands follow whichever editor view the user focused last.
+    connect(qApp, &QApplication::focusChanged, this, [this](QWidget*, QWidget* now) {
+        if (now == nullptr) {
+            return;
+        }
+        if (splitEditor_ != nullptr && (now == splitEditor_ || splitEditor_->isAncestorOf(now))) {
+            splitFocused_ = true;
+            updateEditorActions();
+        } else if (now == tabs_ || tabs_->isAncestorOf(now)) {
+            splitFocused_ = false;
+            updateEditorActions();
+        }
     });
     connect(QApplication::clipboard(), &QClipboard::dataChanged, this,
             &MainWindow::updateEditorActions);
@@ -241,12 +262,33 @@ void MainWindow::openFolder(const QString& folderPath) {
     rememberActiveFileForWorktree();
     workspaceRoot_ = normalizedPath(folder.absoluteFilePath());
     rememberRecentFolder(workspaceRoot_);
+    workspaceFilesIndexedAt_ = 0;
     auto* explorer = ensureExplorer();
     explorer->setRootPath(workspaceRoot_);
     setExplorerVisible(true);
     setWindowTitle(QStringLiteral("%1 — KetPlus CM").arg(folder.fileName()));
     statusBar()->showMessage(QStringLiteral("Opened %1").arg(workspaceRoot_), 2500);
     git_->setWorkspacePath(workspaceRoot_);
+}
+
+void MainWindow::changeEvent(QEvent* event) {
+    QMainWindow::changeEvent(event);
+    if (event->type() != QEvent::WindowStateChange || fullScreenAction_ == nullptr) {
+        return;
+    }
+    const auto previousState = static_cast<QWindowStateChangeEvent*>(event)->oldState();
+    if (isFullScreen() && !previousState.testFlag(Qt::WindowFullScreen)) {
+        // Entering full screen clears the maximized flag, so remember it for the way back.
+        maximizedBeforeFullScreen_ = previousState.testFlag(Qt::WindowMaximized);
+    }
+    {
+        const QSignalBlocker blocker(fullScreenAction_);
+        fullScreenAction_->setChecked(isFullScreen());
+    }
+    exitFullScreenShortcut_->setEnabled(isFullScreen());
+    if (!isFullScreen() && distractionFree_) {
+        setDistractionFree(false);
+    }
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
