@@ -26,6 +26,9 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QSettings>
+#include <QShortcut>
+
+#include <ScintillaMessages.h>
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QStatusBar>
@@ -93,7 +96,7 @@ void MainWindow::createActions() {
     undoAction_ = editMenu->addAction(QStringLiteral("&Undo"));
     undoAction_->setShortcut(QKeySequence::Undo);
     connect(undoAction_, &QAction::triggered, this, [this] {
-        if (auto* editor = currentEditor()) {
+        if (auto* editor = activeEditor()) {
             editor->undoEdit();
         }
     });
@@ -101,7 +104,7 @@ void MainWindow::createActions() {
     redoAction_ = editMenu->addAction(QStringLiteral("&Redo"));
     redoAction_->setShortcut(QKeySequence::Redo);
     connect(redoAction_, &QAction::triggered, this, [this] {
-        if (auto* editor = currentEditor()) {
+        if (auto* editor = activeEditor()) {
             editor->redoEdit();
         }
     });
@@ -110,7 +113,7 @@ void MainWindow::createActions() {
     cutAction_ = editMenu->addAction(QStringLiteral("Cu&t"));
     cutAction_->setShortcut(QKeySequence::Cut);
     connect(cutAction_, &QAction::triggered, this, [this] {
-        if (auto* editor = currentEditor()) {
+        if (auto* editor = activeEditor()) {
             editor->cutSelection();
         }
     });
@@ -118,7 +121,7 @@ void MainWindow::createActions() {
     copyAction_ = editMenu->addAction(QStringLiteral("&Copy"));
     copyAction_->setShortcut(QKeySequence::Copy);
     connect(copyAction_, &QAction::triggered, this, [this] {
-        if (auto* editor = currentEditor()) {
+        if (auto* editor = activeEditor()) {
             editor->copySelection();
         }
     });
@@ -126,7 +129,7 @@ void MainWindow::createActions() {
     pasteAction_ = editMenu->addAction(QStringLiteral("&Paste"));
     pasteAction_->setShortcut(QKeySequence::Paste);
     connect(pasteAction_, &QAction::triggered, this, [this] {
-        if (auto* editor = currentEditor()) {
+        if (auto* editor = activeEditor()) {
             editor->pasteClipboard();
         }
     });
@@ -134,7 +137,7 @@ void MainWindow::createActions() {
     deleteAction_ = editMenu->addAction(QStringLiteral("&Delete"));
     deleteAction_->setShortcut(QKeySequence::Delete);
     connect(deleteAction_, &QAction::triggered, this, [this] {
-        if (auto* editor = currentEditor()) {
+        if (auto* editor = activeEditor()) {
             editor->deleteSelection();
         }
     });
@@ -142,7 +145,7 @@ void MainWindow::createActions() {
     selectAllAction_ = editMenu->addAction(QStringLiteral("Select &All"));
     selectAllAction_->setShortcut(QKeySequence::SelectAll);
     connect(selectAllAction_, &QAction::triggered, this, [this] {
-        if (auto* editor = currentEditor()) {
+        if (auto* editor = activeEditor()) {
             editor->selectAllText();
         }
     });
@@ -170,7 +173,7 @@ void MainWindow::createActions() {
         auto* action = menu->addAction(label);
         action->setShortcut(shortcut);
         connect(action, &QAction::triggered, this, [this, handler] {
-            if (auto* editor = currentEditor(); editor != nullptr && !editor->isHibernated()) {
+            if (auto* editor = activeEditor(); editor != nullptr && !editor->isHibernated()) {
                 handler(*editor);
             }
         });
@@ -233,6 +236,39 @@ void MainWindow::createActions() {
     addViewOption(editMenu, QStringLiteral("Auto-Close Brackets"), {},
                   &EditorViewOptions::autoCloseBrackets);
     addViewOption(editMenu, QStringLiteral("Auto-Indent"), {}, &EditorViewOptions::autoIndent);
+    addViewOption(editMenu, QStringLiteral("Word Completion"), {},
+                  &EditorViewOptions::wordCompletion);
+#ifdef Q_OS_MACOS
+    const QKeySequence completionShortcut(QStringLiteral("Meta+Space"));
+#else
+    const QKeySequence completionShortcut(QStringLiteral("Ctrl+Space"));
+#endif
+    addEditorAction(editMenu, QStringLiteral("Suggest Words"), completionShortcut,
+                    [this](EditorWidget& editor) {
+                        if (!editor.showWordCompletions(true)) {
+                            statusBar()->showMessage(QStringLiteral("No word suggestions"), 2000);
+                        }
+                    });
+
+    auto* selectionMenu = editMenu->addMenu(QStringLiteral("Selectio&n"));
+    addEditorAction(selectionMenu, QStringLiteral("Add &Next Occurrence"),
+                    QKeySequence(QStringLiteral("Ctrl+D")),
+                    [](EditorWidget& editor) { editor.addNextOccurrence(); });
+    addEditorAction(selectionMenu, QStringLiteral("Select &All Occurrences"),
+                    QKeySequence(QStringLiteral("Ctrl+Shift+L")),
+                    [](EditorWidget& editor) { editor.selectAllOccurrences(); });
+    selectionMenu->addSeparator();
+    addEditorAction(selectionMenu, QStringLiteral("Add Cursor &Above"),
+                    QKeySequence(QStringLiteral("Ctrl+Alt+Up")),
+                    [](EditorWidget& editor) { editor.addCursorVertically(true); });
+    addEditorAction(selectionMenu, QStringLiteral("Add Cursor &Below"),
+                    QKeySequence(QStringLiteral("Ctrl+Alt+Down")),
+                    [](EditorWidget& editor) { editor.addCursorVertically(false); });
+    addEditorAction(selectionMenu, QStringLiteral("&Split Selection into Lines"),
+                    QKeySequence(QStringLiteral("Alt+Shift+I")),
+                    [](EditorWidget& editor) { editor.splitSelectionIntoLines(); });
+    addEditorAction(selectionMenu, QStringLiteral("Single &Cursor"), {},
+                    [](EditorWidget& editor) { editor.collapseToMainSelection(); });
 
     editMenu->addSeparator();
     auto* settingsAction = editMenu->addAction(QStringLiteral("Settings…"));
@@ -362,6 +398,67 @@ void MainWindow::createActions() {
             applyViewOptions(options);
         });
     }
+
+    viewMenu->addSeparator();
+    auto* zoomInAction = viewMenu->addAction(QStringLiteral("Zoom In"));
+    zoomInAction->setShortcuts({QKeySequence::ZoomIn, QKeySequence(QStringLiteral("Ctrl+="))});
+    connect(zoomInAction, &QAction::triggered, this, [this] { changeZoom(1); });
+    auto* zoomOutAction = viewMenu->addAction(QStringLiteral("Zoom Out"));
+    zoomOutAction->setShortcut(QKeySequence::ZoomOut);
+    connect(zoomOutAction, &QAction::triggered, this, [this] { changeZoom(-1); });
+    auto* resetZoomAction = viewMenu->addAction(QStringLiteral("Reset Zoom"));
+    resetZoomAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+0")));
+    connect(resetZoomAction, &QAction::triggered, this, [this] { changeZoom(-viewOptions_.zoom); });
+
+    viewMenu->addSeparator();
+    auto* layoutMenu = viewMenu->addMenu(QStringLiteral("Editor Layout"));
+    auto* splitRightAction = layoutMenu->addAction(QStringLiteral("Split Right"));
+    splitRightAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+\\")));
+    connect(splitRightAction, &QAction::triggered, this,
+            [this] { openSplit(currentEditor(), Qt::Horizontal); });
+    auto* splitDownAction = layoutMenu->addAction(QStringLiteral("Split Down"));
+    splitDownAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+K, Ctrl+\\")));
+    connect(splitDownAction, &QAction::triggered, this,
+            [this] { openSplit(currentEditor(), Qt::Vertical); });
+    auto* focusOtherViewAction = layoutMenu->addAction(QStringLiteral("Focus Other View"));
+    focusOtherViewAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+K, Ctrl+F")));
+    connect(focusOtherViewAction, &QAction::triggered, this, &MainWindow::focusOtherView);
+    closeSplitAction_ = layoutMenu->addAction(QStringLiteral("Close Split"));
+    closeSplitAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+K, Ctrl+W")));
+    closeSplitAction_->setEnabled(false);
+    connect(closeSplitAction_, &QAction::triggered, this, &MainWindow::closeSplit);
+
+    fullScreenAction_ = viewMenu->addAction(QStringLiteral("Full Screen"));
+    fullScreenAction_->setCheckable(true);
+    fullScreenAction_->setShortcut(QKeySequence::FullScreen);
+    connect(fullScreenAction_, &QAction::toggled, this, &MainWindow::setFullScreen);
+    distractionFreeAction_ = viewMenu->addAction(QStringLiteral("Distraction-Free Mode"));
+    distractionFreeAction_->setCheckable(true);
+    distractionFreeAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+K, Z")));
+    connect(distractionFreeAction_, &QAction::toggled, this, &MainWindow::setDistractionFree);
+
+    // Escape leaves full screen; it is only active while full screen so editors keep it otherwise.
+    exitFullScreenShortcut_ = new QShortcut(QKeySequence(Qt::Key_Escape), this);
+    exitFullScreenShortcut_->setContext(Qt::WindowShortcut);
+    exitFullScreenShortcut_->setEnabled(false);
+    connect(exitFullScreenShortcut_, &QShortcut::activated, this, [this] {
+        // Let Escape dismiss editor state first: the suggestion list, then extra carets.
+        if (auto* editor = activeEditor()) {
+            if (editor->send(static_cast<unsigned int>(Scintilla::Message::AutoCActive)) != 0) {
+                editor->send(static_cast<unsigned int>(Scintilla::Message::AutoCCancel));
+                return;
+            }
+            if (editor->selectionCount() > 1) {
+                editor->collapseToMainSelection();
+                return;
+            }
+        }
+        if (distractionFree_) {
+            setDistractionFree(false);
+        } else {
+            setFullScreen(false);
+        }
+    });
 
     viewMenu->addSeparator();
     auto* appearanceMenu = viewMenu->addMenu(QStringLiteral("Appearance"));

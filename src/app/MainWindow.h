@@ -11,6 +11,7 @@
 #include <cstdint>
 
 class QCloseEvent;
+class QEvent;
 class QAction;
 class QLabel;
 class QMenu;
@@ -18,6 +19,7 @@ class QPoint;
 class QSplitter;
 class QString;
 class QTabWidget;
+class QShortcut;
 class QTimer;
 class QToolButton;
 
@@ -44,6 +46,7 @@ class MainWindow final : public QMainWindow {
     void openFolder(const QString& folderPath);
 
   protected:
+    void changeEvent(QEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
 
   private:
@@ -87,6 +90,14 @@ class MainWindow final : public QMainWindow {
     void clearMatchHighlights();
     void applyViewOptions(const EditorViewOptions& options);
     void goToLine();
+    [[nodiscard]] EditorWidget* activeEditor() const;
+    void openSplit(EditorWidget* source, Qt::Orientation orientation);
+    void closeSplit();
+    void focusOtherView();
+    void setFullScreen(bool fullScreen);
+    void setDistractionFree(bool enabled);
+    void changeZoom(int delta);
+    void syncEditorZoom(EditorWidget* editor);
     void showSettings();
     void applyAppearanceSettings(const AppearanceSettings& settings);
     void applyThemeToEditors();
@@ -126,6 +137,23 @@ class MainWindow final : public QMainWindow {
     QLabel* documentStateLabel_{nullptr};
     QToolButton* gitButton_{nullptr};
     QTimer* highlightTimer_{nullptr};
+    QSplitter* documentSplit_{nullptr};
+    EditorWidget* splitEditor_{nullptr};
+    EditorWidget* splitSource_{nullptr};
+    QAction* closeSplitAction_{nullptr};
+    QAction* fullScreenAction_{nullptr};
+    QAction* distractionFreeAction_{nullptr};
+    QShortcut* exitFullScreenShortcut_{nullptr};
+    struct DistractionFreeRestore final {
+        bool explorer{false};
+        bool sourceControl{false};
+        bool terminal{false};
+        bool markdownPreview{false};
+        bool fullScreen{false};
+    } distractionFreeRestore_;
+    bool splitFocused_{false};
+    bool distractionFree_{false};
+    bool maximizedBeforeFullScreen_{false};
     QAction* undoAction_{nullptr};
     QAction* redoAction_{nullptr};
     QAction* cutAction_{nullptr};

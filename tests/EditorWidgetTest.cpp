@@ -55,6 +55,11 @@ class EditorWidgetTest final : public QObject {
     void autoClosesBracketsAndIndents();
     void appliesViewOptions();
     void persistsViewOptions();
+    void sharesDocumentBetweenViews();
+    void appliesZoom();
+    void addsNextOccurrencesAsCursors();
+    void addsCursorsVerticallyAndSplitsLines();
+    void suggestsWordsFromDocument();
 };
 
 void EditorWidgetTest::editsThroughClipboardAndHistory() {
@@ -609,6 +614,104 @@ void EditorWidgetTest::persistsViewOptions() {
     QVERIFY(loaded.wordWrap);
     QCOMPARE(loaded.tabWidth, ketplus::EditorViewOptions::maximumTabWidth);
     QCOMPARE(loaded.rulerColumn, ketplus::EditorViewOptions::minimumRulerColumn);
+
+    options.zoom = 99;
+    options.save(settings);
+    QCOMPARE(ketplus::EditorViewOptions::load(settings).zoom,
+             ketplus::EditorViewOptions::maximumZoom);
+}
+
+void EditorWidgetTest::sharesDocumentBetweenViews() {
+    ketplus::EditorWidget source;
+    source.setText("hello");
+    source.configureLexerForPath(QStringLiteral("sample.cpp"));
+
+    {
+        ketplus::EditorWidget mirror;
+        mirror.shareDocumentWith(source);
+        QCOMPARE(mirror.text(), QByteArray("hello"));
+        QCOMPARE(mirror.syntaxName(), source.syntaxName());
+
+        mirror.send(message(Scintilla::Message::AppendText), 1, reinterpret_cast<sptr_t>("!"));
+        QCOMPARE(source.text(), QByteArray("hello!"));
+        QVERIFY(source.document().isModified());
+    }
+
+    source.send(message(Scintilla::Message::AppendText), 1, reinterpret_cast<sptr_t>("?"));
+    QCOMPARE(source.text(), QByteArray("hello!?"));
+}
+
+void EditorWidgetTest::appliesZoom() {
+    ketplus::EditorWidget editor;
+    auto options = editor.viewOptions();
+    options.zoom = 3;
+    editor.setViewOptions(options);
+    QCOMPARE(editor.send(message(Scintilla::Message::GetZoom)), 3);
+
+    options.zoom = -50;
+    editor.setViewOptions(options);
+    QCOMPARE(editor.send(message(Scintilla::Message::GetZoom)),
+             ketplus::EditorViewOptions::minimumZoom);
+}
+
+void EditorWidgetTest::addsNextOccurrencesAsCursors() {
+    ketplus::EditorWidget editor;
+    editor.setText("foo bar foo baz foo");
+    editor.send(message(Scintilla::Message::SetEmptySelection), 1);
+
+    editor.addNextOccurrence();
+    QCOMPARE(editor.selectedText(), QStringLiteral("foo"));
+    QCOMPARE(editor.selectionCount(), 1);
+    editor.addNextOccurrence();
+    QCOMPARE(editor.selectionCount(), 2);
+    editor.selectAllOccurrences();
+    QCOMPARE(editor.selectionCount(), 3);
+
+    QTest::keyClicks(&editor, QStringLiteral("x"));
+    QCOMPARE(editor.text(), QByteArray("x bar x baz x"));
+    editor.collapseToMainSelection();
+    QCOMPARE(editor.selectionCount(), 1);
+}
+
+void EditorWidgetTest::addsCursorsVerticallyAndSplitsLines() {
+    ketplus::EditorWidget editor;
+    editor.setText("abc\nabc\nabc");
+    editor.send(message(Scintilla::Message::SetEmptySelection), 1);
+
+    editor.addCursorVertically(false);
+    editor.addCursorVertically(false);
+    QCOMPARE(editor.selectionCount(), 3);
+    editor.addCursorVertically(false);
+    QCOMPARE(editor.selectionCount(), 3);
+    QTest::keyClicks(&editor, QStringLiteral("-"));
+    QCOMPARE(editor.text(), QByteArray("a-bc\na-bc\na-bc"));
+
+    editor.setText("one\ntwo\nthree");
+    editor.send(message(Scintilla::Message::SetSel), 0, 13);
+    editor.splitSelectionIntoLines();
+    QCOMPARE(editor.selectionCount(), 3);
+}
+
+void EditorWidgetTest::suggestsWordsFromDocument() {
+    ketplus::EditorWidget editor;
+    editor.setText("configure configuration 123abc\n");
+    editor.send(message(Scintilla::Message::SetEmptySelection),
+                static_cast<uptr_t>(editor.send(message(Scintilla::Message::GetLength))));
+
+    QTest::keyClicks(&editor, QStringLiteral("con"));
+    QVERIFY(editor.send(message(Scintilla::Message::AutoCActive)) != 0);
+    editor.send(message(Scintilla::Message::AutoCCancel));
+
+    auto options = editor.viewOptions();
+    options.wordCompletion = false;
+    editor.setViewOptions(options);
+    QTest::keyClicks(&editor, QStringLiteral("f"));
+    QVERIFY(editor.send(message(Scintilla::Message::AutoCActive)) == 0);
+
+    QVERIFY(editor.showWordCompletions(true));
+    editor.send(message(Scintilla::Message::AutoCCancel));
+    QTest::keyClicks(&editor, QStringLiteral("zzz"));
+    QVERIFY(!editor.showWordCompletions(true));
 }
 
 QTEST_MAIN(EditorWidgetTest)

@@ -148,6 +148,11 @@ bool MainWindow::saveEditor(EditorWidget* editor, const bool choosePath) {
     rememberRecentFile(path);
     editor->configureLexerForPath(path);
     editor->applyTheme(theme_.palette());
+    if (editor == splitSource_ && splitEditor_ != nullptr) {
+        // Save As may pick a new lexer, so refresh the split view's styles.
+        splitEditor_->shareDocumentWith(*editor);
+        splitEditor_->applyTheme(theme_.palette());
+    }
     updateTabTitle(editor);
     updateMarkdownPreview();
     statusBar()->showMessage(QStringLiteral("Saved %1").arg(path), 2500);
@@ -188,6 +193,9 @@ bool MainWindow::closeTab(const int index, const bool createReplacement) {
         return false;
     }
 
+    if (editor != nullptr && editor == splitSource_) {
+        closeSplit();
+    }
     if (editor != nullptr && !editor->document().isUntitled()) {
         const QString path = editor->document().filePath();
         closedFilePaths_.removeAll(path);
@@ -245,6 +253,13 @@ void MainWindow::showTabContextMenu(const QPoint& position) {
     auto* editor = qobject_cast<EditorWidget*>(tabs_->widget(index));
     QMenu menu(this);
     auto* previewAction = addMarkdownPreviewContextAction(menu, editor);
+    QAction* splitRightAction = nullptr;
+    QAction* splitDownAction = nullptr;
+    if (editor != nullptr) {
+        menu.addSeparator();
+        splitRightAction = menu.addAction(QStringLiteral("Open in Split Right"));
+        splitDownAction = menu.addAction(QStringLiteral("Open in Split Down"));
+    }
     menu.addSeparator();
     auto* closeAction = menu.addAction(QStringLiteral("Close"));
     auto* closeOthersAction = menu.addAction(QStringLiteral("Close Other Tabs"));
@@ -255,6 +270,10 @@ void MainWindow::showTabContextMenu(const QPoint& position) {
     if (selected == previewAction) {
         tabs_->setCurrentIndex(index);
         setMarkdownPreviewVisible(previewAction->isChecked());
+    } else if (selected != nullptr && selected == splitRightAction) {
+        openSplit(editor, Qt::Horizontal);
+    } else if (selected != nullptr && selected == splitDownAction) {
+        openSplit(editor, Qt::Vertical);
     } else if (selected == closeAction) {
         closeTab(index);
     } else if (selected == closeOthersAction) {
@@ -336,6 +355,7 @@ EditorWidget* MainWindow::createEditor() {
     editor->setEditorSettings(appearanceSettings_.editor);
     editor->setViewOptions(viewOptions_);
     editor->applyTheme(theme_.palette());
+    syncEditorZoom(editor);
     connect(editor, &EditorWidget::contextMenuRequested, this,
             [this, editor](const QPoint& position) { showEditorContextMenu(editor, position); });
     connect(editor, &EditorWidget::dirtyStateChanged, this, [this, editor](const bool dirty) {
@@ -385,7 +405,7 @@ void MainWindow::updateTabTitle(EditorWidget* editor) {
 }
 
 void MainWindow::updateEditorActions() {
-    const auto* editor = currentEditor();
+    const auto* editor = activeEditor();
     const bool hasEditor = editor != nullptr;
     const bool hasSelection = hasEditor && editor->hasSelection();
 
@@ -451,7 +471,7 @@ void MainWindow::enforceTabResourcePolicy() {
         }
         ++residentCount;
         residentBytes += editor->residentBytes();
-        if (editor != activeEditor && !editor->document().isUntitled() &&
+        if (editor != activeEditor && editor != splitSource_ && !editor->document().isUntitled() &&
             !editor->document().isModified()) {
             candidates.append(editor);
         }
@@ -537,13 +557,13 @@ void MainWindow::rebuildRecentFoldersMenu() {
 }
 
 void MainWindow::openFindBar(const bool replaceMode) {
-    const auto* editor = currentEditor();
+    const auto* editor = activeEditor();
     findBar_->open(replaceMode, editor == nullptr ? QString() : editor->selectedText());
     highlightTimer_->start();
 }
 
 void MainWindow::findNext(const bool backwards) {
-    auto* editor = currentEditor();
+    auto* editor = activeEditor();
     if (editor == nullptr) {
         return;
     }
@@ -557,7 +577,7 @@ void MainWindow::findNext(const bool backwards) {
 }
 
 void MainWindow::replaceCurrentMatch() {
-    auto* editor = currentEditor();
+    auto* editor = activeEditor();
     if (editor == nullptr || findBar_->query().isEmpty()) {
         return;
     }
@@ -571,7 +591,7 @@ void MainWindow::replaceCurrentMatch() {
 }
 
 void MainWindow::replaceAllMatches() {
-    auto* editor = currentEditor();
+    auto* editor = activeEditor();
     if (editor == nullptr || findBar_->query().isEmpty()) {
         return;
     }
@@ -590,7 +610,7 @@ SearchOptions MainWindow::searchOptions() const {
 }
 
 void MainWindow::refreshMatchHighlights(const bool updateCount) {
-    auto* editor = currentEditor();
+    auto* editor = activeEditor();
     if (editor == nullptr || !findBar_->isVisible()) {
         return;
     }
@@ -607,6 +627,10 @@ void MainWindow::clearMatchHighlights() {
             editor->clearSearchScope();
         }
     }
+    if (splitEditor_ != nullptr) {
+        splitEditor_->clearMatchHighlights();
+        splitEditor_->clearSearchScope();
+    }
 }
 
 void MainWindow::applyViewOptions(const EditorViewOptions& options) {
@@ -616,6 +640,9 @@ void MainWindow::applyViewOptions(const EditorViewOptions& options) {
         if (auto* editor = qobject_cast<EditorWidget*>(tabs_->widget(index))) {
             editor->setViewOptions(viewOptions_);
         }
+    }
+    if (splitEditor_ != nullptr) {
+        splitEditor_->setViewOptions(viewOptions_);
     }
     const auto* editor = currentEditor();
     if (editor != nullptr && editor->isLargeFileMode() &&
@@ -627,7 +654,7 @@ void MainWindow::applyViewOptions(const EditorViewOptions& options) {
 }
 
 void MainWindow::goToLine() {
-    auto* editor = currentEditor();
+    auto* editor = activeEditor();
     if (editor == nullptr || editor->isHibernated()) {
         return;
     }
@@ -640,6 +667,164 @@ void MainWindow::goToLine() {
         editor->goToLine(line);
         editor->setFocus();
     }
+}
+
+EditorWidget* MainWindow::activeEditor() const {
+    if (splitEditor_ != nullptr && splitFocused_ && splitEditor_->isVisible()) {
+        return splitEditor_;
+    }
+    return currentEditor();
+}
+
+void MainWindow::openSplit(EditorWidget* source, const Qt::Orientation orientation) {
+    if (source == nullptr) {
+        return;
+    }
+    // The active tab is never hibernated, so its document is loaded before sharing.
+    tabs_->setCurrentWidget(source);
+    if (source->isHibernated()) {
+        return;
+    }
+
+    if (splitEditor_ == nullptr) {
+        splitEditor_ = new EditorWidget(documentSplit_);
+        splitEditor_->setEditorSettings(appearanceSettings_.editor);
+        syncEditorZoom(splitEditor_);
+        connect(splitEditor_, &EditorWidget::contextMenuRequested, this,
+                [this](const QPoint& position) { showEditorContextMenu(splitEditor_, position); });
+        connect(splitEditor_, &EditorWidget::editorStateChanged, this, [this] {
+            if (activeEditor() == splitEditor_) {
+                updateEditorActions();
+            }
+        });
+        connect(splitEditor_, &EditorWidget::cursorPositionChanged, this,
+                [this](const int line, const int column) {
+                    if (activeEditor() == splitEditor_) {
+                        cursorPositionLabel_->setText(
+                            QStringLiteral("Ln %1, Col %2").arg(line).arg(column));
+                    }
+                });
+        documentSplit_->addWidget(splitEditor_);
+    }
+
+    splitSource_ = source;
+    splitEditor_->setViewOptions(viewOptions_);
+    splitEditor_->shareDocumentWith(*source);
+    splitEditor_->applyTheme(theme_.palette());
+    documentSplit_->setOrientation(orientation);
+    splitEditor_->show();
+    const int extent =
+        orientation == Qt::Horizontal ? documentSplit_->width() : documentSplit_->height();
+    documentSplit_->setSizes({extent / 2, extent - extent / 2});
+    closeSplitAction_->setEnabled(true);
+    splitEditor_->setFocus();
+}
+
+void MainWindow::closeSplit() {
+    if (splitEditor_ == nullptr) {
+        return;
+    }
+    // Deleting the view releases its reference to the shared Scintilla document.
+    splitEditor_->hide();
+    splitEditor_->deleteLater();
+    splitEditor_ = nullptr;
+    splitSource_ = nullptr;
+    splitFocused_ = false;
+    closeSplitAction_->setEnabled(false);
+    if (auto* editor = currentEditor()) {
+        editor->setFocus();
+    }
+    updateEditorActions();
+}
+
+void MainWindow::focusOtherView() {
+    if (splitEditor_ == nullptr) {
+        return;
+    }
+    if (activeEditor() == splitEditor_) {
+        if (auto* editor = currentEditor()) {
+            editor->setFocus();
+        }
+    } else {
+        splitEditor_->setFocus();
+    }
+}
+
+void MainWindow::setFullScreen(const bool fullScreen) {
+    if (fullScreen == isFullScreen()) {
+        return;
+    }
+    if (fullScreen) {
+        showFullScreen();
+    } else if (maximizedBeforeFullScreen_) {
+        showMaximized();
+    } else {
+        showNormal();
+    }
+}
+
+void MainWindow::setDistractionFree(const bool enabled) {
+    if (enabled != distractionFree_) {
+        if (enabled) {
+            distractionFreeRestore_ = {
+                .explorer = explorerAction_->isChecked(),
+                .sourceControl = sourceControlAction_->isChecked(),
+                .terminal = terminalAction_->isChecked(),
+                .markdownPreview = markdownPreviewAction_->isChecked(),
+                .fullScreen = isFullScreen(),
+            };
+            distractionFree_ = true;
+            setExplorerVisible(false);
+            setSourceControlVisible(false);
+            setTerminalVisible(false);
+            setMarkdownPreviewVisible(false);
+            statusBar()->hide();
+            tabs_->tabBar()->hide();
+            setFullScreen(true);
+        } else {
+            distractionFree_ = false;
+            statusBar()->show();
+            tabs_->tabBar()->show();
+            if (distractionFreeRestore_.explorer) {
+                setExplorerVisible(true);
+            }
+            if (distractionFreeRestore_.sourceControl) {
+                setSourceControlVisible(true);
+            }
+            if (distractionFreeRestore_.terminal) {
+                setTerminalVisible(true);
+            }
+            if (distractionFreeRestore_.markdownPreview) {
+                setMarkdownPreviewVisible(true);
+            }
+            if (!distractionFreeRestore_.fullScreen) {
+                setFullScreen(false);
+            }
+        }
+    }
+
+    const QSignalBlocker blocker(distractionFreeAction_);
+    distractionFreeAction_->setChecked(distractionFree_);
+    if (auto* editor = activeEditor()) {
+        editor->setFocus();
+    }
+}
+
+void MainWindow::changeZoom(const int delta) {
+    auto options = viewOptions_;
+    options.zoom += delta;
+    applyViewOptions(options);
+}
+
+void MainWindow::syncEditorZoom(EditorWidget* editor) {
+    // Ctrl+wheel zooms one Scintilla view; mirror it to every editor and persist it.
+    connect(editor, &ScintillaEditBase::zoom, this, [this](const int zoom) {
+        if (zoom != viewOptions_.zoom) {
+            auto options = viewOptions_;
+            options.zoom = zoom;
+            applyViewOptions(options);
+        }
+    });
 }
 
 void MainWindow::showSettings() {
@@ -667,6 +852,10 @@ void MainWindow::applyAppearanceSettings(const AppearanceSettings& settings) {
             diffView->applyEditorSettings(appearanceSettings_.editor);
         }
     }
+    if (splitEditor_ != nullptr) {
+        splitEditor_->setEditorSettings(appearanceSettings_.editor);
+        splitEditor_->applyTheme(theme_.palette());
+    }
     if (terminal_ != nullptr) {
         terminal_->setTypography(appearanceSettings_.terminal.fontSizePixels,
                                  appearanceSettings_.terminal.lineHeightPixels);
@@ -692,6 +881,9 @@ void MainWindow::applyThemeToEditors() {
         if (auto* diffView = qobject_cast<GitDiffView*>(tabs_->widget(index))) {
             diffView->applyTheme(theme_.palette());
         }
+    }
+    if (splitEditor_ != nullptr) {
+        splitEditor_->applyTheme(theme_.palette());
     }
     if (terminal_ != nullptr) {
         terminal_->applyTheme(theme_.palette());

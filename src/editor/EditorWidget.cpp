@@ -12,6 +12,7 @@
 #include <QByteArrayList>
 #include <QColor>
 #include <QContextMenuEvent>
+#include <QSet>
 #include <QStringList>
 #include <QtMath>
 
@@ -334,6 +335,26 @@ void EditorWidget::setViewOptions(const EditorViewOptions& options) {
 
 const EditorViewOptions& EditorWidget::viewOptions() const noexcept { return viewOptions_; }
 
+void EditorWidget::shareDocumentWith(const EditorWidget& source) {
+    const auto documentPointer = source.send(message(Scintilla::Message::GetDocPointer));
+    if (send(message(Scintilla::Message::GetDocPointer)) != documentPointer) {
+        // Scintilla reference-counts documents, so this view keeps the text alive until
+        // it is destroyed. The lexer and styling belong to the document and stay shared.
+        internalMutation_ = true;
+        send(message(Scintilla::Message::SetDocPointer), 0, documentPointer);
+        internalMutation_ = false;
+    }
+    lexerName_ = source.lexerName_;
+    syntaxName_ = source.syntaxName_;
+    largeFileMode_ = source.largeFileMode_;
+    foldingEnabled_ = source.foldingEnabled_;
+    highlightedBrace_ = -1;
+    highlightedBraceMatch_ = -1;
+    lineNumberDigits_ = 0;
+    updateLineNumberMarginWidth();
+    applyViewOptions();
+}
+
 void EditorWidget::applyTheme(const ThemePalette& palette) {
     const auto family = editorSettings_.fontFamily.toUtf8();
     const int sizeHundredthPoints =
@@ -590,6 +611,159 @@ bool EditorWidget::toggleComment() {
         }
     }
     replaceLines(range, lines);
+    return true;
+}
+
+int EditorWidget::selectionCount() const {
+    return static_cast<int>(send(message(Scintilla::Message::GetSelections)));
+}
+
+void EditorWidget::addNextOccurrence() {
+    if (!hasSelection() && selectionCount() == 1) {
+        // The first press selects the word under the caret, like Sublime Text.
+        const auto caret = send(message(Scintilla::Message::GetCurrentPos));
+        const auto wordStart =
+            send(message(Scintilla::Message::WordStartPosition), static_cast<uptr_t>(caret), 1);
+        const auto wordEnd =
+            send(message(Scintilla::Message::WordEndPosition), static_cast<uptr_t>(caret), 1);
+        if (wordStart != wordEnd) {
+            send(message(Scintilla::Message::SetSel), static_cast<uptr_t>(wordStart), wordEnd);
+        }
+        return;
+    }
+    send(message(Scintilla::Message::TargetWholeDocument));
+    setSearchOptions(SearchOptions{.matchCase = true});
+    send(message(Scintilla::Message::MultipleSelectAddNext));
+    send(message(Scintilla::Message::ScrollCaret));
+}
+
+void EditorWidget::selectAllOccurrences() {
+    if (!hasSelection() && selectionCount() == 1) {
+        addNextOccurrence();
+        if (!hasSelection()) {
+            return;
+        }
+    }
+    send(message(Scintilla::Message::TargetWholeDocument));
+    setSearchOptions(SearchOptions{.matchCase = true});
+    send(message(Scintilla::Message::MultipleSelectAddEach));
+}
+
+void EditorWidget::addCursorVertically(const bool above) {
+    // Grow from the selection farthest in the requested direction.
+    sptr_t edgeCaret = send(message(Scintilla::Message::GetSelectionNCaret), 0);
+    sptr_t edgeLine =
+        send(message(Scintilla::Message::LineFromPosition), static_cast<uptr_t>(edgeCaret));
+    const int count = selectionCount();
+    for (int index = 1; index < count; ++index) {
+        const auto caret =
+            send(message(Scintilla::Message::GetSelectionNCaret), static_cast<uptr_t>(index));
+        const auto line =
+            send(message(Scintilla::Message::LineFromPosition), static_cast<uptr_t>(caret));
+        if (above ? line < edgeLine : line > edgeLine) {
+            edgeCaret = caret;
+            edgeLine = line;
+        }
+    }
+
+    const sptr_t targetLine = edgeLine + (above ? -1 : 1);
+    if (targetLine < 0 || targetLine >= send(message(Scintilla::Message::GetLineCount))) {
+        return;
+    }
+    const auto column =
+        send(message(Scintilla::Message::GetColumn), static_cast<uptr_t>(edgeCaret));
+    const auto position =
+        send(message(Scintilla::Message::FindColumn), static_cast<uptr_t>(targetLine), column);
+    send(message(Scintilla::Message::AddSelection), static_cast<uptr_t>(position), position);
+    send(message(Scintilla::Message::ScrollCaret));
+}
+
+void EditorWidget::splitSelectionIntoLines() {
+    const auto selectionStart = send(message(Scintilla::Message::GetSelectionStart));
+    const auto selectionEnd = send(message(Scintilla::Message::GetSelectionEnd));
+    const auto range = selectedLineRange(false);
+    if (selectionStart == selectionEnd || range.first == range.last) {
+        return;
+    }
+
+    for (sptr_t line = range.first; line <= range.last; ++line) {
+        const auto start = qMax(selectionStart, send(message(Scintilla::Message::PositionFromLine),
+                                                     static_cast<uptr_t>(line)));
+        const auto end = qMin(selectionEnd, send(message(Scintilla::Message::GetLineEndPosition),
+                                                 static_cast<uptr_t>(line)));
+        send(message(line == range.first ? Scintilla::Message::SetSelection
+                                         : Scintilla::Message::AddSelection),
+             static_cast<uptr_t>(end), start);
+    }
+}
+
+void EditorWidget::collapseToMainSelection() {
+    send(message(Scintilla::Message::SetEmptySelection),
+         static_cast<uptr_t>(send(message(Scintilla::Message::GetCurrentPos))));
+}
+
+bool EditorWidget::showWordCompletions(const bool explicitRequest) {
+    if (largeFileMode_ || hibernated_ || selectionCount() > 1) {
+        return false;
+    }
+
+    const auto caret = send(message(Scintilla::Message::GetCurrentPos));
+    const auto wordStart =
+        send(message(Scintilla::Message::WordStartPosition), static_cast<uptr_t>(caret), 1);
+    const auto prefixLength = caret - wordStart;
+    if (prefixLength < (explicitRequest ? 1 : minimumCompletionPrefix)) {
+        return false;
+    }
+    const QByteArray prefix = textRange(wordStart, caret).toLower();
+
+    // Scan a bounded window around the caret so completion stays cheap on long files.
+    constexpr sptr_t scanRadius = 64 * 1024;
+    const auto scanStart = qMax<sptr_t>(0, caret - scanRadius);
+    const auto scanEnd = qMin(send(message(Scintilla::Message::GetLength)), caret + scanRadius);
+    const QByteArray text = textRange(scanStart, scanEnd);
+    const auto isWordByte = [&text](const qsizetype index) {
+        return isWordCharacter(static_cast<unsigned char>(text.at(index)));
+    };
+
+    QList<QByteArray> words;
+    QSet<QByteArray> seen;
+    qsizetype index = 0;
+    while (index < text.size()) {
+        if (!isWordByte(index)) {
+            ++index;
+            continue;
+        }
+        qsizetype end = index;
+        while (end < text.size() && isWordByte(end)) {
+            ++end;
+        }
+        const bool isCurrentWord = scanStart + index == wordStart;
+        const bool startsWithDigit = text.at(index) >= '0' && text.at(index) <= '9';
+        if (!isCurrentWord && !startsWithDigit && end - index > prefix.size()) {
+            const QByteArray word = text.mid(index, end - index);
+            if (word.toLower().startsWith(prefix) && !seen.contains(word)) {
+                seen.insert(word);
+                words.append(word);
+            }
+        }
+        index = end;
+    }
+
+    if (words.isEmpty()) {
+        if (send(message(Scintilla::Message::AutoCActive)) != 0) {
+            send(message(Scintilla::Message::AutoCCancel));
+        }
+        return false;
+    }
+    std::sort(words.begin(), words.end(), [](const QByteArray& left, const QByteArray& right) {
+        return left.compare(right, Qt::CaseInsensitive) < 0;
+    });
+    if (words.size() > maximumCompletionItems) {
+        words.resize(maximumCompletionItems);
+    }
+    const QByteArray list = words.join(' ');
+    sends(message(Scintilla::Message::AutoCShow), static_cast<uptr_t>(prefixLength),
+          list.constData());
     return true;
 }
 
@@ -895,6 +1069,20 @@ void EditorWidget::configureEditor() {
     send(message(Scintilla::Message::SetTabIndents), 1);
     send(message(Scintilla::Message::SetBackSpaceUnIndents), 1);
 
+    // Ctrl/Cmd+click adds carets, Alt+drag makes a column selection, and typing or pasting
+    // applies to every selection.
+    send(message(Scintilla::Message::SetMultipleSelection), 1);
+    send(message(Scintilla::Message::SetAdditionalSelectionTyping), 1);
+    send(message(Scintilla::Message::SetMultiPaste),
+         static_cast<uptr_t>(Scintilla::MultiPaste::Each));
+    send(message(Scintilla::Message::SetMouseSelectionRectangularSwitch), 1);
+    send(message(Scintilla::Message::SetVirtualSpaceOptions),
+         static_cast<uptr_t>(Scintilla::VirtualSpace::RectangularSelection));
+
+    send(message(Scintilla::Message::AutoCSetIgnoreCase), 1);
+    send(message(Scintilla::Message::AutoCSetAutoHide), 1);
+    send(message(Scintilla::Message::AutoCSetMaxHeight), 8);
+
     send(message(Scintilla::Message::SetMarginTypeN), bookmarkMargin,
          static_cast<sptr_t>(Scintilla::MarginType::Symbol));
     send(message(Scintilla::Message::SetMarginMaskN), bookmarkMargin, bookmarkMask);
@@ -939,6 +1127,11 @@ void EditorWidget::configureEditor() {
 
 bool EditorWidget::applyViewOptions() {
     const bool fullFeatures = !largeFileMode_;
+    if (send(message(Scintilla::Message::GetZoom)) != viewOptions_.zoom) {
+        send(message(Scintilla::Message::SetZoom), static_cast<uptr_t>(viewOptions_.zoom));
+        lineNumberDigits_ = 0;
+        updateLineNumberMarginWidth();
+    }
     send(message(Scintilla::Message::SetWrapMode),
          static_cast<uptr_t>(viewOptions_.wordWrap && fullFeatures ? Scintilla::Wrap::Word
                                                                    : Scintilla::Wrap::None));
@@ -1020,6 +1213,10 @@ void EditorWidget::handleCharAdded(const int character) {
             autoIndentCurrentLine();
         }
         return;
+    }
+    if (viewOptions_.wordCompletion && isWordCharacter(character) &&
+        send(message(Scintilla::Message::AutoCActive)) == 0) {
+        showWordCompletions(false);
     }
     if (!viewOptions_.autoCloseBrackets) {
         return;

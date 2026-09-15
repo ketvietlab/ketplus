@@ -163,6 +163,12 @@ void FindReplaceBar::showMatchCount(const int count, const bool limitReached) {
 }
 
 bool FindReplaceBar::eventFilter(QObject* watched, QEvent* event) {
+    if (event->type() == QEvent::ShortcutOverride &&
+        static_cast<QKeyEvent*>(event)->key() == Qt::Key_Escape) {
+        // Claim Escape so it closes the search bar before any window shortcut sees it.
+        event->accept();
+        return true;
+    }
     if (event->type() == QEvent::KeyPress) {
         const auto* keyEvent = static_cast<QKeyEvent*>(event);
         if (keyEvent->key() == Qt::Key_Escape) {
