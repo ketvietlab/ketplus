@@ -14,6 +14,8 @@
 #include <utility>
 
 class QContextMenuEvent;
+class QEvent;
+class QMouseEvent;
 class QPoint;
 
 namespace ketplus {
@@ -148,6 +150,8 @@ class EditorWidget final : public ScintillaEditBase {
 
   protected:
     void contextMenuEvent(QContextMenuEvent* event) override;
+    // Watches the viewport for pointer moves so the fold margin can follow the mouse.
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
   private:
     struct ViewState final {
@@ -167,6 +171,9 @@ class EditorWidget final : public ScintillaEditBase {
     void updateLargeFileMode(qsizetype contentSize);
     void restoreViewState();
     void applyLexerTheme(const ThemePalette& palette);
+    // Fold arrows for open blocks only appear while the pointer is over the margins.
+    void setFoldMarginHovered(bool hovered);
+    void defineFoldMarkers();
     void updateEmbeddedStyleHighlight();
     bool applyViewOptions();
     void updateBraceHighlight();
@@ -188,6 +195,7 @@ class EditorWidget final : public ScintillaEditBase {
     std::unique_ptr<Document> document_;
     EditorSettings editorSettings_{EditorSettings::defaults()};
     EditorViewOptions viewOptions_;
+    QString foldMarkerColor_{QStringLiteral("#8B8B8B")};
     QString lexerName_;
     QString syntaxName_;
     QString syntaxOverride_;
@@ -204,6 +212,7 @@ class EditorWidget final : public ScintillaEditBase {
     bool foldingEnabled_{false};
     bool searchScopeActive_{false};
     bool selectionMatchesActive_{false};
+    bool foldMarginHovered_{false};
     bool embeddedStyleActive_{false};
     // The last colored range; text edits and theme or lexer changes force a rescan.
     bool embeddedStyleDirty_{true};

@@ -43,6 +43,7 @@ class EditorWidgetTest final : public QObject {
     void highlightsGenericCode();
     void highlightsPopularLanguages_data();
     void highlightsPopularLanguages();
+    void revealsFoldArrowsOnMarginHover();
     void colorsCssInsideHtmlStyleBlocks();
     void splitPaneSwitchesBetweenSources();
     void colorsYamlValuesOrange();
@@ -294,6 +295,33 @@ void EditorWidgetTest::highlightsPopularLanguages_data() {
                             << SCE_PAS_WORD;
     QTest::newRow("julia") << QStringLiteral("main.jl") << QByteArray("function f() end")
                            << SCE_JULIA_KEYWORD1;
+}
+
+void EditorWidgetTest::revealsFoldArrowsOnMarginHover() {
+    ketplus::EditorWidget editor;
+    editor.resize(400, 300);
+    editor.setText("root:\n  child: 1\n  other: 2\n");
+    editor.configureLexerForPath(QStringLiteral("values.yaml"));
+    editor.applyTheme(ketplus::ThemePalette{});
+
+    const auto symbolOf = [&editor](const int markerNumber) {
+        return editor.send(message(Scintilla::Message::MarkerSymbolDefined),
+                           static_cast<uptr_t>(markerNumber));
+    };
+    // A collapsed block always shows its arrow; an open one only shows it under the pointer.
+    QCOMPARE(symbolOf(SC_MARKNUM_FOLDER), SC_MARK_RGBAIMAGE);
+    QCOMPARE(symbolOf(SC_MARKNUM_FOLDEROPEN), SC_MARK_EMPTY);
+
+    const auto sendMove = [&editor](const QPointF& position) {
+        QMouseEvent move(QEvent::MouseMove, position, editor.mapToGlobal(position), Qt::NoButton,
+                         Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(editor.viewport(), &move);
+    };
+    sendMove(QPointF(6, 40));
+    QCOMPARE(symbolOf(SC_MARKNUM_FOLDEROPEN), SC_MARK_RGBAIMAGE);
+
+    sendMove(QPointF(320, 40));
+    QCOMPARE(symbolOf(SC_MARKNUM_FOLDEROPEN), SC_MARK_EMPTY);
 }
 
 void EditorWidgetTest::colorsCssInsideHtmlStyleBlocks() {
