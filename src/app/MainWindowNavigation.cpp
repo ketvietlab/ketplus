@@ -347,6 +347,7 @@ void MainWindow::resolveDefinition(EditorWidget* editor, const QString& symbol,
 
     const QString expression = definitionExpression(symbol, editor->syntaxName());
     definitionSymbol_ = symbol;
+    definitionFallbackUsed_ = expression.isEmpty();
     WorkspaceSearchOptions options;
     options.query = expression.isEmpty() ? symbol : expression;
     options.regex = !expression.isEmpty();
@@ -366,9 +367,13 @@ bool MainWindow::openFileReference(EditorWidget* editor, const QString& fileToke
     if (!workspaceRoot_.isEmpty()) {
         bases.append(workspaceRoot_);
     }
+    const QStringList candidates = fileReferenceCandidates(fileToken);
     for (const QString& base : bases) {
-        const QFileInfo target(QDir(base).absoluteFilePath(fileToken));
-        if (target.isFile()) {
+        for (const QString& candidate : candidates) {
+            const QFileInfo target(QDir(base).absoluteFilePath(candidate));
+            if (!target.isFile()) {
+                continue;
+            }
             pushNavigationLocation(locationOf(editor));
             restoringNavigation_ = true;
             openFile(target.absoluteFilePath());
@@ -389,6 +394,16 @@ void MainWindow::finishDefinitionSearch() {
         matchCount += static_cast<int>(file.matches.size());
     }
     if (matchCount == 0) {
+        // The declaration pattern found nothing, so fall back to every use of the name.
+        if (!definitionFallbackUsed_) {
+            definitionFallbackUsed_ = true;
+            WorkspaceSearchOptions options;
+            options.query = definitionSymbol_;
+            options.wholeWord = true;
+            options.matchCase = true;
+            startWorkspaceSearch(options, true);
+            return;
+        }
         statusBar()->showMessage(
             QStringLiteral("No definition found for %1").arg(definitionSymbol_), 4000);
         return;
@@ -409,7 +424,10 @@ void MainWindow::finishDefinitionSearch() {
     }
     panel->setSearching(false);
     panel->setStatusText(
-        QStringLiteral("%L1 possible definitions of %2").arg(matchCount).arg(definitionSymbol_));
+        QStringLiteral("%L1 %2 of %3")
+            .arg(matchCount)
+            .arg(definitionFallbackUsed_ ? QStringLiteral("uses") : QStringLiteral("declarations"))
+            .arg(definitionSymbol_));
 }
 
 MainWindow::NavigationLocation MainWindow::locationOf(EditorWidget* editor) const {

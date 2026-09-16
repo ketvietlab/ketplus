@@ -210,6 +210,7 @@ class MainWindow final : public QMainWindow {
     QList<WorkspaceSearchFileResult> definitionResults_;
     QString definitionSymbol_;
     bool definitionSearch_{false};
+    bool definitionFallbackUsed_{false};
     QToolButton* gitButton_{nullptr};
     QTimer* highlightTimer_{nullptr};
     QSplitter* documentSplit_{nullptr};

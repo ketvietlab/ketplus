@@ -59,6 +59,19 @@ void NavigationTest::buildsDefinitionPatterns() {
     // Not a name, so there is nothing to look for.
     QVERIFY(ketplus::definitionExpression(QStringLiteral("10"), QStringLiteral("c-cpp")).isEmpty());
 
+    // An unrecognised syntax still finds the shapes other languages use.
+    const QString unknown = ketplus::definitionExpression(QStringLiteral("helpUrl"),
+                                                          QStringLiteral("generic"));
+    QVERIFY(matches(unknown, QStringLiteral("export const helpUrl = 'https://example.com';")));
+    QVERIFY(!matches(unknown, QStringLiteral("import { helpUrl } from '../data/help';")));
+
+    // An import without an extension may mean any of several files.
+    const QStringList candidates = ketplus::fileReferenceCandidates(QStringLiteral("../data/help"));
+    QVERIFY(candidates.contains(QStringLiteral("../data/help")));
+    QVERIFY(candidates.contains(QStringLiteral("../data/help.ts")));
+    QVERIFY(candidates.contains(QStringLiteral("../data/help/index.ts")));
+    QVERIFY(ketplus::fileReferenceCandidates(QStringLiteral("helpUrl")).isEmpty());
+
     QVERIFY(ketplus::looksLikeFileReference(QStringLiteral("./theme.css")));
     QVERIFY(ketplus::looksLikeFileReference(QStringLiteral("app/main.h")));
     QVERIFY(!ketplus::looksLikeFileReference(QStringLiteral("renderWidget")));

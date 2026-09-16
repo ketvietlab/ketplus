@@ -1,6 +1,7 @@
 #include "editor/DefinitionPattern.h"
 
 #include <QRegularExpression>
+#include <QStringList>
 
 namespace ketplus {
 namespace {
@@ -61,8 +62,11 @@ QString declarationKeywords(const QString& syntax) {
     if (syntax == QStringLiteral("cmake")) {
         return QStringLiteral("function|macro");
     }
-    // C, C++, Objective-C and anything else that declares types with these words.
-    return QStringLiteral("class|struct|enum|union|namespace|typedef|using|interface|protocol");
+    // C, C++ and Objective-C, plus the words other languages use, so an unrecognised
+    // syntax still finds the common shapes of a declaration.
+    return QStringLiteral("class|struct|enum|union|namespace|typedef|using|interface|protocol|"
+                          "function|func|fn|def|type|const|let|var|val|object|trait|record|"
+                          "module|impl|export\\s+const|export\\s+default");
 }
 
 } // namespace
@@ -97,6 +101,27 @@ QString definitionExpression(const QString& symbol, const QString& syntaxName) {
                "|(?:\\b%2\\s*(?:=|:=)\\s*(?:async\\s+)?(?:function\\b|\\(|\\[|new\\b))"
                "|(?:^\\s*(?:def|fn|func|function|sub)\\s+%2\\b)")
         .arg(keywords, name);
+}
+
+QStringList fileReferenceCandidates(const QString& token) {
+    if (!looksLikeFileReference(token)) {
+        return {};
+    }
+    QStringList candidates{token};
+    static const QStringList suffixes{
+        QStringLiteral(".ts"),   QStringLiteral(".tsx"),  QStringLiteral(".js"),
+        QStringLiteral(".jsx"),  QStringLiteral(".mjs"),  QStringLiteral(".cjs"),
+        QStringLiteral(".astro"), QStringLiteral(".vue"), QStringLiteral(".svelte"),
+        QStringLiteral(".json"), QStringLiteral(".css"),  QStringLiteral(".scss"),
+        QStringLiteral(".py"),   QStringLiteral(".rb"),   QStringLiteral(".go"),
+        QStringLiteral(".rs"),   QStringLiteral(".h"),    QStringLiteral(".hpp")};
+    for (const QString& suffix : suffixes) {
+        candidates.append(token + suffix);
+    }
+    for (const QString& suffix : suffixes) {
+        candidates.append(token + QStringLiteral("/index") + suffix);
+    }
+    return candidates;
 }
 
 bool looksLikeFileReference(const QString& token) {

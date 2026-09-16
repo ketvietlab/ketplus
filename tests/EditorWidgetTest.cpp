@@ -231,6 +231,8 @@ void EditorWidgetTest::selectsSyntaxFromPath_data() {
     QTest::newRow("scala") << QStringLiteral("App.scala") << QStringLiteral("scala");
     QTest::newRow("objective-c") << QStringLiteral("View.mm") << QStringLiteral("objective-c");
     QTest::newRow("gemfile") << QStringLiteral("Gemfile") << QStringLiteral("ruby");
+    QTest::newRow("astro") << QStringLiteral("page.astro")
+                           << QStringLiteral("javascript-typescript");
 }
 
 void EditorWidgetTest::selectsSyntaxFromPath() {

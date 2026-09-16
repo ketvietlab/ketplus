@@ -12,4 +12,8 @@ namespace ketplus {
 // True when the token looks like a file reference, such as "./theme.css" or "app/main.h".
 [[nodiscard]] bool looksLikeFileReference(const QString& token);
 
+// Relative paths to try for a file reference: the token itself, then the extensions an
+// import without one may mean, then the index file of a folder.
+[[nodiscard]] QStringList fileReferenceCandidates(const QString& token);
+
 } // namespace ketplus
