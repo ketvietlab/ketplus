@@ -44,6 +44,8 @@ class SymbolIndex final {
     void indexWorkspace(const QString& root, const WorkspaceFileList& files,
                         const std::atomic_bool* cancelled = nullptr);
     [[nodiscard]] bool hasWorkspace(const QString& root) const;
+    // Re-reads one file, so a lookup after a save does not point at a line that has moved.
+    void reindexFile(const QString& root, const QString& relativePath);
     // Declarations of `name` in `root`, marking that workspace as recently used.
     [[nodiscard]] QList<SymbolHit> lookup(const QString& root, const QString& name);
     void forgetWorkspace(const QString& root);

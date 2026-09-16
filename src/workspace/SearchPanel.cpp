@@ -55,9 +55,10 @@ class ResultDelegate final : public QStyledItemDelegate {
         document.setHtml(markup);
         const QRect text = style->subElementRect(QStyle::SE_ItemViewItemText, &view, widget);
         document.setTextWidth(text.width());
-        painter->setClipRect(text);
 
         painter->save();
+        // Clipping inside the saved state, so the next row is not clipped to this one.
+        painter->setClipRect(text);
         painter->translate(text.topLeft() +
                            QPoint(0, (text.height() - document.size().height()) / 2));
         QAbstractTextDocumentLayout::PaintContext context;

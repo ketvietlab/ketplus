@@ -440,6 +440,13 @@ void MainWindow::clearSymbolIndex() {
         statusBar()->showMessage(QStringLiteral("No symbols are indexed"), 3000);
         return;
     }
+    // A build in flight would put its workspace straight back, so it is stopped first.
+    if (symbolIndexCancelled_ != nullptr) {
+        symbolIndexCancelled_->store(true);
+    }
+    if (symbolIndexThread_ != nullptr) {
+        symbolIndexThread_->wait();
+    }
     const int workspaces = symbolIndex_->workspaceCount();
     const qint64 bytes = symbolIndex_->memoryBytes();
     symbolIndex_->clear();

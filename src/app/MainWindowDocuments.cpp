@@ -3,6 +3,7 @@
 #include "app/SettingsDialog.h"
 #include "editor/EditorSplitPane.h"
 #include "editor/EditorWidget.h"
+#include "index/SymbolIndex.h"
 #include "git/GitChangesPanel.h"
 #include "git/GitDiffView.h"
 #include "git/GitService.h"
@@ -147,6 +148,13 @@ bool MainWindow::saveEditor(EditorWidget* editor, const bool choosePath) {
 
     editor->markSaved();
     rememberRecentFile(path);
+    // The index holds what this file said before the save, so that one file is read again.
+    if (symbolIndex_ != nullptr && !workspaceRoot_.isEmpty()) {
+        const QString relative = QDir(workspaceRoot_).relativeFilePath(path);
+        if (!relative.startsWith(QStringLiteral(".."))) {
+            symbolIndex_->reindexFile(workspaceRoot_, relative);
+        }
+    }
     editor->configureLexerForPath(path);
     editor->applyTheme(theme_.palette());
     if (splitPane_ != nullptr && editor == splitSource_) {

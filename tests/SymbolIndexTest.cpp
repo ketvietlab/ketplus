@@ -27,7 +27,37 @@ class SymbolIndexTest final : public QObject {
     void sharesFilesWithIdenticalContents();
     void dropsTheLeastRecentlyUsedWorkspaceOverBudget();
     void dropsIdleWorkspaces();
+    void followsAFileThatChangedOnDisk();
 };
+
+void SymbolIndexTest::followsAFileThatChangedOnDisk() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QDir root(directory.path());
+    const QString path = root.filePath(QStringLiteral("a.cpp"));
+    QVERIFY(writeFile(path, "class Widget {};\n"));
+
+    ketplus::SymbolIndex index;
+    index.indexWorkspace(root.absolutePath(), listOf({QStringLiteral("a.cpp")}));
+    QCOMPARE(index.lookup(root.absolutePath(), QStringLiteral("Widget")).first().line, 1);
+
+    // Saving moves the declaration; a lookup must not point at the old line.
+    QVERIFY(writeFile(path, "// a note\n// another\nclass Widget {};\n"));
+    index.reindexFile(root.absolutePath(), QStringLiteral("a.cpp"));
+    const auto hits = index.lookup(root.absolutePath(), QStringLiteral("Widget"));
+    QCOMPARE(hits.size(), 1);
+    QCOMPARE(hits.first().line, 3);
+
+    // A declaration that is gone leaves nothing behind.
+    QVERIFY(writeFile(path, "int main() { return 0; }\n"));
+    index.reindexFile(root.absolutePath(), QStringLiteral("a.cpp"));
+    QVERIFY(index.lookup(root.absolutePath(), QStringLiteral("Widget")).isEmpty());
+    QCOMPARE(index.fileCount(root.absolutePath()), 1);
+
+    // An unknown workspace is left alone.
+    index.reindexFile(QStringLiteral("/nowhere"), QStringLiteral("a.cpp"));
+    QCOMPARE(index.workspaceCount(), 1);
+}
 
 void SymbolIndexTest::findsDeclarationsWithoutScanning() {
     QTemporaryDir directory;

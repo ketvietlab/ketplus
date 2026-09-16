@@ -96,6 +96,66 @@ void SymbolIndex::indexWorkspace(const QString& root, const WorkspaceFileList& f
     enforceBudget(root);
 }
 
+void SymbolIndex::reindexFile(const QString& root, const QString& relativePath) {
+    {
+        const QMutexLocker locker(&mutex_);
+        if (!workspaces_.contains(root)) {
+            return;
+        }
+    }
+    if (hasBinaryFileSuffix(relativePath)) {
+        return;
+    }
+    const QString path = QDir(root).absoluteFilePath(relativePath);
+    const QString syntax = QString::fromLatin1(syntaxDefinitionForPath(path).name);
+    QString text;
+    const bool readable = syntax != QStringLiteral("plain") && readSearchableFile(path, &text);
+
+    const QMutexLocker locker(&mutex_);
+    auto workspace = workspaces_.find(root);
+    if (workspace == workspaces_.end()) {
+        return;
+    }
+    const QByteArray hash = readable ? contentHash(text) : QByteArray();
+    if (!hash.isEmpty() && workspace->files.value(hash).contains(relativePath)) {
+        return; // The contents are what the index already holds.
+    }
+
+    // Drop the path from whichever contents it held before.
+    for (auto file = workspace->files.begin(); file != workspace->files.end();) {
+        if (!file.value().removeOne(relativePath)) {
+            ++file;
+            continue;
+        }
+        if (auto blob = blobs_.find(file.key()); blob != blobs_.end()) {
+            --blob->references;
+            if (blob->references <= 0) {
+                totalBytes_ -= blob->bytes;
+                for (const auto& symbol : blob->symbols) {
+                    auto owners = names_.find(symbol.name);
+                    if (owners != names_.end()) {
+                        owners->removeAll(file.key());
+                        if (owners->isEmpty()) {
+                            names_.erase(owners);
+                        }
+                    }
+                }
+                blobs_.erase(blob);
+            }
+        }
+        if (file.value().isEmpty()) {
+            file = workspace->files.erase(file);
+        } else {
+            ++file;
+        }
+    }
+
+    if (!hash.isEmpty()) {
+        addBlobReference(hash, text, syntax);
+        workspace->files[hash].append(relativePath);
+    }
+}
+
 bool SymbolIndex::hasWorkspace(const QString& root) const {
     const QMutexLocker locker(&mutex_);
     return workspaces_.contains(root);
