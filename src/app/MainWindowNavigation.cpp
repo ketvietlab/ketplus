@@ -1,6 +1,7 @@
 #include "app/MainWindow.h"
 
 #include "editor/DefinitionPattern.h"
+#include "index/SymbolIndex.h"
 #include "editor/EditorWidget.h"
 #include "editor/SymbolExtractor.h"
 #include "workspace/SearchPanel.h"
@@ -20,6 +21,7 @@
 #include <QStatusBar>
 #include <QTabWidget>
 #include <QThread>
+#include <QTimer>
 
 #include <functional>
 
@@ -204,6 +206,12 @@ void MainWindow::refreshWorkspaceFileIndex(const bool force) {
 
 MainWindow::~MainWindow() {
     cancelWorkspaceSearch();
+    if (symbolIndexCancelled_ != nullptr) {
+        symbolIndexCancelled_->store(true);
+    }
+    if (symbolIndexThread_ != nullptr) {
+        symbolIndexThread_->wait();
+    }
     if (workspaceIndexCancelled_ != nullptr) {
         workspaceIndexCancelled_->store(true);
     }
@@ -334,6 +342,13 @@ void MainWindow::activateQuickOpenItem(const QVariant& data) {
         }
         break;
     }
+    case QuickOpenMode::Definitions: {
+        const QStringList parts = data.toString().split(QLatin1Char('\n'));
+        if (parts.size() == 2) {
+            openWorkspaceFile(parts.at(0), parts.at(1).toInt());
+        }
+        break;
+    }
     case QuickOpenMode::Symbols: {
         EditorWidget* editor = symbolEditor_;
         if (editor == nullptr || editor->isHibernated()) {
@@ -371,6 +386,11 @@ void MainWindow::resolveDefinition(EditorWidget* editor, const QString& symbol,
         return;
     }
 
+    // An indexed workspace answers without touching the disk.
+    if (resolveDefinitionFromIndex(editor, symbol)) {
+        return;
+    }
+
     // A declaration in this file wins: it needs no scan and is the common case.
     if (!editor->isLargeFileMode()) {
         const int currentLine = editor->currentLine();
@@ -396,6 +416,9 @@ void MainWindow::resolveDefinition(EditorWidget* editor, const QString& symbol,
         return;
     }
 
+    // The scan answers this click; the index makes the next ones instant.
+    startSymbolIndex(workspaceRoot_);
+
     const QString expression = definitionExpression(symbol, editor->syntaxName());
     definitionSymbol_ = symbol;
     definitionFallbackUsed_ = expression.isEmpty();
@@ -405,6 +428,130 @@ void MainWindow::resolveDefinition(EditorWidget* editor, const QString& symbol,
     options.wholeWord = expression.isEmpty();
     options.matchCase = true;
     startWorkspaceSearch(options, true);
+}
+
+void MainWindow::clearSymbolIndex() {
+    if (symbolIndex_ == nullptr) {
+        statusBar()->showMessage(QStringLiteral("No symbols are indexed"), 3000);
+        return;
+    }
+    const int workspaces = symbolIndex_->workspaceCount();
+    const qint64 bytes = symbolIndex_->memoryBytes();
+    symbolIndex_->clear();
+    statusBar()->showMessage(QStringLiteral("Cleared the index of %L1 %2 (%L3 MB)")
+                                 .arg(workspaces)
+                                 .arg(workspaces == 1 ? QStringLiteral("folder")
+                                                      : QStringLiteral("folders"))
+                                 .arg(bytes / (1024 * 1024)),
+                             3000);
+}
+
+bool MainWindow::resolveDefinitionFromIndex(EditorWidget* editor, const QString& symbol) {
+    if (symbolIndex_ == nullptr || workspaceRoot_.isEmpty() ||
+        !symbolIndex_->hasWorkspace(workspaceRoot_)) {
+        return false;
+    }
+    const auto hits = symbolIndex_->lookup(workspaceRoot_, symbol);
+    if (hits.isEmpty()) {
+        return false;
+    }
+
+    const QDir root(workspaceRoot_);
+    const QString currentPath =
+        editor->document().isUntitled() ? QString() : editor->document().filePath();
+    if (hits.size() == 1) {
+        openWorkspaceFile(hits.constFirst().relativePath, hits.constFirst().line);
+        return true;
+    }
+
+    // Several declarations: list them, with the ones in this file first.
+    QList<QuickOpenItem> items;
+    items.reserve(hits.size());
+    for (const auto& hit : hits) {
+        const QString path = QDir::cleanPath(root.absoluteFilePath(hit.relativePath));
+        items.append({hit.relativePath,
+                      QStringLiteral("%1 · line %2")
+                          .arg(hit.kind.isEmpty() ? QStringLiteral("symbol") : hit.kind)
+                          .arg(hit.line),
+                      QStringLiteral("%1\n%2").arg(hit.relativePath).arg(hit.line)});
+        if (path == currentPath) {
+            items.move(items.size() - 1, 0);
+        }
+    }
+    quickOpenMode_ = QuickOpenMode::Definitions;
+    ensureQuickOpen()->open(QStringLiteral("Definitions of %1").arg(symbol), items);
+    return true;
+}
+
+void MainWindow::openWorkspaceFile(const QString& relativePath, const int line) {
+    const QString path = QDir::cleanPath(QDir(workspaceRoot_).absoluteFilePath(relativePath));
+    if (auto* editor = activeEditor(); editor != nullptr && !editor->isHibernated()) {
+        pushNavigationLocation(locationOf(editor));
+    }
+    restoringNavigation_ = true;
+    openFile(path);
+    restoringNavigation_ = false;
+    if (auto* opened = currentEditor(); opened != nullptr && !opened->isHibernated()) {
+        opened->goToLine(line);
+        opened->setFocus();
+        lastLocation_ = locationOf(opened);
+    }
+}
+
+void MainWindow::startSymbolIndex(const QString& root) {
+    if (root.isEmpty() || symbolIndexThread_ != nullptr) {
+        return;
+    }
+    if (symbolIndex_ == nullptr) {
+        symbolIndex_ = std::make_unique<SymbolIndex>();
+    }
+    if (symbolIndex_->hasWorkspace(root)) {
+        return;
+    }
+    const WorkspaceFileList files = cachedWorkspaceFiles(root);
+    if (files.relativePaths.isEmpty()) {
+        // The file list is stale or still being built; the next lookup tries again.
+        refreshWorkspaceFileIndex(false);
+        return;
+    }
+
+    symbolIndexRoot_ = root;
+    symbolIndexCancelled_ = std::make_shared<std::atomic_bool>(false);
+    const auto cancelled = symbolIndexCancelled_;
+    auto* index = symbolIndex_.get();
+    // Reading and extracting happen off the UI thread; the destructor cancels and waits.
+    auto* thread = QThread::create([this, index, root, files, cancelled] {
+        index->indexWorkspace(root, files, cancelled.get());
+        QMetaObject::invokeMethod(
+            this,
+            [this, root, cancelled] {
+                symbolIndexThread_ = nullptr;
+                symbolIndexRoot_.clear();
+                if (!cancelled->load() && symbolIndex_ != nullptr) {
+                    statusBar()->showMessage(
+                        QStringLiteral("Indexed %L1 files in %2")
+                            .arg(symbolIndex_->fileCount(root))
+                            .arg(QFileInfo(root).fileName()),
+                        3000);
+                }
+            },
+            Qt::QueuedConnection);
+    });
+    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+    symbolIndexThread_ = thread;
+    thread->start(QThread::LowPriority);
+
+    if (symbolIndexIdleTimer_ == nullptr) {
+        // Workspaces left untouched are dropped even while the budget has room.
+        symbolIndexIdleTimer_ = new QTimer(this);
+        symbolIndexIdleTimer_->setInterval(60 * 1000);
+        connect(symbolIndexIdleTimer_, &QTimer::timeout, this, [this] {
+            if (symbolIndex_ != nullptr) {
+                symbolIndex_->evictIdle(defaultSymbolIndexIdleMs, workspaceRoot_);
+            }
+        });
+        symbolIndexIdleTimer_->start();
+    }
 }
 
 bool MainWindow::openFileReference(EditorWidget* editor, const QString& fileToken) {

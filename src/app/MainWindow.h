@@ -41,6 +41,7 @@ struct SearchOptions;
 
 class EditorSplitPane;
 class EditorWidget;
+class SymbolIndex;
 class FindReplaceBar;
 class ExplorerPanel;
 class GitChangesPanel;
@@ -133,6 +134,11 @@ class MainWindow final : public QMainWindow {
     void startWorkspaceSearch(const WorkspaceSearchOptions& options, bool definitionSearch);
     // Ctrl/Cmd+click and F12: opens a file reference, or finds where a symbol is declared.
     void goToDefinition();
+    // Builds the symbol index for `root` in the background, if it is not there already.
+    void startSymbolIndex(const QString& root);
+    void clearSymbolIndex();
+    [[nodiscard]] bool resolveDefinitionFromIndex(EditorWidget* editor, const QString& symbol);
+    void openWorkspaceFile(const QString& relativePath, int line);
     void resolveDefinition(EditorWidget* editor, const QString& symbol, const QString& fileToken);
     bool openFileReference(EditorWidget* editor, const QString& fileToken);
     void finishDefinitionSearch();
@@ -180,7 +186,7 @@ class MainWindow final : public QMainWindow {
         qint64 position{0};
         int line{0};
     };
-    enum class QuickOpenMode { Commands, Files, Symbols };
+    enum class QuickOpenMode { Commands, Files, Symbols, Definitions };
     // The side panel the search panel replaced, restored when search is closed.
     enum class SidePanel { None, Explorer, SourceControl };
 
@@ -240,6 +246,11 @@ class MainWindow final : public QMainWindow {
     QPointer<EditorWidget> symbolEditor_;
     QStringList workspaceFiles_;
     QStringList declinedFullScanRoots_;
+    std::unique_ptr<SymbolIndex> symbolIndex_;
+    QPointer<QThread> symbolIndexThread_;
+    std::shared_ptr<std::atomic_bool> symbolIndexCancelled_;
+    QString symbolIndexRoot_;
+    QTimer* symbolIndexIdleTimer_{nullptr};
     QString workspaceFilesRoot_;
     qint64 workspaceFilesIndexedAt_{0};
     bool workspaceFilesTruncated_{false};

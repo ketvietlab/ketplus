@@ -3,6 +3,7 @@
 #include "app/SettingsDialog.h"
 #include "editor/EditorSplitPane.h"
 #include "editor/EditorWidget.h"
+#include "index/SymbolIndex.h"
 #include "git/GitChangesPanel.h"
 #include "git/GitDiffView.h"
 #include "git/GitService.h"

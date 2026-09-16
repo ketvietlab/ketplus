@@ -292,6 +292,8 @@ void MainWindow::createActions() {
     goToDefinitionAction_ = goMenu->addAction(QStringLiteral("Go to &Definition"));
     goToDefinitionAction_->setShortcut(QKeySequence(Qt::Key_F12));
     connect(goToDefinitionAction_, &QAction::triggered, this, &MainWindow::goToDefinition);
+    auto* clearIndexAction = goMenu->addAction(QStringLiteral("Clear Symbol Index"));
+    connect(clearIndexAction, &QAction::triggered, this, &MainWindow::clearSymbolIndex);
     goMenu->addSeparator();
     backAction_ = goMenu->addAction(QStringLiteral("Bac&k"));
     forwardAction_ = goMenu->addAction(QStringLiteral("For&ward"));
