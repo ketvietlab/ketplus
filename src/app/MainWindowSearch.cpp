@@ -39,7 +39,8 @@ SearchPanel* MainWindow::ensureSearchPanel() {
     workspaceSplit_->insertWidget(0, searchPanel_);
     workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(searchPanel_), 0);
     workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(editorSplit_), 1);
-    connect(searchPanel_, &SearchPanel::searchRequested, this, &MainWindow::startWorkspaceSearch);
+    connect(searchPanel_, &SearchPanel::searchRequested, this,
+            qOverload<>(&MainWindow::startWorkspaceSearch));
     connect(searchPanel_, &SearchPanel::cancelRequested, this, [this] {
         cancelWorkspaceSearch();
         searchPanel_->setSearching(false);
