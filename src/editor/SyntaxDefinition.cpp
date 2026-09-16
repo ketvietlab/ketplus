@@ -485,7 +485,7 @@ const SyntaxDefinition& syntaxDefinitionForPath(const QString& filePath) {
     if (matches(suffix, {"c", "cc", "cpp", "cxx", "h", "hh", "hpp", "hxx"})) {
         return cppDefinition;
     }
-    if (matches(suffix, {"js", "jsx", "mjs", "cjs", "ts", "tsx", "mts", "cts"})) {
+    if (matches(suffix, {"js", "jsx", "mjs", "cjs", "ts", "tsx", "mts", "cts", "astro"})) {
         return javascriptDefinition;
     }
     if (suffix == QStringLiteral("java")) {

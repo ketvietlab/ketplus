@@ -41,6 +41,7 @@ struct SearchOptions;
 
 class EditorSplitPane;
 class EditorWidget;
+class SymbolIndex;
 class FindReplaceBar;
 class ExplorerPanel;
 class GitChangesPanel;
@@ -119,11 +120,33 @@ class MainWindow final : public QMainWindow {
     [[nodiscard]] QString quickOpenStyleSheet() const;
     void activateQuickOpenItem(const QVariant& data);
     void refreshWorkspaceFileIndex(bool force);
+    // How long a collected file list is reused before the tree is walked again.
+    static constexpr qint64 workspaceIndexMaxAgeMs = 30 * 1000;
+    [[nodiscard]] int workspaceFileLimit(const QString& root) const;
+    // The cached file list for `root`, empty when it is missing or too old to trust.
+    [[nodiscard]] WorkspaceFileList cachedWorkspaceFiles(const QString& root) const;
+    void askAboutFullWorkspaceScan(const QString& root);
     void finishWorkspaceFileIndex(const QString& root, const WorkspaceFileList& files);
     void updateGoToFileItems();
     SearchPanel* ensureSearchPanel();
+    void applySearchPanelColors();
     void setSearchPanelVisible(bool visible);
     void startWorkspaceSearch();
+    void startWorkspaceSearch(const WorkspaceSearchOptions& options, bool definitionSearch);
+    // Ctrl/Cmd+click and F12: opens a file reference, or finds where a symbol is declared.
+    void goToDefinition();
+    // Builds the symbol index for `root` in the background, if it is not there already.
+    void startSymbolIndex(const QString& root);
+    void clearSymbolIndex();
+    [[nodiscard]] bool resolveDefinitionFromIndex(EditorWidget* editor, const QString& symbol);
+    void openWorkspaceFile(const QString& relativePath, int line);
+    void resolveDefinition(EditorWidget* editor, const QString& symbol, const QString& fileToken,
+                           const QString& lineText);
+    [[nodiscard]] QString resolveFileReference(EditorWidget* editor, const QString& token) const;
+    bool openFileReference(EditorWidget* editor, const QString& fileToken);
+    // Follows `import { name } from "./module"` to the declaration inside that module.
+    bool openImportedSymbol(EditorWidget* editor, const QString& symbol, const QString& lineText);
+    void finishDefinitionSearch();
     void cancelWorkspaceSearch();
     void finishWorkspaceSearch(const WorkspaceSearchSummary& summary, bool cancelled);
     void replaceInWorkspace();
@@ -168,7 +191,9 @@ class MainWindow final : public QMainWindow {
         qint64 position{0};
         int line{0};
     };
-    enum class QuickOpenMode { Commands, Files, Symbols };
+    enum class QuickOpenMode { Commands, Files, Symbols, Definitions };
+    // The side panel the search panel replaced, restored when search is closed.
+    enum class SidePanel { None, Explorer, SourceControl };
 
     [[nodiscard]] NavigationLocation locationOf(EditorWidget* editor) const;
     [[nodiscard]] bool isLocationAvailable(const NavigationLocation& location) const;
@@ -201,6 +226,11 @@ class MainWindow final : public QMainWindow {
     std::shared_ptr<std::atomic_bool> searchCancelled_;
     quint64 searchGeneration_{0};
     WorkspaceSearchOptions lastSearchOptions_;
+    QList<WorkspaceSearchFileResult> definitionResults_;
+    QString definitionSymbol_;
+    bool definitionSearch_{false};
+    QString definitionPattern_;
+    SidePanel panelBeforeSearch_{SidePanel::None};
     QToolButton* gitButton_{nullptr};
     QTimer* highlightTimer_{nullptr};
     QSplitter* documentSplit_{nullptr};
@@ -214,11 +244,18 @@ class MainWindow final : public QMainWindow {
     QuickOpenPopup* quickOpen_{nullptr};
     QuickOpenMode quickOpenMode_{QuickOpenMode::Commands};
     QAction* commandPaletteAction_{nullptr};
+    QAction* goToDefinitionAction_{nullptr};
     QAction* backAction_{nullptr};
     QAction* forwardAction_{nullptr};
     QList<QPointer<QAction>> paletteActions_;
     QPointer<EditorWidget> symbolEditor_;
     QStringList workspaceFiles_;
+    QStringList declinedFullScanRoots_;
+    std::unique_ptr<SymbolIndex> symbolIndex_;
+    QPointer<QThread> symbolIndexThread_;
+    std::shared_ptr<std::atomic_bool> symbolIndexCancelled_;
+    QString symbolIndexRoot_;
+    QTimer* symbolIndexIdleTimer_{nullptr};
     QString workspaceFilesRoot_;
     qint64 workspaceFilesIndexedAt_{0};
     bool workspaceFilesTruncated_{false};

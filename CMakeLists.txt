@@ -138,6 +138,8 @@ ketplus_enable_warnings(ketplus_preview)
 add_library(KetPlusCM::preview ALIAS ketplus_preview)
 
 add_library(ketplus_editor STATIC
+    src/editor/DefinitionPattern.cpp
+    src/editor/DefinitionPattern.h
     src/editor/EditorSettings.cpp
     src/editor/EditorSettings.h
     src/editor/EditorSplitPane.cpp
@@ -165,6 +167,17 @@ target_include_directories(ketplus_editor PUBLIC
 )
 ketplus_enable_warnings(ketplus_editor)
 add_library(KetPlusCM::editor ALIAS ketplus_editor)
+
+add_library(ketplus_index STATIC
+    src/index/SymbolIndex.cpp
+    src/index/SymbolIndex.h
+)
+target_link_libraries(ketplus_index PUBLIC Qt6::Core ketplus_editor ketplus_workspace)
+target_include_directories(ketplus_index PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
+)
+ketplus_enable_warnings(ketplus_index)
+add_library(KetPlusCM::index ALIAS ketplus_index)
 
 add_library(ketplus_git_ui STATIC
     src/git/GitChangesPanel.cpp
@@ -228,6 +241,7 @@ if(KETPLUS_CM_BUILD_APP)
             KetPlusCM::editor
             KetPlusCM::git
             KetPlusCM::git_ui
+            KetPlusCM::index
             KetPlusCM::preview
             KetPlusCM::settings_ui
             KetPlusCM::terminal
@@ -311,6 +325,17 @@ if(KETPLUS_CM_BUILD_TESTS)
 
     ketplus_cm_add_test(ketplus_editor_tests ketplus_editor_tests)
     set_tests_properties(ketplus_editor_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    add_executable(ketplus_symbol_index_tests tests/SymbolIndexTest.cpp)
+    target_link_libraries(ketplus_symbol_index_tests
+        PRIVATE Qt6::Test ketplus_index ketplus_lexilla
+    )
+    ketplus_enable_warnings(ketplus_symbol_index_tests)
+
+    ketplus_cm_add_test(ketplus_symbol_index_tests ketplus_symbol_index_tests)
+    set_tests_properties(ketplus_symbol_index_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
 
     add_executable(ketplus_settings_tests
         tests/SettingsDialogTest.cpp

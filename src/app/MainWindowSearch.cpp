@@ -4,6 +4,7 @@
 #include "git/GitChangesPanel.h"
 #include "git/GitService.h"
 #include "workspace/ExplorerPanel.h"
+#include "ui/Theme.h"
 #include "workspace/SearchPanel.h"
 
 #include <QAction>
@@ -39,7 +40,8 @@ SearchPanel* MainWindow::ensureSearchPanel() {
     workspaceSplit_->insertWidget(0, searchPanel_);
     workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(searchPanel_), 0);
     workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(editorSplit_), 1);
-    connect(searchPanel_, &SearchPanel::searchRequested, this, &MainWindow::startWorkspaceSearch);
+    connect(searchPanel_, &SearchPanel::searchRequested, this,
+            qOverload<>(&MainWindow::startWorkspaceSearch));
     connect(searchPanel_, &SearchPanel::cancelRequested, this, [this] {
         cancelWorkspaceSearch();
         searchPanel_->setSearching(false);
@@ -50,12 +52,31 @@ SearchPanel* MainWindow::ensureSearchPanel() {
     connect(searchPanel_, &SearchPanel::matchActivated, this, &MainWindow::openSearchMatch);
     connect(searchPanel_, &SearchPanel::hideRequested, this,
             [this] { setSearchPanelVisible(false); });
+    applySearchPanelColors();
     return searchPanel_;
+}
+
+void MainWindow::applySearchPanelColors() {
+    if (searchPanel_ == nullptr) {
+        return;
+    }
+    const auto& palette = theme_.palette();
+    // The folder reads quietly, the file name carries the row, and the matched text uses
+    // the same color the editor highlights matches with.
+    searchPanel_->setResultColors(palette.textMuted, palette.textMain, palette.textMuted,
+                                  palette.textSecondary, palette.warning);
 }
 
 void MainWindow::setSearchPanelVisible(const bool visible) {
     if (visible) {
         auto* panel = ensureSearchPanel();
+        if (!panel->isVisible()) {
+            // Closing the search panel returns to whichever panel it replaced.
+            panelBeforeSearch_ = explorer_ != nullptr && explorer_->isVisible() ? SidePanel::Explorer
+                                 : gitChanges_ != nullptr && gitChanges_->isVisible()
+                                     ? SidePanel::SourceControl
+                                     : SidePanel::None;
+        }
         if (explorer_ != nullptr) {
             explorer_->hide();
         }
@@ -87,21 +108,37 @@ void MainWindow::setSearchPanelVisible(const bool visible) {
     if (searchPanel_ != nullptr) {
         searchPanel_->hide();
     }
-    const QSignalBlocker blocker(searchPanelAction_);
-    searchPanelAction_->setChecked(false);
+    {
+        const QSignalBlocker blocker(searchPanelAction_);
+        searchPanelAction_->setChecked(false);
+    }
+    const SidePanel restore = panelBeforeSearch_;
+    panelBeforeSearch_ = SidePanel::None;
+    if (restore == SidePanel::Explorer) {
+        setExplorerVisible(true);
+        return;
+    }
+    if (restore == SidePanel::SourceControl) {
+        setSourceControlVisible(true);
+        return;
+    }
     if (auto* editor = activeEditor()) {
         editor->setFocus();
     }
 }
 
 void MainWindow::startWorkspaceSearch() {
+    startWorkspaceSearch(ensureSearchPanel()->options(), false);
+}
+
+void MainWindow::startWorkspaceSearch(const WorkspaceSearchOptions& options,
+                                      const bool definitionSearch) {
     auto* panel = ensureSearchPanel();
     if (workspaceRoot_.isEmpty()) {
         panel->setStatusText(QStringLiteral("Open a folder to search across its files."));
         return;
     }
 
-    const WorkspaceSearchOptions options = panel->options();
     QString error;
     const QRegularExpression expression = buildSearchExpression(options, &error);
     if (!error.isEmpty()) {
@@ -111,9 +148,17 @@ void MainWindow::startWorkspaceSearch() {
 
     cancelWorkspaceSearch();
     lastSearchOptions_ = options;
-    panel->clearResults();
-    panel->setSearching(true);
-    panel->setStatusText(QStringLiteral("Searching…"));
+    definitionSearch_ = definitionSearch;
+    definitionResults_.clear();
+    if (definitionSearch) {
+        // A definition lookup only opens the panel when the answer is ambiguous.
+        statusBar()->showMessage(
+            QStringLiteral("Looking for a definition of %1…").arg(definitionSymbol_), 2000);
+    } else {
+        panel->clearResults();
+        panel->setSearching(true);
+        panel->setStatusText(QStringLiteral("Searching…"));
+    }
 
     // Unsaved tab contents take precedence over the files on disk.
     QHash<QString, QString> openBuffers;
@@ -131,23 +176,35 @@ void MainWindow::startWorkspaceSearch() {
     searchCancelled_ = cancelled;
     // The worker reports each file as it is found. cancelWorkspaceSearch() and the
     // destructor wait for it, and stale generations are ignored on arrival.
+    const int fileLimit = workspaceFileLimit(root);
+    // A recent file list is reused, so a lookup does not walk the tree again.
+    const WorkspaceFileList knownFiles = cachedWorkspaceFiles(root);
     auto* thread = QThread::create([this, root, options, expression, openBuffers, cancelled,
-                                    generation] {
-        const WorkspaceSearchSummary summary = searchWorkspace(
-            root, options, expression, openBuffers, cancelled.get(),
-            [this, cancelled, generation](const WorkspaceSearchFileResult& file) {
-                if (cancelled->load()) {
-                    return;
-                }
-                QMetaObject::invokeMethod(
-                    this,
-                    [this, generation, file] {
-                        if (generation == searchGeneration_ && searchPanel_ != nullptr) {
-                            searchPanel_->addFileResult(file);
-                        }
-                    },
-                    Qt::QueuedConnection);
-            });
+                                    generation, fileLimit, knownFiles] {
+        const auto onFile = [this, cancelled, generation](const WorkspaceSearchFileResult& file) {
+            if (cancelled->load()) {
+                return;
+            }
+            QMetaObject::invokeMethod(
+                this,
+                [this, generation, file] {
+                    if (generation != searchGeneration_) {
+                        return;
+                    }
+                    if (definitionSearch_) {
+                        definitionResults_.append(file);
+                    } else if (searchPanel_ != nullptr) {
+                        searchPanel_->addFileResult(file);
+                    }
+                },
+                Qt::QueuedConnection);
+        };
+        const WorkspaceSearchSummary summary =
+            knownFiles.relativePaths.isEmpty()
+                ? searchWorkspace(root, options, expression, openBuffers, cancelled.get(), onFile,
+                                  defaultSearchMatchLimit, fileLimit)
+                : searchWorkspaceFiles(root, knownFiles, options, expression, openBuffers,
+                                       cancelled.get(), onFile);
         const bool wasCancelled = cancelled->load();
         QMetaObject::invokeMethod(
             this,
@@ -175,6 +232,14 @@ void MainWindow::cancelWorkspaceSearch() {
 
 void MainWindow::finishWorkspaceSearch(const WorkspaceSearchSummary& summary,
                                        const bool cancelled) {
+    if (definitionSearch_) {
+        definitionSearch_ = false;
+        if (!cancelled) {
+            finishDefinitionSearch();
+        }
+        definitionResults_.clear();
+        return;
+    }
     if (searchPanel_ == nullptr) {
         return;
     }

@@ -18,6 +18,9 @@ class ExplorerPanel final : public QWidget {
 
     [[nodiscard]] QString rootPath() const;
     void setRootPath(const QString& path);
+    // Expands the folders down to `path` and selects it. Folders load in the background, so
+    // a path whose folders are not there yet is revealed once they arrive.
+    void revealPath(const QString& path);
     void focusTree();
 
   signals:
@@ -36,6 +39,7 @@ class ExplorerPanel final : public QWidget {
     void copySelectedPath();
     void setShowHiddenFiles(bool show);
     void refresh();
+    bool tryRevealPath(const QString& path);
     [[nodiscard]] QString selectedPath() const;
     [[nodiscard]] QString targetDirectory() const;
 
@@ -45,6 +49,7 @@ class ExplorerPanel final : public QWidget {
     QWidget* emptyPage_{nullptr};
     QLabel* folderLabel_{nullptr};
     QString rootPath_;
+    QString pendingReveal_;
     bool showHiddenFiles_{false};
 };
 

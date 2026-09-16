@@ -3,6 +3,7 @@
 #include "app/SettingsDialog.h"
 #include "editor/EditorSplitPane.h"
 #include "editor/EditorWidget.h"
+#include "index/SymbolIndex.h"
 #include "git/GitChangesPanel.h"
 #include "git/GitDiffView.h"
 #include "git/GitService.h"
@@ -147,6 +148,13 @@ bool MainWindow::saveEditor(EditorWidget* editor, const bool choosePath) {
 
     editor->markSaved();
     rememberRecentFile(path);
+    // The index holds what this file said before the save, so that one file is read again.
+    if (symbolIndex_ != nullptr && !workspaceRoot_.isEmpty()) {
+        const QString relative = QDir(workspaceRoot_).relativeFilePath(path);
+        if (!relative.startsWith(QStringLiteral(".."))) {
+            symbolIndex_->reindexFile(workspaceRoot_, relative);
+        }
+    }
     editor->configureLexerForPath(path);
     editor->applyTheme(theme_.palette());
     if (splitPane_ != nullptr && editor == splitSource_) {
@@ -300,6 +308,8 @@ void MainWindow::showEditorContextMenu(EditorWidget* editor, const QPoint& posit
     menu.addSeparator();
     menu.addAction(selectAllAction_);
     menu.addSeparator();
+    menu.addAction(goToDefinitionAction_);
+    menu.addSeparator();
     // The split view edits its source tab's document, so split from that tab.
     auto* source = editor == splitEditor_ && splitSource_ != nullptr ? splitSource_ : editor;
     auto* splitRightAction = menu.addAction(QStringLiteral("Split Right"));
@@ -382,6 +392,11 @@ EditorWidget* MainWindow::createEditor() {
     syncEditorZoom(editor);
     connect(editor, &EditorWidget::contextMenuRequested, this,
             [this, editor](const QPoint& position) { showEditorContextMenu(editor, position); });
+    connect(editor, &EditorWidget::definitionRequested, this,
+            [this, editor](const QString& symbol, const QString& fileToken,
+                           const QString& lineText) {
+                resolveDefinition(editor, symbol, fileToken, lineText);
+            });
     connect(editor, &EditorWidget::dirtyStateChanged, this, [this, editor](const bool dirty) {
         updateTabTitle(editor);
         if (currentEditor() == editor) {
@@ -485,6 +500,10 @@ void MainWindow::activateCurrentTab() {
     editor->markActivated(++tabAccessSequence_);
     editor->setFocus();
     enforceTabResourcePolicy();
+    // The Explorer follows the tab, so the file being edited is always the selected one.
+    if (explorer_ != nullptr && !editor->document().isUntitled()) {
+        explorer_->revealPath(editor->document().filePath());
+    }
 }
 
 void MainWindow::enforceTabResourcePolicy() {
@@ -732,6 +751,11 @@ void MainWindow::openSplit(EditorWidget* source, const Qt::Orientation orientati
         syncEditorZoom(splitEditor_);
         connect(splitEditor_, &EditorWidget::contextMenuRequested, this,
                 [this](const QPoint& position) { showEditorContextMenu(splitEditor_, position); });
+        connect(splitEditor_, &EditorWidget::definitionRequested, this,
+                [this](const QString& symbol, const QString& fileToken,
+                       const QString& lineText) {
+                    resolveDefinition(splitEditor_, symbol, fileToken, lineText);
+                });
         connect(splitEditor_, &EditorWidget::editorStateChanged, this, [this] {
             if (activeEditor() == splitEditor_) {
                 updateEditorActions();
@@ -930,6 +954,7 @@ void MainWindow::applyThemeToEditors() {
     if (terminal_ != nullptr) {
         terminal_->applyTheme(theme_.palette());
     }
+    applySearchPanelColors();
     updateMarkdownPreview();
 }
 

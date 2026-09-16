@@ -12,7 +12,9 @@
 #include <QByteArrayList>
 #include <QColor>
 #include <QContextMenuEvent>
+#include <QEvent>
 #include <QImage>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPolygonF>
 #include <QSet>
@@ -57,6 +59,7 @@ constexpr int bookmarkMask = 1 << bookmarkMarker;
 constexpr uptr_t findIndicator = INDICATOR_CONTAINER;
 constexpr uptr_t selectionIndicator = INDICATOR_CONTAINER + 1;
 constexpr uptr_t embeddedStyleIndicator = INDICATOR_CONTAINER + 2;
+constexpr uptr_t linkIndicator = INDICATOR_CONTAINER + 3;
 constexpr sptr_t symbolMarginWidth = 14;
 // How far back a <style> block may open and still color the visible CSS.
 constexpr sptr_t embeddedStyleLookBehind = 256 * 1024;
@@ -65,32 +68,43 @@ constexpr uptr_t marker(const Scintilla::MarkerOutline value) {
     return static_cast<uptr_t>(value);
 }
 
-// Draws a thin, antialiased chevron in Scintilla's RGBA byte order.
-QByteArray chevronPixels(const int size, const qreal scale, const QColor& color, const bool open) {
+// Draws a thin, antialiased chevron into Scintilla's RGBA pixel buffer.
+QByteArray chevronPixels(const int size, const int scalePercent, const QString& color,
+                         const bool open) {
+    const qreal scale = scalePercent / 100.0;
     const int pixels = qMax(1, qRound(size * scale));
-    QImage image(pixels, pixels, QImage::Format_RGBA8888);
+    QImage image(pixels, pixels, QImage::Format_ARGB32);
     image.fill(Qt::transparent);
-    QPainter painter(&image);
-    painter.setRenderHint(QPainter::Antialiasing);
-    painter.scale(scale, scale);
-    QPen pen(color, 1.4);
-    pen.setCapStyle(Qt::RoundCap);
-    pen.setJoinStyle(Qt::RoundJoin);
-    painter.setPen(pen);
-    const qreal middle = size / 2.0;
-    const qreal arm = size * 0.22;
-    if (open) {
-        painter.drawPolyline(QPolygonF{QPointF(middle - arm * 1.5, middle - arm * 0.75),
-                                       QPointF(middle, middle + arm * 0.75),
-                                       QPointF(middle + arm * 1.5, middle - arm * 0.75)});
-    } else {
-        painter.drawPolyline(QPolygonF{QPointF(middle - arm * 0.75, middle - arm * 1.5),
-                                       QPointF(middle + arm * 0.75, middle),
-                                       QPointF(middle - arm * 0.75, middle + arm * 1.5)});
+    {
+        QPainter painter(&image);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.scale(scale, scale);
+        QPen pen(QColor(color), 1.5);
+        pen.setCapStyle(Qt::RoundCap);
+        pen.setJoinStyle(Qt::RoundJoin);
+        painter.setPen(pen);
+        const qreal middle = size / 2.0;
+        const qreal arm = size * 0.23;
+        if (open) {
+            painter.drawPolyline(QPolygonF{QPointF(middle - arm * 1.4, middle - arm * 0.7),
+                                           QPointF(middle, middle + arm * 0.7),
+                                           QPointF(middle + arm * 1.4, middle - arm * 0.7)});
+        } else {
+            painter.drawPolyline(QPolygonF{QPointF(middle - arm * 0.7, middle - arm * 1.4),
+                                           QPointF(middle + arm * 0.7, middle),
+                                           QPointF(middle - arm * 0.7, middle + arm * 1.4)});
+        }
     }
-    painter.end();
-    return QByteArray(reinterpret_cast<const char*>(image.constBits()),
-                      static_cast<qsizetype>(image.sizeInBytes()));
+
+    // Scintilla reads tightly packed RGBA rows, so scanline padding is dropped here.
+    const QImage rgba = image.convertToFormat(QImage::Format_RGBA8888);
+    QByteArray buffer;
+    buffer.reserve(static_cast<qsizetype>(pixels) * pixels * 4);
+    for (int row = 0; row < pixels; ++row) {
+        buffer.append(reinterpret_cast<const char*>(rgba.constScanLine(row)),
+                      static_cast<qsizetype>(pixels) * 4);
+    }
+    return buffer;
 }
 
 bool isCssNameCharacter(const char character) {
@@ -189,6 +203,8 @@ CommentTokens commentTokensForSyntax(const QString& syntax) {
 EditorWidget::EditorWidget(QWidget* parent)
     : ScintillaEditBase(parent), document_(std::make_unique<Document>()) {
     configureEditor();
+    viewport()->setMouseTracking(true);
+    viewport()->installEventFilter(this);
     connect(this, &ScintillaEditBase::savePointChanged, this, [this](const bool dirty) {
         if (internalMutation_) {
             return;
@@ -640,25 +656,8 @@ void EditorWidget::applyTheme(const ThemePalette& palette) {
          scintillaColor(palette.accent));
     send(message(Scintilla::Message::MarkerSetBack), bookmarkMarker,
          scintillaColor(palette.accent));
-    const qreal scale = qMax<qreal>(1.0, devicePixelRatioF());
-    const int markerSize = static_cast<int>(symbolMarginWidth);
-    const int markerPixels = qMax(1, qRound(markerSize * scale));
-    send(message(Scintilla::Message::RGBAImageSetWidth), static_cast<uptr_t>(markerPixels));
-    send(message(Scintilla::Message::RGBAImageSetHeight), static_cast<uptr_t>(markerPixels));
-    send(message(Scintilla::Message::RGBAImageSetScale), static_cast<uptr_t>(qRound(scale * 100)));
-    const QColor foldColor(palette.textMuted);
-    const QByteArray closedChevron = chevronPixels(markerSize, scale, foldColor, false);
-    const QByteArray openChevron = chevronPixels(markerSize, scale, foldColor, true);
-    for (const auto outline :
-         {Scintilla::MarkerOutline::Folder, Scintilla::MarkerOutline::FolderEnd}) {
-        sends(message(Scintilla::Message::MarkerDefineRGBAImage), marker(outline),
-              closedChevron.constData());
-    }
-    for (const auto outline :
-         {Scintilla::MarkerOutline::FolderOpen, Scintilla::MarkerOutline::FolderOpenMid}) {
-        sends(message(Scintilla::Message::MarkerDefineRGBAImage), marker(outline),
-              openChevron.constData());
-    }
+    foldMarkerColor_ = palette.textMuted;
+    defineFoldMarkers();
     applyStyle(*this, STYLE_FOLDDISPLAYTEXT, palette.textMuted);
     send(message(Scintilla::Message::StyleSetBack), STYLE_FOLDDISPLAYTEXT,
          scintillaColor(palette.panelSubtle));
@@ -675,11 +674,183 @@ void EditorWidget::applyTheme(const ThemePalette& palette) {
          scintillaColor(palette.warning));
     send(message(Scintilla::Message::IndicSetFore), selectionIndicator,
          scintillaColor(palette.accent));
+    send(message(Scintilla::Message::IndicSetFore), linkIndicator, scintillaColor(palette.info));
 
     applyLexerTheme(palette);
     send(message(Scintilla::Message::Colourise), 0, -1);
     updateEmbeddedStyleHighlight();
     themePending_ = false;
+}
+
+void EditorWidget::defineFoldMarkers() {
+    // Scintilla's Qt layer draws marker images one buffer pixel per logical pixel and ignores
+    // the image scale, so the buffer is built at the margin's logical size.
+    constexpr int scalePercent = 100;
+    const int size = static_cast<int>(symbolMarginWidth);
+    send(message(Scintilla::Message::RGBAImageSetWidth), static_cast<uptr_t>(size));
+    send(message(Scintilla::Message::RGBAImageSetHeight), static_cast<uptr_t>(size));
+    send(message(Scintilla::Message::RGBAImageSetScale), static_cast<uptr_t>(scalePercent));
+
+    // A collapsed block always shows its chevron; open blocks reveal theirs on hover.
+    const QByteArray closed = chevronPixels(size, scalePercent, foldMarkerColor_, false);
+    for (const auto outline :
+         {Scintilla::MarkerOutline::Folder, Scintilla::MarkerOutline::FolderEnd}) {
+        sends(message(Scintilla::Message::MarkerDefineRGBAImage), marker(outline),
+              closed.constData());
+    }
+    const QByteArray open = chevronPixels(size, scalePercent, foldMarkerColor_, true);
+    for (const auto outline :
+         {Scintilla::MarkerOutline::FolderOpen, Scintilla::MarkerOutline::FolderOpenMid}) {
+        if (foldMarginHovered_) {
+            sends(message(Scintilla::Message::MarkerDefineRGBAImage), marker(outline),
+                  open.constData());
+        } else {
+            send(message(Scintilla::Message::MarkerDefine), marker(outline),
+                 static_cast<sptr_t>(Scintilla::MarkerSymbol::Empty));
+        }
+    }
+}
+
+void EditorWidget::setFoldMarginHovered(const bool hovered) {
+    if (hovered != foldMarginHovered_) {
+        foldMarginHovered_ = hovered;
+        defineFoldMarkers();
+    }
+}
+
+bool EditorWidget::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == viewport()) {
+        if (event->type() == QEvent::MouseMove) {
+            auto* mouse = static_cast<QMouseEvent*>(event);
+            sptr_t margins = 0;
+            for (uptr_t margin = 0; margin <= foldMargin; ++margin) {
+                margins += send(message(Scintilla::Message::GetMarginWidthN), margin);
+            }
+            const auto position = mouse->position();
+            setFoldMarginHovered(position.x() >= 0 && position.x() < margins);
+            updateLinkHighlight(position.toPoint(), mouse->modifiers());
+        } else if (event->type() == QEvent::MouseButtonPress) {
+            auto* mouse = static_cast<QMouseEvent*>(event);
+            if (mouse->button() == Qt::LeftButton &&
+                mouse->modifiers().testFlag(Qt::ControlModifier)) {
+                const auto position =
+                    send(message(Scintilla::Message::PositionFromPointClose),
+                         static_cast<uptr_t>(mouse->position().x()),
+                         static_cast<sptr_t>(mouse->position().y()));
+                clearLinkHighlight();
+                if (position >= 0) {
+                    emit definitionRequested(wordAtPosition(position),
+                                             fileTokenAtPosition(position),
+                                             lineTextAtPosition(position));
+                }
+                // Scintilla treats Ctrl+click as a selection gesture, so the click stops here.
+                return true;
+            }
+        } else if (event->type() == QEvent::Leave) {
+            setFoldMarginHovered(false);
+            clearLinkHighlight();
+        }
+    }
+    return ScintillaEditBase::eventFilter(watched, event);
+}
+
+void EditorWidget::updateLinkHighlight(const QPoint& point,
+                                       const Qt::KeyboardModifiers modifiers) {
+    if (!modifiers.testFlag(Qt::ControlModifier) || largeFileMode_ || hibernated_) {
+        clearLinkHighlight();
+        return;
+    }
+    const auto position = send(message(Scintilla::Message::PositionFromPointClose),
+                               static_cast<uptr_t>(point.x()), static_cast<sptr_t>(point.y()));
+    if (position < 0 || wordAtPosition(position).isEmpty()) {
+        clearLinkHighlight();
+        return;
+    }
+    const auto start =
+        send(message(Scintilla::Message::WordStartPosition), static_cast<uptr_t>(position), 1);
+    const auto end =
+        send(message(Scintilla::Message::WordEndPosition), static_cast<uptr_t>(position), 1);
+    if (start == linkStart_ && end == linkEnd_) {
+        return;
+    }
+    clearLinkHighlight();
+    linkStart_ = start;
+    linkEnd_ = end;
+    send(message(Scintilla::Message::SetIndicatorCurrent), linkIndicator);
+    send(message(Scintilla::Message::IndicatorFillRange), static_cast<uptr_t>(start), end - start);
+    viewport()->setCursor(Qt::PointingHandCursor);
+}
+
+void EditorWidget::clearLinkHighlight() {
+    if (linkStart_ < 0) {
+        return;
+    }
+    send(message(Scintilla::Message::SetIndicatorCurrent), linkIndicator);
+    send(message(Scintilla::Message::IndicatorClearRange), static_cast<uptr_t>(linkStart_),
+         linkEnd_ - linkStart_);
+    linkStart_ = -1;
+    linkEnd_ = -1;
+    viewport()->unsetCursor();
+}
+
+QString EditorWidget::wordAtPosition(const sptr_t position) const {
+    const auto start =
+        send(message(Scintilla::Message::WordStartPosition), static_cast<uptr_t>(position), 1);
+    const auto end =
+        send(message(Scintilla::Message::WordEndPosition), static_cast<uptr_t>(position), 1);
+    if (end <= start) {
+        return {};
+    }
+    return QString::fromUtf8(textRange(start, end));
+}
+
+QString EditorWidget::fileTokenAtPosition(const sptr_t position) const {
+    const auto line = send(message(Scintilla::Message::LineFromPosition),
+                           static_cast<uptr_t>(position));
+    const auto lineStart =
+        send(message(Scintilla::Message::PositionFromLine), static_cast<uptr_t>(line));
+    const auto lineEnd =
+        send(message(Scintilla::Message::GetLineEndPosition), static_cast<uptr_t>(line));
+    if (position < lineStart || position > lineEnd) {
+        return {};
+    }
+    const QByteArray text = textRange(lineStart, lineEnd);
+    const auto isTokenCharacter = [](const char character) {
+        return isWordCharacter(static_cast<unsigned char>(character)) ||
+               character == '.' || character == '/' || character == '-' || character == '@' ||
+               character == '~' || character == '+';
+    };
+    if (text.isEmpty()) {
+        return {};
+    }
+    const qsizetype offset = static_cast<qsizetype>(position - lineStart);
+    const qsizetype index = qMax<qsizetype>(0, qMin(offset, text.size() - 1));
+    if (!isTokenCharacter(text.at(index))) {
+        return {};
+    }
+    qsizetype start = index;
+    while (start > 0 && isTokenCharacter(text.at(start - 1))) {
+        --start;
+    }
+    qsizetype end = index;
+    while (end + 1 < text.size() && isTokenCharacter(text.at(end + 1))) {
+        ++end;
+    }
+    return QString::fromUtf8(text.mid(start, end - start + 1));
+}
+
+QString EditorWidget::lineTextAtPosition(const sptr_t position) const {
+    const auto line =
+        send(message(Scintilla::Message::LineFromPosition), static_cast<uptr_t>(position));
+    const auto start =
+        send(message(Scintilla::Message::PositionFromLine), static_cast<uptr_t>(line));
+    const auto end =
+        send(message(Scintilla::Message::GetLineEndPosition), static_cast<uptr_t>(line));
+    return end > start ? QString::fromUtf8(textRange(start, end)) : QString();
+}
+
+sptr_t EditorWidget::caretWordPosition() const {
+    return send(message(Scintilla::Message::GetCurrentPos));
 }
 
 void EditorWidget::updateEmbeddedStyleHighlight() {
@@ -1568,14 +1739,14 @@ void EditorWidget::configureEditor() {
     send(message(Scintilla::Message::SetMarginMaskN), foldMargin, Scintilla::MaskFolders);
     send(message(Scintilla::Message::SetMarginWidthN), foldMargin, 0);
     send(message(Scintilla::Message::SetMarginSensitiveN), foldMargin, 1);
-    // Fold headers get chevrons drawn in applyTheme; the body of a block stays unmarked so
-    // the margin reads as quiet as an editor gutter rather than a tree outline.
+    // The body of a block stays unmarked so the margin reads as a gutter, not a tree outline.
     for (const auto outline :
          {Scintilla::MarkerOutline::FolderMidTail, Scintilla::MarkerOutline::FolderSub,
           Scintilla::MarkerOutline::FolderTail}) {
         send(message(Scintilla::Message::MarkerDefine), marker(outline),
              static_cast<sptr_t>(Scintilla::MarkerSymbol::Empty));
     }
+    defineFoldMarkers();
     send(message(Scintilla::Message::SetAutomaticFold),
          static_cast<uptr_t>(Scintilla::AutomaticFold::Show) |
              static_cast<uptr_t>(Scintilla::AutomaticFold::Click) |
@@ -1586,6 +1757,8 @@ void EditorWidget::configureEditor() {
     send(message(Scintilla::Message::FoldDisplayTextSetStyle),
          static_cast<uptr_t>(Scintilla::FoldDisplayTextStyle::Boxed));
 
+    send(message(Scintilla::Message::IndicSetStyle), linkIndicator,
+         static_cast<sptr_t>(Scintilla::IndicatorStyle::Plain));
     send(message(Scintilla::Message::IndicSetStyle), embeddedStyleIndicator,
          static_cast<sptr_t>(Scintilla::IndicatorStyle::TextFore));
     send(message(Scintilla::Message::IndicSetFlags), embeddedStyleIndicator,

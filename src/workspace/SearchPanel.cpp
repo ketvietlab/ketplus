@@ -1,10 +1,17 @@
 #include "workspace/SearchPanel.h"
 
+#include <QAbstractTextDocumentLayout>
+#include <QApplication>
 #include <QCheckBox>
 #include <QHBoxLayout>
+#include <QPainter>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QSignalBlocker>
+#include <QStyledItemDelegate>
+#include <QTextDocument>
+#include <QTextOption>
 #include <QToolButton>
 #include <QTreeWidget>
 #include <QVBoxLayout>
@@ -16,6 +23,60 @@ constexpr int pathRole = Qt::UserRole + 1;
 constexpr int lineRole = Qt::UserRole + 2;
 constexpr int columnRole = Qt::UserRole + 3;
 constexpr int lengthRole = Qt::UserRole + 4;
+constexpr int markupRole = Qt::UserRole + 5;
+
+// Draws the row from the markup the panel built, so one row can carry several colors.
+class ResultDelegate final : public QStyledItemDelegate {
+  public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+
+    void paint(QPainter* painter, const QStyleOptionViewItem& option,
+               const QModelIndex& index) const override {
+        const QString markup = index.data(markupRole).toString();
+        if (markup.isEmpty()) {
+            QStyledItemDelegate::paint(painter, option, index);
+            return;
+        }
+
+        QStyleOptionViewItem view(option);
+        initStyleOption(&view, index);
+        view.text.clear();
+        const QWidget* widget = view.widget;
+        QStyle* style = widget != nullptr ? widget->style() : QApplication::style();
+        style->drawControl(QStyle::CE_ItemViewItem, &view, painter, widget);
+
+        QTextDocument document;
+        document.setDefaultFont(view.font);
+        document.setDocumentMargin(0);
+        QTextOption layout;
+        // Rows keep one line and are clipped, so every result is the same height.
+        layout.setWrapMode(QTextOption::NoWrap);
+        document.setDefaultTextOption(layout);
+        document.setHtml(markup);
+        const QRect text = style->subElementRect(QStyle::SE_ItemViewItemText, &view, widget);
+        document.setTextWidth(text.width());
+
+        painter->save();
+        // Clipping inside the saved state, so the next row is not clipped to this one.
+        painter->setClipRect(text);
+        painter->translate(text.topLeft() +
+                           QPoint(0, (text.height() - document.size().height()) / 2));
+        QAbstractTextDocumentLayout::PaintContext context;
+        context.palette = view.palette;
+        document.documentLayout()->draw(painter, context);
+        painter->restore();
+    }
+};
+
+QString escaped(const QString& text) { return text.toHtmlEscaped(); }
+
+QString colored(const QString& text, const QString& color, const bool bold = false) {
+    if (text.isEmpty()) {
+        return {};
+    }
+    return QStringLiteral("<span style=\"color:%1;%2\">%3</span>")
+        .arg(color, bold ? QStringLiteral("font-weight:600;") : QString(), escaped(text));
+}
 
 } // namespace
 
@@ -71,6 +132,7 @@ SearchPanel::SearchPanel(QWidget* parent)
     results_->setUniformRowHeights(true);
     results_->setTextElideMode(Qt::ElideRight);
     results_->setAccessibleName(QStringLiteral("Search results"));
+    results_->setItemDelegate(new ResultDelegate(results_));
 
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(10, 8, 10, 8);
@@ -109,6 +171,19 @@ WorkspaceSearchOptions SearchPanel::options() const {
             .includePatterns = includeEdit_->text()};
 }
 
+void SearchPanel::setOptions(const WorkspaceSearchOptions& options) {
+    const QSignalBlocker queryBlocker(queryEdit_);
+    const QSignalBlocker matchCaseBlocker(matchCaseCheck_);
+    const QSignalBlocker wholeWordBlocker(wholeWordCheck_);
+    const QSignalBlocker regexBlocker(regexCheck_);
+    const QSignalBlocker includeBlocker(includeEdit_);
+    queryEdit_->setText(options.query);
+    matchCaseCheck_->setChecked(options.matchCase);
+    wholeWordCheck_->setChecked(options.wholeWord);
+    regexCheck_->setChecked(options.regex);
+    includeEdit_->setText(options.includePatterns);
+}
+
 QString SearchPanel::replacement() const { return replaceEdit_->text(); }
 
 QStringList SearchPanel::resultPaths() const {
@@ -139,14 +214,24 @@ void SearchPanel::clearResults() {
 
 void SearchPanel::addFileResult(const WorkspaceSearchFileResult& result) {
     auto* fileItem = new QTreeWidgetItem(results_);
+    const qsizetype separator = result.relativePath.lastIndexOf(QLatin1Char('/'));
+    const QString folder =
+        separator < 0 ? QString() : result.relativePath.left(separator + 1);
+    const QString fileName = result.relativePath.mid(separator + 1);
     fileItem->setText(0, QStringLiteral("%1  (%2)")
                              .arg(result.relativePath)
                              .arg(result.matches.size()));
+    fileItem->setData(0, markupRole,
+                      colored(folder, colors_.folder) +
+                          colored(fileName, colors_.fileName, true) +
+                          colored(QStringLiteral("  ·  %1").arg(result.matches.size()),
+                                  colors_.lineNumber));
     fileItem->setToolTip(0, result.path);
     fileItem->setData(0, pathRole, result.path);
     for (const auto& match : result.matches) {
         auto* matchItem = new QTreeWidgetItem(fileItem);
         matchItem->setText(0, QStringLiteral("%1: %2").arg(match.line).arg(match.preview.trimmed()));
+        matchItem->setData(0, markupRole, matchMarkup(match));
         matchItem->setToolTip(0, match.preview);
         matchItem->setData(0, pathRole, result.path);
         matchItem->setData(0, lineRole, match.line);
@@ -165,6 +250,30 @@ void SearchPanel::setSearching(const bool searching) {
 }
 
 void SearchPanel::setStatusText(const QString& text) { statusLabel_->setText(text); }
+
+void SearchPanel::setResultColors(const QString& folder, const QString& fileName,
+                                  const QString& lineNumber, const QString& text,
+                                  const QString& match) {
+    colors_ = {folder, fileName, lineNumber, text, match};
+}
+
+QString SearchPanel::matchMarkup(const WorkspaceSearchMatch& match) const {
+    // The preview is the whole line; leading indentation is dropped for the row.
+    const QString line = match.preview;
+    qsizetype indent = 0;
+    while (indent < line.size() && line.at(indent).isSpace()) {
+        ++indent;
+    }
+    const qsizetype start =
+        qMax(indent, qMin(static_cast<qsizetype>(match.column), line.size()));
+    const qsizetype length =
+        qMax<qsizetype>(0, qMin(static_cast<qsizetype>(match.length), line.size() - start));
+
+    return colored(QStringLiteral("%1  ").arg(match.line), colors_.lineNumber) +
+           colored(line.mid(indent, start - indent), colors_.text) +
+           colored(line.mid(start, length), colors_.match, true) +
+           colored(line.mid(start + length), colors_.text);
+}
 
 void SearchPanel::activateItem(QTreeWidgetItem* item) {
     if (item == nullptr) {

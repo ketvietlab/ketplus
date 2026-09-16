@@ -14,6 +14,8 @@
 #include <utility>
 
 class QContextMenuEvent;
+class QEvent;
+class QMouseEvent;
 class QPoint;
 
 namespace ketplus {
@@ -140,7 +142,17 @@ class EditorWidget final : public ScintillaEditBase {
     int highlightMatches(const QString& query, const SearchOptions& options);
     void clearMatchHighlights();
 
+    // The word and the file-reference token around a position, for go to definition.
+    [[nodiscard]] QString wordAtPosition(sptr_t position) const;
+    [[nodiscard]] QString fileTokenAtPosition(sptr_t position) const;
+    [[nodiscard]] QString lineTextAtPosition(sptr_t position) const;
+    [[nodiscard]] sptr_t caretWordPosition() const;
+
   signals:
+    // Emitted on Ctrl/Cmd+click, with the word and the file token under the pointer, and the
+    // whole line, which may import the word from another file.
+    void definitionRequested(const QString& symbol, const QString& fileToken,
+                             const QString& lineText);
     void dirtyStateChanged(bool dirty);
     void cursorPositionChanged(int line, int column);
     void editorStateChanged();
@@ -148,6 +160,8 @@ class EditorWidget final : public ScintillaEditBase {
 
   protected:
     void contextMenuEvent(QContextMenuEvent* event) override;
+    // Watches the viewport for pointer moves so the fold margin can follow the mouse.
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
   private:
     struct ViewState final {
@@ -167,6 +181,12 @@ class EditorWidget final : public ScintillaEditBase {
     void updateLargeFileMode(qsizetype contentSize);
     void restoreViewState();
     void applyLexerTheme(const ThemePalette& palette);
+    // Fold arrows for open blocks only appear while the pointer is over the margins.
+    void setFoldMarginHovered(bool hovered);
+    void defineFoldMarkers();
+    // Underlines the word under the pointer while Ctrl/Cmd is held.
+    void updateLinkHighlight(const QPoint& point, Qt::KeyboardModifiers modifiers);
+    void clearLinkHighlight();
     void updateEmbeddedStyleHighlight();
     bool applyViewOptions();
     void updateBraceHighlight();
@@ -188,6 +208,7 @@ class EditorWidget final : public ScintillaEditBase {
     std::unique_ptr<Document> document_;
     EditorSettings editorSettings_{EditorSettings::defaults()};
     EditorViewOptions viewOptions_;
+    QString foldMarkerColor_{QStringLiteral("#8B8B8B")};
     QString lexerName_;
     QString syntaxName_;
     QString syntaxOverride_;
@@ -204,6 +225,9 @@ class EditorWidget final : public ScintillaEditBase {
     bool foldingEnabled_{false};
     bool searchScopeActive_{false};
     bool selectionMatchesActive_{false};
+    sptr_t linkStart_{-1};
+    sptr_t linkEnd_{-1};
+    bool foldMarginHovered_{false};
     bool embeddedStyleActive_{false};
     // The last colored range; text edits and theme or lexer changes force a rescan.
     bool embeddedStyleDirty_{true};

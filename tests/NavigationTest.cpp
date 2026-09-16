@@ -1,8 +1,11 @@
+#include "editor/DefinitionPattern.h"
 #include "editor/EditorWidget.h"
 #include "editor/SymbolExtractor.h"
 #include "workspace/FuzzyMatcher.h"
 #include "workspace/QuickOpenPopup.h"
 #include "workspace/WorkspaceFileIndex.h"
+
+#include <ScintillaMessages.h>
 
 #include <QDir>
 #include <QFile>
@@ -23,7 +26,110 @@ class NavigationTest final : public QObject {
     void extractsCppSymbols();
     void extractsScriptAndMarkdownSymbols();
     void movesCaretToPosition();
+    void buildsDefinitionPatterns();
+    void readsSymbolsAndFileTokensUnderTheCaret();
+    void requestsDefinitionOnModifierClick();
 };
+
+void NavigationTest::buildsDefinitionPatterns() {
+    const auto matches = [](const QString& pattern, const QString& line) {
+        const QRegularExpression expression(pattern);
+        return expression.isValid() && expression.match(line).hasMatch();
+    };
+
+    const QString cpp = ketplus::definitionExpression(QStringLiteral("Widget"),
+                                                      QStringLiteral("c-cpp"));
+    QVERIFY(matches(cpp, QStringLiteral("class Widget final : public QWidget {")));
+    QVERIFY(!matches(cpp, QStringLiteral("    auto* widget = new Widget(this);")));
+
+    const QString python = ketplus::definitionExpression(QStringLiteral("render"),
+                                                         QStringLiteral("python"));
+    QVERIFY(matches(python, QStringLiteral("def render(self):")));
+    QVERIFY(!matches(python, QStringLiteral("    self.render()")));
+
+    const QString js = ketplus::definitionExpression(QStringLiteral("handler"),
+                                                     QStringLiteral("javascript-typescript"));
+    QVERIFY(matches(js, QStringLiteral("const handler = (event) => {")));
+    QVERIFY(matches(js, QStringLiteral("function handler(event) {")));
+
+    const QString css = ketplus::definitionExpression(QStringLiteral("panel"),
+                                                      QStringLiteral("css"));
+    QVERIFY(matches(css, QStringLiteral(".panel { color: red; }")));
+
+    // Not a name, so there is nothing to look for.
+    QVERIFY(ketplus::definitionExpression(QStringLiteral("10"), QStringLiteral("c-cpp")).isEmpty());
+
+    // An unrecognised syntax still finds the shapes other languages use.
+    const QString unknown = ketplus::definitionExpression(QStringLiteral("helpUrl"),
+                                                          QStringLiteral("generic"));
+    QVERIFY(matches(unknown, QStringLiteral("export const helpUrl = 'https://example.com';")));
+    QVERIFY(!matches(unknown, QStringLiteral("import { helpUrl } from '../data/help';")));
+
+    // An import without an extension may mean any of several files.
+    const QStringList candidates = ketplus::fileReferenceCandidates(QStringLiteral("../data/help"));
+    QVERIFY(candidates.contains(QStringLiteral("../data/help")));
+    QVERIFY(candidates.contains(QStringLiteral("../data/help.ts")));
+    QVERIFY(candidates.contains(QStringLiteral("../data/help/index.ts")));
+    QVERIFY(ketplus::fileReferenceCandidates(QStringLiteral("helpUrl")).isEmpty());
+    // TypeScript projects import the built "./menus.js" from a file that is "./menus.ts".
+    QVERIFY(ketplus::fileReferenceCandidates(QStringLiteral("./menus.js"))
+                .contains(QStringLiteral("./menus.ts")));
+
+    // The module a name is imported from, so a click follows the import.
+    QCOMPARE(ketplus::importedModuleOnLine(
+                 QStringLiteral("import { menus } from './menus.js';")),
+             QStringLiteral("./menus.js"));
+    QCOMPARE(ketplus::importedModuleOnLine(QStringLiteral("const a = require(\"../lib/a\")")),
+             QStringLiteral("../lib/a"));
+    QCOMPARE(ketplus::importedModuleOnLine(QStringLiteral("#include \"app/main.h\"")),
+             QStringLiteral("app/main.h"));
+    QCOMPARE(ketplus::importedModuleOnLine(QStringLiteral("from .helpers import render")),
+             QStringLiteral("/helpers"));
+    QVERIFY(ketplus::importedModuleOnLine(QStringLiteral("const menus = buildMenus();")).isEmpty());
+
+    QVERIFY(ketplus::looksLikeFileReference(QStringLiteral("./theme.css")));
+    QVERIFY(ketplus::looksLikeFileReference(QStringLiteral("app/main.h")));
+    QVERIFY(!ketplus::looksLikeFileReference(QStringLiteral("renderWidget")));
+}
+
+void NavigationTest::readsSymbolsAndFileTokensUnderTheCaret() {
+    ketplus::EditorWidget editor;
+    const QByteArray text = "#include \"app/MainWindow.h\"\nWidget* widget = nullptr;\n";
+    editor.setText(text);
+
+    QCOMPARE(editor.wordAtPosition(text.indexOf("Widget*") + 2), QStringLiteral("Widget"));
+    QCOMPARE(editor.fileTokenAtPosition(text.indexOf("app/MainWindow.h") + 4),
+             QStringLiteral("app/MainWindow.h"));
+    // A word is not a file reference, and whitespace has neither.
+    QVERIFY(!ketplus::looksLikeFileReference(editor.fileTokenAtPosition(text.indexOf("* widget"))));
+}
+
+void NavigationTest::requestsDefinitionOnModifierClick() {
+    ketplus::EditorWidget editor;
+    editor.resize(420, 200);
+    editor.setText("Widget* widget = nullptr;\n");
+    editor.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&editor));
+
+    QSignalSpy spy(&editor, &ketplus::EditorWidget::definitionRequested);
+    // Aim at the third character of the word, in the editor's own coordinates.
+    const auto messageOf = [](const Scintilla::Message value) {
+        return static_cast<unsigned int>(value);
+    };
+    const QPointF point(
+        static_cast<qreal>(editor.send(messageOf(Scintilla::Message::PointXFromPosition), 0, 3)),
+        static_cast<qreal>(editor.send(messageOf(Scintilla::Message::PointYFromPosition), 0, 3)) +
+            2);
+    QMouseEvent plain(QEvent::MouseButtonPress, point, editor.mapToGlobal(point), Qt::LeftButton,
+                      Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(editor.viewport(), &plain);
+    QCOMPARE(spy.count(), 0);
+
+    QMouseEvent modified(QEvent::MouseButtonPress, point, editor.mapToGlobal(point),
+                         Qt::LeftButton, Qt::LeftButton, Qt::ControlModifier);
+    QApplication::sendEvent(editor.viewport(), &modified);
+    QCOMPARE(spy.count(), 1);
+}
 
 void NavigationTest::scoresFuzzyMatches() {
     QCOMPARE(ketplus::fuzzyMatchScore(u"", u"anything"), 0);
