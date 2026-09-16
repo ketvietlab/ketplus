@@ -22,6 +22,8 @@ class SearchPanel final : public QWidget {
     explicit SearchPanel(QWidget* parent = nullptr);
 
     [[nodiscard]] WorkspaceSearchOptions options() const;
+    // Shows the query that produced the listed results, e.g. after a definition lookup.
+    void setOptions(const WorkspaceSearchOptions& options);
     [[nodiscard]] QString replacement() const;
     [[nodiscard]] QStringList resultPaths() const;
     [[nodiscard]] int resultMatchCount() const noexcept;

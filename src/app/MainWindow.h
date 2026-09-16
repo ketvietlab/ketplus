@@ -224,7 +224,7 @@ class MainWindow final : public QMainWindow {
     QList<WorkspaceSearchFileResult> definitionResults_;
     QString definitionSymbol_;
     bool definitionSearch_{false};
-    bool definitionFallbackUsed_{false};
+    QString definitionPattern_;
     SidePanel panelBeforeSearch_{SidePanel::None};
     QToolButton* gitButton_{nullptr};
     QTimer* highlightTimer_{nullptr};

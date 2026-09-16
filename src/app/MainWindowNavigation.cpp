@@ -419,13 +419,13 @@ void MainWindow::resolveDefinition(EditorWidget* editor, const QString& symbol,
     // The scan answers this click; the index makes the next ones instant.
     startSymbolIndex(workspaceRoot_);
 
-    const QString expression = definitionExpression(symbol, editor->syntaxName());
+    // One pass looks for the name itself, which is far cheaper than running a declaration
+    // pattern over every line; the lines that come back are classified afterwards.
     definitionSymbol_ = symbol;
-    definitionFallbackUsed_ = expression.isEmpty();
+    definitionPattern_ = definitionExpression(symbol, editor->syntaxName());
     WorkspaceSearchOptions options;
-    options.query = expression.isEmpty() ? symbol : expression;
-    options.regex = !expression.isEmpty();
-    options.wholeWord = expression.isEmpty();
+    options.query = symbol;
+    options.wholeWord = true;
     options.matchCase = true;
     startWorkspaceSearch(options, true);
 }
@@ -587,45 +587,62 @@ bool MainWindow::openFileReference(EditorWidget* editor, const QString& fileToke
 }
 
 void MainWindow::finishDefinitionSearch() {
-    int matchCount = 0;
+    int useCount = 0;
     for (const auto& file : definitionResults_) {
-        matchCount += static_cast<int>(file.matches.size());
+        useCount += static_cast<int>(file.matches.size());
     }
-    if (matchCount == 0) {
-        // The declaration pattern found nothing, so fall back to every use of the name.
-        if (!definitionFallbackUsed_) {
-            definitionFallbackUsed_ = true;
-            WorkspaceSearchOptions options;
-            options.query = definitionSymbol_;
-            options.wholeWord = true;
-            options.matchCase = true;
-            startWorkspaceSearch(options, true);
-            return;
-        }
-        statusBar()->showMessage(
-            QStringLiteral("No definition found for %1").arg(definitionSymbol_), 4000);
+    if (useCount == 0) {
+        statusBar()->showMessage(QStringLiteral("%1 is not used anywhere in this folder")
+                                     .arg(definitionSymbol_),
+                                 4000);
         return;
     }
-    if (matchCount == 1) {
-        const auto& file = definitionResults_.constFirst();
+
+    // Keep the lines that look like a declaration rather than a use of the name.
+    QList<WorkspaceSearchFileResult> declarations;
+    int declarationCount = 0;
+    if (!definitionPattern_.isEmpty()) {
+        const QRegularExpression pattern(definitionPattern_);
+        if (pattern.isValid()) {
+            for (const auto& file : definitionResults_) {
+                WorkspaceSearchFileResult kept{file.path, file.relativePath, {}};
+                for (const auto& match : file.matches) {
+                    if (pattern.match(match.preview).hasMatch()) {
+                        kept.matches.append(match);
+                    }
+                }
+                if (!kept.matches.isEmpty()) {
+                    declarationCount += static_cast<int>(kept.matches.size());
+                    declarations.append(kept);
+                }
+            }
+        }
+    }
+
+    if (declarationCount == 1) {
+        const auto& file = declarations.constFirst();
         const auto& match = file.matches.constFirst();
         openSearchMatch(file.path, match.line, match.column, match.length);
         return;
     }
 
-    // Several candidates: the user picks one in the search panel.
+    // Several declarations, or none to tell apart: the user picks from the search panel.
+    const bool showDeclarations = declarationCount > 1;
     setSearchPanelVisible(true);
     auto* panel = ensureSearchPanel();
+    panel->setOptions(lastSearchOptions_);
     panel->clearResults();
-    for (const auto& file : definitionResults_) {
+    for (const auto& file : showDeclarations ? declarations : definitionResults_) {
         panel->addFileResult(file);
     }
     panel->setSearching(false);
-    panel->setStatusText(
-        QStringLiteral("%L1 %2 of %3")
-            .arg(matchCount)
-            .arg(definitionFallbackUsed_ ? QStringLiteral("uses") : QStringLiteral("declarations"))
-            .arg(definitionSymbol_));
+    panel->setStatusText(showDeclarations
+                             ? QStringLiteral("%L1 declarations of %2")
+                                   .arg(declarationCount)
+                                   .arg(definitionSymbol_)
+                             : QStringLiteral("No declaration of %1 here; %L2 uses")
+                                   .arg(definitionSymbol_)
+                                   .arg(useCount));
 }
 
 MainWindow::NavigationLocation MainWindow::locationOf(EditorWidget* editor) const {

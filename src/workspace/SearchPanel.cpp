@@ -5,6 +5,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QToolButton>
 #include <QTreeWidget>
 #include <QVBoxLayout>
@@ -107,6 +108,19 @@ WorkspaceSearchOptions SearchPanel::options() const {
             .wholeWord = wholeWordCheck_->isChecked(),
             .regex = regexCheck_->isChecked(),
             .includePatterns = includeEdit_->text()};
+}
+
+void SearchPanel::setOptions(const WorkspaceSearchOptions& options) {
+    const QSignalBlocker queryBlocker(queryEdit_);
+    const QSignalBlocker matchCaseBlocker(matchCaseCheck_);
+    const QSignalBlocker wholeWordBlocker(wholeWordCheck_);
+    const QSignalBlocker regexBlocker(regexCheck_);
+    const QSignalBlocker includeBlocker(includeEdit_);
+    queryEdit_->setText(options.query);
+    matchCaseCheck_->setChecked(options.matchCase);
+    wholeWordCheck_->setChecked(options.wholeWord);
+    regexCheck_->setChecked(options.regex);
+    includeEdit_->setText(options.includePatterns);
 }
 
 QString SearchPanel::replacement() const { return replaceEdit_->text(); }
