@@ -740,7 +740,8 @@ bool EditorWidget::eventFilter(QObject* watched, QEvent* event) {
                 clearLinkHighlight();
                 if (position >= 0) {
                     emit definitionRequested(wordAtPosition(position),
-                                             fileTokenAtPosition(position));
+                                             fileTokenAtPosition(position),
+                                             lineTextAtPosition(position));
                 }
                 // Scintilla treats Ctrl+click as a selection gesture, so the click stops here.
                 return true;
@@ -836,6 +837,16 @@ QString EditorWidget::fileTokenAtPosition(const sptr_t position) const {
         ++end;
     }
     return QString::fromUtf8(text.mid(start, end - start + 1));
+}
+
+QString EditorWidget::lineTextAtPosition(const sptr_t position) const {
+    const auto line =
+        send(message(Scintilla::Message::LineFromPosition), static_cast<uptr_t>(position));
+    const auto start =
+        send(message(Scintilla::Message::PositionFromLine), static_cast<uptr_t>(line));
+    const auto end =
+        send(message(Scintilla::Message::GetLineEndPosition), static_cast<uptr_t>(line));
+    return end > start ? QString::fromUtf8(textRange(start, end)) : QString();
 }
 
 sptr_t EditorWidget::caretWordPosition() const {

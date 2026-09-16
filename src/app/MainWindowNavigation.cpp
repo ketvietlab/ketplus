@@ -370,15 +370,20 @@ void MainWindow::goToDefinition() {
     }
     const auto position = editor->caretWordPosition();
     resolveDefinition(editor, editor->wordAtPosition(position),
-                      editor->fileTokenAtPosition(position));
+                      editor->fileTokenAtPosition(position),
+                      editor->lineTextAtPosition(position));
 }
 
 void MainWindow::resolveDefinition(EditorWidget* editor, const QString& symbol,
-                                   const QString& fileToken) {
+                                   const QString& fileToken, const QString& lineText) {
     if (editor == nullptr || editor->isHibernated()) {
         return;
     }
     if (openFileReference(editor, fileToken)) {
+        return;
+    }
+    // A name brought in by an import is declared in that module, not in this folder at large.
+    if (openImportedSymbol(editor, symbol, lineText)) {
         return;
     }
     if (symbol.isEmpty()) {
@@ -554,36 +559,77 @@ void MainWindow::startSymbolIndex(const QString& root) {
     }
 }
 
-bool MainWindow::openFileReference(EditorWidget* editor, const QString& fileToken) {
-    if (fileToken.isEmpty() || !looksLikeFileReference(fileToken)) {
-        return false;
+QString MainWindow::resolveFileReference(EditorWidget* editor, const QString& token) const {
+    if (token.isEmpty() || !looksLikeFileReference(token)) {
+        return {};
     }
     QStringList bases;
-    if (!editor->document().isUntitled()) {
+    if (editor != nullptr && !editor->document().isUntitled()) {
         bases.append(QFileInfo(editor->document().filePath()).absolutePath());
     }
     if (!workspaceRoot_.isEmpty()) {
         bases.append(workspaceRoot_);
     }
-    const QStringList candidates = fileReferenceCandidates(fileToken);
     for (const QString& base : bases) {
-        for (const QString& candidate : candidates) {
+        for (const QString& candidate : fileReferenceCandidates(token)) {
             const QFileInfo target(QDir(base).absoluteFilePath(candidate));
-            if (!target.isFile()) {
-                continue;
+            if (target.isFile()) {
+                return target.absoluteFilePath();
             }
-            pushNavigationLocation(locationOf(editor));
-            restoringNavigation_ = true;
-            openFile(target.absoluteFilePath());
-            restoringNavigation_ = false;
-            if (auto* opened = currentEditor()) {
-                lastLocation_ = locationOf(opened);
-                opened->setFocus();
-            }
-            return true;
         }
     }
-    return false;
+    return {};
+}
+
+bool MainWindow::openFileReference(EditorWidget* editor, const QString& fileToken) {
+    const QString path = resolveFileReference(editor, fileToken);
+    if (path.isEmpty()) {
+        return false;
+    }
+    pushNavigationLocation(locationOf(editor));
+    restoringNavigation_ = true;
+    openFile(path);
+    restoringNavigation_ = false;
+    if (auto* opened = currentEditor()) {
+        lastLocation_ = locationOf(opened);
+        opened->setFocus();
+    }
+    return true;
+}
+
+bool MainWindow::openImportedSymbol(EditorWidget* editor, const QString& symbol,
+                                    const QString& lineText) {
+    if (symbol.isEmpty() || !lineText.contains(symbol)) {
+        return false;
+    }
+    const QString path = resolveFileReference(editor, importedModuleOnLine(lineText));
+    if (path.isEmpty() || (!editor->document().isUntitled() &&
+                           QFileInfo(path) == QFileInfo(editor->document().filePath()))) {
+        return false;
+    }
+
+    pushNavigationLocation(locationOf(editor));
+    restoringNavigation_ = true;
+    openFile(path);
+    restoringNavigation_ = false;
+    auto* opened = currentEditor();
+    if (opened == nullptr || opened->isHibernated()) {
+        return true;
+    }
+
+    // Land on the declaration inside the module rather than at its first line.
+    const QRegularExpression pattern(definitionExpression(symbol, opened->syntaxName()));
+    const QStringList lines = QString::fromUtf8(opened->text()).split(QLatin1Char('\n'));
+    for (int index = 0; index < lines.size(); ++index) {
+        if (pattern.isValid() && !pattern.pattern().isEmpty() &&
+            pattern.match(lines.at(index)).hasMatch()) {
+            opened->goToLine(index + 1);
+            break;
+        }
+    }
+    opened->setFocus();
+    lastLocation_ = locationOf(opened);
+    return true;
 }
 
 void MainWindow::finishDefinitionSearch() {

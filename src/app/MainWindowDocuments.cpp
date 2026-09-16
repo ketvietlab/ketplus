@@ -385,8 +385,9 @@ EditorWidget* MainWindow::createEditor() {
     connect(editor, &EditorWidget::contextMenuRequested, this,
             [this, editor](const QPoint& position) { showEditorContextMenu(editor, position); });
     connect(editor, &EditorWidget::definitionRequested, this,
-            [this, editor](const QString& symbol, const QString& fileToken) {
-                resolveDefinition(editor, symbol, fileToken);
+            [this, editor](const QString& symbol, const QString& fileToken,
+                           const QString& lineText) {
+                resolveDefinition(editor, symbol, fileToken, lineText);
             });
     connect(editor, &EditorWidget::dirtyStateChanged, this, [this, editor](const bool dirty) {
         updateTabTitle(editor);
@@ -739,8 +740,9 @@ void MainWindow::openSplit(EditorWidget* source, const Qt::Orientation orientati
         connect(splitEditor_, &EditorWidget::contextMenuRequested, this,
                 [this](const QPoint& position) { showEditorContextMenu(splitEditor_, position); });
         connect(splitEditor_, &EditorWidget::definitionRequested, this,
-                [this](const QString& symbol, const QString& fileToken) {
-                    resolveDefinition(splitEditor_, symbol, fileToken);
+                [this](const QString& symbol, const QString& fileToken,
+                       const QString& lineText) {
+                    resolveDefinition(splitEditor_, symbol, fileToken, lineText);
                 });
         connect(splitEditor_, &EditorWidget::editorStateChanged, this, [this] {
             if (activeEditor() == splitEditor_) {
@@ -940,6 +942,7 @@ void MainWindow::applyThemeToEditors() {
     if (terminal_ != nullptr) {
         terminal_->applyTheme(theme_.palette());
     }
+    applySearchPanelColors();
     updateMarkdownPreview();
 }
 

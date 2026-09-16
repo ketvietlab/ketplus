@@ -4,6 +4,7 @@
 #include "git/GitChangesPanel.h"
 #include "git/GitService.h"
 #include "workspace/ExplorerPanel.h"
+#include "ui/Theme.h"
 #include "workspace/SearchPanel.h"
 
 #include <QAction>
@@ -51,7 +52,19 @@ SearchPanel* MainWindow::ensureSearchPanel() {
     connect(searchPanel_, &SearchPanel::matchActivated, this, &MainWindow::openSearchMatch);
     connect(searchPanel_, &SearchPanel::hideRequested, this,
             [this] { setSearchPanelVisible(false); });
+    applySearchPanelColors();
     return searchPanel_;
+}
+
+void MainWindow::applySearchPanelColors() {
+    if (searchPanel_ == nullptr) {
+        return;
+    }
+    const auto& palette = theme_.palette();
+    // The folder reads quietly, the file name carries the row, and the matched text uses
+    // the same color the editor highlights matches with.
+    searchPanel_->setResultColors(palette.textMuted, palette.textMain, palette.textMuted,
+                                  palette.textSecondary, palette.warning);
 }
 
 void MainWindow::setSearchPanelVisible(const bool visible) {

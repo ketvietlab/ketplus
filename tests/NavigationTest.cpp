@@ -71,6 +71,21 @@ void NavigationTest::buildsDefinitionPatterns() {
     QVERIFY(candidates.contains(QStringLiteral("../data/help.ts")));
     QVERIFY(candidates.contains(QStringLiteral("../data/help/index.ts")));
     QVERIFY(ketplus::fileReferenceCandidates(QStringLiteral("helpUrl")).isEmpty());
+    // TypeScript projects import the built "./menus.js" from a file that is "./menus.ts".
+    QVERIFY(ketplus::fileReferenceCandidates(QStringLiteral("./menus.js"))
+                .contains(QStringLiteral("./menus.ts")));
+
+    // The module a name is imported from, so a click follows the import.
+    QCOMPARE(ketplus::importedModuleOnLine(
+                 QStringLiteral("import { menus } from './menus.js';")),
+             QStringLiteral("./menus.js"));
+    QCOMPARE(ketplus::importedModuleOnLine(QStringLiteral("const a = require(\"../lib/a\")")),
+             QStringLiteral("../lib/a"));
+    QCOMPARE(ketplus::importedModuleOnLine(QStringLiteral("#include \"app/main.h\"")),
+             QStringLiteral("app/main.h"));
+    QCOMPARE(ketplus::importedModuleOnLine(QStringLiteral("from .helpers import render")),
+             QStringLiteral("/helpers"));
+    QVERIFY(ketplus::importedModuleOnLine(QStringLiteral("const menus = buildMenus();")).isEmpty());
 
     QVERIFY(ketplus::looksLikeFileReference(QStringLiteral("./theme.css")));
     QVERIFY(ketplus::looksLikeFileReference(QStringLiteral("app/main.h")));

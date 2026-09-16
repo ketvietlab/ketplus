@@ -129,6 +129,7 @@ class MainWindow final : public QMainWindow {
     void finishWorkspaceFileIndex(const QString& root, const WorkspaceFileList& files);
     void updateGoToFileItems();
     SearchPanel* ensureSearchPanel();
+    void applySearchPanelColors();
     void setSearchPanelVisible(bool visible);
     void startWorkspaceSearch();
     void startWorkspaceSearch(const WorkspaceSearchOptions& options, bool definitionSearch);
@@ -139,8 +140,12 @@ class MainWindow final : public QMainWindow {
     void clearSymbolIndex();
     [[nodiscard]] bool resolveDefinitionFromIndex(EditorWidget* editor, const QString& symbol);
     void openWorkspaceFile(const QString& relativePath, int line);
-    void resolveDefinition(EditorWidget* editor, const QString& symbol, const QString& fileToken);
+    void resolveDefinition(EditorWidget* editor, const QString& symbol, const QString& fileToken,
+                           const QString& lineText);
+    [[nodiscard]] QString resolveFileReference(EditorWidget* editor, const QString& token) const;
     bool openFileReference(EditorWidget* editor, const QString& fileToken);
+    // Follows `import { name } from "./module"` to the declaration inside that module.
+    bool openImportedSymbol(EditorWidget* editor, const QString& symbol, const QString& lineText);
     void finishDefinitionSearch();
     void cancelWorkspaceSearch();
     void finishWorkspaceSearch(const WorkspaceSearchSummary& summary, bool cancelled);

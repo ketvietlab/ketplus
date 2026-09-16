@@ -145,11 +145,14 @@ class EditorWidget final : public ScintillaEditBase {
     // The word and the file-reference token around a position, for go to definition.
     [[nodiscard]] QString wordAtPosition(sptr_t position) const;
     [[nodiscard]] QString fileTokenAtPosition(sptr_t position) const;
+    [[nodiscard]] QString lineTextAtPosition(sptr_t position) const;
     [[nodiscard]] sptr_t caretWordPosition() const;
 
   signals:
-    // Emitted on Ctrl/Cmd+click, with the word and the file token under the pointer.
-    void definitionRequested(const QString& symbol, const QString& fileToken);
+    // Emitted on Ctrl/Cmd+click, with the word and the file token under the pointer, and the
+    // whole line, which may import the word from another file.
+    void definitionRequested(const QString& symbol, const QString& fileToken,
+                             const QString& lineText);
     void dirtyStateChanged(bool dirty);
     void cursorPositionChanged(int line, int column);
     void editorStateChanged();

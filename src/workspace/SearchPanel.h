@@ -34,6 +34,10 @@ class SearchPanel final : public QWidget {
     void addFileResult(const WorkspaceSearchFileResult& result);
     void setSearching(bool searching);
     void setStatusText(const QString& text);
+    // Colors for the result rows, so a folder, a file name, a line number and the matched
+    // text are told apart. Called with the theme's palette.
+    void setResultColors(const QString& folder, const QString& fileName, const QString& lineNumber,
+                         const QString& text, const QString& match);
 
   signals:
     void searchRequested();
@@ -44,6 +48,7 @@ class SearchPanel final : public QWidget {
 
   private:
     void activateItem(QTreeWidgetItem* item);
+    [[nodiscard]] QString matchMarkup(const WorkspaceSearchMatch& match) const;
 
     QLineEdit* queryEdit_{nullptr};
     QLineEdit* replaceEdit_{nullptr};
@@ -55,6 +60,13 @@ class SearchPanel final : public QWidget {
     QPushButton* replaceAllButton_{nullptr};
     QLabel* statusLabel_{nullptr};
     QTreeWidget* results_{nullptr};
+    struct ResultColors final {
+        QString folder{QStringLiteral("#8B93A1")};
+        QString fileName{QStringLiteral("#E6EDF3")};
+        QString lineNumber{QStringLiteral("#6E7681")};
+        QString text{QStringLiteral("#ADBAC7")};
+        QString match{QStringLiteral("#E5A93C")};
+    } colors_;
     int matchCount_{0};
     bool searching_{false};
 };

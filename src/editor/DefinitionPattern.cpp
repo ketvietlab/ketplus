@@ -3,6 +3,8 @@
 #include <QRegularExpression>
 #include <QStringList>
 
+#include <utility>
+
 namespace ketplus {
 namespace {
 
@@ -103,11 +105,45 @@ QString definitionExpression(const QString& symbol, const QString& syntaxName) {
         .arg(keywords, name);
 }
 
+QString importedModuleOnLine(const QString& line) {
+    static const QRegularExpression specifier(
+        QStringLiteral("(?:^|\\W)(?:from|import|require|include|use)\\s*\\(?\\s*"
+                       "(?:[\"'<]([^\"'>\\n]+)[\"'>]|([A-Za-z_.][\\w./]*))"));
+    const auto match = specifier.match(line);
+    if (!match.hasMatch()) {
+        return {};
+    }
+    QString path = match.captured(1);
+    if (path.isEmpty()) {
+        // `from .module import x`: a dotted Python module becomes a relative path.
+        path = match.captured(2);
+        if (path.isEmpty() || !path.startsWith(QLatin1Char('.'))) {
+            return {};
+        }
+        path.replace(QLatin1Char('.'), QLatin1Char('/'));
+    }
+    return path;
+}
+
 QStringList fileReferenceCandidates(const QString& token) {
     if (!looksLikeFileReference(token)) {
         return {};
     }
     QStringList candidates{token};
+    // TypeScript projects import "./a.js" from a file that is really "./a.ts".
+    static const QList<std::pair<QString, QStringList>> rewrites{
+        {QStringLiteral(".js"), {QStringLiteral(".ts"), QStringLiteral(".tsx")}},
+        {QStringLiteral(".jsx"), {QStringLiteral(".tsx")}},
+        {QStringLiteral(".mjs"), {QStringLiteral(".mts")}},
+        {QStringLiteral(".cjs"), {QStringLiteral(".cts")}}};
+    for (const auto& [suffix, replacements] : rewrites) {
+        if (token.endsWith(suffix)) {
+            const QString base = token.chopped(suffix.size());
+            for (const QString& replacement : replacements) {
+                candidates.append(base + replacement);
+            }
+        }
+    }
     static const QStringList suffixes{
         QStringLiteral(".ts"),   QStringLiteral(".tsx"),  QStringLiteral(".js"),
         QStringLiteral(".jsx"),  QStringLiteral(".mjs"),  QStringLiteral(".cjs"),
