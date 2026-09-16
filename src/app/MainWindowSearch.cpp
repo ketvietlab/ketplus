@@ -57,6 +57,13 @@ SearchPanel* MainWindow::ensureSearchPanel() {
 void MainWindow::setSearchPanelVisible(const bool visible) {
     if (visible) {
         auto* panel = ensureSearchPanel();
+        if (!panel->isVisible()) {
+            // Closing the search panel returns to whichever panel it replaced.
+            panelBeforeSearch_ = explorer_ != nullptr && explorer_->isVisible() ? SidePanel::Explorer
+                                 : gitChanges_ != nullptr && gitChanges_->isVisible()
+                                     ? SidePanel::SourceControl
+                                     : SidePanel::None;
+        }
         if (explorer_ != nullptr) {
             explorer_->hide();
         }
@@ -88,8 +95,20 @@ void MainWindow::setSearchPanelVisible(const bool visible) {
     if (searchPanel_ != nullptr) {
         searchPanel_->hide();
     }
-    const QSignalBlocker blocker(searchPanelAction_);
-    searchPanelAction_->setChecked(false);
+    {
+        const QSignalBlocker blocker(searchPanelAction_);
+        searchPanelAction_->setChecked(false);
+    }
+    const SidePanel restore = panelBeforeSearch_;
+    panelBeforeSearch_ = SidePanel::None;
+    if (restore == SidePanel::Explorer) {
+        setExplorerVisible(true);
+        return;
+    }
+    if (restore == SidePanel::SourceControl) {
+        setSourceControlVisible(true);
+        return;
+    }
     if (auto* editor = activeEditor()) {
         editor->setFocus();
     }

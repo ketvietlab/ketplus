@@ -175,6 +175,8 @@ class MainWindow final : public QMainWindow {
         int line{0};
     };
     enum class QuickOpenMode { Commands, Files, Symbols };
+    // The side panel the search panel replaced, restored when search is closed.
+    enum class SidePanel { None, Explorer, SourceControl };
 
     [[nodiscard]] NavigationLocation locationOf(EditorWidget* editor) const;
     [[nodiscard]] bool isLocationAvailable(const NavigationLocation& location) const;
@@ -211,6 +213,7 @@ class MainWindow final : public QMainWindow {
     QString definitionSymbol_;
     bool definitionSearch_{false};
     bool definitionFallbackUsed_{false};
+    SidePanel panelBeforeSearch_{SidePanel::None};
     QToolButton* gitButton_{nullptr};
     QTimer* highlightTimer_{nullptr};
     QSplitter* documentSplit_{nullptr};
