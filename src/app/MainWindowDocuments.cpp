@@ -492,6 +492,10 @@ void MainWindow::activateCurrentTab() {
     editor->markActivated(++tabAccessSequence_);
     editor->setFocus();
     enforceTabResourcePolicy();
+    // The Explorer follows the tab, so the file being edited is always the selected one.
+    if (explorer_ != nullptr && !editor->document().isUntitled()) {
+        explorer_->revealPath(editor->document().filePath());
+    }
 }
 
 void MainWindow::enforceTabResourcePolicy() {

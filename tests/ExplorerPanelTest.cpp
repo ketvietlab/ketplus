@@ -16,7 +16,41 @@ class ExplorerPanelTest final : public QObject {
     void loadsOnlyAfterReceivingARoot();
     void opensFilesFromTheTree();
     void togglesFoldersFromTheTree();
+    void revealsAnOpenFile();
 };
+
+void ExplorerPanelTest::revealsAnOpenFile() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QDir root(directory.path());
+    QVERIFY(root.mkpath(QStringLiteral("src/app")));
+    const QString path = root.filePath(QStringLiteral("src/app/main.cpp"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.close();
+
+    ketplus::ExplorerPanel explorer;
+    explorer.resize(280, 500);
+    explorer.show();
+    explorer.setRootPath(directory.path());
+
+    auto* tree = explorer.findChild<QTreeView*>(QStringLiteral("explorerTree"));
+    QVERIFY(tree != nullptr);
+    auto* model = qobject_cast<QFileSystemModel*>(tree->model());
+    QVERIFY(model != nullptr);
+
+    // The folders on the way are not loaded yet, so revealing finishes as they arrive.
+    explorer.revealPath(path);
+    QTRY_VERIFY_WITH_TIMEOUT(model->filePath(tree->currentIndex()) == path, 3000);
+    QVERIFY(tree->isExpanded(model->index(root.filePath(QStringLiteral("src")))));
+    QVERIFY(tree->isExpanded(model->index(root.filePath(QStringLiteral("src/app")))));
+
+    // A file outside the open folder leaves the selection alone.
+    QTemporaryDir elsewhere;
+    QVERIFY(elsewhere.isValid());
+    explorer.revealPath(QDir(elsewhere.path()).filePath(QStringLiteral("other.cpp")));
+    QCOMPARE(model->filePath(tree->currentIndex()), path);
+}
 
 void ExplorerPanelTest::loadsOnlyAfterReceivingARoot() {
     ketplus::ExplorerPanel explorer;

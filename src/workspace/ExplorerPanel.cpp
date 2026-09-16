@@ -18,6 +18,7 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QStackedWidget>
 #include <QTimer>
 #include <QToolButton>
@@ -132,6 +133,11 @@ ExplorerPanel::ExplorerPanel(QWidget* parent)
     connect(collapseButton, &QToolButton::clicked, tree_, &QTreeView::collapseAll);
     connect(refreshButton, &QToolButton::clicked, this, &ExplorerPanel::refresh);
     connect(closeButton, &QToolButton::clicked, this, &ExplorerPanel::hideRequested);
+    connect(model_, &QFileSystemModel::directoryLoaded, this, [this](const QString&) {
+        if (!pendingReveal_.isEmpty() && tryRevealPath(pendingReveal_)) {
+            pendingReveal_.clear();
+        }
+    });
 }
 
 QString ExplorerPanel::rootPath() const { return rootPath_; }
@@ -143,10 +149,52 @@ void ExplorerPanel::setRootPath(const QString& path) {
     }
 
     rootPath_ = root.absoluteFilePath();
+    pendingReveal_.clear();
     folderLabel_->setText(root.fileName().isEmpty() ? rootPath_ : root.fileName());
     folderLabel_->setToolTip(rootPath_);
     tree_->setRootIndex(model_->setRootPath(rootPath_));
     pages_->setCurrentWidget(tree_);
+}
+
+void ExplorerPanel::revealPath(const QString& path) {
+    pendingReveal_.clear();
+    if (path.isEmpty() || rootPath_.isEmpty()) {
+        return;
+    }
+    const QString target = QFileInfo(path).absoluteFilePath();
+    if (target != rootPath_ && !target.startsWith(rootPath_ + QLatin1Char('/'))) {
+        // A file outside the open folder has nothing to select here.
+        return;
+    }
+    if (!tryRevealPath(target)) {
+        // The folders on the way are still loading; directoryLoaded finishes the job.
+        pendingReveal_ = target;
+    }
+}
+
+bool ExplorerPanel::tryRevealPath(const QString& path) {
+    // Ask for each folder from the root down, so the model starts loading them in order.
+    const QString relative = QDir(rootPath_).relativeFilePath(path);
+    QString walked = rootPath_;
+    for (const QString& part : relative.split(QLatin1Char('/'), Qt::SkipEmptyParts)) {
+        walked += QLatin1Char('/') + part;
+        const QModelIndex index = model_->index(walked);
+        if (!index.isValid()) {
+            return false;
+        }
+        if (walked != path) {
+            tree_->setExpanded(index, true);
+        }
+    }
+
+    const QModelIndex index = model_->index(path);
+    if (!index.isValid()) {
+        return false;
+    }
+    const QSignalBlocker blocker(tree_->selectionModel());
+    tree_->setCurrentIndex(index);
+    tree_->scrollTo(index, QAbstractItemView::EnsureVisible);
+    return true;
 }
 
 void ExplorerPanel::focusTree() {
