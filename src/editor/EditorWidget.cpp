@@ -78,12 +78,12 @@ QByteArray chevronPixels(const int size, const int scalePercent, const QString& 
         QPainter painter(&image);
         painter.setRenderHint(QPainter::Antialiasing);
         painter.scale(scale, scale);
-        QPen pen(QColor(color), 1.3);
+        QPen pen(QColor(color), 1.5);
         pen.setCapStyle(Qt::RoundCap);
         pen.setJoinStyle(Qt::RoundJoin);
         painter.setPen(pen);
         const qreal middle = size / 2.0;
-        const qreal arm = size * 0.18;
+        const qreal arm = size * 0.23;
         if (open) {
             painter.drawPolyline(QPolygonF{QPointF(middle - arm * 1.4, middle - arm * 0.7),
                                            QPointF(middle, middle + arm * 0.7),
@@ -681,12 +681,12 @@ void EditorWidget::applyTheme(const ThemePalette& palette) {
 }
 
 void EditorWidget::defineFoldMarkers() {
-    const int scalePercent = qMax(100, qRound(devicePixelRatioF() * 100));
+    // Scintilla's Qt layer draws marker images one buffer pixel per logical pixel and ignores
+    // the image scale, so the buffer is built at the margin's logical size.
+    constexpr int scalePercent = 100;
     const int size = static_cast<int>(symbolMarginWidth);
-    send(message(Scintilla::Message::RGBAImageSetWidth),
-         static_cast<uptr_t>(qMax(1, size * scalePercent / 100)));
-    send(message(Scintilla::Message::RGBAImageSetHeight),
-         static_cast<uptr_t>(qMax(1, size * scalePercent / 100)));
+    send(message(Scintilla::Message::RGBAImageSetWidth), static_cast<uptr_t>(size));
+    send(message(Scintilla::Message::RGBAImageSetHeight), static_cast<uptr_t>(size));
     send(message(Scintilla::Message::RGBAImageSetScale), static_cast<uptr_t>(scalePercent));
 
     // A collapsed block always shows its chevron; open blocks reveal theirs on hover.
