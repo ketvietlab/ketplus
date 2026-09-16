@@ -65,34 +65,6 @@ constexpr uptr_t marker(const Scintilla::MarkerOutline value) {
     return static_cast<uptr_t>(value);
 }
 
-// Draws a thin, antialiased chevron in Scintilla's RGBA byte order.
-QByteArray chevronPixels(const int size, const qreal scale, const QColor& color, const bool open) {
-    const int pixels = qMax(1, qRound(size * scale));
-    QImage image(pixels, pixels, QImage::Format_RGBA8888);
-    image.fill(Qt::transparent);
-    QPainter painter(&image);
-    painter.setRenderHint(QPainter::Antialiasing);
-    painter.scale(scale, scale);
-    QPen pen(color, 1.4);
-    pen.setCapStyle(Qt::RoundCap);
-    pen.setJoinStyle(Qt::RoundJoin);
-    painter.setPen(pen);
-    const qreal middle = size / 2.0;
-    const qreal arm = size * 0.22;
-    if (open) {
-        painter.drawPolyline(QPolygonF{QPointF(middle - arm * 1.5, middle - arm * 0.75),
-                                       QPointF(middle, middle + arm * 0.75),
-                                       QPointF(middle + arm * 1.5, middle - arm * 0.75)});
-    } else {
-        painter.drawPolyline(QPolygonF{QPointF(middle - arm * 0.75, middle - arm * 1.5),
-                                       QPointF(middle + arm * 0.75, middle),
-                                       QPointF(middle - arm * 0.75, middle + arm * 1.5)});
-    }
-    painter.end();
-    return QByteArray(reinterpret_cast<const char*>(image.constBits()),
-                      static_cast<qsizetype>(image.sizeInBytes()));
-}
-
 bool isCssNameCharacter(const char character) {
     return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') ||
            (character >= '0' && character <= '9') || character == '-' || character == '_' ||
@@ -640,24 +612,14 @@ void EditorWidget::applyTheme(const ThemePalette& palette) {
          scintillaColor(palette.accent));
     send(message(Scintilla::Message::MarkerSetBack), bookmarkMarker,
          scintillaColor(palette.accent));
-    const qreal scale = qMax<qreal>(1.0, devicePixelRatioF());
-    const int markerSize = static_cast<int>(symbolMarginWidth);
-    const int markerPixels = qMax(1, qRound(markerSize * scale));
-    send(message(Scintilla::Message::RGBAImageSetWidth), static_cast<uptr_t>(markerPixels));
-    send(message(Scintilla::Message::RGBAImageSetHeight), static_cast<uptr_t>(markerPixels));
-    send(message(Scintilla::Message::RGBAImageSetScale), static_cast<uptr_t>(qRound(scale * 100)));
-    const QColor foldColor(palette.textMuted);
-    const QByteArray closedChevron = chevronPixels(markerSize, scale, foldColor, false);
-    const QByteArray openChevron = chevronPixels(markerSize, scale, foldColor, true);
     for (const auto outline :
-         {Scintilla::MarkerOutline::Folder, Scintilla::MarkerOutline::FolderEnd}) {
-        sends(message(Scintilla::Message::MarkerDefineRGBAImage), marker(outline),
-              closedChevron.constData());
-    }
-    for (const auto outline :
-         {Scintilla::MarkerOutline::FolderOpen, Scintilla::MarkerOutline::FolderOpenMid}) {
-        sends(message(Scintilla::Message::MarkerDefineRGBAImage), marker(outline),
-              openChevron.constData());
+         {Scintilla::MarkerOutline::Folder, Scintilla::MarkerOutline::FolderEnd,
+          Scintilla::MarkerOutline::FolderOpen, Scintilla::MarkerOutline::FolderOpenMid}) {
+        // Filled with the same muted color so the arrow reads as one quiet shape.
+        send(message(Scintilla::Message::MarkerSetFore), marker(outline),
+             scintillaColor(palette.textMuted));
+        send(message(Scintilla::Message::MarkerSetBack), marker(outline),
+             scintillaColor(palette.textMuted));
     }
     applyStyle(*this, STYLE_FOLDDISPLAYTEXT, palette.textMuted);
     send(message(Scintilla::Message::StyleSetBack), STYLE_FOLDDISPLAYTEXT,
@@ -1568,13 +1530,21 @@ void EditorWidget::configureEditor() {
     send(message(Scintilla::Message::SetMarginMaskN), foldMargin, Scintilla::MaskFolders);
     send(message(Scintilla::Message::SetMarginWidthN), foldMargin, 0);
     send(message(Scintilla::Message::SetMarginSensitiveN), foldMargin, 1);
-    // Fold headers get chevrons drawn in applyTheme; the body of a block stays unmarked so
-    // the margin reads as quiet as an editor gutter rather than a tree outline.
+    // A fold header shows an arrow that points right when closed and down when open; the
+    // body of a block stays unmarked so the margin reads as a gutter, not a tree outline.
+    const auto defineFoldMarker = [this](const Scintilla::MarkerOutline outline,
+                                         const Scintilla::MarkerSymbol symbol) {
+        send(message(Scintilla::Message::MarkerDefine), marker(outline),
+             static_cast<sptr_t>(symbol));
+    };
+    defineFoldMarker(Scintilla::MarkerOutline::Folder, Scintilla::MarkerSymbol::Arrow);
+    defineFoldMarker(Scintilla::MarkerOutline::FolderEnd, Scintilla::MarkerSymbol::Arrow);
+    defineFoldMarker(Scintilla::MarkerOutline::FolderOpen, Scintilla::MarkerSymbol::ArrowDown);
+    defineFoldMarker(Scintilla::MarkerOutline::FolderOpenMid, Scintilla::MarkerSymbol::ArrowDown);
     for (const auto outline :
          {Scintilla::MarkerOutline::FolderMidTail, Scintilla::MarkerOutline::FolderSub,
           Scintilla::MarkerOutline::FolderTail}) {
-        send(message(Scintilla::Message::MarkerDefine), marker(outline),
-             static_cast<sptr_t>(Scintilla::MarkerSymbol::Empty));
+        defineFoldMarker(outline, Scintilla::MarkerSymbol::Empty);
     }
     send(message(Scintilla::Message::SetAutomaticFold),
          static_cast<uptr_t>(Scintilla::AutomaticFold::Show) |
