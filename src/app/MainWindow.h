@@ -124,6 +124,12 @@ class MainWindow final : public QMainWindow {
     SearchPanel* ensureSearchPanel();
     void setSearchPanelVisible(bool visible);
     void startWorkspaceSearch();
+    void startWorkspaceSearch(const WorkspaceSearchOptions& options, bool definitionSearch);
+    // Ctrl/Cmd+click and F12: opens a file reference, or finds where a symbol is declared.
+    void goToDefinition();
+    void resolveDefinition(EditorWidget* editor, const QString& symbol, const QString& fileToken);
+    bool openFileReference(EditorWidget* editor, const QString& fileToken);
+    void finishDefinitionSearch();
     void cancelWorkspaceSearch();
     void finishWorkspaceSearch(const WorkspaceSearchSummary& summary, bool cancelled);
     void replaceInWorkspace();
@@ -201,6 +207,9 @@ class MainWindow final : public QMainWindow {
     std::shared_ptr<std::atomic_bool> searchCancelled_;
     quint64 searchGeneration_{0};
     WorkspaceSearchOptions lastSearchOptions_;
+    QList<WorkspaceSearchFileResult> definitionResults_;
+    QString definitionSymbol_;
+    bool definitionSearch_{false};
     QToolButton* gitButton_{nullptr};
     QTimer* highlightTimer_{nullptr};
     QSplitter* documentSplit_{nullptr};
@@ -214,6 +223,7 @@ class MainWindow final : public QMainWindow {
     QuickOpenPopup* quickOpen_{nullptr};
     QuickOpenMode quickOpenMode_{QuickOpenMode::Commands};
     QAction* commandPaletteAction_{nullptr};
+    QAction* goToDefinitionAction_{nullptr};
     QAction* backAction_{nullptr};
     QAction* forwardAction_{nullptr};
     QList<QPointer<QAction>> paletteActions_;

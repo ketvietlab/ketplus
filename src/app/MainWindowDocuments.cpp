@@ -300,6 +300,8 @@ void MainWindow::showEditorContextMenu(EditorWidget* editor, const QPoint& posit
     menu.addSeparator();
     menu.addAction(selectAllAction_);
     menu.addSeparator();
+    menu.addAction(goToDefinitionAction_);
+    menu.addSeparator();
     // The split view edits its source tab's document, so split from that tab.
     auto* source = editor == splitEditor_ && splitSource_ != nullptr ? splitSource_ : editor;
     auto* splitRightAction = menu.addAction(QStringLiteral("Split Right"));
@@ -382,6 +384,10 @@ EditorWidget* MainWindow::createEditor() {
     syncEditorZoom(editor);
     connect(editor, &EditorWidget::contextMenuRequested, this,
             [this, editor](const QPoint& position) { showEditorContextMenu(editor, position); });
+    connect(editor, &EditorWidget::definitionRequested, this,
+            [this, editor](const QString& symbol, const QString& fileToken) {
+                resolveDefinition(editor, symbol, fileToken);
+            });
     connect(editor, &EditorWidget::dirtyStateChanged, this, [this, editor](const bool dirty) {
         updateTabTitle(editor);
         if (currentEditor() == editor) {
@@ -732,6 +738,10 @@ void MainWindow::openSplit(EditorWidget* source, const Qt::Orientation orientati
         syncEditorZoom(splitEditor_);
         connect(splitEditor_, &EditorWidget::contextMenuRequested, this,
                 [this](const QPoint& position) { showEditorContextMenu(splitEditor_, position); });
+        connect(splitEditor_, &EditorWidget::definitionRequested, this,
+                [this](const QString& symbol, const QString& fileToken) {
+                    resolveDefinition(splitEditor_, symbol, fileToken);
+                });
         connect(splitEditor_, &EditorWidget::editorStateChanged, this, [this] {
             if (activeEditor() == splitEditor_) {
                 updateEditorActions();

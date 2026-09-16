@@ -138,6 +138,8 @@ ketplus_enable_warnings(ketplus_preview)
 add_library(KetPlusCM::preview ALIAS ketplus_preview)
 
 add_library(ketplus_editor STATIC
+    src/editor/DefinitionPattern.cpp
+    src/editor/DefinitionPattern.h
     src/editor/EditorSettings.cpp
     src/editor/EditorSettings.h
     src/editor/EditorSplitPane.cpp

@@ -59,6 +59,7 @@ constexpr int bookmarkMask = 1 << bookmarkMarker;
 constexpr uptr_t findIndicator = INDICATOR_CONTAINER;
 constexpr uptr_t selectionIndicator = INDICATOR_CONTAINER + 1;
 constexpr uptr_t embeddedStyleIndicator = INDICATOR_CONTAINER + 2;
+constexpr uptr_t linkIndicator = INDICATOR_CONTAINER + 3;
 constexpr sptr_t symbolMarginWidth = 14;
 // How far back a <style> block may open and still color the visible CSS.
 constexpr sptr_t embeddedStyleLookBehind = 256 * 1024;
@@ -673,6 +674,7 @@ void EditorWidget::applyTheme(const ThemePalette& palette) {
          scintillaColor(palette.warning));
     send(message(Scintilla::Message::IndicSetFore), selectionIndicator,
          scintillaColor(palette.accent));
+    send(message(Scintilla::Message::IndicSetFore), linkIndicator, scintillaColor(palette.info));
 
     applyLexerTheme(palette);
     send(message(Scintilla::Message::Colourise), 0, -1);
@@ -719,17 +721,125 @@ void EditorWidget::setFoldMarginHovered(const bool hovered) {
 bool EditorWidget::eventFilter(QObject* watched, QEvent* event) {
     if (watched == viewport()) {
         if (event->type() == QEvent::MouseMove) {
+            auto* mouse = static_cast<QMouseEvent*>(event);
             sptr_t margins = 0;
             for (uptr_t margin = 0; margin <= foldMargin; ++margin) {
                 margins += send(message(Scintilla::Message::GetMarginWidthN), margin);
             }
-            const auto position = static_cast<QMouseEvent*>(event)->position();
+            const auto position = mouse->position();
             setFoldMarginHovered(position.x() >= 0 && position.x() < margins);
+            updateLinkHighlight(position.toPoint(), mouse->modifiers());
+        } else if (event->type() == QEvent::MouseButtonPress) {
+            auto* mouse = static_cast<QMouseEvent*>(event);
+            if (mouse->button() == Qt::LeftButton &&
+                mouse->modifiers().testFlag(Qt::ControlModifier)) {
+                const auto position =
+                    send(message(Scintilla::Message::PositionFromPointClose),
+                         static_cast<uptr_t>(mouse->position().x()),
+                         static_cast<sptr_t>(mouse->position().y()));
+                clearLinkHighlight();
+                if (position >= 0) {
+                    emit definitionRequested(wordAtPosition(position),
+                                             fileTokenAtPosition(position));
+                }
+                // Scintilla treats Ctrl+click as a selection gesture, so the click stops here.
+                return true;
+            }
         } else if (event->type() == QEvent::Leave) {
             setFoldMarginHovered(false);
+            clearLinkHighlight();
         }
     }
     return ScintillaEditBase::eventFilter(watched, event);
+}
+
+void EditorWidget::updateLinkHighlight(const QPoint& point,
+                                       const Qt::KeyboardModifiers modifiers) {
+    if (!modifiers.testFlag(Qt::ControlModifier) || largeFileMode_ || hibernated_) {
+        clearLinkHighlight();
+        return;
+    }
+    const auto position = send(message(Scintilla::Message::PositionFromPointClose),
+                               static_cast<uptr_t>(point.x()), static_cast<sptr_t>(point.y()));
+    if (position < 0 || wordAtPosition(position).isEmpty()) {
+        clearLinkHighlight();
+        return;
+    }
+    const auto start =
+        send(message(Scintilla::Message::WordStartPosition), static_cast<uptr_t>(position), 1);
+    const auto end =
+        send(message(Scintilla::Message::WordEndPosition), static_cast<uptr_t>(position), 1);
+    if (start == linkStart_ && end == linkEnd_) {
+        return;
+    }
+    clearLinkHighlight();
+    linkStart_ = start;
+    linkEnd_ = end;
+    send(message(Scintilla::Message::SetIndicatorCurrent), linkIndicator);
+    send(message(Scintilla::Message::IndicatorFillRange), static_cast<uptr_t>(start), end - start);
+    viewport()->setCursor(Qt::PointingHandCursor);
+}
+
+void EditorWidget::clearLinkHighlight() {
+    if (linkStart_ < 0) {
+        return;
+    }
+    send(message(Scintilla::Message::SetIndicatorCurrent), linkIndicator);
+    send(message(Scintilla::Message::IndicatorClearRange), static_cast<uptr_t>(linkStart_),
+         linkEnd_ - linkStart_);
+    linkStart_ = -1;
+    linkEnd_ = -1;
+    viewport()->unsetCursor();
+}
+
+QString EditorWidget::wordAtPosition(const sptr_t position) const {
+    const auto start =
+        send(message(Scintilla::Message::WordStartPosition), static_cast<uptr_t>(position), 1);
+    const auto end =
+        send(message(Scintilla::Message::WordEndPosition), static_cast<uptr_t>(position), 1);
+    if (end <= start) {
+        return {};
+    }
+    return QString::fromUtf8(textRange(start, end));
+}
+
+QString EditorWidget::fileTokenAtPosition(const sptr_t position) const {
+    const auto line = send(message(Scintilla::Message::LineFromPosition),
+                           static_cast<uptr_t>(position));
+    const auto lineStart =
+        send(message(Scintilla::Message::PositionFromLine), static_cast<uptr_t>(line));
+    const auto lineEnd =
+        send(message(Scintilla::Message::GetLineEndPosition), static_cast<uptr_t>(line));
+    if (position < lineStart || position > lineEnd) {
+        return {};
+    }
+    const QByteArray text = textRange(lineStart, lineEnd);
+    const auto isTokenCharacter = [](const char character) {
+        return isWordCharacter(static_cast<unsigned char>(character)) ||
+               character == '.' || character == '/' || character == '-' || character == '@' ||
+               character == '~' || character == '+';
+    };
+    if (text.isEmpty()) {
+        return {};
+    }
+    const qsizetype offset = static_cast<qsizetype>(position - lineStart);
+    const qsizetype index = qMax<qsizetype>(0, qMin(offset, text.size() - 1));
+    if (!isTokenCharacter(text.at(index))) {
+        return {};
+    }
+    qsizetype start = index;
+    while (start > 0 && isTokenCharacter(text.at(start - 1))) {
+        --start;
+    }
+    qsizetype end = index;
+    while (end + 1 < text.size() && isTokenCharacter(text.at(end + 1))) {
+        ++end;
+    }
+    return QString::fromUtf8(text.mid(start, end - start + 1));
+}
+
+sptr_t EditorWidget::caretWordPosition() const {
+    return send(message(Scintilla::Message::GetCurrentPos));
 }
 
 void EditorWidget::updateEmbeddedStyleHighlight() {
@@ -1636,6 +1746,8 @@ void EditorWidget::configureEditor() {
     send(message(Scintilla::Message::FoldDisplayTextSetStyle),
          static_cast<uptr_t>(Scintilla::FoldDisplayTextStyle::Boxed));
 
+    send(message(Scintilla::Message::IndicSetStyle), linkIndicator,
+         static_cast<sptr_t>(Scintilla::IndicatorStyle::Plain));
     send(message(Scintilla::Message::IndicSetStyle), embeddedStyleIndicator,
          static_cast<sptr_t>(Scintilla::IndicatorStyle::TextFore));
     send(message(Scintilla::Message::IndicSetFlags), embeddedStyleIndicator,

@@ -142,7 +142,14 @@ class EditorWidget final : public ScintillaEditBase {
     int highlightMatches(const QString& query, const SearchOptions& options);
     void clearMatchHighlights();
 
+    // The word and the file-reference token around a position, for go to definition.
+    [[nodiscard]] QString wordAtPosition(sptr_t position) const;
+    [[nodiscard]] QString fileTokenAtPosition(sptr_t position) const;
+    [[nodiscard]] sptr_t caretWordPosition() const;
+
   signals:
+    // Emitted on Ctrl/Cmd+click, with the word and the file token under the pointer.
+    void definitionRequested(const QString& symbol, const QString& fileToken);
     void dirtyStateChanged(bool dirty);
     void cursorPositionChanged(int line, int column);
     void editorStateChanged();
@@ -174,6 +181,9 @@ class EditorWidget final : public ScintillaEditBase {
     // Fold arrows for open blocks only appear while the pointer is over the margins.
     void setFoldMarginHovered(bool hovered);
     void defineFoldMarkers();
+    // Underlines the word under the pointer while Ctrl/Cmd is held.
+    void updateLinkHighlight(const QPoint& point, Qt::KeyboardModifiers modifiers);
+    void clearLinkHighlight();
     void updateEmbeddedStyleHighlight();
     bool applyViewOptions();
     void updateBraceHighlight();
@@ -212,6 +222,8 @@ class EditorWidget final : public ScintillaEditBase {
     bool foldingEnabled_{false};
     bool searchScopeActive_{false};
     bool selectionMatchesActive_{false};
+    sptr_t linkStart_{-1};
+    sptr_t linkEnd_{-1};
     bool foldMarginHovered_{false};
     bool embeddedStyleActive_{false};
     // The last colored range; text edits and theme or lexer changes force a rescan.

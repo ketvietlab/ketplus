@@ -95,13 +95,17 @@ void MainWindow::setSearchPanelVisible(const bool visible) {
 }
 
 void MainWindow::startWorkspaceSearch() {
+    startWorkspaceSearch(ensureSearchPanel()->options(), false);
+}
+
+void MainWindow::startWorkspaceSearch(const WorkspaceSearchOptions& options,
+                                      const bool definitionSearch) {
     auto* panel = ensureSearchPanel();
     if (workspaceRoot_.isEmpty()) {
         panel->setStatusText(QStringLiteral("Open a folder to search across its files."));
         return;
     }
 
-    const WorkspaceSearchOptions options = panel->options();
     QString error;
     const QRegularExpression expression = buildSearchExpression(options, &error);
     if (!error.isEmpty()) {
@@ -111,9 +115,17 @@ void MainWindow::startWorkspaceSearch() {
 
     cancelWorkspaceSearch();
     lastSearchOptions_ = options;
-    panel->clearResults();
-    panel->setSearching(true);
-    panel->setStatusText(QStringLiteral("Searching…"));
+    definitionSearch_ = definitionSearch;
+    definitionResults_.clear();
+    if (definitionSearch) {
+        // A definition lookup only opens the panel when the answer is ambiguous.
+        statusBar()->showMessage(
+            QStringLiteral("Looking for a definition of %1…").arg(definitionSymbol_), 2000);
+    } else {
+        panel->clearResults();
+        panel->setSearching(true);
+        panel->setStatusText(QStringLiteral("Searching…"));
+    }
 
     // Unsaved tab contents take precedence over the files on disk.
     QHash<QString, QString> openBuffers;
@@ -142,7 +154,12 @@ void MainWindow::startWorkspaceSearch() {
                 QMetaObject::invokeMethod(
                     this,
                     [this, generation, file] {
-                        if (generation == searchGeneration_ && searchPanel_ != nullptr) {
+                        if (generation != searchGeneration_) {
+                            return;
+                        }
+                        if (definitionSearch_) {
+                            definitionResults_.append(file);
+                        } else if (searchPanel_ != nullptr) {
                             searchPanel_->addFileResult(file);
                         }
                     },
@@ -175,6 +192,14 @@ void MainWindow::cancelWorkspaceSearch() {
 
 void MainWindow::finishWorkspaceSearch(const WorkspaceSearchSummary& summary,
                                        const bool cancelled) {
+    if (definitionSearch_) {
+        definitionSearch_ = false;
+        if (!cancelled) {
+            finishDefinitionSearch();
+        }
+        definitionResults_.clear();
+        return;
+    }
     if (searchPanel_ == nullptr) {
         return;
     }

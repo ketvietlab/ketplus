@@ -1,7 +1,9 @@
 #include "app/MainWindow.h"
 
+#include "editor/DefinitionPattern.h"
 #include "editor/EditorWidget.h"
 #include "editor/SymbolExtractor.h"
+#include "workspace/SearchPanel.h"
 #include "ui/Theme.h"
 #include "workspace/QuickOpenPopup.h"
 
@@ -293,6 +295,121 @@ void MainWindow::activateQuickOpenItem(const QVariant& data) {
         break;
     }
     }
+}
+
+void MainWindow::goToDefinition() {
+    auto* editor = activeEditor();
+    if (editor == nullptr) {
+        return;
+    }
+    const auto position = editor->caretWordPosition();
+    resolveDefinition(editor, editor->wordAtPosition(position),
+                      editor->fileTokenAtPosition(position));
+}
+
+void MainWindow::resolveDefinition(EditorWidget* editor, const QString& symbol,
+                                   const QString& fileToken) {
+    if (editor == nullptr || editor->isHibernated()) {
+        return;
+    }
+    if (openFileReference(editor, fileToken)) {
+        return;
+    }
+    if (symbol.isEmpty()) {
+        statusBar()->showMessage(QStringLiteral("Put the cursor on a symbol first"), 3000);
+        return;
+    }
+
+    // A declaration in this file wins: it needs no scan and is the common case.
+    if (!editor->isLargeFileMode()) {
+        const int currentLine = editor->currentLine();
+        for (const auto& candidate : extractDocumentSymbols(editor->text(), editor->syntaxName())) {
+            const bool sameName = candidate.name == symbol ||
+                                  candidate.name.endsWith(QStringLiteral(".") + symbol) ||
+                                  candidate.name.endsWith(QStringLiteral("::") + symbol);
+            if (sameName && candidate.line != currentLine) {
+                pushNavigationLocation(locationOf(editor));
+                editor->goToLine(candidate.line);
+                editor->setFocus();
+                lastLocation_ = locationOf(editor);
+                return;
+            }
+        }
+    }
+
+    if (workspaceRoot_.isEmpty()) {
+        statusBar()->showMessage(
+            QStringLiteral("No definition of %1 in this file. Open a folder to search further.")
+                .arg(symbol),
+            4000);
+        return;
+    }
+
+    const QString expression = definitionExpression(symbol, editor->syntaxName());
+    definitionSymbol_ = symbol;
+    WorkspaceSearchOptions options;
+    options.query = expression.isEmpty() ? symbol : expression;
+    options.regex = !expression.isEmpty();
+    options.wholeWord = expression.isEmpty();
+    options.matchCase = true;
+    startWorkspaceSearch(options, true);
+}
+
+bool MainWindow::openFileReference(EditorWidget* editor, const QString& fileToken) {
+    if (fileToken.isEmpty() || !looksLikeFileReference(fileToken)) {
+        return false;
+    }
+    QStringList bases;
+    if (!editor->document().isUntitled()) {
+        bases.append(QFileInfo(editor->document().filePath()).absolutePath());
+    }
+    if (!workspaceRoot_.isEmpty()) {
+        bases.append(workspaceRoot_);
+    }
+    for (const QString& base : bases) {
+        const QFileInfo target(QDir(base).absoluteFilePath(fileToken));
+        if (target.isFile()) {
+            pushNavigationLocation(locationOf(editor));
+            restoringNavigation_ = true;
+            openFile(target.absoluteFilePath());
+            restoringNavigation_ = false;
+            if (auto* opened = currentEditor()) {
+                lastLocation_ = locationOf(opened);
+                opened->setFocus();
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+void MainWindow::finishDefinitionSearch() {
+    int matchCount = 0;
+    for (const auto& file : definitionResults_) {
+        matchCount += static_cast<int>(file.matches.size());
+    }
+    if (matchCount == 0) {
+        statusBar()->showMessage(
+            QStringLiteral("No definition found for %1").arg(definitionSymbol_), 4000);
+        return;
+    }
+    if (matchCount == 1) {
+        const auto& file = definitionResults_.constFirst();
+        const auto& match = file.matches.constFirst();
+        openSearchMatch(file.path, match.line, match.column, match.length);
+        return;
+    }
+
+    // Several candidates: the user picks one in the search panel.
+    setSearchPanelVisible(true);
+    auto* panel = ensureSearchPanel();
+    panel->clearResults();
+    for (const auto& file : definitionResults_) {
+        panel->addFileResult(file);
+    }
+    panel->setSearching(false);
+    panel->setStatusText(
+        QStringLiteral("%L1 possible definitions of %2").arg(matchCount).arg(definitionSymbol_));
 }
 
 MainWindow::NavigationLocation MainWindow::locationOf(EditorWidget* editor) const {
