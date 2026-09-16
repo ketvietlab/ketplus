@@ -119,7 +119,11 @@ class MainWindow final : public QMainWindow {
     [[nodiscard]] QString quickOpenStyleSheet() const;
     void activateQuickOpenItem(const QVariant& data);
     void refreshWorkspaceFileIndex(bool force);
+    // How long a collected file list is reused before the tree is walked again.
+    static constexpr qint64 workspaceIndexMaxAgeMs = 30 * 1000;
     [[nodiscard]] int workspaceFileLimit(const QString& root) const;
+    // The cached file list for `root`, empty when it is missing or too old to trust.
+    [[nodiscard]] WorkspaceFileList cachedWorkspaceFiles(const QString& root) const;
     void askAboutFullWorkspaceScan(const QString& root);
     void finishWorkspaceFileIndex(const QString& root, const WorkspaceFileList& files);
     void updateGoToFileItems();

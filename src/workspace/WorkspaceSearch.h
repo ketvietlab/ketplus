@@ -72,4 +72,11 @@ using WorkspaceSearchFileCallback = std::function<void(const WorkspaceSearchFile
     int maximumMatches = defaultSearchMatchLimit,
     int maximumFiles = defaultWorkspaceFileLimit);
 
+// Searches a file list that was already collected, so a lookup does not walk the tree again.
+[[nodiscard]] WorkspaceSearchSummary searchWorkspaceFiles(
+    const QString& rootPath, const WorkspaceFileList& files,
+    const WorkspaceSearchOptions& options, const QRegularExpression& expression,
+    const QHash<QString, QString>& openBuffers, const std::atomic_bool* cancelled,
+    const WorkspaceSearchFileCallback& onFile, int maximumMatches = defaultSearchMatchLimit);
+
 } // namespace ketplus

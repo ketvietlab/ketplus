@@ -29,7 +29,6 @@ namespace {
 constexpr int navigationJumpLines = 10;
 constexpr auto fullScanRootsKey = "workspace/fullScanRoots";
 constexpr int maximumNavigationHistory = 50;
-constexpr qint64 workspaceIndexMaxAgeMs = 30 * 1000;
 
 QString strippedMenuText(QString text) {
     text.remove(QLatin1Char('&'));
@@ -227,6 +226,17 @@ void MainWindow::finishWorkspaceFileIndex(const QString& root, const WorkspaceFi
     if (files.truncated) {
         askAboutFullWorkspaceScan(root);
     }
+}
+
+WorkspaceFileList MainWindow::cachedWorkspaceFiles(const QString& root) const {
+    const bool fresh = workspaceFilesRoot_ == root && !workspaceIndexing_ &&
+                       !workspaceFiles_.isEmpty() &&
+                       QDateTime::currentMSecsSinceEpoch() - workspaceFilesIndexedAt_ <
+                           workspaceIndexMaxAgeMs;
+    if (!fresh) {
+        return {};
+    }
+    return {workspaceFiles_, workspaceFilesTruncated_};
 }
 
 int MainWindow::workspaceFileLimit(const QString& root) const {

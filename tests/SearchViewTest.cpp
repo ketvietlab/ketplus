@@ -168,6 +168,13 @@ void SearchViewTest::skipsAssetsByFileSuffix() {
         });
     QCOMPARE(found, QStringList{QStringLiteral("page.html")});
     QCOMPARE(summary.fileCount, 1);
+
+    // A caller that already listed the tree searches that list instead of walking again.
+    const ketplus::WorkspaceFileList known{{QStringLiteral("page.html")}, false};
+    QCOMPARE(ketplus::searchWorkspaceFiles(root.absolutePath(), known, options, expression, {},
+                                           nullptr, {})
+                 .matchCount,
+             1);
 }
 
 void SearchViewTest::searchesWorkspaceWithOpenBuffers() {

@@ -164,29 +164,34 @@ void MainWindow::startWorkspaceSearch(const WorkspaceSearchOptions& options,
     // The worker reports each file as it is found. cancelWorkspaceSearch() and the
     // destructor wait for it, and stale generations are ignored on arrival.
     const int fileLimit = workspaceFileLimit(root);
+    // A recent file list is reused, so a lookup does not walk the tree again.
+    const WorkspaceFileList knownFiles = cachedWorkspaceFiles(root);
     auto* thread = QThread::create([this, root, options, expression, openBuffers, cancelled,
-                                    generation, fileLimit] {
-        const WorkspaceSearchSummary summary = searchWorkspace(
-            root, options, expression, openBuffers, cancelled.get(),
-            [this, cancelled, generation](const WorkspaceSearchFileResult& file) {
-                if (cancelled->load()) {
-                    return;
-                }
-                QMetaObject::invokeMethod(
-                    this,
-                    [this, generation, file] {
-                        if (generation != searchGeneration_) {
-                            return;
-                        }
-                        if (definitionSearch_) {
-                            definitionResults_.append(file);
-                        } else if (searchPanel_ != nullptr) {
-                            searchPanel_->addFileResult(file);
-                        }
-                    },
-                    Qt::QueuedConnection);
-            },
-            defaultSearchMatchLimit, fileLimit);
+                                    generation, fileLimit, knownFiles] {
+        const auto onFile = [this, cancelled, generation](const WorkspaceSearchFileResult& file) {
+            if (cancelled->load()) {
+                return;
+            }
+            QMetaObject::invokeMethod(
+                this,
+                [this, generation, file] {
+                    if (generation != searchGeneration_) {
+                        return;
+                    }
+                    if (definitionSearch_) {
+                        definitionResults_.append(file);
+                    } else if (searchPanel_ != nullptr) {
+                        searchPanel_->addFileResult(file);
+                    }
+                },
+                Qt::QueuedConnection);
+        };
+        const WorkspaceSearchSummary summary =
+            knownFiles.relativePaths.isEmpty()
+                ? searchWorkspace(root, options, expression, openBuffers, cancelled.get(), onFile,
+                                  defaultSearchMatchLimit, fileLimit)
+                : searchWorkspaceFiles(root, knownFiles, options, expression, openBuffers,
+                                       cancelled.get(), onFile);
         const bool wasCancelled = cancelled->load();
         QMetaObject::invokeMethod(
             this,

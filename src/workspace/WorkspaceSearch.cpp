@@ -219,9 +219,21 @@ WorkspaceSearchSummary searchWorkspace(const QString& rootPath,
                                        const std::atomic_bool* cancelled,
                                        const WorkspaceSearchFileCallback& onFile,
                                        const int maximumMatches, const int maximumFiles) {
+    const WorkspaceFileList files = collectWorkspaceFiles(rootPath, maximumFiles, cancelled);
+    return searchWorkspaceFiles(rootPath, files, options, expression, openBuffers, cancelled,
+                                onFile, maximumMatches);
+}
+
+WorkspaceSearchSummary searchWorkspaceFiles(const QString& rootPath,
+                                            const WorkspaceFileList& files,
+                                            const WorkspaceSearchOptions& options,
+                                            const QRegularExpression& expression,
+                                            const QHash<QString, QString>& openBuffers,
+                                            const std::atomic_bool* cancelled,
+                                            const WorkspaceSearchFileCallback& onFile,
+                                            const int maximumMatches) {
     WorkspaceSearchSummary summary;
     const auto isCancelled = [cancelled] { return cancelled != nullptr && cancelled->load(); };
-    const WorkspaceFileList files = collectWorkspaceFiles(rootPath, maximumFiles, cancelled);
     summary.truncated = files.truncated;
     // Canonical paths line up with the keys of `openBuffers` even through symlinks.
     const QString canonicalRoot = QFileInfo(rootPath).canonicalFilePath();

@@ -296,6 +296,9 @@ void MainWindow::openFolder(const QString& folderPath) {
     setWindowTitle(QStringLiteral("%1 — KetPlus CM").arg(folder.fileName()));
     statusBar()->showMessage(QStringLiteral("Opened %1").arg(workspaceRoot_), 2500);
     git_->setWorkspacePath(workspaceRoot_);
+    // Listing the tree now means the first lookup does not wait for it, and a folder too
+    // large for the default limit asks about a full scan while the user is still here.
+    refreshWorkspaceFileIndex(true);
 }
 
 void MainWindow::changeEvent(QEvent* event) {
