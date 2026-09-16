@@ -119,6 +119,8 @@ class MainWindow final : public QMainWindow {
     [[nodiscard]] QString quickOpenStyleSheet() const;
     void activateQuickOpenItem(const QVariant& data);
     void refreshWorkspaceFileIndex(bool force);
+    [[nodiscard]] int workspaceFileLimit(const QString& root) const;
+    void askAboutFullWorkspaceScan(const QString& root);
     void finishWorkspaceFileIndex(const QString& root, const WorkspaceFileList& files);
     void updateGoToFileItems();
     SearchPanel* ensureSearchPanel();
@@ -233,6 +235,7 @@ class MainWindow final : public QMainWindow {
     QList<QPointer<QAction>> paletteActions_;
     QPointer<EditorWidget> symbolEditor_;
     QStringList workspaceFiles_;
+    QStringList declinedFullScanRoots_;
     QString workspaceFilesRoot_;
     qint64 workspaceFilesIndexedAt_{0};
     bool workspaceFilesTruncated_{false};

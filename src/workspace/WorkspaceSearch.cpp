@@ -218,11 +218,10 @@ WorkspaceSearchSummary searchWorkspace(const QString& rootPath,
                                        const QHash<QString, QString>& openBuffers,
                                        const std::atomic_bool* cancelled,
                                        const WorkspaceSearchFileCallback& onFile,
-                                       const int maximumMatches) {
+                                       const int maximumMatches, const int maximumFiles) {
     WorkspaceSearchSummary summary;
     const auto isCancelled = [cancelled] { return cancelled != nullptr && cancelled->load(); };
-    const WorkspaceFileList files =
-        collectWorkspaceFiles(rootPath, defaultWorkspaceFileLimit, cancelled);
+    const WorkspaceFileList files = collectWorkspaceFiles(rootPath, maximumFiles, cancelled);
     summary.truncated = files.truncated;
     // Canonical paths line up with the keys of `openBuffers` even through symlinks.
     const QString canonicalRoot = QFileInfo(rootPath).canonicalFilePath();
@@ -240,6 +239,9 @@ WorkspaceSearchSummary searchWorkspace(const QString& rootPath,
         QString text;
         if (const auto buffer = openBuffers.constFind(path); buffer != openBuffers.constEnd()) {
             text = buffer.value();
+        } else if (hasBinaryFileSuffix(relativePath)) {
+            // Assets are recognised by name, so thousands of images are never opened.
+            continue;
         } else if (!readSearchableFile(path, &text)) {
             continue;
         }

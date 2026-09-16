@@ -15,6 +15,8 @@
 #include <QKeySequence>
 #include <QMenu>
 #include <QMenuBar>
+#include <QMessageBox>
+#include <QSettings>
 #include <QStatusBar>
 #include <QTabWidget>
 #include <QThread>
@@ -25,6 +27,7 @@ namespace ketplus {
 namespace {
 
 constexpr int navigationJumpLines = 10;
+constexpr auto fullScanRootsKey = "workspace/fullScanRoots";
 constexpr int maximumNavigationHistory = 50;
 constexpr qint64 workspaceIndexMaxAgeMs = 30 * 1000;
 
@@ -159,8 +162,8 @@ void MainWindow::updateGoToFileItems() {
     if (workspaceIndexing_) {
         quickOpen_->setStatusText(QStringLiteral("Indexing workspace files…"));
     } else if (workspaceFilesTruncated_ && workspaceFilesRoot_ == workspaceRoot_) {
-        quickOpen_->setStatusText(QStringLiteral("Showing the first %L1 files")
-                                      .arg(defaultWorkspaceFileLimit));
+        quickOpen_->setStatusText(
+            QStringLiteral("Showing the first %L1 files").arg(workspaceFiles_.size()));
     } else {
         quickOpen_->setStatusText({});
     }
@@ -185,9 +188,9 @@ void MainWindow::refreshWorkspaceFileIndex(const bool force) {
     // Walk the tree off the UI thread; large workspaces can take a moment. The destructor
     // cancels and waits, so `this` outlives the worker, and a queued call to a destroyed
     // receiver is discarded.
-    auto* thread = QThread::create([this, root, cancelled] {
-        const WorkspaceFileList files =
-            collectWorkspaceFiles(root, defaultWorkspaceFileLimit, cancelled.get());
+    const int limit = workspaceFileLimit(root);
+    auto* thread = QThread::create([this, root, limit, cancelled] {
+        const WorkspaceFileList files = collectWorkspaceFiles(root, limit, cancelled.get());
         if (cancelled->load()) {
             return;
         }
@@ -221,6 +224,44 @@ void MainWindow::finishWorkspaceFileIndex(const QString& root, const WorkspaceFi
     workspaceFilesRoot_ = root;
     workspaceFilesIndexedAt_ = QDateTime::currentMSecsSinceEpoch();
     updateGoToFileItems();
+    if (files.truncated) {
+        askAboutFullWorkspaceScan(root);
+    }
+}
+
+int MainWindow::workspaceFileLimit(const QString& root) const {
+    const QSettings settings;
+    return settings.value(fullScanRootsKey).toStringList().contains(root)
+               ? maximumWorkspaceFileLimit
+               : defaultWorkspaceFileLimit;
+}
+
+void MainWindow::askAboutFullWorkspaceScan(const QString& root) {
+    // Asked once per folder per session; the answer to scan it all is remembered for good.
+    if (workspaceFileLimit(root) == maximumWorkspaceFileLimit ||
+        declinedFullScanRoots_.contains(root)) {
+        return;
+    }
+
+    const auto answer = QMessageBox::question(
+        this, QStringLiteral("Large folder"),
+        QStringLiteral("%1 holds more than %L2 files, so Go to File and Search in Files only "
+                       "cover the first %L2.\n\nScan the whole folder? It uses more memory and "
+                       "takes longer to open, and is remembered for this folder.")
+            .arg(QFileInfo(root).fileName())
+            .arg(defaultWorkspaceFileLimit),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (answer != QMessageBox::Yes) {
+        declinedFullScanRoots_.append(root);
+        return;
+    }
+
+    QSettings settings;
+    QStringList roots = settings.value(fullScanRootsKey).toStringList();
+    roots.removeAll(root);
+    roots.append(root);
+    settings.setValue(fullScanRootsKey, roots);
+    refreshWorkspaceFileIndex(true);
 }
 
 void MainWindow::showGoToSymbol() {

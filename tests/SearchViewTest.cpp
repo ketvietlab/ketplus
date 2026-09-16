@@ -35,6 +35,7 @@ class SearchViewTest final : public QObject {
     void filtersIncludePatterns();
     void readsOnlySearchableFiles();
     void searchesWorkspaceWithOpenBuffers();
+    void skipsAssetsByFileSuffix();
     void collectsSearchPanelResults();
     void highlightsSelectedWordMatches();
     void convertsLineEndingsAndOverridesSyntax();
@@ -139,6 +140,34 @@ void SearchViewTest::readsOnlySearchableFiles() {
     QVERIFY(!ketplus::readSearchableFile(binary, &content));
     QVERIFY(!ketplus::readSearchableFile(latin1, &content));
     QVERIFY(!ketplus::readSearchableFile(directory.filePath(QStringLiteral("missing")), &content));
+}
+
+void SearchViewTest::skipsAssetsByFileSuffix() {
+    QVERIFY(ketplus::hasBinaryFileSuffix(QStringLiteral("output/img/photo.JPG")));
+    QVERIFY(ketplus::hasBinaryFileSuffix(QStringLiteral("docs/manual.pdf")));
+    QVERIFY(!ketplus::hasBinaryFileSuffix(QStringLiteral("src/main.cpp")));
+    QVERIFY(!ketplus::hasBinaryFileSuffix(QStringLiteral("Makefile")));
+    // A dot in a folder name says nothing about the file.
+    QVERIFY(!ketplus::hasBinaryFileSuffix(QStringLiteral("a.b/README")));
+
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QDir root(directory.path());
+    QVERIFY(writeFile(root.filePath(QStringLiteral("page.html")), "alpha\n"));
+    // Text inside an asset is never read, so thousands of images cost nothing to skip.
+    QVERIFY(writeFile(root.filePath(QStringLiteral("banner.png")), "alpha\n"));
+
+    QString error;
+    const ketplus::WorkspaceSearchOptions options{.query = QStringLiteral("alpha")};
+    const auto expression = ketplus::buildSearchExpression(options, &error);
+    QStringList found;
+    const auto summary = ketplus::searchWorkspace(
+        root.absolutePath(), options, expression, {}, nullptr,
+        [&found](const ketplus::WorkspaceSearchFileResult& file) {
+            found.append(file.relativePath);
+        });
+    QCOMPARE(found, QStringList{QStringLiteral("page.html")});
+    QCOMPARE(summary.fileCount, 1);
 }
 
 void SearchViewTest::searchesWorkspaceWithOpenBuffers() {

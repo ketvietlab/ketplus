@@ -163,8 +163,9 @@ void MainWindow::startWorkspaceSearch(const WorkspaceSearchOptions& options,
     searchCancelled_ = cancelled;
     // The worker reports each file as it is found. cancelWorkspaceSearch() and the
     // destructor wait for it, and stale generations are ignored on arrival.
+    const int fileLimit = workspaceFileLimit(root);
     auto* thread = QThread::create([this, root, options, expression, openBuffers, cancelled,
-                                    generation] {
+                                    generation, fileLimit] {
         const WorkspaceSearchSummary summary = searchWorkspace(
             root, options, expression, openBuffers, cancelled.get(),
             [this, cancelled, generation](const WorkspaceSearchFileResult& file) {
@@ -184,7 +185,8 @@ void MainWindow::startWorkspaceSearch(const WorkspaceSearchOptions& options,
                         }
                     },
                     Qt::QueuedConnection);
-            });
+            },
+            defaultSearchMatchLimit, fileLimit);
         const bool wasCancelled = cancelled->load();
         QMetaObject::invokeMethod(
             this,

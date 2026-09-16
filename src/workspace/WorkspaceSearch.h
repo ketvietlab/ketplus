@@ -1,5 +1,7 @@
 #pragma once
 
+#include "workspace/WorkspaceFileIndex.h"
+
 #include <QHash>
 #include <QList>
 #include <QRegularExpression>
@@ -67,6 +69,7 @@ using WorkspaceSearchFileCallback = std::function<void(const WorkspaceSearchFile
     const QString& rootPath, const WorkspaceSearchOptions& options,
     const QRegularExpression& expression, const QHash<QString, QString>& openBuffers,
     const std::atomic_bool* cancelled, const WorkspaceSearchFileCallback& onFile,
-    int maximumMatches = defaultSearchMatchLimit);
+    int maximumMatches = defaultSearchMatchLimit,
+    int maximumFiles = defaultWorkspaceFileLimit);
 
 } // namespace ketplus
