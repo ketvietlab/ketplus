@@ -1,7 +1,7 @@
 #include "preview/MermaidRenderer.h"
 
-#include <QCryptographicHash>
 #include <QByteArrayView>
+#include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -9,12 +9,14 @@
 #include <QJsonObject>
 #include <QProcess>
 #include <QProcessEnvironment>
+#include <QRegularExpression>
 #include <QStandardPaths>
 
 namespace ketplus {
 namespace {
 
-constexpr auto cacheVersion = "ketplus-mermaid-v3";
+// v4: labels are SVG text rows, not HTML in <foreignObject>, which Qt SVG does not draw.
+constexpr auto cacheVersion = "ketplus-mermaid-v4";
 
 bool isExecutableFile(const QString& path) {
     const QFileInfo file(path);
@@ -70,7 +72,13 @@ QByteArray mermaidConfiguration(const bool darkTheme) {
         {QStringLiteral("fontFamily"), QStringLiteral("Inter, sans-serif")},
         {QStringLiteral("fontSize"), QStringLiteral("13px")},
     };
+    // HTML labels render inside <foreignObject>, which Qt SVG skips: every label vanished.
+    const QJsonObject svgLabels{{QStringLiteral("htmlLabels"), false}};
     return QJsonDocument(QJsonObject{{QStringLiteral("theme"), QStringLiteral("base")},
+                                     {QStringLiteral("htmlLabels"), false},
+                                     {QStringLiteral("flowchart"), svgLabels},
+                                     {QStringLiteral("class"), svgLabels},
+                                     {QStringLiteral("state"), svgLabels},
                                      {QStringLiteral("themeVariables"), themeVariables}})
         .toJson(QJsonDocument::Compact);
 }
@@ -92,8 +100,27 @@ MermaidRenderer::MermaidRenderer(QObject* parent)
                 if (!currentJob_.has_value()) {
                     return;
                 }
-                const bool succeeded = exitStatus == QProcess::NormalExit && exitCode == 0 &&
-                                       QFileInfo(currentJob_->outputPath).size() > 0;
+                const QString partial = partialPathFor(currentJob_->outputPath);
+                bool succeeded = exitStatus == QProcess::NormalExit && exitCode == 0 &&
+                                 QFileInfo(partial).size() > 0;
+                if (succeeded && partial.endsWith(QStringLiteral(".svg"))) {
+                    QFile output(partial);
+                    if (output.open(QIODevice::ReadWrite)) {
+                        const QByteArray flattened = flattenLabelRows(output.readAll());
+                        output.resize(0);
+                        output.seek(0);
+                        succeeded = output.write(flattened) == flattened.size();
+                    } else {
+                        succeeded = false;
+                    }
+                }
+                // The finished file appears under its cache name only now, so a request made
+                // while mmdc was still writing never reads a partial or unprocessed diagram.
+                if (succeeded) {
+                    QFile::remove(currentJob_->outputPath);
+                    succeeded = QFile::rename(partial, currentJob_->outputPath);
+                }
+                QFile::remove(partial);
                 QString error = QString::fromUtf8(process_->readAllStandardError()).trimmed();
                 if (!succeeded && error.isEmpty()) {
                     error = QStringLiteral("mmdc exited with code %1").arg(exitCode);
@@ -117,10 +144,76 @@ MermaidRenderer::~MermaidRenderer() {
         }
     }
     if (currentJob_) {
-        QFile::remove(currentJob_->outputPath);
+        QFile::remove(partialPathFor(currentJob_->outputPath));
         QFile::remove(QDir(cacheDirectory_).filePath(currentJob_->cacheKey + QStringLiteral(".mmd")));
         QFile::remove(QDir(cacheDirectory_).filePath(currentJob_->cacheKey + QStringLiteral(".json")));
     }
+}
+
+QByteArray MermaidRenderer::flattenLabelRows(const QByteArray& svg) {
+    const QString source = QString::fromUtf8(svg);
+    if (!source.contains(QStringLiteral("text-outer-tspan")))
+        return svg;
+    // em resolves against the root font size mermaid writes into its stylesheet.
+    static const QRegularExpression rootFont(QStringLiteral(R"re(font-size:\s*([0-9.]+)px)re"));
+    const auto fontMatch = rootFont.match(source);
+    const double fontSize = fontMatch.hasMatch() ? fontMatch.captured(1).toDouble() : 16.0;
+    const auto length = [fontSize](const QString& value) {
+        const QString trimmed = value.trimmed();
+        return trimmed.endsWith(QStringLiteral("em")) ? trimmed.chopped(2).toDouble() * fontSize
+                                                      : trimmed.toDouble();
+    };
+    static const QRegularExpression textElement(QStringLiteral(R"re(<text([^>]*)>(.*?)</text>)re"),
+                                                QRegularExpression::DotMatchesEverythingOption);
+    static const QRegularExpression positionAttribute(QStringLiteral(R"re(\s(?:y|dy)="[^"]*")re"));
+    static const QRegularExpression rowStart(
+        QStringLiteral(R"re(<tspan class="text-outer-tspan row"([^>]*?)/?>)re"));
+    static const QRegularExpression yAttribute(QStringLiteral(R"re(\sy="([^"]*)")re"));
+    static const QRegularExpression dyAttribute(QStringLiteral(R"re(\sdy="([^"]*)")re"));
+    static const QRegularExpression anchorAttribute(QStringLiteral(R"re(text-anchor="[^"]*")re"));
+    static const QRegularExpression innerText(
+        QStringLiteral(R"re(<tspan[^>]*class="text-inner-tspan"[^>]*>([^<]*)</tspan>)re"));
+
+    QString result;
+    result.reserve(source.size());
+    qsizetype copied = 0;
+    auto texts = textElement.globalMatch(source);
+    while (texts.hasNext()) {
+        const auto text = texts.next();
+        const QString body = text.captured(2);
+        if (!body.contains(QStringLiteral("text-outer-tspan")))
+            continue;
+        result += QStringView(source).mid(copied, text.capturedStart() - copied);
+        copied = text.capturedEnd();
+        const QString attributes = QString(text.captured(1)).remove(positionAttribute);
+        auto rows = rowStart.globalMatch(body);
+        QList<QRegularExpressionMatch> starts;
+        while (rows.hasNext())
+            starts.append(rows.next());
+        for (qsizetype row = 0; row < starts.size(); ++row) {
+            const auto& start = starts.at(row);
+            const qsizetype end =
+                row + 1 < starts.size() ? starts.at(row + 1).capturedStart() : body.size();
+            const QString rowAttributes = start.captured(1);
+            const QString content = body.mid(start.capturedEnd(), end - start.capturedEnd());
+            QString line;
+            auto words = innerText.globalMatch(content);
+            while (words.hasNext())
+                line += words.next().captured(1);
+            const double y = length(yAttribute.match(rowAttributes).captured(1)) +
+                             length(dyAttribute.match(rowAttributes).captured(1));
+            const auto anchor = anchorAttribute.match(rowAttributes);
+            result +=
+                QStringLiteral("<text%1 y=\"%2\"%3>%4</text>")
+                    .arg(attributes, QString::number(y, 'f', 2),
+                         anchor.hasMatch() && !attributes.contains(QStringLiteral("text-anchor"))
+                             ? QLatin1Char(' ') + anchor.captured(0)
+                             : QString{},
+                         line);
+        }
+    }
+    result += QStringView(source).mid(copied);
+    return result.toUtf8();
 }
 
 bool MermaidRenderer::isAvailable() const noexcept { return !executablePath_.isEmpty(); }
@@ -202,6 +295,13 @@ QString MermaidRenderer::keyFor(const QString& source, const bool darkTheme, con
     return QString::fromLatin1(hash.result().toHex());
 }
 
+// Keeps the extension last: mmdc picks the output format from it.
+QString MermaidRenderer::partialPathFor(const QString& outputPath) {
+    const QFileInfo info(outputPath);
+    return info.dir().filePath(info.completeBaseName() + QStringLiteral(".partial.") +
+                               info.suffix());
+}
+
 QString MermaidRenderer::outputPathFor(const QString& cacheKey, const bool raster) const {
     return QDir(cacheDirectory_).filePath(cacheKey + (raster ? QStringLiteral(".png") : QStringLiteral(".svg")));
 }
@@ -232,9 +332,10 @@ void MermaidRenderer::startNext() {
     }
     config.close();
 
-    QStringList arguments{QStringLiteral("-i"), inputPath, QStringLiteral("-o"),
-                          currentJob_->outputPath, QStringLiteral("-b"),
-                          QStringLiteral("transparent"), QStringLiteral("-c"), configPath};
+    QStringList arguments{QStringLiteral("-i"), inputPath,
+                          QStringLiteral("-o"), partialPathFor(currentJob_->outputPath),
+                          QStringLiteral("-b"), QStringLiteral("transparent"),
+                          QStringLiteral("-c"), configPath};
     QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
     const QString executableDirectory = QFileInfo(executablePath_).absolutePath();
     environment.insert(QStringLiteral("PATH"),

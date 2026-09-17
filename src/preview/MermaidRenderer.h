@@ -36,6 +36,10 @@ class MermaidRenderer final : public QObject {
     [[nodiscard]] bool isAvailable() const noexcept;
     [[nodiscard]] const QString& executablePath() const noexcept;
     [[nodiscard]] Result request(const QString& source, bool darkTheme, bool raster = false);
+    // Rewrites mermaid-cli's multi-row SVG labels into one <text> per row with pixel offsets.
+    // Qt SVG ignores em-based `y`/`dy` and nested <tspan>, so the rows mermaid emits with
+    // htmlLabels off would otherwise sit at the top of their shapes or disappear.
+    [[nodiscard]] static QByteArray flattenLabelRows(const QByteArray& svg);
 
   signals:
     void diagramReady(const QString& cacheKey);
@@ -52,6 +56,7 @@ class MermaidRenderer final : public QObject {
     [[nodiscard]] static QString discoverExecutable();
     [[nodiscard]] static QString keyFor(const QString& source, bool darkTheme, bool raster);
     [[nodiscard]] QString outputPathFor(const QString& cacheKey, bool raster) const;
+    [[nodiscard]] static QString partialPathFor(const QString& outputPath);
     void startNext();
     void finishCurrent(bool succeeded, const QString& error = {});
 
