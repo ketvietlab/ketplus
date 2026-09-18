@@ -1,10 +1,7 @@
-#include "editor/EditorSplitPane.h"
 #include "editor/EditorWidget.h"
+#include "editor/EditorSplitPane.h"
 #include "ui/Theme.h"
 
-#include <SciLexer.h>
-#include <Scintilla.h>
-#include <ScintillaMessages.h>
 #include <QColor>
 #include <QContextMenuEvent>
 #include <QFile>
@@ -13,6 +10,9 @@
 #include <QTabBar>
 #include <QTemporaryDir>
 #include <QtTest>
+#include <SciLexer.h>
+#include <Scintilla.h>
+#include <ScintillaMessages.h>
 
 namespace {
 
@@ -46,7 +46,7 @@ class EditorWidgetTest final : public QObject {
     void revealsFoldArrowsOnMarginHover();
     void colorsCssInsideHtmlStyleBlocks();
     void splitPaneSwitchesBetweenSources();
-    void colorsYamlValuesOrange();
+    void colorsYamlRolesDistinctly();
     void usesLargeFileModeAtThreshold();
     void hibernatesAndRestoresCleanFiles();
     void keepsDirtyFilesResident();
@@ -199,8 +199,7 @@ void EditorWidgetTest::selectsSyntaxFromPath_data() {
     QTest::addColumn<QString>("path");
     QTest::addColumn<QString>("syntax");
 
-    QTest::newRow("generic") << QStringLiteral("component.unknown")
-                             << QStringLiteral("generic");
+    QTest::newRow("generic") << QStringLiteral("component.unknown") << QStringLiteral("generic");
     QTest::newRow("plain text") << QStringLiteral("notes.txt") << QStringLiteral("plain");
     QTest::newRow("cpp") << QStringLiteral("main.cpp") << QStringLiteral("c-cpp");
     QTest::newRow("typescript") << QStringLiteral("app.tsx")
@@ -271,16 +270,14 @@ void EditorWidgetTest::highlightsPopularLanguages_data() {
 
     QTest::newRow("javascript") << QStringLiteral("app.js") << QByteArray("const value = 1;")
                                 << SCE_C_WORD;
-    QTest::newRow("python") << QStringLiteral("app.py") << QByteArray("def greet():")
-                            << SCE_P_WORD;
+    QTest::newRow("python") << QStringLiteral("app.py") << QByteArray("def greet():") << SCE_P_WORD;
     QTest::newRow("shell") << QStringLiteral("run.sh") << QByteArray("if true; then")
                            << SCE_SH_WORD;
     QTest::newRow("sql") << QStringLiteral("query.sql") << QByteArray("select * from users")
                          << SCE_SQL_WORD;
     QTest::newRow("rust") << QStringLiteral("main.rs") << QByteArray("fn main() {}")
                           << SCE_RUST_WORD;
-    QTest::newRow("ruby") << QStringLiteral("app.rb") << QByteArray("class Server")
-                          << SCE_RB_WORD;
+    QTest::newRow("ruby") << QStringLiteral("app.rb") << QByteArray("class Server") << SCE_RB_WORD;
     QTest::newRow("lua") << QStringLiteral("init.lua") << QByteArray("local value = true")
                          << SCE_LUA_WORD;
     QTest::newRow("dart") << QStringLiteral("app.dart") << QByteArray("class Widget {}")
@@ -327,8 +324,8 @@ void EditorWidgetTest::revealsFoldArrowsOnMarginHover() {
 }
 
 void EditorWidgetTest::colorsCssInsideHtmlStyleBlocks() {
-    const QByteArray code =
-        "<style>\n:root { --app: #15181d; }\n.panel { color: red; }\n</style>\n<p>color: red;</p>\n";
+    const QByteArray code = "<style>\n:root { --app: #15181d; }\n.panel { color: red; "
+                            "}\n</style>\n<p>color: red;</p>\n";
     ketplus::ThemePalette palette;
     palette.info = QStringLiteral("#3B82F6");
     palette.warning = QStringLiteral("#E5A93C");
@@ -395,24 +392,32 @@ void EditorWidgetTest::highlightsPopularLanguages() {
     QCOMPARE(editor.send(message(Scintilla::Message::GetStyleAt), 0), expectedStyle);
 }
 
-void EditorWidgetTest::colorsYamlValuesOrange() {
-    const QByteArray code = "name: KetPlus\ncount: 42\nenabled: true\ndescription: |\n  Lightweight editor\n";
+void EditorWidgetTest::colorsYamlRolesDistinctly() {
+    const QByteArray code =
+        "name: KetPlus\ncount: 42\nenabled: true\ndescription: |\n  Lightweight editor\n";
     ketplus::ThemePalette palette;
-    palette.warning = QStringLiteral("#E5A93C");
+    palette.textSecondary = QStringLiteral("#4E5156");
+    palette.syntaxKeyword = QStringLiteral("#3F4DB8");
+    palette.syntaxNumber = QStringLiteral("#B45309");
+    palette.syntaxString = QStringLiteral("#0F7A43");
+    palette.syntaxComment = QStringLiteral("#6A737D");
+    palette.syntaxAttribute = QStringLiteral("#9A6700");
 
     ketplus::EditorWidget editor;
     editor.setText(code);
     editor.configureLexerForPath(QStringLiteral("ketplus.yaml"));
     editor.applyTheme(palette);
 
-    const int valueStyles[] = {SCE_YAML_DEFAULT, SCE_YAML_NUMBER, SCE_YAML_KEYWORD,
-                               SCE_YAML_TEXT};
-    const auto expectedColor = scintillaColor(palette.warning);
-    for (const int style : valueStyles) {
-        QCOMPARE(editor.send(message(Scintilla::Message::StyleGetFore),
-                             static_cast<uptr_t>(style)),
-                 expectedColor);
-    }
+    const auto fore = [&editor](const int style) {
+        return editor.send(message(Scintilla::Message::StyleGetFore), static_cast<uptr_t>(style));
+    };
+    QCOMPARE(fore(SCE_YAML_IDENTIFIER), scintillaColor(palette.syntaxKeyword));
+    QCOMPARE(fore(SCE_YAML_KEYWORD), scintillaColor(palette.syntaxKeyword));
+    QCOMPARE(fore(SCE_YAML_NUMBER), scintillaColor(palette.syntaxNumber));
+    QCOMPARE(fore(SCE_YAML_DEFAULT), scintillaColor(palette.textSecondary));
+    QCOMPARE(fore(SCE_YAML_TEXT), scintillaColor(palette.textSecondary));
+    QVERIFY(fore(SCE_YAML_NUMBER) != fore(SCE_YAML_IDENTIFIER));
+    QVERIFY(fore(SCE_YAML_TEXT) != fore(SCE_YAML_NUMBER));
 }
 
 void EditorWidgetTest::usesLargeFileModeAtThreshold() {
@@ -455,8 +460,7 @@ void EditorWidgetTest::hibernatesAndRestoresCleanFiles() {
     QCOMPARE(editor.send(message(Scintilla::Message::GetAnchor)), 4);
     QCOMPARE(editor.send(message(Scintilla::Message::GetCurrentPos)), 15);
 
-    editor.send(message(Scintilla::Message::AddText), 1,
-                reinterpret_cast<sptr_t>("x"));
+    editor.send(message(Scintilla::Message::AddText), 1, reinterpret_cast<sptr_t>("x"));
     QVERIFY(editor.canUndoEdit());
 }
 
@@ -472,8 +476,7 @@ void EditorWidgetTest::keepsDirtyFilesResident() {
     ketplus::EditorWidget editor;
     const auto loadResult = editor.loadFile(path);
     QVERIFY2(loadResult.ok, qPrintable(loadResult.error));
-    editor.send(message(Scintilla::Message::AddText), 1,
-                reinterpret_cast<sptr_t>("!"));
+    editor.send(message(Scintilla::Message::AddText), 1, reinterpret_cast<sptr_t>("!"));
 
     QVERIFY(editor.document().isModified());
     QVERIFY(!editor.hibernate());
@@ -606,8 +609,9 @@ void EditorWidgetTest::highlightsAllMatches() {
     ketplus::EditorWidget editor;
     editor.setText("one two one two one");
 
-    QCOMPARE(editor.highlightMatches(QStringLiteral("one"), ketplus::SearchOptions{.matchCase = true}),
-             3);
+    QCOMPARE(
+        editor.highlightMatches(QStringLiteral("one"), ketplus::SearchOptions{.matchCase = true}),
+        3);
     QCOMPARE(editor.send(message(Scintilla::Message::IndicatorValueAt), findIndicator, 0), 1);
     QCOMPARE(editor.send(message(Scintilla::Message::IndicatorValueAt), findIndicator, 4), 0);
 

@@ -12,7 +12,8 @@ copying web-specific implementation details.
 - Indigo for active and focused states
 - Two-pixel active-tab indicator
 - Inter for application chrome and the platform monospace font for source text
-- Semantic colors shared by application controls and syntax highlighting
+- Semantic chrome colors for application controls
+- Separate syntax roles so keywords, types, numbers, and strings stay distinct
 
 ## Implementation
 
@@ -24,9 +25,11 @@ derived from Két density tokens. Editor, terminal, and preview typography use
 independent font-size and line-height values; control line height remains
 automatic so typography changes do not distort navigation or button geometry.
 
-Scintilla receives the same surface, selection, focus, and semantic colors. The
-Lexilla themes cover C-family languages, JavaScript/TypeScript, Python, HTML,
-JSON, Markdown, and Rust.
+Scintilla receives the same surface, selection, and focus colors, plus dedicated
+`syntaxKeyword`, `syntaxString`, `syntaxNumber`, `syntaxType`, `syntaxComment`,
+and `syntaxAttribute` roles. Diff added/removed lines still use the semantic
+positive/danger colors. The Lexilla themes cover C-family languages,
+JavaScript/TypeScript, Python, HTML, JSON, Markdown, Rust, and related lexers.
 
 The source KetJS tokens remain the visual reference. Native controls may differ
 slightly where macOS, Windows, or Linux conventions improve usability.
