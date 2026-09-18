@@ -38,6 +38,14 @@ struct ThemePalette final {
     QString warning;
     QString danger;
     QString info;
+    // Dedicated Lexilla roles. Kept separate from chrome semantics so keywords,
+    // types, and numbers stay distinguishable instead of sharing one indigo.
+    QString syntaxKeyword;
+    QString syntaxString;
+    QString syntaxNumber;
+    QString syntaxType;
+    QString syntaxComment;
+    QString syntaxAttribute;
 };
 
 class ThemeManager final : public QObject {

@@ -43,7 +43,7 @@ No item in this Wave 1 document has native visual-measurement QA approval.
 | --- | --- | --- | --- |
 | `--kv-page-bg` | `#f7f5f5` / `#1b1f24` | `#F7F5F5` / `#1B1F24` | Equivalent observed value; source fixture not implemented |
 | `--kv-panel-bg` | `#ffffff` / `#1d2228` | `#FFFFFF` / `#1D2228` | Equivalent observed value; source fixture not implemented |
-| `--kv-text-main` | `#24262a` / `#f2f4f7` | `#24262A` / `#CDD2D8` | Dark unresolved drift |
+| `--kv-text-main` | `#24262a` / `#f2f4f7` | `#1A1C20` / `#E8ECF1` | Intentional readability boost; dark closer to KDS |
 | `--kv-accent` | `#5167c4` / `#5968df` | `#5968DF` / `#5968DF` | Light unresolved drift |
 | `--kv-panel-border` | `#e9e7e8` / `rgb(255 255 255 / 5.5%)` | Concrete native border fields | Mapping/alpha parity unresolved |
 | `--kv-focus-ring` | shadow using `#dde2f7` / `rgb(89 104 223 / 16%)` | Border-only focus in current QSS | Intentional mechanism candidate, pending QA |

@@ -231,7 +231,11 @@ void RefactorWave1ContractTest::currentNativePaletteBaseline() {
     QVERIFY(!light.dark);
     QCOMPARE(light.pageBackground, QStringLiteral("#F7F5F5"));
     QCOMPARE(light.panelBackground, QStringLiteral("#FFFFFF"));
-    QCOMPARE(light.textMain, QStringLiteral("#24262A"));
+    QCOMPARE(light.textMain, QStringLiteral("#1A1C20"));
+    QCOMPARE(light.info, QStringLiteral("#0A7C9C"));
+    QCOMPARE(light.syntaxKeyword, QStringLiteral("#3F4DB8"));
+    QVERIFY(light.syntaxKeyword != light.syntaxType);
+    QVERIFY(light.syntaxNumber != light.syntaxKeyword);
     QVERIFY(!light.focus.isEmpty());
     QVERIFY(!light.danger.isEmpty());
 
@@ -241,8 +245,12 @@ void RefactorWave1ContractTest::currentNativePaletteBaseline() {
     QCOMPARE(dark.pageBackground, QStringLiteral("#1B1F24"));
     QCOMPARE(dark.panelBackground, QStringLiteral("#1D2228"));
     QCOMPARE(dark.accent, QStringLiteral("#5968DF"));
+    QCOMPARE(dark.textMain, QStringLiteral("#E8ECF1"));
+    QCOMPARE(dark.info, QStringLiteral("#5EC8E8"));
     QVERIFY(!dark.positive.isEmpty());
     QVERIFY(!dark.warning.isEmpty());
+    QVERIFY(!dark.syntaxString.isEmpty());
+    QVERIFY(dark.syntaxKeyword != dark.syntaxNumber);
 }
 
 void RefactorWave1ContractTest::parserReadsObservedWorktreeFlags() {
