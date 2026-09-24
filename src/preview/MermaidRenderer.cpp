@@ -16,7 +16,8 @@ namespace ketplus {
 namespace {
 
 // v4: labels are SVG text rows, not HTML in <foreignObject>, which Qt SVG does not draw.
-constexpr auto cacheVersion = "ketplus-mermaid-v4";
+// v5: node labels carry an explicit fill; cached state diagrams drew them black.
+constexpr auto cacheVersion = "ketplus-mermaid-v5";
 
 bool isExecutableFile(const QString& path) {
     const QFileInfo file(path);
@@ -74,7 +75,11 @@ QByteArray mermaidConfiguration(const bool darkTheme) {
     };
     // HTML labels render inside <foreignObject>, which Qt SVG skips: every label vanished.
     const QJsonObject svgLabels{{QStringLiteral("htmlLabels"), false}};
+    // Mermaid's state diagram styles only HTML node labels; its SVG text rows get
+    // no fill and draw black, unreadable on the dark background.
+    const QString themeCss = QStringLiteral(".label text{fill:%1;}").arg(text);
     return QJsonDocument(QJsonObject{{QStringLiteral("theme"), QStringLiteral("base")},
+                                     {QStringLiteral("themeCSS"), themeCss},
                                      {QStringLiteral("htmlLabels"), false},
                                      {QStringLiteral("flowchart"), svgLabels},
                                      {QStringLiteral("class"), svgLabels},

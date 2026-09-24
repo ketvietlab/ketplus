@@ -263,6 +263,9 @@ done
 if [ -z "$config" ] || ! grep -q '"stateLabelColor":"#CDD2D8"' "$config"; then
   exit 12
 fi
+if ! grep -q '"themeCSS":".label text{fill:#CDD2D8;}"' "$config"; then
+  exit 13
+fi
 printf '%s' '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="160"><rect x="10" y="10" width="300" height="140" fill="#8b5cf6"/></svg>' > "$output"
 )";
     QCOMPARE(executable.write(script), script.size());
