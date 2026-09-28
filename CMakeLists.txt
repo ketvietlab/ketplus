@@ -159,8 +159,7 @@ target_link_libraries(ketplus_editor
         ketplus_core
         ketplus_scintilla
         ketplus_ui
-    PRIVATE
-        ketplus_lexilla
+        ketplus::syntax
 )
 target_include_directories(ketplus_editor PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
@@ -320,7 +319,7 @@ if(KETPLUS_CM_BUILD_TESTS)
     ketplus_cm_add_test(ketplus_tests ketplus_tests)
 
     add_executable(ketplus_editor_tests tests/EditorWidgetTest.cpp)
-    target_link_libraries(ketplus_editor_tests PRIVATE Qt6::Test ketplus_editor ketplus_lexilla)
+    target_link_libraries(ketplus_editor_tests PRIVATE Qt6::Test ketplus_editor)
     ketplus_enable_warnings(ketplus_editor_tests)
 
     ketplus_cm_add_test(ketplus_editor_tests ketplus_editor_tests)
@@ -328,7 +327,7 @@ if(KETPLUS_CM_BUILD_TESTS)
 
     add_executable(ketplus_symbol_index_tests tests/SymbolIndexTest.cpp)
     target_link_libraries(ketplus_symbol_index_tests
-        PRIVATE Qt6::Test ketplus_index ketplus_lexilla
+        PRIVATE Qt6::Test ketplus_index
     )
     ketplus_enable_warnings(ketplus_symbol_index_tests)
 
@@ -372,7 +371,7 @@ if(KETPLUS_CM_BUILD_TESTS)
 
     add_executable(ketplus_navigation_tests tests/NavigationTest.cpp)
     target_link_libraries(ketplus_navigation_tests
-        PRIVATE Qt6::Test ketplus_editor ketplus_workspace ketplus_lexilla
+        PRIVATE Qt6::Test ketplus_editor ketplus_workspace
     )
     ketplus_enable_warnings(ketplus_navigation_tests)
 
@@ -383,7 +382,7 @@ if(KETPLUS_CM_BUILD_TESTS)
 
     add_executable(ketplus_search_view_tests tests/SearchViewTest.cpp)
     target_link_libraries(ketplus_search_view_tests
-        PRIVATE Qt6::Test ketplus_editor ketplus_workspace ketplus_lexilla
+        PRIVATE Qt6::Test ketplus_editor ketplus_workspace
     )
     ketplus_enable_warnings(ketplus_search_view_tests)
 

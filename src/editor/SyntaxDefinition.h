@@ -1,6 +1,7 @@
 #pragma once
 
-#include <array>
+#include <ketplus/syntax/SyntaxDefinition.h>
+
 #include <cstddef>
 #include <vector>
 
@@ -8,18 +9,12 @@ class QString;
 
 namespace ketplus {
 
-inline constexpr std::size_t syntaxKeywordSetCount = 6;
+// The syntax tables live in ketplus-syntax, shared with the KetPlus phone app; these take Qt
+// strings.
+inline constexpr std::size_t syntaxKeywordSetCount = syntax::keywordSetCount;
 
-struct SyntaxDefinition final {
-    const char* name;
-    const char* lexer;
-    std::array<const char*, syntaxKeywordSetCount> keywordSets;
-};
-
-struct SyntaxChoice final {
-    const char* name;
-    const char* displayName;
-};
+using SyntaxDefinition = syntax::SyntaxDefinition;
+using SyntaxChoice = syntax::SyntaxChoice;
 
 [[nodiscard]] const SyntaxDefinition& syntaxDefinitionForPath(const QString& filePath);
 [[nodiscard]] const SyntaxDefinition* syntaxDefinitionByName(const QString& name);
