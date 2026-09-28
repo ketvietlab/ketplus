@@ -1,6 +1,6 @@
 #include "terminal/TerminalPanel.h"
 
-#include "terminal/PtyProcess.h"
+#include "terminal/TerminalSession.h"
 #include "terminal/TerminalView.h"
 
 #include <QDir>
@@ -16,9 +16,11 @@
 namespace ketplus {
 
 TerminalPanel::TerminalPanel(QWidget* parent)
-    : QWidget(parent), process_(new PtyProcess(this)), terminal_(new TerminalView(*process_, this)),
+    : QWidget(parent), session_(new TerminalSession(this)),
+      terminal_(new TerminalView(*session_, this)),
       titleLabel_(new QLabel(QStringLiteral("TERMINAL"), this)), pathLabel_(new QLabel(this)),
-      closeButton_(new QToolButton(this)) {
+      findButton_(new QToolButton(this)), clearButton_(new QToolButton(this)),
+      restartButton_(new QToolButton(this)), closeButton_(new QToolButton(this)) {
     setProperty("kvRole", QStringLiteral("terminalPanel"));
     setMinimumHeight(120);
     setFocusPolicy(Qt::StrongFocus);
@@ -35,6 +37,27 @@ TerminalPanel::TerminalPanel(QWidget* parent)
     headerLayout->addWidget(titleLabel_);
     headerLayout->addWidget(pathLabel_, 1);
 
+    findButton_->setText(QString::fromUtf8("⌕"));
+    findButton_->setAutoRaise(true);
+    findButton_->setToolTip(QStringLiteral("Find in terminal"));
+    findButton_->setAccessibleName(QStringLiteral("Find in terminal"));
+    findButton_->setProperty("kvRole", QStringLiteral("terminalAction"));
+    headerLayout->addWidget(findButton_);
+
+    clearButton_->setText(QString::fromUtf8("⌫"));
+    clearButton_->setAutoRaise(true);
+    clearButton_->setToolTip(QStringLiteral("Clear terminal scrollback"));
+    clearButton_->setAccessibleName(QStringLiteral("Clear terminal scrollback"));
+    clearButton_->setProperty("kvRole", QStringLiteral("terminalAction"));
+    headerLayout->addWidget(clearButton_);
+
+    restartButton_->setText(QString::fromUtf8("↻"));
+    restartButton_->setAutoRaise(true);
+    restartButton_->setToolTip(QStringLiteral("Restart terminal session"));
+    restartButton_->setAccessibleName(QStringLiteral("Restart terminal session"));
+    restartButton_->setProperty("kvRole", QStringLiteral("terminalAction"));
+    headerLayout->addWidget(restartButton_);
+
     closeButton_->setText(QString::fromUtf8("×"));
     closeButton_->setAutoRaise(true);
     closeButton_->setToolTip(QStringLiteral("Hide terminal"));
@@ -49,17 +72,24 @@ TerminalPanel::TerminalPanel(QWidget* parent)
     layout->addWidget(terminal_, 1);
 
     connect(closeButton_, &QToolButton::clicked, this, &TerminalPanel::closeRequested);
+    connect(findButton_, &QToolButton::clicked, terminal_, &TerminalView::openSearch);
+    connect(clearButton_, &QToolButton::clicked, terminal_, &TerminalView::clearScrollback);
+    connect(restartButton_, &QToolButton::clicked, this, [this] {
+        if (!terminal_->restart()) {
+            emit statusMessageRequested(QStringLiteral("Unable to restart terminal session."));
+        }
+    });
     connect(terminal_, &TerminalView::statusMessageRequested, this,
             &TerminalPanel::statusMessageRequested);
     connect(terminal_, &TerminalView::titleChanged, this,
             [this](const QString& title) { titleLabel_->setToolTip(title); });
-    connect(process_, &PtyProcess::started, this, [this] {
+    connect(session_, &TerminalSession::started, this, [this] {
         titleLabel_->setText(QStringLiteral("TERMINAL"));
         titleLabel_->setProperty("terminalState", QStringLiteral("running"));
         titleLabel_->style()->unpolish(titleLabel_);
         titleLabel_->style()->polish(titleLabel_);
     });
-    connect(process_, &PtyProcess::exited, this, [this](int) {
+    connect(session_, &TerminalSession::exited, this, [this](int) {
         titleLabel_->setText(QStringLiteral("TERMINAL · EXITED"));
         titleLabel_->setProperty("terminalState", QStringLiteral("exited"));
         titleLabel_->style()->unpolish(titleLabel_);
@@ -76,7 +106,7 @@ void TerminalPanel::start(const QString& workingDirectory) {
                             ? workingDirectory_
                             : QStringLiteral("~/%1").arg(homeRelative));
     pathLabel_->setToolTip(workingDirectory_);
-    if (!process_->isRunning()) {
+    if (!session_->isRunning()) {
         terminal_->start(workingDirectory_);
     }
 }
@@ -101,6 +131,6 @@ void TerminalPanel::setTypography(const int fontSizePixels, const int lineHeight
     terminal_->setTypography(fontSizePixels, lineHeightPixels);
 }
 
-bool TerminalPanel::isSessionRunning() const { return process_->isRunning(); }
+bool TerminalPanel::isSessionRunning() const { return session_->isRunning(); }
 
 } // namespace ketplus

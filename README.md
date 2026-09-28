@@ -80,6 +80,11 @@ target_link_libraries(my_app PRIVATE
 )
 ```
 
+`KetPlusCM::terminal` remains the compatibility target for the complete terminal.
+Consumers that need a narrower boundary can link `KetPlusCM::terminal_core` for
+PTY, VT state, input encoding, and bounded scrollback without Qt Widgets, or
+`KetPlusCM::terminal_ui` for the complete `TerminalView` and `TerminalPanel` UI.
+
 Consumers should pin an immutable release commit or tag. `develop` is the
 integration branch; `main` and `cm-v*` tags identify production revisions.
 
@@ -113,8 +118,10 @@ KetPlus CM also checks `KETPLUS_MMDC` when a custom `mmdc` executable path is ne
   powered by the installed Git CLI
 - Styled inline Git diff tabs with line gutters and semantic added/removed colors
 - Fast switching between linked Git worktrees without changing branches in place
-- Lazy embedded terminal backed by a real PTY and libvterm on macOS and Linux;
-  hiding the panel keeps the shell session alive
+- Lazy embedded terminal backed by a real PTY and libvterm on macOS and Linux,
+  with mouse selection/copy, bounded scrollback search, clear/restart actions,
+  bracketed paste, TUI mouse reporting with Shift-to-select, and a core separated
+  from its Qt Widgets UI; hiding the panel keeps the shell session alive
 - KetJS-inspired compact visual system with matching semantic color tokens
 - System, light, and dark appearance modes under `View > Appearance`
 - Persistent interface, editor, terminal, and Markdown preview typography under

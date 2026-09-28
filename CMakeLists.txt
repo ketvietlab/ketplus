@@ -102,22 +102,41 @@ target_include_directories(ketplus_workspace PUBLIC
 ketplus_enable_warnings(ketplus_workspace)
 add_library(KetPlusCM::workspace ALIAS ketplus_workspace)
 
-add_library(ketplus_terminal STATIC
+add_library(ketplus_terminal_core STATIC
     src/terminal/PtyProcess.cpp
     src/terminal/PtyProcess.h
+    src/terminal/TerminalSession.cpp
+    src/terminal/TerminalSession.h
+)
+target_link_libraries(ketplus_terminal_core PUBLIC Qt6::Core ketplus_vterm)
+if(UNIX AND NOT APPLE)
+    target_link_libraries(ketplus_terminal_core PRIVATE util)
+endif()
+target_include_directories(ketplus_terminal_core PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
+)
+ketplus_enable_warnings(ketplus_terminal_core)
+add_library(KetPlusCM::terminal_core ALIAS ketplus_terminal_core)
+
+add_library(ketplus_terminal_ui STATIC
     src/terminal/TerminalPanel.cpp
     src/terminal/TerminalPanel.h
     src/terminal/TerminalView.cpp
     src/terminal/TerminalView.h
 )
-target_link_libraries(ketplus_terminal PUBLIC Qt6::Widgets ketplus_vterm ketplus_ui)
-if(UNIX AND NOT APPLE)
-    target_link_libraries(ketplus_terminal PRIVATE util)
-endif()
-target_include_directories(ketplus_terminal PUBLIC
+target_link_libraries(ketplus_terminal_ui
+    PUBLIC Qt6::Widgets ketplus_terminal_core ketplus_ui
+)
+target_include_directories(ketplus_terminal_ui PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
 )
-ketplus_enable_warnings(ketplus_terminal)
+ketplus_enable_warnings(ketplus_terminal_ui)
+add_library(KetPlusCM::terminal_ui ALIAS ketplus_terminal_ui)
+
+# Compatibility target for current consumers. New integrations can choose the
+# non-Widgets core or the complete Widgets UI explicitly.
+add_library(ketplus_terminal INTERFACE)
+target_link_libraries(ketplus_terminal INTERFACE ketplus_terminal_ui)
 add_library(KetPlusCM::terminal ALIAS ketplus_terminal)
 
 add_library(ketplus_preview STATIC
@@ -393,7 +412,7 @@ if(KETPLUS_CM_BUILD_TESTS)
 
     add_executable(ketplus_terminal_tests tests/PtyProcessTest.cpp)
     target_link_libraries(ketplus_terminal_tests
-        PRIVATE Qt6::Test ketplus_terminal ketplus_ui
+        PRIVATE Qt6::Test KetPlusCM::terminal_ui
     )
     ketplus_enable_warnings(ketplus_terminal_tests)
 
