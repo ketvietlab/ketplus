@@ -4,10 +4,11 @@
 #include "ui/Theme.h"
 
 #include <ILexer.h>
-#include <Lexilla.h>
 #include <SciLexer.h>
 #include <Scintilla.h>
 #include <ScintillaMessages.h>
+#include <ketplus/syntax/Lexers.h>
+#include <ketplus/syntax/Tokens.h>
 
 #include <QByteArrayList>
 #include <QColor>
@@ -43,13 +44,6 @@ void applyStyle(ScintillaEditBase& editor, const int style, const QString& foreg
                 scintillaColor(foreground));
     editor.send(message(Scintilla::Message::StyleSetBold), static_cast<uptr_t>(style), bold);
     editor.send(message(Scintilla::Message::StyleSetItalic), static_cast<uptr_t>(style), italic);
-}
-
-void setStyles(ScintillaEditBase& editor, const std::initializer_list<int> styles,
-               const QString& foreground, const bool bold = false, const bool italic = false) {
-    for (const int style : styles) {
-        applyStyle(editor, style, foreground, bold, italic);
-    }
 }
 
 constexpr uptr_t bookmarkMargin = 1;
@@ -406,7 +400,7 @@ void EditorWidget::configureLexerForPath(const QString& filePath) {
     if (largeFileMode_) {
         lexerName_ = QStringLiteral("null");
         syntaxName_ = QStringLiteral("large-file");
-        Scintilla::ILexer5* lexer = CreateLexer("null");
+        Scintilla::ILexer5* lexer = syntax::createLexer("null");
         send(message(Scintilla::Message::SetILexer), 0, reinterpret_cast<sptr_t>(lexer));
         foldingEnabled_ = false;
         applyViewOptions();
@@ -420,19 +414,10 @@ void EditorWidget::configureLexerForPath(const QString& filePath) {
         chosenDefinition != nullptr ? *chosenDefinition : syntaxDefinitionForPath(filePath);
     lexerName_ = QString::fromLatin1(definition.lexer);
     syntaxName_ = QString::fromLatin1(definition.name);
-    Scintilla::ILexer5* lexer = CreateLexer(definition.lexer);
+    // Keyword sets and lexer properties come with it, as the phone app's highlighter has them.
+    Scintilla::ILexer5* lexer = syntax::createLexer(definition);
     send(message(Scintilla::Message::SetILexer), 0, reinterpret_cast<sptr_t>(lexer));
     foldingEnabled_ = false;
-    for (std::size_t index = 0; index < definition.keywordSets.size(); ++index) {
-        const char* keywords = definition.keywordSets[index];
-        sends(message(Scintilla::Message::SetKeyWords), static_cast<uptr_t>(index),
-              keywords == nullptr ? "" : keywords);
-    }
-    if (syntaxName_ == QStringLiteral("scss") || syntaxName_ == QStringLiteral("less")) {
-        const QByteArray key = "lexer.css." + syntaxName_.toLatin1() + ".language";
-        sends(message(Scintilla::Message::SetProperty), reinterpret_cast<uptr_t>(key.constData()),
-              "1");
-    }
     applyViewOptions();
     send(message(Scintilla::Message::Colourise), 0, -1);
     embeddedStyleDirty_ = true;
@@ -2146,454 +2131,43 @@ void EditorWidget::applyLexerTheme(const ThemePalette& palette) {
         palette.syntaxComment.isEmpty() ? palette.textMuted : palette.syntaxComment;
     const QString& attribute =
         palette.syntaxAttribute.isEmpty() ? palette.warning : palette.syntaxAttribute;
+    const auto colorFor = [&](const syntax::Token token) -> const QString* {
+        switch (token) {
+        case syntax::Token::plain:
+            return nullptr;
+        case syntax::Token::keyword:
+            return &keyword;
+        case syntax::Token::string:
+            return &string;
+        case syntax::Token::number:
+            return &number;
+        case syntax::Token::type:
+            return &type;
+        case syntax::Token::comment:
+            return &comment;
+        case syntax::Token::attribute:
+            return &attribute;
+        case syntax::Token::danger:
+            return &palette.danger;
+        case syntax::Token::added:
+            return &palette.positive;
+        case syntax::Token::changed:
+            return &palette.warning;
+        case syntax::Token::strong:
+            return &palette.textMain;
+        case syntax::Token::secondary:
+            return &palette.textSecondary;
+        }
+        return nullptr;
+    };
 
-    if (lexerName_ == QStringLiteral("cpp")) {
-        setStyles(*this,
-                  {SCE_C_COMMENT, SCE_C_COMMENTLINE, SCE_C_COMMENTDOC, SCE_C_COMMENTLINEDOC,
-                   SCE_C_PREPROCESSORCOMMENT, SCE_C_PREPROCESSORCOMMENTDOC},
-                  comment, false, true);
-        applyStyle(*this, SCE_C_NUMBER, number);
-        applyStyle(*this, SCE_C_WORD, keyword, true);
-        setStyles(*this,
-                  {SCE_C_STRING, SCE_C_CHARACTER, SCE_C_STRINGEOL, SCE_C_VERBATIM, SCE_C_REGEX,
-                   SCE_C_STRINGRAW, SCE_C_TRIPLEVERBATIM, SCE_C_HASHQUOTEDSTRING, SCE_C_USERLITERAL,
-                   SCE_C_ESCAPESEQUENCE},
-                  string);
-        applyStyle(*this, SCE_C_PREPROCESSOR, attribute);
-        applyStyle(*this, SCE_C_WORD2, type, true);
-        applyStyle(*this, SCE_C_COMMENTDOCKEYWORD, keyword);
-        applyStyle(*this, SCE_C_COMMENTDOCKEYWORDERROR, palette.danger);
-        applyStyle(*this, SCE_C_GLOBALCLASS, type);
-    } else if (lexerName_ == QStringLiteral("python")) {
-        setStyles(*this, {SCE_P_COMMENTLINE, SCE_P_COMMENTBLOCK}, comment, false, true);
-        applyStyle(*this, SCE_P_NUMBER, number);
-        setStyles(*this,
-                  {SCE_P_STRING, SCE_P_CHARACTER, SCE_P_TRIPLE, SCE_P_TRIPLEDOUBLE, SCE_P_STRINGEOL,
-                   SCE_P_FSTRING, SCE_P_FCHARACTER, SCE_P_FTRIPLE, SCE_P_FTRIPLEDOUBLE},
-                  string);
-        setStyles(*this, {SCE_P_WORD, SCE_P_WORD2}, keyword, true);
-        setStyles(*this, {SCE_P_CLASSNAME, SCE_P_DEFNAME}, type, true);
-        applyStyle(*this, SCE_P_DECORATOR, attribute);
-        applyStyle(*this, SCE_P_ATTRIBUTE, type);
-    } else if (lexerName_ == QStringLiteral("hypertext") || lexerName_ == QStringLiteral("xml") ||
-               lexerName_ == QStringLiteral("phpscript")) {
-        setStyles(*this, {SCE_H_TAG, SCE_H_TAGEND, SCE_H_XMLSTART, SCE_H_XMLEND}, keyword, true);
-        setStyles(*this, {SCE_H_ATTRIBUTE, SCE_H_ENTITY}, type);
-        setStyles(*this, {SCE_H_DOUBLESTRING, SCE_H_SINGLESTRING, SCE_H_VALUE}, string);
-        setStyles(*this, {SCE_H_COMMENT, SCE_H_XCCOMMENT, SCE_H_SGML_COMMENT}, comment, false,
-                  true);
-        applyStyle(*this, SCE_H_NUMBER, number);
-        setStyles(*this, {SCE_H_TAGUNKNOWN, SCE_H_ATTRIBUTEUNKNOWN, SCE_H_SGML_ERROR},
-                  palette.danger);
-        setStyles(*this, {SCE_HJ_COMMENT, SCE_HJ_COMMENTLINE, SCE_HJ_COMMENTDOC}, comment, false,
-                  true);
-        applyStyle(*this, SCE_HJ_NUMBER, number);
-        setStyles(*this, {SCE_HJ_WORD, SCE_HJ_KEYWORD}, keyword, true);
-        setStyles(*this,
-                  {SCE_HJ_DOUBLESTRING, SCE_HJ_SINGLESTRING, SCE_HJ_REGEX, SCE_HJ_TEMPLATELITERAL},
-                  string);
-        setStyles(*this, {SCE_HPHP_COMMENT, SCE_HPHP_COMMENTLINE}, comment, false, true);
-        applyStyle(*this, SCE_HPHP_WORD, keyword, true);
-        applyStyle(*this, SCE_HPHP_NUMBER, number);
-        setStyles(*this, {SCE_HPHP_HSTRING, SCE_HPHP_SIMPLESTRING, SCE_HPHP_HSTRING_VARIABLE},
-                  string);
-        setStyles(*this, {SCE_HPHP_VARIABLE, SCE_HPHP_COMPLEX_VARIABLE}, attribute);
-    } else if (lexerName_ == QStringLiteral("json")) {
-        applyStyle(*this, SCE_JSON_NUMBER, number);
-        setStyles(*this, {SCE_JSON_STRING, SCE_JSON_URI, SCE_JSON_COMPACTIRI}, string);
-        applyStyle(*this, SCE_JSON_PROPERTYNAME, keyword);
-        setStyles(*this, {SCE_JSON_LINECOMMENT, SCE_JSON_BLOCKCOMMENT}, comment, false, true);
-        setStyles(*this, {SCE_JSON_KEYWORD, SCE_JSON_LDKEYWORD}, keyword, true);
-        setStyles(*this, {SCE_JSON_STRINGEOL, SCE_JSON_ERROR}, palette.danger);
-    } else if (lexerName_ == QStringLiteral("markdown")) {
-        setStyles(*this,
-                  {SCE_MARKDOWN_HEADER1, SCE_MARKDOWN_HEADER2, SCE_MARKDOWN_HEADER3,
-                   SCE_MARKDOWN_HEADER4, SCE_MARKDOWN_HEADER5, SCE_MARKDOWN_HEADER6},
-                  keyword, true);
-        setStyles(*this, {SCE_MARKDOWN_STRONG1, SCE_MARKDOWN_STRONG2}, palette.textMain, true);
-        setStyles(*this, {SCE_MARKDOWN_EM1, SCE_MARKDOWN_EM2}, palette.textSecondary, false, true);
-        setStyles(*this, {SCE_MARKDOWN_CODE, SCE_MARKDOWN_CODE2, SCE_MARKDOWN_CODEBK}, string);
-        applyStyle(*this, SCE_MARKDOWN_LINK, type);
-        applyStyle(*this, SCE_MARKDOWN_BLOCKQUOTE, comment, false, true);
-        setStyles(*this, {SCE_MARKDOWN_ULIST_ITEM, SCE_MARKDOWN_OLIST_ITEM}, attribute);
-    } else if (lexerName_ == QStringLiteral("rust")) {
-        setStyles(*this,
-                  {SCE_RUST_COMMENTBLOCK, SCE_RUST_COMMENTLINE, SCE_RUST_COMMENTBLOCKDOC,
-                   SCE_RUST_COMMENTLINEDOC},
-                  comment, false, true);
-        applyStyle(*this, SCE_RUST_NUMBER, number);
-        setStyles(*this,
-                  {SCE_RUST_WORD, SCE_RUST_WORD2, SCE_RUST_WORD3, SCE_RUST_WORD4, SCE_RUST_WORD5,
-                   SCE_RUST_WORD6, SCE_RUST_WORD7},
-                  keyword, true);
-        setStyles(*this,
-                  {SCE_RUST_STRING, SCE_RUST_STRINGR, SCE_RUST_CHARACTER, SCE_RUST_BYTESTRING,
-                   SCE_RUST_BYTESTRINGR, SCE_RUST_BYTECHARACTER, SCE_RUST_CSTRING,
-                   SCE_RUST_CSTRINGR},
-                  string);
-        setStyles(*this, {SCE_RUST_LIFETIME, SCE_RUST_MACRO}, attribute);
-        applyStyle(*this, SCE_RUST_LEXERROR, palette.danger);
-    } else if (lexerName_ == QStringLiteral("css")) {
-        applyStyle(*this, SCE_CSS_COMMENT, comment, false, true);
-        setStyles(*this, {SCE_CSS_TAG, SCE_CSS_CLASS, SCE_CSS_ID, SCE_CSS_ATTRIBUTE}, keyword);
-        setStyles(*this,
-                  {SCE_CSS_PSEUDOCLASS, SCE_CSS_PSEUDOELEMENT, SCE_CSS_EXTENDED_PSEUDOCLASS,
-                   SCE_CSS_EXTENDED_PSEUDOELEMENT},
-                  type);
-        setStyles(*this,
-                  {SCE_CSS_IDENTIFIER, SCE_CSS_IDENTIFIER2, SCE_CSS_IDENTIFIER3,
-                   SCE_CSS_EXTENDED_IDENTIFIER, SCE_CSS_VARIABLE},
-                  palette.textSecondary);
-        setStyles(*this, {SCE_CSS_DOUBLESTRING, SCE_CSS_SINGLESTRING}, string);
-        setStyles(*this, {SCE_CSS_IMPORTANT, SCE_CSS_DIRECTIVE, SCE_CSS_GROUP_RULE}, attribute,
-                  true);
-        setStyles(*this, {SCE_CSS_UNKNOWN_IDENTIFIER, SCE_CSS_UNKNOWN_PSEUDOCLASS}, palette.danger);
-    } else if (lexerName_ == QStringLiteral("bash")) {
-        applyStyle(*this, SCE_SH_COMMENTLINE, comment, false, true);
-        applyStyle(*this, SCE_SH_WORD, keyword, true);
-        applyStyle(*this, SCE_SH_NUMBER, number);
-        setStyles(
-            *this,
-            {SCE_SH_STRING, SCE_SH_CHARACTER, SCE_SH_BACKTICKS, SCE_SH_HERE_DELIM, SCE_SH_HERE_Q},
-            string);
-        setStyles(*this, {SCE_SH_SCALAR, SCE_SH_PARAM}, attribute);
-        applyStyle(*this, SCE_SH_ERROR, palette.danger);
-    } else if (lexerName_ == QStringLiteral("yaml")) {
-        applyStyle(*this, SCE_YAML_COMMENT, comment, false, true);
-        applyStyle(*this, SCE_YAML_IDENTIFIER, keyword);
-        setStyles(*this, {SCE_YAML_DEFAULT, SCE_YAML_TEXT}, palette.textSecondary);
-        applyStyle(*this, SCE_YAML_KEYWORD, keyword, true);
-        applyStyle(*this, SCE_YAML_NUMBER, number);
-        setStyles(*this, {SCE_YAML_REFERENCE, SCE_YAML_DOCUMENT}, string);
-        applyStyle(*this, SCE_YAML_ERROR, palette.danger);
-    } else if (lexerName_ == QStringLiteral("toml")) {
-        applyStyle(*this, SCE_TOML_COMMENT, comment, false, true);
-        setStyles(*this, {SCE_TOML_IDENTIFIER, SCE_TOML_KEY, SCE_TOML_TABLE}, keyword);
-        applyStyle(*this, SCE_TOML_KEYWORD, attribute, true);
-        setStyles(*this, {SCE_TOML_NUMBER, SCE_TOML_DATETIME}, number);
-        setStyles(*this,
-                  {SCE_TOML_STRING_SQ, SCE_TOML_STRING_DQ, SCE_TOML_TRIPLE_STRING_SQ,
-                   SCE_TOML_TRIPLE_STRING_DQ, SCE_TOML_ESCAPECHAR},
-                  string);
-        setStyles(*this, {SCE_TOML_ERROR, SCE_TOML_STRINGEOL}, palette.danger);
-    } else if (lexerName_ == QStringLiteral("sql")) {
-        setStyles(
-            *this,
-            {SCE_SQL_COMMENT, SCE_SQL_COMMENTLINE, SCE_SQL_COMMENTDOC, SCE_SQL_COMMENTLINEDOC},
-            comment, false, true);
-        applyStyle(*this, SCE_SQL_NUMBER, number);
-        setStyles(*this, {SCE_SQL_WORD, SCE_SQL_WORD2}, keyword, true);
-        setStyles(*this, {SCE_SQL_STRING, SCE_SQL_CHARACTER}, string);
-        applyStyle(*this, SCE_SQL_QUOTEDIDENTIFIER, attribute);
-        applyStyle(*this, SCE_SQL_COMMENTDOCKEYWORDERROR, palette.danger);
-    } else if (lexerName_ == QStringLiteral("ruby")) {
-        setStyles(*this, {SCE_RB_COMMENTLINE, SCE_RB_POD}, comment, false, true);
-        applyStyle(*this, SCE_RB_WORD, keyword, true);
-        applyStyle(*this, SCE_RB_NUMBER, number);
-        setStyles(*this,
-                  {SCE_RB_STRING, SCE_RB_CHARACTER, SCE_RB_REGEX, SCE_RB_SYMBOL, SCE_RB_BACKTICKS,
-                   SCE_RB_HERE_Q, SCE_RB_HERE_QQ, SCE_RB_HERE_QX},
-                  string);
-        setStyles(*this, {SCE_RB_CLASSNAME, SCE_RB_DEFNAME, SCE_RB_MODULE_NAME}, type, true);
-        setStyles(*this, {SCE_RB_GLOBAL, SCE_RB_INSTANCE_VAR, SCE_RB_CLASS_VAR}, attribute);
-        applyStyle(*this, SCE_RB_ERROR, palette.danger);
-    } else if (lexerName_ == QStringLiteral("lua")) {
-        setStyles(*this, {SCE_LUA_COMMENT, SCE_LUA_COMMENTLINE, SCE_LUA_COMMENTDOC}, comment, false,
-                  true);
-        applyStyle(*this, SCE_LUA_WORD, keyword, true);
-        applyStyle(*this, SCE_LUA_NUMBER, number);
-        setStyles(*this, {SCE_LUA_STRING, SCE_LUA_CHARACTER, SCE_LUA_LITERALSTRING}, string);
-        setStyles(*this, {SCE_LUA_WORD2, SCE_LUA_WORD3, SCE_LUA_WORD4}, type);
-        applyStyle(*this, SCE_LUA_STRINGEOL, palette.danger);
-    } else if (lexerName_ == QStringLiteral("dart")) {
-        setStyles(*this,
-                  {SCE_DART_COMMENTLINE, SCE_DART_COMMENTLINEDOC, SCE_DART_COMMENTBLOCK,
-                   SCE_DART_COMMENTBLOCKDOC},
-                  comment, false, true);
-        setStyles(
-            *this,
-            {SCE_DART_KW_PRIMARY, SCE_DART_KW_SECONDARY, SCE_DART_KW_TERTIARY, SCE_DART_KW_TYPE},
-            keyword, true);
-        applyStyle(*this, SCE_DART_NUMBER, number);
-        setStyles(*this,
-                  {SCE_DART_STRING_SQ, SCE_DART_STRING_DQ, SCE_DART_TRIPLE_STRING_SQ,
-                   SCE_DART_TRIPLE_STRING_DQ, SCE_DART_RAWSTRING_SQ, SCE_DART_RAWSTRING_DQ,
-                   SCE_DART_ESCAPECHAR},
-                  string);
-        applyStyle(*this, SCE_DART_METADATA, attribute);
-        applyStyle(*this, SCE_DART_STRINGEOL, palette.danger);
-    } else if (lexerName_ == QStringLiteral("zig")) {
-        setStyles(*this, {SCE_ZIG_COMMENTLINE, SCE_ZIG_COMMENTLINEDOC, SCE_ZIG_COMMENTLINETOP},
-                  comment, false, true);
-        setStyles(*this,
-                  {SCE_ZIG_KW_PRIMARY, SCE_ZIG_KW_SECONDARY, SCE_ZIG_KW_TERTIARY, SCE_ZIG_KW_TYPE},
-                  keyword, true);
-        applyStyle(*this, SCE_ZIG_NUMBER, number);
-        setStyles(*this,
-                  {SCE_ZIG_CHARACTER, SCE_ZIG_STRING, SCE_ZIG_MULTISTRING, SCE_ZIG_ESCAPECHAR},
-                  string);
-        setStyles(*this, {SCE_ZIG_FUNCTION, SCE_ZIG_BUILTIN_FUNCTION}, type);
-        applyStyle(*this, SCE_ZIG_STRINGEOL, palette.danger);
-    } else if (lexerName_ == QStringLiteral("props")) {
-        applyStyle(*this, SCE_PROPS_COMMENT, comment, false, true);
-        applyStyle(*this, SCE_PROPS_SECTION, keyword, true);
-        applyStyle(*this, SCE_PROPS_KEY, type);
-        applyStyle(*this, SCE_PROPS_ASSIGNMENT, attribute);
-        applyStyle(*this, SCE_PROPS_DEFVAL, string);
-    } else if (lexerName_ == QStringLiteral("diff")) {
-        setStyles(*this, {SCE_DIFF_COMMENT, SCE_DIFF_COMMAND}, comment);
-        setStyles(*this, {SCE_DIFF_HEADER, SCE_DIFF_POSITION}, keyword, true);
-        setStyles(*this, {SCE_DIFF_ADDED, SCE_DIFF_PATCH_ADD}, palette.positive);
-        setStyles(*this,
-                  {SCE_DIFF_DELETED, SCE_DIFF_PATCH_DELETE, SCE_DIFF_REMOVED_PATCH_ADD,
-                   SCE_DIFF_REMOVED_PATCH_DELETE},
-                  palette.danger);
-        applyStyle(*this, SCE_DIFF_CHANGED, palette.warning);
-    } else if (lexerName_ == QStringLiteral("makefile")) {
-        applyStyle(*this, SCE_MAKE_COMMENT, comment, false, true);
-        applyStyle(*this, SCE_MAKE_PREPROCESSOR, attribute);
-        applyStyle(*this, SCE_MAKE_IDENTIFIER, type);
-        applyStyle(*this, SCE_MAKE_TARGET, keyword, true);
-        applyStyle(*this, SCE_MAKE_IDEOL, palette.danger);
-    } else if (lexerName_ == QStringLiteral("cmake")) {
-        applyStyle(*this, SCE_CMAKE_COMMENT, comment, false, true);
-        setStyles(*this,
-                  {SCE_CMAKE_STRINGDQ, SCE_CMAKE_STRINGLQ, SCE_CMAKE_STRINGRQ, SCE_CMAKE_STRINGVAR},
-                  string);
-        setStyles(*this,
-                  {SCE_CMAKE_COMMANDS, SCE_CMAKE_WHILEDEF, SCE_CMAKE_FOREACHDEF,
-                   SCE_CMAKE_IFDEFINEDEF, SCE_CMAKE_MACRODEF},
-                  keyword, true);
-        applyStyle(*this, SCE_CMAKE_PARAMETERS, type);
-        applyStyle(*this, SCE_CMAKE_VARIABLE, attribute);
-        applyStyle(*this, SCE_CMAKE_NUMBER, number);
-    } else if (lexerName_ == QStringLiteral("perl")) {
-        setStyles(*this, {SCE_PL_COMMENTLINE, SCE_PL_POD, SCE_PL_POD_VERB}, comment, false, true);
-        applyStyle(*this, SCE_PL_WORD, keyword, true);
-        applyStyle(*this, SCE_PL_NUMBER, number);
-        setStyles(*this,
-                  {SCE_PL_STRING, SCE_PL_CHARACTER, SCE_PL_STRING_Q, SCE_PL_STRING_QQ,
-                   SCE_PL_STRING_QW, SCE_PL_HERE_Q, SCE_PL_HERE_QQ, SCE_PL_BACKTICKS},
-                  string);
-        setStyles(*this, {SCE_PL_SCALAR, SCE_PL_ARRAY, SCE_PL_HASH, SCE_PL_SYMBOLTABLE}, attribute);
-        setStyles(*this, {SCE_PL_REGEX, SCE_PL_REGSUBST, SCE_PL_STRING_QR}, type);
-        applyStyle(*this, SCE_PL_ERROR, palette.danger);
-    } else if (lexerName_ == QStringLiteral("r")) {
-        applyStyle(*this, SCE_R_COMMENT, comment, false, true);
-        setStyles(*this, {SCE_R_KWORD, SCE_R_BASEKWORD}, keyword, true);
-        applyStyle(*this, SCE_R_OTHERKWORD, type);
-        applyStyle(*this, SCE_R_NUMBER, number);
-        setStyles(
-            *this,
-            {SCE_R_STRING, SCE_R_STRING2, SCE_R_RAWSTRING, SCE_R_RAWSTRING2, SCE_R_ESCAPESEQUENCE},
-            string);
-        setStyles(*this, {SCE_R_INFIX, SCE_R_BACKTICKS}, attribute);
-    } else if (lexerName_ == QStringLiteral("batch")) {
-        applyStyle(*this, SCE_BAT_COMMENT, comment, false, true);
-        applyStyle(*this, SCE_BAT_WORD, keyword, true);
-        applyStyle(*this, SCE_BAT_LABEL, type, true);
-        setStyles(*this, {SCE_BAT_HIDE, SCE_BAT_COMMAND}, type);
-        applyStyle(*this, SCE_BAT_IDENTIFIER, attribute);
-    } else if (lexerName_ == QStringLiteral("powershell")) {
-        setStyles(*this, {SCE_POWERSHELL_COMMENT, SCE_POWERSHELL_COMMENTSTREAM}, comment, false,
-                  true);
-        applyStyle(*this, SCE_POWERSHELL_KEYWORD, keyword, true);
-        setStyles(*this, {SCE_POWERSHELL_CMDLET, SCE_POWERSHELL_ALIAS, SCE_POWERSHELL_FUNCTION},
-                  type);
-        applyStyle(*this, SCE_POWERSHELL_NUMBER, number);
-        setStyles(*this,
-                  {SCE_POWERSHELL_STRING, SCE_POWERSHELL_CHARACTER, SCE_POWERSHELL_HERE_STRING,
-                   SCE_POWERSHELL_HERE_CHARACTER},
-                  string);
-        applyStyle(*this, SCE_POWERSHELL_VARIABLE, attribute);
-    } else if (lexerName_ == QStringLiteral("haskell")) {
-        setStyles(
-            *this,
-            {SCE_HA_COMMENTLINE, SCE_HA_COMMENTBLOCK, SCE_HA_COMMENTBLOCK2, SCE_HA_COMMENTBLOCK3},
-            comment, false, true);
-        setStyles(*this, {SCE_HA_KEYWORD, SCE_HA_IMPORT}, keyword, true);
-        applyStyle(*this, SCE_HA_NUMBER, number);
-        setStyles(*this, {SCE_HA_STRING, SCE_HA_CHARACTER}, string);
-        setStyles(*this,
-                  {SCE_HA_CLASS, SCE_HA_MODULE, SCE_HA_CAPITAL, SCE_HA_DATA, SCE_HA_INSTANCE},
-                  type);
-        setStyles(*this, {SCE_HA_PRAGMA, SCE_HA_PREPROCESSOR}, attribute);
-        applyStyle(*this, SCE_HA_STRINGEOL, palette.danger);
-    } else if (lexerName_ == QStringLiteral("erlang")) {
-        setStyles(*this,
-                  {SCE_ERLANG_COMMENT, SCE_ERLANG_COMMENT_FUNCTION, SCE_ERLANG_COMMENT_MODULE,
-                   SCE_ERLANG_COMMENT_DOC},
-                  comment, false, true);
-        applyStyle(*this, SCE_ERLANG_KEYWORD, keyword, true);
-        applyStyle(*this, SCE_ERLANG_NUMBER, number);
-        setStyles(*this, {SCE_ERLANG_STRING, SCE_ERLANG_CHARACTER}, string);
-        setStyles(*this, {SCE_ERLANG_FUNCTION_NAME, SCE_ERLANG_BIFS, SCE_ERLANG_MODULES}, type);
-        setStyles(*this,
-                  {SCE_ERLANG_VARIABLE, SCE_ERLANG_MACRO, SCE_ERLANG_RECORD, SCE_ERLANG_PREPROC},
-                  attribute);
-        applyStyle(*this, SCE_ERLANG_UNKNOWN, palette.danger);
-    } else if (lexerName_ == QStringLiteral("lisp")) {
-        setStyles(*this, {SCE_LISP_COMMENT, SCE_LISP_MULTI_COMMENT}, comment, false, true);
-        setStyles(*this, {SCE_LISP_KEYWORD, SCE_LISP_KEYWORD_KW}, keyword, true);
-        applyStyle(*this, SCE_LISP_NUMBER, number);
-        applyStyle(*this, SCE_LISP_STRING, string);
-        setStyles(*this, {SCE_LISP_SYMBOL, SCE_LISP_SPECIAL}, attribute);
-        applyStyle(*this, SCE_LISP_STRINGEOL, palette.danger);
-    } else if (lexerName_ == QStringLiteral("pascal")) {
-        setStyles(*this, {SCE_PAS_COMMENT, SCE_PAS_COMMENT2, SCE_PAS_COMMENTLINE}, comment, false,
-                  true);
-        applyStyle(*this, SCE_PAS_WORD, keyword, true);
-        setStyles(*this, {SCE_PAS_NUMBER, SCE_PAS_HEXNUMBER}, number);
-        setStyles(*this, {SCE_PAS_STRING, SCE_PAS_CHARACTER, SCE_PAS_MULTILINESTRING}, string);
-        setStyles(*this, {SCE_PAS_PREPROCESSOR, SCE_PAS_PREPROCESSOR2}, attribute);
-        applyStyle(*this, SCE_PAS_STRINGEOL, palette.danger);
-    } else if (lexerName_ == QStringLiteral("fortran")) {
-        applyStyle(*this, SCE_F_COMMENT, comment, false, true);
-        applyStyle(*this, SCE_F_WORD, keyword, true);
-        setStyles(*this, {SCE_F_WORD2, SCE_F_WORD3}, type);
-        applyStyle(*this, SCE_F_NUMBER, number);
-        setStyles(*this, {SCE_F_STRING1, SCE_F_STRING2}, string);
-        setStyles(*this, {SCE_F_PREPROCESSOR, SCE_F_LABEL}, attribute);
-        applyStyle(*this, SCE_F_STRINGEOL, palette.danger);
-    } else if (lexerName_ == QStringLiteral("tcl")) {
-        setStyles(
-            *this,
-            {SCE_TCL_COMMENT, SCE_TCL_COMMENTLINE, SCE_TCL_COMMENT_BOX, SCE_TCL_BLOCK_COMMENT},
-            comment, false, true);
-        setStyles(*this, {SCE_TCL_WORD, SCE_TCL_WORD2, SCE_TCL_WORD3}, keyword, true);
-        applyStyle(*this, SCE_TCL_NUMBER, number);
-        setStyles(*this, {SCE_TCL_IN_QUOTE, SCE_TCL_WORD_IN_QUOTE}, string);
-        setStyles(*this, {SCE_TCL_SUBSTITUTION, SCE_TCL_SUB_BRACE}, attribute);
-        applyStyle(*this, SCE_TCL_MODIFIER, type);
-    } else if (lexerName_ == QStringLiteral("vb")) {
-        setStyles(*this, {SCE_B_COMMENT, SCE_B_COMMENTBLOCK, SCE_B_DOCLINE, SCE_B_DOCBLOCK},
-                  comment, false, true);
-        setStyles(*this, {SCE_B_KEYWORD, SCE_B_KEYWORD2}, keyword, true);
-        setStyles(*this, {SCE_B_KEYWORD3, SCE_B_KEYWORD4, SCE_B_CONSTANT}, type);
-        setStyles(*this, {SCE_B_NUMBER, SCE_B_HEXNUMBER, SCE_B_BINNUMBER, SCE_B_DATE}, type);
-        applyStyle(*this, SCE_B_STRING, string);
-        setStyles(*this, {SCE_B_PREPROCESSOR, SCE_B_LABEL}, attribute);
-        setStyles(*this, {SCE_B_STRINGEOL, SCE_B_ERROR}, palette.danger);
-    } else if (lexerName_ == QStringLiteral("d")) {
-        setStyles(*this,
-                  {SCE_D_COMMENT, SCE_D_COMMENTLINE, SCE_D_COMMENTDOC, SCE_D_COMMENTNESTED,
-                   SCE_D_COMMENTLINEDOC},
-                  comment, false, true);
-        applyStyle(*this, SCE_D_WORD, keyword, true);
-        setStyles(*this, {SCE_D_WORD2, SCE_D_WORD3, SCE_D_TYPEDEF}, type);
-        applyStyle(*this, SCE_D_NUMBER, number);
-        setStyles(*this, {SCE_D_STRING, SCE_D_CHARACTER, SCE_D_STRINGB, SCE_D_STRINGR}, string);
-        setStyles(*this, {SCE_D_STRINGEOL, SCE_D_COMMENTDOCKEYWORDERROR}, palette.danger);
-    } else if (lexerName_ == QStringLiteral("julia")) {
-        setStyles(*this, {SCE_JULIA_COMMENT, SCE_JULIA_DOCSTRING}, comment, false, true);
-        applyStyle(*this, SCE_JULIA_KEYWORD1, keyword, true);
-        setStyles(*this,
-                  {SCE_JULIA_KEYWORD2, SCE_JULIA_KEYWORD3, SCE_JULIA_KEYWORD4, SCE_JULIA_TYPEANNOT},
-                  type);
-        applyStyle(*this, SCE_JULIA_NUMBER, number);
-        setStyles(*this,
-                  {SCE_JULIA_STRING, SCE_JULIA_CHAR, SCE_JULIA_STRINGLITERAL, SCE_JULIA_COMMAND,
-                   SCE_JULIA_COMMANDLITERAL},
-                  string);
-        setStyles(*this, {SCE_JULIA_MACRO, SCE_JULIA_SYMBOL, SCE_JULIA_STRINGINTERP}, attribute);
-        applyStyle(*this, SCE_JULIA_LEXERROR, palette.danger);
-    } else if (lexerName_ == QStringLiteral("nim")) {
-        setStyles(
-            *this,
-            {SCE_NIM_COMMENT, SCE_NIM_COMMENTDOC, SCE_NIM_COMMENTLINE, SCE_NIM_COMMENTLINEDOC},
-            comment, false, true);
-        applyStyle(*this, SCE_NIM_WORD, keyword, true);
-        applyStyle(*this, SCE_NIM_NUMBER, number);
-        setStyles(*this,
-                  {SCE_NIM_STRING, SCE_NIM_CHARACTER, SCE_NIM_TRIPLE, SCE_NIM_TRIPLEDOUBLE,
-                   SCE_NIM_BACKTICKS},
-                  string);
-        applyStyle(*this, SCE_NIM_FUNCNAME, type, true);
-        setStyles(*this, {SCE_NIM_STRINGEOL, SCE_NIM_NUMERROR}, palette.danger);
-    } else if (lexerName_ == QStringLiteral("latex")) {
-        setStyles(*this, {SCE_L_COMMENT, SCE_L_COMMENT2}, comment, false, true);
-        setStyles(*this, {SCE_L_COMMAND, SCE_L_SHORTCMD}, keyword, true);
-        setStyles(*this, {SCE_L_TAG, SCE_L_TAG2}, type);
-        setStyles(*this, {SCE_L_MATH, SCE_L_MATH2}, attribute);
-        setStyles(*this, {SCE_L_VERBATIM, SCE_L_CMDOPT}, string);
-        applyStyle(*this, SCE_L_ERROR, palette.danger);
-    } else if (lexerName_ == QStringLiteral("asm")) {
-        setStyles(*this, {SCE_ASM_COMMENT, SCE_ASM_COMMENTBLOCK, SCE_ASM_COMMENTDIRECTIVE}, comment,
-                  false, true);
-        setStyles(*this, {SCE_ASM_CPUINSTRUCTION, SCE_ASM_MATHINSTRUCTION, SCE_ASM_EXTINSTRUCTION},
-                  keyword, true);
-        applyStyle(*this, SCE_ASM_REGISTER, type);
-        setStyles(*this, {SCE_ASM_DIRECTIVE, SCE_ASM_DIRECTIVEOPERAND}, attribute);
-        applyStyle(*this, SCE_ASM_NUMBER, number);
-        setStyles(*this, {SCE_ASM_STRING, SCE_ASM_CHARACTER, SCE_ASM_STRINGBACKQUOTE}, string);
-        applyStyle(*this, SCE_ASM_STRINGEOL, palette.danger);
-    } else if (lexerName_ == QStringLiteral("coffeescript")) {
-        setStyles(*this,
-                  {SCE_COFFEESCRIPT_COMMENT, SCE_COFFEESCRIPT_COMMENTLINE,
-                   SCE_COFFEESCRIPT_COMMENTDOC, SCE_COFFEESCRIPT_COMMENTBLOCK,
-                   SCE_COFFEESCRIPT_COMMENTLINEDOC},
-                  comment, false, true);
-        setStyles(*this, {SCE_COFFEESCRIPT_WORD, SCE_COFFEESCRIPT_WORD2}, keyword, true);
-        applyStyle(*this, SCE_COFFEESCRIPT_NUMBER, number);
-        setStyles(*this,
-                  {SCE_COFFEESCRIPT_STRING, SCE_COFFEESCRIPT_CHARACTER, SCE_COFFEESCRIPT_VERBATIM,
-                   SCE_COFFEESCRIPT_REGEX, SCE_COFFEESCRIPT_STRINGRAW},
-                  string);
-        setStyles(*this, {SCE_COFFEESCRIPT_GLOBALCLASS, SCE_COFFEESCRIPT_INSTANCEPROPERTY},
-                  attribute);
-        applyStyle(*this, SCE_COFFEESCRIPT_STRINGEOL, palette.danger);
-    } else if (lexerName_ == QStringLiteral("verilog")) {
-        setStyles(*this, {SCE_V_COMMENT, SCE_V_COMMENTLINE, SCE_V_COMMENTLINEBANG}, comment, false,
-                  true);
-        applyStyle(*this, SCE_V_WORD, keyword, true);
-        setStyles(*this, {SCE_V_WORD2, SCE_V_WORD3, SCE_V_USER}, type);
-        applyStyle(*this, SCE_V_NUMBER, number);
-        applyStyle(*this, SCE_V_STRING, string);
-        setStyles(*this, {SCE_V_PREPROCESSOR, SCE_V_INPUT, SCE_V_OUTPUT, SCE_V_INOUT}, attribute);
-        applyStyle(*this, SCE_V_STRINGEOL, palette.danger);
-    } else if (lexerName_ == QStringLiteral("vhdl")) {
-        setStyles(*this, {SCE_VHDL_COMMENT, SCE_VHDL_COMMENTLINEBANG, SCE_VHDL_BLOCK_COMMENT},
-                  comment, false, true);
-        applyStyle(*this, SCE_VHDL_KEYWORD, keyword, true);
-        setStyles(*this,
-                  {SCE_VHDL_STDOPERATOR, SCE_VHDL_STDFUNCTION, SCE_VHDL_STDPACKAGE,
-                   SCE_VHDL_STDTYPE, SCE_VHDL_USERWORD},
-                  type);
-        applyStyle(*this, SCE_VHDL_ATTRIBUTE, attribute);
-        applyStyle(*this, SCE_VHDL_NUMBER, number);
-        applyStyle(*this, SCE_VHDL_STRING, string);
-        applyStyle(*this, SCE_VHDL_STRINGEOL, palette.danger);
-    } else if (lexerName_ == QStringLiteral("caml")) {
-        setStyles(*this,
-                  {SCE_CAML_COMMENT, SCE_CAML_COMMENT1, SCE_CAML_COMMENT2, SCE_CAML_COMMENT3},
-                  comment, false, true);
-        applyStyle(*this, SCE_CAML_KEYWORD, keyword, true);
-        setStyles(*this, {SCE_CAML_KEYWORD2, SCE_CAML_KEYWORD3, SCE_CAML_TAGNAME}, type);
-        applyStyle(*this, SCE_CAML_NUMBER, number);
-        setStyles(*this, {SCE_CAML_STRING, SCE_CAML_CHAR}, string);
-        applyStyle(*this, SCE_CAML_LINENUM, attribute);
-    } else if (lexerName_ == QStringLiteral("fsharp")) {
-        setStyles(*this, {SCE_FSHARP_COMMENT, SCE_FSHARP_COMMENTLINE}, comment, false, true);
-        applyStyle(*this, SCE_FSHARP_KEYWORD, keyword, true);
-        setStyles(
-            *this,
-            {SCE_FSHARP_KEYWORD2, SCE_FSHARP_KEYWORD3, SCE_FSHARP_KEYWORD4, SCE_FSHARP_KEYWORD5},
-            type);
-        applyStyle(*this, SCE_FSHARP_NUMBER, number);
-        setStyles(*this,
-                  {SCE_FSHARP_STRING, SCE_FSHARP_CHARACTER, SCE_FSHARP_VERBATIM,
-                   SCE_FSHARP_QUOTATION, SCE_FSHARP_FORMAT_SPEC},
-                  string);
-        setStyles(*this, {SCE_FSHARP_PREPROCESSOR, SCE_FSHARP_ATTRIBUTE}, attribute);
-    } else if (lexerName_ == QStringLiteral("gdscript")) {
-        setStyles(*this, {SCE_GD_COMMENTLINE, SCE_GD_COMMENTBLOCK}, comment, false, true);
-        setStyles(*this, {SCE_GD_WORD, SCE_GD_WORD2}, keyword, true);
-        applyStyle(*this, SCE_GD_NUMBER, number);
-        setStyles(*this, {SCE_GD_STRING, SCE_GD_CHARACTER, SCE_GD_TRIPLE, SCE_GD_TRIPLEDOUBLE},
-                  string);
-        setStyles(*this, {SCE_GD_CLASSNAME, SCE_GD_FUNCNAME}, type, true);
-        setStyles(*this, {SCE_GD_ANNOTATION, SCE_GD_NODEPATH}, attribute);
-        applyStyle(*this, SCE_GD_STRINGEOL, palette.danger);
+    // Which style is which token is shared with the phone app; the colours are this theme's.
+    const syntax::TokenStyles& styles = syntax::tokenStyles(lexerName_.toStdString());
+    for (std::size_t style = 0; style < styles.size(); ++style) {
+        const syntax::TokenStyle& tokenStyle = styles[style];
+        if (const QString* color = colorFor(tokenStyle.token)) {
+            applyStyle(*this, static_cast<int>(style), *color, tokenStyle.bold, tokenStyle.italic);
+        }
     }
 }
 

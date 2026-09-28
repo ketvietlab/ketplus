@@ -7,18 +7,24 @@ endif()
 
 include(FetchContent)
 
-# Pin both projects so builds remain reproducible. They can be upgraded together.
+# Pin both projects so builds remain reproducible. They can be upgraded together: ketplus-syntax
+# carries Lexilla and the lexer interface headers of this Scintilla release.
 FetchContent_Declare(
     scintilla
     GIT_REPOSITORY https://github.com/mirror/scintilla.git
     GIT_TAG a1c86144eed9e3d2187e3a8b391d11ca909f00d2
 )
 
+# Which syntax a file gets, its Lexilla lexer and what each lexer style is; shared with the
+# KetPlus phone app so code reads the same on both.
 FetchContent_Declare(
-    lexilla
-    GIT_REPOSITORY https://github.com/ScintillaOrg/lexilla.git
-    GIT_TAG 3e6f317eed854bc312b4c4453206189d381c7ae7
+    ketplus_syntax
+    GIT_REPOSITORY https://github.com/ketvietlab/ketplus-syntax.git
+    GIT_TAG cb7435c1e9237ee32d3459a58917b0e84b8b6025
+    GIT_SUBMODULES third_party/lexilla
 )
+set(KETPLUS_SYNTAX_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(KETPLUS_SYNTAX_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
 
 FetchContent_Declare(
     inter_font
@@ -33,7 +39,7 @@ FetchContent_Declare(
     GIT_TAG 9d6d2112335080312ef8c36667fa717ded4f7daf
 )
 
-FetchContent_MakeAvailable(scintilla lexilla inter_font libvterm)
+FetchContent_MakeAvailable(scintilla ketplus_syntax inter_font libvterm)
 
 add_library(ketplus_vterm STATIC
     "${libvterm_SOURCE_DIR}/src/encoding.c"
@@ -121,21 +127,3 @@ target_compile_definitions(ketplus_scintilla
 )
 target_link_libraries(ketplus_scintilla PUBLIC Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Core5Compat)
 set_target_properties(ketplus_scintilla PROPERTIES POSITION_INDEPENDENT_CODE ON)
-
-file(GLOB lexilla_library_sources CONFIGURE_DEPENDS
-    "${lexilla_SOURCE_DIR}/lexlib/*.cxx"
-    "${lexilla_SOURCE_DIR}/lexers/*.cxx"
-)
-
-add_library(ketplus_lexilla STATIC
-    "${lexilla_SOURCE_DIR}/src/Lexilla.cxx"
-    ${lexilla_library_sources}
-)
-target_include_directories(ketplus_lexilla
-    PUBLIC "${lexilla_SOURCE_DIR}/include"
-    PRIVATE
-        "${lexilla_SOURCE_DIR}/lexlib"
-        "${scintilla_SOURCE_DIR}/include"
-)
-target_compile_definitions(ketplus_lexilla PRIVATE _CRT_SECURE_NO_DEPRECATE=1)
-set_target_properties(ketplus_lexilla PROPERTIES POSITION_INDEPENDENT_CODE ON)
