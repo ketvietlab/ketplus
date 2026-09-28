@@ -13,10 +13,12 @@ Qt application shell
     -> Git service
         -> system Git CLI via short-lived asynchronous processes
     -> terminal panel (lazy)
-        -> libvterm screen and keyboard model
-        -> PTY process backend
-            -> forkpty (macOS/Linux)
-            -> ConPTY (future Windows backend)
+        -> terminal UI (Qt Widgets selection, search, painting)
+        -> terminal core (Qt Core + libvterm, no Qt Widgets)
+            -> VT state and bounded scrollback
+            -> PTY process backend
+                -> forkpty (macOS/Linux)
+                -> ConPTY (future Windows backend)
     -> reusable settings shell
         -> public appearance settings and built-in theme selection
         -> consumer-owned pages through a narrow extension contract
@@ -32,9 +34,13 @@ Qt application shell
 - `src/git` owns read-only repository discovery, status/diff requests, porcelain
   parsing, and linked-worktree discovery. It never stages, commits, or changes
   the checkout.
-- `src/terminal` owns the embedded terminal surface, VT state, scrollback, and
-  process transport. `PtyProcess` isolates platform process creation from the
-  renderer so a ConPTY backend can be added without changing terminal UI code.
+- `src/terminal` is split into `KetPlusCM::terminal_core` and
+  `KetPlusCM::terminal_ui`. `TerminalSession` owns VT state, bounded scrollback,
+  keyboard encoding and `PtyProcess` without depending on Qt Widgets;
+  `TerminalView` and `TerminalPanel` own painting, selection, clipboard, search,
+  and panel actions. `KetPlusCM::terminal` remains a compatibility target for
+  the complete UI. `PtyProcess` isolates platform process creation so a ConPTY
+  backend can be added without changing the session or UI contracts.
 - `src/preview` keeps Mermaid output as SVG through the full-size diagram viewer;
   mouse-wheel and native trackpad pinch gestures zoom the vector scene without
   rasterizing it.

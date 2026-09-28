@@ -7,7 +7,7 @@ class QToolButton;
 
 namespace ketplus {
 
-class PtyProcess;
+class TerminalSession;
 class TerminalView;
 struct ThemePalette;
 
@@ -28,10 +28,13 @@ class TerminalPanel final : public QWidget {
     void statusMessageRequested(const QString& message);
 
   private:
-    PtyProcess* process_{nullptr};
+    TerminalSession* session_{nullptr};
     TerminalView* terminal_{nullptr};
     QLabel* titleLabel_{nullptr};
     QLabel* pathLabel_{nullptr};
+    QToolButton* findButton_{nullptr};
+    QToolButton* clearButton_{nullptr};
+    QToolButton* restartButton_{nullptr};
     QToolButton* closeButton_{nullptr};
     QString workingDirectory_;
 };

@@ -1,13 +1,16 @@
 #include "terminal/PtyProcess.h"
 #include "terminal/TerminalPanel.h"
+#include "terminal/TerminalSession.h"
 #include "terminal/TerminalView.h"
 #include "ui/Theme.h"
 
+#include <QClipboard>
 #include <QDir>
 #include <QEvent>
 #include <QFontDatabase>
 #include <QFontInfo>
 #include <QInputMethodEvent>
+#include <QLabel>
 #include <QLineEdit>
 #include <QSignalSpy>
 #include <QTest>
@@ -45,6 +48,10 @@ class PtyProcessTest final : public QObject {
     void coalescesStreamingPaints();
     void controlCInterruptsForegroundCommand();
     void honorsSynchronizedOutputTransactions();
+    void selectsAndCopiesTextWithMouse();
+    void findsTextInTerminalBuffer();
+    void boundsCoreScrollback();
+    void emitsMouseProtocolFromCore();
 };
 
 void PtyProcessTest::runsInteractiveShellInRequestedDirectory() {
@@ -69,14 +76,14 @@ void PtyProcessTest::runsInteractiveShellInRequestedDirectory() {
 
 void PtyProcessTest::rendersAnsiOutputThroughVterm() {
 #if defined(Q_OS_UNIX)
-    PtyProcess process;
-    TerminalView terminal(process);
+    TerminalSession session;
+    TerminalView terminal(session);
     terminal.resize(640, 240);
     terminal.show();
-    QSignalSpy exitSpy(&process, &PtyProcess::exited);
+    QSignalSpy exitSpy(&session, &TerminalSession::exited);
 
     terminal.start(QDir::tempPath());
-    process.send(QByteArray("printf '\\033[31m__KETPLUS_VTERM__\\033[0m\\n'; exit\n"));
+    session.sendBytes(QByteArray("printf '\\033[31m__KETPLUS_VTERM__\\033[0m\\n'; exit\n"));
 
     QTRY_VERIFY_WITH_TIMEOUT(terminal.visibleText().contains("__KETPLUS_VTERM__"), 5000);
     QTRY_VERIFY_WITH_TIMEOUT(!exitSpy.isEmpty(), 10000);
@@ -87,28 +94,28 @@ void PtyProcessTest::rendersAnsiOutputThroughVterm() {
 
 void PtyProcessTest::usesSystemFixedFont() {
     ThemeManager theme(*qApp);
-    PtyProcess process;
-    TerminalView terminal(process);
+    TerminalSession session;
+    TerminalView terminal(session);
     terminal.ensurePolished();
     QCOMPARE(QFontInfo(terminal.font()).family(),
              QFontInfo(QFontDatabase::systemFont(QFontDatabase::FixedFont)).family());
 }
 
 void PtyProcessTest::appliesTerminalTypography() {
-    PtyProcess process;
-    TerminalView terminal(process);
+    TerminalSession session;
+    TerminalView terminal(session);
     terminal.setTypography(17, 29);
     QCOMPARE(terminal.font().pixelSize(), 17);
 }
 
 void PtyProcessTest::echoesTypedTextBeforeEnter() {
 #if defined(Q_OS_UNIX)
-    PtyProcess process;
-    TerminalView terminal(process);
+    TerminalSession session;
+    TerminalView terminal(session);
     terminal.resize(640, 240);
     terminal.show();
-    QSignalSpy exitSpy(&process, &PtyProcess::exited);
-    QSignalSpy outputSpy(&process, &PtyProcess::outputReceived);
+    QSignalSpy exitSpy(&session, &TerminalSession::exited);
+    QSignalSpy outputSpy(&session, &TerminalSession::outputReceived);
     PaintCounter paints;
     terminal.viewport()->installEventFilter(&paints);
 
@@ -119,9 +126,9 @@ void PtyProcessTest::echoesTypedTextBeforeEnter() {
 
     QTRY_VERIFY_WITH_TIMEOUT(terminal.visibleText().contains("ketplus_live_echo"), 1000);
     QTRY_VERIFY_WITH_TIMEOUT(paints.count > 0, 200);
-    process.send(QByteArray(1, '\x03'));
+    session.sendBytes(QByteArray(1, '\x03'));
     QTest::qWait(100);
-    process.send(QByteArray("exit\n"));
+    session.sendBytes(QByteArray("exit\n"));
     QTRY_VERIFY_WITH_TIMEOUT(!exitSpy.isEmpty(), 10000);
 #else
     QSKIP("The first PTY backend targets macOS and Linux.");
@@ -148,8 +155,8 @@ void PtyProcessTest::restoresFocusAfterAnActionMenuCloses() {
 }
 
 void PtyProcessTest::rendersInputMethodPreedit() {
-    PtyProcess process;
-    TerminalView terminal(process);
+    TerminalSession session;
+    TerminalView terminal(session);
     terminal.resize(640, 240);
     terminal.show();
     terminal.setFocus();
@@ -164,8 +171,8 @@ void PtyProcessTest::rendersInputMethodPreedit() {
 }
 
 void PtyProcessTest::coalescesStreamingPaints() {
-    PtyProcess process;
-    TerminalView terminal(process);
+    TerminalSession session;
+    TerminalView terminal(session);
     terminal.resize(640, 240);
     terminal.show();
     PaintCounter paints;
@@ -174,7 +181,7 @@ void PtyProcessTest::coalescesStreamingPaints() {
     paints.count = 0;
 
     for (int chunk = 0; chunk < 120; ++chunk) {
-        process.outputReceived(QByteArray("x"));
+        session.feedOutput(QByteArray("x"));
     }
     QTest::qWait(80);
 
@@ -185,20 +192,20 @@ void PtyProcessTest::coalescesStreamingPaints() {
 
 void PtyProcessTest::controlCInterruptsForegroundCommand() {
 #if defined(Q_OS_UNIX)
-    PtyProcess process;
-    TerminalView terminal(process);
+    TerminalSession session;
+    TerminalView terminal(session);
     terminal.resize(640, 240);
     terminal.show();
     QByteArray output;
-    connect(&process, &PtyProcess::outputReceived, this,
+    connect(&session, &TerminalSession::outputReceived, this,
             [&output](const QByteArray& bytes) { output.append(bytes); });
-    QSignalSpy exitSpy(&process, &PtyProcess::exited);
+    QSignalSpy exitSpy(&session, &TerminalSession::exited);
 
     terminal.start(QDir::tempPath());
-    process.send(QByteArray("stty -echo; printf '__KETPLUS_READY__\\n'\n"));
+    session.sendBytes(QByteArray("stty -echo; printf '__KETPLUS_READY__\\n'\n"));
     QTRY_VERIFY_WITH_TIMEOUT(output.count("__KETPLUS_READY__") >= 2, 5000);
     output.clear();
-    process.send(
+    session.sendBytes(
         QByteArray("printf '__SLEEP_STARTED__\\n'; sleep 30 && printf '__SLEEP_COMPLETED__\\n'\n"));
     QTRY_VERIFY_WITH_TIMEOUT(output.contains("__SLEEP_STARTED__"), 5000);
     output.clear();
@@ -207,9 +214,9 @@ void PtyProcessTest::controlCInterruptsForegroundCommand() {
 #else
     QTest::keyClick(&terminal, Qt::Key_C, Qt::ControlModifier);
 #endif
-    process.send(QByteArray("printf '__AFTER_INTERRUPT__\\n'\n"));
+    session.sendBytes(QByteArray("printf '__AFTER_INTERRUPT__\\n'\n"));
     QTRY_VERIFY_WITH_TIMEOUT(output.contains("__AFTER_INTERRUPT__"), 7000);
-    process.send(QByteArray("exit\n"));
+    session.sendBytes(QByteArray("exit\n"));
 
     QTRY_VERIFY_WITH_TIMEOUT(!exitSpy.isEmpty(), 7000);
     QVERIFY2(!output.contains("__SLEEP_COMPLETED__"), output.constData());
@@ -219,23 +226,97 @@ void PtyProcessTest::controlCInterruptsForegroundCommand() {
 }
 
 void PtyProcessTest::honorsSynchronizedOutputTransactions() {
-    PtyProcess process;
-    TerminalView terminal(process);
+    TerminalSession session;
+    TerminalView terminal(session);
     terminal.resize(640, 240);
     terminal.show();
     PaintCounter paints;
     terminal.viewport()->installEventFilter(&paints);
-    QTest::qWait(20);
+    QTest::qWait(80);
     paints.count = 0;
 
-    process.outputReceived(QByteArray("\x1b[?2026hplaceholder"));
+    session.feedOutput(QByteArray("\x1b[?2026hplaceholder"));
     QTest::qWait(30);
     QCOMPARE(paints.count, 0);
 
-    process.outputReceived(QByteArray("\r\x1b[2Ktyped\x1b[?2026l"));
+    session.feedOutput(QByteArray("\r\x1b[2Ktyped\x1b[?2026l"));
     QTRY_VERIFY_WITH_TIMEOUT(paints.count > 0, 100);
     QVERIFY(terminal.visibleText().contains(QStringLiteral("typed")));
     QVERIFY(!terminal.visibleText().contains(QStringLiteral("placeholder")));
+}
+
+void PtyProcessTest::selectsAndCopiesTextWithMouse() {
+    TerminalSession session;
+    TerminalView terminal(session);
+    terminal.resize(640, 240);
+    terminal.show();
+    session.feedOutput(QByteArray("alpha beta\r\nsecond line"));
+    QTest::qWait(20);
+
+    const QFontMetrics metrics(terminal.font());
+    const int cellWidth = qMax(1, metrics.horizontalAdvance(QLatin1Char('M')));
+    const int cellHeight = qMax(metrics.height(), 20);
+    const QPoint firstCell(10 + cellWidth / 2, 8 + cellHeight / 2);
+    const QPoint fifthCell(10 + 4 * cellWidth + cellWidth / 2, 8 + cellHeight / 2);
+    QTest::mousePress(terminal.viewport(), Qt::LeftButton, Qt::NoModifier, firstCell);
+    QTest::mouseMove(terminal.viewport(), fifthCell);
+    QTest::mouseRelease(terminal.viewport(), Qt::LeftButton, Qt::NoModifier, fifthCell);
+
+    QCOMPARE(terminal.selectedText(), QStringLiteral("alpha"));
+    terminal.copySelection();
+    QCOMPARE(QApplication::clipboard()->text(), QStringLiteral("alpha"));
+}
+
+void PtyProcessTest::findsTextInTerminalBuffer() {
+    TerminalSession session;
+    TerminalView terminal(session);
+    terminal.resize(640, 240);
+    terminal.show();
+    session.feedOutput(QByteArray("first needle\r\nsecond needle"));
+
+    terminal.openSearch();
+    auto* searchEdit = terminal.findChild<QLineEdit*>(QStringLiteral("terminalSearchEdit"));
+    QVERIFY(searchEdit != nullptr);
+    searchEdit->setText(QStringLiteral("needle"));
+
+    auto* status = terminal.findChild<QLabel*>(QStringLiteral("terminalSearchStatus"));
+    QVERIFY(status != nullptr);
+    QTRY_COMPARE_WITH_TIMEOUT(status->text(), QStringLiteral("1 / 2"), 500);
+}
+
+void PtyProcessTest::boundsCoreScrollback() {
+    TerminalSession session;
+    session.resizeTerminal(2, 20);
+    QByteArray output;
+    output.reserve(5100 * 3);
+    for (int line = 0; line < 5100; ++line) {
+        output.append("x\r\n");
+    }
+    session.feedOutput(output);
+
+    QCOMPARE(session.historyLineCount(), 5000);
+}
+
+void PtyProcessTest::emitsMouseProtocolFromCore() {
+    TerminalSession session;
+    session.feedOutput(QByteArray("\x1b[?1000h\x1b[?1006h"));
+    QVERIFY(session.mouseTrackingEnabled());
+    QSignalSpy inputSpy(&session, &TerminalSession::inputGenerated);
+
+    session.sendMouseMove(2, 3, VTERM_MOD_NONE);
+    session.sendMouseButton(1, true, VTERM_MOD_NONE);
+    session.sendMouseButton(1, false, VTERM_MOD_NONE);
+
+    QVERIFY(!inputSpy.isEmpty());
+    QByteArray generated;
+    for (const QList<QVariant>& arguments : inputSpy) {
+        generated.append(arguments.at(0).toByteArray());
+    }
+    QVERIFY(generated.contains("\x1b[<0;4;3M"));
+    QVERIFY(generated.contains("\x1b[<0;4;3m"));
+
+    session.feedOutput(QByteArray("\x1b[?1000l"));
+    QVERIFY(!session.mouseTrackingEnabled());
 }
 
 } // namespace ketplus
