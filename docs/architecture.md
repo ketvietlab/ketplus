@@ -19,6 +19,9 @@ Qt application shell
             -> PTY process backend
                 -> forkpty (macOS/Linux)
                 -> ConPTY (future Windows backend)
+    -> standalone macOS terminal shell
+        -> native windows and menus
+        -> one terminal UI/core session per open tab
     -> reusable settings shell
         -> public appearance settings and built-in theme selection
         -> consumer-owned pages through a narrow extension contract
@@ -41,6 +44,11 @@ Qt application shell
   and panel actions. `KetPlusCM::terminal` remains a compatibility target for
   the complete UI. `PtyProcess` isolates platform process creation so a ConPTY
   backend can be added without changing the session or UI contracts.
+- `src/terminal_app` is the macOS-only standalone application shell. It owns
+  windows, tabs, native menu actions, Finder open requests, and LaunchServices
+  metadata, while reusing `terminal_core` and `terminal_ui` unchanged. The
+  target is enabled by default for public macOS app builds and stays out of
+  embedded consumers whenever `KETPLUS_CM_BUILD_APP=OFF`.
 - `src/preview` keeps Mermaid output as SVG through the full-size diagram viewer;
   mouse-wheel and native trackpad pinch gestures zoom the vector scene without
   rasterizing it.

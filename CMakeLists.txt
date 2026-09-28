@@ -10,6 +10,15 @@ project(
 option(KETPLUS_CM_BUILD_APP "Build the KetPlus CM desktop application" ON)
 option(KETPLUS_CM_BUILD_TESTS "Build KetPlus CM tests" ON)
 option(KETPLUS_CM_BUILD_BENCHMARKS "Build KetPlus CM performance benchmarks" OFF)
+if(APPLE)
+    option(KETPLUS_CM_BUILD_TERMINAL_APP
+        "Build the standalone KetPlus Terminal application" ON
+    )
+else()
+    option(KETPLUS_CM_BUILD_TERMINAL_APP
+        "Build the standalone KetPlus Terminal application" OFF
+    )
+endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -308,6 +317,96 @@ if(KETPLUS_CM_BUILD_APP)
     )
 endif()
 
+if(APPLE AND KETPLUS_CM_BUILD_APP AND KETPLUS_CM_BUILD_TERMINAL_APP)
+    set(ketplus_terminal_app_icon "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/KetPlusTerminal.icns")
+    set_source_files_properties(
+        "${ketplus_terminal_app_icon}"
+        PROPERTIES MACOSX_PACKAGE_LOCATION "Resources"
+    )
+
+    add_library(ketplus_terminal_app_ui STATIC
+        src/terminal_app/TerminalTab.cpp
+        src/terminal_app/TerminalTab.h
+        src/terminal_app/TerminalWindow.cpp
+        src/terminal_app/TerminalWindow.h
+    )
+    target_link_libraries(ketplus_terminal_app_ui
+        PUBLIC
+            Qt6::Widgets
+            KetPlusCM::terminal_ui
+            KetPlusCM::ui
+    )
+    ketplus_enable_warnings(ketplus_terminal_app_ui)
+
+    qt_add_executable(ketplus_terminal_app MACOSX_BUNDLE
+        src/terminal_app/TerminalApplication.cpp
+        src/terminal_app/TerminalApplication.h
+        src/terminal_app/main.cpp
+        "${ketplus_terminal_app_icon}"
+    )
+    target_link_libraries(ketplus_terminal_app
+        PRIVATE
+            Qt6::Widgets
+            ketplus_terminal_app_ui
+    )
+    target_compile_definitions(ketplus_terminal_app PRIVATE
+        KETPLUS_CM_VERSION="${PROJECT_VERSION}"
+    )
+    ketplus_enable_warnings(ketplus_terminal_app)
+    ketplus_cm_add_font_resources(ketplus_terminal_app)
+
+    qt_add_resources(ketplus_terminal_app "ketplus_terminal_brand"
+        PREFIX "/brand"
+        BASE "${CMAKE_CURRENT_SOURCE_DIR}/assets/brand"
+        FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/brand/ketplus-terminal-icon.png"
+    )
+
+    set_target_properties(ketplus_terminal_app PROPERTIES
+        OUTPUT_NAME "KetPlus Terminal"
+        MACOSX_BUNDLE_BUNDLE_NAME "KetPlus Terminal"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.ketsuite.ketplus.terminal"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_ICON_FILE "KetPlusTerminal.icns"
+        MACOSX_BUNDLE_INFO_PLIST
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/terminal_app/Info.plist.in"
+    )
+
+    install(TARGETS ketplus_terminal_app BUNDLE DESTINATION .)
+    qt_generate_deploy_app_script(
+        TARGET ketplus_terminal_app
+        OUTPUT_SCRIPT ketplus_terminal_deploy_script
+        NO_PLUGINS
+        NO_TRANSLATIONS
+        NO_UNSUPPORTED_PLATFORM_ERROR
+    )
+    install(SCRIPT "${ketplus_terminal_deploy_script}")
+    install(CODE [[
+        set(terminal_bundle
+            "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/KetPlus Terminal.app"
+        )
+        set(cocoa_plugin
+            "${terminal_bundle}/Contents/PlugIns/platforms/libqcocoa.dylib"
+        )
+        file(MAKE_DIRECTORY "${terminal_bundle}/Contents/PlugIns/platforms")
+        file(COPY_FILE "$<TARGET_FILE:Qt6::QCocoaIntegrationPlugin>" "${cocoa_plugin}")
+        execute_process(
+            COMMAND /usr/bin/codesign --force --sign - "${cocoa_plugin}"
+            RESULT_VARIABLE plugin_sign_result
+        )
+        if(NOT plugin_sign_result EQUAL 0)
+            message(FATAL_ERROR "Unable to ad-hoc sign the Cocoa platform plugin")
+        endif()
+        execute_process(
+            COMMAND /usr/bin/codesign --force --sign - "${terminal_bundle}"
+            RESULT_VARIABLE bundle_sign_result
+        )
+        if(NOT bundle_sign_result EQUAL 0)
+            message(FATAL_ERROR "Unable to ad-hoc sign KetPlus Terminal.app")
+        endif()
+    ]])
+endif()
+
 if(KETPLUS_CM_BUILD_BENCHMARKS)
     qt_add_executable(ketplus_editor_benchmark benchmarks/EditorBenchmark.cpp)
     target_link_libraries(ketplus_editor_benchmark
@@ -420,6 +519,18 @@ if(KETPLUS_CM_BUILD_TESTS)
     set_tests_properties(ketplus_terminal_tests PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     )
+
+    if(APPLE AND TARGET ketplus_terminal_app_ui)
+        add_executable(ketplus_terminal_app_tests tests/TerminalAppTest.cpp)
+        target_link_libraries(ketplus_terminal_app_tests
+            PRIVATE Qt6::Test ketplus_terminal_app_ui
+        )
+        ketplus_enable_warnings(ketplus_terminal_app_tests)
+        ketplus_cm_add_test(ketplus_terminal_app_tests ketplus_terminal_app_tests)
+        set_tests_properties(ketplus_terminal_app_tests PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;SHELL=/bin/sh"
+        )
+    endif()
 
     add_executable(ketplus_git_tests tests/GitParserTest.cpp)
     target_link_libraries(ketplus_git_tests PRIVATE Qt6::Test ketplus_git)
