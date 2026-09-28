@@ -53,9 +53,41 @@ Run the development build:
 
 ```sh
 open "build/dev/KetPlus CM.app"   # macOS
+open "build/dev/KetPlus Terminal.app" # standalone terminal on macOS
 ./build/dev/ketplus-cm             # Linux
 build\\dev\\KetPlusCM.exe        # Windows
 ```
+
+### Standalone terminal for macOS
+
+macOS builds `KetPlus Terminal.app` by default alongside the editor. It is a
+small native terminal app backed by the same PTY, libvterm core, and bounded
+scrollback as the embedded panel, with tabs, multiple windows, copy/paste,
+search, clear/restart, zoom, full screen, and system/light/dark appearance.
+
+- `Cmd+T` opens a tab; `Cmd+W` closes the active tab.
+- `Cmd+Shift+[` / `Cmd+Shift+]` or `Ctrl+Shift+Tab` / `Ctrl+Tab` switch tabs.
+- Opening a folder starts a tab in that folder. Opening an executable shell
+  script runs it in a new terminal window.
+- Set `-DKETPLUS_CM_BUILD_TERMINAL_APP=OFF` to omit the bundle.
+
+For a self-contained Release bundle with the required Qt frameworks, install to
+a staging directory after building:
+
+```sh
+cmake --preset release
+cmake --build --preset release
+cmake --install build/release --prefix dist
+open "dist/KetPlus Terminal.app"
+```
+
+Signing and notarization still belong to the downstream distribution pipeline.
+
+macOS does not expose one system-wide "default terminal" setting. The bundle
+registers as an alternate handler for `public.shell-script`, so it can be chosen
+from Finder with **Open With > Other…**, followed by **Change All…** in Get Info.
+Apps with their own terminal preference still need `KetPlus Terminal` selected
+inside that app.
 
 ## Use as a CMake dependency
 
@@ -122,6 +154,9 @@ KetPlus CM also checks `KETPLUS_MMDC` when a custom `mmdc` executable path is ne
   with mouse selection/copy, bounded scrollback search, clear/restart actions,
   bracketed paste, TUI mouse reporting with Shift-to-select, and a core separated
   from its Qt Widgets UI; hiding the panel keeps the shell session alive
+- Standalone `KetPlus Terminal.app` on macOS with lightweight per-tab PTY
+  sessions, native menus, multiple windows, Finder folder/script opening, zoom,
+  full screen, and optional shell-script file association
 - KetJS-inspired compact visual system with matching semantic color tokens
 - System, light, and dark appearance modes under `View > Appearance`
 - Persistent interface, editor, terminal, and Markdown preview typography under
