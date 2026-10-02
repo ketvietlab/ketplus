@@ -10,6 +10,7 @@ class QApplication;
 namespace ketplus {
 
 struct ThemePalette final {
+    bool operator==(const ThemePalette&) const = default;
     bool dark{false};
     QString appBackground;
     QString pageBackground;

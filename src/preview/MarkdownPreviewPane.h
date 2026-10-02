@@ -23,6 +23,7 @@ class MarkdownPreviewPane final : public QWidget {
     explicit MarkdownPreviewPane(QWidget* parent = nullptr);
 
     void setSource(const QString& markdown, const QString& filePath, const ThemePalette& palette);
+    void setEmbedded(bool embedded);
     void showEmpty(const ThemePalette& palette);
     void setTypography(int fontSizePixels, int lineHeightPixels);
 
@@ -52,6 +53,7 @@ class MarkdownPreviewPane final : public QWidget {
     void linkMermaidImages();
     void setNotice(const QString& message, bool error = false);
 
+    QWidget* header_{nullptr};
     PreviewBrowser* browser_{nullptr};
     QLabel* notice_{nullptr};
     QTimer* renderTimer_{nullptr};

@@ -89,3 +89,9 @@ Qt application shell
    palette. The non-indexing file tree is implemented.
 3. Code intelligence: Tree-sitter and optional LSP processes.
 4. Extensions: versioned JSON-RPC protocol with out-of-process plugins.
+
+## Document display modes
+
+Markdown documents open in an embedded preview with a horizontally centered floating Preview/Source control, 100 px above the document viewport bottom. The Scintilla source buffer, undo history and cursor remain alive across switches. Preview parsing is cached by content, path, theme and typography; hidden documents defer refresh until shown. Body width is capped at 960 logical pixels. Large-file mode retains source-only behavior.
+
+GitDiffView defaults to Diff and adds Preview/Source for Markdown. Preview and read-only Source show the right-hand revision: the index for staged changes, the working tree otherwise. Git revision reads are generation-fenced; failed index reads never fall back to unstaged content. MarkdownModeController owns presentation without changing EditorWidget identity or duplicating private product code.

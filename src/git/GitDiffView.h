@@ -14,6 +14,8 @@ namespace ketplus {
 
 class EditorWidget;
 class GitDiffModel;
+class MarkdownModeController;
+class GitRevisionContent;
 
 class GitDiffView final : public QWidget {
     Q_OBJECT
@@ -34,6 +36,10 @@ class GitDiffView final : public QWidget {
 
   private:
     void updateHeader();
+    MarkdownModeController* markdownModes_{nullptr};
+    GitRevisionContent* revisionContent_{nullptr};
+    QString revisionText_;
+
     void updateSpans();
     void updateContextButton();
 

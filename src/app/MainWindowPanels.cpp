@@ -60,38 +60,18 @@ MarkdownPreviewPane* MainWindow::ensureMarkdownPreview() {
 }
 
 void MainWindow::setMarkdownPreviewVisible(const bool visible) {
-    if (visible) {
-        auto* preview = ensureMarkdownPreview();
-        preview->show();
-        const int availableWidth = qMax(640, editorSplit_->width());
-        editorSplit_->setSizes({availableWidth * 3 / 5, availableWidth * 2 / 5});
-        const QSignalBlocker blocker(markdownPreviewAction_);
-        markdownPreviewAction_->setChecked(true);
-        updateMarkdownPreview();
-        return;
-    }
-
-    if (markdownPreview_ != nullptr) {
-        markdownPreview_->hide();
-    }
-    const QSignalBlocker blocker(markdownPreviewAction_);
-    markdownPreviewAction_->setChecked(false);
-    if (auto* editor = currentEditor()) {
-        editor->setFocus();
-    }
+    if (auto* editor = currentEditor())
+        editor->setMarkdownPreviewVisible(visible);
+    updateMarkdownPreview();
 }
 
 void MainWindow::updateMarkdownPreview() {
-    if (markdownPreview_ == nullptr || !markdownPreview_->isVisible()) {
-        return;
-    }
     auto* editor = currentEditor();
-    if (editor == nullptr || editor->syntaxName() != QStringLiteral("markdown")) {
-        markdownPreview_->showEmpty(theme_.palette());
-        return;
-    }
-    markdownPreview_->setSource(QString::fromUtf8(editor->text()), editor->document().filePath(),
-                                theme_.palette());
+    const QSignalBlocker blocker(markdownPreviewAction_);
+    markdownPreviewAction_->setChecked(editor && editor->isMarkdownPreviewVisible());
+    if (editor)
+        editor->setPreviewTypography(appearanceSettings_.preview.fontSizePixels,
+                                     appearanceSettings_.preview.lineHeightPixels);
 }
 
 TerminalPanel* MainWindow::ensureTerminal() {

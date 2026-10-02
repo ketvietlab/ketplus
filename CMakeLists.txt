@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.24)
 
 project(
     KetPlusCM
-    VERSION 0.3.0
+    VERSION 0.3.1
     DESCRIPTION "A fast, lightweight, cross-platform text editor"
     LANGUAGES C CXX
 )
@@ -77,6 +77,8 @@ ketplus_enable_warnings(ketplus_core)
 add_library(KetPlusCM::core ALIAS ketplus_core)
 
 add_library(ketplus_git STATIC
+    src/git/GitRevisionContent.cpp
+    src/git/GitRevisionContent.h
     src/git/GitParser.cpp
     src/git/GitParser.h
     src/git/GitService.cpp
@@ -151,6 +153,8 @@ add_library(KetPlusCM::terminal ALIAS ketplus_terminal)
 add_library(ketplus_preview STATIC
     src/preview/MarkdownPreviewPane.cpp
     src/preview/MarkdownPreviewPane.h
+    src/preview/MarkdownModeController.cpp
+    src/preview/MarkdownModeController.h
     src/preview/MermaidDiagramDialog.cpp
     src/preview/MermaidDiagramDialog.h
     src/preview/MermaidRenderer.cpp
@@ -175,6 +179,7 @@ add_library(ketplus_editor STATIC
     src/editor/EditorViewOptions.cpp
     src/editor/EditorViewOptions.h
     src/editor/EditorWidget.cpp
+    src/editor/EditorMarkdown.cpp
     src/editor/EditorWidget.h
     src/editor/SymbolExtractor.cpp
     src/editor/SymbolExtractor.h
@@ -185,6 +190,7 @@ target_link_libraries(ketplus_editor
     PUBLIC
         Qt6::Widgets
         ketplus_core
+        ketplus_preview
         ketplus_scintilla
         ketplus_ui
         ketplus::syntax
@@ -563,6 +569,12 @@ if(KETPLUS_CM_BUILD_TESTS)
     set_tests_properties(ketplus_git_changes_panel_tests PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     )
+
+    add_executable(ketplus_markdown_modes_tests tests/MarkdownModesTest.cpp)
+    target_link_libraries(ketplus_markdown_modes_tests PRIVATE Qt6::Test KetPlusCM::editor KetPlusCM::git_ui)
+    ketplus_enable_warnings(ketplus_markdown_modes_tests)
+    ketplus_cm_add_test(ketplus_markdown_modes_tests ketplus_markdown_modes_tests)
+    set_tests_properties(ketplus_markdown_modes_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     add_executable(ketplus_preview_tests tests/MarkdownPreviewPaneTest.cpp)
     target_link_libraries(ketplus_preview_tests PRIVATE Qt6::Test ketplus_preview)

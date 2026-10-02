@@ -3,10 +3,10 @@
 #include "app/SettingsDialog.h"
 #include "editor/EditorSplitPane.h"
 #include "editor/EditorWidget.h"
-#include "index/SymbolIndex.h"
 #include "git/GitChangesPanel.h"
 #include "git/GitDiffView.h"
 #include "git/GitService.h"
+#include "index/SymbolIndex.h"
 #include "preview/MarkdownPreviewPane.h"
 #include "terminal/TerminalPanel.h"
 #include "ui/FindReplaceBar.h"
@@ -111,9 +111,8 @@ bool MainWindow::saveAllDocuments() {
         }
         ++savedCount;
     }
-    statusBar()->showMessage(savedCount == 0
-                                 ? QStringLiteral("No unsaved changes")
-                                 : QStringLiteral("Saved %1 file(s)").arg(savedCount),
+    statusBar()->showMessage(savedCount == 0 ? QStringLiteral("No unsaved changes")
+                                             : QStringLiteral("Saved %1 file(s)").arg(savedCount),
                              2500);
     return true;
 }
@@ -345,7 +344,7 @@ QAction* MainWindow::addMarkdownPreviewContextAction(QMenu& menu, EditorWidget* 
     }
     auto* action = menu.addAction(QStringLiteral("Markdown Preview"));
     action->setCheckable(true);
-    action->setChecked(markdownPreview_ != nullptr && markdownPreview_->isVisible());
+    action->setChecked(editor->isMarkdownPreviewVisible());
     action->setShortcut(markdownPreviewAction_->shortcut());
     return action;
 }
@@ -386,17 +385,22 @@ void MainWindow::configureTabCloseButton(const int index, QWidget* tab,
 
 EditorWidget* MainWindow::createEditor() {
     auto* editor = new EditorWidget(this);
+    editor->setPreviewTypography(appearanceSettings_.preview.fontSizePixels,
+                                 appearanceSettings_.preview.lineHeightPixels);
+    connect(editor, &EditorWidget::previewFileOpenRequested, this, &MainWindow::openFile);
+    connect(editor, &EditorWidget::previewStatusMessageRequested, this,
+            [this](const QString& message) { statusBar()->showMessage(message, 7000); });
     editor->setEditorSettings(appearanceSettings_.editor);
     editor->setViewOptions(viewOptions_);
     editor->applyTheme(theme_.palette());
     syncEditorZoom(editor);
     connect(editor, &EditorWidget::contextMenuRequested, this,
             [this, editor](const QPoint& position) { showEditorContextMenu(editor, position); });
-    connect(editor, &EditorWidget::definitionRequested, this,
-            [this, editor](const QString& symbol, const QString& fileToken,
-                           const QString& lineText) {
-                resolveDefinition(editor, symbol, fileToken, lineText);
-            });
+    connect(
+        editor, &EditorWidget::definitionRequested, this,
+        [this, editor](const QString& symbol, const QString& fileToken, const QString& lineText) {
+            resolveDefinition(editor, symbol, fileToken, lineText);
+        });
     connect(editor, &EditorWidget::dirtyStateChanged, this, [this, editor](const bool dirty) {
         updateTabTitle(editor);
         if (currentEditor() == editor) {
@@ -708,10 +712,10 @@ void MainWindow::goToLine() {
         return;
     }
     bool accepted = false;
-    const int line = QInputDialog::getInt(
-        this, QStringLiteral("Go to Line"),
-        QStringLiteral("Line number (1–%1):").arg(editor->lineCount()), editor->currentLine(), 1,
-        editor->lineCount(), 1, &accepted);
+    const int line =
+        QInputDialog::getInt(this, QStringLiteral("Go to Line"),
+                             QStringLiteral("Line number (1–%1):").arg(editor->lineCount()),
+                             editor->currentLine(), 1, editor->lineCount(), 1, &accepted);
     if (accepted) {
         pushNavigationLocation(locationOf(editor));
         editor->goToLine(line);
@@ -752,8 +756,7 @@ void MainWindow::openSplit(EditorWidget* source, const Qt::Orientation orientati
         connect(splitEditor_, &EditorWidget::contextMenuRequested, this,
                 [this](const QPoint& position) { showEditorContextMenu(splitEditor_, position); });
         connect(splitEditor_, &EditorWidget::definitionRequested, this,
-                [this](const QString& symbol, const QString& fileToken,
-                       const QString& lineText) {
+                [this](const QString& symbol, const QString& fileToken, const QString& lineText) {
                     resolveDefinition(splitEditor_, symbol, fileToken, lineText);
                 });
         connect(splitEditor_, &EditorWidget::editorStateChanged, this, [this] {

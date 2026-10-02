@@ -85,7 +85,7 @@ class PreviewBrowser final : public QTextBrowser {
             return;
         }
 
-        const qreal documentMargin = document()->documentMargin();
+        const qreal documentMargin = document()->rootFrame()->frameFormat().leftMargin();
         const qreal cardWidth = document()->size().width() - (documentMargin * 2.0);
         const QPointF offset = scrollOffset();
         auto* layout = document()->documentLayout();
@@ -172,7 +172,7 @@ namespace {
 
 constexpr int previewDebounceMilliseconds = 150;
 constexpr qreal previewDocumentPadding = 28.0;
-constexpr qreal previewDocumentMaxWidth = 760.0;
+constexpr qreal previewDocumentMaxWidth = 960.0;
 bool isClosingFence(const QString& line, const QString& openingFence) {
     const QString value = line.trimmed();
     if (value.size() < openingFence.size()) {
@@ -204,6 +204,7 @@ MarkdownPreviewPane::MarkdownPreviewPane(QWidget* parent)
     setMinimumWidth(280);
 
     auto* header = new QWidget(this);
+    header_ = header;
     header->setProperty("kvRole", QStringLiteral("previewHeader"));
     auto* headerLayout = new QHBoxLayout(header);
     headerLayout->setContentsMargins(14, 0, 6, 0);
@@ -229,6 +230,8 @@ MarkdownPreviewPane::MarkdownPreviewPane(QWidget* parent)
     browser_->setOpenLinks(false);
     browser_->setOpenExternalLinks(false);
     browser_->setReadOnly(true);
+    browser_->document()->setDocumentMargin(previewDocumentPadding);
+    setFocusProxy(browser_);
 
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -275,12 +278,16 @@ MarkdownPreviewPane::MarkdownPreviewPane(QWidget* parent)
 
 void MarkdownPreviewPane::setSource(const QString& markdown, const QString& filePath,
                                     const ThemePalette& palette) {
+    if (hasSource_ && markdown_ == markdown && filePath_ == filePath && palette_ == palette)
+        return;
     markdown_ = markdown;
     filePath_ = filePath;
     palette_ = palette;
     hasSource_ = true;
     renderTimer_->start();
 }
+
+void MarkdownPreviewPane::setEmbedded(const bool embedded) { header_->setVisible(!embedded); }
 
 void MarkdownPreviewPane::showEmpty(const ThemePalette& palette) {
     renderTimer_->stop();
@@ -296,6 +303,9 @@ void MarkdownPreviewPane::showEmpty(const ThemePalette& palette) {
 }
 
 void MarkdownPreviewPane::setTypography(const int fontSizePixels, const int lineHeightPixels) {
+    if (fontSizePixels_ == qBound(8, fontSizePixels, 48) &&
+        lineHeightPixels_ == qBound(qMax(12, qBound(8, fontSizePixels, 48)), lineHeightPixels, 96))
+        return;
     fontSizePixels_ = qBound(8, fontSizePixels, 48);
     lineHeightPixels_ = qBound(qMax(12, fontSizePixels_), lineHeightPixels, 96);
     if (hasSource_) {
@@ -327,12 +337,15 @@ void MarkdownPreviewPane::renderNow() {
         filePath_.isEmpty()
             ? QUrl()
             : QUrl::fromLocalFile(QFileInfo(filePath_).absolutePath() + QLatin1Char('/')));
+    browser_->document()->setLayoutEnabled(false);
     applyDocumentStyle();
     auto markdownFeatures = QTextDocument::MarkdownFeatures(QTextDocument::MarkdownDialectGitHub);
     markdownFeatures.setFlag(QTextDocument::MarkdownNoHTML);
     browser_->document()->setMarkdown(prepared.markdown, markdownFeatures);
     applyBlockTypography();
     linkMermaidImages();
+    updateDocumentMargin();
+    browser_->document()->setLayoutEnabled(true);
 
     if (prepared.rendererUnavailable) {
         setNotice(QStringLiteral("Mermaid preview needs mmdc. Install it with: "
@@ -415,7 +428,7 @@ QImage MarkdownPreviewPane::renderSvg(const QString& filePath) const {
     if (logicalSize.isEmpty()) {
         logicalSize = QSize(640, 360);
     }
-    const int availableWidth = qMax(240, browser_->viewport()->width() - 48);
+    const int availableWidth = qMax(240, qMin(960, browser_->viewport()->width() - 48));
     if (logicalSize.width() > availableWidth) {
         logicalSize.scale(availableWidth, 1600, Qt::KeepAspectRatio);
     }
@@ -529,7 +542,16 @@ void MarkdownPreviewPane::updateDocumentMargin() {
     const qreal viewportWidth = browser_->viewport()->width();
     const qreal horizontalMargin =
         qMax(previewDocumentPadding, (viewportWidth - previewDocumentMaxWidth) / 2.0);
-    browser_->document()->setDocumentMargin(horizontalMargin);
+    auto* frame = browser_->document()->rootFrame();
+    auto format = frame->frameFormat();
+    if (qFuzzyCompare(format.leftMargin(), horizontalMargin) &&
+        qFuzzyCompare(format.rightMargin(), horizontalMargin))
+        return;
+    format.setLeftMargin(horizontalMargin);
+    format.setRightMargin(horizontalMargin);
+    format.setTopMargin(previewDocumentPadding);
+    format.setBottomMargin(previewDocumentPadding);
+    frame->setFrameFormat(format);
 }
 
 void MarkdownPreviewPane::applyBlockTypography() {

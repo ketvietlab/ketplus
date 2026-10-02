@@ -1,4 +1,7 @@
 #include "git/GitDiffView.h"
+#include "editor/SyntaxDefinition.h"
+#include "git/GitRevisionContent.h"
+#include "preview/MarkdownModeController.h"
 
 #include "editor/EditorWidget.h"
 #include "ui/Theme.h"
@@ -11,9 +14,9 @@
 #include <QClipboard>
 #include <QColor>
 #include <QFileInfo>
-#include <QHeaderView>
 #include <QHBoxLayout>
 #include <QHash>
+#include <QHeaderView>
 #include <QLabel>
 #include <QPainter>
 #include <QRegularExpression>
@@ -299,24 +302,24 @@ class GitDiffModel final : public QAbstractTableModel {
                                                   line.text.at(utf16Start + 1).isLowSurrogate()
                                               ? 2
                                               : 1;
-                    const int style = static_cast<unsigned char>(
-                        styledBytes.at(bytePosition * 2 + 1));
+                    const int style =
+                        static_cast<unsigned char>(styledBytes.at(bytePosition * 2 + 1));
                     const QByteArray encoded = line.text.mid(utf16Start, unitCount).toUtf8();
 
                     auto cachedFormat = formatsByStyle.constFind(style);
                     if (cachedFormat == formatsByStyle.cend()) {
                         QTextCharFormat format;
-                        format.setForeground(qtColor(syntaxEngine.send(
-                            message(Scintilla::Message::StyleGetFore),
-                            static_cast<uptr_t>(style))));
-                        format.setFontWeight(syntaxEngine.send(
-                                                 message(Scintilla::Message::StyleGetBold),
-                                                 static_cast<uptr_t>(style))
-                                                 ? QFont::Bold
-                                                 : QFont::Normal);
-                        format.setFontItalic(syntaxEngine.send(
-                                                  message(Scintilla::Message::StyleGetItalic),
-                                                  static_cast<uptr_t>(style)) != 0);
+                        format.setForeground(
+                            qtColor(syntaxEngine.send(message(Scintilla::Message::StyleGetFore),
+                                                      static_cast<uptr_t>(style))));
+                        format.setFontWeight(
+                            syntaxEngine.send(message(Scintilla::Message::StyleGetBold),
+                                              static_cast<uptr_t>(style))
+                                ? QFont::Bold
+                                : QFont::Normal);
+                        format.setFontItalic(
+                            syntaxEngine.send(message(Scintilla::Message::StyleGetItalic),
+                                              static_cast<uptr_t>(style)) != 0);
                         cachedFormat = formatsByStyle.insert(style, format);
                     }
                     const QTextCharFormat& format = cachedFormat.value();
@@ -458,11 +461,11 @@ class DiffTextDelegate final : public QStyledItemDelegate {
             painter->setFont(codeFont);
             painter->setPen(index.data(Qt::ForegroundRole).value<QColor>());
             const auto alignment = index.data(Qt::TextAlignmentRole).value<Qt::Alignment>();
-            painter->drawText(textRect,
-                              (alignment == Qt::Alignment() ? Qt::AlignLeft | Qt::AlignVCenter
-                                                            : alignment) |
-                                  Qt::TextSingleLine,
-                              text);
+            painter->drawText(
+                textRect,
+                (alignment == Qt::Alignment() ? Qt::AlignLeft | Qt::AlignVCenter : alignment) |
+                    Qt::TextSingleLine,
+                text);
         }
         painter->restore();
     }
@@ -470,10 +473,18 @@ class DiffTextDelegate final : public QStyledItemDelegate {
 
 GitDiffView::GitDiffView(QWidget* parent)
     : QWidget(parent), model_(new GitDiffModel(this)), table_(new QTableView(this)),
-      syntaxEngine_(new EditorWidget(this)),
-      fileLabel_(new QLabel(this)), pathLabel_(new QLabel(this)),
-      scopeLabel_(new QLabel(this)), statsLabel_(new QLabel(this)),
+      syntaxEngine_(new EditorWidget(this)), fileLabel_(new QLabel(this)),
+      pathLabel_(new QLabel(this)), scopeLabel_(new QLabel(this)), statsLabel_(new QLabel(this)),
       openButton_(new QToolButton(this)), contextButton_(new QToolButton(this)) {
+    revisionContent_ = new GitRevisionContent(this);
+    markdownModes_ = new MarkdownModeController(table_, [this] { return revisionText_; }, true);
+    connect(markdownModes_, &MarkdownModeController::fileOpenRequested, this,
+            &GitDiffView::openFileRequested);
+    connect(revisionContent_, &GitRevisionContent::ready, this,
+            [this](const QString& content, const QString& error) {
+                revisionText_ = content;
+                markdownModes_->setAvailable(error.isEmpty(), error);
+            });
     setProperty("kvRole", QStringLiteral("gitDiff"));
     setAttribute(Qt::WA_StyledBackground, true);
 
@@ -579,8 +590,14 @@ QString GitDiffView::filePath() const { return filePath_; }
 
 GitDiffMode GitDiffView::mode() const noexcept { return mode_; }
 
-void GitDiffView::setDiff(const QString& filePath, const GitDiffMode mode,
-                          const QString& diff, const ThemePalette& palette) {
+void GitDiffView::setDiff(const QString& filePath, const GitDiffMode mode, const QString& diff,
+                          const ThemePalette& palette) {
+    const bool markdown = QString::fromLatin1(syntaxDefinitionForPath(filePath).name) == "markdown";
+    markdownModes_->configure(filePath, palette, markdown);
+    if (markdown) {
+        markdownModes_->setAvailable(false, "Loading Markdown…");
+        revisionContent_->load(filePath, mode);
+    }
     filePath_ = filePath;
     mode_ = mode;
     rawDiff_ = diff;
@@ -608,6 +625,9 @@ void GitDiffView::applyEditorSettings(const EditorSettings& settings) {
 
 void GitDiffView::applyTheme(const ThemePalette& palette) {
     palette_ = palette;
+    markdownModes_->configure(filePath_, palette,
+                              QString::fromLatin1(syntaxDefinitionForPath(filePath_).name) ==
+                                  "markdown");
     model_->applyTheme(palette);
     model_->applySyntax(filePath_, *syntaxEngine_, palette);
 }

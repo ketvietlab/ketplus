@@ -1,4 +1,5 @@
 #include "editor/EditorWidget.h"
+#include "preview/MarkdownModeController.h"
 
 #include "editor/SyntaxDefinition.h"
 #include "ui/Theme.h"
@@ -232,6 +233,8 @@ EditorWidget::EditorWidget(QWidget* parent)
                     static_cast<int>(Scintilla::ModificationFlags::DeleteText);
                 if ((static_cast<int>(type) & textChanges) != 0) {
                     embeddedStyleDirty_ = true;
+                    if (markdownPresentation_)
+                        markdownPresentation_->invalidate();
                 }
             });
     connect(this, &ScintillaEditBase::linesAdded, this,
@@ -338,6 +341,7 @@ Document::Result EditorWidget::loadFile(const QString& filePath) {
 
     setText(result.content);
     configureLexerForPath(document_->filePath());
+    updateMarkdownPresentation(true);
     return {true, {}};
 }
 
@@ -586,6 +590,9 @@ void EditorWidget::shareDocumentWith(const EditorWidget& source) {
 }
 
 void EditorWidget::applyTheme(const ThemePalette& palette) {
+    presentationPalette_ = palette;
+    if (markdownPresentation_)
+        updateMarkdownPresentation();
     const auto family = editorSettings_.fontFamily.toUtf8();
     const int sizeHundredthPoints =
         qRound(editorSettings_.fontSizePixels * 72.0 * 100.0 / logicalDpiY());

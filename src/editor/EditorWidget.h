@@ -3,6 +3,7 @@
 #include "core/Document.h"
 #include "editor/EditorSettings.h"
 #include "editor/EditorViewOptions.h"
+#include "ui/Theme.h"
 
 #include <ScintillaEditBase.h>
 
@@ -20,7 +21,7 @@ class QPoint;
 
 namespace ketplus {
 
-struct ThemePalette;
+class MarkdownModeController;
 
 struct FindResult final {
     bool found{false};
@@ -88,6 +89,10 @@ class EditorWidget final : public ScintillaEditBase {
     [[nodiscard]] const EditorViewOptions& viewOptions() const noexcept;
     void shareDocumentWith(const EditorWidget& source);
     void applyTheme(const ThemePalette& palette);
+    void setMarkdownPreviewVisible(bool visible);
+    bool isMarkdownPreviewVisible() const;
+    void setPreviewTypography(int fontSizePixels, int lineHeightPixels);
+
     void undoEdit();
     void redoEdit();
     void cutSelection();
@@ -151,6 +156,8 @@ class EditorWidget final : public ScintillaEditBase {
   signals:
     // Emitted on Ctrl/Cmd+click, with the word and the file token under the pointer, and the
     // whole line, which may import the word from another file.
+    void previewFileOpenRequested(const QString& path);
+    void previewStatusMessageRequested(const QString& message);
     void definitionRequested(const QString& symbol, const QString& fileToken,
                              const QString& lineText);
     void dirtyStateChanged(bool dirty);
@@ -164,6 +171,11 @@ class EditorWidget final : public ScintillaEditBase {
     bool eventFilter(QObject* watched, QEvent* event) override;
 
   private:
+    void updateMarkdownPresentation(bool opened = false);
+    MarkdownModeController* markdownPresentation_{nullptr};
+    ThemePalette presentationPalette_;
+    int previewFontSize_{14};
+    int previewLineHeight_{22};
     struct ViewState final {
         sptr_t caret{0};
         sptr_t anchor{0};
