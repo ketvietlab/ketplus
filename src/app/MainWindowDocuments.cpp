@@ -421,6 +421,7 @@ EditorWidget* MainWindow::createEditor() {
     connect(editor, &EditorWidget::editorStateChanged, this, [this, editor] {
         if (currentEditor() == editor) {
             updateEditorActions();
+            updateMarkdownPreview();
         }
     });
     connect(editor, &EditorWidget::notifyChange, this, [this, editor] {
