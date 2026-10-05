@@ -17,7 +17,8 @@ namespace {
 
 // v4: labels are SVG text rows, not HTML in <foreignObject>, which Qt SVG does not draw.
 // v5: node labels carry an explicit fill; cached state diagrams drew them black.
-constexpr auto cacheVersion = "ketplus-mermaid-v5";
+// v6: Qt-readable class colours, Két theme, early stylesheets and rounded rectangles.
+constexpr auto cacheVersion = "ketplus-mermaid-v6";
 
 bool isExecutableFile(const QString& path) {
     const QFileInfo file(path);
@@ -25,56 +26,115 @@ bool isExecutableFile(const QString& path) {
 }
 
 QByteArray mermaidConfiguration(const bool darkTheme) {
-    const QString background = darkTheme ? QStringLiteral("#1D2228")
-                                         : QStringLiteral("#FFFFFF");
-    const QString surface = darkTheme ? QStringLiteral("#23282F")
-                                      : QStringLiteral("#F7F5F5");
-    const QString text = darkTheme ? QStringLiteral("#CDD2D8")
-                                   : QStringLiteral("#24262A");
-    const QString border = darkTheme ? QStringLiteral("#858D99")
-                                     : QStringLiteral("#717373");
-    const QString line = darkTheme ? QStringLiteral("#B4BAC4")
-                                   : QStringLiteral("#5A5C5E");
+    // Két Design System tokens (packages/design-system foundations/tokens.css). Translucent
+    // tokens are pre-mixed over the surface: a diagram is drawn on its own.
+    struct Palette final {
+        const char* surface;       // --kv-color-surface
+        const char* raised;        // --kv-color-surface-subtle
+        const char* group;         // --kv-color-canvas-raised
+        const char* groupBorder;   // --kv-border-default
+        const char* ink;           // --kv-color-ink
+        const char* inkSecondary;  // --kv-color-ink-secondary
+        const char* line;          // --kv-color-ink-muted
+        const char* node;          // --kv-color-accent-soft
+        const char* nodeBorder;    // --kv-accent-border; primary-800 on dark, where the
+                                   // 32% border disappears against a diagram's fills
+        const char* accent;        // --kv-color-accent
+        const char* neutralBorder; // --kv-border-strong
+        const char* note;          // --kv-color-warning-soft
+        const char* noteBorder;    // --kv-warning-border
+        const char* danger;        // --kv-color-danger
+        const char* dangerSoft;    // --kv-color-danger-soft
+        const char* positive;      // --kv-color-positive
+        const char* warning;       // --kv-color-warning
+        const char* info;          // --kv-color-info
+    };
+    static constexpr Palette dark{"#1D2228", "#23282F", "#171B20", "#30353A", "#F2F4F7", "#B4BAC4",
+                                  "#858D99", "#252C42", "#394985", "#5968DF", "#3A3F44", "#39352B",
+                                  "#4D422D", "#EF665C", "#382B2F", "#40C97B", "#E5A93C", "#AAB6ED"};
+    static constexpr Palette light{"#FFFFFF", "#FBFAFA", "#F7F5F5", "#DDDCDE", "#24262A",
+                                   "#5A5C5E", "#717373", "#EEF0FB", "#C3CDF0", "#4F5ED0",
+                                   "#CCCCCD", "#FBF3E6", "#EED6AD", "#B42318", "#FEF3F2",
+                                   "#1D5D3B", "#8B5C12", "#4557BC"};
+    const Palette& kv = darkTheme ? dark : light;
+    const auto c = [](const char* value) { return QString::fromLatin1(value); };
+    const QString text = c(kv.ink);
 
-    const QJsonObject themeVariables{
+    // Nodes read as accent-soft cards on the surface, groups as the raised canvas, notes as
+    // warning-soft callouts and lines in muted ink, as Két surfaces do elsewhere.
+    QJsonObject themeVariables{
         {QStringLiteral("darkMode"), darkTheme},
-        {QStringLiteral("background"), background},
-        {QStringLiteral("primaryColor"), surface},
+        {QStringLiteral("background"), c(kv.surface)},
+        {QStringLiteral("primaryColor"), c(kv.node)},
         {QStringLiteral("primaryTextColor"), text},
-        {QStringLiteral("primaryBorderColor"), border},
-        {QStringLiteral("secondaryColor"), surface},
+        {QStringLiteral("primaryBorderColor"), c(kv.nodeBorder)},
+        {QStringLiteral("secondaryColor"), c(kv.raised)},
         {QStringLiteral("secondaryTextColor"), text},
-        {QStringLiteral("secondaryBorderColor"), border},
-        {QStringLiteral("tertiaryColor"), background},
+        {QStringLiteral("secondaryBorderColor"), c(kv.neutralBorder)},
+        {QStringLiteral("tertiaryColor"), c(kv.group)},
         {QStringLiteral("tertiaryTextColor"), text},
-        {QStringLiteral("tertiaryBorderColor"), border},
+        {QStringLiteral("tertiaryBorderColor"), c(kv.groupBorder)},
         {QStringLiteral("textColor"), text},
-        {QStringLiteral("lineColor"), line},
-        {QStringLiteral("mainBkg"), surface},
-        {QStringLiteral("nodeBkg"), surface},
+        {QStringLiteral("lineColor"), c(kv.line)},
+        {QStringLiteral("mainBkg"), c(kv.node)},
+        {QStringLiteral("nodeBkg"), c(kv.node)},
         {QStringLiteral("nodeTextColor"), text},
-        {QStringLiteral("nodeBorder"), border},
-        {QStringLiteral("edgeLabelBackground"), background},
-        {QStringLiteral("stateBkg"), surface},
+        {QStringLiteral("nodeBorder"), c(kv.nodeBorder)},
+        {QStringLiteral("clusterBkg"), c(kv.group)},
+        {QStringLiteral("clusterBorder"), c(kv.groupBorder)},
+        {QStringLiteral("titleColor"), text},
+        {QStringLiteral("edgeLabelBackground"), c(kv.surface)},
+        {QStringLiteral("stateBkg"), c(kv.node)},
         {QStringLiteral("stateLabelColor"), text},
-        {QStringLiteral("transitionColor"), line},
-        {QStringLiteral("transitionLabelColor"), text},
-        {QStringLiteral("labelBackgroundColor"), surface},
-        {QStringLiteral("actorBkg"), surface},
-        {QStringLiteral("actorBorder"), border},
+        {QStringLiteral("altBackground"), c(kv.group)},
+        {QStringLiteral("compositeBackground"), c(kv.group)},
+        {QStringLiteral("compositeTitleBackground"), c(kv.raised)},
+        {QStringLiteral("transitionColor"), c(kv.line)},
+        {QStringLiteral("transitionLabelColor"), c(kv.inkSecondary)},
+        {QStringLiteral("labelBackgroundColor"), c(kv.surface)},
+        {QStringLiteral("actorBkg"), c(kv.node)},
+        {QStringLiteral("actorBorder"), c(kv.nodeBorder)},
         {QStringLiteral("actorTextColor"), text},
-        {QStringLiteral("actorLineColor"), line},
-        {QStringLiteral("signalColor"), line},
+        {QStringLiteral("actorLineColor"), c(kv.line)},
+        {QStringLiteral("signalColor"), c(kv.line)},
         {QStringLiteral("signalTextColor"), text},
+        {QStringLiteral("labelBoxBkgColor"), c(kv.raised)},
+        {QStringLiteral("labelBoxBorderColor"), c(kv.neutralBorder)},
         {QStringLiteral("labelTextColor"), text},
-        {QStringLiteral("noteBkgColor"), surface},
+        {QStringLiteral("loopTextColor"), c(kv.inkSecondary)},
+        {QStringLiteral("activationBkgColor"), c(kv.raised)},
+        {QStringLiteral("activationBorderColor"), c(kv.accent)},
+        {QStringLiteral("sequenceNumberColor"), c("#FFFFFF")},
+        {QStringLiteral("noteBkgColor"), c(kv.note)},
         {QStringLiteral("noteTextColor"), text},
-        {QStringLiteral("noteBorderColor"), border},
+        {QStringLiteral("noteBorderColor"), c(kv.noteBorder)},
+        {QStringLiteral("errorBkgColor"), c(kv.dangerSoft)},
+        {QStringLiteral("errorTextColor"), c(kv.danger)},
         {QStringLiteral("fontFamily"), QStringLiteral("Inter, sans-serif")},
         {QStringLiteral("fontSize"), QStringLiteral("13px")},
     };
+    // Series colours (pie, journey, git, timeline) follow the semantic hues in order.
+    const char* series[] = {kv.accent, kv.positive, kv.warning, kv.danger, kv.info, kv.line};
+    for (int index = 0; index < 12; ++index) {
+        const QString colour = c(series[index % 6]);
+        themeVariables.insert(QStringLiteral("pie%1").arg(index + 1), colour);
+        themeVariables.insert(QStringLiteral("cScale%1").arg(index), colour);
+        themeVariables.insert(QStringLiteral("git%1").arg(index), colour);
+    }
+    themeVariables.insert(QStringLiteral("pieStrokeColor"), c(kv.surface));
+    themeVariables.insert(QStringLiteral("pieOuterStrokeColor"), c(kv.neutralBorder));
+    themeVariables.insert(QStringLiteral("pieTitleTextColor"), text);
+    themeVariables.insert(QStringLiteral("pieSectionTextColor"), c("#FFFFFF"));
+    themeVariables.insert(QStringLiteral("pieLegendTextColor"), text);
     // HTML labels render inside <foreignObject>, which Qt SVG skips: every label vanished.
     const QJsonObject svgLabels{{QStringLiteral("htmlLabels"), false}};
+    const QJsonObject sequence{
+        {QStringLiteral("actorFontFamily"), QStringLiteral("Inter, sans-serif")},
+        {QStringLiteral("noteFontFamily"), QStringLiteral("Inter, sans-serif")},
+        {QStringLiteral("messageFontFamily"), QStringLiteral("Inter, sans-serif")},
+        {QStringLiteral("actorFontSize"), 13},
+        {QStringLiteral("noteFontSize"), 13},
+        {QStringLiteral("messageFontSize"), 13}};
     // Mermaid's state diagram styles only HTML node labels; its SVG text rows get
     // no fill and draw black, unreadable on the dark background.
     const QString themeCss = QStringLiteral(".label text{fill:%1;}").arg(text);
@@ -84,6 +144,7 @@ QByteArray mermaidConfiguration(const bool darkTheme) {
                                      {QStringLiteral("flowchart"), svgLabels},
                                      {QStringLiteral("class"), svgLabels},
                                      {QStringLiteral("state"), svgLabels},
+                                     {QStringLiteral("sequence"), sequence},
                                      {QStringLiteral("themeVariables"), themeVariables}})
         .toJson(QJsonDocument::Compact);
 }
@@ -111,7 +172,7 @@ MermaidRenderer::MermaidRenderer(QObject* parent)
                 if (succeeded && partial.endsWith(QStringLiteral(".svg"))) {
                     QFile output(partial);
                     if (output.open(QIODevice::ReadWrite)) {
-                        const QByteArray flattened = flattenLabelRows(output.readAll());
+                        const QByteArray flattened = qtReadableSvg(output.readAll());
                         output.resize(0);
                         output.seek(0);
                         succeeded = output.write(flattened) == flattened.size();
@@ -150,9 +211,77 @@ MermaidRenderer::~MermaidRenderer() {
     }
     if (currentJob_) {
         QFile::remove(partialPathFor(currentJob_->outputPath));
-        QFile::remove(QDir(cacheDirectory_).filePath(currentJob_->cacheKey + QStringLiteral(".mmd")));
-        QFile::remove(QDir(cacheDirectory_).filePath(currentJob_->cacheKey + QStringLiteral(".json")));
+        QFile::remove(
+            QDir(cacheDirectory_).filePath(currentJob_->cacheKey + QStringLiteral(".mmd")));
+        QFile::remove(
+            QDir(cacheDirectory_).filePath(currentJob_->cacheKey + QStringLiteral(".json")));
     }
+}
+
+QByteArray MermaidRenderer::qtReadableSvg(const QByteArray& svg) {
+    // classDef and `style` colours arrive as `fill:#c0392b !important`, both inline and in
+    // the stylesheet. Qt SVG reads the flag as part of the colour, rejects it and paints the
+    // shape black with black labels. Inline styles already win, and each class rule follows
+    // the theme rule it overrides, so dropping the flag keeps the cascade. Only a flag that
+    // ends a declaration goes; a label that says "!important" keeps it.
+    static const QRegularExpression important(QStringLiteral(R"re(\s*!\s*important(?=\s*[;}"]))re"),
+                                              QRegularExpression::CaseInsensitiveOption);
+    QString source = QString::fromUtf8(svg);
+    static const QRegularExpression cssContent(
+        QStringLiteral(R"re(<style\b[^>]*>.*?</style>|\sstyle="[^"]*")re"),
+        QRegularExpression::DotMatchesEverythingOption);
+    auto css = cssContent.globalMatch(source);
+    QList<QRegularExpressionMatch> cssMatches;
+    while (css.hasNext())
+        cssMatches.append(css.next());
+    for (auto it = cssMatches.crbegin(); it != cssMatches.crend(); ++it) {
+        const QString cleaned = QString(it->captured(0)).remove(important);
+        source.replace(it->capturedStart(), it->capturedLength(), cleaned);
+    }
+    // Qt applies a stylesheet only to elements parsed after it. Mermaid sequences put
+    // actor boxes before <style>, so move styles to the start of the SVG root.
+    static const QRegularExpression stylesheet(QStringLiteral(R"re(<style\b[^>]*>.*?</style>)re"),
+                                               QRegularExpression::DotMatchesEverythingOption);
+    static const QRegularExpression svgRoot(QStringLiteral(R"re(<svg\b[^>]*>)re"));
+    QString styles;
+    auto sheets = stylesheet.globalMatch(source);
+    while (sheets.hasNext())
+        styles += sheets.next().captured(0);
+    source.remove(stylesheet);
+    const auto root = svgRoot.match(source);
+    if (root.hasMatch())
+        source.insert(root.capturedEnd(), styles);
+
+    // SVG rx/ry work in both Qt and browsers; CSS border-radius does not round SVG rects.
+    // Use Két's 8px control radius, retaining larger radii for pill/stadium shapes.
+    static const QRegularExpression rectangle(QStringLiteral(R"re(<rect\b[^>]*>)re"));
+    QString rounded;
+    qsizetype copied = 0;
+    auto rectangles = rectangle.globalMatch(source);
+    while (rectangles.hasNext()) {
+        const auto rect = rectangles.next();
+        rounded += QStringView(source).mid(copied, rect.capturedStart() - copied);
+        copied = rect.capturedEnd();
+        QString element = rect.captured(0);
+        for (const QString& axis : {QStringLiteral("rx"), QStringLiteral("ry")}) {
+            const QRegularExpression attribute(QStringLiteral(R"re(\s%1="([^"]*)")re").arg(axis));
+            const auto existing = attribute.match(element);
+            if (existing.hasMatch()) {
+                bool numeric = false;
+                const double radius = existing.captured(1).toDouble(&numeric);
+                if (numeric && radius < 8.0)
+                    element.replace(existing.capturedStart(), existing.capturedLength(),
+                                    QStringLiteral(" %1=\"8\"").arg(axis));
+            } else {
+                const qsizetype end = element.endsWith(QStringLiteral("/>")) ? element.size() - 2
+                                                                             : element.size() - 1;
+                element.insert(end, QStringLiteral(" %1=\"8\"").arg(axis));
+            }
+        }
+        rounded += element;
+    }
+    rounded += QStringView(source).mid(copied);
+    return flattenLabelRows(rounded.toUtf8());
 }
 
 QByteArray MermaidRenderer::flattenLabelRows(const QByteArray& svg) {
@@ -225,7 +354,8 @@ bool MermaidRenderer::isAvailable() const noexcept { return !executablePath_.isE
 
 const QString& MermaidRenderer::executablePath() const noexcept { return executablePath_; }
 
-MermaidRenderer::Result MermaidRenderer::request(const QString& source, const bool darkTheme, const bool raster) {
+MermaidRenderer::Result MermaidRenderer::request(const QString& source, const bool darkTheme,
+                                                 const bool raster) {
     const QString cacheKey = keyFor(source, darkTheme, raster);
     const QString outputPath = outputPathFor(cacheKey, raster);
     if (!isAvailable()) {
@@ -308,7 +438,8 @@ QString MermaidRenderer::partialPathFor(const QString& outputPath) {
 }
 
 QString MermaidRenderer::outputPathFor(const QString& cacheKey, const bool raster) const {
-    return QDir(cacheDirectory_).filePath(cacheKey + (raster ? QStringLiteral(".png") : QStringLiteral(".svg")));
+    return QDir(cacheDirectory_)
+        .filePath(cacheKey + (raster ? QStringLiteral(".png") : QStringLiteral(".svg")));
 }
 
 void MermaidRenderer::startNext() {
@@ -343,11 +474,11 @@ void MermaidRenderer::startNext() {
                           QStringLiteral("-c"), configPath};
     QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
     const QString executableDirectory = QFileInfo(executablePath_).absolutePath();
-    environment.insert(QStringLiteral("PATH"),
-                       executableDirectory + QDir::listSeparator() +
-                           environment.value(QStringLiteral("PATH")));
+    environment.insert(QStringLiteral("PATH"), executableDirectory + QDir::listSeparator() +
+                                                   environment.value(QStringLiteral("PATH")));
     process_->setProcessEnvironment(environment);
-    if (currentJob_->outputPath.endsWith(QStringLiteral(".png"))) arguments << QStringLiteral("-s") << QStringLiteral("2");
+    if (currentJob_->outputPath.endsWith(QStringLiteral(".png")))
+        arguments << QStringLiteral("-s") << QStringLiteral("2");
 #ifdef Q_OS_WIN
     if (executablePath_.endsWith(QStringLiteral(".cmd"), Qt::CaseInsensitive) ||
         executablePath_.endsWith(QStringLiteral(".bat"), Qt::CaseInsensitive)) {

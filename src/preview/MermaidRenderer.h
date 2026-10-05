@@ -1,8 +1,8 @@
 #pragma once
 
-#include <QObject>
 #include <QHash>
 #include <QList>
+#include <QObject>
 #include <QSet>
 #include <QString>
 
@@ -40,6 +40,9 @@ class MermaidRenderer final : public QObject {
     // Qt SVG ignores em-based `y`/`dy` and nested <tspan>, so the rows mermaid emits with
     // htmlLabels off would otherwise sit at the top of their shapes or disappear.
     [[nodiscard]] static QByteArray flattenLabelRows(const QByteArray& svg);
+    // Everything mermaid-cli's SVG needs before Qt SVG draws it: `!important` dropped from
+    // colours, stylesheets placed before shapes, 8px rectangle radii and flattened labels.
+    [[nodiscard]] static QByteArray qtReadableSvg(const QByteArray& svg);
 
   signals:
     void diagramReady(const QString& cacheKey);

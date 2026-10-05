@@ -7,10 +7,13 @@
 #include <QFile>
 #include <QGraphicsSvgItem>
 #include <QGraphicsView>
+#include <QImage>
 #include <QLabel>
 #include <QNativeGestureEvent>
+#include <QPainter>
 #include <QPointingDevice>
 #include <QPushButton>
+#include <QSvgRenderer>
 #include <QTemporaryDir>
 #include <QTextBlock>
 #include <QTextBrowser>
@@ -32,6 +35,9 @@ class MarkdownPreviewPaneTest final : public QObject {
     void discoversMmdcInstalledByNvm();
     void rendersMermaidAndOpensThePopup();
     void opensVectorDiagramWithPanControls();
+    void classColoursSurviveQtSvg();
+    void sequenceColoursSurviveQtSvg();
+    void roundsDiagramRectangles();
 };
 
 ketplus::ThemePalette previewTestPalette() {
@@ -260,10 +266,13 @@ while [ "$#" -gt 0 ]; do
   else shift
   fi
 done
-if [ -z "$config" ] || ! grep -q '"stateLabelColor":"#CDD2D8"' "$config"; then
+if [ -z "$config" ] || ! grep -q '"stateLabelColor":"#F2F4F7"' "$config"; then
   exit 12
 fi
-if ! grep -q '"themeCSS":".label text{fill:#CDD2D8;}"' "$config"; then
+if ! grep -q '"primaryColor":"#252C42"' "$config"; then
+  exit 14
+fi
+if ! grep -q '"themeCSS":".label text{fill:#F2F4F7;}"' "$config"; then
   exit 13
 fi
 printf '%s' '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="160"><rect x="10" y="10" width="300" height="140" fill="#8b5cf6"/></svg>' > "$output"
@@ -349,6 +358,73 @@ void MarkdownPreviewPaneTest::opensVectorDiagramWithPanControls() {
     QApplication::sendEvent(view->viewport(), &pinch);
     QVERIFY(pinch.isAccepted());
     QVERIFY(view->transform().m11() > buttonScale);
+}
+
+// What mermaid-cli writes for `classDef zalo fill:#c0392b,color:#fff` and `class SIG zalo`.
+void MarkdownPreviewPaneTest::classColoursSurviveQtSvg() {
+    const QByteArray svg =
+        R"(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 40">)"
+        R"(<style>#d .node rect{fill:#23282F;}#d .zalo rect{fill:rgb(192, 57, 43)!important;})"
+        R"(#d .zalo tspan{fill:rgb(255, 255, 255)!important;}</style><g id="d">)"
+        R"(<g class="node default zalo"><rect style="fill:#c0392b !important;stroke:#f1948a !IMPORTANT" )"
+        R"(x="0" y="0" width="100" height="40"/>)"
+        R"(<text x="5" y="30"><tspan>Say !important; &quot;!important&quot;</tspan></text></g></g></svg>)";
+    const QByteArray readable = ketplus::MermaidRenderer::qtReadableSvg(svg);
+    QVERIFY(!readable.contains("43)!important;"));
+    QVERIFY(!readable.contains("!IMPORTANT"));
+    QVERIFY(readable.contains("Say !important; &quot;!important&quot;</tspan>"));
+
+    QSvgRenderer renderer(readable);
+    QVERIFY(renderer.isValid());
+    QImage image(100, 40, QImage::Format_ARGB32);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    renderer.render(&painter);
+    painter.end();
+    // The class colour, not the black Qt SVG falls back to for `#c0392b !important`.
+    QCOMPARE(image.pixelColor(90, 5).name(), QStringLiteral("#c0392b"));
+}
+
+void MarkdownPreviewPaneTest::sequenceColoursSurviveQtSvg() {
+    const QByteArray svg =
+        R"(<svg id="my-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 40">)"
+        R"(<rect x="0" y="0" width="40" height="40" fill="#eaeaea" stroke="#666" class="actor actor-top"/>)"
+        R"(<style>#my-svg .actor{stroke:#394985;fill:#252C42;})"
+        R"(#my-svg .activation0{fill:#23282F;stroke:#5968DF;}</style>)"
+        R"(<rect x="60" y="0" width="40" height="40" fill="#EDF2AE" stroke="#666" class="activation0"/></svg>)";
+    QSvgRenderer renderer(ketplus::MermaidRenderer::qtReadableSvg(svg));
+    QVERIFY(renderer.isValid());
+    QImage image(100, 40, QImage::Format_ARGB32);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    renderer.render(&painter);
+    painter.end();
+    QCOMPARE(image.pixelColor(20, 20).name(), QStringLiteral("#252c42"));
+    QCOMPARE(image.pixelColor(80, 20).name(), QStringLiteral("#23282f"));
+}
+
+void MarkdownPreviewPaneTest::roundsDiagramRectangles() {
+    const QByteArray svg =
+        R"(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 40">)"
+        R"(<rect width="40" height="40" fill="#252c42"/>)"
+        R"(<rect x="60" width="40" height="40" rx="3" ry="3" fill="#252c42"/>)"
+        R"(<rect x="45" width="10" height="40" rx="20" ry="20" fill="#252c42"/></svg>)";
+    const QByteArray readable = ketplus::MermaidRenderer::qtReadableSvg(svg);
+    QCOMPARE(readable.count("rx=\"8\""), 2);
+    QCOMPARE(readable.count("ry=\"8\""), 2);
+    QVERIFY(readable.contains("rx=\"20\" ry=\"20\""));
+    QCOMPARE(ketplus::MermaidRenderer::qtReadableSvg(readable), readable);
+    QSvgRenderer renderer(readable);
+    QVERIFY(renderer.isValid());
+    QImage image(100, 40, QImage::Format_ARGB32);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    renderer.render(&painter);
+    painter.end();
+    QCOMPARE(image.pixelColor(0, 0).alpha(), 0);
+    QCOMPARE(image.pixelColor(60, 0).alpha(), 0);
+    QCOMPARE(image.pixelColor(20, 20).name(), QStringLiteral("#252c42"));
+    QCOMPARE(image.pixelColor(80, 20).name(), QStringLiteral("#252c42"));
 }
 
 QTEST_MAIN(MarkdownPreviewPaneTest)

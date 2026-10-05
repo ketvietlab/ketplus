@@ -13,7 +13,7 @@
 #include <functional>
 
 #ifndef KETPLUS_CM_VERSION
-#define KETPLUS_CM_VERSION "0.3.1"
+#define KETPLUS_CM_VERSION "0.3.2"
 #endif
 
 namespace {
