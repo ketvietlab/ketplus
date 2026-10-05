@@ -59,6 +59,19 @@ GitService::GitService(QObject* parent)
     connect(refreshTimer_, &QTimer::timeout, this, &GitService::refresh);
 }
 
+GitService::~GitService() {
+    refreshTimer_->stop();
+    // QProcess emits finished from its destructor. Its callbacks use snapshot/worktree
+    // members, so disconnect and stop producers before those derived members are freed.
+    for (auto* process : findChildren<QProcess*>()) {
+        process->disconnect();
+        if (process->state() != QProcess::NotRunning) {
+            process->kill();
+            process->waitForFinished(1000);
+        }
+    }
+}
+
 bool GitService::isAvailable() const noexcept { return !gitExecutable_.isEmpty(); }
 
 const GitSnapshot& GitService::snapshot() const noexcept { return snapshot_; }
@@ -261,11 +274,11 @@ void GitService::runGit(const QStringList& arguments, const QString& workingDire
         process->deleteLater();
     };
 
-    connect(process, &QProcess::finished, process,
+    connect(process, &QProcess::finished, this,
             [finish](const int exitCode, const QProcess::ExitStatus status) mutable {
                 finish(exitCode, status == QProcess::NormalExit);
             });
-    connect(process, &QProcess::errorOccurred, process,
+    connect(process, &QProcess::errorOccurred, this,
             [finish](const QProcess::ProcessError error) mutable {
                 if (error == QProcess::FailedToStart) {
                     finish(-1, false);

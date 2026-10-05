@@ -15,6 +15,7 @@ class GitService final : public QObject {
 
   public:
     explicit GitService(QObject* parent = nullptr);
+    ~GitService() override;
 
     [[nodiscard]] bool isAvailable() const noexcept;
     [[nodiscard]] const GitSnapshot& snapshot() const noexcept;

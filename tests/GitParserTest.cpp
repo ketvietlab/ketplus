@@ -3,12 +3,14 @@
 
 #include <QDir>
 #include <QFile>
+#include <QPointer>
 #include <QProcess>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QtTest>
 
 #include <initializer_list>
+#include <memory>
 
 namespace {
 
@@ -39,6 +41,7 @@ class GitParserTest final : public QObject {
     void parsesPorcelainV2Status();
     void parsesWorktreeList();
     void discoversWorktreesAndProducesDiffs();
+    void stopsPendingCommandsBeforeDestruction();
 };
 
 void GitParserTest::parsesPorcelainV2Status() {
@@ -129,8 +132,7 @@ void GitParserTest::discoversWorktreesAndProducesDiffs() {
                    {QStringLiteral("-c"), QStringLiteral("user.name=KetPlus Test"),
                     QStringLiteral("-c"), QStringLiteral("user.email=test@ketplus.invalid"),
                     QStringLiteral("commit"), QStringLiteral("-m"), QStringLiteral("Initial")}));
-    QVERIFY(runGit(git, root,
-                   {QStringLiteral("branch"), QStringLiteral("feature/worktree")}));
+    QVERIFY(runGit(git, root, {QStringLiteral("branch"), QStringLiteral("feature/worktree")}));
     QVERIFY(runGit(git, root,
                    {QStringLiteral("worktree"), QStringLiteral("add"), linkedRoot,
                     QStringLiteral("feature/worktree")}));
@@ -225,6 +227,37 @@ void GitParserTest::discoversWorktreesAndProducesDiffs() {
     QTRY_VERIFY_WITH_TIMEOUT(untrackedFinished, 5000);
     QVERIFY2(untrackedError.isEmpty(), qPrintable(untrackedError));
     QVERIFY2(untrackedDiff.contains(QStringLiteral("+new")), qPrintable(untrackedDiff));
+}
+
+void GitParserTest::stopsPendingCommandsBeforeDestruction() {
+    const QString git = QStandardPaths::findExecutable(QStringLiteral("git"));
+    if (git.isEmpty())
+        QSKIP("Git is not installed.");
+    QTemporaryDir workspace;
+    QVERIFY(workspace.isValid());
+    QVERIFY(runGit(git, workspace.path(), {QStringLiteral("init"), QStringLiteral("-q")}));
+    auto service = std::make_unique<ketplus::GitService>();
+    service->setWorkspacePath(workspace.path());
+    QTRY_VERIFY_WITH_TIMEOUT(!service->worktrees().isEmpty(), 5000);
+    service->refresh();
+    QList<QPointer<QProcess>> pending;
+    for (auto* process : service->findChildren<QProcess*>()) {
+        if (process->state() != QProcess::NotRunning) {
+            QVERIFY(process->waitForStarted(5000));
+            pending.append(process);
+        }
+    }
+    QVERIFY(!pending.isEmpty());
+    bool runningAtOwnerDestruction = false;
+    connect(service.get(), &QObject::destroyed, this, [&runningAtOwnerDestruction, pending] {
+        for (const auto& process : pending)
+            runningAtOwnerDestruction |= process && process->state() != QProcess::NotRunning;
+    });
+    service.reset();
+    // Producers must stop while the derived service's snapshot/worktree data still exists.
+    QVERIFY(!runningAtOwnerDestruction);
+    for (const auto& process : pending)
+        QVERIFY(process.isNull());
 }
 
 QTEST_MAIN(GitParserTest)
