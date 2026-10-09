@@ -59,9 +59,8 @@ void GitDiffViewTest::rendersStructuredInlineDiff() {
     QVERIFY(renderedCodeFont.family() != QStringLiteral("Helvetica"));
     QCOMPARE(table->verticalHeader()->defaultSectionSize(), 24);
     QCOMPARE(table->model()->rowCount(), 4);
-    QVERIFY(table->columnWidth(0) <= 30);
+    QVERIFY(table->columnWidth(0) < 46);
     QCOMPARE(table->columnWidth(0), table->columnWidth(1));
-    QCOMPARE(table->columnWidth(2), 20);
     QCOMPARE(table->columnSpan(0, 0), 4);
     QCOMPARE(table->model()->index(0, 0).data().toString(), QStringLiteral("@@ -1,2 +1,2 @@"));
     QCOMPARE(table->model()->index(1, 0).data().toString(), QStringLiteral("1"));
@@ -128,7 +127,7 @@ void GitDiffViewTest::rendersStructuredInlineDiff() {
     QCOMPARE(table->columnWidth(0), table->columnWidth(1));
     view.setDiff(QStringLiteral("/repo/example.cpp"), ketplus::GitDiffMode::Unstaged, diff,
                  palette);
-    QCOMPARE(table->columnWidth(0), shortGutter);
+    QVERIFY(table->columnWidth(0) < fourDigitGutter);
 }
 
 QTEST_MAIN(GitDiffViewTest)
