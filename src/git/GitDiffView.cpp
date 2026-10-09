@@ -14,6 +14,7 @@
 #include <QClipboard>
 #include <QColor>
 #include <QFileInfo>
+#include <QFontMetrics>
 #include <QHBoxLayout>
 #include <QHash>
 #include <QHeaderView>
@@ -27,6 +28,8 @@
 #include <QTextLayout>
 #include <QToolButton>
 #include <QVBoxLayout>
+
+#include <algorithm>
 
 namespace ketplus {
 namespace {
@@ -371,6 +374,12 @@ class GitDiffModel final : public QAbstractTableModel {
     }
 
     [[nodiscard]] int additions() const noexcept { return additions_; }
+    [[nodiscard]] int largestVisibleLineNumber() const noexcept {
+        int largest = 1;
+        for (const DiffLine& line : lines_)
+            largest = std::max({largest, line.oldLine, line.newLine});
+        return largest;
+    }
     [[nodiscard]] int deletions() const noexcept { return deletions_; }
 
     [[nodiscard]] const QVector<QTextLayout::FormatRange>& syntaxFormats(const int row) const {
@@ -555,13 +564,12 @@ GitDiffView::GitDiffView(QWidget* parent)
     table_->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
     table_->verticalHeader()->hide();
     table_->horizontalHeader()->hide();
+    table_->horizontalHeader()->setMinimumSectionSize(18);
     table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
     table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Fixed);
     table_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
     table_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
-    table_->setColumnWidth(0, 46);
-    table_->setColumnWidth(1, 46);
-    table_->setColumnWidth(2, 24);
+    table_->setColumnWidth(2, 20);
     applyEditorSettings(EditorSettings::defaults());
     syntaxEngine_->hide();
 
@@ -577,6 +585,7 @@ GitDiffView::GitDiffView(QWidget* parent)
         hideUnchangedRows_ = checked;
         model_->setHideUnchangedRows(hideUnchangedRows_);
         model_->applySyntax(filePath_, *syntaxEngine_, palette_);
+        updateLineNumberColumns();
         updateContextButton();
         updateSpans();
     });
@@ -607,6 +616,7 @@ void GitDiffView::setDiff(const QString& filePath, const GitDiffMode mode, const
     model_->setDiff(diff);
     model_->applyTheme(palette);
     model_->applySyntax(filePath, *syntaxEngine_, palette);
+    updateLineNumberColumns();
     updateHeader();
     updateSpans();
     table_->scrollToTop();
@@ -618,6 +628,7 @@ void GitDiffView::applyEditorSettings(const EditorSettings& settings) {
     syntaxEngine_->setEditorSettings(value);
     model_->setCodeFont(codeFont);
     table_->setFont(codeFont);
+    updateLineNumberColumns();
     table_->verticalHeader()->setMinimumSectionSize(value.lineHeightPixels);
     table_->verticalHeader()->setDefaultSectionSize(value.lineHeightPixels);
     table_->viewport()->update();
@@ -648,6 +659,14 @@ void GitDiffView::updateHeader() {
 void GitDiffView::updateContextButton() {
     contextButton_->setText(hideUnchangedRows_ ? QStringLiteral("Show Context")
                                                : QStringLiteral("Hide Context"));
+}
+
+void GitDiffView::updateLineNumberColumns() {
+    const int digits = QString::number(model_->largestVisibleLineNumber()).size();
+    const QFontMetrics metrics(table_->font());
+    const int width = std::max(24, metrics.horizontalAdvance(QString(digits, u'9')) + 12);
+    table_->setColumnWidth(0, width);
+    table_->setColumnWidth(1, width);
 }
 
 void GitDiffView::updateSpans() {

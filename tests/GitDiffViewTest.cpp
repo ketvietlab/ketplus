@@ -17,8 +17,7 @@ class GitDiffViewTest final : public QObject {
 };
 
 void GitDiffViewTest::rendersStructuredInlineDiff() {
-    qApp->setStyleSheet(
-        QStringLiteral("QWidget { font-family: Helvetica; font-size: 20px; }"));
+    qApp->setStyleSheet(QStringLiteral("QWidget { font-family: Helvetica; font-size: 20px; }"));
 
     ketplus::ThemePalette palette;
     palette.dark = true;
@@ -33,27 +32,25 @@ void GitDiffViewTest::rendersStructuredInlineDiff() {
     palette.positive = QStringLiteral("#40c97b");
     palette.danger = QStringLiteral("#ef665c");
 
-    const QString diff = QString::fromUtf8(
-        "diff --git a/example.cpp b/example.cpp\n"
-        "index 1111111..2222222 100644\n"
-        "--- a/example.cpp\n"
-        "+++ b/example.cpp\n"
-        "@@ -1,2 +1,2 @@\n"
-        " int unchanged = 0;\n"
-        "-int before = 1;\n"
-        "+int after = 2;\n");
+    const QString diff = QString::fromUtf8("diff --git a/example.cpp b/example.cpp\n"
+                                           "index 1111111..2222222 100644\n"
+                                           "--- a/example.cpp\n"
+                                           "+++ b/example.cpp\n"
+                                           "@@ -1,2 +1,2 @@\n"
+                                           " int unchanged = 0;\n"
+                                           "-int before = 1;\n"
+                                           "+int after = 2;\n");
 
     ketplus::GitDiffView view;
-    view.setDiff(QStringLiteral("/repo/example.cpp"), ketplus::GitDiffMode::Unstaged,
-                 diff, palette);
+    view.setDiff(QStringLiteral("/repo/example.cpp"), ketplus::GitDiffMode::Unstaged, diff,
+                 palette);
 
     QCOMPARE(view.filePath(), QStringLiteral("/repo/example.cpp"));
     QCOMPARE(view.mode(), ketplus::GitDiffMode::Unstaged);
 
     auto* table = view.findChild<QTableView*>();
     QVERIFY(table != nullptr);
-    QCOMPARE(table->font().family(),
-             QFontDatabase::systemFont(QFontDatabase::FixedFont).family());
+    QCOMPARE(table->font().family(), QFontDatabase::systemFont(QFontDatabase::FixedFont).family());
     QCOMPARE(table->font().pixelSize(), 12);
     const QFont renderedCodeFont = table->model()->index(1, 3).data(Qt::FontRole).value<QFont>();
     QCOMPARE(renderedCodeFont.family(),
@@ -62,9 +59,11 @@ void GitDiffViewTest::rendersStructuredInlineDiff() {
     QVERIFY(renderedCodeFont.family() != QStringLiteral("Helvetica"));
     QCOMPARE(table->verticalHeader()->defaultSectionSize(), 24);
     QCOMPARE(table->model()->rowCount(), 4);
+    QVERIFY(table->columnWidth(0) <= 30);
+    QCOMPARE(table->columnWidth(0), table->columnWidth(1));
+    QCOMPARE(table->columnWidth(2), 20);
     QCOMPARE(table->columnSpan(0, 0), 4);
-    QCOMPARE(table->model()->index(0, 0).data().toString(),
-             QStringLiteral("@@ -1,2 +1,2 @@"));
+    QCOMPARE(table->model()->index(0, 0).data().toString(), QStringLiteral("@@ -1,2 +1,2 @@"));
     QCOMPARE(table->model()->index(1, 0).data().toString(), QStringLiteral("1"));
     QCOMPARE(table->model()->index(1, 1).data().toString(), QStringLiteral("1"));
     QCOMPARE(table->model()->index(2, 0).data().toString(), QStringLiteral("2"));
@@ -90,8 +89,7 @@ void GitDiffViewTest::rendersStructuredInlineDiff() {
     QVERIFY(table->model()->index(3, 3).data(Qt::ForegroundRole).value<QColor>() !=
             QColor(palette.positive));
 
-    const QVariantList syntaxColors =
-        table->model()->index(3, 3).data(Qt::UserRole + 1).toList();
+    const QVariantList syntaxColors = table->model()->index(3, 3).data(Qt::UserRole + 1).toList();
     QVERIFY(syntaxColors.contains(QColor(palette.accent)));
 
     auto customTypography = ketplus::EditorSettings::defaults();
@@ -121,6 +119,16 @@ void GitDiffViewTest::rendersStructuredInlineDiff() {
         }
     }
     QVERIFY(foundStats);
+
+    const int shortGutter = table->columnWidth(0);
+    view.setDiff(QStringLiteral("/repo/example.cpp"), ketplus::GitDiffMode::Unstaged,
+                 QStringLiteral("@@ -999,2 +999,2 @@\n context\n+change\n"), palette);
+    const int fourDigitGutter = table->columnWidth(0);
+    QVERIFY(fourDigitGutter > shortGutter);
+    QCOMPARE(table->columnWidth(0), table->columnWidth(1));
+    view.setDiff(QStringLiteral("/repo/example.cpp"), ketplus::GitDiffMode::Unstaged, diff,
+                 palette);
+    QCOMPARE(table->columnWidth(0), shortGutter);
 }
 
 QTEST_MAIN(GitDiffViewTest)

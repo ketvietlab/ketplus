@@ -42,6 +42,7 @@ class GitDiffView final : public QWidget {
 
     void updateSpans();
     void updateContextButton();
+    void updateLineNumberColumns();
 
     GitDiffModel* model_{nullptr};
     QTableView* table_{nullptr};

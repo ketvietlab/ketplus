@@ -13,7 +13,9 @@ terminal.
 - Selecting a file in Source Control opens its group-specific diff as a reusable
   editor tab. The inline view has old/new gutters, styled hunk headers, semantic
   added/removed line colors, and change counts instead of exposing raw patch
-  metadata. Activating the Source Control row opens files that still exist.
+  metadata. Its old/new line-number columns follow the visible line-number
+  digits and editor font, so short diffs leave more room for code. Activating
+  the Source Control row opens files that still exist.
 - `View Current File Diff` is available from the Git menu and Explorer context
   menu; it shows the complete on-disk change against `HEAD`.
 - `Refresh Status` asks Git for a fresh snapshot.
