@@ -66,6 +66,8 @@ class EditorWidget final : public ScintillaEditBase {
     void setText(const QByteArray& text);
     [[nodiscard]] Document::Result loadFile(const QString& filePath);
     [[nodiscard]] Document::Result restoreFromDisk();
+    // Explicit reopen: refresh changed clean buffers, preserving dirty edits and view state.
+    [[nodiscard]] Document::Result refreshFromDisk();
     [[nodiscard]] bool hibernate();
     void markThemePending() noexcept;
     void markActivated(std::uint64_t sequence) noexcept;
@@ -191,7 +193,7 @@ class EditorWidget final : public ScintillaEditBase {
     void configureEditor();
     void updateLineNumberMarginWidth();
     void updateLargeFileMode(qsizetype contentSize);
-    void restoreViewState();
+    void restoreViewState(const ViewState& state);
     void applyLexerTheme(const ThemePalette& palette);
     // Fold arrows for open blocks only appear while the pointer is over the margins.
     void setFoldMarginHovered(bool hovered);

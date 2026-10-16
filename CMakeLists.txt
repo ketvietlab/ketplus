@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.24)
 
 project(
     KetPlusCM
-    VERSION 0.3.4
+    VERSION 0.3.5
     DESCRIPTION "A fast, lightweight, cross-platform text editor"
     LANGUAGES C CXX
 )
@@ -179,6 +179,7 @@ add_library(ketplus_editor STATIC
     src/editor/EditorViewOptions.cpp
     src/editor/EditorViewOptions.h
     src/editor/EditorWidget.cpp
+    src/editor/EditorFileRefresh.cpp
     src/editor/EditorMarkdown.cpp
     src/editor/EditorWidget.h
     src/editor/SymbolExtractor.cpp
@@ -441,6 +442,12 @@ if(KETPLUS_CM_BUILD_TESTS)
     ketplus_enable_warnings(ketplus_tests)
 
     ketplus_cm_add_test(ketplus_tests ketplus_tests)
+
+    add_executable(ketplus_editor_file_refresh_tests tests/EditorFileRefreshTest.cpp)
+    target_link_libraries(ketplus_editor_file_refresh_tests PRIVATE Qt6::Test KetPlusCM::editor)
+    ketplus_enable_warnings(ketplus_editor_file_refresh_tests)
+    ketplus_cm_add_test(ketplus_editor_file_refresh_tests ketplus_editor_file_refresh_tests)
+    set_tests_properties(ketplus_editor_file_refresh_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     add_executable(ketplus_editor_tests tests/EditorWidgetTest.cpp)
     target_link_libraries(ketplus_editor_tests PRIVATE Qt6::Test ketplus_editor)

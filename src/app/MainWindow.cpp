@@ -241,6 +241,10 @@ void MainWindow::openFile(const QString& filePath) {
         auto* existing = qobject_cast<EditorWidget*>(tabs_->widget(index));
         if (existing != nullptr && !existing->document().isUntitled() &&
             normalizedPath(existing->document().filePath()) == absolutePath) {
+            const auto refreshed = existing->refreshFromDisk();
+            if (!refreshed.ok)
+                statusBar()->showMessage(
+                    QStringLiteral("Unable to refresh file: %1").arg(refreshed.error), 5000);
             tabs_->setCurrentIndex(index);
             return;
         }

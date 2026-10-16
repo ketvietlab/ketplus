@@ -95,3 +95,13 @@ Qt application shell
 Markdown documents open in an embedded preview with a horizontally centered floating Preview/Source control, 100 px above the document viewport bottom. The Scintilla source buffer, undo history and cursor remain alive across switches. Preview parsing is cached by content, path, theme and typography; hidden documents defer refresh until shown. Body width is capped at 960 logical pixels. Large-file mode retains source-only behavior.
 
 GitDiffView defaults to Diff and adds Preview/Source for Markdown. Preview and read-only Source show the right-hand revision: the index for staged changes, the working tree otherwise. Git revision reads are generation-fenced; failed index reads never fall back to unstaged content. MarkdownModeController owns presentation without changing EditorWidget identity or duplicating private product code.
+
+## Reopening files changed outside the editor
+
+`EditorWidget::refreshFromDisk()` reads a clean open file again on explicit reopen.
+It compares decoded content rather than size/mtime, preserves caret/selection and
+scroll, and keeps undo/redo when bytes are unchanged. Dirty buffers are never
+replaced. A missing/unreadable file returns an error without replacing the current
+buffer. Hibernated documents use their normal restore path. Markdown retains its
+Preview/Source mode and invalidates the rendered content when text changes.
+Consumers call this exported API when activating an already open file.

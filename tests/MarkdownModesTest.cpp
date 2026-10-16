@@ -74,6 +74,28 @@ class MarkdownModesTest final : public QObject {
         editor.setMarkdownPreviewVisible(true);
         QTRY_VERIFY(browser->toPlainText().contains("paragraph"));
     }
+    void refreshesPreviewWithoutChangingItsMode() {
+        QTemporaryDir directory;
+        const auto path = directory.filePath("notes.md");
+        write(path, "# VERSION 1\n");
+        ketplus::EditorWidget editor;
+        editor.resize(700, 400);
+        editor.applyTheme(palette());
+        editor.show();
+        QVERIFY(editor.loadFile(path).ok);
+        auto* browser = editor.findChild<QTextBrowser*>("markdownPreviewBrowser");
+        QVERIFY(browser);
+        QTRY_VERIFY(browser->toPlainText().contains("VERSION 1"));
+        write(path, "# VERSION 2\n");
+        QVERIFY(editor.refreshFromDisk().ok);
+        QVERIFY(editor.isMarkdownPreviewVisible());
+        QTRY_VERIFY(browser->toPlainText().contains("VERSION 2"));
+        editor.setMarkdownPreviewVisible(false);
+        write(path, "# VERSION 3\n");
+        QVERIFY(editor.refreshFromDisk().ok);
+        QVERIFY(!editor.isMarkdownPreviewVisible());
+        QCOMPARE(editor.text(), QByteArray("# VERSION 3\n"));
+    }
     void previewCapsWidthWithoutGiantVerticalMargins() {
         ketplus::MarkdownPreviewPane preview;
         preview.resize(1600, 700);

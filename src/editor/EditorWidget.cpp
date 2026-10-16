@@ -358,7 +358,7 @@ Document::Result EditorWidget::restoreFromDisk() {
 
     setText(result.content);
     configureLexerForPath(path);
-    restoreViewState();
+    restoreViewState(hibernatedViewState_);
     return {true, {}};
 }
 
@@ -2065,15 +2065,15 @@ void EditorWidget::updateLargeFileMode(const qsizetype contentSize) {
     }
 }
 
-void EditorWidget::restoreViewState() {
+void EditorWidget::restoreViewState(const ViewState& state) {
     const auto length = send(message(Scintilla::Message::GetLength));
-    const auto caret = qBound<sptr_t>(0, hibernatedViewState_.caret, length);
-    const auto anchor = qBound<sptr_t>(0, hibernatedViewState_.anchor, length);
+    const auto caret = qBound<sptr_t>(0, state.caret, length);
+    const auto anchor = qBound<sptr_t>(0, state.anchor, length);
     send(message(Scintilla::Message::SetSel), static_cast<uptr_t>(anchor), caret);
     send(message(Scintilla::Message::SetFirstVisibleLine),
-         static_cast<uptr_t>(qMax<sptr_t>(0, hibernatedViewState_.firstVisibleLine)));
+         static_cast<uptr_t>(qMax<sptr_t>(0, state.firstVisibleLine)));
     send(message(Scintilla::Message::SetXOffset),
-         static_cast<uptr_t>(qMax<sptr_t>(0, hibernatedViewState_.horizontalOffset)));
+         static_cast<uptr_t>(qMax<sptr_t>(0, state.horizontalOffset)));
 }
 
 void EditorWidget::setSearchOptions(const SearchOptions& searchOptions) {
