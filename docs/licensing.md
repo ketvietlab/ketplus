@@ -33,6 +33,11 @@ placing proprietary implementation in CM files.
 | Lexilla | `3e6f317eed854bc312b4c4453206189d381c7ae7` (`rel-5-5-2`) | Compiled statically | Scintilla permissive license |
 | libvterm | `9d6d2112335080312ef8c36667fa717ded4f7daf` (`v0.3.3`) | Compiled statically | MIT |
 | Inter | 4.1 | Font embedded in Qt resources | SIL OFL 1.1 |
+| Két Design System | 0.1.41 | Mermaid configuration snapshots in Qt resources | MIT |
+
+The Mermaid theme snapshots retain their upstream source revision and hashes in
+`resources/mermaid/SOURCE.json`. The publisher's MIT license is bundled alongside
+the configuration as `KetDesignSystem-LICENSE.txt`; no KétSuite service code is copied.
 
 Git and Mermaid CLI are discovered as separately installed executables. They
 are not linked or bundled by this source build. If a future installer bundles

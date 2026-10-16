@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.24)
 
 project(
     KetPlusCM
-    VERSION 0.3.5
+    VERSION 0.3.6
     DESCRIPTION "A fast, lightweight, cross-platform text editor"
     LANGUAGES C CXX
 )
@@ -159,6 +159,12 @@ add_library(ketplus_preview STATIC
     src/preview/MermaidDiagramDialog.h
     src/preview/MermaidRenderer.cpp
     src/preview/MermaidRenderer.h
+)
+qt_add_resources(ketplus_preview "ketplus_mermaid_themes"
+    PREFIX "/ketplus/mermaid"
+    BASE "resources/mermaid"
+    FILES resources/mermaid/light.json resources/mermaid/dark.json
+          resources/mermaid/SOURCE.json resources/mermaid/KetDesignSystem-LICENSE.txt
 )
 target_link_libraries(ketplus_preview
     PUBLIC Qt6::Widgets Qt6::Svg Qt6::SvgWidgets ketplus_ui

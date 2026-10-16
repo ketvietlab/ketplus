@@ -129,6 +129,11 @@ npm install -g @mermaid-js/mermaid-cli
 
 KetPlus CM also checks `KETPLUS_MMDC` when a custom `mmdc` executable path is needed.
 
+Diagrams use the canonical Két Design System Mermaid theme in light and dark mode:
+Inter 13px, compact spacing, 12px corners and shared semantic role colors. The resolved
+configuration snapshots and upstream revision are recorded in `resources/mermaid/`.
+Qt SVG compatibility preserves explicit label fills and existing pill-shaped nodes.
+
 ## Current capabilities
 
 - Create, open, edit, and atomically save files

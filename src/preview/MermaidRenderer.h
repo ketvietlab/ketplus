@@ -41,7 +41,7 @@ class MermaidRenderer final : public QObject {
     // htmlLabels off would otherwise sit at the top of their shapes or disappear.
     [[nodiscard]] static QByteArray flattenLabelRows(const QByteArray& svg);
     // Everything mermaid-cli's SVG needs before Qt SVG draws it: `!important` dropped from
-    // colours, stylesheets placed before shapes, 8px rectangle radii and flattened labels.
+    // colours, stylesheets placed before shapes, 12px rectangle radii and flattened labels.
     [[nodiscard]] static QByteArray qtReadableSvg(const QByteArray& svg);
 
   signals:
