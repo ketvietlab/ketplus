@@ -37,6 +37,7 @@ class MarkdownPreviewPaneTest final : public QObject {
     void opensVectorDiagramWithPanControls();
     void classColoursSurviveQtSvg();
     void sequenceColoursSurviveQtSvg();
+    void canonicalSemanticColoursSurviveQtSvg();
     void roundsDiagramRectangles();
 };
 
@@ -266,13 +267,13 @@ while [ "$#" -gt 0 ]; do
   else shift
   fi
 done
-if [ -z "$config" ] || ! grep -q '"stateLabelColor":"#F2F4F7"' "$config"; then
+if [ -z "$config" ] || ! grep -q '"stateLabelColor":"#f2f4f7"' "$config"; then
   exit 12
 fi
-if ! grep -q '"primaryColor":"#252C42"' "$config"; then
+if ! grep -q '"primaryColor":"#252c42"' "$config"; then
   exit 14
 fi
-if ! grep -q '"themeCSS":".label text{fill:#F2F4F7;}"' "$config"; then
+if ! grep -q '.node.kv-positive path' "$config" || ! grep -q '"curve":"rounded"' "$config"; then
   exit 13
 fi
 printf '%s' '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="160"><rect x="10" y="10" width="300" height="140" fill="#8b5cf6"/></svg>' > "$output"
@@ -403,6 +404,24 @@ void MarkdownPreviewPaneTest::sequenceColoursSurviveQtSvg() {
     QCOMPARE(image.pixelColor(80, 20).name(), QStringLiteral("#23282f"));
 }
 
+void MarkdownPreviewPaneTest::canonicalSemanticColoursSurviveQtSvg() {
+    const QByteArray svg =
+        R"(<svg xmlns="http://www.w3.org/2000/svg" id="diagram" viewBox="0 0 100 40">)"
+        R"(<style>#diagram .node.kv-positive rect{fill:#223833;stroke:#40c97b;})"
+        R"(#diagram .node.kv-danger path{fill:#382b2f;stroke:#ef665c;}</style>)"
+        R"(<g class="node kv-positive"><rect width="40" height="40"/></g>)"
+        R"(<g class="node kv-danger"><path d="M60 0H100V40H60Z"/></g></svg>)";
+    QSvgRenderer renderer(ketplus::MermaidRenderer::qtReadableSvg(svg));
+    QVERIFY(renderer.isValid());
+    QImage image(100, 40, QImage::Format_ARGB32);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    renderer.render(&painter);
+    painter.end();
+    QCOMPARE(image.pixelColor(20, 20).name(), QStringLiteral("#223833"));
+    QCOMPARE(image.pixelColor(80, 20).name(), QStringLiteral("#382b2f"));
+}
+
 void MarkdownPreviewPaneTest::roundsDiagramRectangles() {
     const QByteArray svg =
         R"(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 40">)"
@@ -410,8 +429,8 @@ void MarkdownPreviewPaneTest::roundsDiagramRectangles() {
         R"(<rect x="60" width="40" height="40" rx="3" ry="3" fill="#252c42"/>)"
         R"(<rect x="45" width="10" height="40" rx="20" ry="20" fill="#252c42"/></svg>)";
     const QByteArray readable = ketplus::MermaidRenderer::qtReadableSvg(svg);
-    QCOMPARE(readable.count("rx=\"8\""), 2);
-    QCOMPARE(readable.count("ry=\"8\""), 2);
+    QCOMPARE(readable.count("rx=\"12\""), 2);
+    QCOMPARE(readable.count("ry=\"12\""), 2);
     QVERIFY(readable.contains("rx=\"20\" ry=\"20\""));
     QCOMPARE(ketplus::MermaidRenderer::qtReadableSvg(readable), readable);
     QSvgRenderer renderer(readable);
