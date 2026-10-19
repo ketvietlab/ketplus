@@ -254,6 +254,12 @@ milestone changes state.
   (capability negotiation, signaling through the relay, peer authentication, frames) is specified
   in [remote transport](remote-transport.md) and
   [ADR 0025](decisions/0025-remote-transport-protocol.md).
+- `ketplus_computer`: native desktop control through a separate signed
+  `KetPlus Computer` agent app that owns TCC grants and enforces per-app
+  access, behind a thin MCP front for all providers
+  ([ADR 0026](decisions/0026-ketplus-computer-agent-app.md), accepted; macOS
+  first). The spike in `apps/computer` is in place, and host integration is
+  next.
 - Windows daemon/desktop CI once required Qt WebView packages are available.
 - Cross-block native selection/accessibility mapping and physical-device
   CPU/frame-time/RSS evidence for the bounded transcript renderer. Giant bodies
