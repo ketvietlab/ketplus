@@ -101,6 +101,7 @@ target_include_directories(ketplus_product_version INTERFACE
 )
 
 add_subdirectory(modules/browser)
+add_subdirectory(modules/computer)
 add_subdirectory(modules/remote)
 add_subdirectory(apps/daemon)
 

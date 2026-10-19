@@ -9,7 +9,7 @@ function(ketplus_add_gui_test target)
     ketplus_enable_warnings(${target})
     add_test(NAME ${target} COMMAND ${target})
     set_tests_properties(${target} PROPERTIES ENVIRONMENT
-        "QT_QPA_PLATFORM=offscreen;KETPLUS_DISABLE_DAEMON_AUTOSTART=1;KETPLUS_BROWSER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/${target}-browser-tools.json")
+        "QT_QPA_PLATFORM=offscreen;KETPLUS_DISABLE_DAEMON_AUTOSTART=1;KETPLUS_BROWSER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/${target}-browser-tools.json;KETPLUS_COMPUTER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/${target}-computer-tools.json;KETPLUS_COMPUTER_DIR=${CMAKE_CURRENT_BINARY_DIR}/${target}-computer")
 endfunction()
 
 ketplus_add_gui_test(ketplus_codex_browser_tools_tests CodexBrowserToolsTest.cpp)
@@ -45,6 +45,8 @@ target_link_libraries(ketplus_atlas_workspace_tests PRIVATE
 
 ketplus_add_gui_test(ketplus_desktop_zoom_tests DesktopZoomTest.cpp)
 target_link_libraries(ketplus_desktop_zoom_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+ketplus_add_gui_test(ketplus_settings_computer_page_tests SettingsComputerPageTest.cpp)
+target_link_libraries(ketplus_settings_computer_page_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 
 ketplus_add_gui_test(ketplus_interface_font_tests InterfaceFontTest.cpp)
 target_link_libraries(ketplus_interface_font_tests PRIVATE

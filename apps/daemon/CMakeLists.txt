@@ -18,6 +18,7 @@ target_link_libraries(ketplus_daemon_core PUBLIC
     ketplus_remote
     ketplus_control_crypto
     ketplus_browser_tools
+    ketplus_computer_tools
     ketplus_product_version
     LibDataChannel::LibDataChannelStatic
 )

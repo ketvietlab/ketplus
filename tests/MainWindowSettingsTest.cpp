@@ -522,17 +522,26 @@ void MainWindowSettingsTest::settingsAndWorktreesUseWorkspacePages() {
     auto* settingsNavigation =
         settingsPage->findChild<QListWidget*>(QStringLiteral("settingsWorkspaceNavigation"));
     QVERIFY(settingsNavigation != nullptr);
-    QCOMPARE(settingsNavigation->count(), 8);
-    QCOMPARE(settingsNavigation->item(7)->data(Qt::UserRole).toString(), QStringLiteral("updates"));
+    QCOMPARE(settingsNavigation->count(), 9);
+    QCOMPARE(settingsNavigation->item(8)->data(Qt::UserRole).toString(), QStringLiteral("updates"));
     QCOMPARE(settingsNavigation->item(4)->data(Qt::UserRole).toString(), QStringLiteral("browser"));
     QCOMPARE(settingsNavigation->item(4)->text(), QStringLiteral("Browser"));
     QCOMPARE(settingsNavigation->item(5)->data(Qt::UserRole).toString(),
+             QStringLiteral("computer"));
+    QCOMPARE(settingsNavigation->item(5)->text(), QStringLiteral("Computer use"));
+    QCOMPARE(settingsNavigation->item(6)->data(Qt::UserRole).toString(),
              QStringLiteral("providers"));
+    auto* computerPage =
+        settingsPage->findChild<QWidget*>(QStringLiteral("settingsWorkspaceComputer"));
+    QVERIFY(computerPage != nullptr);
+    settingsNavigation->setCurrentRow(5);
+    QTRY_VERIFY(computerPage->isVisible());
     auto* providersPage =
         settingsPage->findChild<QWidget*>(QStringLiteral("settingsWorkspaceProviders"));
     QVERIFY(providersPage != nullptr);
-    settingsNavigation->setCurrentRow(5);
+    settingsNavigation->setCurrentRow(6);
     QTRY_VERIFY(providersPage->isVisible());
+    QVERIFY(!computerPage->isVisible());
     settingsNavigation->setCurrentRow(0);
     QTRY_VERIFY(!providersPage->isVisible());
     QCOMPARE(settingsNavigation->currentItem()->data(Qt::UserRole).toString(),

@@ -101,6 +101,8 @@ add_library(ketplus_desktop_shell STATIC
     src/app/SettingsClaudeAnalytics.h
     src/app/SettingsClaudeCredentials.cpp
     src/app/SettingsClaudeCredentials.h
+    src/app/SettingsComputerPage.cpp
+    src/app/SettingsComputerPage.h
     src/app/SettingsProvidersPage.cpp
     src/app/SettingsProvidersPage.h
     src/app/SettingsUpdatesPage.cpp
@@ -118,6 +120,7 @@ target_link_libraries(ketplus_desktop_shell PUBLIC
     Qt6::Widgets
     ketplus_ai
     ketplus_app_updater
+    ketplus_computer_tools
     ketplus_atlas
     ketplus_desktop_support
     KetPlusCM::core
@@ -242,6 +245,36 @@ if(APPLE)
         DEPENDS ketplus ketplus_daemon ketplus_stage_claude_sidecar
         VERBATIM
     )
+    # ADR 0026: KetPlus Computer is a separately signed app nested in Contents/Helpers so TCC
+    # attributes Screen Recording and Accessibility to it. TCC keys grants to the signature's
+    # designated requirement: an ad-hoc identity resets them on every rebuild.
+    option(KETPLUS_BUNDLE_COMPUTER_AGENT
+        "Build KetPlus Computer.app (Swift) into KetPlus.app/Contents/Helpers" ON)
+    set(KETPLUS_COMPUTER_SIGN_IDENTITY "-" CACHE STRING
+        "codesign identity for KetPlus Computer.app; '-' signs ad hoc")
+    if(KETPLUS_BUNDLE_COMPUTER_AGENT)
+        add_custom_target(ketplus_bundle_computer_agent ALL
+            COMMAND "${PROJECT_SOURCE_DIR}/apps/computer/scripts/build-app.sh"
+                --identity "${KETPLUS_COMPUTER_SIGN_IDENTITY}"
+                --out "$<TARGET_BUNDLE_DIR:ketplus>/Contents/Helpers"
+                --scratch "${CMAKE_CURRENT_BINARY_DIR}/computer-swift"
+            DEPENDS ketplus
+            USES_TERMINAL
+            VERBATIM
+        )
+        # ditto keeps the nested app's own signature.
+        install(CODE "
+            set(computer_destination \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/KetPlus.app/Contents/Helpers/KetPlus Computer.app\")
+            file(REMOVE_RECURSE \"\${computer_destination}\")
+            execute_process(
+                COMMAND /usr/bin/ditto \"$<TARGET_BUNDLE_DIR:ketplus>/Contents/Helpers/KetPlus Computer.app\" \"\${computer_destination}\"
+                RESULT_VARIABLE computer_copy_result)
+            if(NOT computer_copy_result EQUAL 0)
+                message(FATAL_ERROR \"Unable to embed KetPlus Computer.app\")
+            endif()"
+            COMPONENT Runtime
+        )
+    endif()
     # Default agent skills (ket-atlas, enterprise-grade, ket-design-system). Desktop and the
     # daemon both find them at ../Resources/agent-skills.
     install(DIRECTORY "${PROJECT_SOURCE_DIR}/assets/agent-skills"

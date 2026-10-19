@@ -122,6 +122,41 @@ was accepted. The results follow.
 - Not yet verified: injection through the daemon and Claude sidecar, multiple
   displays, and any periodic Screen Recording re-prompt.
 
+## Implementation (2026-10-19)
+
+The first implementation refines the decision as follows.
+
+- **Tokens.** The daemon creates `<KetPlus data>/computer/host.key` (0600). It
+  passes `KETPLUS_COMPUTER_CONVERSATION` and
+  `KETPLUS_COMPUTER_TOKEN = hex(HMAC-SHA256(key, "computer.v0:" + id))` to the
+  front. The agent recomputes the token on every request. It needs no session
+  table, and conversations cannot forge each other's tokens.
+- **Remote turns.** The token cannot be withheld from a Cursor ACP session
+  that is already bound. Instead, `startTurn` writes `remote-turns/<stem>` for a
+  remote client and removes it for a local one, after the busy check. The agent
+  refuses a marked conversation. A failed write for a remote turn fails the turn
+  while the feature is on. A missed removal only leaves control off.
+- **Capture** includes only the granted applications. Excluding KetPlus was not
+  enough, because the menu bar of the frontmost app still leaked into the image.
+  The menu bar is therefore not captured, and keyboard shortcuts replace it.
+  The source rectangle is pinned to the whole display. Without it, a filter
+  whose only window was a small system dialog scaled that dialog to fill the
+  image, and clicks were mapped to the wrong place.
+- **Pointer targets** are resolved from the window list at the event's global
+  point. The Dock's transparent full-display window is skipped, Dock tiles and
+  the bare desktop count as Finder, and the menu bar counts as the frontmost
+  app. Keyboard input targets the frontmost app.
+- **Esc** ends the lease and revokes the conversation's grants. That
+  conversation then gets `CANCELLED` until the user approves apps again. The
+  lease idles out after 90 s. `wait` is capped at 60 s.
+- **The opt-in** is in Settings → Computer use (`computer-tools.json`: `enabled`,
+  default off, and `deniedApps`). Changes apply from the next turn.
+- **Codex** is not given the server yet. Its app-server binds MCP servers per
+  process, not per conversation, so it cannot carry a conversation token.
+- **Test builds.** `build-app.sh --testing` compiles a
+  `KETPLUS_COMPUTER_TEST_APPROVAL` override into the approval panel for
+  `scripts/e2e.mjs`. Release builds never contain it.
+
 ## Alternatives considered
 
 - Reusing KetViewer's capture and input code. KetViewer is a separate commercial

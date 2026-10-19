@@ -8,45 +8,79 @@ import UniformTypeIdentifiers
 struct Screenshot {
     let png: Data
     let geometry: ScreenGeometry
+    /// Bundle IDs of the granted apps that had windows in the capture.
+    let visibleApps: [String]
 }
 
 enum CaptureError: Error, CustomStringConvertible {
     case displayUnavailable
+    case nothingGranted
     case encodeFailed
 
     var description: String {
         switch self {
         case .displayUnavailable: return "The main display is not available for capture."
+        case .nothingGranted: return "No granted application is running. Call list_apps and request_access first."
         case .encodeFailed: return "The screenshot could not be encoded as PNG."
         }
     }
 }
 
-/// Captures the main display, excluding KetPlus windows so the agent never
-/// reads its own transcript back from the screen.
+/// Captures only the windows of applications granted to the conversation. Every
+/// other app, KetPlus, this agent's panels and the menu bar stay out of the image.
 enum ScreenCapture {
-    static let excludedBundleIdentifiers: Set<String> = ["dev.ketplus.editor", AgentPaths.bundleIdentifier]
-
-    static func captureMainDisplay() async throws -> Screenshot {
-        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+    /// `region` is display-local points (top-left origin); nil captures the display.
+    static func capture(including granted: Set<String>, region: CGRect? = nil) async throws -> Screenshot {
+        let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
         let mainID = CGMainDisplayID()
         guard let display = content.displays.first(where: { $0.displayID == mainID }) else {
             throw CaptureError.displayUnavailable
         }
-        let excluded = content.applications.filter { excludedBundleIdentifiers.contains($0.bundleIdentifier) }
-        let filter = SCContentFilter(display: display, excludingApplications: excluded, exceptingWindows: [])
+        let apps = content.applications.filter {
+            granted.contains($0.bundleIdentifier) && !AppPolicy.ketPlusBundleIdentifiers.contains($0.bundleIdentifier)
+        }
+        guard !apps.isEmpty else { throw CaptureError.nothingGranted }
+        let filter = SCContentFilter(display: display, including: apps, exceptingWindows: [])
 
-        let geometry = ScreenGeometry(displayBounds: CGDisplayBounds(mainID))
+        let bounds = CGDisplayBounds(mainID)
         let configuration = SCStreamConfiguration()
-        configuration.width = geometry.imageWidth
-        configuration.height = geometry.imageHeight
         configuration.showsCursor = true
         configuration.scalesToFit = true
+        let geometry: ScreenGeometry
+        if let region {
+            configuration.sourceRect = region
+            let native = nativeScale(mainID, bounds: bounds)
+            let fit = ScreenGeometry(displayBounds: CGRect(origin: .zero, size: CGSize(
+                width: region.width * native, height: region.height * native)))
+            configuration.width = fit.imageWidth
+            configuration.height = fit.imageHeight
+            geometry = fit
+        } else {
+            // Pin the whole display. Left unset, a filter whose only window is a small
+            // modal panel was scaled up to fill the image, breaking click mapping.
+            configuration.sourceRect = CGRect(origin: .zero, size: bounds.size)
+            geometry = ScreenGeometry(displayBounds: bounds)
+            configuration.width = geometry.imageWidth
+            configuration.height = geometry.imageHeight
+        }
 
         let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
+        let visible = Set(content.windows.compactMap { window -> String? in
+            guard let id = window.owningApplication?.bundleIdentifier, granted.contains(id),
+                  window.frame.intersects(bounds) else { return nil }
+            return id
+        })
         return Screenshot(png: try encodePNG(image),
-                          geometry: ScreenGeometry(displayBounds: geometry.displayBounds,
-                                                   imageWidth: image.width, imageHeight: image.height))
+                          geometry: region == nil
+                              ? ScreenGeometry(displayBounds: bounds, imageWidth: image.width, imageHeight: image.height)
+                              : geometry,
+                          visibleApps: visible.sorted())
+    }
+
+    /// Physical pixels per point on the display, so zoom never upsamples.
+    private static func nativeScale(_ display: CGDirectDisplayID, bounds: CGRect) -> CGFloat {
+        guard let mode = CGDisplayCopyDisplayMode(display), bounds.width > 0 else { return 1 }
+        return max(1, CGFloat(mode.pixelWidth) / bounds.width)
     }
 
     private static func encodePNG(_ image: CGImage) throws -> Data {

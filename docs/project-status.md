@@ -170,6 +170,13 @@ milestone changes state.
   resumed sessions; disabled/unavailable tools produce explicit no-fallback guidance.
   Codex screenshots render in the transcript gallery; Claude/Cursor gallery
   parity remains separate from MCP tool availability.
+- macOS computer use (ADR 0026): `apps/computer` builds the separately signed
+  `KetPlus Computer.app`, nested in `Contents/Helpers`. It owns the TCC grants
+  and serves the `ketplus_computer` MCP front. It enforces per-conversation app
+  approval, tiers, capture of granted apps only, a single control lease, the Esc
+  kill switch and an audit log. `modules/computer` gives Claude and Cursor the
+  front with an HMAC conversation token when Settings → Computer use is on (off
+  by default), and marks remote-started turns so the agent refuses them.
 - Pro desktop shell under `apps/desktop`.
 - Desktop repository metadata cached in SQLite for sidebar names,
   with background Git validation and QSettings recent-path ordering.
@@ -254,12 +261,9 @@ milestone changes state.
   (capability negotiation, signaling through the relay, peer authentication, frames) is specified
   in [remote transport](remote-transport.md) and
   [ADR 0025](decisions/0025-remote-transport-protocol.md).
-- `ketplus_computer`: native desktop control through a separate signed
-  `KetPlus Computer` agent app that owns TCC grants and enforces per-app
-  access, behind a thin MCP front for all providers
-  ([ADR 0026](decisions/0026-ketplus-computer-agent-app.md), accepted; macOS
-  first). The spike in `apps/computer` is in place, and host integration is
-  next.
+- Computer use follow-ups ([ADR 0026](decisions/0026-ketplus-computer-agent-app.md)):
+  Codex (per-conversation MCP binding), accessibility-tree `observe`/`act`,
+  before/after thumbnails in the transcript, multiple displays, and Windows.
 - Windows daemon/desktop CI once required Qt WebView packages are available.
 - Cross-block native selection/accessibility mapping and physical-device
   CPU/frame-time/RSS evidence for the bounded transcript renderer. Giant bodies

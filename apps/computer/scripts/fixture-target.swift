@@ -1,40 +1,48 @@
-// Click target for the ADR 0026 spike: a floating window with one large
-// button. Prints its button frame in global top-left points, then writes
-// `clicked` to the given file when the button is pressed and exits.
-// Usage: swift fixture-target.swift /tmp/kpc-clicked.txt
+// Target app for computer-use checks (ADR 0026): a window with a text field and a
+// Submit button. It prints both frames in global top-left points, then writes the
+// field's text to the output file when Submit is pressed, and exits.
+// Build with scripts/build-fixture.sh; run: "<app>/Contents/MacOS/KetPlusComputerFixture" <output>
 import AppKit
 
-let output = CommandLine.arguments.dropFirst().first ?? "/tmp/kpc-clicked.txt"
+let output = CommandLine.arguments.dropFirst().first ?? "/tmp/kpc-fixture.txt"
 try? FileManager.default.removeItem(atPath: output)
 
 final class Target: NSObject {
-    @objc func pressed(_ sender: NSButton) {
-        FileManager.default.createFile(atPath: output, contents: Data("clicked\n".utf8))
-        sender.title = "Clicked ✓"
+    let field = NSTextField(frame: NSRect(x: 20, y: 120, width: 360, height: 28))
+
+    @objc func submit(_ sender: NSButton) {
+        FileManager.default.createFile(atPath: output, contents: Data((field.stringValue + "\n").utf8))
+        sender.title = "Submitted ✓"
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { NSApp.terminate(nil) }
     }
 }
 
 let app = NSApplication.shared
-app.setActivationPolicy(.accessory)
+app.setActivationPolicy(.regular)
 let target = Target()
-let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 360, height: 200),
+let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 220),
                       styleMask: [.titled], backing: .buffered, defer: false)
-window.title = "KetPlus Computer spike target"
+window.title = "KetPlus Computer fixture"
 window.level = .floating
 window.center()
-let button = NSButton(title: "Click me", target: target, action: #selector(Target.pressed(_:)))
+target.field.font = .systemFont(ofSize: 16)
+target.field.placeholderString = "Type here"
+let button = NSButton(title: "Submit", target: target, action: #selector(Target.submit(_:)))
 button.bezelStyle = .regularSquare
-button.font = .systemFont(ofSize: 28, weight: .semibold)
-button.frame = NSRect(x: 20, y: 20, width: 320, height: 140)
+button.font = .systemFont(ofSize: 22, weight: .semibold)
+button.frame = NSRect(x: 20, y: 20, width: 360, height: 80)
+window.contentView?.addSubview(target.field)
 window.contentView?.addSubview(button)
-window.orderFrontRegardless()
+window.makeKeyAndOrderFront(nil)
+app.activate(ignoringOtherApps: true)
 
 // Cocoa uses a bottom-left origin on the primary screen; CGEvent uses top-left.
-let onScreen = window.convertToScreen(button.convert(button.bounds, to: nil))
 let primaryHeight = NSScreen.screens[0].frame.height
-print("button \(Int(onScreen.minX)) \(Int(primaryHeight - onScreen.maxY)) \(Int(onScreen.width)) \(Int(onScreen.height))"
-      + " screen \(Int(NSScreen.screens[0].frame.width)) \(Int(primaryHeight))")
+func topLeft(_ view: NSView) -> String {
+    let rect = window.convertToScreen(view.convert(view.bounds, to: nil))
+    return "\(Int(rect.minX)) \(Int(primaryHeight - rect.maxY)) \(Int(rect.width)) \(Int(rect.height))"
+}
+print("field \(topLeft(target.field)) button \(topLeft(button)) screen \(Int(NSScreen.screens[0].frame.width)) \(Int(primaryHeight))")
 fflush(stdout)
 DispatchQueue.main.asyncAfter(deadline: .now() + 600) { NSApp.terminate(nil) }
 app.run()

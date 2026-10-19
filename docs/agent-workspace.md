@@ -589,6 +589,44 @@ Claude/Cursor can consume screenshot tool results, while their transcript
 presentation remains the existing provider-specific behavior. See
 [ADR 0011](decisions/0011-browser-tools-for-all-providers.md).
 
+## Computer use
+
+Settings → Computer use is off by default. It is stored as
+`computer-tools.json` (`enabled`, `deniedApps`) beside `browser-tools.json`;
+`KETPLUS_COMPUTER_TOOLS_CONFIG` overrides the path. When the setting is on and
+`KetPlus Computer.app` is present, each Claude query and each Cursor ACP
+session/new or session/load receives a `ketplus_computer` stdio server. The
+server's environment carries `KETPLUS_COMPUTER_CONVERSATION` and
+`KETPLUS_COMPUTER_TOKEN`, the HMAC of the conversation ID under
+`<KetPlus data>/computer/host.key` (or `KETPLUS_COMPUTER_DIR`). Turn input
+cannot add or replace the server. The Claude sidecar and Cursor permission
+handling allow `ketplus_computer` tools only when KetPlus injected the server.
+The agent app is the enforcement point:
+
+- A conversation sees and controls only the apps the user approved for it in
+  the agent's native approval panel (`request_access`). Screenshots include
+  only those apps. KetPlus windows, the agent's own panels and the menu bar are
+  never captured.
+- Tiers: KetPlus, Keychain Access, password managers and `deniedApps` are
+  blocked. Browsers other than Safari are view-only. Terminals and IDEs accept
+  clicks only. Pointer input is checked against the app that owns the window
+  under the point; keyboard input is checked against the frontmost app and is
+  refused while secure input is active.
+- One conversation holds the control lease at a time. The lease ends after 90 s
+  without an action. A banner shows while it is held. Esc, unless the agent
+  itself posted it, ends the lease, revokes that conversation's grants and
+  answers its next calls with `CANCELLED` until the user approves apps again.
+- `startTurn` writes a remote-turn marker for turns from remote clients and
+  removes it for local turns. The agent refuses a marked conversation with
+  `REMOTE_TURN`.
+- Each action appends a line, without images or typed text, to
+  `computer/audit/<conversation stem>.jsonl`.
+
+Codex app-server binds MCP servers per process rather than per conversation, so
+Codex does not receive `ketplus_computer` yet. Tools follow
+`computer_toolset_20260801` names, plus `list_apps`, `request_access` and
+`open_application`. `wait` is capped at 60 s.
+
 ## Live smoke test
 
 Authenticated model calls are opt-in. The regular test suite uses a deterministic

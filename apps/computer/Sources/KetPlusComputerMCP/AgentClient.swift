@@ -7,18 +7,25 @@ struct AgentCallError: Error {
 }
 
 /// Forwards computer.v0 calls to the agent app, starting it through
-/// LaunchServices so that it is its own responsible process for TCC.
+/// LaunchServices so that it is its own responsible process for TCC. The daemon
+/// supplies the conversation and its token in the server's environment.
 final class AgentClient {
     private let paths = AgentPaths.standard()
+    private let conversation: String
+    private let token: String
     private var connection: LineConnection?
-    private var token = ""
     private var nextID = 1
+
+    init(environment: [String: String] = ProcessInfo.processInfo.environment) {
+        conversation = environment["KETPLUS_COMPUTER_CONVERSATION"] ?? ""
+        token = environment["KETPLUS_COMPUTER_TOKEN"] ?? ""
+    }
 
     func call(_ method: String, _ params: [String: Any] = [:]) throws -> [String: Any] {
         do {
             return try send(method, params)
         } catch is SocketError {
-            // The agent may have restarted with a new token; reconnect once.
+            // The agent may have restarted; reconnect once.
             connection = nil
             return try send(method, params)
         }
@@ -28,7 +35,8 @@ final class AgentClient {
         let connection = try connected()
         let id = nextID
         nextID += 1
-        try connection.writeObject(["id": id, "token": token, "method": method, "params": params])
+        try connection.writeObject(["id": id, "conversation": conversation, "token": token,
+                                    "method": method, "params": params])
         let response = try connection.readObject()
         if let error = response["error"] as? [String: Any] {
             throw AgentCallError(code: error["code"] as? String ?? "INTERNAL",
@@ -39,29 +47,32 @@ final class AgentClient {
 
     private func connected() throws -> LineConnection {
         if let connection { return connection }
-        if let ready = try? open() { return ready }
+        if let ready = try? LineConnection.connect(to: paths.socket.path) {
+            connection = ready
+            return ready
+        }
         try launchAgent()
         let deadline = Date().addingTimeInterval(10)
         while Date() < deadline {
-            if let ready = try? open() { return ready }
+            if let ready = try? LineConnection.connect(to: paths.socket.path) {
+                connection = ready
+                return ready
+            }
             usleep(100_000)
         }
         throw AgentCallError(code: "AGENT_UNAVAILABLE", message: "KetPlus Computer did not start within 10 seconds.")
     }
 
-    private func open() throws -> LineConnection {
-        let value = try String(contentsOf: paths.token, encoding: .utf8)
-        let ready = try LineConnection.connect(to: paths.socket.path)
-        token = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        connection = ready
-        return ready
-    }
-
     private func launchAgent() throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        // -g keeps the user's frontmost app; -a goes through LaunchServices.
-        process.arguments = ["-g", "-a", agentBundle().path]
+        // -g keeps the user's frontmost app; -a goes through LaunchServices, which does not
+        // pass this process's environment, so forward the directory override explicitly.
+        var arguments = ["-g"]
+        if let directory = ProcessInfo.processInfo.environment["KETPLUS_COMPUTER_DIR"], !directory.isEmpty {
+            arguments += ["--env", "KETPLUS_COMPUTER_DIR=\(directory)"]
+        }
+        process.arguments = arguments + ["-a", agentBundle().path]
         try process.run()
         process.waitUntilExit()
         guard process.terminationStatus == 0 else {
@@ -71,9 +82,6 @@ final class AgentClient {
 
     /// KetPlus Computer.app/Contents/MacOS/ketplus-computer-mcp -> KetPlus Computer.app
     private func agentBundle() -> URL {
-        if let override = ProcessInfo.processInfo.environment["KETPLUS_COMPUTER_APP"], !override.isEmpty {
-            return URL(fileURLWithPath: override)
-        }
         let executable = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
         return executable.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     }

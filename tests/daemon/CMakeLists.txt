@@ -4,7 +4,7 @@ function(ketplus_add_daemon_test target source)
     target_link_libraries(${target} PRIVATE Qt6::Test ketplus_daemon_core)
     add_test(NAME ${target} COMMAND ${target})
     set_tests_properties(${target} PROPERTIES ENVIRONMENT
-        "KETPLUS_DISABLE_DAEMON_AUTOSTART=1;KETPLUS_BROWSER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/${target}-browser-tools.json")
+        "KETPLUS_DISABLE_DAEMON_AUTOSTART=1;KETPLUS_BROWSER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/${target}-browser-tools.json;KETPLUS_COMPUTER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/${target}-computer-tools.json;KETPLUS_COMPUTER_DIR=${CMAKE_CURRENT_BINARY_DIR}/${target}-computer")
 endfunction()
 
 qt_add_executable(ketplus_daemon_client_upgrade_policy_tests DaemonClientUpgradePolicyTest.cpp)
@@ -40,7 +40,7 @@ ketplus_add_daemon_test(ketplus_daemon_cloud_privacy_tests cloud-privacy/CloudPr
 target_sources(ketplus_daemon_cloud_privacy_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 # Signed builds may run PCRE2 without JIT; cloud projection must stay linear there too.
 set_tests_properties(ketplus_daemon_cloud_privacy_tests PROPERTIES ENVIRONMENT
-    "KETPLUS_DISABLE_DAEMON_AUTOSTART=1;KETPLUS_BROWSER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/ketplus_daemon_cloud_privacy_tests-browser-tools.json;QT_ENABLE_REGEXP_JIT=0")
+    "KETPLUS_DISABLE_DAEMON_AUTOSTART=1;KETPLUS_BROWSER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/ketplus_daemon_cloud_privacy_tests-browser-tools.json;KETPLUS_COMPUTER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/ketplus_daemon_cloud_privacy_tests-computer-tools.json;KETPLUS_COMPUTER_DIR=${CMAKE_CURRENT_BINARY_DIR}/ketplus_daemon_cloud_privacy_tests-computer;QT_ENABLE_REGEXP_JIT=0")
 ketplus_add_daemon_test(ketplus_daemon_activity_groups_tests DaemonActivityGroupsTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_transcript_window_tests DaemonTranscriptWindowTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_workspace_files_tests DaemonWorkspaceFilesTest.cpp)
@@ -50,6 +50,8 @@ if(KETPLUS_BUILD_DESKTOP)
     target_link_libraries(ketplus_browser_provider_integration_tests PRIVATE ketplus_ai)
 endif()
 ketplus_add_daemon_test(ketplus_daemon_claude_adapter_tests ClaudeAdapterTest.cpp)
+ketplus_add_daemon_test(ketplus_computer_tool_launch_tests ComputerToolLaunchTest.cpp)
+ketplus_add_daemon_test(ketplus_computer_provider_integration_tests ComputerProviderIntegrationTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_handoff_tests ProviderHandoffTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_cursor_adapter_tests CursorAdapterTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_session_fork_tests SessionForkTest.cpp)

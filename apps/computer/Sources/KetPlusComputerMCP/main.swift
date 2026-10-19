@@ -4,36 +4,15 @@ import Foundation
 // Thin stdio MCP front for KetPlus Computer (ADR 0026). It never captures the
 // screen or posts input itself; every tool call is forwarded to the agent app.
 
-let serverVersion = "0.0.1-spike"
+let serverVersion = "0.1.0"
 let instructions = """
-    KetPlus Computer controls native macOS applications. Use it only when no MCP server, \
-    shell command or ketplus_browser tool can do the task. Take a screenshot first; \
-    click coordinates are pixels in the most recent screenshot. KetPlus windows are \
-    excluded from screenshots.
+    KetPlus Computer controls native macOS apps. Use it only when no MCP server, shell command \
+    or ketplus_browser tool can do the task. Call list_apps, then request_access for the apps \
+    you need; the user approves them. Screenshots show only granted apps, and every coordinate \
+    is a pixel of the most recent screenshot. Terminals and IDEs accept clicks only; browsers \
+    other than Safari are view-only. If a tool reports CANCELLED, REMOTE_TURN or SECURE_INPUT, \
+    stop and tell the user.
     """
-
-let tools: [[String: Any]] = [
-    [
-        "name": "screenshot",
-        "description": "Capture the main display, downscaled. Returns a PNG whose pixels are the coordinate space for clicks.",
-        "inputSchema": ["type": "object", "properties": [String: Any](), "additionalProperties": false],
-    ],
-    [
-        "name": "left_click",
-        "description": "Left-click at [x, y] pixels in the most recent screenshot.",
-        "inputSchema": [
-            "type": "object",
-            "properties": [
-                "coordinate": [
-                    "type": "array", "items": ["type": "integer", "minimum": 0], "minItems": 2, "maxItems": 2,
-                    "description": "[x, y] in screenshot pixels",
-                ],
-            ],
-            "required": ["coordinate"],
-            "additionalProperties": false,
-        ],
-    ],
-]
 
 let agent = AgentClient()
 
@@ -43,27 +22,38 @@ func emit(_ object: [String: Any]) {
     FileHandle.standardOutput.write(data)
 }
 
+func text(_ value: String) -> [String: Any] { ["type": "text", "text": value] }
+
+func imageResult(_ shot: [String: Any], _ note: String) -> [String: Any] {
+    ["content": [["type": "image", "data": shot["png"] as? String ?? "", "mimeType": "image/png"], text(note)]]
+}
+
 func toolResult(_ name: String, _ arguments: [String: Any]) -> [String: Any] {
     do {
         switch name {
+        case "wait":
+            let seconds = min(max((arguments["duration"] as? NSNumber)?.doubleValue ?? 0, 0), ToolCatalog.maxWaitSeconds)
+            Thread.sleep(forTimeInterval: seconds)
+            return ["content": [text("Waited \(seconds) s.")]]
         case "screenshot":
             let shot = try agent.call("screenshot")
-            let width = shot["width"] as? Int ?? 0
-            let height = shot["height"] as? Int ?? 0
-            return ["content": [
-                ["type": "image", "data": shot["png"] as? String ?? "", "mimeType": "image/png"],
-                ["type": "text", "text": "Screenshot \(width)x\(height). Click coordinates use this image."],
-            ]]
-        case "left_click":
-            _ = try agent.call("left_click", ["coordinate": arguments["coordinate"] ?? NSNull()])
-            return ["content": [["type": "text", "text": "Clicked. Take a screenshot to verify the result."]]]
+            let apps = (shot["visibleApps"] as? [String] ?? []).joined(separator: ", ")
+            return imageResult(shot, "Screenshot \(shot["width"] ?? 0)x\(shot["height"] ?? 0); granted apps visible: \(apps.isEmpty ? "none" : apps). Coordinates use this image.")
+        case "zoom":
+            let shot = try agent.call("zoom", arguments)
+            return imageResult(shot, "Zoomed region \(shot["width"] ?? 0)x\(shot["height"] ?? 0). Click coordinates still refer to the last screenshot.")
+        case _ where ToolCatalog.names.contains(name):
+            let result = try agent.call(name, arguments)
+            if result["ok"] as? Bool == true, result.count == 1 { return ["content": [text("OK")]] }
+            let data = try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys])
+            return ["content": [text(String(decoding: data, as: UTF8.self))]]
         default:
-            return ["isError": true, "content": [["type": "text", "text": "Unknown tool \(name)."]]]
+            return ["isError": true, "content": [text("Unknown tool \(name).")]]
         }
     } catch let failure as AgentCallError {
-        return ["isError": true, "content": [["type": "text", "text": "\(failure.code): \(failure.message)"]]]
+        return ["isError": true, "content": [text("\(failure.code): \(failure.message)")]]
     } catch {
-        return ["isError": true, "content": [["type": "text", "text": "AGENT_UNAVAILABLE: \(error)"]]]
+        return ["isError": true, "content": [text("AGENT_UNAVAILABLE: \(error)")]]
     }
 }
 
@@ -83,7 +73,7 @@ func handle(_ message: [String: Any]) {
     case "ping":
         emit(["jsonrpc": "2.0", "id": id, "result": [String: Any]()])
     case "tools/list":
-        emit(["jsonrpc": "2.0", "id": id, "result": ["tools": tools]])
+        emit(["jsonrpc": "2.0", "id": id, "result": ["tools": ToolCatalog.tools]])
     case "tools/call":
         let name = params["name"] as? String ?? ""
         let arguments = params["arguments"] as? [String: Any] ?? [:]

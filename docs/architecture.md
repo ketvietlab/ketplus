@@ -284,6 +284,20 @@ The policy allows computer use only for Safari (which the Chromium-only
 `ketplus_browser` cannot drive) and for native apps that are not browsers; see
 ADR 0014.
 
+## Computer use
+
+`apps/computer` builds `KetPlus Computer.app` (Swift), a separately signed app
+nested in `KetPlus.app/Contents/Helpers`. It is the only KetPlus process that
+captures the screen or posts input, so macOS attributes Screen Recording and
+Accessibility to it. It also enforces per-conversation app grants, app tiers,
+the control lease and the Esc kill switch. `ketplus-computer-mcp`, inside the
+same bundle, is the stdio MCP front that providers launch. It forwards
+`computer.v0` requests over a user-only socket. `modules/computer` owns the
+opt-in settings, the host key and per-conversation tokens, the remote-turn
+markers, and the routing text. Claude receives the server per query, and
+Cursor receives it on session creation and loading. Codex does not receive it
+yet. See [ADR 0026](decisions/0026-ketplus-computer-agent-app.md).
+
 ## Local daemon slice
 
 Worktree selection is provider-specific. Codex can select the next turn's cwd during
