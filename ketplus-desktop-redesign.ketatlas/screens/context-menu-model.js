@@ -15,7 +15,7 @@ K.contextMenuItems = target => {
     const close = [item("close-tab", "Close"), item("close-others", "Close Other Tabs", target.tabCount < 2 ? "Only one tab is open." : ""), item("close-all", "Close All Tabs")];
     const preview = item("markdown-preview", "Markdown Preview", "", { checked: K.query.get("preview") === "markdown" });
     switch (target.kind) {
-        case "conversation": return [fork, separator, item("archive", "Archive conversation"), item("delete", "Delete conversation…", K.deletionBlocker({ ...target, kind: target.kind === "worktree" ? "worktree" : "conversation" }), { danger: true })];
+        case "conversation": return [item("tags", "Tags…"), fork, separator, item("archive", "Archive conversation"), item("delete", "Delete conversation…", K.deletionBlocker({ ...target, kind: target.kind === "worktree" ? "worktree" : "conversation" }), { danger: true })];
         case "legacy-conversation": return [item("rename-conversation", "Rename…"), fork, item("delete", "Delete…", K.deletionBlocker({ ...target, kind: "conversation" }), { danger: true }), item("archive", "Archive")];
         case "transcript": return [fork];
         case "changed-file": return [copyPath, item("reveal", K.query.get("platform") === "windows" ? "Reveal in Explorer" : K.query.get("platform") === "linux" ? "Reveal in File Manager" : "Reveal in Finder", missing ? "This file no longer exists." : ""), item("open-file", "Open File", missing ? "This file no longer exists." : "")];

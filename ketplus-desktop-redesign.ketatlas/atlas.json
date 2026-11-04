@@ -4306,6 +4306,146 @@
           "label": "Open remote repository"
         }
       ]
+    },
+    {
+      "id": "conversation-tags",
+      "title": "Tag and filter conversations",
+      "start": "rows",
+      "ends": [
+        "filtered",
+        "managed"
+      ],
+      "nodes": [
+        {
+          "id": "rows",
+          "screen": "workspace",
+          "title": "Two-line rows with tags",
+          "url": "./screens/workspace.html?repo=ketviet",
+          "column": 0,
+          "row": 0
+        },
+        {
+          "id": "menu",
+          "screen": "workspace",
+          "title": "Right-click · Tags…",
+          "url": "./screens/workspace.html?repo=ketviet&context=conversation",
+          "column": 1,
+          "row": 0
+        },
+        {
+          "id": "editor",
+          "screen": "workspace",
+          "title": "Tag editor",
+          "url": "./screens/workspace.html?repo=ketviet&tags=edit",
+          "column": 2,
+          "row": 0
+        },
+        {
+          "id": "create",
+          "screen": "workspace",
+          "title": "Create a tag while typing",
+          "url": "./screens/workspace.html?repo=ketviet&tags=edit&tagQuery=Release",
+          "column": 3,
+          "row": 0
+        },
+        {
+          "id": "limit",
+          "type": "note",
+          "title": "Limits",
+          "description": "Up to 8 tags per conversation and 32 tags in total; names up to 24 characters and unique without regard to case. Blocked choices stay visible with the reason.",
+          "column": 3,
+          "row": 1
+        },
+        {
+          "id": "filtered",
+          "screen": "workspace",
+          "title": "Filtered by tag",
+          "url": "./screens/workspace.html?repo=ketviet&tagFilter=account",
+          "column": 1,
+          "row": 1
+        },
+        {
+          "id": "managed",
+          "screen": "workspace",
+          "title": "Manage tags",
+          "url": "./screens/workspace.html?repo=ketviet&tags=manage",
+          "column": 2,
+          "row": 1
+        },
+        {
+          "id": "header",
+          "screen": "workspace",
+          "title": "Tags in the header",
+          "url": "./screens/workspace.html?repo=ketviet&tags=header",
+          "column": 0,
+          "row": 1
+        }
+      ],
+      "edges": [
+        {
+          "from": "rows",
+          "to": "menu",
+          "label": "Right-click a conversation"
+        },
+        {
+          "from": "menu",
+          "to": "editor",
+          "label": "Choose Tags…"
+        },
+        {
+          "from": "editor",
+          "to": "create",
+          "label": "Type a new name"
+        },
+        {
+          "from": "create",
+          "to": "rows",
+          "label": "Enter creates and applies it",
+          "kind": "primary"
+        },
+        {
+          "from": "create",
+          "to": "limit",
+          "label": "Limit reached",
+          "kind": "conditional"
+        },
+        {
+          "from": "rows",
+          "to": "filtered",
+          "label": "Click a tag chip",
+          "kind": "conditional"
+        },
+        {
+          "from": "filtered",
+          "to": "rows",
+          "label": "Clear the filter",
+          "kind": "recovery"
+        },
+        {
+          "from": "editor",
+          "to": "managed",
+          "label": "Manage tags…",
+          "kind": "conditional"
+        },
+        {
+          "from": "managed",
+          "to": "rows",
+          "label": "Save or Cancel",
+          "kind": "recovery"
+        },
+        {
+          "from": "rows",
+          "to": "header",
+          "label": "Click a tag or + in the header",
+          "kind": "conditional"
+        },
+        {
+          "from": "header",
+          "to": "rows",
+          "label": "Toggle, create or Escape",
+          "kind": "recovery"
+        }
+      ]
     }
   ]
 }

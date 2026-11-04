@@ -442,7 +442,7 @@ K.conversationParams = (page, query, params) => {
 };
 K.conversationCatalog = K.scope.conversations;
 K.conversationRows = (repo = K.repo) => {
-    const records = K.repositoryRecords(repo).filter(({ record }) => !record.id.startsWith("draft-") || record.explicit);
+    const records = K.repositoryRecords(repo).filter(({ record }) => (!record.id.startsWith("draft-") || record.explicit) && (K.isTagFiltered?.(record) ?? true));
     const expanded = (K.demo.expandedRepositories || []).includes(repo);
     const visible = expanded ? records : records.filter(({record}, index) => index < 5 || K.isActiveTurn(record) || (repo === K.repo && record.id === K.activeConversation));
     if (records.length === 0) return "";
@@ -454,8 +454,9 @@ K.conversationRows = (repo = K.repo) => {
                 ["workspace", "atlas-builder"].includes(K.page);
             const host = K.repositoryHost(repo);
             const available = !host || host.status === "connected";
-            const content = `${K.conversationActivity(record)}<span class="conversation-title">${K.escape(record.title)}</span>`;
-            const title = `${K.escape(record.title)}&#10;${K.escape(scope.tree)}${host ? `&#10;${K.escape(host.name)}` : ""}`;
+            const content = K.conversationRowContent?.(record, scope) ?? `${K.conversationActivity(record)}<span class="conversation-title">${K.escape(record.title)}</span>`;
+            const tagNames = (K.recordTags?.(record) || []).map(tag => tag.label).join(", ");
+            const title = `${K.escape(record.title)}${tagNames ? `&#10;Tags: ${K.escape(tagNames)}` : ""}&#10;${K.escape(scope.tree)}${host ? `&#10;${K.escape(host.name)}` : ""}`;
             return available
                 ? `<a class="conversation ${selected ? "selected" : ""}" data-conversation="${K.escape(record.id)}" title="${title}" ${selected ? 'aria-current="page"' : ""} href="${K.url(record.page, { repo: scope.repo, tree: scope.tree, conversation: record.id, state: record.turn, bundle: record.bundle || K.bundle })}">${content}</a>`
                 : `<span class="conversation unavailable" aria-disabled="true" title="${title}&#10;Remote machine offline">${content}</span>`;

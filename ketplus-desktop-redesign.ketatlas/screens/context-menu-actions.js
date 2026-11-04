@@ -26,6 +26,8 @@ K.performContextCommand = (id, target) => {
     if (["archive", "delete"].includes(id)) {
         const kind = target.kind === "worktree" ? "worktree" : "conversation";
         reload({ dialog: id, kind, target: target.id, targetTree: target.scope.tree, targetRepo: target.scope.repo });
+    } else if (id === "tags") {
+        K.openTagEditor(target);
     } else if (id === "fork") {
         if (K.demo.operation) return K.toast("Wait for the pending operation.");
         K.queue("fork");

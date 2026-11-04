@@ -35,6 +35,7 @@ K.sidebar = function () {
     const machineOptions = [`<option value="local" ${machine === "local" ? "selected" : ""}>This Mac</option>`,
         ...(K.demo.remoteHosts || []).map(item => `<option value="${K.escape(item.id)}" ${machine === item.id ? "selected" : ""}>Linux: ${K.escape(item.name)}</option>`)].join("");
     const repositories = K.repositoryCatalog.filter(repo => K.repositoryMachine(repo.id) === machine)
+        .filter(repo => !K.demo.tagFilter || K.repositoryRecords(repo.id).some(({ record }) => K.isTagFiltered(record)))
         .sort((a, b) => K.repositoryRecency(b.id) - K.repositoryRecency(a.id)
             || a.label.localeCompare(b.label))
         .map(repositoryGroup).join("");
@@ -45,7 +46,8 @@ K.sidebar = function () {
     <div class="sidebar-context"><div class="sidebar-rule"></div>
     <div class="machine-switcher"><div class="machine-select-wrap"><select id="machine-select" aria-label="Machine for repositories" title="${machine === "local" ? "Local repositories on this Mac" : `Linux machine ${K.escape(host?.name || "unavailable")} · ${host?.status === "connected" ? "Connected" : "Offline"}`}">${machineOptions}</select>${K.icon("chevron-down")}</div>${K.ib("plus", "Add repository", "repository")}</div>
     ${host?.status === "offline" ? `<p class="machine-note">Offline · ${K.link("connections", "Reconnect in Connections", null, { remote: "offline" })}</p>` : ""}
-    <nav class="repository-groups" aria-label="Repositories and conversations">${repositories || `<p class="repository-empty">${empty}</p>`}</nav></div>
+    ${K.tagFilterBar?.() || ""}
+    <nav class="repository-groups" aria-label="Repositories and conversations">${repositories || `<p class="repository-empty">${K.demo.tagFilter ? "No conversations with this tag." : empty}</p>`}</nav></div>
     <div class="sidebar-bottom">${K.query.get("userMenu") === "open" ? `<div class="user-menu" role="menu"><div class="user-menu-heading"><span class="avatar">AN</span><div><b>An Nguyen</b><small>Personal workspace</small></div></div><div class="user-menu-rule"></div>${K.link("settings", "<span>Settings</span><kbd>⌘ ,</kbd>", "settings", { userMenu: null }, "user-menu-item")}${K.link("connections", "<span>Account & devices</span>", "unplug", { userMenu: null }, "user-menu-item")}</div>` : ""}
     <button type="button" class="identity" data-action="user-menu" aria-expanded="${K.query.get("userMenu") === "open" ? "true" : "false"}"><span class="avatar">AN</span><span><b>An Nguyen</b><small>Personal workspace</small></span>${K.icon(K.query.get("userMenu") === "open" ? "chevron-up" : "chevron-down")}</button></div></div>`;
 };

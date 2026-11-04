@@ -1,7 +1,7 @@
 # KetPlus Desktop · A space to create
 
 Interactive desktop mock aligned with the latest fetched KetPlus Mobile design and
-implemented desktop features. **10 current screens, 20 workflows, 252 nodes, 328 transitions.**
+implemented desktop features. **10 current screens, 21 workflows, 260 nodes, 339 transitions.**
 All product UI copy is English, including the signed-out “Sign in” CTA.
 
 The Workspace `?activity=browser` fixture groups ordinary browser steps under
@@ -385,3 +385,36 @@ The viewer itself has an unrelated `/favicon.ico` 404; direct mock pages have no
 console errors or failed network requests. Native Qt/SwiftUI, physical iPhone
 keyboard/safe-area behavior, daemon permissions and real cross-device switching
 remain implementation work. Mock checks never mark native implementation verified.
+
+## Conversation tags and two-line sidebar rows
+
+Flow `conversation-tags`. Implemented natively per ADR 0028: Desktop SQLite storage, no agent
+access, filter not persisted. The native header shows a solid-bordered Add tag button
+instead of the mock's dashed one.
+
+- Every sidebar conversation row has two lines in a 48 px row (the native row is 36 px today).
+  Line 1 has the status icon, the title at full width and, while a turn started by another
+  conversation's message runs, `from #N`. Line 2 has the conversation's `#number`, then its tags.
+  An untagged row shows its status there instead.
+- Tags show as whole chips (84 px at most, long names end with an ellipsis). Chips that do not
+  fit are hidden and counted in `+N`, whose tooltip lists them. The tag of the active filter
+  always comes first. The default sidebar is 214 px wide (180 px minimum), and these rules keep
+  line 2 inside it.
+- Right-click → **Tags…** opens a popover with a search field and checkable tags. Typing a new
+  name offers **Create “…”**, and Enter creates the tag and applies it. Limits: 8 tags per
+  conversation, 32 in total, names up to 24 characters, unique regardless of case. Choices that
+  are blocked stay visible with the reason.
+- Clicking a chip filters every repository on the current machine by that tag. A bar shows the
+  tag and the match count with a clear (×) button. Repositories without a match are hidden.
+- The conversation header shows the open conversation's tags after the worktree chip: up to
+  three chips, then `+N`, then `+`. An untagged conversation shows a dashed **Add tag** button.
+  Any of them opens the same tag editor beneath the header. Edits update the header and the
+  sidebar row together.
+- **Manage tags…** renames tags, cycles their colour (8 colours, light and dark values) and
+  deletes them. Deleting a tag removes it from its conversations and clears a filter that uses it.
+- Fixtures: `?repo=ketviet`, `&context=conversation`, `&tags=edit[&tagQuery=Release]`,
+  `&tagFilter=account`, `&tags=manage`, `&tags=header` (editor opened from the header). Conversation numbers are a stable hash for the mock;
+  native numbers come from the daemon (ADR 0027).
+- Evidence: `evidence/conversation-tags/` (dark rows, the tag editor, header tags and Manage tags in light theme),
+  1440×900, Chromium through KetPlus browser tools. Code: `screens/conversation-tags.js`,
+  `screens/conversation-tag-actions.js`, `screens/conversation-tags.css`.
