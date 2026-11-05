@@ -150,6 +150,11 @@ void AgentWorktreeCreator::remove(const QString& repositoryPath, const QString& 
         emit failed(QStringLiteral("Only an inactive linked worktree can be removed."));
         return;
     }
+    const QString git = QStandardPaths::findExecutable(QStringLiteral("git"));
+    if (git.isEmpty()) {
+        emit failed(QStringLiteral("Git was not found on PATH."));
+        return;
+    }
     output_.clear();
     targetPath_ = target;
     timedOut_ = false;
@@ -157,11 +162,13 @@ void AgentWorktreeCreator::remove(const QString& repositoryPath, const QString& 
     pruning_ = false;
     active_ = true;
     auto environment = QProcessEnvironment::systemEnvironment();
-    environment.insert("GIT_TERMINAL_PROMPT", "0");
+    environment.insert(QStringLiteral("GIT_TERMINAL_PROMPT"), QStringLiteral("0"));
+    environment.insert(QStringLiteral("GIT_PAGER"), QStringLiteral("cat"));
     process_.setProcessEnvironment(environment);
     process_.setWorkingDirectory(repositoryPath);
-    process_.setProgram(QStringLiteral("git"));
-    QStringList arguments{QStringLiteral("worktree"), QStringLiteral("remove")};
+    process_.setProgram(git);
+    QStringList arguments{QStringLiteral("-c"), QStringLiteral("color.ui=false"),
+                          QStringLiteral("worktree"), QStringLiteral("remove")};
     if (force)
         arguments.append(QStringLiteral("--force"));
     arguments << QStringLiteral("--") << target;

@@ -262,6 +262,9 @@ class MainWindow final : public QMainWindow {
     void deleteAgentConversation(const QString& worktreePath, const QString& conversationId);
     void clearPendingWorktreeDeletion();
     void removeNextPendingLinkedWorktree();
+    // Empty when nothing in this window blocks removing the linked worktree `target`
+    // (canonical); otherwise every reason, separated by "; ". Both deletion paths use it.
+    [[nodiscard]] QString worktreeRemovalBlocker(const QString& target) const;
     bool archiveWorktree(const QString& path);
     bool restoreArchivedWorktree(const QString& path);
     [[nodiscard]] QVariantList archivedWorktrees() const;
@@ -417,6 +420,7 @@ class MainWindow final : public QMainWindow {
     QStringList pendingDeleteWorktreePaths_;
     QString pendingDeleteWorktreeRepository_;
     bool pendingDeleteWorktreeForce_{false};
+    QStringList pendingDeleteWorktreeSkipped_;
     QStringList sidebarRepositoryRoots_;
     QHash<QString, QString> sidebarRepositoryByPath_;
     QSet<QString> sidebarRepositoryLookups_;

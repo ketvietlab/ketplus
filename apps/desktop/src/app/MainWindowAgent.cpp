@@ -407,8 +407,9 @@ void MainWindow::ensureAgentWorkspace() {
             [this](const QString& path) {
                 agentManager_->archiveConversationsForWorktree(path);
                 git_->scheduleRefresh(0);
-                if (!pendingDeleteWorktreePaths_.isEmpty()) {
-                    removeNextPendingLinkedWorktree();
+                if (!pendingDeleteWorktreePaths_.isEmpty() ||
+                    !pendingDeleteWorktreeSkipped_.isEmpty()) {
+                    removeNextPendingLinkedWorktree(); // Also reports skipped worktrees.
                     return;
                 }
                 clearPendingWorktreeDeletion();
@@ -913,6 +914,7 @@ void MainWindow::clearPendingWorktreeDeletion() {
     pendingDeleteWorktreePaths_.clear();
     pendingDeleteWorktreeRepository_.clear();
     pendingDeleteWorktreeForce_ = false;
+    pendingDeleteWorktreeSkipped_.clear();
 }
 
 void MainWindow::removeNextPendingLinkedWorktree() {
@@ -925,11 +927,29 @@ void MainWindow::removeNextPendingLinkedWorktree() {
             continue;
         if (!QFileInfo(QDir(worktree).filePath(QStringLiteral(".git"))).isFile())
             continue;
+        // The same checks as the sidebar's "Delete worktree…", except that the current
+        // worktree is switched away from below instead of refusing.
+        const QString blocker = worktreeRemovalBlocker(QFileInfo(worktree).canonicalFilePath());
+        if (!blocker.isEmpty()) {
+            pendingDeleteWorktreeSkipped_.append(
+                tr("%1: %2").arg(QDir::toNativeSeparators(worktree), blocker));
+            continue;
+        }
         if (normalizedPath(worktree) == normalizedPath(workspaceRoot_) &&
             normalizedPath(primary) != normalizedPath(worktree))
             switchToWorktree(primary);
         agentWorktreeCreator_->remove(repository, worktree, pendingDeleteWorktreeForce_);
         return;
+    }
+    if (!pendingDeleteWorktreeSkipped_.isEmpty()) {
+        auto* notice =
+            new QMessageBox(QMessageBox::Warning, tr("Some worktrees were kept"),
+                            tr("These worktrees were not deleted:\n%1")
+                                .arg(pendingDeleteWorktreeSkipped_.join(QLatin1Char('\n'))),
+                            QMessageBox::Ok, this);
+        notice->setObjectName(QStringLiteral("worktreeDeletionSkipped"));
+        notice->setAttribute(Qt::WA_DeleteOnClose);
+        notice->open();
     }
     clearPendingWorktreeDeletion();
     git_->scheduleRefresh(0);

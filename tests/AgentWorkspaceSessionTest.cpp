@@ -73,6 +73,29 @@ void AgentWorkspaceViewTest::persistsComposerDraftByConversation() {
     attachmentRestored.removeAttachment(0);
 }
 
+void AgentWorkspaceViewTest::runningCheckoutsIncludeExecutionWorktrees() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString conversation = directory.filePath(QStringLiteral("repo"));
+    const QString execution = directory.filePath(QStringLiteral("repo-feature"));
+    QVERIFY(QDir().mkpath(conversation));
+    QVERIFY(QDir().mkpath(execution));
+
+    ketplus::CodexAppServer appServer(QStringLiteral("/nonexistent/fake-codex"));
+    ketplus::AgentSessionManager manager(&appServer);
+    // A conversation born in `repo` that now runs in `repo-feature`.
+    emit appServer.daemonSessionDiscovered(
+        QJsonObject{{QStringLiteral("session_id"), QStringLiteral("moved-session")},
+                    {QStringLiteral("session_generation"), 1},
+                    {QStringLiteral("conversation_path"), conversation},
+                    {QStringLiteral("worktree_path"), execution},
+                    {QStringLiteral("state"), QStringLiteral("running")}});
+    const QString canonicalExecution = QFileInfo(execution).canonicalFilePath();
+    QVERIFY(!manager.runningPaths().contains(canonicalExecution));
+    QVERIFY(manager.runningCheckoutPaths().contains(canonicalExecution));
+    QVERIFY(manager.runningCheckoutPaths().contains(QFileInfo(conversation).canonicalFilePath()));
+}
+
 void AgentWorkspaceViewTest::selectingColdDaemonConversationShowsChatRestoreState() {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
