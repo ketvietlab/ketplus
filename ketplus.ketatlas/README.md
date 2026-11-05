@@ -1,5 +1,9 @@
 # KetPlus Desktop · A space to create
 
+> **Frozen.** The design reference is now the Qt mock in `mockups/qt`
+> ([ADR 0033](../docs/decisions/0033-qt-design-mock.md)). This bundle is kept as a
+> record of earlier decisions and is no longer updated.
+
 Interactive desktop mock aligned with the latest fetched KetPlus Mobile design and
 implemented desktop features. **10 current screens, 21 workflows, 260 nodes, 339 transitions.**
 All product UI copy is English, including the signed-out “Sign in” CTA.

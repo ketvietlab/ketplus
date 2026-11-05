@@ -346,6 +346,13 @@ action. Composer block line-height matches
 the transcript at 1.75; focused Qt tests cover Vietnamese single-line sizing and composer undo.
 
 
+## Qt design mock
+
+The design reference is the Qt Quick mock in `mockups/qt` (ADR 0033), built
+from the Két Qt kit. It covers every screen and workflow of the frozen
+`ketplus.ketatlas` with deterministic fixtures, and `--smoke` fails on any QML
+warning. It is a standalone CMake project, not part of the Lite or Pro build.
+
 ## Conversation repository selector design prototype
 
 The Desktop Atlas now includes shared Desktop/iPhone repository-and-worktree
