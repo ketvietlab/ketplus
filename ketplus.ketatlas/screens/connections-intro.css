@@ -16,30 +16,18 @@
 .connections-local-note > .icon { width: 16px; height: 16px; flex-shrink: 0; margin-top: 2px; }
 .connections-scene { height: 400px; min-width: 0; border-radius: 16px; border: 1px solid var(--kv-panel-border); background: var(--kv-page-bg); overflow: hidden; }
 .connections-scene-content { position: relative; height: 100%; }
-.connection-desktop { position: absolute; left: 24px; right: 55px; top: 56px; height: 243px; border: 1px solid var(--kv-border-strong); border-radius: 9px; background: var(--kv-panel-bg); box-shadow: 0 14px 30px rgb(0 0 0 / 5%); overflow: hidden; }
-.connection-desktop-bar { height: 30px; display: flex; align-items: center; gap: 42px; padding: 0 12px; border-bottom: 1px solid var(--kv-panel-border); background: var(--kv-page-bg); }
+.connection-desktop { position: absolute; left: 24px; right: 55px; top: 44px; height: 286px; border: 1px solid var(--kv-border-strong); border-radius: 9px; background: var(--kv-panel-bg); box-shadow: 0 14px 30px rgb(0 0 0 / 5%); overflow: hidden; }
+.connection-desktop-bar { height: 26px; display: flex; align-items: center; gap: 42px; padding: 0 12px; border-bottom: 1px solid var(--kv-panel-border); background: var(--kv-page-bg); }
 .connection-desktop-bar > span:last-child { display: flex; align-items: center; gap: 5px; font-size: 9px; color: var(--kv-text-muted); }
 .connection-desktop-bar .icon { width: 11px; height: 11px; }
 .connection-window-dots { display: flex; gap: 4px; }
 .connection-window-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--kv-border-strong); }
-.connection-desktop-body { display: flex; height: calc(100% - 30px); }
-.connection-mini-rail { width: 38px; display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 14px 0; border-right: 1px solid var(--kv-panel-border); background: var(--kv-page-bg); flex-shrink: 0; }
-.connection-mini-rail > .icon { width: 13px; height: 13px; color: var(--kv-text-muted); }
-.connection-mini-rail .ket-mark { width: 19px; height: 19px; }
-.connection-mini-chat { padding: 15px; min-width: 0; flex: 1; }
-.connection-mini-chat > small { font-size: 8px; color: var(--kv-text-muted); }
-.connection-mini-chat h3 { font-size: 11px; margin-top: 3px; }
-.connection-sample-prompt { margin: 15px 0; border-radius: 5px; padding: 8px; background: var(--kv-accent-subtle); color: var(--kv-accent-text); font-size: 8px; }
-.connection-agent-label { display: flex; align-items: center; gap: 5px; font-size: 9px; }
-.connection-agent-label .ket-mark { width: 13px; height: 13px; }
-.connection-agent-label > span:last-child { margin-left: auto; color: var(--kv-text-muted); font-size: 8px; }
-.connection-mini-chat > p { margin: 9px 0; font-size: 9px; line-height: 1.7; }
-.connection-sample-lines i { display: block; width: 68%; height: 3px; border-radius: 2px; background: var(--kv-border-default); margin-top: 5px; }
-.connection-sample-lines i:last-child { width: 45%; }
-/* Real KetPlus Mobile capture (ketplus-app ketplus-worktree-mobile.ketatlas @ bf9d14f6, 393×852 @2x). */
+/* Real captures: desktop workspace.html?state=question (1280×760) and KetPlus Mobile
+   (ketplus-app ketplus-worktree-mobile.ketatlas @ bf9d14f6, 393×852 @2x). */
+.connection-desktop > .connection-screen { display: block; width: 100%; height: calc(100% - 26px); object-fit: cover; object-position: left top; }
 .connection-phone { position: absolute; right: 18px; top: 26px; width: 160px; aspect-ratio: 393 / 852; padding: 4px; box-sizing: content-box; border-radius: 26px; background: #111214; box-shadow: 0 0 0 1px rgb(255 255 255 / 8%) inset, 0 18px 36px rgb(0 0 0 / 16%); }
-.connection-phone-screen { display: block; width: 100%; height: 100%; border-radius: 22px; }
-:root:not([data-theme="dark"]) .connection-phone-screen[data-theme-variant="dark"], :root[data-theme="dark"] .connection-phone-screen[data-theme-variant="light"] { display: none; }
+.connection-phone > .connection-screen { display: block; width: 100%; height: 100%; border-radius: 22px; }
+:root:not([data-theme="dark"]) .connection-screen[data-theme-variant="dark"], :root[data-theme="dark"] .connection-screen[data-theme-variant="light"] { display: none; }
 .connection-scene-caption { position: absolute; left: 25px; bottom: 23px; display: flex; align-items: center; gap: 7px; color: var(--kv-text-muted); font-size: 9px; }
 .connection-scene-caption .icon { width: 13px; height: 13px; }
 .connections-setup { border-top: 1px solid var(--kv-panel-border); padding-top: 28px; }
