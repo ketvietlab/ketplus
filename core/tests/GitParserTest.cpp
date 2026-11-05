@@ -45,6 +45,7 @@ class GitParserTest final : public QObject {
     void diffsSymlinksAsLinks();
     void diffsUntrackedFilesWithDecomposedNames();
     void stopsPendingCommandsBeforeDestruction();
+    void diffsFilesBeforeTheFirstCommit();
 };
 
 void GitParserTest::parsesPorcelainV2Status() {
@@ -373,6 +374,60 @@ void GitParserTest::stopsPendingCommandsBeforeDestruction() {
     QVERIFY(!runningAtOwnerDestruction);
     for (const auto& process : pending)
         QVERIFY(process.isNull());
+}
+
+void GitParserTest::diffsFilesBeforeTheFirstCommit() {
+    const QString git = QStandardPaths::findExecutable(QStringLiteral("git"));
+    if (git.isEmpty())
+        QSKIP("Git is not installed.");
+
+    QTemporaryDir workspace;
+    QVERIFY(workspace.isValid());
+    // Canonical, because a deleted file cannot be resolved through /var -> /private/var.
+    const QString root = QFileInfo(workspace.path()).canonicalFilePath();
+    QVERIFY(runGit(git, root, {QStringLiteral("init"), QStringLiteral("-q")}));
+    const QString staged = QDir(root).filePath(QStringLiteral("staged.txt"));
+    const QString removed = QDir(root).filePath(QStringLiteral("removed.txt"));
+    for (const QString& path : {staged, removed}) {
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QCOMPARE(file.write("first\n"), 6);
+    }
+    // A tracked symlink whose target does not exist is still an entry on disk.
+    const QString danglingLink = QDir(root).filePath(QStringLiteral("dangling-link"));
+    QVERIFY(QFile::link(QStringLiteral("missing-target"), danglingLink));
+    QVERIFY(runGit(git, root, {QStringLiteral("add"), QStringLiteral(".")}));
+    // Staged, then deleted from the working tree: only the index still has it.
+    QVERIFY(QFile::remove(removed));
+
+    ketplus::GitService service;
+    service.setWorkspacePath(root);
+    QTRY_COMPARE_WITH_TIMEOUT(service.snapshot().files.size(), 3, 5000);
+    QCOMPARE(service.snapshot().head, QStringLiteral("(initial)"));
+
+    QHash<QString, QString> diffs;
+    QHash<QString, QString> errors;
+    connect(&service, &ketplus::GitService::diffReady, &service,
+            [&](const QString& path, const ketplus::GitDiffMode, const QString& diff,
+                const QString& error) {
+                diffs.insert(path, diff);
+                errors.insert(path, error);
+            });
+    service.requestDiff(staged);
+    service.requestDiff(removed);
+    service.requestDiff(danglingLink);
+    QTRY_COMPARE_WITH_TIMEOUT(diffs.size(), 3, 5000);
+    QVERIFY2(errors.value(danglingLink).isEmpty(), qPrintable(errors.value(danglingLink)));
+    QVERIFY2(diffs.value(danglingLink).contains(QStringLiteral("new file mode 120000")),
+             qPrintable(diffs.value(danglingLink)));
+    QVERIFY(diffs.value(danglingLink).contains(QStringLiteral("+missing-target")));
+    QVERIFY2(errors.value(staged).isEmpty(), qPrintable(errors.value(staged)));
+    QVERIFY2(diffs.value(staged).contains(QStringLiteral("+first")),
+             qPrintable(diffs.value(staged)));
+    // Absent from both the working tree and the (empty) HEAD: no combined change.
+    QVERIFY2(errors.value(removed).isEmpty(), qPrintable(errors.value(removed)));
+    QVERIFY2(diffs.contains(removed) && diffs.value(removed).isEmpty(),
+             qPrintable(diffs.value(removed)));
 }
 
 QTEST_MAIN(GitParserTest)
