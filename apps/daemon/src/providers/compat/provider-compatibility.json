@@ -1,0 +1,65 @@
+{
+    "manifest_version": 1,
+    "window": "Releases from the last three months are supported (ADR 0015). Review monthly.",
+    "reviewed": "2026-09-25",
+    "providers": {
+        "codex": {
+            "name": "Codex CLI",
+            "minimum": "0.142.1",
+            "tested": [
+                "0.154.0"
+            ],
+            "update": "npm install -g @openai/codex@latest",
+            "update_homebrew": "brew upgrade codex",
+            "dialects": [
+                {
+                    "id": "codex-app-server-v2",
+                    "from": "0.142.1",
+                    "capabilities": [
+                        "images",
+                        "modelList",
+                        "rateLimits",
+                        "threadFork",
+                        "threadRename",
+                        "threadResume",
+                        "turnInterrupt",
+                        "turnSteer"
+                    ]
+                }
+            ]
+        },
+        "cursor": {
+            "name": "Cursor CLI",
+            "minimum": "2026.06.25",
+            "tested": [
+                "2026.09.18"
+            ],
+            "update": "agent update",
+            "dialects": [
+                {
+                    "id": "cursor-acp-v1",
+                    "from": "2026.06.25",
+                    "capabilities": [
+                        "images",
+                        "modelList",
+                        "threadResume",
+                        "turnInterrupt"
+                    ]
+                }
+            ]
+        },
+        "claude": {
+            "name": "Claude Agent SDK",
+            "bundled": true,
+            "capabilities": [
+                "images",
+                "modelList",
+                "threadFork",
+                "threadResume",
+                "turnInterrupt",
+                "turnSteer"
+            ]
+        }
+    },
+    "capabilities": "Capability names are listed in ADR 0015. KetPlus gates features on these, never on version numbers."
+}

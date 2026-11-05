@@ -1,9 +1,11 @@
 /build/
 /dist/
 /.cache/
-/.cache/
 /.idea/
 /.vscode/
 .DS_Store
 CMakeUserPresets.json
 compile_commands.json
+node_modules/
+# jurplel/install-qt-action runs aqt in the checkout, even on a cache hit.
+aqtinstall.log

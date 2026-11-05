@@ -1,0 +1,123 @@
+GIẤY PHÉP SỬ DỤNG PHÔNG CHỮ KÉT SANS — phiên bản 1.0
+Copyright 2026 Két Việt. Bảo lưu mọi quyền.
+
+Bản tiếng Việt là bản chính. Bản tiếng Anh bên dưới để tham khảo.
+
+1. Định nghĩa
+   "Phông chữ" là các tệp phông KÉT Sans (OTF, TTF, WOFF2) và tài liệu đi kèm do Két Việt phát
+   hành. "Bạn" là cá nhân hoặc tổ chức sử dụng Phông chữ.
+
+2. Quyền được cấp
+   Két Việt cấp cho Bạn quyền miễn phí, không độc quyền, có hiệu lực toàn cầu và không chuyển
+   nhượng được để tải, cài đặt và sử dụng Phông chữ trên bất kỳ số lượng thiết bị nào. Quyền này
+   áp dụng cho mục đích cá nhân lẫn thương mại, kể cả in ấn, ấn phẩm số, website, ứng dụng, video,
+   quảng cáo, bao bì, logo và nhận diện thương hiệu.
+
+3. Nhúng Phông chữ
+   Bạn được nhúng Phông chữ vào:
+   a) tài liệu điện tử như PDF;
+   b) website, qua @font-face với tệp do Bạn tự lưu trữ;
+   c) ứng dụng, trò chơi và thiết bị.
+   Bạn được đổi định dạng hoặc lược bớt glyph (subset) của Phông chữ, nhưng chỉ để nhúng. Điều
+   kiện: không đưa Phông chữ ra thành tệp riêng để người khác tải, cài đặt hoặc trích xuất.
+
+4. Những điều không được làm
+   a) Sửa, chỉnh outline, ghép hoặc chuyển thể Phông chữ, hay tạo phông chữ phái sinh từ Phông
+      chữ, trừ việc đổi định dạng và subset theo mục 3.
+   b) Bán, cho thuê, cấp phép lại hoặc phân phối lại các tệp Phông chữ, dù riêng lẻ hay trong gói
+      hoặc bộ sưu tập phông, kể cả khi phân phối miễn phí. Người khác cần Phông chữ phải tải từ
+      nguồn chính thức của Két Việt.
+   c) Dùng tên "KÉT Sans" hay nhãn hiệu KÉT cho bất kỳ phông chữ nào khác.
+   d) Gỡ bỏ thông tin bản quyền và giấy phép trong các tệp Phông chữ.
+
+5. Logo và tác phẩm của Bạn
+   Bạn được dùng Phông chữ để tạo logo, nhãn hiệu và các tác phẩm khác. Quyền đối với tác phẩm đó
+   thuộc về Bạn. Tuy vậy, điều này không cho Bạn thêm quyền nào đối với bản thân Phông chữ.
+
+6. Quyền sở hữu
+   Phông chữ thuộc sở hữu của Két Việt và được pháp luật về sở hữu trí tuệ bảo hộ. Giấy phép này
+   không chuyển giao quyền sở hữu nào cho Bạn. KÉT là nhãn hiệu của Két Việt và không được cấp
+   phép theo giấy phép này.
+
+7. Không bảo đảm
+   Phông chữ được cung cấp "nguyên trạng", không kèm bất kỳ bảo đảm nào, dù rõ ràng hay ngụ ý, kể
+   cả bảo đảm về khả năng thương mại, sự phù hợp với một mục đích cụ thể và việc không vi phạm
+   quyền của bên thứ ba.
+
+8. Giới hạn trách nhiệm
+   Trong phạm vi pháp luật cho phép, Két Việt không chịu trách nhiệm về bất kỳ thiệt hại nào phát
+   sinh từ việc sử dụng hoặc không thể sử dụng Phông chữ.
+
+9. Chấm dứt
+   Giấy phép tự động chấm dứt khi Bạn vi phạm bất kỳ điều khoản nào. Khi đó Bạn phải ngừng sử dụng
+   Phông chữ và xoá mọi bản sao của nó.
+
+10. Phiên bản giấy phép
+    Két Việt có thể ban hành phiên bản giấy phép mới cho các bản Phông chữ phát hành sau này. Bản
+    Phông chữ Bạn đã tải tiếp tục tuân theo giấy phép đi kèm bản đó.
+
+11. Luật áp dụng
+    Giấy phép này được điều chỉnh bởi pháp luật Việt Nam.
+
+--------------------------------------------------------------------------------
+
+KÉT SANS FONT LICENSE — version 1.0
+Copyright 2026 Két Việt. All rights reserved.
+
+The Vietnamese text above is the governing version. This English text is for reference.
+
+1. Definitions
+   "Font" means the KÉT Sans font files (OTF, TTF, WOFF2) and accompanying documentation released
+   by Két Việt. "You" means the individual or organisation using the Font.
+
+2. Grant
+   Két Việt grants You a free, non-exclusive, worldwide, non-transferable licence to download,
+   install and use the Font on any number of devices. This licence covers personal and commercial
+   purposes, including print, digital publications, websites, apps, video, advertising,
+   packaging, logos and brand identities.
+
+3. Embedding
+   You may embed the Font in:
+   a) electronic documents such as PDF;
+   b) websites, through @font-face with files You host yourself;
+   c) apps, games and devices.
+   You may convert or subset the Font, but only for embedding. Condition: the Font must not be
+   made available as a separate file that others can download, install or extract.
+
+4. Restrictions
+   You may not:
+   a) modify, edit the outlines of, combine or adapt the Font, or create derivative fonts from
+      it, except for the conversion and subsetting allowed in section 3;
+   b) sell, rent, sublicense or redistribute the Font files, alone or in font packages or
+      collections, even free of charge. Others who need the Font must download it from Két
+      Việt's official source;
+   c) use the name "KÉT Sans" or the KÉT trademark for any other font;
+   d) remove the copyright and licence information from the Font files.
+
+5. Logos and your work
+   You may use the Font to create logos, trademarks and other works. The rights in those works
+   belong to You. This gives You no further rights in the Font itself.
+
+6. Ownership
+   The Font is owned by Két Việt and protected by intellectual property law. This licence
+   transfers no ownership to You. KÉT is a trademark of Két Việt and is not licensed under this
+   licence.
+
+7. No warranty
+   The Font is provided "as is", without warranty of any kind, express or implied, including
+   warranties of merchantability, fitness for a particular purpose and non-infringement.
+
+8. Limitation of liability
+   To the extent permitted by law, Két Việt is not liable for any damage arising from the use of,
+   or inability to use, the Font.
+
+9. Termination
+   This licence ends automatically if You breach any of its terms. You must then stop using the
+   Font and delete all copies of it.
+
+10. Licence versions
+    Két Việt may issue new versions of this licence for later releases of the Font. A release You
+    have downloaded remains under the licence that came with it.
+
+11. Governing law
+    This licence is governed by the laws of Vietnam.

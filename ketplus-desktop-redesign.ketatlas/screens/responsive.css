@@ -1,0 +1,306 @@
+@media (max-width: 1150px) {
+    .atlas-grid {
+        gap: 12px;
+    }
+    .atlas-thumbnail {
+        padding: 19px 12px 0;
+        height: 154px;
+    }
+    .atlas-card-details {
+        padding: 13px;
+    }
+    .atlas-card-details h3 {
+        font-size: var(--kp-text-base);
+    }
+    .atlas-meta {
+        gap: 8px;
+    }
+    .atlas-meta time {
+        display: none;
+    }
+    .builder-scroll {
+        padding: 20px;
+    }
+    .preview-surface {
+        padding: 20px;
+    }
+    .demo-onboarding {
+        padding: 22px;
+    }
+    .file-explorer {
+        width: 195px;
+    }
+    .source-line code {
+        font-size: var(--kp-text-sm);
+    }
+}
+@media (max-width: 760px) {
+    .file-explorer {
+        display: none;
+    }
+    .file-tabs > a,
+    .file-tabs > span:not(.spacer) {
+        padding: 0 8px;
+        font-size: var(--kp-text-xs);
+    }
+    .source-code {
+        min-width: 100%;
+    }
+    .markdown-preview {
+        padding: 25px;
+    }
+    .markdown-preview h1 {
+        font-size: calc(26px * var(--kp-font-scale));
+    }
+    .atlas-grid {
+        grid-template-columns: 1fr;
+    }
+    .atlas-toolbar {
+        flex-wrap: wrap;
+    }
+    .atlas-toolbar .search-field {
+        width: 100%;
+    }
+    .atlas-card-details p {
+        min-height: 0;
+    }
+    .atlas-thumbnail {
+        height: 180px;
+    }
+    .prototype-stage {
+        padding: 20px;
+    }
+    .prototype-stage .demo-onboarding {
+        padding: 23px;
+    }
+    .atlas-preview-bar {
+        padding: 0 12px;
+        gap: 7px;
+    }
+    .atlas-preview-bar .muted {
+        display: none;
+    }
+    .recent-atlas td:nth-child(3) {
+        display: none;
+    }
+    .page-heading {
+        gap: 15px;
+        flex-wrap: wrap;
+    }
+    .page-heading h1 {
+        font-size: calc(23px * var(--kp-font-scale));
+    }
+}
+@media (max-width: 1150px) {
+    .settings-layout {
+        gap: 22px;
+    }
+    .settings-nav {
+        width: 150px;
+        padding-right: 12px;
+    }
+    .signin-layout {
+        gap: 25px;
+    }
+    .signin-story h1 {
+        font-size: calc(28px * var(--kp-font-scale));
+    }
+    .illustration-monitor {
+        width: 180px;
+    }
+    .device-status {
+        width: 140px;
+    }
+    .device-time {
+        display: none;
+    }
+    .device-row {
+        gap: 14px;
+        padding: 20px 17px;
+    }
+    .connection-overview {
+        gap: 24px;
+    }
+    .connection-orbit {
+        padding-right: 0;
+    }
+    .connection-overview h2 {
+        font-size: calc(17px * var(--kp-font-scale));
+    }
+    .connection-overview p {
+        font-size: var(--kp-text-md);
+    }
+    .connection-overview .row {
+        flex-wrap: wrap;
+    }
+}
+@media (max-width: 760px) {
+    .settings-layout {
+        display: block;
+        margin-top: 10px;
+    }
+    .settings-nav {
+        width: 100%;
+        display: flex;
+        gap: 5px;
+        min-height: 0;
+        overflow-x: auto;
+        border: 0;
+        padding: 0 0 12px;
+        margin-bottom: 10px;
+    }
+    .settings-nav a {
+        white-space: nowrap;
+    }
+    .settings-main {
+        max-width: none;
+    }
+    .settings-nav a:nth-child(n + 3) {
+        display: none;
+    }
+    .theme-options {
+        gap: 10px;
+    }
+    .theme-mini {
+        margin: 7px 7px 0;
+    }
+    .theme-mini-side {
+        width: 30px;
+    }
+    .theme-mini-main {
+        padding: 15px 8px;
+    }
+    .settings-preview-message .badge {
+        display: none;
+    }
+    .settings-footer .btn {
+        font-size: var(--kp-text-sm);
+        padding: 4px 8px;
+    }
+    .typography-fields .field-row {
+        grid-template-columns: 110px 1fr;
+        gap: 12px;
+    }
+    .connection-overview {
+        display: block;
+        padding: 10px 0 26px;
+    }
+    .connection-orbit {
+        justify-content: center;
+        padding: 15px 0 26px;
+    }
+    .device-row {
+        flex-wrap: wrap;
+        gap: 12px;
+        padding: 15px;
+    }
+    .device-description {
+        min-width: 150px;
+    }
+    .device-status {
+        padding-left: 52px;
+        width: auto;
+        flex: 1;
+    }
+    .connections-footnote {
+        align-items: flex-start;
+        line-height: 1.8;
+    }
+    .account-strip small {
+        font-size: var(--kp-text-xs) !important;
+    }
+    .account-strip .btn {
+        padding: 5px;
+        font-size: var(--kp-text-xs);
+    }
+    .signin-layout {
+        display: flex;
+        flex-direction: column;
+        gap: 30px;
+        min-height: 0;
+    }
+    .signin-story {
+        width: 100%;
+    }
+    .signin-story h1 {
+        font-size: calc(27px * var(--kp-font-scale));
+    }
+    .signin-story > p {
+        max-width: none;
+    }
+    .device-illustration {
+        display: none;
+    }
+    .signin-feature {
+        font-size: var(--kp-text-sm);
+    }
+    .signin-form-wrap {
+        width: 100%;
+    }
+    .signin-form-wrap [data-ui="surface"] {
+        padding: 23px;
+    }
+    .spotlight-backdrop {
+        padding: 70px 12px 12px;
+    }
+    .spotlight > footer > span:last-child {
+        display: none;
+    }
+    .spotlight > form > input {
+        font-size: var(--kp-text-base);
+    }
+    .spotlight-hint {
+        font-size: var(--kp-text-xs);
+        padding-left: 15px;
+        padding-right: 15px;
+    }
+    .spotlight-result b {
+        font-size: var(--kp-text-sm);
+    }
+    .spotlight-result small {
+        font-size: var(--kp-text-xs);
+    }
+}
+.desktop-main .nav-item {
+    white-space: nowrap;
+}
+html {
+    font-size: 16px;
+}
+.nav-item {
+    white-space: nowrap;
+}
+.transcript {
+    padding-top: 10px;
+    padding-bottom: 14px;
+}
+.day-divider {
+    margin: 0 0 12px;
+}
+.user-message {
+    margin-bottom: 18px;
+}
+.changed-file {
+    padding-top: 7px;
+    padding-bottom: 7px;
+}
+.changed-files {
+    margin-top: 12px;
+}
+.chat-scroll {
+    scrollbar-color: var(--kv-border-default) transparent;
+}
+body .nav-item {
+    font-size: calc(12px * var(--kp-font-scale));
+}
+.source-line code {
+    font-size: var(--kp-editor-size, 12.65px);
+    font-family: var(--kp-editor-font, var(--kv-font-mono));
+}
+.terminal-output,
+#terminal-command {
+    font-size: var(--kp-terminal-size, 12.65px);
+}
+.markdown-preview {
+    font-size: var(--kp-markdown-size, 13.8px);
+}

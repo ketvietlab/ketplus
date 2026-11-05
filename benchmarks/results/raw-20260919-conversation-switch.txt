@@ -1,0 +1,40 @@
+revision=073cbc2fdb1110e4a3e9af8b6cc0c35e95aaceb0
+tracked_diff_sha256=92a08f64913be7442dd6c9555d75f4eaa33e20d5e9f28f22b34e7d12a86ed6f1
+CMAKE_BUILD_TYPE:STRING=Release
+CMAKE_CXX_FLAGS_RELEASE:STRING=-O3 -DNDEBUG
+os=Darwin 25.2.0 Darwin Kernel Version 25.2.0: Tue Nov 18 21:09:40 PST 2025; root:xnu-12377.61.12~1/RELEASE_ARM64_T6000 arm64 arm
+hardware=Apple M1 Pro
+memory_bytes=34359738368
+run=1
+arm=baseline
+{"batch":{"appliedMs":121,"cacheBytes":914328,"cachedPages":0,"idleMs":121,"measuredMs":121,"messages":60,"newer":false,"pages":10,"preparedMs":121,"readMs":11},"body_kib":8,"cpu_ms":309.86100000000005,"messages":60,"mode":"history-initial","pages":10,"wall_ms":128.099584}
+{"batch":{"appliedMs":46,"cacheBytes":914328,"cachedPages":0,"idleMs":46,"measuredMs":46,"messages":60,"newer":false,"pages":10,"preparedMs":46,"readMs":12},"cpu_ms":242.16199999999998,"messages":60,"mode":"history-switch-cold","pages":10,"wall_ms":49.674875}
+{"messages":60,"mode":"history-switch-warm","wall_ms":1.343042}
+{"body_kib":8,"mode":"measure","same_page_repeated":[{"cpu_ms":279.707,"wall_ms":106.078375},{"cpu_ms":225.784,"wall_ms":34.918125},{"cpu_ms":218.03799999999995,"wall_ms":35.714291},{"cpu_ms":194.73600000000002,"wall_ms":104.375833}]}
+arm=candidate
+{"batch":{"appliedMs":82,"cacheBytes":0,"cachedPages":0,"idleMs":82,"measuredMs":82,"messages":6,"newer":false,"pages":1,"preparedMs":82,"readMs":4},"body_kib":8,"cpu_ms":70.519,"messages":6,"mode":"history-initial","pages":1,"wall_ms":88.021833}
+{"batch":{"appliedMs":7,"cacheBytes":0,"cachedPages":0,"idleMs":7,"measuredMs":7,"messages":6,"newer":false,"pages":1,"preparedMs":7,"readMs":6},"cpu_ms":4.767000000000021,"messages":6,"mode":"history-switch-cold","pages":1,"wall_ms":10.210458}
+{"messages":6,"mode":"history-switch-warm","wall_ms":1.079084}
+{"body_kib":8,"mode":"measure","same_page_repeated":[{"cpu_ms":271.99500000000006,"wall_ms":102.552958},{"cpu_ms":3.556999999999977,"wall_ms":1.992375},{"cpu_ms":3.1220000000000137,"wall_ms":1.6945},{"cpu_ms":2.6619999999999977,"wall_ms":1.7985}]}
+run=2
+arm=baseline
+{"batch":{"appliedMs":150,"cacheBytes":914328,"cachedPages":0,"idleMs":150,"measuredMs":150,"messages":60,"newer":false,"pages":10,"preparedMs":150,"readMs":11},"body_kib":8,"cpu_ms":263.098,"messages":60,"mode":"history-initial","pages":10,"wall_ms":156.401125}
+{"batch":{"appliedMs":52,"cacheBytes":914328,"cachedPages":0,"idleMs":51,"measuredMs":51,"messages":60,"newer":false,"pages":10,"preparedMs":51,"readMs":15},"cpu_ms":192.53499999999997,"messages":60,"mode":"history-switch-cold","pages":10,"wall_ms":54.896875}
+{"messages":60,"mode":"history-switch-warm","wall_ms":1.725583}
+{"body_kib":8,"mode":"measure","same_page_repeated":[{"cpu_ms":264.105,"wall_ms":114.971125},{"cpu_ms":184.91799999999998,"wall_ms":32.42925},{"cpu_ms":196.49499999999998,"wall_ms":33.451417},{"cpu_ms":181.19700000000006,"wall_ms":34.432875}]}
+arm=candidate
+{"batch":{"appliedMs":80,"cacheBytes":0,"cachedPages":0,"idleMs":80,"measuredMs":80,"messages":6,"newer":false,"pages":1,"preparedMs":80,"readMs":2},"body_kib":8,"cpu_ms":70.658,"messages":6,"mode":"history-initial","pages":1,"wall_ms":87.640917}
+{"batch":{"appliedMs":5,"cacheBytes":0,"cachedPages":0,"idleMs":5,"measuredMs":5,"messages":6,"newer":false,"pages":1,"preparedMs":5,"readMs":5},"cpu_ms":4.644000000000009,"messages":6,"mode":"history-switch-cold","pages":1,"wall_ms":9.113625}
+{"messages":6,"mode":"history-switch-warm","wall_ms":1.2065}
+{"body_kib":8,"mode":"measure","same_page_repeated":[{"cpu_ms":268.21900000000005,"wall_ms":103.917958},{"cpu_ms":2.8329999999999744,"wall_ms":1.821875},{"cpu_ms":2.5880000000000347,"wall_ms":1.756667},{"cpu_ms":2.827000000000024,"wall_ms":1.809791}]}
+run=3
+arm=baseline
+{"batch":{"appliedMs":130,"cacheBytes":914328,"cachedPages":0,"idleMs":130,"measuredMs":129,"messages":60,"newer":false,"pages":10,"preparedMs":130,"readMs":11},"body_kib":8,"cpu_ms":287.151,"messages":60,"mode":"history-initial","pages":10,"wall_ms":135.322083}
+{"batch":{"appliedMs":55,"cacheBytes":914328,"cachedPages":0,"idleMs":55,"measuredMs":55,"messages":60,"newer":false,"pages":10,"preparedMs":55,"readMs":17},"cpu_ms":220.02100000000002,"messages":60,"mode":"history-switch-cold","pages":10,"wall_ms":57.128667}
+{"messages":60,"mode":"history-switch-warm","wall_ms":1.460292}
+{"body_kib":8,"mode":"measure","same_page_repeated":[{"cpu_ms":288.68399999999997,"wall_ms":114.519083},{"cpu_ms":218.339,"wall_ms":34.511208},{"cpu_ms":223.88600000000002,"wall_ms":35.01125},{"cpu_ms":220.27399999999997,"wall_ms":32.579792}]}
+arm=candidate
+{"batch":{"appliedMs":81,"cacheBytes":0,"cachedPages":0,"idleMs":81,"measuredMs":81,"messages":6,"newer":false,"pages":1,"preparedMs":81,"readMs":3},"body_kib":8,"cpu_ms":69.36200000000001,"messages":6,"mode":"history-initial","pages":1,"wall_ms":86.708833}
+{"batch":{"appliedMs":6,"cacheBytes":0,"cachedPages":0,"idleMs":6,"measuredMs":6,"messages":6,"newer":false,"pages":1,"preparedMs":6,"readMs":6},"cpu_ms":4.605999999999999,"messages":6,"mode":"history-switch-cold","pages":1,"wall_ms":9.787375}
+{"messages":6,"mode":"history-switch-warm","wall_ms":1.322709}
+{"body_kib":8,"mode":"measure","same_page_repeated":[{"cpu_ms":289.746,"wall_ms":105.767959},{"cpu_ms":3.4210000000000074,"wall_ms":1.780917},{"cpu_ms":3.051000000000026,"wall_ms":1.824292},{"cpu_ms":3.192000000000028,"wall_ms":1.758542}]}

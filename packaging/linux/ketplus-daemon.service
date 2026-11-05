@@ -1,0 +1,19 @@
+[Unit]
+Description=KetPlus headless agent daemon
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/opt/ketplus/current/bin/ketplus_daemon
+Environment=KETPLUS_DAEMON_DATA_DIR=%h/.local/share/Ketsuite/KetPlus
+Environment=KETPLUS_DAEMON_SOCKET=%t/ketplus-daemon-v0
+Environment=PATH=%h/.local/bin:%h/.local/opt/ketplus/current/bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=-%h/.config/ketplus/daemon.env
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillMode=control-group
+UMask=0077
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,107 @@
+# KetPlus CM architecture
+
+## Boundaries
+
+```text
+Qt application shell
+    -> editor adapter
+        -> Scintilla + Lexilla
+        -> native persistent typography settings
+    -> document core
+    -> workspace explorer
+        -> QFileSystemModel (lazy directory loading, no content index)
+    -> Git service
+        -> system Git CLI via short-lived asynchronous processes
+    -> terminal panel (lazy)
+        -> terminal UI (Qt Widgets selection, search, painting)
+        -> terminal core (Qt Core + libvterm, no Qt Widgets)
+            -> VT state and bounded scrollback
+            -> PTY process backend
+                -> forkpty (macOS/Linux)
+                -> ConPTY (future Windows backend)
+    -> standalone macOS terminal shell
+        -> native windows and menus
+        -> one terminal UI/core session per open tab
+    -> reusable settings shell
+        -> public appearance settings and built-in theme selection
+        -> consumer-owned pages through a narrow extension contract
+```
+
+- `src/app` owns windows, menus, tabs, and user interaction.
+- `src/editor` adapts Scintilla to KetPlus CM concepts. Scintilla API calls must not
+  leak into the application shell. Editor typography is normalized and persisted
+  here, then shared with read-only diff views.
+- `src/core` owns documents and persistence. It must not depend on Qt Widgets.
+- `src/workspace` owns the lightweight file tree and filesystem actions. It
+  discovers entries only when folders are expanded and does not build an index.
+- `src/git` owns read-only repository discovery, status/diff requests, porcelain
+  parsing, and linked-worktree discovery. It never stages, commits, or changes
+  the checkout.
+- `src/terminal` is split into `KetPlusCM::terminal_core` and
+  `KetPlusCM::terminal_ui`. `TerminalSession` owns VT state, bounded scrollback,
+  keyboard encoding and `PtyProcess` without depending on Qt Widgets;
+  `TerminalView` and `TerminalPanel` own painting, selection, clipboard, search,
+  and panel actions. `KetPlusCM::terminal` remains a compatibility target for
+  the complete UI. `PtyProcess` isolates platform process creation so a ConPTY
+  backend can be added without changing the session or UI contracts.
+- `src/terminal_app` is the macOS-only standalone application shell. It owns
+  windows, tabs, native menu actions, Finder open requests, and LaunchServices
+  metadata, while reusing `terminal_core` and `terminal_ui` unchanged. The
+  target is enabled by default for public macOS app builds and stays out of
+  embedded consumers whenever `KETPLUS_CM_BUILD_APP=OFF`.
+- `src/preview` keeps Mermaid output as SVG through the full-size diagram viewer;
+  mouse-wheel and native trackpad pinch gestures zoom the vector scene without
+  rasterizing it.
+- Proprietary KetPlus features consume a pinned KetPlus CM revision and live in
+  separate files and targets. They must not be added behind compile flags in
+  this repository or implemented by modifying CM files without publishing those
+  modifications under MPL 2.0.
+- Reusable CMake targets are exposed through the `KetPlusCM::` namespace. The
+  public app is optional through `KETPLUS_CM_BUILD_APP`, so a proprietary
+  consumer does not compile or package the CM shell.
+- `develop` is the integration branch. Production consumers pin a commit from
+  `main`, preferably the commit identified by an immutable `cm-v*` release tag.
+- Terminal creation is lazy. Hiding its panel only detaches the visible area; it
+  does not stop the shell. The first implementation retains one session, while
+  the planned session registry will retain one or more sessions per worktree.
+- `src/app/SettingsDialog` owns the reusable tabbed settings shell. Public
+  appearance values are applied as one normalized snapshot; proprietary
+  consumers register self-owned pages through `SettingsHost`, with validated
+  stable identity, deterministic ordering and ownership transfer only after a
+  successful registration. Their storage and behavior remain outside CM. See
+  `settings.md`.
+
+## Principles
+
+1. Keep startup synchronous work minimal.
+2. Load heavyweight services only when a feature needs them.
+3. Keep parsing, indexing, and project search away from the UI thread.
+4. Prefer process-based extensions over an unstable in-process C++ plugin ABI.
+5. Measure startup time, memory, and large-file behavior before adding features.
+6. Keep Git optional and read-only; terminal workflows remain the source of truth
+   for operations that mutate a repository.
+
+## Suggested milestones
+
+1. Editing foundation: robust encodings, line endings, recent files, session
+   restore, and drag-and-drop.
+2. Workspace: file watcher, project search powered by ripgrep, and command
+   palette. The non-indexing file tree is implemented.
+3. Code intelligence: Tree-sitter and optional LSP processes.
+4. Extensions: versioned JSON-RPC protocol with out-of-process plugins.
+
+## Document display modes
+
+Markdown documents open in an embedded preview with a horizontally centered floating Preview/Source control, 100 px above the document viewport bottom. The Scintilla source buffer, undo history and cursor remain alive across switches. Preview parsing is cached by content, path, theme and typography; hidden documents defer refresh until shown. Body width is capped at 960 logical pixels. Large-file mode retains source-only behavior.
+
+GitDiffView defaults to Diff and adds Preview/Source for Markdown. Preview and read-only Source show the right-hand revision: the index for staged changes, the working tree otherwise. Git revision reads are generation-fenced; failed index reads never fall back to unstaged content. MarkdownModeController owns presentation without changing EditorWidget identity or duplicating private product code.
+
+## Reopening files changed outside the editor
+
+`EditorWidget::refreshFromDisk()` reads a clean open file again on explicit reopen.
+It compares decoded content rather than size/mtime, preserves caret/selection and
+scroll, and keeps undo/redo when bytes are unchanged. Dirty buffers are never
+replaced. A missing/unreadable file returns an error without replacing the current
+buffer. Hibernated documents use their normal restore path. Markdown retains its
+Preview/Source mode and invalidates the rendered content when text changes.
+Consumers call this exported API when activating an already open file.

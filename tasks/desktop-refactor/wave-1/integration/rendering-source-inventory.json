@@ -1,0 +1,421 @@
+{
+  "revision": "d0591869113ad4420961bff2ef2f2ac0ea840b58",
+  "designTree": "b2b621b64a457fe4c0de2b36f5dcee0c807e969d",
+  "renderingSourceSha256": "76e38167628a53b8a207abe78d48f2ab37c4199c565fbd15623fceb324cee157",
+  "entries": [
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/DESIGN.md",
+      "gitBlob": "a8fe6104af124b23a625dc4b17ae816862f99c6a",
+      "category": "documentation",
+      "sha256": "2b145848259c978e6e7b59db525be7901630e907b0866924b53d7410415288e5"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/FLOW-CONTRACT.md",
+      "gitBlob": "6b9a6450561b41bb8fef477fb8f3735a5fb0b166",
+      "category": "documentation",
+      "sha256": "861c879c196cd8e0b39b754591358305733c857dc8dfa1e3e502728c83dd5e31"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/README.md",
+      "gitBlob": "4bb818855fb6a8b15afd9d28c178624898099641",
+      "category": "documentation",
+      "sha256": "87ce942943c92f984901f8c6590c62398bb61f89a67fda6434197a394e7809e1"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/REVIEW-RESOLUTION.md",
+      "gitBlob": "89a59f64ac562885ac87d78e1195aaf7bdab1740",
+      "category": "documentation",
+      "sha256": "d8684a485cd11adae5670907d1734e682fa2d8748dce84872efbacd3518e43d5"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/adapter.schema.json",
+      "gitBlob": "073c67c75ebedae293b51079b5ba609a8bb984a4",
+      "category": "rendering-source",
+      "sha256": "1c5625c38dcdf17468fa66c5e95e40f0e9a3b9320df85de191b8dddff0459314"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/assets/activity/activity-expanded.svg",
+      "gitBlob": "5ce25f17255b9f5aa0e5e7b1878ee5523affa122",
+      "category": "rendering-source",
+      "sha256": "44d436a054ed2e09f00b7a3b243364867aada510a4bbe0e631453651aa7f3ae6"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/assets/activity/image-gallery.svg",
+      "gitBlob": "55f12814bea67ec00147b016e3e029987bdc2cae",
+      "category": "rendering-source",
+      "sha256": "dfac46d15612b47c66f441090617424cdc7ab611c82cab8afa2e6e71c95547bc"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/assets/activity/workspace-dark.svg",
+      "gitBlob": "ba092caf7731665ea63c4625a15fe4d6b77e3986",
+      "category": "rendering-source",
+      "sha256": "db92489fb0bea61d2fcb74eda863a310fd06739ae60271c96b198cd113aeb47a"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/assets/activity/workspace-light.svg",
+      "gitBlob": "cc1225a78f9ac6f92d5e6b88f47c0a5bc8b36cc5",
+      "category": "rendering-source",
+      "sha256": "4f138dcbf2595082b5845a4e0be9406cbeb17ff00deb12fd061fe9fc41f8be9b"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/assets/brand/ketplus-v1/README.md",
+      "gitBlob": "7cfc146cc1f5c1a30c7d4c0700c94d0449d2100d",
+      "category": "documentation",
+      "sha256": "d1c663eada7083efc721a52364225894e09141624446718fff06abe91627223d"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/assets/brand/ketplus-v1/ketplus-icon.png",
+      "gitBlob": "5cfa4eba2ca58f810869fe5a9958aa2efd8753f4",
+      "category": "rendering-source",
+      "sha256": "f63d5ed7b505ac8f42fb1f15102959307658441ce23236602347f49dadedc13b"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/assets/brand/ketplus-v1/ketplus-logo-dark.png",
+      "gitBlob": "419ef9fd68cd954617734df913a81cbbf0cabfcc",
+      "category": "rendering-source",
+      "sha256": "da53d738267325156b992eb83c57e3ade4a5da85d64252640258c5535a931fe8"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/assets/brand/ketplus-v1/ketplus-logo-light.png",
+      "gitBlob": "97547d978de663e3f5a4cd48f4904f7a544cd2b0",
+      "category": "rendering-source",
+      "sha256": "ee135c6ea3835b0b17e81b23d26d8e397a2a660d17ab82bbacfdf4c8f417c7fd"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/assets/brand/ketplus-v1/ketplus-mark-transparent.png",
+      "gitBlob": "086b6cd689a6679c6c0af8a7e52223c412636b42",
+      "category": "rendering-source",
+      "sha256": "aafad5596c2e59ef6626cb20bc3997bcb058c9b8d8b1d78cf630a9eeeec31836"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/assets/fonts.css",
+      "gitBlob": "a987f29c9f0eda29c216e7a81ea4701536d91fc0",
+      "category": "rendering-source",
+      "sha256": "2ca642f4c269bafe87685bf3195fe9215307c8d483577ce53ec51a19dd6504e4"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/assets/fonts/inter-latin-ext-standard-normal.woff2",
+      "gitBlob": "a0125fa05c1b9bd6d9679c949dc58ec26ab71aaf",
+      "category": "rendering-source",
+      "sha256": "5e6d4fe9d9f4bff8b2a2469d25ab19576bb85331e22c6ed51398e16f95d56a9c"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/assets/fonts/inter-latin-standard-normal.woff2",
+      "gitBlob": "b0d0e2e5c6bc11bf3696f830d73b4f7077cc33a4",
+      "category": "rendering-source",
+      "sha256": "2c295d99e26dcf357d4d01bcf270fd6924b600c9a13dd8c363ef114f4c6976fa"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/assets/fonts/inter-vietnamese-standard-normal.woff2",
+      "gitBlob": "79ac1ef3d204d84a4e025f4d64ca0f10e7479c77",
+      "category": "rendering-source",
+      "sha256": "935ab355938e6cd9b5fa39f2c3250ee16f3b08807c65dc4162356b50dbc8c7a2"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/assets/icons.js",
+      "gitBlob": "f34d7cad462be01eea081264fe22b9dcec70c866",
+      "category": "rendering-source",
+      "sha256": "d91375445f3675239ea3d94b1f89dbfe101f265ac164056b8cfe8a44d70c52b2"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/assets/ket-design-system-contracts.js",
+      "gitBlob": "43a62add1249bfe0e2239c64029a24f986742a62",
+      "category": "rendering-source",
+      "sha256": "cfb786252bcea96b8ff6cc30e6cfa9d2c09f0ba4129b1d4b740f238712c02e84"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/assets/ket-design-system-runtime.js",
+      "gitBlob": "9243bd1a33f22e196232f7ab43ec73fe2d81ebe5",
+      "category": "rendering-source",
+      "sha256": "060327db243e68f394f2a46e364aa331eee4fbedc4ffc9ce0e11478b5e5a9356"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/assets/ket-design-system.css",
+      "gitBlob": "aa4613952e33f1fb1762893ac12dd1a7ad956b78",
+      "category": "rendering-source",
+      "sha256": "1a73199437536b1955111f37e8ed08e1ed395ac1b689af17b81e4b9cb4895f2e"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/assets/pairing-demo.svg",
+      "gitBlob": "c7906a67233868171383d395eddea98d13c3081a",
+      "category": "rendering-source",
+      "sha256": "4d060191692a3a7108948d3b947a3cb194aae6310049b61784dc58a8c43a242d"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/atlas.json",
+      "gitBlob": "d6bca36bcfe89dcaf8182eb4d9f65e8605ee92d4",
+      "category": "rendering-source",
+      "sha256": "ba172fd07fe2399eef4f6f7e703141618585c7b0a88f44f18d29c6b542ca65bd"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/atlas.progress.json",
+      "gitBlob": "8470eebf042d32ea0a1657eecddf6d4edc053b53",
+      "category": "progress-metadata",
+      "sha256": "821892ec0f88ff908b393dc6d4ad7d7380d504557e44b36d81dfbfc849adc40d"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/design-system.atlas.json",
+      "gitBlob": "a893f4128877b6aa19b5868dc4e528fb3184475b",
+      "category": "rendering-source",
+      "sha256": "e279941c069d1613bf047596fae7eefde401b24da2574df69e967d4aeaf6de16"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/design-system.lock.json",
+      "gitBlob": "f8f18842931c37b274e71de4a1d79a449817b16c",
+      "category": "rendering-source",
+      "sha256": "92c2d251096bfd78c8c1b19d1e1d6b424cef211a9e966829b44e27a3801e0e75"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/ketatlas.schema.json",
+      "gitBlob": "d47e741d3d374ac1cc86001078641c62101aa076",
+      "category": "rendering-source",
+      "sha256": "9cc6d5a3974e6e49c24f699de31c535a00eed9adf81a9bbe4ff3ea5f0b9a7a12"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/licenses/Inter-OFL.txt",
+      "gitBlob": "40589daa9de8bc96606292ea0be712ff0f0626eb",
+      "category": "documentation",
+      "sha256": "3b0a5fca3d17942cde889069889dedbbbd075e9b599968c82a95f4d944e9b345"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/licenses/Ket-Design-System-MIT.txt",
+      "gitBlob": "345a46051384ff41b5dbf86591a6238699c5c869",
+      "category": "documentation",
+      "sha256": "21a04c5b7aa12b45dfefe506cae70ffb2f22961e3bd89d9edcbcaad57e86956c"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/licenses/Lucide.txt",
+      "gitBlob": "718bb3f0e44153809972abed31839375804bf652",
+      "category": "documentation",
+      "sha256": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/actions.js",
+      "gitBlob": "503bce67780076a721b24654a3a3b179fc21d61a",
+      "category": "rendering-source",
+      "sha256": "e4f1e4192b5da67b3e478aac2f46a0b98a794a0edd367860dd8707b6f95eebaa"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/archive.js",
+      "gitBlob": "92f59daa63524b50d6b361b7dbb8dbf5b88d52fc",
+      "category": "rendering-source",
+      "sha256": "21bdcec36cfac29699ad6df506b5a3518e37269475ec7762e84a6f2673dc83f0"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/atlas-builder.html",
+      "gitBlob": "ac70ee191d1439d6419dbf691a6cb071d933498c",
+      "category": "rendering-source",
+      "sha256": "cf0e92a412034c611e843395471cbb0257be5b4f332559678a10bb552ff1fc0f"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/atlas-flows.js",
+      "gitBlob": "3cba2fc1c910be24236de583072d7d630f22f8d7",
+      "category": "rendering-source",
+      "sha256": "8e5d001dde7d7b2414b3f5a0266d9b3a887663776f9b3214784c1e2ed3d58b34"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/atlas-library.html",
+      "gitBlob": "af050402ed9bd30d753b0f0785fb82f79af6d93e",
+      "category": "rendering-source",
+      "sha256": "c589887601681816dea548ce715d1f2d15a05ef153a0e2be2709b3ef1a10b71f"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/atlas-map.css",
+      "gitBlob": "e5dbf34f3bcbe7d9ce6b740bc405d56005a9791a",
+      "category": "rendering-source",
+      "sha256": "ff5c47e17024106b96980c83bbf1f522b4e27af59dbb32bbb56d17075a3ade5c"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/atlas-map.js",
+      "gitBlob": "c68aa58f2d2d70a263caa4c1cb22627be616b1b1",
+      "category": "rendering-source",
+      "sha256": "768b96eaa689630a1dcff2414cd00594258c77bf7f911c1ba1bed303948213f1"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/atlas-preview.html",
+      "gitBlob": "5e5ff91fd46d00f6ab8a76d41bd9d4dc9eb0bd13",
+      "category": "rendering-source",
+      "sha256": "439de3fafecbd4e904c82860c6aec34d4892de85f70ba77634d4ae9b27acb6f2"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/atlas.css",
+      "gitBlob": "ae8679c25961497c7bad4fc1875e3c92aab158fb",
+      "category": "rendering-source",
+      "sha256": "c56741e5876778667b8c394424611c0beb28929cd84fc9d1dc5974d53763e04e"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/atlas.js",
+      "gitBlob": "52c324f37d406236498415e284984f16d7e1cef3",
+      "category": "rendering-source",
+      "sha256": "be1d7ed057f715392a7ebd8208f3d9c4281fd04cc3acfc7f3f9529271315151f"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/changes.html",
+      "gitBlob": "784cec6810df336838bdcc040bc547760650ae1f",
+      "category": "rendering-source",
+      "sha256": "1b5d113b529bd6faa06921afc2af144f9d3febb9e65f716133ac867f7ff46502"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/code.js",
+      "gitBlob": "bb755fe9d635c83d29ef526631ae67df918a2f7c",
+      "category": "rendering-source",
+      "sha256": "8542e338df2669af05e7c3158a8c0828e32124f2585477b6c0a157c7b5bb2e89"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/connections.css",
+      "gitBlob": "b71a4310799d169e17b302033c568706218be509",
+      "category": "rendering-source",
+      "sha256": "a161edb89abfd7d2f55ec051c7740114cf3873e78d9bd186fec1db944605c90e"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/connections.html",
+      "gitBlob": "e11ac38ed4585b52b18bab8f5b0a84d243059211",
+      "category": "rendering-source",
+      "sha256": "512302c21f75a7d60d8ff84123f46b8bb5d65ffabc5909e71e0fa1a069c678b4"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/connections.js",
+      "gitBlob": "e1de0d663bf536d5e3eb37dac98c9f29a97639e0",
+      "category": "rendering-source",
+      "sha256": "022882b8fa19dbe7b4168f666704a413e7302bde6b2d2e637065e5834a6a7ee2"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/conversations.js",
+      "gitBlob": "28034b0cf629eb6f4941b135498b80b5015dd2f9",
+      "category": "rendering-source",
+      "sha256": "2f9a4d684dfef52dc2e73738c82c269d3d1f93e2c802f190af783e220ed9340c"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/core.js",
+      "gitBlob": "616a12fb107c794e602cff013b3c53c92c236a8d",
+      "category": "rendering-source",
+      "sha256": "62270d62c99e3e5593f30298120455d493d7e8a4fd0cac6233d4a9e174d05293"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/desktop.css",
+      "gitBlob": "2c717a754aceb49c0745d5fe6690300eacc78b33",
+      "category": "rendering-source",
+      "sha256": "3b1924b30bec1d6e2ed379e39e6884754e6dd779e6e419c7659797f1edd51d86"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/editor.css",
+      "gitBlob": "04fbdc4bf326efe2fd948c1ebaaede29fe6423fb",
+      "category": "rendering-source",
+      "sha256": "f2846bd9bf420bc875022d9a9ade53b60bcbe4dfea5929845c7e10205ae0a3b4"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/editor.html",
+      "gitBlob": "76f83e0cb045010fa5d9761aeb340484ec545d2e",
+      "category": "rendering-source",
+      "sha256": "75f3fbcc6624faae952a7424986f6b1466afdc6ad02add76982e88ed0cb0740e"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/history-actions.js",
+      "gitBlob": "afe138b29a8664862d349a6268bde429f0c16410",
+      "category": "rendering-source",
+      "sha256": "3df130fec161701ecef55270f1da60bbe3341b8ecdae830997bad649368e28d2"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/journey-actions.js",
+      "gitBlob": "4469b0e4ac13200c2b1e626bc7403798fbeb5dfb",
+      "category": "rendering-source",
+      "sha256": "767c5dd589732daabf6d8ae4cff026161ba92f81ca7451f4a25b90654c61d04b"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/journey-model.js",
+      "gitBlob": "4d8c859e45d836be7f3ec912c726c936f8795bbe",
+      "category": "rendering-source",
+      "sha256": "30d2e44874fb27dcb28599e4445cfc501b3f402748f02dc24aafcb887bc368de"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/journeys.css",
+      "gitBlob": "b9123410789881d1266dd4fc6a6dc770cb2ab826",
+      "category": "rendering-source",
+      "sha256": "72536e6989790bfd8c33f3cc2c548c85e9432760bab5573d0884cf5af6f8ddc4"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/responsive.css",
+      "gitBlob": "14e1f2d9158ba2974d7ed70c9eecb6c512e7bba0",
+      "category": "rendering-source",
+      "sha256": "d7d0e3ac9681f13588a1851b6bf26c2d6fd8cdd6e7bfd64bf81aedb0d6b68b49"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/search.html",
+      "gitBlob": "41404b0c5c8595ca46ebb2290fb312de5ddf6e9f",
+      "category": "rendering-source",
+      "sha256": "d58ecd6d33b42a52bf43fa72fdb816c923021b6c82b5efd99cb8748bb356de3a"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/settings.css",
+      "gitBlob": "88e0db53b26450443289cc7fa2f776974eb4229b",
+      "category": "rendering-source",
+      "sha256": "bfc3a585b950ee68b374481be714ccc7ff2c57dc416e8d037a5124edfb38c75f"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/settings.html",
+      "gitBlob": "5968e618ffd256677dec4ee72bb0fdba7043c853",
+      "category": "rendering-source",
+      "sha256": "4330f709de65aa37275cdac94ba19571f3d7397b76d142561707d21600849a1e"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/settings.js",
+      "gitBlob": "2c53d220740efc4210057db00732078cdbe9983a",
+      "category": "rendering-source",
+      "sha256": "bba99cdf852ba2c204febdd1181a6d7b5a10a3e5b252c93b372294524e47650a"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/shell.js",
+      "gitBlob": "bec6ddb1c3a71d0dc7b144b2826331612ad98267",
+      "category": "rendering-source",
+      "sha256": "4f96f5ea673ff7af8fa936447d8500cf8b3ccf56a6ee1d4c64cf5023c5b7f42a"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/sidebar-status.css",
+      "gitBlob": "a8734becda498a8bd4674f2c8bd9735d969583c9",
+      "category": "rendering-source",
+      "sha256": "f7adb6a2d5d45c10799ba0f8cf42414e8f27d669b06d5de7ca8a604042900bd3"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/spotlight.css",
+      "gitBlob": "de90220a21e3a051898acb033a3fa0a74e65e577",
+      "category": "rendering-source",
+      "sha256": "05a28140d0c488899e32ed804fb2a41282ca1297c8e0b2e45d47d8becf3d34ff"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/typography.css",
+      "gitBlob": "21bc12abd1ed696bf482932e201bd1dc7c204632",
+      "category": "rendering-source",
+      "sha256": "247d1829e2e9f760720897f6522b31eb7bdbd93013c7d1395cad15882cfe36c5"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/workspace-states.js",
+      "gitBlob": "e402456dc1c5b365cff816640e454bc95d11dea5",
+      "category": "rendering-source",
+      "sha256": "d40be24ee8d2fb3e603eb72b17c47e20d30148f8f93caa643a99c50d61f942b8"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/workspace.css",
+      "gitBlob": "07a88b6699bbc0f286fe29c46a5a88d9affe0825",
+      "category": "rendering-source",
+      "sha256": "1c48c0a746394627c093ef771a4d6c808d0c2ab726bea3503ae40c48e05e4e51"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/workspace.html",
+      "gitBlob": "1a61b5b183c8b80f05fa849a59d376a9d5df6132",
+      "category": "rendering-source",
+      "sha256": "63fb7676342f1690d4301b2db4927ab8eb9c26c1f0c1ab768524bd26dbfc4a1f"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/workspace.js",
+      "gitBlob": "a43a4181f0be0cf95e015fe4ee26626d6b2adf7b",
+      "category": "rendering-source",
+      "sha256": "0f66011621daee00bd2de99f626b942abaf926c9a4d6e097948e7d69aa7efeda"
+    },
+    {
+      "path": "ketplus-desktop-redesign.ketatlas/screens/worktrees.html",
+      "gitBlob": "81598ed5d60160f7c2ff648af270b4ac1fab8727",
+      "category": "rendering-source",
+      "sha256": "714194803e7eaaf25e574937f2c35423859b6a0848f74a3d0c2cd5c5bc39b17a"
+    }
+  ]
+}

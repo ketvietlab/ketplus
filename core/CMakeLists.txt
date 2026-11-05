@@ -1,0 +1,598 @@
+cmake_minimum_required(VERSION 3.24)
+
+project(
+    KetPlusCM
+    VERSION 0.3.6
+    DESCRIPTION "A fast, lightweight, cross-platform text editor"
+    LANGUAGES C CXX
+)
+
+option(KETPLUS_CM_BUILD_APP "Build the KetPlus CM desktop application" ON)
+option(KETPLUS_CM_BUILD_TESTS "Build KetPlus CM tests" ON)
+option(KETPLUS_CM_BUILD_BENCHMARKS "Build KetPlus CM performance benchmarks" OFF)
+if(APPLE)
+    option(KETPLUS_CM_BUILD_TERMINAL_APP
+        "Build the standalone KetPlus Terminal application" ON
+    )
+else()
+    option(KETPLUS_CM_BUILD_TERMINAL_APP
+        "Build the standalone KetPlus Terminal application" OFF
+    )
+endif()
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTOUIC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Core5Compat Svg SvgWidgets)
+
+include(cmake/CompilerCache.cmake)
+include(cmake/Dependencies.cmake)
+include(cmake/Warnings.cmake)
+
+set_property(GLOBAL PROPERTY
+    KETPLUS_CM_INTER_FONT_SOURCE_DIR "${inter_font_SOURCE_DIR}"
+)
+
+function(ketplus_cm_add_font_resources target)
+    get_property(font_source_dir GLOBAL PROPERTY KETPLUS_CM_INTER_FONT_SOURCE_DIR)
+    qt_add_resources(${target} "ketplus_fonts"
+        PREFIX "/fonts"
+        BASE "${font_source_dir}"
+        FILES "${font_source_dir}/InterVariable.ttf"
+    )
+    qt_add_resources(${target} "ketplus_font_licenses"
+        PREFIX "/licenses/inter"
+        BASE "${font_source_dir}"
+        FILES "${font_source_dir}/LICENSE.txt"
+    )
+endfunction()
+
+add_library(ketplus_ui STATIC
+    src/ui/FindReplaceBar.cpp
+    src/ui/FindReplaceBar.h
+    src/ui/Theme.cpp
+    src/ui/Theme.h
+)
+target_link_libraries(ketplus_ui PUBLIC Qt6::Widgets)
+target_include_directories(ketplus_ui PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
+)
+ketplus_enable_warnings(ketplus_ui)
+add_library(KetPlusCM::ui ALIAS ketplus_ui)
+
+add_library(ketplus_core STATIC
+    src/core/Document.cpp
+    src/core/Document.h
+)
+target_link_libraries(ketplus_core PUBLIC Qt6::Core)
+target_include_directories(ketplus_core PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
+)
+ketplus_enable_warnings(ketplus_core)
+add_library(KetPlusCM::core ALIAS ketplus_core)
+
+add_library(ketplus_git STATIC
+    src/git/GitRevisionContent.cpp
+    src/git/GitRevisionContent.h
+    src/git/GitParser.cpp
+    src/git/GitParser.h
+    src/git/GitService.cpp
+    src/git/GitService.h
+    src/git/GitTypes.h
+)
+target_link_libraries(ketplus_git PUBLIC Qt6::Core)
+target_include_directories(ketplus_git PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
+)
+ketplus_enable_warnings(ketplus_git)
+add_library(KetPlusCM::git ALIAS ketplus_git)
+
+add_library(ketplus_workspace STATIC
+    src/workspace/ExplorerPanel.cpp
+    src/workspace/ExplorerPanel.h
+    src/workspace/FuzzyMatcher.cpp
+    src/workspace/FuzzyMatcher.h
+    src/workspace/QuickOpenPopup.cpp
+    src/workspace/QuickOpenPopup.h
+    src/workspace/SearchPanel.cpp
+    src/workspace/SearchPanel.h
+    src/workspace/WorkspaceFileIndex.cpp
+    src/workspace/WorkspaceFileIndex.h
+    src/workspace/WorkspaceSearch.cpp
+    src/workspace/WorkspaceSearch.h
+)
+target_link_libraries(ketplus_workspace PUBLIC Qt6::Widgets)
+target_include_directories(ketplus_workspace PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
+)
+ketplus_enable_warnings(ketplus_workspace)
+add_library(KetPlusCM::workspace ALIAS ketplus_workspace)
+
+add_library(ketplus_terminal_core STATIC
+    src/terminal/PtyProcess.cpp
+    src/terminal/PtyProcess.h
+    src/terminal/TerminalSession.cpp
+    src/terminal/TerminalSession.h
+)
+target_link_libraries(ketplus_terminal_core PUBLIC Qt6::Core ketplus_vterm)
+if(UNIX AND NOT APPLE)
+    target_link_libraries(ketplus_terminal_core PRIVATE util)
+endif()
+target_include_directories(ketplus_terminal_core PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
+)
+ketplus_enable_warnings(ketplus_terminal_core)
+add_library(KetPlusCM::terminal_core ALIAS ketplus_terminal_core)
+
+add_library(ketplus_terminal_ui STATIC
+    src/terminal/TerminalPanel.cpp
+    src/terminal/TerminalPanel.h
+    src/terminal/TerminalView.cpp
+    src/terminal/TerminalView.h
+)
+target_link_libraries(ketplus_terminal_ui
+    PUBLIC Qt6::Widgets ketplus_terminal_core ketplus_ui
+)
+target_include_directories(ketplus_terminal_ui PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
+)
+ketplus_enable_warnings(ketplus_terminal_ui)
+add_library(KetPlusCM::terminal_ui ALIAS ketplus_terminal_ui)
+
+# Compatibility target for current consumers. New integrations can choose the
+# non-Widgets core or the complete Widgets UI explicitly.
+add_library(ketplus_terminal INTERFACE)
+target_link_libraries(ketplus_terminal INTERFACE ketplus_terminal_ui)
+add_library(KetPlusCM::terminal ALIAS ketplus_terminal)
+
+add_library(ketplus_preview STATIC
+    src/preview/MarkdownPreviewPane.cpp
+    src/preview/MarkdownPreviewPane.h
+    src/preview/MarkdownModeController.cpp
+    src/preview/MarkdownModeController.h
+    src/preview/MermaidDiagramDialog.cpp
+    src/preview/MermaidDiagramDialog.h
+    src/preview/MermaidRenderer.cpp
+    src/preview/MermaidRenderer.h
+)
+qt_add_resources(ketplus_preview "ketplus_mermaid_themes"
+    PREFIX "/ketplus/mermaid"
+    BASE "resources/mermaid"
+    FILES resources/mermaid/light.json resources/mermaid/dark.json
+          resources/mermaid/SOURCE.json resources/mermaid/KetDesignSystem-LICENSE.txt
+)
+target_link_libraries(ketplus_preview
+    PUBLIC Qt6::Widgets Qt6::Svg Qt6::SvgWidgets ketplus_ui
+)
+target_include_directories(ketplus_preview PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
+)
+ketplus_enable_warnings(ketplus_preview)
+add_library(KetPlusCM::preview ALIAS ketplus_preview)
+
+add_library(ketplus_editor STATIC
+    src/editor/DefinitionPattern.cpp
+    src/editor/DefinitionPattern.h
+    src/editor/EditorSettings.cpp
+    src/editor/EditorSettings.h
+    src/editor/EditorSplitPane.cpp
+    src/editor/EditorSplitPane.h
+    src/editor/EditorViewOptions.cpp
+    src/editor/EditorViewOptions.h
+    src/editor/EditorWidget.cpp
+    src/editor/EditorFileRefresh.cpp
+    src/editor/EditorMarkdown.cpp
+    src/editor/EditorWidget.h
+    src/editor/SymbolExtractor.cpp
+    src/editor/SymbolExtractor.h
+    src/editor/SyntaxDefinition.cpp
+    src/editor/SyntaxDefinition.h
+)
+target_link_libraries(ketplus_editor
+    PUBLIC
+        Qt6::Widgets
+        ketplus_core
+        ketplus_preview
+        ketplus_scintilla
+        ketplus_ui
+        ketplus::syntax
+)
+target_include_directories(ketplus_editor PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
+)
+ketplus_enable_warnings(ketplus_editor)
+add_library(KetPlusCM::editor ALIAS ketplus_editor)
+
+add_library(ketplus_index STATIC
+    src/index/SymbolIndex.cpp
+    src/index/SymbolIndex.h
+)
+target_link_libraries(ketplus_index PUBLIC Qt6::Core ketplus_editor ketplus_workspace)
+target_include_directories(ketplus_index PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
+)
+ketplus_enable_warnings(ketplus_index)
+add_library(KetPlusCM::index ALIAS ketplus_index)
+
+add_library(ketplus_git_ui STATIC
+    src/git/GitChangesPanel.cpp
+    src/git/GitChangesPanel.h
+    src/git/GitDiffView.cpp
+    src/git/GitDiffView.h
+)
+target_link_libraries(ketplus_git_ui
+    PUBLIC Qt6::Widgets ketplus_editor ketplus_git ketplus_ui
+)
+target_include_directories(ketplus_git_ui PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
+)
+ketplus_enable_warnings(ketplus_git_ui)
+add_library(KetPlusCM::git_ui ALIAS ketplus_git_ui)
+
+add_library(ketplus_settings_ui STATIC
+    src/app/AppearanceSettings.cpp
+    src/app/AppearanceSettings.h
+    src/app/SettingsDialog.cpp
+    src/app/SettingsDialogAppearance.cpp
+    src/app/SettingsDialog.h
+)
+target_link_libraries(ketplus_settings_ui PUBLIC Qt6::Widgets ketplus_editor ketplus_ui)
+target_include_directories(ketplus_settings_ui PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
+)
+ketplus_enable_warnings(ketplus_settings_ui)
+add_library(KetPlusCM::settings_ui ALIAS ketplus_settings_ui)
+
+if(KETPLUS_CM_BUILD_APP)
+    set(ketplus_platform_sources)
+    if(APPLE)
+        set(ketplus_macos_icon "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/KetPlus.icns")
+        set_source_files_properties(
+            "${ketplus_macos_icon}"
+            PROPERTIES MACOSX_PACKAGE_LOCATION "Resources"
+        )
+        list(APPEND ketplus_platform_sources "${ketplus_macos_icon}")
+    elseif(WIN32)
+        list(APPEND ketplus_platform_sources assets/icons/KetPlus.rc)
+    endif()
+
+    qt_add_executable(ketplus_cm WIN32 MACOSX_BUNDLE
+        src/app/MainWindow.cpp
+        src/app/MainWindowActions.cpp
+        src/app/MainWindowDocuments.cpp
+        src/app/MainWindowFormat.cpp
+        src/app/MainWindowGit.cpp
+        src/app/MainWindow.h
+        src/app/MainWindowNavigation.cpp
+        src/app/MainWindowPanels.cpp
+        src/app/MainWindowSearch.cpp
+        src/main.cpp
+        ${ketplus_platform_sources}
+    )
+    target_link_libraries(ketplus_cm
+        PRIVATE
+            Qt6::Widgets
+            KetPlusCM::core
+            KetPlusCM::editor
+            KetPlusCM::git
+            KetPlusCM::git_ui
+            KetPlusCM::index
+            KetPlusCM::preview
+            KetPlusCM::settings_ui
+            KetPlusCM::terminal
+            KetPlusCM::ui
+            KetPlusCM::workspace
+    )
+    target_compile_definitions(ketplus_cm PRIVATE
+        KETPLUS_CM_VERSION="${PROJECT_VERSION}"
+    )
+    ketplus_enable_warnings(ketplus_cm)
+    ketplus_cm_add_font_resources(ketplus_cm)
+
+    qt_add_resources(ketplus_cm "ketplus_brand"
+        PREFIX "/brand"
+        BASE "${CMAKE_CURRENT_SOURCE_DIR}/assets/brand"
+        FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/brand/ketplus-app-icon.png"
+    )
+
+    if(APPLE)
+        set(ketplus_output_name "KetPlus CM")
+    elseif(WIN32)
+        set(ketplus_output_name "KetPlusCM")
+    else()
+        set(ketplus_output_name "ketplus-cm")
+    endif()
+
+    set_target_properties(ketplus_cm PROPERTIES
+        OUTPUT_NAME "${ketplus_output_name}"
+        MACOSX_BUNDLE_BUNDLE_NAME "KétPlus"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.ketsuite.ketplus.cm"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+    )
+
+    if(APPLE)
+        set_target_properties(ketplus_cm PROPERTIES MACOSX_BUNDLE_ICON_FILE "KetPlus.icns")
+    endif()
+
+    install(TARGETS ketplus_cm
+        BUNDLE DESTINATION .
+        RUNTIME DESTINATION bin
+    )
+
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE" THIRD_PARTY_NOTICES.md
+        DESTINATION share/licenses/ketplus-cm
+    )
+endif()
+
+if(APPLE AND KETPLUS_CM_BUILD_APP AND KETPLUS_CM_BUILD_TERMINAL_APP)
+    set(ketplus_terminal_app_icon "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/KetPlusTerminal.icns")
+    set_source_files_properties(
+        "${ketplus_terminal_app_icon}"
+        PROPERTIES MACOSX_PACKAGE_LOCATION "Resources"
+    )
+
+    add_library(ketplus_terminal_app_ui STATIC
+        src/terminal_app/TerminalTab.cpp
+        src/terminal_app/TerminalTab.h
+        src/terminal_app/TerminalWindow.cpp
+        src/terminal_app/TerminalWindow.h
+    )
+    target_link_libraries(ketplus_terminal_app_ui
+        PUBLIC
+            Qt6::Widgets
+            KetPlusCM::terminal_ui
+            KetPlusCM::ui
+    )
+    ketplus_enable_warnings(ketplus_terminal_app_ui)
+
+    qt_add_executable(ketplus_terminal_app MACOSX_BUNDLE
+        src/terminal_app/TerminalApplication.cpp
+        src/terminal_app/TerminalApplication.h
+        src/terminal_app/main.cpp
+        "${ketplus_terminal_app_icon}"
+    )
+    target_link_libraries(ketplus_terminal_app
+        PRIVATE
+            Qt6::Widgets
+            ketplus_terminal_app_ui
+    )
+    target_compile_definitions(ketplus_terminal_app PRIVATE
+        KETPLUS_CM_VERSION="${PROJECT_VERSION}"
+    )
+    ketplus_enable_warnings(ketplus_terminal_app)
+    ketplus_cm_add_font_resources(ketplus_terminal_app)
+
+    qt_add_resources(ketplus_terminal_app "ketplus_terminal_brand"
+        PREFIX "/brand"
+        BASE "${CMAKE_CURRENT_SOURCE_DIR}/assets/brand"
+        FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/brand/ketplus-terminal-icon.png"
+    )
+
+    set_target_properties(ketplus_terminal_app PROPERTIES
+        OUTPUT_NAME "KetPlus Terminal"
+        MACOSX_BUNDLE_BUNDLE_NAME "KetPlus Terminal"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.ketsuite.ketplus.terminal"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_ICON_FILE "KetPlusTerminal.icns"
+        MACOSX_BUNDLE_INFO_PLIST
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/terminal_app/Info.plist.in"
+    )
+
+    install(TARGETS ketplus_terminal_app BUNDLE DESTINATION .)
+    qt_generate_deploy_app_script(
+        TARGET ketplus_terminal_app
+        OUTPUT_SCRIPT ketplus_terminal_deploy_script
+        NO_PLUGINS
+        NO_TRANSLATIONS
+        NO_UNSUPPORTED_PLATFORM_ERROR
+    )
+    install(SCRIPT "${ketplus_terminal_deploy_script}")
+    install(CODE [[
+        set(terminal_bundle
+            "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/KetPlus Terminal.app"
+        )
+        set(cocoa_plugin
+            "${terminal_bundle}/Contents/PlugIns/platforms/libqcocoa.dylib"
+        )
+        file(MAKE_DIRECTORY "${terminal_bundle}/Contents/PlugIns/platforms")
+        file(COPY_FILE "$<TARGET_FILE:Qt6::QCocoaIntegrationPlugin>" "${cocoa_plugin}")
+        execute_process(
+            COMMAND /usr/bin/codesign --force --sign - "${cocoa_plugin}"
+            RESULT_VARIABLE plugin_sign_result
+        )
+        if(NOT plugin_sign_result EQUAL 0)
+            message(FATAL_ERROR "Unable to ad-hoc sign the Cocoa platform plugin")
+        endif()
+        execute_process(
+            COMMAND /usr/bin/codesign --force --sign - "${terminal_bundle}"
+            RESULT_VARIABLE bundle_sign_result
+        )
+        if(NOT bundle_sign_result EQUAL 0)
+            message(FATAL_ERROR "Unable to ad-hoc sign KetPlus Terminal.app")
+        endif()
+    ]])
+endif()
+
+if(KETPLUS_CM_BUILD_BENCHMARKS)
+    qt_add_executable(ketplus_editor_benchmark benchmarks/EditorBenchmark.cpp)
+    target_link_libraries(ketplus_editor_benchmark
+        PRIVATE Qt6::Widgets ketplus_editor ketplus_workspace
+    )
+    ketplus_enable_warnings(ketplus_editor_benchmark)
+endif()
+
+if(KETPLUS_CM_BUILD_TESTS)
+    enable_testing()
+    find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
+
+    function(ketplus_cm_add_test test_name target)
+        if(WIN32)
+            add_test(
+                NAME ${test_name}
+                COMMAND ${target} -o "${CMAKE_BINARY_DIR}/${test_name}.txt,txt"
+            )
+        else()
+            add_test(NAME ${test_name} COMMAND ${target} -o -,txt)
+        endif()
+    endfunction()
+
+    add_executable(ketplus_tests tests/DocumentTest.cpp)
+    target_link_libraries(ketplus_tests PRIVATE Qt6::Test ketplus_core)
+    ketplus_enable_warnings(ketplus_tests)
+
+    ketplus_cm_add_test(ketplus_tests ketplus_tests)
+
+    add_executable(ketplus_editor_file_refresh_tests tests/EditorFileRefreshTest.cpp)
+    target_link_libraries(ketplus_editor_file_refresh_tests PRIVATE Qt6::Test KetPlusCM::editor)
+    ketplus_enable_warnings(ketplus_editor_file_refresh_tests)
+    ketplus_cm_add_test(ketplus_editor_file_refresh_tests ketplus_editor_file_refresh_tests)
+    set_tests_properties(ketplus_editor_file_refresh_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    add_executable(ketplus_editor_tests tests/EditorWidgetTest.cpp)
+    target_link_libraries(ketplus_editor_tests PRIVATE Qt6::Test ketplus_editor)
+    ketplus_enable_warnings(ketplus_editor_tests)
+
+    ketplus_cm_add_test(ketplus_editor_tests ketplus_editor_tests)
+    set_tests_properties(ketplus_editor_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    add_executable(ketplus_symbol_index_tests tests/SymbolIndexTest.cpp)
+    target_link_libraries(ketplus_symbol_index_tests
+        PRIVATE Qt6::Test ketplus_index
+    )
+    ketplus_enable_warnings(ketplus_symbol_index_tests)
+
+    ketplus_cm_add_test(ketplus_symbol_index_tests ketplus_symbol_index_tests)
+    set_tests_properties(ketplus_symbol_index_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
+
+    add_executable(ketplus_settings_tests
+        tests/SettingsDialogTest.cpp
+    )
+    target_link_libraries(ketplus_settings_tests
+        PRIVATE Qt6::Test KetPlusCM::settings_ui
+    )
+    ketplus_enable_warnings(ketplus_settings_tests)
+
+    ketplus_cm_add_test(ketplus_settings_tests ketplus_settings_tests)
+    set_tests_properties(ketplus_settings_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
+
+    add_executable(ketplus_refactor_wave_1_tests
+        tests/RefactorWave1ContractTest.cpp
+    )
+    target_link_libraries(ketplus_refactor_wave_1_tests
+        PRIVATE Qt6::Test KetPlusCM::settings_ui KetPlusCM::git
+    )
+    ketplus_enable_warnings(ketplus_refactor_wave_1_tests)
+
+    ketplus_cm_add_test(ketplus_refactor_wave_1_tests ketplus_refactor_wave_1_tests)
+    set_tests_properties(ketplus_refactor_wave_1_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
+
+    add_executable(ketplus_workspace_tests tests/ExplorerPanelTest.cpp)
+    target_link_libraries(ketplus_workspace_tests PRIVATE Qt6::Test ketplus_workspace)
+    ketplus_enable_warnings(ketplus_workspace_tests)
+
+    ketplus_cm_add_test(ketplus_workspace_tests ketplus_workspace_tests)
+    set_tests_properties(ketplus_workspace_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    add_executable(ketplus_navigation_tests tests/NavigationTest.cpp)
+    target_link_libraries(ketplus_navigation_tests
+        PRIVATE Qt6::Test ketplus_editor ketplus_workspace
+    )
+    ketplus_enable_warnings(ketplus_navigation_tests)
+
+    ketplus_cm_add_test(ketplus_navigation_tests ketplus_navigation_tests)
+    set_tests_properties(ketplus_navigation_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
+
+    add_executable(ketplus_search_view_tests tests/SearchViewTest.cpp)
+    target_link_libraries(ketplus_search_view_tests
+        PRIVATE Qt6::Test ketplus_editor ketplus_workspace
+    )
+    ketplus_enable_warnings(ketplus_search_view_tests)
+
+    ketplus_cm_add_test(ketplus_search_view_tests ketplus_search_view_tests)
+    set_tests_properties(ketplus_search_view_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
+
+    add_executable(ketplus_terminal_tests tests/PtyProcessTest.cpp)
+    target_link_libraries(ketplus_terminal_tests
+        PRIVATE Qt6::Test KetPlusCM::terminal_ui
+    )
+    ketplus_enable_warnings(ketplus_terminal_tests)
+
+    ketplus_cm_add_test(ketplus_terminal_tests ketplus_terminal_tests)
+    set_tests_properties(ketplus_terminal_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
+
+    if(APPLE AND TARGET ketplus_terminal_app_ui)
+        add_executable(ketplus_terminal_app_tests tests/TerminalAppTest.cpp)
+        target_link_libraries(ketplus_terminal_app_tests
+            PRIVATE Qt6::Test ketplus_terminal_app_ui
+        )
+        ketplus_enable_warnings(ketplus_terminal_app_tests)
+        ketplus_cm_add_test(ketplus_terminal_app_tests ketplus_terminal_app_tests)
+        set_tests_properties(ketplus_terminal_app_tests PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;SHELL=/bin/sh"
+        )
+    endif()
+
+    add_executable(ketplus_git_tests tests/GitParserTest.cpp)
+    target_link_libraries(ketplus_git_tests PRIVATE Qt6::Test ketplus_git)
+    ketplus_enable_warnings(ketplus_git_tests)
+
+    ketplus_cm_add_test(ketplus_git_tests ketplus_git_tests)
+
+    add_executable(ketplus_git_diff_view_tests
+        tests/GitDiffViewTest.cpp
+    )
+    target_link_libraries(ketplus_git_diff_view_tests
+        PRIVATE Qt6::Test KetPlusCM::git_ui
+    )
+    ketplus_enable_warnings(ketplus_git_diff_view_tests)
+
+    ketplus_cm_add_test(ketplus_git_diff_view_tests ketplus_git_diff_view_tests)
+    set_tests_properties(ketplus_git_diff_view_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
+
+    add_executable(ketplus_git_changes_panel_tests
+        tests/GitChangesPanelTest.cpp
+    )
+    target_link_libraries(ketplus_git_changes_panel_tests
+        PRIVATE Qt6::Test KetPlusCM::git_ui
+    )
+    ketplus_enable_warnings(ketplus_git_changes_panel_tests)
+
+    ketplus_cm_add_test(ketplus_git_changes_panel_tests ketplus_git_changes_panel_tests)
+    set_tests_properties(ketplus_git_changes_panel_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
+
+    add_executable(ketplus_markdown_modes_tests tests/MarkdownModesTest.cpp)
+    target_link_libraries(ketplus_markdown_modes_tests PRIVATE Qt6::Test KetPlusCM::editor KetPlusCM::git_ui)
+    ketplus_enable_warnings(ketplus_markdown_modes_tests)
+    ketplus_cm_add_test(ketplus_markdown_modes_tests ketplus_markdown_modes_tests)
+    set_tests_properties(ketplus_markdown_modes_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    add_executable(ketplus_preview_tests tests/MarkdownPreviewPaneTest.cpp)
+    target_link_libraries(ketplus_preview_tests PRIVATE Qt6::Test ketplus_preview)
+    ketplus_enable_warnings(ketplus_preview_tests)
+
+    ketplus_cm_add_test(ketplus_preview_tests ketplus_preview_tests)
+    set_tests_properties(ketplus_preview_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endif()

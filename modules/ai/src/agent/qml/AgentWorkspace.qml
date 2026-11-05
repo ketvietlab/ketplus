@@ -1,0 +1,2287 @@
+import "ChromeMetrics.js" as Metrics
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Controls.Basic as Basic
+import QtQuick.Effects
+import QtQuick.Layouts
+import "TranscriptPosition.js" as TranscriptPosition
+
+Item {
+    id: root
+    objectName: "agentWorkspaceRoot"
+
+    readonly property var t: agentHost.tokens
+    // The reading column the transcript and composer share. The host sets its
+    // width; 0 lets the conversation fill the pane.
+    readonly property real conversationColumnWidth: agentHost.conversationWidth > 0
+        ? Metrics.px(agentHost.conversationWidth, t) : Number.POSITIVE_INFINITY
+    readonly property int messageCount: messages.count
+    property string selectedModel: ""
+    property string modelLabel: "Codex default"
+    property string selectedEffort: ""
+    property var efforts: []
+    property string defaultEffort: ""
+    function effortLabel(value) {
+        const names = {none: "None", minimal: "Minimal", low: "Light", medium: "Medium", high: "High", xhigh: "Extra high", "extra-high": "Extra high", max: "Maximum", ultra: "Ultra"}
+        return names[value] || value
+    }
+    function enabledSkillCount() {
+        let count = 0
+        for (let skill of agentHost.skills || []) if (skill.enabled) ++count
+        return count
+    }
+    property string selectedProvider: "codex"
+    readonly property string usageProvider: (agentHost.statusProvider || selectedProvider || "codex").toLowerCase()
+    readonly property var usageSnapshot: agentHost.usageSnapshot || ({})
+    readonly property bool usageMatchesProvider: (usageSnapshot.provider || "") === usageProvider
+    readonly property var usageContext: usageMatchesProvider ? (usageSnapshot.context || {}) : ({})
+    readonly property var weeklyQuota: usageProvider === "codex" ? (agentHost.weeklyLimit || {}) : ({})
+    readonly property var usageLimitRows: {
+        if (usageMatchesProvider && usageSnapshot.session && usageSnapshot.session.mode === "api_key") return []
+        if (usageMatchesProvider && usageSnapshot.limits && usageSnapshot.limits.length > 0)
+            return usageSnapshot.limits
+        if (weeklyQuota.available || weeklyQuota.loading)
+            return [{id: "weekly", label: "Weekly · all models",
+                     usedPercent: weeklyQuota.usedPercent,
+                     resetsAt: weeklyQuota.resetsAt,
+                     available: weeklyQuota.available}]
+        return []
+    }
+    readonly property real usageRingProgress: {
+        if (usageContext.available && Number(usageContext.limitTokens) > 0)
+            return Math.max(0, Math.min(1,
+                Number(usageContext.usedTokens) / Number(usageContext.limitTokens)))
+        // Providers name their windows differently, so the ring shows the tightest one.
+        let tightest = -1
+        for (let row of usageLimitRows)
+            if (row.available) tightest = Math.max(tightest, Number(row.usedPercent))
+        if (tightest >= 0)
+            return Math.max(0, Math.min(1, tightest / 100))
+        if (weeklyQuota.available)
+            return Math.max(0, Math.min(1, Number(weeklyQuota.usedPercent) / 100))
+        return 0
+    }
+    readonly property bool usageCompactEnabled: usageProvider === "codex"
+                                                && providerSupports("codex", "threadCompact")
+        && agentHost.agentAvailable
+        && !agentHost.sessionRunning
+        && usageContext.available === true
+        && Number(usageContext.limitTokens) > 0
+    property var permissionProfiles: agentHost.permissions
+    property string permission: "workspace-write"
+    readonly property var currentPermission: {
+        for (let p of permissionProfiles) if (p.id === permission) return p
+        return {label: "Permissions", elevated: false, id: ""}
+    }
+    readonly property bool permissionElevated: currentPermission.elevated === true
+    readonly property color permissionAccent: permissionElevated
+                                              ? (root.t.warning || "#d9a441")
+                                              : root.t.textSecondary
+    function permissionIconSource(profileId) {
+        if (profileId === "read-only")
+            return "qrc:/agent/icons/lock.svg"
+        if (profileId === "workspace-write")
+            return "qrc:/agent/icons/folder.svg"
+        return "qrc:/agent/icons/shield.svg"
+    }
+    function permissionLabelColor(profile) {
+        if (profile && profile.elevated === true)
+            return root.t.warning || "#d9a441"
+        return root.t.textMain
+    }
+    property bool modelsLoading: false
+    function refreshModels() {
+        if (!agentHost.agentAvailable || modelsLoading) return
+        modelsLoading = true
+        agentHost.requestModels()
+    }
+    function openModelPicker() {
+        skillsPopup.close()
+        permissionMenu.close()
+        usageLimitsPopover.close()
+        modelPopup.open()
+        if (agentHost.models.length === 0) refreshModels()
+    }
+    property string worktreeQuery: ""
+    property bool showAllWorktrees: false
+    property bool applyingConversationConfiguration: false
+    readonly property var filteredWorktrees: filterWorktrees(worktreeQuery)
+    readonly property var slashCommands: agentHost.compactMode ? [
+        {id: "model", label: "/model", description: "Choose model and reasoning effort"},
+        {id: "permissions", label: "/permissions", description: "Choose access for the next agent turn"},
+        {id: "skills", label: "/skills", description: "Manage skills for this workspace"}
+    ] : [
+        {id: "new", label: "/new", description: "Start a new conversation"},
+        {id: "clear", label: "/clear", description: "Clear this chat into a fresh conversation"},
+        {id: "compact", label: "/compact", description: "Compact this conversation's context"},
+        {id: "terminal", label: "/terminal", description: "Open a new terminal tab"},
+        {id: "diff", label: "/diff", description: "Open the current file diff"},
+        {id: "model", label: "/model", description: "Choose model and reasoning effort"},
+        {id: "permissions", label: "/permissions", description: "Choose access for the next agent turn"},
+        {id: "skills", label: "/skills", description: "Manage skills for this workspace"},
+        {id: "plan", label: "/plan", description: "Plan a change without editing files"}
+    ].filter(function(command) {
+        return command.id !== "compact" || root.providerSupports(root.selectedProvider, "threadCompact")
+    })
+    readonly property var visibleSlashCommands: filterSlashCommands(prompt ? prompt.text : "")
+    property int selectedSkillSuggestion: 0
+    readonly property var activeSkillMention: skillMentionAtCursor(
+        prompt ? prompt.text : "", prompt ? prompt.cursorPosition : 0)
+    // `$` completes skills, `@` completes files and folders of the conversation worktree, and
+    // `#` completes other conversations' numbers (ADR 0027).
+    readonly property var visibleSkillSuggestions: !activeSkillMention.active ? []
+        : activeSkillMention.kind === "file"
+            ? (agentHost.fileMentionRevision, agentHost.fileMentionSuggestions(activeSkillMention.query))
+            : activeSkillMention.kind === "conversation"
+                ? (agentHost.conversations, agentHost.conversationMentionSuggestions(activeSkillMention.query))
+                : agentHost.skillSuggestions(activeSkillMention.query)
+    property var drafts: ({})
+    property string draftScope: ""
+    property var questionDrafts: ({})
+    property var questionDraftOrder: []
+    readonly property int maximumQuestionDrafts: 64
+    function questionDraftKey(messageKey) {
+        return transcriptScope + "\n" + messageKey
+    }
+    function questionDraftFor(messageKey) {
+        return questionDrafts[questionDraftKey(messageKey)] || ({})
+    }
+    function saveQuestionDraft(messageKey, answers, questionIndex, otherAnswers) {
+        if (!messageKey) return
+        const key = questionDraftKey(messageKey)
+        const updated = Object.assign({}, questionDrafts)
+        updated[key] = {
+            answers: Object.assign({}, answers || {}),
+            questionIndex: questionIndex,
+            otherAnswers: Object.assign({}, otherAnswers || {})
+        }
+        questionDrafts = updated
+        const nextOrder = questionDraftOrder.filter(candidate => candidate !== key)
+        nextOrder.push(key)
+        while (nextOrder.length > maximumQuestionDrafts) {
+            const evicted = nextOrder.shift()
+            const bounded = Object.assign({}, questionDrafts)
+            delete bounded[evicted]
+            questionDrafts = bounded
+        }
+        questionDraftOrder = nextOrder
+    }
+    function clearQuestionDraft(messageKey) {
+        const key = questionDraftKey(messageKey)
+        const updated = Object.assign({}, questionDrafts)
+        delete updated[key]
+        questionDrafts = updated
+        questionDraftOrder = questionDraftOrder.filter(candidate => candidate !== key)
+    }
+    function saveAndRestoreDraft() {
+        drafts[draftScope] = {text: prompt.text}
+        agentHost.saveComposerDraft(draftScope, prompt.text)
+        draftScope = agentHost.composerScope
+        const draft = drafts[draftScope]
+        prompt.text = draft ? draft.text : agentHost.composerDraft(draftScope)
+    }
+    Timer {
+        id: composerDraftSaveTimer
+        interval: 250
+        onTriggered: agentHost.saveComposerDraft(root.draftScope, prompt.text)
+    }
+    Connections {
+        target: agentHost
+        function onSteeringAccepted(scope, text) {
+            if (scope === root.draftScope) {
+                if (prompt.text.trim() === text) prompt.clear()
+            } else if (root.drafts[scope] && root.drafts[scope].text.trim() === text) {
+                root.drafts[scope].text = ""
+            }
+        }
+        function onAgentAvailableChanged() {
+            if (agentHost.agentAvailable)
+                root.refreshModels()
+        }
+        function onModelsChanged() {
+            root.modelsLoading = false
+            root.applyConversationConfiguration()
+        }
+        function onConversationConfigurationChanged() { root.applyConversationConfiguration() }
+        function onModelConfigurationFinished(error) { if (!error) modelPopup.close() }
+        function onSessionChanged() {
+            if (!agentHost.sessionRunning && transcript) {
+                transcript.streamingViewportPrepared = false
+                transcript.streamingTailRequested = false
+            }
+            if (agentHost.sessionRunning && transcript && transcript.followTail)
+                Qt.callLater(root.restoreTranscriptPosition)
+        }
+        function onComposerScopeChanged() { root.saveAndRestoreDraft() }
+        function onWorktreesChanged() { Qt.callLater(root.revealSelectedWorktree) }
+        function onRestoringChanged() {
+            if (!agentHost.restoring) return
+            modelPopup.close()
+            permissionMenu.close()
+            skillsPopup.close()
+            imagePreview.close()
+        }
+    }
+
+    function modelMatchesId(candidate, modelId) {
+        if (!candidate || !modelId)
+            return false
+        if (candidate.model === modelId || candidate.id === modelId)
+            return true
+        for (let effort of (candidate.efforts || []))
+            if (effort.model === modelId)
+                return true
+        return false
+    }
+
+    function modelForId(modelId) {
+        if (!modelId)
+            return null
+        const preferred = agentHost.conversationProvider || selectedProvider
+        let anyMatch = null
+        for (let candidate of agentHost.models) {
+            if (!modelMatchesId(candidate, modelId)) continue
+            if (preferred && candidate.provider === preferred) return candidate
+            if (!anyMatch) anyMatch = candidate
+        }
+        return anyMatch
+    }
+
+    function providerTitle(provider) {
+        if (provider === "claude") return "Claude"
+        if (provider === "cursor") return "Cursor"
+        return "Codex"
+    }
+    function composerModelText() {
+        const provider = providerTitle(root.selectedProvider)
+        let name = root.modelLabel || root.selectedModel || "Default"
+        const prefix = new RegExp("^" + provider + "\\s+", "i")
+        name = name.replace(prefix, "")
+        if (!name) name = "Default"
+        return provider + " · " + name + (root.selectedEffort ? "   " + root.effortLabel(root.selectedEffort) : "")
+    }
+    function composerModelTooltip() {
+        const provider = providerTitle(root.selectedProvider)
+        let name = root.modelLabel || root.selectedModel || "Default"
+        const prefix = new RegExp("^" + provider + "\\s+", "i")
+        name = name.replace(prefix, "")
+        const effort = root.selectedEffort ? " · " + root.effortLabel(root.selectedEffort) : ""
+        if (root.selectedProvider === "cursor" && (root.selectedModel === "auto" || name.toLowerCase() === "auto"))
+            return provider + " · Auto" + effort + " — Cursor chooses the model for this turn"
+        return provider + " · " + name + effort
+    }
+
+    function publishConversationConfiguration() {
+        if (!applyingConversationConfiguration) {
+            agentHost.updateConversationConfiguration(selectedModel, selectedEffort, permission, selectedProvider)
+        }
+    }
+
+    function applyConversationConfiguration() {
+        applyingConversationConfiguration = true
+        const configuredModel = agentHost.conversationModel || ""
+        const configuredProvider = (agentHost.conversationProvider || "").toLowerCase()
+        const model = modelForId(configuredModel)
+        if (model && (!configuredProvider || model.provider === configuredProvider)) {
+            selectModel(model, false)
+        } else if (configuredModel) {
+            selectedProvider = configuredProvider || selectedProvider || "codex"
+            selectedModel = configuredModel
+            modelLabel = configuredModel
+            efforts = []
+            defaultEffort = ""
+        } else if (configuredProvider) {
+            selectedProvider = configuredProvider
+        }
+        selectedEffort = agentHost.conversationEffort || (model ? (defaultEffort || selectedEffort) : selectedEffort) || ""
+        if (!agentHost.conversationEffort && model) {
+            for (let effort of (model.efforts || [])) {
+                if (effort.model === configuredModel) {
+                    selectedEffort = effort.id
+                    break
+                }
+            }
+        }
+        permission = agentHost.conversationPermission || "workspace-write"
+        let permissionSupported = false
+        for (let profile of permissionProfiles) if (profile.id === permission) permissionSupported = true
+        if (!permissionSupported) permission = model && model.defaultPermission ? model.defaultPermission : "workspace-write"
+        applyingConversationConfiguration = false
+    }
+
+    function selectModel(model, persist) {
+        if (!model) return
+        const changed = selectedProvider !== model.provider || selectedModel !== model.model
+        let permissionSupported = false
+        for (let profile of model.permissions) if (profile.id === permission) permissionSupported = true
+        if (!permissionSupported) permission = model.defaultPermission
+        selectedProvider = model.provider
+        permissionProfiles = model.permissions
+        selectedModel = model.model
+        modelLabel = model.displayName
+        efforts = model.supportedReasoningEfforts
+        defaultEffort = model.defaultReasoningEffort
+        if (changed) selectedEffort = defaultEffort
+        if (persist !== false) publishConversationConfiguration()
+    }
+
+    function focusPrompt() {
+        if (agentHost.agentAvailable)
+            prompt.forceActiveFocus()
+    }
+
+    function useSuggestion(text) {
+        prompt.text = text
+        prompt.cursorPosition = prompt.length
+        prompt.forceActiveFocus()
+    }
+
+    function filterWorktrees(query) {
+        const items = agentHost.worktrees || []
+        const needle = (query || "").trim().toLocaleLowerCase()
+        return items.filter(function(item) {
+            if (needle.length === 0)
+                return showAllWorktrees || item.relevant
+            const searchText = item.searchText || (item.branch + " " + item.displayPath + " " + item.path)
+            return searchText.toLocaleLowerCase().indexOf(needle) !== -1
+        })
+    }
+
+    function selectedWorktreeIndex() {
+        const items = filteredWorktrees || []
+        for (let index = 0; index < items.length; ++index)
+            if (items[index].selected)
+                return index
+        return -1
+    }
+
+    function revealSelectedWorktree() {
+        const index = selectedWorktreeIndex()
+        if (index >= 0)
+            sidebar.worktreeList.positionViewAtIndex(index, ListView.Contain)
+    }
+
+    // Capability names come from the daemon's provider.runtime_status (ADR 0015).
+    function providerSupports(provider, capability) {
+        const runtime = agentHost.providerRuntime || {}
+        if (runtime.gated !== true) return true
+        const capabilities = (runtime.providers || {})[provider] || []
+        return capabilities.indexOf(capability) !== -1
+    }
+
+    function filterSlashCommands(text) {
+        const value = (text || "").trim()
+        if (!value.startsWith("/"))
+            return []
+        const needle = value.substring(1).toLocaleLowerCase()
+        return slashCommands.filter(function(command) {
+            return command.id.indexOf(needle) !== -1 || command.label.indexOf(value) === 0
+        })
+    }
+
+    function slashCommandForText(text) {
+        const value = (text || "").trim()
+        for (let command of slashCommands) {
+            if (value === command.label || value.startsWith(command.label + " "))
+                return command
+        }
+        return null
+    }
+
+    function isSkillNameCharacter(character) {
+        return character.length > 0 && /[A-Za-z0-9_.:-]/.test(character)
+    }
+
+    function skillMentionAtCursor(text, cursorPosition) {
+        const value = text || ""
+        const cursor = Math.max(0, Math.min(cursorPosition, value.length))
+        const inactive = {active: false, kind: "", start: cursor, end: cursor, query: ""}
+        let fileStart = cursor - 1
+        while (fileStart >= 0 && /[^\s@"$]/.test(value.charAt(fileStart))) --fileStart
+        if (fileStart >= 0 && value.charAt(fileStart) === "@"
+                && (fileStart === 0 || /[\s(\[{'"]/.test(value.charAt(fileStart - 1)))) {
+            let fileEnd = cursor
+            while (fileEnd < value.length && /[^\s@"$]/.test(value.charAt(fileEnd))) ++fileEnd
+            return {active: true, kind: "file", start: fileStart, end: fileEnd,
+                    query: value.substring(fileStart + 1, cursor)}
+        }
+        let numberStart = cursor - 1
+        while (numberStart >= 0 && /[^\s#@$]/.test(value.charAt(numberStart))) --numberStart
+        if (numberStart >= 0 && value.charAt(numberStart) === "#"
+                && (numberStart === 0 || /[\s(\[{'"]/.test(value.charAt(numberStart - 1)))) {
+            let numberEnd = cursor
+            while (numberEnd < value.length && /[^\s#@$]/.test(value.charAt(numberEnd))) ++numberEnd
+            return {active: true, kind: "conversation", start: numberStart, end: numberEnd,
+                    query: value.substring(numberStart + 1, cursor)}
+        }
+        let start = cursor - 1
+        while (start >= 0 && isSkillNameCharacter(value.charAt(start))) --start
+        if (start < 0 || value.charAt(start) !== "$")
+            return inactive
+        if (start > 0 && /[A-Za-z0-9_$]/.test(value.charAt(start - 1)))
+            return inactive
+        let end = cursor
+        while (end < value.length && isSkillNameCharacter(value.charAt(end))) ++end
+        return {active: true, kind: "skill", start: start, end: end,
+                query: value.substring(start + 1, cursor)}
+    }
+
+    function applySkillSuggestion(skill) {
+        if (!skill || !activeSkillMention.active) return
+        // A folder stays open for completion so its children can be picked next.
+        const insertion = (skill.mention || ("$" + skill.name)) + (skill.directory ? "" : " ")
+        const start = activeSkillMention.start
+        prompt.remove(start, activeSkillMention.end)
+        prompt.insert(start, insertion)
+        prompt.cursorPosition = start + insertion.length
+        selectedSkillSuggestion = 0
+        root.focusPrompt()
+    }
+
+    function applySlashCommand(command) {
+        if (command.id === "compact") {
+            if (agentHost.sessionRunning) {
+                agentHost.steerPrompt("/compact")
+                return
+            }
+            agentHost.submitConfiguredPrompt("/compact", {provider: selectedProvider})
+            if (agentHost.sessionRunning) prompt.clear()
+            root.focusPrompt()
+            return
+        }
+        prompt.clear()
+        if (command.id === "new" || command.id === "clear") {
+            agentHost.requestClearSession()
+        } else if (command.id === "terminal") {
+            agentHost.requestTerminal()
+        } else if (command.id === "diff") {
+            agentHost.requestCurrentFileDiff()
+        } else if (command.id === "model") {
+            root.openModelPicker()
+            return
+        } else if (command.id === "permissions") {
+            permissionMenu.open()
+        } else if (command.id === "skills") {
+            agentHost.refreshSkills()
+            skillsPopup.open()
+        } else if (command.id === "plan") {
+            prompt.text = "/plan "
+            prompt.cursorPosition = prompt.text.length
+        }
+        root.focusPrompt()
+    }
+
+    function appendMessage(kind, body, meta, filePath, itemId) {
+        messages.append({
+            "kind": kind,
+            "body": body,
+            "imageSources": [],
+            "fileStats": [],
+            "meta": meta || "",
+            "filePath": filePath || "",
+            "itemId": itemId || "",
+            "subtype": "",
+            "command": "",
+            "running": false
+        })
+    }
+
+    function displayMessageBody(kind, text) {
+        return text || ""
+    }
+
+    ModelPicker {
+        id: modelPopup
+        tokens: root.t
+        viewport: root
+        anchorItem: modelButton
+        models: agentHost.models
+        // Between turns a conversation may move to another provider; not mid-turn.
+        efforts: root.efforts
+        selectedModel: root.selectedModel
+        selectedEffort: root.selectedEffort
+        selectedProvider: root.selectedProvider
+        defaultEffort: root.defaultEffort
+        loading: root.modelsLoading
+        available: agentHost.agentAvailable
+        effortLabel: root.effortLabel
+        configurationRevision: agentHost.conversationConfigurationRevision
+        compactWindow: agentHost.conversationCompactWindow
+        compactSupported: agentHost.compactWindowSupported
+        modelCapacity: Number(root.usageContext.limitTokens) || 0
+        applying: agentHost.modelConfigurationApplying
+        applyError: agentHost.modelConfigurationError
+        blockedReason: {
+            if (!agentHost.configurationWritable) return qsTr("Reconnect to the desktop before applying.")
+            return ""
+        }
+        onApplyRequested: function(model, effort, provider, changes) {
+            agentHost.applyModelConfiguration(model, effort, provider, changes)
+        }
+        onRefreshRequested: root.refreshModels()
+    }
+
+    UsageLimitsPopover {
+        id: usageLimitsPopover
+        parent: Overlay.overlay
+        workspace: root
+        contextUsage: root.usageContext
+        limitRows: root.usageLimitRows
+        claude: root.usageProvider === "claude"
+        sessionUsage: root.usageMatchesProvider ? (root.usageSnapshot.session || {}) : ({})
+        accountUsage: agentHost.claudeAccountUsage || ({})
+        onAccountRefreshRequested: agentHost.requestClaudeAccountUsage()
+        compactEnabled: root.usageCompactEnabled
+        function positionPopover() {
+            const overlay = Overlay.overlay
+            const pos = usageRingButton.mapToItem(overlay, 0, 0)
+            x = Math.max(8, Math.min(overlay.width - width - 8,
+                                     pos.x + usageRingButton.width - width))
+            y = Math.max(8, Math.min(overlay.height - height - 8, pos.y - height - 8))
+        }
+        onHeightChanged: if (visible) Qt.callLater(positionPopover)
+        Connections {
+            target: usageLimitsPopover.parent
+            function onHeightChanged() { if (usageLimitsPopover.visible) Qt.callLater(usageLimitsPopover.positionPopover) }
+            function onWidthChanged() { if (usageLimitsPopover.visible) Qt.callLater(usageLimitsPopover.positionPopover) }
+        }
+        onAboutToShow: {
+            if (claude) agentHost.requestClaudeAccountUsage()
+            Qt.callLater(positionPopover)
+        }
+        onCompactRequested: {
+            close()
+            agentHost.submitConfiguredPrompt("/compact", {provider: "codex"})
+        }
+    }
+
+    Basic.Popup {
+        id: imagePreview
+        objectName: "imagePreview"
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: Math.min(Metrics.px(1100, root.t), root.width - Metrics.px(32, root.t))
+        height: Math.min(Metrics.px(850, root.t), root.height - Metrics.px(32, root.t))
+        modal: true
+        focus: true
+        padding: Metrics.px(16, root.t)
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        background: Rectangle { color: root.t.surfaceRaised; radius: Metrics.px(8, root.t) }
+        property url imageSource
+        Image {
+            objectName: "imagePreviewContent"
+            anchors.fill: parent
+            anchors.topMargin: Metrics.px(32, root.t)
+            source: imagePreview.imageSource
+            fillMode: Image.PreserveAspectFit
+            autoTransform: true
+        }
+        Basic.ToolButton {
+            id: closeImageButton
+            anchors.top: parent.top
+            anchors.right: parent.right
+            width: Metrics.px(32, root.t)
+            height: Metrics.px(32, root.t)
+            padding: Metrics.px(8, root.t)
+            contentItem: TintedIcon { source: "qrc:/agent/icons/plus.svg"; color: root.t.textMain; rotation: 45 }
+            onClicked: imagePreview.close()
+            Accessible.name: "Close image"
+            KetToolTip {
+                tokens: root.t
+                visible: closeImageButton.hovered
+                text: "Close image"
+            }
+        }
+    }
+
+    function openTranscriptFind() {
+        if (transcript)
+            transcript.openFind()
+    }
+
+    function transcriptFindStep(backwards) {
+        if (!transcript)
+            return
+        if (!transcript.findOpen || transcript.findQuery.length === 0) {
+            transcript.openFind()
+            return
+        }
+        if (backwards)
+            transcript.findPrevious()
+        else
+            transcript.findNext()
+    }
+
+    // Standalone workspaces handle Find here. Hosts with Edit > Find actions (the desktop
+    // window) route those to the transcript themselves; a second shortcut for the same
+    // sequence would make both ambiguous so that neither fires.
+    Shortcut {
+        sequences: [StandardKey.Find]
+        context: Qt.WindowShortcut
+        enabled: !!root.transcript && root.visible && !agentHost.findActionsProvided
+        onActivated: root.openTranscriptFind()
+    }
+    Shortcut {
+        sequences: [StandardKey.FindNext]
+        context: Qt.WindowShortcut
+        enabled: !!root.transcript && root.visible && !agentHost.findActionsProvided
+        onActivated: root.transcriptFindStep(false)
+    }
+    Shortcut {
+        sequences: [StandardKey.FindPrevious]
+        context: Qt.WindowShortcut
+        enabled: !!root.transcript && root.visible && !agentHost.findActionsProvided
+        onActivated: root.transcriptFindStep(true)
+    }
+
+    function conversationCopyText() {
+        return agentHost.transcriptCopyText()
+    }
+
+    property var transcriptPositions: ({})
+    property string transcriptScope: ""
+    property var transcriptAnchor: null
+    property var transcript: null
+    property var transcriptWheel: null
+    property var transcriptScrollBar: null
+    property bool restoringTranscript: false
+    property bool settlingTranscript: false
+    property bool updatingTranscript: false
+    property int transcriptUpdateRevision: 0
+    property int transcriptInputRevision: 0
+    // Shared counter for transcript history request tokens (see TranscriptView).
+    property int transcriptHistoryRequestSerial: 0
+    // True from a wheel event until the event loop turns over, covering the
+    // synchronous Flickable motion that the event itself produces.
+    property bool transcriptWheelEventPending: false
+    // Test hook: deferred Markdown refreshes that captured a fresh anchor.
+    property int transcriptRenderAnchorCaptures: 0
+    // Layout trace only: offset at the last frame the trace recorded.
+    property real transcriptTracedOffset: 0
+    // What the reader saw move: the screen displacement of the row read on the
+    // previous frame, accumulated. contentY also moves when rows above are
+    // measured or history is prepended, which the reader never sees.
+    property string transcriptTracedReaderKey: ""
+    property real transcriptTracedReaderY: 0
+    property real transcriptTracedReaderOffset: 0
+    // Phase of the previous traced frame: the first idle frame after a gesture
+    // still carries the gesture's last motion.
+    property string transcriptTracedPhase: "idle"
+
+    function traceReaderOffset() {
+        const geometry = transcript.geometry
+        if (!geometry) return transcript.contentY - transcript.originY
+        const previous = geometry.rowForKey(transcriptTracedReaderKey)
+        if (previous >= 0)
+            transcriptTracedReaderOffset -= (transcript.rowTop(previous) - transcript.contentY)
+                                            - transcriptTracedReaderY
+        const row = transcript.readingRow()
+        transcriptTracedReaderKey = row >= 0 ? geometry.keyAt(row) : ""
+        transcriptTracedReaderY = row >= 0 ? transcript.rowTop(row) - transcript.contentY : 0
+        return transcriptTracedReaderOffset
+    }
+
+    function traceTranscript(event, details) {
+        if (!agentHost.layoutTraceEnabled || !transcript) return
+        const values = details || {}
+        values.contentY = transcript.contentY
+        values.originY = transcript.originY
+        values.contentHeight = transcript.contentHeight
+        values.viewportHeight = transcript.height
+        values.followTail = transcript.followTail
+        values.moving = transcript.scrolling
+        values.restoring = restoringTranscript
+        values.settling = settlingTranscript
+        values.anchorOffset = transcriptAnchor ? transcriptAnchor.offset : 0
+        values.wheelActive = transcriptWheel ? transcriptWheel.active : false
+        values.opacity = transcript.opacity
+        agentHost.traceLayout(event, values)
+    }
+
+    // One presented frame. "frame-presented" is kept verbatim for the existing
+    // trace consumers; the two metric events are separate so that the reducer
+    // never has to guess which frames it is allowed to difference.
+    function traceTranscriptFrame() {
+        if (!agentHost.layoutTraceEnabled || !transcript) return
+        traceTranscript("frame-presented", {})
+        const phase = transcript.tracedGesturePhase()
+        const offset = transcript.contentY - transcript.originY
+        const previousReaderOffset = transcriptTracedReaderOffset
+        const previousReaderKey = transcriptTracedReaderKey
+        const readerOffset = traceReaderOffset()
+        const previousPhase = transcriptTracedPhase
+        transcriptTracedPhase = phase
+        // The defect in one record: the reader touched nothing and the line
+        // they were reading moved on screen.
+        if (phase === "idle" && previousPhase === "idle" && !transcript.followTail
+                && Math.abs(readerOffset - previousReaderOffset) > 2)
+            traceTranscript("reader-jump", {delta: readerOffset - previousReaderOffset,
+                                            key: previousReaderKey})
+        // An idle frame that nevertheless moved is the purest form of the defect:
+        // the reader touched nothing and the page went somewhere. Skipping those
+        // frames would drop that motion out of the path entirely, so idle is
+        // silent only while it is genuinely still.
+        const moved = Math.abs(offset - transcriptTracedOffset) > 0.5
+        if (phase === "idle" && !moved) return
+        transcriptTracedOffset = offset
+        // M1 and M3: signed position, measured against originY so that a history
+        // page prepended above the viewport does not read as motion.
+        traceTranscript("gesture-frame", {phase: phase,
+                                          direction: transcriptWheel ? transcriptWheel.direction : 0,
+                                          offset: offset,
+                                          readerOffset: readerOffset})
+        // One sample per frame is what the reader sees; a row that enters, leaves
+        // and enters again between two frames was never on screen twice.
+        const census = transcript.tracedRowCensus()
+        traceTranscript("row-visibility", {phase: phase,
+                                           keys: census.keys,
+                                           collapsedRealized: census.collapsedRealized,
+                                           collapsedInViewport: census.collapsedInViewport,
+                                           collapsedInSpan: census.collapsedInSpan,
+                                           indexSpan: census.indexSpan,
+                                           listContentHeight: census.listContentHeight,
+                                           geometryTotal: census.geometryTotal,
+                                           geometryRows: census.geometryRows,
+                                           geometryMeasured: census.geometryMeasured,
+                                           geometryMismatches: census.geometryMismatches})
+    }
+
+    // When a changed conversation was switched in and hidden to settle, and
+    // the longest it may stay hidden.
+    property double transcriptSettleStarted: 0
+    readonly property int transcriptSettleDeadline: 250
+    Timer {
+        id: transcriptSettleTimer
+        interval: 32
+        onTriggered: {
+            root.restoreTranscriptPosition()
+            if (!running) {
+                root.traceTranscript("settle-end", {durationMs: Date.now() - root.transcriptSettleStarted})
+                root.settlingTranscript = false
+            }
+        }
+    }
+
+    // Jump to the newest message. From far above, scrolling there would sweep
+    // through everything in between and settle row by row as heights arrive, so
+    // the transcript is hidden, placed at the bottom and shown again once the
+    // rows there have their real heights: the reader sees the bottom, not the trip.
+    function jumpToLatest() {
+        if (!transcript || !transcript.messageModel || transcript.messageModel.count === 0)
+            return
+        const far = !!agentHost.historyState.hasNewer
+            || transcript.contentBelow() > 2 * transcript.height
+        beginTranscriptInput()
+        transcript.noteTranscriptInput()
+        transcript.cancelFlick()
+        transcript.wheelGlideRemaining = 0
+        transcript.resetNewMessageCount()
+        transcript.followTail = true
+        transcript.streamingTailRequested = true
+        if (far) {
+            settlingTranscript = true
+            transcriptJumpFrames = 0
+            transcriptJumpTimer.restart()
+        }
+        if (agentHost.historyState.hasNewer) {
+            agentHost.loadLatestMessages()
+            return
+        }
+        restoringTranscript = true
+        transcript.positionViewAtEnd()
+        restoringTranscript = false
+        settleTranscriptTail()
+    }
+    property int transcriptJumpFrames: 0
+    Timer {
+        id: transcriptJumpTimer
+        interval: 16
+        onTriggered: {
+            const view = root.transcript
+            if (!view || !view.followTail) {
+                root.settlingTranscript = false
+                return
+            }
+            ++root.transcriptJumpFrames
+            root.restoringTranscript = true
+            view.positionViewAtEnd()
+            root.restoringTranscript = false
+            // Shown once the rows on screen are measured and the newest window has
+            // arrived, or after half a second (three when a window is loading).
+            // A blank transcript for seconds reads as lost content; past the
+            // limit the bottom shows while the newest window is still arriving.
+            const loading = !!agentHost.historyState.loading
+            const limit = loading ? 60 : 30
+            if ((!loading && view.visibleRowsMeasured()) || root.transcriptJumpFrames >= limit) {
+                root.traceTranscript("jump-latest-shown", {frames: root.transcriptJumpFrames, loading: loading,
+                                                           measured: view.visibleRowsMeasured()})
+                root.settlingTranscript = false
+                root.settleTranscriptTail()
+                return
+            }
+            restart()
+        }
+    }
+    // Cmd+Down (Ctrl+Down elsewhere). In a text field whose cursor is not at the
+    // end, the keys keep their text meaning.
+    Shortcut {
+        sequences: ["Ctrl+Down"]
+        context: Qt.WindowShortcut
+        enabled: {
+            if (!root.transcript || !root.visible)
+                return false
+            const focus = root.Window.activeFocusItem
+            return !(focus && focus.cursorPosition !== undefined && focus.length !== undefined
+                     && focus.cursorPosition < focus.length)
+        }
+        onActivated: root.jumpToLatest()
+    }
+
+    // Pins the bottom once. Heights that arrive later need nothing more: every
+    // geometry, header and footer change makes TranscriptView hold the tail.
+    function settleTranscriptTail() {
+        if (!transcript || !transcript.followTail || transcript.wheelEngaged
+                || (transcriptScrollBar && transcriptScrollBar.pressed))
+            return
+        restoringTranscript = true
+        transcript.holdReadingPosition()
+        restoringTranscript = false
+    }
+
+    function transcriptInputActive() {
+        return !!transcript && (transcript.scrolling || transcriptWheelEventPending
+                                || transcript.wheelEngaged
+                                || (transcriptScrollBar && transcriptScrollBar.pressed))
+    }
+
+    // Layout-driven settle point. The C++ TranscriptPolish item invokes this
+    // from updatePolish(), i.e. after ListView has committed delegate heights
+    // for the frame and before scene sync. Every height/origin/y change of a
+    // row requests it, so restoration follows layout rather than a frame count.
+    function settleTranscriptLayout() {
+        // Row heights reported since the last frame are placed before this one.
+        if (transcript)
+            transcript.flushRowHeights()
+        if (!transcript || restoringTranscript || updatingTranscript)
+            return
+        restoreTranscriptPosition()
+    }
+
+    function beginTranscriptInput() {
+        ++transcriptInputRevision
+        if (transcript)
+            transcript.clearHistoryTrimBlocks()
+    }
+
+    function followTranscriptInputMotion(delta) {
+        // Credit the physical motion to the anchor, then re-select the interior
+        // row for the new viewport.
+        if (transcriptAnchor && !transcript.followTail
+                && transcriptWheel.direction !== 0)
+            transcriptAnchor = Object.assign({}, transcriptAnchor,
+                                             {offset: transcriptAnchor.offset + delta, text: undefined})
+        captureTranscriptWheelPosition()
+    }
+
+    function captureTranscriptPosition() {
+        return TranscriptPosition.capture(transcript)
+    }
+
+    function captureTranscriptWheelPosition() {
+        transcriptAnchor = captureTranscriptPosition()
+        return transcriptAnchor
+    }
+
+    function restoreTranscriptPosition() {
+        restoreTranscriptPositionInternal(false)
+    }
+
+    function restoreTranscriptPositionInternal(preserveDuringInput) {
+        restoreCapturedTranscriptPosition(transcriptAnchor, preserveDuringInput)
+    }
+
+    function restoreCapturedTranscriptPosition(anchor, preserveDuringInput) {
+        traceTranscript("restore-request")
+        if (!transcript || !transcriptWheel || !transcriptScrollBar || restoringTranscript
+                || updatingTranscript || (!preserveDuringInput && (transcript.scrolling
+                || transcript.wheelEngaged || transcriptScrollBar.pressed))) return
+        restoringTranscript = true
+        transcript.forceLayout()
+        if (transcript.followTail) {
+            transcript.positionViewAtEnd()
+            settleTranscriptTail()
+        } else if (anchor && messages.count > 0) {
+            // Rows sit at exact positions, so restoring is adopting the anchor as
+            // the view's reading position; no row has to be materialized first.
+            transcript.holdAnchor(anchor)
+            traceTranscript("restore-applied", {})
+        }
+        restoringTranscript = false
+    }
+
+    function setSessionMessageModel(model, scope, changed) {
+        const activated = transcriptHost.activate(scope || "", model)
+        transcriptScope = scope || ""
+        transcriptAnchor = transcriptPositions[transcriptScope] || null
+        // Models are cached per conversation even though the expensive QML
+        // viewport is shared. A clean cached model can restore immediately;
+        // hiding the viewport for a settle cycle causes a visible flash on
+        // every A -> B -> A switch and is unnecessary when rows did not change.
+        if (!changed) {
+            settlingTranscript = false
+            transcript.followTail = transcriptAnchor ? transcriptAnchor.followTail : true
+            restoreTranscriptPosition()
+            transcriptAnchor = captureTranscriptPosition()
+            return
+        }
+        settlingTranscript = true
+        transcriptSettleStarted = Date.now()
+        traceTranscript("settle-begin", {scope: transcriptScope})
+        transcriptSettleTimer.restart()
+        restoringTranscript = true
+        transcriptWheel.enabled = false
+        transcriptWheel.direction = 0
+        transcript.cancelFlick()
+        transcript.followTail = transcriptAnchor ? transcriptAnchor.followTail : true
+        transcriptWheel.enabled = true
+        restoringTranscript = false
+        restoreTranscriptPosition()
+        Qt.callLater(root.restoreTranscriptPosition)
+    }
+
+    function captureSessionTranscriptPosition() {
+        if (transcriptScope && messages.count > 0 && !settlingTranscript)
+            transcriptPositions[transcriptScope] = captureTranscriptPosition()
+    }
+
+    function beginSessionMessageUpdate() {
+        beginTranscriptUpdate()
+    }
+
+    function endSessionMessageUpdate() {
+        endTranscriptUpdate()
+    }
+
+    function releaseSessionTranscript(scope) {
+        // Evicted transcripts restart at the tail; do not keep their anchors forever.
+        delete transcriptPositions[scope || ""]
+        transcriptHost.release(scope || "")
+    }
+
+    function warmTranscriptCount() {
+        return transcriptHost.cachedTranscripts.length
+    }
+
+    function prepareStreamingViewport(item) {
+        if (!transcript || !agentHost.sessionRunning || !item || item.kind === "user"
+                || transcript.streamingViewportPrepared)
+            return
+        transcript.streamingViewportPrepared = true
+        // Streaming is not a change in reading intent: keep following when
+        // already at the bottom, and preserve history reading otherwise.
+        transcript.streamingTailRequested = transcript.followTail
+    }
+
+    function appendSessionMessage(item) {
+        prepareStreamingViewport(item)
+        beginTranscriptUpdate()
+        messages.append(item)
+        endTranscriptUpdate()
+    }
+
+    function beginTranscriptUpdate() {
+        // A wheel/scrollbar gesture in flight keeps its own row anchor, which
+        // tracks physical motion exactly. Otherwise the reading row is captured
+        // before the mutation; TranscriptView holds it through the heights that
+        // arrive afterwards.
+        const gestureOwnsPosition = !settlingTranscript && !restoringTranscript && transcript
+            && !transcript.followTail
+            && transcriptWheel.direction !== 0 && transcriptInputActive()
+        // The view's own reading anchor is current: it is renewed after every
+        // move the reader makes and every hold the view makes. Capturing from
+        // the screen instead lays out the rows' documents first, so a diagram
+        // that finished loading moves the reader's text before the view could
+        // hold it, and the capture would adopt the moved position.
+        if (!gestureOwnsPosition && !settlingTranscript && !restoringTranscript)
+            transcriptAnchor = transcript && !transcript.followTail && transcript.readingAnchor
+                ? transcript.readingAnchor : captureTranscriptPosition()
+        updatingTranscript = true
+    }
+
+    function endTranscriptUpdate() {
+        updatingTranscript = false
+        // Height notifications during the mutation are deliberately ignored.
+        // Always schedule a tail settle, including when immediate restoration
+        // is deferred by ListView's residual movement state.
+        if (transcript.followTail)
+            settleTranscriptTail()
+        if (!transcript.followTail
+                && transcriptWheel.direction !== 0 && transcriptInputActive()) {
+            // Gesture-owned update (see beginTranscriptUpdate).
+            agentHost.scheduleTranscriptRestore()
+            return
+        }
+        const updateAnchor = transcriptAnchor
+        const revision = ++transcriptUpdateRevision
+        const inputRevision = transcriptInputRevision
+        const inputWasActive = transcriptInputActive()
+        // ListView may revise estimates for recycled delegates after a model
+        // update. Restore the captured reading row even during an active
+        // flick so those estimate changes cannot move content under the
+        // pointer. This does not re-enable tail following or pagination.
+        restoreCapturedTranscriptPosition(updateAnchor, inputWasActive)
+        // Late delegate materialization is handled by the layout-driven settle
+        // (row y / contentHeight change -> polish -> settleTranscriptLayout).
+        Qt.callLater(function() {
+            if (revision === root.transcriptUpdateRevision
+                    && inputRevision === root.transcriptInputRevision)
+                root.restoreCapturedTranscriptPosition(updateAnchor, inputWasActive)
+        })
+    }
+
+    // History pages (older prepends, newer edge-window replacements) can land
+    // while a kinetic flick is running. Restoring the reading row would pin it
+    // against the flick; TranscriptView instead absorbs the known height
+    // shift of a page as it happens, so a kinetic page update only records the
+    // reading position and leaves contentY to the flick.
+    property bool transcriptPageKinetic: false
+
+    function beginTranscriptPageUpdate() {
+        transcriptPageKinetic = !!transcript && transcript.flicking && !transcript.dragging
+            && !transcript.followTail && !settlingTranscript && !restoringTranscript
+        traceTranscript("page-update-begin", {kinetic: transcriptPageKinetic})
+        if (!transcriptPageKinetic) {
+            beginTranscriptUpdate()
+            return
+        }
+        transcriptAnchor = captureTranscriptPosition()
+        updatingTranscript = true
+    }
+
+    function endTranscriptPageUpdate() {
+        if (!transcriptPageKinetic) {
+            endTranscriptUpdate()
+            return
+        }
+        transcriptPageKinetic = false
+        updatingTranscript = false
+        // Delegates materialized by the page publish heights in later polish
+        // passes; settleTranscriptLayout places them.
+        agentHost.scheduleTranscriptRestore()
+    }
+
+    function prependSessionMessages(items) {
+        beginTranscriptPageUpdate()
+        messages.prepend(items)
+        endTranscriptPageUpdate()
+    }
+
+    function updateSessionMessage(index, item) {
+        traceTranscript("delta", {messageIndex: index, characters: (item.body || "").length})
+        prepareStreamingViewport(item)
+        beginTranscriptUpdate()
+        // Session updates address canonical messages; collapsed activities and
+        // split Markdown blocks make the displayed row count a different size.
+        if (index >= 0 && index < messages.sourceCount())
+            messages.set(index, item)
+        endTranscriptUpdate()
+    }
+
+    function updateSessionMessages(updates) {
+        for (const update of updates)
+            prepareStreamingViewport(update.message)
+        beginTranscriptUpdate()
+        for (const update of updates) {
+            traceTranscript("delta", {messageIndex: update.index, characters: (update.message.body || "").length})
+            if (update.index >= 0 && update.index < messages.sourceCount())
+                messages.set(update.index, update.message)
+        }
+        endTranscriptUpdate()
+    }
+
+    function debugMessageSurfaceWidth(index) {
+        const delegate = transcript.itemAtIndex(index)
+        if (!delegate)
+            return -1
+        for (let child of delegate.children)
+            if (child.objectName === "messageSurface")
+                return child.width
+        return -1
+    }
+
+    function debugMessageBodySelectable(index) {
+        const delegate = transcript.itemAtIndex(index)
+        if (!delegate)
+            return false
+        const stack = delegate.children.slice()
+        while (stack.length > 0) {
+            const item = stack.pop()
+            if (item.objectName === "messageBody")
+                return item.selectByMouse === true
+            for (let child of item.children || [])
+                stack.push(child)
+        }
+        return false
+    }
+
+    function prepareBenchmarkMessages(count) {
+        transcript.followTail = false
+        messages.clear()
+        for (let index = 0; index < count; ++index) {
+            if (index % 9 === 4) {
+                appendMessage("tool", "Reading and analyzing source files", "Tool call · " + index, "")
+            } else if (index % 11 === 7) {
+                appendMessage("file", "EditorWidget.cpp", "src/editor/EditorWidget.cpp", "src/editor/EditorWidget.cpp")
+            } else if (index % 3 === 0) {
+                appendMessage("user", "Benchmark message " + index + ": inspect the active worktree.", "You", "")
+            } else {
+                appendMessage("assistant",
+                              "The agent transcript stays virtualized while this response contains enough text to exercise wrapping and GPU-backed scrolling.",
+                              "KetPlus Agent", "")
+            }
+        }
+        transcript.positionViewAtBeginning()
+    }
+
+    function setBenchmarkScrollProgress(progress) {
+        // Programmatic navigation supersedes wheel anchoring and any pending
+        // mutation correction.
+        beginTranscriptInput()
+        if (transcriptWheel)
+            transcriptWheel.direction = 0
+        transcript.followTail = progress >= 1
+        transcript.streamingTailRequested = transcript.followTail
+        const maximum = Math.max(0, transcript.contentHeight - transcript.height)
+        // Move as navigation, not as layout displacement: adopt the new
+        // reading position as the anchor so it is not restored away.
+        restoringTranscript = true
+        transcript.contentY = maximum * Math.max(0, Math.min(1, progress))
+        restoringTranscript = false
+        transcript.previousScrollY = transcript.contentY
+        captureTranscriptWheelPosition()
+    }
+
+    function submitCurrentPrompt() {
+        if (!agentHost.agentAvailable || agentHost.steeringPending)
+            return
+        const value = prompt.text.trim()
+        if (value.length === 0 && agentHost.attachments.length === 0)
+            return
+        if (agentHost.sessionRunning) {
+            agentHost.steerPrompt(value)
+            revealLatestAfterSubmit()
+            return
+        }
+        const slashCommand = root.slashCommandForText(value)
+        if (slashCommand && slashCommand.id === "plan" && value.length > slashCommand.label.length) {
+            const planPrompt = value.substring(slashCommand.label.length).trim()
+            if (planPrompt.length === 0)
+                return
+            agentHost.submitConfiguredPrompt(planPrompt, {model: selectedModel, effort: selectedEffort, permission: permission, provider: selectedProvider, mode: "plan"})
+            if (agentHost.sessionRunning) {
+                prompt.clear()
+                revealLatestAfterSubmit()
+            }
+            return
+        }
+        if (value.startsWith("/") && root.visibleSlashCommands.length > 0) {
+            root.applySlashCommand(root.visibleSlashCommands[0])
+            return
+        }
+        agentHost.submitConfiguredPrompt(value, {model: selectedModel, effort: selectedEffort, permission: permission, provider: selectedProvider})
+        if (agentHost.sessionRunning) {
+            prompt.clear()
+            revealLatestAfterSubmit()
+        }
+    }
+
+    // Sending is a change of reading intent: the reader wants to see the
+    // message they sent and its answer, not the history they scrolled to.
+    function revealLatestAfterSubmit() {
+        if (!transcript || transcript.followTail)
+            return
+        traceTranscript("submit-reveal-latest", {})
+        jumpToLatest()
+    }
+
+    readonly property var messages: agentHost.messageModel
+
+    Rectangle {
+        anchors.fill: parent
+        color: root.t.pageBackground || "#1b1f24"
+    }
+
+    Basic.SplitView {
+        objectName: "agentWorkspaceSplit"
+        anchors.fill: parent
+        orientation: Qt.Horizontal
+        handle: Item {
+            objectName: "sidebarResizeHandle"
+            implicitWidth: agentHost.productSidebarVisible && !agentHost.compactMode ? Metrics.px(6, root.t) : 0
+            readonly property color dividerColor: SplitHandle.pressed ? root.t.accent
+                                                 : SplitHandle.hovered ? root.t.borderStrong : root.t.border
+            Rectangle {
+                objectName: "sidebarDivider"
+                visible: parent.implicitWidth > 0
+                anchors.horizontalCenter: parent.horizontalCenter
+                height: parent.height
+                width: 1
+                color: parent.dividerColor
+            }
+            HoverHandler {
+                enabled: parent.implicitWidth > 0
+                cursorShape: Qt.SplitHCursor
+            }
+        }
+
+        AgentSidebar {
+            id: sidebar
+            workspace: root
+            visible: agentHost.productSidebarVisible && !agentHost.compactMode
+            SplitView.minimumWidth: visible ? 188 : 0
+            SplitView.preferredWidth: visible ? 216 : 0
+            SplitView.maximumWidth: visible ? 320 : 0
+        }
+
+        Rectangle {
+            id: chatPane
+            objectName: "chatPane"
+            SplitView.fillWidth: true
+            SplitView.minimumWidth: 260
+            color: root.t.pageBackground || "#1b1f24"
+
+            ColumnLayout {
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width
+                spacing: 0
+
+                AgentWorkspaceHeader {
+                    workspace: root
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: implicitHeight
+                }
+
+                AgentScopeNotice {
+                    workspace: root
+                }
+
+                WarmTranscriptHost {
+                    id: transcriptHost
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    // Keep the final row clear of the composer even while
+                    // the viewport is pinned during streaming or a new send.
+                    Layout.bottomMargin: Metrics.px(20, root.t)
+                    initialModel: agentHost.messageModel
+                    transcriptFactory: cachedTranscriptFactory
+                    onTranscriptActivated: function(view) {
+                        root.transcript = view
+                        root.transcriptWheel = view.wheelController
+                        root.transcriptScrollBar = view.verticalScrollBar
+                    }
+
+                    Rectangle {
+                        id: transcriptFindBar
+                        objectName: "transcriptFindBar"
+                        readonly property var view: root.transcript
+                        visible: !!view && view.findOpen
+                        z: 10
+                        anchors.top: parent.top
+                        anchors.right: parent.right
+                        anchors.topMargin: Metrics.px(8, root.t)
+                        anchors.rightMargin: Metrics.px(16, root.t)
+                        width: Math.min(parent.width - Metrics.px(32, root.t), Metrics.px(380, root.t))
+                        height: findRow.height + (findStatusText.visible ? findStatusText.height + Metrics.px(4, root.t) : 0) + Metrics.px(8, root.t)
+                        radius: Metrics.px(7, root.t)
+                        color: root.t.surfaceRaised
+                        border.color: root.t.borderStrong
+                        Accessible.role: Accessible.ToolBar
+                        Accessible.name: "Find in conversation"
+                        Connections {
+                            target: transcriptFindBar.view
+                            ignoreUnknownSignals: true
+                            function onFindOpened() {
+                                findField.forceActiveFocus()
+                                findField.selectAll()
+                            }
+                        }
+                        Row {
+                            id: findRow
+                            x: Metrics.px(6, root.t)
+                            y: Metrics.px(4, root.t)
+                            width: parent.width - Metrics.px(12, root.t)
+                            height: Metrics.px(30, root.t)
+                            spacing: Metrics.px(4, root.t)
+                            Basic.TextField {
+                                id: findField
+                                objectName: "transcriptFindField"
+                                width: parent.width - findCount.width - 3 * Metrics.px(28, root.t) - 3 * parent.spacing
+                                height: Metrics.px(30, root.t)
+                                placeholderText: "Find in conversation"
+                                color: root.t.textMain
+                                placeholderTextColor: root.t.textMuted
+                                font.family: root.t.uiFont
+                                font.pixelSize: root.t.body
+                                background: Rectangle {
+                                    color: "transparent"
+                                }
+                                Accessible.name: "Find in conversation"
+                                onTextEdited: if (transcriptFindBar.view) transcriptFindBar.view.setFindQuery(text)
+                                Keys.onReturnPressed: event => (event.modifiers & Qt.ShiftModifier) ? transcriptFindBar.view.findPrevious() : transcriptFindBar.view.findNext()
+                                Keys.onEnterPressed: event => (event.modifiers & Qt.ShiftModifier) ? transcriptFindBar.view.findPrevious() : transcriptFindBar.view.findNext()
+                                Keys.onEscapePressed: transcriptFindBar.view.closeFind()
+                            }
+                            Text {
+                                id: findCount
+                                objectName: "transcriptFindCount"
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: transcriptFindBar.view ? transcriptFindBar.view.findCountText : ""
+                                color: root.t.textMuted
+                                font.family: root.t.uiFont
+                                font.pixelSize: root.t.caption
+                                Accessible.name: text
+                            }
+                            Basic.ToolButton {
+                                objectName: "transcriptFindPrevious"
+                                width: Metrics.px(28, root.t)
+                                height: Metrics.px(28, root.t)
+                                padding: Metrics.px(7, root.t)
+                                contentItem: TintedIcon { source: "qrc:/agent/icons/arrow-up.svg"; color: root.t.textMain }
+                                background: Rectangle { color: parent.hovered ? root.t.surfaceHover : "transparent"; radius: Metrics.px(4, root.t) }
+                                onClicked: transcriptFindBar.view.findPrevious()
+                                Accessible.name: "Previous match"
+                            }
+                            Basic.ToolButton {
+                                objectName: "transcriptFindNext"
+                                width: Metrics.px(28, root.t)
+                                height: Metrics.px(28, root.t)
+                                padding: Metrics.px(7, root.t)
+                                contentItem: TintedIcon { source: "qrc:/agent/icons/arrow-up.svg"; color: root.t.textMain; rotation: 180 }
+                                background: Rectangle { color: parent.hovered ? root.t.surfaceHover : "transparent"; radius: Metrics.px(4, root.t) }
+                                onClicked: transcriptFindBar.view.findNext()
+                                Accessible.name: "Next match"
+                            }
+                            Basic.ToolButton {
+                                objectName: "transcriptFindClose"
+                                width: Metrics.px(28, root.t)
+                                height: Metrics.px(28, root.t)
+                                padding: Metrics.px(7, root.t)
+                                contentItem: TintedIcon { source: "qrc:/agent/icons/plus.svg"; color: root.t.textMain; rotation: 45 }
+                                background: Rectangle { color: parent.hovered ? root.t.surfaceHover : "transparent"; radius: Metrics.px(4, root.t) }
+                                onClicked: transcriptFindBar.view.closeFind()
+                                Accessible.name: "Close find"
+                            }
+                        }
+                        Text {
+                            id: findStatusText
+                            objectName: "transcriptFindStatus"
+                            x: Metrics.px(12, root.t)
+                            y: findRow.y + findRow.height + Metrics.px(2, root.t)
+                            width: parent.width - Metrics.px(24, root.t)
+                            visible: text.length > 0
+                            text: transcriptFindBar.view ? transcriptFindBar.view.findStatus : ""
+                            color: root.t.textMuted
+                            font.family: root.t.uiFont
+                            font.pixelSize: root.t.caption
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    Component {
+                        id: cachedTranscriptFactory
+
+                        TranscriptView {
+                            shell: root
+                            host: agentHost
+                            preview: imagePreview
+                            settleTimer: transcriptSettleTimer
+                        }
+                    }
+                }
+
+                BackgroundTaskBar {
+                    workspace: root
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredWidth: Math.min(parent.width - Metrics.px(40, root.t), root.conversationColumnWidth - Metrics.px(40, root.t))
+                    Layout.preferredHeight: implicitHeight
+                    Layout.bottomMargin: visible ? Metrics.px(6, root.t) : 0
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: composer.height + composerFooter.height + Metrics.px(18, root.t)
+
+                    Rectangle {
+                        id: composer
+                        objectName: "agentComposer"
+                        readonly property bool compactControls: width < 520
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.top: parent.top
+                        width: Math.min(parent.width - Metrics.px(40, root.t), root.conversationColumnWidth - Metrics.px(40, root.t))
+                        height: composerColumn.implicitHeight + Metrics.px(8, root.t)
+                        radius: Metrics.px(16, root.t)
+                        color: root.t.surfaceRaised
+                        border.width: 1
+                        border.color: prompt.activeFocus ? root.t.borderStrong : root.t.border
+
+                        DropArea {
+                            anchors.fill: parent
+                            onDropped: function(drop) {
+                                if (drop.hasUrls) {
+                                    let paths = []
+                                    for (let url of drop.urls) paths.push(url.toString())
+                                    agentHost.addAttachments(paths)
+                                    drop.acceptProposedAction()
+                                }
+                            }
+                        }
+                        ColumnLayout {
+                            id: composerColumn
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.margins: Metrics.px(4, root.t)
+                            spacing: Metrics.px(4, root.t)
+
+                            Flow {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: childrenRect.height
+                                visible: agentHost.attachments.length > 0
+                                spacing: Metrics.px(6, root.t)
+                                Repeater {
+                                    model: agentHost.attachments
+                                        Rectangle {
+                                        id: attachmentChip
+                                        objectName: "composerAttachmentChip"
+                                        required property var modelData
+                                        required property int index
+                                        width: Metrics.px(200, root.t)
+                                        height: Metrics.px(40, root.t)
+                                        radius: Metrics.px(10, root.t)
+                                        color: root.t.surfaceRaised
+                                        border.width: modelData.image && attachmentChipHover.hovered ? 1 : 0
+                                        border.color: root.t.focus
+                                        Accessible.role: modelData.image ? Accessible.Button : Accessible.StaticText
+                                        Accessible.name: modelData.image
+                                                         ? "Preview " + (modelData.name || "image")
+                                                         : (modelData.name || "Attachment")
+                                        Accessible.onPressAction: attachmentChip.previewAttachment()
+                                        function previewAttachment() {
+                                            if (!modelData.image || !modelData.url)
+                                                return
+                                            imagePreview.imageSource = modelData.url
+                                            imagePreview.open()
+                                        }
+                                        HoverHandler {
+                                            id: attachmentChipHover
+                                            enabled: !!modelData.image
+                                        }
+                                        RowLayout {
+                                            id: chipRow
+                                            anchors.fill: parent
+                                            anchors.margins: Metrics.px(6, root.t)
+                                            spacing: Metrics.px(6, root.t)
+                                            Image {
+                                                objectName: "composerAttachmentImage"
+                                                visible: modelData.image
+                                                source: modelData.image ? modelData.url : ""
+                                                sourceSize.width: 56
+                                                sourceSize.height: 56
+                                                Layout.preferredWidth: Metrics.px(28, root.t)
+                                                Layout.preferredHeight: Metrics.px(28, root.t)
+                                                fillMode: Image.PreserveAspectCrop
+                                            }
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: modelData.name
+                                                elide: Text.ElideMiddle
+                                                color: root.t.textMain
+                                                font.pixelSize: root.t.body
+                                            }
+                                            Basic.ToolButton {
+                                                id: removeAttachmentButton
+                                                objectName: "removeAttachmentButton"
+                                                z: 2
+                                                text: "×"
+                                                Layout.preferredWidth: Metrics.px(24, root.t)
+                                                Layout.preferredHeight: Metrics.px(24, root.t)
+                                                onClicked: agentHost.removeAttachment(index)
+                                                KetToolTip {
+                                                    tokens: root.t
+                                                    visible: removeAttachmentButton.hovered
+                                                    text: "Remove attachment"
+                                                }
+                                            }
+                                        }
+                                        MouseArea {
+                                            id: attachmentPreviewArea
+                                            objectName: "composerAttachmentPreviewArea"
+                                            z: 1
+                                            anchors.fill: parent
+                                            anchors.rightMargin: removeAttachmentButton.width
+                                                                + chipRow.spacing + chipRow.anchors.margins
+                                            enabled: !!modelData.image
+                                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                            onClicked: attachmentChip.previewAttachment()
+                                        }
+                                        KetToolTip {
+                                            tokens: root.t
+                                            visible: modelData.image && attachmentChipHover.hovered
+                                                     && !removeAttachmentButton.hovered
+                                            text: "Click to preview"
+                                        }
+                                    }
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 0
+                            Basic.ScrollView {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: Math.min(Metrics.px(160, root.t), Math.max(Metrics.px(32, root.t), prompt.implicitHeight))
+                                clip: true
+                                Basic.TextArea {
+                                    id: prompt
+                                    objectName: "agentPrompt"
+                                    leftPadding: Metrics.px(10, root.t); rightPadding: Metrics.px(4, root.t); topPadding: Metrics.px(6, root.t); bottomPadding: Metrics.px(6, root.t)
+                                    placeholderText: agentHost.presentationState.folder === "missing"
+                                                     ? "Continue in the main worktree…"
+                                                     : "Type / for commands, @ for files, $ for skills"
+                                    // Drafting must remain available even while the
+                                    // transport reconnects; submission is gated separately.
+                                    enabled: true
+                                    color: root.t.textMain
+                                    placeholderTextColor: root.t.textMuted
+                                    selectionColor: root.t.accentMuted
+                                    selectedTextColor: root.t.textMain
+                                    wrapMode: TextArea.Wrap
+                                    background: null
+                                    font.family: root.t.uiFont
+                                    font.pixelSize: root.t.reading
+                                    property string lastObservedText: ""
+                                    onTextChanged: {
+                                        // QTextDocument formatting also emits textChanged.
+                                        // Save/reformat only after an actual text edit.
+                                        if (text === lastObservedText)
+                                            return
+                                        lastObservedText = text
+                                        composerDraftSaveTimer.restart()
+                                        composerLineHeightTimer.restart()
+                                    }
+                                    onFontChanged: composerLineHeightTimer.restart()
+                                    Component.onCompleted: composerLineHeightTimer.restart()
+                                    Timer {
+                                        id: composerLineHeightTimer
+                                        objectName: "composerLineHeightTimer"
+                                        interval: 0
+                                        onTriggered: agentHost.formatComposerDocument(prompt.textDocument, prompt.font.pixelSize)
+                                    }
+                                    Keys.onPressed: function(event) {
+                                        if (event.matches(StandardKey.Paste) && agentHost.pasteClipboardImage()) {
+                                            event.accepted = true
+                                            return
+                                        }
+                                        if (root.visibleSkillSuggestions.length > 0) {
+                                            if (event.key === Qt.Key_Down) {
+                                                root.selectedSkillSuggestion = Math.min(
+                                                    root.visibleSkillSuggestions.length - 1,
+                                                    root.selectedSkillSuggestion + 1)
+                                                event.accepted = true
+                                                return
+                                            }
+                                            if (event.key === Qt.Key_Up) {
+                                                root.selectedSkillSuggestion = Math.max(
+                                                    0, root.selectedSkillSuggestion - 1)
+                                                event.accepted = true
+                                                return
+                                            }
+                                            if (event.key === Qt.Key_Tab || event.key === Qt.Key_Return
+                                                    || event.key === Qt.Key_Enter) {
+                                                const index = Math.min(root.selectedSkillSuggestion,
+                                                                       root.visibleSkillSuggestions.length - 1)
+                                                root.applySkillSuggestion(
+                                                    root.visibleSkillSuggestions[index])
+                                                event.accepted = true
+                                                return
+                                            }
+                                        }
+                                        if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                                            && !(event.modifiers & Qt.ShiftModifier) && !prompt.inputMethodComposing) {
+                                            root.submitCurrentPrompt()
+                                            event.accepted = true
+                                        }
+                                    }
+                                }
+                            }
+                                Basic.ToolButton {
+                                    id: stopButton
+                                    objectName: "stopButton"
+                                    Layout.alignment: Qt.AlignBottom
+                                    Layout.preferredWidth: Metrics.px(32, root.t)
+                                    Layout.preferredHeight: Metrics.px(32, root.t)
+                                    visible: agentHost.sessionRunning
+                                    padding: 0
+                                    contentItem: Item {
+                                            TintedIcon {
+                                                anchors.centerIn: parent
+                                                width: Metrics.px(14, root.t); height: Metrics.px(14, root.t)
+                                                source: "qrc:/agent/icons/square.svg"
+                                                color: root.t.textMain
+                                            }
+                                        }
+                                        background: Item {
+                                            Rectangle {
+                                                anchors.centerIn: parent
+                                                width: Metrics.px(26, root.t); height: Metrics.px(26, root.t); radius: Metrics.px(13, root.t)
+                                                color: stopButton.hovered ? root.t.surfaceHover : root.t.interactiveBackground
+                                                border.width: 1
+                                                border.color: root.t.border
+                                            }
+                                        }
+                                        onClicked: agentHost.stopAgent()
+                                        KetToolTip { tokens: root.t; visible: stopButton.hovered; text: "Stop agent" }
+                                        Accessible.name: "Stop agent"
+                                    }
+                                    Basic.ToolButton {
+                                        id: sendButton
+                                        objectName: "sendButton"
+                                        Layout.alignment: Qt.AlignBottom
+                                        Layout.preferredWidth: Metrics.px(32, root.t)
+                                        Layout.preferredHeight: Metrics.px(32, root.t)
+                                        enabled: agentHost.agentAvailable && !agentHost.steeringPending
+                                                 && (prompt.text.trim().length > 0 || agentHost.attachments.length > 0)
+                                        visible: true
+                                        padding: 0
+                                        contentItem: Item {
+                                            TintedIcon {
+                                                anchors.centerIn: parent
+                                                width: Metrics.px(14, root.t); height: Metrics.px(14, root.t)
+                                                source: "qrc:/agent/icons/arrow-up.svg"
+                                                color: sendButton.enabled ? root.t.pageBackground : root.t.textDisabled
+                                            }
+                                        }
+                                        background: Item {
+                                            Rectangle {
+                                                anchors.centerIn: parent
+                                                width: Metrics.px(26, root.t); height: Metrics.px(26, root.t); radius: Metrics.px(13, root.t)
+                                                color: sendButton.enabled
+                                                       ? (sendButton.hovered ? root.t.textSecondary : root.t.textMain)
+                                                       : root.t.interactiveActive
+                                            }
+                                        }
+                                        onClicked: root.submitCurrentPrompt()
+                                        KetToolTip {
+                                            tokens: root.t
+                                            visible: sendButton.hovered
+                                            text: agentHost.steeringPending ? "Sending..."
+                                                  : agentHost.sessionRunning
+                                                    ? "Steer current turn"
+                                                  : "Send · Enter (Shift+Enter for new line)"
+                                        }
+                                        Accessible.name: agentHost.sessionRunning ? "Steer current turn" : "Send message"
+                                    }
+                                }
+                            }
+                        }
+
+                        // Suggestion popovers float above the composer so the transcript never moves.
+                        Rectangle {
+                            id: slashPalette
+                            objectName: "slashPalette"
+                            anchors.left: composer.left
+                            anchors.right: composer.right
+                            anchors.bottom: composer.top
+                            anchors.bottomMargin: Metrics.px(6, root.t)
+                            z: 20
+                            height: slashCommandList.implicitHeight + Metrics.px(8, root.t)
+                            visible: root.visibleSlashCommands.length > 0 && !agentHost.sessionRunning
+                            radius: Metrics.px(12, root.t)
+                            color: root.t.surfaceRaised
+                            border.width: 1
+                            border.color: root.t.borderStrong
+                            Column {
+                                id: slashCommandList
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.margins: Metrics.px(4, root.t)
+                                spacing: Metrics.px(2, root.t)
+                                Repeater {
+                                    model: root.visibleSlashCommands
+                                    Basic.ItemDelegate {
+                                        required property var modelData
+                                        width: slashCommandList.width
+                                        height: Metrics.px(42, root.t)
+                                        padding: Metrics.px(8, root.t)
+                                        contentItem: RowLayout {
+                                            spacing: Metrics.px(10, root.t)
+                                            Text {
+                                                text: modelData.label
+                                                color: root.t.textMain
+                                                font.family: root.t.monoFont
+                                                font.pixelSize: root.t.reading
+                                                Layout.preferredWidth: Metrics.px(92, root.t)
+                                                verticalAlignment: Text.AlignVCenter
+                                            }
+                                            Text {
+                                                text: modelData.description
+                                                color: root.t.textMuted
+                                                font.family: root.t.uiFont
+                                                font.pixelSize: root.t.body
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                                verticalAlignment: Text.AlignVCenter
+                                            }
+                                    }
+                                    background: Rectangle {
+                                        radius: Metrics.px(8, root.t)
+                                        color: parent.hovered ? root.t.interactiveActive : "transparent"
+                                    }
+                                    onClicked: root.applySlashCommand(modelData)
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        id: skillMentionPalette
+                        objectName: "skillMentionPalette"
+                        anchors.left: composer.left
+                        anchors.right: composer.right
+                        anchors.bottom: composer.top
+                        anchors.bottomMargin: Metrics.px(6, root.t)
+                        z: 20
+                        height: Math.min(Metrics.px(360, root.t), skillSuggestionList.contentHeight + Metrics.px(8, root.t))
+                        visible: root.visibleSkillSuggestions.length > 0
+                        radius: Metrics.px(12, root.t)
+                        color: root.t.surfaceRaised
+                        border.width: 1
+                        border.color: root.t.borderStrong
+
+                        ListView {
+                            id: skillSuggestionList
+                            objectName: "skillSuggestionList"
+                            anchors.fill: parent
+                            anchors.margins: Metrics.px(4, root.t)
+                            clip: true
+                            spacing: Metrics.px(2, root.t)
+                            model: root.visibleSkillSuggestions
+                            currentIndex: Math.min(root.selectedSkillSuggestion,
+                                                   Math.max(0, count - 1))
+
+                            delegate: Basic.ItemDelegate {
+                                id: suggestionRow
+                                required property var modelData
+                                required property int index
+                                readonly property bool fileEntry: modelData.kind === "file"
+                                width: skillSuggestionList.width
+                                // A file shows its worktree path, then whether it is a file or folder.
+                                height: Metrics.px(46, root.t)
+                                padding: Metrics.px(8, root.t)
+                                highlighted: index === skillSuggestionList.currentIndex
+                                contentItem: Item {
+                                    ColumnLayout {
+                                        objectName: "fileMentionSuggestion"
+                                        anchors.fill: parent
+                                        visible: suggestionRow.fileEntry
+                                        spacing: 1
+                                        Text {
+                                            objectName: "fileMentionPath"
+                                            Layout.fillWidth: true
+                                            text: (suggestionRow.modelData.path || "").replace(/\/$/, "")
+                                            color: root.t.accentHover
+                                            font.family: root.t.monoFont
+                                            font.pixelSize: root.t.reading
+                                            // Long paths keep both the top folder and the file name.
+                                            elide: Text.ElideMiddle
+                                        }
+                                        Text {
+                                            text: suggestionRow.modelData.directory ? "Folder" : "File"
+                                            color: root.t.textMuted
+                                            font.family: root.t.uiFont
+                                            font.pixelSize: root.t.micro
+                                        }
+                                    }
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        visible: !suggestionRow.fileEntry
+                                        spacing: Metrics.px(10, root.t)
+                                        Text {
+                                            text: suggestionRow.modelData.mention || ""
+                                            color: root.t.accentHover
+                                            font.family: root.t.monoFont
+                                            font.pixelSize: root.t.reading
+                                            Layout.preferredWidth: Metrics.px(150, root.t)
+                                            elide: Text.ElideRight
+                                        }
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 1
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: suggestionRow.modelData.description || ""
+                                                color: root.t.textMain
+                                                font.family: root.t.uiFont
+                                                font.pixelSize: root.t.body
+                                                elide: Text.ElideRight
+                                            }
+                                            Text {
+                                                text: suggestionRow.modelData.kind === "conversation"
+                                                      ? (suggestionRow.modelData.detail || "")
+                                                      : (suggestionRow.modelData.source || "") + " skill"
+                                                color: root.t.textMuted
+                                                font.family: root.t.uiFont
+                                                font.pixelSize: root.t.micro
+                                            }
+                                        }
+                                    }
+                                }
+                                background: Rectangle {
+                                    radius: Metrics.px(8, root.t)
+                                    color: parent.highlighted || parent.hovered
+                                        ? root.t.interactiveActive : "transparent"
+                                }
+                                onClicked: root.applySkillSuggestion(modelData)
+                            }
+                        }
+                    }
+
+                    RowLayout {
+                        id: composerFooter
+                        objectName: "composerFooter"
+                        anchors.left: composer.left
+                        anchors.right: composer.right
+                        anchors.top: composer.bottom
+                        anchors.topMargin: Metrics.px(4, root.t)
+                        anchors.leftMargin: Metrics.px(2, root.t)
+                        anchors.rightMargin: Metrics.px(2, root.t)
+                        height: Metrics.px(28, root.t)
+                        spacing: Metrics.px(2, root.t)
+
+                                Basic.ToolButton {
+                                    id: attachButton
+                                    objectName: "attachButton"
+                                    Layout.preferredWidth: Metrics.px(28, root.t)
+                                    Layout.preferredHeight: Metrics.px(28, root.t)
+                                    contentItem: Item {
+                                        Item {
+                                            objectName: "attachGlyph"
+                                            anchors.centerIn: parent
+                                            width: Metrics.px(14, root.t)
+                                            height: Metrics.px(14, root.t)
+                                            Rectangle { anchors.centerIn: parent; width: Metrics.px(12, root.t); height: 1.5; radius: 1; color: root.t.textSecondary }
+                                            Rectangle { anchors.centerIn: parent; width: 1.5; height: Metrics.px(12, root.t); radius: 1; color: root.t.textSecondary }
+                                        }
+                                    }
+                                    padding: Metrics.px(7, root.t)
+                                    background: Item {
+                                        Rectangle {
+                                            anchors.centerIn: parent
+                                            width: Metrics.px(24, root.t)
+                                            height: Metrics.px(24, root.t)
+                                            radius: Metrics.px(5, root.t)
+                                            color: attachButton.hovered ? root.t.surfaceHover : "transparent"
+                                        }
+                                    }
+                                    onClicked: agentHost.chooseAttachments()
+                                    KetToolTip {
+                                        tokens: root.t
+                                        visible: attachButton.hovered
+                                        text: "Add images or text files"
+                                    }
+                                    Accessible.name: "Attach files"
+                                }
+                                Basic.ToolButton {
+                                    id: permissionButton
+                                    objectName: "permissionButton"
+                                    Layout.minimumHeight: Metrics.px(28, root.t)
+                                    text: root.currentPermission.label
+                                    contentItem: Row {
+                                        spacing: Metrics.px(6, root.t)
+                                        TintedIcon {
+                                            width: Metrics.px(14, root.t)
+                                            height: Metrics.px(14, root.t)
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            source: root.permissionIconSource(root.permission)
+                                            color: root.permissionAccent
+                                        }
+                                        Text {
+                                            text: permissionButton.text
+                                            visible: !composer.compactControls
+                                            color: root.permissionAccent
+                                            font.family: root.t.uiFont
+                                            font.pixelSize: root.t.body
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+                                        TintedIcon {
+                                            width: Metrics.px(14, root.t)
+                                            height: Metrics.px(14, root.t)
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            source: "qrc:/agent/icons/chevron-down.svg"
+                                            color: root.permissionElevated
+                                                   ? root.permissionAccent : root.t.textMuted
+                                        }
+                                    }
+                                    background: Rectangle { radius: Metrics.px(6, root.t); color: permissionButton.hovered || permissionMenu.visible ? root.t.surfaceHover : "transparent" }
+                                    onClicked: { skillsPopup.close(); modelPopup.close(); permissionMenu.open() }
+                                    Basic.Popup {
+                                        id: permissionMenu
+                                        objectName: "permissionMenu"
+                                        focus: true
+                                        onOpened: permissionItems.forceActiveFocus()
+                                        y: -height - 4
+                                        x: Math.min(0, root.width - permissionButton.mapToItem(root, 0, 0).x - width - 12)
+                                        width: Math.min(Metrics.px(320, root.t), root.width - Metrics.px(24, root.t))
+                                        height: permissionItems.implicitHeight + Metrics.px(16, root.t)
+                                        padding: Metrics.px(8, root.t)
+                                        background: Rectangle {
+                                            color: root.t.surfaceRaised
+                                            radius: Metrics.px(12, root.t)
+                                            border.width: 1
+                                            border.color: root.t.borderStrong
+                                        }
+                                        Column {
+                                            id: permissionItems
+                                            width: parent.width
+                                            spacing: Metrics.px(2, root.t)
+                                            focus: true
+                                            Keys.onPressed: function(event) {
+                                            const choice = event.key - Qt.Key_1
+                                            if (choice >= 0 && choice < root.permissionProfiles.length) {
+                                                root.permission = root.permissionProfiles[choice].id
+                                                root.publishConversationConfiguration()
+                                                permissionMenu.close()
+                                                event.accepted = true
+                                            }
+                                        }
+                                            Text {
+                                                width: parent.width
+                                                leftPadding: Metrics.px(8, root.t)
+                                                topPadding: Metrics.px(2, root.t)
+                                                bottomPadding: Metrics.px(6, root.t)
+                                                text: "Mode"
+                                                color: root.t.textMuted
+                                                font.family: root.t.uiFont
+                                                font.pixelSize: root.t.micro
+                                            }
+                                            Repeater {
+                                                model: root.permissionProfiles
+                                                Basic.ItemDelegate {
+                                                    id: permissionOption
+                                                    required property var modelData
+                                                    required property int index
+                                                    width: permissionItems.width
+                                                    height: Metrics.px(52, root.t)
+                                                    leftPadding: Metrics.px(8, root.t)
+                                                    rightPadding: Metrics.px(8, root.t)
+                                                    contentItem: RowLayout {
+                                                        spacing: Metrics.px(8, root.t)
+                                                        TintedIcon {
+                                                            Layout.preferredWidth: Metrics.px(14, root.t)
+                                                            Layout.preferredHeight: Metrics.px(14, root.t)
+                                                            Layout.alignment: Qt.AlignVCenter
+                                                            source: root.permissionIconSource(modelData.id)
+                                                            color: root.permissionLabelColor(modelData)
+                                                        }
+                                                        Column {
+                                                            Layout.fillWidth: true
+                                                            Layout.alignment: Qt.AlignVCenter
+                                                            spacing: Metrics.px(3, root.t)
+                                                            Text {
+                                                                width: parent.width
+                                                                text: modelData.label
+                                                                color: root.permissionLabelColor(modelData)
+                                                                font.family: root.t.uiFont
+                                                                font.pixelSize: root.t.body
+                                                            }
+                                                            Text {
+                                                                width: parent.width
+                                                                text: modelData.description || ""
+                                                                elide: Text.ElideRight
+                                                                color: modelData.elevated === true
+                                                                       ? (root.t.warning || "#d9a441")
+                                                                       : root.t.textMuted
+                                                                opacity: modelData.elevated === true ? 0.85 : 1
+                                                                font.family: root.t.uiFont
+                                                                font.pixelSize: root.t.micro
+                                                            }
+                                                        }
+                                                        Rectangle {
+                                                            visible: modelData.elevated === true && root.permission !== modelData.id
+                                                            Layout.preferredWidth: enableText.implicitWidth + Metrics.px(12, root.t)
+                                                            Layout.preferredHeight: Metrics.px(18, root.t)
+                                                            Layout.alignment: Qt.AlignVCenter
+                                                            radius: Metrics.px(5, root.t)
+                                                            color: "transparent"
+                                                            border.width: 1
+                                                            border.color: root.t.warning || "#d9a441"
+                                                            Text {
+                                                                id: enableText
+                                                                anchors.centerIn: parent
+                                                                text: "Enable"
+                                                                color: root.t.warning || "#d9a441"
+                                                                font.family: root.t.uiFont
+                                                                font.pixelSize: root.t.micro
+                                                            }
+                                                        }
+                                                        Text {
+                                                            text: root.permission === modelData.id ? "✓" : ""
+                                                            color: root.permissionLabelColor(modelData)
+                                                            font.pixelSize: root.t.caption
+                                                            Layout.preferredWidth: Metrics.px(12, root.t)
+                                                            Layout.alignment: Qt.AlignVCenter
+                                                        }
+                                                        Text {
+                                                            text: String(index + 1)
+                                                            color: root.t.textMuted
+                                                            font.family: root.t.uiFont
+                                                            font.pixelSize: root.t.micro
+                                                            Layout.preferredWidth: Metrics.px(10, root.t)
+                                                            Layout.alignment: Qt.AlignVCenter
+                                                            horizontalAlignment: Text.AlignRight
+                                                        }
+                                                    }
+                                                    background: Rectangle { radius: Metrics.px(6, root.t); color: parent.hovered ? root.t.interactiveActive : "transparent" }
+                                                    onClicked: {
+                                                        root.permission = modelData.id
+                                                        root.publishConversationConfiguration()
+                                                        permissionMenu.close()
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    KetToolTip {
+                                        tokens: root.t
+                                        visible: permissionButton.hovered
+                                        text: "Permissions for the next message. Restricted actions are blocked without approval prompts."
+                                    }
+                                }
+                                Basic.ToolButton {
+                                    id: skillsButton
+                                    objectName: "skillsButton"
+                                    Layout.minimumHeight: Metrics.px(28, root.t)
+                                    visible: false
+                                    enabled: !agentHost.sessionRunning
+                                    text: root.enabledSkillCount() > 0 ? "Skills " + root.enabledSkillCount() : "Skills"
+                                    contentItem: Row {
+                                        spacing: Metrics.px(6, root.t)
+                                        TintedIcon {
+                                            width: Metrics.px(14, root.t)
+                                            height: Metrics.px(14, root.t)
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            source: "qrc:/agent/icons/zap.svg"
+                                            color: root.enabledSkillCount() > 0 ? root.t.accentHover : root.t.textSecondary
+                                        }
+                                        Text {
+                                            text: skillsButton.text
+                                            visible: !composer.compactControls
+                                            color: root.enabledSkillCount() > 0 ? root.t.accentHover : root.t.textSecondary
+                                            font.family: root.t.uiFont
+                                            font.pixelSize: root.t.body
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+                                    }
+                                    background: Rectangle { radius: Metrics.px(8, root.t); color: skillsButton.hovered ? root.t.surfaceHover : "transparent" }
+                                    onClicked: {
+                                        permissionMenu.close()
+                                        modelPopup.close()
+                                        agentHost.refreshSkills()
+                                        skillsPopup.open()
+                                    }
+                                    Basic.Popup {
+                                        id: skillsPopup
+                                        objectName: "skillsPopup"
+                                        focus: true
+                                        y: -height - 4
+                                        x: Math.min(0, root.width - skillsButton.mapToItem(root, 0, 0).x - width - 12)
+                                        width: Math.min(Metrics.px(420, root.t), root.width - Metrics.px(24, root.t))
+                                        height: Math.min(root.height - Metrics.px(32, root.t), skillsContent.implicitHeight + Metrics.px(16, root.t))
+                                        padding: Metrics.px(8, root.t)
+                                        background: Rectangle { color: root.t.surfaceRaised; radius: Metrics.px(12, root.t); border.color: root.t.borderStrong }
+                                        ColumnLayout {
+                                            id: skillsContent
+                                            width: parent.width
+                                            spacing: Metrics.px(6, root.t)
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    text: "Skills"
+                                                    color: root.t.textMain
+                                                    font.family: root.t.uiFont
+                                                    font.pixelSize: root.t.reading
+                                                    font.weight: Font.DemiBold
+                                                }
+                                                Text {
+                                                    text: root.enabledSkillCount() + " enabled"
+                                                    color: root.t.textMuted
+                                                    font.family: root.t.uiFont
+                                                    font.pixelSize: root.t.caption
+                                                }
+                                            }
+                                            Text {
+                                                Layout.fillWidth: true
+                                                visible: agentHost.skills.length === 0
+                                                text: "No SKILL.md files found in this project or user skills."
+                                                color: root.t.textSecondary
+                                                font.family: root.t.uiFont
+                                                font.pixelSize: root.t.body
+                                                wrapMode: Text.Wrap
+                                            }
+                                            ListView {
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: Math.min(root.height * 0.46, contentHeight)
+                                                clip: true
+                                                model: agentHost.skills
+                                                delegate: Basic.ItemDelegate {
+                                                    id: skillOption
+                                                    required property var modelData
+                                                    width: ListView.view.width
+                                                    height: Metrics.px(62, root.t)
+                                                    padding: Metrics.px(8, root.t)
+                                                    contentItem: RowLayout {
+                                                        spacing: Metrics.px(10, root.t)
+                                                        Rectangle {
+                                                            Layout.preferredWidth: Metrics.px(18, root.t)
+                                                            Layout.preferredHeight: Metrics.px(18, root.t)
+                                                            radius: Metrics.px(5, root.t)
+                                                            color: modelData.enabled ? root.t.accent : "transparent"
+                                                            border.width: 1
+                                                            border.color: modelData.enabled ? root.t.accentHover : root.t.borderStrong
+                                                            Text {
+                                                                anchors.centerIn: parent
+                                                                text: modelData.enabled ? "✓" : ""
+                                                                color: "#ffffff"
+                                                                font.pixelSize: root.t.body
+                                                            }
+                                                        }
+                                                        Column {
+                                                            Layout.fillWidth: true
+                                                            spacing: Metrics.px(3, root.t)
+                                                            Text {
+                                                                width: parent.width
+                                                                text: modelData.name + " · " + modelData.source
+                                                                color: root.t.textMain
+                                                                font.family: root.t.uiFont
+                                                                font.pixelSize: root.t.reading
+                                                                font.weight: modelData.enabled ? Font.DemiBold : Font.Medium
+                                                                elide: Text.ElideRight
+                                                            }
+                                                            Text {
+                                                                width: parent.width
+                                                                text: modelData.description || modelData.displayPath
+                                                                color: root.t.textMuted
+                                                                font.family: root.t.uiFont
+                                                                font.pixelSize: root.t.caption
+                                                                elide: Text.ElideRight
+                                                            }
+                                                            Text {
+                                                                width: parent.width
+                                                                text: modelData.displayPath
+                                                                color: root.t.textDisabled
+                                                                font.family: root.t.uiFont
+                                                                font.pixelSize: root.t.micro
+                                                                elide: Text.ElideMiddle
+                                                            }
+                                                        }
+                                                    }
+                                                    background: Rectangle {
+                                                        radius: Metrics.px(8, root.t)
+                                                        color: modelData.enabled ? root.t.interactiveActive
+                                                              : parent.hovered ? root.t.surfaceHover : "transparent"
+                                                    }
+                                                    onClicked: agentHost.toggleSkill(modelData.path, !modelData.enabled)
+                                                    KetToolTip {
+                                                        tokens: root.t
+                                                        visible: skillOption.hovered
+                                                        text: modelData.description || modelData.displayPath
+                                                    }
+                                                }
+                                                ScrollBar.vertical: Basic.ScrollBar { policy: ScrollBar.AsNeeded }
+                                            }
+                                        }
+                                    }
+                                    KetToolTip {
+                                        tokens: root.t
+                                        visible: skillsButton.hovered
+                                        text: "Manage skills included with the next agent turn"
+                                    }
+                                }
+                                Item { Layout.fillWidth: true }
+                                Basic.ToolButton {
+                                    id: modelButton
+                                    objectName: "modelButton"
+                                    Layout.minimumWidth: Metrics.px(40, root.t)
+                                    Layout.minimumHeight: Metrics.px(28, root.t)
+                                    Layout.maximumWidth: Math.max(Metrics.px(40, root.t), composer.width - (composer.compactControls ? Metrics.px(120, root.t) : Metrics.px(240, root.t)))
+                                    contentItem: RowLayout {
+                                        spacing: Metrics.px(6, root.t)
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: root.composerModelText()
+                                            color: root.t.textSecondary
+                                            font.family: root.t.uiFont
+                                            font.pixelSize: root.t.body
+                                            elide: Text.ElideRight
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
+                                        TintedIcon {
+                                            Layout.preferredWidth: Metrics.px(14, root.t)
+                                            Layout.preferredHeight: Metrics.px(14, root.t)
+                                            source: "qrc:/agent/icons/chevron-down.svg"
+                                            rotation: modelPopup.visible ? 180 : 0
+                                            color: root.t.textMuted
+                                        }
+                                    }
+                                    background: Rectangle { radius: Metrics.px(5, root.t); color: modelButton.hovered || modelPopup.visible ? root.t.surfaceHover : "transparent" }
+                                    onClicked: {
+                                        if (modelPopup.visible) modelPopup.close()
+                                        else root.openModelPicker()
+                                    }
+                                    Accessible.name: "Choose model and reasoning effort"
+                                    KetToolTip {
+                                        tokens: root.t
+                                        visible: modelButton.hovered && !modelPopup.visible
+                                        text: root.composerModelTooltip()
+                                    }
+                                }
+                                UsageRingButton {
+                                    tokens: root.t
+                                    id: usageRingButton
+                                    Layout.alignment: Qt.AlignVCenter
+                                    Layout.preferredWidth: Metrics.px(20, root.t)
+                                    Layout.preferredHeight: Metrics.px(20, root.t)
+                                    progress: root.usageRingProgress
+                                    trackColor: root.t.borderStrong
+                                    fillColor: root.usageRingProgress >= 0.9 ? root.t.warning : root.t.textSecondary
+                                    hoverColor: root.t.surfaceHover
+                                    onClicked: {
+                                        skillsPopup.close()
+                                        permissionMenu.close()
+                                        modelPopup.close()
+                                        usageLimitsPopover.toggleFromAnchor()
+                                    }
+                                    KetToolTip {
+                                        tokens: root.t
+                                        visible: usageRingButton.hovered && !usageLimitsPopover.visible
+                                        text: {
+                                            const pct = Math.round(root.usageRingProgress * 100)
+                                            if (root.usageContext.available)
+                                                return "Context " + pct + "% · usage limits"
+                                            if (root.weeklyQuota.available)
+                                                return "Weekly " + pct + "% · usage limits"
+                                            return "Context and usage limits"
+                                        }
+                                    }
+                                }
+                    }
+                }
+            }
+
+        }
+    }
+}

@@ -38,10 +38,11 @@ cmake -S "$repository_dir" -B "$build_dir" -G Ninja \
 cmake --build "$build_dir" --parallel
 
 benchmark_binary="$build_dir/ketplus_editor_benchmark"
+agent_benchmark_binary="$build_dir/ketplus_agent_benchmark"
 if [[ "$(uname -s)" == "Darwin" ]]; then
-    app_binary="$build_dir/KetPlusCM.app/Contents/MacOS/KetPlusCM"
+    app_binary="$build_dir/KetPlus.app/Contents/MacOS/KetPlus"
 else
-    app_binary="$build_dir/KetPlusCM"
+    app_binary="$build_dir/KetPlus"
 fi
 
 "$benchmark_binary" --write-fixture "$temporary_dir/fixture-1mib.txt" 1048576
@@ -62,6 +63,13 @@ cp "$temporary_dir/fixture-10mib.txt" "$temporary_dir/fixture-10mib.unknown"
     echo
     echo "[editor-engine]"
     QT_QPA_PLATFORM=offscreen "$benchmark_binary"
+
+    echo
+    echo "[agent-workspace-qtquick]"
+    for run in 1 2 3; do
+        echo "RUN=$run"
+        "$agent_benchmark_binary"
+    done
 
     if [[ "$(uname -s)" == "Darwin" ]]; then
         echo

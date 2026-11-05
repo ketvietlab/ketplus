@@ -6,7 +6,7 @@ hardware=Apple M1 Pro
 memory_bytes=34359738368
 
 [editor-engine]
-qt.qpa.fonts: Populating font family aliases took 372 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost.
+qt.qpa.fonts: Populating font family aliases took 372 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
 METRIC set_text_1_mib median_ms=0.541 min_ms=0.529 max_ms=1.312 iterations=15 mib=1.0 throughput_mib_s=1848.0
 METRIC set_text_10_mib median_ms=5.687 min_ms=5.435 max_ms=10.072 iterations=9 mib=10.0 throughput_mib_s=1758.3
 METRIC set_text_50_mib median_ms=30.155 min_ms=29.238 max_ms=53.533 iterations=5 mib=50.0 throughput_mib_s=1658.1

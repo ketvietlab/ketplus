@@ -1,0 +1,12 @@
+Available models
+
+auto - Auto (default)
+composer-2.5 - Composer 2.5
+sample-sonnet-5 - Sample Sonnet 5
+sample-sonnet-5-thinking - Sample Sonnet 5 Thinking
+sample-gpt-low - Sample GPT
+sample-gpt - Sample GPT
+sample-gpt-high - Sample GPT
+sample-gpt-high-fast - Sample GPT Fast
+
+Tip: use --model <id> (or /model <id> in interactive mode) to switch.

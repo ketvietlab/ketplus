@@ -1,0 +1,972 @@
+{
+  "scope": "Interactive static mock only; no Qt/SwiftUI, daemon, provider or cloud changes.",
+  "baseRevision": "49c18f2d14d3a9d7857a6cbe4006a913fbf6e974",
+  "browser": {
+    "engine": "Chrome 155.0.8059.84 via KetPlus browser MCP",
+    "directPagesConsoleErrors": 0,
+    "primaryFlows": [
+      "Desktop: choose ketviet with pilot search retained; header/sidebar/worktree results update together.",
+      "iPhone: choose ketviet, then ketplus-app; edited draft and active conversation remain; new repository leads Conversations drawer.",
+      "Light desktop and iPhone: rejected switch Retry applies the new repository.",
+      "Keyboard: repository-search caret survives rerender; second Escape closes dialog (first clears native search)."
+    ],
+    "measurements": [
+      {
+        "key": "repoPickerLightDesktop",
+        "elements": [
+          {
+            "tag": "html",
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "width": 1440,
+              "height": 900
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 1440,
+              "height": 900,
+              "clientWidth": 1440,
+              "clientHeight": 900
+            },
+            "computedStyle": {
+              "font-size": "16px",
+              "color": "rgb(36, 38, 42)",
+              "background-color": "rgba(0, 0, 0, 0)"
+            }
+          },
+          {
+            "tag": "section",
+            "bounds": {
+              "x": 10,
+              "y": 319,
+              "width": 192.83,
+              "height": 152
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 193,
+              "height": 152,
+              "clientWidth": 193,
+              "clientHeight": 152
+            },
+            "computedStyle": {
+              "font-size": "13px",
+              "color": "rgb(36, 38, 42)",
+              "background-color": "rgba(0, 0, 0, 0)"
+            }
+          },
+          {
+            "tag": "button",
+            "id": "rp-opener",
+            "bounds": {
+              "x": 419.77,
+              "y": 15.27,
+              "width": 273.64,
+              "height": 28.45
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 272,
+              "height": 26,
+              "clientWidth": 272,
+              "clientHeight": 26
+            },
+            "computedStyle": {
+              "font-size": "12px",
+              "color": "rgb(90, 92, 94)",
+              "background-color": "rgb(255, 255, 255)"
+            }
+          },
+          {
+            "tag": "dialog",
+            "id": "rp-dialog",
+            "bounds": {
+              "x": 320,
+              "y": 137.27,
+              "width": 800,
+              "height": 625.45
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 798,
+              "height": 623,
+              "clientWidth": 798,
+              "clientHeight": 623
+            },
+            "computedStyle": {
+              "font-size": "13px",
+              "color": "rgb(36, 38, 42)",
+              "background-color": "rgb(255, 255, 255)"
+            }
+          },
+          {
+            "tag": "h2",
+            "id": "rp-dialog-title",
+            "bounds": {
+              "x": 341,
+              "y": 158.27,
+              "width": 267.89,
+              "height": 24
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 268,
+              "height": 24,
+              "clientWidth": 268,
+              "clientHeight": 24
+            },
+            "computedStyle": {
+              "font-size": "20px",
+              "color": "rgb(36, 38, 42)",
+              "background-color": "rgba(0, 0, 0, 0)"
+            }
+          },
+          {
+            "tag": "input",
+            "id": "rp-repo-search",
+            "bounds": {
+              "x": 337,
+              "y": 271.72,
+              "width": 231,
+              "height": 34
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 229,
+              "height": 32,
+              "clientWidth": 229,
+              "clientHeight": 32
+            },
+            "computedStyle": {
+              "font-size": "13px",
+              "color": "rgb(36, 38, 42)",
+              "background-color": "rgb(255, 255, 255)"
+            }
+          },
+          {
+            "tag": "input",
+            "id": "rp-tree-search",
+            "bounds": {
+              "x": 601,
+              "y": 271.72,
+              "width": 502,
+              "height": 34
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 500,
+              "height": 32,
+              "clientWidth": 500,
+              "clientHeight": 32
+            },
+            "computedStyle": {
+              "font-size": "13px",
+              "color": "rgb(36, 38, 42)",
+              "background-color": "rgb(255, 255, 255)"
+            }
+          },
+          {
+            "tag": "footer",
+            "bounds": {
+              "x": 321,
+              "y": 704.72,
+              "width": 798,
+              "height": 57
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 798,
+              "height": 56,
+              "clientWidth": 798,
+              "clientHeight": 56
+            },
+            "computedStyle": {
+              "font-size": "13px",
+              "color": "rgb(36, 38, 42)",
+              "background-color": "rgba(0, 0, 0, 0)"
+            }
+          }
+        ]
+      },
+      {
+        "key": "repoPickerLightMobile",
+        "elements": [
+          {
+            "tag": "html",
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 844
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 390,
+              "height": 844,
+              "clientWidth": 390,
+              "clientHeight": 844
+            },
+            "computedStyle": {
+              "font-size": "16px",
+              "color": "rgb(36, 38, 42)",
+              "background-color": "rgba(0, 0, 0, 0)"
+            }
+          },
+          {
+            "tag": "section",
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "width": 0,
+              "height": 0
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 0,
+              "height": 0,
+              "clientWidth": 0,
+              "clientHeight": 0
+            },
+            "computedStyle": {
+              "font-size": "13px",
+              "color": "rgb(36, 38, 42)",
+              "background-color": "rgba(0, 0, 0, 0)"
+            }
+          },
+          {
+            "tag": "button",
+            "id": "rp-opener",
+            "bounds": {
+              "x": 52,
+              "y": 67.06,
+              "width": 237.67,
+              "height": 44
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 238,
+              "height": 44,
+              "clientWidth": 238,
+              "clientHeight": 44
+            },
+            "computedStyle": {
+              "font-size": "11px",
+              "color": "rgb(90, 92, 94)",
+              "background-color": "rgba(0, 0, 0, 0)"
+            }
+          },
+          {
+            "tag": "dialog",
+            "id": "rp-dialog",
+            "bounds": {
+              "x": 0,
+              "y": 229.55,
+              "width": 390,
+              "height": 614.45
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 388,
+              "height": 613,
+              "clientWidth": 388,
+              "clientHeight": 613
+            },
+            "computedStyle": {
+              "font-size": "13px",
+              "color": "rgb(36, 38, 42)",
+              "background-color": "rgb(255, 255, 255)"
+            }
+          },
+          {
+            "tag": "h2",
+            "id": "rp-dialog-title",
+            "bounds": {
+              "x": 17,
+              "y": 258.55,
+              "width": 260,
+              "height": 24
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 260,
+              "height": 24,
+              "clientWidth": 260,
+              "clientHeight": 24
+            },
+            "computedStyle": {
+              "font-size": "20px",
+              "color": "rgb(36, 38, 42)",
+              "background-color": "rgba(0, 0, 0, 0)"
+            }
+          },
+          {
+            "tag": "input",
+            "id": "rp-repo-search",
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "width": 0,
+              "height": 0
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 0,
+              "height": 0,
+              "clientWidth": 0,
+              "clientHeight": 0
+            },
+            "computedStyle": {
+              "font-size": "16px",
+              "color": "rgb(36, 38, 42)",
+              "background-color": "rgb(255, 255, 255)"
+            }
+          },
+          {
+            "tag": "input",
+            "id": "rp-tree-search",
+            "bounds": {
+              "x": 17,
+              "y": 441.55,
+              "width": 356,
+              "height": 44
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 354,
+              "height": 42,
+              "clientWidth": 354,
+              "clientHeight": 42
+            },
+            "computedStyle": {
+              "font-size": "16px",
+              "color": "rgb(36, 38, 42)",
+              "background-color": "rgb(255, 255, 255)"
+            }
+          },
+          {
+            "tag": "footer",
+            "bounds": {
+              "x": 1,
+              "y": 779,
+              "width": 388,
+              "height": 65
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 388,
+              "height": 64,
+              "clientWidth": 388,
+              "clientHeight": 64
+            },
+            "computedStyle": {
+              "font-size": "13px",
+              "color": "rgb(36, 38, 42)",
+              "background-color": "rgba(0, 0, 0, 0)"
+            }
+          }
+        ]
+      },
+      {
+        "key": "mobile-draft-and-sidebar",
+        "elements": [
+          {
+            "tag": "section",
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "width": 0,
+              "height": 0
+            }
+          },
+          {
+            "tag": "button",
+            "id": "rp-opener",
+            "bounds": {
+              "x": 52,
+              "y": 69.03,
+              "width": 153.69,
+              "height": 32
+            }
+          },
+          {
+            "tag": "textarea",
+            "id": "rp-draft",
+            "bounds": {
+              "x": 23,
+              "y": 718.09,
+              "width": 344,
+              "height": 56
+            },
+            "value": "Keep this exact draft — pilot check."
+          },
+          {
+            "tag": "dialog",
+            "id": "rp-drawer",
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "width": 320,
+              "height": 844
+            }
+          },
+          {
+            "tag": "section",
+            "bounds": {
+              "x": 10,
+              "y": 327,
+              "width": 299,
+              "height": 188
+            }
+          }
+        ]
+      },
+      {
+        "key": "responsive-320",
+        "elements": [
+          {
+            "tag": "html",
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "width": 320,
+              "height": 844
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 320,
+              "height": 844,
+              "clientWidth": 320,
+              "clientHeight": 844
+            },
+            "computedStyle": {
+              "display": "block"
+            }
+          },
+          {
+            "tag": "dialog",
+            "id": "rp-dialog",
+            "bounds": {
+              "x": 0,
+              "y": 229.55,
+              "width": 320,
+              "height": 614.45
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 318,
+              "height": 613,
+              "clientWidth": 318,
+              "clientHeight": 613
+            },
+            "computedStyle": {
+              "display": "flex"
+            }
+          },
+          {
+            "tag": "div",
+            "bounds": {
+              "x": 1,
+              "y": 336.55,
+              "width": 318,
+              "height": 56
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 318,
+              "height": 56,
+              "clientWidth": 318,
+              "clientHeight": 56
+            },
+            "computedStyle": {
+              "display": "flex"
+            }
+          },
+          {
+            "tag": "div",
+            "bounds": {
+              "x": 1,
+              "y": 392.55,
+              "width": 318,
+              "height": 386.45
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 318,
+              "height": 384,
+              "clientWidth": 318,
+              "clientHeight": 384
+            },
+            "computedStyle": {
+              "display": "flex"
+            }
+          },
+          {
+            "tag": "input",
+            "id": "rp-repo-search",
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "width": 0,
+              "height": 0
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 0,
+              "height": 0,
+              "clientWidth": 0,
+              "clientHeight": 0
+            },
+            "computedStyle": {
+              "display": "block"
+            }
+          },
+          {
+            "tag": "input",
+            "id": "rp-tree-search",
+            "bounds": {
+              "x": 17,
+              "y": 441.55,
+              "width": 286,
+              "height": 44
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 284,
+              "height": 42,
+              "clientWidth": 284,
+              "clientHeight": 42
+            },
+            "computedStyle": {
+              "display": "block"
+            }
+          },
+          {
+            "tag": "footer",
+            "bounds": {
+              "x": 1,
+              "y": 779,
+              "width": 318,
+              "height": 65
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 318,
+              "height": 64,
+              "clientWidth": 318,
+              "clientHeight": 64
+            },
+            "computedStyle": {
+              "display": "flex"
+            }
+          }
+        ]
+      },
+      {
+        "key": "responsive-767",
+        "elements": [
+          {
+            "tag": "html",
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "width": 767,
+              "height": 844
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 767,
+              "height": 844,
+              "clientWidth": 767,
+              "clientHeight": 844
+            },
+            "computedStyle": {
+              "display": "block"
+            }
+          },
+          {
+            "tag": "dialog",
+            "id": "rp-dialog",
+            "bounds": {
+              "x": 0,
+              "y": 229.55,
+              "width": 767,
+              "height": 614.45
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 765,
+              "height": 613,
+              "clientWidth": 765,
+              "clientHeight": 613
+            },
+            "computedStyle": {
+              "display": "flex"
+            }
+          },
+          {
+            "tag": "div",
+            "bounds": {
+              "x": 1,
+              "y": 336.55,
+              "width": 765,
+              "height": 56
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 765,
+              "height": 56,
+              "clientWidth": 765,
+              "clientHeight": 56
+            },
+            "computedStyle": {
+              "display": "flex"
+            }
+          },
+          {
+            "tag": "div",
+            "bounds": {
+              "x": 1,
+              "y": 392.55,
+              "width": 765,
+              "height": 386.45
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 765,
+              "height": 384,
+              "clientWidth": 765,
+              "clientHeight": 384
+            },
+            "computedStyle": {
+              "display": "flex"
+            }
+          },
+          {
+            "tag": "input",
+            "id": "rp-repo-search",
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "width": 0,
+              "height": 0
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 0,
+              "height": 0,
+              "clientWidth": 0,
+              "clientHeight": 0
+            },
+            "computedStyle": {
+              "display": "block"
+            }
+          },
+          {
+            "tag": "input",
+            "id": "rp-tree-search",
+            "bounds": {
+              "x": 17,
+              "y": 441.55,
+              "width": 733,
+              "height": 44
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 731,
+              "height": 42,
+              "clientWidth": 731,
+              "clientHeight": 42
+            },
+            "computedStyle": {
+              "display": "block"
+            }
+          },
+          {
+            "tag": "footer",
+            "bounds": {
+              "x": 1,
+              "y": 779,
+              "width": 765,
+              "height": 65
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 765,
+              "height": 64,
+              "clientWidth": 765,
+              "clientHeight": 64
+            },
+            "computedStyle": {
+              "display": "flex"
+            }
+          }
+        ]
+      },
+      {
+        "key": "responsive-768",
+        "elements": [
+          {
+            "tag": "html",
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 844
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 768,
+              "height": 844,
+              "clientWidth": 768,
+              "clientHeight": 844
+            },
+            "computedStyle": {
+              "display": "block"
+            }
+          },
+          {
+            "tag": "dialog",
+            "id": "rp-dialog",
+            "bounds": {
+              "x": 24,
+              "y": 109.27,
+              "width": 720,
+              "height": 625.45
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 718,
+              "height": 623,
+              "clientWidth": 718,
+              "clientHeight": 623
+            },
+            "computedStyle": {
+              "display": "flex"
+            }
+          },
+          {
+            "tag": "div",
+            "bounds": {
+              "x": 25,
+              "y": 194.72,
+              "width": 718,
+              "height": 482
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 718,
+              "height": 480,
+              "clientWidth": 718,
+              "clientHeight": 480
+            },
+            "computedStyle": {
+              "display": "grid"
+            }
+          },
+          {
+            "tag": "input",
+            "id": "rp-repo-search",
+            "bounds": {
+              "x": 41,
+              "y": 243.72,
+              "width": 231,
+              "height": 34
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 229,
+              "height": 32,
+              "clientWidth": 229,
+              "clientHeight": 32
+            },
+            "computedStyle": {
+              "display": "block"
+            }
+          },
+          {
+            "tag": "input",
+            "id": "rp-tree-search",
+            "bounds": {
+              "x": 305,
+              "y": 243.72,
+              "width": 422,
+              "height": 34
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 420,
+              "height": 32,
+              "clientWidth": 420,
+              "clientHeight": 32
+            },
+            "computedStyle": {
+              "display": "block"
+            }
+          },
+          {
+            "tag": "footer",
+            "bounds": {
+              "x": 25,
+              "y": 676.72,
+              "width": 718,
+              "height": 57
+            },
+            "scroll": {
+              "top": 0,
+              "left": 0,
+              "width": 718,
+              "height": 56,
+              "clientWidth": 718,
+              "clientHeight": 56
+            },
+            "computedStyle": {
+              "display": "flex"
+            }
+          }
+        ]
+      }
+    ],
+    "finalTouchTargets": [
+      {
+        "tag": "button",
+        "id": "rp-opener",
+        "text": "ketviet / feat/ketview-production-pilot",
+        "bounds": {
+          "x": 52,
+          "y": 67.06,
+          "width": 237.67,
+          "height": 44
+        }
+      },
+      {
+        "tag": "button",
+        "text": "Repositories",
+        "bounds": {
+          "x": 17,
+          "y": 348.55,
+          "width": 113.06,
+          "height": 44
+        }
+      },
+      {
+        "tag": "button",
+        "text": "Clear search",
+        "bounds": {
+          "x": 132.06,
+          "y": 680,
+          "width": 125.88,
+          "height": 44
+        }
+      },
+      {
+        "tag": "footer",
+        "text": "Selection applies immediately. Done",
+        "bounds": {
+          "x": 1,
+          "y": 779,
+          "width": 388,
+          "height": 65
+        }
+      }
+    ],
+    "atlasPreview": "Opened native Atlas Try preview; sandboxed iframe and local scripts/styles loaded. Worker cannot observe subframe content; interactions verified on the identical direct screen routes.",
+    "atlasViewerIssue": "CLI viewer requests /favicon.ico, which returns 404. Direct prototype pages have no console errors or failed requests.",
+    "sessionsClosed": true
+  },
+  "captures": [
+    {
+      "file": "desktop-dark.png",
+      "captureId": "capture-65",
+      "sha256": "7077eb3afd28beb3aaeaeb6c375e9c03d9715b71e8de19e06d854d1e4351661f",
+      "url": "http://127.0.0.1:62350/screens/repository-picker.html?theme=dark&search=pilot&repo=ketviet&worktree=ketviet-pilot",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "dark",
+      "recordedAt": "2026-10-16T06:04:58.916Z"
+    },
+    {
+      "file": "iphone-repositories-dark.png",
+      "captureId": "capture-50",
+      "sha256": "92cadd72ec95c27306870044c1de62b96b8c337a3d39da13b46d68499cc74f32",
+      "url": "http://127.0.0.1:62350/screens/repository-picker-mobile.html?theme=dark&search=pilot",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "dark",
+      "recordedAt": "2026-10-16T06:01:46.255Z"
+    },
+    {
+      "file": "iphone-worktrees-dark.png",
+      "captureId": "capture-66",
+      "sha256": "809c9148a6101785b0ce222e1c27f4d4dffe960581d20f525ec80ec896994734",
+      "url": "http://127.0.0.1:62350/screens/repository-picker-mobile.html?theme=dark&repo=ketviet&search=pilot&step=worktrees",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "theme": "dark",
+      "recordedAt": "2026-10-16T06:06:01.378Z"
+    }
+  ],
+  "unverified": [
+    "Native Desktop/iPhone implementation",
+    "Real provider/daemon repository switch",
+    "Cross-device persistence and ordering",
+    "Physical iPhone software keyboard and safe-area behavior"
+  ],
+  "sourceFiles": {
+    "ketplus-desktop-redesign.ketatlas/screens/repository-picker-mobile.html": "a86383cdc7d838c94681cd948d4506aa69e772d760d507c19a3f2f6c9ef9b8e0",
+    "ketplus-desktop-redesign.ketatlas/screens/repository-picker-model.js": "b800d88dbd8e6883b857f7a5d416a3c68552ee2f59718c9d6a36125824767a66",
+    "ketplus-desktop-redesign.ketatlas/screens/repository-picker.css": "9bc9ebbf23bc91c93318e8da74cbaaaa801890754d3d3ee0fb0955b58004103a",
+    "ketplus-desktop-redesign.ketatlas/screens/repository-picker.html": "3b464891df96c8b638ce1f55e63a677ede16e4eb3084a1217e0a51ddfd8635b6",
+    "ketplus-desktop-redesign.ketatlas/screens/repository-picker.js": "f852c0d7a0cf66049d8b582e93112eb81fb84d61f1f2c0f3acf1c4b9d9a7fad0",
+    "tests/design/repository-picker.test.cjs": "9d3ff26692cc259391599be78d91fe9b2068d93d9a1c1cf9f65b0cf64431a1f2"
+  },
+  "sourceFingerprint": "942cdeeaecfc7ae6a1e49f10bba5d8c52f3d3dede6236032de3c56c4a20103e6",
+  "tests": {
+    "command": "NODE_PATH=/tmp/ketplus-repository-picker-deps/node_modules node --test tests/design/repository-picker.test.cjs",
+    "passed": 18,
+    "failed": 0,
+    "environment": "Node 24.14.1; jsdom 26.1.0",
+    "log": "model-dom-tests.log"
+  }
+}

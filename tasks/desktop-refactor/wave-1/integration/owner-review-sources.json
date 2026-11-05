@@ -1,0 +1,166 @@
+{
+  "schemaVersion": "ketplus.integration.owner-review.v1",
+  "recordedAt": "2026-09-12T08:06:08.913Z",
+  "reviewer": "Integration / Design QA",
+  "approval": "none",
+  "sources": [
+    {
+      "repository": "ketvietlab/ketviet",
+      "revision": "e2a0844c5db717ff6ab0c700d123f4facc228d8c",
+      "pr": 479,
+      "artifacts": [
+        {
+          "path": "contracts/ketplus-refactor-vnext/ketplus-control-vnext.proposal.openapi.json",
+          "sha256": "99ae83c3c8b471c47e939e550c4ec5a884d671ef7c3e8f57f9a59a17fd1a0da5",
+          "url": "https://github.com/ketvietlab/ketviet/blob/e2a0844c5db717ff6ab0c700d123f4facc228d8c/contracts/ketplus-refactor-vnext/ketplus-control-vnext.proposal.openapi.json"
+        },
+        {
+          "path": "contracts/ketplus-refactor-vnext/conformance-fixtures.schema.json",
+          "sha256": "af3d9f4ec13176eea56f7b6e8fc797b85fbbd51f6e1dbec337e28fd62c6fec60",
+          "url": "https://github.com/ketvietlab/ketviet/blob/e2a0844c5db717ff6ab0c700d123f4facc228d8c/contracts/ketplus-refactor-vnext/conformance-fixtures.schema.json"
+        },
+        {
+          "path": "contracts/ketplus-refactor-vnext/fixtures/conformance-fixtures.json",
+          "sha256": "d454b2825c7bdbf89c94d7ed7fc6222ecf13454fc10dcab178265d2d869415d3",
+          "url": "https://github.com/ketvietlab/ketviet/blob/e2a0844c5db717ff6ab0c700d123f4facc228d8c/contracts/ketplus-refactor-vnext/fixtures/conformance-fixtures.json"
+        },
+        {
+          "path": "contracts/ketplus-refactor-vnext/fixtures/manifest.json",
+          "sha256": "1884fdb0d36be0163a8fc47dfc6b816d707d30e992dcdb685f1fc4e6377eef82",
+          "url": "https://github.com/ketvietlab/ketviet/blob/e2a0844c5db717ff6ab0c700d123f4facc228d8c/contracts/ketplus-refactor-vnext/fixtures/manifest.json"
+        },
+        {
+          "path": "apps/ketsuite/modules/ketplus_control/src/__test__/vnext-fixtures.test.ts",
+          "sha256": "5141a2440b83484d539860d353cf79e596de0247bd0089307c0bb87feefdc888",
+          "url": "https://github.com/ketvietlab/ketviet/blob/e2a0844c5db717ff6ab0c700d123f4facc228d8c/apps/ketsuite/modules/ketplus_control/src/__test__/vnext-fixtures.test.ts"
+        },
+        {
+          "path": "tasks/ketplus-refactor/wave-1/backend/audit-and-contract-handoff.md",
+          "sha256": "82dff7be2bb9be20d9b4cea0ee90454f12109059669497cfbc9c6e70c5df6817",
+          "url": "https://github.com/ketvietlab/ketviet/blob/e2a0844c5db717ff6ab0c700d123f4facc228d8c/tasks/ketplus-refactor/wave-1/backend/audit-and-contract-handoff.md"
+        }
+      ]
+    },
+    {
+      "repository": "ketvietlab/ketplus",
+      "revision": "aa50715f60b8a056c395dd106d9959d98ce6abd2",
+      "pr": 3,
+      "artifacts": [
+        {
+          "path": "docs/refactor-wave-1/proposed-public-interfaces.md",
+          "sha256": "4ec08f127c8b26e69ba7d442d25b7de8d8bd878ead388eed59a1acb19246b1c6",
+          "url": "https://github.com/ketvietlab/ketplus/blob/aa50715f60b8a056c395dd106d9959d98ce6abd2/docs/refactor-wave-1/proposed-public-interfaces.md"
+        },
+        {
+          "path": "docs/refactor-wave-1/token-metric-mapping.md",
+          "sha256": "f990120eb633be7cc8d190c1656b488ca857925dd4b4b5372cc295c48c27bfe2",
+          "url": "https://github.com/ketvietlab/ketplus/blob/aa50715f60b8a056c395dd106d9959d98ce6abd2/docs/refactor-wave-1/token-metric-mapping.md"
+        },
+        {
+          "path": "tests/RefactorWave1ContractTest.cpp",
+          "sha256": "7b332c5aab8196fc2773aecba8d73a538e8ca90016acdd6246bb283061f4caf9",
+          "url": "https://github.com/ketvietlab/ketplus/blob/aa50715f60b8a056c395dd106d9959d98ce6abd2/tests/RefactorWave1ContractTest.cpp"
+        }
+      ]
+    },
+    {
+      "repository": "ketvietlab/ketplus-desktop",
+      "revision": "c739042143af4666f0d820b17ae36ed6b0531c5d",
+      "pr": 19,
+      "artifacts": [
+        {
+          "path": "tasks/desktop-refactor/wave-1/core-transcript/handoff.md",
+          "sha256": "15d8e2b5f7bf60c3a6723888187643c57fc941ad60e295524f5bfa76ea165d2f",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/blob/c739042143af4666f0d820b17ae36ed6b0531c5d/tasks/desktop-refactor/wave-1/core-transcript/handoff.md"
+        },
+        {
+          "path": "benchmarks/transcript-refactor-baseline.mjs",
+          "sha256": "512d9fcf69a97089f62f42ee8dc9546e0eaf2d9c46b4c7a98f2b193c82319259",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/blob/c739042143af4666f0d820b17ae36ed6b0531c5d/benchmarks/transcript-refactor-baseline.mjs"
+        },
+        {
+          "path": "tests/fixtures/transcript-refactor/generate-transcript-workloads.mjs",
+          "sha256": "265da1c42f13ec3dcbe5c55d0462eb3e962402434aa19957513b98aa49914531",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/blob/c739042143af4666f0d820b17ae36ed6b0531c5d/tests/fixtures/transcript-refactor/generate-transcript-workloads.mjs"
+        },
+        {
+          "path": "tests/fixtures/transcript-refactor/generate-transcript-workloads.test.mjs",
+          "sha256": "7d7d5c6461a532c022ac41529aacb66cb0c5453b6631c3dfb0dc5695edf2a09a",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/blob/c739042143af4666f0d820b17ae36ed6b0531c5d/tests/fixtures/transcript-refactor/generate-transcript-workloads.test.mjs"
+        },
+        {
+          "path": "tests/fixtures/transcript-refactor/baseline-harness.test.mjs",
+          "sha256": "b0c0ecd226973315206d32b77ac3be4a2cef9b3622780ee472debef312796ebb",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/blob/c739042143af4666f0d820b17ae36ed6b0531c5d/tests/fixtures/transcript-refactor/baseline-harness.test.mjs"
+        },
+        {
+          "path": "tasks/desktop-refactor/wave-1/core-transcript/r03-c-baseline-resolution.md",
+          "sha256": "d495d254b243c0519114ebe4e9816a78cc26dd6bcdfce6c8cf7bf16fca40e037",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/blob/c739042143af4666f0d820b17ae36ed6b0531c5d/tasks/desktop-refactor/wave-1/core-transcript/r03-c-baseline-resolution.md"
+        }
+      ],
+      "mergeCommit": "0d789192596d01a387d9dc69efae1ec53de13b25"
+    }
+  ],
+  "previousReviews": [
+    {
+      "recordedAt": "2026-09-12T07:51:08.911Z",
+      "sources": [
+        {
+          "repository": "ketvietlab/ketplus",
+          "revision": "33ff0dda5e7e6f8f5bf3225283b125e26abbbb09",
+          "pr": 3,
+          "artifacts": [
+            {
+              "path": "docs/refactor-wave-1/proposed-public-interfaces.md",
+              "sha256": "608ccb51b216ddbade4af61a8cfabdff32b2c7e2fcd3925aea95514d5686e571",
+              "url": "https://github.com/ketvietlab/ketplus/blob/33ff0dda5e7e6f8f5bf3225283b125e26abbbb09/docs/refactor-wave-1/proposed-public-interfaces.md"
+            },
+            {
+              "path": "docs/refactor-wave-1/token-metric-mapping.md",
+              "sha256": "bbe2431c27409e03ad9e16e3253baef0f6dddb84444798ce6ce0def64b6322e4",
+              "url": "https://github.com/ketvietlab/ketplus/blob/33ff0dda5e7e6f8f5bf3225283b125e26abbbb09/docs/refactor-wave-1/token-metric-mapping.md"
+            },
+            {
+              "path": "tests/RefactorWave1ContractTest.cpp",
+              "sha256": "fe396894921178642f011a8c01d177388bde395bbbd661ffc8e613cd35247c1b",
+              "url": "https://github.com/ketvietlab/ketplus/blob/33ff0dda5e7e6f8f5bf3225283b125e26abbbb09/tests/RefactorWave1ContractTest.cpp"
+            }
+          ]
+        },
+        {
+          "repository": "ketvietlab/ketplus-desktop",
+          "revision": "c1dc1cbbedd9dea82f603f726794dfb2c8261cb2",
+          "pr": 19,
+          "artifacts": [
+            {
+              "path": "tasks/desktop-refactor/wave-1/core-transcript/handoff.md",
+              "sha256": "d8e7e1bdebb62645200407be6d1db5d2ad78a6bb6439cdc30f7d1ba204ef7f2a",
+              "url": "https://github.com/ketvietlab/ketplus-desktop/blob/c1dc1cbbedd9dea82f603f726794dfb2c8261cb2/tasks/desktop-refactor/wave-1/core-transcript/handoff.md"
+            },
+            {
+              "path": "benchmarks/transcript-refactor-baseline.mjs",
+              "sha256": "da2fa9e6d19bcfb8355f28a422990455e0b48d2b7288d8d655f195784f7f2d33",
+              "url": "https://github.com/ketvietlab/ketplus-desktop/blob/c1dc1cbbedd9dea82f603f726794dfb2c8261cb2/benchmarks/transcript-refactor-baseline.mjs"
+            },
+            {
+              "path": "tests/fixtures/transcript-refactor/generate-transcript-workloads.mjs",
+              "sha256": "8c37122c5179f796443b6d7891533706fc7c9e888ba384733654e087031a68dd",
+              "url": "https://github.com/ketvietlab/ketplus-desktop/blob/c1dc1cbbedd9dea82f603f726794dfb2c8261cb2/tests/fixtures/transcript-refactor/generate-transcript-workloads.mjs"
+            },
+            {
+              "path": "tests/fixtures/transcript-refactor/generate-transcript-workloads.test.mjs",
+              "sha256": "bf75261bf297e21e69db34dc51a05212f4bae4ce461999476f00c60e2f8ef1e6",
+              "url": "https://github.com/ketvietlab/ketplus-desktop/blob/c1dc1cbbedd9dea82f603f726794dfb2c8261cb2/tests/fixtures/transcript-refactor/generate-transcript-workloads.test.mjs"
+            },
+            {
+              "path": "tests/fixtures/transcript-refactor/baseline-harness.test.mjs",
+              "sha256": "e821679a4fe60954d530ef7d9e4170be8bead8ea7cece1956dc21ec296f98580",
+              "url": "https://github.com/ketvietlab/ketplus-desktop/blob/c1dc1cbbedd9dea82f603f726794dfb2c8261cb2/tests/fixtures/transcript-refactor/baseline-harness.test.mjs"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "ketatlas.design-system-lock.v1",
+  "adapterSchemaVersion": "ketatlas.design-system-adapter.v1",
+  "adapter": "@ketvietlab/design-system",
+  "source": "@ketvietlab/design-system",
+  "version": "0.1.7",
+  "revision": "6f923d1e13958ce740e50bccab45efc56ccd2f84",
+  "repository": "https://github.com/ketvietlab/ketjs",
+  "materialization": "Exact public CSS with local imports inlined; canonical SSR contracts; no token overrides.",
+  "registeredComponents": 106,
+  "files": [
+    {
+      "path": "assets/ket-design-system.css",
+      "sha256": "1a73199437536b1955111f37e8ed08e1ed395ac1b689af17b81e4b9cb4895f2e"
+    },
+    {
+      "path": "assets/ket-design-system-contracts.js",
+      "sha256": "cfb786252bcea96b8ff6cc30e6cfa9d2c09f0ba4129b1d4b740f238712c02e84"
+    },
+    {
+      "path": "assets/ket-design-system-runtime.js",
+      "sha256": "060327db243e68f394f2a46e364aa331eee4fbedc4ffc9ce0e11478b5e5a9356"
+    }
+  ]
+}

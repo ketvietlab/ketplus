@@ -1,0 +1,33 @@
+.execution-context-dialog {
+    box-sizing: border-box;
+    width: min(34rem, calc(100vw - 2rem));
+    max-height: 85dvh;
+    overflow-y: auto;
+    border: 1px solid var(--kv-border-default);
+    border-radius: var(--kv-radius-xl);
+    padding: 16px;
+    background: var(--kv-panel-bg);
+    color: var(--kv-text-main);
+    font: inherit;
+    box-shadow: var(--kv-shadow-popover);
+}
+.execution-context-dialog::backdrop { background: rgb(12 14 16 / 52%); }
+.execution-context-dialog h2 { flex: 1; margin: 0; font-size: 20px; line-height: 24px; font-weight: 600; }
+.execution-context-dialog p { color: var(--kv-text-secondary); font-size: 13px; line-height: 20px; }
+.execution-context-options { display: grid; gap: 8px; max-height: 300px; overflow-y: auto; overscroll-behavior: contain; margin: 12px 0; }
+.execution-context-options .btn { display: block; min-height: 40px; padding: 10px 12px; font-size: 13px; line-height: 20px; text-align: left; }
+.execution-context-options [aria-pressed="true"] { border-color: var(--kv-action-primary-bg); }
+.execution-worktree-button { cursor: pointer; font: inherit; }
+.execution-context-note { color: var(--kv-text-muted); font-size: 12px; border-top: 1px solid var(--kv-border-default); padding: 12px 0; }
+.worktree-search { box-sizing: border-box; width: 100%; min-height: 32px; height: 32px; padding: 5px 12px; font: inherit; font-size: 13px; line-height: 20px; }
+.worktree-current { margin: 12px 0; font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.execution-context-dialog .worktree-count { margin: 12px 0 6px; font-size: 12px; line-height: 16px; }
+.worktree-folder { display: block; margin-top: 4px; color: var(--kv-text-muted); font-size: 12px; line-height: 16px; }
+.worktree-pager { display: flex; gap: 8px; justify-content: space-between; }
+.worktree-pager button { min-height: 32px; padding: 6px 12px; border: 1px solid var(--kv-border-default); border-radius: var(--kv-radius-md); background: var(--kv-interactive-bg); color: var(--kv-text-main); font: inherit; font-size: 12px; cursor: pointer; }
+.worktree-pager button:disabled { opacity: .45; }
+.worktree-pager button[hidden] { display: none; }
+.worktree-model-used { display: inline-block; margin-left: 6px; font-size: 12px; line-height: 1; vertical-align: middle; opacity: .7; }
+@media (max-width: 47.9375rem) {
+    .worktree-search { min-height: 36px; height: 36px; font-size: 16px; line-height: 24px; }
+}

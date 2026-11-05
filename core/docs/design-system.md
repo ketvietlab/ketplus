@@ -1,0 +1,35 @@
+# Design system
+
+KetPlus adapts the
+[KetJS design system](https://github.com/ketvietlab/ketjs/tree/develop/packages/design-system)
+to a native Qt Widgets application. The goal is visual continuity without
+copying web-specific implementation details.
+
+## Principles
+
+- Dense, operational layout with restrained decoration
+- Neutral canvas and panel surfaces with quiet borders
+- Indigo for active and focused states
+- Two-pixel active-tab indicator
+- Inter for application chrome and the platform monospace font for source text
+- Semantic chrome colors for application controls
+- Separate syntax roles so keywords, types, numbers, and strings stay distinct
+
+## Implementation
+
+`ThemeManager` owns the semantic light and dark palettes, applies the Qt palette
+and stylesheet, and follows the operating system by default. The selected mode
+is persisted through `QSettings` and can be changed from `View > Appearance`.
+Settings can change the interface base font size while component hierarchy stays
+derived from Két density tokens. Editor, terminal, and preview typography use
+independent font-size and line-height values; control line height remains
+automatic so typography changes do not distort navigation or button geometry.
+
+Scintilla receives the same surface, selection, and focus colors, plus dedicated
+`syntaxKeyword`, `syntaxString`, `syntaxNumber`, `syntaxType`, `syntaxComment`,
+and `syntaxAttribute` roles. Diff added/removed lines still use the semantic
+positive/danger colors. The Lexilla themes cover C-family languages,
+JavaScript/TypeScript, Python, HTML, JSON, Markdown, Rust, and related lexers.
+
+The source KetJS tokens remain the visual reference. Native controls may differ
+slightly where macOS, Windows, or Linux conventions improve usability.

@@ -1,13 +1,28 @@
 #include "workspace/ExplorerPanel.h"
+#include "workspace/ActivityBar.h"
+#include "workspace/LucideIcons.h"
 
+#include "ui/InterfaceZoom.h"
+#include "ui/Theme.h"
+#include "ui/TypeScale.h"
+
+#include <QAction>
 #include <QDir>
 #include <QFile>
 #include <QFileSystemModel>
+#include <QHBoxLayout>
+#include <QLabel>
 #include <QMetaObject>
+#include <QProgressBar>
+#include <QSet>
+#include <QSettings>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QToolButton>
 #include <QTreeView>
 #include <QtTest>
+
+#include <algorithm>
 
 class ExplorerPanelTest final : public QObject {
     Q_OBJECT
@@ -16,41 +31,14 @@ class ExplorerPanelTest final : public QObject {
     void loadsOnlyAfterReceivingARoot();
     void opensFilesFromTheTree();
     void togglesFoldersFromTheTree();
-    void revealsAnOpenFile();
+    void switchesActivityModes();
+    void collapsesAndPreviewsRepositoryConversations();
+    void conversationStatusMarksUnreadCompletionAndRotatesWorkingIcon();
+    void runningAgentTurnNamesItsSender();
+    void ordersRepositoryConversationsByLatestTurnAcrossWorktrees();
+    void ordersRepositoriesByTheirNewestConversation();
+    void scalesSidebarTypeWithInterfaceZoom();
 };
-
-void ExplorerPanelTest::revealsAnOpenFile() {
-    QTemporaryDir directory;
-    QVERIFY(directory.isValid());
-    const QDir root(directory.path());
-    QVERIFY(root.mkpath(QStringLiteral("src/app")));
-    const QString path = root.filePath(QStringLiteral("src/app/main.cpp"));
-    QFile file(path);
-    QVERIFY(file.open(QIODevice::WriteOnly));
-    file.close();
-
-    ketplus::ExplorerPanel explorer;
-    explorer.resize(280, 500);
-    explorer.show();
-    explorer.setRootPath(directory.path());
-
-    auto* tree = explorer.findChild<QTreeView*>(QStringLiteral("explorerTree"));
-    QVERIFY(tree != nullptr);
-    auto* model = qobject_cast<QFileSystemModel*>(tree->model());
-    QVERIFY(model != nullptr);
-
-    // The folders on the way are not loaded yet, so revealing finishes as they arrive.
-    explorer.revealPath(path);
-    QTRY_VERIFY_WITH_TIMEOUT(model->filePath(tree->currentIndex()) == path, 3000);
-    QVERIFY(tree->isExpanded(model->index(root.filePath(QStringLiteral("src")))));
-    QVERIFY(tree->isExpanded(model->index(root.filePath(QStringLiteral("src/app")))));
-
-    // A file outside the open folder leaves the selection alone.
-    QTemporaryDir elsewhere;
-    QVERIFY(elsewhere.isValid());
-    explorer.revealPath(QDir(elsewhere.path()).filePath(QStringLiteral("other.cpp")));
-    QCOMPARE(model->filePath(tree->currentIndex()), path);
-}
 
 void ExplorerPanelTest::loadsOnlyAfterReceivingARoot() {
     ketplus::ExplorerPanel explorer;
@@ -131,6 +119,458 @@ void ExplorerPanelTest::togglesFoldersFromTheTree() {
                                       Q_ARG(QModelIndex, index)));
     QVERIFY(!tree->isExpanded(index));
     QCOMPARE(opened.count(), 0);
+}
+
+void ExplorerPanelTest::switchesActivityModes() {
+    ketplus::ActivityBar bar;
+    QSignalSpy requested(&bar, &ketplus::ActivityBar::modeRequested);
+    QVERIFY(bar.findChild<QToolButton*>(QStringLiteral("atlasActivityButton")) == nullptr);
+    auto* agent = bar.findChild<QToolButton*>(QStringLiteral("agentWorkspaceActivityButton"));
+    auto* source = bar.findChild<QToolButton*>(QStringLiteral("sourceControlActivityButton"));
+    auto* remote = bar.findChild<QToolButton*>(QStringLiteral("remoteActivityButton"));
+    QVERIFY(agent != nullptr);
+    QVERIFY(source != nullptr);
+    QVERIFY(remote != nullptr);
+
+    agent->click();
+    QCOMPARE(bar.mode(), ketplus::ActivityBar::Mode::AgentWorkspace);
+    QCOMPARE(requested.count(), 1);
+    remote->click();
+    QCOMPARE(bar.mode(), ketplus::ActivityBar::Mode::Remote);
+    QVERIFY(remote->isChecked());
+    QVERIFY(!agent->isChecked());
+    QCOMPARE(requested.count(), 2);
+
+    bar.setSourceControlAvailable(false);
+    QVERIFY(!source->isEnabled());
+    bar.setSourceControlAvailable(true);
+    source->click();
+    QCOMPARE(bar.mode(), ketplus::ActivityBar::Mode::SourceControl);
+    QCOMPARE(requested.count(), 3);
+    remote->click();
+    QCOMPARE(requested.count(), 4);
+    QCOMPARE(bar.mode(), ketplus::ActivityBar::Mode::Remote);
+    QVERIFY(!source->isChecked());
+
+    // Repository > conversation; each conversation names the worktree it runs in.
+    const QVariantList conversations = {
+        QVariantMap{{QStringLiteral("id"), QStringLiteral("thread-1")},
+                    {QStringLiteral("title"), QStringLiteral("Refine navigation")},
+                    {QStringLiteral("status"), QStringLiteral("Completed")},
+                    {QStringLiteral("started"), true},
+                    {QStringLiteral("selected"), true},
+                    {QStringLiteral("lastTurnStartedAt"), 20},
+                    {QStringLiteral("path"), QStringLiteral("/repo/develop")}},
+        QVariantMap{{QStringLiteral("id"), QStringLiteral("thread-2")},
+                    {QStringLiteral("title"), QStringLiteral("Review startup")},
+                    {QStringLiteral("status"), QStringLiteral("Reasoning")},
+                    {QStringLiteral("running"), true},
+                    {QStringLiteral("started"), true},
+                    {QStringLiteral("lastTurnStartedAt"), 10},
+                    {QStringLiteral("path"), QStringLiteral("/repo/feature")}}};
+    QSignalSpy conversationRequested(&bar, &ketplus::ActivityBar::conversationRequested);
+    QSignalSpy conversationMenuRequested(&bar,
+                                         &ketplus::ActivityBar::conversationContextMenuRequested);
+    QSignalSpy repositoryActivation(&bar, &ketplus::ActivityBar::repositoryActivationRequested);
+    QSignalSpy newConversation(&bar, &ketplus::ActivityBar::newConversationRequested);
+    bar.setRepositories({{QStringLiteral("/repo"), QStringLiteral("repo"), true, conversations},
+                         {QStringLiteral("/other"), QStringLiteral("other"), false, {}}});
+    QVERIFY(bar.findChildren<QToolButton*>(QStringLiteral("productWorktreeButton")).isEmpty());
+    const auto groups =
+        bar.findChildren<QToolButton*>(QStringLiteral("productRepositoryGroupButton"));
+    QCOMPARE(groups.size(), 2);
+    QCOMPARE(groups.at(0)->accessibleName(), QStringLiteral("repo"));
+    QVERIFY(groups.at(0)->property("activeRepository").toBool());
+    const auto rows = bar.findChildren<QToolButton*>(QStringLiteral("productConversationButton"));
+    QCOMPARE(rows.size(), 2);
+    QCOMPARE(rows.at(0)->height(), 36);
+    QVERIFY(rows.at(0)->isChecked());
+    QVERIFY(!rows.at(1)->isChecked());
+    QCOMPARE(rows.at(0)->accessibleDescription(), QStringLiteral("Completed"));
+    QCOMPARE(rows.at(1)->accessibleDescription(), QStringLiteral("Working"));
+    QCOMPARE(rows.at(1)->toolTip(), QStringLiteral("Review startup\nfeature"));
+
+    rows.at(1)->click();
+    QCOMPARE(conversationRequested.count(), 1);
+    QCOMPARE(conversationRequested.constFirst().at(0).toString(), QStringLiteral("/repo/feature"));
+    QCOMPARE(conversationRequested.constFirst().at(1).toString(), QStringLiteral("thread-2"));
+    QVERIFY(!rows.at(1)->isChecked());
+    QCOMPARE(rows.at(0)->contextMenuPolicy(), Qt::CustomContextMenu);
+    QVERIFY(QMetaObject::invokeMethod(rows.at(0), "customContextMenuRequested",
+                                      Q_ARG(QPoint, QPoint(4, 4))));
+    QCOMPARE(conversationMenuRequested.count(), 1);
+    QCOMPARE(conversationMenuRequested.constFirst().at(0).toString(),
+             QStringLiteral("/repo/develop"));
+    QCOMPARE(conversationMenuRequested.constFirst().at(1).toString(), QStringLiteral("thread-1"));
+
+    // Repositories without conversations open their folder; there is no collapse icon.
+    QVERIFY(bar.findChildren<QLabel*>(QStringLiteral("productRepositoryCollapsedIcon")).isEmpty());
+    groups.at(1)->click();
+    QCOMPARE(repositoryActivation.count(), 1);
+    QCOMPARE(repositoryActivation.constFirst().constFirst().toString(), QStringLiteral("/other"));
+
+    // Every repository offers a new conversation on hover and names itself in the request.
+    const auto create =
+        bar.findChildren<QToolButton*>(QStringLiteral("productNewConversationButton"));
+    QCOMPARE(create.size(), 2);
+    QVERIFY(create.constFirst()->isHidden());
+    create.at(1)->click();
+    QCOMPARE(newConversation.count(), 1);
+    QCOMPARE(newConversation.constFirst().constFirst().toString(), QStringLiteral("/other"));
+
+    // Double-clicking a conversation asks to rename that conversation in its own worktree.
+    QSignalSpy renameRequested(&bar, &ketplus::ActivityBar::conversationRenameRequested);
+    QTest::mouseDClick(rows.at(1), Qt::LeftButton);
+    QCOMPARE(renameRequested.count(), 1);
+    QCOMPARE(renameRequested.constFirst().at(0).toString(), QStringLiteral("/repo/feature"));
+    QCOMPARE(renameRequested.constFirst().at(1).toString(), QStringLiteral("thread-2"));
+
+    // Quota is gone from the sidebar; Settings lives in the user menu.
+    QVERIFY(bar.findChild<QProgressBar*>(QStringLiteral("productQuotaProgress")) == nullptr);
+    QVERIFY(bar.findChild<QToolButton*>(QStringLiteral("productSettingsButton")) == nullptr);
+    QSignalSpy settingsRequested(&bar, &ketplus::ActivityBar::settingsRequested);
+    auto* settingsAction = bar.findChild<QAction*>(QStringLiteral("productSettingsAction"));
+    QVERIFY(settingsAction);
+    settingsAction->trigger();
+    QCOMPARE(settingsRequested.count(), 1);
+
+    // The sidebar is resizable within its bounds.
+    QSignalSpy widthChanged(&bar, &ketplus::ActivityBar::sidebarWidthChanged);
+    bar.setSidebarWidth(1000);
+    QCOMPARE(bar.width(), ketplus::ActivityBar::kMaxWidth);
+    bar.setSidebarWidth(10);
+    QCOMPARE(bar.width(), ketplus::ActivityBar::kMinWidth);
+    QCOMPARE(widthChanged.count(), 2);
+}
+
+void ExplorerPanelTest::collapsesAndPreviewsRepositoryConversations() {
+    QTemporaryDir settings;
+    QVERIFY(settings.isValid());
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
+
+    QVariantList conversations;
+    for (int index = 0; index < 7; ++index) {
+        conversations.append(QVariantMap{{"id", QStringLiteral("thread-%1").arg(index)},
+                                         {"title", QStringLiteral("Conversation %1").arg(index)},
+                                         {"status", QStringLiteral("Completed")},
+                                         {"started", true},
+                                         {"selected", index == 6},
+                                         {"running", index == 5},
+                                         {"lastTurnStartedAt", 100 - index},
+                                         {"path", QStringLiteral("/repo/develop")}});
+    }
+    ketplus::ActivityBar bar;
+    bar.setRepositories({{QStringLiteral("/repo"), QStringLiteral("repo"), true, conversations},
+                         {QStringLiteral("/other"), QStringLiteral("other"), false, {}}});
+    const auto rows = bar.findChildren<QToolButton*>(QStringLiteral("productConversationButton"));
+    QCOMPARE(rows.size(), 7);
+    const auto visibleIds = [&rows] {
+        QSet<QString> ids;
+        for (auto* row : rows) {
+            if (!row->isHidden())
+                ids.insert(row->property("conversationId").toString());
+        }
+        return ids;
+    };
+    QCOMPARE(visibleIds().size(), 5);
+    QVERIFY(visibleIds().contains(QStringLiteral("thread-0")));
+    QVERIFY(visibleIds().contains(QStringLiteral("thread-5")));
+    QVERIFY(visibleIds().contains(QStringLiteral("thread-6")));
+    QVERIFY(!visibleIds().contains(QStringLiteral("thread-3")));
+    QVERIFY(!visibleIds().contains(QStringLiteral("thread-4")));
+
+    auto* showMore = bar.findChild<QToolButton*>(QStringLiteral("productShowMoreConversations"));
+    QVERIFY(showMore);
+    QVERIFY(!showMore->isHidden());
+    showMore->click();
+    QCOMPARE(visibleIds().size(), 7);
+    QVERIFY(showMore->isHidden());
+
+    const auto groups =
+        bar.findChildren<QToolButton*>(QStringLiteral("productRepositoryGroupButton"));
+    QCOMPARE(groups.size(), 2);
+    QSignalSpy activation(&bar, &ketplus::ActivityBar::repositoryActivationRequested);
+    groups.at(0)->click();
+    QCOMPARE(activation.count(), 0);
+    QCOMPARE(visibleIds().size(), 0);
+    QCOMPARE(groups.at(0)->accessibleDescription(), QStringLiteral("Collapsed"));
+    QCOMPARE(QSettings().value(QStringLiteral("sidebar/collapsedRepositories")).toStringList(),
+             QStringList{QStringLiteral("/repo")});
+    groups.at(0)->click();
+    QCOMPARE(activation.count(), 0);
+    QCOMPARE(visibleIds().size(), 5);
+    QCOMPARE(groups.at(0)->accessibleDescription(), QStringLiteral("Expanded"));
+    groups.at(1)->click();
+    QCOMPARE(activation.count(), 1);
+    QCOMPARE(activation.constFirst().constFirst().toString(), QStringLiteral("/other"));
+}
+
+void ExplorerPanelTest::conversationStatusMarksUnreadCompletionAndRotatesWorkingIcon() {
+    ketplus::ActivityBar bar;
+    const QVariantList conversations{
+        QVariantMap{{QStringLiteral("id"), QStringLiteral("seen")},
+                    {QStringLiteral("title"), QStringLiteral("Already read")},
+                    {QStringLiteral("status"), QStringLiteral("Completed")},
+                    {QStringLiteral("started"), true},
+                    {QStringLiteral("seen"), true},
+                    {QStringLiteral("selected"), true},
+                    {QStringLiteral("path"), QStringLiteral("/repo/develop")}},
+        QVariantMap{{QStringLiteral("id"), QStringLiteral("persisted")},
+                    {QStringLiteral("title"), QStringLiteral("Read before relaunch")},
+                    {QStringLiteral("status"), QStringLiteral("Completed")},
+                    {QStringLiteral("started"), true},
+                    {QStringLiteral("seen"), true},
+                    {QStringLiteral("path"), QStringLiteral("/repo/persisted")}},
+        QVariantMap{{QStringLiteral("id"), QStringLiteral("unread")},
+                    {QStringLiteral("title"), QStringLiteral("Background result")},
+                    {QStringLiteral("status"), QStringLiteral("Completed")},
+                    {QStringLiteral("started"), true},
+                    {QStringLiteral("seen"), false},
+                    {QStringLiteral("path"), QStringLiteral("/repo/feature")}},
+        QVariantMap{{QStringLiteral("id"), QStringLiteral("working")},
+                    {QStringLiteral("title"), QStringLiteral("In progress")},
+                    {QStringLiteral("status"), QStringLiteral("Working")},
+                    {QStringLiteral("started"), true},
+                    {QStringLiteral("running"), true},
+                    {QStringLiteral("path"), QStringLiteral("/repo/topic")}},
+        QVariantMap{{QStringLiteral("id"), QStringLiteral("waiting")},
+                    {QStringLiteral("title"), QStringLiteral("Awaiting reply")},
+                    {QStringLiteral("status"), QStringLiteral("Waiting for your answer…")},
+                    {QStringLiteral("started"), true},
+                    {QStringLiteral("running"), true},
+                    {QStringLiteral("path"), QStringLiteral("/repo/waiting")}}};
+    bar.setRepositories({{QStringLiteral("/repo"), QStringLiteral("repo"), true, conversations}});
+
+    const auto rows = bar.findChildren<QToolButton*>(QStringLiteral("productConversationButton"));
+    const auto statusFor = [&rows](const QString& id) {
+        const auto row = std::find_if(rows.cbegin(), rows.cend(), [&id](QToolButton* button) {
+            return button->property("conversationId").toString() == id;
+        });
+        return row == rows.cend()
+                   ? nullptr
+                   : (*row)->findChild<QLabel*>(QStringLiteral("productConversationStatusIcon"));
+    };
+    auto* seen = statusFor(QStringLiteral("seen"));
+    auto* persisted = statusFor(QStringLiteral("persisted"));
+    auto* unread = statusFor(QStringLiteral("unread"));
+    auto* working = statusFor(QStringLiteral("working"));
+    auto* waiting = statusFor(QStringLiteral("waiting"));
+    QVERIFY(seen);
+    QVERIFY(persisted);
+    QVERIFY(unread);
+    QVERIFY(working);
+    QVERIFY(waiting);
+    QCOMPARE(seen->property("lucideColorRole").toString(), QStringLiteral("muted"));
+    QCOMPARE(persisted->property("lucideColorRole").toString(), QStringLiteral("muted"));
+    QCOMPARE(unread->property("lucideColorRole").toString(), QStringLiteral("accent"));
+    // The loader uses the main text colour so it stays readable on the dark sidebar.
+    QCOMPARE(working->property("lucideColorRole").toString(), QStringLiteral("main"));
+    QVERIFY(working->property("spinning").toBool());
+    QCOMPARE(waiting->property("lucideBody").toByteArray(),
+             QByteArray(ketplus::lucide::pauseCircle));
+    QCOMPARE(waiting->property("lucideColorRole").toString(), QStringLiteral("warning"));
+    QVERIFY(!waiting->property("spinning").toBool());
+    const int angle = working->property("rotationAngle").toInt();
+    QTRY_VERIFY(working->property("rotationAngle").toInt() != angle);
+
+    const auto unreadRow = std::find_if(rows.cbegin(), rows.cend(), [](QToolButton* button) {
+        return button->property("conversationId").toString() == QStringLiteral("unread");
+    });
+    QVERIFY(unreadRow != rows.cend());
+    (*unreadRow)->click();
+    QCOMPARE(unread->property("lucideColorRole").toString(), QStringLiteral("muted"));
+
+    // A later daemon projection can clear the read marker after a background turn.
+    QVariantList refreshed = conversations;
+    refreshed[2] = QVariantMap{{QStringLiteral("id"), QStringLiteral("unread")},
+                               {QStringLiteral("title"), QStringLiteral("Background result")},
+                               {QStringLiteral("status"), QStringLiteral("Completed")},
+                               {QStringLiteral("started"), true},
+                               {QStringLiteral("seen"), false},
+                               {QStringLiteral("path"), QStringLiteral("/repo/feature")}};
+    bar.setRepositories({{QStringLiteral("/repo"), QStringLiteral("repo"), true, refreshed}});
+    QCOMPARE(statusFor(QStringLiteral("unread"))->property("lucideColorRole").toString(),
+             QStringLiteral("accent"));
+}
+
+void ExplorerPanelTest::runningAgentTurnNamesItsSender() {
+    ketplus::ActivityBar bar;
+    QVariantMap woken{{QStringLiteral("id"), QStringLiteral("woken")},
+                      {QStringLiteral("title"), QStringLiteral("Sidebar")},
+                      {QStringLiteral("number"), QStringLiteral("1093")},
+                      {QStringLiteral("agentTurnNumber"), QStringLiteral("4821")},
+                      {QStringLiteral("agentTurnTitle"), QStringLiteral("Release checklist")},
+                      {QStringLiteral("started"), true},
+                      {QStringLiteral("running"), true},
+                      {QStringLiteral("path"), QStringLiteral("/repo/sidebar")}};
+    bar.setRepositories({{QStringLiteral("/repo"), QStringLiteral("repo"), true, {woken}}});
+    const auto row = [&bar] {
+        return bar.findChild<QToolButton*>(QStringLiteral("productConversationButton"));
+    };
+    QVERIFY(row());
+    auto* layout = qobject_cast<QHBoxLayout*>(row()->layout());
+    QVERIFY(layout);
+    auto* number = row()->findChild<QLabel*>(QStringLiteral("productConversationNumber"));
+    QVERIFY(number);
+    QCOMPARE(number->text(), QStringLiteral("#1093"));
+    QCOMPARE(layout->itemAt(layout->count() - 1)->widget(), number);
+    QCOMPARE(layout->contentsMargins().left(), layout->contentsMargins().right());
+    ketplus::ThemeManager theme(*qApp);
+    bar.applyPalette(theme.palette());
+    bar.resize(bar.width(), 400);
+    bar.show();
+    for (const int width : {ketplus::ActivityBar::kMinWidth, ketplus::ActivityBar::kWidth,
+                            ketplus::ActivityBar::kMaxWidth}) {
+        bar.setSidebarWidth(width);
+        QCoreApplication::processEvents();
+        QVERIFY(number->geometry().right() <= row()->width());
+        QVERIFY(number->geometry().left() > layout->itemAt(1)->widget()->geometry().left());
+    }
+    const auto capture = qEnvironmentVariable("KETPLUS_SIDEBAR_CAPTURE");
+    if (!capture.isEmpty())
+        QVERIFY(bar.grab().save(capture));
+    auto* sender = row()->findChild<QLabel*>(QStringLiteral("productConversationAgentSender"));
+    QVERIFY(sender);
+    QCOMPARE(sender->text(), QStringLiteral("from #4821"));
+    QVERIFY(row()->toolTip().contains(QStringLiteral("Message from #4821 · Release checklist")));
+    QVERIFY(row()->accessibleDescription().endsWith(
+        QStringLiteral("Message from #4821 · Release checklist")));
+
+    // The label belongs to the running turn; it goes when the turn ends.
+    woken.insert(QStringLiteral("running"), false);
+    bar.setRepositories({{QStringLiteral("/repo"), QStringLiteral("repo"), true, {woken}}});
+    QVERIFY(!row()->findChild<QLabel*>(QStringLiteral("productConversationAgentSender")));
+    QVERIFY(!row()->toolTip().contains(QStringLiteral("#4821")));
+}
+
+void ExplorerPanelTest::ordersRepositoryConversationsByLatestTurnAcrossWorktrees() {
+    ketplus::ActivityBar bar;
+    const auto conversation = [](const QString& id, const QString& path, const qint64 startedAt) {
+        return QVariantMap{
+            {QStringLiteral("id"), id},        {QStringLiteral("title"), id},
+            {QStringLiteral("started"), true}, {QStringLiteral("seen"), true},
+            {QStringLiteral("path"), path},    {QStringLiteral("lastTurnStartedAt"), startedAt}};
+    };
+    const auto order = [&bar] {
+        QStringList ids;
+        for (auto* row :
+             bar.findChildren<QToolButton*>(QStringLiteral("productConversationButton")))
+            ids << row->property("conversationId").toString();
+        return ids;
+    };
+    // Projected worktree by worktree; `legacy` has no recorded turn and keeps its place last.
+    QVariantList conversations{
+        conversation(QStringLiteral("alpha"), QStringLiteral("/repo/a"), 20),
+        conversation(QStringLiteral("legacy"), QStringLiteral("/repo/a"), 0),
+        conversation(QStringLiteral("beta"), QStringLiteral("/repo/b"), 30),
+        conversation(QStringLiteral("gamma"), QStringLiteral("/repo/b"), 10)};
+    bar.setRepositories({{QStringLiteral("/repo"), QStringLiteral("repo"), true, conversations}});
+    QCOMPARE(order(), (QStringList{QStringLiteral("beta"), QStringLiteral("alpha"),
+                                   QStringLiteral("gamma"), QStringLiteral("legacy")}));
+
+    // A new message in `gamma` starts a turn and moves it to the top of the repository.
+    conversations[3] = conversation(QStringLiteral("gamma"), QStringLiteral("/repo/b"), 40);
+    bar.setRepositories({{QStringLiteral("/repo"), QStringLiteral("repo"), true, conversations}});
+    QCOMPARE(order(), (QStringList{QStringLiteral("gamma"), QStringLiteral("beta"),
+                                   QStringLiteral("alpha"), QStringLiteral("legacy")}));
+}
+
+void ExplorerPanelTest::ordersRepositoriesByTheirNewestConversation() {
+    ketplus::ActivityBar bar;
+    const auto conversation = [](const QString& id, const QString& title, const qint64 startedAt) {
+        return QVariantMap{{QStringLiteral("id"), id},
+                           {QStringLiteral("title"), title},
+                           {QStringLiteral("started"), true},
+                           {QStringLiteral("seen"), true},
+                           {QStringLiteral("path"), QStringLiteral("/work/") + id},
+                           {QStringLiteral("lastTurnStartedAt"), startedAt}};
+    };
+    const auto repositoryOrder = [&bar] {
+        QStringList paths;
+        for (auto* group : bar.findChildren<QWidget*>(QStringLiteral("productRepositoryGroup")))
+            paths << group->property("repositoryPath").toString();
+        return paths;
+    };
+    const auto conversationOrder = [&bar] {
+        QStringList ids;
+        for (auto* row :
+             bar.findChildren<QToolButton*>(QStringLiteral("productConversationButton")))
+            ids << row->property("conversationId").toString();
+        return ids;
+    };
+    // Phones apply this order too. Being the open repository does not move one, and
+    // repositories without a turn follow by name.
+    bar.setRepositories({{QStringLiteral("/work/ketviet"),
+                          QStringLiteral("ketviet"),
+                          true,
+                          {conversation(QStringLiteral("crm"), QStringLiteral("CRM"), 10)}},
+                         {QStringLiteral("/work/zeta"), QStringLiteral("zeta"), false, {}},
+                         {QStringLiteral("/work/ketplus"),
+                          QStringLiteral("KetPlus"),
+                          false,
+                          {conversation(QStringLiteral("untitled-b"), QStringLiteral("b draft"), 0),
+                           conversation(QStringLiteral("untitled-a"), QStringLiteral("A draft"), 0),
+                           conversation(QStringLiteral("sidebar"), QStringLiteral("Sidebar"), 30)}},
+                         {QStringLiteral("/work/atlas"), QStringLiteral("atlas"), false, {}}});
+    QCOMPARE(repositoryOrder(),
+             (QStringList{QStringLiteral("/work/ketplus"), QStringLiteral("/work/ketviet"),
+                          QStringLiteral("/work/atlas"), QStringLiteral("/work/zeta")}));
+    QCOMPARE(conversationOrder(),
+             (QStringList{QStringLiteral("sidebar"), QStringLiteral("untitled-a"),
+                          QStringLiteral("untitled-b"), QStringLiteral("crm")}));
+}
+
+void ExplorerPanelTest::scalesSidebarTypeWithInterfaceZoom() {
+    ketplus::ThemePalette palette;
+    palette.border = QStringLiteral("#2B3037");
+    palette.sidebarBackground = QStringLiteral("#1B1F24");
+    palette.textMain = QStringLiteral("#F2F4F7");
+    palette.panelBackground = QStringLiteral("#1D2228");
+    palette.textMuted = QStringLiteral("#858D99");
+    palette.textSecondary = QStringLiteral("#B4BAC4");
+    palette.surfaceHover = QStringLiteral("#292F37");
+    palette.accentSubtle = QStringLiteral("#252B42");
+    palette.textDisabled = QStringLiteral("#505862");
+    palette.borderStrong = QStringLiteral("#3B424C");
+    palette.accent = QStringLiteral("#5968DF");
+    palette.positive = QStringLiteral("#40C97B");
+    palette.warning = QStringLiteral("#E5A93C");
+    palette.danger = QStringLiteral("#EF665C");
+    palette.dark = true;
+
+    QCOMPARE(ketplus::TypeScale::pixels(ketplus::TypeStep::Body,
+                                        ketplus::InterfaceZoomMetrics::mediumPixels),
+             12);
+    QCOMPARE(ketplus::TypeScale::pixels(ketplus::TypeStep::Body,
+                                        ketplus::InterfaceZoomMetrics::largePixels),
+             14);
+    QCOMPARE(ketplus::TypeScale::pixels(ketplus::TypeStep::Reading,
+                                        ketplus::InterfaceZoomMetrics::largePixels),
+             16);
+
+    ketplus::ActivityBar bar;
+    bar.applyPalette(palette, ketplus::InterfaceZoomMetrics::mediumPixels);
+    const QString medium = bar.styleSheet();
+    // Sidebar bias +2 on every zoom step: body 12→14, caption 11→13, micro 10→12.
+    QVERIFY(medium.contains(QStringLiteral("font-size: 14px")));
+    QVERIFY(medium.contains(QStringLiteral("font-size: 13px")));
+    QVERIFY(medium.contains(QStringLiteral("font-size: 12px")));
+    QVERIFY(!medium.contains(QStringLiteral("font-size: 11px")));
+    QVERIFY(!medium.contains(QStringLiteral("font-size: 10px")));
+    QVERIFY(!medium.contains(QStringLiteral("font-size: 9px")));
+    QVERIFY(!medium.contains(QStringLiteral("{{")));
+
+    bar.applyPalette(palette, ketplus::InterfaceZoomMetrics::largePixels);
+    const QString large = bar.styleSheet();
+    // Large +2: body 14→16, caption 13→15, micro 11→13.
+    QVERIFY(large.contains(QStringLiteral("font-size: 16px")));
+    QVERIFY(large.contains(QStringLiteral("font-size: 15px")));
+    QVERIFY(large.contains(QStringLiteral("font-size: 13px")));
+    QVERIFY(!large.contains(QStringLiteral("font-size: 14px")));
+    QVERIFY(!large.contains(QStringLiteral("font-size: 12px")));
+    QVERIFY(!large.contains(QStringLiteral("font-size: 11px")));
+    QVERIFY(!large.contains(QStringLiteral("font-size: 10px")));
 }
 
 QTEST_MAIN(ExplorerPanelTest)

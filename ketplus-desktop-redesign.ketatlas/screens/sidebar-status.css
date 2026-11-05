@@ -1,0 +1,302 @@
+/* Selection identifies context; a separate icon and text identify turn state. */
+.sidebar-inner > .brand-link,
+.sidebar-inner > .search-launch,
+.sidebar-inner > nav,
+.sidebar-inner > .sidebar-bottom {
+    flex-shrink: 0;
+}
+.sidebar-context {
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    flex: 1;
+    padding-bottom: 8px;
+}
+.sidebar-inner .sidebar-bottom {
+    padding-top: 8px;
+}
+.conversation-list {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+}
+.conversation {
+    min-width: 0;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    min-height: 38px;
+    padding: 7px 9px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+}
+.conversation.selected {
+    background: var(--kv-panel-bg);
+    border-color: var(--kv-border-strong);
+    box-shadow: var(--kv-shadow-xs);
+}
+.conversation-title {
+    display: block;
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--kp-text-md);
+    font-weight: 500;
+    line-height: 1.4;
+}
+.conversation.selected .conversation-title {
+    font-weight: 620;
+}
+.conversation-meta {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    justify-content: space-between;
+    min-height: 16px;
+}
+.conversation-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: var(--kp-text-sm);
+    font-weight: 550;
+    line-height: 1.4;
+    white-space: nowrap;
+    color: var(--kv-text-muted);
+}
+.conversation-status .icon {
+    width: 14px;
+    height: 14px;
+}
+.conversation-detail {
+    font-size: var(--kp-text-xs);
+    color: var(--kv-text-muted);
+    white-space: nowrap;
+}
+.status-working {
+    color: var(--kv-accent);
+}
+.status-waiting {
+    color: var(--kv-warning);
+}
+.status-completed {
+    color: var(--kv-success);
+}
+.status-error {
+    color: var(--kv-danger);
+}
+.status-working > .icon {
+    animation: conversation-spin 1.3s linear infinite;
+}
+.heading-status {
+    padding: 3px 7px;
+    border: 1px solid var(--kv-border-default);
+    border-radius: 4px;
+}
+.heading-status.status-working {
+    background: var(--kv-accent-subtle);
+    border-color: var(--kv-accent-border);
+}
+.heading-status.status-waiting {
+    background: var(--kv-warning-bg);
+    border-color: var(--kv-warning-border);
+}
+.heading-status.status-completed {
+    background: var(--kv-success-bg);
+    border-color: var(--kv-success-border);
+}
+.heading-status.status-error {
+    background: var(--kv-danger-bg);
+    border-color: var(--kv-danger-border);
+}
+.tree-item span .tree-activity {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: var(--kp-text-xs);
+    margin-top: 3px;
+}
+.tree-item span .tree-activity.status-working {
+    color: var(--kv-accent);
+}
+.tree-item span .tree-activity.status-waiting {
+    color: var(--kv-warning);
+}
+.tree-item .tree-activity .icon {
+    width: 10px;
+    height: 10px;
+    color: inherit;
+    margin: 0;
+}
+@keyframes conversation-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+@media (max-height: 850px) {
+    .sidebar-context .top-gap {
+        margin-top: 9px;
+    }
+}
+@media (max-width: 760px) {
+    .sidebar-context {
+        display: none;
+    }
+    .sidebar-inner > .sidebar-bottom {
+        margin-top: auto;
+    }
+}
+.sidebar-inner > .brand-link {
+    height: 60px;
+}
+.sidebar-inner > .search-launch {
+    margin-bottom: 12px;
+}
+.sidebar-inner > nav .nav-item {
+    height: 34px;
+}
+.sidebar-context .sidebar-rule {
+    margin: 12px 3px 8px;
+}
+.sidebar-context .top-gap {
+    margin-top: 10px;
+}
+.sidebar-context .tree-item {
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+.sidebar-context .all-worktrees {
+    margin-top: 6px;
+    margin-bottom: 6px;
+}
+/* Claude-style sidebar (14.85rem narrowed 10% → 13.365rem); small repo
+   headings with their conversations directly beneath, at Claude's density. */
+[data-ui="app-shell"] {
+    --kv-sidebar-width: 13.365rem;
+}
+.sidebar-context .section-label {
+    letter-spacing: 0;
+    font-weight: 500;
+    height: 24px;
+    padding-left: 8px;
+}
+.sidebar-context .section-label .icon-btn,
+.repository-group-header .icon-btn {
+    width: 22px;
+    height: 22px;
+    min-height: 22px;
+}
+.repository-groups {
+    display: grid;
+    gap: 10px;
+}
+.repository-group-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 24px;
+    padding: 0 2px 0 8px;
+}
+.repository-group-name {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: var(--kp-text-sm);
+    font-weight: 500;
+    color: var(--kv-text-muted);
+}
+.repository-group-name span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.repository-group-name:hover,
+.repository-group.selected .repository-group-name {
+    color: var(--kv-text-secondary);
+}
+.repository-group-name .icon {
+    width: 12px;
+    height: 12px;
+}
+.repository-group-header .icon-btn {
+    margin-left: auto;
+    opacity: 0;
+}
+.repository-group-header:hover .icon-btn,
+.repository-group-header .icon-btn:focus-visible {
+    opacity: 1;
+}
+.sidebar-context .conversation-list {
+    gap: 1px;
+}
+.sidebar-context .conversation {
+    min-height: 28px;
+    padding: 3px 8px;
+    gap: 8px;
+    border: 0;
+    border-radius: 6px;
+}
+.sidebar-context .conversation.selected {
+    background: var(--kv-surface-hover);
+    box-shadow: none;
+}
+.sidebar-context .conversation-title {
+    font-weight: 450;
+    color: var(--kv-text-main);
+}
+.sidebar-context .conversation.selected .conversation-title {
+    font-weight: 500;
+}
+.sidebar-context .conversation-indicator {
+    margin-left: 0;
+    width: 14px;
+}
+.sidebar-context .conversation-indicator .icon {
+    width: 13px;
+    height: 13px;
+}
+.sidebar-context .conversation-indicator.status-neutral .icon,
+.sidebar-context .conversation-indicator.status-completed .icon {
+    color: var(--kv-text-muted);
+}
+/* Compact header and main navigation to match the dense repository list. */
+.sidebar-inner > .brand-link {
+    height: 50px;
+    gap: 8px;
+}
+.sidebar-inner > .brand-link .brand-wordmark {
+    height: 30px;
+    width: auto;
+}
+.sidebar-inner > .search-launch {
+    height: 28px;
+    margin-bottom: 8px;
+    font-size: var(--kp-text-sm);
+}
+.sidebar-inner > nav .nav-item {
+    height: 28px;
+    margin: 1px 0;
+    gap: 8px;
+    padding: 0 8px;
+    font-size: var(--kp-text-md);
+}
+.sidebar-inner > nav .nav-item .icon {
+    width: 15px;
+    height: 15px;
+}
+.sidebar-inner > nav .nav-count {
+    line-height: 15px;
+}
+.sidebar-context .sidebar-rule {
+    margin: 8px 3px 6px;
+}
+/* Tighter left gutter: rows keep their own 8px inset. Scoped to beat
+   desktop.css, which loads after this imported sheet. */
+[data-ui="app-sidebar"] .sidebar-inner {
+    padding-left: 6px;
+    padding-right: 8px;
+}

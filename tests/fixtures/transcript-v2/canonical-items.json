@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "source": "Sanitized shape corpus derived from the local KetPlus daemon journal on 2026-09-13; user content and raw payload values are excluded.",
+  "cases": [
+    {
+      "name": "user-message",
+      "item": {"id": "user", "type": "userMessage", "content": [{"type": "text", "text": "Prompt"}]},
+      "expectedEventType": "user.message",
+      "visible": true
+    },
+    {
+      "name": "final-with-commentary-final",
+      "item": {"id": "final", "type": "agentMessage", "phase": "final_answer", "text": "Done"},
+      "expectedEventType": "assistant.final",
+      "visible": true
+    },
+    {
+      "name": "commentary-visible",
+      "item": {"id": "commentary", "type": "agentMessage", "phase": "commentary", "text": "Internal progress"},
+      "expectedEventType": "assistant.commentary",
+      "visible": true
+    },
+    {
+      "name": "reasoning-hidden",
+      "item": {"id": "reasoning", "type": "reasoning", "text": "Internal reasoning"},
+      "expectedEventType": "assistant.reasoning",
+      "visible": false
+    },
+    {
+      "name": "command-secret",
+      "item": {"id": "command", "type": "commandExecution", "command": "curl --token CORPUS_SECRET https://example.test", "cwd": "/workspace", "status": "completed", "exitCode": 0},
+      "expectedEventType": "command.run",
+      "visible": true
+    },
+    {
+      "name": "file-change",
+      "item": {"id": "file", "type": "fileChange", "changes": [{"path": "src/main.cpp", "kind": {"type": "update"}, "diff": "@@ -1 +1 @@\n-old\n+new"}]},
+      "expectedEventType": "file.change",
+      "visible": true
+    },
+    {
+      "name": "web-search",
+      "item": {"id": "search", "type": "webSearch", "query": "Qt transcript model"},
+      "expectedEventType": "search.web",
+      "visible": true
+    },
+    {
+      "name": "image-view",
+      "item": {"id": "image", "type": "imageView", "path": "/tmp/image.png"},
+      "expectedEventType": "image.view",
+      "visible": true
+    },
+    {
+      "name": "image-generation",
+      "item": {"id": "generated", "type": "imageGeneration", "savedPath": "/tmp/generated.png"},
+      "expectedEventType": "image.generate",
+      "visible": true
+    },
+    {
+      "name": "mcp-tool",
+      "item": {"id": "mcp", "type": "mcpToolCall", "server": "local", "tool": "inspect", "arguments": {"api_key": "CORPUS_SECRET"}},
+      "expectedEventType": "integration.mcp",
+      "visible": true
+    },
+    {
+      "name": "dynamic-tool",
+      "item": {"id": "dynamic", "type": "dynamicToolCall", "tool": "custom", "arguments": {"password": "CORPUS_SECRET"}},
+      "expectedEventType": "tool.dynamic",
+      "visible": true
+    },
+    {
+      "name": "browser-open-secret-url",
+      "item": {"id": "browser", "type": "dynamicToolCall", "tool": "open_website", "arguments": {"url": "https://user:CORPUS_SECRET@example.test/page?token=CORPUS_SECRET&safe=value#code=CORPUS_SECRET"}},
+      "expectedEventType": "browser.open",
+      "visible": true
+    },
+    {
+      "name": "collaboration",
+      "item": {"id": "collab", "type": "collabAgentToolCall"},
+      "expectedEventType": "integration.collaboration",
+      "visible": true
+    },
+    {
+      "name": "sub-agent",
+      "item": {"id": "subagent", "type": "subAgentActivity"},
+      "expectedEventType": "integration.subagent",
+      "visible": true
+    },
+    {
+      "name": "sleep",
+      "item": {"id": "sleep", "type": "sleep"},
+      "expectedEventType": "activity.wait",
+      "visible": true
+    },
+    {
+      "name": "context-compaction",
+      "item": {"id": "compact", "type": "contextCompaction"},
+      "expectedEventType": "system.compaction",
+      "visible": true
+    },
+    {
+      "name": "unknown-future-item",
+      "item": {"id": "future", "type": "futureToolV2", "password": "CORPUS_SECRET", "value": "kept"},
+      "expectedEventType": "unknown",
+      "visible": true,
+      "genericPolicy": true
+    }
+  ]
+}

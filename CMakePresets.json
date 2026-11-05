@@ -8,24 +8,70 @@
   "configurePresets": [
     {
       "name": "dev",
-      "displayName": "KetPlus CM development",
+      "displayName": "KetPlus Pro development",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/dev",
       "cacheVariables": {
+        "KETPLUS_EDITION": "pro",
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_PREFIX_PATH": "$env{QT_ROOT}",
-        "KETPLUS_CM_BUILD_TESTS": "ON"
+        "KETPLUS_BUILD_TESTS": "ON"
       }
     },
     {
       "name": "release",
-      "displayName": "KetPlus CM release",
+      "displayName": "KetPlus Pro release",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/release",
       "cacheVariables": {
+        "KETPLUS_EDITION": "pro",
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_PREFIX_PATH": "$env{QT_ROOT}",
-        "KETPLUS_CM_BUILD_TESTS": "OFF"
+        "KETPLUS_BUILD_TESTS": "OFF"
+      }
+    },
+    {
+      "name": "daemon-dev",
+      "displayName": "Headless daemon development",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/daemon-dev",
+      "cacheVariables": {
+        "KETPLUS_EDITION": "pro",
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_PREFIX_PATH": "$env{QT_ROOT}",
+        "KETPLUS_BUILD_DESKTOP": "OFF",
+        "KETPLUS_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "daemon-release",
+      "inherits": "daemon-dev",
+      "binaryDir": "${sourceDir}/build/daemon-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "KETPLUS_BUILD_TESTS": "OFF"
+      }
+    },
+    {
+      "name": "lite-dev",
+      "displayName": "KetPlus Lite development",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/lite-dev",
+      "cacheVariables": {
+        "KETPLUS_EDITION": "lite",
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_PREFIX_PATH": "$env{QT_ROOT}",
+        "KETPLUS_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "lite-release",
+      "inherits": "lite-dev",
+      "displayName": "KetPlus Lite release",
+      "binaryDir": "${sourceDir}/build/lite-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "KETPLUS_BUILD_TESTS": "OFF"
       }
     }
   ],
@@ -37,12 +83,42 @@
     {
       "name": "release",
       "configurePreset": "release"
+    },
+    {
+      "name": "daemon-dev",
+      "configurePreset": "daemon-dev"
+    },
+    {
+      "name": "daemon-release",
+      "configurePreset": "daemon-release"
+    },
+    {
+      "name": "lite-dev",
+      "configurePreset": "lite-dev"
+    },
+    {
+      "name": "lite-release",
+      "configurePreset": "lite-release"
     }
   ],
   "testPresets": [
     {
       "name": "dev",
       "configurePreset": "dev",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "daemon-dev",
+      "configurePreset": "daemon-dev",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "lite-dev",
+      "configurePreset": "lite-dev",
       "output": {
         "outputOnFailure": true
       }
