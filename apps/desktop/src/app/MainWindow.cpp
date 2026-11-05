@@ -85,7 +85,7 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     repositoryLookupPool_.setMaxThreadCount(2);
     theme_.setInterfaceFontSizePixels(
         InterfaceZoomMetrics::snap(appearanceSettings_.interfaceFontSizePixels));
-    setWindowTitle(QStringLiteral("KetPlus"));
+    setWindowTitle(QStringLiteral("KétPlus Pro"));
     atlasIndex_ = new AtlasIndex(this);
     connect(atlasIndex_, &AtlasIndex::changed, this, &MainWindow::populateSpotlight);
     refreshAtlasIndex();
@@ -496,7 +496,7 @@ void MainWindow::openFolder(const QString& folderPath) {
         setExplorerVisible(true);
     }
     syncAgentWorkspaceContext(keepAgentWorkspace);
-    setWindowTitle(QStringLiteral("%1 — KetPlus").arg(folder.fileName()));
+    setWindowTitle(QStringLiteral("%1 — KétPlus Pro").arg(folder.fileName()));
     statusBar()->showMessage(QStringLiteral("Opened %1").arg(workspaceRoot_), 2500);
     git_->setWorkspacePath(workspaceRoot_);
     if (!suppressWorkspaceRestore_ && !restoringWorkspaceState_) {

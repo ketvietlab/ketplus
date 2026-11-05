@@ -65,7 +65,7 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
       documentStateLabel_(new QLabel(QStringLiteral("New"), this)),
       gitButton_(new QToolButton(this)) {
     theme_.setInterfaceFontSizePixels(appearanceSettings_.interfaceFontSizePixels);
-    setWindowTitle(QStringLiteral("KetPlus CM"));
+    setWindowTitle(QStringLiteral("KétPlus"));
     resize(1100, 720);
     setMinimumSize(680, 420);
     setUnifiedTitleAndToolBarOnMac(true);
@@ -298,7 +298,7 @@ void MainWindow::openFolder(const QString& folderPath) {
     auto* explorer = ensureExplorer();
     explorer->setRootPath(workspaceRoot_);
     setExplorerVisible(true);
-    setWindowTitle(QStringLiteral("%1 — KetPlus CM").arg(folder.fileName()));
+    setWindowTitle(QStringLiteral("%1 — KétPlus").arg(folder.fileName()));
     statusBar()->showMessage(QStringLiteral("Opened %1").arg(workspaceRoot_), 2500);
     git_->setWorkspacePath(workspaceRoot_);
     // Listing the tree now means the first lookup does not wait for it, and a folder too

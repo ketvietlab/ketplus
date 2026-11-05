@@ -29,7 +29,9 @@ int main(int argc, char* argv[]) {
 #endif
     QtWebView::initialize();
     QApplication app(argc, argv);
+    // The name keeps the settings location of existing installs; users see KétPlus Pro.
     QCoreApplication::setApplicationName(QStringLiteral("KetPlus"));
+    QGuiApplication::setApplicationDisplayName(QStringLiteral("KétPlus Pro"));
     QCoreApplication::setApplicationVersion(QStringLiteral(KETPLUS_PRODUCT_VERSION));
     QCoreApplication::setOrganizationName(QStringLiteral("KetPlus"));
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/brand/ketplus-app-icon.png")));

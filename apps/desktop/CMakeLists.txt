@@ -175,7 +175,7 @@ qt_add_resources(ketplus "ketplus_wordmarks"
 
 set_target_properties(ketplus PROPERTIES
     OUTPUT_NAME "KetPlus"
-    MACOSX_BUNDLE_BUNDLE_NAME "KetPlus"
+    MACOSX_BUNDLE_BUNDLE_NAME "KétPlus Pro"
     MACOSX_BUNDLE_GUI_IDENTIFIER "dev.ketplus.editor"
     MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
     MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"

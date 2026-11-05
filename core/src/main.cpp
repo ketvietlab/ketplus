@@ -19,7 +19,9 @@ int main(int argc, char* argv[]) {
     startupTimer.start();
 
     QApplication app(argc, argv);
+    // The name keeps the settings location of KetPlus CM installs; users see KétPlus.
     QCoreApplication::setApplicationName(QStringLiteral("KetPlus CM"));
+    QGuiApplication::setApplicationDisplayName(QStringLiteral("KétPlus"));
     QCoreApplication::setApplicationVersion(QStringLiteral(KETPLUS_CM_VERSION));
     QCoreApplication::setOrganizationName(QStringLiteral("Ketsuite"));
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/brand/ketplus-app-icon.png")));
