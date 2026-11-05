@@ -34,6 +34,9 @@ final class AppPolicyTests: XCTestCase {
     func testTiers() {
         XCTAssertEqual(AppPolicy.tier(for: "dev.ketplus.editor"), .blocked)
         XCTAssertEqual(AppPolicy.tier(for: AgentPaths.bundleIdentifier), .blocked)
+        XCTAssertEqual(AppPolicy.tier(for: "com.ketsuite.ketplus.cm"), .blocked)
+        XCTAssertEqual(AppPolicy.tier(for: "com.ketsuite.ketplus.terminal"), .blocked)
+        XCTAssertFalse(AppPolicy.allows(AppPolicy.tier(for: "com.ketsuite.ketplus.terminal"), .keyboard))
         XCTAssertEqual(AppPolicy.tier(for: "com.apple.keychainaccess"), .blocked)
         XCTAssertEqual(AppPolicy.tier(for: ""), .blocked)
         XCTAssertEqual(AppPolicy.tier(for: "com.google.Chrome"), .viewOnly)
@@ -129,5 +132,47 @@ final class GeometryRegionTests: XCTestCase {
         let pixel = geometry.imagePoint(global: CGPoint(x: 1999, y: 999))
         XCTAssertEqual(pixel.x, 999)
         XCTAssertEqual(pixel.y, 499)
+    }
+}
+
+final class InterruptibleTests: XCTestCase {
+    func testStopsBeforeTheNextStepOnceStopped() {
+        var sent: [Int] = []
+        var stopped = false
+        XCTAssertThrowsError(try Interruptible.forEach(0..<250, stopped: { stopped }) { step in
+            sent.append(step)
+            if step == 2 { stopped = true }
+        }) { XCTAssertEqual($0 as? InputInterrupted, InputInterrupted()) }
+        XCTAssertEqual(sent, [0, 1, 2])
+    }
+
+    func testStopBeforeTheFirstStepSendsNothing() {
+        var sent = 0
+        XCTAssertThrowsError(try Interruptible.forEach(0..<3, stopped: { true }) { _ in sent += 1 })
+        XCTAssertEqual(sent, 0)
+    }
+
+    func testRunsEveryStepWhenNotStopped() throws {
+        var sent = 0
+        try Interruptible.forEach(stride(from: 0, to: 40, by: 16), stopped: { false }) { _ in sent += 1 }
+        XCTAssertEqual(sent, 3)
+    }
+}
+
+final class RepositoryAppsTests: XCTestCase {
+    /// A new app in this repository must be blocked too, or an agent could type into its shell.
+    func testEveryAppBuiltByTheRepositoryIsBlocked() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../../../..").standardized
+        var identifiers: Set<String> = []
+        for path in ["CMakeLists.txt", "apps/desktop/CMakeLists.txt", "core/CMakeLists.txt"] {
+            let text = try String(contentsOf: root.appendingPathComponent(path), encoding: .utf8)
+            let pattern = try NSRegularExpression(pattern: #"MACOSX_BUNDLE_GUI_IDENTIFIER\s+"([^"]+)""#)
+            for match in pattern.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+                identifiers.insert(String(text[Range(match.range(at: 1), in: text)!]))
+            }
+        }
+        XCTAssertEqual(identifiers, ["dev.ketplus.editor", "com.ketsuite.ketplus.cm", "com.ketsuite.ketplus.terminal"])
+        for identifier in identifiers { XCTAssertEqual(AppPolicy.tier(for: identifier), .blocked, identifier) }
     }
 }

@@ -20,7 +20,12 @@ public enum ActionKind: Sendable {
 }
 
 public enum AppPolicy {
-    public static let ketPlusBundleIdentifiers: Set<String> = ["dev.ketplus.editor", AgentPaths.bundleIdentifier]
+    /// Every app this repository builds: KétPlus Pro, KétPlus (Lite) and KetPlus Terminal. Each
+    /// runs a shell, and Pro could approve its own grants, so all are blocked.
+    public static let ketPlusBundleIdentifiers: Set<String> = [
+        "dev.ketplus.editor", "com.ketsuite.ketplus.cm", "com.ketsuite.ketplus.terminal",
+        AgentPaths.bundleIdentifier,
+    ]
 
     /// Credentials, passwords and KetPlus itself (the agent must not approve its own grants).
     static let blocked: Set<String> = [
