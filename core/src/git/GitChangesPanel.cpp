@@ -7,12 +7,13 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QFont>
-#include <QHeaderView>
 #include <QHBoxLayout>
+#include <QHeaderView>
 #include <QLabel>
 #include <QMenu>
 #include <QPainter>
 #include <QPainterPath>
+#include <QScrollBar>
 #include <QStackedWidget>
 #include <QStyledItemDelegate>
 #include <QToolButton>
@@ -299,6 +300,12 @@ GitChangesPanel::GitChangesPanel(QWidget* parent)
 }
 
 void GitChangesPanel::setSnapshot(const GitSnapshot& snapshot) {
+    // Refreshes run on every save and Git change; keep the user's place in the list.
+    const QTreeWidgetItem* previous = tree_->currentItem();
+    const bool hadFile = previous != nullptr && previous->parent() != nullptr;
+    const QString selectedPath = hadFile ? previous->data(0, pathRole).toString() : QString{};
+    const int selectedMode = hadFile ? previous->data(0, diffModeRole).toInt() : -1;
+    const int scrollPosition = tree_->verticalScrollBar()->value();
     tree_->clear();
 
     if (!snapshot.isRepository()) {
@@ -340,6 +347,19 @@ void GitChangesPanel::setSnapshot(const GitSnapshot& snapshot) {
              snapshot.repositoryRoot);
     tree_->expandAll();
     pages_->setCurrentWidget(tree_);
+    if (hadFile) {
+        for (int group = 0; group < tree_->topLevelItemCount(); ++group) {
+            auto* parent = tree_->topLevelItem(group);
+            for (int child = 0; child < parent->childCount(); ++child) {
+                auto* item = parent->child(child);
+                if (item->data(0, pathRole).toString() == selectedPath &&
+                    item->data(0, diffModeRole).toInt() == selectedMode) {
+                    tree_->setCurrentItem(item);
+                }
+            }
+        }
+    }
+    tree_->verticalScrollBar()->setValue(scrollPosition);
 }
 
 void GitChangesPanel::focusChanges() {

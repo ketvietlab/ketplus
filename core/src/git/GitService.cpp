@@ -73,10 +73,17 @@ GitService::GitService(QObject* parent)
       refreshTimer_(new QTimer(this)) {
     refreshTimer_->setSingleShot(true);
     connect(refreshTimer_, &QTimer::timeout, this, &GitService::refresh);
+    const auto gitStateChanged = [this] {
+        watchGitState(); // A replaced file drops out of the watch list.
+        scheduleRefresh(300);
+    };
+    connect(&gitStateWatcher_, &QFileSystemWatcher::directoryChanged, this, gitStateChanged);
+    connect(&gitStateWatcher_, &QFileSystemWatcher::fileChanged, this, gitStateChanged);
 }
 
 GitService::~GitService() {
     refreshTimer_->stop();
+    gitStateWatcher_.disconnect(this);
     // QProcess emits finished from its destructor. Its callbacks use snapshot/worktree
     // members, so disconnect and stop producers before those derived members are freed.
     for (auto* process : findChildren<QProcess*>()) {
@@ -98,9 +105,12 @@ void GitService::setWorkspacePath(const QString& path) {
     refreshTimer_->stop();
     workspacePath_ = normalizedPath(path);
     repositoryRoot_.clear();
+    gitDirectory_.clear();
+    watchGitState();
     snapshot_ = {};
     worktrees_.clear();
     ++workspaceGeneration_;
+    ++diffGeneration_;
     ++refreshGeneration_;
     emit snapshotChanged(snapshot_);
 
@@ -111,22 +121,26 @@ void GitService::setWorkspacePath(const QString& path) {
 
     const quint64 generation = workspaceGeneration_;
     runGit({QStringLiteral("-C"), workspacePath_, QStringLiteral("rev-parse"),
-            QStringLiteral("--show-toplevel")},
+            QStringLiteral("--show-toplevel"), QStringLiteral("--absolute-git-dir")},
            workspacePath_,
-           [this, generation](const int exitCode, const QByteArray& output,
-                              const QByteArray&, const bool completedNormally) {
+           [this, generation](const int exitCode, const QByteArray& output, const QByteArray&,
+                              const bool completedNormally) {
                if (generation != workspaceGeneration_ || !completedNormally || exitCode != 0) {
                    if (generation == workspaceGeneration_) {
                        emit worktreesChanged(worktrees_);
                    }
                    return;
                }
-               const QString root = QString::fromUtf8(output).trimmed();
+               const QStringList lines =
+                   QString::fromUtf8(output).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+               const QString root = lines.value(0).trimmed();
                if (root.isEmpty()) {
                    emit worktreesChanged(worktrees_);
                    return;
                }
                repositoryRoot_ = normalizedPath(root);
+               gitDirectory_ = normalizedPath(lines.value(1).trimmed());
+               watchGitState();
                refresh();
            });
 }
@@ -181,6 +195,7 @@ void GitService::scheduleRefresh(const int delayMilliseconds) {
 }
 
 void GitService::requestDiff(const QString& filePath, const GitDiffMode mode) {
+    const quint64 diffGeneration = ++diffGeneration_;
     if (repositoryRoot_.isEmpty()) {
         emit diffReady(filePath, mode, {},
                        QStringLiteral("The open folder is not a Git repository."));
@@ -235,18 +250,22 @@ void GitService::requestDiff(const QString& filePath, const GitDiffMode mode) {
         arguments.append(literalPathspec(relativePath));
     }
 
-    runGit(arguments, root,
-           [this, filePath, mode, acceptedDifferenceExitCode](
-               const int exitCode, const QByteArray& output, const QByteArray& error,
-               const bool completedNormally) {
-               if (!completedNormally ||
-                   (exitCode != 0 && exitCode != acceptedDifferenceExitCode)) {
-                   emit diffReady(filePath, mode, {}, QString::fromUtf8(error).trimmed());
-                   return;
-               }
-               emit diffReady(filePath, mode, QString::fromUtf8(output), {});
-           },
-           20000);
+    runGit(
+        arguments, root,
+        [this, filePath, mode, acceptedDifferenceExitCode,
+         diffGeneration](const int exitCode, const QByteArray& output, const QByteArray& error,
+                         const bool completedNormally) {
+            // A newer request or a workspace switch makes this reply stale.
+            if (diffGeneration != diffGeneration_) {
+                return;
+            }
+            if (!completedNormally || (exitCode != 0 && exitCode != acceptedDifferenceExitCode)) {
+                emit diffReady(filePath, mode, {}, QString::fromUtf8(error).trimmed());
+                return;
+            }
+            emit diffReady(filePath, mode, QString::fromUtf8(output), {});
+        },
+        20000);
 }
 
 void GitService::runGit(const QStringList& arguments, const QString& workingDirectory,
@@ -317,6 +336,38 @@ void GitService::runGit(const QStringList& arguments, const QString& workingDire
 
     process->start();
     timeout->start(timeoutMilliseconds);
+}
+
+void GitService::watchGitState() {
+    QStringList desired;
+    if (!gitDirectory_.isEmpty()) {
+        // The folder sees index and HEAD being replaced; logs/HEAD is appended for every
+        // commit, checkout and reset, including branch moves that leave HEAD itself unchanged.
+        desired.append(gitDirectory_);
+        const QString reflog = QDir(gitDirectory_).filePath(QStringLiteral("logs/HEAD"));
+        if (QFileInfo::exists(reflog)) {
+            desired.append(reflog);
+        }
+    }
+    const QStringList watched = gitStateWatcher_.files() + gitStateWatcher_.directories();
+    QStringList removed;
+    for (const QString& path : watched) {
+        if (!desired.contains(path)) {
+            removed.append(path);
+        }
+    }
+    if (!removed.isEmpty()) {
+        gitStateWatcher_.removePaths(removed);
+    }
+    QStringList added;
+    for (const QString& path : desired) {
+        if (!watched.contains(path)) {
+            added.append(path);
+        }
+    }
+    if (!added.isEmpty()) {
+        gitStateWatcher_.addPaths(added);
+    }
 }
 
 bool GitService::isUntracked(const QString& relativePath) const {

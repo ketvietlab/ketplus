@@ -2,6 +2,7 @@
 
 #include "git/GitTypes.h"
 
+#include <QFileSystemWatcher>
 #include <QObject>
 #include <QStringList>
 #include <QTimer>
@@ -41,6 +42,7 @@ class GitService final : public QObject {
     void runGit(const QStringList& arguments, const QString& workingDirectory,
                 CommandCallback callback, int timeoutMilliseconds = 10000);
     [[nodiscard]] bool isUntracked(const QString& relativePath) const;
+    void watchGitState();
 
     QString gitExecutable_;
     QString workspacePath_;
@@ -49,6 +51,12 @@ class GitService final : public QObject {
     QVector<GitWorktree> worktrees_;
     quint64 workspaceGeneration_{0};
     quint64 refreshGeneration_{0};
+    // Only the newest diff request is answered; an older reply would replace it.
+    quint64 diffGeneration_{0};
+    // Git commands run outside KetPlus (terminal, agents) change the index, HEAD and reflog
+    // in the repository's git dir; watching it keeps Source Control current.
+    QString gitDirectory_;
+    QFileSystemWatcher gitStateWatcher_;
     QTimer* refreshTimer_{nullptr};
 };
 
