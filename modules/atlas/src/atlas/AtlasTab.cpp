@@ -97,11 +97,13 @@ QString atlasStyle(const QPalette& palette, const int basePixels) {
     const QString muted = dark ? QStringLiteral("#858D99") : QStringLiteral("#717373");
     const QString border = dark ? QStringLiteral("#2B3037") : QStringLiteral("#E9E7E8");
     const QString strong = dark ? QStringLiteral("#3B424C") : QStringLiteral("#CCCCCD");
-    const QString accent = dark ? QStringLiteral("#5968DF") : QStringLiteral("#5167C4");
-    const QString accentHover = dark ? QStringLiteral("#6875EA") : QStringLiteral("#45579F");
+    const QString accent = QStringLiteral("#1746FF");
+    const QString accentText = dark ? QStringLiteral("#9EB5FF") : QStringLiteral("#1238DB");
+    const QString primary = QStringLiteral("#365FD6");
+    const QString primaryHover = QStringLiteral("#3151C6");
     QString css = TypeScale::apply(QStringLiteral(R"QSS(
 QWidget#atlasTab, QWidget#atlasPicker, QStackedWidget#atlasPages { background:@page@; color:@text@; }
-QLabel#atlasEyebrow { color:@accent@; font-size:{{caption}}px; font-weight:600; letter-spacing:1px; }
+QLabel#atlasEyebrow { color:@accentText@; font-size:{{caption}}px; font-weight:600; letter-spacing:1px; }
 QLabel#atlasLibraryTitle { color:@text@; font-size:{{display}}px; font-weight:620; }
 QLabel#atlasLibrarySubtitle { color:@muted@; font-size:{{reading}}px; }
 QLabel#atlasScopeIcon { color:@muted@; }
@@ -111,13 +113,13 @@ QLineEdit#atlasSearch { min-height:34px; max-width:290px; padding:0 12px; border
 QLineEdit#atlasSearch:focus { border-color:@accent@; }
 QListWidget#atlasGrid { border:0; background:transparent; outline:0; }
 QListWidget#atlasGrid::item { border:0; background:transparent; }
-QPushButton#atlasCreateButton, QPushButton#atlasEmptyCreateButton { min-height:32px; padding:0 13px; border:1px solid @accent@; border-radius:6px; background:@accent@; color:white; font-weight:600; }
-QPushButton#atlasCreateButton:hover, QPushButton#atlasEmptyCreateButton:hover { background:@accentHover@; }
+QPushButton#atlasCreateButton, QPushButton#atlasEmptyCreateButton { min-height:32px; padding:0 13px; border:1px solid @primary@; border-radius:6px; background:@primary@; color:white; font-weight:600; }
+QPushButton#atlasCreateButton:hover, QPushButton#atlasEmptyCreateButton:hover { border-color:@primaryHover@; background:@primaryHover@; }
 QToolButton[atlasViewToggle="true"] { min-width:30px; min-height:28px; border:0; border-radius:4px; background:transparent; color:@muted@; }
 QToolButton[atlasViewToggle="true"]:checked { background:@panel@; color:@text@; }
 QWidget#atlasViewSwitcher { padding:3px; border:1px solid @border@; border-radius:6px; background:@raised@; }
 QWidget#atlasEmptyPanel { background:transparent; }
-QLabel#atlasEmptyIcon { color:@accent@; font-size:{{glyphLarge}}px; }
+QLabel#atlasEmptyIcon { color:@accentText@; font-size:{{glyphLarge}}px; }
 QLabel#atlasEmptyTitle { color:@text@; font-size:{{title}}px; font-weight:600; }
 QLabel#atlasEmptyState { color:@muted@; font-size:{{reading}}px; }
 QLabel#atlasStatus { color:@secondary@; font-size:{{reading}}px; }
@@ -129,7 +131,8 @@ QLabel#atlasLastValidNotice { color:@secondary@; background:@raised@; border-bot
         {"@raised@", raised},       {"@text@", text},
         {"@secondary@", secondary}, {"@muted@", muted},
         {"@border@", border},       {"@strong@", strong},
-        {"@accent@", accent},       {"@accentHover@", accentHover}};
+        {"@accent@", accent},       {"@accentText@", accentText},
+        {"@primary@", primary},     {"@primaryHover@", primaryHover}};
     for (const auto& replacement : replacements)
         css.replace(replacement.first, replacement.second);
     return css;
@@ -157,9 +160,9 @@ class AtlasCard final : public QStyledItemDelegate {
         const bool selected = option.state.testFlag(QStyle::State_Selected);
         const bool dark = QApplication::palette().color(QPalette::Window).lightness() < 128;
         const QColor panel(dark ? QStringLiteral("#1D2228") : QStringLiteral("#FFFFFF"));
-        const QColor selectedPanel(dark ? QStringLiteral("#252D4A") : QStringLiteral("#EEF0FB"));
+        const QColor selectedPanel(dark ? QStringLiteral("#202C4B") : QStringLiteral("#EDF2FF"));
         const QColor border(dark ? QStringLiteral("#2B3037") : QStringLiteral("#E9E7E8"));
-        const QColor selectedBorder(dark ? QStringLiteral("#4A5796") : QStringLiteral("#C3CDF0"));
+        const QColor selectedBorder(dark ? QStringLiteral("#415B9C") : QStringLiteral("#C2D1FF"));
         const QColor text(dark ? QStringLiteral("#F2F4F7") : QStringLiteral("#24262A"));
         const QColor muted(dark ? QStringLiteral("#858D99") : QStringLiteral("#717373"));
         p->setPen(selected ? selectedBorder : border);

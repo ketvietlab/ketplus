@@ -658,7 +658,7 @@ Rectangle {
                                     color: !renameConversationMenuItem.enabled
                                            ? workspace.t.textDisabled
                                            : renameConversationMenuItem.highlighted
-                                             ? workspace.t.accentActive : workspace.t.textMain
+                                             ? workspace.t.accentText : workspace.t.textMain
                                     font: renameConversationMenuItem.font
                                     verticalAlignment: Text.AlignVCenter
                                     elide: Text.ElideRight
@@ -689,7 +689,7 @@ Rectangle {
                                     color: !forkConversationMenuItem.enabled
                                            ? workspace.t.textDisabled
                                            : forkConversationMenuItem.highlighted
-                                             ? workspace.t.accentActive : workspace.t.textMain
+                                             ? workspace.t.accentText : workspace.t.textMain
                                     font: forkConversationMenuItem.font
                                     verticalAlignment: Text.AlignVCenter
                                     elide: Text.ElideRight
@@ -716,7 +716,7 @@ Rectangle {
                                     text: deleteConversationMenuItem.text
                                     color: deleteConversationMenuItem.enabled
                                            ? (deleteConversationMenuItem.highlighted
-                                              ? workspace.t.accentActive : workspace.t.danger)
+                                              ? workspace.t.accentText : workspace.t.danger)
                                            : workspace.t.textDisabled
                                     font: deleteConversationMenuItem.font
                                     verticalAlignment: Text.AlignVCenter
@@ -743,7 +743,7 @@ Rectangle {
                                     text: archiveConversationMenuItem.text
                                     color: archiveConversationMenuItem.enabled
                                            ? (archiveConversationMenuItem.highlighted
-                                              ? workspace.t.accentActive : workspace.t.textMain)
+                                              ? workspace.t.accentText : workspace.t.textMain)
                                            : workspace.t.textDisabled
                                     font: archiveConversationMenuItem.font
                                     verticalAlignment: Text.AlignVCenter

@@ -41,7 +41,7 @@ application.
 | libvterm | `v0.3.3`, commit `9d6d2112335080312ef8c36667fa717ded4f7daf` | Compiled statically | MIT | Include its copyright and license text |
 | Inter | 4.1 archive pinned by SHA-256 | Font embedded in Qt resources | SIL OFL 1.1 | Include the copyright and complete OFL text in an easily accessible form |
 | KÉT Sans | 1.0.0 official ZIP pinned by SHA-256 | Four unmodified hinted TTF faces fetched at build time and embedded in Pro Qt resources | KÉT Sans Font License 1.0, proprietary | App embedding only; no loose font redistribution; ship the complete license |
-| Két Design System | 0.1.41 Mermaid snapshots in CM `cm-v0.3.6` | Embedded configuration data | MIT | Include the publisher notice in CM Mermaid resources |
+| Két Design System | 0.1.44 Mermaid snapshots in `core/resources/mermaid` | Embedded configuration data | MIT | Include the publisher notice in CM Mermaid resources |
 | Lucide Static | 1.40.0 assets | Vendored SVG path data | ISC, plus Feather MIT for derived icons | Include both applicable notices |
 | Sparkle | 2.10.0 release archive pinned by SHA-256 | Unmodified framework in `Contents/Frameworks`, only when `KETPLUS_UPDATE_FEED_URL` is set (ADR 0019) | MIT, plus the bsdiff and other notices in its `LICENSE` | Ship `Sparkle-MIT.txt` complete |
 

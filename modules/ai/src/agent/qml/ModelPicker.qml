@@ -777,7 +777,8 @@ Basic.Popup {
                 }
                 background: Rectangle {
                     radius: Metrics.px(5, tokens)
-                    color: applyButton.hovered ? picker.tokens.accentHover : picker.tokens.accent
+                    color: applyButton.pressed ? picker.tokens.actionPrimaryActive
+                           : applyButton.hovered ? picker.tokens.actionPrimaryHover : picker.tokens.actionPrimary
                 }
                 onClicked: picker.applyRequested(picker.draftModel, picker.draftEffort, picker.selectedProviderTab,
                     picker.compactSupported ? {compactWindow: compactControl.requested, expected_revision: picker.draftRevision} : {expected_revision: picker.draftRevision})

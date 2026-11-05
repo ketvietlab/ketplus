@@ -33,13 +33,17 @@ ThemePalette lightPalette() {
         .interactiveBackground = QStringLiteral("#FFFFFF"),
         .interactiveHover = QStringLiteral("#F7F5F5"),
         .interactiveActive = QStringLiteral("#EFEDEE"),
-        .accent = QStringLiteral("#5968DF"),
-        .accentHover = QStringLiteral("#4F5ED0"),
-        .accentActive = QStringLiteral("#4557BC"),
-        .accentSubtle = QStringLiteral("#EEF0FB"),
-        .accentMuted = QStringLiteral("#DDE2F7"),
-        .focus = QStringLiteral("#7485E8"),
-        .tabActiveText = QStringLiteral("#394985"),
+        .accent = QStringLiteral("#1746FF"),
+        .accentHover = QStringLiteral("#1238DB"),
+        .accentActive = QStringLiteral("#102EB3"),
+        .accentSubtle = QStringLiteral("#EDF2FF"),
+        .accentMuted = QStringLiteral("#DDE6FF"),
+        .focus = QStringLiteral("#1746FF"),
+        .tabActiveText = QStringLiteral("#1238DB"),
+        .accentText = QStringLiteral("#1238DB"),
+        .actionPrimary = QStringLiteral("#365FD6"),
+        .actionPrimaryHover = QStringLiteral("#3151C6"),
+        .actionPrimaryActive = QStringLiteral("#2B46B7"),
         .positive = QStringLiteral("#1D5D3B"),
         .warning = QStringLiteral("#8B5C12"),
         .danger = QStringLiteral("#B42318"),
@@ -72,13 +76,17 @@ ThemePalette darkPalette() {
         .interactiveBackground = QStringLiteral("#20252C"),
         .interactiveHover = QStringLiteral("#292F37"),
         .interactiveActive = QStringLiteral("#313844"),
-        .accent = QStringLiteral("#5968DF"),
-        .accentHover = QStringLiteral("#7485E8"),
-        .accentActive = QStringLiteral("#4F5ED0"),
-        .accentSubtle = QStringLiteral("#252B42"),
-        .accentMuted = QStringLiteral("#2B3356"),
-        .focus = QStringLiteral("#7485E8"),
-        .tabActiveText = QStringLiteral("#AAB6ED"),
+        .accent = QStringLiteral("#1746FF"),
+        .accentHover = QStringLiteral("#1238DB"),
+        .accentActive = QStringLiteral("#102EB3"),
+        .accentSubtle = QStringLiteral("#202C4B"),
+        .accentMuted = QStringLiteral("#23315D"),
+        .focus = QStringLiteral("#668CFF"),
+        .tabActiveText = QStringLiteral("#9EB5FF"),
+        .accentText = QStringLiteral("#9EB5FF"),
+        .actionPrimary = QStringLiteral("#365FD6"),
+        .actionPrimaryHover = QStringLiteral("#3151C6"),
+        .actionPrimaryActive = QStringLiteral("#2B46B7"),
         .positive = QStringLiteral("#40C97B"),
         .warning = QStringLiteral("#E5A93C"),
         .danger = QStringLiteral("#EF665C"),
@@ -146,7 +154,7 @@ QMenuBar::item {
 
 QMenuBar::item:selected {
     background: {{accentSubtle}};
-    color: {{accentActive}};
+    color: {{accentText}};
 }
 
 QMenu {
@@ -165,7 +173,7 @@ QMenu::item {
 
 QMenu::item:selected {
     background: {{accentSubtle}};
-    color: {{accentActive}};
+    color: {{accentText}};
 }
 
 QMenu::separator {
@@ -268,7 +276,7 @@ QToolButton[kvRole="activityButton"]:hover {
 QToolButton[kvRole="activityButton"]:checked {
     border-left-color: {{accent}};
     background: {{panelBackground}};
-    color: {{accent}};
+    color: {{accentText}};
 }
 
 QToolButton[kvRole="activityButton"]:disabled {
@@ -440,7 +448,7 @@ QTreeView::item:hover {
 
 QTreeView::item:selected {
     background: {{accentSubtle}};
-    color: {{accentActive}};
+    color: {{accentText}};
 }
 
 QStatusBar {
@@ -529,7 +537,7 @@ QLabel[kvRole="diffScope"][diffMode="staged"] {
 
 QLabel[kvRole="diffScope"][diffMode="unstaged"] {
     border-color: {{accent}};
-    color: {{accentActive}};
+    color: {{accentText}};
 }
 
 QLabel[kvRole="diffStats"] {
@@ -755,15 +763,21 @@ QWidget[kvRole="settingsPreview"] {
 }
 
 QPushButton[kvRole="primaryAction"] {
-    border-color: {{accent}};
-    background: {{accent}};
+    border-color: {{actionPrimary}};
+    background: {{actionPrimary}};
     color: #FFFFFF;
     font-weight: 600;
 }
 
 QPushButton[kvRole="primaryAction"]:hover {
-    border-color: {{accentHover}};
-    background: {{accentHover}};
+    border-color: {{actionPrimaryHover}};
+    background: {{actionPrimaryHover}};
+    color: #FFFFFF;
+}
+
+QPushButton[kvRole="primaryAction"]:pressed {
+    border-color: {{actionPrimaryActive}};
+    background: {{actionPrimaryActive}};
     color: #FFFFFF;
 }
 
@@ -902,6 +916,10 @@ QToolButton[kvRole="sidebarAction"]:hover {
         {"{{accentMuted}}", palette.accentMuted},
         {"{{focus}}", palette.focus},
         {"{{tabActiveText}}", palette.tabActiveText},
+        {"{{accentText}}", palette.accentText},
+        {"{{actionPrimaryHover}}", palette.actionPrimaryHover},
+        {"{{actionPrimaryActive}}", palette.actionPrimaryActive},
+        {"{{actionPrimary}}", palette.actionPrimary},
         {"{{danger}}", palette.danger},
     };
 

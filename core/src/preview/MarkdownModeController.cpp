@@ -49,10 +49,10 @@ void MarkdownModeController::configure(const QString& path, const ThemePalette& 
         QStringLiteral("#markdownModeBar { background:%1; border:1px solid %2; border-radius:8px; }"
                        "QToolButton { color:%3; background:transparent; border:0; padding:4px "
                        "12px; border-radius:6px; }"
-                       "QToolButton:checked { background:%4; color:%5; }"
+                       "QToolButton:checked { background:%4; color:%6; }"
                        "QToolButton:focus { border:1px solid %5; }")
             .arg(palette.surfaceRaised, palette.border, palette.textMain, palette.accentSubtle,
-                 palette.accent));
+                 palette.accent, palette.accentText));
     if (!enabled) {
         bar_->hide();
         surface_->setFocusProxy(nullptr);

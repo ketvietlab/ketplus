@@ -43,7 +43,7 @@ Basic.Menu {
         rightPadding: Metrics.px(28, menu.tokens)
         contentItem: Text {
             text: entry.text
-            color: !entry.enabled ? menu.tokens.textDisabled : entry.highlighted ? menu.tokens.accentActive : menu.tokens.textMain
+            color: !entry.enabled ? menu.tokens.textDisabled : entry.highlighted ? menu.tokens.accentText : menu.tokens.textMain
             font: entry.font
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
