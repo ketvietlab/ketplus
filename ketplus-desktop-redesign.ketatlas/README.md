@@ -208,6 +208,10 @@ It keeps the public Két AppShell contracts, runtime and semantic tokens;
   also lets opaque sandboxed previews load the font without cross-origin requests.
   `assets/fonts.css`, `assets/fonts/` (Inter) and `licenses/Inter-OFL.txt` are no longer
   loaded; they stay only because the wave-1 baseline manifest records their hashes.
+  Font sizes are whole pixels. Configuration defaults are integers (interface 15, editor
+  and terminal 13, Markdown 14 px), and sizes derived from the interface size are rounded
+  with `round(…, 1px)`, so no deployed setting stores a fractional size. The locked Két
+  Design System stylesheet keeps its rem sizes, which resolve to whole pixels at 16 px.
   Licenses are in `licenses/`; brand provenance is in `assets/brand/ketplus-v1/`.
 
 ## Verification

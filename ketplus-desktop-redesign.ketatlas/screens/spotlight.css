@@ -9,7 +9,7 @@
     opacity: 0.6;
 }
 .search-background h1 {
-    font-size: calc(30px * var(--kp-font-scale));
+    font-size: round(calc(30px * var(--kp-font-scale)), 1px);
 }
 .spotlight-backdrop {
     align-items: flex-start;
@@ -36,7 +36,7 @@
     background: transparent;
     flex: 1;
     min-width: 0;
-    font-size: calc(14px * var(--kp-font-scale));
+    font-size: round(calc(14px * var(--kp-font-scale)), 1px);
     padding: 9px 0;
 }
 .spotlight-hint {
@@ -134,7 +134,7 @@
     margin-bottom: 15px;
 }
 .search-empty h3 {
-    font-size: calc(14px * var(--kp-font-scale));
+    font-size: round(calc(14px * var(--kp-font-scale)), 1px);
 }
 .search-empty p {
     font-size: var(--kp-text-md);

@@ -92,7 +92,7 @@
     font-size: var(--kp-text-md);
 }
 .atlas-flow-label h2 {
-    font-size: calc(17px * var(--kp-font-scale));
+    font-size: round(calc(17px * var(--kp-font-scale)), 1px);
 }
 .atlas-flow-label p {
     font-size: var(--kp-text-md);
@@ -309,7 +309,7 @@
     margin-bottom: 20px;
 }
 .atlas-map-placeholder h2 {
-    font-size: calc(26px * var(--kp-font-scale));
+    font-size: round(calc(26px * var(--kp-font-scale)), 1px);
     margin: 9px 0 13px;
 }
 .atlas-map-placeholder p {
@@ -355,13 +355,13 @@
     box-shadow: none;
 }
 .embedded-screen .demo-onboarding h2 {
-    font-size: calc(35px * var(--kp-font-scale));
+    font-size: round(calc(35px * var(--kp-font-scale)), 1px);
 }
 .embedded-screen .demo-onboarding > p {
-    font-size: calc(15px * var(--kp-font-scale));
+    font-size: round(calc(15px * var(--kp-font-scale)), 1px);
 }
 .embedded-screen .demo-onboarding header {
-    font-size: calc(15px * var(--kp-font-scale));
+    font-size: round(calc(15px * var(--kp-font-scale)), 1px);
 }
 .embedded-screen .demo-workspaces {
     margin: 32px 0;

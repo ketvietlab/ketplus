@@ -180,28 +180,28 @@ const handlers = {
         K.go("settings", {
             theme: "light",
             system: "false",
-            fontSize: 14.95,
-            editorSize: 12.65,
-            terminalSize: 12.65,
-            markdownSize: 13.8,
+            fontSize: 15,
+            editorSize: 13,
+            terminalSize: 13,
+            markdownSize: 14,
         }),
     "save-appearance": () =>
         K.go("workspace", {
             theme: window.KetPlusTheme.preference,
             conversationWidth: document.querySelector("#conversation-width")?.value || K.query.get("conversationWidth"),
-            fontSize: document.querySelector("#ui-size")?.value || K.query.get("fontSize") || 14.95,
+            fontSize: document.querySelector("#ui-size")?.value || K.query.get("fontSize") || 15,
             editorSize:
                 document.querySelector("#editor-size")?.value.replace(" px", "") ||
                 K.query.get("editorSize") ||
-                12.65,
+                13,
             terminalSize:
                 document.querySelector("#terminal-size")?.value.replace(" px", "") ||
                 K.query.get("terminalSize") ||
-                12.65,
+                13,
             markdownSize:
                 document.querySelector("#markdown-size")?.value.replace(" px", "") ||
                 K.query.get("markdownSize") ||
-                13.8,
+                14,
             editorFont:
                 document.querySelector("#editor-font")?.value ||
                 K.query.get("editorFont") ||

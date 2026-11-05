@@ -67,7 +67,7 @@ body { --kp-text-reading: 15px; --kp-conversation-width: 760px; }
 .sidebar-inner > .brand-link { height: 58px; }
 /* AgentProductNavigation.qml owns the product rows: Body, 34px high, 2px apart.
    Divide out the mock's default 1.15 text scale; explicit font choices still scale. */
-.sidebar-inner > nav .nav-item { height: 34px; margin: 0 0 2px; padding: 0 9px; gap: 9px; font-size: calc(12px * var(--kp-font-scale) / 1.15); font-weight: 500; }
+.sidebar-inner > nav .nav-item { height: 34px; margin: 0 0 2px; padding: 0 9px; gap: 9px; font-size: round(calc(12px * var(--kp-font-scale) * 13 / 15), 1px); font-weight: 500; }
 .sidebar-inner > nav .nav-item.is-active { font-weight: 600; }
 .sidebar-inner > nav .nav-item:last-child { margin-bottom: 0; }
 .sidebar-inner > nav .nav-item .icon { width: 16px; height: 16px; flex-shrink: 0; }

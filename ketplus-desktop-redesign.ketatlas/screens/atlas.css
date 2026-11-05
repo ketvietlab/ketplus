@@ -65,7 +65,7 @@
     width: 220px;
     min-height: 151px;
     box-shadow: 0 3px 9px rgb(0 0 0 / 5%);
-    font-size: calc(5px * var(--kp-font-scale));
+    font-size: round(calc(5px * var(--kp-font-scale)), 1px);
 }
 .mini-app-top {
     border-bottom: 1px solid var(--kv-panel-border);
@@ -105,7 +105,7 @@
     flex: 1;
 }
 .mini-app-main b {
-    font-size: calc(7px * var(--kp-font-scale));
+    font-size: round(calc(7px * var(--kp-font-scale)), 1px);
     display: block;
     letter-spacing: -0.1px;
 }
@@ -124,7 +124,7 @@
 .mini-blocks div {
     border: 1px solid var(--kv-panel-border);
     padding: 7px 5px;
-    font-size: calc(5px * var(--kp-font-scale));
+    font-size: round(calc(5px * var(--kp-font-scale)), 1px);
     flex: 1;
     border-radius: 3px;
 }
@@ -164,11 +164,11 @@
     margin: 10px 0 9px;
 }
 .mini-phone > b {
-    font-size: calc(7px * var(--kp-font-scale));
+    font-size: round(calc(7px * var(--kp-font-scale)), 1px);
     display: block;
 }
 .mini-phone > p {
-    font-size: calc(4px * var(--kp-font-scale));
+    font-size: round(calc(4px * var(--kp-font-scale)), 1px);
     color: var(--kv-text-muted);
     margin: 5px 0 12px;
 }
@@ -182,7 +182,7 @@
     border: 0;
     background: var(--kv-accent);
     color: var(--kv-on-accent);
-    font-size: calc(5px * var(--kp-font-scale));
+    font-size: round(calc(5px * var(--kp-font-scale)), 1px);
     width: 100%;
     padding: 5px 0;
     border-radius: 3px;
@@ -267,7 +267,7 @@
     margin: 25px 0 28px;
 }
 .builder-welcome h2 {
-    font-size: calc(22px * var(--kp-font-scale));
+    font-size: round(calc(22px * var(--kp-font-scale)), 1px);
     margin: 19px 0 12px;
 }
 .builder-welcome p {
@@ -360,7 +360,7 @@
     margin: 28px 0 9px;
 }
 .demo-onboarding h2 {
-    font-size: calc(23px * var(--kp-font-scale));
+    font-size: round(calc(23px * var(--kp-font-scale)), 1px);
     line-height: 1.3;
     letter-spacing: -0.7px;
 }
@@ -466,7 +466,7 @@
 .mini-phone-cta {
     background: var(--kv-accent);
     color: var(--kv-on-accent);
-    font-size: calc(5px * var(--kp-font-scale));
+    font-size: round(calc(5px * var(--kp-font-scale)), 1px);
     width: 100%;
     padding: 5px 0;
     text-align: center;

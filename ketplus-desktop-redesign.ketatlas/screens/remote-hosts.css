@@ -29,7 +29,7 @@
     min-width: 0;
 }
 .remote-heading h1 {
-    font-size: 1.25rem;
+    font-size: 20px;
     line-height: 1.5rem;
     font-weight: 600;
     letter-spacing: 0;
@@ -43,7 +43,7 @@
 .remote-pending p,
 .remote-foot p {
     color: var(--kv-text-muted);
-    font-size: 0.8125rem;
+    font-size: 13px;
     line-height: 1.25rem;
 }
 .remote-heading p {
@@ -52,7 +52,7 @@
 .remote-section-head h2,
 .remote-empty h2,
 .remote-pending h2 {
-    font-size: 0.875rem;
+    font-size: 14px;
     line-height: 1.25rem;
     font-weight: 600;
     letter-spacing: 0;
@@ -87,21 +87,21 @@
     border-radius: var(--kv-radius-full);
     color: var(--kv-accent-text);
     background: var(--kv-accent-subtle);
-    font-size: 0.75rem;
+    font-size: 12px;
     line-height: 1rem;
     font-weight: 600;
 }
 .remote-steps strong,
 .remote-host-name strong,
 .remote-identity strong {
-    font-size: 0.8125rem;
+    font-size: 13px;
     line-height: 1.25rem;
     font-weight: 600;
 }
 .remote-steps p {
     margin-top: 4px;
     color: var(--kv-text-muted);
-    font-size: 0.75rem;
+    font-size: 12px;
     line-height: 1rem;
 }
 .remote-code-form {
@@ -112,7 +112,7 @@
 .remote-code-form label,
 .remote-check,
 .remote-facts dt {
-    font-size: 0.8125rem;
+    font-size: 13px;
     line-height: 1.25rem;
     font-weight: 500;
 }
@@ -127,7 +127,7 @@
     height: 32px;
     min-height: 32px;
     padding: 5px 10px;
-    font-size: 0.8125rem;
+    font-size: 13px;
     line-height: 1.25rem;
     font-family: var(--kv-font-mono);
     text-transform: uppercase;
@@ -138,7 +138,7 @@
 }
 .remote-help,
 .remote-error {
-    font-size: 0.75rem;
+    font-size: 12px;
     line-height: 1rem;
 }
 .remote-help {
@@ -185,12 +185,12 @@
     color: var(--kv-text-muted);
 }
 .remote-compare > span {
-    font-size: 0.75rem;
+    font-size: 12px;
     line-height: 1rem;
 }
 .remote-compare strong {
     font-family: var(--kv-font-mono);
-    font-size: 1.875rem;
+    font-size: 30px;
     line-height: 2.5rem;
     font-weight: 600;
     letter-spacing: 0.12em;
@@ -275,7 +275,7 @@
 .remote-facts dd {
     min-width: 0;
     margin: 0;
-    font-size: 0.8125rem;
+    font-size: 13px;
     line-height: 1.25rem;
     overflow-wrap: anywhere;
 }
@@ -352,14 +352,14 @@
     gap: 8px;
 }
 .remote-method strong {
-    font-size: 0.8125rem;
+    font-size: 13px;
     line-height: 1.25rem;
     font-weight: 600;
 }
 .remote-method p,
 .remote-method li {
     color: var(--kv-text-muted);
-    font-size: 0.75rem;
+    font-size: 12px;
     line-height: 1rem;
 }
 .remote-method ul {
@@ -371,7 +371,7 @@
 .remote-section code,
 .connections-remote code {
     font-family: var(--kv-font-mono);
-    font-size: 0.75rem;
+    font-size: 12px;
 }
 .remote-ssh-form {
     margin-top: 16px;
@@ -382,7 +382,7 @@
 }
 .remote-fingerprint {
     font-family: var(--kv-font-mono);
-    font-size: 0.8125rem;
+    font-size: 13px;
     overflow-wrap: anywhere;
 }
 .remote-command {
@@ -399,7 +399,7 @@
     padding: 4px 4px 4px 12px;
     border-bottom: 1px solid var(--kv-border);
     color: var(--kv-text-muted);
-    font-size: 0.75rem;
+    font-size: 12px;
 }
 .remote-command pre {
     margin: 0;
@@ -409,6 +409,6 @@
 }
 .remote-command code {
     font-family: var(--kv-font-mono);
-    font-size: 0.75rem;
+    font-size: 12px;
     line-height: 1.25rem;
 }

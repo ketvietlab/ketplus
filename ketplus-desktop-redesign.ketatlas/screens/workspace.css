@@ -24,7 +24,7 @@
     flex-shrink: 0;
 }
 .agent-heading h2 {
-    font-size: calc(15px * var(--kp-font-scale));
+    font-size: round(calc(15px * var(--kp-font-scale)), 1px);
     letter-spacing: -0.2px;
 }
 .agent-heading p {
@@ -314,7 +314,7 @@
     background: var(--kv-surface-raised);
 }
 .answer h3 {
-    font-size: calc(14px * var(--kp-font-scale));
+    font-size: round(calc(14px * var(--kp-font-scale)), 1px);
     margin: 0 0 7px;
 }
 .answer ul {
@@ -575,7 +575,7 @@
     letter-spacing: 1.6px;
 }
 .welcome h1 {
-    font-size: calc(32px * var(--kp-font-scale));
+    font-size: round(calc(32px * var(--kp-font-scale)), 1px);
     letter-spacing: -1.15px;
     text-align: center;
 }
@@ -1064,7 +1064,7 @@
         display: none;
     }
     .welcome h1 {
-        font-size: calc(27px * var(--kp-font-scale));
+        font-size: round(calc(27px * var(--kp-font-scale)), 1px);
     }
     .question-card {
         padding: 12px;

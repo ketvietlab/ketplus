@@ -1,32 +1,34 @@
-/* User-selected 15% increase; layout dimensions and Két tokens stay unchanged. */
+/* Every font size is a whole pixel: defaults are integers a deployed configuration can store,
+   and sizes derived from the interface size are rounded. The scale is the interface size over
+   13px; layout dimensions and Két tokens stay unchanged. */
 body {
-    --kp-font-scale: 1.15;
-    --kp-ui-size: 14.95px;
-    --kp-editor-size: 12.65px;
-    --kp-terminal-size: 12.65px;
-    --kp-markdown-size: 13.8px;
-    --kp-text-tiny: calc(8px * var(--kp-font-scale));
-    --kp-text-xs: calc(9px * var(--kp-font-scale));
-    --kp-text-sm: calc(10px * var(--kp-font-scale));
-    --kp-text-md: calc(11px * var(--kp-font-scale));
-    --kp-text-base: calc(12px * var(--kp-font-scale));
-    --kp-text-reading: calc(12px * var(--kp-font-scale) - 1px);
+    --kp-font-scale: calc(15 / 13);
+    --kp-ui-size: 15px;
+    --kp-editor-size: 13px;
+    --kp-terminal-size: 13px;
+    --kp-markdown-size: 14px;
+    --kp-text-tiny: round(calc(8px * var(--kp-font-scale)), 1px);
+    --kp-text-xs: round(calc(9px * var(--kp-font-scale)), 1px);
+    --kp-text-sm: round(calc(10px * var(--kp-font-scale)), 1px);
+    --kp-text-md: round(calc(11px * var(--kp-font-scale)), 1px);
+    --kp-text-base: round(calc(12px * var(--kp-font-scale)), 1px);
+    --kp-text-reading: round(calc(12px * var(--kp-font-scale) - 1px), 1px);
 }
 
 /* Sidebar text is 1px smaller; turn and worktree status labels keep their size. */
 .sidebar-inner {
-    --kp-text-xs: calc(9px * var(--kp-font-scale) - 1px);
-    --kp-text-sm: calc(10px * var(--kp-font-scale) - 1px);
-    --kp-text-md: calc(11px * var(--kp-font-scale) - 1px);
-    --kp-text-base: calc(12px * var(--kp-font-scale) - 1px);
+    --kp-text-xs: round(calc(9px * var(--kp-font-scale) - 1px), 1px);
+    --kp-text-sm: round(calc(10px * var(--kp-font-scale) - 1px), 1px);
+    --kp-text-md: round(calc(11px * var(--kp-font-scale) - 1px), 1px);
+    --kp-text-base: round(calc(12px * var(--kp-font-scale) - 1px), 1px);
     font-size: calc(var(--kp-ui-size) - 1px);
 }
 .sidebar-inner .nav-item {
     font-size: var(--kp-text-base);
 }
 .sidebar-inner .conversation-status {
-    --kp-text-sm: calc(10px * var(--kp-font-scale));
+    --kp-text-sm: round(calc(10px * var(--kp-font-scale)), 1px);
 }
 .sidebar-inner .tree-activity {
-    --kp-text-xs: calc(9px * var(--kp-font-scale));
+    --kp-text-xs: round(calc(9px * var(--kp-font-scale)), 1px);
 }

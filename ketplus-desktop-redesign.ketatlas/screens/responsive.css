@@ -50,7 +50,7 @@
         padding: 25px;
     }
     .markdown-preview h1 {
-        font-size: calc(26px * var(--kp-font-scale));
+        font-size: round(calc(26px * var(--kp-font-scale)), 1px);
     }
     .atlas-grid {
         grid-template-columns: 1fr;
@@ -88,7 +88,7 @@
         flex-wrap: wrap;
     }
     .page-heading h1 {
-        font-size: calc(23px * var(--kp-font-scale));
+        font-size: round(calc(23px * var(--kp-font-scale)), 1px);
     }
 }
 @media (max-width: 1150px) {
@@ -103,7 +103,7 @@
         gap: 25px;
     }
     .signin-story h1 {
-        font-size: calc(28px * var(--kp-font-scale));
+        font-size: round(calc(28px * var(--kp-font-scale)), 1px);
     }
     .illustration-monitor {
         width: 180px;
@@ -125,7 +125,7 @@
         padding-right: 0;
     }
     .connection-overview h2 {
-        font-size: calc(17px * var(--kp-font-scale));
+        font-size: round(calc(17px * var(--kp-font-scale)), 1px);
     }
     .connection-overview p {
         font-size: var(--kp-text-md);
@@ -223,7 +223,7 @@
         width: 100%;
     }
     .signin-story h1 {
-        font-size: calc(27px * var(--kp-font-scale));
+        font-size: round(calc(27px * var(--kp-font-scale)), 1px);
     }
     .signin-story > p {
         max-width: none;
@@ -291,16 +291,16 @@ html {
     scrollbar-color: var(--kv-border-default) transparent;
 }
 body .nav-item {
-    font-size: calc(12px * var(--kp-font-scale));
+    font-size: round(calc(12px * var(--kp-font-scale)), 1px);
 }
 .source-line code {
-    font-size: var(--kp-editor-size, 12.65px);
+    font-size: var(--kp-editor-size, 13px);
     font-family: var(--kp-editor-font, var(--kv-font-mono));
 }
 .terminal-output,
 #terminal-command {
-    font-size: var(--kp-terminal-size, 12.65px);
+    font-size: var(--kp-terminal-size, 13px);
 }
 .markdown-preview {
-    font-size: var(--kp-markdown-size, 13.8px);
+    font-size: var(--kp-markdown-size, 14px);
 }

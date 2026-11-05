@@ -131,13 +131,14 @@ const fragmentState = new URLSearchParams(location.hash.slice(1)).get("demo");
 if (fragmentState) K.query.set("demo", fragmentState);
 K.state = K.query.get("state") || "ready";
 for (const [queryKey, cssKey, defaultSize] of [
-    ["fontSize", "ui", 14.95],
-    ["editorSize", "editor", 12.65],
-    ["terminalSize", "terminal", 12.65],
-    ["markdownSize", "markdown", 13.8],
+    ["fontSize", "ui", 15],
+    ["editorSize", "editor", 13],
+    ["terminalSize", "terminal", 13],
+    ["markdownSize", "markdown", 14],
 ]) {
     if (K.query.has(queryKey)) {
-        const size = Math.min(18, Math.max(10, parseFloat(K.query.get(queryKey)) || defaultSize));
+        // Sizes are whole pixels; a fractional value from an old link rounds.
+        const size = Math.min(18, Math.max(10, Math.round(parseFloat(K.query.get(queryKey))) || defaultSize));
         document.body.style.setProperty(`--kp-${cssKey}-size`, `${size}px`);
         if (cssKey === "ui") document.body.style.setProperty("--kp-font-scale", size / 13);
     }

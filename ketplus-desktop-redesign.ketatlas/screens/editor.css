@@ -432,10 +432,10 @@
     line-height: 1.85;
 }
 .markdown-preview h1 {
-    font-size: calc(31px * var(--kp-font-scale));
+    font-size: round(calc(31px * var(--kp-font-scale)), 1px);
 }
 .markdown-lead {
-    font-size: calc(14px * var(--kp-font-scale)) !important;
+    font-size: round(calc(14px * var(--kp-font-scale)), 1px) !important;
     color: var(--kv-text-secondary);
     margin-top: 12px;
 }
@@ -445,7 +445,7 @@
     margin: 28px 0;
 }
 .markdown-preview h2 {
-    font-size: calc(17px * var(--kp-font-scale));
+    font-size: round(calc(17px * var(--kp-font-scale)), 1px);
     margin: 24px 0 10px;
 }
 .markdown-callout {

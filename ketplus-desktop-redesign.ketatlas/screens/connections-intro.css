@@ -7,7 +7,7 @@
 .connections-hero { display: grid; grid-template-columns: .9fr 1.1fr; align-items: center; gap: 28px; margin: 48px 0 54px; }
 .connections-hero-copy { padding: 10px 0; }
 .connections-hero-copy .eyebrow { font-size: 10px; letter-spacing: 1.4px; color: var(--kv-accent-text); }
-.connections-hero-copy h2 { font-size: clamp(34px, 3.2vw, 46px); line-height: 1.13; letter-spacing: -1.7px; font-weight: 600; margin: 16px 0 20px; }
+.connections-hero-copy h2 { font-size: round(clamp(34px, 3vw, 46px), 1px); line-height: 1.13; letter-spacing: -1.7px; font-weight: 600; margin: 16px 0 20px; }
 .connections-hero-copy > p { max-width: 360px; color: var(--kv-text-muted); font-size: 14px; line-height: 1.85; }
 .connections-signin { margin-top: 28px; display: flex; align-items: flex-start; flex-direction: column; gap: 11px; }
 .connections-signin .btn { min-height: 40px; padding: 9px 20px; gap: 22px; }

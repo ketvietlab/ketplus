@@ -94,18 +94,18 @@ p {
     margin: 0;
 }
 h1 {
-    font-size: calc(25px * var(--kp-font-scale));
+    font-size: round(calc(25px * var(--kp-font-scale)), 1px);
     line-height: 1.25;
     font-weight: 620;
     letter-spacing: -0.8px;
 }
 h2 {
-    font-size: calc(18px * var(--kp-font-scale));
+    font-size: round(calc(18px * var(--kp-font-scale)), 1px);
     font-weight: 600;
     letter-spacing: -0.35px;
 }
 h3 {
-    font-size: calc(14px * var(--kp-font-scale));
+    font-size: round(calc(14px * var(--kp-font-scale)), 1px);
     font-weight: 600;
 }
 p + p {
@@ -249,7 +249,7 @@ code {
     padding: 0 7px;
 }
 .brand-link strong {
-    font-size: calc(18px * var(--kp-font-scale));
+    font-size: round(calc(18px * var(--kp-font-scale)), 1px);
     letter-spacing: -0.5px;
 }
 .brand-link strong span {
@@ -805,7 +805,7 @@ code {
     border-bottom: 1px solid var(--kv-panel-border);
 }
 .modal > header h2 {
-    font-size: calc(16px * var(--kp-font-scale));
+    font-size: round(calc(16px * var(--kp-font-scale)), 1px);
 }
 .modal-body {
     padding: 22px;

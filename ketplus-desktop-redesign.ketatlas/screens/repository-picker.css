@@ -1,5 +1,5 @@
 /* Product recipe within the existing native-app HTML mock; public DS assets stay immutable. */
-body[data-screen^="repository-picker"] { font-size: .8125rem; line-height: 1.5385; }
+body[data-screen^="repository-picker"] { font-size: 13px; line-height: 1.5385; }
 .rp-sidebar { height: 100%; display: flex; flex-direction: column; padding: 0 10px; }
 .rp-brand { display: flex; align-items: center; gap: 8px; height: 60px; font-size: 20px; font-weight: 700; }
 .rp-brand img { width: 30px; height: 30px; object-fit: contain; }

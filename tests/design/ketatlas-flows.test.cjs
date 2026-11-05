@@ -1196,3 +1196,20 @@ test("no-result model search keeps the compact draft and recovers when cleared",
     a.input("#model-search", "");
     assert.equal(a.document.querySelector("#model-search-empty").hidden, true);
 });
+test("font sizes are whole pixels, including configuration defaults", () => {
+    const screens = path.join(root, "screens");
+    for (const file of fs.readdirSync(screens).filter((name) => name.endsWith(".css"))) {
+        const css = fs.readFileSync(path.join(screens, file), "utf8");
+        for (const [declaration] of css.matchAll(/font-size:[^;}]+|--kp-(?:ui|editor|terminal|markdown)-size:[^;}]+/g)) {
+            assert.doesNotMatch(declaration, /\d\.\d/, `${file}: ${declaration}`);
+            // A size derived from the scale must round to a whole pixel.
+            if (/--kp-font-scale|vw/.test(declaration)) assert.match(declaration, /round\(/, `${file}: ${declaration}`);
+        }
+        for (const [token] of css.matchAll(/--kp-text-[a-z]+:[^;}]+/g))
+            if (/--kp-font-scale/.test(token)) assert.match(token, /round\(/, `${file}: ${token}`);
+    }
+    const core = fs.readFileSync(path.join(screens, "core.js"), "utf8");
+    for (const [, size] of core.matchAll(/\["\w+Size", "\w+", ([\d.]+)\]/g)) assert.ok(Number.isInteger(Number(size)), size);
+    const settings = fs.readFileSync(path.join(screens, "settings.js"), "utf8");
+    for (const [, size] of settings.matchAll(/K\.fontSizes\("\w+", ([\d.]+)\)/g)) assert.ok(Number.isInteger(Number(size)), size);
+});
