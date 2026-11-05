@@ -2241,7 +2241,7 @@
           "id": "repository-picker-tests",
           "kind": "test",
           "title": "18 focused model/DOM tests and scoped KetPlus browser verification; mock only",
-          "url": "./evidence/repository-picker/verification.json",
+          "url": "../tests/design/repository-picker.test.cjs",
           "state": "passed",
           "revision": "49c18f2d14d3 + prototype:942cdeeaecfc",
           "environment": "Node 24.14.1 / jsdom 26.1.0 / KetPlus browser Chrome 155.0.8059.84; Desktop 1440x900 and iPhone 390x844 light/dark; layout 320/767/768px"
@@ -2283,7 +2283,7 @@
           "id": "repository-picker-tests",
           "kind": "test",
           "title": "18 focused model/DOM tests and scoped KetPlus browser verification; mock only",
-          "url": "./evidence/repository-picker/verification.json",
+          "url": "../tests/design/repository-picker.test.cjs",
           "state": "passed",
           "revision": "49c18f2d14d3 + prototype:942cdeeaecfc",
           "environment": "Node 24.14.1 / jsdom 26.1.0 / KetPlus browser Chrome 155.0.8059.84; Desktop 1440x900 and iPhone 390x844 light/dark; layout 320/767/768px"

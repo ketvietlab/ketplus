@@ -35,7 +35,7 @@ Bundle thiết kế .ketatlas trong private Desktop là artifact của sản ph�
 | [04 — Pixel & performance](04-pixel-performance-gates.md) | Reference khóa, screenshot gates, benchmark và DoD |
 | [Coverage](coverage.json) | Inventory có thể kiểm tra tự động: mỗi state → node → screen → task |
 
-Nguồn thiết kế: [DESIGN](../../ketplus-desktop-redesign.ketatlas/DESIGN.md), [FLOW-CONTRACT](../../ketplus-desktop-redesign.ketatlas/FLOW-CONTRACT.md), [review resolution](../../ketplus-desktop-redesign.ketatlas/REVIEW-RESOLUTION.md). Ownership: [repository boundaries](../../docs/repository-boundaries.md), [architecture](../../docs/architecture.md), [ADR 0004](../../docs/decisions/0004-canonical-transcript-hybrid-retention.md).
+Nguồn thiết kế: [DESIGN](../../ketplus.ketatlas/DESIGN.md), [FLOW-CONTRACT](../../ketplus.ketatlas/FLOW-CONTRACT.md), [review resolution](../../ketplus.ketatlas/REVIEW-RESOLUTION.md). Ownership: [repository boundaries](../../docs/repository-boundaries.md), [architecture](../../docs/architecture.md), [ADR 0004](../../docs/decisions/0004-canonical-transcript-hybrid-retention.md).
 
 ## Baseline đã kiểm tra
 

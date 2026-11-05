@@ -50,7 +50,7 @@ and [FLOW-CONTRACT.md](FLOW-CONTRACT.md) for state and ownership contracts.
 ## Open
 
 ```sh
-npx --yes ketatlas@0.6.1 serve ./ketplus-desktop-redesign.ketatlas --port 4198
+npx --yes ketatlas@0.6.1 serve ./ketplus.ketatlas --port 4198
 ```
 
 Open `http://127.0.0.1:4198`. Select a workflow, then choose **Open screen**.
@@ -190,7 +190,7 @@ It keeps the public Két AppShell contracts, runtime and semantic tokens;
 - Official desktop adapter: `@ketvietlab/design-system@0.1.44`, revision
   `e8adee2da3bfeea66c01f46f110fdc5243fb23c0` (ketviet PR #2177, Két Blue); see
   descriptor and lock. Refresh it with the package's
-  `ket-design-system-atlas materialize ketplus-desktop-redesign.ketatlas` from that
+  `ket-design-system-atlas materialize ketplus.ketatlas` from that
   revision, after `npm run design:inventory` and `npm run build:design-system` in
   `ketsuite/`. `assets/fonts/InterVariable*.woff2` are the font files the
   stylesheet references, copied unchanged from the same revision.
@@ -218,8 +218,8 @@ It keeps the public Két AppShell contracts, runtime and semantic tokens;
 
 ```sh
 npx --yes ketatlas@0.6.1 discover . --json
-npx --yes ketatlas@0.6.1 validate ./ketplus-desktop-redesign.ketatlas
-npx --yes ketatlas@0.6.1 audit ./ketplus-desktop-redesign.ketatlas --strict
+npx --yes ketatlas@0.6.1 validate ./ketplus.ketatlas
+npx --yes ketatlas@0.6.1 audit ./ketplus.ketatlas --strict
 
 atlas_test_deps=$(mktemp -d)
 npm install --prefix "$atlas_test_deps" --no-audit --no-fund jsdom@26.1.0
@@ -387,14 +387,13 @@ Focused checks (no provider quota):
 
 ```sh
 NODE_PATH=/tmp/ketplus-repository-picker-deps/node_modules node --test tests/design/repository-picker.test.cjs
-ketatlas validate ketplus-desktop-redesign.ketatlas
-ketatlas audit ketplus-desktop-redesign.ketatlas --strict
-ketatlas serve ketplus-desktop-redesign.ketatlas --port 62350 --no-preload
+ketatlas validate ketplus.ketatlas
+ketatlas audit ketplus.ketatlas --strict
+ketatlas serve ketplus.ketatlas --port 62350 --no-preload
 ```
 
 Use the existing external jsdom 26.1.0 setup described above; dependencies are not
-installed inside the bundle. Verification and original browser captures are in
-`evidence/repository-picker/`. Browser checks cover direct prototype interactions
+installed inside the bundle. Browser checks cover direct prototype interactions
 at 1440 × 900 and 390 × 844 in light/dark, plus layout at 320/767/768px. Atlas's
 sandboxed **Try** iframe and its local resources load; the browser worker cannot
 observe inside iframes, so actions were exercised on the exact standalone routes.
@@ -432,9 +431,6 @@ instead of the mock's dashed one.
 - Fixtures: `?repo=ketviet`, `&context=conversation`, `&tags=edit[&tagQuery=Release]`,
   `&tagFilter=account`, `&tags=manage`, `&tags=header` (editor opened from the header). Conversation numbers are a stable hash for the mock;
   native numbers come from the daemon (ADR 0027).
-- Evidence: `evidence/conversation-tags/` (dark rows, the tag editor, header tags and Manage tags in light theme),
-  1440×900, Chromium through KetPlus browser tools. Code: `screens/conversation-tags.js`,
-  `screens/conversation-tag-actions.js`, `screens/conversation-tags.css`.
 
 ## Agent messaging between conversations
 
@@ -459,6 +455,3 @@ The mock shows the Desktop projection only.
   open conversation is never offered.
 - Fixtures: `?conversation=startup` (receiver), `?conversation=navigation` (sender),
   `&agent=reply`, `&agent=held`, `&mention=conversation` (picker open on `Ask #`).
-- Evidence: `evidence/agent-messaging/` (receiver and reply in dark theme, held note with the
-  picker in light theme), 1440×900, Chromium through KetPlus browser tools. Code:
-  `screens/agent-messages.js`, `screens/agent-messages.css`.

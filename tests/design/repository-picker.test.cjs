@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const M = require("../../ketplus-desktop-redesign.ketatlas/screens/repository-picker-model.js");
+const M = require("../../ketplus.ketatlas/screens/repository-picker-model.js");
 
 test("current repository stays first, including while searching another repository", () => {
     const state = M.createState();

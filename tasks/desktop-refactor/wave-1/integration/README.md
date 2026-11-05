@@ -28,7 +28,7 @@ Artifacts:
 Baseline sources:
 
 - Desktop base: `origin/develop` at `7efc058d99b37f269fdebd5b69044fff32b84195`.
-- Design artifact: [ketplus-desktop-redesign.ketatlas](../../../../ketplus-desktop-redesign.ketatlas/atlas.json), merged by PR #16 and repinned at the pixel-perfect + transcript-v2 integration revision `d0591869113ad4420961bff2ef2f2ac0ea840b58`.
+- Design artifact: [ketplus.ketatlas](../../../../ketplus.ketatlas/atlas.json), merged by PR #16 and repinned at the pixel-perfect + transcript-v2 integration revision `d0591869113ad4420961bff2ef2f2ac0ea840b58`.
 - Plan source: PR #17 exact source revision `37a14562a11b6ec9fb7f137e9e93c95af464bc8d`. R00-B observed a squash merge on `origin/develop` at `73bddc13aab3425636fbd2f0a61860d95d13402c`; the source revision is not an ancestor of develop.
 - Mandatory repository docs read: [project status](../../../../docs/project-status.md), [repository boundaries](../../../../docs/repository-boundaries.md), [architecture](../../../../docs/architecture.md), [development](../../../../docs/development.md), [testing](../../../../docs/testing.md), [product architecture](../../../../docs/product-architecture.md), and [licensing](../../../../docs/licensing.md).
 
