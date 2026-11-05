@@ -23,6 +23,9 @@ class RepositoryMetadataStore final {
     QHash<QString, RepositoryMetadata> lookupAll(const QStringList& paths) const;
     void save(const RepositoryMetadata& metadata) const;
     void remove(const QString& path) const;
+    // The checkout that owns `path`: the nearest folder at or above it with a `.git` entry,
+    // canonical. Empty when there is none (a bare repository or no repository).
+    static QString checkoutRoot(const QString& path);
 
   private:
     QString databasePath_;

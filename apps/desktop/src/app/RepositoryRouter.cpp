@@ -41,8 +41,11 @@ RepositoryLocation locateRepository(const QString& path) {
         git.waitForFinished();
         // A slow Git is not "no repository": keep the last verified identity, so linked
         // worktrees still route to one window and endpoint.
-        if (const auto cached = RepositoryMetadataStore().lookup(canonical))
-            return {cached->identity, canonical};
+        if (const auto cached = RepositoryMetadataStore().lookup(canonical)) {
+            // `canonical` can be a folder inside the checkout; route to the checkout itself.
+            const QString checkout = RepositoryMetadataStore::checkoutRoot(canonical);
+            return {cached->identity, checkout.isEmpty() ? canonical : checkout};
+        }
         return {canonical, canonical};
     }
     const auto lines = QString::fromUtf8(git.readAllStandardOutput()).trimmed().split('\n');
@@ -222,16 +225,27 @@ void RepositoryRouter::registerLocation(const QString& normalized, const QString
         while (auto* socket = server->nextPendingConnection()) {
             connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
             QTimer::singleShot(requestLifetimeMs, socket, &QObject::deleteLater);
+            // Bounds what Qt buffers for this client, including while the lookup runs.
+            socket->setReadBufferSize(maximumRequestBytes + 1);
             connect(socket, &QLocalSocket::readyRead, socket, [this, socket, normalized] {
                 if (!socket->canReadLine()) {
                     if (socket->bytesAvailable() > maximumRequestBytes)
                         socket->abort();
                     return;
                 }
-                // One request per connection; later data is ignored.
+                const QByteArray line = socket->readLine(maximumRequestBytes + 2);
+                if (line.size() > maximumRequestBytes || !line.endsWith('\n')) {
+                    socket->abort();
+                    return;
+                }
+                // One request per connection: anything after it ends the connection.
                 disconnect(socket, &QLocalSocket::readyRead, socket, nullptr);
-                const auto request =
-                    QJsonDocument::fromJson(socket->readLine(maximumRequestBytes)).object();
+                connect(socket, &QLocalSocket::readyRead, socket, [socket] { socket->abort(); });
+                if (socket->bytesAvailable() > 0) {
+                    socket->abort();
+                    return;
+                }
+                const auto request = QJsonDocument::fromJson(line).object();
                 const QString action = request.value("action").toString();
                 const bool opensFile = action == QStringLiteral("openFile") ||
                                        action == QStringLiteral("openFileDiff");

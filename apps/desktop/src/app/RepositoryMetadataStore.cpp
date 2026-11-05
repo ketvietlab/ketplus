@@ -49,24 +49,27 @@ class Connection final {
     QString name_;
 };
 // A replaced checkout (deleted and re-cloned, or a worktree recreated for another
-// repository) keeps its path but not its Git metadata, so the root's `.git` must still
-// belong to the cached identity.
-bool rootBelongsToIdentity(const RepositoryMetadata& metadata) {
-    const QString identity = QFileInfo(metadata.identity).canonicalFilePath();
-    const QFileInfo git(QDir(metadata.root).filePath(QStringLiteral(".git")));
+// repository) keeps its path but not its Git metadata, so the checkout that owns the
+// looked-up path must still belong to the cached identity.
+bool ownedByIdentity(const QString& path, const QString& cachedIdentity) {
+    const QString identity = QFileInfo(cachedIdentity).canonicalFilePath();
     if (identity.isEmpty())
         return false;
+    const QString checkout = RepositoryMetadataStore::checkoutRoot(path);
+    if (checkout.isEmpty()) { // A bare repository: the path lies inside its Git directory.
+        const QString canonical = QFileInfo(path).canonicalFilePath();
+        return canonical == identity || canonical.startsWith(identity + QLatin1Char('/'));
+    }
+    const QFileInfo git(QDir(checkout).filePath(QStringLiteral(".git")));
     if (git.isDir())
         return git.canonicalFilePath() == identity;
-    if (!git.isFile()) // A bare repository's root is its own identity.
-        return QFileInfo(metadata.root).canonicalFilePath() == identity;
     QFile file(git.absoluteFilePath());
     if (!file.open(QIODevice::ReadOnly))
         return false;
     const QString line = QString::fromUtf8(file.readLine(4096)).trimmed();
     if (!line.startsWith(QStringLiteral("gitdir:")))
         return false;
-    const QString target = QDir(metadata.root).absoluteFilePath(line.mid(7).trimmed());
+    const QString target = QDir(checkout).absoluteFilePath(line.mid(7).trimmed());
     const QString resolved = QFileInfo(target).canonicalFilePath();
     return resolved == identity || resolved.startsWith(identity + QLatin1Char('/'));
 }
@@ -78,6 +81,19 @@ RepositoryMetadataStore::RepositoryMetadataStore(QString databasePath)
               ? QDir(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation))
                     .filePath(QStringLiteral("repository-metadata.sqlite"))
               : std::move(databasePath)) {}
+
+QString RepositoryMetadataStore::checkoutRoot(const QString& path) {
+    QString current = QFileInfo(path).canonicalFilePath();
+    while (!current.isEmpty()) {
+        if (QFileInfo::exists(QDir(current).filePath(QStringLiteral(".git"))))
+            return current;
+        const QString parent = QFileInfo(current).absolutePath();
+        if (parent == current)
+            break;
+        current = parent;
+    }
+    return {};
+}
 
 std::optional<RepositoryMetadata> RepositoryMetadataStore::lookup(const QString& path) const {
     const auto found = lookupAll({path});
@@ -111,7 +127,7 @@ RepositoryMetadataStore::lookupAll(const QStringList& paths) const {
         query.finish();
         // Never present a cached repo whose checkout or Git metadata disappeared or changed.
         if (QFileInfo(metadata.root).isDir() && QFileInfo::exists(metadata.identity) &&
-            rootBelongsToIdentity(metadata))
+            ownedByIdentity(metadata.path, metadata.identity))
             result.insert(path, metadata);
     }
     return result;

@@ -45,8 +45,10 @@ Qt application shell
   router is destroyed, and only the window's latest folder is registered, so
   opening a folder never waits for Git.
   Desktop repository pickers use a separate disposable SQLite metadata cache
-  for immediate names, with Git validation in the background; cached metadata
-  is never trusted for IPC routing. Batch reads (the sidebar's recent
+  for immediate names, with Git validation in the background. IPC routing
+  trusts cached metadata only when the identity lookup times out, and only if
+  the checkout owning the path still belongs to the cached identity
+  ([ADR 0004](decisions/0004-repository-navigation-metadata-cache.md)). Batch reads (the sidebar's recent
   repositories) share one SQLite connection. Those validation jobs run on a window-owned
   bounded thread pool, which is drained before child services and QApplication
   tear down so Git processes and SQLite connections cannot escape shutdown.

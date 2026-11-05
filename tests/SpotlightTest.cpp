@@ -4,6 +4,8 @@
 #include <QApplication>
 #include <QDir>
 #include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -30,6 +32,18 @@ class SpotlightTest final : public QObject {
                git({"-C", root, "-c", "user.name=Test", "-c", "user.email=test@example.invalid",
                     "commit", "--allow-empty", "-qm", "Initial"}) &&
                git({"-C", root, "worktree", "add", "-qb", "linked", worktree});
+    }
+    // A `git` that hangs, so every lookup hits the router's 1.5 s timeout.
+    static QString slowGitDirectory(const QTemporaryDir& directory) {
+        const QString folder = directory.filePath("slow-git");
+        QDir().mkpath(folder);
+        QFile script(folder + "/git");
+        script.open(QIODevice::WriteOnly);
+        script.write("#!/bin/sh\n/bin/sleep 5\n");
+        script.close();
+        script.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                              QFileDevice::ExeOwner);
+        return folder;
     }
   private slots:
     void initTestCase() {
@@ -117,6 +131,59 @@ class SpotlightTest final : public QObject {
         client.write(QByteArray(32 * 1024, 'a'));
         QVERIFY(client.waitForBytesWritten(1000));
         QTRY_COMPARE_WITH_TIMEOUT(client.state(), QLocalSocket::UnconnectedState, 600);
+        QVERIFY(!window.isVisible());
+    }
+
+    void timeoutRoutesToTheCachedCheckout() {
+        QTemporaryDir directory;
+        const auto root = directory.filePath("project");
+        const auto linked = directory.filePath("project-feature");
+        QVERIFY(createWorktree(root, linked));
+        QVERIFY(QDir().mkpath(linked + "/src"));
+        QFile file(linked + "/src/file.txt");
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("text\n");
+        file.close();
+        QWidget window;
+        ketplus::RepositoryRouter router;
+        router.registerWindow(linked, &window);
+        QCOMPARE(ketplus::RepositoryRouter::repositoryRoot(linked + "/src"),
+                 ketplus::RepositoryRouter::canonicalPath(root));
+        QSignalSpy worktrees(&router, &ketplus::RepositoryRouter::worktreeRequested);
+        QSignalSpy files(&router, &ketplus::RepositoryRouter::fileRequested);
+        QSignalSpy opened(&router, &ketplus::RepositoryRouter::openFileRequested);
+        const auto oldPath = qgetenv("PATH");
+        qputenv("PATH", slowGitDirectory(directory).toUtf8());
+        router.openFile(file.fileName());
+        qputenv("PATH", oldPath);
+        // The window stays on its checkout instead of switching into `src`.
+        QCOMPARE(files.count(), 1);
+        QCOMPARE(worktrees.count(), 0);
+        QCOMPARE(opened.count(), 0);
+    }
+
+    void dropsDataAfterTheRoutingRequest() {
+        QTemporaryDir repo;
+        QTemporaryDir directory;
+        QWidget window;
+        ketplus::RepositoryRouter router;
+        router.registerWindow(repo.path(), &window);
+        QLocalSocket client;
+        client.connectToServer(ketplus::RepositoryRouter::endpointName(repo.path()));
+        QVERIFY(client.waitForConnected(1000));
+        const auto oldPath = qgetenv("PATH");
+        qputenv("PATH", slowGitDirectory(directory).toUtf8());
+        const QByteArray request =
+            QJsonDocument(QJsonObject{{"action", "activate"}, {"path", repo.path()}})
+                .toJson(QJsonDocument::Compact) +
+            '\n';
+        client.write(request + QByteArray(512 * 1024, 'a'));
+        // Cut off well before the 1.5 s lookup could answer, without buffering the rest.
+        QTRY_COMPARE_WITH_TIMEOUT(client.state(), QLocalSocket::UnconnectedState, 1000);
+        for (auto* socket : router.findChildren<QLocalSocket*>())
+            QVERIFY(socket->bytesAvailable() <= 16 * 1024 + 1);
+        QTest::qWait(1700);
+        qputenv("PATH", oldPath);
         QVERIFY(!window.isVisible());
     }
 
