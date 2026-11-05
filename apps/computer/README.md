@@ -70,6 +70,14 @@ scripts/build-fixture.sh
 node scripts/e2e.mjs "dist/KetPlus Computer.app" "dist/KetPlus Computer Fixture.app" [--manual-esc]
 ```
 
+To check the real approval panel, run against a release build, for example the
+one inside the desktop build's `KetPlus.app/Contents/Helpers`, and answer the
+panel when asked (Deny, Esc, Allow):
+
+```sh
+node scripts/approval-check.mjs "<KetPlus.app>/Contents/Helpers/KetPlus Computer.app" "dist/KetPlus Computer Fixture.app"
+```
+
 The test build must already hold both TCC grants. With `--manual-esc`, the
 script asks you to press Esc and then click Stop on the banner. Synthetic events
 from a shell without Accessibility never reach the kill switch, so only real
