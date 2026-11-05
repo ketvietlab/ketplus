@@ -53,26 +53,30 @@ body[data-screen^="repository-picker"] { font-size: 13px; line-height: 1.5385; }
 .rp-dialog { width: min(800px, calc(100vw - 48px)); max-height: min(680px, calc(100dvh - 64px)); padding: 0; overflow: hidden; border: 1px solid var(--kv-border-default); border-radius: 16px; background: var(--kv-panel-bg); color: var(--kv-text-main); box-shadow: var(--kv-shadow-popover); }
 .rp-dialog[open] { display: flex; flex-direction: column; }
 .rp-dialog::backdrop, .rp-drawer::backdrop { background: rgb(12 14 16 / 48%); }
-.rp-dialog-header { display: flex; justify-content: space-between; align-items: start; gap: 12px; padding: 20px 20px 16px; }
-.rp-dialog-header h2 { font-size: 20px; line-height: 24px; font-weight: 600; letter-spacing: 0; }
-.rp-dialog-header p { color: var(--kv-text-muted); font-size: 12px; margin-top: 6px; }
-.rp-picker-columns { display: grid; grid-template-columns: 264px minmax(0, 1fr); min-height: 330px; overflow: hidden; border-block: 1px solid var(--kv-border-default); }
-.rp-repo-pane, .rp-tree-pane { min-width: 0; display: flex; flex-direction: column; padding: 16px; overflow: hidden; }
+.rp-dialog-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 16px 12px 20px; }
+.rp-dialog-header h2 { font-size: 16px; line-height: 24px; font-weight: 600; letter-spacing: 0; }
+.rp-picker-columns { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 320px; overflow: hidden; border-top: 1px solid var(--kv-border-default); }
+.rp-repo-pane, .rp-tree-pane { min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 12px; overflow: hidden; }
 .rp-repo-pane { border-right: 1px solid var(--kv-border-default); }
-.rp-section-title { display: flex; align-items: baseline; gap: 8px; justify-content: space-between; margin-bottom: 12px; }
-.rp-section-title h3 { font-size: 13px; line-height: 20px; font-weight: 600; }
-.rp-section-title > span { color: var(--kv-text-muted); font-size: 11px; overflow-wrap: anywhere; }
 .rp-search { display: flex; align-items: center; position: relative; flex-shrink: 0; }
 .rp-search > .icon { position: absolute; left: 10px; width: 16px; height: 16px; color: var(--kv-text-muted); pointer-events: none; }
 .rp-search input { width: 100%; padding: 6px 10px 6px 34px; height: 34px; min-height: 34px; border-radius: var(--kv-radius-md); font-size: 13px; line-height: 20px; }
 .rp-repo-list, .rp-tree-list { overflow: auto; overscroll-behavior: contain; min-height: 0; }
 .rp-repo-list { margin-top: 8px; }
-.rp-choice { display: flex; align-items: center; gap: 10px; width: 100%; border: 1px solid transparent; border-radius: var(--kv-radius-md); background: none; color: var(--kv-text-main); padding: 10px 8px; text-align: start; min-height: 60px; }
+.rp-choice { display: flex; align-items: center; gap: 10px; width: 100%; border: 1px solid transparent; border-radius: var(--kv-radius-md); background: none; color: var(--kv-text-main); padding: 8px 10px; text-align: start; min-height: 40px; }
 .rp-choice:hover { background: var(--kv-interactive-bg); }
 .rp-choice[aria-pressed="true"] { background: var(--kv-accent-subtle); }
 .rp-choice > .icon, .rp-choice-icon { flex-shrink: 0; color: var(--kv-text-muted); }
-.rp-choice[aria-pressed="true"] > .icon, .rp-choice[aria-pressed="true"] .rp-choice-icon { color: var(--kv-action-primary-bg); }
+.rp-choice[aria-pressed="true"] > .icon, .rp-choice[aria-pressed="true"] .rp-choice-icon { color: var(--kv-accent-text); }
 .rp-choice > .icon:last-child { margin-left: auto; }
+/* One line per repository: name, then a quiet worktree count; the selected row carries the state. */
+.rp-count { flex-shrink: 0; min-width: 20px; text-align: right; font-size: 12px; line-height: 16px; color: var(--kv-text-muted); font-variant-numeric: tabular-nums; }
+.rp-agent-mark { display: flex; flex-shrink: 0; color: var(--kv-accent-text); }
+.rp-agent-mark > .icon { width: 14px; height: 14px; }
+.rp-tree-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.rp-tree-name strong { min-width: 0; }
+.rp-chip { flex-shrink: 0; padding: 0 6px; border-radius: var(--kv-radius-sm); background: var(--kv-interactive-bg); color: var(--kv-text-muted); font-size: 11px; line-height: 16px; }
+.rp-chip.rp-agent-tag { background: var(--kv-accent-subtle); color: var(--kv-accent-text); }
 .rp-choice-icon { display: flex; }
 .rp-choice-copy { flex: 1; min-width: 0; }
 .rp-choice-copy strong { display: block; font-size: 13px; line-height: 20px; font-weight: 500; overflow-wrap: anywhere; }
@@ -80,10 +84,6 @@ body[data-screen^="repository-picker"] { font-size: 13px; line-height: 1.5385; }
 .rp-tree-choice { align-items: flex-start; padding: 12px 10px; }
 .rp-tree-choice > .icon { margin-top: 2px; }
 .rp-tree-choice small { margin-top: 4px; }
-.rp-tree-tags { display: flex; flex-wrap: wrap; gap: 6px; color: var(--kv-text-muted); font-size: 11px; line-height: 16px; }
-.rp-tree-tags:has(span) { margin-top: 6px; }
-.rp-agent-tag { color: var(--kv-action-primary-bg); }
-.rp-result-count { margin: 10px 0 6px; font-size: 12px; color: var(--kv-text-muted); }
 .rp-empty { min-height: 230px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; color: var(--kv-text-muted); padding: 24px 12px; }
 .rp-empty strong { font-size: 13px; color: var(--kv-text-main); font-weight: 500; overflow-wrap: anywhere; max-width: 100%; }
 .rp-empty p { font-size: 12px; line-height: 18px; }
@@ -93,8 +93,6 @@ body[data-screen^="repository-picker"] { font-size: 13px; line-height: 1.5385; }
 .rp-agent-hint > .icon, .rp-feedback > .icon { flex-shrink: 0; color: var(--kv-action-primary-bg); }
 .rp-agent-hint .btn, .rp-feedback .btn { margin-left: auto; flex-shrink: 0; font-size: 12px; }
 .rp-error > .icon { color: var(--kv-danger); }
-.rp-dialog-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--kv-border-default); }
-.rp-dialog-footer > span { color: var(--kv-text-muted); font-size: 12px; }
 .rp-dialog .btn { min-height: 32px; font-size: 13px; line-height: 20px; }
 .rp-dialog .icon-btn { width: 32px; padding: 6px; }
 .rp-loading { min-height: 340px; display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; color: var(--kv-text-muted); }
@@ -127,7 +125,6 @@ body[data-screen^="repository-picker"] { font-size: 13px; line-height: 1.5385; }
     .rp-sheet-handle { display: block; flex-shrink: 0; width: 32px; height: 4px; margin: 8px auto 0; border-radius: 8px; background: var(--kv-border-default); }
     .rp-dialog-header { padding: 16px 16px 12px; align-items: center; }
     .rp-dialog-header h2 { font-size: 20px; line-height: 24px; }
-    .rp-dialog-header p { max-width: 260px; line-height: 18px; }
     .rp-dialog .icon-btn { width: 44px; height: 44px; min-height: 44px; }
     .rp-dialog .btn { min-height: 44px; }
     .rp-step-bar { display: flex; align-items: center; justify-content: space-between; padding: 0 16px 12px; color: var(--kv-text-secondary); min-height: 44px; }
@@ -136,12 +133,11 @@ body[data-screen^="repository-picker"] { font-size: 13px; line-height: 1.5385; }
     .rp-picker-columns { display: flex; min-height: 0; flex: 1; max-height: 460px; overflow-y: auto; }
     .rp-repo-pane, .rp-tree-pane { width: 100%; padding: 16px; border: 0; min-height: 260px; }
     .rp-picker-columns[data-step="repositories"] .rp-tree-pane, .rp-picker-columns[data-step="worktrees"] .rp-repo-pane { display: none; }
-    .rp-choice { min-height: 60px; padding: 12px 8px; }
+    .rp-choice { min-height: 48px; padding: 10px 8px; }
+    .rp-picker-columns { padding-bottom: env(safe-area-inset-bottom); }
     .rp-search input { height: 44px; min-height: 44px; font-size: 16px; line-height: 24px; }
     .rp-agent-hint, .rp-feedback { align-items: flex-start; flex-wrap: wrap; gap: 8px; padding: 12px 16px; }
     .rp-agent-hint .btn, .rp-feedback .btn { min-height: 44px; margin-left: 22px; padding-left: 0; }
-    .rp-dialog-footer { padding: 8px 16px max(12px, env(safe-area-inset-bottom)); }
-    .rp-dialog-footer .btn { min-height: 44px; }
     .rp-drawer { position: fixed; inset: 0 auto 0 0; height: 100dvh; max-height: none; width: min(320px, 86vw); max-width: none; margin: 0; padding: 0; border: 0; border-right: 1px solid var(--kv-border-default); }
     .rp-drawer[open] { display: flex; flex-direction: column; }
     .rp-drawer > .icon-btn { position: absolute; right: 8px; top: 8px; width: 44px; height: 44px; }
