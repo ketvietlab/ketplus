@@ -120,8 +120,12 @@ milestone changes state.
   waiting for lingering output after closing prompt input. Accepted unanswered
   steering still keeps the turn open. A fake-SDK regression covers output that
   never ends after its result.
-- Provider-bound start/steer input uses the restored 0.1.10 response guidance
-  from `runtime/ResponseGuidance.h`: Vietnamese self-address "tui", light playful
+- Provider host instructions carry the restored 0.1.10 response guidance
+  from `runtime/ResponseGuidance.h`. Claude (system-prompt append) and Codex
+  (`developerInstructions`) receive it once per session instead of in each user
+  message, where every turn added another ~1.2k-token copy to the history. Cursor's
+  ACP has no system prompt, so it still arrives with each turn in the host block.
+  The guidance asks for Vietnamese self-address "tui", light playful
   tone, accurate 🟢/🟡/🔴 progress and concrete next actions. The longer flirt-comedy
   prompt is removed. Each turn ends with a localized task/status/evidence/next-action
   matrix that carries unfinished requests forward and distinguishes implementation,

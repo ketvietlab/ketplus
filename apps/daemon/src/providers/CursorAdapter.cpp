@@ -3,6 +3,7 @@
 #include "BrowserToolLaunch.h"
 #include "providers/CursorToolItem.h"
 #include "providers/compat/ProviderVersionProbe.h"
+#include "runtime/ResponseGuidance.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -1214,6 +1215,7 @@ void CursorAdapter::sendPrompt(TurnState& turn, const QJsonObject& params) {
     if (agentSessions_.contains(turn.ketplusSessionId) &&
         !agentInstructions_.value(turn.ketplusSessionId).isEmpty())
         hostText += QStringLiteral("\n\n") + agentInstructions_.value(turn.ketplusSessionId);
+    hostText = withResponseGuidance(hostText);
     prompt.prepend(QJsonObject{{QStringLiteral("type"), QStringLiteral("text")},
                                {QStringLiteral("text"), hostText}});
     emit canonicalEvent(turn.ketplusSessionId, QStringLiteral("turn.started"),

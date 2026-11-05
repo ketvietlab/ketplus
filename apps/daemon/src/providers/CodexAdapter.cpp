@@ -4,6 +4,7 @@
 #include "CodexBrowserTools.h"
 #include "CodexLaunchReloader.h"
 #include "providers/compat/ProviderVersionProbe.h"
+#include "runtime/ResponseGuidance.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -362,11 +363,16 @@ void CodexAdapter::sendCall(const QString& method, const QJsonObject& params, Ca
     }
     pending_.insert(id, std::move(callback));
     pendingMethods_.insert(id, method);
-    sendObject(
-        {{QStringLiteral("id"), static_cast<qint64>(id)},
-         {QStringLiteral("method"), method},
-         {QStringLiteral("params"), browser_tools::withCodexBrowserInstructions(
-                                        method, params, !launchedBrowserArguments_.isEmpty())}});
+    QJsonObject providerParams = browser_tools::withCodexBrowserInstructions(
+        method, params, !launchedBrowserArguments_.isEmpty());
+    if (method == QStringLiteral("thread/start") || method == QStringLiteral("thread/resume"))
+        providerParams.insert(
+            QStringLiteral("developerInstructions"),
+            withResponseGuidance(
+                providerParams.value(QStringLiteral("developerInstructions")).toString()));
+    sendObject({{QStringLiteral("id"), static_cast<qint64>(id)},
+                {QStringLiteral("method"), method},
+                {QStringLiteral("params"), providerParams}});
 }
 
 void CodexAdapter::sendObject(const QJsonObject& object) {

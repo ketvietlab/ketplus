@@ -5,7 +5,6 @@
 #include "providers/CursorAdapter.h"
 #include "runtime/ApprovalBroker.h"
 #include "runtime/CompactWindowPolicy.h"
-#include "runtime/ResponseGuidance.h"
 
 #include <QFileInfo>
 #include <QJsonArray>
@@ -40,11 +39,6 @@ QString sandboxType(const QJsonObject& options) {
 }
 
 } // namespace
-
-// Provider-only suffix: the journal and optimistic UI keep the original user text.
-void SessionHost::appendResponseGuidance(QJsonArray& input) {
-    input.append(QJsonObject{{"type", "text"}, {"text", responseGuidance()}});
-}
 
 // Every text item of the turn, in order; attachments arrive as further items.
 QString SessionHost::promptText(const QJsonArray& input) {
