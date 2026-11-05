@@ -95,6 +95,7 @@ final class AgentTools {
                 detail["characters"] = (params["value"] as? String)?.count ?? 0
             }
             if let mode = result.value["mode"] { detail["mode"] = mode }
+            if let decision = result.value["decision"] { detail["decision"] = decision }
             audit.record(conversation: conversation, tool: method, target: result.target, outcome: "ok", detail: detail)
             return result.value
         } catch let failure as AgentFailure {
@@ -205,6 +206,7 @@ final class AgentTools {
             }
         }
         var approved = false
+        var decision = "none_needed"
         if !wanted.isEmpty {
             guard Permissions.screenRecording, Permissions.accessibility else {
                 throw AgentFailure(code: "PERMISSION_REQUIRED",
@@ -212,12 +214,14 @@ final class AgentTools {
             }
             let request = ApprovalPanel.Request(conversation: conversation, apps: wanted,
                                                 reason: String((params["reason"] as? String ?? "").prefix(300)))
-            approved = DispatchQueue.main.sync { MainActor.assumeIsolated { ApprovalPanel.ask(request) } }
+            let answer = DispatchQueue.main.sync { MainActor.assumeIsolated { ApprovalPanel.ask(request) } }
+            decision = answer.rawValue
+            approved = answer == .allow
             if approved { control.grant(Set(wanted.map(\.bundleIdentifier)), to: conversation) }
         }
         return ["granted": control.grantedApps(conversation).sorted(),
                 "denied": approved ? [] : wanted.map(\.name),
-                "blocked": refused]
+                "blocked": refused, "decision": decision]
     }
 
     func requireGranted(_ bundle: String, _ action: ActionKind, _ conversation: String) throws {

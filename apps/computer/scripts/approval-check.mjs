@@ -2,6 +2,7 @@
 // Manual check of the real approval panel (ADR 0026) on a release build, for example
 // KetPlus.app/Contents/Helpers/KetPlus Computer.app from the desktop build. Uses no
 // provider quota and posts no input. You answer the panel three times: Deny, Esc, Allow.
+// Allow is disabled for the first second after the panel appears.
 // The agent is started with KETPLUS_COMPUTER_TEST_APPROVAL=allow on purpose: a release
 // build must ignore it and still show the panel.
 // Usage: node approval-check.mjs "<KetPlus Computer.app>" "<KetPlus Computer Fixture.app>"
@@ -67,16 +68,18 @@ async function request(instruction) {
 
 const deny = await request("Read it, then click Deny.");
 check("the test override is ignored: the call waited for you", deny.seconds > 1, `${deny.seconds.toFixed(1)} s`);
+check("the agent recorded Deny", deny.answer.decision === "deny", deny.answer.decision);
 check("Deny grants nothing", deny.answer.granted.length === 0 && deny.answer.denied.length === 1, JSON.stringify(deny.answer));
 check("nothing is captured after Deny", (await call("screenshot")).startsWith("APP_NOT_GRANTED"));
 const looks = await ask("Did the panel name the fixture, show the reason and the warning-style icon, with Deny and Allow? [y/n] ");
 check("the panel content looked right", looks.trim().toLowerCase().startsWith("y"));
 
 const escape = await request("Press Esc on the keyboard.");
-check("Esc denies", escape.answer.granted.length === 0, JSON.stringify(escape.answer));
+check("Esc denies", escape.answer.decision === "deny" && escape.answer.granted.length === 0, JSON.stringify(escape.answer));
 
-const allow = await request('Click "Allow for this conversation".');
-check("Allow grants the fixture", allow.answer.granted.includes("dev.ketplus.computer.fixture"), JSON.stringify(allow.answer));
+const allow = await request('Wait a second, then click "Allow for this conversation".');
+check("Allow grants the fixture", allow.answer.decision === "allow"
+  && allow.answer.granted.includes("dev.ketplus.computer.fixture"), JSON.stringify(allow.answer));
 check("a screenshot works after Allow", (await call("screenshot")).startsWith("Screenshot"));
 
 terminal.close();

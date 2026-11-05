@@ -33,7 +33,10 @@ let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 220),
                       styleMask: [.titled], backing: .buffered, defer: false)
 window.title = "KetPlus Computer fixture"
 window.level = .floating
-window.center()
+// The agent captures the primary display, so the fixture opens there, not on the
+// display the user happens to be working on.
+let primaryFrame = NSScreen.screens[0].frame
+window.setFrameOrigin(NSPoint(x: primaryFrame.midX - window.frame.width / 2, y: primaryFrame.midY))
 target.field.font = .systemFont(ofSize: 16)
 target.field.placeholderString = "Type here"
 let button = NSButton(title: "Submit", target: target, action: #selector(Target.submit(_:)))

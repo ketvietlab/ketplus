@@ -7,6 +7,9 @@ import ComputerProtocol
 @MainActor
 enum ApprovalPanel {
     static let timeout: TimeInterval = 120
+    /// Allow stays disabled this long after the panel appears, so a click meant
+    /// for something else cannot land on it.
+    static let armDelay: TimeInterval = 1
 
     struct Request {
         let conversation: String
@@ -14,22 +17,59 @@ enum ApprovalPanel {
         let reason: String
     }
 
-    /// Blocks until the user answers or the timeout passes (a denial).
-    static func ask(_ request: Request) -> Bool {
+    enum Decision: String {
+        case allow, deny
+        /// Timed out, or ended by Stop or Esc outside the panel.
+        case dismissed
+    }
+
+    /// Blocks until the user answers or the timeout passes. Only a press of the
+    /// Allow button itself grants access.
+    static func ask(_ request: Request) -> Decision {
         #if KETPLUS_COMPUTER_TESTING
         // Test builds only (build-app.sh --testing): release builds never compile this.
         if let answer = ProcessInfo.processInfo.environment["KETPLUS_COMPUTER_TEST_APPROVAL"] {
-            return answer == "allow"
+            return answer == "allow" ? .allow : .deny
         }
         #endif
         let alert = makeAlert(request)
+        let buttons = Buttons()
+        let allow = alert.buttons[0]
+        let deny = alert.buttons[1]
+        allow.target = buttons
+        allow.action = #selector(Buttons.allow(_:))
+        deny.target = buttons
+        deny.action = #selector(Buttons.deny(_:))
+        allow.isEnabled = false
         NSApp.activate(ignoringOtherApps: true)
-        let timer = Timer(timeInterval: timeout, repeats: false) { _ in
-            NSApp.abortModal()
+        // The modal loop does not service the main queue, so these are run-loop timers.
+        let timers = [
+            Timer(timeInterval: 0, repeats: false) { _ in
+                // Activation can be refused; keep the panel above the user's windows anyway.
+                alert.window.level = .modalPanel
+                alert.window.orderFrontRegardless()
+            },
+            Timer(timeInterval: armDelay, repeats: false) { _ in allow.isEnabled = true },
+            Timer(timeInterval: timeout, repeats: false) { _ in NSApp.abortModal() },
+        ]
+        timers.forEach { RunLoop.main.add($0, forMode: .modalPanel) }
+        defer { timers.forEach { $0.invalidate() } }
+        _ = alert.runModal()
+        return buttons.decision
+    }
+
+    private final class Buttons: NSObject {
+        var decision = Decision.dismissed
+
+        @objc func allow(_ sender: NSButton) {
+            decision = .allow
+            NSApp.stopModal()
         }
-        RunLoop.main.add(timer, forMode: .modalPanel)
-        defer { timer.invalidate() }
-        return alert.runModal() == .alertFirstButtonReturn
+
+        @objc func deny(_ sender: NSButton) {
+            decision = .deny
+            NSApp.stopModal()
+        }
     }
 
     /// The approval alert; also rendered by `--render-previews`.

@@ -152,6 +152,15 @@ The first implementation refines the decision as follows.
 - **Esc** ends the lease and revokes the conversation's grants. That
   conversation then gets `CANCELLED` until the user approves apps again. The
   lease idles out after 90 s. `wait` is capped at 60 s.
+- **The approval panel** records the decision from the button that was
+  pressed, not from the alert's return code. Allow stays disabled for one
+  second after the panel appears, so a click meant for something else cannot
+  grant access. The panel is raised above other windows even when macOS refuses
+  to activate the agent. The audit records each decision (`allow`, `deny`,
+  `dismissed`). A release-build run of `scripts/approval-check.mjs` once
+  reported a Deny click as a grant. Real clicks on the same panel code in a probe
+  app always gave the right answer, so the cause was not found; these changes
+  remove the paths that could explain it.
 - **The opt-in** is in Settings → Computer use (`computer-tools.json`: `enabled`,
   default off, and `deniedApps`). Changes apply from the next turn.
 - **Codex** is not given the server yet. Its app-server binds MCP servers per
