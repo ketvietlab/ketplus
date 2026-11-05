@@ -1,4 +1,5 @@
 #include "workspace/ReadOnlyWorkspaceFiles.h"
+#include "workspace/WorkspaceExposure.h"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -226,7 +227,7 @@ QByteArray ReadOnlyWorkspaceFiles::git(const QStringList& arguments, const int m
                                        QString* errorCode) const {
     QProcess process;
     process.setProgram(QStringLiteral("git"));
-    process.setArguments(hardenedGitArguments(canonicalRoot_) + arguments);
+    process.setArguments(readArguments() + arguments);
     process.setProcessEnvironment(hardenedGitEnvironment());
     process.setProcessChannelMode(QProcess::SeparateChannels);
     process.start(QIODevice::ReadOnly);
@@ -249,6 +250,78 @@ QByteArray ReadOnlyWorkspaceFiles::git(const QStringList& arguments, const int m
         return {};
     }
     return output;
+}
+
+QStringList ReadOnlyWorkspaceFiles::readArguments() const {
+    if (!filterDrivers_) {
+        // Reading config runs nothing; the overrides then win over every config file.
+        QProcess process;
+        process.setProgram(QStringLiteral("git"));
+        process.setArguments(hardenedGitArguments(canonicalRoot_) +
+                             QStringList{QStringLiteral("config"), QStringLiteral("--name-only"),
+                                         QStringLiteral("--get-regexp"),
+                                         QStringLiteral("^filter\\.")});
+        process.setProcessEnvironment(hardenedGitEnvironment());
+        process.start(QIODevice::ReadOnly);
+        QStringList drivers;
+        if (process.waitForStarted(2'000) && process.waitForFinished(5'000)) {
+            for (const QByteArray& line : process.readAllStandardOutput().split('\n')) {
+                const QString key = QString::fromUtf8(line).trimmed();
+                const qsizetype last = key.lastIndexOf(u'.');
+                const QString driver = last > 7 ? key.mid(7, last - 7) : QString{};
+                if (!driver.isEmpty() && !drivers.contains(driver))
+                    drivers.append(driver);
+            }
+        } else {
+            process.kill();
+            process.waitForFinished();
+        }
+        filterDrivers_ = drivers;
+    }
+    QStringList arguments = hardenedGitArguments(canonicalRoot_);
+    for (const QString& driver : std::as_const(*filterDrivers_)) {
+        for (const char* key : {"clean", "smudge", "process"})
+            arguments << QStringLiteral("-c")
+                      << QStringLiteral("filter.%1.%2=").arg(driver, QLatin1String(key));
+        arguments << QStringLiteral("-c") << QStringLiteral("filter.%1.required=false").arg(driver);
+    }
+    return arguments;
+}
+
+QStringList ReadOnlyWorkspaceFiles::ignoredPaths(const QStringList& relativePaths) const {
+    if (relativePaths.isEmpty())
+        return {};
+    QProcess process;
+    process.setProgram(QStringLiteral("git"));
+    process.setArguments(readArguments() + QStringList{QStringLiteral("check-ignore"),
+                                                       QStringLiteral("-z"),
+                                                       QStringLiteral("--stdin")});
+    process.setProcessEnvironment(hardenedGitEnvironment());
+    process.start();
+    if (!process.waitForStarted(2'000))
+        return {};
+    for (const QString& path : relativePaths) {
+        process.write(path.toUtf8());
+        process.write("\0", 1);
+    }
+    process.closeWriteChannel();
+    if (!process.waitForFinished(10'000)) {
+        process.kill();
+        process.waitForFinished();
+        return {};
+    }
+    // Exit 1 means nothing is ignored; 128 means not a repository.
+    QStringList ignored;
+    for (const QByteArray& path : process.readAllStandardOutput().split('\0')) {
+        if (!path.isEmpty())
+            ignored.append(QString::fromUtf8(path));
+    }
+    return ignored;
+}
+
+bool ReadOnlyWorkspaceFiles::shared(const QString& relativePath) const {
+    return !workspace_exposure::isSecretPath(relativePath) &&
+           ignoredPaths({relativePath}).isEmpty();
 }
 
 QString ReadOnlyWorkspaceFiles::revision(QString* errorCode) const {
@@ -456,11 +529,30 @@ QJsonObject ReadOnlyWorkspaceFiles::tree(const QJsonObject& request) const {
         entries = QDir(directory).entryInfoList(
             QDir::AllEntries | QDir::Hidden | QDir::NoDotAndDotDot, QDir::DirsFirst | QDir::Name);
     }
-    entries.erase(std::remove_if(entries.begin(), entries.end(),
-                                 [](const QFileInfo& info) {
-                                     return isGitSegment(info.fileName());
-                                 }),
-                  entries.end());
+    entries.erase(
+        std::remove_if(
+            entries.begin(), entries.end(),
+            [this](const QFileInfo& info) {
+                return isGitSegment(info.fileName()) ||
+                       workspace_exposure::isSecretPath(
+                           QDir(canonicalRoot_).relativeFilePath(info.absoluteFilePath()));
+            }),
+        entries.end());
+    // Ignored entries (build output, local config, secrets) are not shared with devices.
+    QStringList candidates;
+    candidates.reserve(entries.size());
+    for (const QFileInfo& info : std::as_const(entries))
+        candidates.append(QDir(canonicalRoot_).relativeFilePath(info.absoluteFilePath()));
+    const QStringList ignoredList = ignoredPaths(candidates);
+    const QSet<QString> ignored(ignoredList.cbegin(), ignoredList.cend());
+    if (!ignored.isEmpty())
+        entries.erase(
+            std::remove_if(entries.begin(), entries.end(),
+                           [this, &ignored](const QFileInfo& info) {
+                               return ignored.contains(
+                                   QDir(canonicalRoot_).relativeFilePath(info.absoluteFilePath()));
+                           }),
+            entries.end());
     QJsonArray values;
     for (int index = offset; index < entries.size() && values.size() < limit; ++index) {
         const QFileInfo& info = entries.at(index);
@@ -492,6 +584,8 @@ QJsonObject ReadOnlyWorkspaceFiles::file(const QJsonObject& request) const {
     const QString relative = relativeClean(request.value(QStringLiteral("path")).toString());
     if (relative.isEmpty() || canonicalRoot_.isEmpty())
         return failure(QStringLiteral("invalid_path"));
+    if (!shared(relative))
+        return failure(QStringLiteral("permission_denied"));
     QFile source;
     qint64 size = 0;
     switch (openBeneath(canonicalRoot_, relative, &source, &size)) {
@@ -532,6 +626,8 @@ QJsonObject ReadOnlyWorkspaceFiles::diff(const QJsonObject& request) const {
     const QString relative = relativeClean(request.value(QStringLiteral("path")).toString());
     if (relative.isEmpty() || resolved(relative, &error).isEmpty())
         return fencedError(error.isEmpty() ? QStringLiteral("invalid_path") : error);
+    if (!shared(relative))
+        return failure(QStringLiteral("permission_denied"));
     QByteArray output = git({QStringLiteral("diff"), QStringLiteral("--no-ext-diff"),
                              QStringLiteral("--no-textconv"), QStringLiteral("--unified=3"),
                              QStringLiteral("HEAD"), QStringLiteral("--"), relative},
@@ -589,16 +685,36 @@ QJsonObject ReadOnlyWorkspaceFiles::search(const QJsonObject& request) const {
     int scannedFiles = 0;
     QElapsedTimer deadline;
     deadline.start();
-    QDirIterator it(canonicalRoot_, QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot,
-                    QDirIterator::Subdirectories);
-    while (it.hasNext() && matches.size() < limit && returnedBytes < maximumDiffBytes &&
+    // In a repository, Git lists the candidates without its ignored folders (node_modules,
+    // build output), so the budget goes to source files. Elsewhere, walk the tree.
+    QString listError;
+    const QByteArray listed =
+        git({QStringLiteral("ls-files"), QStringLiteral("-z"), QStringLiteral("--cached"),
+             QStringLiteral("--others"), QStringLiteral("--exclude-standard")},
+            16 * 1024 * 1024, &listError);
+    QStringList candidates;
+    if (listError.isEmpty()) {
+        for (const QByteArray& path : listed.split('\0')) {
+            if (!path.isEmpty())
+                candidates.append(QString::fromUtf8(path));
+        }
+    }
+    std::optional<QDirIterator> walk;
+    if (!listError.isEmpty())
+        walk.emplace(canonicalRoot_, QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot,
+                     QDirIterator::Subdirectories);
+    qsizetype nextCandidate = 0;
+    const auto hasNext = [&] { return walk ? walk->hasNext() : nextCandidate < candidates.size(); };
+    while (hasNext() && matches.size() < limit && returnedBytes < maximumDiffBytes &&
            scannedFiles < 5'000 && deadline.elapsed() < 350) {
-        const QString absolute = it.next();
+        const QString absolute =
+            walk ? walk->next() : QDir(canonicalRoot_).filePath(candidates.at(nextCandidate++));
         ++scannedFiles;
         const QFileInfo info(absolute);
         const QString relative = QDir(canonicalRoot_).relativeFilePath(absolute);
         const QStringList parts = relative.split(u'/', Qt::SkipEmptyParts);
-        if (std::any_of(parts.cbegin(), parts.cend(), isGitSegment) || info.isSymLink() ||
+        if (std::any_of(parts.cbegin(), parts.cend(), isGitSegment) ||
+            workspace_exposure::isSecretPath(relative) || info.isSymLink() ||
             info.size() > maximumSearchFileBytes || !info.isReadable())
             continue;
         QFile file;
@@ -632,7 +748,7 @@ QJsonObject ReadOnlyWorkspaceFiles::search(const QJsonObject& request) const {
     QJsonObject result{{QStringLiteral("matches"), matches},
                        {QStringLiteral("truncated"),
                         matches.size() == limit || returnedBytes >= maximumDiffBytes ||
-                            scannedFiles >= 5'000 || deadline.elapsed() >= 350}};
+                            (hasNext() && (scannedFiles >= 5'000 || deadline.elapsed() >= 350))}};
     (void)finishRevision(expected, &result);
     return result;
 }
@@ -641,6 +757,8 @@ QString ReadOnlyWorkspaceFiles::readImage(const QString& relativePath, QByteArra
     const QString relative = relativeClean(relativePath);
     if (relative.isEmpty() || canonicalRoot_.isEmpty())
         return QStringLiteral("invalid_path");
+    if (!shared(relative))
+        return QStringLiteral("permission_denied");
     QFile source;
     qint64 size = 0;
     switch (openBeneath(canonicalRoot_, relative, &source, &size)) {

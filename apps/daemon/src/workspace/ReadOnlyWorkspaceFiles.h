@@ -7,6 +7,7 @@
 #include <QStringList>
 
 #include <functional>
+#include <optional>
 
 class QObject;
 
@@ -72,12 +73,20 @@ class ReadOnlyWorkspaceFiles final {
     [[nodiscard]] QJsonObject fencedError(const QString& code) const;
     [[nodiscard]] QByteArray git(const QStringList& arguments, int maximumBytes,
                                  QString* errorCode) const;
+    // hardenedGitArguments plus an empty override for every configured filter driver, so a
+    // repository's clean/smudge/process filter never runs during status or diff.
+    [[nodiscard]] QStringList readArguments() const;
+    // Whether a paired device may see this path: not git-ignored and not a secret.
+    [[nodiscard]] bool shared(const QString& relativePath) const;
+    // The paths Git ignores, from one `check-ignore` run. Empty outside a repository.
+    [[nodiscard]] QStringList ignoredPaths(const QStringList& relativePaths) const;
     [[nodiscard]] QString startRevision(const QString& expected) const;
     [[nodiscard]] bool finishRevision(const QString& expected, QJsonObject* result) const;
 
     WorkspaceFileScope scope_;
     RevisionFence fence_;
     QString canonicalRoot_;
+    mutable std::optional<QStringList> filterDrivers_;
 };
 
 } // namespace ketplus::daemon
