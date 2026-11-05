@@ -133,7 +133,8 @@ QVector<GitWorktree> parseWorktrees(const QByteArray& output, const QString& cur
             current.detached = true;
         } else if (field == "bare") {
             current.bare = true;
-        } else if (field.startsWith("locked")) {
+        } else if (field == "locked" || field.startsWith("locked ")) {
+            current.locked = true;
             current.lockReason = QString::fromUtf8(field.mid(6)).trimmed();
         } else if (field.startsWith("prunable")) {
             current.prunable = true;

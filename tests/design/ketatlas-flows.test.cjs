@@ -16,13 +16,18 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { screen, root, manifest } = require("./ketatlas-dom.cjs");
 const urls = new Set(manifest.screens.map((s) => s.url));
-test("sandboxed previews load the exact local Inter font subsets", () => {
+test("sandboxed previews embed KÉT Sans 1.0 and use it for every text token", () => {
     const css = fs.readFileSync(path.join(root, "assets/fonts-inline.css"), "utf8");
-    for (const name of ["inter-latin-standard-normal", "inter-latin-ext-standard-normal",
-        "inter-vietnamese-standard-normal"]) {
-        const font = fs.readFileSync(path.join(root, `assets/fonts/${name}.woff2`)).toString("base64");
-        assert.ok(css.includes(`data:font/woff2;base64,${font}`), `${name} matches its source`);
-    }
+    assert.ok(css.startsWith('@charset "UTF-8";'));
+    // Released weights only: Light, Regular, Medium (also semibold) and Bold.
+    const faces = [...css.matchAll(/@font-face\{font-family:"KÉT Sans";src:url\(data:font\/woff2;base64,[A-Za-z0-9+/=]+\) format\("woff2"\);font-weight:([0-9 ]+);/g)];
+    assert.deepEqual(faces.map((face) => face[1]), ["300", "400", "500 600", "700"]);
+    assert.doesNotMatch(css, /Inter/);
+    assert.match(css, /--kv-font-sans:"KÉT Sans",ui-sans-serif,sans-serif/);
+    // KÉT Sans Mono 0.10.0 has Regular only; bold code is synthesized.
+    assert.match(css, /@font-face\{font-family:"KÉT Sans Mono";src:url\(data:font\/woff2;base64,[A-Za-z0-9+/=]+\) format\("woff2"\);font-weight:400;/);
+    assert.match(css, /--kv-font-mono:"KÉT Sans Mono",ui-monospace,/);
+    assert.ok(fs.existsSync(path.join(root, "licenses/KET-Sans-1.0.txt")));
     for (const screen of manifest.screens) {
         const html = fs.readFileSync(path.join(root, screen.url), "utf8");
         assert.match(html, /\.\.\/assets\/fonts-inline\.css/);
@@ -46,6 +51,73 @@ for (const url of urls)
             assert.equal(s.document.querySelectorAll('[id="prompt"]').length <= 1, true);
             s.close();
         });
+test("the KétPlus shell has no KetSuite application switcher", () => {
+    for (const page of ["screens/workspace.html", "screens/connections.html", "screens/repository-picker.html"]) {
+        const s = screen(page);
+        const shell = s.document.querySelector('[data-ui="app-shell"]');
+        assert.ok(shell, page);
+        assert.equal(shell.querySelector('[data-ui="app-switcher"]'), null, page);
+        assert.equal(shell.firstElementChild.dataset.ui, "app-sidebar", page);
+        assert.match(fs.readFileSync(path.join(root, "screens/desktop.css"), "utf8"), /--kv-app-switcher-width: 0px;/);
+        s.close();
+    }
+});
+
+test("agent messages name their sender, and the header shows the conversation number (ADR 0027)", () => {
+    const received = screen("screens/workspace.html?conversation=startup");
+    assert.match(received.document.querySelector(".agent-message .agent-origin").textContent.trim(),
+        /^Message from @agent\/\d{4} · Refine navigation · Codex$/);
+    assert.equal(received.document.querySelector(".transcript > .user-message:not(.agent-message)"), null);
+    assert.match(received.document.querySelector(".agent-heading .header-number").textContent, /^@agent\/\d{4}$/);
+    // The sidebar shows bare numbers; `#1234` would read as an issue or pull request.
+    const numbers = [...received.document.querySelectorAll(".sidebar-inner .conversation-number, .sidebar-inner .conversation-sender")].map(n => n.textContent.trim());
+    assert.ok(numbers.length > 1);
+    assert.ok(numbers.every(text => !text.includes("#")), numbers.join(", "));
+    assert.ok(numbers.some(text => /^from \d{4}$/.test(text)));
+    received.close();
+    const sent = screen("screens/workspace.html?conversation=navigation");
+    assert.match(sent.document.querySelector(".agent-note").textContent.trim(),
+        /Sent to @agent\/\d{4} · Review the startup flow · started a turn · reply requested\.$/);
+    assert.ok(sent.document.querySelector(".agent-tool-row"));
+    sent.close();
+    const held = screen("screens/workspace.html?conversation=navigation&agent=held");
+    assert.match(held.document.querySelector(".agent-note.held").textContent, /is held because the agents exchanged too many messages/);
+    held.close();
+    const reply = screen("screens/workspace.html?conversation=navigation&agent=reply");
+    const turn = reply.document.querySelector(".transcript > .assistant-message");
+    const bubble = reply.document.querySelector(".transcript > .agent-message");
+    assert.match(bubble.querySelector(".agent-origin").textContent.trim(), /^Reply from @agent\/\d{4} · Review the startup flow/);
+    assert.equal(turn.nextElementSibling, bubble, "the reply opens the turn after the sending turn");
+    reply.close();
+});
+test("Copy @agent/ copies the conversation reference", () => {
+    const s = screen("screens/workspace.html?context=conversation");
+    const copy = s.document.querySelector('[data-context-command="copy-agent-reference"]');
+    assert.match(copy.textContent, /^Copy @agent\/\d{4}$/);
+    s.click('[data-context-command="copy-agent-reference"]');
+    assert.match(s.K.demo.menuClipboard, /^@agent\/\d{4}$/);
+    s.close();
+});
+test("@agent/ in the composer completes another conversation's number; a plain @ does not", () => {
+    const s = screen("screens/workspace.html?conversation=navigation");
+    const prompt = s.document.querySelector("#prompt");
+    prompt.value = "Ask @src";
+    prompt.setSelectionRange(8, 8);
+    prompt.dispatchEvent(new s.w.Event("input", { bubbles: true }));
+    assert.equal(s.document.querySelector(".mention-menu"), null, "a plain @ stays a file mention");
+    prompt.value = "Ask @agent/";
+    prompt.setSelectionRange(11, 11);
+    prompt.dispatchEvent(new s.w.Event("input", { bubbles: true }));
+    const own = s.document.querySelector(".header-number").textContent.replace("@agent/", "");
+    const options = [...s.document.querySelectorAll(".mention-option")];
+    assert.ok(options.length > 0);
+    assert.ok(options.every(option => option.dataset.conversationNumber !== own), "a conversation cannot message itself");
+    const first = options[0].dataset.conversationNumber;
+    prompt.dispatchEvent(new s.w.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    assert.equal(prompt.value, `Ask @agent/${first} `);
+    assert.equal(s.document.querySelector(".mention-menu"), null);
+    s.close();
+});
 test("conversation header is scoped to chat; the detail pane owns its top row", () => {
     for (const panel of [null, "task", "terminal", "file", "atlas"]) {
         const s = screen(`screens/workspace.html?state=running${panel ? `&panel=${panel}` : ""}`);
@@ -54,7 +126,9 @@ test("conversation header is scoped to chat; the detail pane owns its top row", 
         const heading = chat.querySelector(":scope > .agent-heading");
         assert.ok(heading, panel || "chat only");
         assert.equal(view.querySelector(":scope > .agent-heading"), null);
-        assert.deepEqual([...heading.querySelectorAll("[data-action]")].map(node => node.dataset.action), ["new-chat", "open-atlas-panel", "terminal"]);
+        // Tag chips open the tag editor (ADR 0028); the trailing row holds the conversation actions.
+        assert.ok(heading.querySelector(".header-tags [data-action='edit-header-tags']"));
+        assert.deepEqual([...heading.querySelectorAll(":scope > .row [data-action]")].map(node => node.dataset.action), ["new-chat", "open-atlas-panel", "terminal"]);
         const detail = view.querySelector(".context-pane");
         assert.equal(Boolean(detail), Boolean(panel));
         if (detail) assert.ok(detail.querySelector(":scope > .context-tabs"));
@@ -870,7 +944,7 @@ test("right-click preserves active conversation and archives the clicked reposit
     const current = a.K.current;
     rightClick(a, '.conversation[href*="repo=ketviet"]');
     assert.equal(a.K.current, current);
-    assert.deepEqual(menuCommands(a), ["fork", "archive", "delete"]);
+    assert.deepEqual(menuCommands(a), ["tags", "copy-agent-reference", "fork", "archive", "delete"]);
     const target = a.K.openContext;
     a.click('[data-context-command="archive"]');
     const confirm = a.follow();
@@ -915,7 +989,11 @@ test("context menu keyboard navigation skips disabled actions and restores focus
     const a = screen('screens/workspace.html?provider=Cursor');
     const node = a.document.querySelector('.conversation.selected'); node.focus();
     node.dispatchEvent(new a.w.KeyboardEvent('keydown', {key:'F10', shiftKey:true, bubbles:true}));
-    assert.equal(a.document.activeElement.dataset.contextCommand, 'archive');
+    assert.equal(a.document.activeElement.dataset.contextCommand, 'tags');
+    a.document.activeElement.dispatchEvent(new a.w.KeyboardEvent('keydown', {key:'ArrowDown', bubbles:true}));
+    assert.equal(a.document.activeElement.dataset.contextCommand, 'copy-agent-reference');
+    a.document.activeElement.dispatchEvent(new a.w.KeyboardEvent('keydown', {key:'ArrowDown', bubbles:true}));
+    assert.equal(a.document.activeElement.dataset.contextCommand, 'archive', 'disabled Fork is skipped');
     a.w.dispatchEvent(new a.w.Event('resize'));
     assert.ok(a.document.querySelector('.desktop-context-menu'), 'Viewer resizing must retain the menu fixture');
     a.document.activeElement.dispatchEvent(new a.w.KeyboardEvent('keydown', {key:'ArrowDown', bubbles:true}));
@@ -1178,4 +1256,36 @@ test("no-result model search keeps the compact draft and recovers when cleared",
     assert.equal(a.K.compactDraft, "272000");
     a.input("#model-search", "");
     assert.equal(a.document.querySelector("#model-search-empty").hidden, true);
+});
+test("mono text never renders below 13px", () => {
+    const screens = path.join(root, "screens");
+    const atLeast13 = size => /^max\(13px,/.test(size) || /^round\(max\(13px,/.test(size) ||
+        (/^\d+px$/.test(size) && parseInt(size, 10) >= 13) || /^var\(--kp-(editor|terminal)-size/.test(size);
+    for (const file of fs.readdirSync(screens).filter((name) => name.endsWith(".css"))) {
+        const css = fs.readFileSync(path.join(screens, file), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+        for (const [, selector, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+            if (!/font(-family)?\s*:[^;]*mono/i.test(body)) continue;
+            const shorthand = /font\s*:\s*(?:(?:italic|normal|bold|[1-9]00)\s+)*([^\s/;]+)/.exec(body)?.[1];
+            const size = /font-size\s*:\s*([^;]+)/.exec(body)?.[1].trim() || shorthand;
+            assert.ok(size && atLeast13(size), `${file}: ${selector.trim()} → ${size}`);
+        }
+    }
+    assert.match(fs.readFileSync(path.join(screens, "typography.css"), "utf8"), /\[data-ui="code-block"\][\s\S]*max\(13px, var\(--kv-text-xs\)\)/);
+});
+test("font sizes are whole pixels, including configuration defaults", () => {
+    const screens = path.join(root, "screens");
+    for (const file of fs.readdirSync(screens).filter((name) => name.endsWith(".css"))) {
+        const css = fs.readFileSync(path.join(screens, file), "utf8");
+        for (const [declaration] of css.matchAll(/font-size:[^;}]+|--kp-(?:ui|editor|terminal|markdown)-size:[^;}]+/g)) {
+            assert.doesNotMatch(declaration, /\d\.\d/, `${file}: ${declaration}`);
+            // A size derived from the scale must round to a whole pixel.
+            if (/--kp-font-scale|vw/.test(declaration)) assert.match(declaration, /round\(/, `${file}: ${declaration}`);
+        }
+        for (const [token] of css.matchAll(/--kp-text-[a-z]+:[^;}]+/g))
+            if (/--kp-font-scale/.test(token)) assert.match(token, /round\(/, `${file}: ${token}`);
+    }
+    const core = fs.readFileSync(path.join(screens, "core.js"), "utf8");
+    for (const [, size] of core.matchAll(/\["\w+Size", "\w+", ([\d.]+)\]/g)) assert.ok(Number.isInteger(Number(size)), size);
+    const settings = fs.readFileSync(path.join(screens, "settings.js"), "utf8");
+    for (const [, size] of settings.matchAll(/K\.fontSizes\("\w+", ([\d.]+)\)/g)) assert.ok(Number.isInteger(Number(size)), size);
 });

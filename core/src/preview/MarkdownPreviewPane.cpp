@@ -516,9 +516,10 @@ void MarkdownPreviewPane::applyDocumentStyle() {
         hr { color: %3; margin: 24px 0; }
         img { margin: 8px 0 16px; }
     )");
-    documentStyle = documentStyle.arg(palette_.textMain, palette_.panelBackground, palette_.border,
-                                      palette_.accent, palette_.panelSubtle, palette_.accentMuted,
-                                      palette_.textSecondary, codeFont, bodyFont.family());
+    documentStyle =
+        documentStyle.arg(palette_.textMain, palette_.panelBackground, palette_.border,
+                          palette_.accentText, palette_.panelSubtle, palette_.accentMuted,
+                          palette_.textSecondary, codeFont, bodyFont.family());
     const int codeFontSize = qMax(8, fontSizePixels_ - 1);
     const std::pair<const char*, int> typographyTokens[] = {
         {"{{bodyFontSize}}", fontSizePixels_},
@@ -670,10 +671,10 @@ void MarkdownPreviewPane::applyBlockTypography() {
                 fragmentFormat.setFont(styledCodeFont,
                                        QTextCharFormat::FontPropertiesSpecifiedOnly);
                 fragmentFormat.setForeground(
-                    QColor(isCodeBlock ? palette_.textMain : palette_.accent));
+                    QColor(isCodeBlock ? palette_.textMain : palette_.accentText));
                 fragmentFormat.clearBackground();
             } else if (sourceFormat.isAnchor()) {
-                fragmentFormat.setForeground(QColor(palette_.accent));
+                fragmentFormat.setForeground(QColor(palette_.accentText));
                 fragmentFormat.setFontUnderline(false);
             } else {
                 fragmentFormat.setForeground(

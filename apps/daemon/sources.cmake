@@ -17,13 +17,16 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/LocalJournalDeletion.cpp
     src/runtime/SessionHostDeletion.cpp
     src/storage/LocalJournalTasks.cpp
-    src/cloud/BrowserSignIn.cpp
-    src/cloud/BrowserSignIn.h
     src/cloud/CloudControlClient.cpp
+    src/cloud/CloudControlCommands.cpp
+    src/cloud/CloudControlRestore.cpp
+    src/cloud/CloudControlSupport.cpp
+    src/cloud/CloudControlSupport.h
+    src/cloud/CloudControlSync.cpp
+    src/cloud/CloudControlWorktreeCommands.cpp
     src/cloud/CloudControlClient.h
     src/cloud/CloudControlDeviceSignIn.cpp
     src/cloud/CloudControlSignIn.cpp
-    src/cloud/ControlEndpoint.h
     src/cloud/CloudControlBatching.h
     src/cloud/WorktreeBranches.cpp
     src/cloud/WorktreeBranches.h
@@ -31,16 +34,13 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/cloud/WorktreeRepositories.h
     src/cloud/CloudEventProjection.cpp
     src/cloud/CloudEventProjection.h
-    src/cloud/CloudCrypto.cpp
-    src/cloud/CloudCrypto.h
-    src/cloud/CredentialStore.cpp
-    src/cloud/CredentialStore.h
     src/cloud/RelayWakeups.cpp
     src/cloud/RelayWakeups.h
     src/ipc/LocalIpcServer.cpp
     src/ipc/LocalIpcServer.h
     src/protocol/DaemonProtocol.cpp
     src/protocol/DaemonProtocol.h
+    src/providers/ProviderAdapter.h
     src/providers/ClaudeAdapter.cpp
     src/providers/ClaudeAdapter.h
     src/providers/CursorAdapter.cpp

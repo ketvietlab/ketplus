@@ -216,7 +216,7 @@ Item {
                 visible: messageSurface.agentMessage
                 width: parent.width
                 text: visible ? meta : ""
-                color: shell.t.accent
+                color: shell.t.accentText
                 font.family: shell.t.uiFont
                 font.pixelSize: shell.t.caption
                 font.weight: Font.Medium
@@ -348,7 +348,7 @@ Item {
                     width: Metrics.px(15, shell.t)
                     height: Metrics.px(15, shell.t)
                     source: subtype === "compaction" ? "qrc:/agent/icons/bot.svg" : subtype === "webSearch" ? "qrc:/agent/icons/search.svg" : kind === "tool" ? "qrc:/agent/icons/square-terminal.svg" : kind === "file" ? "qrc:/agent/icons/file-code.svg" : "qrc:/agent/icons/sparkles.svg"
-                    color: subtype === "compaction" ? shell.t.textMuted : subtype === "webSearch" ? shell.t.textMuted : kind === "tool" ? shell.t.warning : kind === "file" ? shell.t.tabActiveText : shell.t.accent
+                    color: subtype === "compaction" ? shell.t.textMuted : subtype === "webSearch" ? shell.t.textMuted : kind === "tool" ? shell.t.warning : kind === "file" ? shell.t.tabActiveText : shell.t.accentText
                 }
                 Text {
                     anchors.verticalCenter: parent.verticalCenter

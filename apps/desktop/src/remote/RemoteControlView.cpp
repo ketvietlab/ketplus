@@ -172,24 +172,26 @@ DialogChoice runDecisionDialog(QWidget* parent, const QString& objectName, const
 
 // Native Qt mapping of @ketvietlab/design-system's public semantic contract.
 // Keep these roles aligned with packages/design-system/src/foundations/tokens.css;
-// the values below were verified against ketjs develop e845f18a.
+// the values below were verified against ketviet e8adee2d (design system 0.1.44).
 struct KdsPalette final {
     QString page, panel, raised, hover, text, secondary, muted, disabled, border, strong, input;
-    QString accent, accentHover, accentActive, accentSubtle, accentBorder;
+    QString accent, accentHover, accentActive, accentSubtle, accentBorder, accentText;
+    QString primary, primaryHover, primaryActive;
     QString positive, positiveBg, positiveBorder, warning, warningBg, warningBorder;
     QString danger, dangerBg, dangerBorder;
 };
 
 KdsPalette kdsPalette(const bool dark) {
     if (dark)
-        return {"#1B1F24", "#1D2228", "#23282F", "#292F37", "#F2F4F7", "#B4BAC4", "#858D99",
-                "#505862", "#2B3037", "#3B424C", "#20252C", "#5968DF", "#6875EA", "#4C59C9",
-                "#252B42", "#465292", "#40C97B", "#1D3028", "#315C45", "#E5A93C", "#352D1F",
-                "#604E29", "#EF665C", "#382526", "#653C3B"};
-    return {"#F7F5F5", "#FFFFFF", "#FBFAFA", "#F1EFF0", "#24262A", "#5A5C5E", "#717373",
-            "#9A9EA2", "#E9E7E8", "#CCCCCD", "#FFFFFF", "#5167C4", "#45579F", "#394985",
-            "#EEF0FB", "#C3CDF0", "#1D5D3B", "#ECF5EF", "#C9E7D4", "#8B5C12", "#FBF3E6",
-            "#EED6AD", "#B42318", "#FEF3F2", "#FECDCA"};
+        return {"#1B1F24", "#1D2228", "#23282F", "#292F37", "#F2F4F7", "#B4BAC4",
+                "#858D99", "#505862", "#2B3037", "#3B424C", "#20252C", "#1746FF",
+                "#1238DB", "#102EB3", "#202C4B", "#415B9C", "#9EB5FF", "#365FD6",
+                "#3151C6", "#2B46B7", "#40C97B", "#1D3028", "#315C45", "#E5A93C",
+                "#352D1F", "#604E29", "#EF665C", "#382526", "#653C3B"};
+    return {"#F7F5F5", "#FFFFFF", "#FBFAFA", "#F1EFF0", "#24262A", "#5A5C5E", "#717373", "#9A9EA2",
+            "#E9E7E8", "#CCCCCD", "#FFFFFF", "#1746FF", "#1238DB", "#102EB3", "#EDF2FF", "#C2D1FF",
+            "#1238DB", "#365FD6", "#3151C6", "#2B46B7", "#1D5D3B", "#ECF5EF", "#C9E7D4", "#8B5C12",
+            "#FBF3E6", "#EED6AD", "#B42318", "#FEF3F2", "#FECDCA"};
 }
 
 QString remoteStyle(const KdsPalette& p, const int basePixels) {
@@ -202,7 +204,7 @@ QLabel[remoteRole="context"] { color:@muted@; font-size:{{caption}}px; font-weig
 QFrame[remoteRole="pageHeader"] { border:0; background:@page@; }
 QLabel[remoteRole="title"] { color:@text@; font-size:{{heading}}px; font-weight:600; }
 QLabel[remoteRole="connectionsTitle"] { color:@text@; font-size:{{display}}px; font-weight:620; }
-QLabel[remoteRole="eyebrow"] { color:@accent@; font-size:{{micro}}px; font-weight:600; letter-spacing:1px; }
+QLabel[remoteRole="eyebrow"] { color:@accentText@; font-size:{{micro}}px; font-weight:600; letter-spacing:1px; }
 QLabel[remoteRole="heroTitle"] { color:@text@; font-size:{{display}}px; font-weight:600; }
 QLabel[remoteRole="heroCopy"] { color:@muted@; font-size:{{reading}}px; }
 QLabel[remoteRole="description"] { color:@muted@; font-size:{{body}}px; }
@@ -233,10 +235,10 @@ QLabel[remoteRole="badge"] { min-height:20px; padding:0 8px; border:1px solid @b
 QLabel[remoteRole="badge"][remoteTone="positive"] { border-color:@positiveBorder@; background:@positiveBg@; color:@positive@; }
 QLabel[remoteRole="badge"][remoteTone="warning"] { border-color:@warningBorder@; background:@warningBg@; color:@warning@; }
 QFrame[remoteRole="routeNode"] { border:1px solid @border@; border-radius:5px; background:@raised@; }
-QLabel[remoteRole="routeIcon"] { color:@accent@; font-size:{{glyphSmall}}px; font-weight:600; }
+QLabel[remoteRole="routeIcon"] { color:@accentText@; font-size:{{glyphSmall}}px; font-weight:600; }
 QLabel[remoteRole="routeTitle"] { color:@text@; font-size:{{body}}px; font-weight:600; }
 QLabel[remoteRole="routeDetail"], QLabel[remoteRole="routeArrow"] { color:@muted@; font-size:{{micro}}px; }
-QLabel[remoteRole="emptyIcon"] { color:@accent@; font-size:{{glyphLarge}}px; font-weight:500; }
+QLabel[remoteRole="emptyIcon"] { color:@accentText@; font-size:{{glyphLarge}}px; font-weight:500; }
 QLabel[remoteRole="emptyTitle"] { color:@text@; font-size:{{title}}px; font-weight:600; }
 QLabel[remoteRole="emptyText"] { color:@muted@; font-size:{{body}}px; }
 QLabel[remoteRole="sectionTitle"] { color:@text@; font-size:{{reading}}px; font-weight:600; }
@@ -276,9 +278,9 @@ QLineEdit:read-only { background:@raised@; color:@secondary@; }
 QPushButton { min-height:32px; padding:0 12px; border:1px solid @strong@; border-radius:5px; background:@input@; color:@secondary@; font-size:{{body}}px; font-weight:500; }
 QPushButton:hover { border-color:@muted@; background:@hover@; color:@text@; }
 QPushButton:pressed { background:@raised@; }
-QPushButton[remotePrimary="true"] { border-color:@accent@; background:@accent@; color:white; font-weight:600; }
-QPushButton[remotePrimary="true"]:hover { border-color:@accentHover@; background:@accentHover@; color:white; }
-QPushButton[remotePrimary="true"]:pressed { border-color:@accentActive@; background:@accentActive@; }
+QPushButton[remotePrimary="true"] { border-color:@primary@; background:@primary@; color:white; font-weight:600; }
+QPushButton[remotePrimary="true"]:hover { border-color:@primaryHover@; background:@primaryHover@; color:white; }
+QPushButton[remotePrimary="true"]:pressed { border-color:@primaryActive@; background:@primaryActive@; }
 QPushButton[remoteTertiary="true"] { border-color:transparent; background:transparent; }
 QPushButton[remoteDanger="true"] { border-color:@dangerBorder@; background:transparent; color:@danger@; }
 QPushButton[remoteDanger="true"]:hover { border-color:@danger@; background:@dangerBg@; color:@danger@; }
@@ -302,6 +304,10 @@ QLabel[remoteRole="qr"] { background:white; border:10px solid white; border-radi
                                                          {"@accentActive@", p.accentActive},
                                                          {"@accentSubtle@", p.accentSubtle},
                                                          {"@accentBorder@", p.accentBorder},
+                                                         {"@accentText@", p.accentText},
+                                                         {"@primaryHover@", p.primaryHover},
+                                                         {"@primaryActive@", p.primaryActive},
+                                                         {"@primary@", p.primary},
                                                          {"@positive@", p.positive},
                                                          {"@positiveBg@", p.positiveBg},
                                                          {"@positiveBorder@", p.positiveBorder},

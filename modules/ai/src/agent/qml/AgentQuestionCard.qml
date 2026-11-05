@@ -505,10 +505,10 @@ Rectangle {
                             }
                             background: Rectangle {
                                 radius: Metrics.px(6, tokens)
-                                color: continueButton.enabled
-                                       ? (continueButton.hovered ? root.tokens.accentHover
-                                                                 : root.tokens.accent)
-                                       : root.tokens.interactiveBackground
+                                color: !continueButton.enabled ? root.tokens.interactiveBackground
+                                       : continueButton.pressed ? root.tokens.actionPrimaryActive
+                                       : continueButton.hovered ? root.tokens.actionPrimaryHover
+                                       : root.tokens.actionPrimary
                             }
                         }
                     }

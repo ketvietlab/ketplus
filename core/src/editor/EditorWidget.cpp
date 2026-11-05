@@ -619,7 +619,7 @@ void EditorWidget::applyTheme(const ThemePalette& palette) {
          scintillaColor(palette.panelSubtle));
     lineNumberDigits_ = 0;
     updateLineNumberMarginWidth();
-    applyStyle(*this, STYLE_BRACELIGHT, palette.accent, true);
+    applyStyle(*this, STYLE_BRACELIGHT, palette.accentText, true);
     send(message(Scintilla::Message::StyleSetBack), STYLE_BRACELIGHT,
          scintillaColor(palette.accentSubtle));
     applyStyle(*this, STYLE_BRACEBAD, palette.danger, true);

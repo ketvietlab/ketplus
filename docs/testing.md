@@ -15,8 +15,11 @@ characterization run on macOS only; Ubuntu builds are paused to cut CI cost and
 must be restored before a Linux release. The browser regression and design
 evidence checks still run on Ubuntu. Private Windows CI remains deferred until
 the required Qt 6.11 WebView development packages are available from Qt's
-public repository. Branch pushes outside `develop` and `main` do not run CI;
-their pull request does, and a newer commit cancels the obsolete run.
+public repository. Pull requests into `integration` and branch pushes run no
+CI; run the targets for the area you changed before pushing and list them in the
+pull request. CI runs on promotion pull requests into `develop`, on pull
+requests into `main` and on pushes to `main`; a newer commit cancels the
+obsolete run. See `docs/release-process.md`.
 
 ## Target map
 
@@ -263,8 +266,9 @@ answer. It also covers queued/stale/task-notification results during startup,
 synthetic no-response frames, prompt UUID matching, explicit startup errors, and
 visible failure on EOF or a bounded wait without an answer. These use a fake SDK
 and consume no provider quota. `ketplus_daemon_worktree_context_tests` verifies that the response
-preferences suffix reaches both start and steer provider input and stays out of
-the journal. Claude/Cursor adapter fixtures retain the full provider prompt in
+preferences reach the Codex developer instructions once, stay out of start and
+steer input, and stay out of the journal; `ketplus_browser_provider_integration_tests`
+checks that Claude, Codex and Cursor host instructions contain them exactly once. Claude/Cursor adapter fixtures retain the full provider prompt in
 their logs and strip the suffix only when dispatching test commands.
 
 ### Claude background tasks

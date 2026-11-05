@@ -60,7 +60,7 @@ Rectangle {
                 width: parent.width
                 text: notice.detail + (notice.folderMissing ? ' <a href="worktree">Choose worktree</a>' : '')
                 textFormat: Text.RichText
-                linkColor: workspace.t.accent
+                linkColor: workspace.t.accentText
                 onLinkActivated: agentHost.requestExecutionWorktree()
                 property string hoveredLink: ""
                 onLinkHovered: function(link) { hoveredLink = link }

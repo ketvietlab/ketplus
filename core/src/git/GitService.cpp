@@ -34,6 +34,22 @@ QString normalizedPath(const QString& path) {
     return QDir::cleanPath(canonical.isEmpty() ? file.absoluteFilePath() : canonical);
 }
 
+// Resolves the folders but keeps the last component, so a symlink stays the link Git tracks
+// instead of becoming its target.
+QString entryPath(const QString& path) {
+    if (path.isEmpty()) {
+        return {};
+    }
+    const QFileInfo file(path);
+    const QString folder = normalizedPath(file.absolutePath());
+    QString name = file.fileName();
+#if defined(Q_OS_DARWIN)
+    // Qt and Git both report names precomposed on macOS; match them when a caller passes NFD.
+    name = name.normalized(QString::NormalizationForm_C);
+#endif
+    return QDir::cleanPath(QDir(folder).filePath(name));
+}
+
 bool isInside(const QString& path, const QString& root) {
     const QString relative = QDir(root).relativeFilePath(path);
     return relative != QStringLiteral("..") && !relative.startsWith(QStringLiteral("../")) &&
@@ -171,7 +187,7 @@ void GitService::requestDiff(const QString& filePath, const GitDiffMode mode) {
         return;
     }
 
-    const QString absolutePath = normalizedPath(filePath);
+    const QString absolutePath = entryPath(filePath);
     if (!isInside(absolutePath, repositoryRoot_)) {
         emit diffReady(filePath, mode, {},
                        QStringLiteral("The file is outside the active repository."));
@@ -183,13 +199,27 @@ void GitService::requestDiff(const QString& filePath, const GitDiffMode mode) {
     QStringList arguments{QStringLiteral("-C"), root, QStringLiteral("diff"),
                           QStringLiteral("--no-ext-diff"), QStringLiteral("--no-color")};
     int acceptedDifferenceExitCode = 0;
-    if (isUntracked(relativePath)) {
+    // Before the first commit, the working tree is compared with nothing: an entry on disk is
+    // entirely new, and one that is only in the index has no combined change. A symlink counts
+    // as on disk even when its target is missing, because Git tracks the link itself.
+    const bool unbornHead = snapshot_.head == QStringLiteral("(initial)");
+    const bool combinedWithoutHead = unbornHead && mode == GitDiffMode::Combined;
+    const QFileInfo entry(absolutePath);
+    const bool entryOnDisk = entry.isSymLink() || entry.exists();
+    if (combinedWithoutHead && !entryOnDisk) {
+        emit diffReady(filePath, mode, {}, {});
+        return;
+    }
+    if (isUntracked(relativePath) ||
+        (combinedWithoutHead && (entry.isSymLink() || entry.isFile()))) {
         arguments.append({QStringLiteral("--no-index"), QStringLiteral("--"),
                           nullDeviceForGit(), absolutePath});
         acceptedDifferenceExitCode = 1;
     } else {
         arguments.append(QStringLiteral("--find-renames"));
-        if (mode == GitDiffMode::Staged) {
+        if (mode == GitDiffMode::Staged || combinedWithoutHead) {
+            // Without HEAD, the staged copy is the closest combined view of a folder entry such
+            // as a submodule.
             arguments.append(QStringLiteral("--cached"));
         } else if (mode == GitDiffMode::Combined) {
             arguments.append(QStringLiteral("HEAD"));

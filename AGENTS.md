@@ -64,8 +64,10 @@ request. Do not close user-owned or other agents' sessions or kill shared browse
 4. Format changed C++ files with the repository `.clang-format`.
 5. Run `git diff --check` before committing. A `core/` change also runs the Lite
    suite (`ctest --preset lite-dev`).
-6. Work on `develop`. Treat `main` as production and update it only as part of
-   an explicit release.
+6. Branch from `integration` and open the pull request into `integration`; it
+   has no CI, so step 3 is the check. Only `integration` is promoted into
+   `develop`, and `main` is production, updated only by an explicit release
+   (`docs/release-process.md`).
 
 ## Source structure
 
@@ -76,7 +78,8 @@ request. Do not close user-owned or other agents' sessions or kill shared browse
 - `apps/browser`: bundled browser runtime, a separate helper process.
 - `modules/ai`: provider transport and Agent Workspace.
 - `modules/atlas`: Atlas process, WebView, and code index.
-- `modules/remote`: daemon IPC client and relay (Control v2) client.
+- `modules/remote`: daemon IPC client, relay (Control v2) client, and the
+  `ketplus_control_crypto` keys/credentials/sign-in target the daemon also links.
 - `tests`: Pro and cross-boundary integration tests.
 - `modules/accounts` and `modules/router`: reserved; create each only with its
   first real implementation.

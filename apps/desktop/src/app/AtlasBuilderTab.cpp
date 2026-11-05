@@ -36,8 +36,9 @@ QString builderStyle(const QPalette& palette, const int basePixels) {
     const QString muted = dark ? QStringLiteral("#858D99") : QStringLiteral("#717373");
     const QString border = dark ? QStringLiteral("#2B3037") : QStringLiteral("#E9E7E8");
     const QString strong = dark ? QStringLiteral("#3B424C") : QStringLiteral("#CCCCCD");
-    const QString accent = dark ? QStringLiteral("#5968DF") : QStringLiteral("#5167C4");
-    const QString accentSubtle = dark ? QStringLiteral("#252B42") : QStringLiteral("#EEF0FB");
+    // Két Design System accent-text and accent-subtle (Két Blue).
+    const QString accent = dark ? QStringLiteral("#9EB5FF") : QStringLiteral("#1238DB");
+    const QString accentSubtle = dark ? QStringLiteral("#202C4B") : QStringLiteral("#EDF2FF");
     return TypeScale::apply(QStringLiteral(R"QSS(
 QWidget#atlasBuilderTab, QWidget#atlasBuilderPlaceholder { background:%1; color:%4; }
 QWidget#atlasBuilderToolbar { min-height:58px; max-height:58px; background:%2; border-bottom:1px solid %6; }

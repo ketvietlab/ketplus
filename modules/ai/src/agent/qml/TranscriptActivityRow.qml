@@ -166,7 +166,7 @@ Column {
             anchors.left: parent.left
             y: Math.round(activityHeader.firstLineCenter - height / 2)
             source: root.iconSource()
-            color: root.running ? root.tokens.accent : root.tokens.textMuted
+            color: root.running ? root.tokens.accentText : root.tokens.textMuted
         }
 
         Text {
@@ -183,7 +183,7 @@ Column {
                   ? (root.running ? "Running command" : "Ran command") + (root.status === "failed" ? " · Failed" : root.status === "interrupted" ? " · Interrupted" : "")
                   : root.expanded ? root.displayTitle : root.displayTitle.replace(/\s*\n\s*/g, " ")
             textFormat: Text.PlainText
-            color: root.status === "failed" ? root.tokens.danger : titleHover.hovered && root.opensFile ? root.tokens.accent : root.tokens.textSecondary
+            color: root.status === "failed" ? root.tokens.danger : titleHover.hovered && root.opensFile ? root.tokens.accentText : root.tokens.textSecondary
             font.underline: titleHover.hovered && root.opensFile
             font.family: root.subtype === "command" && !root.describedCommand ? root.tokens.monoFont : root.tokens.uiFont
             font.pixelSize: root.tokens.body
@@ -224,7 +224,7 @@ Column {
             background: Item {}
             contentItem: Text {
                 text: browserOpen.text
-                color: root.tokens.accent
+                color: root.tokens.accentText
                 font.family: root.tokens.uiFont
                 font.pixelSize: root.tokens.caption
                 horizontalAlignment: Text.AlignHCenter
@@ -289,7 +289,7 @@ Column {
             verticalPadding: 0
             contentItem: Text {
                 text: openTarget.text
-                color: root.tokens.accent
+                color: root.tokens.accentText
                 font.family: root.tokens.uiFont
                 font.pixelSize: root.tokens.caption
                 verticalAlignment: Text.AlignVCenter
@@ -410,7 +410,7 @@ Column {
                 background: Item {}
                 contentItem: Text {
                     text: commandMore.text
-                    color: root.tokens.accent
+                    color: root.tokens.accentText
                     font.family: root.tokens.uiFont
                     font.pixelSize: root.tokens.caption
                     horizontalAlignment: Text.AlignRight

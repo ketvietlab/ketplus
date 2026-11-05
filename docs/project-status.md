@@ -120,8 +120,12 @@ milestone changes state.
   waiting for lingering output after closing prompt input. Accepted unanswered
   steering still keeps the turn open. A fake-SDK regression covers output that
   never ends after its result.
-- Provider-bound start/steer input uses the restored 0.1.10 response guidance
-  from `runtime/ResponseGuidance.h`: Vietnamese self-address "tui", light playful
+- Provider host instructions carry the restored 0.1.10 response guidance
+  from `runtime/ResponseGuidance.h`. Claude (system-prompt append) and Codex
+  (`developerInstructions`) receive it once per session instead of in each user
+  message, where every turn added another ~1.2k-token copy to the history. Cursor's
+  ACP has no system prompt, so it still arrives with each turn in the host block.
+  The guidance asks for Vietnamese self-address "tui", light playful
   tone, accurate 🟢/🟡/🔴 progress and concrete next actions. The longer flirt-comedy
   prompt is removed. Each turn ends with a localized task/status/evidence/next-action
   matrix that carries unfinished requests forward and distinguishes implementation,
@@ -269,6 +273,18 @@ future directory without first defining and testing its contract.
   question card extraction. New work should continue extracting cohesive
   transcript, composer, and attachment components instead of extending the
   monolith.
+- `CodexAppServer` keeps a direct codex app-server transport that only tests use
+  (26 constructions in 8 Agent Workspace test files); the application always goes
+  through the daemon. Its transports are separate translation units, but about 20
+  `usesDaemon()` branches in the `AgentSession*` sources still serve only that test
+  path. Retiring it means moving those tests onto a daemon fixture first.
+- KétPlus (`core/src/app`) and KétPlus Pro (`apps/desktop/src/app`) each have their own
+  `ketplus::MainWindow`, carried over from the two-repository era (ADR 0029). Shared
+  behavior moves into `core` libraries one slice at a time; the Language, Line Endings
+  and Encoding controls are `DocumentFormatControls` (`core/src/editor`). Search
+  (`MainWindowSearch.cpp`, 78 of about 360 lines differ) is the next slice; Documents,
+  Navigation and Panels have diverged and need their differences reconciled before they
+  can be shared.
 - Several test translation units exceed 400 lines. Split reusable fixtures and
   scenario groups when adding coverage, while preserving readable test intent.
 - Unsigned developer packages are implemented, but signing, notarization, and
@@ -320,7 +336,7 @@ selection moves the existing conversation to the chosen repository, updates its
 header and scope, and promotes the sidebar group while retaining its draft.
 The iPhone variant uses a two-step bottom sheet. Search, failed acknowledgment,
 offline/reconnect and stale-catalog recovery are covered by focused mock tests.
-See `ketplus-desktop-redesign.ketatlas/README.md` for fixtures and evidence.
+See `ketplus.ketatlas/README.md` for fixtures and evidence.
 The approved flow is implemented in the native Qt picker and SwiftUI companion.
 Acknowledged switches preserve the conversation anchor/draft, regroup the sidebar
 and update Files/Source Control and file search. Local repositories include both

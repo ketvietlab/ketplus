@@ -2,6 +2,7 @@
 #include "BrowserAgentInstructions.h"
 #include "BrowserToolLaunch.h"
 #include "providers/ClaudeCredentials.h"
+#include "runtime/ResponseGuidance.h"
 #include <QRegularExpression>
 
 #include <QCoreApplication>
@@ -98,7 +99,7 @@ QJsonObject decorateClaudeModel(QJsonObject source) {
 } // namespace
 
 ClaudeAdapter::ClaudeAdapter(const QString& executable, QObject* parent)
-    : QObject(parent), executable_(executable.isEmpty() ? findExecutable() : executable),
+    : ProviderAdapter(parent), executable_(executable.isEmpty() ? findExecutable() : executable),
       process_(new QProcess(this)), restartTimer_(new QTimer(this)) {
     restartTimer_->setSingleShot(true);
     connect(restartTimer_, &QTimer::timeout, this, [this] {
@@ -162,6 +163,20 @@ ClaudeAdapter::~ClaudeAdapter() {
 }
 
 bool ClaudeAdapter::isAvailable() const { return !executable_.isEmpty(); }
+
+QString ClaudeAdapter::missingSidecarMessage() {
+    return QStringLiteral("Claude Agent SDK sidecar was not found.");
+}
+
+QString ClaudeAdapter::missingMessage() const { return missingSidecarMessage(); }
+
+void ClaudeAdapter::runtimeStatus(std::function<void(const compat::Runtime&)> callback) {
+    callback(compat::bundledClaude(executable_));
+}
+
+bool ClaudeAdapter::supports(const QString& capability) const {
+    return compat::policy(QStringLiteral("claude")).baselineSupports(capability);
+}
 
 bool ClaudeAdapter::isReady() const { return ready_; }
 
@@ -365,7 +380,8 @@ void ClaudeAdapter::sendCall(const QString& method, const QJsonObject& params, C
                 instructions += QStringLiteral("\n\n") + agentInstructions;
         }
         providerParams.insert(QStringLiteral("mcpServers"), servers);
-        providerParams.insert(QStringLiteral("browserInstructions"), instructions);
+        providerParams.insert(QStringLiteral("browserInstructions"),
+                              withResponseGuidance(instructions));
     }
     sendObject({{QStringLiteral("id"), static_cast<qint64>(id)},
                 {QStringLiteral("method"), method},

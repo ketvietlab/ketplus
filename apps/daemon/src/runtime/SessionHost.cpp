@@ -184,6 +184,23 @@ QString requestedAdapter(const QJsonObject& options, const QString& fallback) {
 // Commands relayed from the phone arrive under this client id; every other client runs on the Mac.
 bool localClient(const QString& clientId) { return clientId != QStringLiteral("cloud-control-v2"); }
 
+// Appends each provider's model list to `merged` in order; a provider that fails adds nothing.
+void appendModelLists(QList<ProviderAdapter*> providers, QJsonArray merged,
+                      std::function<void(const QJsonArray&)> done) {
+    if (providers.isEmpty()) {
+        done(merged);
+        return;
+    }
+    ProviderAdapter* const next = providers.takeFirst();
+    next->call(QStringLiteral("model/list"), {},
+               [providers = std::move(providers), merged = std::move(merged),
+                done = std::move(done)](const QJsonObject& result, const QString&) mutable {
+                   for (const QJsonValue& value : result.value(QStringLiteral("data")).toArray())
+                       merged.append(value);
+                   appendModelLists(std::move(providers), std::move(merged), std::move(done));
+               });
+}
+
 bool isCanonicalAdapter(const QString& adapter) {
     return adapter == QStringLiteral("codex") || adapter == QStringLiteral("claude") ||
            adapter == QStringLiteral("cursor");
@@ -274,26 +291,27 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAda
 
 SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAdapter* claude,
                          CursorAdapter* cursor, QObject* parent)
-    : QObject(parent), catalogCache_(this), journal_(journal), adapter_(adapter), claude_(claude),
-      cursor_(cursor), approvals_(new ApprovalBroker(this)),
+    : QObject(parent), catalogCache_(this), journal_(journal), adapter_(adapter),
+      approvals_(new ApprovalBroker(this)),
       mediaStore_(McpMediaStore::directoryForJournal(journal->databasePath())) {
     deltaFlush_.setSingleShot(true);
     deltaFlush_.setInterval(deltaCoalesceMs);
     connect(&deltaFlush_, &QTimer::timeout, this, &SessionHost::flushDeltas);
+    for (ProviderAdapter* provider :
+         {static_cast<ProviderAdapter*>(adapter), static_cast<ProviderAdapter*>(claude),
+          static_cast<ProviderAdapter*>(cursor)})
+        if (provider != nullptr)
+            providers_.append(provider);
     QSet<QString> liveSessions;
-    connect(adapter_, &CodexAdapter::stopped, this, [this] { catalogCache_.invalidate("codex"); });
+    for (ProviderAdapter* provider : std::as_const(providers_))
+        connect(provider, &ProviderAdapter::stopped, this,
+                [this, name = provider->name()] { catalogCache_.invalidate(name); });
     connect(adapter_, &CodexAdapter::notificationReceived, this,
             [this](const QString& method, const QJsonObject&) {
                 if (method == "account/updated")
                     catalogCache_.invalidate("codex");
             });
     connect(adapter_, &CodexAdapter::reloaded, this, [this] { catalogCache_.invalidate("codex"); });
-    if (claude_)
-        connect(claude_, &ClaudeAdapter::stopped, this,
-                [this] { catalogCache_.invalidate("claude"); });
-    if (cursor_)
-        connect(cursor_, &CursorAdapter::stopped, this,
-                [this] { catalogCache_.invalidate("cursor"); });
     for (const StoredSession& stored : journal_->sessions()) {
         liveSessions.insert(stored.id);
         Session session;
@@ -376,43 +394,27 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAda
                                  {QStringLiteral("method"), method},
                                  {QStringLiteral("oversized_bytes"), bytes}});
             });
-    connect(adapter_, &CodexAdapter::stopped, this,
-            [this](const QString& reason) { providerStopped(QStringLiteral("codex"), reason); });
     connect(adapter_, &CodexAdapter::reloaded, this, &SessionHost::providerReloaded);
-    if (claude_ != nullptr) {
-        connect(claude_, &ClaudeAdapter::canonicalEvent, this,
-                [this](const QString& sessionId, const QString& type, const QJsonObject& payload) {
-                    handleCanonicalEvent(QStringLiteral("claude"), sessionId, type, payload);
+    for (ProviderAdapter* provider : std::as_const(providers_)) {
+        const QString name = provider->name();
+        connect(provider, &ProviderAdapter::stopped, this,
+                [this, name](const QString& reason) { providerStopped(name, reason); });
+        if (provider == adapter_)
+            continue; // Codex requests and notifications are connected above.
+        connect(provider, &ProviderAdapter::canonicalEvent, this,
+                [this, name](const QString& sessionId, const QString& type,
+                             const QJsonObject& payload) {
+                    handleCanonicalEvent(name, sessionId, type, payload);
                 });
-        connect(
-            claude_, &ClaudeAdapter::requestReceived, this,
-            [this](const QJsonValue& requestId, const QString& method, const QJsonObject& params) {
-                if (method == "question.request") {
-                    handleCanonicalQuestion(requestId, params, "claude");
-                    return;
-                }
-                handleCanonicalPermission(QStringLiteral("claude"), requestId, params);
-            });
-        connect(claude_, &ClaudeAdapter::stopped, this, [this](const QString& reason) {
-            providerStopped(QStringLiteral("claude"), reason);
-        });
-    }
-    if (cursor_ != nullptr) {
-        connect(cursor_, &CursorAdapter::canonicalEvent, this,
-                [this](const QString& sessionId, const QString& type, const QJsonObject& payload) {
-                    handleCanonicalEvent(QStringLiteral("cursor"), sessionId, type, payload);
+        connect(provider, &ProviderAdapter::requestReceived, this,
+                [this, name](const QJsonValue& requestId, const QString& method,
+                             const QJsonObject& params) {
+                    if (method == QStringLiteral("question.request") ||
+                        method == QStringLiteral("cursor/ask_question"))
+                        handleCanonicalQuestion(requestId, params, name);
+                    else
+                        handleCanonicalPermission(name, requestId, params);
                 });
-        connect(
-            cursor_, &CursorAdapter::requestReceived, this,
-            [this](const QJsonValue& requestId, const QString& method, const QJsonObject& params) {
-                if (method == QStringLiteral("cursor/ask_question"))
-                    handleCanonicalQuestion(requestId, params);
-                else
-                    handleCanonicalPermission(QStringLiteral("cursor"), requestId, params);
-            });
-        connect(cursor_, &CursorAdapter::stopped, this, [this](const QString& reason) {
-            providerStopped(QStringLiteral("cursor"), reason);
-        });
     }
     connect(approvals_, &ApprovalBroker::providerResolutionReady, this,
             &SessionHost::routeProviderResponse);
@@ -599,12 +601,19 @@ void SessionHost::handleProviderQuery(
                                                            const QString& providerError) {
                 if (providerError.isEmpty())
                     tagCodexModels(result);
-                QJsonArray data = result.value(QStringLiteral("data")).toArray();
-                const bool hasClaude = claude_ != nullptr && claude_->isAvailable();
-                const bool hasCursor = cursor_ != nullptr && cursor_->isAvailable();
-                const auto finish = [callback, providerError, hasClaude, hasCursor,
-                                     result](QJsonArray merged) {
-                    if (merged.isEmpty() && !providerError.isEmpty() && !hasClaude && !hasCursor) {
+                // Other providers list everything on Codex's first page, in registry order.
+                QList<ProviderAdapter*> others;
+                if (cursor.isEmpty())
+                    for (ProviderAdapter* provider : std::as_const(providers_))
+                        if (provider != adapter_ && provider->isAvailable())
+                            others.append(provider);
+                const bool hasOthers = std::any_of(
+                    providers_.cbegin(), providers_.cend(), [this](ProviderAdapter* provider) {
+                        return provider != adapter_ && provider->isAvailable();
+                    });
+                const auto finish = [callback, providerError, hasOthers,
+                                     result](const QJsonArray& merged) {
+                    if (merged.isEmpty() && !providerError.isEmpty() && !hasOthers) {
                         callback({}, providerError);
                         return;
                     }
@@ -613,38 +622,7 @@ void SessionHost::handleProviderQuery(
                     response.insert(QStringLiteral("ok"), true);
                     callback(response, {});
                 };
-                const auto appendCursor = [this, finish](QJsonArray current) {
-                    if (cursor_ == nullptr || !cursor_->isAvailable()) {
-                        finish(std::move(current));
-                        return;
-                    }
-                    cursor_->call(
-                        QStringLiteral("model/list"), {},
-                        [current, finish](const QJsonObject& cursorResult, const QString&) {
-                            QJsonArray merged = current;
-                            for (const QJsonValue& value :
-                                 cursorResult.value(QStringLiteral("data")).toArray())
-                                merged.append(value);
-                            finish(merged);
-                        });
-                };
-                if (cursor.isEmpty() && hasClaude) {
-                    claude_->call(
-                        QStringLiteral("model/list"), {},
-                        [data, appendCursor](const QJsonObject& claudeResult, const QString&) {
-                            QJsonArray merged = data;
-                            for (const QJsonValue& value :
-                                 claudeResult.value(QStringLiteral("data")).toArray())
-                                merged.append(value);
-                            appendCursor(merged);
-                        });
-                    return;
-                }
-                if (cursor.isEmpty() && hasCursor) {
-                    appendCursor(data);
-                    return;
-                }
-                finish(data);
+                appendModelLists(others, result.value(QStringLiteral("data")).toArray(), finish);
             });
         return;
     }
@@ -662,14 +640,11 @@ void SessionHost::handleProviderQuery(
         if (session != sessions_.cend())
             pending->required = session->stored.adapter;
         QList<QPair<QString, ProviderCatalogCache::Fetch>> fetches;
-        fetches.append(
-            {"codex", [this](auto done) { adapter_->configurationCatalog(std::move(done)); }});
-        if (claude_ && claude_->isAvailable())
-            fetches.append(
-                {"claude", [this](auto done) { claude_->configurationCatalog(std::move(done)); }});
-        if (cursor_ && cursor_->isAvailable())
-            fetches.append(
-                {"cursor", [this](auto done) { cursor_->configurationCatalog(std::move(done)); }});
+        for (ProviderAdapter* provider : std::as_const(providers_))
+            if (provider == adapter_ || provider->isAvailable())
+                fetches.append({provider->name(), [provider](auto done) {
+                                    provider->configurationCatalog(std::move(done));
+                                }});
         for (const auto& fetch : fetches)
             pending->providers.append(fetch.first);
         const auto finish = [pending, callback] {
@@ -1199,14 +1174,9 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
             it == sessions_.end() ? QJsonArray{} : it->backgroundTasks, compactWindow);
         !failure.isEmpty())
         return failure;
-    if (adapter == QStringLiteral("claude") && (claude_ == nullptr || !claude_->isAvailable())) {
-        return error(QStringLiteral("provider_unavailable"),
-                     QStringLiteral("Claude Agent SDK sidecar was not found."));
-    }
-    if (adapter == QStringLiteral("cursor") && (cursor_ == nullptr || !cursor_->isAvailable())) {
-        return error(QStringLiteral("provider_unavailable"),
-                     CursorAdapter::missingExecutableMessage());
-    }
+    // Codex is checked when its process starts, as before.
+    if (adapter != QStringLiteral("codex") && availableProvider(adapter) == nullptr)
+        return error(QStringLiteral("provider_unavailable"), missingProviderMessage(adapter));
     if (it == sessions_.end()) {
         Session session;
         session.stored.id = sessionId;
@@ -1410,11 +1380,12 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
                          .arg(it->stored.worktreePath, executionDirectory(*it))}});
     if (agentOrigin.isEmpty()) {
         addAgentContext(*it, displayText, input, true);
-        appendResponseGuidance(input);
     } else {
         input.append(
             QJsonObject{{QStringLiteral("type"), QStringLiteral("text")},
-                        {QStringLiteral("text"), agent_messaging::automaticTurnGuidance()}});
+                        {QStringLiteral("text"),
+                         agent_messaging::automaticTurnGuidance(
+                             agentOrigin.value(QStringLiteral("agent_messages")).toArray())}});
     }
     prepareTurn(sessionId, it->stored.generation, input, turnOptions);
     return ok(
@@ -1601,9 +1572,9 @@ QJsonObject SessionHost::steer(const QJsonObject& request, CommandCallback outco
         return error(QStringLiteral("turn_not_running"),
                      QStringLiteral("The session has no active turn to steer."));
     }
-    if (claude && claude_ == nullptr) {
+    if (claude && provider(QStringLiteral("claude")) == nullptr) {
         return error(QStringLiteral("provider_unavailable"),
-                     QStringLiteral("Claude Agent SDK sidecar was not found."));
+                     missingProviderMessage(QStringLiteral("claude")));
     }
     // Images reach the running turn as they would a new one: the provider reads temporary
     // copies, and turn.steered keeps media-store references so every client can draw them.
@@ -1699,13 +1670,13 @@ QJsonObject SessionHost::steer(const QJsonObject& request, CommandCallback outco
     };
     if (agentOrigin.isEmpty())
         addAgentContext(*session, displayText, input, false);
-    appendResponseGuidance(input);
     if (claude) {
-        claude_->call(QStringLiteral("turn/steer"),
-                      {{QStringLiteral("sessionId"), sessionId},
-                       {QStringLiteral("prompt"), promptText(input)},
-                       {QStringLiteral("images"), imagePaths(input)}},
-                      std::move(finish));
+        provider(QStringLiteral("claude"))
+            ->call(QStringLiteral("turn/steer"),
+                   {{QStringLiteral("sessionId"), sessionId},
+                    {QStringLiteral("prompt"), promptText(input)},
+                    {QStringLiteral("images"), imagePaths(input)}},
+                   std::move(finish));
     } else {
         adapter_->call(QStringLiteral("turn/steer"),
                        {{QStringLiteral("threadId"), session->stored.threadId},
@@ -1774,11 +1745,10 @@ QJsonObject SessionHost::interrupt(const QJsonObject& request) {
             return error(QStringLiteral("turn_not_running"),
                          QStringLiteral("The session has no active turn to interrupt."));
         }
-        const bool cursor = session->stored.adapter == QStringLiteral("cursor");
-        if (cursor ? cursor_ == nullptr : claude_ == nullptr) {
+        ProviderAdapter* const target = provider(session->stored.adapter);
+        if (target == nullptr) {
             return error(QStringLiteral("provider_unavailable"),
-                         cursor ? CursorAdapter::missingExecutableMessage()
-                                : QStringLiteral("Claude Agent SDK sidecar was not found."));
+                         missingProviderMessage(session->stored.adapter));
         }
         // Claude and Cursor first create a provider-native session.  There is no native turn to
         // cancel during that short interval, so remember Stop and send it just after the adapter
@@ -1796,12 +1766,8 @@ QJsonObject SessionHost::interrupt(const QJsonObject& request) {
                             {{QStringLiteral("message"), providerError}});
             }
         };
-        if (cursor)
-            cursor_->call(QStringLiteral("turn/interrupt"),
-                          {{QStringLiteral("sessionId"), sessionId}}, finish);
-        else
-            claude_->call(QStringLiteral("turn/interrupt"),
-                          {{QStringLiteral("sessionId"), sessionId}}, finish);
+        target->call(QStringLiteral("turn/interrupt"), {{QStringLiteral("sessionId"), sessionId}},
+                     finish);
         return ok({{QStringLiteral("accepted"), true}});
     }
     // Codex can likewise be between turn/start and its turn/started notification. The daemon
@@ -2632,10 +2598,8 @@ void SessionHost::handleCanonicalPermission(const QString& adapterName, const QJ
                                             const QJsonObject& params) {
     auto it = sessions_.find(params.value(QStringLiteral("sessionId")).toString());
     if (it == sessions_.end()) {
-        if (adapterName == QStringLiteral("cursor") && cursor_ != nullptr)
-            cursor_->respond(requestId, {{QStringLiteral("allow"), false}});
-        else if (claude_ != nullptr)
-            claude_->respond(requestId, {{QStringLiteral("allow"), false}});
+        if (ProviderAdapter* const target = provider(adapterName))
+            target->respond(requestId, {{QStringLiteral("allow"), false}});
         return;
     }
     const QString tool = params.value(QStringLiteral("tool")).toString();
@@ -2655,10 +2619,8 @@ void SessionHost::handleCanonicalQuestion(const QJsonValue& requestId, const QJs
                                           const QString& provider) {
     auto it = sessions_.find(params.value(QStringLiteral("sessionId")).toString());
     if (it == sessions_.end()) {
-        if (provider == "claude" && claude_ != nullptr)
-            claude_->respondError(requestId, "unknown_session", "Question has no active session.");
-        else if (cursor_ != nullptr)
-            cursor_->respondError(requestId, "unknown_session", "Question has no active session.");
+        if (ProviderAdapter* const target = this->provider(provider))
+            target->respondError(requestId, "unknown_session", "Question has no active session.");
         return;
     }
     (void)approvals_->request(
@@ -2676,26 +2638,17 @@ void SessionHost::routeProviderResponse(const QJsonValue& taggedId, const QJsonO
     QJsonValue requestId = taggedId;
     if (!untagRequestId(taggedId, adapterName, requestId))
         adapterName = pendingProviderByRequest_.take(requestKey(taggedId));
-    if (adapterName == QStringLiteral("claude") && claude_ != nullptr) {
-        if (result.contains("answers")) {
-            claude_->respond(requestId, result);
-            return;
-        }
-        const bool allow =
-            result.value(QStringLiteral("decision")).toString() == QStringLiteral("accept");
-        claude_->respond(requestId,
-                         {{QStringLiteral("allow"), allow}, {QStringLiteral("accepted"), allow}});
-        return;
-    }
-    if (adapterName == QStringLiteral("cursor") && cursor_ != nullptr) {
+    // Claude and Cursor take answers as they are and decisions as allow/accepted.
+    ProviderAdapter* const target = provider(adapterName);
+    if (target != nullptr && target != adapter_) {
         if (result.contains(QStringLiteral("answers"))) {
-            cursor_->respond(requestId, result);
+            target->respond(requestId, result);
             return;
         }
         const bool allow =
             result.value(QStringLiteral("decision")).toString() == QStringLiteral("accept");
-        cursor_->respond(requestId,
-                         {{QStringLiteral("allow"), allow}, {QStringLiteral("accepted"), allow}});
+        target->respond(requestId,
+                        {{QStringLiteral("allow"), allow}, {QStringLiteral("accepted"), allow}});
         return;
     }
     adapter_->respond(requestId, result);
@@ -2709,15 +2662,8 @@ void SessionHost::routeProviderError(const QJsonValue& taggedId, const QString& 
     QJsonValue requestId = taggedId;
     if (!untagRequestId(taggedId, adapterName, requestId))
         adapterName = pendingProviderByRequest_.take(requestKey(taggedId));
-    if (adapterName == QStringLiteral("claude") && claude_ != nullptr) {
-        claude_->respondError(requestId, code, message);
-        return;
-    }
-    if (adapterName == QStringLiteral("cursor") && cursor_ != nullptr) {
-        cursor_->respondError(requestId, code, message);
-        return;
-    }
-    adapter_->respondError(requestId, code, message);
+    ProviderAdapter* const target = provider(adapterName);
+    (target != nullptr ? target : adapter_)->respondError(requestId, code, message);
 }
 
 } // namespace ketplus::daemon

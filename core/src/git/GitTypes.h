@@ -48,6 +48,8 @@ struct GitWorktree final {
     QString head;
     QString branch;
     QString lockReason;
+    // `git worktree lock` without --reason leaves lockReason empty.
+    bool locked{false};
     bool current{false};
     bool detached{false};
     bool bare{false};

@@ -24,6 +24,7 @@ class ClaudeAdapter;
 class ClaudeAccountUsage;
 class CodexAdapter;
 class CursorAdapter;
+class ProviderAdapter;
 
 class SessionHost final : public QObject, private AgentHostPort {
     Q_OBJECT
@@ -74,6 +75,10 @@ class SessionHost final : public QObject, private AgentHostPort {
     [[nodiscard]] static bool isBackgroundTaskCommand(const QString& type);
     // ADR 0015 capability of the provider behind `adapter` ("codex", "claude" or "cursor").
     [[nodiscard]] bool providerSupports(const QString& adapter, const QString& capability) const;
+    // The provider for a session's adapter name, or nullptr when it is not installed.
+    [[nodiscard]] ProviderAdapter* provider(const QString& adapter) const;
+    [[nodiscard]] ProviderAdapter* availableProvider(const QString& adapter) const;
+    [[nodiscard]] QString missingProviderMessage(const QString& adapter) const;
     // ADR 0027: the local socket and executable the injected ketplus_agents server uses. Until
     // set (tests that drive SessionHost directly), turns get no agent tools.
     void setAgentEndpoint(const QString& socketName, const QString& executable);
@@ -248,7 +253,6 @@ class SessionHost final : public QObject, private AgentHostPort {
     void releaseTurnAttachments(Session& session);
     // What a provider that takes a single prompt reads from a message's input, and the paths of
     // its images.
-    static void appendResponseGuidance(QJsonArray& input);
     [[nodiscard]] static QString promptText(const QJsonArray& input);
     [[nodiscard]] static QJsonArray imagePaths(const QJsonArray& input);
     [[nodiscard]] bool updateSessionTitle(Session& session, const QString& title, bool customTitle);
@@ -294,9 +298,12 @@ class SessionHost final : public QObject, private AgentHostPort {
 
     ProviderCatalogCache catalogCache_;
     LocalJournal* journal_{nullptr};
+    // Codex is also reached through `adapter_` for what only it has: app-server notifications,
+    // thread listing and the browser-settings reload.
     CodexAdapter* adapter_{nullptr};
-    ClaudeAdapter* claude_{nullptr};
-    CursorAdapter* cursor_{nullptr};
+    // Every installed provider by adapter name, Codex included; the order is the merge order
+    // of model lists and catalogs.
+    QList<ProviderAdapter*> providers_;
     ApprovalBroker* approvals_{nullptr};
     QHash<QString, Session> sessions_;
     QHash<QString, QString> sessionsByThread_;

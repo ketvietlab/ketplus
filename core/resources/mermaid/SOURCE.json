@@ -1,10 +1,10 @@
 {
-  "source_commit": "4a5f82df06d5b2433497d5ab45736b98279f436e",
+  "source_commit": "e8adee2da3bfeea66c01f46f110fdc5243fb23c0",
   "theme_path": "ketsuite/packages/design-system/src/runtime/mermaid-theme.js",
   "tokens_path": "ketsuite/packages/design-system/src/foundations/tokens.css",
   "package": "@ketvietlab/design-system",
-  "version": "0.1.41",
+  "version": "0.1.44",
   "license": "MIT",
   "theme_source_sha256": "8edf02b461a4186b7f2a3fbccce3be0f6aff121721460f04b69389b0f3b29bed",
-  "tokens_source_sha256": "eb8d8de9e142778388e5f2aabf1921e4e25184168423594007cf31447c3d7bf1"
+  "tokens_source_sha256": "f920ee68488887e67430b0c71690e608068e0a691b7978f2a8b67cbe92c41d7f"
 }

@@ -5,7 +5,6 @@
 #include "providers/CursorAdapter.h"
 #include "runtime/ApprovalBroker.h"
 #include "runtime/CompactWindowPolicy.h"
-#include "runtime/ResponseGuidance.h"
 
 #include <QFileInfo>
 #include <QJsonArray>
@@ -40,11 +39,6 @@ QString sandboxType(const QJsonObject& options) {
 }
 
 } // namespace
-
-// Provider-only suffix: the journal and optimistic UI keep the original user text.
-void SessionHost::appendResponseGuidance(QJsonArray& input) {
-    input.append(QJsonObject{{"type", "text"}, {"text", responseGuidance()}});
-}
 
 // Every text item of the turn, in order; attachments arrive as further items.
 QString SessionHost::promptText(const QJsonArray& input) {
@@ -188,7 +182,8 @@ void SessionHost::prepareTurn(const QString& sessionId, const qint64 generation,
 void SessionHost::beginClaudeTurn(const QString& sessionId, const qint64 generation,
                                   const QJsonArray& input, const QJsonObject& options) {
     auto it = sessions_.find(sessionId);
-    if (it == sessions_.end() || it->stored.generation != generation || claude_ == nullptr) {
+    ProviderAdapter* const claude = provider(QStringLiteral("claude"));
+    if (it == sessions_.end() || it->stored.generation != generation || claude == nullptr) {
         return;
     }
     const QString prompt = promptText(input);
@@ -226,7 +221,7 @@ void SessionHost::beginClaudeTurn(const QString& sessionId, const qint64 generat
         params.insert(QStringLiteral("agentMcpServer"), agent_tools::claudeServer(*launch));
         params.insert(QStringLiteral("agentInstructions"), agentInstructions(*it));
     }
-    claude_->call(
+    claude->call(
         QStringLiteral("turn/start"), params,
         [this, sessionId, generation](const QJsonObject& result, const QString& providerError) {
             auto current = sessions_.find(sessionId);
@@ -267,7 +262,8 @@ void SessionHost::beginClaudeTurn(const QString& sessionId, const qint64 generat
 void SessionHost::beginCursorTurn(const QString& sessionId, const qint64 generation,
                                   const QJsonArray& input, const QJsonObject& options) {
     auto it = sessions_.find(sessionId);
-    if (it == sessions_.end() || it->stored.generation != generation || cursor_ == nullptr)
+    ProviderAdapter* const cursor = provider(QStringLiteral("cursor"));
+    if (it == sessions_.end() || it->stored.generation != generation || cursor == nullptr)
         return;
     const QString prompt = promptText(input);
     if (prompt.isEmpty()) {
@@ -297,7 +293,7 @@ void SessionHost::beginCursorTurn(const QString& sessionId, const qint64 generat
         params.insert(QStringLiteral("agentMcpServer"), agent_tools::acpServer(*launch));
         params.insert(QStringLiteral("agentInstructions"), agentInstructions(*it));
     }
-    cursor_->call(
+    cursor->call(
         QStringLiteral("turn/start"), params,
         [this, sessionId, generation](const QJsonObject& result, const QString& providerError) {
             auto current = sessions_.find(sessionId);

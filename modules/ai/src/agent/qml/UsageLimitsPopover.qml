@@ -182,7 +182,7 @@ Popup {
                             contentItem: Text {
                                 id: compactText
                                 text: "Compact session"
-                                color: compactSessionButton.hovered ? workspace.t.accentActive : root.primaryColor
+                                color: workspace.t.accentText
                                 font.family: workspace.t.uiFont
                                 font.pixelSize: workspace.t.body
                                 horizontalAlignment: Text.AlignHCenter

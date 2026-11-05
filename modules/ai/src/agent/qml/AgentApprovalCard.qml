@@ -152,7 +152,7 @@ Rectangle {
                 width: Metrics.px(96, tokens); height: Metrics.px(34, tokens); text: "Allow once"
                 onClicked: root.submit("Accept")
                 contentItem: Text { text: parent.text; color: "#ffffff"; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: root.tokens.caption; font.weight: Font.DemiBold }
-                background: Rectangle { radius: Metrics.px(6, tokens); color: parent.hovered ? root.tokens.accentHover : root.tokens.accent }
+                background: Rectangle { radius: Metrics.px(6, tokens); color: parent.pressed ? root.tokens.actionPrimaryActive : parent.hovered ? root.tokens.actionPrimaryHover : root.tokens.actionPrimary }
             }
         }
     }

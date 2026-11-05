@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { JSDOM, VirtualConsole } = require("jsdom");
-const root = path.resolve(__dirname, "../../ketplus-desktop-redesign.ketatlas");
+const root = path.resolve(__dirname, "../../ketplus.ketatlas");
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "atlas.json"), "utf8"));
 const openedWindows = new Set();
 test.afterEach(() => {
@@ -40,6 +40,8 @@ function screen(relative = "screens/workspace.html", options = {}) {
         postMessage(message, origin) { parentMessages.push({ message, origin }); },
     } });
     w.document.fonts = { ready: Promise.resolve() };
+    // jsdom has no CSS namespace; selectors built with CSS.escape only quote attribute values.
+    w.CSS ??= { escape: value => String(value).replace(/["\\\]\[]/g, "\\$&") };
     w.HTMLElement.prototype.scrollIntoView = function () {};
     // jsdom does not implement native dialog methods; only emulate open/close
     // state here. Browser checks own focus, top-layer rendering and backdrop QA.

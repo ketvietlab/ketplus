@@ -3,6 +3,7 @@
 #include "BrowserToolLaunch.h"
 #include "providers/CursorToolItem.h"
 #include "providers/compat/ProviderVersionProbe.h"
+#include "runtime/ResponseGuidance.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -369,7 +370,7 @@ bool looksRunnable(const QFileInfo& info) {
 } // namespace
 
 CursorAdapter::CursorAdapter(const QString& executable, QObject* parent)
-    : QObject(parent), executable_(executable.isEmpty() ? findExecutable() : executable) {
+    : ProviderAdapter(parent), executable_(executable.isEmpty() ? findExecutable() : executable) {
     process_ = new QProcess(this);
     versionProbe_ = new compat::ProviderVersionProbe(
         compat::policy(QStringLiteral("cursor")),
@@ -445,6 +446,8 @@ CursorAdapter::~CursorAdapter() {
 }
 
 bool CursorAdapter::isAvailable() const { return !executable_.isEmpty(); }
+
+QString CursorAdapter::missingMessage() const { return missingExecutableMessage(); }
 
 bool CursorAdapter::isReady() const { return ready_; }
 
@@ -1214,6 +1217,7 @@ void CursorAdapter::sendPrompt(TurnState& turn, const QJsonObject& params) {
     if (agentSessions_.contains(turn.ketplusSessionId) &&
         !agentInstructions_.value(turn.ketplusSessionId).isEmpty())
         hostText += QStringLiteral("\n\n") + agentInstructions_.value(turn.ketplusSessionId);
+    hostText = withResponseGuidance(hostText);
     prompt.prepend(QJsonObject{{QStringLiteral("type"), QStringLiteral("text")},
                                {QStringLiteral("text"), hostText}});
     emit canonicalEvent(turn.ketplusSessionId, QStringLiteral("turn.started"),

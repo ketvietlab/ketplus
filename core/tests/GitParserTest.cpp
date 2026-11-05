@@ -3,6 +3,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QHash>
 #include <QPointer>
 #include <QProcess>
 #include <QStandardPaths>
@@ -41,7 +42,10 @@ class GitParserTest final : public QObject {
     void parsesPorcelainV2Status();
     void parsesWorktreeList();
     void discoversWorktreesAndProducesDiffs();
+    void diffsSymlinksAsLinks();
+    void diffsUntrackedFilesWithDecomposedNames();
     void stopsPendingCommandsBeforeDestruction();
+    void diffsFilesBeforeTheFirstCommit();
 };
 
 void GitParserTest::parsesPorcelainV2Status() {
@@ -97,17 +101,26 @@ void GitParserTest::parsesWorktreeList() {
         "HEAD fedcba98",
         "detached",
         "",
+        "worktree /repo-locked",
+        "HEAD 76543210",
+        "branch refs/heads/locked",
+        "locked",
+        "",
     });
 
     const auto worktrees =
         ketplus::git_parser::parseWorktrees(output, QDir::cleanPath(QStringLiteral("/repo")));
-    QCOMPARE(worktrees.size(), 3);
+    QCOMPARE(worktrees.size(), 4);
     QVERIFY(worktrees.at(0).current);
     QCOMPARE(worktrees.at(0).branch, QStringLiteral("main"));
     QCOMPARE(worktrees.at(1).branch, QStringLiteral("feature/git"));
+    QVERIFY(worktrees.at(1).locked);
     QCOMPARE(worktrees.at(1).lockReason, QStringLiteral("editing"));
+    QVERIFY(!worktrees.at(0).locked);
     QVERIFY(worktrees.at(2).detached);
     QCOMPARE(worktrees.at(2).head, QStringLiteral("fedcba98"));
+    QVERIFY(worktrees.at(3).locked);
+    QVERIFY(worktrees.at(3).lockReason.isEmpty());
 }
 
 void GitParserTest::discoversWorktreesAndProducesDiffs() {
@@ -229,6 +242,109 @@ void GitParserTest::discoversWorktreesAndProducesDiffs() {
     QVERIFY2(untrackedDiff.contains(QStringLiteral("+new")), qPrintable(untrackedDiff));
 }
 
+void GitParserTest::diffsSymlinksAsLinks() {
+    const QString git = QStandardPaths::findExecutable(QStringLiteral("git"));
+    if (git.isEmpty())
+        QSKIP("Git is not installed.");
+
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString root = temporary.filePath(QStringLiteral("repo"));
+    const QString outside = temporary.filePath(QStringLiteral("outside.txt"));
+    QVERIFY(QDir().mkpath(QDir(root).filePath(QStringLiteral("sub"))));
+    QVERIFY(runGit(git, root, {QStringLiteral("init"), QStringLiteral("-q")}));
+    const auto write = [](const QString& path, const QByteArray& contents) {
+        QFile file(path);
+        return file.open(QIODevice::WriteOnly) && file.write(contents) == contents.size();
+    };
+    QVERIFY(write(QDir(root).filePath(QStringLiteral("sub/target.txt")), "target before\n"));
+    QVERIFY(write(QDir(root).filePath(QStringLiteral("other.txt")), "other\n"));
+    QVERIFY(write(outside, "outside\n"));
+    const QString link = QDir(root).filePath(QStringLiteral("link.txt"));
+    const QString outsideLink = QDir(root).filePath(QStringLiteral("outside-link.txt"));
+    QVERIFY(QFile::link(QStringLiteral("sub/target.txt"), link));
+    QVERIFY(QFile::link(outside, outsideLink));
+    QVERIFY(runGit(git, root, {QStringLiteral("add"), QStringLiteral(".")}));
+    QVERIFY(runGit(git, root,
+                   {QStringLiteral("-c"), QStringLiteral("user.name=KetPlus Test"),
+                    QStringLiteral("-c"), QStringLiteral("user.email=test@ketplus.invalid"),
+                    QStringLiteral("commit"), QStringLiteral("-q"), QStringLiteral("-m"),
+                    QStringLiteral("Initial")}));
+
+    // Retarget both links and change the old target, so a diff of the target would differ.
+    QVERIFY(QFile::remove(link));
+    QVERIFY(QFile::link(QStringLiteral("other.txt"), link));
+    QVERIFY(QFile::remove(outsideLink));
+    QVERIFY(QFile::link(QStringLiteral("other.txt"), outsideLink));
+    QVERIFY(write(QDir(root).filePath(QStringLiteral("sub/target.txt")), "target after\n"));
+
+    ketplus::GitService service;
+    service.setWorkspacePath(root);
+    QTRY_COMPARE_WITH_TIMEOUT(service.snapshot().files.size(), 3, 5000);
+
+    QHash<QString, QString> diffs;
+    QHash<QString, QString> errors;
+    connect(&service, &ketplus::GitService::diffReady, &service,
+            [&](const QString& path, const ketplus::GitDiffMode, const QString& diff,
+                const QString& error) {
+                diffs.insert(path, diff);
+                errors.insert(path, error);
+            });
+    service.requestDiff(link);
+    service.requestDiff(outsideLink);
+    QTRY_COMPARE_WITH_TIMEOUT(diffs.size(), 2, 5000);
+
+    QVERIFY2(errors.value(link).isEmpty(), qPrintable(errors.value(link)));
+    QVERIFY2(diffs.value(link).contains(QStringLiteral("-sub/target.txt")),
+             qPrintable(diffs.value(link)));
+    QVERIFY(diffs.value(link).contains(QStringLiteral("+other.txt")));
+    QVERIFY(!diffs.value(link).contains(QStringLiteral("target after")));
+
+    QVERIFY2(errors.value(outsideLink).isEmpty(), qPrintable(errors.value(outsideLink)));
+    QVERIFY2(diffs.value(outsideLink).contains(QStringLiteral("+other.txt")),
+             qPrintable(diffs.value(outsideLink)));
+}
+
+void GitParserTest::diffsUntrackedFilesWithDecomposedNames() {
+    const QString git = QStandardPaths::findExecutable(QStringLiteral("git"));
+    if (git.isEmpty())
+        QSKIP("Git is not installed.");
+
+    QTemporaryDir workspace;
+    QVERIFY(workspace.isValid());
+    const QString root = QFileInfo(workspace.path()).canonicalFilePath();
+    QVERIFY(runGit(git, root, {QStringLiteral("init"), QStringLiteral("-q")}));
+    // Some tools write names decomposed (NFD); Git on macOS reports them precomposed (NFC).
+    const QString name =
+        QStringLiteral("t\u00e0i-li\u1ec7u.md").normalized(QString::NormalizationForm_D);
+    const QString path = QDir(root).filePath(name);
+    {
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QCOMPARE(file.write("xin chao\n"), 9);
+    }
+
+    ketplus::GitService service;
+    service.setWorkspacePath(root);
+    QTRY_COMPARE_WITH_TIMEOUT(service.snapshot().files.size(), 1, 5000);
+    QVERIFY(service.snapshot().files.at(0).untracked);
+
+    QString diff;
+    QString error;
+    bool finished = false;
+    connect(&service, &ketplus::GitService::diffReady, &service,
+            [&](const QString&, const ketplus::GitDiffMode, const QString& output,
+                const QString& message) {
+                diff = output;
+                error = message;
+                finished = true;
+            });
+    service.requestDiff(path, ketplus::GitDiffMode::Unstaged);
+    QTRY_VERIFY_WITH_TIMEOUT(finished, 5000);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QVERIFY2(diff.contains(QStringLiteral("+xin chao")), qPrintable(diff));
+}
+
 void GitParserTest::stopsPendingCommandsBeforeDestruction() {
     const QString git = QStandardPaths::findExecutable(QStringLiteral("git"));
     if (git.isEmpty())
@@ -258,6 +374,60 @@ void GitParserTest::stopsPendingCommandsBeforeDestruction() {
     QVERIFY(!runningAtOwnerDestruction);
     for (const auto& process : pending)
         QVERIFY(process.isNull());
+}
+
+void GitParserTest::diffsFilesBeforeTheFirstCommit() {
+    const QString git = QStandardPaths::findExecutable(QStringLiteral("git"));
+    if (git.isEmpty())
+        QSKIP("Git is not installed.");
+
+    QTemporaryDir workspace;
+    QVERIFY(workspace.isValid());
+    // Canonical, because a deleted file cannot be resolved through /var -> /private/var.
+    const QString root = QFileInfo(workspace.path()).canonicalFilePath();
+    QVERIFY(runGit(git, root, {QStringLiteral("init"), QStringLiteral("-q")}));
+    const QString staged = QDir(root).filePath(QStringLiteral("staged.txt"));
+    const QString removed = QDir(root).filePath(QStringLiteral("removed.txt"));
+    for (const QString& path : {staged, removed}) {
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QCOMPARE(file.write("first\n"), 6);
+    }
+    // A tracked symlink whose target does not exist is still an entry on disk.
+    const QString danglingLink = QDir(root).filePath(QStringLiteral("dangling-link"));
+    QVERIFY(QFile::link(QStringLiteral("missing-target"), danglingLink));
+    QVERIFY(runGit(git, root, {QStringLiteral("add"), QStringLiteral(".")}));
+    // Staged, then deleted from the working tree: only the index still has it.
+    QVERIFY(QFile::remove(removed));
+
+    ketplus::GitService service;
+    service.setWorkspacePath(root);
+    QTRY_COMPARE_WITH_TIMEOUT(service.snapshot().files.size(), 3, 5000);
+    QCOMPARE(service.snapshot().head, QStringLiteral("(initial)"));
+
+    QHash<QString, QString> diffs;
+    QHash<QString, QString> errors;
+    connect(&service, &ketplus::GitService::diffReady, &service,
+            [&](const QString& path, const ketplus::GitDiffMode, const QString& diff,
+                const QString& error) {
+                diffs.insert(path, diff);
+                errors.insert(path, error);
+            });
+    service.requestDiff(staged);
+    service.requestDiff(removed);
+    service.requestDiff(danglingLink);
+    QTRY_COMPARE_WITH_TIMEOUT(diffs.size(), 3, 5000);
+    QVERIFY2(errors.value(danglingLink).isEmpty(), qPrintable(errors.value(danglingLink)));
+    QVERIFY2(diffs.value(danglingLink).contains(QStringLiteral("new file mode 120000")),
+             qPrintable(diffs.value(danglingLink)));
+    QVERIFY(diffs.value(danglingLink).contains(QStringLiteral("+missing-target")));
+    QVERIFY2(errors.value(staged).isEmpty(), qPrintable(errors.value(staged)));
+    QVERIFY2(diffs.value(staged).contains(QStringLiteral("+first")),
+             qPrintable(diffs.value(staged)));
+    // Absent from both the working tree and the (empty) HEAD: no combined change.
+    QVERIFY2(errors.value(removed).isEmpty(), qPrintable(errors.value(removed)));
+    QVERIFY2(diffs.contains(removed) && diffs.value(removed).isEmpty(),
+             qPrintable(diffs.value(removed)));
 }
 
 QTEST_MAIN(GitParserTest)

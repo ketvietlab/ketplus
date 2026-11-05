@@ -1,12 +1,13 @@
 #pragma once
 
+#include "providers/ProviderAdapter.h"
+
 #include <QDeadlineTimer>
 #include <QElapsedTimer>
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
-#include <QObject>
 
 #include <functional>
 
@@ -17,35 +18,34 @@ namespace ketplus::daemon {
 
 class ClaudeCredentials;
 
-class ClaudeAdapter final : public QObject {
+class ClaudeAdapter final : public ProviderAdapter {
     Q_OBJECT
 
   public:
-    using Callback = std::function<void(const QJsonObject&, const QString&)>;
-
     explicit ClaudeAdapter(const QString& executable = {}, QObject* parent = nullptr);
     ~ClaudeAdapter() override;
 
-    [[nodiscard]] bool isAvailable() const;
-    [[nodiscard]] bool isReady() const;
-    [[nodiscard]] QString executable() const;
+    [[nodiscard]] QString name() const override { return QStringLiteral("claude"); }
+    [[nodiscard]] QString missingMessage() const override;
+    [[nodiscard]] bool isAvailable() const override;
+    [[nodiscard]] bool isReady() const override;
+    [[nodiscard]] QString executable() const override;
 
-    void call(const QString& method, const QJsonObject& params, Callback callback);
-    void configurationCatalog(Callback callback);
-    void respond(const QJsonValue& requestId, const QJsonObject& result);
-    void respondError(const QJsonValue& requestId, const QString& code, const QString& message);
-    void stop();
+    void call(const QString& method, const QJsonObject& params, Callback callback) override;
+    // The bundled sidecar: its staged SDK versions and the policy baseline capabilities.
+    void runtimeStatus(std::function<void(const compat::Runtime&)> callback) override;
+    [[nodiscard]] bool supports(const QString& capability) const override;
+    void configurationCatalog(Callback callback) override;
+    void respond(const QJsonValue& requestId, const QJsonObject& result) override;
+    void respondError(const QJsonValue& requestId, const QString& code,
+                      const QString& message) override;
+    void stop() override;
     void setCredentials(ClaudeCredentials* credentials) { credentials_ = credentials; }
 
+    [[nodiscard]] static QString missingSidecarMessage();
     [[nodiscard]] static QJsonArray modelCatalog();
     [[nodiscard]] static QJsonArray permissionProfiles();
     [[nodiscard]] static QString permissionMode(const QString& profile);
-
-  signals:
-    void canonicalEvent(const QString& sessionId, const QString& type, const QJsonObject& payload);
-    void requestReceived(const QJsonValue& requestId, const QString& method,
-                         const QJsonObject& params);
-    void stopped(const QString& reason);
 
   private:
     struct QueuedCall final {

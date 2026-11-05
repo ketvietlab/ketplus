@@ -188,6 +188,8 @@ add_library(ketplus_editor STATIC
     src/editor/EditorFileRefresh.cpp
     src/editor/EditorMarkdown.cpp
     src/editor/EditorWidget.h
+    src/editor/DocumentFormatControls.cpp
+    src/editor/DocumentFormatControls.h
     src/editor/SymbolExtractor.cpp
     src/editor/SymbolExtractor.h
     src/editor/SyntaxDefinition.cpp
@@ -265,7 +267,6 @@ if(KETPLUS_CM_BUILD_APP)
         src/app/MainWindow.cpp
         src/app/MainWindowActions.cpp
         src/app/MainWindowDocuments.cpp
-        src/app/MainWindowFormat.cpp
         src/app/MainWindowGit.cpp
         src/app/MainWindow.h
         src/app/MainWindowNavigation.cpp

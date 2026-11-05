@@ -4,6 +4,7 @@
 #include "CodexBrowserTools.h"
 #include "CodexLaunchReloader.h"
 #include "providers/compat/ProviderVersionProbe.h"
+#include "runtime/ResponseGuidance.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -35,7 +36,7 @@ QString errorText(const QJsonObject& error) {
 } // namespace
 
 CodexAdapter::CodexAdapter(const QString& executable, QObject* parent)
-    : QObject(parent), executable_(executable.isEmpty() ? findExecutable() : executable),
+    : ProviderAdapter(parent), executable_(executable.isEmpty() ? findExecutable() : executable),
       process_(new QProcess(this)),
       stdoutReader_(maximumProviderMessageBytes,
                     {QStringLiteral("id"), QStringLiteral("method"),
@@ -117,6 +118,10 @@ CodexAdapter::~CodexAdapter() {
 }
 
 bool CodexAdapter::isAvailable() const { return !executable_.isEmpty(); }
+
+QString CodexAdapter::missingMessage() const {
+    return compat::missing(compat::policy(QStringLiteral("codex"))).message;
+}
 
 bool CodexAdapter::isReady() const { return ready_; }
 
@@ -362,11 +367,16 @@ void CodexAdapter::sendCall(const QString& method, const QJsonObject& params, Ca
     }
     pending_.insert(id, std::move(callback));
     pendingMethods_.insert(id, method);
-    sendObject(
-        {{QStringLiteral("id"), static_cast<qint64>(id)},
-         {QStringLiteral("method"), method},
-         {QStringLiteral("params"), browser_tools::withCodexBrowserInstructions(
-                                        method, params, !launchedBrowserArguments_.isEmpty())}});
+    QJsonObject providerParams = browser_tools::withCodexBrowserInstructions(
+        method, params, !launchedBrowserArguments_.isEmpty());
+    if (method == QStringLiteral("thread/start") || method == QStringLiteral("thread/resume"))
+        providerParams.insert(
+            QStringLiteral("developerInstructions"),
+            withResponseGuidance(
+                providerParams.value(QStringLiteral("developerInstructions")).toString()));
+    sendObject({{QStringLiteral("id"), static_cast<qint64>(id)},
+                {QStringLiteral("method"), method},
+                {QStringLiteral("params"), providerParams}});
 }
 
 void CodexAdapter::sendObject(const QJsonObject& object) {

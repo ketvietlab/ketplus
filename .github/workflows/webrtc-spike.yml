@@ -2,9 +2,10 @@ name: webrtc-spike
 
 # The WebRTC transport spike (ADR 0024) builds on the daemon's platforms and carries its data
 # channels directly and through a loopback TURN server there. The product build never includes
-# it, so it runs only when the spike changes.
+# it, so it runs only when a promotion or release changes the spike.
 on:
   pull_request:
+    branches: [develop, main]
     paths:
       - "benchmarks/webrtc-datachannel/**"
       - ".github/workflows/webrtc-spike.yml"

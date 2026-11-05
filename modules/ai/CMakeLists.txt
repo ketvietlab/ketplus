@@ -65,6 +65,9 @@ add_library(ketplus_ai STATIC
     src/agent/AgentWorkspaceView.h
     src/agent/CodexAppServer.cpp
     src/agent/CodexAppServer.h
+    src/agent/CodexAppServerDaemonEvents.cpp
+    src/agent/CodexAppServerDaemonSessions.cpp
+    src/agent/CodexAppServerProcess.cpp
     src/agent/CodexDaemonTranscript.cpp
     src/agent/CodexDaemonDiscovery.cpp
     src/agent/CodexRateLimits.cpp
@@ -213,11 +216,11 @@ foreach(icon zap shield lock arrow-up send square git-branch bot square-terminal
     )
 endforeach()
 set_source_files_properties(
-    "${PROJECT_SOURCE_DIR}/ketplus-desktop-redesign.ketatlas/assets/brand/ketplus-v1/ketplus-logo-light.png"
+    "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1/ketplus-logo-light.png"
     PROPERTIES QT_RESOURCE_ALIAS "brand/ketplus-logo-light.png"
 )
 set_source_files_properties(
-    "${PROJECT_SOURCE_DIR}/ketplus-desktop-redesign.ketatlas/assets/brand/ketplus-v1/ketplus-logo-dark.png"
+    "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1/ketplus-logo-dark.png"
     PROPERTIES QT_RESOURCE_ALIAS "brand/ketplus-logo-dark.png"
 )
 foreach(icon messages-square folder network unplug settings chevron-down chevron-right square-pen paperclip sparkles)
@@ -292,8 +295,8 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
         src/agent/icons/chevron-right.svg
         src/agent/icons/square-pen.svg
         src/agent/icons/paperclip.svg
-        "${PROJECT_SOURCE_DIR}/ketplus-desktop-redesign.ketatlas/assets/brand/ketplus-v1/ketplus-logo-light.png"
-        "${PROJECT_SOURCE_DIR}/ketplus-desktop-redesign.ketatlas/assets/brand/ketplus-v1/ketplus-logo-dark.png"
+        "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1/ketplus-logo-light.png"
+        "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1/ketplus-logo-dark.png"
         "${PROJECT_SOURCE_DIR}/assets/icons/lucide/plus.svg"
         "${PROJECT_SOURCE_DIR}/assets/icons/lucide/rotate-ccw.svg"
         "${PROJECT_SOURCE_DIR}/assets/icons/lucide/check.svg"
