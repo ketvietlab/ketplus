@@ -6,6 +6,7 @@
 #include "app/RepositoryRouter.h"
 #include "app/SpotlightDialog.h"
 #include "atlas/AtlasTab.h"
+#include "editor/DiskChangePrompt.h"
 #include "editor/DocumentFormatControls.h"
 #include "workspace/AtlasIndex.h"
 
@@ -118,6 +119,11 @@ bool MainWindow::saveEditor(EditorWidget* editor, const bool choosePath) {
         if (path.isEmpty()) {
             return false;
         }
+    }
+
+    if (QFileInfo(path).absoluteFilePath() == document.filePath() &&
+        !disk_change::confirmSave(this, editor)) {
+        return false;
     }
 
     const QByteArray content = editor->text();
@@ -524,7 +530,10 @@ void MainWindow::activateCurrentTab() {
     if (editor->isHibernated()) {
         const auto result = editor->restoreFromDisk();
         if (!result.ok) {
-            QMessageBox::critical(this, QStringLiteral("Unable to restore tab"), result.error);
+            QMessageBox::critical(
+                this, QStringLiteral("Unable to restore tab"),
+                QStringLiteral("%1\n\nThe tab stays read-only until the file can be read.")
+                    .arg(result.error));
             return;
         }
         editor->applyTheme(theme_.palette());

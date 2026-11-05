@@ -1,5 +1,6 @@
 #include "core/Document.h"
 
+#include <QCryptographicHash>
 #include <QFile>
 #include <QFileInfo>
 #include <QSaveFile>
@@ -17,6 +18,10 @@ const QByteArray utf16BEBom("\xFE\xFF", 2);
 
 QByteArray withoutPrefix(const QByteArray& raw, const QByteArray& prefix) {
     return raw.startsWith(prefix) ? raw.mid(prefix.size()) : raw;
+}
+
+QByteArray digest(const QByteArray& raw) {
+    return QCryptographicHash::hash(raw, QCryptographicHash::Sha256);
 }
 
 } // namespace
@@ -60,11 +65,20 @@ Document::LoadResult Document::load(const QString& filePath, const TextEncoding 
     return loadWith(filePath, encoding);
 }
 
+Document::LoadResult Document::reload(const QString& filePath) {
+    return encodingExplicit_ ? loadWith(filePath, encoding_) : loadWith(filePath, {});
+}
+
 Document::LoadResult Document::loadWith(const QString& filePath,
                                         const std::optional<TextEncoding> encoding) {
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
         return {false, file.errorString(), {}};
+    }
+    if (file.size() > maximumFileBytes) {
+        return {false,
+                QStringLiteral("The file is larger than %1 MiB.").arg(maximumFileBytes >> 20),
+                {}};
     }
 
     const QByteArray raw = file.readAll();
@@ -74,7 +88,9 @@ Document::LoadResult Document::loadWith(const QString& filePath,
 
     filePath_ = QFileInfo(filePath).absoluteFilePath();
     encoding_ = encoding.value_or(detectEncoding(raw));
+    encodingExplicit_ = encoding.has_value();
     modified_ = false;
+    rememberDiskState(raw);
     return {true, {}, decodeToUtf8(raw, encoding_)};
 }
 
@@ -106,7 +122,30 @@ Document::Result Document::saveAs(const QString& filePath, const QByteArray& con
 
     filePath_ = QFileInfo(filePath).absoluteFilePath();
     modified_ = false;
+    rememberDiskState(*encoded);
     return {true, {}};
+}
+
+void Document::rememberDiskState(const QByteArray& raw) {
+    diskSize_ = raw.size();
+    diskDigest_ = digest(raw);
+}
+
+bool Document::changedOnDisk() const {
+    if (isUntitled() || diskSize_ < 0) {
+        return false;
+    }
+    const QFileInfo info(filePath_);
+    if (!info.exists() || info.size() != diskSize_) {
+        return true;
+    }
+    // Equal sizes are compared by content: an mtime misses quick same-size rewrites, and a
+    // touched but identical file is not a change.
+    QFile file(filePath_);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return true;
+    }
+    return digest(file.readAll()) != diskDigest_;
 }
 
 const QString& Document::filePath() const noexcept {
@@ -131,7 +170,10 @@ void Document::setModified(const bool modified) noexcept {
     modified_ = modified;
 }
 
-void Document::setTextEncoding(const TextEncoding encoding) noexcept { encoding_ = encoding; }
+void Document::setTextEncoding(const TextEncoding encoding) noexcept {
+    encoding_ = encoding;
+    encodingExplicit_ = true;
+}
 
 TextEncoding Document::detectEncoding(const QByteArray& raw) {
     if (raw.startsWith(utf8Bom)) {

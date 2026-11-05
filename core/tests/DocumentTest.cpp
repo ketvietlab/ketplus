@@ -28,6 +28,7 @@ private slots:
     void detectsAndRoundTripsEncodings();
     void reopensWithChosenEncoding();
     void rejectsCharactersOutsideLatin1();
+    void refusesFilesAboveTheSizeLimit();
 };
 
 void DocumentTest::savesAndLoadsUtf8Content() {
@@ -117,6 +118,23 @@ void DocumentTest::rejectsCharactersOutsideLatin1() {
         document.saveAs(directory.filePath(QStringLiteral("x.txt")), QByteArray("Xin ch\xC3\xA0o \xE1\xBB\x9D"));
     QVERIFY(!result.ok);
     QVERIFY(result.error.contains(QStringLiteral("ISO-8859-1")));
+}
+
+void DocumentTest::refusesFilesAboveTheSizeLimit() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("huge.log"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    // Sparse, so the fixture costs no disk space.
+    QVERIFY(file.resize(ketplus::Document::maximumFileBytes + 1));
+    file.close();
+
+    ketplus::Document document;
+    const auto result = document.load(path);
+    QVERIFY(!result.ok);
+    QVERIFY(result.content.isEmpty());
+    QVERIFY(document.isUntitled());
 }
 
 QTEST_MAIN(DocumentTest)

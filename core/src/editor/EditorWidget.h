@@ -65,9 +65,13 @@ class EditorWidget final : public ScintillaEditBase {
 
     void setText(const QByteArray& text);
     [[nodiscard]] Document::Result loadFile(const QString& filePath);
+    // Reloads a hibernated tab. Refuses while the document has edits.
     [[nodiscard]] Document::Result restoreFromDisk();
     // Explicit reopen: refresh changed clean buffers, preserving dirty edits and view state.
     [[nodiscard]] Document::Result refreshFromDisk();
+    // Replaces the buffer with the file on disk, discarding unsaved edits but keeping the view.
+    [[nodiscard]] Document::Result reloadFromDisk();
+    // Empties a clean, titled buffer and makes it read-only until restoreFromDisk succeeds.
     [[nodiscard]] bool hibernate();
     void markThemePending() noexcept;
     void markActivated(std::uint64_t sequence) noexcept;

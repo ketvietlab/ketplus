@@ -14,14 +14,25 @@ Document::Result EditorWidget::refreshFromDisk() {
         return {true, {}};
     if (hibernated_)
         return restoreFromDisk();
+    return reloadFromDisk();
+}
+
+Document::Result EditorWidget::reloadFromDisk() {
+    if (document_->isUntitled() || hibernated_)
+        return restoreFromDisk();
 
     // Read before changing the live document. Size/mtime alone miss quick equal-size edits.
-    Document latest;
-    const auto loaded = latest.load(document_->filePath(), document_->textEncoding());
+    // A copy keeps a user-chosen encoding; otherwise it is detected again.
+    Document latest = *document_;
+    const auto loaded = latest.reload(document_->filePath());
     if (!loaded.ok)
         return {false, loaded.error};
-    if (loaded.content == text())
-        return {true, {}}; // Preserve undo/redo and selections when nothing changed.
+    if (loaded.content == text()) {
+        // Preserve undo/redo and selections when nothing changed.
+        *document_ = std::move(latest);
+        markSaved();
+        return {true, {}};
+    }
 
     const ViewState state{
         .caret = send(message(Scintilla::Message::GetCurrentPos)),

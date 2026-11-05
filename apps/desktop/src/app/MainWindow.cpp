@@ -5,6 +5,7 @@
 #include "app/SpotlightDialog.h"
 #include "app/WorktreesWorkspacePage.h"
 #include "atlas/AtlasTab.h"
+#include "editor/DiskChangePrompt.h"
 #include "editor/DocumentFormatControls.h"
 #include "workspace/AtlasIndex.h"
 
@@ -376,6 +377,7 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     connect(qApp, &QApplication::applicationStateChanged, this,
             [this](const Qt::ApplicationState state) {
                 if (state == Qt::ApplicationActive) {
+                    disk_change::refreshCleanTabs(tabs_);
                     git_->scheduleRefresh(0);
                     refreshAgentWorktrees();
                 }
