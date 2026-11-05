@@ -24,6 +24,9 @@ test("sandboxed previews embed KÉT Sans 1.0 and use it for every text token", (
     assert.deepEqual(faces.map((face) => face[1]), ["300", "400", "500 600", "700"]);
     assert.doesNotMatch(css, /Inter/);
     assert.match(css, /--kv-font-sans:"KÉT Sans",ui-sans-serif,sans-serif/);
+    // KÉT Sans Mono 0.10.0 has Regular only; bold code is synthesized.
+    assert.match(css, /@font-face\{font-family:"KÉT Sans Mono";src:url\(data:font\/woff2;base64,[A-Za-z0-9+/=]+\) format\("woff2"\);font-weight:400;/);
+    assert.match(css, /--kv-font-mono:"KÉT Sans Mono",ui-monospace,/);
     assert.ok(fs.existsSync(path.join(root, "licenses/KET-Sans-1.0.txt")));
     for (const screen of manifest.screens) {
         const html = fs.readFileSync(path.join(root, screen.url), "utf8");

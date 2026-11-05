@@ -200,9 +200,10 @@ It keeps the public Két AppShell contracts, runtime and semantic tokens;
   Desktop tokens are not replaced with copied mobile CSS or touch geometry.
 - KÉT Sans 1.0 (tag `v1.0.0`), Lucide Static 1.40.0 and unchanged KétPlus v1 branding assets.
   `assets/fonts-inline.css` embeds the four released optical-size KÉT Sans WOFF2 files
-  (300, 400, 500–600, 700) and sets `--kv-font-sans` to KÉT Sans and `--kv-font-mono` to
-  the system monospace, since KÉT Sans has no monospace. The KÉT Sans licence
-  (`licenses/KET-Sans-1.0.txt`) allows self-hosted embedding but not redistributing the
+  (300, 400, 500–600, 700) and KÉT Sans Mono 0.10.0 Regular (ket-art `1cf560f`), and points
+  `--kv-font-sans` and `--kv-font-mono` at them. The mono has one weight, so bold code is
+  synthesized. The KÉT Sans licence
+  (`licenses/KET-Sans-1.0.txt`), which covers both, allows self-hosted embedding but not redistributing the
   font files, so the fonts are only embedded, never shipped as files. Embedding
   also lets opaque sandboxed previews load the font without cross-origin requests.
   `assets/fonts.css`, `assets/fonts/` (Inter) and `licenses/Inter-OFL.txt` are no longer
