@@ -302,8 +302,9 @@ void GitParserTest::diffsFilesBeforeTheFirstCommit() {
     QVERIFY2(errors.value(staged).isEmpty(), qPrintable(errors.value(staged)));
     QVERIFY2(diffs.value(staged).contains(QStringLiteral("+first")),
              qPrintable(diffs.value(staged)));
+    // Absent from both the working tree and the (empty) HEAD: no combined change.
     QVERIFY2(errors.value(removed).isEmpty(), qPrintable(errors.value(removed)));
-    QVERIFY2(diffs.value(removed).contains(QStringLiteral("+first")),
+    QVERIFY2(diffs.contains(removed) && diffs.value(removed).isEmpty(),
              qPrintable(diffs.value(removed)));
 }
 

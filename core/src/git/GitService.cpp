@@ -183,9 +183,14 @@ void GitService::requestDiff(const QString& filePath, const GitDiffMode mode) {
     QStringList arguments{QStringLiteral("-C"), root, QStringLiteral("diff"),
                           QStringLiteral("--no-ext-diff"), QStringLiteral("--no-color")};
     int acceptedDifferenceExitCode = 0;
-    // Before the first commit there is no HEAD to compare with, so the whole file is new.
+    // Before the first commit, the working tree is compared with nothing: a file on disk is
+    // entirely new, and one that is only in the index has no combined change.
     const bool unbornHead = snapshot_.head == QStringLiteral("(initial)");
     const bool combinedWithoutHead = unbornHead && mode == GitDiffMode::Combined;
+    if (combinedWithoutHead && !QFileInfo(absolutePath).isFile()) {
+        emit diffReady(filePath, mode, {}, {});
+        return;
+    }
     if (isUntracked(relativePath) || (combinedWithoutHead && QFileInfo(absolutePath).isFile())) {
         arguments.append({QStringLiteral("--no-index"), QStringLiteral("--"),
                           nullDeviceForGit(), absolutePath});
@@ -193,8 +198,6 @@ void GitService::requestDiff(const QString& filePath, const GitDiffMode mode) {
     } else {
         arguments.append(QStringLiteral("--find-renames"));
         if (mode == GitDiffMode::Staged) {
-            arguments.append(QStringLiteral("--cached"));
-        } else if (combinedWithoutHead) {
             arguments.append(QStringLiteral("--cached"));
         } else if (mode == GitDiffMode::Combined) {
             arguments.append(QStringLiteral("HEAD"));
