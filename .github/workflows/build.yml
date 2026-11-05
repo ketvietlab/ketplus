@@ -1,14 +1,19 @@
 name: build
 
+# Integration has no CI: authors test what they change before merging there.
+# The build runs on promotion pull requests into develop, on release pull
+# requests into main and on the production main commit. The promotion pull
+# request already built the head that lands on develop.
 on:
   push:
-    # Pull requests already build their head; branch pushes would run it twice.
-    branches: [develop, main]
+    branches: [main]
     paths-ignore:
       - "**/*.md"
   pull_request:
+    branches: [develop, main]
     paths-ignore:
       - "**/*.md"
+  workflow_dispatch:
 
 # A newer commit on the same branch or PR makes the running build obsolete.
 concurrency:

@@ -2,9 +2,40 @@
 
 ## Branch policy
 
-`develop` is for integration and `main` for production. Both editions release
-from the same commit history; a change to `core/` and to Pro lands in one pull
-request.
+Three long-lived branches carry every change (ADR 0030):
+
+```text
+feature/fix -> test what you changed -> pull request into integration -> merge
+                                                                          |
+                                         pull request integration -> develop
+                                         (promotion provenance + full build)
+                                                                          |
+                                             release: main fast-forwards to develop
+```
+
+- `integration` receives every feature and fix pull request and has no CI.
+  Before pushing, the author runs the tests for the part they changed (see
+  `docs/testing.md`) and records the commands and results in the pull request.
+- `develop` is verified. It receives only promotion pull requests whose head is
+  `integration` in this repository and points at the integration tip; the
+  `promotion provenance` job refuses anything else. Merge a promotion with a
+  merge commit, never squash or rebase: the next promotion recognizes the
+  previous one by its second parent. A failure on a promotion is fixed with a
+  new pull request into `integration`.
+- `main` is production and moves only through a release.
+
+Each feature or fix has one pull request, into `integration`. Both editions
+release from the same commit history; a change to `core/` and to Pro lands in
+one pull request.
+
+A hotfix also goes through `integration`. If an incident forces a direct change
+to `develop`, get explicit approval, run the affected tests and merge the same
+commit back into `integration` before the next promotion, or the promotion
+check refuses it.
+
+Branch protection: `integration` has no required checks but allows no
+force-push or deletion; `develop` requires `promotion provenance` and the
+`build` jobs, including for administrators; `main` keeps its release rules.
 
 ## Versions and tags
 
@@ -18,7 +49,7 @@ Each edition keeps its own version:
 Tags up to `cm-v0.3.6` are KetPlus CM releases from before the merge (ADR 0029)
 and stay as they are. To release:
 
-1. Test the change on `develop` and require every CI job to pass.
+1. Promote the change into `develop` and require every CI job to pass.
 2. Raise the edition's version. A `core/` change shipped in Pro also raises the
    Pro version.
 3. Fast-forward `main` to the verified commit.
