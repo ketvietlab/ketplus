@@ -218,8 +218,7 @@ final class AgentTools {
         var decision = "none_needed"
         if !wanted.isEmpty {
             guard Permissions.screenRecording, Permissions.accessibility else {
-                throw AgentFailure(code: "PERMISSION_REQUIRED",
-                                   message: "KetPlus Computer needs Screen Recording and Accessibility in System Settings > Privacy & Security.")
+                throw permissionRequired(screenRecording: true, accessibility: true)
             }
             let work = workDisplay()
             let request = ApprovalPanel.Request(conversation: conversation, apps: wanted,
@@ -266,8 +265,7 @@ final class AgentTools {
 
     private func screenshot(_ conversation: String, region: CGRect?, display: DisplayInfo) throws -> [String: Any] {
         guard Permissions.screenRecording else {
-            throw AgentFailure(code: "PERMISSION_REQUIRED",
-                               message: "Allow KetPlus Computer in System Settings > Privacy & Security > Screen & System Audio Recording.")
+            throw permissionRequired(screenRecording: true, accessibility: false)
         }
         let granted = control.grantedApps(conversation).filter { tier($0) != .blocked }
         // Apps such as Qt do not repaint hidden windows, so their pixels would be old. On a
@@ -364,9 +362,20 @@ final class AgentTools {
 
     func requireAccessibility() throws {
         guard Permissions.accessibility else {
-            throw AgentFailure(code: "PERMISSION_REQUIRED",
-                               message: "Allow KetPlus Computer in System Settings > Privacy & Security > Accessibility.")
+            throw permissionRequired(screenRecording: false, accessibility: true)
         }
+    }
+
+    /// Shows the missing macOS prompts, then tells the agent to wait for the user and retry.
+    func permissionRequired(screenRecording: Bool, accessibility: Bool) -> AgentFailure {
+        Permissions.promptForMissing(screenRecording: screenRecording, accessibility: accessibility)
+        var missing: [String] = []
+        if screenRecording && !Permissions.screenRecording { missing.append("Screen & System Audio Recording") }
+        if accessibility && !Permissions.accessibility { missing.append("Accessibility") }
+        let names = missing.isEmpty ? "Screen Recording and Accessibility" : missing.joined(separator: " and ")
+        return AgentFailure(code: "PERMISSION_REQUIRED",
+                            message: "macOS is asking the user to allow KetPlus Computer for \(names) "
+                                + "(System Settings > Privacy & Security). Ask the user to allow it, then call request_access again.")
     }
 
     func modifiers(_ params: [String: Any]) throws -> KeyCombo.Modifiers {
