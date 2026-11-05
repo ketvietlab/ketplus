@@ -435,3 +435,30 @@ instead of the mock's dashed one.
 - Evidence: `evidence/conversation-tags/` (dark rows, the tag editor, header tags and Manage tags in light theme),
   1440×900, Chromium through KetPlus browser tools. Code: `screens/conversation-tags.js`,
   `screens/conversation-tag-actions.js`, `screens/conversation-tags.css`.
+
+## Agent messaging between conversations
+
+Flow `agent-messaging`. Implemented natively per ADR 0027: the daemon numbers every
+conversation and its `ketplus_agents` MCP server lets an agent message another one by number.
+The mock shows the Desktop projection only.
+
+- The header shows the open conversation's `#number` before its title, as every sidebar row
+  does on its second line.
+- The sender's turn keeps its `agents_send` tool row and adds an **Agent message** note:
+  `Sent to #N · title · started a turn · reply requested.`
+- An idle receiver starts a turn. Its opening row is an outlined bubble labelled
+  `Message from #N · title · provider` instead of the user's text. While that turn runs, its
+  sidebar row ends with `from #N`.
+- The receiver's final answer comes back to the sender as the opening row of the next turn,
+  labelled `Reply from #N · title · provider`.
+- Over a loop-guard limit (hop 6, 30 automatic turns in one exchange, 20 per receiver per hour)
+  the message is held: both conversations show a warning note. A held message is delivered with
+  the receiver's next message from the user.
+- Typing `#` in the composer lists other conversations by number, title and worktree, filtered
+  by number prefix or title. Arrow keys move, Enter or Tab inserts `#N `, Escape closes. The
+  open conversation is never offered.
+- Fixtures: `?conversation=startup` (receiver), `?conversation=navigation` (sender),
+  `&agent=reply`, `&agent=held`, `&mention=conversation` (picker open on `Ask #`).
+- Evidence: `evidence/agent-messaging/` (receiver and reply in dark theme, held note with the
+  picker in light theme), 1440×900, Chromium through KetPlus browser tools. Code:
+  `screens/agent-messages.js`, `screens/agent-messages.css`.

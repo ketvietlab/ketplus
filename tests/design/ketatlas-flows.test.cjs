@@ -63,6 +63,44 @@ test("the KétPlus shell has no KetSuite application switcher", () => {
     }
 });
 
+test("agent messages name their sender, and the header shows the conversation number (ADR 0027)", () => {
+    const received = screen("screens/workspace.html?conversation=startup");
+    assert.match(received.document.querySelector(".agent-message .agent-origin").textContent.trim(),
+        /^Message from #\d{4} · Refine navigation · Codex$/);
+    assert.equal(received.document.querySelector(".transcript > .user-message:not(.agent-message)"), null);
+    assert.match(received.document.querySelector(".agent-heading .header-number").textContent, /^#\d{4}$/);
+    received.close();
+    const sent = screen("screens/workspace.html?conversation=navigation");
+    assert.match(sent.document.querySelector(".agent-note").textContent.trim(),
+        /Sent to #\d{4} · Review the startup flow · started a turn · reply requested\.$/);
+    assert.ok(sent.document.querySelector(".agent-tool-row"));
+    sent.close();
+    const held = screen("screens/workspace.html?conversation=navigation&agent=held");
+    assert.match(held.document.querySelector(".agent-note.held").textContent, /is held because the agents exchanged too many messages/);
+    held.close();
+    const reply = screen("screens/workspace.html?conversation=navigation&agent=reply");
+    const turn = reply.document.querySelector(".transcript > .assistant-message");
+    const bubble = reply.document.querySelector(".transcript > .agent-message");
+    assert.match(bubble.querySelector(".agent-origin").textContent.trim(), /^Reply from #\d{4} · Review the startup flow/);
+    assert.equal(turn.nextElementSibling, bubble, "the reply opens the turn after the sending turn");
+    reply.close();
+});
+test("# in the composer completes another conversation's number", () => {
+    const s = screen("screens/workspace.html?conversation=navigation");
+    const prompt = s.document.querySelector("#prompt");
+    prompt.value = "Ask #";
+    prompt.setSelectionRange(5, 5);
+    prompt.dispatchEvent(new s.w.Event("input", { bubbles: true }));
+    const own = s.document.querySelector(".header-number").textContent.slice(1);
+    const options = [...s.document.querySelectorAll(".mention-option")];
+    assert.ok(options.length > 0);
+    assert.ok(options.every(option => option.dataset.conversationNumber !== own), "a conversation cannot message itself");
+    const first = options[0].dataset.conversationNumber;
+    prompt.dispatchEvent(new s.w.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    assert.equal(prompt.value, `Ask #${first} `);
+    assert.equal(s.document.querySelector(".mention-menu"), null);
+    s.close();
+});
 test("conversation header is scoped to chat; the detail pane owns its top row", () => {
     for (const panel of [null, "task", "terminal", "file", "atlas"]) {
         const s = screen(`screens/workspace.html?state=running${panel ? `&panel=${panel}` : ""}`);
@@ -71,7 +109,9 @@ test("conversation header is scoped to chat; the detail pane owns its top row", 
         const heading = chat.querySelector(":scope > .agent-heading");
         assert.ok(heading, panel || "chat only");
         assert.equal(view.querySelector(":scope > .agent-heading"), null);
-        assert.deepEqual([...heading.querySelectorAll("[data-action]")].map(node => node.dataset.action), ["new-chat", "open-atlas-panel", "terminal"]);
+        // Tag chips open the tag editor (ADR 0028); the trailing row holds the conversation actions.
+        assert.ok(heading.querySelector(".header-tags [data-action='edit-header-tags']"));
+        assert.deepEqual([...heading.querySelectorAll(":scope > .row [data-action]")].map(node => node.dataset.action), ["new-chat", "open-atlas-panel", "terminal"]);
         const detail = view.querySelector(".context-pane");
         assert.equal(Boolean(detail), Boolean(panel));
         if (detail) assert.ok(detail.querySelector(":scope > .context-tabs"));
@@ -887,7 +927,7 @@ test("right-click preserves active conversation and archives the clicked reposit
     const current = a.K.current;
     rightClick(a, '.conversation[href*="repo=ketviet"]');
     assert.equal(a.K.current, current);
-    assert.deepEqual(menuCommands(a), ["fork", "archive", "delete"]);
+    assert.deepEqual(menuCommands(a), ["tags", "fork", "archive", "delete"]);
     const target = a.K.openContext;
     a.click('[data-context-command="archive"]');
     const confirm = a.follow();
@@ -932,7 +972,9 @@ test("context menu keyboard navigation skips disabled actions and restores focus
     const a = screen('screens/workspace.html?provider=Cursor');
     const node = a.document.querySelector('.conversation.selected'); node.focus();
     node.dispatchEvent(new a.w.KeyboardEvent('keydown', {key:'F10', shiftKey:true, bubbles:true}));
-    assert.equal(a.document.activeElement.dataset.contextCommand, 'archive');
+    assert.equal(a.document.activeElement.dataset.contextCommand, 'tags');
+    a.document.activeElement.dispatchEvent(new a.w.KeyboardEvent('keydown', {key:'ArrowDown', bubbles:true}));
+    assert.equal(a.document.activeElement.dataset.contextCommand, 'archive', 'disabled Fork is skipped');
     a.w.dispatchEvent(new a.w.Event('resize'));
     assert.ok(a.document.querySelector('.desktop-context-menu'), 'Viewer resizing must retain the menu fixture');
     a.document.activeElement.dispatchEvent(new a.w.KeyboardEvent('keydown', {key:'ArrowDown', bubbles:true}));

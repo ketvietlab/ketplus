@@ -40,6 +40,8 @@ function screen(relative = "screens/workspace.html", options = {}) {
         postMessage(message, origin) { parentMessages.push({ message, origin }); },
     } });
     w.document.fonts = { ready: Promise.resolve() };
+    // jsdom has no CSS namespace; selectors built with CSS.escape only quote attribute values.
+    w.CSS ??= { escape: value => String(value).replace(/["\\\]\[]/g, "\\$&") };
     w.HTMLElement.prototype.scrollIntoView = function () {};
     // jsdom does not implement native dialog methods; only emulate open/close
     // state here. Browser checks own focus, top-layer rendering and backdrop QA.
