@@ -52,7 +52,15 @@ func toolResult(_ name: String, _ arguments: [String: Any]) -> [String: Any] {
             let display = shot["display"] as? [String: Any] ?? [:]
             let which = "display \(display["id"] ?? "?") \"\(display["name"] ?? "")\"\(display["work"] as? Bool == true ? " (work display)" : "")"
                 + " at \(display["x"] ?? 0),\(display["y"] ?? 0) \(display["width"] ?? 0)x\(display["height"] ?? 0) points"
-            return imageResult(shot, "Screenshot \(shot["width"] ?? 0)x\(shot["height"] ?? 0) of \(which); granted apps visible: \(apps.isEmpty ? "none" : apps). Coordinates use this image.")
+            var note = ""
+            if let raised = shot["raised"] as? [String], !raised.isEmpty {
+                note += " Raised hidden windows on the work display first: \(raised.joined(separator: ", "))."
+            }
+            if let covered = shot["covered"] as? [String], !covered.isEmpty {
+                note += " Covered by other windows, so these may show old pixels: \(covered.joined(separator: ", "))."
+                    + " Trust observe for their current state, or use open_application with foreground."
+            }
+            return imageResult(shot, "Screenshot \(shot["width"] ?? 0)x\(shot["height"] ?? 0) of \(which); granted apps visible: \(apps.isEmpty ? "none" : apps). Coordinates use this image.\(note)")
         case "zoom":
             let shot = try agent.call("zoom", arguments)
             return imageResult(shot, "Zoomed region \(shot["width"] ?? 0)x\(shot["height"] ?? 0). Click coordinates still refer to the last screenshot.")

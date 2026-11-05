@@ -260,6 +260,18 @@ final class AgentTools {
                                message: "Allow KetPlus Computer in System Settings > Privacy & Security > Screen & System Audio Recording.")
         }
         let granted = control.grantedApps(conversation).filter { tier($0) != .blocked }
+        // Apps such as Qt do not repaint hidden windows, so their pixels would be old. On a
+        // separate work display the agent raises them (no activation); elsewhere it warns.
+        let work = workDisplay()
+        var raised: [String] = [], covered: [String] = []
+        for window in WindowStack.hiddenGranted(granted, on: display) {
+            if display.id == work?.id, !display.isMain, Displays.raiseWindow(of: window.pid, frame: window.frame) {
+                raised.append(window.bundle)
+            } else {
+                covered.append(window.bundle)
+            }
+        }
+        if !raised.isEmpty { usleep(300_000) }
         let shot: Screenshot
         do {
             shot = try waitFor { try await ScreenCapture.capture(including: granted, region: region, display: display.id) }
@@ -276,7 +288,8 @@ final class AgentTools {
         if region == nil { lock.withLock { geometries[conversation] = shot.geometry } }
         return ["png": shot.png.base64EncodedString(), "width": shot.geometry.imageWidth,
                 "height": shot.geometry.imageHeight, "visibleApps": shot.visibleApps,
-                "display": displaySummary(display, work: workDisplay())]
+                "raised": Array(Set(raised)).sorted(), "covered": Array(Set(covered)).sorted(),
+                "display": displaySummary(display, work: work)]
     }
 
     private func zoom(_ params: [String: Any], _ conversation: String) throws -> [String: Any] {

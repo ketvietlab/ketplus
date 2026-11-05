@@ -37,6 +37,15 @@ display and could not see a granted window on another one.
   the work display. `observe` marks elements whose centre is on another display
   as `offscreen`. When no granted app has a window on the display, `screenshot`
   answers `NOTHING_ON_DISPLAY` instead of ScreenCaptureKit's `-3811`.
+- **Hidden windows are raised or flagged.** Some apps, Qt among them, stop
+  repainting a window that other windows cover, so a capture shows its old
+  pixels while accessibility already reports the new state. Before a
+  screenshot the agent finds granted windows that other apps' windows hide by
+  at least half, using the on-screen window order. On a work display that is
+  not the main display it raises them with the accessibility raise action,
+  which does not activate the app, and waits 300 ms. On the main display it
+  leaves the user's windows in front and lists the app under `covered`, and
+  the MCP result says the image may be old. `raised` lists apps it raised.
 - **The banner follows.** The control banner shows at the top of the work
   display.
 - **The user's windows stay put.** Only granted apps' windows move. The agent
@@ -69,6 +78,12 @@ from `observe` instead of from the fixture.
   characters; `scripts/e2e.mjs` now checks it on the fixture.
 - With KétChat QA already on the second display, granting the fixture placed it
   28 points down and right of KétChat instead of exactly on top of it.
+- A KétChat QA window under Slack on the second display kept showing old pixels
+  in screenshots while `observe` already reported new text, because Qt stops
+  painting a hidden window. With hidden windows raised, an ordinary window over
+  the whole display no longer hid it: the first screenshot raised KétChat and
+  showed its current window, KetPlus stayed the front app, and the next
+  screenshot needed no raise. `swift test` has 33 tests, including coverage.
 - Not yet verified: a turn started from the desktop app, displays with
   different scale factors, and a display that disconnects during a turn.
 

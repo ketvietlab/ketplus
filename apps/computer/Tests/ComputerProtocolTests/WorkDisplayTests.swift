@@ -49,3 +49,13 @@ final class WorkDisplayTests: XCTestCase {
                                                                    on: side, index: 7)))
     }
 }
+
+final class OcclusionTests: XCTestCase {
+    func testCoveredFraction() {
+        let window = CGRect(x: 100, y: 100, width: 400, height: 300)
+        XCTAssertEqual(Occlusion.coveredFraction(window, above: []), 0)
+        XCTAssertEqual(Occlusion.coveredFraction(window, above: [CGRect(x: 0, y: 0, width: 1920, height: 1080)]), 1)
+        XCTAssertEqual(Occlusion.coveredFraction(window, above: [CGRect(x: 100, y: 100, width: 200, height: 300)]), 0.5)
+        XCTAssertEqual(Occlusion.coveredFraction(window, above: [CGRect(x: 600, y: 100, width: 100, height: 100)]), 0)
+    }
+}

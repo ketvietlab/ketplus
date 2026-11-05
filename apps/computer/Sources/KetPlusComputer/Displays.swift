@@ -58,6 +58,16 @@ enum Displays {
         return moved
     }
 
+    /// Raises the app's window with this frame above other apps' windows without
+    /// activating the app, so that it repaints.
+    static func raiseWindow(of pid: pid_t, frame: CGRect) -> Bool {
+        guard let match = movableFrames(of: pid).first(where: {
+            abs($0.frame.minX - frame.minX) < 2 && abs($0.frame.minY - frame.minY) < 2
+                && abs($0.frame.width - frame.width) < 2 && abs($0.frame.height - frame.height) < 2
+        }) else { return false }
+        return AXUIElementPerformAction(match.window, kAXRaiseAction as CFString) == .success
+    }
+
     private static func movableFrames(of pid: pid_t) -> [(window: AXUIElement, frame: CGRect)] {
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 1.5)

@@ -204,6 +204,23 @@ check("background input never moved the pointer to its targets",
 cover.kill();
 await settle(1200);
 
+// ---- Hidden windows (ADR 0028): an ordinary window over the whole work display hides the fixture.
+if (work?.main === false) {
+  const display = placed.toGlobal([0, 0, placed.width, placed.height]).map((value) => String(Math.round(value)));
+  const wall = spawn(join(dirname(fixtureApp), "fixture-cover"), [...display, "normal"], { stdio: ["ignore", "pipe", "inherit"] });
+  await new Promise((resolve) => createInterface({ input: wall.stdout }).once("line", resolve));
+  await settle(400);
+  const hidden = await capture();
+  check("a screenshot raises the hidden fixture on the work display",
+    hidden.words.includes(`Raised hidden windows on the work display first: ${fixtureId}`), hidden.words.slice(-160));
+  const frontRaised = json(await a.call("list_apps")).apps.find((entry) => entry.bundleId === fixtureId);
+  check("raising does not activate the fixture", frontRaised?.frontmost === false);
+  const again = await capture();
+  check("a raised fixture is not raised again", !again.words.includes("Raised hidden windows"), again.words.slice(-160));
+  wall.kill();
+  await settle(600);
+}
+
 // ---- Foreground (ADR 0026): the real pointer and keyboard, fixture in front on the work display.
 fixture = await launchFixture();
 const opened = json(await a.call("open_application", { app: fixtureId, foreground: true }));

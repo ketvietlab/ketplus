@@ -36,6 +36,10 @@ answer `NEEDS_FOREGROUND`.
 `screenshot` captures the work display unless `display` is `main` or an ID from
 `list_apps`. The work display comes from `display` in `computer-tools.json`
 (`secondary` by default, or `main`); with one display it is the main display.
+Some apps, Qt among them, do not repaint a window that other windows cover.
+Before a screenshot the agent raises such granted windows on a separate work
+display without activating the app (`raised`), and otherwise lists them under
+`covered`, because their pixels may be old.
 
 ### Local MCP clients
 
