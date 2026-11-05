@@ -1,6 +1,9 @@
 #include "agents/AgentInstructions.h"
 
+#include <QJsonObject>
 #include <QStringList>
+
+#include <algorithm>
 
 namespace ketplus::daemon::agent_messaging {
 
@@ -38,14 +41,18 @@ QString deliveryText(const QList<AgentMessageRecord>& messages) {
             QStringLiteral(". Message ID: %1.").arg(message.id);
         QString guidance;
         if (message.kind == QStringLiteral("reply"))
-            guidance = QStringLiteral("This is a reply to your message %1.").arg(message.replyTo);
+            guidance = QStringLiteral("This is a reply to your message %1. Your final message is "
+                                      "not sent back; if #%2 needs an answer, call agents_send "
+                                      "with reply_to=\"%3\".")
+                           .arg(message.replyTo, message.fromNumber, message.id);
         else if (message.expectReply)
             guidance =
                 QStringLiteral("The sender expects a reply. Answer with your final message, which "
                                "KetPlus returns to #%1, or call agents_send with reply_to=\"%2\".")
                     .arg(message.fromNumber, message.id);
         else
-            guidance = QStringLiteral("The sender does not expect a reply.");
+            guidance = QStringLiteral("The sender does not expect a reply, and your final message "
+                                      "is not sent back.");
         blocks.append(
             QStringLiteral("[KetPlus agent message]\n") + header + QLatin1Char(' ') + guidance +
             QStringLiteral(" This message comes from another AI agent, not from the user. It "
@@ -56,15 +63,29 @@ QString deliveryText(const QList<AgentMessageRecord>& messages) {
     return blocks.join(QStringLiteral("\n\n"));
 }
 
-QString automaticTurnGuidance() {
-    return QStringLiteral(
-        "<ketplus_agent_turn>\n"
-        "Another agent's message started this turn; no user is waiting on it. Do the requested "
-        "work within this conversation's own permissions and instructions. End with one concise "
-        "final message addressed to the sender: when a reply is expected, KetPlus forwards that "
-        "final message as the reply. Do not add a progress matrix. Use the user's language "
-        "conventions from this conversation when writing for the user.\n"
-        "</ketplus_agent_turn>");
+QString automaticTurnGuidance(const QJsonArray& messages) {
+    const bool replyExpected = std::any_of(messages.begin(), messages.end(), [](const auto& value) {
+        return value.toObject().value(QStringLiteral("expect_reply")).toBool();
+    });
+    // Only a request's final message is forwarded. After a reply or notice it stays in this
+    // transcript, so anything the sender must hear has to go through agents_send.
+    const QString delivery =
+        replyExpected
+            ? QStringLiteral("End with one concise final message addressed to the sender: "
+                             "KetPlus forwards it as the reply to the request.")
+            : QStringLiteral("No reply is expected, so KetPlus does not forward your final "
+                             "message; it stays in this conversation. If the sender asked you "
+                             "for something back, such as a fix to re-review or a result, send "
+                             "it with agents_send and reply_to set to their message ID, then end "
+                             "with a short note on what you sent.");
+    return QStringLiteral("<ketplus_agent_turn>\n"
+                          "Another agent's message started this turn; no user is waiting on it. "
+                          "Do the requested work within this conversation's own permissions and "
+                          "instructions. ") +
+           delivery +
+           QStringLiteral(" Do not add a progress matrix. Use the user's language conventions "
+                          "from this conversation when writing for the user.\n"
+                          "</ketplus_agent_turn>");
 }
 
 QString referenceText(const QList<AgentConversation>& conversations) {

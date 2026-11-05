@@ -219,6 +219,8 @@ class AgentMessagingTest final : public QObject {
         const QByteArray providerLog = logText(fixture.claudeLog);
         QVERIFY(providerLog.contains("[KetPlus agent message]"));
         QVERIFY(providerLog.contains("<ketplus_agent_turn>"));
+        // A request's final message is forwarded, so the receiver is told to answer with it.
+        QVERIFY(providerLog.contains("KetPlus forwards it as the reply to the request."));
 
         // The receiver's final answer comes back to the sender, which starts its own turn.
         QTRY_COMPARE_WITH_TIMEOUT(fixture.count(sender, "turn.completed"), 2, 5000);
@@ -235,6 +237,12 @@ class AgentMessagingTest final : public QObject {
         QCOMPARE(replied.value("state").toString(), "replied");
         QCOMPARE(replied.value("peer_number").toString(), fixture.number(sender));
         QCOMPARE(replied.value("reply_to").toString(), sent.value("message_id").toString());
+        // The reply's turn is told its final message stays local and to use agents_send.
+        const QByteArray replyLog = logText(fixture.claudeLog);
+        QVERIFY(replyLog.contains("KetPlus does not forward your final message"));
+        QVERIFY(replyLog.contains(QStringLiteral("call agents_send with reply_to=\\\"%1\\\"")
+                                      .arg(replyMessage.value("message_id").toString())
+                                      .toUtf8()));
         // A reply that asks nothing ends the exchange.
         QTest::qWait(300);
         QCOMPARE(fixture.count(receiver, "turn.completed"), 2);

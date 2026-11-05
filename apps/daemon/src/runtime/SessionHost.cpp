@@ -1383,7 +1383,9 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
     } else {
         input.append(
             QJsonObject{{QStringLiteral("type"), QStringLiteral("text")},
-                        {QStringLiteral("text"), agent_messaging::automaticTurnGuidance()}});
+                        {QStringLiteral("text"),
+                         agent_messaging::automaticTurnGuidance(
+                             agentOrigin.value(QStringLiteral("agent_messages")).toArray())}});
     }
     prepareTurn(sessionId, it->stored.generation, input, turnOptions);
     return ok(
