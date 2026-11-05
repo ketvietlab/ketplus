@@ -25,8 +25,8 @@ namespace {
 // v4: labels are SVG text rows, not HTML in <foreignObject>, which Qt SVG does not draw.
 // v5: node labels carry an explicit fill; cached state diagrams drew them black.
 // v6: Qt-readable class colours, Két theme, early stylesheets and rounded rectangles.
-// v7: canonical KétSuite theme snapshots and 12px diagram corners.
-constexpr auto cacheVersion = "ketplus-mermaid-v7";
+// v8: Két Blue theme snapshots from design system 0.1.44 (v7: 12px diagram corners).
+constexpr auto cacheVersion = "ketplus-mermaid-v8";
 
 bool isExecutableFile(const QString& path) {
     const QFileInfo file(path);
