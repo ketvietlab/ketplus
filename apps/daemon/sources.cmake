@@ -18,6 +18,12 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/SessionHostDeletion.cpp
     src/storage/LocalJournalTasks.cpp
     src/cloud/CloudControlClient.cpp
+    src/cloud/CloudControlCommands.cpp
+    src/cloud/CloudControlRestore.cpp
+    src/cloud/CloudControlSupport.cpp
+    src/cloud/CloudControlSupport.h
+    src/cloud/CloudControlSync.cpp
+    src/cloud/CloudControlWorktreeCommands.cpp
     src/cloud/CloudControlClient.h
     src/cloud/CloudControlDeviceSignIn.cpp
     src/cloud/CloudControlSignIn.cpp
