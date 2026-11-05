@@ -60,7 +60,7 @@ extension AgentTools {
         references.invalidate(conversation)
         let node = AXTree.node(element)
         try requireGranted(bundle, action == "set_value" ? .keyboard : .pointer, conversation)
-        if let frame = node.frame { glide(to: CGPoint(x: frame.midX, y: frame.midY)) }
+        if let frame = node.frame { try glide(to: CGPoint(x: frame.midX, y: frame.midY), conversation) }
         let done: Bool
         switch action {
         case "press": done = AXTree.perform(.press, on: element)
@@ -97,7 +97,7 @@ extension AgentTools {
         guard let plan = BackgroundPlanner.click(path: path.map(\.info), rightButton: method == "right_click") else {
             throw needsForeground("No accessible control at that point, so this click")
         }
-        glide(to: point)
+        try glide(to: point, conversation)
         guard AXTree.perform(plan.action, on: path[plan.index].element) else {
             throw AgentFailure(code: "ACTION_FAILED", message: "\(owner.bundle) did not accept \(plan.action.rawValue).")
         }
@@ -114,7 +114,7 @@ extension AgentTools {
         }
         guard try modifiers(params).isEmpty else { throw needsForeground("A scroll with modifier keys") }
         let (point, owner) = try backgroundTarget(params, conversation, "scroll")
-        glide(to: point)
+        try glide(to: point, conversation)
         let vertical = direction == .up || direction == .down
         guard AXTree.scroll(owner.pid, at: point, vertical: vertical,
                             increasing: direction == .down || direction == .right, amount: amount) else {
@@ -162,10 +162,10 @@ extension AgentTools {
         // Only the target's focus matters: the user may type a password elsewhere meanwhile.
         let focused = AXTree.focusedElement(pid)
         if focused?.info.isSecureText == true { throw secureInput() }
-        if let frame = focused?.frame { glide(to: CGPoint(x: frame.midX, y: frame.midY)) }
+        if let frame = focused?.frame { try glide(to: CGPoint(x: frame.midX, y: frame.midY), conversation) }
         var delivery = "event"
         if method == "type" {
-            try InputControl.type(text, to: pid)
+            try InputControl.type(text, to: pid, stopped: stopCheck(conversation))
         } else {
             let (combo, count) = try keyCombo(text, params)
             // An inactive app ignores posted key equivalents; its menu bar still runs them.
@@ -175,7 +175,7 @@ extension AgentTools {
                       AXTree.pressMenuShortcut(pid, combo) {
                 delivery = "menu"
             } else {
-                try InputControl.press(combo, repeat: count, to: pid)
+                try InputControl.press(combo, repeat: count, to: pid, stopped: stopCheck(conversation))
             }
         }
         lock.withLock { lastTargets[conversation] = bundle }
@@ -200,11 +200,13 @@ extension AgentTools {
         AgentFailure(code: "SECURE_INPUT", message: "A password or other secure field has focus. Ask the user to enter it.")
     }
 
-    /// Shows the agent's pointer gliding to a point before the action lands there.
-    private func glide(to point: CGPoint) {
+    /// Shows the agent's pointer gliding to a point before the action lands there. The user may
+    /// stop computer use during the pause, so the action must not follow it then.
+    private func glide(to point: CGPoint, _ conversation: String) throws {
         let cursor = self.cursor
         DispatchQueue.main.async { MainActor.assumeIsolated { cursor.glide(to: point) } }
         usleep(200_000)
+        if control.isCancelled(conversation) { throw cancelled() }
     }
 
     private func describe(_ node: AXTree.Node, _ reference: String, _ geometry: ScreenGeometry) -> String {

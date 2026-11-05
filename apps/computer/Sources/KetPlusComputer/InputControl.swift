@@ -91,11 +91,13 @@ enum InputControl {
         up.post(tap: .cghidEventTap)
     }
 
-    static func scroll(_ direction: ScrollDirection, amount: Int, at point: CGPoint?, modifiers: KeyCombo.Modifiers) throws {
+    static func scroll(_ direction: ScrollDirection, amount: Int, at point: CGPoint?, modifiers: KeyCombo.Modifiers,
+                       stopped: () -> Bool = { false }) throws {
+        if stopped() { throw InputInterrupted() }
         if let point { try move(to: point) }
         let vertical: Int32 = direction == .up ? 1 : direction == .down ? -1 : 0
         let horizontal: Int32 = direction == .left ? 1 : direction == .right ? -1 : 0
-        for _ in 0..<amount {
+        try Interruptible.forEach(0..<amount, stopped: stopped) { _ in
             guard let event = CGEvent(scrollWheelEvent2Source: source(), units: .line, wheelCount: 2,
                                       wheel1: vertical * 3, wheel2: horizontal * 3, wheel3: 0)
             else { throw InputError.eventCreationFailed }
@@ -106,10 +108,9 @@ enum InputControl {
     }
 
     /// Types literal Unicode text, independent of the keyboard layout.
-    static func type(_ text: String, to pid: pid_t? = nil) throws {
+    static func type(_ text: String, to pid: pid_t? = nil, stopped: () -> Bool = { false }) throws {
         let units = Array(text.utf16)
-        var index = 0
-        while index < units.count {
+        try Interruptible.forEach(stride(from: 0, to: units.count, by: 16), stopped: stopped) { index in
             let chunk = Array(units[index..<min(index + 16, units.count)])
             guard let down = CGEvent(keyboardEventSource: source(pid), virtualKey: 0, keyDown: true),
                   let up = CGEvent(keyboardEventSource: source(pid), virtualKey: 0, keyDown: false)
@@ -121,13 +122,13 @@ enum InputControl {
             send(down, to: pid)
             send(up, to: pid)
             usleep(pause)
-            index += chunk.count
         }
     }
 
-    static func press(_ combo: KeyCombo, repeat count: Int, to pid: pid_t? = nil) throws {
+    static func press(_ combo: KeyCombo, repeat count: Int, to pid: pid_t? = nil,
+                      stopped: () -> Bool = { false }) throws {
         guard let code = combo.keyCode else { return }
-        for _ in 0..<count {
+        try Interruptible.forEach(0..<count, stopped: stopped) { _ in
             guard let down = CGEvent(keyboardEventSource: source(pid), virtualKey: code, keyDown: true),
                   let up = CGEvent(keyboardEventSource: source(pid), virtualKey: code, keyDown: false)
             else { throw InputError.eventCreationFailed }

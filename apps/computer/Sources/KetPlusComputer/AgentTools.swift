@@ -101,7 +101,20 @@ final class AgentTools {
         } catch let failure as AgentFailure {
             audit.record(conversation: conversation, tool: method, target: nil, outcome: failure.code)
             throw failure
+        } catch is InputInterrupted {
+            audit.record(conversation: conversation, tool: method, target: nil, outcome: "CANCELLED")
+            throw cancelled()
         }
+    }
+
+    func cancelled() -> AgentFailure {
+        AgentFailure(code: "CANCELLED",
+                     message: "The user stopped computer use (Esc or Stop). Stop and ask the user before continuing.")
+    }
+
+    /// Checked between the steps of a long input so Stop and Esc end it at once.
+    func stopCheck(_ conversation: String) -> () -> Bool {
+        { [control] in control.isCancelled(conversation) }
     }
 
     private func perform(_ method: String, _ params: [String: Any], _ conversation: String) throws
@@ -111,10 +124,7 @@ final class AgentTools {
         case "cursor_position": return (cursorPosition(conversation), nil)
         default: break
         }
-        if method != "request_access" && control.isCancelled(conversation) {
-            throw AgentFailure(code: "CANCELLED",
-                               message: "The user stopped computer use (Esc or Stop). Stop and ask the user before continuing.")
-        }
+        if method != "request_access" && control.isCancelled(conversation) { throw cancelled() }
         try takeControl(conversation)
         // Input changes the UI, so element references from the last observe go stale
         // (act resolves its reference first, then invalidates).
@@ -392,7 +402,8 @@ final class AgentTools {
         }
         let flags = try modifiers(params)
         let (point, app) = try pointerTarget(params["coordinate"], conversation, required: false)
-        try InputControl.scroll(direction, amount: amount, at: point, modifiers: flags)
+        try InputControl.scroll(direction, amount: amount, at: point, modifiers: flags,
+                                 stopped: stopCheck(conversation))
         markForeground()
         return (["ok": true], app)
     }
@@ -427,10 +438,10 @@ final class AgentTools {
                                message: "A password or other secure field has focus. Ask the user to enter it.")
         }
         if method == "type" {
-            try InputControl.type(text)
+            try InputControl.type(text, stopped: stopCheck(conversation))
         } else {
             let (combo, count) = try keyCombo(text, params)
-            try InputControl.press(combo, repeat: count)
+            try InputControl.press(combo, repeat: count, stopped: stopCheck(conversation))
         }
         markForeground()
         return (["ok": true], app)
