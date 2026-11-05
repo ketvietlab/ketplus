@@ -231,6 +231,21 @@ void NavigationTest::listsRepositoryFilesByIgnoreRules() {
     const auto limited = ketplus::collectWorkspaceFiles(directory.path(), 2);
     QCOMPARE(limited.relativePaths.size(), 2);
     QVERIFY(limited.truncated);
+
+    // The index still names src/out/gen.c after src/ became a link out of the workspace.
+    QTemporaryDir outside;
+    QVERIFY(outside.isValid());
+    QVERIFY(QDir(outside.path()).mkpath(QStringLiteral("out")));
+    QFile outsideFile(QDir(outside.path()).filePath(QStringLiteral("out/gen.c")));
+    QVERIFY(outsideFile.open(QIODevice::WriteOnly));
+    outsideFile.close();
+    QVERIFY(QDir(root.filePath(QStringLiteral("src"))).removeRecursively());
+    QVERIFY(QFile::link(outside.path(), root.filePath(QStringLiteral("src"))));
+    QVERIFY(QFileInfo(root.filePath(QStringLiteral("src/out/gen.c"))).isFile());
+    const auto linked = ketplus::collectWorkspaceFiles(directory.path());
+    QVERIFY2(!linked.relativePaths.contains(QStringLiteral("src/out/gen.c")),
+             qPrintable(linked.relativePaths.join(u',')));
+    QVERIFY(linked.relativePaths.contains(QStringLiteral("vendor/lib.c")));
 }
 
 void NavigationTest::extractsCppSymbols() {

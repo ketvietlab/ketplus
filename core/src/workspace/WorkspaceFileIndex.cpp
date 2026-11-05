@@ -2,6 +2,7 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QHash>
 #include <QProcess>
 #include <QSet>
 
@@ -64,6 +65,24 @@ std::optional<QStringList> gitListedPaths(const QString& root, const std::atomic
     // --cached lists a file once per conflict stage.
     paths.removeDuplicates();
     return paths;
+}
+
+// Whether a folder on the way to `relative` is a symlink. The index can still name
+// `src/note.txt` after `src/` was replaced by a link out of the workspace, and search and
+// replace must not follow it. Answers are kept per folder, so each is checked once.
+bool hasSymlinkedParent(const QDir& root, const QString& relative, QHash<QString, bool>* folders) {
+    for (qsizetype slash = relative.indexOf(QLatin1Char('/')); slash > 0;
+         slash = relative.indexOf(QLatin1Char('/'), slash + 1)) {
+        const QString folder = relative.left(slash);
+        auto known = folders->constFind(folder);
+        if (known == folders->cend()) {
+            known = folders->insert(folder, QFileInfo(root.filePath(folder)).isSymLink());
+        }
+        if (*known) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Appends the files under `start` (relative to `root`), skipping dependency, build and hidden
@@ -154,13 +173,14 @@ WorkspaceFileList collectWorkspaceFiles(const QString& rootPath, const int maxim
     // In a repository, .gitignore decides: a committed vendor/ is listed and an ignored
     // cmake-build-debug/ is not. Elsewhere, a walk skips the usual dependency and build folders.
     if (const auto listed = gitListedPaths(root.absolutePath(), cancelled)) {
+        QHash<QString, bool> symlinkedFolders;
         for (const QString& relative : *listed) {
             if (cancelled != nullptr && cancelled->load()) {
                 result.truncated = true;
                 break;
             }
             const QFileInfo entry(root.filePath(relative));
-            if (entry.isSymLink()) {
+            if (entry.isSymLink() || hasSymlinkedParent(root, relative, &symlinkedFolders)) {
                 continue;
             }
             if (entry.isDir()) {
