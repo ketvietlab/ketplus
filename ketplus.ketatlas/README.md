@@ -410,7 +410,7 @@ instead of the mock's dashed one.
 
 - Every sidebar conversation row has two lines in a 48 px row (the native row is 36 px today).
   Line 1 has the status icon, the title at full width and, while a turn started by another
-  conversation's message runs, `from #N`. Line 2 has the conversation's `#number`, then its tags.
+  conversation's message runs, `from N`. Line 2 has the conversation's number (no `#`), then its tags.
   An untagged row shows its status there instead.
 - Tags show as whole chips (84 px at most, long names end with an ellipsis). Chips that do not
   fit are hidden and counted in `+N`, whose tooltip lists them. The tag of the active filter
@@ -438,20 +438,22 @@ Flow `agent-messaging`. Implemented natively per ADR 0027: the daemon numbers ev
 conversation and its `ketplus_agents` MCP server lets an agent message another one by number.
 The mock shows the Desktop projection only.
 
-- The header shows the open conversation's `#number` before its title, as every sidebar row
-  does on its second line.
+- Conversations are referenced as `@agent/NNNN`. `#` is not used, because `#1234` also reads as
+  an issue or pull request number. The sidebar shows the bare number on a row's second line.
+- The header shows the open conversation's `@agent/NNNN` before its title. Right-click a
+  conversation → **Copy @agent/NNNN** copies the reference.
 - The sender's turn keeps its `agents_send` tool row and adds an **Agent message** note:
-  `Sent to #N · title · started a turn · reply requested.`
+  `Sent to @agent/N · title · started a turn · reply requested.`
 - An idle receiver starts a turn. Its opening row is an outlined bubble labelled
-  `Message from #N · title · provider` instead of the user's text. While that turn runs, its
-  sidebar row ends with `from #N`.
+  `Message from @agent/N · title · provider` instead of the user's text. While that turn runs,
+  its sidebar row ends with `from N`.
 - The receiver's final answer comes back to the sender as the opening row of the next turn,
-  labelled `Reply from #N · title · provider`.
+  labelled `Reply from @agent/N · title · provider`.
 - Over a loop-guard limit (hop 6, 30 automatic turns in one exchange, 20 per receiver per hour)
   the message is held: both conversations show a warning note. A held message is delivered with
   the receiver's next message from the user.
-- Typing `#` in the composer lists other conversations by number, title and worktree, filtered
-  by number prefix or title. Arrow keys move, Enter or Tab inserts `#N `, Escape closes. The
-  open conversation is never offered.
+- Typing `@agent/` in the composer lists other conversations by number, title and worktree,
+  filtered by number prefix or title; any other `@` stays a file mention. Arrow keys move, Enter
+  or Tab inserts `@agent/N `, Escape closes. The open conversation is never offered.
 - Fixtures: `?conversation=startup` (receiver), `?conversation=navigation` (sender),
-  `&agent=reply`, `&agent=held`, `&mention=conversation` (picker open on `Ask #`).
+  `&agent=reply`, `&agent=held`, `&mention=conversation` (picker open on `Ask @agent/`).

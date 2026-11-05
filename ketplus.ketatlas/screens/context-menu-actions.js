@@ -28,6 +28,11 @@ K.performContextCommand = (id, target) => {
         reload({ dialog: id, kind, target: target.id, targetTree: target.scope.tree, targetRepo: target.scope.repo });
     } else if (id === "tags") {
         K.openTagEditor(target);
+    } else if (id === "copy-agent-reference") {
+        // ADR 0027: the reference other conversations and the composer use.
+        K.demo.menuClipboard = `@agent/${K.conversationNumber(target.scope, target.record)}`;
+        K.toast(`Copied ${K.demo.menuClipboard}`);
+        finish();
     } else if (id === "fork") {
         if (K.demo.operation) return K.toast("Wait for the pending operation.");
         K.queue("fork");

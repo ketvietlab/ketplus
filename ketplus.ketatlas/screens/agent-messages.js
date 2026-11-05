@@ -4,7 +4,7 @@ K.agentPeers = (scope = K.scope) => {
     const sender = scope.conversations.navigation, receiver = scope.conversations.startup;
     return sender && receiver ? { sender, receiver } : null;
 };
-K.agentNamed = (record, scope = K.scope) => `#${K.conversationNumber(scope, record)} · ${record.title}`;
+K.agentNamed = (record, scope = K.scope) => `@agent/${K.conversationNumber(scope, record)} · ${record.title}`;
 K.agentRequestText = "Review the desktop startup flow and tell me whether conversation activity is restored before the sidebar paints. Reply with your findings.";
 K.agentReplyText = "Activity is restored before the sidebar paints: the journal page loads first and the rows render from it. The only gap is the unread cursor, which arrives one frame later.";
 K.agentBubble = (label, text) =>
@@ -12,7 +12,7 @@ K.agentBubble = (label, text) =>
 K.agentNote = (text, held = false) =>
     `<div class="agent-note${held ? " held" : ""}" role="status">${K.icon(held ? "pause-circle" : "send")}<span><b>Agent message</b>${K.escape(text)}</span></div>`;
 K.agentToolRow = number =>
-    `<div class="activity-row agent-tool-row"><span class="activity-prefix">Called</span><code>ketplus_agents · agents_send</code><span class="agent-tool-target">#${K.escape(number)}</span></div>`;
+    `<div class="activity-row agent-tool-row"><span class="activity-prefix">Called</span><code>ketplus_agents · agents_send</code><span class="agent-tool-target">@agent/${K.escape(number)}</span></div>`;
 
 {
     const transcript = K.transcript;
@@ -31,14 +31,14 @@ K.agentToolRow = number =>
         if (K.current !== sender || K.current.latestPrompt) return body;
         const number = K.conversationNumber(K.scope, receiver);
         body = body.replace(/(<div class="user-bubble-text"[^>]*>)[\s\S]*?(<\/div>)/,
-            `$1${K.escape(`Ask #${number} to review the startup flow and reply with what it finds.`)}$2`);
+            `$1${K.escape(`Ask @agent/${number} to review the startup flow and reply with what it finds.`)}$2`);
         const fixture = K.query.get("agent");
         const note = fixture === "held"
-            ? K.agentNote(`Message to #${number} is held because the agents exchanged too many messages. It is delivered with that conversation's next message from you.`, true)
+            ? K.agentNote(`Message to @agent/${number} is held because the agents exchanged too many messages. It is delivered with that conversation's next message from you.`, true)
             : K.agentNote(`Sent to ${K.agentNamed(receiver)} · started a turn · reply requested.`);
         body = body.replace(/(<\/section>)/, `${K.agentToolRow(number)}$1${note}`);
         if (fixture === "reply") {
-            const reply = `${K.agentBubble(`Reply from ${K.agentNamed(receiver)} · ${receiver.provider || "Codex"}`, K.agentReplyText)}<article class="assistant-message transcript-turn"><div class="assistant-body"><div class="answer final-answer"><p>#${K.escape(number)} confirmed the restore order. I will keep the unread cursor fix in this branch.</p></div></div></article>`;
+            const reply = `${K.agentBubble(`Reply from ${K.agentNamed(receiver)} · ${receiver.provider || "Codex"}`, K.agentReplyText)}<article class="assistant-message transcript-turn"><div class="assistant-body"><div class="answer final-answer"><p>@agent/${K.escape(number)} confirmed the restore order. I will keep the unread cursor fix in this branch.</p></div></div></article>`;
             // The reply opens the next turn, right after the turn that sent the message.
             body = body.replace(/(<article class="assistant-message[\s\S]*?<\/article>)/, `$1${reply}`);
         }
@@ -46,7 +46,7 @@ K.agentToolRow = number =>
     };
 }
 
-// Header: the number other conversations and `#` references use, before the title.
+// Header: the @agent/ reference other conversations use, before the title.
 {
     const workspace = K.views.workspace;
     K.views.workspace = () => {
@@ -54,18 +54,20 @@ K.agentToolRow = number =>
         if (K.state === "empty" || !K.current) return html;
         const number = K.conversationNumber(K.scope, K.current);
         return html.replace('<div class="agent-header-context"><h2>',
-            `<div class="agent-header-context"><span class="header-number" aria-label="Conversation number ${number}">#${number}</span><h2>`);
+            `<div class="agent-header-context"><span class="header-number" aria-label="Agent reference @agent/${number}">@agent/${number}</span><h2>`);
     };
 }
 
-// `#` in the composer completes other conversations' numbers, as `@` completes files.
+// `@agent/` in the composer completes other conversations' numbers; any other `@` completes files.
 K.conversationMention = (value, cursor) => {
     let start = cursor - 1;
-    while (start >= 0 && /[^\s#@$]/.test(value.charAt(start))) --start;
-    if (start < 0 || value.charAt(start) !== "#" || (start > 0 && !/[\s(\[{'"]/.test(value.charAt(start - 1)))) return null;
+    while (start >= 0 && /[^\s@"$]/.test(value.charAt(start))) --start;
+    if (start < 0 || value.charAt(start) !== "@" || (start > 0 && !/[\s(\[{'"]/.test(value.charAt(start - 1)))) return null;
+    const typed = value.slice(start + 1, cursor);
+    if (!typed.startsWith("agent/")) return null; // a plain `@` is a file mention
     let end = cursor;
-    while (end < value.length && /[^\s#@$]/.test(value.charAt(end))) ++end;
-    return { start, end, query: value.slice(start + 1, cursor).toLowerCase() };
+    while (end < value.length && /[^\s@"$]/.test(value.charAt(end))) ++end;
+    return { start, end, query: typed.slice(6).toLowerCase() };
 };
 K.conversationSuggestions = query => {
     const rows = [];
@@ -82,8 +84,8 @@ K.conversationSuggestions = query => {
 K.mentionMenu = (query, highlighted = 0) => {
     const rows = K.conversationSuggestions(query);
     const items = rows.length
-        ? rows.map((row, index) => `<button type="button" role="option" class="mention-option${index === highlighted ? " highlighted" : ""}" aria-selected="${index === highlighted}" data-conversation-number="${row.number}"><span class="conversation-number">#${row.number}</span><span class="mention-title">${K.escape(row.title)}</span><small>${K.escape(row.place)}</small></button>`).join("")
-        : `<div class="mention-empty">No conversation matches #${K.escape(query)}</div>`;
+        ? rows.map((row, index) => `<button type="button" role="option" class="mention-option${index === highlighted ? " highlighted" : ""}" aria-selected="${index === highlighted}" data-conversation-number="${row.number}"><span class="conversation-number">@agent/${row.number}</span><span class="mention-title">${K.escape(row.title)}</span><small>${K.escape(row.place)}</small></button>`).join("")
+        : `<div class="mention-empty">No conversation matches @agent/${K.escape(query)}</div>`;
     return `<div class="mention-menu" role="listbox" aria-label="Conversations"><div class="mention-menu-title">Conversations</div>${items}</div>`;
 };
 {
@@ -91,7 +93,7 @@ K.mentionMenu = (query, highlighted = 0) => {
     K.composer = (...args) => {
         const html = composer(...args);
         if (K.query.get("mention") !== "conversation" || K.current?.draft) return html;
-        return html.replace("></textarea>", ">Ask #</textarea>")
+        return html.replace("></textarea>", ">Ask @agent/</textarea>")
             .replace('<div class="composer-wrap">', `<div class="composer-wrap">${K.mentionMenu("")}`);
     };
 }
@@ -108,7 +110,7 @@ K.applyMention = number => {
     const prompt = document.querySelector("#prompt");
     const mention = prompt && K.conversationMention(prompt.value, prompt.selectionStart);
     if (!mention) return K.closeMentionMenu();
-    prompt.setRangeText(`#${number} `, mention.start, mention.end, "end");
+    prompt.setRangeText(`@agent/${number} `, mention.start, mention.end, "end");
     prompt.dispatchEvent(new Event("input", { bubbles: true }));
     K.closeMentionMenu();
     prompt.focus();

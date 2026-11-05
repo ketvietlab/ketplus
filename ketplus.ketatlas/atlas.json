@@ -4648,7 +4648,7 @@
         {
           "id": "pick",
           "screen": "workspace",
-          "title": "Type # to pick a conversation",
+          "title": "Type @agent/ to pick a conversation",
           "url": "./screens/workspace.html?conversation=navigation&mention=conversation",
           "column": 0,
           "row": 0
@@ -4664,7 +4664,7 @@
         {
           "id": "received",
           "screen": "workspace",
-          "title": "Receiver · Message from #… bubble",
+          "title": "Receiver · Message from @agent/… bubble",
           "url": "./screens/workspace.html?conversation=startup",
           "column": 2,
           "row": 0
@@ -4672,7 +4672,7 @@
         {
           "id": "reply",
           "screen": "workspace",
-          "title": "Sender · Reply from #…",
+          "title": "Sender · Reply from @agent/…",
           "url": "./screens/workspace.html?conversation=navigation&agent=reply",
           "column": 3,
           "row": 0
@@ -4704,7 +4704,7 @@
         {
           "from": "sent",
           "to": "received",
-          "label": "Idle receiver starts a turn; its row ends with from #…",
+          "label": "Idle receiver starts a turn; its sidebar row ends with from NNNN",
           "kind": "primary"
         },
         {
