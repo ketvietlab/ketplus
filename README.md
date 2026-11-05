@@ -210,9 +210,11 @@ core/               editor, workspace, Git, terminal, preview (both editions; Li
 apps/desktop/       KétPlus Pro desktop shell and executable
 apps/daemon/        local and headless Linux daemon, ketplusctl
 apps/browser/       bundled browser runtime for agent tools
+apps/computer/      KetPlus Computer, the macOS computer-use helper app (Swift)
 modules/ai/         Agent Workspace and provider transports
 modules/atlas/      Atlas integration and code index
 modules/remote/     daemon client and relay (Control v2) client
+modules/computer/   computer use settings and provider MCP launch
 tests/              Pro and cross-boundary integration tests
 ```
 
