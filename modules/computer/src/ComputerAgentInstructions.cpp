@@ -12,12 +12,16 @@ QString agentInstructions(const bool computerAvailable) {
                   "mcp__ketplus_computer__ prefix. Prefer an MCP server, a shell command or "
                   "ketplus_browser when one can do the task. Call list_apps, then request_access "
                   "for the apps you need with a one-sentence reason; the user approves them. "
-                  "Take a screenshot before acting: it shows only granted apps, and every "
-                  "coordinate is a pixel of the most recent screenshot. Take another screenshot "
-                  "to verify each important step. Terminals and IDEs accept clicks only, and "
-                  "browsers other than Safari are view-only. On CANCELLED, REMOTE_TURN, "
-                  "SECURE_INPUT or CONTROL_LOCKED, stop using the computer and tell the user. "
-                  "Never type passwords or other secrets; ask the user to enter them.")
+                  "The tools work in the background: the user keeps their pointer, keyboard and "
+                  "front app, and granted apps work even behind other windows. Prefer observe "
+                  "and act on element refs; left_click, right_click, scroll, type and key at "
+                  "screenshot coordinates also run in the background. Take a screenshot or "
+                  "observe again to verify each important step; any input makes refs stale. "
+                  "Use \"foreground\": true only after NEEDS_FOREGROUND, because it moves the "
+                  "user's real pointer. Terminals and IDEs accept clicks only, and browsers "
+                  "other than Safari are view-only. On CANCELLED, REMOTE_TURN, SECURE_INPUT or "
+                  "CONTROL_LOCKED, stop using the computer and tell the user. Never type "
+                  "passwords or other secrets; ask the user to enter them.")
             : QStringLiteral(
                   "KetPlus computer use is off or unavailable for this conversation. If a task "
                   "needs control of a native app, report that limitation and the need to enable "

@@ -3,22 +3,31 @@ import Carbon.HIToolbox
 import ComputerProtocol
 import Foundation
 
-/// Tool semantics and policy enforcement (ADR 0026). Runs on socket threads;
-/// UI work hops to the main thread.
+/// Tool semantics and policy enforcement (ADR 0026, 0027). Runs on socket threads;
+/// UI work hops to the main thread. Background tools are in AgentTools+Background.
 final class AgentTools {
     private let paths: AgentPaths
-    private let control: ControlState
+    let control: ControlState
     private let audit: AuditLog
-    private let lock = NSLock()
+    let lock = NSLock()
     private var geometries: [String: ScreenGeometry] = [:]
     private let indicator: ControlIndicator
+    let cursor: VirtualCursor
     private var killSwitch: KillSwitch?
+    let references = ReferenceTable<AXUIElement>()
+    /// The app each conversation last acted on: the default keyboard target.
+    var lastTargets: [String: String] = [:]
+    /// When the agent last used the real pointer or HID keyboard.
+    var lastForeground: Date?
 
-    init(paths: AgentPaths, control: ControlState, indicator: ControlIndicator) {
+    @MainActor
+    init(paths: AgentPaths, control: ControlState, indicator: ControlIndicator, cursor: VirtualCursor) {
         self.paths = paths
         self.control = control
         self.indicator = indicator
+        self.cursor = cursor
         audit = AuditLog(paths: paths)
+        indicator.onStop = { [weak self] in self?.userStopped(by: "stop") }
     }
 
     // MARK: lifecycle hooks (main thread)
@@ -26,23 +35,38 @@ final class AgentTools {
     @MainActor
     func installKillSwitch() {
         guard killSwitch == nil, Permissions.accessibility else { return }
-        let killSwitch = KillSwitch(isArmed: { [control] in control.activeHolder != nil }) { [weak self] in
-            MainActor.assumeIsolated { self?.userPressedEscape() }
+        let killSwitch = KillSwitch(isArmed: { [weak self] in self?.escapeStopsAgent() ?? false }) { [weak self] in
+            MainActor.assumeIsolated { self?.userStopped(by: "esc") }
         }
         if killSwitch.install() { self.killSwitch = killSwitch }
     }
 
     @MainActor
     func expireIdleLease() {
-        if control.expireIdleLease() { indicator.hide() }
+        if control.expireIdleLease() {
+            indicator.hide()
+            cursor.hide()
+        }
+    }
+
+    /// Esc is the user's own key unless they are in an app this agent controls or
+    /// the agent just used the real pointer (ADR 0027).
+    private func escapeStopsAgent() -> Bool {
+        guard let holder = control.activeHolder else { return false }
+        let since = lock.withLock { lastForeground.map { Date().timeIntervalSince($0) } }
+        return KillSwitchPolicy.consumesEscape(
+            frontmostIsGranted: control.grantedApps(holder).contains(WindowTargets.frontmostApplication),
+            secondsSinceForeground: since)
     }
 
     @MainActor
-    private func userPressedEscape() {
+    private func userStopped(by source: String) {
         if let stopped = control.cancelActive() {
-            audit.record(conversation: stopped, tool: "esc", target: nil, outcome: "cancelled_by_user")
+            references.invalidate(stopped)
+            audit.record(conversation: stopped, tool: source, target: nil, outcome: "cancelled_by_user")
         }
         indicator.hide()
+        cursor.hide()
         if NSApp.modalWindow != nil { NSApp.abortModal() }
     }
 
@@ -65,8 +89,13 @@ final class AgentTools {
     func call(_ method: String, _ params: [String: Any], conversation: String) throws -> [String: Any] {
         do {
             let result = try perform(method, params, conversation)
-            audit.record(conversation: conversation, tool: method, target: result.target, outcome: "ok",
-                         detail: method == "type" ? ["characters": (params["text"] as? String)?.count ?? 0] : [:])
+            var detail: [String: Any] = [:]
+            if method == "type" { detail["characters"] = (params["text"] as? String)?.count ?? 0 }
+            if method == "act", params["action"] as? String == "set_value" {
+                detail["characters"] = (params["value"] as? String)?.count ?? 0
+            }
+            if let mode = result.value["mode"] { detail["mode"] = mode }
+            audit.record(conversation: conversation, tool: method, target: result.target, outcome: "ok", detail: detail)
             return result.value
         } catch let failure as AgentFailure {
             audit.record(conversation: conversation, tool: method, target: nil, outcome: failure.code)
@@ -83,23 +112,39 @@ final class AgentTools {
         }
         if method != "request_access" && control.isCancelled(conversation) {
             throw AgentFailure(code: "CANCELLED",
-                               message: "The user pressed Esc to stop computer use. Stop and ask the user before continuing.")
+                               message: "The user stopped computer use (Esc or Stop). Stop and ask the user before continuing.")
         }
         try takeControl(conversation)
+        // Input changes the UI, so element references from the last observe go stale
+        // (act resolves its reference first, then invalidates).
+        if !["request_access", "screenshot", "zoom", "observe", "act"].contains(method) {
+            references.invalidate(conversation)
+        }
+        let foreground = params["foreground"] as? Bool ?? false
         switch method {
         case "request_access": return (try requestAccess(params, conversation), nil)
         case "open_application": return try openApplication(params, conversation)
         case "screenshot": return (try screenshot(conversation, region: nil), nil)
         case "zoom": return (try zoom(params, conversation), nil)
+        case "observe": return try observe(params, conversation)
+        case "act": return try act(params, conversation)
         case "left_click", "right_click", "middle_click", "double_click", "triple_click":
-            return try click(method, params, conversation)
+            return foreground ? try click(method, params, conversation)
+                              : try backgroundClick(method, params, conversation)
         case "mouse_move":
+            guard foreground else { throw needsForeground("mouse_move") }
             let (point, app) = try pointerTarget(params["coordinate"], conversation, required: true)
             try InputControl.move(to: point)
+            markForeground()
             return (["ok": true], app)
-        case "left_click_drag": return try drag(params, conversation)
-        case "scroll": return try scroll(params, conversation)
-        case "type", "key": return try keyboard(method, params, conversation)
+        case "left_click_drag":
+            guard foreground else { throw needsForeground("left_click_drag") }
+            return try drag(params, conversation)
+        case "scroll":
+            return foreground ? try scroll(params, conversation) : try backgroundScroll(params, conversation)
+        case "type", "key":
+            return foreground ? try keyboard(method, params, conversation)
+                              : try backgroundKeyboard(method, params, conversation)
         default: throw AgentFailure(code: "UNKNOWN_METHOD", message: "Unknown method \(method).")
         }
     }
@@ -119,6 +164,8 @@ final class AgentTools {
         DispatchQueue.main.async { [self] in
             MainActor.assumeIsolated {
                 installKillSwitch()
+                // The user may have pressed Stop since this call took the lease.
+                guard control.activeHolder == conversation else { return }
                 indicator.show(apps: names.sorted())
             }
         }
@@ -131,7 +178,7 @@ final class AgentTools {
         return Set(list)
     }
 
-    private func tier(_ bundle: String) -> AppTier { AppPolicy.tier(for: bundle, denied: deniedApps()) }
+    func tier(_ bundle: String) -> AppTier { AppPolicy.tier(for: bundle, denied: deniedApps()) }
 
     private func listApps(_ conversation: String) -> [String: Any] {
         let granted = control.grantedApps(conversation)
@@ -173,7 +220,7 @@ final class AgentTools {
                 "blocked": refused]
     }
 
-    private func requireGranted(_ bundle: String, _ action: ActionKind, _ conversation: String) throws {
+    func requireGranted(_ bundle: String, _ action: ActionKind, _ conversation: String) throws {
         let appTier = tier(bundle)
         guard appTier != .blocked else {
             throw AgentFailure(code: "APP_BLOCKED", message: "\(bundle.isEmpty ? "This target" : bundle) cannot be controlled.")
@@ -193,8 +240,10 @@ final class AgentTools {
             throw AgentFailure(code: "APP_NOT_FOUND", message: "No application matches the app parameter.")
         }
         try requireGranted(app.bundleIdentifier, .view, conversation)
-        try AppCatalog.open(app.bundleIdentifier)
-        return (["opened": app.bundleIdentifier], app.bundleIdentifier)
+        let activate = params["foreground"] as? Bool ?? false
+        try AppCatalog.open(app.bundleIdentifier, activate: activate)
+        lock.withLock { lastTargets[conversation] = app.bundleIdentifier }
+        return (["opened": app.bundleIdentifier, "frontmost": activate], app.bundleIdentifier)
     }
 
     // MARK: capture
@@ -228,30 +277,40 @@ final class AgentTools {
 
     // MARK: pointer
 
-    private func geometry(_ conversation: String) throws -> ScreenGeometry {
+    func geometry(_ conversation: String) throws -> ScreenGeometry {
         guard let geometry = lock.withLock({ geometries[conversation] }) else {
             throw AgentFailure(code: "NO_SCREENSHOT", message: "Take a screenshot first; coordinates refer to it.")
         }
         return geometry
     }
 
-    private func coordinate(_ value: Any?) -> (Int, Int)? {
+    /// The last full screenshot's geometry, or the display's when none was taken.
+    func currentGeometry(_ conversation: String) -> ScreenGeometry {
+        lock.withLock { geometries[conversation] } ?? ScreenGeometry(displayBounds: CGDisplayBounds(CGMainDisplayID()))
+    }
+
+    func coordinate(_ value: Any?) -> (Int, Int)? {
         guard let pair = value as? [Any], pair.count == 2,
               let x = (pair[0] as? NSNumber)?.intValue, let y = (pair[1] as? NSNumber)?.intValue else { return nil }
         return (x, y)
     }
 
+    /// Global point for an image coordinate of the last screenshot.
+    func globalPoint(_ x: Int, _ y: Int, _ conversation: String) throws -> CGPoint {
+        let geometry = try geometry(conversation)
+        guard geometry.contains(imageX: x, imageY: y) else {
+            throw AgentFailure(code: "OUT_OF_BOUNDS",
+                               message: "(\(x), \(y)) is outside the \(geometry.imageWidth)x\(geometry.imageHeight) screenshot.")
+        }
+        return geometry.globalPoint(imageX: x, imageY: y)
+    }
+
     /// Global point for an image coordinate (or the cursor), after checking the
-    /// app that will actually receive the event.
+    /// app that will actually receive the real pointer's event: the topmost one.
     private func pointerTarget(_ value: Any?, _ conversation: String, required: Bool) throws -> (CGPoint, String) {
         let point: CGPoint
         if let (x, y) = coordinate(value) {
-            let geometry = try geometry(conversation)
-            guard geometry.contains(imageX: x, imageY: y) else {
-                throw AgentFailure(code: "OUT_OF_BOUNDS",
-                                   message: "(\(x), \(y)) is outside the \(geometry.imageWidth)x\(geometry.imageHeight) screenshot.")
-            }
-            point = geometry.globalPoint(imageX: x, imageY: y)
+            point = try globalPoint(x, y, conversation)
         } else if value == nil && !required {
             point = InputControl.cursorLocation
         } else {
@@ -263,14 +322,14 @@ final class AgentTools {
         return (point, app)
     }
 
-    private func requireAccessibility() throws {
+    func requireAccessibility() throws {
         guard Permissions.accessibility else {
             throw AgentFailure(code: "PERMISSION_REQUIRED",
                                message: "Allow KetPlus Computer in System Settings > Privacy & Security > Accessibility.")
         }
     }
 
-    private func modifiers(_ params: [String: Any]) throws -> KeyCombo.Modifiers {
+    func modifiers(_ params: [String: Any]) throws -> KeyCombo.Modifiers {
         guard let parsed = KeyCombo.parseModifiers(params["text"] as? String ?? "") else {
             throw AgentFailure(code: "INVALID_PARAMS", message: "text must be modifiers such as shift, ctrl, alt, super or ctrl+shift.")
         }
@@ -283,6 +342,7 @@ final class AgentTools {
         let button: MouseButton = method == "right_click" ? .right : method == "middle_click" ? .middle : .left
         let count = method == "double_click" ? 2 : method == "triple_click" ? 3 : 1
         try InputControl.click(button, count: count, at: point, modifiers: flags)
+        markForeground()
         return (["ok": true], app)
     }
 
@@ -291,6 +351,7 @@ final class AgentTools {
         let (start, app) = try pointerTarget(params["start_coordinate"], conversation, required: true)
         let (end, _) = try pointerTarget(params["coordinate"], conversation, required: true)
         try InputControl.drag(from: start, to: end, modifiers: flags)
+        markForeground()
         return (["ok": true], app)
     }
 
@@ -302,15 +363,32 @@ final class AgentTools {
         let flags = try modifiers(params)
         let (point, app) = try pointerTarget(params["coordinate"], conversation, required: false)
         try InputControl.scroll(direction, amount: amount, at: point, modifiers: flags)
+        markForeground()
         return (["ok": true], app)
     }
 
     // MARK: keyboard
 
-    private func keyboard(_ method: String, _ params: [String: Any], _ conversation: String) throws -> ([String: Any], String?) {
+    func keyText(_ params: [String: Any]) throws -> String {
         guard let text = params["text"] as? String, !text.isEmpty, text.count <= 4000 else {
             throw AgentFailure(code: "INVALID_PARAMS", message: "text must be 1 to 4000 characters.")
         }
+        return text
+    }
+
+    func keyCombo(_ text: String, _ params: [String: Any]) throws -> (KeyCombo, Int) {
+        guard let combo = KeyCombo.parse(text) else {
+            throw AgentFailure(code: "INVALID_PARAMS", message: "Unknown key \"\(text)\".")
+        }
+        let count = (params["repeat"] as? NSNumber)?.intValue ?? 1
+        guard (1...100).contains(count) else {
+            throw AgentFailure(code: "INVALID_PARAMS", message: "repeat must be 1 to 100.")
+        }
+        return (combo, count)
+    }
+
+    private func keyboard(_ method: String, _ params: [String: Any], _ conversation: String) throws -> ([String: Any], String?) {
+        let text = try keyText(params)
         try requireAccessibility()
         let app = WindowTargets.frontmostApplication
         try requireGranted(app, .keyboard, conversation)
@@ -321,15 +399,10 @@ final class AgentTools {
         if method == "type" {
             try InputControl.type(text)
         } else {
-            guard let combo = KeyCombo.parse(text) else {
-                throw AgentFailure(code: "INVALID_PARAMS", message: "Unknown key \"\(text)\".")
-            }
-            let count = (params["repeat"] as? NSNumber)?.intValue ?? 1
-            guard (1...100).contains(count) else {
-                throw AgentFailure(code: "INVALID_PARAMS", message: "repeat must be 1 to 100.")
-            }
+            let (combo, count) = try keyCombo(text, params)
             try InputControl.press(combo, repeat: count)
         }
+        markForeground()
         return (["ok": true], app)
     }
 
@@ -337,6 +410,10 @@ final class AgentTools {
         guard let geometry = lock.withLock({ geometries[conversation] }) else { return ["coordinate": NSNull()] }
         let point = geometry.imagePoint(global: InputControl.cursorLocation)
         return ["coordinate": [point.x, point.y]]
+    }
+
+    func markForeground() {
+        lock.withLock { lastForeground = Date() }
     }
 
     private func waitFor<T>(_ operation: @escaping () async throws -> T) throws -> T {

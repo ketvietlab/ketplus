@@ -56,11 +56,11 @@ final class AppPolicyTests: XCTestCase {
 final class KeyComboTests: XCTestCase {
     func testParsesKeysAndCombinations() {
         XCTAssertEqual(KeyCombo.parse("Return"), KeyCombo(keyCode: 36, modifiers: []))
-        XCTAssertEqual(KeyCombo.parse("ctrl+s"), KeyCombo(keyCode: 1, modifiers: [.control]))
+        XCTAssertEqual(KeyCombo.parse("ctrl+s"), KeyCombo(keyCode: 1, modifiers: [.control], character: "S"))
         XCTAssertEqual(KeyCombo.parse("super+shift+Tab"), KeyCombo(keyCode: 48, modifiers: [.command, .shift]))
         XCTAssertEqual(KeyCombo.parse("alt+F4"), KeyCombo(keyCode: 118, modifiers: [.option]))
         XCTAssertEqual(KeyCombo.parse("Page_Down"), KeyCombo(keyCode: 121, modifiers: []))
-        XCTAssertEqual(KeyCombo.parse("A"), KeyCombo(keyCode: 0, modifiers: []))
+        XCTAssertEqual(KeyCombo.parse("A"), KeyCombo(keyCode: 0, modifiers: [], character: "A"))
     }
 
     func testRejectsUnknownOrMalformed() {

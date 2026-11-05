@@ -40,8 +40,11 @@ enum ScrollDirection: String {
     case up, down, left, right
 }
 
-/// Posts synthetic HID events. Every event carries this process's PID, which the
-/// kill switch uses to tell agent input from the user's own Esc.
+/// Posts synthetic events. HID events move the real pointer and carry this process's
+/// PID, which the kill switch uses to tell agent input from the user's own Esc.
+/// Keyboard events can instead go to one process (ADR 0027): they skip the HID
+/// stream and the frontmost app, and use a private source so the user's held
+/// modifiers do not leak into them.
 enum InputControl {
     private static let pause: useconds_t = 30_000
 
@@ -103,43 +106,49 @@ enum InputControl {
     }
 
     /// Types literal Unicode text, independent of the keyboard layout.
-    static func type(_ text: String) throws {
+    static func type(_ text: String, to pid: pid_t? = nil) throws {
         let units = Array(text.utf16)
         var index = 0
         while index < units.count {
             let chunk = Array(units[index..<min(index + 16, units.count)])
-            guard let down = CGEvent(keyboardEventSource: source(), virtualKey: 0, keyDown: true),
-                  let up = CGEvent(keyboardEventSource: source(), virtualKey: 0, keyDown: false)
+            guard let down = CGEvent(keyboardEventSource: source(pid), virtualKey: 0, keyDown: true),
+                  let up = CGEvent(keyboardEventSource: source(pid), virtualKey: 0, keyDown: false)
             else { throw InputError.eventCreationFailed }
             chunk.withUnsafeBufferPointer { buffer in
                 down.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress)
                 up.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress)
             }
-            down.post(tap: .cghidEventTap)
-            up.post(tap: .cghidEventTap)
+            send(down, to: pid)
+            send(up, to: pid)
             usleep(pause)
             index += chunk.count
         }
     }
 
-    static func press(_ combo: KeyCombo, repeat count: Int) throws {
+    static func press(_ combo: KeyCombo, repeat count: Int, to pid: pid_t? = nil) throws {
         guard let code = combo.keyCode else { return }
         for _ in 0..<count {
-            guard let down = CGEvent(keyboardEventSource: source(), virtualKey: code, keyDown: true),
-                  let up = CGEvent(keyboardEventSource: source(), virtualKey: code, keyDown: false)
+            guard let down = CGEvent(keyboardEventSource: source(pid), virtualKey: code, keyDown: true),
+                  let up = CGEvent(keyboardEventSource: source(pid), virtualKey: code, keyDown: false)
             else { throw InputError.eventCreationFailed }
             down.flags = cgFlags(combo.modifiers)
             up.flags = cgFlags(combo.modifiers)
-            down.post(tap: .cghidEventTap)
+            send(down, to: pid)
             usleep(pause)
-            up.post(tap: .cghidEventTap)
+            send(up, to: pid)
             usleep(pause)
         }
     }
 
+    private static func send(_ event: CGEvent, to pid: pid_t?) {
+        if let pid { event.postToPid(pid) } else { event.post(tap: .cghidEventTap) }
+    }
+
     static var cursorLocation: CGPoint { CGEvent(source: nil)?.location ?? .zero }
 
-    private static func source() -> CGEventSource? { CGEventSource(stateID: .hidSystemState) }
+    private static func source(_ pid: pid_t? = nil) -> CGEventSource? {
+        CGEventSource(stateID: pid == nil ? .hidSystemState : .privateState)
+    }
 
     private static func mouseEvent(_ type: CGEventType, at point: CGPoint, button: CGMouseButton) throws -> CGEvent {
         guard let event = CGEvent(mouseEventSource: source(), mouseType: type,

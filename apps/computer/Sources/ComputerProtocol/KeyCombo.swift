@@ -14,10 +14,14 @@ public struct KeyCombo: Equatable, Sendable {
 
     public let keyCode: UInt16?
     public let modifiers: Modifiers
+    /// The printed character of a single-character key, uppercased ("A", "/"), as menu
+    /// items show it. Nil for named keys such as Return.
+    public let character: String?
 
-    public init(keyCode: UInt16?, modifiers: Modifiers) {
+    public init(keyCode: UInt16?, modifiers: Modifiers, character: String? = nil) {
         self.keyCode = keyCode
         self.modifiers = modifiers
+        self.character = character
     }
 
     public static func parseModifiers(_ text: String) -> Modifiers? {
@@ -45,7 +49,7 @@ public struct KeyCombo: Equatable, Sendable {
             return KeyCombo(keyCode: nil, modifiers: modifiers.union(modifier))
         }
         guard let code = keyCodes[last] ?? keyCodes[last.lowercased()] else { return nil }
-        return KeyCombo(keyCode: code, modifiers: modifiers)
+        return KeyCombo(keyCode: code, modifiers: modifiers, character: last.count == 1 ? last.uppercased() : nil)
     }
 
     static let modifierNames: [String: Modifiers] = [

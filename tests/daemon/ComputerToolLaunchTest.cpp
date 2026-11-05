@@ -154,6 +154,8 @@ class ComputerToolLaunchTest final : public QObject {
         const QString off = computer::agentInstructions(false);
         QVERIFY(on.startsWith("[KetPlus computer policy]"));
         QVERIFY(on.contains("request_access"));
+        QVERIFY(on.contains("observe"));
+        QVERIFY(on.contains("NEEDS_FOREGROUND"));
         QVERIFY(!on.contains("off or unavailable"));
         QVERIFY(off.contains("off or unavailable"));
         for (const QString& text : {on, off})

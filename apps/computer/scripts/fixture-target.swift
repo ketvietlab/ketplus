@@ -19,6 +19,15 @@ final class Target: NSObject {
 
 let app = NSApplication.shared
 app.setActivationPolicy(.regular)
+// A standard Edit menu, so shortcuts such as super+a behave as in real apps.
+let mainMenu = NSMenu()
+let editItem = NSMenuItem()
+let editMenu = NSMenu(title: "Edit")
+editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+editItem.submenu = editMenu
+mainMenu.addItem(NSMenuItem())
+mainMenu.addItem(editItem)
+app.mainMenu = mainMenu
 let target = Target()
 let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 220),
                       styleMask: [.titled], backing: .buffered, defer: false)

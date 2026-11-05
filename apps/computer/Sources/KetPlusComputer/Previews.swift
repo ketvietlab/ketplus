@@ -14,6 +14,7 @@ enum Previews {
                    ("Finder", "com.apple.finder")],
             reason: "Launch the app in the iOS Simulator and tap through onboarding.")
         let indicator = ControlIndicator()
+        let cursor = VirtualCursor()
         for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
             NSApp.appearance = NSAppearance(named: appearance)
             let alert = ApprovalPanel.makeAlert(request)
@@ -22,6 +23,9 @@ enum Previews {
             indicator.show(apps: ["Simulator", "Xcode"])
             try write(indicator.window, to: directory.appendingPathComponent("indicator-\(name).png"))
             indicator.hide()
+            cursor.glide(to: CGPoint(x: 400, y: 400))
+            try write(cursor.window, to: directory.appendingPathComponent("cursor-\(name).png"))
+            cursor.hide()
         }
     }
 

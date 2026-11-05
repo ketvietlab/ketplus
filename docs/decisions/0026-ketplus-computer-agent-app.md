@@ -3,6 +3,9 @@
 Status: accepted
 Date: 2026-10-19
 
+Input became background-first in
+[ADR 0027](0027-background-computer-use.md).
+
 ## Context
 
 ADR 0014 lets agents use computer use for Safari and native desktop

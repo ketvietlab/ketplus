@@ -21,7 +21,7 @@ if let flag = CommandLine.arguments.firstIndex(of: "--render-previews"),
 
 let paths = AgentPaths.standard()
 let tools = MainActor.assumeIsolated {
-    AgentTools(paths: paths, control: ControlState(), indicator: ControlIndicator())
+    AgentTools(paths: paths, control: ControlState(), indicator: ControlIndicator(), cursor: VirtualCursor())
 }
 do {
     try AgentServer(paths: paths, tools: tools).start()

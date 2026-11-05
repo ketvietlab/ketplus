@@ -173,8 +173,11 @@ milestone changes state.
 - macOS computer use (ADR 0026): `apps/computer` builds the separately signed
   `KetPlus Computer.app`, nested in `Contents/Helpers`. It owns the TCC grants
   and serves the `ketplus_computer` MCP front. It enforces per-conversation app
-  approval, tiers, capture of granted apps only, a single control lease, the Esc
-  kill switch and an audit log. `modules/computer` gives Claude and Cursor the
+  approval, tiers, capture of granted apps only, a single control lease, the
+  Stop button and Esc kill switch, and an audit log. Input is background-first
+  (ADR 0027): accessibility `observe`/`act`, coordinate clicks mapped to
+  accessibility actions, keyboard events sent to one process and an overlay
+  pointer; the real pointer is opt-in. `modules/computer` gives Claude and Cursor the
   front with an HMAC conversation token when Settings → Computer use is on (off
   by default), and marks remote-started turns so the agent refuses them.
 - Pro desktop shell under `apps/desktop`.
@@ -262,8 +265,9 @@ milestone changes state.
   in [remote transport](remote-transport.md) and
   [ADR 0025](decisions/0025-remote-transport-protocol.md).
 - Computer use follow-ups ([ADR 0026](decisions/0026-ketplus-computer-agent-app.md)):
-  Codex (per-conversation MCP binding), accessibility-tree `observe`/`act`,
-  before/after thumbnails in the transcript, multiple displays, and Windows.
+  Codex (per-conversation MCP binding), before/after thumbnails in the
+  transcript, multiple displays, minimized windows and other Spaces, shortcuts
+  that need a key window in background apps, and Windows.
 - Windows daemon/desktop CI once required Qt WebView packages are available.
 - Cross-block native selection/accessibility mapping and physical-device
   CPU/frame-time/RSS evidence for the bounded transcript renderer. Giant bodies

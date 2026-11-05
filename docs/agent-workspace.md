@@ -609,23 +609,38 @@ The agent app is the enforcement point:
   never captured.
 - Tiers: KetPlus, Keychain Access, password managers and `deniedApps` are
   blocked. Browsers other than Safari are view-only. Terminals and IDEs accept
-  clicks only. Pointer input is checked against the app that owns the window
-  under the point; keyboard input is checked against the frontmost app and is
-  refused while secure input is active.
+  clicks only, and `act` `set_value` counts as typing.
+- Input runs in the background by default (ADR 0027). `observe` reads a granted
+  app's accessibility tree, even behind other windows, and `act` drives its
+  elements by reference; references go stale after any input. `left_click`,
+  `right_click` and `scroll` at screenshot coordinates become accessibility
+  actions on the frontmost granted app's window at that point. `type` and `key`
+  go to one process: the `app` parameter, the app last acted on, or the
+  frontmost app. Shortcuts first run the matching enabled menu item. Typing is
+  refused when the target's focused element is a secure text field. Without an
+  accessible element, calls fail with `NEEDS_FOREGROUND`.
+- `"foreground": true` uses the real pointer and HID keyboard, as in the first
+  release: pointer input is checked against the topmost window at the point and
+  keyboard input against the frontmost app, refused while secure input is
+  active. Drags, pointer moves and double, triple, middle or modified clicks
+  always need it.
 - One conversation holds the control lease at a time. The lease ends after 90 s
-  without an action. A banner shows while it is held. Esc, unless the agent
-  itself posted it, ends the lease, revokes that conversation's grants and
-  answers its next calls with `CANCELLED` until the user approves apps again.
+  without an action. A banner with a Stop button shows while it is held, and an
+  overlay pointer marks background actions. Stop, or Esc while a granted app is
+  frontmost or within 15 s of foreground input, ends the lease, revokes that
+  conversation's grants and answers its next calls with `CANCELLED` until the
+  user approves apps again. Esc posted by the agent itself never counts.
 - `startTurn` writes a remote-turn marker for turns from remote clients and
   removes it for local turns. The agent refuses a marked conversation with
   `REMOTE_TURN`.
-- Each action appends a line, without images or typed text, to
-  `computer/audit/<conversation stem>.jsonl`.
+- Each action appends a line, with its mode but without images or typed text,
+  to `computer/audit/<conversation stem>.jsonl`.
 
 Codex app-server binds MCP servers per process rather than per conversation, so
 Codex does not receive `ketplus_computer` yet. Tools follow
-`computer_toolset_20260801` names, plus `list_apps`, `request_access` and
-`open_application`. `wait` is capped at 60 s.
+`computer_toolset_20260801` names, plus `list_apps`, `request_access`,
+`open_application`, `observe` and `act`. `open_application` leaves the app
+behind the user's work unless `foreground` is set. `wait` is capped at 60 s.
 
 ## Live smoke test
 

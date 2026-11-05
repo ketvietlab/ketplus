@@ -42,6 +42,12 @@ func toolResult(_ name: String, _ arguments: [String: Any]) -> [String: Any] {
         case "zoom":
             let shot = try agent.call("zoom", arguments)
             return imageResult(shot, "Zoomed region \(shot["width"] ?? 0)x\(shot["height"] ?? 0). Click coordinates still refer to the last screenshot.")
+        case "observe":
+            let result = try agent.call("observe", arguments)
+            let truncated = result["truncated"] as? Bool == true ? " (truncated; raise max_nodes)" : ""
+            return ["content": [text("Snapshot \(result["snapshotId"] ?? "") of \(result["app"] ?? ""): "
+                + "\(result["nodes"] ?? 0) elements\(truncated). Frames are x,y,width x height in screenshot pixels.\n"
+                + "\(result["tree"] ?? "")")]]
         case _ where ToolCatalog.names.contains(name):
             let result = try agent.call(name, arguments)
             if result["ok"] as? Bool == true, result.count == 1 { return ["content": [text("OK")]] }

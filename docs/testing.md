@@ -73,7 +73,7 @@ obsolete run. See `docs/release-process.md`.
 | macOS bundle layout | `ketplus_macos_bundle_layout_tests` | embedded matching daemon, loadable Qt runtime plugins, and absence of bundled Codex |
 | Computer use host side | `ketplus_computer_tool_launch_tests`, `ketplus_computer_provider_integration_tests` | settings, host key permissions, token vector shared with the agent, remote-turn markers, server merge, Claude/Cursor injection by settings only (fake providers) |
 | Computer use settings | `ketplus_settings_computer_page_tests` | opt-in disabled without the agent app, persisted toggle and deny list, reverted toggle on save failure |
-| Computer use agent | `cd apps/computer && swift test` | tiers and actions, token vector, key parsing, control lease and Esc revocation, geometry, owner-only socket |
+| Computer use agent | `cd apps/computer && swift test` | tiers and actions, token vector, key parsing, control lease and Esc revocation, geometry, owner-only socket, background click planning, stale references, Esc scope, keyboard target, menu shortcuts, scroll steps |
 | Standalone browser feasibility | `cd apps/browser && npm test` | Chromium observe/act fencing, node re-verification, proxy-enforced origin policy, secret redaction, structured comparison, JSON-RPC, and MCP discovery |
 
 Run the relevant target while iterating. The manual compact-window picker has
@@ -166,7 +166,8 @@ node --test apps/daemon/providers/claude-sidecar/test/browser.test.mjs apps/daem
 Computer-use changes also run `(cd apps/computer && swift test)`. TCC grants
 cannot run in CI. After changing the agent, run `apps/computer/scripts/e2e.mjs`
 on a Mac against a `--testing` build and the fixture app (see
-`apps/computer/README.md`). Use `--manual-esc` when the kill switch changed.
+`apps/computer/README.md`). It covers background input under a covering window
+and foreground input. Use `--manual-esc` when the kill switch or Stop changed.
 
 The sidecar test uses a temporary fake SDK, never an authenticated model. The
 browser suite includes reset-after-denial socket regressions and read-only engine

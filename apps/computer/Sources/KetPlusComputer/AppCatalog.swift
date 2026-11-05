@@ -40,13 +40,13 @@ enum AppCatalog {
         return nil
     }
 
-    /// Launches or activates an app and waits briefly for it to become frontmost.
-    static func open(_ bundleIdentifier: String) throws {
+    /// Launches an app, bringing it to the front only when `activate` is set.
+    static func open(_ bundleIdentifier: String, activate: Bool) throws {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) else {
             throw AgentFailure(code: "APP_NOT_FOUND", message: "No installed application has ID \(bundleIdentifier).")
         }
         let configuration = NSWorkspace.OpenConfiguration()
-        configuration.activates = true
+        configuration.activates = activate
         let done = DispatchSemaphore(value: 0)
         var failure: Error?
         NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, error in

@@ -2,7 +2,8 @@
 
 `KetPlus Computer.app` (`dev.ketplus.computer`) is the only KetPlus process that
 captures the screen or posts input, so macOS attributes Screen Recording and
-Accessibility to it. It also enforces who may control what (ADR 0026).
+Accessibility to it. It also enforces who may control what (ADR 0026). Input runs
+in the background, so the user keeps their pointer and front app (ADR 0027).
 `ketplus-computer-mcp`, inside the same bundle, is the stdio MCP server that
 providers launch. It never captures or clicks itself.
 
@@ -14,16 +15,22 @@ provider ── stdio ──> ketplus-computer-mcp   (env: KETPLUS_COMPUTER_CONV
                         ├─ grants per conversation and app (native approval panel)
                         ├─ tiers: blocked / view_only / click_only / full, plus the user's deniedApps
                         ├─ ScreenCaptureKit: only granted apps; KetPlus, own panels and menu bar excluded
-                        ├─ CGEvent input, checked against the app under the pointer or the frontmost app
-                        └─ one control lease, Esc kill switch, banner, audit log
+                        ├─ background: accessibility observe/act and clicks, keyboard events to one process,
+                        │   overlay pointer; granted apps work behind other windows
+                        ├─ foreground (opt-in): HID events, checked against the topmost window or frontmost app
+                        └─ one control lease, Stop button and Esc, banner, audit log
 ```
 
 Tools follow `computer_toolset_20260801`: `screenshot`, `zoom`, `left_click`,
 `right_click`, `middle_click`, `double_click`, `triple_click`,
 `left_click_drag`, `mouse_move`, `scroll`, `type`, `key`, `cursor_position` and
-`wait` (60 s maximum). KetPlus adds `list_apps`, `request_access` and
-`open_application`. `left_mouse_down`, `left_mouse_up` and `hold_key` are not
-implemented.
+`wait` (60 s maximum). KetPlus adds `list_apps`, `request_access`,
+`open_application`, `observe` and `act`. `left_mouse_down`, `left_mouse_up` and
+`hold_key` are not implemented.
+
+`left_click`, `right_click`, `scroll`, `type` and `key` run in the background
+unless `"foreground": true`. The other pointer tools need it and otherwise
+answer `NEEDS_FOREGROUND`.
 
 Files in `<KetPlus data>/computer` (`KETPLUS_COMPUTER_DIR`):
 
@@ -48,12 +55,14 @@ requirement (bundle ID and team), so a real identity keeps them across rebuilds.
 An ad-hoc signature resets them.
 
 `swift build -c release && .build/release/KetPlusComputer --render-previews <dir>`
-writes the approval alert and the control banner as PNGs in light and dark
-appearance. It needs no TCC grant.
+writes the approval alert, the control banner and the overlay pointer as PNGs
+in light and dark appearance. It needs no TCC grant.
 
 ### End-to-end on a Mac
 
-This check moves and clicks the real pointer and uses no provider quota:
+This check uses no provider quota. Its background part covers the fixture with
+`fixture-cover` and must not move the pointer; its foreground part moves and
+clicks the real pointer. Do not type or use the mouse while it runs.
 
 ```sh
 scripts/build-app.sh --testing --identity <sha1>   # adds KETPLUS_COMPUTER_TEST_APPROVAL (test builds only)
@@ -62,5 +71,6 @@ node scripts/e2e.mjs "dist/KetPlus Computer.app" "dist/KetPlus Computer Fixture.
 ```
 
 The test build must already hold both TCC grants. With `--manual-esc`, the
-script asks you to press Esc. Synthetic key events from a shell without
-Accessibility never reach the kill switch, so only a real key press verifies it.
+script asks you to press Esc and then click Stop on the banner. Synthetic events
+from a shell without Accessibility never reach the kill switch, so only real
+input verifies them.

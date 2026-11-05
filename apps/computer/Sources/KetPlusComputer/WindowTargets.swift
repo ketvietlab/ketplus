@@ -35,6 +35,29 @@ enum WindowTargets {
         return finder
     }
 
+    /// The granted app whose window is frontmost at a global point among granted
+    /// apps only (ADR 0027). Windows of other apps on top are ignored, because the
+    /// screenshot does not show them either.
+    static func grantedOwner(at point: CGPoint, among granted: Set<String>) -> (bundle: String, pid: pid_t)? {
+        let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+            as? [[String: Any]] ?? []
+        let menuBarLevel = Int(CGWindowLevelForKey(.mainMenuWindow))
+        for window in windows {
+            guard let pid = window[kCGWindowOwnerPID as String] as? pid_t, pid != getpid(),
+                  (window[kCGWindowLayer as String] as? Int ?? 0) < menuBarLevel,
+                  let boundsInfo = window[kCGWindowBounds as String] as? [String: Any],
+                  let bounds = CGRect(dictionaryRepresentation: boundsInfo as CFDictionary), bounds.contains(point),
+                  let bundle = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier, granted.contains(bundle)
+            else { continue }
+            return (bundle, pid)
+        }
+        return nil
+    }
+
+    static func pid(of bundle: String) -> pid_t? {
+        NSRunningApplication.runningApplications(withBundleIdentifier: bundle).first?.processIdentifier
+    }
+
     private static func coversDisplay(_ bounds: CGRect) -> Bool {
         var count: UInt32 = 0
         var displays = [CGDirectDisplayID](repeating: 0, count: 16)
