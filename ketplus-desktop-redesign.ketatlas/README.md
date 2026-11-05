@@ -198,10 +198,15 @@ It keeps the public Két AppShell contracts, runtime and semantic tokens;
   switcher and `desktop.css` collapses its column.
 - Mobile's native Két adaptation informs navigation, activity and composer patterns.
   Desktop tokens are not replaced with copied mobile CSS or touch geometry.
-- Local Inter, Lucide Static 1.40.0 and unchanged KétPlus v1 branding assets.
-  `assets/fonts-inline.css` embeds the three licensed local Inter WOFF2 files for
-  opaque sandboxed previews. `assets/fonts.css` and `assets/fonts/` remain the
-  readable sources; embedded previews no longer need cross-origin font requests.
+- KÉT Sans 1.0 (tag `v1.0.0`), Lucide Static 1.40.0 and unchanged KétPlus v1 branding assets.
+  `assets/fonts-inline.css` embeds the four released optical-size KÉT Sans WOFF2 files
+  (300, 400, 500–600, 700) and sets `--kv-font-sans` to KÉT Sans and `--kv-font-mono` to
+  the system monospace, since KÉT Sans has no monospace. The KÉT Sans licence
+  (`licenses/KET-Sans-1.0.txt`) allows self-hosted embedding but not redistributing the
+  font files, so the fonts are only embedded, never shipped as files. Embedding
+  also lets opaque sandboxed previews load the font without cross-origin requests.
+  `assets/fonts.css`, `assets/fonts/` (Inter) and `licenses/Inter-OFL.txt` are no longer
+  loaded; they stay only because the wave-1 baseline manifest records their hashes.
   Licenses are in `licenses/`; brand provenance is in `assets/brand/ketplus-v1/`.
 
 ## Verification
@@ -242,7 +247,7 @@ prototype-named URL values cannot select undeclared provider, flow or bundle
 objects. The execution-worktree picker keeps its pending state visible until the
 simulated acknowledgment. These guards protect the review prototype; production
 storage, permissions and daemon acknowledgments remain separate native contracts.
-The static bundle also embeds its three local Inter WOFF2 sources in one stylesheet,
+The static bundle also embeds its KÉT Sans WOFF2 sources in one stylesheet,
 so opaque sandboxed KetAtlas previews load the intended font without font requests.
 
 Final mock check (2026-10-08): 280/280 deterministic DOM/asset tests pass;

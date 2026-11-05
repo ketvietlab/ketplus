@@ -9,7 +9,7 @@ unchanged in the latest fetched `origin/develop` (`2508489`). Desktop matched
 
 Desktop pins the Két 0.1.44 static adapter (Két Blue, ketviet `e8adee2d`),
 its semantic colors, the public AppShell without the KetSuite application
-switcher, local Inter and Lucide. Accent-coloured text and icons use
+switcher, KÉT Sans 1.0 and Lucide. Accent-coloured text and icons use
 `--kv-accent-text` and `--kv-nav-selected-text`, never `--kv-accent`, so they
 stay readable on dark surfaces. The product implementation is Qt Widgets/QML;
 this existing dependency-free web bundle remains a review surrogate, not production

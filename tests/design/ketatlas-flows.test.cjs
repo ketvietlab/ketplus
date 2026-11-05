@@ -16,13 +16,15 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { screen, root, manifest } = require("./ketatlas-dom.cjs");
 const urls = new Set(manifest.screens.map((s) => s.url));
-test("sandboxed previews load the exact local Inter font subsets", () => {
+test("sandboxed previews embed KÉT Sans 1.0 and use it for every text token", () => {
     const css = fs.readFileSync(path.join(root, "assets/fonts-inline.css"), "utf8");
-    for (const name of ["inter-latin-standard-normal", "inter-latin-ext-standard-normal",
-        "inter-vietnamese-standard-normal"]) {
-        const font = fs.readFileSync(path.join(root, `assets/fonts/${name}.woff2`)).toString("base64");
-        assert.ok(css.includes(`data:font/woff2;base64,${font}`), `${name} matches its source`);
-    }
+    assert.ok(css.startsWith('@charset "UTF-8";'));
+    // Released weights only: Light, Regular, Medium (also semibold) and Bold.
+    const faces = [...css.matchAll(/@font-face\{font-family:"KÉT Sans";src:url\(data:font\/woff2;base64,[A-Za-z0-9+/=]+\) format\("woff2"\);font-weight:([0-9 ]+);/g)];
+    assert.deepEqual(faces.map((face) => face[1]), ["300", "400", "500 600", "700"]);
+    assert.doesNotMatch(css, /Inter/);
+    assert.match(css, /--kv-font-sans:"KÉT Sans",ui-sans-serif,sans-serif/);
+    assert.ok(fs.existsSync(path.join(root, "licenses/KET-Sans-1.0.txt")));
     for (const screen of manifest.screens) {
         const html = fs.readFileSync(path.join(root, screen.url), "utf8");
         assert.match(html, /\.\.\/assets\/fonts-inline\.css/);
