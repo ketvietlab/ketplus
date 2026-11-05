@@ -224,7 +224,7 @@ git diff --check
 ```
 
 Do not mechanically format vendored files or unrelated source. Check the final
-diff for generated data, absolute paths, credentials, and KÉT Sans font data.
+diff for generated data, absolute paths, and credentials.
 
 ## External tools
 

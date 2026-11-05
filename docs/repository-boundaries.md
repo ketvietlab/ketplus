@@ -87,6 +87,4 @@ depend on Qt Widgets, QML, or the desktop executable.
 
 The whole repository is MPL 2.0, applied at file level. Re-run the dependency
 and distribution audit in `licensing.md` whenever adding a library, bundling an
-external tool, or changing static/dynamic linkage. KÉT Sans is fetched from its
-official release at build time and must never be committed, including as base64
-inside a CSS file or mock.
+external tool, or changing static/dynamic linkage.

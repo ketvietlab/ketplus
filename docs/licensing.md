@@ -22,8 +22,7 @@ Pro was the proprietary `ketplus-desktop` repository; the copyright holder
 relicensed that source under MPL 2.0 when importing it here.
 
 MPL 2.0 applies at file level. Files that are not MPL-covered state their own
-license; the bundled agent skills below are the only such repository files
-besides third-party license texts. A fork may combine this source with
+license, such as the MIT agent skills below and third-party license texts. A fork may combine this source with
 proprietary files, but a shipped modification to an MPL-covered file must stay
 available under MPL 2.0.
 
@@ -41,7 +40,7 @@ application.
 | Lexilla | `rel-5-5-2`, commit `3e6f317eed854bc312b4c4453206189d381c7ae7` | Compiled statically | Scintilla permissive license | Preserve its copyright and permission notice in copies and supporting documentation |
 | libvterm | `v0.3.3`, commit `9d6d2112335080312ef8c36667fa717ded4f7daf` | Compiled statically | MIT | Include its copyright and license text |
 | Inter | 4.1 archive pinned by SHA-256 | Font embedded in Qt resources | SIL OFL 1.1 | Include the copyright and complete OFL text in an easily accessible form |
-| KÉT Sans | 1.0.0 official ZIP pinned by SHA-256 | Four unmodified hinted TTF faces fetched at build time and embedded in Pro Qt resources; never committed | KÉT Sans Font License 1.0, proprietary | App embedding only; no loose font redistribution; ship the complete license |
+| KÉT Sans | 1.0.0 official ZIP pinned by SHA-256 | Four unmodified hinted TTF faces fetched at build time and embedded in Pro Qt resources | KÉT Sans Font License 1.0, proprietary | App embedding only; no loose font redistribution; ship the complete license |
 | Két Design System | 0.1.41 Mermaid snapshots in CM `cm-v0.3.6` | Embedded configuration data | MIT | Include the publisher notice in CM Mermaid resources |
 | Lucide Static | 1.40.0 assets | Vendored SVG path data | ISC, plus Feather MIT for derived icons | Include both applicable notices |
 | Sparkle | 2.10.0 release archive pinned by SHA-256 | Unmodified framework in `Contents/Frameworks`, only when `KETPLUS_UPDATE_FEED_URL` is set (ADR 0019) | MIT, plus the bsdiff and other notices in its `LICENSE` | Ship `Sparkle-MIT.txt` complete |
@@ -179,10 +178,8 @@ source and skill are MPL 2.0 with the rest of the repository.
 ### Default agent skills
 
 `assets/agent-skills` is copied to `KetPlus.app/Contents/Resources/agent-skills`
-(ADR 0021). `ket-atlas` and `enterprise-grade` are © KETVIET JSC, all rights
-reserved, and are distributed with KétPlus Pro; forks must remove them or obtain
-permission. Their license is an open question in ADR 0029.
-`ket-design-system` is © KETVIET JSC under MIT and ships with its `LICENSE`.
+(ADR 0021). `ket-atlas`, `enterprise-grade` and `ket-design-system` are
+© KETVIET JSC under MIT; each ships with its `LICENSE`.
 
 ### Bundled Claude Agent SDK sidecar
 
@@ -253,8 +250,7 @@ applicable items are complete:
 - [ ] Public history contains only source and assets reviewed for publication.
 - [ ] License and source headers are consistently MPL 2.0, except files that
       state their own license.
-- [ ] No credentials, signing material, transcripts, or KÉT Sans font files are
-      committed (the font is fetched at build time).
+- [ ] No credentials, signing material, or transcripts are committed.
 - [ ] Every bundled library, plugin, font, icon, and executable is represented
       in the generated SBOM.
 - [ ] License texts and notices are copied into the installed application.

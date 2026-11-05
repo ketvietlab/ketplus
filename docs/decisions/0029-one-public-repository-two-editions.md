@@ -36,8 +36,9 @@ Lampion.
   `ketplus-desktop` is archived as a private repository. Open pull requests there are
   ported as new pull requests here.
 - The whole repository is MPL 2.0. Third-party licenses are unchanged and are listed in
-  `docs/licensing.md`. The KÉT Sans font is fetched from its official release at build
-  time and is never committed.
+  `docs/licensing.md`. The bundled `ket-atlas`, `enterprise-grade` and
+  `ket-design-system` agent skills are MIT. The KÉT Sans font keeps its own license from
+  the public `ket-sans-font` repository.
 - The relay client is open source with the rest of the desktop: `modules/remote`,
   `apps/desktop/src/remote` and the daemon's host side in `apps/daemon/src/cloud`. Users
   can audit the end-to-end encryption, and the daemon does not have to close again
@@ -66,8 +67,6 @@ Lampion.
 
 ## Open questions
 
-- The bundled `ket-atlas` and `enterprise-grade` agent skills are © KETVIET JSC, all
-  rights reserved. Relicense them, or keep them as separately licensed files.
 - A trademark policy for the KétPlus name and logo.
 
 ## Alternatives considered

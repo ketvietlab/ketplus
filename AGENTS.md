@@ -29,8 +29,7 @@ Product, identity, gateway, Router, and monetization decisions live in
   checks inside it; Pro extends it through exported `KetPlusCM::*` targets and
   public include paths, never relative includes into `core/src`.
 - Never commit credentials, access tokens, user transcripts, machine-specific
-  paths, generated build trees, `.cache` contents, signing material, or KÉT Sans
-  font files (including base64 in CSS); the font is fetched at build time.
+  paths, generated build trees, `.cache` contents, or signing material.
 - Do not run tests that consume provider quota unless the user explicitly asks.
 
 ## Replacement bundles
