@@ -26,7 +26,7 @@
     border-bottom: 1px solid var(--kv-panel-border);
 }
 .spotlight > form > .icon {
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
     width: 20px;
     height: 20px;
 }
@@ -87,7 +87,7 @@
     color: var(--kv-text-muted);
 }
 .spotlight-result.highlighted > .icon {
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
 }
 .spotlight-result > span {
     flex: 1;

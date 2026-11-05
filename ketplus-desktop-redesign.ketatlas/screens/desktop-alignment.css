@@ -33,7 +33,7 @@ body { --kp-text-reading: 15px; --kp-conversation-width: 760px; }
 .activity-children { margin: 4px 0 12px 5px; padding: 2px 0 2px 14px; border-left: 1px solid var(--kv-border-default); }
 .activity-child { min-height: 44px; padding: 7px 0; gap: 10px; }
 .activity-child small { font-size: 11px; line-height: 1.5; }
-.activity-child:hover { color: var(--kv-accent); }
+.activity-child:hover { color: var(--kv-accent-text); }
 .browser-open-action { margin-left: auto; flex-shrink: 0; }
 .command-detail { margin: 2px 0; min-width: 0; width: 100%; }
 .command-row { cursor: pointer; min-height: 36px; padding: 6px 0; font-size: 12px; list-style: none; gap: 8px; }
@@ -47,7 +47,7 @@ body { --kp-text-reading: 15px; --kp-conversation-width: 760px; }
 .command-input-detail summary::-webkit-details-marker { display: none; }
 .command-input-detail summary code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .command-input-detail[open] summary code { white-space: pre-wrap; overflow-wrap: anywhere; text-overflow: clip; }
-.command-input-detail summary span { flex: none; color: var(--kv-accent); font-size: 12px; }
+.command-input-detail summary span { flex: none; color: var(--kv-accent-text); font-size: 12px; }
 .command-input-detail .command-show-less, .command-input-detail[open] .command-show-more { display: none; }
 .command-input-detail[open] .command-show-less { display: inline; }
 .current-activity { color: var(--kv-text-muted); font-size: 14px; gap: 8px; }
@@ -80,7 +80,7 @@ body { --kp-text-reading: 15px; --kp-conversation-width: 760px; }
 .machine-switcher > .icon-btn { width: 24px; min-width: 24px; height: 24px; min-height: 24px; padding: 0; }
 .machine-switcher > .icon-btn .icon { width: 14px; height: 14px; }
 .machine-note, .repository-empty { margin: 0 8px 10px; color: var(--kv-text-muted); font-size: 11px; line-height: 16px; }
-.machine-note a { color: var(--kv-accent); text-decoration: underline; text-underline-offset: 2px; }
+.machine-note a { color: var(--kv-accent-text); text-decoration: underline; text-underline-offset: 2px; }
 .repository-groups { display: grid; gap: 4px; }
 .remote-repository .repository-group-name > .icon { width: 12px; height: 12px; flex-shrink: 0; }
 .sidebar-context .conversation.unavailable { color: var(--kv-text-muted); cursor: not-allowed; }
@@ -104,7 +104,7 @@ body { --kp-text-reading: 15px; --kp-conversation-width: 760px; }
 .modal-body > label { display: block; margin: 16px 0 6px; font-size: 13px; font-weight: 550; }
 .modal-body > input, .modal-body > select { width: 100%; }
 .provider-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--kv-border-default); padding-bottom: 10px; }
-.provider-tabs .active { color: var(--kv-accent); background: var(--kv-accent-subtle); }
+.provider-tabs .active { color: var(--kv-accent-text); background: var(--kv-accent-subtle); }
 .provider-tabs .btn { flex: 1; }
 .effort-picker input { padding-left: 0; padding-right: 0; }
 .range-labels { justify-content: space-between; }

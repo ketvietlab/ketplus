@@ -96,7 +96,11 @@ const K = (window.K = {
         return `<span class="badge ${variant}">${text}</span>`;
     },
     template(name, slots) {
-        return window.ATLAS_DESIGN_SYSTEM.templates[name].replace(
+        let markup = window.ATLAS_DESIGN_SYSTEM.templates[name];
+        // KétPlus is not a KetSuite app: its shell has no application switcher rail.
+        if (name === "shell")
+            markup = markup.replace(/<nav data-ui="app-switcher"[\s\S]*?<\/nav>/, "");
+        return markup.replace(
             /__ATLAS_SLOT_([A-Z_]+)__/g,
             (_, key) => slots[key.toLowerCase()] || "",
         );

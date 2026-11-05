@@ -46,6 +46,18 @@ for (const url of urls)
             assert.equal(s.document.querySelectorAll('[id="prompt"]').length <= 1, true);
             s.close();
         });
+test("the KétPlus shell has no KetSuite application switcher", () => {
+    for (const page of ["screens/workspace.html", "screens/connections.html", "screens/repository-picker.html"]) {
+        const s = screen(page);
+        const shell = s.document.querySelector('[data-ui="app-shell"]');
+        assert.ok(shell, page);
+        assert.equal(shell.querySelector('[data-ui="app-switcher"]'), null, page);
+        assert.equal(shell.firstElementChild.dataset.ui, "app-sidebar", page);
+        assert.match(fs.readFileSync(path.join(root, "screens/desktop.css"), "utf8"), /--kv-app-switcher-width: 0px;/);
+        s.close();
+    }
+});
+
 test("conversation header is scoped to chat; the detail pane owns its top row", () => {
     for (const panel of [null, "task", "terminal", "file", "atlas"]) {
         const s = screen(`screens/workspace.html?state=running${panel ? `&panel=${panel}` : ""}`);

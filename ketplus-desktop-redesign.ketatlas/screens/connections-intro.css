@@ -6,7 +6,7 @@
 .connections-intro > .banner { margin-top: 24px; }
 .connections-hero { display: grid; grid-template-columns: .9fr 1.1fr; align-items: center; gap: 28px; margin: 48px 0 54px; }
 .connections-hero-copy { padding: 10px 0; }
-.connections-hero-copy .eyebrow { font-size: 10px; letter-spacing: 1.4px; color: var(--kv-accent); }
+.connections-hero-copy .eyebrow { font-size: 10px; letter-spacing: 1.4px; color: var(--kv-accent-text); }
 .connections-hero-copy h2 { font-size: clamp(34px, 3.2vw, 46px); line-height: 1.13; letter-spacing: -1.7px; font-weight: 600; margin: 16px 0 20px; }
 .connections-hero-copy > p { max-width: 360px; color: var(--kv-text-muted); font-size: 14px; line-height: 1.85; }
 .connections-signin { margin-top: 28px; display: flex; align-items: flex-start; flex-direction: column; gap: 11px; }
@@ -29,7 +29,7 @@
 .connection-mini-chat { padding: 15px; min-width: 0; flex: 1; }
 .connection-mini-chat > small { font-size: 8px; color: var(--kv-text-muted); }
 .connection-mini-chat h3 { font-size: 11px; margin-top: 3px; }
-.connection-sample-prompt { margin: 15px 0; border-radius: 5px; padding: 8px; background: var(--kv-accent-subtle); color: var(--kv-accent); font-size: 8px; }
+.connection-sample-prompt { margin: 15px 0; border-radius: 5px; padding: 8px; background: var(--kv-accent-subtle); color: var(--kv-accent-text); font-size: 8px; }
 .connection-agent-label { display: flex; align-items: center; gap: 5px; font-size: 9px; }
 .connection-agent-label .ket-mark { width: 13px; height: 13px; }
 .connection-agent-label > span:last-child { margin-left: auto; color: var(--kv-text-muted); font-size: 8px; }
@@ -42,10 +42,10 @@
 .connection-phone header .icon { width: 11px; height: 11px; }
 .connection-phone > small { font-size: 8px; color: var(--kv-text-muted); display: block; margin: 7px 0 16px 15px; }
 .connection-phone-question { padding: 11px 8px; border: 1px solid var(--kv-panel-border); border-radius: 7px; background: var(--kv-page-bg); }
-.connection-phone-question > .icon { display: block; color: var(--kv-accent); width: 16px; height: 16px; margin-bottom: 9px; }
+.connection-phone-question > .icon { display: block; color: var(--kv-accent-text); width: 16px; height: 16px; margin-bottom: 9px; }
 .connection-phone-question b { font-size: 8px; display: block; }
 .connection-phone-question p { font-size: 8px; color: var(--kv-text-muted); line-height: 1.6; margin: 7px 0; }
-.connection-phone-question > span { display: flex; align-items: center; gap: 6px; padding: 6px; border-radius: 4px; background: var(--kv-accent-subtle); color: var(--kv-accent); font-size: 7px; }
+.connection-phone-question > span { display: flex; align-items: center; gap: 6px; padding: 6px; border-radius: 4px; background: var(--kv-accent-subtle); color: var(--kv-accent-text); font-size: 7px; }
 .connection-phone-question > span .icon { width: 10px; height: 10px; }
 .connection-phone-bottom { position: absolute; width: 40px; height: 3px; bottom: 7px; left: calc(50% - 20px); background: var(--kv-border-strong); border-radius: 5px; }
 .connection-scene-caption { position: absolute; left: 25px; bottom: 23px; display: flex; align-items: center; gap: 7px; color: var(--kv-text-muted); font-size: 9px; }

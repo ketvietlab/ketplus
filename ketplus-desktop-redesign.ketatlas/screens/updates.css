@@ -59,7 +59,7 @@
     border: 1px solid var(--kv-accent-border);
     border-radius: 6px;
     background: var(--kv-accent-subtle);
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
     font-size: var(--kp-text-md);
     font-weight: 550;
 }

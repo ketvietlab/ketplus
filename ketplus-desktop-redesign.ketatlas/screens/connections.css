@@ -45,7 +45,7 @@
     display: grid;
     place-items: center;
     background: var(--kv-accent-subtle);
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
 }
 .large-device .icon {
     width: 44px;
@@ -294,7 +294,7 @@
     align-items: center;
     justify-content: center;
     gap: 10px;
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
 }
 .illustration-phone i {
     display: block;
@@ -384,7 +384,7 @@
     height: 65px;
     border-radius: 12px;
     background: var(--kv-accent-subtle);
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
 }
 .pair-device-icon > .icon,
 .revoke-icon > .icon {

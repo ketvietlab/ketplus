@@ -180,8 +180,15 @@ This static HTML/CSS/classic-JavaScript prototype represents a native Qt applica
 It keeps the public Két AppShell contracts, runtime and semantic tokens;
 `desktop-alignment.css` owns desktop composition. No `atlas.renderer.json` is needed.
 
-- Official desktop adapter: `@ketvietlab/design-system@0.1.7`, revision
-  `6f923d1e13958ce740e50bccab45efc56ccd2f84`; see descriptor and lock.
+- Official desktop adapter: `@ketvietlab/design-system@0.1.44`, revision
+  `e8adee2da3bfeea66c01f46f110fdc5243fb23c0` (ketviet PR #2177, Két Blue); see
+  descriptor and lock. Refresh it with the package's
+  `ket-design-system-atlas materialize ketplus-desktop-redesign.ketatlas` from that
+  revision, after `npm run design:inventory` and `npm run build:design-system` in
+  `ketsuite/`. `assets/fonts/InterVariable*.woff2` are the font files the
+  stylesheet references, copied unchanged from the same revision.
+- KétPlus is not a KetSuite app: `K.template("shell")` drops the application
+  switcher and `desktop.css` collapses its column.
 - Mobile's native Két adaptation informs navigation, activity and composer patterns.
   Desktop tokens are not replaced with copied mobile CSS or touch geometry.
 - Local Inter, Lucide Static 1.40.0 and unchanged KétPlus v1 branding assets.

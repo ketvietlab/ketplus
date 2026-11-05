@@ -52,7 +52,7 @@
     line-height: 18px;
 }
 .atlas-chat-toggle.active {
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
     background: var(--kv-accent-subtle);
     border-color: var(--kv-accent-border);
 }
@@ -104,7 +104,7 @@
     inset: 0;
     width: 1400px;
     height: 850px;
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
     pointer-events: none;
 }
 .atlas-map-connectors > path {
@@ -305,7 +305,7 @@
 .atlas-map-placeholder > .icon {
     width: 35px;
     height: 35px;
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
     margin-bottom: 20px;
 }
 .atlas-map-placeholder h2 {
@@ -322,7 +322,7 @@
     align-items: center;
     justify-content: center;
     margin-top: 35px;
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
     opacity: 0.65;
 }
 .placeholder-flow > span {
@@ -425,7 +425,7 @@
 .atlas-flow-item b { display: block; font-size: 12px; font-weight: 500; line-height: 1.5; }
 .atlas-flow-item small { display: block; margin-top: 3px; font-size: 11px; color: var(--kv-text-muted); }
 .atlas-flow-item:hover { background: var(--kv-page-bg); }
-.atlas-flow-item[aria-current="true"] { background: var(--kv-accent-subtle); color: var(--kv-accent); }
+.atlas-flow-item[aria-current="true"] { background: var(--kv-accent-subtle); color: var(--kv-accent-text); }
 .has-flow-sidebar .atlas-map-viewport { left: var(--atlas-flow-width); }
 .has-flow-sidebar .atlas-map-tools { left: calc(var(--atlas-flow-width) + 22px); }
 .has-flow-sidebar .atlas-map-hint { left: calc(var(--atlas-flow-width) + 265px); }
@@ -470,7 +470,7 @@
     padding: 2px 5px 2px 7px;
     border: 1px solid var(--kv-accent-border);
     border-radius: 4px;
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
     background: var(--kv-accent-subtle);
 }
 .flow-tag > button {
@@ -564,14 +564,14 @@
 }
 .flow-option > .icon {
     width: 13px;
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
 }
 .request-flow-tag {
     display: inline-flex;
     align-items: center;
     gap: 4px;
     font-size: var(--kp-text-sm);
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
     margin-bottom: 5px;
     font-weight: 550;
 }

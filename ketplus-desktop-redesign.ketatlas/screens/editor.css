@@ -76,7 +76,7 @@
 }
 .file-row.active {
     background: var(--kv-accent-subtle);
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
 }
 .file-row small {
     margin-left: auto;
@@ -182,7 +182,7 @@
     background: var(--kv-accent-subtle);
 }
 .syntax-keyword {
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
 }
 .syntax-string {
     color: var(--kv-success);
@@ -216,7 +216,7 @@
 .hunk-header {
     padding: 7px 20px;
     background: var(--kv-accent-subtle);
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
     font: var(--kp-text-sm) var(--kv-font-mono);
 }
 .diff-lines {
@@ -307,7 +307,7 @@
     color: var(--kv-text-muted);
 }
 .terminal-prompt > b {
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
     font-weight: 500;
 }
 .terminal-prompt > span {
@@ -408,7 +408,7 @@
 }
 .change-row.selected {
     background: var(--kv-accent-subtle);
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
 }
 .git-footer {
     margin-top: auto;
@@ -455,7 +455,7 @@
     background: var(--kv-accent-subtle);
     border-left: 3px solid var(--kv-accent);
     margin: 18px 0;
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
 }
 .markdown-preview ol {
     padding-left: 18px;

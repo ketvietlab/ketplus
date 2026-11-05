@@ -28,7 +28,7 @@
 }
 .settings-nav a.active {
     background: var(--kv-accent-subtle);
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
 }
 .settings-nav .icon {
     width: 14px;
@@ -72,7 +72,7 @@
     font-size: var(--kp-text-md);
 }
 .theme-card.selected > div:last-child .icon {
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
 }
 .theme-card > div:last-child .icon {
     width: 15px;
@@ -182,7 +182,7 @@
 .accent-setting > .icon {
     margin-left: auto;
     width: 15px;
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
 }
 .settings-preview {
     border: 1px solid var(--kv-border-default);
@@ -206,7 +206,7 @@
     padding: 10px 12px;
 }
 .preview-tab-strip span:first-child {
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
     border-bottom: 2px solid var(--kv-accent);
     background: var(--kv-panel-bg);
 }

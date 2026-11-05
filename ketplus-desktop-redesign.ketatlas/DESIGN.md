@@ -7,8 +7,11 @@ The selected reference is the mobile bundle at
 unchanged in the latest fetched `origin/develop` (`2508489`). Desktop matched
 `5aba76d` in the earlier review and was rebased to `771c761` before this change.
 
-Desktop retains its pinned Két 0.1.7 static adapter, semantic colors, public
-AppShell, local Inter and Lucide. The product implementation is Qt Widgets/QML;
+Desktop pins the Két 0.1.44 static adapter (Két Blue, ketviet `e8adee2d`),
+its semantic colors, the public AppShell without the KetSuite application
+switcher, local Inter and Lucide. Accent-coloured text and icons use
+`--kv-accent-text` and `--kv-nav-selected-text`, never `--kv-accent`, so they
+stay readable on dark surfaces. The product implementation is Qt Widgets/QML;
 this existing dependency-free web bundle remains a review surrogate, not production
 markup. Mobile's older native token adaptation is not copied over desktop tokens.
 

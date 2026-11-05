@@ -14,6 +14,11 @@
 @import url("./journeys.css");
 @import url("./context-menu.css");
 @import url("./updates.css");
+
+/* KétPlus has no KetSuite application switcher; collapse its shell column. */
+[data-ui="app-shell"] {
+    --kv-app-switcher-width: 0px;
+}
 * {
     box-sizing: border-box;
 }
@@ -135,7 +140,7 @@ code {
     color: var(--kv-danger);
 }
 .accent {
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
 }
 .spacer {
     flex: 1;
@@ -219,7 +224,7 @@ code {
     border-color: var(--kv-warning-border);
 }
 .badge.brand {
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
     background: var(--kv-accent-subtle);
     border-color: var(--kv-accent-border);
 }
@@ -307,7 +312,7 @@ code {
 }
 .nav-item.is-active {
     background: var(--kv-accent-subtle);
-    color: var(--kv-accent);
+    color: var(--kv-nav-selected-text);
     font-weight: 550;
 }
 .nav-item kbd {
@@ -396,7 +401,7 @@ code {
     color: var(--kv-text-muted);
 }
 .repository-row.selected .repository-glyph .icon {
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
 }
 .repository-indicator,
 .conversation-indicator {
@@ -466,12 +471,12 @@ code {
 }
 .tree-item.selected span b,
 .tree-item.selected .icon {
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
 }
 .tree-count {
     font-size: var(--kp-text-xs);
     margin-left: auto;
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
 }
 .all-worktrees {
     display: flex;
@@ -669,7 +674,7 @@ code {
 }
 .eyebrow {
     font-size: var(--kp-text-sm);
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
     font-weight: 600;
     letter-spacing: 1.4px;
     text-transform: uppercase;
@@ -732,7 +737,7 @@ code {
 .empty-state > .icon {
     width: 35px;
     height: 35px;
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
 }
 .empty-state p {
     max-width: 390px;
@@ -745,7 +750,7 @@ code {
     align-items: center;
     gap: 12px;
     background: var(--kv-accent-subtle);
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
     border: 1px solid var(--kv-accent-border);
     padding: 13px 16px;
     border-radius: 6px;
@@ -871,7 +876,7 @@ code {
     border-bottom: 2px solid transparent;
 }
 .route-tabs a.active {
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
     border-color: var(--kv-accent);
 }
 @media (max-width: 1100px) {

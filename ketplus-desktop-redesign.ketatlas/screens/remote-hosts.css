@@ -85,7 +85,7 @@
     flex: none;
     place-items: center;
     border-radius: var(--kv-radius-full);
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
     background: var(--kv-accent-subtle);
     font-size: 0.75rem;
     line-height: 1rem;
@@ -167,7 +167,7 @@
     flex: none;
     place-items: center;
     border-radius: var(--kv-radius-sm);
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
     background: var(--kv-accent-subtle);
 }
 .remote-host-mark .icon,

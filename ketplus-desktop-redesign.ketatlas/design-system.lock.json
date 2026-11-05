@@ -3,23 +3,23 @@
   "adapterSchemaVersion": "ketatlas.design-system-adapter.v1",
   "adapter": "@ketvietlab/design-system",
   "source": "@ketvietlab/design-system",
-  "version": "0.1.7",
-  "revision": "6f923d1e13958ce740e50bccab45efc56ccd2f84",
-  "repository": "https://github.com/ketvietlab/ketjs",
+  "version": "0.1.44",
+  "revision": "e8adee2da3bfeea66c01f46f110fdc5243fb23c0",
+  "repository": "https://github.com/ketvietlab/ketsuite",
   "materialization": "Exact public CSS with local imports inlined; canonical SSR contracts; no token overrides.",
-  "registeredComponents": 106,
+  "registeredComponents": 161,
   "files": [
     {
       "path": "assets/ket-design-system.css",
-      "sha256": "1a73199437536b1955111f37e8ed08e1ed395ac1b689af17b81e4b9cb4895f2e"
+      "sha256": "2481bcef208383308eb16c0cd71010f35a16b23cd04d390af52b48ab728f7c0b"
     },
     {
       "path": "assets/ket-design-system-contracts.js",
-      "sha256": "cfb786252bcea96b8ff6cc30e6cfa9d2c09f0ba4129b1d4b740f238712c02e84"
+      "sha256": "b46ef993494b32edcaa006c9eaa95a629a7e72cf467a175591f0c194b2f332ef"
     },
     {
       "path": "assets/ket-design-system-runtime.js",
-      "sha256": "060327db243e68f394f2a46e364aa331eee4fbedc4ffc9ce0e11478b5e5a9356"
+      "sha256": "b00b8e86f0ba3ddbe909cee88eb00aa2f2e38d948eaef360dc33979ffa569318"
     }
   ]
 }

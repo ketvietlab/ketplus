@@ -293,7 +293,7 @@
     gap: 9px;
     min-height: 34px;
     padding: 5px 7px;
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
     font-size: var(--kp-text-md);
 }
 .final-answer {
@@ -390,7 +390,7 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
     font-size: var(--kp-text-md);
 }
 .text-link .icon {
@@ -609,7 +609,7 @@
     background: var(--kv-accent-subtle);
 }
 .suggestion > .icon {
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
 }
 .suggestion > .icon:last-child {
     margin-left: auto;
@@ -741,7 +741,7 @@
 }
 .question-card > .row {
     font-size: var(--kp-text-sm);
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
 }
 .question-card h3 {
     font-size: var(--kp-text-base);
@@ -796,7 +796,7 @@
     font-size: var(--kp-text-md);
 }
 .provider-tabs b {
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
 }
 .provider-tabs span {
     color: var(--kv-text-disabled);
@@ -854,7 +854,7 @@
     font-weight: 550;
 }
 .effort-picker output {
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
 }
 .effort-picker input {
     width: 100%;
@@ -915,7 +915,7 @@
     height: 38px;
     border-radius: 7px;
     background: var(--kv-accent-subtle);
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
 }
 .worktree-name {
     width: 180px;
@@ -950,7 +950,7 @@
 }
 .worktree-explainer > .icon {
     margin-top: 2px;
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
 }
 .worktree-explainer h3 {
     font-size: var(--kp-text-base);

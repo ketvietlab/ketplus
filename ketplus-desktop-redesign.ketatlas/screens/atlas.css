@@ -356,7 +356,7 @@
 .onboarding-step {
     font-size: var(--kp-text-xs);
     letter-spacing: 1px;
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
     margin: 28px 0 9px;
 }
 .demo-onboarding h2 {
@@ -401,7 +401,7 @@
 }
 .demo-workspace > .icon {
     width: 15px;
-    color: var(--kv-accent);
+    color: var(--kv-accent-text);
 }
 .demo-onboarding > .btn {
     width: 100%;
