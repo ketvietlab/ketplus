@@ -87,7 +87,6 @@ add_library(ketplus_desktop_shell STATIC
     src/app/MainWindowAtlas.cpp
     src/app/MainWindowDefinition.cpp
     src/app/MainWindowDocuments.cpp
-    src/app/MainWindowFormat.cpp
     src/app/MainWindowLayout.cpp
     src/app/MainWindowNavigation.cpp
     src/app/MainWindowPanels.cpp

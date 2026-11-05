@@ -2,9 +2,11 @@
 #include "app/AtlasBuilderTab.h"
 #include "app/AtlasConversationPanel.h"
 #include "app/MainWindow.h"
+
 #include "app/RepositoryRouter.h"
 #include "app/SpotlightDialog.h"
 #include "atlas/AtlasTab.h"
+#include "editor/DocumentFormatControls.h"
 #include "workspace/AtlasIndex.h"
 
 #include "agent/AgentSessionManager.h"
@@ -142,7 +144,7 @@ bool MainWindow::saveEditor(EditorWidget* editor, const bool choosePath) {
     }
     updateTabTitle(editor);
     updateMarkdownPreview();
-    updateFormatIndicators();
+    format_->updateIndicators();
     statusBar()->showMessage(QStringLiteral("Saved %1").arg(path), 2500);
     git_->scheduleRefresh();
     if (QFileInfo(path).suffix().compare(QStringLiteral("json"), Qt::CaseInsensitive) == 0)
@@ -495,7 +497,7 @@ void MainWindow::updateEditorActions() {
 }
 
 void MainWindow::updateDocumentState() {
-    updateFormatIndicators();
+    format_->updateIndicators();
     const auto* editor = documentOwner();
     if (editor == nullptr) {
         documentStateLabel_->setText(qobject_cast<GitDiffView*>(tabs_->currentWidget()) != nullptr

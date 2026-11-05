@@ -1,5 +1,7 @@
 #include "app/MainWindow.h"
 
+#include "editor/DocumentFormatControls.h"
+
 #include "app/SettingsDialog.h"
 #include "editor/EditorSplitPane.h"
 #include "editor/EditorWidget.h"
@@ -42,6 +44,13 @@
 #include <algorithm>
 
 namespace ketplus {
+
+EditorWidget* MainWindow::documentOwner() const {
+    // The split view shares its source tab's document, file and encoding.
+    auto* editor = activeEditor();
+    return editor != nullptr && editor == splitEditor_ && splitSource_ != nullptr ? splitSource_
+                                                                                  : editor;
+}
 namespace {
 constexpr int maximumResidentTabCount = 12;
 constexpr qsizetype residentTextBudgetBytes = 64 * 1024 * 1024;
@@ -162,7 +171,7 @@ bool MainWindow::saveEditor(EditorWidget* editor, const bool choosePath) {
     }
     updateTabTitle(editor);
     updateMarkdownPreview();
-    updateFormatIndicators();
+    format_->updateIndicators();
     statusBar()->showMessage(QStringLiteral("Saved %1").arg(path), 2500);
     git_->scheduleRefresh();
     if (editor->isLargeFileMode()) {
@@ -467,7 +476,7 @@ void MainWindow::updateEditorActions() {
 }
 
 void MainWindow::updateDocumentState() {
-    updateFormatIndicators();
+    format_->updateIndicators();
     const auto* editor = currentEditor();
     if (editor == nullptr) {
         documentStateLabel_->setText(qobject_cast<GitDiffView*>(tabs_->currentWidget()) != nullptr

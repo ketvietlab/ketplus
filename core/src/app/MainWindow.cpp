@@ -1,5 +1,7 @@
 #include "app/MainWindow.h"
 
+#include "editor/DocumentFormatControls.h"
+
 #include "app/SettingsDialog.h"
 #include "editor/EditorSplitPane.h"
 #include "editor/EditorWidget.h"
@@ -138,9 +140,7 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
         statusBar()->addPermanentWidget(button);
         return button;
     };
-    encodingButton_ = addStatusButton(encodingMenu_, QStringLiteral("File encoding"));
-    lineEndingButton_ = addStatusButton(lineEndingMenu_, QStringLiteral("Line endings"));
-    languageButton_ = addStatusButton(languageMenu_, QStringLiteral("Language"));
+    format_->addStatusButtons(addStatusButton);
 
     connect(tabs_, &QTabWidget::tabCloseRequested, this,
             [this](const int index) { closeTab(index); });
