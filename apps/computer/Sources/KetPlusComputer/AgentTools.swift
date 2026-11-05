@@ -220,7 +220,7 @@ final class AgentTools {
             approved = answer == .allow
             if approved { control.grant(Set(wanted.map(\.bundleIdentifier)), to: conversation) }
         }
-        let moved = approved ? moveToWorkDisplay(wanted.map(\.bundleIdentifier)) : []
+        let moved = approved ? moveToWorkDisplay(wanted.map(\.bundleIdentifier), conversation: conversation) : []
         return ["granted": control.grantedApps(conversation).sorted(),
                 "denied": approved ? [] : wanted.map(\.name),
                 "blocked": refused, "decision": decision, "movedToWorkDisplay": moved]
@@ -247,7 +247,7 @@ final class AgentTools {
         }
         try requireGranted(app.bundleIdentifier, .view, conversation)
         let activate = params["foreground"] as? Bool ?? false
-        let moved = try openOnWorkDisplay(app.bundleIdentifier, activate: activate)
+        let moved = try openOnWorkDisplay(app.bundleIdentifier, activate: activate, conversation: conversation)
         lock.withLock { lastTargets[conversation] = app.bundleIdentifier }
         return (["opened": app.bundleIdentifier, "frontmost": activate, "movedToWorkDisplay": moved], app.bundleIdentifier)
     }

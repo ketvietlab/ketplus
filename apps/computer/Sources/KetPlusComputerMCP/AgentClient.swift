@@ -8,7 +8,8 @@ struct AgentCallError: Error {
 
 /// Forwards computer.v0 calls to the agent app, starting it through
 /// LaunchServices so that it is its own responsible process for TCC. The daemon
-/// supplies the conversation and its token in the server's environment.
+/// supplies the conversation and its token in the server's environment; a local
+/// client outside KetPlus mints its own from the user-only host key instead.
 final class AgentClient {
     private let paths = AgentPaths.standard()
     private let conversation: String
@@ -16,9 +17,21 @@ final class AgentClient {
     private var connection: LineConnection?
     private var nextID = 1
 
-    init(environment: [String: String] = ProcessInfo.processInfo.environment) {
-        conversation = environment["KETPLUS_COMPUTER_CONVERSATION"] ?? ""
-        token = environment["KETPLUS_COMPUTER_TOKEN"] ?? ""
+    init(environment: [String: String] = ProcessInfo.processInfo.environment, localClient: String? = nil) throws {
+        guard let localClient else {
+            conversation = environment["KETPLUS_COMPUTER_CONVERSATION"] ?? ""
+            token = environment["KETPLUS_COMPUTER_TOKEN"] ?? ""
+            return
+        }
+        guard let local = ConversationToken.localConversation(localClient) else {
+            throw AgentCallError(code: "INVALID_PARAMS", message: "--local-client needs a name of letters, digits, '.', '_' or '-'.")
+        }
+        // Anyone who can read host.key can already mint tokens; it is 0600 and owned by this user.
+        guard let key = try? Data(contentsOf: paths.hostKey), !key.isEmpty else {
+            throw AgentCallError(code: "UNAUTHORIZED", message: "No host key at \(paths.hostKey.path). Open KetPlus once to create it.")
+        }
+        conversation = local
+        token = ConversationToken.mint(key: key, conversation: local)
     }
 
     func call(_ method: String, _ params: [String: Any] = [:]) throws -> [String: Any] {

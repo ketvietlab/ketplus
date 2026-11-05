@@ -32,20 +32,19 @@ enum Displays {
 
     /// Moves an app's unminimized windows, frameless ones included, onto the display.
     /// Returns how many moved; windows already there stay put.
+    /// Windows of the app that count for placement and already lie on the display.
+    static func windowsOn(_ display: DisplayInfo, of pid: pid_t) -> Int {
+        movableFrames(of: pid).filter { WorkDisplay.isOn($0.frame, display) }.count
+    }
+
+    /// `startIndex` continues the cascade after windows already on the display, so a
+    /// second app does not land exactly on the first.
     @discardableResult
-    static func moveWindows(of pid: pid_t, to display: DisplayInfo) -> Int {
-        let app = AXUIElementCreateApplication(pid)
-        AXUIElementSetMessagingTimeout(app, 1.5)
-        var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value) == .success,
-              let windows = value as? [AXUIElement] else { return 0 }
+    static func moveWindows(of pid: pid_t, to display: DisplayInfo, startIndex: Int = 0) -> Int {
         var moved = 0
-        for window in windows {
-            guard let frame = frame(window), !bool(window, kAXMinimizedAttribute),
-                  WorkDisplay.isMovable(role: string(window, kAXRoleAttribute),
-                                        subrole: string(window, kAXSubroleAttribute), size: frame.size),
-                  !WorkDisplay.isOn(frame, display) else { continue }
-            let target = WorkDisplay.place(frame, on: display, index: moved)
+        for (window, frame) in movableFrames(of: pid) {
+            guard !WorkDisplay.isOn(frame, display) else { continue }
+            let target = WorkDisplay.place(frame, on: display, index: startIndex + moved)
             var origin = target.origin
             var size = target.size
             if let position = AXValueCreate(.cgPoint, &origin),
@@ -57,6 +56,21 @@ enum Displays {
             }
         }
         return moved
+    }
+
+    private static func movableFrames(of pid: pid_t) -> [(window: AXUIElement, frame: CGRect)] {
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 1.5)
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value) == .success,
+              let windows = value as? [AXUIElement] else { return [] }
+        return windows.compactMap { window in
+            guard let frame = frame(window), !bool(window, kAXMinimizedAttribute),
+                  WorkDisplay.isMovable(role: string(window, kAXRoleAttribute),
+                                        subrole: string(window, kAXSubroleAttribute), size: frame.size)
+            else { return nil }
+            return (window, frame)
+        }
     }
 
     private static func string(_ element: AXUIElement, _ name: String) -> String? {

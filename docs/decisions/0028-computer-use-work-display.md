@@ -24,7 +24,8 @@ display and could not see a granted window on another one.
   panel, the agent moves their unminimized windows that are not already on the
   work display. Frameless windows count; panels, sheets, system dialogs and
   windows under 160x100 points stay put. It sets the accessibility position and size,
-  shrinks a window to the visible frame and cascades several windows.
+  shrinks a window to the visible frame and cascades several windows, after the
+  conversation's granted windows already on the display.
   `open_application` does the same for an app it opens or reveals, and gives a
   launched app up to 3 s to show a window. The approval panel names the
   display when more than one is connected. `request_access` and
@@ -66,6 +67,8 @@ from `observe` instead of from the fixture.
   there, and a background click and typing filtered its conversation list.
   Background Backspace was ignored until key events carried their NSEvent
   characters; `scripts/e2e.mjs` now checks it on the fixture.
+- With KétChat QA already on the second display, granting the fixture placed it
+  28 points down and right of KétChat instead of exactly on top of it.
 - Not yet verified: a turn started from the desktop app, displays with
   different scale factors, and a display that disconnects during a turn.
 

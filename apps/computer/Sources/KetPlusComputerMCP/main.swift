@@ -14,7 +14,18 @@ let instructions = """
     stop and tell the user.
     """
 
-let agent = AgentClient()
+// `--local-client <name>` serves an MCP client outside KetPlus, such as a terminal agent.
+let localClient = CommandLine.arguments.firstIndex(of: "--local-client").map {
+    $0 + 1 < CommandLine.arguments.count ? CommandLine.arguments[$0 + 1] : ""
+}
+let agent: AgentClient
+do {
+    agent = try AgentClient(localClient: localClient)
+} catch {
+    let failure = error as? AgentCallError
+    FileHandle.standardError.write(Data("\(failure?.code ?? "ERROR"): \(failure?.message ?? "\(error)")\n".utf8))
+    exit(2)
+}
 
 func emit(_ object: [String: Any]) {
     guard var data = try? JSONSerialization.data(withJSONObject: object) else { return }

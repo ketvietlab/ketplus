@@ -33,18 +33,24 @@ extension AgentTools {
         allDisplays().first { $0.bounds == geometry.displayBounds }
     }
 
-    /// Moves the windows of running apps onto the work display. Returns the apps that moved.
-    func moveToWorkDisplay(_ bundles: [String]) -> [String] {
+    /// Moves the windows of running apps onto the work display, cascading after the
+    /// conversation's granted windows already there. Returns the apps that moved.
+    func moveToWorkDisplay(_ bundles: [String], conversation: String) -> [String] {
         guard let work = workDisplay() else { return [] }
+        var placed = control.grantedApps(conversation).subtracting(bundles)
+            .compactMap(WindowTargets.pid(of:))
+            .reduce(0) { $0 + Displays.windowsOn(work, of: $1) }
         return bundles.filter { bundle in
             guard let pid = WindowTargets.pid(of: bundle) else { return false }
-            return Displays.moveWindows(of: pid, to: work) > 0
+            let moved = Displays.moveWindows(of: pid, to: work, startIndex: placed)
+            placed += moved
+            return moved > 0
         }
     }
 
     /// Opens or reveals a granted app on the work display. A launched app gets a few
     /// seconds to show its first window.
-    func openOnWorkDisplay(_ bundle: String, activate: Bool) throws -> Bool {
+    func openOnWorkDisplay(_ bundle: String, activate: Bool, conversation: String) throws -> Bool {
         let wasRunning = WindowTargets.pid(of: bundle) != nil
         if wasRunning {
             if activate {
@@ -55,7 +61,7 @@ extension AgentTools {
         }
         for attempt in 0..<(wasRunning ? 1 : 15) {
             if attempt > 0 { usleep(200_000) }
-            if !moveToWorkDisplay([bundle]).isEmpty { return true }
+            if !moveToWorkDisplay([bundle], conversation: conversation).isEmpty { return true }
         }
         return false
     }

@@ -7,6 +7,13 @@ final class ConversationTokenTests: XCTestCase {
     // Same vector as tests/ComputerToolLaunchTest.cpp.
     let key = Data(0..<32)
 
+    func testLocalClientsGetTheirOwnConversations() {
+        XCTAssertEqual(ConversationToken.localConversation("claude-code"), "local:claude-code")
+        XCTAssertNil(ConversationToken.localConversation(""))
+        XCTAssertNil(ConversationToken.localConversation("a/b"))
+        XCTAssertNil(ConversationToken.localConversation(String(repeating: "x", count: 65)))
+    }
+
     func testTokenMatchesSharedVector() {
         XCTAssertEqual(ConversationToken.mint(key: key, conversation: "conv-123"),
                        "87a6f0b9a2457797da83b42f05dc619965e1681453effbb6d607042db46b341d")

@@ -12,6 +12,13 @@ public enum ConversationToken {
         return Data(mac).map { String(format: "%02x", $0) }.joined()
     }
 
+    /// The conversation of a local MCP client outside KetPlus (`--local-client <name>`).
+    /// The prefix keeps its grants apart from daemon conversations; nil for a bad name.
+    public static func localConversation(_ name: String) -> String? {
+        guard name.range(of: "^[A-Za-z0-9._-]{1,64}$", options: .regularExpression) != nil else { return nil }
+        return "local:" + name
+    }
+
     public static func verify(key: Data, conversation: String, token: String) -> Bool {
         guard !key.isEmpty, !conversation.isEmpty else { return false }
         let expected = Array(mint(key: key, conversation: conversation).utf8)

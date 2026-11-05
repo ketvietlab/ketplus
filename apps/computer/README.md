@@ -37,6 +37,20 @@ answer `NEEDS_FOREGROUND`.
 `list_apps`. The work display comes from `display` in `computer-tools.json`
 (`secondary` by default, or `main`); with one display it is the main display.
 
+### Local MCP clients
+
+An agent outside KetPlus, such as a terminal coding agent, can use the same tools
+with `ketplus-computer-mcp --local-client <name>`. The front mints the token from
+`host.key` itself and uses the conversation `local:<name>`, so its grants, lease
+and audit stay apart from daemon conversations. It still needs the approval panel
+for every app. This adds no access: `host.key` is 0600 and any process of the same
+user could already read it. Without a host key (KetPlus never opened) it exits
+with `UNAUTHORIZED`. For example:
+
+```sh
+claude mcp add ketplus-computer -- "<KetPlus.app>/Contents/Helpers/KetPlus Computer.app/Contents/MacOS/ketplus-computer-mcp" --local-client claude-code
+```
+
 Files in `<KetPlus data>/computer` (`KETPLUS_COMPUTER_DIR`):
 
 - `host.key`: 0600, created by the daemon.

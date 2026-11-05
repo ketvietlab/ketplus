@@ -644,6 +644,10 @@ The agent app is the enforcement point:
 - Each action appends a line, with its mode but without images or typed text,
   to `computer/audit/<conversation stem>.jsonl`.
 
+Outside KetPlus, `ketplus-computer-mcp --local-client <name>` mints a token for
+the conversation `local:<name>` from the user-only host key; approval, tiers,
+the lease and the audit apply unchanged (see `apps/computer/README.md`).
+
 Codex app-server binds MCP servers per process rather than per conversation, so
 Codex does not receive `ketplus_computer` yet. Tools follow
 `computer_toolset_20260801` names, plus `list_apps`, `request_access`,
