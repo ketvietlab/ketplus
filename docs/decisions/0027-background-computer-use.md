@@ -87,6 +87,19 @@ bundle-less window (`fixture-cover`) and Finder frontmost, then repeats the
 foreground path. With `--manual-esc` it also asks for a real Esc and a click on
 Stop.
 
+## Verification (2026-10-19, macOS 26.2)
+
+- `scripts/e2e.mjs --manual-esc` passed every check: background input under
+  `fixture-cover` with Finder frontmost, foreground input, a real Esc while the
+  fixture was frontmost, and a click on Stop. Each stop returned `CANCELLED` and
+  was audited.
+- A real Claude turn through the Claude sidecar, with the daemon's policy text,
+  completed the covered fixture with `observe`, `act set_value`, `observe` and
+  `act press`. The audit recorded no HID input.
+- Not yet verified: the approval panel in a release build, a turn started from
+  the desktop app through the daemon, multiple displays and apps with poor
+  accessibility.
+
 ## Alternatives considered
 
 - Private SkyLight focus calls, as Codex appears to use. They would let more
