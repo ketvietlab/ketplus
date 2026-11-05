@@ -236,10 +236,9 @@ void WorktreesWorkspacePage::rebuild() {
         rowLayout->addWidget(activity);
 
         const bool current = path == activePath_;
-        auto* state =
-            new QLabel(current ? (activeDirty_ ? tr("Uncommitted changes") : tr("Clean"))
-                               : (worktree.lockReason.isEmpty() ? tr("Available") : tr("Locked")),
-                       row);
+        auto* state = new QLabel(current ? (activeDirty_ ? tr("Uncommitted changes") : tr("Clean"))
+                                         : (worktree.locked ? tr("Locked") : tr("Available")),
+                                 row);
         state->setObjectName(QStringLiteral("worktreesWorkspaceState"));
         state->setProperty("warning", current && activeDirty_);
         chrome_geometry::minimumWidth(state, 78);
