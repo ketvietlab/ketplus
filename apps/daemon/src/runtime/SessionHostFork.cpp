@@ -87,7 +87,13 @@ void SessionHost::forkSession(const QJsonObject& request,
         finish(self->storeFork(sourceId, sourceGeneration, forkId, threadId));
     };
     if (adapter == QStringLiteral("claude")) {
-        claude_->call(QStringLiteral("thread/fork"), params, std::move(forked));
+        ProviderAdapter* const claude = provider(adapter);
+        if (claude == nullptr) {
+            finish(
+                forkError(QStringLiteral("provider_unavailable"), missingProviderMessage(adapter)));
+            return;
+        }
+        claude->call(QStringLiteral("thread/fork"), params, std::move(forked));
         return;
     }
     QJsonObject codexParams = params;

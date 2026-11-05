@@ -36,7 +36,7 @@ QString errorText(const QJsonObject& error) {
 } // namespace
 
 CodexAdapter::CodexAdapter(const QString& executable, QObject* parent)
-    : QObject(parent), executable_(executable.isEmpty() ? findExecutable() : executable),
+    : ProviderAdapter(parent), executable_(executable.isEmpty() ? findExecutable() : executable),
       process_(new QProcess(this)),
       stdoutReader_(maximumProviderMessageBytes,
                     {QStringLiteral("id"), QStringLiteral("method"),
@@ -118,6 +118,10 @@ CodexAdapter::~CodexAdapter() {
 }
 
 bool CodexAdapter::isAvailable() const { return !executable_.isEmpty(); }
+
+QString CodexAdapter::missingMessage() const {
+    return compat::missing(compat::policy(QStringLiteral("codex"))).message;
+}
 
 bool CodexAdapter::isReady() const { return ready_; }
 

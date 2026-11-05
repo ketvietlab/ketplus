@@ -56,9 +56,10 @@ void SessionHost::processDeletionWork() {
                 journal_->completeProviderCleanup(id, generation, provider, thread);
                 continue;
             }
-            const bool codex = provider == "codex" && adapter_ && adapter_->isAvailable();
-            const bool claude = provider == "claude" && claude_ && claude_->isAvailable();
-            if (!codex && !claude)
+            // Only Codex and Claude delete provider threads.
+            ProviderAdapter* const adapter =
+                provider == "codex" || provider == "claude" ? availableProvider(provider) : nullptr;
+            if (adapter == nullptr)
                 continue; // Keep unsupported/unavailable cleanup durable.
             providerCleanupInFlight_.insert(key);
             const QPointer<SessionHost> guard(this);
@@ -78,10 +79,7 @@ void SessionHost::processDeletionWork() {
                 }
             };
             const QJsonObject args{{"threadId", thread}};
-            if (codex)
-                adapter_->call("thread/delete", args, std::move(completed));
-            else
-                claude_->call("thread/delete", args, std::move(completed));
+            adapter->call("thread/delete", args, std::move(completed));
         }
     }
 }

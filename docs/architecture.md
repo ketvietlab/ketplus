@@ -175,8 +175,13 @@ current-window occupancy (`usage.context`) events; UI updates remain incremental
 
 Turns use the selected read-only, workspace-write, or full-access sandbox. The
 daemon's approval broker exposes user-input and approval requests to one
-authoritative responder with expiry. Codex remains the default provider. A
-Claude adapter can run beside it: the daemon supervises a Claude Agent SDK
+authoritative responder with expiry. Every provider process is a
+`ProviderAdapter` (`apps/daemon/src/providers/ProviderAdapter.h`): availability,
+calls, catalogs, approval replies, runtime status and capabilities. SessionHost keeps
+them in one registry keyed by adapter name instead of a pointer per provider. Codex
+also forwards raw app-server notifications that SessionHost projects; Claude and
+Cursor translate their own streams into canonical events. Codex remains the default
+provider. A Claude adapter can run beside it: the daemon supervises a Claude Agent SDK
 sidecar, normalizes its stream into the same journal events, and Desktop only
 selects the provider. The sidecar is packaged as JavaScript plus production
 `node_modules` in `KetPlus.app/Contents/Resources/claude-sidecar` (not
