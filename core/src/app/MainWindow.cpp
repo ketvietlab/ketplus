@@ -1,5 +1,6 @@
 #include "app/MainWindow.h"
 
+#include "editor/DiskChangePrompt.h"
 #include "editor/DocumentFormatControls.h"
 
 #include "app/SettingsDialog.h"
@@ -229,6 +230,7 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     connect(qApp, &QApplication::applicationStateChanged, this,
             [this](const Qt::ApplicationState state) {
                 if (state == Qt::ApplicationActive) {
+                    disk_change::refreshCleanTabs(tabs_);
                     git_->scheduleRefresh(0);
                 }
             });

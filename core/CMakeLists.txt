@@ -190,6 +190,8 @@ add_library(ketplus_editor STATIC
     src/editor/EditorWidget.h
     src/editor/DocumentFormatControls.cpp
     src/editor/DocumentFormatControls.h
+    src/editor/DiskChangePrompt.cpp
+    src/editor/DiskChangePrompt.h
     src/editor/SymbolExtractor.cpp
     src/editor/SymbolExtractor.h
     src/editor/SyntaxDefinition.cpp

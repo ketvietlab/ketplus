@@ -324,7 +324,11 @@ void EditorWidget::setText(const QByteArray& text) {
                               : firstLineFeed < 0 && text.contains('\r')              ? SC_EOL_CR
                                                                                       : SC_EOL_LF;
     send(message(Scintilla::Message::SetEOLMode), static_cast<uptr_t>(endOfLineMode));
-    sends(message(Scintilla::Message::SetText), 0, text.constData());
+    send(message(Scintilla::Message::SetReadOnly), 0);
+    // SetText stops at the first NUL; an explicit length keeps every byte of the file.
+    send(message(Scintilla::Message::ClearAll));
+    sends(message(Scintilla::Message::AppendText), static_cast<uptr_t>(text.size()),
+          text.constData());
     send(message(Scintilla::Message::EmptyUndoBuffer));
     markSaved();
     hibernated_ = false;
@@ -349,9 +353,12 @@ Document::Result EditorWidget::restoreFromDisk() {
     if (!hibernated_ || document_->isUntitled()) {
         return {true, {}};
     }
+    if (document_->isModified()) {
+        return {false, QStringLiteral("The tab has edits that reloading would discard.")};
+    }
 
     const auto path = document_->filePath();
-    auto result = document_->load(path, document_->textEncoding());
+    auto result = document_->reload(path);
     if (!result.ok) {
         return {false, result.error};
     }
@@ -382,6 +389,8 @@ bool EditorWidget::hibernate() {
     sends(message(Scintilla::Message::SetText), 0, "");
     send(message(Scintilla::Message::EmptyUndoBuffer));
     send(message(Scintilla::Message::SetSavePoint));
+    // Nothing typed into the empty buffer could be saved or survive the restore.
+    send(message(Scintilla::Message::SetReadOnly), 1);
     document_->setModified(false);
     hibernated_ = true;
     internalMutation_ = false;
