@@ -78,7 +78,8 @@ request. Do not close user-owned or other agents' sessions or kill shared browse
 - `apps/browser`: bundled browser runtime, a separate helper process.
 - `modules/ai`: provider transport and Agent Workspace.
 - `modules/atlas`: Atlas process, WebView, and code index.
-- `modules/remote`: daemon IPC client and relay (Control v2) client.
+- `modules/remote`: daemon IPC client, relay (Control v2) client, and the
+  `ketplus_control_crypto` keys/credentials/sign-in target the daemon also links.
 - `tests`: Pro and cross-boundary integration tests.
 - `modules/accounts` and `modules/router`: reserved; create each only with its
   first real implementation.

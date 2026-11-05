@@ -16,9 +16,10 @@ include("${REPO}/apps/daemon/sources.cmake")
 include("${REPO}/modules/browser/sources.cmake")
 list(TRANSFORM KETPLUS_DAEMON_CORE_SOURCES PREPEND "${REPO}/apps/daemon/")
 list(TRANSFORM KETPLUS_BROWSER_TOOLS_SOURCES PREPEND "${REPO}/modules/browser/")
-list(FILTER KETPLUS_DAEMON_CORE_SOURCES EXCLUDE REGEX "/CredentialStore\\.cpp$")
+# CredentialStore.cpp (OS key storage) is replaced by MemoryCredentials.cpp.
 add_library(r03_privacy_core STATIC MemoryCredentials.cpp ${KETPLUS_DAEMON_CORE_SOURCES}
-  ${KETPLUS_BROWSER_TOOLS_SOURCES} "${REPO}/modules/remote/src/DaemonPaths.cpp")
+  ${KETPLUS_BROWSER_TOOLS_SOURCES} "${REPO}/modules/remote/src/DaemonPaths.cpp"
+  "${REPO}/modules/remote/src/cloud/CloudCrypto.cpp" "${REPO}/modules/remote/src/cloud/BrowserSignIn.cpp")
 set_source_files_properties("${DAEMON}/providers/compat/provider-compatibility.json"
   PROPERTIES QT_RESOURCE_ALIAS "provider-compatibility.json")
 qt_add_resources(r03_privacy_core "r03_daemon_compat" PREFIX "/ketplus/daemon"

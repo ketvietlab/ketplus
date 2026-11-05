@@ -1,17 +1,6 @@
 include("${PROJECT_SOURCE_DIR}/cmake/WebRtc.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/sources.cmake")
-# Host and remote-client processes share only the private crypto/credential boundary.
-add_library(ketplus_control_crypto STATIC
-    src/cloud/CloudCrypto.cpp src/cloud/CloudCrypto.h
-    src/cloud/CredentialStore.cpp src/cloud/CredentialStore.h
-    src/cloud/BrowserSignIn.cpp src/cloud/BrowserSignIn.h)
-target_link_libraries(ketplus_control_crypto PUBLIC Qt6::Core Qt6::Network OpenSSL::Crypto ketplus_remote)
-target_include_directories(ketplus_control_crypto PUBLIC
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
-ketplus_enable_warnings(ketplus_control_crypto)
-set(ketplus_daemon_runtime_sources ${KETPLUS_DAEMON_CORE_SOURCES})
-list(FILTER ketplus_daemon_runtime_sources EXCLUDE REGEX "/(CloudCrypto|CredentialStore|BrowserSignIn)\\.(cpp|h)$")
-add_library(ketplus_daemon_core STATIC ${ketplus_daemon_runtime_sources}
+add_library(ketplus_daemon_core STATIC ${KETPLUS_DAEMON_CORE_SOURCES}
     src/providers/ClaudeCredentials.cpp src/providers/ClaudeCredentials.h
     src/providers/ClaudeAccountUsage.cpp src/providers/ClaudeAccountUsage.h
     src/providers/ClaudeKeychain.cpp)
