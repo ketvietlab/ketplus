@@ -15,8 +15,11 @@ characterization run on macOS only; Ubuntu builds are paused to cut CI cost and
 must be restored before a Linux release. The browser regression and design
 evidence checks still run on Ubuntu. Private Windows CI remains deferred until
 the required Qt 6.11 WebView development packages are available from Qt's
-public repository. Branch pushes outside `develop` and `main` do not run CI;
-their pull request does, and a newer commit cancels the obsolete run.
+public repository. Pull requests into `integration` and branch pushes run no
+CI; run the targets for the area you changed before pushing and list them in the
+pull request. CI runs on promotion pull requests into `develop`, on pull
+requests into `main` and on pushes to `main`; a newer commit cancels the
+obsolete run. See `docs/release-process.md`.
 
 ## Target map
 

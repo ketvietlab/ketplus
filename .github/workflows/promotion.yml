@@ -1,0 +1,37 @@
+name: promotion
+
+# Feature and fix pull requests target integration, which has no CI. A pull
+# request into develop promotes the integration tip as a batch and must come
+# from integration itself; the build workflow verifies the same head.
+on:
+  pull_request:
+    branches: [develop]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  provenance:
+    name: promotion provenance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Check the promotion policy
+        run: bash .github/scripts/check-develop-promotion.test.sh
+      - name: Require the integration tip
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_BRANCH: ${{ github.head_ref }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REPOSITORY: ${{ github.repository }}
+        run: bash .github/scripts/check-develop-promotion.sh
