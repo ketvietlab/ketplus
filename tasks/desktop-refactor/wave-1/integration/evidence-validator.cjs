@@ -10,6 +10,10 @@ const rendering = require("./rendering-source.cjs");
 const BASE = "tasks/desktop-refactor/wave-1/integration";
 const DESIGN = "ketplus-desktop-redesign.ketatlas";
 const DESIGN_REVISION = "d0591869113ad4420961bff2ef2f2ac0ea840b58";
+// The bundle was renamed after the pinned review; pinned paths keep the reviewed name,
+// and the live copy is read from its current location.
+const LIVE_DESIGN = "ketplus.ketatlas";
+const livePath = p => typeof p === "string" && p.startsWith(DESIGN + "/") ? LIVE_DESIGN + p.slice(DESIGN.length) : p;
 const HASH = /^[0-9a-f]{64}$/;
 const REV = /^[0-9a-f]{40}$/;
 const STAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?(?:Z|[+-]\d{2}:\d{2})$/;
@@ -100,12 +104,12 @@ function validate({ root = process.cwd(), manifestPath = BASE + "/baseline-manif
   const check = (ok, at, message) => { if (!ok) issue(errors, at, message); return ok; };
   const git = (...args) => execFileSync("git", ["-C", root, ...args], { maxBuffer: 64*1024*1024, stdio: ["ignore", "pipe", "pipe"] });
   const json = (bytes, at) => { try { return JSON.parse(bytes.toString()); } catch { issue(errors, at, "invalid JSON"); return null; } };
-  const read = (p, at) => { const f = resolveRepoPath(root, p, at, errors); return f ? fs.readFileSync(f) : null; };
+  const read = (p, at) => { const f = resolveRepoPath(root, livePath(p), at, errors); return f ? fs.readFileSync(f) : null; };
   // The design bundle keeps evolving after its review. Evidence binds to the pinned
   // revision, so a live copy that differs (or is gone) is reported but does not fail.
   // A missing file is drift; a path that escapes the repository is still an error.
   const readLive = (p, at) => {
-    const found = [], file = resolveRepoPath(root, p, at, found);
+    const found = [], file = resolveRepoPath(root, livePath(p), at, found);
     for (const e of found) if (e.message !== "does not exist or cannot be read") errors.push(e);
     return file && !found.length ? fs.readFileSync(file) : null;
   };
@@ -202,7 +206,7 @@ function validate({ root = process.cwd(), manifestPath = BASE + "/baseline-manif
     const receipt = json(read(BASE + "/rendering-source-inventory.json", "renderingSource"), "renderingSource");
     check(equal(receipt, renderingInventory), "renderingSource", "receipt differs from immutable rendering source inventory");
     for (const entry of renderingInventory.entries.filter(e => e.category === "rendering-source")) {
-      const live = readLive(entry.path, "renderingSource." + entry.path);
+      const live = readLive(entry.path, "renderingSource." + livePath(entry.path));
       if (!live || hash(live) !== entry.sha256) issue(warnings, "renderingSource." + entry.path, "differs from pinned rendering source", "drift");
     }
     check(manifest.schemaVersion === "ketplus.desktop.refactor.integration-baseline.v1", "schemaVersion", "invalid schemaVersion");
@@ -345,4 +349,4 @@ function validate({ root = process.cwd(), manifestPath = BASE + "/baseline-manif
   if (errors.length) taskReadiness = taskReadiness?.map(row => ({ ...row, status: "BLOCKED" }));
   return { ok: errors.length === 0, errors, warnings, manifest, atlasInventory, readiness, taskReadiness };
 }
-module.exports = { validate, computeAtlasInventory, resolveRepoPath };
+module.exports = { validate, computeAtlasInventory, resolveRepoPath, livePath };

@@ -1,4 +1,5 @@
 // TEST ONLY: generated PNGs and approval records are parser fixtures, never QA evidence.
+const { livePath } = require("../../tasks/desktop-refactor/wave-1/integration/evidence-validator.cjs");
 const fs = require("node:fs");
 const path = require("node:path");
 const { createHash } = require("node:crypto");
@@ -40,7 +41,7 @@ function approve(root, e, role) {
 function visualFixture(manifest, root) {
   const ref = manifest.evidence.find(e => e.id === "visual-reference");
   const native = manifest.evidence.find(e => e.id === "native-pixel");
-  const atlas = JSON.parse(fs.readFileSync(path.join(root, manifest.artifactPaths.designAtlas)));
+  const atlas = JSON.parse(fs.readFileSync(path.join(root, livePath(manifest.artifactPaths.designAtlas))));
   const state = atlas.screens[0].url, theme = "dark";
   const fixture = writeArtifact(root, "workload", { testOnly: true, seed: "validator" });
   const environment = {

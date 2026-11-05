@@ -1,0 +1,4731 @@
+{
+  "$schema": "./ketatlas.schema.json",
+  "version": 1,
+  "title": "KetPlus Desktop · A space to create",
+  "description": "UI redesign based on current features · Két Design System · Interactive prototype with sample data.",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "screens": [
+    {
+      "id": "workspace",
+      "title": "Agent Workspace",
+      "url": "./screens/workspace.html"
+    },
+    {
+      "id": "atlas-builder",
+      "title": "Edit Atlas in KétPlus",
+      "url": "./screens/atlas-builder.html"
+    },
+    {
+      "id": "editor",
+      "title": "Editor",
+      "url": "./screens/editor.html"
+    },
+    {
+      "id": "changes",
+      "title": "Source changes",
+      "url": "./screens/changes.html"
+    },
+    {
+      "id": "worktrees",
+      "title": "Manage worktrees",
+      "url": "./screens/worktrees.html"
+    },
+    {
+      "id": "connections",
+      "title": "Connections",
+      "url": "./screens/connections.html"
+    },
+    {
+      "id": "settings",
+      "title": "Appearance settings",
+      "url": "./screens/settings.html"
+    },
+    {
+      "id": "search",
+      "title": "Quick search",
+      "url": "./screens/search.html"
+    },
+    {
+      "id": "repository-picker-desktop",
+      "title": "Repository & worktree · Desktop",
+      "url": "./screens/repository-picker.html",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    {
+      "id": "repository-picker-mobile",
+      "title": "Repository & worktree · iPhone",
+      "url": "./screens/repository-picker-mobile.html",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    }
+  ],
+  "flows": [
+    {
+      "id": "conversation-repository-desktop",
+      "title": "Switch conversation repository · Desktop",
+      "start": "choose",
+      "ends": [
+        "workspace"
+      ],
+      "nodes": [
+        {
+          "id": "choose",
+          "screen": "repository-picker-desktop",
+          "title": "Current repository first",
+          "url": "./screens/repository-picker.html?theme=dark&search=pilot",
+          "column": 0,
+          "row": 0
+        },
+        {
+          "id": "selected",
+          "screen": "repository-picker-desktop",
+          "title": "Repository and conversation switch together",
+          "url": "./screens/repository-picker.html?theme=dark&repo=ketviet&search=pilot&step=worktrees",
+          "column": 1,
+          "row": 0
+        },
+        {
+          "id": "workspace",
+          "screen": "repository-picker-desktop",
+          "title": "Header and sidebar follow the conversation",
+          "url": "./screens/repository-picker.html?theme=dark&repo=ketviet&picker=closed",
+          "column": 2,
+          "row": 0
+        },
+        {
+          "id": "error",
+          "screen": "repository-picker-desktop",
+          "title": "Keep the old scope on failure",
+          "url": "./screens/repository-picker.html?theme=dark&scenario=error",
+          "column": 0,
+          "row": 1
+        },
+        {
+          "id": "offline",
+          "screen": "repository-picker-desktop",
+          "title": "Reconnect before switching",
+          "url": "./screens/repository-picker.html?theme=dark&scenario=offline",
+          "column": 0,
+          "row": 2
+        },
+        {
+          "id": "empty",
+          "screen": "repository-picker-desktop",
+          "title": "No matching worktree in this repository",
+          "url": "./screens/repository-picker.html?theme=dark&search=missing-worktree&step=worktrees",
+          "column": 1,
+          "row": 1
+        },
+        {
+          "id": "loading",
+          "screen": "repository-picker-desktop",
+          "title": "Load repositories",
+          "url": "./screens/repository-picker.html?theme=dark&scenario=loading",
+          "column": 0,
+          "row": 3
+        },
+        {
+          "id": "stale",
+          "screen": "repository-picker-desktop",
+          "title": "Refresh a changed catalog",
+          "url": "./screens/repository-picker.html?theme=dark&scenario=stale",
+          "column": 1,
+          "row": 2
+        }
+      ],
+      "edges": [
+        {
+          "from": "choose",
+          "to": "selected",
+          "label": "Select ketviet; keep the pilot search",
+          "kind": "primary"
+        },
+        {
+          "from": "selected",
+          "to": "workspace",
+          "label": "Done; current repository leads sidebar",
+          "kind": "primary"
+        },
+        {
+          "from": "choose",
+          "to": "error",
+          "label": "Switch is rejected",
+          "kind": "conditional"
+        },
+        {
+          "from": "error",
+          "to": "selected",
+          "label": "Retry succeeds",
+          "kind": "recovery"
+        },
+        {
+          "from": "offline",
+          "to": "choose",
+          "label": "Reconnect",
+          "kind": "recovery"
+        },
+        {
+          "from": "selected",
+          "to": "empty",
+          "label": "Search an unknown worktree",
+          "kind": "conditional"
+        },
+        {
+          "from": "empty",
+          "to": "selected",
+          "label": "Clear search",
+          "kind": "recovery"
+        },
+        {
+          "from": "loading",
+          "to": "choose",
+          "label": "Try again",
+          "kind": "recovery"
+        },
+        {
+          "from": "stale",
+          "to": "choose",
+          "label": "Refresh catalog",
+          "kind": "recovery"
+        },
+        {
+          "from": "choose",
+          "to": "offline",
+          "label": "Connection becomes unavailable",
+          "kind": "conditional"
+        },
+        {
+          "from": "choose",
+          "to": "loading",
+          "label": "Refresh repositories",
+          "kind": "conditional"
+        },
+        {
+          "from": "choose",
+          "to": "stale",
+          "label": "Repository catalog changed on another device",
+          "kind": "conditional"
+        }
+      ]
+    },
+    {
+      "id": "conversation-repository-iphone",
+      "title": "Switch conversation repository · iPhone",
+      "start": "choose",
+      "ends": [
+        "workspace"
+      ],
+      "nodes": [
+        {
+          "id": "choose",
+          "screen": "repository-picker-mobile",
+          "title": "Current repository first",
+          "url": "./screens/repository-picker-mobile.html?theme=dark&search=pilot",
+          "column": 0,
+          "row": 0
+        },
+        {
+          "id": "selected",
+          "screen": "repository-picker-mobile",
+          "title": "Repository and conversation switch together",
+          "url": "./screens/repository-picker-mobile.html?theme=dark&repo=ketviet&search=pilot&step=worktrees",
+          "column": 1,
+          "row": 0
+        },
+        {
+          "id": "workspace",
+          "screen": "repository-picker-mobile",
+          "title": "Header and sidebar follow the conversation",
+          "url": "./screens/repository-picker-mobile.html?theme=dark&repo=ketviet&picker=closed",
+          "column": 2,
+          "row": 0
+        },
+        {
+          "id": "error",
+          "screen": "repository-picker-mobile",
+          "title": "Keep the old scope on failure",
+          "url": "./screens/repository-picker-mobile.html?theme=dark&scenario=error",
+          "column": 0,
+          "row": 1
+        },
+        {
+          "id": "offline",
+          "screen": "repository-picker-mobile",
+          "title": "Reconnect before switching",
+          "url": "./screens/repository-picker-mobile.html?theme=dark&scenario=offline",
+          "column": 0,
+          "row": 2
+        },
+        {
+          "id": "empty",
+          "screen": "repository-picker-mobile",
+          "title": "No matching worktree in this repository",
+          "url": "./screens/repository-picker-mobile.html?theme=dark&search=missing-worktree&step=worktrees",
+          "column": 1,
+          "row": 1
+        },
+        {
+          "id": "loading",
+          "screen": "repository-picker-mobile",
+          "title": "Load repositories",
+          "url": "./screens/repository-picker-mobile.html?theme=dark&scenario=loading",
+          "column": 0,
+          "row": 3
+        },
+        {
+          "id": "stale",
+          "screen": "repository-picker-mobile",
+          "title": "Refresh a changed catalog",
+          "url": "./screens/repository-picker-mobile.html?theme=dark&scenario=stale",
+          "column": 1,
+          "row": 2
+        }
+      ],
+      "edges": [
+        {
+          "from": "choose",
+          "to": "selected",
+          "label": "Select ketviet; keep the pilot search",
+          "kind": "primary"
+        },
+        {
+          "from": "selected",
+          "to": "workspace",
+          "label": "Done; current repository leads sidebar",
+          "kind": "primary"
+        },
+        {
+          "from": "choose",
+          "to": "error",
+          "label": "Switch is rejected",
+          "kind": "conditional"
+        },
+        {
+          "from": "error",
+          "to": "selected",
+          "label": "Retry succeeds",
+          "kind": "recovery"
+        },
+        {
+          "from": "offline",
+          "to": "choose",
+          "label": "Reconnect",
+          "kind": "recovery"
+        },
+        {
+          "from": "selected",
+          "to": "empty",
+          "label": "Search an unknown worktree",
+          "kind": "conditional"
+        },
+        {
+          "from": "empty",
+          "to": "selected",
+          "label": "Clear search",
+          "kind": "recovery"
+        },
+        {
+          "from": "loading",
+          "to": "choose",
+          "label": "Try again",
+          "kind": "recovery"
+        },
+        {
+          "from": "stale",
+          "to": "choose",
+          "label": "Refresh catalog",
+          "kind": "recovery"
+        },
+        {
+          "from": "choose",
+          "to": "offline",
+          "label": "Connection becomes unavailable",
+          "kind": "conditional"
+        },
+        {
+          "from": "choose",
+          "to": "loading",
+          "label": "Refresh repositories",
+          "kind": "conditional"
+        },
+        {
+          "from": "choose",
+          "to": "stale",
+          "label": "Repository catalog changed on another device",
+          "kind": "conditional"
+        }
+      ]
+    },
+    {
+      "id": "agent-journey",
+      "title": "Work with your Agent",
+      "start": "new",
+      "ends": [
+        "terminal",
+        "done",
+        "stopped"
+      ],
+      "nodes": [
+        {
+          "id": "new",
+          "screen": "workspace",
+          "column": 0,
+          "row": 0,
+          "url": "./screens/workspace.html?state=empty",
+          "title": "New conversation"
+        },
+        {
+          "id": "running",
+          "screen": "workspace",
+          "column": 1,
+          "row": 0,
+          "url": "./screens/workspace.html?state=running",
+          "title": "Agent working"
+        },
+        {
+          "id": "question",
+          "screen": "workspace",
+          "column": 2,
+          "row": 0,
+          "url": "./screens/workspace.html?state=question",
+          "title": "A question for you"
+        },
+        {
+          "id": "done",
+          "screen": "workspace",
+          "column": 3,
+          "row": 0,
+          "title": "Response and changed files"
+        },
+        {
+          "id": "file",
+          "screen": "workspace",
+          "column": 4,
+          "row": 0,
+          "url": "./screens/workspace.html?panel=file",
+          "title": "Review a diff beside the conversation"
+        },
+        {
+          "id": "terminal",
+          "screen": "workspace",
+          "column": 5,
+          "row": 0,
+          "url": "./screens/workspace.html?panel=terminal",
+          "title": "Terminal on the right"
+        },
+        {
+          "id": "error",
+          "screen": "workspace",
+          "column": 2,
+          "row": 1,
+          "url": "./screens/workspace.html?state=error&turn=running",
+          "title": "Agent connection error"
+        },
+        {
+          "id": "stopped",
+          "screen": "workspace",
+          "column": 2,
+          "row": 2,
+          "url": "./screens/workspace.html?state=stopped",
+          "title": "Turn stopped"
+        },
+        {
+          "id": "model",
+          "screen": "workspace",
+          "column": 0,
+          "row": 1,
+          "url": "./screens/workspace.html?state=empty&dialog=model",
+          "title": "Choose model and reasoning"
+        },
+        {
+          "id": "restore",
+          "screen": "workspace",
+          "column": 3,
+          "row": 1,
+          "url": "./screens/workspace.html?state=restore",
+          "title": "Restore conversation history"
+        },
+        {
+          "id": "sending",
+          "screen": "workspace",
+          "column": 0,
+          "row": 3,
+          "url": "./screens/workspace.html?state=sending",
+          "title": "Request awaiting acknowledgment"
+        },
+        {
+          "id": "steering",
+          "screen": "workspace",
+          "column": 1,
+          "row": 3,
+          "url": "./screens/workspace.html?state=steering",
+          "title": "Guidance targets the active turn"
+        },
+        {
+          "id": "stopping",
+          "screen": "workspace",
+          "column": 2,
+          "row": 3,
+          "url": "./screens/workspace.html?state=stopping",
+          "title": "Stop awaiting acknowledgment"
+        },
+        {
+          "id": "question-more",
+          "screen": "workspace",
+          "column": 3,
+          "row": 3,
+          "url": "./screens/workspace.html?state=question&question=2",
+          "title": "Additional constraints"
+        },
+        {
+          "id": "answer-submitting",
+          "screen": "workspace",
+          "column": 4,
+          "row": 3,
+          "url": "./screens/workspace.html?state=answer-submitting&question=2",
+          "title": "Reply awaiting acknowledgment"
+        },
+        {
+          "id": "answer-error",
+          "screen": "workspace",
+          "column": 5,
+          "row": 3,
+          "url": "./screens/workspace.html?state=answer-error&question=2",
+          "title": "Reply failed; answers preserved"
+        },
+        {
+          "id": "reconnecting",
+          "screen": "workspace",
+          "column": 0,
+          "row": 4,
+          "url": "./screens/workspace.html?state=reconnecting&turn=running",
+          "title": "Reconcile existing turn; never resend prompt"
+        },
+        {
+          "id": "missing-active",
+          "screen": "workspace",
+          "column": 1,
+          "row": 4,
+          "url": "./screens/workspace.html?state=missing&turn=running",
+          "title": "Missing folder; Stop remains available"
+        },
+        {
+          "id": "reply-resolved",
+          "screen": "workspace",
+          "column": 2,
+          "row": 4,
+          "url": "./screens/workspace.html?state=running&answer=resolved",
+          "title": "Answered on another device"
+        },
+        {
+          "id": "steer-error",
+          "screen": "workspace",
+          "column": 3,
+          "row": 4,
+          "url": "./screens/workspace.html?state=running&send=failed",
+          "title": "Guidance failed; draft retained"
+        },
+        {
+          "id": "private-question",
+          "screen": "workspace",
+          "column": 0,
+          "row": 6,
+          "url": "./screens/workspace.html?state=question&question=2&secret=1",
+          "title": "Private input is not serialized"
+        },
+        {
+          "id": "question-expired",
+          "screen": "workspace",
+          "column": 1,
+          "row": 6,
+          "url": "./screens/workspace.html?state=question&request=expired",
+          "title": "Expired request rejects submission"
+        },
+        {
+          "id": "activity-files",
+          "screen": "workspace",
+          "column": 1,
+          "row": 7,
+          "url": "./screens/workspace.html?state=ready&activity=files",
+          "title": "Exact file edits and commands"
+        },
+        {
+          "id": "activity-images",
+          "screen": "workspace",
+          "column": 2,
+          "row": 7,
+          "url": "./screens/workspace.html?state=ready&activity=images",
+          "title": "Reviewed image gallery"
+        },
+        {
+          "id": "activity-browser",
+          "screen": "workspace",
+          "column": 3,
+          "row": 7,
+          "url": "./screens/workspace.html?state=ready&activity=browser",
+          "title": "Search, website and app activity"
+        },
+        {
+          "id": "activity-unknown",
+          "screen": "workspace",
+          "column": 4,
+          "row": 7,
+          "url": "./screens/workspace.html?state=ready&activity=unknown",
+          "title": "Unknown activity fallback"
+        },
+        {
+          "id": "activity-group-loading",
+          "screen": "workspace",
+          "title": "Browser group details · loading",
+          "url": "./screens/workspace.html?state=ready&activity=browser&groupDetails=loading",
+          "column": 20,
+          "row": 0
+        },
+        {
+          "id": "activity-group-error",
+          "screen": "workspace",
+          "title": "Browser group details · error",
+          "url": "./screens/workspace.html?state=ready&activity=browser&groupDetails=error",
+          "column": 20,
+          "row": 1
+        },
+        {
+          "id": "activity-group-updated",
+          "screen": "workspace",
+          "title": "Browser group details · updated",
+          "url": "./screens/workspace.html?state=ready&activity=browser&groupDetails=updated",
+          "column": 20,
+          "row": 2
+        }
+      ],
+      "edges": [
+        {
+          "from": "new",
+          "to": "sending",
+          "label": "Send request",
+          "kind": "primary"
+        },
+        {
+          "from": "new",
+          "to": "model",
+          "label": "Choose model and reasoning effort",
+          "kind": "primary"
+        },
+        {
+          "from": "model",
+          "to": "new",
+          "label": "Apply selection",
+          "kind": "primary"
+        },
+        {
+          "from": "running",
+          "to": "question",
+          "label": "Agent needs clarification",
+          "kind": "primary"
+        },
+        {
+          "from": "question",
+          "to": "question-more",
+          "label": "Next question",
+          "kind": "primary"
+        },
+        {
+          "from": "done",
+          "to": "file",
+          "label": "Open a changed file",
+          "kind": "primary"
+        },
+        {
+          "from": "file",
+          "to": "terminal",
+          "label": "Open terminal on the right",
+          "kind": "primary"
+        },
+        {
+          "from": "running",
+          "to": "error",
+          "label": "Connection interrupted",
+          "kind": "conditional"
+        },
+        {
+          "from": "error",
+          "to": "reconnecting",
+          "label": "Retry",
+          "kind": "recovery"
+        },
+        {
+          "from": "running",
+          "to": "stopping",
+          "label": "Stop turn",
+          "kind": "primary"
+        },
+        {
+          "from": "stopped",
+          "to": "running",
+          "label": "Send another request",
+          "kind": "recovery"
+        },
+        {
+          "from": "done",
+          "to": "restore",
+          "label": "Select an older conversation",
+          "kind": "primary"
+        },
+        {
+          "from": "restore",
+          "to": "done",
+          "label": "History restored",
+          "kind": "recovery"
+        },
+        {
+          "from": "sending",
+          "to": "running",
+          "label": "Request accepted",
+          "kind": "primary"
+        },
+        {
+          "from": "stopping",
+          "to": "stopped",
+          "label": "Interruption acknowledged",
+          "kind": "primary"
+        },
+        {
+          "from": "reconnecting",
+          "to": "running",
+          "label": "Existing turn state reconciled",
+          "kind": "primary"
+        },
+        {
+          "from": "question-more",
+          "to": "answer-submitting",
+          "label": "Submit answers",
+          "kind": "primary"
+        },
+        {
+          "from": "answer-submitting",
+          "to": "running",
+          "label": "Answers accepted; Agent resumes",
+          "kind": "primary"
+        },
+        {
+          "from": "running",
+          "to": "done",
+          "label": "Turn completion received",
+          "kind": "primary"
+        },
+        {
+          "from": "answer-submitting",
+          "to": "answer-error",
+          "label": "Submission failed",
+          "kind": "conditional"
+        },
+        {
+          "from": "answer-error",
+          "to": "answer-submitting",
+          "label": "Retry preserved answers",
+          "kind": "recovery"
+        },
+        {
+          "from": "question",
+          "to": "reply-resolved",
+          "label": "Another device answered first",
+          "kind": "conditional"
+        },
+        {
+          "from": "reply-resolved",
+          "to": "done",
+          "label": "Turn completion received",
+          "kind": "primary"
+        },
+        {
+          "from": "running",
+          "to": "steering",
+          "label": "Send additional guidance",
+          "kind": "primary"
+        },
+        {
+          "from": "steering",
+          "to": "running",
+          "label": "Guidance acknowledged",
+          "kind": "primary"
+        },
+        {
+          "from": "steering",
+          "to": "steer-error",
+          "label": "Delivery failed",
+          "kind": "conditional"
+        },
+        {
+          "from": "steer-error",
+          "to": "steering",
+          "label": "Retry guidance",
+          "kind": "recovery"
+        },
+        {
+          "from": "running",
+          "to": "missing-active",
+          "label": "Folder removed externally",
+          "kind": "conditional"
+        },
+        {
+          "from": "missing-active",
+          "to": "stopping",
+          "label": "Stop existing turn",
+          "kind": "primary"
+        },
+        {
+          "from": "question-more",
+          "to": "private-question",
+          "label": "Provider marks a question private",
+          "kind": "conditional"
+        },
+        {
+          "from": "private-question",
+          "to": "answer-submitting",
+          "label": "Submit without storing secret in URL",
+          "kind": "primary"
+        },
+        {
+          "from": "question",
+          "to": "question-expired",
+          "label": "Request expires",
+          "kind": "conditional"
+        },
+        {
+          "from": "question-expired",
+          "to": "running",
+          "label": "Refresh authoritative state; never resend prompt",
+          "kind": "recovery"
+        },
+        {
+          "from": "running",
+          "to": "activity-files",
+          "label": "File and command activities complete",
+          "kind": "primary"
+        },
+        {
+          "from": "activity-files",
+          "to": "activity-images",
+          "label": "Review image activity",
+          "kind": "primary"
+        },
+        {
+          "from": "activity-images",
+          "to": "activity-browser",
+          "label": "Review browser and app activity",
+          "kind": "primary"
+        },
+        {
+          "from": "activity-browser",
+          "to": "done",
+          "label": "Final response is delivered",
+          "kind": "primary"
+        },
+        {
+          "from": "activity-browser",
+          "to": "activity-unknown",
+          "label": "A newer activity type is received",
+          "kind": "conditional"
+        },
+        {
+          "from": "activity-unknown",
+          "to": "done",
+          "label": "Generic fallback preserves the event",
+          "kind": "recovery"
+        },
+        {
+          "from": "activity-browser",
+          "to": "activity-group-loading",
+          "label": "Expand group; request details"
+        },
+        {
+          "from": "activity-group-loading",
+          "to": "activity-group-updated",
+          "label": "Details load; new step arrives"
+        },
+        {
+          "from": "activity-group-loading",
+          "to": "activity-group-error",
+          "label": "Detail request fails",
+          "kind": "conditional"
+        },
+        {
+          "from": "activity-group-error",
+          "to": "activity-group-updated",
+          "label": "Retry succeeds",
+          "kind": "recovery"
+        },
+        {
+          "from": "activity-group-updated",
+          "to": "activity-browser",
+          "label": "Collapse group"
+        }
+      ]
+    },
+    {
+      "id": "code-review",
+      "title": "Explore code and review changes",
+      "start": "edit",
+      "ends": [
+        "terminal",
+        "edit"
+      ],
+      "nodes": [
+        {
+          "id": "edit",
+          "screen": "editor",
+          "column": 0,
+          "row": 0,
+          "title": "Read code in the editor"
+        },
+        {
+          "id": "preview",
+          "screen": "editor",
+          "column": 1,
+          "row": 0,
+          "url": "./screens/editor.html?preview=markdown",
+          "title": "Preview Markdown"
+        },
+        {
+          "id": "diff",
+          "screen": "changes",
+          "column": 2,
+          "row": 0,
+          "title": "Unstaged changes"
+        },
+        {
+          "id": "staged",
+          "screen": "changes",
+          "column": 3,
+          "row": 0,
+          "url": "./screens/changes.html?group=staged",
+          "title": "Staged Changes diff"
+        },
+        {
+          "id": "terminal",
+          "screen": "editor",
+          "column": 4,
+          "row": 0,
+          "url": "./screens/editor.html?panel=terminal",
+          "title": "Run Git commands in the terminal"
+        },
+        {
+          "id": "clean",
+          "screen": "changes",
+          "column": 2,
+          "row": 1,
+          "url": "./screens/changes.html?state=clean",
+          "title": "Clean worktree"
+        }
+      ],
+      "edges": [
+        {
+          "from": "edit",
+          "to": "preview",
+          "label": "Open Markdown preview",
+          "kind": "primary"
+        },
+        {
+          "from": "preview",
+          "to": "diff",
+          "label": "Open Source Control",
+          "kind": "primary"
+        },
+        {
+          "from": "diff",
+          "to": "staged",
+          "label": "Select a staged file",
+          "kind": "primary"
+        },
+        {
+          "from": "staged",
+          "to": "terminal",
+          "label": "Open terminal for Git commands",
+          "kind": "primary"
+        },
+        {
+          "from": "diff",
+          "to": "clean",
+          "label": "Snapshot has no changes",
+          "kind": "conditional"
+        },
+        {
+          "from": "clean",
+          "to": "edit",
+          "label": "Back to editor",
+          "kind": "primary"
+        }
+      ]
+    },
+    {
+      "id": "worktree-journey",
+      "title": "Switch and create worktrees",
+      "start": "list",
+      "ends": [
+        "created",
+        "switch",
+        "recovered"
+      ],
+      "nodes": [
+        {
+          "id": "list",
+          "screen": "worktrees",
+          "column": 0,
+          "row": 0,
+          "title": "Worktree list"
+        },
+        {
+          "id": "create",
+          "screen": "worktrees",
+          "column": 1,
+          "row": 0,
+          "url": "./screens/worktrees.html?dialog=create",
+          "title": "Create a branch and worktree"
+        },
+        {
+          "id": "invalid",
+          "screen": "worktrees",
+          "column": 2,
+          "row": 1,
+          "url": "./screens/worktrees.html?dialog=create&state=invalid",
+          "title": "Invalid branch name"
+        },
+        {
+          "id": "created",
+          "screen": "workspace",
+          "column": 3,
+          "row": 0,
+          "url": "./screens/workspace.html?state=empty&tree=feature-navigation",
+          "title": "New worktree ready"
+        },
+        {
+          "id": "switch",
+          "screen": "workspace",
+          "column": 1,
+          "row": 1,
+          "url": "./screens/workspace.html?tree=feature-onboarding",
+          "title": "Switch task context"
+        },
+        {
+          "id": "missing",
+          "screen": "workspace",
+          "column": 2,
+          "row": 2,
+          "url": "./screens/workspace.html?state=missing",
+          "title": "Worktree removed outside the app"
+        },
+        {
+          "id": "recovered",
+          "screen": "worktrees",
+          "column": 3,
+          "row": 2,
+          "title": "Choose an available worktree"
+        },
+        {
+          "id": "creating",
+          "screen": "worktrees",
+          "column": 0,
+          "row": 3,
+          "url": "./screens/worktrees.html?state=creating",
+          "title": "Git operation in progress"
+        },
+        {
+          "id": "create-error",
+          "screen": "worktrees",
+          "column": 1,
+          "row": 3,
+          "url": "./screens/worktrees.html?state=create-error",
+          "title": "Git/IO error; retry checks existing result"
+        }
+      ],
+      "edges": [
+        {
+          "from": "list",
+          "to": "create",
+          "label": "Create worktree",
+          "kind": "primary"
+        },
+        {
+          "from": "create",
+          "to": "invalid",
+          "label": "Invalid branch name",
+          "kind": "conditional"
+        },
+        {
+          "from": "invalid",
+          "to": "create",
+          "label": "Edit branch name",
+          "kind": "recovery"
+        },
+        {
+          "from": "create",
+          "to": "creating",
+          "label": "Create a valid branch and switch to it",
+          "kind": "primary"
+        },
+        {
+          "from": "list",
+          "to": "switch",
+          "label": "Select an existing worktree",
+          "kind": "primary"
+        },
+        {
+          "from": "list",
+          "to": "missing",
+          "label": "Worktree folder has been deleted",
+          "kind": "conditional"
+        },
+        {
+          "from": "missing",
+          "to": "recovered",
+          "label": "Select another workspace; original history is not moved",
+          "kind": "recovery"
+        },
+        {
+          "from": "creating",
+          "to": "created",
+          "label": "Git result verified; open exact worktree",
+          "kind": "primary"
+        },
+        {
+          "from": "creating",
+          "to": "create-error",
+          "label": "Git or filesystem error",
+          "kind": "conditional"
+        },
+        {
+          "from": "create-error",
+          "to": "create",
+          "label": "Retry after checking branch and folder",
+          "kind": "recovery"
+        }
+      ]
+    },
+    {
+      "id": "atlas-journey",
+      "title": "Open an Atlas from a conversation",
+      "start": "conversation",
+      "ends": [
+        "stopped",
+        "closed"
+      ],
+      "nodes": [
+        {
+          "id": "conversation",
+          "screen": "workspace",
+          "title": "Conversation with Atlas control",
+          "column": 0,
+          "row": 0
+        },
+        {
+          "id": "library",
+          "screen": "workspace",
+          "title": "Atlas tab in the right pane",
+          "url": "./screens/workspace.html?panel=atlas",
+          "column": 1,
+          "row": 0
+        },
+        {
+          "id": "edit",
+          "screen": "atlas-builder",
+          "title": "Edit Atlas in KétPlus",
+          "url": "./screens/atlas-builder.html?bundle=desktop&fromConversation=navigation&chat=collapsed",
+          "column": 2,
+          "row": 1
+        },
+        {
+          "id": "edit-invalid",
+          "screen": "atlas-builder",
+          "title": "Keep last valid Atlas while files change",
+          "url": "./screens/atlas-builder.html?bundle=desktop&fromConversation=navigation&chat=collapsed&bundleState=invalid",
+          "column": 3,
+          "row": 3
+        },
+        {
+          "id": "edit-missing",
+          "screen": "atlas-builder",
+          "title": "Original Atlas bundle is missing",
+          "url": "./screens/atlas-builder.html?bundle=desktop&fromConversation=navigation&chat=collapsed&bundleState=missing",
+          "column": 4,
+          "row": 3
+        },
+        {
+          "id": "empty",
+          "screen": "workspace",
+          "title": "No Atlases in this conversation",
+          "url": "./screens/workspace.html?panel=atlas&atlasList=empty&conversation=startup",
+          "column": 2,
+          "row": 2
+        },
+        {
+          "id": "starting",
+          "screen": "workspace",
+          "title": "Starting the Atlas viewer",
+          "url": "./screens/workspace.html?panel=atlas&atlasView=starting",
+          "column": 2,
+          "row": 0
+        },
+        {
+          "id": "error",
+          "screen": "workspace",
+          "title": "Viewer failed to start",
+          "url": "./screens/workspace.html?panel=atlas&atlasView=error",
+          "column": 3,
+          "row": 2
+        },
+        {
+          "id": "browser",
+          "type": "external",
+          "title": "External browser window",
+          "description": "KetAtlas opens outside KétPlus. The managed viewer reports browser presence to KétPlus.",
+          "column": 3,
+          "row": 0
+        },
+        {
+          "id": "running",
+          "screen": "workspace",
+          "title": "Atlas running with one browser tab",
+          "url": "./screens/workspace.html?panel=atlas&atlasView=running",
+          "column": 4,
+          "row": 0
+        },
+        {
+          "id": "multiple",
+          "screen": "workspace",
+          "title": "Two Atlases running",
+          "url": "./screens/workspace.html?panel=atlas&atlasView=multiple",
+          "column": 4,
+          "row": 1
+        },
+        {
+          "id": "stopped",
+          "screen": "workspace",
+          "title": "Stopped from KétPlus",
+          "url": "./screens/workspace.html?panel=atlas&atlasView=stopped",
+          "column": 6,
+          "row": 0
+        },
+        {
+          "id": "closed",
+          "screen": "workspace",
+          "title": "Last browser tab closed; Atlas stopped",
+          "url": "./screens/workspace.html?panel=atlas&atlasView=browser-closed",
+          "column": 6,
+          "row": 2
+        },
+        {
+          "id": "stopping",
+          "screen": "workspace",
+          "title": "Stopping Atlas; badge remains until acknowledged",
+          "url": "./screens/workspace.html?panel=atlas&atlasView=stopping",
+          "column": 5,
+          "row": 0
+        },
+        {
+          "id": "elsewhere",
+          "screen": "workspace",
+          "title": "Viewer running in another worktree",
+          "url": "./screens/workspace.html?tree=feature-onboarding&panel=atlas&atlasView=elsewhere",
+          "column": 5,
+          "row": 1
+        }
+      ],
+      "edges": [
+        {
+          "from": "conversation",
+          "to": "library",
+          "label": "Open Atlas control in the chat header",
+          "kind": "primary"
+        },
+        {
+          "from": "library",
+          "to": "edit",
+          "label": "Edit the selected Atlas inside KétPlus",
+          "kind": "primary"
+        },
+        {
+          "from": "edit",
+          "to": "library",
+          "label": "Return to the same conversation and Atlas list",
+          "kind": "recovery"
+        },
+        {
+          "from": "edit",
+          "to": "edit-invalid",
+          "label": "Files are incomplete during an edit",
+          "kind": "conditional"
+        },
+        {
+          "from": "edit-invalid",
+          "to": "edit",
+          "label": "Valid files arrive; restore the current map",
+          "kind": "recovery"
+        },
+        {
+          "from": "edit",
+          "to": "edit-missing",
+          "label": "The bundle moves or is deleted",
+          "kind": "conditional"
+        },
+        {
+          "from": "edit-missing",
+          "to": "library",
+          "label": "Return and choose an available Atlas",
+          "kind": "recovery"
+        },
+        {
+          "from": "library",
+          "to": "empty",
+          "label": "No Atlases in this conversation",
+          "kind": "conditional"
+        },
+        {
+          "from": "empty",
+          "to": "library",
+          "label": "Create with Agent or return to the list",
+          "kind": "recovery"
+        },
+        {
+          "from": "library",
+          "to": "starting",
+          "label": "Open an Atlas in the browser",
+          "kind": "primary"
+        },
+        {
+          "from": "starting",
+          "to": "browser",
+          "label": "Managed viewer is ready",
+          "kind": "primary"
+        },
+        {
+          "from": "starting",
+          "to": "error",
+          "label": "Viewer fails to start",
+          "kind": "conditional"
+        },
+        {
+          "from": "error",
+          "to": "starting",
+          "label": "Retry after checking the CLI",
+          "kind": "recovery"
+        },
+        {
+          "from": "browser",
+          "to": "running",
+          "label": "Browser connects; badge shows one running",
+          "kind": "primary"
+        },
+        {
+          "from": "running",
+          "to": "browser",
+          "label": "Focus the external browser",
+          "kind": "primary"
+        },
+        {
+          "from": "running",
+          "to": "multiple",
+          "label": "Open another Atlas",
+          "kind": "primary"
+        },
+        {
+          "from": "multiple",
+          "to": "running",
+          "label": "Stop one Atlas from KétPlus",
+          "kind": "recovery"
+        },
+        {
+          "from": "running",
+          "to": "stopping",
+          "label": "Stop Atlas from KétPlus",
+          "kind": "primary"
+        },
+        {
+          "from": "browser",
+          "to": "closed",
+          "label": "Close the last browser tab; viewer stops itself",
+          "kind": "conditional"
+        },
+        {
+          "from": "running",
+          "to": "closed",
+          "label": "Close the last browser tab; badge clears",
+          "kind": "conditional"
+        },
+        {
+          "from": "stopping",
+          "to": "stopped",
+          "label": "Managed process exits; badge clears",
+          "kind": "primary"
+        },
+        {
+          "from": "running",
+          "to": "elsewhere",
+          "label": "Switch worktrees; global badge remains",
+          "kind": "primary"
+        },
+        {
+          "from": "elsewhere",
+          "to": "stopped",
+          "label": "Stop viewer in the other worktree",
+          "kind": "primary"
+        }
+      ]
+    },
+    {
+      "id": "device-journey",
+      "title": "Connect your phone",
+      "start": "signin",
+      "ends": [
+        "paired",
+        "revoked"
+      ],
+      "nodes": [
+        {
+          "id": "signin",
+          "screen": "connections",
+          "column": 0,
+          "row": 0,
+          "url": "./screens/connections.html?state=signed-out",
+          "title": "Sign in to Ketsuite"
+        },
+        {
+          "id": "invalid",
+          "screen": "connections",
+          "column": 1,
+          "row": 1,
+          "url": "./screens/connections.html?state=signin-error&dialog=signin",
+          "title": "Invalid credentials"
+        },
+        {
+          "id": "connected",
+          "screen": "connections",
+          "column": 1,
+          "row": 0,
+          "title": "Connected devices"
+        },
+        {
+          "id": "pair",
+          "screen": "connections",
+          "column": 2,
+          "row": 0,
+          "url": "./screens/connections.html?dialog=pair",
+          "title": "Scan the demo QR code"
+        },
+        {
+          "id": "confirm",
+          "screen": "connections",
+          "column": 3,
+          "row": 0,
+          "url": "./screens/connections.html?dialog=confirm",
+          "title": "Confirm the device"
+        },
+        {
+          "id": "paired",
+          "screen": "connections",
+          "column": 4,
+          "row": 0,
+          "url": "./screens/connections.html?state=paired",
+          "title": "Pairing complete"
+        },
+        {
+          "id": "expired",
+          "screen": "connections",
+          "column": 3,
+          "row": 1,
+          "url": "./screens/connections.html?dialog=expired",
+          "title": "QR code expired"
+        },
+        {
+          "id": "reconnect",
+          "screen": "connections",
+          "column": 2,
+          "row": 2,
+          "url": "./screens/connections.html?state=offline",
+          "title": "Disconnected and retry"
+        },
+        {
+          "id": "revoke",
+          "screen": "connections",
+          "column": 5,
+          "row": 0,
+          "url": "./screens/connections.html?state=paired&dialog=revoke",
+          "title": "Confirm access revocation"
+        },
+        {
+          "id": "revoked",
+          "screen": "connections",
+          "column": 6,
+          "row": 0,
+          "url": "./screens/connections.html?state=revoked",
+          "title": "Device access revoked"
+        },
+        {
+          "id": "signin-form",
+          "screen": "connections",
+          "column": 0,
+          "row": 3,
+          "url": "./screens/connections.html?state=signed-out&dialog=signin",
+          "title": "Username/password dialog"
+        },
+        {
+          "id": "signing-in",
+          "screen": "connections",
+          "column": 1,
+          "row": 3,
+          "url": "./screens/connections.html?state=signing-in&dialog=signin",
+          "title": "Authentication pending"
+        },
+        {
+          "id": "confirming",
+          "screen": "connections",
+          "column": 2,
+          "row": 3,
+          "url": "./screens/connections.html?state=confirming&dialog=confirm",
+          "title": "Pairing approval pending"
+        },
+        {
+          "id": "confirm-error",
+          "screen": "connections",
+          "column": 3,
+          "row": 3,
+          "url": "./screens/connections.html?state=confirm-error&dialog=confirm",
+          "title": "Approval failed; no grant"
+        },
+        {
+          "id": "revoking",
+          "screen": "connections",
+          "column": 4,
+          "row": 3,
+          "url": "./screens/connections.html?state=revoking&dialog=revoke&device=iphone",
+          "title": "Revocation pending"
+        },
+        {
+          "id": "revoke-error",
+          "screen": "connections",
+          "column": 5,
+          "row": 3,
+          "url": "./screens/connections.html?state=revoke-error&dialog=revoke&device=iphone",
+          "title": "Revocation failed; access retained"
+        },
+        {
+          "id": "auth-expired",
+          "screen": "connections",
+          "column": 0,
+          "row": 4,
+          "url": "./screens/connections.html?state=auth-expired",
+          "title": "Login expired; local work preserved"
+        },
+        {
+          "id": "signout",
+          "screen": "connections",
+          "column": 1,
+          "row": 4,
+          "url": "./screens/connections.html?dialog=signout",
+          "title": "Sign-out effects explained"
+        },
+        {
+          "id": "cancel-error",
+          "screen": "connections",
+          "column": 2,
+          "row": 4,
+          "url": "./screens/connections.html?dialog=cancel-error",
+          "title": "Ticket cancellation pending expiry"
+        },
+        {
+          "id": "device-details",
+          "screen": "connections",
+          "column": 3,
+          "row": 4,
+          "url": "./screens/connections.html?dialog=details&device=iphone",
+          "title": "Existing device can be revoked"
+        }
+      ],
+      "edges": [
+        {
+          "from": "signin",
+          "to": "signin-form",
+          "label": "Sign in with demo credentials",
+          "kind": "primary"
+        },
+        {
+          "from": "signing-in",
+          "to": "invalid",
+          "label": "Invalid sign-in details",
+          "kind": "conditional"
+        },
+        {
+          "from": "invalid",
+          "to": "signin-form",
+          "label": "Edit credentials",
+          "kind": "recovery"
+        },
+        {
+          "from": "connected",
+          "to": "pair",
+          "label": "Add device",
+          "kind": "primary"
+        },
+        {
+          "from": "pair",
+          "to": "confirm",
+          "label": "Phone requests pairing · simulated",
+          "kind": "primary"
+        },
+        {
+          "from": "confirm",
+          "to": "confirming",
+          "label": "Confirm the matching device",
+          "kind": "primary"
+        },
+        {
+          "from": "pair",
+          "to": "expired",
+          "label": "Pairing code expired",
+          "kind": "conditional"
+        },
+        {
+          "from": "expired",
+          "to": "pair",
+          "label": "Generate a new code",
+          "kind": "recovery"
+        },
+        {
+          "from": "connected",
+          "to": "reconnect",
+          "label": "Connection lost",
+          "kind": "conditional"
+        },
+        {
+          "from": "reconnect",
+          "to": "connected",
+          "label": "Reconnect",
+          "kind": "recovery"
+        },
+        {
+          "from": "paired",
+          "to": "revoke",
+          "label": "Select Revoke",
+          "kind": "primary"
+        },
+        {
+          "from": "revoke",
+          "to": "revoking",
+          "label": "Confirm revocation",
+          "kind": "primary"
+        },
+        {
+          "from": "signin-form",
+          "to": "signing-in",
+          "label": "Submit username/password",
+          "kind": "primary"
+        },
+        {
+          "from": "signing-in",
+          "to": "connected",
+          "label": "Authentication accepted",
+          "kind": "primary"
+        },
+        {
+          "from": "confirming",
+          "to": "paired",
+          "label": "Grant acknowledged",
+          "kind": "primary"
+        },
+        {
+          "from": "confirming",
+          "to": "confirm-error",
+          "label": "Approval failed",
+          "kind": "conditional"
+        },
+        {
+          "from": "confirm-error",
+          "to": "confirming",
+          "label": "Retry approval",
+          "kind": "recovery"
+        },
+        {
+          "from": "confirm",
+          "to": "connected",
+          "label": "Decline and cancel ticket",
+          "kind": "recovery"
+        },
+        {
+          "from": "pair",
+          "to": "connected",
+          "label": "Close and cancel ticket",
+          "kind": "recovery"
+        },
+        {
+          "from": "pair",
+          "to": "cancel-error",
+          "label": "Cancellation cannot be acknowledged",
+          "kind": "conditional"
+        },
+        {
+          "from": "cancel-error",
+          "to": "connected",
+          "label": "Cancel retry acknowledged",
+          "kind": "recovery"
+        },
+        {
+          "from": "revoking",
+          "to": "revoked",
+          "label": "Revocation acknowledged",
+          "kind": "primary"
+        },
+        {
+          "from": "revoking",
+          "to": "revoke-error",
+          "label": "Revocation failed",
+          "kind": "conditional"
+        },
+        {
+          "from": "revoke-error",
+          "to": "revoking",
+          "label": "Retry same device",
+          "kind": "recovery"
+        },
+        {
+          "from": "connected",
+          "to": "device-details",
+          "label": "Open an existing device",
+          "kind": "primary"
+        },
+        {
+          "from": "device-details",
+          "to": "revoke",
+          "label": "Revoke this device",
+          "kind": "primary"
+        },
+        {
+          "from": "connected",
+          "to": "auth-expired",
+          "label": "Authentication expires",
+          "kind": "conditional"
+        },
+        {
+          "from": "auth-expired",
+          "to": "signin-form",
+          "label": "Sign in again",
+          "kind": "recovery"
+        },
+        {
+          "from": "connected",
+          "to": "signout",
+          "label": "Sign out",
+          "kind": "primary"
+        },
+        {
+          "from": "signout",
+          "to": "signin",
+          "label": "Confirm remote disconnection",
+          "kind": "primary"
+        }
+      ]
+    },
+    {
+      "id": "appearance-journey",
+      "title": "Personalize your workspace",
+      "start": "light",
+      "ends": [
+        "applied"
+      ],
+      "nodes": [
+        {
+          "id": "light",
+          "screen": "settings",
+          "column": 0,
+          "row": 0,
+          "title": "Light theme"
+        },
+        {
+          "id": "dark",
+          "screen": "settings",
+          "column": 1,
+          "row": 0,
+          "url": "./screens/settings.html?theme=dark",
+          "title": "Dark theme"
+        },
+        {
+          "id": "typography",
+          "screen": "settings",
+          "column": 2,
+          "row": 0,
+          "url": "./screens/settings.html?theme=dark&tab=typography",
+          "title": "Typography and preview"
+        },
+        {
+          "id": "applied",
+          "screen": "workspace",
+          "column": 3,
+          "row": 0,
+          "url": "./screens/workspace.html?theme=dark&saved=appearance",
+          "title": "Appearance applied"
+        }
+      ],
+      "edges": [
+        {
+          "from": "light",
+          "to": "dark",
+          "label": "Choose the dark theme",
+          "kind": "primary"
+        },
+        {
+          "from": "dark",
+          "to": "typography",
+          "label": "Adjust typography and preview",
+          "kind": "primary"
+        },
+        {
+          "from": "typography",
+          "to": "applied",
+          "label": "Save appearance",
+          "kind": "primary"
+        }
+      ]
+    },
+    {
+      "id": "spotlight-journey",
+      "title": "Find files and Atlases with Spotlight",
+      "start": "search",
+      "ends": [
+        "file",
+        "atlas"
+      ],
+      "nodes": [
+        {
+          "id": "search",
+          "screen": "search",
+          "column": 0,
+          "row": 0,
+          "title": "Quick search"
+        },
+        {
+          "id": "file",
+          "screen": "editor",
+          "column": 1,
+          "row": 0,
+          "title": "Open a file from Spotlight"
+        },
+        {
+          "id": "atlas",
+          "screen": "workspace",
+          "column": 1,
+          "row": 1,
+          "title": "Open the Atlas tab from Spotlight",
+          "url": "./screens/workspace.html?panel=atlas"
+        },
+        {
+          "id": "empty",
+          "screen": "search",
+          "column": 1,
+          "row": 2,
+          "url": "./screens/search.html?q=no-matching-file",
+          "title": "No search results"
+        }
+      ],
+      "edges": [
+        {
+          "from": "search",
+          "to": "file",
+          "label": "Select file",
+          "kind": "primary"
+        },
+        {
+          "from": "search",
+          "to": "atlas",
+          "label": "Select Atlas; show its conversation tab",
+          "kind": "primary"
+        },
+        {
+          "from": "search",
+          "to": "empty",
+          "label": "No results",
+          "kind": "conditional"
+        },
+        {
+          "from": "empty",
+          "to": "search",
+          "label": "Clear query",
+          "kind": "recovery"
+        }
+      ]
+    },
+    {
+      "id": "history-journey",
+      "title": "Read a long conversation",
+      "start": "latest",
+      "ends": [
+        "following",
+        "retention"
+      ],
+      "nodes": [
+        {
+          "id": "latest",
+          "screen": "workspace",
+          "column": 0,
+          "row": 0,
+          "url": "./screens/workspace.html?state=ready",
+          "title": "Newest three turns, bounded by item/bytes"
+        },
+        {
+          "id": "loading",
+          "screen": "workspace",
+          "column": 1,
+          "row": 0,
+          "url": "./screens/workspace.html?history=loading",
+          "title": "Prepend without moving the reading anchor"
+        },
+        {
+          "id": "older",
+          "screen": "workspace",
+          "column": 2,
+          "row": 0,
+          "url": "./screens/workspace.html?history=older",
+          "title": "Read earlier content"
+        },
+        {
+          "id": "page-error",
+          "screen": "workspace",
+          "column": 3,
+          "row": 0,
+          "url": "./screens/workspace.html?history=page-error",
+          "title": "Earlier-page error does not replace transcript"
+        },
+        {
+          "id": "partial",
+          "screen": "workspace",
+          "column": 4,
+          "row": 0,
+          "url": "./screens/workspace.html?history=partial",
+          "title": "Continue inside a large turn"
+        },
+        {
+          "id": "new-content",
+          "screen": "workspace",
+          "column": 0,
+          "row": 1,
+          "url": "./screens/workspace.html?history=new-content&state=running",
+          "title": "Live content arrives while reading above"
+        },
+        {
+          "id": "following",
+          "screen": "workspace",
+          "column": 1,
+          "row": 1,
+          "url": "./screens/workspace.html?state=running",
+          "title": "Latest resumes follow mode"
+        },
+        {
+          "id": "retention",
+          "screen": "workspace",
+          "column": 2,
+          "row": 1,
+          "url": "./screens/workspace.html?history=retention",
+          "title": "Older history needs the original Mac"
+        },
+        {
+          "id": "rich-loading",
+          "screen": "workspace",
+          "column": 3,
+          "row": 1,
+          "url": "./screens/workspace.html?history=rich-loading",
+          "title": "Load rich preview on demand"
+        },
+        {
+          "id": "rich-error",
+          "screen": "workspace",
+          "column": 4,
+          "row": 1,
+          "url": "./screens/workspace.html?history=rich-error",
+          "title": "Retry one preview without reloading transcript"
+        },
+        {
+          "id": "tool-errors",
+          "screen": "workspace",
+          "column": 0,
+          "row": 2,
+          "url": "./screens/workspace.html?history=tool-errors",
+          "title": "Run / Ran / Failed / Interrupted, no command output"
+        }
+      ],
+      "edges": [
+        {
+          "from": "latest",
+          "to": "loading",
+          "label": "Scroll to top or Load earlier",
+          "kind": "primary"
+        },
+        {
+          "from": "loading",
+          "to": "older",
+          "label": "Page accepted; anchor retained",
+          "kind": "primary"
+        },
+        {
+          "from": "loading",
+          "to": "page-error",
+          "label": "Page request failed",
+          "kind": "conditional"
+        },
+        {
+          "from": "page-error",
+          "to": "loading",
+          "label": "Retry only this page",
+          "kind": "recovery"
+        },
+        {
+          "from": "loading",
+          "to": "partial",
+          "label": "Page ends inside a turn",
+          "kind": "conditional"
+        },
+        {
+          "from": "partial",
+          "to": "older",
+          "label": "Load remaining items; keep live watermark",
+          "kind": "primary"
+        },
+        {
+          "from": "older",
+          "to": "new-content",
+          "label": "New live content arrives",
+          "kind": "conditional"
+        },
+        {
+          "from": "new-content",
+          "to": "following",
+          "label": "Latest",
+          "kind": "primary"
+        },
+        {
+          "from": "loading",
+          "to": "retention",
+          "label": "Cloud retention exhausted and Mac unavailable",
+          "kind": "conditional"
+        },
+        {
+          "from": "retention",
+          "to": "partial",
+          "label": "Mac reconnects; resume older history",
+          "kind": "recovery"
+        },
+        {
+          "from": "older",
+          "to": "rich-loading",
+          "label": "Open code / diff / media / diagram",
+          "kind": "primary"
+        },
+        {
+          "from": "rich-loading",
+          "to": "rich-error",
+          "label": "Preview request failed",
+          "kind": "conditional"
+        },
+        {
+          "from": "rich-error",
+          "to": "rich-loading",
+          "label": "Retry preview",
+          "kind": "recovery"
+        },
+        {
+          "from": "rich-loading",
+          "to": "older",
+          "label": "Preview accepted",
+          "kind": "primary"
+        },
+        {
+          "from": "latest",
+          "to": "tool-errors",
+          "label": "Command lifecycle sample",
+          "kind": "primary"
+        },
+        {
+          "from": "tool-errors",
+          "to": "following",
+          "label": "Continue following live content",
+          "kind": "primary"
+        }
+      ]
+    },
+    {
+      "id": "archive-journey",
+      "title": "Archive and restore from Settings",
+      "start": "conversation",
+      "ends": [
+        "restored",
+        "empty"
+      ],
+      "nodes": [
+        {
+          "id": "conversation",
+          "screen": "workspace",
+          "column": 0,
+          "row": 0,
+          "url": "./screens/workspace.html",
+          "title": "Choose a conversation"
+        },
+        {
+          "id": "manage",
+          "screen": "workspace",
+          "column": 1,
+          "row": 0,
+          "url": "./screens/workspace.html?context=conversation",
+          "title": "Conversation context menu"
+        },
+        {
+          "id": "archive",
+          "screen": "workspace",
+          "column": 2,
+          "row": 0,
+          "url": "./screens/workspace.html?dialog=archive&kind=conversation&target=navigation",
+          "title": "Archive keeps files/history and running turns"
+        },
+        {
+          "id": "pending",
+          "screen": "workspace",
+          "column": 3,
+          "row": 0,
+          "url": "./screens/workspace.html?state=resource-pending&dialog=archive&kind=conversation&target=navigation",
+          "title": "Archive acknowledgment pending"
+        },
+        {
+          "id": "settings",
+          "screen": "settings",
+          "column": 4,
+          "row": 0,
+          "url": "./screens/settings.html?tab=archived&fixture=archived",
+          "title": "Settings → Archived"
+        },
+        {
+          "id": "restore",
+          "screen": "settings",
+          "column": 0,
+          "row": 1,
+          "url": "./screens/settings.html?tab=archived&fixture=archived&dialog=restore-archive&kind=worktree&targetTree=fix-scroll-anchor",
+          "title": "Restore to original workspace"
+        },
+        {
+          "id": "restoring",
+          "screen": "settings",
+          "column": 1,
+          "row": 1,
+          "url": "./screens/settings.html?tab=archived&fixture=archived&state=resource-pending&dialog=restore-archive&kind=worktree&targetTree=fix-scroll-anchor",
+          "title": "Restore acknowledgment pending"
+        },
+        {
+          "id": "restored",
+          "screen": "settings",
+          "column": 2,
+          "row": 1,
+          "url": "./screens/settings.html?tab=archived&saved=restored",
+          "title": "Restored; stay in Settings, no rerun"
+        },
+        {
+          "id": "error",
+          "screen": "settings",
+          "column": 3,
+          "row": 1,
+          "url": "./screens/settings.html?tab=archived&fixture=archived&state=resource-error&dialog=restore-archive&kind=worktree&targetTree=fix-scroll-anchor",
+          "title": "Restore failed; archive remains"
+        },
+        {
+          "id": "worktrees",
+          "screen": "worktrees",
+          "column": 4,
+          "row": 1,
+          "url": "./screens/worktrees.html",
+          "title": "Worktree management"
+        },
+        {
+          "id": "archive-worktree",
+          "screen": "worktrees",
+          "column": 0,
+          "row": 2,
+          "url": "./screens/worktrees.html?dialog=archive&kind=worktree&targetTree=fix-scroll-anchor",
+          "title": "Archive a worktree and hide its conversations"
+        },
+        {
+          "id": "empty",
+          "screen": "settings",
+          "column": 1,
+          "row": 2,
+          "url": "./screens/settings.html?tab=archived",
+          "title": "No archived items"
+        }
+      ],
+      "edges": [
+        {
+          "from": "conversation",
+          "to": "manage",
+          "label": "Right-click the conversation",
+          "kind": "primary"
+        },
+        {
+          "from": "manage",
+          "to": "archive",
+          "label": "Choose Archive conversation",
+          "kind": "primary"
+        },
+        {
+          "from": "archive",
+          "to": "pending",
+          "label": "Confirm Archive",
+          "kind": "primary"
+        },
+        {
+          "from": "pending",
+          "to": "settings",
+          "label": "Archive acknowledged; open Settings",
+          "kind": "primary"
+        },
+        {
+          "from": "settings",
+          "to": "restore",
+          "label": "Restore worktree",
+          "kind": "primary"
+        },
+        {
+          "from": "restore",
+          "to": "restoring",
+          "label": "Confirm Restore",
+          "kind": "primary"
+        },
+        {
+          "from": "restoring",
+          "to": "restored",
+          "label": "Restore acknowledged",
+          "kind": "primary"
+        },
+        {
+          "from": "restoring",
+          "to": "error",
+          "label": "Restore failed",
+          "kind": "conditional"
+        },
+        {
+          "from": "error",
+          "to": "restoring",
+          "label": "Retry safely",
+          "kind": "recovery"
+        },
+        {
+          "from": "conversation",
+          "to": "worktrees",
+          "label": "View worktrees",
+          "kind": "primary"
+        },
+        {
+          "from": "worktrees",
+          "to": "archive-worktree",
+          "label": "Manage → Archive",
+          "kind": "primary"
+        },
+        {
+          "from": "archive-worktree",
+          "to": "settings",
+          "label": "Confirm; keep running turns and files",
+          "kind": "primary"
+        },
+        {
+          "from": "settings",
+          "to": "empty",
+          "label": "All archived items have been restored",
+          "kind": "primary"
+        }
+      ]
+    },
+    {
+      "id": "delete-journey",
+      "title": "Delete safely, separately from Archive",
+      "start": "worktrees",
+      "ends": [
+        "deleted",
+        "blocked"
+      ],
+      "nodes": [
+        {
+          "id": "worktrees",
+          "screen": "worktrees",
+          "column": 0,
+          "row": 0,
+          "url": "./screens/worktrees.html?fixture=clean",
+          "title": "Select an inactive clean linked worktree"
+        },
+        {
+          "id": "delete",
+          "screen": "worktrees",
+          "column": 1,
+          "row": 0,
+          "url": "./screens/worktrees.html?fixture=clean&dialog=delete&kind=worktree&targetTree=fix-scroll-anchor",
+          "title": "Confirm exact worktree; branch and history retained"
+        },
+        {
+          "id": "pending",
+          "screen": "worktrees",
+          "column": 2,
+          "row": 0,
+          "url": "./screens/worktrees.html?fixture=clean&state=resource-pending&dialog=delete&kind=worktree&targetTree=fix-scroll-anchor",
+          "title": "Deletion acknowledgment pending"
+        },
+        {
+          "id": "deleted",
+          "screen": "settings",
+          "column": 3,
+          "row": 0,
+          "url": "./screens/settings.html?tab=archived&saved=delete",
+          "title": "Worktree removed; history stays archived"
+        },
+        {
+          "id": "dirty",
+          "screen": "worktrees",
+          "column": 4,
+          "row": 0,
+          "url": "./screens/worktrees.html?fixture=dirty&dialog=delete&kind=worktree&targetTree=fix-scroll-anchor",
+          "title": "Uncommitted changes block deletion"
+        },
+        {
+          "id": "blocked",
+          "screen": "workspace",
+          "column": 0,
+          "row": 1,
+          "url": "./screens/workspace.html?state=running&dialog=delete&kind=conversation&target=navigation",
+          "title": "Active conversation must be stopped first"
+        },
+        {
+          "id": "conversation",
+          "screen": "workspace",
+          "column": 1,
+          "row": 1,
+          "url": "./screens/workspace.html?dialog=delete&kind=conversation&target=navigation",
+          "title": "Delete conversation requires typed confirmation"
+        },
+        {
+          "id": "error",
+          "screen": "worktrees",
+          "column": 2,
+          "row": 1,
+          "url": "./screens/worktrees.html?fixture=clean&state=resource-error&dialog=delete&kind=worktree&targetTree=fix-scroll-anchor",
+          "title": "Deletion failed; nothing removed"
+        }
+      ],
+      "edges": [
+        {
+          "from": "worktrees",
+          "to": "delete",
+          "label": "Manage → Delete",
+          "kind": "primary"
+        },
+        {
+          "from": "delete",
+          "to": "pending",
+          "label": "Type DELETE and confirm",
+          "kind": "primary"
+        },
+        {
+          "from": "pending",
+          "to": "deleted",
+          "label": "Deletion acknowledged",
+          "kind": "primary"
+        },
+        {
+          "from": "pending",
+          "to": "error",
+          "label": "Deletion failed",
+          "kind": "conditional"
+        },
+        {
+          "from": "error",
+          "to": "pending",
+          "label": "Retry after checking current state",
+          "kind": "recovery"
+        },
+        {
+          "from": "worktrees",
+          "to": "dirty",
+          "label": "Worktree has uncommitted changes",
+          "kind": "conditional"
+        },
+        {
+          "from": "dirty",
+          "to": "worktrees",
+          "label": "Preserve changes first",
+          "kind": "recovery"
+        },
+        {
+          "from": "worktrees",
+          "to": "blocked",
+          "label": "Conversation still has an active turn",
+          "kind": "conditional"
+        },
+        {
+          "from": "worktrees",
+          "to": "conversation",
+          "label": "Delete an inactive conversation",
+          "kind": "primary"
+        },
+        {
+          "from": "conversation",
+          "to": "deleted",
+          "label": "Typed confirmation and acknowledgment",
+          "kind": "primary"
+        }
+      ]
+    },
+    {
+      "id": "provider-journey",
+      "title": "Choose an agent and inspect context",
+      "start": "ready",
+      "ends": [
+        "claude",
+        "cursor",
+        "settings"
+      ],
+      "nodes": [
+        {
+          "id": "ready",
+          "screen": "workspace",
+          "title": "Conversation ready",
+          "url": "./screens/workspace.html?state=ready",
+          "column": 0,
+          "row": 0
+        },
+        {
+          "id": "catalog",
+          "screen": "workspace",
+          "title": "Provider and model picker",
+          "url": "./screens/workspace.html?state=ready&dialog=model",
+          "column": 1,
+          "row": 0
+        },
+        {
+          "id": "claude",
+          "screen": "workspace",
+          "title": "Claude model and effort",
+          "url": "./screens/workspace.html?provider=Claude&model=Sonnet&dialog=model",
+          "column": 2,
+          "row": 0
+        },
+        {
+          "id": "cursor",
+          "screen": "workspace",
+          "title": "Cursor Auto, no separate effort",
+          "url": "./screens/workspace.html?provider=Cursor&model=Auto&dialog=model",
+          "column": 2,
+          "row": 1
+        },
+        {
+          "id": "usage",
+          "screen": "workspace",
+          "title": "Codex context and account limits",
+          "url": "./screens/workspace.html?dialog=usage",
+          "column": 1,
+          "row": 2
+        },
+        {
+          "id": "unknown",
+          "screen": "workspace",
+          "title": "Context not reported",
+          "url": "./screens/workspace.html?dialog=usage&usage=unknown",
+          "column": 2,
+          "row": 2
+        },
+        {
+          "id": "claude-limits",
+          "screen": "workspace",
+          "title": "No borrowed account quota",
+          "url": "./screens/workspace.html?provider=Claude&dialog=usage",
+          "column": 3,
+          "row": 2
+        },
+        {
+          "id": "running",
+          "screen": "workspace",
+          "title": "Claude guidance and Stop",
+          "url": "./screens/workspace.html?provider=Claude&state=running",
+          "column": 3,
+          "row": 0
+        },
+        {
+          "id": "cursor-running",
+          "screen": "workspace",
+          "title": "Cursor Stop without unsupported guidance",
+          "url": "./screens/workspace.html?provider=Cursor&state=running",
+          "column": 3,
+          "row": 1
+        },
+        {
+          "id": "settings",
+          "screen": "settings",
+          "title": "Provider runtime and browser settings",
+          "url": "./screens/settings.html?tab=providers",
+          "column": 4,
+          "row": 2
+        }
+      ],
+      "edges": [
+        {
+          "from": "ready",
+          "to": "catalog",
+          "label": "Choose model",
+          "kind": "primary"
+        },
+        {
+          "from": "catalog",
+          "to": "claude",
+          "label": "Choose Claude",
+          "kind": "primary"
+        },
+        {
+          "from": "catalog",
+          "to": "cursor",
+          "label": "Choose Cursor",
+          "kind": "primary"
+        },
+        {
+          "from": "ready",
+          "to": "usage",
+          "label": "Open toolbar context ring",
+          "kind": "primary"
+        },
+        {
+          "from": "usage",
+          "to": "unknown",
+          "label": "No exact provider snapshot",
+          "kind": "conditional"
+        },
+        {
+          "from": "unknown",
+          "to": "usage",
+          "label": "Provider reports current context",
+          "kind": "recovery"
+        },
+        {
+          "from": "claude",
+          "to": "claude-limits",
+          "label": "Inspect Claude limits",
+          "kind": "primary"
+        },
+        {
+          "from": "claude",
+          "to": "running",
+          "label": "Send a request",
+          "kind": "primary"
+        },
+        {
+          "from": "running",
+          "to": "claude",
+          "label": "Turn completed",
+          "kind": "primary"
+        },
+        {
+          "from": "cursor",
+          "to": "cursor-running",
+          "label": "Send a request",
+          "kind": "primary"
+        },
+        {
+          "from": "cursor-running",
+          "to": "cursor",
+          "label": "Turn completed",
+          "kind": "primary"
+        },
+        {
+          "from": "usage",
+          "to": "settings",
+          "label": "Open Settings → Providers",
+          "kind": "primary"
+        },
+        {
+          "from": "claude-limits",
+          "to": "settings",
+          "label": "Inspect provider availability",
+          "kind": "primary"
+        }
+      ]
+    },
+    {
+      "id": "conversation-lifecycle",
+      "title": "Create, rename and fork a conversation",
+      "start": "existing",
+      "ends": [
+        "new",
+        "forked",
+        "unsupported"
+      ],
+      "nodes": [
+        {
+          "id": "existing",
+          "screen": "workspace",
+          "title": "Existing conversation",
+          "url": "./screens/workspace.html?state=ready",
+          "column": 0,
+          "row": 0
+        },
+        {
+          "id": "create",
+          "screen": "workspace",
+          "title": "Select base worktree and optional branch",
+          "url": "./screens/workspace.html?dialog=new-conversation",
+          "column": 1,
+          "row": 0
+        },
+        {
+          "id": "creating",
+          "screen": "workspace",
+          "title": "Wait for creation acknowledgment",
+          "url": "./screens/workspace.html?dialog=new-conversation&creation=pending",
+          "column": 2,
+          "row": 0
+        },
+        {
+          "id": "create-error",
+          "screen": "workspace",
+          "title": "Creation failure preserves the original",
+          "url": "./screens/workspace.html?dialog=new-conversation&creation=error",
+          "column": 2,
+          "row": 1
+        },
+        {
+          "id": "new",
+          "screen": "workspace",
+          "title": "New conversation in chosen worktree",
+          "url": "./screens/workspace.html?state=empty&tree=feature-navigation",
+          "column": 3,
+          "row": 0
+        },
+        {
+          "id": "manage",
+          "screen": "workspace",
+          "title": "Conversation context menu",
+          "url": "./screens/workspace.html?context=conversation",
+          "column": 1,
+          "row": 2
+        },
+        {
+          "id": "rename",
+          "screen": "workspace",
+          "title": "Rename this conversation",
+          "url": "./screens/workspace.html?dialog=rename",
+          "column": 2,
+          "row": 2
+        },
+        {
+          "id": "fork",
+          "screen": "workspace",
+          "title": "Copy an idle conversation",
+          "url": "./screens/workspace.html?dialog=fork",
+          "column": 2,
+          "row": 3
+        },
+        {
+          "id": "fork-pending",
+          "screen": "workspace",
+          "title": "Wait for fork acknowledgment",
+          "url": "./screens/workspace.html?dialog=fork&fork=pending",
+          "column": 3,
+          "row": 3
+        },
+        {
+          "id": "fork-failed",
+          "screen": "workspace",
+          "title": "Original unchanged after fork failure",
+          "url": "./screens/workspace.html?dialog=fork&fork=error",
+          "column": 3,
+          "row": 4
+        },
+        {
+          "id": "forked",
+          "screen": "workspace",
+          "title": "Independent fork, no worktree ownership",
+          "url": "./screens/workspace.html?forked=1",
+          "column": 4,
+          "row": 3
+        },
+        {
+          "id": "unsupported",
+          "screen": "workspace",
+          "title": "Cursor fork is unavailable",
+          "url": "./screens/workspace.html?provider=Cursor&dialog=fork",
+          "column": 2,
+          "row": 4
+        }
+      ],
+      "edges": [
+        {
+          "from": "existing",
+          "to": "create",
+          "label": "New conversation",
+          "kind": "primary"
+        },
+        {
+          "from": "create",
+          "to": "creating",
+          "label": "Create conversation",
+          "kind": "primary"
+        },
+        {
+          "from": "creating",
+          "to": "new",
+          "label": "Creation acknowledged",
+          "kind": "primary"
+        },
+        {
+          "from": "creating",
+          "to": "create-error",
+          "label": "Git creation failed",
+          "kind": "conditional"
+        },
+        {
+          "from": "create-error",
+          "to": "create",
+          "label": "Retry with another branch",
+          "kind": "recovery"
+        },
+        {
+          "from": "existing",
+          "to": "manage",
+          "label": "Right-click the conversation",
+          "kind": "primary"
+        },
+        {
+          "from": "existing",
+          "to": "rename",
+          "label": "Double-click the conversation",
+          "kind": "primary"
+        },
+        {
+          "from": "rename",
+          "to": "existing",
+          "label": "Save name",
+          "kind": "primary"
+        },
+        {
+          "from": "manage",
+          "to": "fork",
+          "label": "Fork an idle supported conversation",
+          "kind": "primary"
+        },
+        {
+          "from": "fork",
+          "to": "fork-pending",
+          "label": "Create fork",
+          "kind": "primary"
+        },
+        {
+          "from": "fork-pending",
+          "to": "forked",
+          "label": "Provider and journal acknowledge",
+          "kind": "primary"
+        },
+        {
+          "from": "fork-pending",
+          "to": "fork-failed",
+          "label": "Fork failed",
+          "kind": "conditional"
+        },
+        {
+          "from": "fork-failed",
+          "to": "fork",
+          "label": "Retry",
+          "kind": "recovery"
+        },
+        {
+          "from": "manage",
+          "to": "unsupported",
+          "label": "Provider lacks threadFork",
+          "kind": "conditional"
+        }
+      ]
+    },
+    {
+      "id": "context-menu-journey",
+      "title": "Use desktop context menus",
+      "start": "entry",
+      "ends": [
+        "conversation",
+        "conversation-running",
+        "conversation-cursor",
+        "conversation-legacy",
+        "transcript",
+        "transcript-running",
+        "changed-file",
+        "changed-file-missing",
+        "worktree-main",
+        "worktree-clean",
+        "worktree-dirty",
+        "worktree-locked",
+        "worktree-unsaved",
+        "editor-tab",
+        "markdown-tab",
+        "unsaved-tab",
+        "detail-tab",
+        "editor",
+        "editor-selection",
+        "explorer-file",
+        "explorer-folder",
+        "explorer-root",
+        "explorer-error",
+        "git-file",
+        "git-staged",
+        "git-missing"
+      ],
+      "nodes": [
+        {
+          "id": "entry",
+          "type": "note",
+          "title": "Right-click a target",
+          "description": "Use native menu variants. Shift+F10 is the keyboard equivalent. See CONTEXT-MENUS.md for source and action contracts.",
+          "column": 0,
+          "row": 0
+        },
+        {
+          "id": "conversation",
+          "screen": "workspace",
+          "title": "Conversation · idle",
+          "url": "./screens/workspace.html?context=conversation",
+          "column": 1,
+          "row": 0
+        },
+        {
+          "id": "conversation-running",
+          "screen": "workspace",
+          "title": "Conversation · running",
+          "url": "./screens/workspace.html?context=conversation&state=running",
+          "column": 1,
+          "row": 1
+        },
+        {
+          "id": "conversation-cursor",
+          "screen": "workspace",
+          "title": "Conversation · Cursor",
+          "url": "./screens/workspace.html?context=conversation&provider=Cursor",
+          "column": 1,
+          "row": 2
+        },
+        {
+          "id": "conversation-legacy",
+          "screen": "workspace",
+          "title": "Legacy QML conversation menu",
+          "url": "./screens/workspace.html?context=legacy-conversation",
+          "column": 1,
+          "row": 3
+        },
+        {
+          "id": "transcript",
+          "screen": "workspace",
+          "title": "Transcript · fork only",
+          "url": "./screens/workspace.html?context=transcript",
+          "column": 1,
+          "row": 4
+        },
+        {
+          "id": "transcript-running",
+          "screen": "workspace",
+          "title": "Transcript · running",
+          "url": "./screens/workspace.html?context=transcript&state=running",
+          "column": 1,
+          "row": 5
+        },
+        {
+          "id": "changed-file",
+          "screen": "workspace",
+          "title": "Changed file",
+          "url": "./screens/workspace.html?context=changed-file&activity=files",
+          "column": 1,
+          "row": 6
+        },
+        {
+          "id": "changed-file-missing",
+          "screen": "workspace",
+          "title": "Changed file · missing",
+          "url": "./screens/workspace.html?context=changed-file&contextFixture=missing&activity=files",
+          "column": 2,
+          "row": 0
+        },
+        {
+          "id": "worktree-main",
+          "screen": "worktrees",
+          "title": "Worktree · current workspace",
+          "url": "./screens/worktrees.html?context=worktree",
+          "column": 2,
+          "row": 1
+        },
+        {
+          "id": "worktree-clean",
+          "screen": "worktrees",
+          "title": "Worktree · clean and idle",
+          "url": "./screens/worktrees.html?context=worktree&fixture=clean&targetTree=fix-scroll-anchor",
+          "column": 2,
+          "row": 2
+        },
+        {
+          "id": "worktree-dirty",
+          "screen": "worktrees",
+          "title": "Worktree · uncommitted changes",
+          "url": "./screens/worktrees.html?context=worktree&fixture=dirty&targetTree=fix-scroll-anchor",
+          "column": 2,
+          "row": 3
+        },
+        {
+          "id": "worktree-locked",
+          "screen": "worktrees",
+          "title": "Worktree · locked",
+          "url": "./screens/worktrees.html?context=worktree&fixture=clean&targetTree=fix-scroll-anchor&contextFixture=locked",
+          "column": 2,
+          "row": 4
+        },
+        {
+          "id": "worktree-unsaved",
+          "screen": "worktrees",
+          "title": "Worktree · unsaved editor",
+          "url": "./screens/worktrees.html?context=worktree&fixture=clean&targetTree=fix-scroll-anchor&contextFixture=unsaved",
+          "column": 2,
+          "row": 5
+        },
+        {
+          "id": "editor-tab",
+          "screen": "editor",
+          "title": "Editor tab",
+          "url": "./screens/editor.html?context=editor-tab",
+          "column": 2,
+          "row": 6
+        },
+        {
+          "id": "markdown-tab",
+          "screen": "editor",
+          "title": "Markdown tab",
+          "url": "./screens/editor.html?context=editor-tab&file=design-system.md&preview=markdown",
+          "column": 3,
+          "row": 0
+        },
+        {
+          "id": "unsaved-tab",
+          "screen": "editor",
+          "title": "Editor tab · unsaved changes",
+          "url": "./screens/editor.html?context=editor-tab&contextFixture=unsaved",
+          "column": 3,
+          "row": 1
+        },
+        {
+          "id": "detail-tab",
+          "screen": "workspace",
+          "title": "Agent detail tab",
+          "url": "./screens/workspace.html?context=detail-tab&panel=file",
+          "column": 3,
+          "row": 2
+        },
+        {
+          "id": "editor",
+          "screen": "editor",
+          "title": "Editor · no selection",
+          "url": "./screens/editor.html?context=editor",
+          "column": 3,
+          "row": 3
+        },
+        {
+          "id": "editor-selection",
+          "screen": "editor",
+          "title": "Editor · text selected",
+          "url": "./screens/editor.html?context=editor&contextFixture=selection",
+          "column": 3,
+          "row": 4
+        },
+        {
+          "id": "explorer-file",
+          "screen": "editor",
+          "title": "Explorer · file",
+          "url": "./screens/editor.html?context=explorer-file",
+          "column": 3,
+          "row": 5
+        },
+        {
+          "id": "explorer-folder",
+          "screen": "editor",
+          "title": "Explorer · folder",
+          "url": "./screens/editor.html?context=explorer-folder",
+          "column": 3,
+          "row": 6
+        },
+        {
+          "id": "explorer-root",
+          "screen": "editor",
+          "title": "Explorer · root and empty area",
+          "url": "./screens/editor.html?context=explorer-root",
+          "column": 4,
+          "row": 0
+        },
+        {
+          "id": "explorer-error",
+          "screen": "editor",
+          "title": "Explorer · mutation error",
+          "url": "./screens/editor.html?context=explorer-file&outcome=error",
+          "column": 4,
+          "row": 1
+        },
+        {
+          "id": "git-file",
+          "screen": "changes",
+          "title": "Git · working tree file",
+          "url": "./screens/changes.html?context=git-file",
+          "column": 4,
+          "row": 2
+        },
+        {
+          "id": "git-staged",
+          "screen": "changes",
+          "title": "Git · staged file",
+          "url": "./screens/changes.html?context=git-file&group=staged",
+          "column": 4,
+          "row": 3
+        },
+        {
+          "id": "git-missing",
+          "screen": "changes",
+          "title": "Git · deleted file",
+          "url": "./screens/changes.html?context=git-file&contextFixture=missing",
+          "column": 4,
+          "row": 4
+        }
+      ],
+      "edges": [
+        {
+          "from": "entry",
+          "to": "conversation",
+          "label": "Conversation · idle",
+          "kind": "conditional"
+        },
+        {
+          "from": "entry",
+          "to": "conversation-running",
+          "label": "Conversation · running",
+          "kind": "conditional"
+        },
+        {
+          "from": "entry",
+          "to": "conversation-cursor",
+          "label": "Conversation · Cursor",
+          "kind": "conditional"
+        },
+        {
+          "from": "entry",
+          "to": "conversation-legacy",
+          "label": "Legacy QML conversation menu",
+          "kind": "conditional"
+        },
+        {
+          "from": "entry",
+          "to": "transcript",
+          "label": "Transcript · fork only",
+          "kind": "conditional"
+        },
+        {
+          "from": "entry",
+          "to": "transcript-running",
+          "label": "Transcript · running",
+          "kind": "conditional"
+        },
+        {
+          "from": "entry",
+          "to": "changed-file",
+          "label": "Changed file",
+          "kind": "conditional"
+        },
+        {
+          "from": "entry",
+          "to": "changed-file-missing",
+          "label": "Changed file · missing",
+          "kind": "conditional"
+        },
+        {
+          "from": "entry",
+          "to": "worktree-main",
+          "label": "Worktree · current workspace",
+          "kind": "conditional"
+        },
+        {
+          "from": "entry",
+          "to": "worktree-clean",
+          "label": "Worktree · clean and idle",
+          "kind": "conditional"
+        },
+        {
+          "from": "entry",
+          "to": "worktree-dirty",
+          "label": "Worktree · uncommitted changes",
+          "kind": "conditional"
+        },
+        {
+          "from": "entry",
+          "to": "worktree-locked",
+          "label": "Worktree · locked",
+          "kind": "conditional"
+        },
+        {
+          "from": "entry",
+          "to": "worktree-unsaved",
+          "label": "Worktree · unsaved editor",
+          "kind": "conditional"
+        },
+        {
+          "from": "entry",
+          "to": "editor-tab",
+          "label": "Editor tab",
+          "kind": "conditional"
+        },
+        {
+          "from": "entry",
+          "to": "markdown-tab",
+          "label": "Markdown tab",
+          "kind": "conditional"
+        },
+        {
+          "from": "entry",
+          "to": "unsaved-tab",
+          "label": "Editor tab · unsaved changes",
+          "kind": "conditional"
+        },
+        {
+          "from": "entry",
+          "to": "detail-tab",
+          "label": "Agent detail tab",
+          "kind": "conditional"
+        },
+        {
+          "from": "entry",
+          "to": "editor",
+          "label": "Editor · no selection",
+          "kind": "conditional"
+        },
+        {
+          "from": "entry",
+          "to": "editor-selection",
+          "label": "Editor · text selected",
+          "kind": "conditional"
+        },
+        {
+          "from": "entry",
+          "to": "explorer-file",
+          "label": "Explorer · file",
+          "kind": "conditional"
+        },
+        {
+          "from": "entry",
+          "to": "explorer-folder",
+          "label": "Explorer · folder",
+          "kind": "conditional"
+        },
+        {
+          "from": "entry",
+          "to": "explorer-root",
+          "label": "Explorer · root and empty area",
+          "kind": "conditional"
+        },
+        {
+          "from": "entry",
+          "to": "explorer-error",
+          "label": "Explorer · mutation error",
+          "kind": "conditional"
+        },
+        {
+          "from": "entry",
+          "to": "git-file",
+          "label": "Git · working tree file",
+          "kind": "conditional"
+        },
+        {
+          "from": "entry",
+          "to": "git-staged",
+          "label": "Git · staged file",
+          "kind": "conditional"
+        },
+        {
+          "from": "entry",
+          "to": "git-missing",
+          "label": "Git · deleted file",
+          "kind": "conditional"
+        }
+      ]
+    },
+    {
+      "id": "background-tasks",
+      "title": "Monitor and stop background tasks",
+      "start": "running",
+      "ends": [
+        "stopped",
+        "dismissed",
+        "failed",
+        "orphaned"
+      ],
+      "nodes": [
+        {
+          "id": "running",
+          "screen": "workspace",
+          "title": "Turn running with background tasks",
+          "url": "./screens/workspace.html?state=running&bg=running",
+          "column": 0,
+          "row": 0
+        },
+        {
+          "id": "output",
+          "screen": "workspace",
+          "title": "Shell output tail in the context pane",
+          "url": "./screens/workspace.html?state=running&bg=running&panel=task&task=build",
+          "column": 1,
+          "row": 0
+        },
+        {
+          "id": "confirm",
+          "screen": "workspace",
+          "title": "Confirm stopping the task",
+          "url": "./screens/workspace.html?state=running&bg=running&panel=task&task=build&dialog=stop-task",
+          "column": 2,
+          "row": 0
+        },
+        {
+          "id": "stopping",
+          "screen": "workspace",
+          "title": "Stop requested",
+          "url": "./screens/workspace.html?state=running&bg=stopping&panel=task&task=build",
+          "column": 3,
+          "row": 0
+        },
+        {
+          "id": "stopped",
+          "screen": "workspace",
+          "title": "Task stopped, output kept",
+          "url": "./screens/workspace.html?bg=stopped&panel=task&task=build",
+          "column": 4,
+          "row": 0
+        },
+        {
+          "id": "idle",
+          "screen": "workspace",
+          "title": "Turn finished, tasks still running",
+          "url": "./screens/workspace.html?bg=running",
+          "column": 0,
+          "row": 1
+        },
+        {
+          "id": "completed",
+          "screen": "workspace",
+          "title": "Task completed",
+          "url": "./screens/workspace.html?bg=completed",
+          "column": 1,
+          "row": 1
+        },
+        {
+          "id": "dismissed",
+          "screen": "workspace",
+          "title": "Finished task dismissed",
+          "url": "./screens/workspace.html?bg=agent",
+          "column": 2,
+          "row": 1
+        },
+        {
+          "id": "offline",
+          "screen": "workspace",
+          "title": "Daemon offline: last known tasks",
+          "url": "./screens/workspace.html?state=error&bg=running",
+          "column": 0,
+          "row": 2
+        },
+        {
+          "id": "failed",
+          "screen": "workspace",
+          "title": "Task failed with its output",
+          "url": "./screens/workspace.html?bg=failed&panel=task&task=build",
+          "column": 1,
+          "row": 2
+        },
+        {
+          "id": "progress",
+          "screen": "workspace",
+          "title": "Subagent progress",
+          "url": "./screens/workspace.html?state=running&bg=running&panel=task&task=review",
+          "column": 2,
+          "row": 2
+        },
+        {
+          "id": "orphaned",
+          "screen": "workspace",
+          "title": "Orphaned after restart",
+          "url": "./screens/workspace.html?bg=orphaned",
+          "column": 0,
+          "row": 3
+        }
+      ],
+      "edges": [
+        {
+          "from": "running",
+          "to": "output",
+          "label": "Output",
+          "kind": "primary"
+        },
+        {
+          "from": "output",
+          "to": "confirm",
+          "label": "Stop",
+          "kind": "primary"
+        },
+        {
+          "from": "confirm",
+          "to": "stopping",
+          "label": "Stop task",
+          "kind": "primary"
+        },
+        {
+          "from": "confirm",
+          "to": "output",
+          "label": "Keep running",
+          "kind": "recovery"
+        },
+        {
+          "from": "stopping",
+          "to": "stopped",
+          "label": "task_notification: stopped",
+          "kind": "primary"
+        },
+        {
+          "from": "running",
+          "to": "idle",
+          "label": "Turn finishes; tasks keep running",
+          "kind": "conditional"
+        },
+        {
+          "from": "idle",
+          "to": "completed",
+          "label": "task_notification: completed",
+          "kind": "primary"
+        },
+        {
+          "from": "completed",
+          "to": "dismissed",
+          "label": "Dismiss",
+          "kind": "primary"
+        },
+        {
+          "from": "idle",
+          "to": "failed",
+          "label": "task_notification: failed",
+          "kind": "conditional"
+        },
+        {
+          "from": "running",
+          "to": "progress",
+          "label": "Progress on a subagent",
+          "kind": "conditional"
+        },
+        {
+          "from": "running",
+          "to": "offline",
+          "label": "Daemon disconnects",
+          "kind": "conditional"
+        },
+        {
+          "from": "offline",
+          "to": "running",
+          "label": "Reconnect; background_tasks_changed snapshot",
+          "kind": "recovery"
+        },
+        {
+          "from": "offline",
+          "to": "orphaned",
+          "label": "KetPlus restarted (worker_restart)",
+          "kind": "conditional"
+        }
+      ]
+    },
+    {
+      "id": "update-journey",
+      "title": "Keep KetPlus up to date",
+      "start": "build",
+      "ends": [
+        "updated",
+        "disabled",
+        "skipped"
+      ],
+      "nodes": [
+        {
+          "id": "build",
+          "type": "note",
+          "title": "Build configuration",
+          "description": "Release builds embed the signed feed URL and public EdDSA key. Without both, updates are disabled.",
+          "column": 0,
+          "row": 0
+        },
+        {
+          "id": "current",
+          "screen": "settings",
+          "title": "Up to date",
+          "url": "./screens/settings.html?tab=updates",
+          "column": 1,
+          "row": 0
+        },
+        {
+          "id": "disabled",
+          "screen": "settings",
+          "title": "No update feed in this build",
+          "url": "./screens/settings.html?tab=updates&update=disabled",
+          "column": 1,
+          "row": 1
+        },
+        {
+          "id": "checking",
+          "screen": "settings",
+          "title": "Checking the signed feed",
+          "url": "./screens/settings.html?tab=updates&update=checking",
+          "column": 2,
+          "row": 0
+        },
+        {
+          "id": "error",
+          "screen": "settings",
+          "title": "Feed unreachable",
+          "url": "./screens/settings.html?tab=updates&update=error",
+          "column": 2,
+          "row": 1
+        },
+        {
+          "id": "available",
+          "screen": "settings",
+          "title": "New version and release notes",
+          "url": "./screens/settings.html?tab=updates&update=available",
+          "column": 3,
+          "row": 0
+        },
+        {
+          "id": "skipped",
+          "screen": "settings",
+          "title": "Version skipped",
+          "url": "./screens/settings.html?tab=updates&saved=skipped",
+          "column": 3,
+          "row": 1
+        },
+        {
+          "id": "downloading",
+          "screen": "settings",
+          "title": "Download and verify",
+          "url": "./screens/settings.html?tab=updates&update=downloading",
+          "column": 4,
+          "row": 0
+        },
+        {
+          "id": "ready",
+          "screen": "settings",
+          "title": "Ready while agents run",
+          "url": "./screens/settings.html?tab=updates&update=ready",
+          "column": 5,
+          "row": 0
+        },
+        {
+          "id": "later",
+          "screen": "workspace",
+          "title": "Update reminder in sidebar",
+          "url": "./screens/workspace.html?update=ready",
+          "column": 5,
+          "row": 1
+        },
+        {
+          "id": "updated",
+          "screen": "workspace",
+          "title": "Relaunched, turns preserved",
+          "url": "./screens/workspace.html?saved=updated",
+          "column": 6,
+          "row": 0
+        }
+      ],
+      "edges": [
+        {
+          "from": "build",
+          "to": "current",
+          "label": "Feed URL and public key embedded",
+          "kind": "primary"
+        },
+        {
+          "from": "build",
+          "to": "disabled",
+          "label": "No feed configured",
+          "kind": "conditional"
+        },
+        {
+          "from": "current",
+          "to": "checking",
+          "label": "Check for updates or daily check",
+          "kind": "primary"
+        },
+        {
+          "from": "checking",
+          "to": "available",
+          "label": "Newer signed version found",
+          "kind": "primary"
+        },
+        {
+          "from": "checking",
+          "to": "error",
+          "label": "Feed did not respond",
+          "kind": "conditional"
+        },
+        {
+          "from": "error",
+          "to": "checking",
+          "label": "Retry",
+          "kind": "recovery"
+        },
+        {
+          "from": "available",
+          "to": "downloading",
+          "label": "Install and relaunch",
+          "kind": "primary"
+        },
+        {
+          "from": "available",
+          "to": "skipped",
+          "label": "Skip this version",
+          "kind": "conditional"
+        },
+        {
+          "from": "downloading",
+          "to": "ready",
+          "label": "Signature verified",
+          "kind": "primary"
+        },
+        {
+          "from": "ready",
+          "to": "later",
+          "label": "Later · keep working",
+          "kind": "conditional"
+        },
+        {
+          "from": "later",
+          "to": "ready",
+          "label": "Open the update pill",
+          "kind": "recovery"
+        },
+        {
+          "from": "ready",
+          "to": "updated",
+          "label": "Restart to update",
+          "kind": "primary"
+        }
+      ]
+    },
+    {
+      "id": "conversation-execution-context",
+      "title": "Switch a conversation worktree",
+      "start": "current",
+      "ends": [
+        "switched",
+        "busy",
+        "offline",
+        "denied"
+      ],
+      "nodes": [
+        {
+          "id": "current",
+          "screen": "workspace",
+          "title": "Same conversation",
+          "url": "./screens/workspace.html?conversation=navigation&contextSwitch=current",
+          "column": 0,
+          "row": 0
+        },
+        {
+          "id": "picker",
+          "screen": "workspace",
+          "title": "Choose next execution worktree",
+          "url": "./screens/workspace.html?conversation=navigation&contextSwitch=ready",
+          "column": 1,
+          "row": 0
+        },
+        {
+          "id": "switched",
+          "screen": "workspace",
+          "title": "Worktree changed; history retained",
+          "url": "./screens/workspace.html?conversation=navigation&contextSwitch=switched&executionTree=feature%2Fatlas-live&contextRevision=2",
+          "column": 2,
+          "row": 0
+        },
+        {
+          "id": "busy",
+          "screen": "workspace",
+          "title": "Finish the active turn",
+          "url": "./screens/workspace.html?conversation=navigation&contextSwitch=busy",
+          "column": 1,
+          "row": 1
+        },
+        {
+          "id": "stale",
+          "screen": "workspace",
+          "title": "Changed on another device",
+          "url": "./screens/workspace.html?conversation=navigation&contextSwitch=stale",
+          "column": 1,
+          "row": 2
+        },
+        {
+          "id": "offline",
+          "screen": "workspace",
+          "title": "Mac offline",
+          "url": "./screens/workspace.html?conversation=navigation&contextSwitch=offline",
+          "column": 1,
+          "row": 3
+        },
+        {
+          "id": "denied",
+          "screen": "workspace",
+          "title": "Access revoked",
+          "url": "./screens/workspace.html?conversation=navigation&contextSwitch=denied",
+          "column": 1,
+          "row": 4
+        },
+        {
+          "id": "search",
+          "screen": "workspace",
+          "title": "Search 1,248 worktrees",
+          "url": "./screens/workspace.html?conversation=navigation&contextSwitch=ready&worktreeQuery=atlas",
+          "column": 2,
+          "row": 5
+        },
+        {
+          "id": "no-results",
+          "screen": "workspace",
+          "title": "No matching worktree",
+          "url": "./screens/workspace.html?conversation=navigation&contextSwitch=ready&worktreeQuery=no-such-branch",
+          "column": 2,
+          "row": 6
+        }
+      ],
+      "edges": [
+        {
+          "from": "current",
+          "to": "picker",
+          "label": "Open execution worktree"
+        },
+        {
+          "from": "picker",
+          "to": "switched",
+          "label": "Select an authorized worktree; daemon confirms"
+        },
+        {
+          "from": "picker",
+          "to": "busy",
+          "label": "Turn active",
+          "kind": "conditional"
+        },
+        {
+          "from": "picker",
+          "to": "stale",
+          "label": "Context changed elsewhere",
+          "kind": "conditional"
+        },
+        {
+          "from": "picker",
+          "to": "offline",
+          "label": "Mac unreachable",
+          "kind": "conditional"
+        },
+        {
+          "from": "picker",
+          "to": "denied",
+          "label": "Grant revoked",
+          "kind": "conditional"
+        },
+        {
+          "from": "stale",
+          "to": "picker",
+          "label": "Refresh and select again",
+          "kind": "recovery"
+        },
+        {
+          "from": "picker",
+          "to": "search",
+          "label": "Search branch or folder",
+          "kind": "conditional"
+        },
+        {
+          "from": "search",
+          "to": "picker",
+          "label": "Clear search",
+          "kind": "recovery"
+        },
+        {
+          "from": "picker",
+          "to": "no-results",
+          "label": "No matches",
+          "kind": "conditional"
+        },
+        {
+          "from": "no-results",
+          "to": "picker",
+          "label": "Clear search",
+          "kind": "recovery"
+        },
+        {
+          "from": "search",
+          "to": "switched",
+          "label": "Choose a matching worktree"
+        }
+      ]
+    },
+    {
+      "id": "compact-window",
+      "title": "Set a compact window",
+      "start": "picker",
+      "ends": [
+        "applied",
+        "default-applied"
+      ],
+      "nodes": [
+        {
+          "id": "picker",
+          "screen": "workspace",
+          "title": "272k on a 1M model",
+          "url": "./screens/workspace.html?provider=Claude&model=Opus%205.5&dialog=model&compactWindow=272000",
+          "column": 0,
+          "row": 0
+        },
+        {
+          "id": "custom",
+          "screen": "workspace",
+          "title": "Custom token threshold",
+          "url": "./screens/workspace.html?provider=Claude&model=Opus%205.5&dialog=model&compactWindow=350000",
+          "column": 1,
+          "row": 0
+        },
+        {
+          "id": "invalid",
+          "screen": "workspace",
+          "title": "Invalid value; keep selection",
+          "url": "./screens/workspace.html?provider=Claude&model=Opus%205.5&dialog=model&compactState=invalid&compactWindow=272000",
+          "column": 2,
+          "row": 0
+        },
+        {
+          "id": "default",
+          "screen": "workspace",
+          "title": "Use provider default",
+          "url": "./screens/workspace.html?provider=Claude&model=Opus%205.5&dialog=model&compactWindow=auto",
+          "column": 3,
+          "row": 0
+        },
+        {
+          "id": "error",
+          "screen": "workspace",
+          "title": "Apply failed; retry",
+          "url": "./screens/workspace.html?provider=Claude&model=Opus%205.5&dialog=model&compactState=error&compactWindow=272000",
+          "column": 0,
+          "row": 1
+        },
+        {
+          "id": "conflict",
+          "screen": "workspace",
+          "title": "Another device changed settings",
+          "url": "./screens/workspace.html?provider=Claude&model=Opus%205.5&dialog=model&compactState=conflict&compactWindow=272000",
+          "column": 1,
+          "row": 1
+        },
+        {
+          "id": "offline",
+          "screen": "workspace",
+          "title": "Offline; read-only settings",
+          "url": "./screens/workspace.html?provider=Claude&model=Opus%205.5&dialog=model&compactState=offline&compactWindow=272000",
+          "column": 2,
+          "row": 1
+        },
+        {
+          "id": "running",
+          "screen": "workspace",
+          "title": "Wait for the active turn",
+          "url": "./screens/workspace.html?provider=Claude&model=Opus%205.5&dialog=model&compactState=running&compactWindow=272000",
+          "column": 3,
+          "row": 1
+        },
+        {
+          "id": "background",
+          "screen": "workspace",
+          "title": "Wait for background tasks",
+          "url": "./screens/workspace.html?provider=Claude&model=Opus%205.5&dialog=model&compactState=background&compactWindow=272000",
+          "column": 0,
+          "row": 2
+        },
+        {
+          "id": "loading",
+          "screen": "workspace",
+          "title": "Loading settings",
+          "url": "./screens/workspace.html?provider=Claude&model=Opus%205.5&dialog=model&compactState=loading&compactWindow=272000",
+          "column": 1,
+          "row": 2
+        },
+        {
+          "id": "saving",
+          "screen": "workspace",
+          "title": "Applying settings",
+          "url": "./screens/workspace.html?provider=Claude&model=Opus%205.5&dialog=model&compactState=saving&compactWindow=272000",
+          "column": 2,
+          "row": 2
+        },
+        {
+          "id": "denied",
+          "screen": "workspace",
+          "title": "Read-only access",
+          "url": "./screens/workspace.html?provider=Claude&model=Opus%205.5&dialog=model&compactState=denied&compactWindow=272000",
+          "column": 3,
+          "row": 2
+        },
+        {
+          "id": "unsupported",
+          "screen": "workspace",
+          "title": "Provider without custom compact",
+          "url": "./screens/workspace.html?provider=Claude&model=Opus%205.5&dialog=model&compactState=unsupported&compactWindow=auto",
+          "column": 0,
+          "row": 3
+        },
+        {
+          "id": "applied",
+          "screen": "workspace",
+          "title": "Saved for the next turn",
+          "url": "./screens/workspace.html?provider=Claude&model=Opus%205.5&compactWindow=272000",
+          "column": 2,
+          "row": 3
+        },
+        {
+          "id": "default-applied",
+          "screen": "workspace",
+          "title": "Provider default saved",
+          "url": "./screens/workspace.html?provider=Claude&model=Opus%205.5&compactWindow=auto",
+          "column": 3,
+          "row": 3
+        }
+      ],
+      "edges": [
+        {
+          "from": "picker",
+          "to": "custom",
+          "label": "Choose Custom"
+        },
+        {
+          "from": "custom",
+          "to": "invalid",
+          "label": "Enter fewer than 100k tokens",
+          "kind": "conditional"
+        },
+        {
+          "from": "invalid",
+          "to": "custom",
+          "label": "Correct the value",
+          "kind": "recovery"
+        },
+        {
+          "from": "picker",
+          "to": "default",
+          "label": "Choose Auto"
+        },
+        {
+          "from": "picker",
+          "to": "saving",
+          "label": "Apply"
+        },
+        {
+          "from": "saving",
+          "to": "applied",
+          "label": "Simulated acknowledgment"
+        },
+        {
+          "from": "picker",
+          "to": "error",
+          "label": "Apply failed; retry",
+          "kind": "conditional"
+        },
+        {
+          "from": "error",
+          "to": "picker",
+          "label": "Retry, reconnect or return to an editable session",
+          "kind": "recovery"
+        },
+        {
+          "from": "picker",
+          "to": "conflict",
+          "label": "Another device changed settings",
+          "kind": "conditional"
+        },
+        {
+          "from": "conflict",
+          "to": "picker",
+          "label": "Retry, reconnect or return to an editable session",
+          "kind": "recovery"
+        },
+        {
+          "from": "picker",
+          "to": "offline",
+          "label": "Offline; read-only settings",
+          "kind": "conditional"
+        },
+        {
+          "from": "offline",
+          "to": "picker",
+          "label": "Retry, reconnect or return to an editable session",
+          "kind": "recovery"
+        },
+        {
+          "from": "picker",
+          "to": "running",
+          "label": "Wait for the active turn",
+          "kind": "conditional"
+        },
+        {
+          "from": "running",
+          "to": "picker",
+          "label": "Retry, reconnect or return to an editable session",
+          "kind": "recovery"
+        },
+        {
+          "from": "picker",
+          "to": "background",
+          "label": "Wait for background tasks",
+          "kind": "conditional"
+        },
+        {
+          "from": "background",
+          "to": "picker",
+          "label": "Retry, reconnect or return to an editable session",
+          "kind": "recovery"
+        },
+        {
+          "from": "picker",
+          "to": "loading",
+          "label": "Loading settings",
+          "kind": "conditional"
+        },
+        {
+          "from": "loading",
+          "to": "picker",
+          "label": "Retry, reconnect or return to an editable session",
+          "kind": "recovery"
+        },
+        {
+          "from": "picker",
+          "to": "denied",
+          "label": "Read-only access",
+          "kind": "conditional"
+        },
+        {
+          "from": "denied",
+          "to": "picker",
+          "label": "Retry, reconnect or return to an editable session",
+          "kind": "recovery"
+        },
+        {
+          "from": "picker",
+          "to": "unsupported",
+          "label": "Provider without custom compact",
+          "kind": "conditional"
+        },
+        {
+          "from": "unsupported",
+          "to": "picker",
+          "label": "Retry, reconnect or return to an editable session",
+          "kind": "recovery"
+        },
+        {
+          "from": "default",
+          "to": "default-applied",
+          "label": "Apply provider default"
+        }
+      ]
+    },
+    {
+      "id": "remote-linux-journey",
+      "title": "Connect a Linux machine over SSH or the relay",
+      "start": "auth",
+      "ends": [
+        "connected",
+        "denied",
+        "remote-repository",
+        "removed",
+        "ssh-connected"
+      ],
+      "nodes": [
+        {
+          "id": "auth",
+          "screen": "connections",
+          "title": "Sign in required",
+          "url": "./screens/connections.html?state=signed-out&remote=auth-required",
+          "column": 0,
+          "row": 0
+        },
+        {
+          "id": "empty",
+          "screen": "connections",
+          "title": "No machines",
+          "url": "./screens/connections.html?remote=empty",
+          "column": 1,
+          "row": 0
+        },
+        {
+          "id": "denied",
+          "screen": "connections",
+          "title": "Pairing denied",
+          "url": "./screens/connections.html?remote=denied",
+          "column": 1,
+          "row": 2
+        },
+        {
+          "id": "add",
+          "screen": "connections",
+          "title": "Enter pairing code",
+          "url": "./screens/connections.html?remote=add",
+          "column": 2,
+          "row": 0
+        },
+        {
+          "id": "invalid",
+          "screen": "connections",
+          "title": "Invalid code",
+          "url": "./screens/connections.html?remote=invalid",
+          "column": 2,
+          "row": 1
+        },
+        {
+          "id": "checking",
+          "screen": "connections",
+          "title": "Check code",
+          "url": "./screens/connections.html?remote=checking",
+          "column": 3,
+          "row": 0
+        },
+        {
+          "id": "expired",
+          "screen": "connections",
+          "title": "Code expired",
+          "url": "./screens/connections.html?remote=code-expired",
+          "column": 3,
+          "row": 1
+        },
+        {
+          "id": "unavailable",
+          "screen": "connections",
+          "title": "Machine unavailable",
+          "url": "./screens/connections.html?remote=unavailable",
+          "column": 3,
+          "row": 2
+        },
+        {
+          "id": "verify",
+          "screen": "connections",
+          "title": "Compare identity",
+          "url": "./screens/connections.html?remote=verify",
+          "column": 4,
+          "row": 0
+        },
+        {
+          "id": "mismatch",
+          "screen": "connections",
+          "title": "Identity mismatch",
+          "url": "./screens/connections.html?remote=mismatch",
+          "column": 4,
+          "row": 1
+        },
+        {
+          "id": "connecting",
+          "screen": "connections",
+          "title": "Trust pending",
+          "url": "./screens/connections.html?remote=connecting",
+          "column": 5,
+          "row": 0
+        },
+        {
+          "id": "connect-error",
+          "screen": "connections",
+          "title": "Connection failed",
+          "url": "./screens/connections.html?remote=connect-error",
+          "column": 5,
+          "row": 1
+        },
+        {
+          "id": "connected",
+          "screen": "connections",
+          "title": "Machine connected",
+          "url": "./screens/connections.html?remote=connected",
+          "column": 6,
+          "row": 0
+        },
+        {
+          "id": "details",
+          "screen": "connections",
+          "title": "Machine details",
+          "url": "./screens/connections.html?remote=details",
+          "column": 7,
+          "row": 0
+        },
+        {
+          "id": "offline",
+          "screen": "connections",
+          "title": "Machine offline",
+          "url": "./screens/connections.html?remote=offline",
+          "column": 7,
+          "row": 1
+        },
+        {
+          "id": "forget",
+          "screen": "connections",
+          "title": "Confirm forget",
+          "url": "./screens/connections.html?remote=details&dialog=forget",
+          "column": 8,
+          "row": 0
+        },
+        {
+          "id": "reconnecting",
+          "screen": "connections",
+          "title": "Reconnect pending",
+          "url": "./screens/connections.html?remote=reconnecting",
+          "column": 8,
+          "row": 1
+        },
+        {
+          "id": "reconnect-error",
+          "screen": "connections",
+          "title": "Reconnect failed",
+          "url": "./screens/connections.html?remote=reconnect-error",
+          "column": 8,
+          "row": 2
+        },
+        {
+          "id": "removing",
+          "screen": "connections",
+          "title": "Removal pending",
+          "url": "./screens/connections.html?remote=removing",
+          "column": 9,
+          "row": 0
+        },
+        {
+          "id": "remove-error",
+          "screen": "connections",
+          "title": "Removal failed",
+          "url": "./screens/connections.html?remote=remove-error",
+          "column": 9,
+          "row": 1
+        },
+        {
+          "id": "removed",
+          "screen": "connections",
+          "title": "Machine forgotten",
+          "url": "./screens/connections.html?remote=removed",
+          "column": 10,
+          "row": 0
+        },
+        {
+          "id": "remote-repository",
+          "screen": "workspace",
+          "title": "Work in a Linux repository",
+          "url": "./screens/workspace.html?repo=api-service&tree=develop&conversation=linux-build",
+          "column": 6,
+          "row": 2
+        },
+        {
+          "id": "method",
+          "screen": "connections",
+          "title": "Choose SSH or relay",
+          "url": "./screens/connections.html?remote=method",
+          "column": 1,
+          "row": 4
+        },
+        {
+          "id": "method-free",
+          "screen": "connections",
+          "title": "Relay needs Pro",
+          "url": "./screens/connections.html?remote=method&plan=free",
+          "column": 1,
+          "row": 5
+        },
+        {
+          "id": "ssh",
+          "screen": "connections",
+          "title": "Enter SSH host",
+          "url": "./screens/connections.html?remote=ssh",
+          "column": 2,
+          "row": 4
+        },
+        {
+          "id": "ssh-checking",
+          "screen": "connections",
+          "title": "Connecting over SSH",
+          "url": "./screens/connections.html?remote=ssh-checking",
+          "column": 3,
+          "row": 4
+        },
+        {
+          "id": "ssh-unreachable",
+          "screen": "connections",
+          "title": "Host unreachable",
+          "url": "./screens/connections.html?remote=ssh-unreachable",
+          "column": 3,
+          "row": 5
+        },
+        {
+          "id": "ssh-auth",
+          "screen": "connections",
+          "title": "Key refused",
+          "url": "./screens/connections.html?remote=ssh-auth",
+          "column": 3,
+          "row": 6
+        },
+        {
+          "id": "ssh-hostkey",
+          "screen": "connections",
+          "title": "Confirm host fingerprint",
+          "url": "./screens/connections.html?remote=ssh-hostkey",
+          "column": 4,
+          "row": 4
+        },
+        {
+          "id": "ssh-no-daemon",
+          "screen": "connections",
+          "title": "Daemon not installed",
+          "url": "./screens/connections.html?remote=ssh-no-daemon",
+          "column": 4,
+          "row": 5
+        },
+        {
+          "id": "ssh-outdated",
+          "screen": "connections",
+          "title": "Daemon out of date",
+          "url": "./screens/connections.html?remote=ssh-outdated",
+          "column": 4,
+          "row": 6
+        },
+        {
+          "id": "ssh-connecting",
+          "screen": "connections",
+          "title": "Checking the daemon",
+          "url": "./screens/connections.html?remote=ssh-connecting",
+          "column": 5,
+          "row": 4
+        },
+        {
+          "id": "ssh-connected",
+          "screen": "connections",
+          "title": "Connected over SSH",
+          "url": "./screens/connections.html?remote=connected&host=dev-server",
+          "column": 6,
+          "row": 4
+        }
+      ],
+      "edges": [
+        {
+          "from": "auth",
+          "to": "empty",
+          "label": "Sign in with KetSuite"
+        },
+        {
+          "from": "empty",
+          "to": "denied",
+          "label": "Pairing permission denied",
+          "kind": "conditional"
+        },
+        {
+          "from": "add",
+          "to": "invalid",
+          "label": "Submit malformed code",
+          "kind": "conditional"
+        },
+        {
+          "from": "invalid",
+          "to": "add",
+          "label": "Correct code",
+          "kind": "recovery"
+        },
+        {
+          "from": "add",
+          "to": "checking",
+          "label": "Submit valid-format code"
+        },
+        {
+          "from": "checking",
+          "to": "expired",
+          "label": "Code expired",
+          "kind": "conditional"
+        },
+        {
+          "from": "checking",
+          "to": "unavailable",
+          "label": "Linux daemon unavailable",
+          "kind": "conditional"
+        },
+        {
+          "from": "checking",
+          "to": "verify",
+          "label": "Pairing request acknowledged"
+        },
+        {
+          "from": "expired",
+          "to": "add",
+          "label": "Request a new code",
+          "kind": "recovery"
+        },
+        {
+          "from": "unavailable",
+          "to": "add",
+          "label": "Retry with a new code",
+          "kind": "recovery"
+        },
+        {
+          "from": "verify",
+          "to": "mismatch",
+          "label": "Codes do not match",
+          "kind": "conditional"
+        },
+        {
+          "from": "mismatch",
+          "to": "add",
+          "label": "Start pairing again",
+          "kind": "recovery"
+        },
+        {
+          "from": "verify",
+          "to": "connecting",
+          "label": "Confirm matching identity"
+        },
+        {
+          "from": "connecting",
+          "to": "connect-error",
+          "label": "Connection not acknowledged",
+          "kind": "conditional"
+        },
+        {
+          "from": "connect-error",
+          "to": "add",
+          "label": "Retry pairing",
+          "kind": "recovery"
+        },
+        {
+          "from": "connecting",
+          "to": "connected",
+          "label": "Trust acknowledged"
+        },
+        {
+          "from": "connected",
+          "to": "details",
+          "label": "Inspect trusted machine"
+        },
+        {
+          "from": "connected",
+          "to": "add",
+          "label": "Pair another machine"
+        },
+        {
+          "from": "details",
+          "to": "offline",
+          "label": "Disconnect"
+        },
+        {
+          "from": "details",
+          "to": "forget",
+          "label": "Choose Forget machine"
+        },
+        {
+          "from": "offline",
+          "to": "reconnecting",
+          "label": "Reconnect"
+        },
+        {
+          "from": "reconnecting",
+          "to": "reconnect-error",
+          "label": "Machine did not respond",
+          "kind": "conditional"
+        },
+        {
+          "from": "reconnect-error",
+          "to": "reconnecting",
+          "label": "Retry reconnect",
+          "kind": "recovery"
+        },
+        {
+          "from": "reconnecting",
+          "to": "connected",
+          "label": "Reconnect acknowledged"
+        },
+        {
+          "from": "forget",
+          "to": "details",
+          "label": "Keep machine",
+          "kind": "recovery"
+        },
+        {
+          "from": "forget",
+          "to": "removing",
+          "label": "Confirm forget"
+        },
+        {
+          "from": "removing",
+          "to": "remove-error",
+          "label": "Removal failed",
+          "kind": "conditional"
+        },
+        {
+          "from": "remove-error",
+          "to": "forget",
+          "label": "Retry removal",
+          "kind": "recovery"
+        },
+        {
+          "from": "removing",
+          "to": "removed",
+          "label": "Removal acknowledged"
+        },
+        {
+          "from": "removed",
+          "to": "add",
+          "label": "Pair a machine again"
+        },
+        {
+          "from": "connected",
+          "to": "remote-repository",
+          "label": "Open remote repository"
+        },
+        {
+          "from": "empty",
+          "to": "method",
+          "label": "Add → Linux machine"
+        },
+        {
+          "from": "method",
+          "to": "add",
+          "label": "Pair through KetPlus Relay (Pro)"
+        },
+        {
+          "from": "method",
+          "to": "method-free",
+          "label": "Plan without the relay",
+          "kind": "conditional"
+        },
+        {
+          "from": "method-free",
+          "to": "method",
+          "label": "Upgrade to Pro",
+          "kind": "recovery"
+        },
+        {
+          "from": "method",
+          "to": "ssh",
+          "label": "Connect with SSH (free)"
+        },
+        {
+          "from": "method-free",
+          "to": "ssh",
+          "label": "Use SSH instead"
+        },
+        {
+          "from": "ssh",
+          "to": "ssh-checking",
+          "label": "Submit user@host"
+        },
+        {
+          "from": "ssh-checking",
+          "to": "ssh-unreachable",
+          "label": "No answer on port 22",
+          "kind": "conditional"
+        },
+        {
+          "from": "ssh-checking",
+          "to": "ssh-auth",
+          "label": "Key refused",
+          "kind": "conditional"
+        },
+        {
+          "from": "ssh-unreachable",
+          "to": "ssh",
+          "label": "Fix the address",
+          "kind": "recovery"
+        },
+        {
+          "from": "ssh-auth",
+          "to": "ssh",
+          "label": "Fix the key",
+          "kind": "recovery"
+        },
+        {
+          "from": "ssh-checking",
+          "to": "ssh-hostkey",
+          "label": "Unknown host key"
+        },
+        {
+          "from": "ssh-checking",
+          "to": "ssh-no-daemon",
+          "label": "No daemon for this user",
+          "kind": "conditional"
+        },
+        {
+          "from": "ssh-checking",
+          "to": "ssh-outdated",
+          "label": "Daemon older than required",
+          "kind": "conditional"
+        },
+        {
+          "from": "ssh-no-daemon",
+          "to": "ssh-checking",
+          "label": "Install, then connect again",
+          "kind": "recovery"
+        },
+        {
+          "from": "ssh-outdated",
+          "to": "ssh-checking",
+          "label": "Upgrade, then connect again",
+          "kind": "recovery"
+        },
+        {
+          "from": "ssh-hostkey",
+          "to": "ssh-connecting",
+          "label": "Fingerprint matches"
+        },
+        {
+          "from": "ssh-connecting",
+          "to": "ssh-connected",
+          "label": "Daemon answered"
+        },
+        {
+          "from": "ssh-connected",
+          "to": "remote-repository",
+          "label": "Open remote repository"
+        }
+      ]
+    },
+    {
+      "id": "conversation-tags",
+      "title": "Tag and filter conversations",
+      "start": "rows",
+      "ends": [
+        "filtered",
+        "managed"
+      ],
+      "nodes": [
+        {
+          "id": "rows",
+          "screen": "workspace",
+          "title": "Two-line rows with tags",
+          "url": "./screens/workspace.html?repo=ketviet",
+          "column": 0,
+          "row": 0
+        },
+        {
+          "id": "menu",
+          "screen": "workspace",
+          "title": "Right-click · Tags…",
+          "url": "./screens/workspace.html?repo=ketviet&context=conversation",
+          "column": 1,
+          "row": 0
+        },
+        {
+          "id": "editor",
+          "screen": "workspace",
+          "title": "Tag editor",
+          "url": "./screens/workspace.html?repo=ketviet&tags=edit",
+          "column": 2,
+          "row": 0
+        },
+        {
+          "id": "create",
+          "screen": "workspace",
+          "title": "Create a tag while typing",
+          "url": "./screens/workspace.html?repo=ketviet&tags=edit&tagQuery=Release",
+          "column": 3,
+          "row": 0
+        },
+        {
+          "id": "limit",
+          "type": "note",
+          "title": "Limits",
+          "description": "Up to 8 tags per conversation and 32 tags in total; names up to 24 characters and unique without regard to case. Blocked choices stay visible with the reason.",
+          "column": 3,
+          "row": 1
+        },
+        {
+          "id": "filtered",
+          "screen": "workspace",
+          "title": "Filtered by tag",
+          "url": "./screens/workspace.html?repo=ketviet&tagFilter=account",
+          "column": 1,
+          "row": 1
+        },
+        {
+          "id": "managed",
+          "screen": "workspace",
+          "title": "Manage tags",
+          "url": "./screens/workspace.html?repo=ketviet&tags=manage",
+          "column": 2,
+          "row": 1
+        },
+        {
+          "id": "header",
+          "screen": "workspace",
+          "title": "Tags in the header",
+          "url": "./screens/workspace.html?repo=ketviet&tags=header",
+          "column": 0,
+          "row": 1
+        }
+      ],
+      "edges": [
+        {
+          "from": "rows",
+          "to": "menu",
+          "label": "Right-click a conversation"
+        },
+        {
+          "from": "menu",
+          "to": "editor",
+          "label": "Choose Tags…"
+        },
+        {
+          "from": "editor",
+          "to": "create",
+          "label": "Type a new name"
+        },
+        {
+          "from": "create",
+          "to": "rows",
+          "label": "Enter creates and applies it",
+          "kind": "primary"
+        },
+        {
+          "from": "create",
+          "to": "limit",
+          "label": "Limit reached",
+          "kind": "conditional"
+        },
+        {
+          "from": "rows",
+          "to": "filtered",
+          "label": "Click a tag chip",
+          "kind": "conditional"
+        },
+        {
+          "from": "filtered",
+          "to": "rows",
+          "label": "Clear the filter",
+          "kind": "recovery"
+        },
+        {
+          "from": "editor",
+          "to": "managed",
+          "label": "Manage tags…",
+          "kind": "conditional"
+        },
+        {
+          "from": "managed",
+          "to": "rows",
+          "label": "Save or Cancel",
+          "kind": "recovery"
+        },
+        {
+          "from": "rows",
+          "to": "header",
+          "label": "Click a tag or + in the header",
+          "kind": "conditional"
+        },
+        {
+          "from": "header",
+          "to": "rows",
+          "label": "Toggle, create or Escape",
+          "kind": "recovery"
+        }
+      ]
+    },
+    {
+      "id": "agent-messaging",
+      "title": "Message another conversation",
+      "start": "pick",
+      "ends": [
+        "reply",
+        "held"
+      ],
+      "nodes": [
+        {
+          "id": "pick",
+          "screen": "workspace",
+          "title": "Type # to pick a conversation",
+          "url": "./screens/workspace.html?conversation=navigation&mention=conversation",
+          "column": 0,
+          "row": 0
+        },
+        {
+          "id": "sent",
+          "screen": "workspace",
+          "title": "Sender · Agent message sent",
+          "url": "./screens/workspace.html?conversation=navigation",
+          "column": 1,
+          "row": 0
+        },
+        {
+          "id": "received",
+          "screen": "workspace",
+          "title": "Receiver · Message from #… bubble",
+          "url": "./screens/workspace.html?conversation=startup",
+          "column": 2,
+          "row": 0
+        },
+        {
+          "id": "reply",
+          "screen": "workspace",
+          "title": "Sender · Reply from #…",
+          "url": "./screens/workspace.html?conversation=navigation&agent=reply",
+          "column": 3,
+          "row": 0
+        },
+        {
+          "id": "held",
+          "screen": "workspace",
+          "title": "Held by the loop guard",
+          "url": "./screens/workspace.html?conversation=navigation&agent=held",
+          "column": 1,
+          "row": 1
+        },
+        {
+          "id": "limits",
+          "type": "note",
+          "title": "Loop guard",
+          "description": "Automatic turns stop at hop 6, after 30 automatic turns in one exchange, or after 20 per receiver per hour. A held message is delivered with the receiver's next message from the user. A conversation cannot message itself.",
+          "column": 2,
+          "row": 1
+        }
+      ],
+      "edges": [
+        {
+          "from": "pick",
+          "to": "sent",
+          "label": "Send; the agent calls agents_send",
+          "kind": "primary"
+        },
+        {
+          "from": "sent",
+          "to": "received",
+          "label": "Idle receiver starts a turn; its row ends with from #…",
+          "kind": "primary"
+        },
+        {
+          "from": "received",
+          "to": "reply",
+          "label": "Final answer is sent back as the reply",
+          "kind": "primary"
+        },
+        {
+          "from": "sent",
+          "to": "held",
+          "label": "Over a loop-guard limit",
+          "kind": "conditional"
+        },
+        {
+          "from": "held",
+          "to": "limits",
+          "label": "Why it was held",
+          "kind": "conditional"
+        }
+      ]
+    }
+  ]
+}
