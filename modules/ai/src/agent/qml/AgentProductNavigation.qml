@@ -22,7 +22,7 @@ ColumnLayout {
             anchors.left: parent.left
             anchors.leftMargin: Metrics.px(13, workspace.t)
             anchors.verticalCenter: parent.verticalCenter
-            width: Metrics.px(132, workspace.t)
+            width: Metrics.px(176, workspace.t)
             height: Metrics.px(44, workspace.t)
             source: navigation.workspace.t.dark
                     ? "qrc:/agent/brand/ketplus-logo-dark.png"
@@ -31,18 +31,7 @@ ColumnLayout {
             horizontalAlignment: Image.AlignLeft
             smooth: true
             mipmap: true
-            Accessible.name: "KetPlus"
-        }
-        Text {
-            anchors.left: parent.left
-            anchors.leftMargin: Metrics.px(153, workspace.t)
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.verticalCenterOffset: Metrics.px(7, workspace.t)
-            text: "Desktop"
-            color: navigation.workspace.t.textMuted
-            font.family: navigation.workspace.t.uiFont
-            font.pixelSize: navigation.workspace.t.micro
-            font.weight: Font.DemiBold
+            Accessible.name: "KétPlus Pro"
         }
     }
 

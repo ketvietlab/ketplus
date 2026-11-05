@@ -719,7 +719,7 @@ void MainWindowSettingsTest::updatesPageAndReminderDriveTheUpdater() {
     QVERIFY(reminder->isHidden());
     updater.remind(QStringLiteral("0.1.18"));
     QVERIFY(!reminder->isHidden());
-    QVERIFY(reminder->text().contains(QStringLiteral("KetPlus 0.1.18")));
+    QVERIFY(reminder->text().contains(QStringLiteral("KétPlus Pro 0.1.18")));
     reminder->click();
     QCOMPARE(updater.checks_, 3);
     updater.remind({});
