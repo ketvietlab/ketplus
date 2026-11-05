@@ -92,4 +92,3 @@
 .header-tag-add:hover { color: var(--kv-text-main); border-style: solid; }
 .header-tag-add .icon { width: 12px; height: 12px; }
 .header-tag:focus-visible, .header-tag-add:focus-visible { outline: 2px solid var(--kv-color-accent); outline-offset: 1px; }
-

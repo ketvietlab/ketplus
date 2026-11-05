@@ -117,4 +117,3 @@ K.headerTags = (record = K.current) => {
     const add = `<button type="button" class="header-tag-add" data-action="edit-header-tags" aria-label="${tags.length ? "Edit tags" : "Add tag"}" title="${tags.length ? "Edit tags" : "Add tag"}">${K.icon(tags.length ? "plus" : "tag")}${tags.length ? "" : "<span>Add tag</span>"}</button>`;
     return `<span class="header-tags" aria-label="Tags">${shown}${more}${add}</span>`;
 };
-
