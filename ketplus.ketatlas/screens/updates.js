@@ -66,8 +66,8 @@ K.sidebar = () => {
             : "";
     return sidebarWithoutUpdates()
         .replace(
-            `${K.link("connections", "<span>Account & devices</span>", "unplug", { userMenu: null }, "user-menu-item")}</div>`,
-            `${K.link("connections", "<span>Account & devices</span>", "unplug", { userMenu: null }, "user-menu-item")}${K.link("settings", "<span>Check for updates…</span>", "refresh-cw", { tab: "updates", userMenu: null }, "user-menu-item")}</div>`,
+            `${K.link("connections", "<span>Account & devices</span>", "connect", { userMenu: null }, "user-menu-item")}</div>`,
+            `${K.link("connections", "<span>Account & devices</span>", "connect", { userMenu: null }, "user-menu-item")}${K.link("settings", "<span>Check for updates…</span>", "refresh-cw", { tab: "updates", userMenu: null }, "user-menu-item")}</div>`,
         )
         .replace('<button type="button" class="identity"', `${pill}<button type="button" class="identity"`);
 };

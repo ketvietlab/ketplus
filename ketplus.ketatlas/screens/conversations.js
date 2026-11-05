@@ -1,5 +1,4 @@
 /* URL-only synthetic state: portable in opaque iframes, never credentials or file bytes. */
-window.KET_ICONS["pause-circle"] = '<circle cx="12" cy="12" r="10"/><path d="M10 15V9"/><path d="M14 15V9"/>';
 K.repo = K.query.get("repo") || "ketplus-desktop";
 K.tree = K.query.get("tree") || "develop";
 K.scopeKey = (tree = K.tree, repo = K.repo) => `${repo}:${tree}`;

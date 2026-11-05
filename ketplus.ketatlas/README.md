@@ -198,14 +198,16 @@ It keeps the public Két AppShell contracts, runtime and semantic tokens;
   switcher and `desktop.css` collapses its column.
 - Mobile's native Két adaptation informs navigation, activity and composer patterns.
   Desktop tokens are not replaced with copied mobile CSS or touch geometry.
-- KÉT Sans 1.0 (tag `v1.0.0`), Lucide Static 1.40.0 and unchanged KétPlus v1 branding assets.
+- KÉT Sans 1.1 (tag `v1.1.0`), Két Symbol 0.11.0 icons and unchanged KétPlus v1 branding
+  assets. `assets/icons.js` holds the unmodified 16 px Light Két Symbol paths (CC BY 4.0,
+  `licenses/Ket-Symbol-CC-BY-4.0.txt`; "Két Symbol © 2026 Két Việt, CC BY 4.0"), keyed by
+  the Lucide names the screens use.
   `assets/fonts-inline.css` embeds the four released optical-size KÉT Sans WOFF2 files
-  (300, 400, 500–600, 700) and KÉT Sans Mono 0.10.2 Regular (review build from ket-art
-  `work/mono`), and points `--kv-font-sans` and `--kv-font-mono` at them. The mono has one weight, so bold code is
-  synthesized. The KÉT Sans licence
-  (`licenses/KET-Sans-1.0.txt`), which covers both, allows self-hosted embedding but not redistributing the
-  font files, so the fonts are only embedded, never shipped as files. Embedding
-  also lets opaque sandboxed previews load the font without cross-origin requests.
+  (300, 400, 500–600, 700) and KÉT Sans Mono 0.10.4 Regular (tag `ket-sans-mono-v0.10.4`,
+  SIL OFL 1.1, `licenses/KET-Sans-Mono-OFL-1.1.txt`), and points `--kv-font-sans` and `--kv-font-mono` at them. The mono has one weight, so bold code is
+  synthesized. Both families are SIL OFL 1.1 (`licenses/KET-Sans-OFL-1.1.txt`,
+  `licenses/KET-Sans-Mono-OFL-1.1.txt`; Reserved Font Names "KÉT" and "KET"). Embedding
+  lets opaque sandboxed previews load the fonts without cross-origin requests.
   `assets/fonts.css`, `assets/fonts/` (Inter) and `licenses/Inter-OFL.txt` are no longer
   loaded; they stay only because the wave-1 baseline manifest records their hashes.
   Font sizes are whole pixels. Configuration defaults are integers (interface 15, editor

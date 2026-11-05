@@ -5,7 +5,8 @@ const K = (window.K = {
     views: {},
     state: "",
     icon(name, cls = "") {
-        return `<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${window.KET_ICONS[name] || window.KET_ICONS["circle"]}</svg>`;
+        // Két Symbol glyphs are filled outlines on a 16 px grid; colour comes from CSS `color`.
+        return `<svg class="icon ${cls}" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">${window.KET_ICONS[name] || window.KET_ICONS["circle"]}</svg>`;
     },
     escape(value = "") {
         return String(value).replace(
