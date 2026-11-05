@@ -44,7 +44,10 @@ markup. Mobile's older native token adaptation is not copied over desktop tokens
 - **Reading surface:** centered 760 px conversation column; Settings can choose
   864 px, 1200 px or full width. Atlas retains its compact overlay. File and
   terminal context stay in the desktop's right pane.
-- **Connections:** one Add action chooses phone pairing or Linux machine pairing.
+- **Connections:** one Add action chooses phone pairing or a Linux machine. A
+  Linux machine connects over SSH (free, the user's own `ssh` and keys) or the
+  KetPlus Relay (Pro: no SSH or open port, phones and notifications). Both are
+  offered side by side; a plan without the relay still offers SSH.
   Phones and trusted Linux machines have separate sections on the same page;
   the Linux workflow stays inline while the phone list remains visible.
 - **Activity:** muted disclosures, a thin grouping rail, exact command text and

@@ -64,7 +64,9 @@ const validDemoSnapshot = saved => {
         !saved.remoteHosts.every(host => isDemoObject(host) && isDemoId(host.id) &&
             isDemoText(host.name, 120) && isDemoText(host.os, 120) &&
             isDemoText(host.lastSeen, 80) &&
-            ["connected", "offline"].includes(host.status)) ||
+            ["connected", "offline"].includes(host.status) &&
+            [undefined, "relay", "ssh"].includes(host.route) &&
+            (host.target === undefined || isDemoText(host.target, 160))) ||
         new Set(saved.remoteHosts.map(host => host.id)).size !== saved.remoteHosts.length)) return false;
     for (const key of ["collapsedRepositories", "expandedRepositories"])
         if (saved[key] !== undefined && !isDemoList(saved[key])) return false;

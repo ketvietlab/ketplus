@@ -3942,13 +3942,14 @@
     },
     {
       "id": "remote-linux-journey",
-      "title": "Connect to a headless Linux machine",
+      "title": "Connect a Linux machine over SSH or the relay",
       "start": "auth",
       "ends": [
         "connected",
-        "removed",
         "denied",
-        "remote-repository"
+        "remote-repository",
+        "removed",
+        "ssh-connected"
       ],
       "nodes": [
         {
@@ -4126,6 +4127,94 @@
           "url": "./screens/workspace.html?repo=api-service&tree=develop&conversation=linux-build",
           "column": 6,
           "row": 2
+        },
+        {
+          "id": "method",
+          "screen": "connections",
+          "title": "Choose SSH or relay",
+          "url": "./screens/connections.html?remote=method",
+          "column": 1,
+          "row": 4
+        },
+        {
+          "id": "method-free",
+          "screen": "connections",
+          "title": "Relay needs Pro",
+          "url": "./screens/connections.html?remote=method&plan=free",
+          "column": 1,
+          "row": 5
+        },
+        {
+          "id": "ssh",
+          "screen": "connections",
+          "title": "Enter SSH host",
+          "url": "./screens/connections.html?remote=ssh",
+          "column": 2,
+          "row": 4
+        },
+        {
+          "id": "ssh-checking",
+          "screen": "connections",
+          "title": "Connecting over SSH",
+          "url": "./screens/connections.html?remote=ssh-checking",
+          "column": 3,
+          "row": 4
+        },
+        {
+          "id": "ssh-unreachable",
+          "screen": "connections",
+          "title": "Host unreachable",
+          "url": "./screens/connections.html?remote=ssh-unreachable",
+          "column": 3,
+          "row": 5
+        },
+        {
+          "id": "ssh-auth",
+          "screen": "connections",
+          "title": "Key refused",
+          "url": "./screens/connections.html?remote=ssh-auth",
+          "column": 3,
+          "row": 6
+        },
+        {
+          "id": "ssh-hostkey",
+          "screen": "connections",
+          "title": "Confirm host fingerprint",
+          "url": "./screens/connections.html?remote=ssh-hostkey",
+          "column": 4,
+          "row": 4
+        },
+        {
+          "id": "ssh-no-daemon",
+          "screen": "connections",
+          "title": "Daemon not installed",
+          "url": "./screens/connections.html?remote=ssh-no-daemon",
+          "column": 4,
+          "row": 5
+        },
+        {
+          "id": "ssh-outdated",
+          "screen": "connections",
+          "title": "Daemon out of date",
+          "url": "./screens/connections.html?remote=ssh-outdated",
+          "column": 4,
+          "row": 6
+        },
+        {
+          "id": "ssh-connecting",
+          "screen": "connections",
+          "title": "Checking the daemon",
+          "url": "./screens/connections.html?remote=ssh-connecting",
+          "column": 5,
+          "row": 4
+        },
+        {
+          "id": "ssh-connected",
+          "screen": "connections",
+          "title": "Connected over SSH",
+          "url": "./screens/connections.html?remote=connected&host=dev-server",
+          "column": 6,
+          "row": 4
         }
       ],
       "edges": [
@@ -4133,11 +4222,6 @@
           "from": "auth",
           "to": "empty",
           "label": "Sign in with KetSuite"
-        },
-        {
-          "from": "empty",
-          "to": "add",
-          "label": "Add → Linux machine"
         },
         {
           "from": "empty",
@@ -4302,6 +4386,111 @@
         },
         {
           "from": "connected",
+          "to": "remote-repository",
+          "label": "Open remote repository"
+        },
+        {
+          "from": "empty",
+          "to": "method",
+          "label": "Add → Linux machine"
+        },
+        {
+          "from": "method",
+          "to": "add",
+          "label": "Pair through KetPlus Relay (Pro)"
+        },
+        {
+          "from": "method",
+          "to": "method-free",
+          "label": "Plan without the relay",
+          "kind": "conditional"
+        },
+        {
+          "from": "method-free",
+          "to": "method",
+          "label": "Upgrade to Pro",
+          "kind": "recovery"
+        },
+        {
+          "from": "method",
+          "to": "ssh",
+          "label": "Connect with SSH (free)"
+        },
+        {
+          "from": "method-free",
+          "to": "ssh",
+          "label": "Use SSH instead"
+        },
+        {
+          "from": "ssh",
+          "to": "ssh-checking",
+          "label": "Submit user@host"
+        },
+        {
+          "from": "ssh-checking",
+          "to": "ssh-unreachable",
+          "label": "No answer on port 22",
+          "kind": "conditional"
+        },
+        {
+          "from": "ssh-checking",
+          "to": "ssh-auth",
+          "label": "Key refused",
+          "kind": "conditional"
+        },
+        {
+          "from": "ssh-unreachable",
+          "to": "ssh",
+          "label": "Fix the address",
+          "kind": "recovery"
+        },
+        {
+          "from": "ssh-auth",
+          "to": "ssh",
+          "label": "Fix the key",
+          "kind": "recovery"
+        },
+        {
+          "from": "ssh-checking",
+          "to": "ssh-hostkey",
+          "label": "Unknown host key"
+        },
+        {
+          "from": "ssh-checking",
+          "to": "ssh-no-daemon",
+          "label": "No daemon for this user",
+          "kind": "conditional"
+        },
+        {
+          "from": "ssh-checking",
+          "to": "ssh-outdated",
+          "label": "Daemon older than required",
+          "kind": "conditional"
+        },
+        {
+          "from": "ssh-no-daemon",
+          "to": "ssh-checking",
+          "label": "Install, then connect again",
+          "kind": "recovery"
+        },
+        {
+          "from": "ssh-outdated",
+          "to": "ssh-checking",
+          "label": "Upgrade, then connect again",
+          "kind": "recovery"
+        },
+        {
+          "from": "ssh-hostkey",
+          "to": "ssh-connecting",
+          "label": "Fingerprint matches"
+        },
+        {
+          "from": "ssh-connecting",
+          "to": "ssh-connected",
+          "label": "Daemon answered"
+        },
+        {
+          "from": "ssh-connected",
           "to": "remote-repository",
           "label": "Open remote repository"
         }

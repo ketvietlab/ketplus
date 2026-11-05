@@ -53,7 +53,11 @@ test("Add connection chooses phone or Linux within the same Connections page", (
     const chooser = connections.follow();
     assert.ok(chooser.document.querySelector('[data-action="pair-device"]'));
     chooser.click('[data-action="remote-add"]');
-    const pairing = chooser.follow();
+    const method = chooser.follow();
+    assert.equal(method.K.remoteState(), "method");
+    assert.ok(method.document.querySelector('[data-action="remote-ssh"]'));
+    method.click('[data-action="remote-relay"]');
+    const pairing = method.follow();
     assert.equal(pairing.K.page, "connections");
     assert.equal(pairing.K.remoteState(), "add");
     assert.ok(pairing.document.querySelector("#remote-code-form"));
@@ -89,8 +93,10 @@ test("remote Linux sign-in returns to machines after acknowledgment", () => {
 });
 test("remote pairing validates code locally, confirms identity, then adds trust", () => {
     const empty = screen("screens/connections.html?remote=empty");
-    empty.click('[data-action="remote-add"]');
-    const form = empty.follow();
+    empty.click('[data-action="remote-method"]');
+    const method = empty.follow();
+    method.click('[data-action="remote-relay"]');
+    const form = method.follow();
     form.input("#remote-code", "bad");
     form.submit("#remote-code-form");
     assert.equal(form.url(), undefined);
@@ -212,3 +218,51 @@ test("remote host snapshot rejects invalid identity and escapes valid display te
     assert.equal(escaped.document.querySelector("#injected"), null);
     assert.match(escaped.document.body.textContent, /<img id="injected">/);
 });
+test("SSH is free and the relay is gated by plan", () => {
+    const pro = screen("screens/connections.html?remote=method");
+    assert.ok(pro.document.querySelector('[data-action="remote-relay"]'));
+    assert.match(pro.document.querySelector(".remote-methods").textContent, /Free/);
+    const free = screen("screens/connections.html?remote=method&plan=free");
+    assert.equal(free.document.querySelector('[data-action="remote-relay"]'), null);
+    assert.ok(free.document.querySelector('[data-action="remote-upgrade"]'));
+    assert.ok(free.document.querySelector('[data-action="remote-ssh"]'), "SSH stays available without Pro");
+    [pro, free].forEach((item) => item.close());
+});
+test("SSH connection checks the host key, then adds the machine with its route", () => {
+    const form = screen("screens/connections.html?remote=ssh");
+    form.input("#remote-ssh-target", "not a host!");
+    form.submit("#remote-ssh-form");
+    assert.equal(form.url(), undefined);
+    assert.equal(form.document.querySelector("#remote-ssh-target").getAttribute("aria-invalid"), "true");
+    form.input("#remote-ssh-target", "ubuntu@dev-server.local");
+    form.submit("#remote-ssh-form");
+    assert.equal(form.url().includes("dev-server.local"), false, "the typed host never enters the route");
+    const checking = form.follow();
+    checking.tick();
+    const hostkey = checking.follow();
+    assert.equal(hostkey.K.remoteState(), "ssh-hostkey");
+    const trust = '[data-action="remote-hostkey-confirm"]';
+    assert.equal(hostkey.document.querySelector(trust).disabled, true);
+    hostkey.click("#remote-hostkey-matched");
+    hostkey.click(trust);
+    const connecting = hostkey.follow();
+    assert.equal(connecting.K.demo.remoteHosts.some((host) => host.route === "ssh"), false);
+    connecting.tick();
+    const connected = connecting.follow();
+    const row = [...connected.document.querySelectorAll(".remote-host-row")].find((item) => /dev-server/.test(item.textContent));
+    assert.ok(row);
+    assert.match(row.textContent, /SSH/);
+    assert.match(row.textContent, /ubuntu@dev-server\.local/);
+});
+for (const [target, state] of [["nobody@nowhere", "ssh-unreachable"], ["bad@dev-server.local", "ssh-auth"],
+    ["new@dev-server.local", "ssh-no-daemon"], ["old@dev-server.local", "ssh-outdated"]])
+    test(`SSH ${state} never adds a machine`, () => {
+        const form = screen("screens/connections.html?remote=ssh");
+        form.input("#remote-ssh-target", target);
+        form.submit("#remote-ssh-form");
+        const checking = form.follow();
+        checking.tick();
+        const result = checking.follow();
+        assert.equal(result.K.remoteState(), state);
+        assert.equal(result.K.demo.remoteHosts.some((host) => host.route === "ssh"), false);
+    });

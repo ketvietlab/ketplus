@@ -92,7 +92,7 @@ Reload the viewer to reset it, and close the browser session after verification.
 | Switch a conversation worktree | Current context, large-catalog search and paging, pending acknowledgment, busy/stale/offline/denied recovery |
 | Open or edit an Atlas from a conversation | Chat header control, right-pane worktree list, in-app Edit and return, browser handoff, running badge, Stop, last-tab-close and recovery |
 | Connect your phone | Demo sign-in, QR expiry/renewal, confirmation, paired devices, revoke/reconnect |
-| Connect to a headless Linux machine | Desktop sign-in, one-time pairing code, identity comparison, connection, offline recovery and acknowledged removal |
+| Connect a Linux machine over SSH or the relay | SSH (free) or relay (Pro) choice, SSH host-key confirmation, unreachable/key/daemon errors, relay sign-in, one-time pairing code, identity comparison, connection, offline recovery and acknowledged removal |
 | Personalize your workspace | Light/dark, typography, conversation width and save |
 | Find files and Atlases with Spotlight | Workspace files and Atlases; keyboard navigation and no results |
 | Read a long conversation | Earlier pages, partial turns, Latest, retention and preview errors |
@@ -157,7 +157,14 @@ Reload the viewer to reset it, and close the browser session after verification.
   newest conversation on that machine; a new conversation moves its repository
   to the top of that machine's list. Offline machines keep history visible and
   disable new remote turns.
-- **Linux machines in Connections:** choose Add → Linux machine. Use
+- **Linux machines in Connections:** choose Add → Linux machine, then **SSH**
+  (free) or **KetPlus Relay** (Pro; `plan=free` shows the upgrade gate instead).
+  SSH takes `user@host` or a `~/.ssh/config` Host and uses the system `ssh`:
+  `ubuntu@dev-server.local` reaches host-key confirmation and connects;
+  `nobody@nowhere`, `bad@dev-server.local`, `new@dev-server.local` and
+  `old@dev-server.local` show an unreachable host, a refused key, a missing daemon
+  (with copyable install commands KetPlus does not run) and an outdated daemon.
+  Each trusted machine shows its route, SSH or Relay. For the relay, use
   `KETP-4826` to reach identity confirmation, `KETP-0000` for an expired code or
   `KETP-9999` for an unavailable machine. Compare the six digits, tick the
   confirmation checkbox, then connect. Machine details offer Disconnect,

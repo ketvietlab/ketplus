@@ -7,7 +7,18 @@ if (K.page === "connections") {
     const hostId = button => button?.dataset.host || K.remoteHost()?.id;
     const selectHost = button => K.demo.remoteHosts.find(host => host.id === hostId(button));
     Object.assign(handlers, {
-        "remote-add": () => navigate("add"),
+        // Add → Linux machine first chooses SSH or the relay.
+        "remote-add": () => navigate("method"),
+        "remote-method": () => navigate("method"),
+        "remote-relay": () => navigate("add"),
+        "remote-upgrade": () => navigate("method", { plan: null }),
+        "remote-ssh": () => navigate("ssh"),
+        "remote-ssh-retry": () => navigate("ssh-checking", { auto: "1", outcome: null }),
+        "remote-hostkey-confirm": () => {
+            if (!document.querySelector("#remote-hostkey-matched")?.checked) return;
+            navigate("ssh-connecting", { auto: "1", outcome: K.query.get("outcome") });
+        },
+        "remote-copy-command": button => { button.textContent = "Copied"; },
         "remote-cancel": () => {
             cancelled = true;
             navigate(K.demo.remoteHosts.length ? "connected" : "empty");
@@ -46,14 +57,33 @@ if (K.page === "connections") {
         },
     });
     document.addEventListener("change", event => {
-        if (event.target.id !== "remote-code-matched") return;
-        const confirm = document.querySelector('[data-action="remote-confirm"]');
+        const gate = { "remote-code-matched": "remote-confirm", "remote-hostkey-matched": "remote-hostkey-confirm" }[event.target.id];
+        if (!gate) return;
+        const confirm = document.querySelector(`[data-action="${gate}"]`);
         if (confirm) confirm.disabled = !event.target.checked;
     });
     document.addEventListener("input", event => {
-        if (event.target.id !== "remote-code") return;
+        const error = { "remote-code": "#remote-code-error", "remote-ssh-target": "#remote-ssh-error" }[event.target.id];
+        if (!error) return;
         event.target.removeAttribute("aria-invalid");
-        document.querySelector("#remote-code-error").textContent = "";
+        document.querySelector(error).textContent = "";
+    });
+    document.addEventListener("submit", event => {
+        if (event.target.id !== "remote-ssh-form") return;
+        event.preventDefault();
+        const input = event.target.elements.target;
+        const target = input.value.trim();
+        if (!/^([A-Za-z0-9._-]+@)?[A-Za-z0-9.-]+$/.test(target)) {
+            input.setAttribute("aria-invalid", "true");
+            document.querySelector("#remote-ssh-error").textContent =
+                "Enter user@host or a Host name from ~/.ssh/config.";
+            input.focus();
+            return;
+        }
+        // Only the synthetic outcome crosses a route; the typed host stays in this page.
+        const outcome = { "old@dev-server.local": "outdated", "new@dev-server.local": "no-daemon",
+            "bad@dev-server.local": "auth", "nobody@nowhere": "unreachable" }[target] || "hostkey";
+        navigate("ssh-checking", { auto: "1", outcome });
     });
     document.addEventListener("submit", event => {
         if (event.target.id !== "remote-code-form") return;
@@ -74,6 +104,13 @@ if (K.page === "connections") {
     });
     if (K.query.get("auto") === "1") {
         const transition = {
+            "ssh-checking": () => navigate({ hostkey: "ssh-hostkey", auth: "ssh-auth",
+                unreachable: "ssh-unreachable", "no-daemon": "ssh-no-daemon", outdated: "ssh-outdated" }[K.query.get("outcome")] || "ssh-connecting"),
+            "ssh-connecting": () => {
+                if (!K.demo.remoteHosts.some(host => host.id === K.remoteSshSampleHost.id))
+                    K.demo.remoteHosts.push({ ...K.remoteSshSampleHost });
+                navigate("connected", { host: K.remoteSshSampleHost.id });
+            },
             checking: () => navigate(K.query.get("outcome") === "expired" ? "code-expired" :
                 K.query.get("outcome") === "unavailable" ? "unavailable" : "verify"),
             connecting: () => {
