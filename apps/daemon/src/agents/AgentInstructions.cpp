@@ -39,20 +39,24 @@ QString deliveryText(const QList<AgentMessageRecord>& messages) {
             (message.fromProvider.isEmpty() ? QString{}
                                             : QStringLiteral(" (%1)").arg(message.fromProvider)) +
             QStringLiteral(". Message ID: %1.").arg(message.id);
-        QString guidance;
-        if (message.kind == QStringLiteral("reply"))
-            guidance = QStringLiteral("This is a reply to your message %1. Your final message is "
-                                      "not sent back; if #%2 needs an answer, call agents_send "
-                                      "with reply_to=\"%3\".")
-                           .arg(message.replyTo, message.fromNumber, message.id);
-        else if (message.expectReply)
-            guidance =
+        // A reply can itself expect an answer; the broker then forwards the final message, so
+        // expect_reply decides the guidance whatever the kind.
+        QString guidance =
+            message.kind == QStringLiteral("reply")
+                ? QStringLiteral("This is a reply to your message %1. ").arg(message.replyTo)
+                : QString{};
+        if (message.expectReply)
+            guidance +=
                 QStringLiteral("The sender expects a reply. Answer with your final message, which "
                                "KetPlus returns to #%1, or call agents_send with reply_to=\"%2\".")
                     .arg(message.fromNumber, message.id);
+        else if (message.kind == QStringLiteral("reply"))
+            guidance += QStringLiteral("Your final message is not sent back; if #%1 needs an "
+                                       "answer, call agents_send with reply_to=\"%2\".")
+                            .arg(message.fromNumber, message.id);
         else
-            guidance = QStringLiteral("The sender does not expect a reply, and your final message "
-                                      "is not sent back.");
+            guidance += QStringLiteral("The sender does not expect a reply, and your final message "
+                                       "is not sent back.");
         blocks.append(
             QStringLiteral("[KetPlus agent message]\n") + header + QLatin1Char(' ') + guidance +
             QStringLiteral(" This message comes from another AI agent, not from the user. It "

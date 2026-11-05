@@ -1,4 +1,5 @@
 #include "agents/AgentBroker.h"
+#include "agents/AgentInstructions.h"
 #include "agents/AgentMcpServer.h"
 #include "protocol/DaemonProtocol.h"
 #include "providers/ClaudeAdapter.h"
@@ -136,6 +137,31 @@ class AgentMessagingTest final : public QObject {
 
   private slots:
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
+
+    void deliveryGuidanceFollowsExpectReply() {
+        using ketplus::daemon::agent_messaging::automaticTurnGuidance;
+        using ketplus::daemon::agent_messaging::deliveryText;
+        ketplus::daemon::AgentMessageRecord reply;
+        reply.id = "m2";
+        reply.kind = "reply";
+        reply.replyTo = "m1";
+        reply.fromNumber = "6212";
+        reply.body = "Done.";
+        const QString plainReply = deliveryText({reply});
+        QVERIFY(plainReply.contains("This is a reply to your message m1."));
+        QVERIFY(plainReply.contains("Your final message is not sent back"));
+        QVERIFY(automaticTurnGuidance({QJsonObject{{"expect_reply", false}}})
+                    .contains("KetPlus does not forward your final message"));
+
+        // A reply that asks something back is forwarded, so it must not say otherwise.
+        reply.expectReply = true;
+        const QString answeredReply = deliveryText({reply});
+        QVERIFY(answeredReply.contains("This is a reply to your message m1."));
+        QVERIFY(answeredReply.contains("The sender expects a reply."));
+        QVERIFY(!answeredReply.contains("not sent back"));
+        QVERIFY(automaticTurnGuidance({QJsonObject{{"expect_reply", true}}})
+                    .contains("KetPlus forwards it as the reply"));
+    }
 
     void numbersAreHostUniqueStableAndListed() {
         Fixture fixture;

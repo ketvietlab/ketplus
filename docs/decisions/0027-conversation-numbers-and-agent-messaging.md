@@ -89,8 +89,9 @@ that turn's final assistant message as the reply. Replies follow the same
 delivery rules, so an idle sender is woken. Unanswered requests expire after 24
 hours and the sender is notified. Turns started by a message use reply-oriented
 response guidance without the progress matrix. The guidance depends on what
-was delivered. After a request, the final message becomes the reply. After a
-reply or a notice, nothing is forwarded, so the guidance and each delivered
+was delivered. When any delivered message has `expect_reply`, including a reply
+that asks something back, the final message becomes the reply. Otherwise
+nothing is forwarded, so the guidance and each delivered
 reply tell the agent to send any follow-up the sender asked for (a fix to
 re-review, a result) with `agents_send(reply_to=…)`. Otherwise, an agent that
 ends with a message addressed to the sender leaves it unsent in its own
