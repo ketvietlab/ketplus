@@ -264,6 +264,18 @@ class TranscriptFileOpeningTest final : public QObject {
             QVERIFY(window.statusBar()->currentMessage().startsWith("Refused a link"));
         }
         QCOMPARE(revealed.size(), 2);
+
+        // The boundary is the checkout the agent ran in, not the conversation's path.
+        agent->setActivePath(root.path());
+        agent->setExecutionBranch("linked", QFileInfo(outside.path()).canonicalFilePath(), 2);
+        const qsizetype beforeLinked = opened_.size();
+        // Answered so a wrong boundary fails the count instead of waiting on the dialog.
+        answerNextQuestion(QMessageBox::Cancel);
+        agent->openRelativeFile(outsideImage);
+        QCOMPARE(opened_.size(), beforeLinked + 1);
+        answerNextQuestion(QMessageBox::Cancel);
+        agent->openRelativeFile(QUrl::fromLocalFile(root.filePath("ảnh #1.png")).toString());
+        QCOMPARE(opened_.size(), beforeLinked + 1);
     }
 
   private:

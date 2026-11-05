@@ -329,13 +329,16 @@ current-window value.
 - Text files opened from chat links use closeable Agent detail tabs beside the
   conversation. Links come from model output, so only viewer types (images
   including SVG, PDFs, audio, video) open through the operating system's default
-  application, after a confirmation when they are outside the worktree.
+  application, after a confirmation when they are outside the execution worktree.
   Directories, application bundles, executables and every other type are revealed
   in Finder/Explorer instead (`MainWindowTranscriptLinks.cpp`). `http`, `https` and
   `mailto` links open; other schemes ask first, showing the URL, and UNC or
   `file://host` links are refused before any file access. Inline-code file
   references resolve suffixes against the background `@` mention listing
-  (`git ls-files -z`), so formatting never runs Git on the GUI thread.
+  (`git ls-files -z`), so formatting never runs Git on the GUI thread; when that
+  list arrives, shown messages are formatted again (`fileLinksChanged`). Code spans
+  starting with `//` or `\\` are never looked up, so rendering cannot reach a UNC
+  share.
   Transcript activation checks MIME type and a bounded content sample before
   entering the editor route; text links retain source-line navigation. Explicit
   editor and Git diff actions are unchanged. The detail-tab context menu can close

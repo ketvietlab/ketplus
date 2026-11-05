@@ -12,6 +12,7 @@
 #include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QProcess>
 #include <QQuickItem>
 #include <QQuickItemGrabResult>
 #include <QQuickTextDocument>
@@ -1262,6 +1263,45 @@ void AgentWorkspaceViewTest::formatsStreamingText() {
                                                    QStringLiteral("messageImageGallery"))));
     QCOMPARE(assistantGallery->property("columns").toInt(), 4);
     QVERIFY(assistantGallery->width() <= 370.0);
+}
+
+void AgentWorkspaceViewTest::linksInlineCodeOnceFilesAreListed() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString root = QFileInfo(directory.path()).canonicalFilePath();
+    QVERIFY(QDir(root).mkpath(QStringLiteral("src")));
+    QFile file(QDir(root).filePath(QStringLiteral("src/unique.ts")));
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.close();
+    QProcess git;
+    git.start(QStringLiteral("git"),
+              {QStringLiteral("-C"), root, QStringLiteral("init"), QStringLiteral("-q")});
+    QVERIFY(git.waitForFinished(10'000));
+
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 640);
+    view.setActivePath(root);
+    view.show();
+    // Formatting never lists the tree, so the suffix links only once the background listing
+    // lands and the shown message is formatted again.
+    view.resetMessages({QVariantMap{
+        {"kind", "assistant"}, {"meta", "Agent"}, {"body", "Edit `unique.ts` next."}}});
+    auto* body = findVisualItem(view.quickView()->rootObject(), QStringLiteral("messageBody"));
+    QTRY_VERIFY(body);
+    auto* quickDocument = qvariant_cast<QQuickTextDocument*>(body->property("textDocument"));
+    QVERIFY(quickDocument);
+    const auto linkHref = [&view, quickDocument] {
+        QTextDocument* document = quickDocument->textDocument();
+        for (QTextBlock block = document->begin(); block.isValid(); block = block.next()) {
+            for (auto it = block.begin(); !it.atEnd(); ++it) {
+                if (it.fragment().charFormat().isAnchor())
+                    return view.messageLinkAt(quickDocument, it.fragment().position());
+            }
+        }
+        return QString{};
+    };
+    QTRY_COMPARE_WITH_TIMEOUT(linkHref(), QStringLiteral("src/unique.ts"), 5000);
 }
 
 void AgentWorkspaceViewTest::opensInlineMarkdownLinks() {

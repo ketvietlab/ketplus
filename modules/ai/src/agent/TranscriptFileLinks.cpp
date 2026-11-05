@@ -30,21 +30,24 @@ void TranscriptFileLinks::setFileRequester(std::function<void()> requester) {
     requester_ = std::move(requester);
 }
 
-void TranscriptFileLinks::setFiles(const QString& root, const QStringList& entries) {
+bool TranscriptFileLinks::setFiles(const QString& root, const QStringList& entries) {
     if (root != root_)
-        return;
-    files_.clear();
+        return false;
+    QStringList files;
     for (const QString& entry : entries) {
         if (!entry.endsWith(QLatin1Char('/')))
-            files_.append(entry);
+            files.append(entry);
     }
-    if (files_.size() > maximumTrackedFiles)
-        files_.clear();
+    if (files.size() > maximumTrackedFiles)
+        files.clear();
+    const bool changed = !filesListed_ || files != files_;
+    files_ = std::move(files);
     filesListed_ = true;
     filesRequested_ = false;
     // Answers given before the list arrived may now resolve.
     cache_.clear();
     age_.restart();
+    return changed;
 }
 
 void TranscriptFileLinks::requestFiles() {
@@ -93,6 +96,9 @@ QString TranscriptFileLinks::href(const QString& text) {
 }
 
 QString TranscriptFileLinks::resolve(const QString& path, bool* final) {
+    // Rendering must not reach the network: on Windows a UNC lookup contacts the host.
+    if (path.startsWith(QStringLiteral("//")) || path.startsWith(QStringLiteral("\\\\")))
+        return {};
     if (path.startsWith(QStringLiteral("~/"))) {
         const QString absolute = QDir::home().filePath(path.mid(2));
         return QFileInfo(absolute).isFile() ? absolute : QString{};

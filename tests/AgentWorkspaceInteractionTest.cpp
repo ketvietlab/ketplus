@@ -556,6 +556,12 @@ void AgentWorkspaceViewTest::linksFileReferencesInInlineCode() {
     QVERIFY(links.href(QStringLiteral("apps/api/src/missing.ts")).isEmpty());
     QVERIFY(links.href(QStringLiteral("https://example.com/a.ts")).isEmpty());
     QVERIFY(links.href(QStringLiteral("../outside.ts")).isEmpty());
+    // `//host/share/…` is a UNC path on Windows; rendering must not look it up. Here it
+    // names a local file, so only the guard keeps it from linking.
+    const QString local =
+        QFileInfo(root.filePath(QStringLiteral("docs/hướng-dẫn/tài-liệu.md"))).absoluteFilePath();
+    QVERIFY(QFileInfo(QLatin1Char('/') + local).isFile());
+    QVERIFY(links.href(QLatin1Char('/') + local).isEmpty());
 }
 
 void AgentWorkspaceViewTest::mermaidFillsGetReadableLabels() {

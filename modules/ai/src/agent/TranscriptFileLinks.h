@@ -19,8 +19,9 @@ class TranscriptFileLinks final {
     void setRoot(const QString& root);
     // Asked for a new listing of the current root when one is missing or old.
     void setFileRequester(std::function<void()> requester);
-    // Entries of `root` from the background listing; folders end with '/'.
-    void setFiles(const QString& root, const QStringList& entries);
+    // Entries of `root` from the background listing; folders end with '/'. Returns whether
+    // the files changed, so messages formatted without them should be formatted again.
+    bool setFiles(const QString& root, const QStringList& entries);
     // The link for a code span, "path" or "path:line"; empty when it names no file.
     [[nodiscard]] QString href(const QString& text);
 

@@ -114,6 +114,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void workingOpacityAnimatorLifecycle();
     void formatsStreamingText();
     void opensInlineMarkdownLinks();
+    void linksInlineCodeOnceFilesAreListed();
     void userMessageBubbleIgnoresUnavailableImage();
     void userBubbleFitsShortTextAndWrapsLongText();
     void compactCodeBlocks();

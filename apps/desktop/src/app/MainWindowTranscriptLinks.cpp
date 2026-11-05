@@ -42,6 +42,10 @@ void MainWindow::openTranscriptLink(const QString& link) {
     }
     const QString agentPath =
         agentWorkspace_->activePath().isEmpty() ? workspaceRoot_ : agentWorkspace_->activePath();
+    // The checkout the agent actually ran in, which a linked worktree makes differ from the
+    // conversation's path; files outside it ask before a default app opens them.
+    const QString executionRoot =
+        agentWorkspace_->activePath().isEmpty() ? workspaceRoot_ : agentWorkspace_->executionPath();
     const auto localPath = [&agentPath](const QString& value) {
         const QUrl url(value);
         if (url.isLocalFile())
@@ -76,7 +80,7 @@ void MainWindow::openTranscriptLink(const QString& link) {
         file_reveal::reveal(path);
         statusBar()->showMessage(QStringLiteral("Revealed instead of opening: %1").arg(path), 4000);
     } else if (action == TranscriptFileAction::View) {
-        if (!transcriptPathInWorktree(path, agentPath) &&
+        if (!transcriptPathInWorktree(path, executionRoot) &&
             QMessageBox::question(this, QStringLiteral("Open file outside the worktree?"),
                                   QStringLiteral("An agent link points outside this worktree:\n\n%1"
                                                  "\n\nOpen it with its default app?")
