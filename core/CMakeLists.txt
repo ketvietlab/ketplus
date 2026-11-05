@@ -106,7 +106,7 @@ add_library(ketplus_workspace STATIC
     src/workspace/WorkspaceSearch.cpp
     src/workspace/WorkspaceSearch.h
 )
-target_link_libraries(ketplus_workspace PUBLIC Qt6::Widgets)
+target_link_libraries(ketplus_workspace PUBLIC Qt6::Widgets ketplus_core)
 target_include_directories(ketplus_workspace PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
 )
@@ -192,6 +192,8 @@ add_library(ketplus_editor STATIC
     src/editor/DocumentFormatControls.h
     src/editor/DiskChangePrompt.cpp
     src/editor/DiskChangePrompt.h
+    src/editor/TabPaths.cpp
+    src/editor/TabPaths.h
     src/editor/SymbolExtractor.cpp
     src/editor/SymbolExtractor.h
     src/editor/SyntaxDefinition.cpp

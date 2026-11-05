@@ -7,6 +7,9 @@
 
 #include <QDir>
 #include <QFile>
+#include <QProcess>
+#include <QPushButton>
+#include <QStringEncoder>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -35,6 +38,7 @@ class SearchViewTest final : public QObject {
     void filtersIncludePatterns();
     void readsOnlySearchableFiles();
     void searchesWorkspaceWithOpenBuffers();
+    void searchDoesNotFollowSymlinkedFolders();
     void skipsAssetsByFileSuffix();
     void collectsSearchPanelResults();
     void highlightsSelectedWordMatches();
@@ -138,8 +142,49 @@ void SearchViewTest::readsOnlySearchableFiles() {
     QVERIFY(ketplus::readSearchableFile(text, &content));
     QCOMPARE(content, QStringLiteral("Xin chào"));
     QVERIFY(!ketplus::readSearchableFile(binary, &content));
-    QVERIFY(!ketplus::readSearchableFile(latin1, &content));
+    // Decoded as the editor shows them.
+    QVERIFY(ketplus::readSearchableFile(latin1, &content));
+    QCOMPARE(content, QStringLiteral("café"));
+    const QString utf16 = directory.filePath(QStringLiteral("Localizable.strings"));
+    QStringEncoder encoder(QStringConverter::Utf16LE);
+    QVERIFY(writeFile(utf16, QByteArray("\xFF\xFE", 2) + QByteArray(encoder.encode(QStringLiteral(
+                                                             "\"key\" = \"Xin chào\";")))));
+    QVERIFY(ketplus::readSearchableFile(utf16, &content));
+    QCOMPARE(content, QStringLiteral("\"key\" = \"Xin chào\";"));
     QVERIFY(!ketplus::readSearchableFile(directory.filePath(QStringLiteral("missing")), &content));
+}
+
+void SearchViewTest::searchDoesNotFollowSymlinkedFolders() {
+    QTemporaryDir directory;
+    QTemporaryDir outside;
+    QVERIFY(directory.isValid() && outside.isValid());
+    const QDir root(directory.path());
+    const auto git = [&root](const QStringList& arguments) {
+        QProcess process;
+        process.start(QStringLiteral("git"),
+                      QStringList{QStringLiteral("-C"), root.path()} + arguments);
+        return process.waitForFinished() && process.exitCode() == 0;
+    };
+    QVERIFY(git({QStringLiteral("init"), QStringLiteral("-q")}));
+    QVERIFY(root.mkpath(QStringLiteral("src")));
+    QVERIFY(writeFile(root.filePath(QStringLiteral("src/note.txt")), "needle inside\n"));
+    QVERIFY(git({QStringLiteral("add"), QStringLiteral("src/note.txt")}));
+    // src/ is replaced by a link out of the workspace while the index still names the file.
+    QVERIFY(
+        writeFile(QDir(outside.path()).filePath(QStringLiteral("note.txt")), "needle outside\n"));
+    QVERIFY(QDir(root.filePath(QStringLiteral("src"))).removeRecursively());
+    QVERIFY(QFile::link(outside.path(), root.filePath(QStringLiteral("src"))));
+
+    QString error;
+    const ketplus::WorkspaceSearchOptions options{.query = QStringLiteral("needle")};
+    const auto expression = ketplus::buildSearchExpression(options, &error);
+    QStringList found;
+    const auto summary = ketplus::searchWorkspace(
+        root.absolutePath(), options, expression, {}, nullptr,
+        [&found](const ketplus::WorkspaceSearchFileResult& file) { found.append(file.path); });
+    // Replace All works from these results, so the outside file is never listed.
+    QVERIFY2(found.isEmpty(), qPrintable(found.join(u',')));
+    QCOMPARE(summary.matchCount, 0);
 }
 
 void SearchViewTest::skipsAssetsByFileSuffix() {
@@ -224,9 +269,17 @@ void SearchViewTest::collectsSearchPanelResults() {
     QCOMPARE(panel.resultPaths(),
              QStringList({QStringLiteral("/tmp/a.txt"), QStringLiteral("/tmp/b.txt")}));
     QCOMPARE(panel.resultMatchCount(), 3);
+    auto* replaceAll = panel.findChild<QPushButton*>(QStringLiteral("searchReplaceAllButton"));
+    QVERIFY(replaceAll != nullptr);
+    QVERIFY(replaceAll->isEnabled());
+    // Past the match limit the list is not every match, so Replace All waits for a narrower search.
+    panel.setResultsTruncated(true);
+    QVERIFY(panel.resultsTruncated());
+    QVERIFY(!replaceAll->isEnabled());
     panel.clearResults();
     QVERIFY(panel.resultPaths().isEmpty());
     QCOMPARE(panel.resultMatchCount(), 0);
+    QVERIFY(!panel.resultsTruncated());
 }
 
 void SearchViewTest::highlightsSelectedWordMatches() {

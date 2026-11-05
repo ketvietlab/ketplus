@@ -26,6 +26,8 @@
 #include <QUrl>
 #include <QVBoxLayout>
 
+#include <utility>
+
 namespace ketplus {
 namespace {
 
@@ -53,6 +55,11 @@ ExplorerPanel::ExplorerPanel(QWidget* parent)
     setMinimumWidth(190);
 
     model_->setReadOnly(false);
+    connect(model_, &QFileSystemModel::fileRenamed, this,
+            [this](const QString& directory, const QString& oldName, const QString& newName) {
+                emit pathRenamed(QDir(directory).filePath(oldName),
+                                 QDir(directory).filePath(newName));
+            });
     model_->setFilter(explorerFilters(false));
     model_->setRootPath(QString());
     model_->iconProvider()->setOptions(QFileIconProvider::DontUseCustomDirectoryIcons);
@@ -323,9 +330,17 @@ void ExplorerPanel::moveSelectedToTrash() {
     if (path.isEmpty() || path == rootPath_) {
         return;
     }
+    QString question = QStringLiteral("Move “%1” to Trash?").arg(QFileInfo(path).fileName());
+    if (const int unsaved = unsavedTabs_ ? unsavedTabs_(path) : 0; unsaved > 0) {
+        question +=
+            QStringLiteral("\n\n%1 open %2 unsaved changes. %3 open, and saving "
+                           "writes the file again.")
+                .arg(unsaved)
+                .arg(unsaved == 1 ? QStringLiteral("tab has") : QStringLiteral("tabs have"))
+                .arg(unsaved == 1 ? QStringLiteral("It stays") : QStringLiteral("They stay"));
+    }
     const auto answer =
-        QMessageBox::question(this, QStringLiteral("Move to Trash"),
-                              QStringLiteral("Move “%1” to Trash?").arg(QFileInfo(path).fileName()),
+        QMessageBox::question(this, QStringLiteral("Move to Trash"), question,
                               QMessageBox::Cancel | QMessageBox::Yes, QMessageBox::Cancel);
     if (answer != QMessageBox::Yes) {
         return;
@@ -333,7 +348,13 @@ void ExplorerPanel::moveSelectedToTrash() {
     if (!QFile::moveToTrash(path)) {
         QMessageBox::critical(this, QStringLiteral("Move to Trash"),
                               QStringLiteral("Unable to move this item to Trash."));
+        return;
     }
+    emit pathTrashed(path);
+}
+
+void ExplorerPanel::setUnsavedTabsQuery(std::function<int(const QString& path)> query) {
+    unsavedTabs_ = std::move(query);
 }
 
 void ExplorerPanel::openContainingFolder() {

@@ -1,7 +1,10 @@
 #include "editor/EditorWidget.h"
+#include "editor/TabPaths.h"
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QSaveFile>
+#include <QTabWidget>
 #include <QTemporaryDir>
 #include <QtTest>
 #include <ScintillaMessages.h>
@@ -90,6 +93,40 @@ class EditorFileRefreshTest final : public QObject {
         QVERIFY(editor.refreshFromDisk().ok);
         QCOMPARE(editor.text(), QString::fromUtf8("thé").toUtf8());
         QCOMPARE(editor.document().textEncoding(), ketplus::TextEncoding::Latin1);
+    }
+    void retargetsTabsAfterARename() {
+        QTemporaryDir dir;
+        QVERIFY(QDir(dir.path()).mkpath("sub"));
+        write(dir.filePath("a.txt"), "a\n");
+        write(dir.filePath("sub/b.txt"), "b\n");
+        write(dir.filePath("subway.txt"), "c\n");
+        QTabWidget tabs;
+        auto* a = new ketplus::EditorWidget;
+        auto* b = new ketplus::EditorWidget;
+        auto* c = new ketplus::EditorWidget;
+        QVERIFY(a->loadFile(dir.filePath("a.txt")).ok);
+        QVERIFY(b->loadFile(dir.filePath("sub/b.txt")).ok);
+        QVERIFY(c->loadFile(dir.filePath("subway.txt")).ok);
+        tabs.addTab(a, "a");
+        tabs.addTab(b, "b");
+        tabs.addTab(c, "c");
+        b->replaceAllText("unsaved\n");
+
+        QCOMPARE(ketplus::tab_paths::editorsWithin(&tabs, dir.filePath("sub")),
+                 QList<ketplus::EditorWidget*>{b});
+        QCOMPARE(ketplus::tab_paths::editorsWithin(&tabs, dir.path()).size(), 3);
+        QVERIFY(QDir(dir.path()).rename("sub", "moved"));
+        const auto moved =
+            ketplus::tab_paths::retarget(&tabs, dir.filePath("sub"), dir.filePath("moved"));
+        QCOMPARE(moved, QList<ketplus::EditorWidget*>{b});
+        QCOMPARE(b->document().filePath(),
+                 QFileInfo(dir.filePath("moved/b.txt")).absoluteFilePath());
+        QVERIFY(b->document().isModified());
+        QCOMPARE(c->document().filePath(),
+                 QFileInfo(dir.filePath("subway.txt")).absoluteFilePath());
+        // Saving now writes the renamed file, not the old path.
+        QVERIFY(b->document().save(b->text()).ok);
+        QVERIFY(!QFile::exists(dir.filePath("sub/b.txt")));
     }
     void detectsTheEncodingAgainOnRefresh() {
         QTemporaryDir dir;

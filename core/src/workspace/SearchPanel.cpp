@@ -123,6 +123,7 @@ SearchPanel::SearchPanel(QWidget* parent)
     buttonsRow->addWidget(searchButton_);
     buttonsRow->addWidget(replaceAllButton_);
     buttonsRow->addStretch();
+    replaceAllButton_->setObjectName(QStringLiteral("searchReplaceAllButton"));
     replaceAllButton_->setEnabled(false);
 
     statusLabel_->setProperty("kvRole", QStringLiteral("searchStatus"));
@@ -196,6 +197,8 @@ QStringList SearchPanel::resultPaths() const {
 
 int SearchPanel::resultMatchCount() const noexcept { return matchCount_; }
 
+bool SearchPanel::resultsTruncated() const noexcept { return truncated_; }
+
 bool SearchPanel::isSearching() const noexcept { return searching_; }
 
 void SearchPanel::focusQuery(const QString& seed) {
@@ -209,6 +212,7 @@ void SearchPanel::focusQuery(const QString& seed) {
 void SearchPanel::clearResults() {
     results_->clear();
     matchCount_ = 0;
+    truncated_ = false;
     replaceAllButton_->setEnabled(false);
 }
 
@@ -240,13 +244,18 @@ void SearchPanel::addFileResult(const WorkspaceSearchFileResult& result) {
     }
     fileItem->setExpanded(true);
     matchCount_ += static_cast<int>(result.matches.size());
-    replaceAllButton_->setEnabled(!searching_);
+    replaceAllButton_->setEnabled(!searching_ && !truncated_);
 }
 
 void SearchPanel::setSearching(const bool searching) {
     searching_ = searching;
     searchButton_->setText(searching ? QStringLiteral("Cancel") : QStringLiteral("Search"));
-    replaceAllButton_->setEnabled(!searching && matchCount_ > 0);
+    replaceAllButton_->setEnabled(!searching && matchCount_ > 0 && !truncated_);
+}
+
+void SearchPanel::setResultsTruncated(const bool truncated) {
+    truncated_ = truncated;
+    replaceAllButton_->setEnabled(!searching_ && matchCount_ > 0 && !truncated_);
 }
 
 void SearchPanel::setStatusText(const QString& text) { statusLabel_->setText(text); }

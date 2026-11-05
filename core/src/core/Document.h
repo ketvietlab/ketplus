@@ -52,6 +52,8 @@ public:
     [[nodiscard]] bool changedOnDisk() const;
 
     void setModified(bool modified) noexcept;
+    // Follows a rename on disk; the content and modified state are unchanged.
+    void setFilePath(const QString& filePath);
     // A user's choice, kept across reloads.
     void setTextEncoding(TextEncoding encoding) noexcept;
 

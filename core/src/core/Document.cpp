@@ -170,6 +170,10 @@ void Document::setModified(const bool modified) noexcept {
     modified_ = modified;
 }
 
+void Document::setFilePath(const QString& filePath) {
+    filePath_ = QFileInfo(filePath).absoluteFilePath();
+}
+
 void Document::setTextEncoding(const TextEncoding encoding) noexcept {
     encoding_ = encoding;
     encodingExplicit_ = true;
