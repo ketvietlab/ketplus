@@ -1086,10 +1086,67 @@ class AgentWorkspaceShellTest final : public QObject {
             auto* paths = dialog->findChild<QLabel*>(QStringLiteral("linkedWorktreePaths"));
             QVERIFY(paths);
             QVERIFY(paths->text().contains(QFileInfo(linkedPath).fileName()));
+            // Forcing shows what is lost next to the choice, not only in a tooltip.
+            auto* force = dialog->findChild<QCheckBox*>(QStringLiteral("forceDeleteWorktreeCheck"));
+            auto* warning =
+                dialog->findChild<QLabel*>(QStringLiteral("forceDeleteWorktreeWarning"));
+            auto* buttons = dialog->findChild<QDialogButtonBox*>();
+            QVERIFY(force && warning && buttons);
+            QVERIFY(force->text().contains(QStringLiteral("discarding")));
+            linked->setChecked(true);
+            QVERIFY(force->isEnabled());
+            QVERIFY(!warning->isVisibleTo(dialog));
+            force->setChecked(true);
+            QVERIFY(warning->isVisibleTo(dialog));
+            QCOMPARE(buttons->button(QDialogButtonBox::Ok)->text(),
+                     QStringLiteral("Delete and Discard Changes"));
+            force->setChecked(false);
+            QVERIFY(!warning->isVisibleTo(dialog));
+            QCOMPARE(buttons->button(QDialogButtonBox::Ok)->text(), QStringLiteral("Delete"));
             dialog->reject();
         });
         view->requestDeleteConversation(conversationId);
         QCOMPARE(manager->ownedWorktrees(linkedPath).size(), 1);
+
+        // Deleting the conversation keeps a worktree that has an unsaved editor, like the
+        // sidebar's "Delete worktree…" does.
+        const QString notes = QDir(linkedPath).filePath(QStringLiteral("notes.txt"));
+        {
+            QFile file(notes);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            QCOMPARE(file.write("saved\n"), 6);
+        }
+        window.openFile(notes);
+        ketplus::EditorWidget* notesEditor = nullptr;
+        QTRY_VERIFY([&] {
+            for (auto* editor : window.findChildren<ketplus::EditorWidget*>()) {
+                if (QFileInfo(editor->document().filePath()).canonicalFilePath() ==
+                    QFileInfo(notes).canonicalFilePath())
+                    notesEditor = editor;
+            }
+            return notesEditor != nullptr;
+        }());
+        notesEditor->replaceAllText("unsaved\n");
+        QVERIFY(notesEditor->document().isModified());
+        QSignalSpy deleted(manager, &ketplus::AgentSessionManager::conversationDeletionFinished);
+        QTimer::singleShot(0, &window, [&window] {
+            auto* dialog = window.findChild<QDialog*>(QStringLiteral("conversationDeleteDialog"));
+            QVERIFY(dialog);
+            auto* linked =
+                dialog->findChild<QCheckBox*>(QStringLiteral("deleteLinkedWorktreeCheck"));
+            auto* buttons = dialog->findChild<QDialogButtonBox*>();
+            QVERIFY(linked && buttons);
+            linked->setChecked(true);
+            buttons->button(QDialogButtonBox::Ok)->click();
+        });
+        view->requestDeleteConversation(conversationId);
+        QTRY_COMPARE_WITH_TIMEOUT(deleted.size(), 1, 5000);
+        QMessageBox* kept = nullptr;
+        QTRY_VERIFY((kept = window.findChild<QMessageBox*>(
+                         QStringLiteral("worktreeDeletionSkipped"))) != nullptr);
+        QVERIFY(kept->text().contains(QStringLiteral("unsaved changes")));
+        kept->accept();
+        QVERIFY(QFileInfo(QDir(linkedPath).filePath(QStringLiteral(".git"))).isFile());
     }
 
     void restoresConversationConfigurationFromConversationStore() {

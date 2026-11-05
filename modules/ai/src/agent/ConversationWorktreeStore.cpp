@@ -5,9 +5,11 @@
 #include <QFileInfo>
 #include <QSet>
 #include <QSqlDatabase>
+#include <QSqlError>
 #include <QSqlQuery>
 #include <QStandardPaths>
 #include <QUuid>
+#include <QtDebug>
 
 namespace ketplus {
 namespace {
@@ -55,7 +57,29 @@ QString cleanPath(const QString& path) {
         return {};
     const QFileInfo info(path);
     const QString canonical = info.canonicalFilePath();
-    return QDir::cleanPath(canonical.isEmpty() ? info.absoluteFilePath() : canonical);
+    if (!canonical.isEmpty())
+        return QDir::cleanPath(canonical);
+    // A deleted worktree has no canonical path. Resolve its nearest existing folder, so a
+    // path under a symlinked parent (/tmp -> /private/tmp) still matches the stored row.
+    QString existing = QDir::cleanPath(info.absoluteFilePath());
+    QStringList missing;
+    while (!QFileInfo::exists(existing)) {
+        const QString parent = QFileInfo(existing).absolutePath();
+        if (parent == existing)
+            return QDir::cleanPath(info.absoluteFilePath());
+        missing.prepend(QFileInfo(existing).fileName());
+        existing = parent;
+    }
+    QString resolved = QFileInfo(existing).canonicalFilePath();
+    for (const QString& part : missing)
+        resolved = QDir(resolved).filePath(part);
+    return QDir::cleanPath(resolved);
+}
+
+void execOrWarn(QSqlQuery& query, const char* action) {
+    if (!query.exec())
+        qWarning().noquote() << "KetPlus: conversation worktree" << action
+                             << "failed:" << query.lastError().text();
 }
 
 } // namespace
@@ -86,7 +110,7 @@ void ConversationWorktreeStore::save(const QString& conversationId, const QStrin
     query.addBindValue(worktree);
     query.addBindValue(role.isEmpty() ? QString::fromLatin1(kRoleAgent) : role);
     query.addBindValue(QDateTime::currentSecsSinceEpoch());
-    query.exec();
+    execOrWarn(query, "save");
 }
 
 void ConversationWorktreeStore::hide(const QString& conversationId, const QString& path) {
@@ -99,7 +123,7 @@ void ConversationWorktreeStore::hide(const QString& conversationId, const QStrin
         "UPDATE conversation_worktrees SET hidden=1 WHERE conversation_id=? AND path=?"));
     query.addBindValue(conversationId);
     query.addBindValue(cleanPath(path));
-    query.exec();
+    execOrWarn(query, "hide");
 }
 
 void ConversationWorktreeStore::removeConversation(const QString& conversationId) {
@@ -110,7 +134,7 @@ void ConversationWorktreeStore::removeConversation(const QString& conversationId
     QSqlQuery query(connection.db_);
     query.prepare(QStringLiteral("DELETE FROM conversation_worktrees WHERE conversation_id=?"));
     query.addBindValue(conversationId);
-    query.exec();
+    execOrWarn(query, "removal");
 }
 
 QVector<ConversationWorktreeRecord>

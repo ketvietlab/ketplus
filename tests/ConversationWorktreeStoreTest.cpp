@@ -1,6 +1,7 @@
 #include "agent/ConversationWorktreeStore.h"
 
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QStringList>
 #include <QTemporaryDir>
@@ -43,6 +44,28 @@ class ConversationWorktreeStoreTest final : public QObject {
         store.removeConversation(QStringLiteral("conversation-a"));
         QVERIFY(store.allPaths(QStringLiteral("conversation-a")).isEmpty());
         QVERIFY(!store.containsPath(primary));
+    }
+
+    void matchesDeletedWorktreesUnderSymlinkedParents() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString real = directory.filePath(QStringLiteral("real"));
+        const QString alias = directory.filePath(QStringLiteral("alias"));
+        QVERIFY(QDir().mkpath(QDir(real).filePath(QStringLiteral("repo-agent"))));
+        QVERIFY(QFile::link(real, alias));
+        const QString worktree = QDir(alias).filePath(QStringLiteral("repo-agent"));
+
+        ketplus::ConversationWorktreeStore store(
+            directory.filePath(QStringLiteral("conversation-worktrees.sqlite")));
+        store.save(QStringLiteral("conversation-a"), worktree,
+                   QString::fromLatin1(ketplus::ConversationWorktreeStore::kRoleAgent));
+        QCOMPARE(store.visiblePaths(QStringLiteral("conversation-a")).size(), 1);
+
+        // Once the worktree is gone it has no canonical path, but its parent still resolves.
+        QVERIFY(QDir(QDir(real).filePath(QStringLiteral("repo-agent"))).removeRecursively());
+        QVERIFY(store.containsPath(worktree, QStringLiteral("other-conversation")));
+        store.hide(QStringLiteral("conversation-a"), worktree);
+        QVERIFY(store.visiblePaths(QStringLiteral("conversation-a")).isEmpty());
     }
 
     void createdDuringTurnIgnoresMainAndExistingCheckouts() {

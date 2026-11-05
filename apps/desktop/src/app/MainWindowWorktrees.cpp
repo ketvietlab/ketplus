@@ -141,6 +141,23 @@ void MainWindow::setWorktreesWorkspaceVisible(const bool visible) {
     workspaceSplit_->setSizes(sizes);
 }
 
+QString MainWindow::worktreeRemovalBlocker(const QString& target) const {
+    if (target.isEmpty() || !QFileInfo(QDir(target).filePath(QStringLiteral(".git"))).isFile())
+        return tr("it is not a linked worktree");
+    const auto contains = [&target](const QString& file) {
+        const QString relative = QDir(target).relativeFilePath(file);
+        return !relative.isEmpty() && !QDir::isAbsolutePath(relative) &&
+               relative != QStringLiteral("..") && !relative.startsWith(QStringLiteral("../"));
+    };
+    for (const EditorWidget* editor : findChildren<EditorWidget*>()) {
+        if (editor->document().isModified() && contains(editor->document().filePath()))
+            return tr("an editor has unsaved changes in it");
+    }
+    if (agentManager_->runningPaths().contains(target))
+        return tr("an agent is running in it");
+    return {};
+}
+
 void MainWindow::showAgentWorktreeContextMenu(const QString& path) {
     const auto target = QFileInfo(path).canonicalFilePath();
     bool known = false;
@@ -150,18 +167,8 @@ void MainWindow::showAgentWorktreeContextMenu(const QString& path) {
     if (!known || target.isEmpty())
         return;
     const auto canRemove = [this, target] {
-        const auto contains = [&target](const QString& file) {
-            const QString relative = QDir(target).relativeFilePath(file);
-            return !relative.isEmpty() && !QDir::isAbsolutePath(relative) &&
-                   relative != QStringLiteral("..") && !relative.startsWith(QStringLiteral("../"));
-        };
-        for (EditorWidget* editor : findChildren<EditorWidget*>()) {
-            if (editor->document().isModified() && contains(editor->document().filePath()))
-                return false;
-        }
-        return QFileInfo(QDir(target).filePath(".git")).isFile() &&
+        return worktreeRemovalBlocker(target).isEmpty() &&
                target != QFileInfo(workspaceRoot_).canonicalFilePath() &&
-               !agentManager_->runningPaths().contains(target) &&
                !agentWorktreeCreator_->isRunning();
     };
     QMenu menu(this);

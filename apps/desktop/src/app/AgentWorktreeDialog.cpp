@@ -526,7 +526,8 @@ AgentConversationDeleteDialog::AgentConversationDeleteDialog(const QStringList& 
                                       : tr("Do you want to delete worktrees linked to this "
                                            "conversation?"),
                                   this)),
-      force_(new QCheckBox(tr("Force delete worktree"), this)) {
+      force_(
+          new QCheckBox(tr("Force delete, discarding uncommitted and untracked changes"), this)) {
     const int linkedWorktreeCount = static_cast<int>(linkedWorktreePaths.size());
     setObjectName(QStringLiteral("conversationDeleteDialog"));
     setWindowTitle(tr("Delete conversation"));
@@ -557,13 +558,28 @@ AgentConversationDeleteDialog::AgentConversationDeleteDialog(const QStringList& 
         layout->addWidget(paths);
     }
     layout->addWidget(force_);
+    // The consequence stays visible next to the choice instead of only in a tooltip.
+    auto* forceWarning =
+        new QLabel(tr("Uncommitted and untracked files in these worktrees are permanently "
+                      "deleted. Commit or stash anything you want to keep first."),
+                   this);
+    forceWarning->setObjectName(QStringLiteral("forceDeleteWorktreeWarning"));
+    forceWarning->setWordWrap(true);
+    forceWarning->setContentsMargins(22, 0, 0, 0);
+    forceWarning->setVisible(false);
+    layout->addWidget(forceWarning);
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-    buttons->button(QDialogButtonBox::Ok)->setText(tr("Delete"));
+    auto* deleteButton = buttons->button(QDialogButtonBox::Ok);
+    deleteButton->setText(tr("Delete"));
     layout->addWidget(buttons);
     connect(deleteLinked_, &QCheckBox::toggled, this, [this](const bool checked) {
         force_->setEnabled(checked);
         if (!checked)
             force_->setChecked(false);
+    });
+    connect(force_, &QCheckBox::toggled, this, [forceWarning, deleteButton](const bool checked) {
+        forceWarning->setVisible(checked);
+        deleteButton->setText(checked ? tr("Delete and Discard Changes") : tr("Delete"));
     });
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);

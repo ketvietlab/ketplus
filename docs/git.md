@@ -32,7 +32,11 @@ stay in the terminal.
 - Right-click a worktree in Agent Workspace to delete it after confirmation.
   Only inactive linked worktrees without a running agent are eligible. The
   branch is retained; Git refuses dirty or locked worktrees unless conversation
-  deletion explicitly requests a forced remove.
+  deletion explicitly requests a forced remove. Conversation deletion applies
+  the same checks: a worktree with an unsaved editor or a running agent is kept
+  and listed afterwards. Choosing the forced remove shows that uncommitted and
+  untracked files are lost, and the button changes to "Delete and Discard
+  Changes".
 - New conversation picks an existing Base worktree or creates a linked
   worktree from that checkout by entering a branch name. Conversation-owned
   worktrees are recorded in desktop SQLite when that create succeeds and when
