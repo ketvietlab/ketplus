@@ -3,6 +3,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QHash>
 #include <QPointer>
 #include <QProcess>
 #include <QStandardPaths>
@@ -42,6 +43,7 @@ class GitParserTest final : public QObject {
     void parsesWorktreeList();
     void discoversWorktreesAndProducesDiffs();
     void stopsPendingCommandsBeforeDestruction();
+    void diffsFilesBeforeTheFirstCommit();
 };
 
 void GitParserTest::parsesPorcelainV2Status() {
@@ -258,6 +260,51 @@ void GitParserTest::stopsPendingCommandsBeforeDestruction() {
     QVERIFY(!runningAtOwnerDestruction);
     for (const auto& process : pending)
         QVERIFY(process.isNull());
+}
+
+void GitParserTest::diffsFilesBeforeTheFirstCommit() {
+    const QString git = QStandardPaths::findExecutable(QStringLiteral("git"));
+    if (git.isEmpty())
+        QSKIP("Git is not installed.");
+
+    QTemporaryDir workspace;
+    QVERIFY(workspace.isValid());
+    // Canonical, because a deleted file cannot be resolved through /var -> /private/var.
+    const QString root = QFileInfo(workspace.path()).canonicalFilePath();
+    QVERIFY(runGit(git, root, {QStringLiteral("init"), QStringLiteral("-q")}));
+    const QString staged = QDir(root).filePath(QStringLiteral("staged.txt"));
+    const QString removed = QDir(root).filePath(QStringLiteral("removed.txt"));
+    for (const QString& path : {staged, removed}) {
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QCOMPARE(file.write("first\n"), 6);
+    }
+    QVERIFY(runGit(git, root, {QStringLiteral("add"), QStringLiteral(".")}));
+    // Staged, then deleted from the working tree: only the index still has it.
+    QVERIFY(QFile::remove(removed));
+
+    ketplus::GitService service;
+    service.setWorkspacePath(root);
+    QTRY_COMPARE_WITH_TIMEOUT(service.snapshot().files.size(), 2, 5000);
+    QCOMPARE(service.snapshot().head, QStringLiteral("(initial)"));
+
+    QHash<QString, QString> diffs;
+    QHash<QString, QString> errors;
+    connect(&service, &ketplus::GitService::diffReady, &service,
+            [&](const QString& path, const ketplus::GitDiffMode, const QString& diff,
+                const QString& error) {
+                diffs.insert(path, diff);
+                errors.insert(path, error);
+            });
+    service.requestDiff(staged);
+    service.requestDiff(removed);
+    QTRY_COMPARE_WITH_TIMEOUT(diffs.size(), 2, 5000);
+    QVERIFY2(errors.value(staged).isEmpty(), qPrintable(errors.value(staged)));
+    QVERIFY2(diffs.value(staged).contains(QStringLiteral("+first")),
+             qPrintable(diffs.value(staged)));
+    QVERIFY2(errors.value(removed).isEmpty(), qPrintable(errors.value(removed)));
+    QVERIFY2(diffs.value(removed).contains(QStringLiteral("+first")),
+             qPrintable(diffs.value(removed)));
 }
 
 QTEST_MAIN(GitParserTest)

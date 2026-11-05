@@ -183,13 +183,18 @@ void GitService::requestDiff(const QString& filePath, const GitDiffMode mode) {
     QStringList arguments{QStringLiteral("-C"), root, QStringLiteral("diff"),
                           QStringLiteral("--no-ext-diff"), QStringLiteral("--no-color")};
     int acceptedDifferenceExitCode = 0;
-    if (isUntracked(relativePath)) {
+    // Before the first commit there is no HEAD to compare with, so the whole file is new.
+    const bool unbornHead = snapshot_.head == QStringLiteral("(initial)");
+    const bool combinedWithoutHead = unbornHead && mode == GitDiffMode::Combined;
+    if (isUntracked(relativePath) || (combinedWithoutHead && QFileInfo(absolutePath).isFile())) {
         arguments.append({QStringLiteral("--no-index"), QStringLiteral("--"),
                           nullDeviceForGit(), absolutePath});
         acceptedDifferenceExitCode = 1;
     } else {
         arguments.append(QStringLiteral("--find-renames"));
         if (mode == GitDiffMode::Staged) {
+            arguments.append(QStringLiteral("--cached"));
+        } else if (combinedWithoutHead) {
             arguments.append(QStringLiteral("--cached"));
         } else if (mode == GitDiffMode::Combined) {
             arguments.append(QStringLiteral("HEAD"));
