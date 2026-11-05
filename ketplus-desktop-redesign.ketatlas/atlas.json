@@ -4446,6 +4446,97 @@
           "kind": "recovery"
         }
       ]
+    },
+    {
+      "id": "agent-messaging",
+      "title": "Message another conversation",
+      "start": "pick",
+      "ends": [
+        "reply",
+        "held"
+      ],
+      "nodes": [
+        {
+          "id": "pick",
+          "screen": "workspace",
+          "title": "Type # to pick a conversation",
+          "url": "./screens/workspace.html?conversation=navigation&mention=conversation",
+          "column": 0,
+          "row": 0
+        },
+        {
+          "id": "sent",
+          "screen": "workspace",
+          "title": "Sender · Agent message sent",
+          "url": "./screens/workspace.html?conversation=navigation",
+          "column": 1,
+          "row": 0
+        },
+        {
+          "id": "received",
+          "screen": "workspace",
+          "title": "Receiver · Message from #… bubble",
+          "url": "./screens/workspace.html?conversation=startup",
+          "column": 2,
+          "row": 0
+        },
+        {
+          "id": "reply",
+          "screen": "workspace",
+          "title": "Sender · Reply from #…",
+          "url": "./screens/workspace.html?conversation=navigation&agent=reply",
+          "column": 3,
+          "row": 0
+        },
+        {
+          "id": "held",
+          "screen": "workspace",
+          "title": "Held by the loop guard",
+          "url": "./screens/workspace.html?conversation=navigation&agent=held",
+          "column": 1,
+          "row": 1
+        },
+        {
+          "id": "limits",
+          "type": "note",
+          "title": "Loop guard",
+          "description": "Automatic turns stop at hop 6, after 30 automatic turns in one exchange, or after 20 per receiver per hour. A held message is delivered with the receiver's next message from the user. A conversation cannot message itself.",
+          "column": 2,
+          "row": 1
+        }
+      ],
+      "edges": [
+        {
+          "from": "pick",
+          "to": "sent",
+          "label": "Send; the agent calls agents_send",
+          "kind": "primary"
+        },
+        {
+          "from": "sent",
+          "to": "received",
+          "label": "Idle receiver starts a turn; its row ends with from #…",
+          "kind": "primary"
+        },
+        {
+          "from": "received",
+          "to": "reply",
+          "label": "Final answer is sent back as the reply",
+          "kind": "primary"
+        },
+        {
+          "from": "sent",
+          "to": "held",
+          "label": "Over a loop-guard limit",
+          "kind": "conditional"
+        },
+        {
+          "from": "held",
+          "to": "limits",
+          "label": "Why it was held",
+          "kind": "conditional"
+        }
+      ]
     }
   ]
 }
