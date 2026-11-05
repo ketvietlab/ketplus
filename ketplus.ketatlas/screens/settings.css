@@ -216,7 +216,7 @@
 }
 .settings-preview-code {
     padding: 17px;
-    font: var(--kp-text-sm) / 1.8 var(--kv-font-mono);
+    font: max(13px, var(--kp-text-sm)) / 1.8 var(--kv-font-mono);
 }
 .settings-preview-code p + p {
     margin: 0;

@@ -371,7 +371,7 @@
 .remote-section code,
 .connections-remote code {
     font-family: var(--kv-font-mono);
-    font-size: 12px;
+    font-size: 13px;
 }
 .remote-ssh-form {
     margin-top: 16px;
@@ -409,6 +409,6 @@
 }
 .remote-command code {
     font-family: var(--kv-font-mono);
-    font-size: 12px;
+    font-size: 13px;
     line-height: 1.25rem;
 }

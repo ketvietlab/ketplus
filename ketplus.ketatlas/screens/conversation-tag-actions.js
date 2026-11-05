@@ -82,7 +82,7 @@ K.openTagEditor = target => {
     editor.setAttribute("role", "dialog");
     editor.setAttribute("aria-label", `Tags for ${target.record.title}`);
     editor.dataset.conversation = target.id;
-    editor.innerHTML = `<header><span>Tags</span><small>#${K.conversationNumber(target.scope, target.record)} · ${K.escape(target.record.title)}</small></header>
+    editor.innerHTML = `<header><span>Tags</span><small>@agent/${K.conversationNumber(target.scope, target.record)} · ${K.escape(target.record.title)}</small></header>
         <input type="text" aria-label="Find or create a tag" placeholder="Find or create a tag" maxlength="40" value="${K.escape(K.query.get("tagQuery") || "")}">
         <div class="tag-editor-list" role="menu"></div>
         <footer>${K.button("Manage tags…", "manage-tags", "settings", "ghost")}</footer>`;

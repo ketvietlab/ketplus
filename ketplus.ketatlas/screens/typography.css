@@ -32,3 +32,13 @@ body {
 .sidebar-inner .tree-activity {
     --kp-text-xs: round(calc(9px * var(--kp-font-scale)), 1px);
 }
+
+/* Mono text never renders below 13px. These Két components set mono sizes inside
+   :where(), so restate each size with the floor rather than editing the adapter. */
+[data-kv-design-system] [data-ui="count-badge"],
+[data-kv-design-system] [data-ui="code-block"],
+[data-kv-design-system] [data-ui="section-eyebrow"],
+[data-kv-design-system] [data-ui="markdown"] code { font-size: max(13px, var(--kv-text-xs)); }
+[data-kv-design-system] [data-ui="code"] { font-size: round(max(13px, 85%), 1px); }
+[data-kv-design-system] [data-ui="action-leading"],
+[data-kv-design-system] [data-ui="disclosure-summary"]::after { font-size: max(13px, 1em); }

@@ -29,12 +29,13 @@
     width: 13px;
 }
 .folder-row,
+/* Explorer rows and Source Control files read at 14 px (--kp-text-base at the default interface size). */
 .file-row {
     height: 29px;
     display: flex;
     align-items: center;
     gap: 7px;
-    font-size: var(--kp-text-sm);
+    font-size: var(--kp-text-base);
     padding: 0 12px;
     color: var(--kv-text-secondary);
 }
@@ -57,7 +58,7 @@
     gap: 6px;
     cursor: pointer;
     height: 28px;
-    font-size: var(--kp-text-sm);
+    font-size: var(--kp-text-base);
     color: var(--kv-text-secondary);
     list-style: none;
 }
@@ -157,7 +158,7 @@
     font-family: var(--kv-font-mono);
     padding: 15px 0;
     min-width: calc(100% - 90px);
-    font-size: var(--kp-text-base);
+    font-size: max(13px, var(--kp-text-base));
     line-height: 1.9;
 }
 .source-line {
@@ -171,12 +172,12 @@
     flex-shrink: 0;
     text-align: right;
     padding-right: 22px;
-    font-size: var(--kp-text-sm);
+    font-size: max(13px, var(--kp-text-sm));
     color: var(--kv-text-disabled);
     user-select: none;
 }
 .source-line code {
-    font-size: var(--kp-text-md);
+    font-size: max(13px, var(--kp-text-md));
 }
 .source-line.current-line {
     background: var(--kv-accent-subtle);
@@ -217,7 +218,7 @@
     padding: 7px 20px;
     background: var(--kv-accent-subtle);
     color: var(--kv-accent-text);
-    font: var(--kp-text-sm) var(--kv-font-mono);
+    font: max(13px, var(--kp-text-sm)) var(--kv-font-mono);
 }
 .diff-lines {
     padding: 8px 0;
@@ -225,7 +226,7 @@
 .diff-line {
     display: flex;
     align-items: center;
-    font-size: var(--kp-text-md);
+    font-size: max(13px, var(--kp-text-md));
     line-height: 25px;
     white-space: pre;
     min-width: max-content;
@@ -237,14 +238,14 @@
     text-align: right;
     flex-shrink: 0;
     color: var(--kv-text-disabled);
-    font: var(--kp-text-xs) var(--kv-font-mono);
+    font: max(13px, var(--kp-text-xs)) var(--kv-font-mono);
     user-select: none;
 }
 .diff-sign {
     width: 20px;
     flex-shrink: 0;
     text-align: center;
-    font: var(--kp-editor-size) var(--kv-font-mono);
+    font: max(13px, var(--kp-editor-size)) var(--kv-font-mono);
     color: var(--kv-text-muted);
 }
 .diff-line.add {
@@ -260,11 +261,11 @@
     color: var(--kv-danger);
 }
 .diff-line code {
-    font: var(--kp-text-sm) / 25px var(--kv-font-mono);
+    font: max(13px, var(--kp-text-sm)) / 25px var(--kv-font-mono);
     padding-left: 12px;
 }
 .context-pane .diff-line code {
-    font-size: var(--kp-text-xs);
+    font-size: max(13px, var(--kp-text-xs));
 }
 .context-pane .diff-line .line-number {
     width: 28px;
@@ -287,7 +288,7 @@
     flex: 1;
     padding: 15px 18px;
     overflow: auto;
-    font: var(--kp-editor-size) / 1.8 var(--kv-font-mono);
+    font: max(13px, var(--kp-editor-size)) / 1.8 var(--kv-font-mono);
 }
 .terminal-session {
     display: flex;
@@ -318,13 +319,13 @@
     flex-wrap: wrap;
     gap: 8px;
     align-items: center;
-    font: var(--kp-editor-size) var(--kv-font-mono);
+    font: max(13px, var(--kp-editor-size)) var(--kv-font-mono);
 }
 #terminal-form label {
     padding-top: 4px;
 }
 #terminal-command {
-    font: var(--kp-editor-size) var(--kv-font-mono);
+    font: max(13px, var(--kp-editor-size)) var(--kv-font-mono);
     background: transparent;
     border: 0;
     outline: none;
@@ -391,7 +392,7 @@
     align-items: center;
     gap: 8px;
     padding: 10px 13px;
-    font-size: var(--kp-text-sm);
+    font-size: var(--kp-text-base);
 }
 .change-row > .icon {
     width: 13px;
@@ -466,6 +467,6 @@
     padding: 17px;
     background: var(--kv-panel-bg-subtle);
     border-radius: 5px;
-    font-size: var(--kp-text-md);
+    font-size: max(13px, var(--kp-text-md));
     margin: 15px 0;
 }
