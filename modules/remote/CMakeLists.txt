@@ -14,8 +14,19 @@ target_include_directories(ketplus_remote PUBLIC
 )
 ketplus_enable_warnings(ketplus_remote)
 
+# Device keys, credential storage and browser sign-in, shared by the host daemon and a
+# Desktop acting as a paired remote client.
+add_library(ketplus_control_crypto STATIC
+    src/cloud/CloudCrypto.cpp src/cloud/CloudCrypto.h
+    src/cloud/CredentialStore.cpp src/cloud/CredentialStore.h
+    src/cloud/BrowserSignIn.cpp src/cloud/BrowserSignIn.h
+    src/cloud/ControlEndpoint.h src/cloud/HostPlatform.h)
+target_link_libraries(ketplus_control_crypto PUBLIC Qt6::Core Qt6::Network OpenSSL::Crypto ketplus_remote)
+target_include_directories(ketplus_control_crypto PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
+ketplus_enable_warnings(ketplus_control_crypto)
+
 # Independent backend for a Desktop acting as a paired remote client; no UI composition yet.
-# Reuse the private crypto/credential target shared with the host daemon.
 add_library(ketplus_remote_control STATIC
     src/control/ControlV2Client.h src/control/ControlV2Client.cpp
     src/control/ControlV2Authentication.cpp src/control/ControlV2Sessions.cpp)

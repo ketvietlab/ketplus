@@ -13,7 +13,7 @@ Place code according to which edition needs it:
 | AI provider transport and Agent Workspace | `modules/ai` | Pro |
 | Atlas process, WebView, and index | `modules/atlas` | Pro |
 | Local/remote host session control plane and Linux headless CLI | `apps/daemon` | Pro; the headless daemon also builds alone |
-| Local IPC and Qt Control v2 remote-client backend | `modules/remote` | Pro |
+| Local IPC, Qt Control v2 remote-client backend, device keys and credentials (`ketplus_control_crypto`) | `modules/remote` | Pro |
 | Canonical browser server (browser.v0) | `apps/browser` | Pro; bundled as a separate helper process, never linked |
 | Provider browser-tool launch settings and runtime discovery | `modules/browser` | Pro; Qt Core only |
 

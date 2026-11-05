@@ -17,13 +17,10 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/LocalJournalDeletion.cpp
     src/runtime/SessionHostDeletion.cpp
     src/storage/LocalJournalTasks.cpp
-    src/cloud/BrowserSignIn.cpp
-    src/cloud/BrowserSignIn.h
     src/cloud/CloudControlClient.cpp
     src/cloud/CloudControlClient.h
     src/cloud/CloudControlDeviceSignIn.cpp
     src/cloud/CloudControlSignIn.cpp
-    src/cloud/ControlEndpoint.h
     src/cloud/CloudControlBatching.h
     src/cloud/WorktreeBranches.cpp
     src/cloud/WorktreeBranches.h
@@ -31,10 +28,6 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/cloud/WorktreeRepositories.h
     src/cloud/CloudEventProjection.cpp
     src/cloud/CloudEventProjection.h
-    src/cloud/CloudCrypto.cpp
-    src/cloud/CloudCrypto.h
-    src/cloud/CredentialStore.cpp
-    src/cloud/CredentialStore.h
     src/cloud/RelayWakeups.cpp
     src/cloud/RelayWakeups.h
     src/ipc/LocalIpcServer.cpp
