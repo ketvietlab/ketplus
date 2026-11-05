@@ -229,7 +229,7 @@
     overflow: hidden;
     min-width: 0;
     color: var(--kv-text-secondary);
-    font-size: var(--kp-text-sm);
+    font-size: max(13px, var(--kp-text-sm));
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -285,7 +285,7 @@
     border-radius: var(--kv-radius-sm);
     background: var(--kv-interactive-bg);
     color: var(--kv-text-secondary);
-    font-size: var(--kp-text-xs);
+    font-size: max(13px, var(--kp-text-xs));
 }
 .current-activity {
     display: flex;
@@ -981,7 +981,7 @@
     border: 1px solid var(--kv-panel-border);
     border-radius: 5px;
     font-family: var(--kv-font-mono);
-    font-size: var(--kp-text-sm);
+    font-size: max(13px, var(--kp-text-sm));
     margin-top: 18px;
     color: var(--kv-text-muted);
 }

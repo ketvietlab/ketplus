@@ -26,11 +26,11 @@
 .agent-note.held svg { color: var(--kv-warning); }
 
 .agent-tool-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.agent-tool-row code { font: var(--kp-text-sm)/1.6 var(--kv-font-mono); color: var(--kv-text-secondary); }
-.agent-tool-target { font: var(--kp-text-sm)/1.6 var(--kv-font-mono); color: var(--kv-text-muted); }
+.agent-tool-row code { font: max(13px, var(--kp-text-sm))/1.6 var(--kv-font-mono); color: var(--kv-text-secondary); }
+.agent-tool-target { font: max(13px, var(--kp-text-sm))/1.6 var(--kv-font-mono); color: var(--kv-text-muted); }
 
 .header-number {
-    flex: none; margin-right: 8px; font: 500 var(--kp-text-base)/1 var(--kv-font-mono); color: var(--kv-text-muted);
+    flex: none; margin-right: 8px; font: 500 max(13px, var(--kp-text-base))/1 var(--kv-font-mono); color: var(--kv-text-muted);
 }
 
 .composer-wrap { position: relative; }

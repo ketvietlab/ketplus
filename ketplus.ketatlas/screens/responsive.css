@@ -31,7 +31,7 @@
         width: 195px;
     }
     .source-line code {
-        font-size: var(--kp-text-sm);
+        font-size: max(13px, var(--kp-text-sm));
     }
 }
 @media (max-width: 760px) {
@@ -294,7 +294,7 @@ body .nav-item {
     font-size: round(calc(12px * var(--kp-font-scale)), 1px);
 }
 .source-line code {
-    font-size: var(--kp-editor-size, 13px);
+    font-size: max(13px, var(--kp-editor-size, 13px));
     font-family: var(--kp-editor-font, var(--kv-font-mono));
 }
 .terminal-output,

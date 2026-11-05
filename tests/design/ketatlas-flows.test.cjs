@@ -1238,6 +1238,21 @@ test("no-result model search keeps the compact draft and recovers when cleared",
     a.input("#model-search", "");
     assert.equal(a.document.querySelector("#model-search-empty").hidden, true);
 });
+test("mono text never renders below 13px", () => {
+    const screens = path.join(root, "screens");
+    const atLeast13 = size => /^max\(13px,/.test(size) || /^round\(max\(13px,/.test(size) ||
+        (/^\d+px$/.test(size) && parseInt(size, 10) >= 13) || /^var\(--kp-(editor|terminal)-size/.test(size);
+    for (const file of fs.readdirSync(screens).filter((name) => name.endsWith(".css"))) {
+        const css = fs.readFileSync(path.join(screens, file), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+        for (const [, selector, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+            if (!/font(-family)?\s*:[^;]*mono/i.test(body)) continue;
+            const shorthand = /font\s*:\s*(?:(?:italic|normal|bold|[1-9]00)\s+)*([^\s/;]+)/.exec(body)?.[1];
+            const size = /font-size\s*:\s*([^;]+)/.exec(body)?.[1].trim() || shorthand;
+            assert.ok(size && atLeast13(size), `${file}: ${selector.trim()} → ${size}`);
+        }
+    }
+    assert.match(fs.readFileSync(path.join(screens, "typography.css"), "utf8"), /\[data-ui="code-block"\][\s\S]*max\(13px, var\(--kv-text-xs\)\)/);
+});
 test("font sizes are whole pixels, including configuration defaults", () => {
     const screens = path.join(root, "screens");
     for (const file of fs.readdirSync(screens).filter((name) => name.endsWith(".css"))) {

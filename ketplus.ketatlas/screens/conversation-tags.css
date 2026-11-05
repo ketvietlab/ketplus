@@ -15,7 +15,7 @@
 .conversation-line { display: flex; align-items: center; gap: 6px; min-width: 0; height: 17px; }
 .sidebar-context .conversation-line .conversation-title { flex: 1; line-height: 17px; }
 .sidebar-context .conversation.selected .conversation-title { font-weight: 500; }
-.conversation-number { flex: none; font: 12px/17px var(--kv-font-mono); color: var(--kv-text-muted); }
+.conversation-number { flex: none; font: 13px/17px var(--kv-font-mono); color: var(--kv-text-muted); }
 .conversation-meta-line { height: 18px; font-size: 12px; color: var(--kv-text-muted); }
 .conversation-meta-line { overflow: hidden; }
 .conversation-tags { display: flex; gap: 4px; min-width: 0; flex: none; }
