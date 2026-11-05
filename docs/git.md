@@ -53,3 +53,16 @@ disabled, and optional repository locks disabled. Status uses porcelain v2 with
 NUL-separated records, and worktree discovery uses the porcelain worktree format.
 Command output and execution time are bounded so a slow repository cannot grow
 memory indefinitely or leave a process running forever.
+
+Status refreshes on its own when Git runs outside KetPlus, for example in the
+integrated terminal or in an agent. The service watches the repository's git
+directory (index and `HEAD` replacements) and its `logs/HEAD` reflog, and
+debounces changes into one refresh. Its own `git status` runs with optional
+locks disabled, so it doesn't write the index and trigger itself. The Source
+Control list keeps the selected file and the scroll position across refreshes.
+
+Only the newest diff request is answered. Replies to an older request, or to a
+request made before a workspace switch, are dropped, so a slow diff can't
+replace the one the user asked for last. Routine diff errors, such as a file
+outside the repository or Git's own error message, appear in the status bar
+instead of a dialog.

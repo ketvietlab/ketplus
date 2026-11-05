@@ -356,7 +356,9 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
                    const QString& error) {
                 const bool fromAgent = agentDiffRequests_.remove(normalizedPath(path));
                 if (!error.isEmpty()) {
-                    QMessageBox::warning(this, QStringLiteral("Unable to show Git diff"), error);
+                    // Routine (outside the repository, git stderr): no modal dialog.
+                    statusBar()->showMessage(
+                        QStringLiteral("Unable to show Git diff: %1").arg(error), 6000);
                 } else if (diff.isEmpty() && fromAgent && QFileInfo(path).isFile()) {
                     openFile(path);
                 } else if (diff.isEmpty()) {

@@ -259,6 +259,8 @@ void MainWindow::openTranscriptFile(const QString& path, bool diff) {
 
 void MainWindow::requestFileDiff(const QString& filePath, const GitDiffMode mode) {
     statusBar()->showMessage(QStringLiteral("Loading Git diff…"));
+    // GitService answers only the newest request, so only it can be an agent's.
+    agentDiffRequests_.clear();
     if (agentWorkspaceMode_)
         agentDiffRequests_.insert(normalizedPath(filePath));
     git_->requestDiff(filePath, mode);

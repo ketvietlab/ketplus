@@ -45,6 +45,8 @@ class GitParserTest final : public QObject {
     void diffsSymlinksAsLinks();
     void diffsUntrackedFilesWithDecomposedNames();
     void stopsPendingCommandsBeforeDestruction();
+    void answersOnlyTheNewestDiffRequest();
+    void refreshesWhenGitRunsOutsideKetPlus();
     void diffsFilesBeforeTheFirstCommit();
 };
 
@@ -208,9 +210,11 @@ void GitParserTest::discoversWorktreesAndProducesDiffs() {
                     unstagedFinished = true;
                 }
             });
+    // Only the newest request is answered, so ask one at a time.
     service.requestDiff(tracked.fileName(), ketplus::GitDiffMode::Staged);
+    QTRY_VERIFY_WITH_TIMEOUT(stagedFinished, 5000);
     service.requestDiff(tracked.fileName(), ketplus::GitDiffMode::Unstaged);
-    QTRY_VERIFY_WITH_TIMEOUT(stagedFinished && unstagedFinished, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(unstagedFinished, 5000);
     QVERIFY(stagedDiff.contains(QStringLiteral("-before")));
     QVERIFY(stagedDiff.contains(QStringLiteral("+after")));
     QVERIFY(unstagedDiff.contains(QStringLiteral("-after")));
@@ -290,9 +294,11 @@ void GitParserTest::diffsSymlinksAsLinks() {
                 diffs.insert(path, diff);
                 errors.insert(path, error);
             });
-    service.requestDiff(link);
-    service.requestDiff(outsideLink);
-    QTRY_COMPARE_WITH_TIMEOUT(diffs.size(), 2, 5000);
+    // Only the newest request is answered, so ask one at a time.
+    for (const QString& path : {link, outsideLink}) {
+        service.requestDiff(path);
+        QTRY_VERIFY_WITH_TIMEOUT(diffs.contains(path), 5000);
+    }
 
     QVERIFY2(errors.value(link).isEmpty(), qPrintable(errors.value(link)));
     QVERIFY2(diffs.value(link).contains(QStringLiteral("-sub/target.txt")),
@@ -413,10 +419,10 @@ void GitParserTest::diffsFilesBeforeTheFirstCommit() {
                 diffs.insert(path, diff);
                 errors.insert(path, error);
             });
-    service.requestDiff(staged);
-    service.requestDiff(removed);
-    service.requestDiff(danglingLink);
-    QTRY_COMPARE_WITH_TIMEOUT(diffs.size(), 3, 5000);
+    for (const QString& path : {staged, removed, danglingLink}) {
+        service.requestDiff(path);
+        QTRY_VERIFY_WITH_TIMEOUT(diffs.contains(path), 5000);
+    }
     QVERIFY2(errors.value(danglingLink).isEmpty(), qPrintable(errors.value(danglingLink)));
     QVERIFY2(diffs.value(danglingLink).contains(QStringLiteral("new file mode 120000")),
              qPrintable(diffs.value(danglingLink)));
@@ -428,6 +434,89 @@ void GitParserTest::diffsFilesBeforeTheFirstCommit() {
     QVERIFY2(errors.value(removed).isEmpty(), qPrintable(errors.value(removed)));
     QVERIFY2(diffs.contains(removed) && diffs.value(removed).isEmpty(),
              qPrintable(diffs.value(removed)));
+}
+
+void GitParserTest::answersOnlyTheNewestDiffRequest() {
+    const QString git = QStandardPaths::findExecutable(QStringLiteral("git"));
+    if (git.isEmpty())
+        QSKIP("Git is not installed.");
+
+    QTemporaryDir workspace;
+    QTemporaryDir other;
+    QVERIFY(workspace.isValid() && other.isValid());
+    const QString root = QFileInfo(workspace.path()).canonicalFilePath();
+    QVERIFY(runGit(git, root, {QStringLiteral("init"), QStringLiteral("-q")}));
+    QVERIFY(runGit(git, other.path(), {QStringLiteral("init"), QStringLiteral("-q")}));
+    const QString first = QDir(root).filePath(QStringLiteral("first.txt"));
+    const QString second = QDir(root).filePath(QStringLiteral("second.txt"));
+    for (const QString& path : {first, second}) {
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QCOMPARE(file.write("line\n"), 5);
+    }
+
+    ketplus::GitService service;
+    service.setWorkspacePath(root);
+    QTRY_COMPARE_WITH_TIMEOUT(service.snapshot().files.size(), 2, 5000);
+
+    QStringList answered;
+    connect(&service, &ketplus::GitService::diffReady, &service,
+            [&](const QString& path, const ketplus::GitDiffMode, const QString&, const QString&) {
+                answered.append(path);
+            });
+    // An older reply arriving later would replace the diff the user asked for last.
+    service.requestDiff(first, ketplus::GitDiffMode::Unstaged);
+    service.requestDiff(second, ketplus::GitDiffMode::Unstaged);
+    QTRY_COMPARE_WITH_TIMEOUT(answered.size(), 1, 5000);
+    QTest::qWait(300);
+    QCOMPARE(answered, QStringList{second});
+
+    // A diff of the previous workspace never opens in the new one.
+    answered.clear();
+    service.requestDiff(first, ketplus::GitDiffMode::Unstaged);
+    service.setWorkspacePath(other.path());
+    QTest::qWait(500);
+    QVERIFY(answered.isEmpty());
+}
+
+void GitParserTest::refreshesWhenGitRunsOutsideKetPlus() {
+    const QString git = QStandardPaths::findExecutable(QStringLiteral("git"));
+    if (git.isEmpty())
+        QSKIP("Git is not installed.");
+
+    QTemporaryDir workspace;
+    QVERIFY(workspace.isValid());
+    const QString root = QFileInfo(workspace.path()).canonicalFilePath();
+    QVERIFY(runGit(git, root, {QStringLiteral("init"), QStringLiteral("-q")}));
+    {
+        QFile file(QDir(root).filePath(QStringLiteral("notes.txt")));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QCOMPARE(file.write("notes\n"), 6);
+    }
+
+    ketplus::GitService service;
+    service.setWorkspacePath(root);
+    QTRY_COMPARE_WITH_TIMEOUT(service.snapshot().files.size(), 1, 5000);
+    QVERIFY(service.snapshot().files.at(0).untracked);
+
+    // Like a terminal or an agent: Git runs without KetPlus asking for a refresh.
+    QVERIFY(runGit(git, root, {QStringLiteral("add"), QStringLiteral("notes.txt")}));
+    QTRY_VERIFY_WITH_TIMEOUT(!service.snapshot().files.isEmpty() &&
+                                 service.snapshot().files.at(0).hasStagedChange(),
+                             5000);
+
+    QVERIFY(runGit(git, root,
+                   {QStringLiteral("-c"), QStringLiteral("user.name=KetPlus Test"),
+                    QStringLiteral("-c"), QStringLiteral("user.email=test@ketplus.invalid"),
+                    QStringLiteral("commit"), QStringLiteral("-q"), QStringLiteral("-m"),
+                    QStringLiteral("Initial")}));
+    QTRY_VERIFY_WITH_TIMEOUT(service.snapshot().files.isEmpty(), 5000);
+    QVERIFY(service.snapshot().head != QStringLiteral("(initial)"));
+
+    QVERIFY(runGit(git, root,
+                   {QStringLiteral("checkout"), QStringLiteral("-q"), QStringLiteral("-b"),
+                    QStringLiteral("feature/watch")}));
+    QTRY_COMPARE_WITH_TIMEOUT(service.snapshot().branch, QStringLiteral("feature/watch"), 5000);
 }
 
 QTEST_MAIN(GitParserTest)

@@ -212,7 +212,9 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
             [this](const QString& path, const GitDiffMode mode, const QString& diff,
                    const QString& error) {
                 if (!error.isEmpty()) {
-                    QMessageBox::warning(this, QStringLiteral("Unable to show Git diff"), error);
+                    // Routine (outside the repository, git stderr): no modal dialog.
+                    statusBar()->showMessage(
+                        QStringLiteral("Unable to show Git diff: %1").arg(error), 6000);
                 } else if (diff.isEmpty()) {
                     statusBar()->showMessage(QStringLiteral("No changes for this file."), 3000);
                 } else {
