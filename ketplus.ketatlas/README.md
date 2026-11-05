@@ -410,11 +410,13 @@ Flow `conversation-tags`. Implemented natively per ADR 0028: Desktop SQLite stor
 access, filter not persisted. The native header shows a solid-bordered Add tag button
 instead of the mock's dashed one.
 
+- Repository headings lead with a folder (open while expanded; a monitor for a Linux machine), and
+  their conversations and **Show more** indent to the repository name.
 - Every sidebar conversation row has two lines in a 48 px row (the native row is 36 px today).
-  Line 1 has the status icon, the title at full width and, while a turn started by another
-  conversation's message runs, `from N`. Line 2 has the conversation's number (no `#`), then its tags.
+  Line 1 has the title, with the status icon at the trailing edge; the row never names an agent sender.
+  Line 2 has the conversation's number (no `#`), then its tags.
   An untagged row shows its status there instead.
-- Tags show as whole chips (84 px at most, long names end with an ellipsis). Chips that do not
+- Tags show as whole label-only chips tinted with their colour, without a dot (84 px at most, long names end with an ellipsis). Chips that do not
   fit are hidden and counted in `+N`, whose tooltip lists them. The tag of the active filter
   always comes first. The default sidebar is 214 px wide (180 px minimum), and these rules keep
   line 2 inside it.
@@ -447,8 +449,8 @@ The mock shows the Desktop projection only.
 - The sender's turn keeps its `agents_send` tool row and adds an **Agent message** note:
   `Sent to @agent/N · title · started a turn · reply requested.`
 - An idle receiver starts a turn. Its opening row is an outlined bubble labelled
-  `Message from @agent/N · title · provider` instead of the user's text. While that turn runs,
-  its sidebar row ends with `from N`.
+  `Message from @agent/N · title · provider` instead of the user's text. Its sidebar row stays
+  title, number and tags; it does not add `from N`.
 - The receiver's final answer comes back to the sender as the opening row of the next turn,
   labelled `Reply from @agent/N · title · provider`.
 - Over a loop-guard limit (hop 6, 30 automatic turns in one exchange, 20 per receiver per hour)

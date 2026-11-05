@@ -82,13 +82,18 @@ body { --kp-text-reading: 15px; --kp-conversation-width: 760px; }
 .machine-note, .repository-empty { margin: 0 8px 10px; color: var(--kv-text-muted); font-size: 11px; line-height: 16px; }
 .machine-note a { color: var(--kv-accent-text); text-decoration: underline; text-underline-offset: 2px; }
 .repository-groups { display: grid; gap: 4px; }
-.remote-repository .repository-group-name > .icon { width: 12px; height: 12px; flex-shrink: 0; }
 .sidebar-context .conversation.unavailable { color: var(--kv-text-muted); cursor: not-allowed; }
 .sidebar-context .conversation.unavailable .conversation-title { color: inherit; }
 .repository-group { margin-bottom: 0; }
 .repository-group-header { display: flex; align-items: center; gap: 2px; height: 28px; min-height: 28px; padding: 0 2px 0 0; }
 .repository-group-name { display: flex; align-items: center; flex: 1; min-width: 0; height: 28px; padding: 0 0 0 8px; background: none; border: 0; color: var(--kv-text-muted); font-size: 13px; font-weight: 500; text-align: left; }
 .repository-group-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Repositories lead with a folder (a monitor for Linux) in the secondary text colour; their
+   conversations indent to the name so each group reads as one block. */
+.repository-group-name { gap: 6px; color: var(--kv-text-secondary); font-weight: 600; }
+.repository-group-name > .icon { width: 14px; height: 14px; flex-shrink: 0; color: var(--kv-text-muted); }
+.repository-group-name:hover, .repository-group.selected .repository-group-name { color: var(--kv-text-main); }
+.sidebar-context .repository-group .conversation, .repository-group .conversation-more { padding-left: 28px; }
 .repository-group-header > .icon-btn { width: 24px; height: 24px; min-height: 24px; }
 .repository-group-header > .icon-btn .icon { width: 14px; height: 14px; }
 .sidebar-context .conversation-list { gap: 2px; }

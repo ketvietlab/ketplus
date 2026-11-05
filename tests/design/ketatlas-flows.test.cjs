@@ -73,10 +73,12 @@ test("agent messages name their sender, and the header shows the conversation nu
     assert.equal(received.document.querySelector(".transcript > .user-message:not(.agent-message)"), null);
     assert.match(received.document.querySelector(".agent-heading .header-number").textContent, /^@agent\/\d{4}$/);
     // The sidebar shows bare numbers; `#1234` would read as an issue or pull request.
-    const numbers = [...received.document.querySelectorAll(".sidebar-inner .conversation-number, .sidebar-inner .conversation-sender")].map(n => n.textContent.trim());
+    const numbers = [...received.document.querySelectorAll(".sidebar-inner .conversation-number")].map(n => n.textContent.trim());
     assert.ok(numbers.length > 1);
-    assert.ok(numbers.every(text => !text.includes("#")), numbers.join(", "));
-    assert.ok(numbers.some(text => /^from \d{4}$/.test(text)));
+    assert.ok(numbers.every(text => /^\d{4,5}$/.test(text)), numbers.join(", "));
+    // Rows do not name the sending agent; the transcript's origin line does.
+    assert.equal(received.document.querySelector(".sidebar-inner .conversation-sender"), null);
+    assert.doesNotMatch(received.document.querySelector(".sidebar-inner").textContent, /\bfrom \d{4}/);
     received.close();
     const sent = screen("screens/workspace.html?conversation=navigation");
     assert.match(sent.document.querySelector(".agent-note").textContent.trim(),
@@ -119,6 +121,20 @@ test("@agent/ in the composer completes another conversation's number; a plain @
     prompt.dispatchEvent(new s.w.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     assert.equal(prompt.value, `Ask @agent/${first} `);
     assert.equal(s.document.querySelector(".mention-menu"), null);
+    s.close();
+});
+test("sidebar rows: folder-led repositories, label-only tag chips and a trailing status icon", () => {
+    const s = screen("screens/workspace.html");
+    const chips = [...s.document.querySelectorAll(".conversation-tag")];
+    assert.ok(chips.length > 0);
+    for (const chip of chips) assert.equal(chip.querySelector(".tag-dot"), null, chip.textContent.trim());
+    // The status icon trails each row so titles line up with their repository heading.
+    for (const row of s.document.querySelectorAll(".sidebar-inner .conversation:has(.conversation-lines)"))
+        assert.ok(row.lastElementChild.classList.contains("conversation-indicator"), row.textContent.trim());
+    // Each repository heading leads with a folder that shows whether the group is open.
+    const heading = s.document.querySelector(".repository-group:not(.remote-repository) .repository-group-name");
+    const folderOpen = /d="([^"]+)"/.exec(s.w.KET_ICONS["folder-open"])[1];
+    assert.equal(heading.querySelector(":scope > svg.icon path").getAttribute("d"), folderOpen);
     s.close();
 });
 test("conversation header is scoped to chat; the detail pane owns its top row", () => {

@@ -26,8 +26,8 @@ K.sidebar = function () {
         const host = K.repositoryHost(repo.id);
         const collapsed = (K.demo.collapsedRepositories || []).includes(repo.id);
         const title = records.length
-            ? `<button class="repository-group-name" data-action="toggle-repository" data-repo="${K.escape(repo.id)}" aria-expanded="${!collapsed}" title="${K.escape(repo.label)}${host ? ` · ${K.escape(host.name)}` : ""}">${repo.location === "remote" ? K.icon("monitor") : ""}<span>${K.escape(repo.label)}</span></button>`
-            : K.link("workspace", `<span>${K.escape(repo.label)}</span>`, null, { repo: repo.id, tree: "develop", state: "empty" }, "repository-group-name");
+            ? `<button class="repository-group-name" data-action="toggle-repository" data-repo="${K.escape(repo.id)}" aria-expanded="${!collapsed}" title="${K.escape(repo.label)}${host ? ` · ${K.escape(host.name)}` : ""}">${K.icon(repo.location === "remote" ? "monitor" : collapsed ? "folder" : "folder-open")}<span>${K.escape(repo.label)}</span></button>`
+            : K.link("workspace", `${K.icon(repo.location === "remote" ? "monitor" : "folder")}<span>${K.escape(repo.label)}</span>`, null, { repo: repo.id, tree: "develop", state: "empty" }, "repository-group-name");
         return `<section class="repository-group ${repo.location === "remote" ? "remote-repository" : ""} ${repo.id === K.repo ? "selected" : ""}"><div class="repository-group-header">${title}${K.ib("plus", host?.status === "offline" ? `Reconnect ${host.name} to start a conversation` : `New conversation in ${repo.label}`, "new-chat", `data-repo="${K.escape(repo.id)}" ${host?.status === "offline" ? "disabled" : ""}`)}</div>${collapsed ? "" : K.conversationRows(repo.id)}</section>`;
     };
     const machine = K.selectedMachine();
