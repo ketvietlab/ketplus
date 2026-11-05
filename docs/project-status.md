@@ -278,6 +278,13 @@ future directory without first defining and testing its contract.
   through the daemon. Its transports are separate translation units, but about 20
   `usesDaemon()` branches in the `AgentSession*` sources still serve only that test
   path. Retiring it means moving those tests onto a daemon fixture first.
+- KétPlus (`core/src/app`) and KétPlus Pro (`apps/desktop/src/app`) each have their own
+  `ketplus::MainWindow`, carried over from the two-repository era (ADR 0029). Shared
+  behavior moves into `core` libraries one slice at a time; the Language, Line Endings
+  and Encoding controls are `DocumentFormatControls` (`core/src/editor`). Search
+  (`MainWindowSearch.cpp`, 78 of about 360 lines differ) is the next slice; Documents,
+  Navigation and Panels have diverged and need their differences reconciled before they
+  can be shared.
 - Several test translation units exceed 400 lines. Split reusable fixtures and
   scenario groups when adding coverage, while preserving readable test intent.
 - Unsigned developer packages are implemented, but signing, notarization, and

@@ -1,7 +1,9 @@
 #include "app/MainWindow.h"
+
 #include "app/RepositoryRouter.h"
 #include "app/SpotlightDialog.h"
 #include "atlas/AtlasTab.h"
+#include "editor/DocumentFormatControls.h"
 #include "workspace/AtlasIndex.h"
 
 #include "agent/AgentSessionManager.h"
@@ -604,10 +606,25 @@ void MainWindow::createActions() {
     });
 
     viewMenu->addSeparator();
-    languageMenu_ = viewMenu->addMenu(QStringLiteral("Language"));
-    lineEndingMenu_ = viewMenu->addMenu(QStringLiteral("Line Endings"));
-    encodingMenu_ = viewMenu->addMenu(QStringLiteral("Encoding"));
-    populateFormatMenus();
+    format_ = new DocumentFormatControls(
+        this, {.document = [this] { return documentOwner(); },
+               .restyle =
+                   [this](EditorWidget* editor) {
+                       editor->applyTheme(theme_.palette());
+                       if (editor == splitSource_ && splitEditor_ != nullptr) {
+                           splitEditor_->shareDocumentWith(*editor);
+                           splitEditor_->applyTheme(theme_.palette());
+                       }
+                   },
+               .reopened =
+                   [this](EditorWidget* editor) {
+                       updateTabTitle(editor);
+                       updateDocumentState();
+                       updateMarkdownPreview();
+                   },
+               .syntaxChanged = [this] { updateMarkdownPreview(); },
+               .save = [this](EditorWidget* editor) { return saveEditor(editor, false); }});
+    format_->addMenus(viewMenu);
 
     viewMenu->addSeparator();
     auto* appearanceMenu = viewMenu->addMenu(QStringLiteral("Appearance"));

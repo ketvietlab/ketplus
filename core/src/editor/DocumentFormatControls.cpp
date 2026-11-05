@@ -1,8 +1,7 @@
-#include "app/MainWindow.h"
+#include "editor/DocumentFormatControls.h"
 
 #include "editor/EditorWidget.h"
 #include "editor/SyntaxDefinition.h"
-#include "ui/Theme.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -14,14 +13,21 @@
 
 namespace ketplus {
 
-void MainWindow::populateFormatMenus() {
+DocumentFormatControls::DocumentFormatControls(QWidget* window, Host host)
+    : QObject(window), window_(window), host_(std::move(host)) {}
+
+void DocumentFormatControls::addMenus(QMenu* menu) {
+    languageMenu_ = menu->addMenu(QStringLiteral("Language"));
+    lineEndingMenu_ = menu->addMenu(QStringLiteral("Line Endings"));
+    encodingMenu_ = menu->addMenu(QStringLiteral("Encoding"));
+
     auto* languageGroup = new QActionGroup(this);
     const auto addLanguage = [this, languageGroup](const QString& label, const QString& name) {
         auto* action = languageMenu_->addAction(label);
         action->setCheckable(true);
         action->setData(name);
         languageGroup->addAction(action);
-        connect(action, &QAction::triggered, this, [this, name] { setEditorSyntax(name); });
+        connect(action, &QAction::triggered, this, [this, name] { setSyntax(name); });
     };
     addLanguage(QStringLiteral("Auto Detect"), QString());
     languageMenu_->addSeparator();
@@ -39,7 +45,7 @@ void MainWindow::populateFormatMenus() {
         action->setData(static_cast<int>(lineEnding));
         lineEndingGroup->addAction(action);
         connect(action, &QAction::triggered, this,
-                [this, lineEnding] { setDocumentLineEnding(lineEnding); });
+                [this, lineEnding] { setLineEnding(lineEnding); });
     }
 
     auto* reopenMenu = encodingMenu_->addMenu(QStringLiteral("Reopen with Encoding"));
@@ -57,13 +63,23 @@ void MainWindow::populateFormatMenus() {
                 [this, encoding] { saveWithEncoding(encoding); });
     }
 
-    for (QMenu* menu : {languageMenu_, lineEndingMenu_, encodingMenu_}) {
-        connect(menu, &QMenu::aboutToShow, this, &MainWindow::syncFormatMenus);
+    for (QMenu* formatMenu : {languageMenu_, lineEndingMenu_, encodingMenu_}) {
+        connect(formatMenu, &QMenu::aboutToShow, this, &DocumentFormatControls::syncMenus);
     }
 }
 
-void MainWindow::syncFormatMenus() {
-    auto* editor = documentOwner();
+void DocumentFormatControls::addStatusButtons(
+    const std::function<QToolButton*(QMenu*, const QString&)>& makeButton) {
+    encodingButton_ = makeButton(encodingMenu_, QStringLiteral("File encoding"));
+    lineEndingButton_ = makeButton(lineEndingMenu_, QStringLiteral("Line endings"));
+    languageButton_ = makeButton(languageMenu_, QStringLiteral("Language"));
+}
+
+void DocumentFormatControls::syncMenus() {
+    if (languageMenu_ == nullptr) {
+        return;
+    }
+    auto* editor = host_.document();
     const bool available = editor != nullptr && !editor->isHibernated();
     for (QMenu* menu : {languageMenu_, lineEndingMenu_, encodingMenu_}) {
         menu->setEnabled(available);
@@ -86,11 +102,11 @@ void MainWindow::syncFormatMenus() {
     }
 }
 
-void MainWindow::updateFormatIndicators() {
+void DocumentFormatControls::updateIndicators() {
     if (encodingButton_ == nullptr) {
         return;
     }
-    auto* editor = documentOwner();
+    auto* editor = host_.document();
     const bool visible = editor != nullptr && !editor->isHibernated();
     for (QToolButton* button : {encodingButton_, lineEndingButton_, languageButton_}) {
         button->setVisible(visible);
@@ -105,46 +121,42 @@ void MainWindow::updateFormatIndicators() {
     languageButton_->setToolTip(editor->syntaxOverride().isEmpty()
                                     ? QStringLiteral("Language detected from the file name")
                                     : QStringLiteral("Language chosen manually"));
-    syncFormatMenus();
+    syncMenus();
 }
 
-void MainWindow::setEditorSyntax(const QString& syntaxName) {
-    auto* editor = documentOwner();
+void DocumentFormatControls::setSyntax(const QString& syntaxName) {
+    auto* editor = host_.document();
     if (editor == nullptr || editor->isHibernated()) {
         return;
     }
     editor->setSyntaxOverride(syntaxName);
-    editor->applyTheme(theme_.palette());
-    if (editor == splitSource_ && splitEditor_ != nullptr) {
-        splitEditor_->shareDocumentWith(*editor);
-        splitEditor_->applyTheme(theme_.palette());
-    }
-    updateMarkdownPreview();
-    updateFormatIndicators();
+    host_.restyle(editor);
+    host_.syntaxChanged();
+    updateIndicators();
 }
 
-void MainWindow::setDocumentLineEnding(const LineEnding lineEnding) {
-    auto* editor = documentOwner();
+void DocumentFormatControls::setLineEnding(const LineEnding lineEnding) {
+    auto* editor = host_.document();
     if (editor != nullptr && !editor->isHibernated() && editor->lineEnding() != lineEnding) {
         editor->setLineEnding(lineEnding);
     }
-    updateFormatIndicators();
+    updateIndicators();
 }
 
-void MainWindow::reopenWithEncoding(const TextEncoding encoding) {
-    auto* editor = documentOwner();
+void DocumentFormatControls::reopenWithEncoding(const TextEncoding encoding) {
+    auto* editor = host_.document();
     if (editor == nullptr || editor->isHibernated()) {
         return;
     }
     if (editor->document().isUntitled()) {
         QMessageBox::information(
-            this, QStringLiteral("Reopen with encoding"),
+            window_, QStringLiteral("Reopen with encoding"),
             QStringLiteral("Save the file before reopening it with another encoding."));
         return;
     }
     if (editor->document().isModified()) {
         const auto answer = QMessageBox::warning(
-            this, QStringLiteral("Unsaved changes"),
+            window_, QStringLiteral("Unsaved changes"),
             QStringLiteral("Reopening %1 as %2 discards your unsaved changes.")
                 .arg(editor->document().displayName(), textEncodingName(encoding)),
             QMessageBox::Discard | QMessageBox::Cancel, QMessageBox::Cancel);
@@ -155,30 +167,24 @@ void MainWindow::reopenWithEncoding(const TextEncoding encoding) {
 
     const auto result = editor->reloadWithEncoding(encoding);
     if (!result.ok) {
-        QMessageBox::critical(this, QStringLiteral("Unable to reopen file"), result.error);
+        QMessageBox::critical(window_, QStringLiteral("Unable to reopen file"), result.error);
         return;
     }
-    editor->applyTheme(theme_.palette());
-    if (editor == splitSource_ && splitEditor_ != nullptr) {
-        splitEditor_->shareDocumentWith(*editor);
-        splitEditor_->applyTheme(theme_.palette());
-    }
-    updateTabTitle(editor);
-    updateDocumentState();
-    updateMarkdownPreview();
+    host_.restyle(editor);
+    host_.reopened(editor);
 }
 
-void MainWindow::saveWithEncoding(const TextEncoding encoding) {
-    auto* editor = documentOwner();
+void DocumentFormatControls::saveWithEncoding(const TextEncoding encoding) {
+    auto* editor = host_.document();
     if (editor == nullptr || editor->isHibernated()) {
         return;
     }
     const TextEncoding previous = editor->document().textEncoding();
     editor->document().setTextEncoding(encoding);
-    if (!saveEditor(editor, false)) {
+    if (!host_.save(editor)) {
         editor->document().setTextEncoding(previous);
     }
-    updateFormatIndicators();
+    updateIndicators();
 }
 
 } // namespace ketplus
