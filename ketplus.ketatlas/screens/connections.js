@@ -107,11 +107,11 @@ K.views.connections = () => {
                     <div class="connections-signin">${K.button("Sign in", "open-signin", "arrow-right", "primary")}<span>Use your KetSuite account to get started.</span></div>
                     <div class="connections-local-note">${K.icon("monitor")}<span>Your local workspace keeps working.<br>Sign in when you’re ready to connect a device.</span></div>
                 </div>
-                <div class="connections-scene" role="img" aria-label="Illustration of the same Agent conversation on a Mac and a phone">
+                <div class="connections-scene" role="img" aria-label="KetPlus Agent Workspace on a Mac and KetPlus Mobile on a phone">
                     <div class="connections-scene-content" aria-hidden="true">
-                        <div class="connection-desktop"><div class="connection-desktop-bar"><span class="connection-window-dots"><i></i><i></i><i></i></span><span>${K.icon("monitor")} This Mac</span></div><div class="connection-desktop-body"><div class="connection-mini-rail">${K.mark()}${K.icon("messages-square")}${K.icon("folder")}${K.icon("network")}</div><div class="connection-mini-chat"><small>ketplus-desktop · develop</small><h3>Refine navigation</h3><div class="connection-sample-prompt">Make the workspace easier to navigate.</div><div class="connection-agent-label">${K.mark()}<b>Agent</b><span>Working</span></div><p>I’ve updated the navigation.<br>One detail needs your input.</p><div class="connection-sample-lines"><i></i><i></i></div></div></div></div>
-                        <div class="connection-phone"><div class="connection-phone-camera"></div><header>${K.icon("chevron-left")}<b>Refine navigation</b></header><small>From your Mac</small><div class="connection-phone-question">${K.icon("circle-help")}<b>Your input is needed</b><p>Keep the sidebar expanded by default?</p><span>Yes, keep it open ${K.icon("arrow-up")}</span></div><div class="connection-phone-bottom"></div></div>
-                        <div class="connection-scene-caption">${K.icon("messages-square")} Same conversation. Another screen.</div>
+                        <div class="connection-desktop"><div class="connection-desktop-bar"><span class="connection-window-dots"><i></i><i></i><i></i></span><span>${K.icon("monitor")} This Mac</span></div><img class="connection-screen" data-theme-variant="light" src="../assets/connections/desktop-question.png" width="1280" height="760" alt=""><img class="connection-screen" data-theme-variant="dark" src="../assets/connections/desktop-question-dark.png" width="1280" height="760" alt=""></div>
+                        <div class="connection-phone"><img class="connection-screen" data-theme-variant="light" src="../assets/connections/mobile-question.png" width="393" height="852" alt=""><img class="connection-screen" data-theme-variant="dark" src="../assets/connections/mobile-question-dark.png" width="393" height="852" alt=""></div>
+                        <div class="connection-scene-caption">${K.icon("messages-square")} Your conversations. On every screen.</div>
                     </div>
                 </div>
             </div>
