@@ -59,6 +59,13 @@ Qt application shell
   leak into the application shell. Editor typography is normalized and persisted
   here, then shared with read-only diff views.
 - `core/src/core` owns documents and persistence. It must not depend on Qt Widgets.
+  A `Document` remembers the size and SHA-256 of the bytes it last loaded or saved.
+  Saving over a file that changed since then (an agent's edit, a branch switch) asks
+  to overwrite, reload or cancel (`editor/DiskChangePrompt`). Clean tabs are refreshed
+  when the app becomes active. Reloads detect the encoding again unless the user chose
+  one. Files above 256 MiB are refused. Text is loaded with an explicit length, so NUL
+  bytes survive a save. A hibernated tab stays read-only until its file is read again,
+  and Save or Save As reads it first and refuses if that fails.
 - `core/src/workspace` owns the lightweight file tree and filesystem actions. It
   discovers entries only when folders are expanded and does not build an index.
   Quick Open and Search list a Git working tree with

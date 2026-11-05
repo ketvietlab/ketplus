@@ -128,6 +128,89 @@ class EditorFileRefreshTest final : public QObject {
         QVERIFY(b->document().save(b->text()).ok);
         QVERIFY(!QFile::exists(dir.filePath("sub/b.txt")));
     }
+    void detectsTheEncodingAgainOnRefresh() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("rewritten.txt");
+        write(path, QByteArray("caf\xe9"));
+        ketplus::EditorWidget editor;
+        QVERIFY(editor.loadFile(path).ok);
+        QCOMPARE(editor.document().textEncoding(), ketplus::TextEncoding::Latin1);
+        write(path, QString::fromUtf8("café ✓").toUtf8());
+        QVERIFY(editor.refreshFromDisk().ok);
+        QCOMPARE(editor.document().textEncoding(), ketplus::TextEncoding::Utf8);
+        QCOMPARE(editor.text(), QString::fromUtf8("café ✓").toUtf8());
+
+        // An encoding the user picked survives the next refresh.
+        QVERIFY(editor.reloadWithEncoding(ketplus::TextEncoding::Latin1).ok);
+        write(path, QString::fromUtf8("thé").toUtf8());
+        QVERIFY(editor.refreshFromDisk().ok);
+        QCOMPARE(editor.document().textEncoding(), ketplus::TextEncoding::Latin1);
+    }
+    void keepsEveryByteAfterANul() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("data.bin");
+        const QByteArray bytes("abc\0def\n", 8);
+        write(path, bytes);
+        ketplus::EditorWidget editor;
+        QVERIFY(editor.loadFile(path).ok);
+        QCOMPARE(editor.text(), bytes);
+        QVERIFY(!editor.document().isModified());
+        QVERIFY(editor.document().saveAs(path, editor.text()).ok);
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), bytes);
+    }
+    void detectsChangesOnDiskSinceLoadOrSave() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("file.txt");
+        write(path, "original\n");
+        ketplus::EditorWidget editor;
+        QVERIFY(editor.loadFile(path).ok);
+        QVERIFY(!editor.document().changedOnDisk());
+        editor.replaceAllText("my edit\n");
+
+        // Same size, same mtime: only the content tells.
+        const auto stamp = QFileInfo(path).lastModified();
+        write(path, "agent's\n\n");
+        QFile touched(path);
+        QVERIFY(touched.open(QIODevice::ReadWrite));
+        QVERIFY(touched.setFileTime(stamp, QFileDevice::FileModificationTime));
+        touched.close();
+        QVERIFY(editor.document().changedOnDisk());
+
+        // Reload takes the agent's version and is clean again.
+        QVERIFY(editor.reloadFromDisk().ok);
+        QCOMPARE(editor.text(), QByteArray("agent's\n\n"));
+        QVERIFY(!editor.document().isModified());
+        QVERIFY(!editor.document().changedOnDisk());
+
+        QVERIFY(editor.document().saveAs(path, "saved\n").ok);
+        QVERIFY(!editor.document().changedOnDisk());
+        write(path, "saved\n"); // Rewritten with the same bytes.
+        QVERIFY(!editor.document().changedOnDisk());
+        QVERIFY(QFile::remove(path));
+        QVERIFY(editor.document().changedOnDisk());
+    }
+    void aHibernatedTabStaysReadOnlyUntilRestored() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("file.txt");
+        write(path, "on disk\n");
+        ketplus::EditorWidget editor;
+        QVERIFY(editor.loadFile(path).ok);
+        QVERIFY(editor.hibernate());
+        QVERIFY(QFile::remove(path));
+        QVERIFY(!editor.restoreFromDisk().ok);
+        QVERIFY(editor.isHibernated());
+        editor.replaceAllText("typed into the empty tab");
+        QVERIFY(editor.text().isEmpty());
+        QVERIFY(!editor.document().isModified());
+
+        write(path, "back\n");
+        QVERIFY(editor.restoreFromDisk().ok);
+        QCOMPARE(editor.text(), QByteArray("back\n"));
+        editor.replaceAllText("editable again\n");
+        QVERIFY(editor.document().isModified());
+    }
 };
 QTEST_MAIN(EditorFileRefreshTest)
 #include "EditorFileRefreshTest.moc"

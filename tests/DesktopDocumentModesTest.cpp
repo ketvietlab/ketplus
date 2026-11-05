@@ -60,6 +60,47 @@ class DesktopDocumentModesTest final : public QObject {
         if (!capture.isEmpty())
             QVERIFY(editor->grab().save(capture));
     }
+    void savingAHibernatedTabKeepsTheFile() {
+        QTemporaryDir directory;
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, directory.path());
+        qputenv("KETPLUS_DAEMON_SOCKET", directory.filePath("isolated.sock").toUtf8());
+        qputenv("KETPLUS_DAEMON_TOKEN_FILE", directory.filePath("isolated-token").toUtf8());
+        qputenv("KETPLUS_CONVERSATION_WORKTREES", directory.filePath("worktrees.sqlite").toUtf8());
+        const auto path = directory.filePath("notes.txt");
+        const QByteArray original("keep these bytes\n");
+        const auto write = [&path](const QByteArray& bytes) {
+            QFile file(path);
+            return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
+        };
+        QVERIFY(write(original));
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(directory.path());
+        window.show();
+        window.openFile(path);
+        ketplus::EditorWidget* editor = nullptr;
+        for (auto* candidate : window.findChildren<ketplus::EditorWidget*>())
+            if (QFileInfo(candidate->document().filePath()).canonicalFilePath() ==
+                QFileInfo(path).canonicalFilePath())
+                editor = candidate;
+        QVERIFY(editor);
+        // Unloaded, briefly missing (a failed restore), then back with the same bytes.
+        QVERIFY(editor->hibernate());
+        QVERIFY(QFile::remove(path));
+        QVERIFY(!editor->restoreFromDisk().ok);
+        QVERIFY(write(original));
+        QAction* save = nullptr;
+        for (auto* action : window.findChildren<QAction*>())
+            if (action->text() == "&Save")
+                save = action;
+        QVERIFY(save);
+        save->trigger();
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), original);
+        QVERIFY(!editor->isHibernated());
+    }
     void exportedTerminalIncludesNewControls() {
         ketplus::TerminalPanel terminal;
         QStringList controls;
