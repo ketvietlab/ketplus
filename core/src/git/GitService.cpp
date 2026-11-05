@@ -34,6 +34,22 @@ QString normalizedPath(const QString& path) {
     return QDir::cleanPath(canonical.isEmpty() ? file.absoluteFilePath() : canonical);
 }
 
+// Resolves the folders but keeps the last component, so a symlink stays the link Git tracks
+// instead of becoming its target.
+QString entryPath(const QString& path) {
+    if (path.isEmpty()) {
+        return {};
+    }
+    const QFileInfo file(path);
+    const QString folder = normalizedPath(file.absolutePath());
+    QString name = file.fileName();
+#if defined(Q_OS_DARWIN)
+    // Qt and Git both report names precomposed on macOS; match them when a caller passes NFD.
+    name = name.normalized(QString::NormalizationForm_C);
+#endif
+    return QDir::cleanPath(QDir(folder).filePath(name));
+}
+
 bool isInside(const QString& path, const QString& root) {
     const QString relative = QDir(root).relativeFilePath(path);
     return relative != QStringLiteral("..") && !relative.startsWith(QStringLiteral("../")) &&
@@ -171,7 +187,7 @@ void GitService::requestDiff(const QString& filePath, const GitDiffMode mode) {
         return;
     }
 
-    const QString absolutePath = normalizedPath(filePath);
+    const QString absolutePath = entryPath(filePath);
     if (!isInside(absolutePath, repositoryRoot_)) {
         emit diffReady(filePath, mode, {},
                        QStringLiteral("The file is outside the active repository."));
