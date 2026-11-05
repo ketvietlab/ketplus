@@ -39,7 +39,7 @@ K.sidebar = function () {
             || a.label.localeCompare(b.label))
         .map(repositoryGroup).join("");
     const empty = machine === "local" ? "No local repositories yet." : "No repositories on this Linux machine yet.";
-    return `<div class="sidebar-inner"><a class="brand-link" aria-label="KétPlus Desktop" href="${K.url("workspace")}"><img class="brand-wordmark brand-wordmark-light" src="../assets/brand/ketplus-v1/ketplus-logo-light.png" alt="KétPlus" width="2172" height="724" /><img class="brand-wordmark brand-wordmark-dark" src="../assets/brand/ketplus-v1/ketplus-logo-dark.png" alt="KétPlus" width="2172" height="724" /><span class="brand-compact">${K.mark()}</span><span class="brand-edition">Desktop</span></a>
+    return `<div class="sidebar-inner"><a class="brand-link" aria-label="KétPlus Pro" href="${K.url("workspace")}"><img class="brand-wordmark brand-wordmark-light" src="../assets/brand/ketplus-v1/ketplus-logo-light.svg" alt="KétPlus Pro" width="2878" height="720" /><img class="brand-wordmark brand-wordmark-dark" src="../assets/brand/ketplus-v1/ketplus-logo-dark.svg" alt="KétPlus Pro" width="2878" height="720" /><span class="brand-compact">${K.mark()}</span></a>
     ${K.link("search", "<span>Quick search</span><kbd>⌘ K</kbd>", "search", {}, "search-launch")}
     <nav aria-label="Main navigation">${nav}</nav>
     <div class="sidebar-context"><div class="sidebar-rule"></div>
@@ -50,7 +50,7 @@ K.sidebar = function () {
     <button type="button" class="identity" data-action="user-menu" aria-expanded="${K.query.get("userMenu") === "open" ? "true" : "false"}"><span class="avatar">AN</span><span><b>An Nguyen</b><small>Personal workspace</small></span>${K.icon(K.query.get("userMenu") === "open" ? "chevron-up" : "chevron-down")}</button></div></div>`;
 };
 K.statusbar = () =>
-    `<footer class="statusbar"><span>${K.icon("circle-check")} Local workspace</span><span class="status-right"><span>UTF-8</span><span>LF</span><span>KetPlus Desktop</span>${K.icon("keyboard")}</span></footer>`;
+    `<footer class="statusbar"><span>${K.icon("circle-check")} Local workspace</span><span class="status-right"><span>UTF-8</span><span>LF</span><span>KétPlus Pro</span>${K.icon("keyboard")}</span></footer>`;
 K.mount = () => {
     if (K.page === "atlas-preview" && K.query.get("embed") === "screen") {
         document.body.classList.add("embedded-screen");

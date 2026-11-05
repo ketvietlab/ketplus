@@ -95,12 +95,10 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     chrome_geometry::spacing(brandLayout, 6);
     brandWordmark_ = new QLabel(brand);
     brandWordmark_->setObjectName(QStringLiteral("productBrandWordmark"));
-    chrome_geometry::fixedSize(brandWordmark_, 90, 30);
-    auto* edition = new QLabel(tr("Desktop"), brand);
-    edition->setObjectName(QStringLiteral("productBrandEdition"));
-    edition->setProperty("kvRole", QStringLiteral("productBrandEdition"));
+    // The KétPlus Pro wordmark is 4:1 and already names the edition.
+    chrome_geometry::fixedSize(brandWordmark_, 120, 30);
+    brandWordmark_->setAccessibleName(QStringLiteral("KétPlus Pro"));
     brandLayout->addWidget(brandWordmark_);
-    brandLayout->addWidget(edition);
     brandLayout->addStretch();
     layout->addWidget(brand);
 
@@ -308,8 +306,9 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
 
 void ActivityBar::setPendingUpdate(const QString& version) {
     updateReadyButton_->setText(
-        version.isEmpty() ? QString()
-                          : tr("Update available\nKetPlus %1 · Review and install").arg(version));
+        version.isEmpty()
+            ? QString()
+            : tr("Update available\nKétPlus Pro %1 · Review and install").arg(version));
     updateReadyButton_->setVisible(!version.isEmpty());
 }
 
@@ -424,7 +423,6 @@ void ActivityBar::applyPalette(const ThemePalette& palette, const int interfaceF
         QScrollBar[scrolling="false"]:hover::handle:vertical { background: %10; }
         QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
         QFrame#productSidebarRule { border: 0; background: %1; }
-        QLabel[kvRole="productBrandEdition"] { color: %5; font-size: {{micro}}px; font-weight: 500; }
         QToolButton { text-align: left; }
         QToolButton[kvRole="productSearch"] { min-height: 30px; max-height: 30px; padding: 0 8px; border: 1px solid %11; border-radius: 5px; background: %4; color: %5; font-size: {{caption}}px; }
         QToolButton[kvRole="productSearch"]:hover { border-color: %13; }
