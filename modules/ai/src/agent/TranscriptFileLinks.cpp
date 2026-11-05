@@ -2,8 +2,9 @@
 
 #include <QDir>
 #include <QFileInfo>
-#include <QProcess>
 #include <QRegularExpression>
+
+#include <utility>
 
 namespace ketplus {
 
@@ -21,7 +22,39 @@ void TranscriptFileLinks::setRoot(const QString& root) {
     cache_.clear();
     files_.clear();
     filesListed_ = false;
+    filesRequested_ = false;
     age_.restart();
+}
+
+void TranscriptFileLinks::setFileRequester(std::function<void()> requester) {
+    requester_ = std::move(requester);
+}
+
+bool TranscriptFileLinks::setFiles(const QString& root, const QStringList& entries) {
+    if (root != root_)
+        return false;
+    QStringList files;
+    for (const QString& entry : entries) {
+        if (!entry.endsWith(QLatin1Char('/')))
+            files.append(entry);
+    }
+    if (files.size() > maximumTrackedFiles)
+        files.clear();
+    const bool changed = !filesListed_ || files != files_;
+    files_ = std::move(files);
+    filesListed_ = true;
+    filesRequested_ = false;
+    // Answers given before the list arrived may now resolve.
+    cache_.clear();
+    age_.restart();
+    return changed;
+}
+
+void TranscriptFileLinks::requestFiles() {
+    if (filesRequested_ || !requester_ || root_.isEmpty())
+        return;
+    filesRequested_ = true;
+    requester_();
 }
 
 QString TranscriptFileLinks::href(const QString& text) {
@@ -40,22 +73,32 @@ QString TranscriptFileLinks::href(const QString& text) {
     if (!path.contains(QLatin1Char('/')) && !extension.match(path).hasMatch())
         return {};
     if (!age_.isValid() || age_.elapsed() > cacheLifetimeMs) {
+        // The old list keeps answering until the new one lands.
         cache_.clear();
-        files_.clear();
-        filesListed_ = false;
         age_.restart();
+        if (filesListed_)
+            requestFiles();
     }
     const auto cached = cache_.constFind(path);
-    const QString resolved = cached != cache_.cend() ? *cached : resolve(path);
-    if (cached == cache_.cend())
-        cache_.insert(path, resolved);
+    QString resolved;
+    if (cached != cache_.cend()) {
+        resolved = *cached;
+    } else {
+        bool final = true;
+        resolved = resolve(path, &final);
+        if (final)
+            cache_.insert(path, resolved);
+    }
     if (resolved.isEmpty())
         return {};
     const QString line = match.captured(2);
     return line.isEmpty() ? resolved : resolved + QLatin1Char(':') + line;
 }
 
-QString TranscriptFileLinks::resolve(const QString& path) {
+QString TranscriptFileLinks::resolve(const QString& path, bool* final) {
+    // Rendering must not reach the network: on Windows a UNC lookup contacts the host.
+    if (path.startsWith(QStringLiteral("//")) || path.startsWith(QStringLiteral("\\\\")))
+        return {};
     if (path.startsWith(QStringLiteral("~/"))) {
         const QString absolute = QDir::home().filePath(path.mid(2));
         return QFileInfo(absolute).isFile() ? absolute : QString{};
@@ -71,10 +114,15 @@ QString TranscriptFileLinks::resolve(const QString& path) {
         return {};
     if (QFileInfo(QDir(root_).filePath(relative)).isFile())
         return relative;
-    // A path given from inside the tree opens when exactly one tracked file ends with it.
+    if (!filesListed_) {
+        requestFiles();
+        *final = false;
+        return {};
+    }
+    // A path given from inside the tree opens when exactly one listed file ends with it.
     const QString suffix = QLatin1Char('/') + relative;
     QString found;
-    for (const QString& file : trackedFiles()) {
+    for (const QString& file : std::as_const(files_)) {
         if (!file.endsWith(suffix))
             continue;
         if (!found.isEmpty())
@@ -82,28 +130,6 @@ QString TranscriptFileLinks::resolve(const QString& path) {
         found = file;
     }
     return found;
-}
-
-const QStringList& TranscriptFileLinks::trackedFiles() {
-    if (filesListed_)
-        return files_;
-    filesListed_ = true;
-    QProcess git;
-    git.setWorkingDirectory(root_);
-    git.start(QStringLiteral("git"),
-              {QStringLiteral("ls-files"), QStringLiteral("--cached"), QStringLiteral("--others"),
-               QStringLiteral("--exclude-standard")});
-    if (!git.waitForFinished(2'000) || git.exitStatus() != QProcess::NormalExit ||
-        git.exitCode() != 0) {
-        git.kill();
-        git.waitForFinished(500);
-        return files_;
-    }
-    files_ =
-        QString::fromUtf8(git.readAllStandardOutput()).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
-    if (files_.size() > maximumTrackedFiles)
-        files_.clear();
-    return files_;
 }
 
 } // namespace ketplus

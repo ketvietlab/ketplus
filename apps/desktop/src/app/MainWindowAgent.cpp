@@ -5,7 +5,6 @@
 #include "app/MainWindow.h"
 #include "app/RepositoryRouter.h"
 #include "app/SpotlightDialog.h"
-#include "app/TranscriptFileType.h"
 #include "app/WorktreesWorkspacePage.h"
 #include "atlas/AtlasTab.h"
 #include "atlas/ManagedAtlasViewers.h"
@@ -36,7 +35,6 @@
 #include <QClipboard>
 #include <QCloseEvent>
 #include <QCryptographicHash>
-#include <QDesktopServices>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -48,7 +46,6 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
-#include <QRegularExpression>
 #include <QSettings>
 #include <QSignalBlocker>
 #include <QSplitter>
@@ -281,54 +278,7 @@ void MainWindow::ensureAgentWorkspace() {
             }
         });
     connect(agentWorkspace_, &AgentWorkspaceView::fileOpenRequested, this,
-            [this](const QString& relativePath) {
-                const QUrl link(relativePath);
-                const QString agentPath = agentWorkspace_->activePath().isEmpty()
-                                              ? workspaceRoot_
-                                              : agentWorkspace_->activePath();
-                const auto localPath = [&agentPath](const QString& value) {
-                    const QUrl url(value);
-                    if (url.isLocalFile())
-                        return url.toLocalFile();
-                    if (QDir::isAbsolutePath(value))
-                        return value;
-                    if (!url.scheme().isEmpty())
-                        return QString{};
-                    const QString decodedPath = url.path(QUrl::FullyDecoded);
-                    return decodedPath.startsWith(QStringLiteral("~/"))
-                               ? QDir::home().filePath(decodedPath.mid(2))
-                               : QDir(agentPath).filePath(decodedPath);
-                };
-                static const QRegularExpression sourceLocation(
-                    QStringLiteral(R"(^(.+):(\d+)(?::\d+)?$)"));
-                const auto locationMatch = sourceLocation.match(relativePath);
-                QString path =
-                    locationMatch.hasMatch() ? localPath(locationMatch.captured(1)) : QString{};
-                if (path.isEmpty())
-                    path = localPath(relativePath);
-                if (path.isEmpty()) {
-                    QDesktopServices::openUrl(link);
-                    return;
-                }
-                path = normalizedPath(path);
-                if (QFileInfo(path).exists() && !isTranscriptTextFile(path)) {
-                    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(path))) {
-                        statusBar()->showMessage(
-                            QStringLiteral("Could not open: %1").arg(relativePath), 3000);
-                    }
-                } else if (QFileInfo(path).isFile()) {
-                    openTranscriptFile(path, false);
-                    // `file.ts:42` lands on its line.
-                    if (locationMatch.hasMatch() &&
-                        path == normalizedPath(localPath(locationMatch.captured(1)))) {
-                        if (auto* editor = currentEditor())
-                            editor->goToLine(locationMatch.captured(2).toInt());
-                    }
-                } else {
-                    statusBar()->showMessage(QStringLiteral("File not found: %1").arg(relativePath),
-                                             3000);
-                }
-            });
+            &MainWindow::openTranscriptLink);
     connect(agentWorkspace_, &AgentWorkspaceView::fileDiffRequested, this,
             [this](const QString& relativePath) {
                 const QString path = agentWorkspace_->absoluteFilePath(relativePath);

@@ -40,8 +40,13 @@ void AgentWorkspaceView::refreshFileMentions() {
                 self->fileMentionEntries_ = std::move(entries);
                 self->fileMentionFoldedEntries_ = std::move(folded);
                 self->fileMentionAge_.start();
+                const bool linksChanged =
+                    self->fileLinks_.setFiles(root, self->fileMentionEntries_);
                 ++self->fileMentionRevision_;
                 emit self->fileMentionsChanged();
+                // Messages already shown were formatted without the list.
+                if (linksChanged)
+                    emit self->fileLinksChanged();
             },
             Qt::QueuedConnection);
     });

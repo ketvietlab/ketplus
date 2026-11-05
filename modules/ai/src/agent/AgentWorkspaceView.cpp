@@ -7,6 +7,7 @@
 #include <QRegularExpression>
 
 #include "agent/CodexAppServer.h"
+#include "agent/FileReveal.h"
 #include "agent/LucideImageProvider.h"
 #include "agent/TranscriptTrace.h"
 #include "app/AppearanceSettings.h"
@@ -150,6 +151,8 @@ AgentWorkspaceView::AgentWorkspaceView(QWidget* parent)
       container_(QWidget::createWindowContainer(view_, this)) {
     activeMessageModel_ = new AgentMessageModel(this);
     messageModels_.insert(QString{}, activeMessageModel_);
+    // Transcript links resolve `Foo.cpp` against the same background listing as @ mentions.
+    fileLinks_.setFileRequester([this] { refreshFileMentions(); });
     streamUpdateTimer_ = new QTimer(this);
     streamUpdateTimer_->setSingleShot(true);
     connect(streamUpdateTimer_, &QTimer::timeout, this,
@@ -857,16 +860,8 @@ QString AgentWorkspaceView::revealableFilePath(const QString& path) const {
 
 void AgentWorkspaceView::revealFile(const QString& path) const {
     const QString absolutePath = revealableFilePath(path);
-    if (absolutePath.isEmpty())
-        return;
-#if defined(Q_OS_MACOS)
-    QProcess::startDetached(QStringLiteral("open"), {QStringLiteral("-R"), absolutePath});
-#elif defined(Q_OS_WIN)
-    QProcess::startDetached(QStringLiteral("explorer.exe"),
-                            {QStringLiteral("/select,") + QDir::toNativeSeparators(absolutePath)});
-#else
-    QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(absolutePath).absolutePath()));
-#endif
+    if (!absolutePath.isEmpty())
+        file_reveal::reveal(absolutePath);
 }
 
 namespace {

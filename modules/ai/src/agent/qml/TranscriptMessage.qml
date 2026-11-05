@@ -732,6 +732,9 @@ Item {
                     function onTokensChanged() {
                         bodyText.updateParagraphFormat();
                     }
+                    function onFileLinksChanged() {
+                        bodyText.updateParagraphFormat();
+                    }
                     function onMermaidChanged() {
                         bodyText.refreshRenderedSource();
                     }

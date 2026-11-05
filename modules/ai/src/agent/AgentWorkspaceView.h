@@ -454,6 +454,8 @@ class AgentWorkspaceView final : public QWidget {
                                  const QString& displayText);
     void composerErrorOccurred(const QString& message);
     void fileMentionsChanged();
+    // The worktree file list that inline-code links resolve against arrived or changed.
+    void fileLinksChanged();
     void steeringAccepted(const QString& scope, const QString& prompt);
     void modelsChanged();
     void skillsChanged();
