@@ -183,21 +183,27 @@ void GitService::requestDiff(const QString& filePath, const GitDiffMode mode) {
     QStringList arguments{QStringLiteral("-C"), root, QStringLiteral("diff"),
                           QStringLiteral("--no-ext-diff"), QStringLiteral("--no-color")};
     int acceptedDifferenceExitCode = 0;
-    // Before the first commit, the working tree is compared with nothing: a file on disk is
-    // entirely new, and one that is only in the index has no combined change.
+    // Before the first commit, the working tree is compared with nothing: an entry on disk is
+    // entirely new, and one that is only in the index has no combined change. A symlink counts
+    // as on disk even when its target is missing, because Git tracks the link itself.
     const bool unbornHead = snapshot_.head == QStringLiteral("(initial)");
     const bool combinedWithoutHead = unbornHead && mode == GitDiffMode::Combined;
-    if (combinedWithoutHead && !QFileInfo(absolutePath).isFile()) {
+    const QFileInfo entry(absolutePath);
+    const bool entryOnDisk = entry.isSymLink() || entry.exists();
+    if (combinedWithoutHead && !entryOnDisk) {
         emit diffReady(filePath, mode, {}, {});
         return;
     }
-    if (isUntracked(relativePath) || (combinedWithoutHead && QFileInfo(absolutePath).isFile())) {
+    if (isUntracked(relativePath) ||
+        (combinedWithoutHead && (entry.isSymLink() || entry.isFile()))) {
         arguments.append({QStringLiteral("--no-index"), QStringLiteral("--"),
                           nullDeviceForGit(), absolutePath});
         acceptedDifferenceExitCode = 1;
     } else {
         arguments.append(QStringLiteral("--find-renames"));
-        if (mode == GitDiffMode::Staged) {
+        if (mode == GitDiffMode::Staged || combinedWithoutHead) {
+            // Without HEAD, the staged copy is the closest combined view of a folder entry such
+            // as a submodule.
             arguments.append(QStringLiteral("--cached"));
         } else if (mode == GitDiffMode::Combined) {
             arguments.append(QStringLiteral("HEAD"));

@@ -279,13 +279,16 @@ void GitParserTest::diffsFilesBeforeTheFirstCommit() {
         QVERIFY(file.open(QIODevice::WriteOnly));
         QCOMPARE(file.write("first\n"), 6);
     }
+    // A tracked symlink whose target does not exist is still an entry on disk.
+    const QString danglingLink = QDir(root).filePath(QStringLiteral("dangling-link"));
+    QVERIFY(QFile::link(QStringLiteral("missing-target"), danglingLink));
     QVERIFY(runGit(git, root, {QStringLiteral("add"), QStringLiteral(".")}));
     // Staged, then deleted from the working tree: only the index still has it.
     QVERIFY(QFile::remove(removed));
 
     ketplus::GitService service;
     service.setWorkspacePath(root);
-    QTRY_COMPARE_WITH_TIMEOUT(service.snapshot().files.size(), 2, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(service.snapshot().files.size(), 3, 5000);
     QCOMPARE(service.snapshot().head, QStringLiteral("(initial)"));
 
     QHash<QString, QString> diffs;
@@ -298,7 +301,12 @@ void GitParserTest::diffsFilesBeforeTheFirstCommit() {
             });
     service.requestDiff(staged);
     service.requestDiff(removed);
-    QTRY_COMPARE_WITH_TIMEOUT(diffs.size(), 2, 5000);
+    service.requestDiff(danglingLink);
+    QTRY_COMPARE_WITH_TIMEOUT(diffs.size(), 3, 5000);
+    QVERIFY2(errors.value(danglingLink).isEmpty(), qPrintable(errors.value(danglingLink)));
+    QVERIFY2(diffs.value(danglingLink).contains(QStringLiteral("new file mode 120000")),
+             qPrintable(diffs.value(danglingLink)));
+    QVERIFY(diffs.value(danglingLink).contains(QStringLiteral("+missing-target")));
     QVERIFY2(errors.value(staged).isEmpty(), qPrintable(errors.value(staged)));
     QVERIFY2(diffs.value(staged).contains(QStringLiteral("+first")),
              qPrintable(diffs.value(staged)));
