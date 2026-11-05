@@ -175,6 +175,13 @@ drop a notice. The `playwright` package (test runner and CLI) and the MCP client
 SDK 2.0.0 (MIT) are development-only and are not bundled. The browser server
 source and skill are MPL 2.0 with the rest of the repository.
 
+### KetPlus Computer
+
+`apps/computer` (ADR 0030) is MPL 2.0 with the rest of the repository. It links only
+Apple system frameworks (AppKit, ApplicationServices, Carbon, CoreGraphics, CryptoKit,
+ImageIO, ScreenCaptureKit, UniformTypeIdentifiers) and has no Swift Package
+dependencies, so it adds no third-party notices.
+
 ### Default agent skills
 
 `assets/agent-skills` is copied to `KetPlus.app/Contents/Resources/agent-skills`

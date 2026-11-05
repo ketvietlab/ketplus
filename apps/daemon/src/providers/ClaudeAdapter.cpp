@@ -1,6 +1,8 @@
 #include "providers/ClaudeAdapter.h"
 #include "BrowserAgentInstructions.h"
 #include "BrowserToolLaunch.h"
+#include "ComputerAgentInstructions.h"
+#include "ComputerToolLaunch.h"
 #include "providers/ClaudeCredentials.h"
 #include "runtime/ResponseGuidance.h"
 #include <QRegularExpression>
@@ -367,8 +369,15 @@ void ClaudeAdapter::sendCall(const QString& method, const QJsonObject& params, C
     if (method == QStringLiteral("turn/start")) {
         const auto launch =
             browser_tools::browserLaunchFromUserSettings(QCoreApplication::applicationDirPath());
-        QJsonObject servers = browser_tools::claudeMcpServers(launch);
-        QString instructions = browser_tools::hostAgentInstructions(launch.has_value());
+        // ADR 0030: the computer front is per conversation; the agent app enforces access.
+        const auto computer = computer_tools::launchFromUserSettings(
+            params.value(QStringLiteral("sessionId")).toString(),
+            QCoreApplication::applicationDirPath());
+        QJsonObject servers =
+            computer_tools::withClaudeMcpServer(browser_tools::claudeMcpServers(launch), computer);
+        QString instructions = browser_tools::hostAgentInstructions(launch.has_value()) +
+                               QStringLiteral("\n\n") +
+                               computer_tools::agentInstructions(computer.has_value());
         // ADR 0027: the conversation's ketplus_agents server, supplied by SessionHost.
         const QJsonObject agentServer =
             providerParams.take(QStringLiteral("agentMcpServer")).toObject();

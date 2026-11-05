@@ -599,6 +599,73 @@ Claude/Cursor can consume screenshot tool results, while their transcript
 presentation remains the existing provider-specific behavior. See
 [ADR 0011](decisions/0011-browser-tools-for-all-providers.md).
 
+## Computer use
+
+Settings → Computer use is off by default. It is stored as
+`computer-tools.json` (`enabled`, `deniedApps`, `display`) beside `browser-tools.json`;
+`KETPLUS_COMPUTER_TOOLS_CONFIG` overrides the path. When the setting is on and
+`KetPlus Computer.app` is present, each Claude query and each Cursor ACP
+session/new or session/load receives a `ketplus_computer` stdio server. The
+server's environment carries `KETPLUS_COMPUTER_CONVERSATION` and
+`KETPLUS_COMPUTER_TOKEN`, the HMAC of the conversation ID under
+`<KetPlus data>/computer/host.key` (or `KETPLUS_COMPUTER_DIR`). Turn input
+cannot add or replace the server. The Claude sidecar and Cursor permission
+handling allow `ketplus_computer` tools only when KetPlus injected the server.
+The agent app is the enforcement point:
+
+- A conversation sees and controls only the apps the user approved for it in
+  the agent's native approval panel (`request_access`). Screenshots include
+  only those apps. KetPlus windows, the agent's own panels and the menu bar are
+  never captured.
+- Tiers: KetPlus, Keychain Access, password managers and `deniedApps` are
+  blocked. Browsers other than Safari are view-only. Terminals and IDEs accept
+  clicks only, and `act` `set_value` counts as typing.
+- Input runs in the background by default (ADR 0031). `observe` reads a granted
+  app's accessibility tree, even behind other windows, and `act` drives its
+  elements by reference; references go stale after any input. `left_click`,
+  `right_click` and `scroll` at screenshot coordinates become accessibility
+  actions on the frontmost granted app's window at that point. `type` and `key`
+  go to one process: the `app` parameter, the app last acted on, or the
+  frontmost app. Shortcuts first run the matching enabled menu item. Typing is
+  refused when the target's focused element is a secure text field. Without an
+  accessible element, calls fail with `NEEDS_FOREGROUND`.
+- `"foreground": true` uses the real pointer and HID keyboard, as in the first
+  release: pointer input is checked against the topmost window at the point and
+  keyboard input against the frontmost app, refused while secure input is
+  active. Drags, pointer moves and double, triple, middle or modified clicks
+  always need it.
+- The agent works on one display (ADR 0032). `display` is `secondary` (the
+  default: the first display that is not the main one, or the main display when
+  it is alone) or `main`. After a grant, and when `open_application` opens or
+  reveals an app, granted apps' windows move to the work display, and the
+  results report `movedToWorkDisplay`. `screenshot` captures the work display
+  unless its `display` parameter is `main` or an ID from `list_apps`, which
+  lists the displays, and answers `NOTHING_ON_DISPLAY` when no granted app has
+  a window there. Granted windows that other apps hide are raised first on a
+  separate work display, or reported as `covered` (their pixels may be old)
+  on the main display. The banner shows on the work display.
+- One conversation holds the control lease at a time. The lease ends after 90 s
+  without an action. A banner with a Stop button shows while it is held, and an
+  overlay pointer marks background actions. Stop, or Esc while a granted app is
+  frontmost or within 15 s of foreground input, ends the lease, revokes that
+  conversation's grants and answers its next calls with `CANCELLED` until the
+  user approves apps again. Esc posted by the agent itself never counts.
+- `startTurn` writes a remote-turn marker for turns from remote clients and
+  removes it for local turns. The agent refuses a marked conversation with
+  `REMOTE_TURN`.
+- Each action appends a line, with its mode but without images or typed text,
+  to `computer/audit/<conversation stem>.jsonl`.
+
+Outside KetPlus, `ketplus-computer-mcp --local-client <name>` mints a token for
+the conversation `local:<name>` from the user-only host key; approval, tiers,
+the lease and the audit apply unchanged (see `apps/computer/README.md`).
+
+Codex app-server binds MCP servers per process rather than per conversation, so
+Codex does not receive `ketplus_computer` yet. Tools follow
+`computer_toolset_20260801` names, plus `list_apps`, `request_access`,
+`open_application`, `observe` and `act`. `open_application` leaves the app
+behind the user's work unless `foreground` is set. `wait` is capped at 60 s.
+
 ## Live smoke test
 
 Authenticated model calls are opt-in. The regular test suite uses a deterministic

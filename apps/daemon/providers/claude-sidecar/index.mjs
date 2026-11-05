@@ -583,6 +583,13 @@ async function startRun(messageId, params, prompt, images) {
   const browserInjected = Object.hasOwn(mcpServers, "ketplus_browser");
   // ADR 0027: the daemon injects this conversation's agent messaging server.
   const agentsInjected = Object.hasOwn(mcpServers, "ketplus_agents");
+  // KetPlus Computer enforces per-app grants itself, so its tools need no prompt.
+  const computerInjected = Object.hasOwn(mcpServers, "ketplus_computer");
+  const hostTools = [
+    ...(browserInjected ? ["mcp__ketplus_browser__*"] : []),
+    ...(agentsInjected ? ["mcp__ketplus_agents__*"] : []),
+    ...(computerInjected ? ["mcp__ketplus_computer__*"] : []),
+  ];
   const effort = typeof params.effort === "string" ? params.effort : "";
   try {
     run.authenticationRevision = params.authentication?.revision || "";
@@ -602,10 +609,7 @@ async function startRun(messageId, params, prompt, images) {
         ...(typeof params.browserInstructions === "string" && params.browserInstructions
           ? { systemPrompt: { type: "preset", preset: "claude_code", append: params.browserInstructions } }
           : {}),
-        allowedTools: [
-          ...(browserInjected ? ["mcp__ketplus_browser__*"] : []),
-          ...(agentsInjected ? ["mcp__ketplus_agents__*"] : []),
-        ],
+        allowedTools: hostTools,
         model: params.model || "sonnet",
         // Per-launch CLI flag: do not replace the SDK's environment or model capacity.
         ...(params.compactWindow ? { extraArgs: { autocompact: String(params.compactWindow) } } : {}),
@@ -624,7 +628,8 @@ async function startRun(messageId, params, prompt, images) {
         canUseTool: async (tool, toolInput) => {
           const requestId = `perm-${sessionId}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
           const input = toolInput && typeof toolInput === "object" ? toolInput : {};
-          if (browserInjected && tool.startsWith("mcp__ketplus_browser__"))
+          if ((browserInjected && tool.startsWith("mcp__ketplus_browser__")) ||
+              (computerInjected && tool.startsWith("mcp__ketplus_computer__")))
             return { behavior: "allow", updatedInput: input };
           if (agentsInjected && tool.startsWith("mcp__ketplus_agents__"))
             return { behavior: "allow", updatedInput: input };

@@ -1,6 +1,7 @@
 #include "providers/CursorAdapter.h"
 #include "BrowserAgentInstructions.h"
 #include "BrowserToolLaunch.h"
+#include "ComputerAgentInstructions.h"
 #include "providers/CursorToolItem.h"
 #include "providers/compat/ProviderVersionProbe.h"
 #include "runtime/ResponseGuidance.h"
@@ -1213,7 +1214,9 @@ void CursorAdapter::sendPrompt(TurnState& turn, const QJsonObject& params) {
     // the journal and user prompt remain unchanged, including image attachments.
     auto prompt = promptContent(params);
     QString hostText =
-        browser_tools::hostAgentInstructions(browserSessions_.contains(turn.ketplusSessionId));
+        browser_tools::hostAgentInstructions(browserSessions_.contains(turn.ketplusSessionId)) +
+        QStringLiteral("\n\n") +
+        computer_tools::agentInstructions(computerSessions_.contains(turn.ketplusSessionId));
     if (agentSessions_.contains(turn.ketplusSessionId) &&
         !agentInstructions_.value(turn.ketplusSessionId).isEmpty())
         hostText += QStringLiteral("\n\n") + agentInstructions_.value(turn.ketplusSessionId);
@@ -1433,9 +1436,10 @@ void CursorAdapter::handlePermissionRequest(const QJsonValue& requestId,
     QJsonObject input = toolCall.value(QStringLiteral("rawInput")).toObject();
     // Cursor emits MCP identity in rawInput, independently of the display title.
     // Only the server injected for this session receives the browser exemption.
-    if (browserSessions_.contains(sessionId) &&
-        input.value(QStringLiteral("providerIdentifier")).toString() ==
-            QStringLiteral("ketplus_browser") &&
+    const QString provider = input.value(QStringLiteral("providerIdentifier")).toString();
+    if (((browserSessions_.contains(sessionId) && provider == QStringLiteral("ketplus_browser")) ||
+         (computerSessions_.contains(sessionId) &&
+          provider == QStringLiteral("ketplus_computer"))) &&
         !input.value(QStringLiteral("toolName")).toString().isEmpty()) {
         respond(requestId, {{QStringLiteral("allow"), true}});
         return;
@@ -1601,6 +1605,7 @@ void CursorAdapter::failPending(const QString& reason) {
     startingSessions_.clear();
     browserSessions_.clear();
     agentSessions_.clear();
+    computerSessions_.clear();
     acpSessionByKetplus_.clear();
     ketplusByAcp_.clear();
     spawnModel_.clear();

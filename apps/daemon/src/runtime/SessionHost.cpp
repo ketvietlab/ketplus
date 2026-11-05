@@ -15,6 +15,7 @@
 
 #include "CodexBrowserTools.h"
 #include "CodexServerRequests.h"
+#include "ComputerToolLaunch.h"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -1226,6 +1227,14 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
             it->stored.title = conversation_title::suggest(displayText);
         }
     }
+    // ADR 0030: no desktop control while a remote client's turn runs. Busy sessions were
+    // rejected above, so no turn is active here. A later local turn lifts the marker, so a
+    // crash or a missed turn end can only leave control off.
+    if (!computer_tools::setRemoteTurn(sessionId, !localClient) && !localClient &&
+        computer_tools::loadSettings().enabled)
+        return error(
+            QStringLiteral("computer_policy_error"),
+            QStringLiteral("KetPlus could not turn off computer use for this remote turn."));
     (void)worktreeCatalogRoot(*it); // Persist repository identity before a checkout is removed.
     const bool worktreeMissing = !QFileInfo(it->stored.worktreePath).isDir();
     noteWorktreesBeforeTurn(*it);

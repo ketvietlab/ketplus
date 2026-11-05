@@ -1,4 +1,5 @@
 #include "BrowserToolLaunch.h"
+#include "ComputerToolLaunch.h"
 #include "providers/CursorAdapter.h"
 
 #include <QCoreApplication>
@@ -19,14 +20,19 @@ void CursorAdapter::ensureAcpSession(const QString& ketplusSessionId, const QStr
         if (!turnEndFile.isEmpty())
             launch->env.insert(QLatin1String(browser_tools::turnEndFileVariable), turnEndFile);
     }
-    QJsonArray servers = browser_tools::acpMcpServers(launch);
-    const bool browserInjected = !servers.isEmpty();
+    const QJsonArray browserServers = browser_tools::acpMcpServers(launch);
+    const bool browserInjected = !browserServers.isEmpty();
+    // ADR 0030: the computer front is bound to this conversation by its token.
+    const auto computer = computer_tools::launchFromUserSettings(
+        ketplusSessionId, QCoreApplication::applicationDirPath());
+    QJsonArray servers = computer_tools::withAcpMcpServer(browserServers, computer);
     // ADR 0027: the conversation's own ketplus_agents server, when SessionHost supplied one.
     const QJsonObject agentServer = agentServers_.value(ketplusSessionId);
     if (!agentServer.isEmpty())
         servers.append(agentServer);
     const auto bind = [this, ketplusSessionId, callback = std::move(callback), model,
                        browserInjected, agentsInjected = !agentServer.isEmpty(),
+                       computerInjected = computer.has_value(),
                        turnEndFile](const QJsonObject& result, const QString& error) {
         if (!error.isEmpty()) {
             callback({}, error);
@@ -48,6 +54,10 @@ void CursorAdapter::ensureAcpSession(const QString& ketplusSessionId, const QStr
             agentSessions_.insert(ketplusSessionId);
         else
             agentSessions_.remove(ketplusSessionId);
+        if (computerInjected)
+            computerSessions_.insert(ketplusSessionId);
+        else
+            computerSessions_.remove(ketplusSessionId);
         ketplusByAcp_.insert(acpId, ketplusSessionId);
         applySessionModel(
             acpId, model, result.value(QStringLiteral("configOptions")).toArray(),

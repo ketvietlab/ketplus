@@ -76,10 +76,13 @@ request. Do not close user-owned or other agents' sessions or kill shared browse
 - `apps/desktop`: Pro executable shell, windows, menus, tabs, and composition.
 - `apps/daemon`: local and headless Linux daemon and `ketplusctl`.
 - `apps/browser`: bundled browser runtime, a separate helper process.
+- `apps/computer`: KetPlus Computer, the separately signed macOS app for agent
+  computer use (Swift Package; ADR 0030-0032).
 - `modules/ai`: provider transport and Agent Workspace.
 - `modules/atlas`: Atlas process, WebView, and code index.
 - `modules/remote`: daemon IPC client, relay (Control v2) client, and the
   `ketplus_control_crypto` keys/credentials/sign-in target the daemon also links.
+- `modules/computer`: computer use settings and provider MCP launch.
 - `tests`: Pro and cross-boundary integration tests.
 - `modules/accounts` and `modules/router`: reserved; create each only with its
   first real implementation.

@@ -233,6 +233,14 @@ Mermaid CLI, and KetAtlas are runtime integrations. Their installation and
 opt-in checks are documented in `agent-workspace.md`, the root README, and
 `testing.md`.
 
+On macOS the desktop build also builds `KetPlus Computer.app` from
+`apps/computer` with the Xcode Swift toolchain (`KETPLUS_BUNDLE_COMPUTER_AGENT`,
+default ON). The default ad-hoc signature changes on every build, which resets
+its Screen Recording and Accessibility grants. To keep the grants across
+rebuilds, configure `-DKETPLUS_COMPUTER_SIGN_IDENTITY=<codesigning SHA-1>`.
+Release signing (`sign-notarize-dmg.sh`) re-signs the nested app with the
+release identity.
+
 The standalone browser feasibility app is outside the CMake build. It requires
 Node.js 22+. It uses system Chrome/Edge or downloads Chrome for Testing on first
 use. The pinned Playwright Chromium below is an optional deterministic test engine:

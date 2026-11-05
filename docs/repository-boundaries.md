@@ -16,6 +16,8 @@ Place code according to which edition needs it:
 | Local IPC, Qt Control v2 remote-client backend, device keys and credentials (`ketplus_control_crypto`) | `modules/remote` | Pro |
 | Canonical browser server (browser.v0) | `apps/browser` | Pro; bundled as a separate helper process, never linked |
 | Provider browser-tool launch settings and runtime discovery | `modules/browser` | Pro; Qt Core only |
+| KetPlus Computer: macOS screen capture, accessibility and input for agents (ADR 0030) | `apps/computer` | Pro; a separately signed Swift app nested in `Contents/Helpers`, never linked |
+| Computer use settings, conversation tokens and MCP launch for providers | `modules/computer` | Pro; Qt Core only |
 
 These stay outside this repository and are proprietary:
 
