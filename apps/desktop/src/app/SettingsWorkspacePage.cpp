@@ -714,7 +714,7 @@ QLabel#settingsPreviewCode { padding:14px 17px; color:%3; font-family:monospace;
 QLabel#settingsPreviewMessage { min-height:34px; padding:0 17px; border-top:1px solid %5;
  color:%2; background:%7; font-size:{{body}}px; }
 QCheckBox#followSystemTheme, QLabel#settingsWorkspaceFieldLabel,
-QComboBox#settingsInterfaceFont, QComboBox#editorFontFamily,
+QComboBox#settingsInterfaceFont, QComboBox#editorFontFamily, QComboBox#computerWorkDisplay,
 QSpinBox#interfaceFontSize, QSpinBox#editorFontSize, QSpinBox#terminalFontSize,
 QSpinBox#previewFontSize { color:%2; font-size:{{reading}}px; }
 QLabel#settingsTypographyUiSample { color:%2; font-size:{{reading}}px; }

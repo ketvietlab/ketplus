@@ -592,7 +592,7 @@ presentation remains the existing provider-specific behavior. See
 ## Computer use
 
 Settings → Computer use is off by default. It is stored as
-`computer-tools.json` (`enabled`, `deniedApps`) beside `browser-tools.json`;
+`computer-tools.json` (`enabled`, `deniedApps`, `display`) beside `browser-tools.json`;
 `KETPLUS_COMPUTER_TOOLS_CONFIG` overrides the path. When the setting is on and
 `KetPlus Computer.app` is present, each Claude query and each Cursor ACP
 session/new or session/load receives a `ketplus_computer` stdio server. The
@@ -624,6 +624,13 @@ The agent app is the enforcement point:
   keyboard input against the frontmost app, refused while secure input is
   active. Drags, pointer moves and double, triple, middle or modified clicks
   always need it.
+- The agent works on one display (ADR 0028). `display` is `secondary` (the
+  default: the first display that is not the main one, or the main display when
+  it is alone) or `main`. After a grant, and when `open_application` opens or
+  reveals an app, granted apps' windows move to the work display, and the
+  results report `movedToWorkDisplay`. `screenshot` captures the work display
+  unless its `display` parameter is `main` or an ID from `list_apps`, which
+  lists the displays. The banner shows on the work display.
 - One conversation holds the control lease at a time. The lease ends after 90 s
   without an action. A banner with a Stop button shows while it is held, and an
   overlay pointer marks background actions. Stop, or Esc while a granted app is

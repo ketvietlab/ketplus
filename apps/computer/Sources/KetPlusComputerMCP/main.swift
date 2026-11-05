@@ -36,9 +36,12 @@ func toolResult(_ name: String, _ arguments: [String: Any]) -> [String: Any] {
             Thread.sleep(forTimeInterval: seconds)
             return ["content": [text("Waited \(seconds) s.")]]
         case "screenshot":
-            let shot = try agent.call("screenshot")
+            let shot = try agent.call("screenshot", arguments)
             let apps = (shot["visibleApps"] as? [String] ?? []).joined(separator: ", ")
-            return imageResult(shot, "Screenshot \(shot["width"] ?? 0)x\(shot["height"] ?? 0); granted apps visible: \(apps.isEmpty ? "none" : apps). Coordinates use this image.")
+            let display = shot["display"] as? [String: Any] ?? [:]
+            let which = "display \(display["id"] ?? "?") \"\(display["name"] ?? "")\"\(display["work"] as? Bool == true ? " (work display)" : "")"
+                + " at \(display["x"] ?? 0),\(display["y"] ?? 0) \(display["width"] ?? 0)x\(display["height"] ?? 0) points"
+            return imageResult(shot, "Screenshot \(shot["width"] ?? 0)x\(shot["height"] ?? 0) of \(which); granted apps visible: \(apps.isEmpty ? "none" : apps). Coordinates use this image.")
         case "zoom":
             let shot = try agent.call("zoom", arguments)
             return imageResult(shot, "Zoomed region \(shot["width"] ?? 0)x\(shot["height"] ?? 0). Click coordinates still refer to the last screenshot.")

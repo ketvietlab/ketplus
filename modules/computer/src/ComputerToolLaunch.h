@@ -22,6 +22,9 @@ struct Settings final {
     bool enabled{false};
     // Bundle IDs the agent must never capture or control, on top of its built-in tiers.
     QStringList deniedApps;
+    // The agent's work display (ADR 0028): "secondary" (a display other than the main one,
+    // falling back to the main display) or "main".
+    QString display{QStringLiteral("secondary")};
 };
 
 struct Launch final {

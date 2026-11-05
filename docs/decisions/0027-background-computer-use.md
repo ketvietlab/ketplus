@@ -97,8 +97,9 @@ Stop.
   completed the covered fixture with `observe`, `act set_value`, `observe` and
   `act press`. The audit recorded no HID input.
 - Not yet verified: the approval panel in a release build, a turn started from
-  the desktop app through the daemon, multiple displays and apps with poor
-  accessibility.
+  the desktop app through the daemon, and apps with poor accessibility.
+  Multiple displays are covered by
+  [ADR 0028](0028-computer-use-work-display.md).
 
 ## Alternatives considered
 

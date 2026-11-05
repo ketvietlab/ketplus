@@ -15,6 +15,8 @@ enum ApprovalPanel {
         let conversation: String
         let apps: [(name: String, bundleIdentifier: String)]
         let reason: String
+        /// Set when the agent works on another display than the main one.
+        var workDisplay: String? = nil
     }
 
     enum Decision: String {
@@ -90,7 +92,10 @@ enum ApprovalPanel {
             lines.append(line)
         }
         if !request.reason.isEmpty { lines.append("\nReason given by the agent: \(request.reason)") }
-        lines.append("\nAccess lasts for this conversation until you press Esc. Other apps stay hidden from the agent.")
+        if let display = request.workDisplay {
+            lines.append("\nTheir windows move to the \(display) display, where the agent works.")
+        }
+        lines.append("\nAccess lasts for this conversation until you press Stop or Esc. Other apps stay hidden from the agent.")
         alert.informativeText = lines.joined(separator: "\n")
         alert.addButton(withTitle: "Allow for this conversation")
         alert.addButton(withTitle: "Deny")

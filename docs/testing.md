@@ -72,8 +72,8 @@ obsolete run. See `docs/release-process.md`.
 | Desktop daemon attach | `ketplus_desktop_daemon_client_tests` | detached UI lifetime, discovery, normalized transcript replay, negotiated features, provider capabilities, fork through the daemon |
 | macOS bundle layout | `ketplus_macos_bundle_layout_tests` | embedded matching daemon, loadable Qt runtime plugins, and absence of bundled Codex |
 | Computer use host side | `ketplus_computer_tool_launch_tests`, `ketplus_computer_provider_integration_tests` | settings, host key permissions, token vector shared with the agent, remote-turn markers, server merge, Claude/Cursor injection by settings only (fake providers) |
-| Computer use settings | `ketplus_settings_computer_page_tests` | opt-in disabled without the agent app, persisted toggle and deny list, reverted toggle on save failure |
-| Computer use agent | `cd apps/computer && swift test` | tiers and actions, token vector, key parsing, control lease and Esc revocation, geometry, owner-only socket, background click planning, stale references, Esc scope, keyboard target, menu shortcuts, scroll steps |
+| Computer use settings | `ketplus_settings_computer_page_tests` | opt-in disabled without the agent app, persisted toggle, deny list and work display, reverted toggle on save failure |
+| Computer use agent | `cd apps/computer && swift test` | tiers and actions, token vector, key parsing, control lease and Esc revocation, geometry, owner-only socket, background click planning, stale references, Esc scope, keyboard target, menu shortcuts, scroll steps, work display choice and window placement |
 | Standalone browser feasibility | `cd apps/browser && npm test` | Chromium observe/act fencing, node re-verification, proxy-enforced origin policy, secret redaction, structured comparison, JSON-RPC, and MCP discovery |
 
 Run the relevant target while iterating. The manual compact-window picker has
@@ -167,7 +167,9 @@ Computer-use changes also run `(cd apps/computer && swift test)`. TCC grants
 cannot run in CI. After changing the agent, run `apps/computer/scripts/e2e.mjs`
 on a Mac against a `--testing` build and the fixture app (see
 `apps/computer/README.md`). It covers background input under a covering window
-and foreground input. Use `--manual-esc` when the kill switch or Stop changed.
+and foreground input on the work display. With two displays connected it also
+checks that granted apps move to the secondary display. Use `--manual-esc` when
+the kill switch or Stop changed.
 
 The sidecar test uses a temporary fake SDK, never an authenticated model. The
 browser suite includes reset-after-denial socket regressions and read-only engine

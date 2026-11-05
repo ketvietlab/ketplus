@@ -187,8 +187,9 @@ The first implementation refines the decision as follows.
   WindowServer failed three captures in a row ("Error in creating screenshot")
   while TCC still allowed access, and capture worked again seconds later.
   Agents should report `CAPTURE_FAILED` rather than guess.
-- Not yet verified: the approval panel in a release build, multiple displays and
-  the periodic Screen Recording re-prompt.
+- Not yet verified: the approval panel in a release build and the periodic
+  Screen Recording re-prompt. Multiple displays are covered by
+  [ADR 0028](0028-computer-use-work-display.md).
 
 ## Alternatives considered
 

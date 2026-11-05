@@ -4,6 +4,7 @@
 captures the screen or posts input, so macOS attributes Screen Recording and
 Accessibility to it. It also enforces who may control what (ADR 0026). Input runs
 in the background, so the user keeps their pointer and front app (ADR 0027).
+Granted apps move to a work display, a secondary display by default (ADR 0028).
 `ketplus-computer-mcp`, inside the same bundle, is the stdio MCP server that
 providers launch. It never captures or clicks itself.
 
@@ -31,6 +32,10 @@ Tools follow `computer_toolset_20260801`: `screenshot`, `zoom`, `left_click`,
 `left_click`, `right_click`, `scroll`, `type` and `key` run in the background
 unless `"foreground": true`. The other pointer tools need it and otherwise
 answer `NEEDS_FOREGROUND`.
+
+`screenshot` captures the work display unless `display` is `main` or an ID from
+`list_apps`. The work display comes from `display` in `computer-tools.json`
+(`secondary` by default, or `main`); with one display it is the main display.
 
 Files in `<KetPlus data>/computer` (`KETPLUS_COMPUTER_DIR`):
 

@@ -3,6 +3,7 @@
 #include "ComputerToolLaunch.h"
 
 #include <QCheckBox>
+#include <QComboBox>
 #include <QCoreApplication>
 #include <QDesktopServices>
 #include <QLabel>
@@ -67,6 +68,22 @@ SettingsComputerPage::SettingsComputerPage(QString settingsPath, QString applica
     layout->addSpacing(24);
 
     layout->addWidget(
+        textLabel(tr("Work display"), QStringLiteral("settingsWorkspaceSubheading"), this));
+    layout->addSpacing(10);
+    display_ = new QComboBox(this);
+    display_->setObjectName(QStringLiteral("computerWorkDisplay"));
+    display_->setAccessibleName(tr("Work display"));
+    display_->addItem(tr("Secondary display"), QStringLiteral("secondary"));
+    display_->addItem(tr("Main display"), QStringLiteral("main"));
+    layout->addWidget(display_, 0, Qt::AlignLeft);
+    layout->addSpacing(4);
+    layout->addWidget(textLabel(
+        tr("The agent works on this display: approved apps move there and screenshots show it. "
+           "With a single display, it uses the main one."),
+        QStringLiteral("settingsWorkspaceHelp"), this));
+    layout->addSpacing(24);
+
+    layout->addWidget(
         textLabel(tr("Blocked apps"), QStringLiteral("settingsWorkspaceSubheading"), this));
     layout->addSpacing(10);
     deniedApps_ = new QLineEdit(this);
@@ -89,7 +106,8 @@ SettingsComputerPage::SettingsComputerPage(QString settingsPath, QString applica
     layout->addSpacing(10);
     layout->addWidget(textLabel(
         tr("Screenshots show only the apps you approved; other apps and KetPlus stay hidden. "
-           "Press Esc at any time to stop: the agent loses its approvals and must ask again. "
+           "Agents work in the background without taking your pointer. Press Stop on the banner, "
+           "or Esc in an approved app, to stop: the agent loses its approvals and must ask again. "
            "Turns started from your phone cannot control this Mac."),
         QStringLiteral("settingsWorkspaceHelp"), this));
     layout->addSpacing(24);
@@ -109,6 +127,7 @@ SettingsComputerPage::SettingsComputerPage(QString settingsPath, QString applica
 
     connect(enabled_, &QCheckBox::toggled, this, &SettingsComputerPage::saveEnabled);
     connect(deniedApps_, &QLineEdit::editingFinished, this, &SettingsComputerPage::saveDeniedApps);
+    connect(display_, &QComboBox::currentIndexChanged, this, &SettingsComputerPage::saveDisplay);
     connect(privacy, &QPushButton::clicked, this, [] {
         QDesktopServices::openUrl(QUrl(QStringLiteral(
             "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")));
@@ -126,6 +145,8 @@ void SettingsComputerPage::load() {
     enabled_->setChecked(settings.enabled);
     enabled_->setEnabled(installed || settings.enabled);
     deniedApps_->setText(settings.deniedApps.join(QStringLiteral(", ")));
+    const QSignalBlocker blockDisplay(display_);
+    display_->setCurrentIndex(qMax(0, display_->findData(settings.display)));
 }
 
 void SettingsComputerPage::saveEnabled(const bool enabled) {
@@ -151,6 +172,19 @@ void SettingsComputerPage::saveDeniedApps() {
     error_->setVisible(!saved);
     if (saved)
         deniedApps_->setText(ids.join(QStringLiteral(", ")));
+}
+
+void SettingsComputerPage::saveDisplay(const int index) {
+    auto settings = computer_tools::loadSettings(settingsPath_);
+    const QString previous = settings.display;
+    settings.display = display_->itemData(index).toString();
+    const bool saved = computer_tools::saveSettings(settings, settingsPath_);
+    error_->setText(saved ? QString() : tr("KetPlus could not save the work display."));
+    error_->setVisible(!saved);
+    if (!saved) {
+        const QSignalBlocker block(display_);
+        display_->setCurrentIndex(qMax(0, display_->findData(previous)));
+    }
 }
 
 } // namespace ketplus

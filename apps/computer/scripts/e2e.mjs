@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// End-to-end check of KetPlus Computer on a real Mac (ADR 0026, 0027). Needs a test build
+// End-to-end check of KetPlus Computer on a real Mac (ADR 0026, 0027, 0028). Needs a test build
 // (build-app.sh --testing) that already holds Screen Recording and Accessibility, and the
 // fixture and fixture-cover from build-fixture.sh. Uses no provider quota. The background
 // part must not move the pointer; the foreground part moves and clicks the real pointer.
@@ -34,10 +34,19 @@ writeFileSync(join(dir, "host.key"), key, { mode: 0o600 });
 const token = (conversation) => createHmac("sha256", key).update(`computer.v0:${conversation}`).digest("hex");
 const stem = (conversation) => createHash("sha256").update(conversation).digest("hex").slice(0, 32);
 
-try { execFileSync("pkill", ["-f", "Contents/MacOS/KetPlusComputer$"], { stdio: "ignore" }); } catch {}
-await new Promise((resolve) => setTimeout(resolve, 500));
+// A running agent keeps its old environment, so wait until it has exited.
+const agentPattern = "Contents/MacOS/KetPlusComputer$";
+const agentRunning = () => { try { execFileSync("pgrep", ["-f", agentPattern]); return true; } catch { return false; } };
+for (let attempt = 0; attempt < 30 && agentRunning(); attempt++) {
+  try { execFileSync("pkill", [attempt < 20 ? "-TERM" : "-KILL", "-f", agentPattern], { stdio: "ignore" }); } catch {}
+  await new Promise((resolve) => setTimeout(resolve, 250));
+}
 execFileSync("/usr/bin/open", ["-g", "--env", `KETPLUS_COMPUTER_DIR=${dir}`,
   "--env", "KETPLUS_COMPUTER_TEST_APPROVAL=allow", "-a", app]);
+// Otherwise the MCP server opens the agent again, without the test environment.
+for (let attempt = 0; attempt < 50 && !existsSync(join(dir, "agent.sock")); attempt++) {
+  await new Promise((resolve) => setTimeout(resolve, 100));
+}
 
 function front(conversation, presentedToken = token(conversation)) {
   const server = spawn(join(app, "Contents/MacOS/ketplus-computer-mcp"), [], {
@@ -75,63 +84,96 @@ forged.close();
 
 check("nothing is captured before a grant", text(await a.call("screenshot")).startsWith("APP_NOT_GRANTED"));
 
-// Each fixture run prints its field and button frames, then exits after Submit.
+// Each fixture run opens on the main display and exits after Submit, writing the field.
 async function launchFixture() {
   const process_ = spawn(join(fixtureApp, "Contents/MacOS/KetPlusComputerFixture"), [output],
     { stdio: ["ignore", "pipe", "inherit"] });
-  const frames = await new Promise((resolve) => createInterface({ input: process_.stdout }).once("line", resolve));
-  const [fx, fy, fw, fh, bx, by, bw, bh, sw, sh] = frames.match(/-?\d+/g).map(Number);
+  await new Promise((resolve) => createInterface({ input: process_.stdout }).once("line", resolve));
   await new Promise((resolve) => setTimeout(resolve, 800));
-  return { process: process_, field: [fx, fy, fw, fh], button: [bx, by, bw, bh], screen: [sw, sh] };
+  return { process: process_ };
 }
-const centre = ([x, y, w, h]) => [x + w / 2, y + h / 2];
+const centre = ([x, y, w, h]) => [Math.round(x + w / 2), Math.round(y + h / 2)];
 const received = () => (existsSync(output) ? readFileSync(output, "utf8").trim() : null);
 const settle = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const fixtureId = "dev.ketplus.computer.fixture";
+
+// A screenshot's image size and the global rectangle of its display, from its text.
+async function capture(args = {}) {
+  const result = await a.call("screenshot", args);
+  const words = text(result);
+  const [, width, height] = /^Screenshot (\d+)x(\d+)/.exec(words)?.map(Number) ?? [];
+  const [, id, x, y, w, h] = /display (\d+) .* at (-?\d+),(-?\d+) (\d+)x(\d+) points/.exec(words)?.map(Number) ?? [];
+  const toGlobal = ([px, py, pw, ph]) => [x + px * w / width, y + py * h / height, pw * w / width, ph * h / height];
+  return { result, words, width, height, id, toGlobal };
+}
+// The field and Submit frames in screenshot pixels, from an AX snapshot.
+async function locate() {
+  const tree = text(await a.call("observe", { app: fixtureId }));
+  const frame = (pattern) => (new RegExp(`${pattern}.*@(-?\\d+),(-?\\d+),(\\d+)x(\\d+)`).exec(tree) ?? []).slice(1).map(Number);
+  return { tree, field: frame(" textfield "), button: frame('button "Submit"') };
+}
 
 let fixture = await launchFixture();
-const [sw, sh] = fixture.screen;
-const apps = json(await a.call("list_apps")).apps;
-const listed = apps.find((entry) => entry.bundleId === "dev.ketplus.computer.fixture");
+const listing = json(await a.call("list_apps"));
+const apps = listing.apps;
+const displays = listing.displays ?? [];
+const work = displays.find((entry) => entry.work);
+check("list_apps names one work display", displays.filter((entry) => entry.work).length === 1,
+  JSON.stringify(displays.map(({ id, name, main, work: isWork }) => ({ id, name, main, work: isWork }))));
+if (displays.length > 1) check("the work display defaults to a secondary display", work?.main === false);
+const listed = apps.find((entry) => entry.bundleId === fixtureId);
 check("list_apps shows the fixture as full and not granted", listed?.tier === "full" && listed?.granted === false);
 const ketplus = apps.find((entry) => entry.bundleId === "dev.ketplus.editor");
 if (ketplus) check("KetPlus itself is blocked", ketplus.tier === "blocked");
 
 const blocked = json(await a.call("request_access", { apps: ["com.apple.keychainaccess"], reason: "e2e" }));
 check("blocked apps are never offered for approval", blocked.blocked.length === 1 && blocked.granted.length === 0);
-const granted = json(await a.call("request_access", { apps: ["dev.ketplus.computer.fixture"], reason: "e2e" }));
-check("request_access grants the fixture", granted.granted.includes("dev.ketplus.computer.fixture"));
+const granted = json(await a.call("request_access", { apps: [fixtureId], reason: "e2e" }));
+check("request_access grants the fixture", granted.granted.includes(fixtureId));
+if (displays.length > 1) {
+  check("the grant moves the fixture to the work display", granted.movedToWorkDisplay?.includes(fixtureId),
+    JSON.stringify(granted.movedToWorkDisplay));
+}
+await settle(400);
 
 // ---- Background (ADR 0027): the fixture is covered by a bundle-less window and Finder is frontmost.
-const [fx, fy, , ] = fixture.field;
-const [, by, , bh] = fixture.button;
-const cover = spawn(join(dirname(fixtureApp), "fixture-cover"), [fx - 30, fy - 30, 420, by + bh - fy + 60].map(String),
+const placed = await capture();
+check("screenshot shows the work display", placed.id === work?.id && placed.words.includes("(work display)"),
+  placed.words.slice(0, 90));
+let frames = await locate();
+check("observe gives the field and Submit frames", frames.field.length === 4 && frames.button.length === 4);
+const [gx, gy] = placed.toGlobal(frames.field);
+const [, by, , bh] = placed.toGlobal(frames.button);
+const cover = spawn(join(dirname(fixtureApp), "fixture-cover"),
+  [gx - 30, gy - 30, 420, by + bh - gy + 60].map((value) => String(Math.round(value))),
   { stdio: ["ignore", "pipe", "inherit"] });
 await new Promise((resolve) => createInterface({ input: cover.stdout }).once("line", resolve));
 execFileSync("/usr/bin/open", ["-a", "Finder"]);
 await settle(800);
 console.log("     (do not type or move the mouse during the background checks)");
-const frontBefore = json(await a.call("list_apps")).apps.find((entry) => entry.bundleId === "dev.ketplus.computer.fixture");
+const frontBefore = json(await a.call("list_apps")).apps.find((entry) => entry.bundleId === fixtureId);
 check("the fixture is in the background", frontBefore?.frontmost === false);
 
-const shot = await a.call("screenshot");
-const image = shot.content.find((part) => part.type === "image");
-const [, width, height] = /(\d+)x(\d+)/.exec(text(shot)).map(Number);
-check("screenshot shows only granted apps", text(shot).includes("granted apps visible: dev.ketplus.computer.fixture") && !!image?.data);
-const toImage = (x, y) => [Math.round(x * width / sw), Math.round(y * height / sh)];
-const zoom = await a.call("zoom", { region: [...toImage(fx, fy), ...toImage(fx + 360, fy + 28)] });
+const shot = await capture();
+const image = shot.result.content.find((part) => part.type === "image");
+const { height } = shot;
+check("screenshot shows only granted apps", shot.words.includes(`granted apps visible: ${fixtureId}`) && !!image?.data);
+frames = await locate();
+const [zx, zy] = frames.field;
+const zoom = await a.call("zoom", { region: [zx, zy, zx + frames.field[2], zy + frames.field[3]] });
 check("zoom returns an image", zoom.content.some((part) => part.type === "image"));
 
 const pointerBefore = json(await a.call("cursor_position")).coordinate;
 const typed = "Xin chào KetPlus ✓";
-const focus = text(await a.call("left_click", { coordinate: toImage(...centre(fixture.field)) }));
+const focus = text(await a.call("left_click", { coordinate: centre(frames.field) }));
 check("a background click focuses the covered field", /"action":"focus"/.test(focus) && /"mode":"background"/.test(focus),
   focus.slice(0, 120));
 check("background typing reaches it", /"mode":"background"/.test(text(await a.call("type", { text: "draft" }))));
 const selectAll = text(await a.call("key", { text: "super+a" }));
 check("background select-all selects the field's text", /"delivery":"text_selection"/.test(selectAll), selectAll.slice(0, 100));
 await a.call("type", { text: typed });
-const first = text(await a.call("observe", { app: "dev.ketplus.computer.fixture" }));
-const second = text(await a.call("observe", { app: "dev.ketplus.computer.fixture" }));
+const first = text(await a.call("observe", { app: fixtureId }));
+const second = text(await a.call("observe", { app: fixtureId }));
 const snapshotOf = (tree) => /^Snapshot (s\d+)/.exec(tree)?.[1];
 const fieldLine = second.split("\n").find((line) => / textfield /.test(line)) ?? "";
 check("observe reads the covered field's value", fieldLine.includes(`value="${typed}"`), fieldLine.trim().slice(0, 100));
@@ -139,36 +181,40 @@ const submitRef = /\[(n\d+)\] button "Submit"/.exec(second)?.[1];
 check("observe lists Submit with press", !!submitRef && /button "Submit".*actions=[a-z_,]*press/.test(second));
 const stale = text(await a.call("act", { snapshot_id: snapshotOf(first), ref: submitRef, action: "press" }));
 check("an older snapshot is stale", stale.startsWith("STALE_SNAPSHOT"), stale.slice(0, 60));
-const coveredForeground = text(await a.call("left_click", { coordinate: toImage(...centre(fixture.field)), foreground: true }));
+const coveredForeground = text(await a.call("left_click", { coordinate: centre(frames.field), foreground: true }));
 check("a foreground click on the covered field hits the cover and is refused",
   /^(APP_BLOCKED|APP_NOT_GRANTED)/.test(coveredForeground), coveredForeground.slice(0, 60));
 const drag = text(await a.call("left_click_drag", { start_coordinate: [10, 10], coordinate: [20, 20] }));
 check("drag needs the real pointer", drag.startsWith("NEEDS_FOREGROUND"), drag.slice(0, 40));
-const third = text(await a.call("observe", { app: "dev.ketplus.computer.fixture" }));
+const third = text(await a.call("observe", { app: fixtureId }));
 const pressRef = /\[(n\d+)\] button "Submit"/.exec(third)?.[1];
 const pressed = text(await a.call("act", { snapshot_id: snapshotOf(third), ref: pressRef, action: "press" }));
 check("act presses Submit in the background", /"mode":"background"/.test(pressed), pressed.slice(0, 80));
 await settle(600);
 check("the covered fixture received the text", received() === typed, JSON.stringify(received()));
 const pointerAfter = json(await a.call("cursor_position")).coordinate;
-const frontAfter = json(await a.call("list_apps")).apps.find((entry) => entry.bundleId === "dev.ketplus.computer.fixture");
+const frontAfter = json(await a.call("list_apps")).apps.find((entry) => entry.bundleId === fixtureId);
 check("background input did not bring the fixture forward", !frontAfter || frontAfter.frontmost === false);
 // The user may move the mouse meanwhile; the agent would have left it on the field or Submit.
 const near = (point, target) => Math.hypot(point[0] - target[0], point[1] - target[1]) < 6;
 check("background input never moved the pointer to its targets",
-  ![fixture.field, fixture.button].some((frame) => near(pointerAfter, toImage(...centre(frame))))
+  ![frames.field, frames.button].some((frame) => near(pointerAfter, centre(frame)))
     || JSON.stringify(pointerBefore) === JSON.stringify(pointerAfter), `${pointerBefore} -> ${pointerAfter}`);
 cover.kill();
 await settle(1200);
 
-// ---- Foreground (ADR 0026): the real pointer and keyboard, fixture in front.
+// ---- Foreground (ADR 0026): the real pointer and keyboard, fixture in front on the work display.
 fixture = await launchFixture();
-await a.call("screenshot");
-const fieldClick = text(await a.call("left_click", { coordinate: toImage(...centre(fixture.field)), foreground: true }));
+const opened = json(await a.call("open_application", { app: fixtureId, foreground: true }));
+if (displays.length > 1) check("open_application moves the relaunched fixture to the work display", opened.movedToWorkDisplay === true);
+await settle(400);
+await capture();
+frames = await locate();
+const fieldClick = text(await a.call("left_click", { coordinate: centre(frames.field), foreground: true }));
 check("foreground click on the field", fieldClick === "OK", fieldClick.slice(0, 120));
 check("foreground typing", text(await a.call("type", { text: typed, foreground: true })) === "OK");
 check("cursor_position reports image pixels", Array.isArray(json(await a.call("cursor_position")).coordinate));
-const submitClick = text(await a.call("left_click", { coordinate: toImage(...centre(fixture.button)), foreground: true }));
+const submitClick = text(await a.call("left_click", { coordinate: centre(frames.button), foreground: true }));
 check("foreground click on Submit", submitClick === "OK", submitClick.slice(0, 120));
 await settle(600);
 check("the fixture received the typed text", received() === typed, JSON.stringify(received()));
@@ -210,9 +256,9 @@ if (manualEsc) {
   const afterEsc = await waitFor("Press Esc now");
   check("a user Esc stops the conversation", afterEsc.startsWith("CANCELLED"), afterEsc.slice(0, 50));
   check("Esc is audited", entries().some((entry) => entry.tool === "esc" && entry.outcome === "cancelled_by_user"));
-  json(await a.call("request_access", { apps: ["dev.ketplus.computer.fixture"], reason: "e2e" }));
+  json(await a.call("request_access", { apps: [fixtureId], reason: "e2e" }));
   await a.call("screenshot");
-  const afterStop = await waitFor("Click Stop on the KetPlus banner at the top of the screen");
+  const afterStop = await waitFor(`Click Stop on the KetPlus banner at the top of the ${work?.name ?? "work"} display`);
   check("the Stop button stops the conversation", afterStop.startsWith("CANCELLED"), afterStop.slice(0, 50));
   check("Stop is audited", entries().some((entry) => entry.tool === "stop" && entry.outcome === "cancelled_by_user"));
   fixture.process.kill();

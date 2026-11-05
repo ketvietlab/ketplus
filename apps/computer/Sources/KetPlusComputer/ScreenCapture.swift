@@ -19,7 +19,7 @@ enum CaptureError: Error, CustomStringConvertible {
 
     var description: String {
         switch self {
-        case .displayUnavailable: return "The main display is not available for capture."
+        case .displayUnavailable: return "The display is not available for capture."
         case .nothingGranted: return "No granted application is running. Call list_apps and request_access first."
         case .encodeFailed: return "The screenshot could not be encoded as PNG."
         }
@@ -30,10 +30,10 @@ enum CaptureError: Error, CustomStringConvertible {
 /// other app, KetPlus, this agent's panels and the menu bar stay out of the image.
 enum ScreenCapture {
     /// `region` is display-local points (top-left origin); nil captures the display.
-    static func capture(including granted: Set<String>, region: CGRect? = nil) async throws -> Screenshot {
+    static func capture(including granted: Set<String>, region: CGRect? = nil,
+                        display displayID: CGDirectDisplayID = CGMainDisplayID()) async throws -> Screenshot {
         let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
-        let mainID = CGMainDisplayID()
-        guard let display = content.displays.first(where: { $0.displayID == mainID }) else {
+        guard let display = content.displays.first(where: { $0.displayID == displayID }) else {
             throw CaptureError.displayUnavailable
         }
         let apps = content.applications.filter {
@@ -42,14 +42,14 @@ enum ScreenCapture {
         guard !apps.isEmpty else { throw CaptureError.nothingGranted }
         let filter = SCContentFilter(display: display, including: apps, exceptingWindows: [])
 
-        let bounds = CGDisplayBounds(mainID)
+        let bounds = CGDisplayBounds(displayID)
         let configuration = SCStreamConfiguration()
         configuration.showsCursor = true
         configuration.scalesToFit = true
         let geometry: ScreenGeometry
         if let region {
             configuration.sourceRect = region
-            let native = nativeScale(mainID, bounds: bounds)
+            let native = nativeScale(displayID, bounds: bounds)
             let fit = ScreenGeometry(displayBounds: CGRect(origin: .zero, size: CGSize(
                 width: region.width * native, height: region.height * native)))
             configuration.width = fit.imageWidth

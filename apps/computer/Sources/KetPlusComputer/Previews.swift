@@ -12,7 +12,8 @@ enum Previews {
             conversation: "preview-conversation",
             apps: [("Simulator", "com.apple.iphonesimulator"), ("Xcode", "com.apple.dt.Xcode"),
                    ("Finder", "com.apple.finder")],
-            reason: "Launch the app in the iOS Simulator and tap through onboarding.")
+            reason: "Launch the app in the iOS Simulator and tap through onboarding.",
+            workDisplay: "DELL P2219H")
         let indicator = ControlIndicator()
         let cursor = VirtualCursor()
         for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {

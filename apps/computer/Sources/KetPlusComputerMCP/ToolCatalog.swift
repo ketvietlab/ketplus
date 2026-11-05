@@ -37,17 +37,17 @@ enum ToolCatalog {
 
     static let tools: [[String: Any]] = [
         ["name": "list_apps",
-         "description": "List running apps with their tier (full, click_only, view_only, blocked) and whether this conversation may use them.",
+         "description": "List running apps with their tier (full, click_only, view_only, blocked) and whether this conversation may use them, and the connected displays.",
          "inputSchema": object([:])],
         ["name": "request_access",
-         "description": "Ask the user to let this conversation see and control apps. Screenshots only show granted apps; input only reaches them.",
+         "description": "Ask the user to let this conversation see and control apps. Granted apps' windows move to the work display. Screenshots only show granted apps; input only reaches them.",
          "inputSchema": object([
              "apps": ["type": "array", "items": ["type": "string"], "minItems": 1, "maxItems": 8,
                       "description": "App names or bundle IDs"],
              "reason": ["type": "string", "description": "One sentence shown to the user"],
          ], required: ["apps"])],
         ["name": "open_application",
-         "description": "Open a granted app. It stays behind the user's work unless foreground is true.",
+         "description": "Open a granted app and move its windows to the work display. It stays behind the user's work unless foreground is true.",
          "inputSchema": object(["app": ["type": "string", "description": "App name or bundle ID"],
                                 "foreground": ["type": "boolean", "description": "Bring the app to the front"]],
                                required: ["app"])],
@@ -66,8 +66,10 @@ enum ToolCatalog {
              "value": ["type": "string", "description": "Text for set_value"],
          ], required: ["snapshot_id", "ref", "action"])],
         ["name": "screenshot",
-         "description": "Capture the main display showing only granted apps. Its pixels are the coordinate space for every other tool.",
-         "inputSchema": object([:])],
+         "description": "Capture the agent's work display (a secondary display when there is one) showing only granted "
+             + "apps. Its pixels are the coordinate space for every other tool.",
+         "inputSchema": object(["display": ["type": "string",
+                                            "description": "work (default), main, or a display ID from list_apps"]])],
         ["name": "zoom",
          "description": "Capture a region of the last screenshot at higher resolution to read small text. Coordinates stay those of the last screenshot.",
          "inputSchema": object(["region": ["type": "array", "items": ["type": "integer"], "minItems": 4, "maxItems": 4,

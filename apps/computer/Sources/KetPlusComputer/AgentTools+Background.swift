@@ -216,7 +216,9 @@ extension AgentTools {
         if !actions.isEmpty { parts.append("actions=\(actions.joined(separator: ","))") }
         if node.focused { parts.append("focused") }
         if !node.enabled { parts.append("disabled") }
-        if let frame = node.frame {
+        if let frame = node.frame, !geometry.displayBounds.contains(CGPoint(x: frame.midX, y: frame.midY)) {
+            parts.append("offscreen")
+        } else if let frame = node.frame {
             let origin = geometry.imagePoint(global: frame.origin)
             let end = geometry.imagePoint(global: CGPoint(x: frame.maxX, y: frame.maxY))
             parts.append("@\(origin.x),\(origin.y),\(end.x - origin.x)x\(end.y - origin.y)")

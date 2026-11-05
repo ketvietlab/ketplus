@@ -177,7 +177,8 @@ milestone changes state.
   Stop button and Esc kill switch, and an audit log. Input is background-first
   (ADR 0027): accessibility `observe`/`act`, coordinate clicks mapped to
   accessibility actions, keyboard events sent to one process and an overlay
-  pointer; the real pointer is opt-in. `modules/computer` gives Claude and Cursor the
+  pointer; the real pointer is opt-in. Granted apps move to a work display,
+  secondary by default, which screenshots show (ADR 0028). `modules/computer` gives Claude and Cursor the
   front with an HMAC conversation token when Settings → Computer use is on (off
   by default), and marks remote-started turns so the agent refuses them.
 - Pro desktop shell under `apps/desktop`.
@@ -266,7 +267,7 @@ milestone changes state.
   [ADR 0025](decisions/0025-remote-transport-protocol.md).
 - Computer use follow-ups ([ADR 0026](decisions/0026-ketplus-computer-agent-app.md)):
   Codex (per-conversation MCP binding), before/after thumbnails in the
-  transcript, multiple displays, minimized windows and other Spaces, shortcuts
+  transcript, minimized windows and other Spaces, shortcuts
   that need a key window in background apps, and Windows.
 - Windows daemon/desktop CI once required Qt WebView packages are available.
 - Cross-block native selection/accessibility mapping and physical-device

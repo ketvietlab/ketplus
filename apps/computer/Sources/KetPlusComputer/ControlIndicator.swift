@@ -10,7 +10,8 @@ final class ControlIndicator {
     /// Called when the user presses Stop.
     var onStop: (() -> Void)?
 
-    func show(apps: [String]) {
+    /// Shows the banner at the top of `screen`, the agent's work display.
+    func show(apps: [String], on screen: NSScreen? = nil) {
         let text = apps.isEmpty
             ? "KetPlus agent is using this Mac"
             : "KetPlus agent is using \(apps.joined(separator: ", "))"
@@ -20,7 +21,7 @@ final class ControlIndicator {
         stop.sizeToFit()
         let height: CGFloat = 36
         let width = 16 + label.frame.width + 12 + stop.frame.width + 8
-        if let screen = NSScreen.main {
+        if let screen = screen ?? NSScreen.main {
             let frame = screen.visibleFrame
             panel.setFrame(NSRect(x: frame.midX - width / 2, y: frame.maxY - height - 12, width: width, height: height),
                            display: true)

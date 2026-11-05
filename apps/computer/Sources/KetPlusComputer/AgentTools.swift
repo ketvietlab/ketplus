@@ -6,7 +6,7 @@ import Foundation
 /// Tool semantics and policy enforcement (ADR 0026, 0027). Runs on socket threads;
 /// UI work hops to the main thread. Background tools are in AgentTools+Background.
 final class AgentTools {
-    private let paths: AgentPaths
+    let paths: AgentPaths
     let control: ControlState
     private let audit: AuditLog
     let lock = NSLock()
@@ -125,7 +125,7 @@ final class AgentTools {
         switch method {
         case "request_access": return (try requestAccess(params, conversation), nil)
         case "open_application": return try openApplication(params, conversation)
-        case "screenshot": return (try screenshot(conversation, region: nil), nil)
+        case "screenshot": return (try screenshot(conversation, region: nil, display: display(for: params["display"])), nil)
         case "zoom": return (try zoom(params, conversation), nil)
         case "observe": return try observe(params, conversation)
         case "act": return try act(params, conversation)
@@ -162,31 +162,30 @@ final class AgentTools {
         let names = control.grantedApps(conversation).compactMap { id in
             AppCatalog.running().first { $0.bundleIdentifier == id }?.name
         }
+        let work = workDisplay()
         DispatchQueue.main.async { [self] in
             MainActor.assumeIsolated {
                 installKillSwitch()
                 // The user may have pressed Stop since this call took the lease.
                 guard control.activeHolder == conversation else { return }
-                indicator.show(apps: names.sorted())
+                indicator.show(apps: names.sorted(), on: work.flatMap(Displays.screen))
             }
         }
     }
 
     private func deniedApps() -> Set<String> {
-        guard let data = try? Data(contentsOf: paths.settingsFile),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let list = object["deniedApps"] as? [String] else { return [] }
-        return Set(list)
+        Set(setting("deniedApps") as? [String] ?? [])
     }
 
     func tier(_ bundle: String) -> AppTier { AppPolicy.tier(for: bundle, denied: deniedApps()) }
 
     private func listApps(_ conversation: String) -> [String: Any] {
         let granted = control.grantedApps(conversation)
+        let work = workDisplay()
         return ["apps": AppCatalog.running().map { app in
             ["name": app.name, "bundleId": app.bundleIdentifier, "tier": tier(app.bundleIdentifier).rawValue,
              "granted": granted.contains(app.bundleIdentifier), "frontmost": app.frontmost] as [String: Any]
-        }]
+        }, "displays": allDisplays().map { displaySummary($0, work: work) }]
     }
 
     private func requestAccess(_ params: [String: Any], _ conversation: String) throws -> [String: Any] {
@@ -212,16 +211,19 @@ final class AgentTools {
                 throw AgentFailure(code: "PERMISSION_REQUIRED",
                                    message: "KetPlus Computer needs Screen Recording and Accessibility in System Settings > Privacy & Security.")
             }
+            let work = workDisplay()
             let request = ApprovalPanel.Request(conversation: conversation, apps: wanted,
-                                                reason: String((params["reason"] as? String ?? "").prefix(300)))
+                                                reason: String((params["reason"] as? String ?? "").prefix(300)),
+                                                workDisplay: allDisplays().count > 1 ? work?.name : nil)
             let answer = DispatchQueue.main.sync { MainActor.assumeIsolated { ApprovalPanel.ask(request) } }
             decision = answer.rawValue
             approved = answer == .allow
             if approved { control.grant(Set(wanted.map(\.bundleIdentifier)), to: conversation) }
         }
+        let moved = approved ? moveToWorkDisplay(wanted.map(\.bundleIdentifier)) : []
         return ["granted": control.grantedApps(conversation).sorted(),
                 "denied": approved ? [] : wanted.map(\.name),
-                "blocked": refused, "decision": decision]
+                "blocked": refused, "decision": decision, "movedToWorkDisplay": moved]
     }
 
     func requireGranted(_ bundle: String, _ action: ActionKind, _ conversation: String) throws {
@@ -245,14 +247,14 @@ final class AgentTools {
         }
         try requireGranted(app.bundleIdentifier, .view, conversation)
         let activate = params["foreground"] as? Bool ?? false
-        try AppCatalog.open(app.bundleIdentifier, activate: activate)
+        let moved = try openOnWorkDisplay(app.bundleIdentifier, activate: activate)
         lock.withLock { lastTargets[conversation] = app.bundleIdentifier }
-        return (["opened": app.bundleIdentifier, "frontmost": activate], app.bundleIdentifier)
+        return (["opened": app.bundleIdentifier, "frontmost": activate, "movedToWorkDisplay": moved], app.bundleIdentifier)
     }
 
     // MARK: capture
 
-    private func screenshot(_ conversation: String, region: CGRect?) throws -> [String: Any] {
+    private func screenshot(_ conversation: String, region: CGRect?, display: DisplayInfo) throws -> [String: Any] {
         guard Permissions.screenRecording else {
             throw AgentFailure(code: "PERMISSION_REQUIRED",
                                message: "Allow KetPlus Computer in System Settings > Privacy & Security > Screen & System Audio Recording.")
@@ -260,7 +262,7 @@ final class AgentTools {
         let granted = control.grantedApps(conversation).filter { tier($0) != .blocked }
         let shot: Screenshot
         do {
-            shot = try waitFor { try await ScreenCapture.capture(including: granted, region: region) }
+            shot = try waitFor { try await ScreenCapture.capture(including: granted, region: region, display: display.id) }
         } catch let error as CaptureError {
             throw AgentFailure(code: error == .nothingGranted ? "APP_NOT_GRANTED" : "CAPTURE_FAILED", message: error.description)
         } catch {
@@ -268,15 +270,20 @@ final class AgentTools {
         }
         if region == nil { lock.withLock { geometries[conversation] = shot.geometry } }
         return ["png": shot.png.base64EncodedString(), "width": shot.geometry.imageWidth,
-                "height": shot.geometry.imageHeight, "visibleApps": shot.visibleApps]
+                "height": shot.geometry.imageHeight, "visibleApps": shot.visibleApps,
+                "display": displaySummary(display, work: workDisplay())]
     }
 
     private func zoom(_ params: [String: Any], _ conversation: String) throws -> [String: Any] {
         let region = (params["region"] as? [Any] ?? []).compactMap { ($0 as? NSNumber)?.intValue }
-        guard let rect = try geometry(conversation).displayRect(imageRegion: region) else {
+        let geometry = try geometry(conversation)
+        guard let rect = geometry.displayRect(imageRegion: region) else {
             throw AgentFailure(code: "INVALID_PARAMS", message: "region must be [x0, y0, x1, y1] inside the last screenshot.")
         }
-        return try screenshot(conversation, region: rect)
+        guard let display = display(of: geometry) else {
+            throw AgentFailure(code: "NO_SCREENSHOT", message: "The last screenshot's display is gone. Take a new screenshot.")
+        }
+        return try screenshot(conversation, region: rect, display: display)
     }
 
     // MARK: pointer
@@ -290,7 +297,8 @@ final class AgentTools {
 
     /// The last full screenshot's geometry, or the display's when none was taken.
     func currentGeometry(_ conversation: String) -> ScreenGeometry {
-        lock.withLock { geometries[conversation] } ?? ScreenGeometry(displayBounds: CGDisplayBounds(CGMainDisplayID()))
+        lock.withLock { geometries[conversation] }
+            ?? ScreenGeometry(displayBounds: workDisplay()?.bounds ?? CGDisplayBounds(CGMainDisplayID()))
     }
 
     func coordinate(_ value: Any?) -> (Int, Int)? {

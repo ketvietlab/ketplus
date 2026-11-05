@@ -61,6 +61,8 @@ Settings loadSettings(const QString& path) {
         if (!id.isEmpty() && !settings.deniedApps.contains(id))
             settings.deniedApps.append(id);
     }
+    if (object.value(QStringLiteral("display")).toString() == QStringLiteral("main"))
+        settings.display = QStringLiteral("main");
     return settings;
 }
 
@@ -68,6 +70,9 @@ bool saveSettings(const Settings& settings, const QString& path) {
     QJsonObject object = readObject(path);
     object.insert(QStringLiteral("enabled"), settings.enabled);
     object.insert(QStringLiteral("deniedApps"), QJsonArray::fromStringList(settings.deniedApps));
+    object.insert(QStringLiteral("display"), settings.display == QStringLiteral("main")
+                                                 ? QStringLiteral("main")
+                                                 : QStringLiteral("secondary"));
     if (!ensurePrivateDirectory(QFileInfo(path).absolutePath()))
         return false;
     QSaveFile file(path);

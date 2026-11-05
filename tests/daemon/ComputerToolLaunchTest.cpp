@@ -47,18 +47,22 @@ class ComputerToolLaunchTest final : public QObject {
         QTemporaryDir root;
         const QString path = root.filePath(QStringLiteral("nested/computer-tools.json"));
         QVERIFY(!computer::loadSettings(path).enabled);
+        QCOMPARE(computer::loadSettings(path).display, QStringLiteral("secondary"));
         QVERIFY(QDir().mkpath(root.filePath(QStringLiteral("nested"))));
         QFile seed(path);
         QVERIFY(seed.open(QIODevice::WriteOnly));
-        seed.write(R"({"future": 7})");
+        seed.write(R"({"future": 7, "display": "elsewhere"})");
         seed.close();
+        QCOMPARE(computer::loadSettings(path).display, QStringLiteral("secondary"));
         computer::Settings settings;
         settings.enabled = true;
+        settings.display = QStringLiteral("main");
         settings.deniedApps = {QStringLiteral("com.example.Bank")};
         QVERIFY(computer::saveSettings(settings, path));
         const auto loaded = computer::loadSettings(path);
         QVERIFY(loaded.enabled);
         QCOMPARE(loaded.deniedApps, QStringList{QStringLiteral("com.example.Bank")});
+        QCOMPARE(loaded.display, QStringLiteral("main"));
         QFile file(path);
         QVERIFY(file.open(QIODevice::ReadOnly));
         QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value("future").toInt(), 7);
@@ -156,6 +160,7 @@ class ComputerToolLaunchTest final : public QObject {
         QVERIFY(on.contains("request_access"));
         QVERIFY(on.contains("observe"));
         QVERIFY(on.contains("NEEDS_FOREGROUND"));
+        QVERIFY(on.contains("work display"));
         QVERIFY(!on.contains("off or unavailable"));
         QVERIFY(off.contains("off or unavailable"));
         for (const QString& text : {on, off})

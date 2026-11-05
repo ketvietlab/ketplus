@@ -2,6 +2,7 @@
 #include "ComputerToolLaunch.h"
 
 #include <QCheckBox>
+#include <QComboBox>
 #include <QDir>
 #include <QFile>
 #include <QLabel>
@@ -55,8 +56,18 @@ class SettingsComputerPageTest final : public QObject {
             (QStringList{QStringLiteral("com.example.Bank"), QStringLiteral("com.example.Mail")}));
         QCOMPARE(denied->text(), QStringLiteral("com.example.Bank, com.example.Mail"));
 
+        auto* display = page.findChild<QComboBox*>(QStringLiteral("computerWorkDisplay"));
+        QVERIFY(display);
+        QCOMPARE(display->currentData().toString(), QStringLiteral("secondary"));
+        display->setCurrentIndex(display->findData(QStringLiteral("main")));
+        QCOMPARE(computer::loadSettings(config).display, QStringLiteral("main"));
+
         SettingsComputerPage reopened(config, helpers);
         QVERIFY(reopened.findChild<QCheckBox*>(QStringLiteral("computerEnabled"))->isChecked());
+        QCOMPARE(reopened.findChild<QComboBox*>(QStringLiteral("computerWorkDisplay"))
+                     ->currentData()
+                     .toString(),
+                 QStringLiteral("main"));
         enabled->setChecked(false);
         QVERIFY(!computer::loadSettings(config).enabled);
         QCOMPARE(computer::loadSettings(config).deniedApps.size(), 2);
