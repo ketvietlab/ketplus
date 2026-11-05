@@ -26,9 +26,9 @@ void SessionHost::providerRuntimeStatus(
     const auto finish = [self, pending, callback = std::move(callback)] {
         if (--pending->remaining > 0 || self.isNull())
             return;
-        const compat::Runtime claude = self->claude_ != nullptr
-                                           ? compat::bundledClaude(self->claude_->executable())
-                                           : compat::bundledClaude({});
+        const ProviderAdapter* const claudeProvider = self->provider(QStringLiteral("claude"));
+        const compat::Runtime claude =
+            compat::bundledClaude(claudeProvider ? claudeProvider->executable() : QString());
         callback({{QStringLiteral("ok"), true},
                   {QStringLiteral("providers"),
                    QJsonArray{pending->codex, claude.toJson(), pending->cursor}}},
@@ -46,23 +46,47 @@ void SessionHost::providerRuntimeStatus(
         }
         finish();
     });
-    if (cursor_ == nullptr) {
+    ProviderAdapter* const cursor = provider(QStringLiteral("cursor"));
+    if (cursor == nullptr) {
         pending->cursor = compat::missing(compat::policy(QStringLiteral("cursor"))).toJson();
         finish();
         return;
     }
-    cursor_->runtimeStatus([pending, finish](const compat::Runtime& runtime) {
+    cursor->runtimeStatus([pending, finish](const compat::Runtime& runtime) {
         pending->cursor = runtime.toJson();
         finish();
     });
 }
 
-bool SessionHost::providerSupports(const QString& adapter, const QString& capability) const {
+ProviderAdapter* SessionHost::provider(const QString& adapter) const {
+    for (ProviderAdapter* candidate : providers_)
+        if (candidate->name() == adapter)
+            return candidate;
+    return nullptr;
+}
+
+ProviderAdapter* SessionHost::availableProvider(const QString& adapter) const {
+    ProviderAdapter* const candidate = provider(adapter);
+    return candidate != nullptr && candidate->isAvailable() ? candidate : nullptr;
+}
+
+QString SessionHost::missingProviderMessage(const QString& adapter) const {
+    if (const ProviderAdapter* const candidate = provider(adapter))
+        return candidate->missingMessage();
+    if (adapter == QStringLiteral("claude"))
+        return ClaudeAdapter::missingSidecarMessage();
     if (adapter == QStringLiteral("cursor"))
-        return cursor_ != nullptr && cursor_->supports(capability);
+        return CursorAdapter::missingExecutableMessage();
+    return QStringLiteral("The selected agent provider is not available.");
+}
+
+bool SessionHost::providerSupports(const QString& adapter, const QString& capability) const {
+    // Claude answers from its policy baseline even before the sidecar is located.
     if (adapter == QStringLiteral("claude"))
         return compat::policy(QStringLiteral("claude")).baselineSupports(capability);
-    return adapter_->supports(capability);
+    const ProviderAdapter* const target =
+        provider(adapter.isEmpty() ? QStringLiteral("codex") : adapter);
+    return target != nullptr && target->supports(capability);
 }
 
 void SessionHost::noteProviderRuntime(const QString& sessionId, const qint64 generation) {
@@ -85,12 +109,12 @@ void SessionHost::noteProviderRuntime(const QString& sessionId, const qint64 gen
         current->noticedRuntime = key;
         appendEvent(*current, QStringLiteral("provider.runtime"), runtime.toJson());
     };
-    if (it->stored.adapter == QStringLiteral("cursor")) {
-        if (cursor_ != nullptr)
-            cursor_->runtimeStatus(record);
-    } else if (it->stored.adapter != QStringLiteral("claude")) {
-        adapter_->runtimeStatus(record);
-    }
+    // The bundled Claude sidecar reports no runtime notice.
+    if (it->stored.adapter == QStringLiteral("claude"))
+        return;
+    if (ProviderAdapter* const target =
+            provider(it->stored.adapter.isEmpty() ? QStringLiteral("codex") : it->stored.adapter))
+        target->runtimeStatus(record);
 }
 
 } // namespace ketplus::daemon

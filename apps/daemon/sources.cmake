@@ -34,6 +34,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/ipc/LocalIpcServer.h
     src/protocol/DaemonProtocol.cpp
     src/protocol/DaemonProtocol.h
+    src/providers/ProviderAdapter.h
     src/providers/ClaudeAdapter.cpp
     src/providers/ClaudeAdapter.h
     src/providers/CursorAdapter.cpp

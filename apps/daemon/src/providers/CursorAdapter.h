@@ -1,5 +1,7 @@
 #pragma once
 
+#include "providers/ProviderAdapter.h"
+
 #include "providers/compat/ProviderCapabilities.h"
 #include "providers/compat/ProviderCompatibility.h"
 
@@ -10,7 +12,6 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QList>
-#include <QObject>
 #include <QPair>
 #include <QSet>
 #include <QStringList>
@@ -28,29 +29,30 @@ class ProviderVersionProbe;
 
 // Cursor CLI ACP client (`agent acp`). The binary is discovered on PATH and is
 // never bundled. Auth stays with the CLI (`agent login` or CURSOR_API_KEY).
-class CursorAdapter final : public QObject {
+class CursorAdapter final : public ProviderAdapter {
     Q_OBJECT
 
   public:
-    using Callback = std::function<void(const QJsonObject&, const QString&)>;
-
     explicit CursorAdapter(const QString& executable = {}, QObject* parent = nullptr);
     ~CursorAdapter() override;
 
-    [[nodiscard]] bool isAvailable() const;
-    [[nodiscard]] bool isReady() const;
-    [[nodiscard]] QString executable() const;
+    [[nodiscard]] QString name() const override { return QStringLiteral("cursor"); }
+    [[nodiscard]] QString missingMessage() const override;
+    [[nodiscard]] bool isAvailable() const override;
+    [[nodiscard]] bool isReady() const override;
+    [[nodiscard]] QString executable() const override;
 
-    void call(const QString& method, const QJsonObject& params, Callback callback);
+    void call(const QString& method, const QJsonObject& params, Callback callback) override;
     // Version and support status of the Cursor CLI (ADR 0015). Launches check it first and an
     // outdated CLI is not started.
-    void runtimeStatus(std::function<void(const compat::Runtime&)> callback);
+    void runtimeStatus(std::function<void(const compat::Runtime&)> callback) override;
     // Whether the running CLI has `capability` (ADR 0015 §3); see CodexAdapter::supports.
-    [[nodiscard]] bool supports(const QString& capability) const;
-    void configurationCatalog(Callback callback);
-    void respond(const QJsonValue& requestId, const QJsonObject& result);
-    void respondError(const QJsonValue& requestId, const QString& code, const QString& message);
-    void stop();
+    [[nodiscard]] bool supports(const QString& capability) const override;
+    void configurationCatalog(Callback callback) override;
+    void respond(const QJsonValue& requestId, const QJsonObject& result) override;
+    void respondError(const QJsonValue& requestId, const QString& code,
+                      const QString& message) override;
+    void stop() override;
 
     [[nodiscard]] static QJsonArray modelCatalog();
     [[nodiscard]] static QJsonArray parseModelList(const QString& output);
@@ -85,12 +87,6 @@ class CursorAdapter final : public QObject {
                                                              const QString& model = {});
     [[nodiscard]] static ProcessInvocation listModelsInvocation(const QString& executable);
     [[nodiscard]] static ProcessInvocation versionInvocation(const QString& executable);
-
-  signals:
-    void canonicalEvent(const QString& sessionId, const QString& type, const QJsonObject& payload);
-    void requestReceived(const QJsonValue& requestId, const QString& method,
-                         const QJsonObject& params);
-    void stopped(const QString& reason);
 
   private:
     struct QueuedCall final {
