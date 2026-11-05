@@ -1410,7 +1410,6 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
                          .arg(it->stored.worktreePath, executionDirectory(*it))}});
     if (agentOrigin.isEmpty()) {
         addAgentContext(*it, displayText, input, true);
-        appendResponseGuidance(input);
     } else {
         input.append(
             QJsonObject{{QStringLiteral("type"), QStringLiteral("text")},
@@ -1699,7 +1698,6 @@ QJsonObject SessionHost::steer(const QJsonObject& request, CommandCallback outco
     };
     if (agentOrigin.isEmpty())
         addAgentContext(*session, displayText, input, false);
-    appendResponseGuidance(input);
     if (claude) {
         claude_->call(QStringLiteral("turn/steer"),
                       {{QStringLiteral("sessionId"), sessionId},

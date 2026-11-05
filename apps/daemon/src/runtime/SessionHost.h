@@ -248,7 +248,6 @@ class SessionHost final : public QObject, private AgentHostPort {
     void releaseTurnAttachments(Session& session);
     // What a provider that takes a single prompt reads from a message's input, and the paths of
     // its images.
-    static void appendResponseGuidance(QJsonArray& input);
     [[nodiscard]] static QString promptText(const QJsonArray& input);
     [[nodiscard]] static QJsonArray imagePaths(const QJsonArray& input);
     [[nodiscard]] bool updateSessionTitle(Session& session, const QString& title, bool customTitle);

@@ -137,6 +137,8 @@ class DaemonWorktreeContextTest final : public QObject {
         QCOMPARE(f.journal->turnContextRevision("conversation", 1, active.turnId), 1);
     }
 
+    // The guidance travels once in the thread's developer instructions. Repeating it in every
+    // user message would add another copy to the provider history on each turn.
     void responseGuidanceIsProviderOnly() {
         Fixture f;
         QVERIFY(f.initialize());
@@ -159,14 +161,21 @@ class DaemonWorktreeContextTest final : public QObject {
         QTRY_COMPARE(f.journal->sessions().first().state, QString("running"));
         QVERIFY(f.call("session.steer", "steer-guidance", {{"prompt", "continue"}})["ok"].toBool());
         QTRY_COMPARE(f.output().count("provider-input:"), 2);
+        int setups = 0;
         for (const auto& line : f.output().split('\n')) {
-            if (!line.startsWith("provider-input:"))
+            if (line.startsWith("provider-input:")) {
+                const auto input = QJsonDocument::fromJson(line.mid(15)).array();
+                QCOMPARE(input.size(), 1);
+                QVERIFY(!input.first()["text"].toString().contains("ketplus_response_preferences"));
                 continue;
-            const auto input = QJsonDocument::fromJson(line.mid(15)).array();
-            QCOMPARE(input.size(), 2);
-            const auto suffix = input.last()["text"].toString();
-            QVERIFY(suffix.contains("<ketplus_response_preferences>"));
-            QCOMPARE(suffix, ketplus::daemon::responseGuidance());
+            }
+            if (!line.startsWith("setup:"))
+                continue;
+            ++setups;
+            const auto suffix =
+                QJsonDocument::fromJson(line.mid(6)).object()["developerInstructions"].toString();
+            QCOMPARE(suffix.count("<ketplus_response_preferences>"), 1);
+            QVERIFY(suffix.endsWith(ketplus::daemon::responseGuidance()));
             QVERIFY(suffix.contains("refer to yourself as 'tui'"));
             QVERIFY(suffix.contains("next task or action and who will do it"));
             QVERIFY(suffix.contains("no forced flirting"));
@@ -188,6 +197,7 @@ class DaemonWorktreeContextTest final : public QObject {
             QVERIFY(suffix.contains("do not silently fall back to another checkout"));
             QVERIFY(!suffix.contains("flirt-comedy"));
         }
+        QVERIFY(setups > 0);
         const auto events =
             QJsonDocument(f.journal->eventsAfter("conversation", 1, 0, 100)).toJson();
         QVERIFY(!events.contains("ketplus_response_preferences"));
@@ -329,8 +339,7 @@ class DaemonWorktreeContextTest final : public QObject {
                 continue;
             const QJsonArray input =
                 QJsonDocument::fromJson(line.mid(12)).object()["input"].toArray();
-            QCOMPARE(input.size(), 3);
-            QVERIFY(input.last()["text"].toString().contains("<ketplus_response_preferences>"));
+            QCOMPARE(input.size(), 2);
             QCOMPARE(input.at(1)["type"].toString(), QString("image"));
             const QString url = input.at(1)["url"].toString();
             QCOMPARE(QByteArray::fromBase64(url.section(',', 1).toLatin1()), bytes);

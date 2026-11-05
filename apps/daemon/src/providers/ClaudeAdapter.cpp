@@ -2,6 +2,7 @@
 #include "BrowserAgentInstructions.h"
 #include "BrowserToolLaunch.h"
 #include "providers/ClaudeCredentials.h"
+#include "runtime/ResponseGuidance.h"
 #include <QRegularExpression>
 
 #include <QCoreApplication>
@@ -365,7 +366,8 @@ void ClaudeAdapter::sendCall(const QString& method, const QJsonObject& params, C
                 instructions += QStringLiteral("\n\n") + agentInstructions;
         }
         providerParams.insert(QStringLiteral("mcpServers"), servers);
-        providerParams.insert(QStringLiteral("browserInstructions"), instructions);
+        providerParams.insert(QStringLiteral("browserInstructions"),
+                              withResponseGuidance(instructions));
     }
     sendObject({{QStringLiteral("id"), static_cast<qint64>(id)},
                 {QStringLiteral("method"), method},

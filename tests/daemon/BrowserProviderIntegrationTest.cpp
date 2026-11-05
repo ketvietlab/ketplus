@@ -85,6 +85,8 @@ class BrowserProviderIntegrationTest final : public QObject {
                 QCOMPARE(policy.count("[KetPlus browser policy]"), 1);
                 QCOMPARE(policy.count("[KetPlus reading policy]"), 1);
                 QCOMPARE(policy.count("[KetPlus Mermaid guidance]"), 1);
+                // Response guidance is daemon policy; direct Codex never carried it.
+                QCOMPARE(policy.count("<ketplus_response_preferences>"), direct ? 0 : 1);
                 QVERIFY(policy.contains("Search with rg"));
                 QCOMPARE(policy.contains("browser_create_session"), available);
                 QCOMPARE(policy.contains("You MUST call browser_close_session"), available);
@@ -223,6 +225,7 @@ class BrowserProviderIntegrationTest final : public QObject {
             QVERIFY(policy.contains("provider-native browser"));
             QCOMPARE(policy.count("[KetPlus reading policy]"), 1);
             QCOMPARE(policy.count("[KetPlus Mermaid guidance]"), 1);
+            QCOMPARE(policy.count("<ketplus_response_preferences>"), 1);
             QVERIFY(policy.contains("Do not cat several files at once"));
             QVERIFY(policy.contains("instead of falling back"));
             // Computer use stays open for Safari and native apps, never for other browsers.
