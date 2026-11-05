@@ -17,7 +17,7 @@ Verified by plan checker on PR #17 worktree:
 | Nodes | 119 |
 | Edges | 158 |
 
-Verified independently from the merged `ketplus-desktop-redesign.ketatlas/atlas.json`:
+Verified independently from the merged `ketplus.ketatlas/atlas.json`:
 
 | Metric | Count |
 | --- | ---: |

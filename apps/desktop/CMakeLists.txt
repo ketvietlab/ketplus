@@ -166,10 +166,10 @@ qt_add_resources(ketplus "ketplus_brand"
 
 qt_add_resources(ketplus "ketplus_wordmarks"
     PREFIX "/brand"
-    BASE "${PROJECT_SOURCE_DIR}/ketplus-desktop-redesign.ketatlas/assets/brand/ketplus-v1"
+    BASE "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1"
     FILES
-        "${PROJECT_SOURCE_DIR}/ketplus-desktop-redesign.ketatlas/assets/brand/ketplus-v1/ketplus-logo-light.png"
-        "${PROJECT_SOURCE_DIR}/ketplus-desktop-redesign.ketatlas/assets/brand/ketplus-v1/ketplus-logo-dark.png"
+        "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1/ketplus-logo-light.png"
+        "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1/ketplus-logo-dark.png"
 )
 
 set_target_properties(ketplus PROPERTIES

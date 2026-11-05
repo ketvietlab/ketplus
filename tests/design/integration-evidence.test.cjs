@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
-const { validate, resolveRepoPath } = require("../../tasks/desktop-refactor/wave-1/integration/evidence-validator.cjs");
+const { validate, resolveRepoPath, livePath } = require("../../tasks/desktop-refactor/wave-1/integration/evidence-validator.cjs");
 const policy = require("../../tasks/desktop-refactor/wave-1/integration/gate-policy.cjs");
 const { visualFixture, approve, writeArtifact, hash, png } = require("./integration-synthetic.cjs");
 const { inspectPng } = require("../../tasks/desktop-refactor/wave-1/integration/png-integrity.cjs");
@@ -13,7 +13,7 @@ const base = "tasks/desktop-refactor/wave-1/integration";
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "ketplus-test-only-evidence-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  for (const p of ["docs", "tests/design", "tasks/desktop-refactor", "ketplus-desktop-redesign.ketatlas"]) fs.cpSync(path.join(repoRoot, p), path.join(root, p), { recursive: true });
+  for (const p of ["docs", "tests/design", "tasks/desktop-refactor", "ketplus.ketatlas"]) fs.cpSync(path.join(repoRoot, p), path.join(root, p), { recursive: true });
   // Only read Git objects from the real repository; no refs or checkouts are changed.
   const gitDir = execFileSync("git", ["-C", repoRoot, "rev-parse", "--absolute-git-dir"], { encoding: "utf8" }).trim();
   fs.writeFileSync(path.join(root, ".git"), "gitdir: " + gitDir + "\n");
@@ -53,14 +53,14 @@ function drifted(t, mutate, match) {
 }
 test("R00-D CLI reports a deleted connections HTML as drift from the reviewed design", t => {
   const f = fixture(t);
-  fs.unlinkSync(path.join(f.root, "ketplus-desktop-redesign.ketatlas/screens/connections.html"));
+  fs.unlinkSync(path.join(f.root, "ketplus.ketatlas/screens/connections.html"));
   const result = require("node:child_process").spawnSync(process.execPath, [base + "/check-integration.cjs"], { cwd: f.root, encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stderr, /warning: drift renderingSource\.ketplus-desktop-redesign\.ketatlas\/screens\/connections\.html/);
+  assert.match(result.stderr, /warning: drift renderingSource\.ketplus\.ketatlas\/screens\/connections\.html/);
 });
 for (const file of ["connections.html", "desktop.css", "core.js"]) {
   test("R00-D reports modified rendering source " + file + " as drift", t => drifted(t, (m, root) => {
-    fs.appendFileSync(path.join(root, "ketplus-desktop-redesign.ketatlas/screens", file), "\n/* drift */\n");
+    fs.appendFileSync(path.join(root, "ketplus.ketatlas/screens", file), "\n/* drift */\n");
   }, new RegExp("screens/" + file.replace(".", "\\.") + ": differs from pinned rendering source")));
 }
 test("R00-D rejects omitted source receipt entry", t => invalid(t, (m, root) => {
@@ -71,13 +71,13 @@ test("R00-D rejects omitted source receipt entry", t => invalid(t, (m, root) => 
 test("R00-D local receipt hashes cannot hide source drift", t => invalid(t, (m, root) => {
   const p = path.join(root, base, "rendering-source-inventory.json"), receipt = JSON.parse(fs.readFileSync(p));
   const e = receipt.entries.find(e => e.path.endsWith("desktop.css"));
-  fs.appendFileSync(path.join(root, e.path), "\n/* drift */\n");
-  e.sha256 = hash(fs.readFileSync(path.join(root, e.path)));
+  fs.appendFileSync(path.join(root, livePath(e.path)), "\n/* drift */\n");
+  e.sha256 = hash(fs.readFileSync(path.join(root, livePath(e.path))));
   fs.writeFileSync(p, JSON.stringify(receipt));
 }, /receipt differs/));
 test("R00-D progress and documentation updates do not change rendering reference", t => {
   const f = fixture(t);
-  for (const file of ["atlas.progress.json", "README.md", "assets/brand/ketplus-v1/README.md"]) fs.appendFileSync(path.join(f.root, "ketplus-desktop-redesign.ketatlas", file), "\n");
+  for (const file of ["atlas.progress.json", "README.md", "assets/brand/ketplus-v1/README.md"]) fs.appendFileSync(path.join(f.root, "ketplus.ketatlas", file), "\n");
   const result = validate({ root: f.root });
   assert.equal(messages(result), "");
 });
@@ -85,11 +85,11 @@ test("R00-D rejects reference receipt binding drift", t => invalid(t, (m, root) 
   const { ref } = visualFixture(m, root); ref.renderingSource.renderingSourceSha256 = "0".repeat(64);
 }, /reference rendering source binding mismatch/, { testOnly: true }));
 test("R00-D reports a renamed source as drift", t => drifted(t, (m, root) => {
-  const p = path.join(root, "ketplus-desktop-redesign.ketatlas/screens/connections.html");
+  const p = path.join(root, "ketplus.ketatlas/screens/connections.html");
   fs.renameSync(p, p + ".renamed");
 }, /screens\/connections\.html: differs from pinned rendering source/));
 test("R00-D rendering source symlink escape is rejected", t => invalid(t, (m, root) => {
-  const relative = "ketplus-desktop-redesign.ketatlas/screens/connections.html";
+  const relative = "ketplus.ketatlas/screens/connections.html";
   fs.unlinkSync(path.join(root, relative));
   fs.symlinkSync(path.join(repoRoot, relative), path.join(root, relative));
 }, /resolves outside repository/));
@@ -161,11 +161,11 @@ for (const [name, mutate, match] of [
 ]) test("rejects " + name, t => invalid(t, mutate, match));
 
 test("missing asset file rejected", t => invalid(t, (m, root) => {
-  fs.unlinkSync(path.join(root, m.assetHashes[1].path));
+  fs.unlinkSync(path.join(root, livePath(m.assetHashes[1].path)));
 }, /does not exist/));
 test("symlink escape rejected even with valid content/hash", t => invalid(t, (m, root) => {
-  const a = m.evidence[0].artifacts[0], target = path.join(root, a.path);
-  fs.unlinkSync(target); fs.symlinkSync(path.join(repoRoot, a.path), target);
+  const a = m.evidence[0].artifacts[0], target = path.join(root, livePath(a.path));
+  fs.unlinkSync(target); fs.symlinkSync(path.join(repoRoot, livePath(a.path)), target);
 }, /resolves outside repository/));
 test("prefix-sibling escape rejected", t => {
   const f = fixture(t), errors = [];
@@ -196,13 +196,13 @@ for (const mutate of [
   a => a.screens[0].url = "./screens/nonexistent.html",
 ]) test("live atlas identity or state changes do not move the reviewed inventory", t => {
   const r = drifted(t, (m, root) => {
-    const p = path.join(root, m.artifactPaths.designAtlas), a = JSON.parse(fs.readFileSync(p));
+    const p = path.join(root, livePath(m.artifactPaths.designAtlas)), a = JSON.parse(fs.readFileSync(p));
     mutate(a); fs.writeFileSync(p, JSON.stringify(a));
   }, /^atlas: live design differs/m);
   assert.equal(r.atlasInventory.screens, r.manifest.design.inventory.screens);
 });
 test("a broken live atlas is drift, not a broken inventory", t => drifted(t, (m, root) => {
-  fs.writeFileSync(path.join(root, m.artifactPaths.designAtlas), "{broken");
+  fs.writeFileSync(path.join(root, livePath(m.artifactPaths.designAtlas)), "{broken");
 }, /^atlas: live design differs/m));
 test("atlas inventory path cannot move away from the reviewed atlas", t => invalid(t, m => {
   m.artifactPaths.designAtlas = "tasks/desktop-refactor/coverage.json";
@@ -238,11 +238,11 @@ for (const [name, mutate, match] of [
 }, match, {testOnly: true}));
 test("JSON renamed PNG with matching digest is rejected by decoder", t => invalid(t, (m, root) => {
   const {captures} = visualFixture(m, root), a = captures[1];
-  fs.writeFileSync(path.join(root, a.path), "{}"); a.sha256 = hash(Buffer.from("{}"));
+  fs.writeFileSync(path.join(root, livePath(a.path)), "{}"); a.sha256 = hash(Buffer.from("{}"));
 }, /invalid PNG signature/, {testOnly: true}));
 test("valid PNG of wrong dimensions is rejected", t => invalid(t, (m, root) => {
   const {captures} = visualFixture(m, root), a = captures[1], bytes = png(1, 1);
-  fs.writeFileSync(path.join(root, a.path), bytes); a.sha256 = hash(bytes);
+  fs.writeFileSync(path.join(root, livePath(a.path)), bytes); a.sha256 = hash(bytes);
 }, /image dimensions mismatch/, {testOnly: true}));
 test("approval record mismatch is checked even after its digest is updated", t => invalid(t, (m, root) => {
   const {ref} = visualFixture(m, root), p = path.join(root, ref.approval.path);

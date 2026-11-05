@@ -2,16 +2,21 @@
 
 Proposed extension: [installable themes and VS Code color-theme compatibility](theming.md).
 
-KetPlus adapts the
-[KetJS design system](https://github.com/ketvietlab/ketjs/tree/develop/packages/design-system)
-to a native Qt Widgets and Qt Quick application. The goal is visual continuity
+KetPlus adapts the Két Design System (`@ketvietlab/design-system`, now in
+`ketsuite/packages/design-system` of ketviet; this palette follows 0.1.44 at
+`e8adee2d`) to a native Qt Widgets and Qt Quick application. The goal is visual continuity
 without copying web-specific implementation details.
 
 ## Principles
 
 - Dense, operational layout with restrained decoration
 - Neutral canvas and panel surfaces with quiet borders
-- Indigo for active and focused states
+- Két Blue for active and focused states. The palette follows Két Design System
+  0.1.44 (ketviet `e8adee2d`): accent `#1746FF` (hover `#1238DB`, active
+  `#102EB3`) for indicators, borders and focus; `accentText` (`#1238DB` light,
+  `#9EB5FF` dark) for accent-coloured text and icons; and the softer
+  `actionPrimary` `#365FD6` (hover `#3151C6`, pressed `#2B46B7`) for filled
+  primary buttons with white text
 - Two-pixel active-tab indicator
 - SF Pro for application chrome when present, then bundled Inter, then the
   platform UI font; Agent Workspace and QWidget chrome share that resolver.
@@ -45,7 +50,7 @@ The Agent Workspace maps that palette into QML through semantic properties,
 rather than defining an independent theme. It follows the KetJS density and
 geometry scale: a 216 px navigation rail (the native equivalent of
 `--kv-sidebar-width: 13.5rem`), 30–34 px controls, 5–7 px interactive radii,
-quiet one-pixel borders, indigo active/focus states, SF Pro (then Inter) UI
+quiet one-pixel borders, Két Blue active/focus states, SF Pro (then Inter) UI
 typography on a collapsed `TypeScale` ladder (micro 10, caption 11, body 12,
 reading 14, title 16, heading 22, display 29 at Medium, plus glyphSmall 16 /
 glyphLarge 34), and Lucide icons. The chat transcript is constrained to 760 px
@@ -71,7 +76,7 @@ Agent Workspace has three presentation states:
 Each worktree row reports live agent activity, while the transcript, title, and
 composer always belong to the selected worktree. Streaming status is expressed
 with text and color together, so activity does not depend on color alone. The
-selected worktree keeps the indigo selection surface whether it is idle or
+selected worktree keeps the Két Blue selection surface whether it is idle or
 running. Running rows use a static green secondary status label (`Agent working...`
 for worktrees and the current status for conversations), without a path suffix,
 shimmer animation, or activity dot. A green dot indicates a successfully completed

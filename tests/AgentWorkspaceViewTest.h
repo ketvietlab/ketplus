@@ -188,6 +188,10 @@ inline ketplus::ThemePalette testPalette() {
     palette.accentMuted = QStringLiteral("#354476");
     palette.focus = QStringLiteral("#6b82ff");
     palette.tabActiveText = QStringLiteral("#8094ff");
+    palette.accentText = QStringLiteral("#9eb5ff");
+    palette.actionPrimary = QStringLiteral("#365fd6");
+    palette.actionPrimaryHover = QStringLiteral("#3151c6");
+    palette.actionPrimaryActive = QStringLiteral("#2b46b7");
     palette.positive = QStringLiteral("#42b883");
     palette.warning = QStringLiteral("#d9a441");
     palette.danger = QStringLiteral("#ef6461");

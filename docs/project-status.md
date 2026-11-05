@@ -336,7 +336,7 @@ selection moves the existing conversation to the chosen repository, updates its
 header and scope, and promotes the sidebar group while retaining its draft.
 The iPhone variant uses a two-step bottom sheet. Search, failed acknowledgment,
 offline/reconnect and stale-catalog recovery are covered by focused mock tests.
-See `ketplus-desktop-redesign.ketatlas/README.md` for fixtures and evidence.
+See `ketplus.ketatlas/README.md` for fixtures and evidence.
 The approved flow is implemented in the native Qt picker and SwiftUI companion.
 Acknowledged switches preserve the conversation anchor/draft, regroup the sidebar
 and update Files/Source Control and file search. Local repositories include both

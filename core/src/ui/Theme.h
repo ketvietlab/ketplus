@@ -35,6 +35,12 @@ struct ThemePalette final {
     QString accentMuted;
     QString focus;
     QString tabActiveText;
+    // Accent as text on panels and subtle fills; readable in both themes (DS accent-text).
+    QString accentText;
+    // Filled primary buttons with white text: a softer blue than the accent (DS action-primary).
+    QString actionPrimary;
+    QString actionPrimaryHover;
+    QString actionPrimaryActive;
     QString positive;
     QString warning;
     QString danger;

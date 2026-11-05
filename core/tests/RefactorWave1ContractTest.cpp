@@ -244,7 +244,7 @@ void RefactorWave1ContractTest::currentNativePaletteBaseline() {
     QVERIFY(dark.dark);
     QCOMPARE(dark.pageBackground, QStringLiteral("#1B1F24"));
     QCOMPARE(dark.panelBackground, QStringLiteral("#1D2228"));
-    QCOMPARE(dark.accent, QStringLiteral("#5968DF"));
+    QCOMPARE(dark.accent, QStringLiteral("#1746FF")); // Két Blue, design system 0.1.44
     QCOMPARE(dark.textMain, QStringLiteral("#E8ECF1"));
     QCOMPARE(dark.info, QStringLiteral("#5EC8E8"));
     QVERIFY(!dark.positive.isEmpty());

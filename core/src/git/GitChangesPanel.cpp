@@ -27,6 +27,12 @@ constexpr int diffModeRole = Qt::UserRole + 1;
 constexpr int subtitleRole = Qt::UserRole + 2;
 constexpr int countRole = Qt::UserRole + 3;
 
+// Két Design System accent-text: Két Blue that stays readable on the dark theme.
+QColor selectedAccentText(const QPalette& palette) {
+    return QColor(palette.color(QPalette::Window).lightness() < 128 ? QStringLiteral("#9EB5FF")
+                                                                    : QStringLiteral("#1238DB"));
+}
+
 class RepositoryIcon final : public QWidget {
   public:
     explicit RepositoryIcon(QWidget* parent) : QWidget(parent) { setFixedSize(18, 18); }
@@ -117,7 +123,7 @@ class SourceControlDelegate final : public QStyledItemDelegate {
         }
 
         if (index.column() == 0) {
-            const QColor iconColor = selected ? QColor(QStringLiteral("#5968DF"))
+            const QColor iconColor = selected ? selectedAccentText(option.palette)
                                               : option.palette.color(QPalette::ButtonText);
             QPen iconPen(iconColor, 1.35);
             iconPen.setCapStyle(Qt::RoundCap);
@@ -147,7 +153,7 @@ class SourceControlDelegate final : public QStyledItemDelegate {
             title.setPixelSize(12);
             title.setWeight(QFont::Normal);
             painter->setFont(title);
-            painter->setPen(selected ? QColor(QStringLiteral("#5968DF"))
+            painter->setPen(selected ? selectedAccentText(option.palette)
                                      : option.palette.color(QPalette::Text));
             painter->drawText(textRect.adjusted(0, 0, 0, -18),
                               Qt::AlignLeft | Qt::AlignVCenter,

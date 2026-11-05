@@ -126,13 +126,13 @@ ColumnLayout {
                         Layout.preferredWidth: Metrics.px(16, workspace.t)
                         Layout.preferredHeight: Metrics.px(16, workspace.t)
                         source: "qrc:/agent/icons/" + navigationButton.modelData.icon
-                        color: navigationButton.checked ? navigation.workspace.t.accent
+                        color: navigationButton.checked ? navigation.workspace.t.accentText
                                                         : navigation.workspace.t.textMuted
                     }
                     Text {
                         Layout.fillWidth: true
                         text: navigationButton.modelData.label
-                        color: navigationButton.checked ? navigation.workspace.t.accent
+                        color: navigationButton.checked ? navigation.workspace.t.accentText
                                                         : navigation.workspace.t.textSecondary
                         elide: Text.ElideRight
                         font.family: navigation.workspace.t.uiFont

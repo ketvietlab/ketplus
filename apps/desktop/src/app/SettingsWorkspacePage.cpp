@@ -70,7 +70,7 @@ QPixmap themePreview(const bool dark) {
     painter.drawRoundedRect(QRectF(0.5, 0.5, width - 1, height - 1), 5, 5);
     painter.fillRect(QRectF(0, 0, 47, height), panel);
     painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor("#5968DF"));
+    painter.setBrush(QColor("#1746FF"));
     painter.drawRoundedRect(QRectF(8, 15, 31, 6), 3, 3);
     painter.setBrush(muted);
     for (int row = 0; row < 6; ++row)
@@ -612,7 +612,11 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     connect(navigation, &QListWidget::currentRowChanged, this,
             [this, navigation, pages, updates](const int row) {
                 for (int index = 0; index < navigation->count(); ++index) {
-                    const QColor color(index == row ? QStringLiteral("#5968DF")
+                    const bool dark =
+                        navigation->palette().color(QPalette::Window).lightness() < 128;
+                    // Két Design System accent-text: Két Blue that stays readable on dark.
+                    const QColor color(index == row ? (dark ? QStringLiteral("#9EB5FF")
+                                                            : QStringLiteral("#1238DB"))
                                                     : QStringLiteral("#7A7E86"));
                     navigation->item(index)->setIcon(navigationIcon(
                         navigation->item(index)->data(Qt::UserRole + 1).toByteArray(), color,
@@ -670,7 +674,7 @@ QWidget#settingsWorkspaceHeading, QWidget#settingsWorkspaceBody,
 QWidget#settingsWorkspaceAppearance, QWidget#settingsWorkspaceTypography,
 QStackedWidget#settingsWorkspacePages, QScrollArea#settingsWorkspaceScroll,
 QScrollArea#settingsWorkspaceScroll > QWidget > QWidget { background:%1; color:%2; }
-QLabel#settingsWorkspaceEyebrow { color:%4; font-size:{{caption}}px; font-weight:600; letter-spacing:1px; }
+QLabel#settingsWorkspaceEyebrow { color:%9; font-size:{{caption}}px; font-weight:600; letter-spacing:1px; }
 QLabel#settingsWorkspaceTitle { color:%2; font-size:{{display}}px; font-weight:620; }
 QLabel#settingsWorkspaceSubtitle, QLabel#settingsWorkspaceIntro { color:%3; font-size:{{reading}}px; }
 QLabel#settingsWorkspaceShortcut { color:%3; font-size:{{caption}}px; }
@@ -681,7 +685,7 @@ QListWidget#settingsWorkspaceNavigation { padding:0 20px 0 0; border:0;
  border-right:1px solid %5; background:transparent; outline:0; }
 QListWidget#settingsWorkspaceNavigation::item { height:34px; padding:0 10px; border-radius:5px;
  color:%3; font-size:{{reading}}px; }
-QListWidget#settingsWorkspaceNavigation::item:selected { background:%6; color:%4; }
+QListWidget#settingsWorkspaceNavigation::item:selected { background:%6; color:%9; }
 QToolButton[kvRole="settingsThemeCard"] { padding:7px; border:1px solid %5; border-radius:7px;
  background:%7; color:%2; font-size:{{reading}}px; font-weight:500; }
 QToolButton[kvRole="settingsThemeCard"]:hover { border-color:%8; }
@@ -690,13 +694,13 @@ QWidget[kvRole="segmentedGroup"] { border:1px solid %5; border-radius:8px; backg
 QToolButton[kvRole="interfaceZoom"] { min-height:24px; padding:0 12px; border:1px solid transparent;
  border-radius:5px; background:transparent; color:%2; font-size:{{reading}}px; font-weight:500; }
 QToolButton[kvRole="interfaceZoom"]:hover { background:%1; }
-QToolButton[kvRole="interfaceZoom"]:checked { background:%6; color:%4; border-color:%4; }
+QToolButton[kvRole="interfaceZoom"]:checked { background:%6; color:%9; border-color:%4; }
 QFrame#settingsWorkspaceDivider { border:0; background:%5; }
 QFrame#settingsWorkspaceAccent { border:0; background:transparent; }
 QFrame#settingsWorkspacePreview, QFrame#settingsTypographySample {
  border:1px solid %5; border-radius:7px; background:%7; }
 QLabel#settingsAccentSwatch { border:3px solid %6; border-radius:6px; background:%4; }
-QLabel#settingsAccentCheck { color:%4; font-size:{{reading}}px; }
+QLabel#settingsAccentCheck { color:%9; font-size:{{reading}}px; }
 QLabel#settingsAccentTitle { color:%2; font-size:{{body}}px; font-weight:600; }
 QLabel#settingsPreviewTabs { min-height:32px; padding:0 12px; border-bottom:2px solid %4;
  color:%2; background:%7; font-size:{{micro}}px; }
@@ -718,7 +722,7 @@ QDialog[kvRole="settingsDialog"] { border:0; background:transparent; }
                                            interfaceFontSizePixels_);
     setStyleSheet(sheet.arg(palette.pageBackground, palette.textMain, palette.textMuted,
                             palette.accent, palette.border, palette.accentSubtle,
-                            palette.panelBackground, palette.borderStrong));
+                            palette.panelBackground, palette.borderStrong, palette.accentText));
     chrome_geometry::apply(this, interfaceFontSizePixels);
 }
 

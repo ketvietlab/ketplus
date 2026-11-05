@@ -411,9 +411,9 @@ void ActivityBar::applyPalette(const ThemePalette& palette, const int interfaceF
         brandWordmark_->setPixmap(scaled);
     }
     const QString controlBorder = palette.dark ? palette.border : QStringLiteral("#DDDCDE");
-    const QString sidebarAccent = palette.dark ? palette.accent : QStringLiteral("#5167C4");
+    const QString sidebarAccent = palette.accentText;
     const QString navSelectedText =
-        palette.dark ? QStringLiteral("#DCE2FF") : QStringLiteral("#394985");
+        palette.dark ? QStringLiteral("#DDE6FF") : QStringLiteral("#102EB3");
     const QString sheet = TypeScale::apply(QStringLiteral(R"(
         QWidget#activityBar { border-right: 1px solid %1; background: %2; }
         QScrollArea#productSidebarContext, QScrollArea#productSidebarContext > QWidget > QWidget,

@@ -1,0 +1,52 @@
+/* ADR 0027 agent messaging: outlined message bubbles, notes, header number and the `#` picker. */
+.agent-message { margin-left: 63px; }
+.agent-bubble {
+    padding: 10px 16px 12px;
+    background: var(--kv-surface-raised);
+    border: 1px solid var(--kv-accent-border);
+    border-radius: 12px;
+    font-size: var(--kp-text-reading);
+    line-height: 1.8;
+}
+.agent-origin {
+    display: flex; align-items: center; gap: 6px; min-width: 0;
+    font-size: var(--kp-text-sm); font-weight: 550; line-height: 1.6; color: var(--kv-accent-text);
+}
+.agent-origin span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.agent-origin svg { width: 14px; height: 14px; flex: none; }
+
+.agent-note {
+    display: flex; align-items: flex-start; gap: 8px; margin: 10px 0;
+    padding: 8px 12px; border: 1px solid var(--kv-panel-border); border-radius: 8px;
+    background: var(--kv-panel-bg-subtle); font-size: var(--kp-text-md); line-height: 1.6; color: var(--kv-text-secondary);
+}
+.agent-note svg { width: 15px; height: 15px; flex: none; margin-top: 2px; color: var(--kv-accent-text); }
+.agent-note b { margin-right: 6px; color: var(--kv-text-main); font-weight: 600; }
+.agent-note.held { border-color: color-mix(in srgb, var(--kv-warning) 45%, transparent); }
+.agent-note.held svg { color: var(--kv-warning); }
+
+.agent-tool-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.agent-tool-row code { font: max(13px, var(--kp-text-sm))/1.6 var(--kv-font-mono); color: var(--kv-text-secondary); }
+.agent-tool-target { font: max(13px, var(--kp-text-sm))/1.6 var(--kv-font-mono); color: var(--kv-text-muted); }
+
+.header-number {
+    flex: none; margin-right: 8px; font: 500 max(13px, var(--kp-text-base))/1 var(--kv-font-mono); color: var(--kv-text-muted);
+}
+
+.composer-wrap { position: relative; }
+.mention-menu {
+    position: absolute; left: 0; right: 0; bottom: calc(100% - 4px); z-index: 30;
+    max-width: 520px; padding: 5px; border: 1px solid var(--kv-border-strong);
+    border-radius: 7px; background: var(--kv-panel-bg); box-shadow: var(--kv-shadow-popover);
+}
+.mention-menu-title { padding: 4px 8px 6px; font-size: var(--kp-text-sm); font-weight: 600; color: var(--kv-text-muted); }
+.mention-option {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px;
+    width: 100%; height: 34px; padding: 0 8px; border: 0; border-radius: 5px; background: transparent;
+    color: var(--kv-text-main); font: inherit; font-size: var(--kp-text-md); text-align: left; cursor: pointer;
+}
+.mention-option.highlighted, .mention-option:hover { background: var(--kv-accent-subtle); }
+.mention-option.highlighted .mention-title { color: var(--kv-accent-text); }
+.mention-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.mention-option small { font-size: var(--kp-text-sm); color: var(--kv-text-muted); white-space: nowrap; }
+.mention-empty { padding: 8px; font-size: var(--kp-text-md); color: var(--kv-text-muted); }

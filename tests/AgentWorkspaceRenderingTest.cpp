@@ -759,7 +759,7 @@ void AgentWorkspaceViewTest::contextMenuFollowsDesignSystem() {
     QTRY_VERIFY(menu->property("visible").toBool());
     menu->setProperty("currentIndex", 0);
     QTRY_VERIFY(renameItem->property("highlighted").toBool());
-    QTRY_COMPARE(itemContent->property("color").value<QColor>(), QColor(palette.accentActive));
+    QTRY_COMPARE(itemContent->property("color").value<QColor>(), QColor(palette.accentText));
     QTRY_COMPARE(itemBackground->property("color").value<QColor>(), QColor(palette.accentSubtle));
     const QString capture = qEnvironmentVariable("KETPLUS_CONTEXT_MENU_CAPTURE");
     if (!capture.isEmpty()) {
