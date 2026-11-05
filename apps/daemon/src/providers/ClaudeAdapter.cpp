@@ -153,7 +153,13 @@ ClaudeAdapter::ClaudeAdapter(const QString& executable, QObject* parent)
             });
 }
 
-ClaudeAdapter::~ClaudeAdapter() { stop(); }
+ClaudeAdapter::~ClaudeAdapter() {
+    // Owners destroy adapters at shutdown, after the SessionHost whose callbacks are still
+    // pending; calling them here would use the freed host. Drop them instead of failing them.
+    pending_.clear();
+    queued_.clear();
+    stop();
+}
 
 bool ClaudeAdapter::isAvailable() const { return !executable_.isEmpty(); }
 

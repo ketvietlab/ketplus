@@ -108,7 +108,13 @@ CodexAdapter::CodexAdapter(const QString& executable, QObject* parent)
             });
 }
 
-CodexAdapter::~CodexAdapter() { stop(); }
+CodexAdapter::~CodexAdapter() {
+    // Owners destroy adapters at shutdown, after the SessionHost whose callbacks are still
+    // pending; calling them here would use the freed host. Drop them instead of failing them.
+    pending_.clear();
+    queued_.clear();
+    stop();
+}
 
 bool CodexAdapter::isAvailable() const { return !executable_.isEmpty(); }
 

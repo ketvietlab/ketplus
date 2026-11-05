@@ -436,7 +436,13 @@ CursorAdapter::CursorAdapter(const QString& executable, QObject* parent)
         });
 }
 
-CursorAdapter::~CursorAdapter() { stop(); }
+CursorAdapter::~CursorAdapter() {
+    // Owners destroy adapters at shutdown, after the SessionHost whose callbacks are still
+    // pending; calling them here would use the freed host. Drop them instead of failing them.
+    pending_.clear();
+    queued_.clear();
+    stop();
+}
 
 bool CursorAdapter::isAvailable() const { return !executable_.isEmpty(); }
 
