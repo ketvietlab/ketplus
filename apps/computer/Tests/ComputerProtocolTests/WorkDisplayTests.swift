@@ -27,6 +27,17 @@ final class WorkDisplayTests: XCTestCase {
         XCTAssertNil(WorkDisplay.resolve("9", displays: displays, work: main))
     }
 
+    func testFramelessWindowsMoveButPanelsDoNot() {
+        let size = CGSize(width: 1200, height: 800)
+        XCTAssertTrue(WorkDisplay.isMovable(role: "AXWindow", subrole: "AXStandardWindow", size: size))
+        XCTAssertTrue(WorkDisplay.isMovable(role: "AXWindow", subrole: "AXUnknown", size: size))
+        XCTAssertTrue(WorkDisplay.isMovable(role: "AXWindow", subrole: nil, size: size))
+        XCTAssertFalse(WorkDisplay.isMovable(role: "AXWindow", subrole: "AXFloatingWindow", size: size))
+        XCTAssertFalse(WorkDisplay.isMovable(role: "AXWindow", subrole: "AXSystemDialog", size: size))
+        XCTAssertFalse(WorkDisplay.isMovable(role: "AXSheet", subrole: nil, size: size))
+        XCTAssertFalse(WorkDisplay.isMovable(role: "AXWindow", subrole: "AXUnknown", size: CGSize(width: 120, height: 40)))
+    }
+
     func testWindowsMoveInsideTheVisibleFrame() {
         XCTAssertTrue(WorkDisplay.isOn(CGRect(x: 2000, y: 0, width: 400, height: 300), side))
         XCTAssertFalse(WorkDisplay.isOn(CGRect(x: 100, y: 100, width: 400, height: 300), side))

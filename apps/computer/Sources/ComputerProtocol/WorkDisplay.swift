@@ -47,6 +47,16 @@ public enum WorkDisplay {
         }
     }
 
+    /// Window subroles that are never moved: panels, sheets and system windows.
+    static let fixedSubroles: Set<String> = ["AXFloatingWindow", "AXSystemFloatingWindow", "AXSystemDialog",
+                                             "AXSheet", "AXDrawer"]
+
+    /// True for an app's own windows, including frameless ones that report no
+    /// standard subrole. Small windows (popovers, tooltips) stay put.
+    public static func isMovable(role: String?, subrole: String?, size: CGSize) -> Bool {
+        role == "AXWindow" && !fixedSubroles.contains(subrole ?? "") && size.width >= 160 && size.height >= 100
+    }
+
     /// True when the window's centre lies on the display.
     public static func isOn(_ window: CGRect, _ display: DisplayInfo) -> Bool {
         display.bounds.contains(CGPoint(x: window.midX, y: window.midY))

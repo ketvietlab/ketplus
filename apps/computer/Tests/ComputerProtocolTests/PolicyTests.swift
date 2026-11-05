@@ -54,6 +54,14 @@ final class AppPolicyTests: XCTestCase {
 }
 
 final class KeyComboTests: XCTestCase {
+    func testBackgroundKeyEventsCarryCharacters() {
+        XCTAssertEqual(KeyCombo.parse("BackSpace")?.eventCharacters, "\u{7f}")
+        XCTAssertEqual(KeyCombo.parse("Left")?.eventCharacters, "\u{F702}")
+        XCTAssertEqual(KeyCombo.parse("ctrl+s")?.eventCharacters, "s")
+        XCTAssertEqual(KeyCombo.parse("shift+a")?.eventCharacters, "A")
+        XCTAssertNil(KeyCombo.parse("F5")?.eventCharacters)
+    }
+
     func testParsesKeysAndCombinations() {
         XCTAssertEqual(KeyCombo.parse("Return"), KeyCombo(keyCode: 36, modifiers: []))
         XCTAssertEqual(KeyCombo.parse("ctrl+s"), KeyCombo(keyCode: 1, modifiers: [.control], character: "S"))

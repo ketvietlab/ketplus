@@ -21,8 +21,9 @@ display and could not see a granted window on another one.
   `computer-tools.json`. The agent reads the file on every call, so a change
   applies at once.
 - **Granted apps move there.** After the user allows apps in the approval
-  panel, the agent moves their standard, unminimized windows that are not
-  already on the work display. It sets the accessibility position and size,
+  panel, the agent moves their unminimized windows that are not already on the
+  work display. Frameless windows count; panels, sheets, system dialogs and
+  windows under 160x100 points stay put. It sets the accessibility position and size,
   shrinks a window to the visible frame and cascades several windows.
   `open_application` does the same for an app it opens or reveals, and gives a
   launched app up to 3 s to show a window. The approval panel names the
@@ -33,7 +34,8 @@ display and could not see a granted window on another one.
   display, its global origin and its size in points. Coordinates in later
   calls use that screenshot's display. `list_apps` lists the displays and marks
   the work display. `observe` marks elements whose centre is on another display
-  as `offscreen`.
+  as `offscreen`. When no granted app has a window on the display, `screenshot`
+  answers `NOTHING_ON_DISPLAY` instead of ScreenCaptureKit's `-3811`.
 - **The banner follows.** The control banner shows at the top of the work
   display.
 - **The user's windows stay put.** Only granted apps' windows move. The agent
@@ -51,12 +53,19 @@ from `observe` instead of from the fixture.
 
 ## Verification (2026-10-19, macOS 26.2, built-in display and a second display)
 
-- `swift test`: 29 tests, including display choice, display arguments and
-  window placement.
+- `swift test`: 31 tests, including display choice, display arguments,
+  frameless windows, window placement and background key characters.
 - `scripts/e2e.mjs` passed every check. The work display was the second
   display; the grant and `open_application` moved the fixture there; the
   screenshot reported it; background and foreground input reached the fixture
   on it.
+- Driving KétChat QA (a Qt app with a frameless window) first left its window
+  on the main display, because only `AXStandardWindow` windows moved, and the
+  work-display capture then failed with `-3811`. With frameless windows
+  accepted, the grant moved it to the second display, a screenshot showed it
+  there, and a background click and typing filtered its conversation list.
+  Background Backspace was ignored until key events carried their NSEvent
+  characters; `scripts/e2e.mjs` now checks it on the fixture.
 - Not yet verified: a turn started from the desktop app, displays with
   different scale factors, and a display that disconnects during a turn.
 

@@ -264,7 +264,12 @@ final class AgentTools {
         do {
             shot = try waitFor { try await ScreenCapture.capture(including: granted, region: region, display: display.id) }
         } catch let error as CaptureError {
-            throw AgentFailure(code: error == .nothingGranted ? "APP_NOT_GRANTED" : "CAPTURE_FAILED", message: error.description)
+            let code = switch error {
+            case .nothingGranted: "APP_NOT_GRANTED"
+            case .nothingOnDisplay: "NOTHING_ON_DISPLAY"
+            default: "CAPTURE_FAILED"
+            }
+            throw AgentFailure(code: code, message: error.description)
         } catch {
             throw AgentFailure(code: "CAPTURE_FAILED", message: String(describing: error))
         }

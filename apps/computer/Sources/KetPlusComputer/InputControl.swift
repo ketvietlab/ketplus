@@ -133,6 +133,11 @@ enum InputControl {
             else { throw InputError.eventCreationFailed }
             down.flags = cgFlags(combo.modifiers)
             up.flags = cgFlags(combo.modifiers)
+            if pid != nil, let characters = combo.eventCharacters {
+                let units = Array(characters.utf16)
+                down.keyboardSetUnicodeString(stringLength: units.count, unicodeString: units)
+                up.keyboardSetUnicodeString(stringLength: units.count, unicodeString: units)
+            }
             send(down, to: pid)
             usleep(pause)
             send(up, to: pid)

@@ -15,12 +15,16 @@ struct Screenshot {
 enum CaptureError: Error, CustomStringConvertible {
     case displayUnavailable
     case nothingGranted
+    case nothingOnDisplay
     case encodeFailed
 
     var description: String {
         switch self {
         case .displayUnavailable: return "The display is not available for capture."
         case .nothingGranted: return "No granted application is running. Call list_apps and request_access first."
+        case .nothingOnDisplay:
+            return "No granted app has a window on this display. Call open_application to bring one here,"
+                + " or pass another display from list_apps."
         case .encodeFailed: return "The screenshot could not be encoded as PNG."
         }
     }
@@ -40,9 +44,16 @@ enum ScreenCapture {
             granted.contains($0.bundleIdentifier) && !AppPolicy.ketPlusBundleIdentifiers.contains($0.bundleIdentifier)
         }
         guard !apps.isEmpty else { throw CaptureError.nothingGranted }
+        let bounds = CGDisplayBounds(displayID)
+        let visible = Set(content.windows.compactMap { window -> String? in
+            guard let id = window.owningApplication?.bundleIdentifier, granted.contains(id),
+                  window.frame.intersects(bounds) else { return nil }
+            return id
+        })
+        // ScreenCaptureKit fails with -3811 when the filter has no window on the display.
+        guard !visible.isEmpty else { throw CaptureError.nothingOnDisplay }
         let filter = SCContentFilter(display: display, including: apps, exceptingWindows: [])
 
-        let bounds = CGDisplayBounds(displayID)
         let configuration = SCStreamConfiguration()
         configuration.showsCursor = true
         configuration.scalesToFit = true
@@ -65,11 +76,6 @@ enum ScreenCapture {
         }
 
         let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
-        let visible = Set(content.windows.compactMap { window -> String? in
-            guard let id = window.owningApplication?.bundleIdentifier, granted.contains(id),
-                  window.frame.intersects(bounds) else { return nil }
-            return id
-        })
         return Screenshot(png: try encodePNG(image),
                           geometry: region == nil
                               ? ScreenGeometry(displayBounds: bounds, imageWidth: image.width, imageHeight: image.height)

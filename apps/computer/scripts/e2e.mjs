@@ -171,7 +171,8 @@ check("a background click focuses the covered field", /"action":"focus"/.test(fo
 check("background typing reaches it", /"mode":"background"/.test(text(await a.call("type", { text: "draft" }))));
 const selectAll = text(await a.call("key", { text: "super+a" }));
 check("background select-all selects the field's text", /"delivery":"text_selection"/.test(selectAll), selectAll.slice(0, 100));
-await a.call("type", { text: typed });
+await a.call("type", { text: `${typed}!` });
+check("background BackSpace deletes a character", /"mode":"background"/.test(text(await a.call("key", { text: "BackSpace" }))));
 const first = text(await a.call("observe", { app: fixtureId }));
 const second = text(await a.call("observe", { app: fixtureId }));
 const snapshotOf = (tree) => /^Snapshot (s\d+)/.exec(tree)?.[1];
@@ -235,7 +236,7 @@ const audit = join(dir, "audit", `${stem("e2e-a")}.jsonl`);
 const auditText = () => (existsSync(audit) ? readFileSync(audit, "utf8") : "");
 const entries = () => auditText().trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
 check("the audit log records actions without typed text",
-  entries().some((entry) => entry.tool === "type" && entry.characters === typed.length && entry.mode === "background")
+  entries().some((entry) => entry.tool === "type" && entry.characters === typed.length + 1 && entry.mode === "background")
     && !auditText().includes("KetPlus ✓"));
 
 if (manualEsc) {

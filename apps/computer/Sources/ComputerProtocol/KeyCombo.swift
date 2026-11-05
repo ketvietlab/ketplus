@@ -57,6 +57,22 @@ public struct KeyCombo: Equatable, Sendable {
         "super": .command, "cmd": .command, "command": .command, "meta": .command, "fn": .function,
     ]
 
+    /// The characters AppKit puts in the key's NSEvent. Events posted to one process
+    /// from a private event source carry none unless set, and apps such as Qt then
+    /// ignore Backspace or arrows.
+    public var eventCharacters: String? {
+        if let code = keyCode, let special = Self.specialCharacters[code] { return String(special) }
+        guard let character else { return nil }
+        return modifiers.contains(.shift) ? character : character.lowercased()
+    }
+
+    /// NSEvent function-key and control characters by virtual key code.
+    static let specialCharacters: [UInt16: Character] = [
+        36: "\r", 76: "\u{3}", 48: "\t", 49: " ", 51: "\u{7f}", 53: "\u{1b}", 117: "\u{F728}",
+        115: "\u{F729}", 119: "\u{F72B}", 116: "\u{F72C}", 121: "\u{F72D}",
+        123: "\u{F702}", 124: "\u{F703}", 125: "\u{F701}", 126: "\u{F700}",
+    ]
+
     /// US ANSI virtual key codes (Carbon kVK_*).
     static let keyCodes: [String: UInt16] = {
         var map: [String: UInt16] = [

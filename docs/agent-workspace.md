@@ -630,7 +630,8 @@ The agent app is the enforcement point:
   reveals an app, granted apps' windows move to the work display, and the
   results report `movedToWorkDisplay`. `screenshot` captures the work display
   unless its `display` parameter is `main` or an ID from `list_apps`, which
-  lists the displays. The banner shows on the work display.
+  lists the displays, and answers `NOTHING_ON_DISPLAY` when no granted app has
+  a window there. The banner shows on the work display.
 - One conversation holds the control lease at a time. The lease ends after 90 s
   without an action. A banner with a Stop button shows while it is held, and an
   overlay pointer marks background actions. Stop, or Esc while a granted app is

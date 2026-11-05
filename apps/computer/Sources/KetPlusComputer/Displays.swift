@@ -30,8 +30,8 @@ enum Displays {
         }
     }
 
-    /// Moves an app's standard, unminimized windows onto the display. Returns how
-    /// many moved; windows already there stay put.
+    /// Moves an app's unminimized windows, frameless ones included, onto the display.
+    /// Returns how many moved; windows already there stay put.
     @discardableResult
     static func moveWindows(of pid: pid_t, to display: DisplayInfo) -> Int {
         let app = AXUIElementCreateApplication(pid)
@@ -41,8 +41,9 @@ enum Displays {
               let windows = value as? [AXUIElement] else { return 0 }
         var moved = 0
         for window in windows {
-            guard string(window, kAXSubroleAttribute) == kAXStandardWindowSubrole,
-                  !bool(window, kAXMinimizedAttribute), let frame = frame(window),
+            guard let frame = frame(window), !bool(window, kAXMinimizedAttribute),
+                  WorkDisplay.isMovable(role: string(window, kAXRoleAttribute),
+                                        subrole: string(window, kAXSubroleAttribute), size: frame.size),
                   !WorkDisplay.isOn(frame, display) else { continue }
             let target = WorkDisplay.place(frame, on: display, index: moved)
             var origin = target.origin
