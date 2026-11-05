@@ -269,6 +269,35 @@ root without following symlinks and require a regular file, so a component
 swapped for a link after validation cannot escape the worktree and FIFOs cannot
 block the daemon. `.git` is rejected case-insensitively.
 
+Paired devices see only what the repository shares. Git-ignored paths (build
+output, `node_modules`, local config) and paths that usually hold credentials
+(`.env` and `.env.*` except `.example`/`.sample`/`.template`, `*.pem`, `*.key`,
+`*.p12`, `*.pfx`, SSH private keys, `.npmrc`, `.netrc`, `.git-credentials` and
+similar) are left out of tree listings and search. File, diff and image reads of
+them fail as `permission_denied`. In a repository, search goes through
+`git ls-files --cached --others --exclude-standard`, so ignored folders don't use
+up its 5,000-file, 350 ms budget. `truncated` is set only when files remained.
+The policy fails closed. When the root or a parent holds `.git` and Git cannot
+evaluate it (corrupt index, bad config, timeout), tree, file, diff, image and
+search requests fail as `unavailable`. Only a folder outside any repository is
+walked without the ignore check. A diff covers exactly the requested file: the
+pathspec is literal, and the request fails as `invalid_path` when the path is a
+directory on disk, in the index or in `HEAD`.
+
+Every git command on the read path runs with the hardened arguments and
+environment: no optional locks, fsmonitor and the untracked cache off, no pager,
+external diff, ssh command or credential helper, and inherited
+`GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE` cleared. Each configured
+`filter.<driver>` (from `git config --get-regexp`) also gets empty `clean`,
+`smudge` and `process` overrides through `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`,
+which keep a driver name containing `=` intact, so a repository's filter never
+runs during status or diff. If the drivers cannot be listed, the read fails.
+Diffs use `git diff-index`, because porcelain `git diff` rewrites the index
+after rehashing stat-dirty files even with optional locks off. As a result, Git LFS files can appear modified to a phone.
+Remote worktree creation uses the same environment with fsmonitor off. Its
+checkout still runs the repository's hooks and filters, just as
+`git worktree add` does on this machine.
+
 Workspace file reads are fenced by the worktree revision the daemon publishes in
 each heartbeat (a hash of HEAD, the status and dirty content). The relay only
 accepts a read naming the revision it lists, which trails the worktree by up to a

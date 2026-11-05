@@ -1,12 +1,12 @@
 #include "cloud/WorktreeBranches.h"
 
 #include "cloud/WorktreeRepositories.h"
+#include "workspace/ReadOnlyWorkspaceFiles.h"
 
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QProcess>
-#include <QProcessEnvironment>
 #include <QRegularExpression>
 #include <QStandardPaths>
 
@@ -21,20 +21,20 @@ struct GitRun {
 };
 
 // Git without prompts, pagers or colour, its output capped so a repository with a huge
-// number of refs cannot grow it without bound.
+// number of refs cannot grow it without bound. The environment is the read path's hardened
+// one (no inherited GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE), and fsmonitor is off. Hooks and
+// filters still run for a checkout, as they would for `git worktree add` on this machine.
 GitRun runGit(const QString& directory, const QStringList& arguments, const int timeoutMs) {
     GitRun result;
     const QString git = QStandardPaths::findExecutable(QStringLiteral("git"));
     if (git.isEmpty())
         return result;
     QProcess process;
-    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
-    environment.insert(QStringLiteral("GIT_TERMINAL_PROMPT"), QStringLiteral("0"));
-    environment.insert(QStringLiteral("GIT_PAGER"), QStringLiteral("cat"));
-    process.setProcessEnvironment(environment);
+    process.setProcessEnvironment(ReadOnlyWorkspaceFiles::hardenedGitEnvironment());
     process.setProcessChannelMode(QProcess::MergedChannels);
     process.setWorkingDirectory(directory);
-    process.start(git, QStringList{QStringLiteral("-c"), QStringLiteral("color.ui=false")} +
+    process.start(git, QStringList{QStringLiteral("-c"), QStringLiteral("color.ui=false"),
+                                   QStringLiteral("-c"), QStringLiteral("core.fsmonitor=false")} +
                            arguments);
     if (!process.waitForStarted(3000))
         return result;

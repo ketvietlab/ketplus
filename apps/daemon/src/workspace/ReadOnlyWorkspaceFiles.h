@@ -7,6 +7,7 @@
 #include <QStringList>
 
 #include <functional>
+#include <optional>
 
 class QObject;
 
@@ -72,12 +73,26 @@ class ReadOnlyWorkspaceFiles final {
     [[nodiscard]] QJsonObject fencedError(const QString& code) const;
     [[nodiscard]] QByteArray git(const QStringList& arguments, int maximumBytes,
                                  QString* errorCode) const;
+    // hardenedGitEnvironment plus an empty override for every configured filter driver, so a
+    // repository's clean/smudge/process filter never runs during status or diff. Empty when the
+    // drivers cannot be read.
+    [[nodiscard]] std::optional<QProcessEnvironment> readEnvironment() const;
+    // Whether the root or a parent holds a `.git`, so a failing Git query is an error rather
+    // than a plain folder.
+    [[nodiscard]] bool insideRepository() const;
+    // Empty when a paired device may see this path; otherwise permission_denied (git-ignored or
+    // a secret) or unavailable (the ignore policy could not be evaluated).
+    [[nodiscard]] QString exposureError(const QString& relativePath) const;
+    // The paths Git ignores, from one `check-ignore` run. Empty outside a repository; nullopt
+    // when Git cannot evaluate the policy.
+    [[nodiscard]] std::optional<QStringList> ignoredPaths(const QStringList& relativePaths) const;
     [[nodiscard]] QString startRevision(const QString& expected) const;
     [[nodiscard]] bool finishRevision(const QString& expected, QJsonObject* result) const;
 
     WorkspaceFileScope scope_;
     RevisionFence fence_;
     QString canonicalRoot_;
+    mutable std::optional<QStringList> filterDrivers_;
 };
 
 } // namespace ketplus::daemon

@@ -60,6 +60,12 @@ class DaemonWorkspaceFilesTest final : public QObject {
     void searchHasBoundedDeadlineAndHonestTruncation();
     void revisionFingerprintsLargeDirtyFilesByMetadata();
     void gitInvocationsIgnoreRepositoryFsmonitor();
+    void gitInvocationsIgnoreRepositoryFilters();
+    void searchSkipsIgnoredFolders();
+    void ignoredAndSecretFilesAreNotShared();
+    void filterNamesWithEqualsAreNeutralized();
+    void diffDoesNotSelectOtherPaths();
+    void failingIgnorePolicySharesNothing();
     void revisionAsyncDeliversOnContextThread();
     void publishedFenceServesTheWorktreeAsItIsNow();
 };
@@ -149,6 +155,237 @@ void DaemonWorkspaceFilesTest::gitInvocationsIgnoreRepositoryFsmonitor() {
     if (!QFile::exists(marker))
         QWARN("This git build did not invoke core.fsmonitor; control check inconclusive.");
 #endif
+}
+
+void DaemonWorkspaceFilesTest::gitInvocationsIgnoreRepositoryFilters() {
+#if !defined(Q_OS_UNIX)
+    QSKIP("filter fixture uses a shell command.");
+#else
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+    initRepository(root.path());
+    QTemporaryDir outside;
+    QVERIFY(outside.isValid());
+    const QString clean = outside.filePath(QStringLiteral("clean-ran"));
+    const QString process = outside.filePath(QStringLiteral("process-ran"));
+    git(root.path(), {QStringLiteral("config"), QStringLiteral("filter.probe.clean"),
+                      QStringLiteral("sh -c 'touch \"%1\"; cat'").arg(clean)});
+    git(root.path(), {QStringLiteral("config"), QStringLiteral("filter.probe.process"),
+                      QStringLiteral("sh -c 'touch \"%1\"; exit 1'").arg(process)});
+    writeFile(root.filePath(QStringLiteral(".git/info/attributes")), "* filter=probe\n");
+    // Same bytes, new mtime: status has to rehash the tracked file through the filter.
+    QTest::qWait(1100);
+    writeFile(root.filePath(QStringLiteral("README.md")), "Fixture\n");
+    const auto indexBytes = [&root] {
+        QFile index(root.filePath(QStringLiteral(".git/index")));
+        return index.open(QIODevice::ReadOnly) ? index.readAll() : QByteArray{};
+    };
+    const QByteArray index = indexBytes();
+
+    const ReadOnlyWorkspaceFiles files(scopeFor(root.path()));
+    QString error;
+    const QString revision = files.revision(&error);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QJsonObject modifiedRequest = request(revision);
+    modifiedRequest.insert(QStringLiteral("modified_only"), true);
+    QVERIFY(files.tree(modifiedRequest).value(QStringLiteral("ok")).toBool());
+    QVERIFY(files.diff(request(revision, QStringLiteral("README.md")))
+                .value(QStringLiteral("ok"))
+                .toBool());
+    QVERIFY2(!QFile::exists(clean) && !QFile::exists(process),
+             "A repository filter driver was executed by the daemon.");
+    // Refreshing the stat-dirty entry would also make the control below skip the filter.
+    QVERIFY2(indexBytes() == index, "A read rewrote the repository index.");
+
+    // Control: an unhardened status runs the filter, so the assertion above is meaningful.
+    QProcess plain;
+    plain.start(QStringLiteral("git"), {QStringLiteral("-C"), root.path(), QStringLiteral("status"),
+                                        QStringLiteral("--porcelain")});
+    QVERIFY(plain.waitForFinished());
+    QVERIFY(QFile::exists(clean) || QFile::exists(process));
+#endif
+}
+
+void DaemonWorkspaceFilesTest::searchSkipsIgnoredFolders() {
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+    initRepository(root.path());
+    writeFile(root.filePath(QStringLiteral(".gitignore")), "node_modules/\n");
+    QVERIFY(QDir(root.path()).mkpath(QStringLiteral("node_modules/pkg")));
+    // More ignored files than the search budget, sorted before src/.
+    for (int index = 0; index < 5'100; ++index)
+        writeFile(root.filePath(QStringLiteral("node_modules/pkg/f%1.js").arg(index)), "x\n");
+    QVERIFY(QDir(root.path()).mkpath(QStringLiteral("src")));
+    writeFile(root.filePath(QStringLiteral("src/app.ts")), "const needleValue = 1;\n");
+
+    const ReadOnlyWorkspaceFiles files(scopeFor(root.path()));
+    const QString revision = files.revision();
+    QJsonObject searchRequest = request(revision);
+    searchRequest.insert(QStringLiteral("query"), QStringLiteral("needleValue"));
+    const QJsonObject result = files.search(searchRequest);
+    QVERIFY2(result.value(QStringLiteral("ok")).toBool(),
+             qPrintable(QJsonDocument(result).toJson()));
+    const QJsonArray matches = result.value(QStringLiteral("matches")).toArray();
+    QCOMPARE(matches.size(), 1);
+    QCOMPARE(matches.first().toObject().value(QStringLiteral("path")).toString(),
+             QStringLiteral("src/app.ts"));
+    QVERIFY(!result.value(QStringLiteral("truncated")).toBool());
+}
+
+void DaemonWorkspaceFilesTest::ignoredAndSecretFilesAreNotShared() {
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+    initRepository(root.path());
+    writeFile(root.filePath(QStringLiteral(".gitignore")), "local/\n");
+    writeFile(root.filePath(QStringLiteral(".env")), "TOKEN=shared-secret\n");
+    writeFile(root.filePath(QStringLiteral(".env.example")), "TOKEN=shared-placeholder\n");
+    writeFile(root.filePath(QStringLiteral("deploy.pem")), "shared-secret key\n");
+    QVERIFY(QDir(root.path()).mkpath(QStringLiteral("local")));
+    writeFile(root.filePath(QStringLiteral("local/notes.txt")), "shared-secret notes\n");
+    writeFile(root.filePath(QStringLiteral("notes.txt")), "shared-public notes\n");
+
+    const ReadOnlyWorkspaceFiles files(scopeFor(root.path()));
+    const QString revision = files.revision();
+    const QJsonObject tree = files.tree(request(revision));
+    QVERIFY(tree.value(QStringLiteral("ok")).toBool());
+    QStringList names;
+    for (const QJsonValue& entry : tree.value(QStringLiteral("entries")).toArray())
+        names.append(entry.toObject().value(QStringLiteral("name")).toString());
+    QVERIFY2(names.contains(QStringLiteral(".env.example")), qPrintable(names.join(u',')));
+    QVERIFY(names.contains(QStringLiteral("notes.txt")));
+    QVERIFY(!names.contains(QStringLiteral(".env")));
+    QVERIFY(!names.contains(QStringLiteral("deploy.pem")));
+    QVERIFY(!names.contains(QStringLiteral("local")));
+
+    for (const QString& path : {QStringLiteral(".env"), QStringLiteral("deploy.pem"),
+                                QStringLiteral("local/notes.txt")}) {
+        QCOMPARE(files.file(request(revision, path)).value(QStringLiteral("error_code")).toString(),
+                 QStringLiteral("permission_denied"));
+        QCOMPARE(files.diff(request(revision, path)).value(QStringLiteral("error_code")).toString(),
+                 QStringLiteral("permission_denied"));
+    }
+    QVERIFY(files.file(request(revision, QStringLiteral(".env.example")))
+                .value(QStringLiteral("ok"))
+                .toBool());
+
+    QJsonObject searchRequest = request(revision);
+    searchRequest.insert(QStringLiteral("query"), QStringLiteral("shared-"));
+    QStringList found;
+    for (const QJsonValue& match :
+         files.search(searchRequest).value(QStringLiteral("matches")).toArray())
+        found.append(match.toObject().value(QStringLiteral("path")).toString());
+    found.sort();
+    QCOMPARE(found, (QStringList{QStringLiteral(".env.example"), QStringLiteral("notes.txt")}));
+    QByteArray image;
+    QCOMPARE(files.readImage(QStringLiteral("deploy.pem"), &image),
+             QStringLiteral("permission_denied"));
+}
+
+void DaemonWorkspaceFilesTest::filterNamesWithEqualsAreNeutralized() {
+#if !defined(Q_OS_UNIX)
+    QSKIP("filter fixture uses a shell command.");
+#else
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+    initRepository(root.path());
+    QTemporaryDir outside;
+    QVERIFY(outside.isValid());
+    const QString marker = outside.filePath(QStringLiteral("clean-ran"));
+    // A valid driver name; `-c filter.probe=other.clean=` would set `filter.probe` instead.
+    git(root.path(), {QStringLiteral("config"), QStringLiteral("filter.probe=other.clean"),
+                      QStringLiteral("sh -c 'touch \"%1\"; cat'").arg(marker)});
+    writeFile(root.filePath(QStringLiteral(".git/info/attributes")), "* filter=probe=other\n");
+    QTest::qWait(1100);
+    writeFile(root.filePath(QStringLiteral("README.md")), "Fixture\n");
+
+    QString error;
+    (void)ReadOnlyWorkspaceFiles(scopeFor(root.path())).revision(&error);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QVERIFY2(!QFile::exists(marker), "A filter driver named with '=' was executed.");
+
+    QProcess plain;
+    plain.start(QStringLiteral("git"), {QStringLiteral("-C"), root.path(), QStringLiteral("status"),
+                                        QStringLiteral("--porcelain")});
+    QVERIFY(plain.waitForFinished());
+    QVERIFY(QFile::exists(marker));
+#endif
+}
+
+void DaemonWorkspaceFilesTest::diffDoesNotSelectOtherPaths() {
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+    initRepository(root.path());
+    QVERIFY(QDir(root.path()).mkpath(QStringLiteral("config")));
+    writeFile(root.filePath(QStringLiteral("config/.env")), "TOKEN=old\n");
+    git(root.path(), {QStringLiteral("add"), QStringLiteral(".")});
+    git(root.path(), {QStringLiteral("commit"), QStringLiteral("-qm"), QStringLiteral("env")});
+    writeFile(root.filePath(QStringLiteral("config/.env")), "TOKEN=new-secret\n");
+
+    const ReadOnlyWorkspaceFiles files(scopeFor(root.path()));
+    const QString revision = files.revision();
+    QCOMPARE(files.diff(request(revision, QStringLiteral("config/.env")))
+                 .value(QStringLiteral("error_code"))
+                 .toString(),
+             QStringLiteral("permission_denied"));
+    for (const QString& path : {QStringLiteral("config"), QStringLiteral("config/*"),
+                                QStringLiteral("conf*"), QStringLiteral("config/.en?")}) {
+        const QJsonObject result = files.diff(request(revision, path));
+        QVERIFY2(!result.value(QStringLiteral("ok")).toBool(), qPrintable(path));
+        QVERIFY2(!QJsonDocument(result).toJson().contains("new-secret"), qPrintable(path));
+    }
+
+    // A directory that exists only in HEAD is still a directory.
+    QVERIFY(QDir(root.filePath(QStringLiteral("config"))).removeRecursively());
+    git(root.path(), {QStringLiteral("rm"), QStringLiteral("-rq"), QStringLiteral("--cached"),
+                      QStringLiteral("config")});
+    const QString removed = files.revision();
+    const QJsonObject result = files.diff(request(removed, QStringLiteral("config")));
+    QVERIFY(!result.value(QStringLiteral("ok")).toBool());
+    QVERIFY(!QJsonDocument(result).toJson().contains("TOKEN"));
+}
+
+void DaemonWorkspaceFilesTest::failingIgnorePolicySharesNothing() {
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+    initRepository(root.path());
+    writeFile(root.filePath(QStringLiteral(".gitignore")), "local/\n");
+    QVERIFY(QDir(root.path()).mkpath(QStringLiteral("local")));
+    writeFile(root.filePath(QStringLiteral("local/config.txt")), "private-value\n");
+    const QString published = ReadOnlyWorkspaceFiles(scopeFor(root.path())).revision();
+    QVERIFY(!published.isEmpty());
+    writeFile(root.filePath(QStringLiteral(".git/index")), "corrupt");
+
+    // Published fencing skips the live revision, so only the policy check stands in the way.
+    const ReadOnlyWorkspaceFiles files(scopeFor(root.path()),
+                                       ReadOnlyWorkspaceFiles::RevisionFence::Published);
+    for (const QString& path : {QStringLiteral("local/config.txt"), QStringLiteral("README.md")}) {
+        const QJsonObject result = files.file(request(published, path));
+        QVERIFY2(!result.value(QStringLiteral("ok")).toBool(), qPrintable(path));
+        QCOMPARE(result.value(QStringLiteral("error_code")).toString(),
+                 QStringLiteral("unavailable"));
+    }
+    QVERIFY(!files.tree(request(published)).value(QStringLiteral("ok")).toBool());
+    QByteArray image;
+    QCOMPARE(files.readImage(QStringLiteral("local/config.txt"), &image),
+             QStringLiteral("unavailable"));
+    QJsonObject searchRequest = request(published);
+    searchRequest.insert(QStringLiteral("query"), QStringLiteral("private-value"));
+    const QJsonObject search = files.search(searchRequest);
+    QVERIFY(!search.value(QStringLiteral("ok")).toBool());
+    QVERIFY(!QJsonDocument(search).toJson().contains("private-value\""));
+
+    // A plain folder has no ignore policy and is still searchable.
+    QTemporaryDir folder;
+    QVERIFY(folder.isValid());
+    writeFile(folder.filePath(QStringLiteral("notes.txt")), "plain-needle\n");
+    const ReadOnlyWorkspaceFiles plain(scopeFor(folder.path()),
+                                       ReadOnlyWorkspaceFiles::RevisionFence::Published);
+    QJsonObject plainSearch = request(QStringLiteral("published"));
+    plainSearch.insert(QStringLiteral("query"), QStringLiteral("plain-needle"));
+    QCOMPARE(plain.search(plainSearch).value(QStringLiteral("matches")).toArray().size(), 1);
+    QVERIFY(plain.file(request(QStringLiteral("published"), QStringLiteral("notes.txt")))
+                .value(QStringLiteral("ok"))
+                .toBool());
 }
 
 void DaemonWorkspaceFilesTest::revisionAsyncDeliversOnContextThread() {

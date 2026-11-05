@@ -91,7 +91,9 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/SessionHostTurns.cpp
     src/runtime/SessionHostTranscriptWindow.cpp
     src/workspace/ReadOnlyWorkspaceFiles.cpp
+    src/workspace/WorkspaceExposure.cpp
     src/workspace/ReadOnlyWorkspaceFiles.h
+    src/workspace/WorkspaceExposure.h
     src/service/DaemonService.cpp
     src/service/DaemonService.h
     src/storage/LocalJournalActivityGroups.cpp
