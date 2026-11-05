@@ -1,0 +1,5 @@
+#pragma once
+
+#define KETPLUS_PRODUCT_VERSION "@PROJECT_VERSION@"
+// Empty when a build configures this header without the KETPLUS_CONTROL_URL cache entry.
+#define KETPLUS_DEFAULT_CONTROL_URL "@KETPLUS_CONTROL_URL@"

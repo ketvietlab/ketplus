@@ -1,0 +1,135 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "eventType": "command.output_delta",
+      "payload": {
+        "item_id": "command-1",
+        "item_type": "commandExecution",
+        "command": "pwd",
+        "status": "completed",
+        "delta": "PRIVATE_DELTA"
+      },
+      "expected": {
+        "item_id": "command-1",
+        "item_type": "commandExecution",
+        "command": "pwd",
+        "status": "completed"
+      }
+    },
+    {
+      "eventType": "command.output_aggregated",
+      "payload": {
+        "item_id": "command-1",
+        "item_type": "commandExecution",
+        "stdout": "PRIVATE_STDOUT",
+        "stderr": "PRIVATE_STDERR",
+        "body": "PRIVATE_BODY",
+        "data": "PRIVATE_DATA"
+      },
+      "expected": {
+        "item_id": "command-1",
+        "item_type": "commandExecution"
+      }
+    },
+    {
+      "eventType": "item/commandExecution/outputDelta",
+      "payload": {
+        "item_id": "command-1",
+        "type": "commandExecution",
+        "output": "PRIVATE_UNKNOWN_OUTPUT"
+      },
+      "expected": {
+        "item_id": "command-1"
+      }
+    },
+    {
+      "eventType": "assistant.delta",
+      "payload": {
+        "item_type": "agentMessage",
+        "delta": "LEGITIMATE_ASSISTANT_TEXT",
+        "command": "mentioned command",
+        "stdout": "quoted stdout"
+      },
+      "expected": {
+        "item_type": "agentMessage",
+        "delta": "LEGITIMATE_ASSISTANT_TEXT",
+        "command": "mentioned command",
+        "stdout": "quoted stdout"
+      }
+    },
+    {
+      "eventType": "tool.output",
+      "payload": {
+        "item_id": "shell-1",
+        "item_type": "shell_command",
+        "command": "pwd",
+        "stdout": "PRIVATE_SHELL_STDOUT"
+      },
+      "expected": {
+        "item_id": "shell-1",
+        "item_type": "shell_command",
+        "command": "pwd"
+      }
+    },
+    {
+      "eventType": "item.completed",
+      "payload": {
+        "item_id": "shell-2",
+        "item_type": "shellCommand",
+        "command": "ls",
+        "output": "PRIVATE_SHELL_OUTPUT"
+      },
+      "expected": {
+        "item_id": "shell-2",
+        "item_type": "shellCommand",
+        "command": "ls"
+      }
+    },
+    {
+      "eventType": "item.completed",
+      "payload": {
+        "item_id": "terminal-1",
+        "item_type": "terminal_command",
+        "command": "git status",
+        "data": "PRIVATE_TERMINAL_DATA"
+      },
+      "expected": {
+        "item_id": "terminal-1",
+        "item_type": "terminal_command",
+        "command": "git status"
+      }
+    },
+    {
+      "eventType": "tool.output",
+      "payload": {
+        "item_id": "tool-1",
+        "item_type": "toolExecution",
+        "command": "make test",
+        "body": "PRIVATE_TOOL_BODY"
+      },
+      "expected": {
+        "item_id": "tool-1",
+        "item_type": "toolExecution",
+        "command": "make test"
+      }
+    },
+    {
+      "eventType": "tool.result",
+      "payload": {
+        "item_id": "command-2",
+        "item_type": "command_execution",
+        "command": "ls",
+        "status": "completed",
+        "output": "PRIVATE_PROVIDER_RESULT",
+        "body": "PRIVATE_PROVIDER_BODY"
+      },
+      "expected": {
+        "item_id": "command-2",
+        "item_type": "command_execution",
+        "command": "ls",
+        "status": "completed"
+      }
+    }
+  ]
+}

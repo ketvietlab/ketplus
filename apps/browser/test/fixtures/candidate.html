@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Candidate workspace</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Arial, sans-serif; color: rgb(24, 32, 51); }
+      #app { display: flex; width: 800px; min-height: 600px; }
+      #sidebar { width: 230px; padding: 20px; background: rgb(241, 243, 247); }
+      #content { flex: 1; padding: 32px; }
+      h1 { margin: 0 0 24px; font-size: 24px; line-height: 32px; font-weight: 700; }
+      button { height: 36px; padding: 0 14px; border: 1px solid rgb(180, 185, 195); border-radius: 6px; background: rgb(255, 255, 255); }
+      #status { margin-top: 20px; }
+    </style>
+  </head>
+  <body>
+    <main id="app" data-canonical-id="workspace">
+      <aside id="sidebar" data-canonical-id="sidebar">
+        <strong>KetPlus</strong>
+      </aside>
+      <section id="content" data-canonical-id="content">
+        <h1 data-canonical-id="title">Build the workspace</h1>
+        <button data-canonical-id="start">Start</button>
+        <p id="status" data-canonical-id="status">Idle</p>
+      </section>
+    </main>
+    <script>
+      document.querySelector("[data-canonical-id='start']").addEventListener("click", () => {
+        document.querySelector("[data-canonical-id='status']").textContent = "Working";
+      });
+    </script>
+  </body>
+</html>

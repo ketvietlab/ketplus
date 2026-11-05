@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>KétPlus · Model & provider</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 13px;
+      color: #d8dadd;
+      background: #16181b;
+      --panel: #222529;
+      --line: #34373c;
+      --muted: #969ba4;
+      --accent: #aeb9ff;
+      --focus: #8293ff;
+      --provider-color: #c5cbd4;
+    }
+    * { box-sizing: border-box; letter-spacing: 0; }
+    body { margin: 0; min-width: 280px; }
+    button, input, textarea { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    button, input, textarea { -webkit-tap-highlight-color: transparent; }
+    button { border: 0; background: none; }
+    button:focus-visible, input:focus-visible, textarea:focus-visible {
+      outline: 2px solid var(--focus); outline-offset: 3px;
+    }
+    button:disabled { cursor: default; opacity: .35; }
+    [hidden] { display: none !important; }
+    .icon {
+      display: inline-block; width: 16px; height: 16px; flex: 0 0 16px;
+      background: currentColor; mask: var(--icon) center / contain no-repeat;
+      -webkit-mask: var(--icon) center / contain no-repeat;
+    }
+    .i-search { --icon: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPgogIDxwYXRoIGQ9Im0yMSAyMS00LjM0LTQuMzQiLz4KICA8Y2lyY2xlIGN4PSIxMSIgY3k9IjExIiByPSI4Ii8+Cjwvc3ZnPg=="); }
+    .i-zap { --icon: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0ibTEzIDItMyA4SDRsNyAxMiAzLThoNloiLz48L3N2Zz4="); }
+    .i-reset { --icon: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTMgMTFhOSA5IDAgMSAxIDIuNyA2LjRNMyA0djdoNyIvPjwvc3ZnPg=="); }
+    .i-plus { --icon: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTUgMTJoMTQiLz48cGF0aCBkPSJNMTIgNXYxNCIvPjwvc3ZnPg=="); }
+    .i-arrow { --icon: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJtNSAxMiA3LTcgNyA3Ii8+PHBhdGggZD0iTTEyIDE5VjUiLz48L3N2Zz4="); }
+    .i-terminal { --icon: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0ibTcgMTEgMi0yLTItMiIvPjxwYXRoIGQ9Ik0xMSAxM2g0Ii8+PHJlY3Qgd2lkdGg9IjE4IiBoZWlnaHQ9IjE4IiB4PSIzIiB5PSIzIiByeD0iMiIgcnk9IjIiLz48L3N2Zz4="); }
+    .i-shield { --icon: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDIyczgtNCA4LTExVjVsLTgtMy04IDN2NmMwIDcgOCAxMSA4IDExIi8+PHBhdGggZD0iTTEyIDh2NG0wIDRoLjAxIi8+PC9zdmc+"); }
+    .i-branch { --icon: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTE1IDZhOSA5IDAgMCAwLTkgOVYzIi8+PGNpcmNsZSBjeD0iMTgiIGN5PSI2IiByPSIzIi8+PGNpcmNsZSBjeD0iNiIgY3k9IjE4IiByPSIzIi8+PC9zdmc+"); }
+    .i-close { --icon: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTUgMTJoMTQiLz48cGF0aCBkPSJNMTIgNXYxNCIvPjwvc3ZnPg=="); transform: rotate(45deg); }
+    .icon-button {
+      width: 28px; height: 28px; flex: 0 0 28px; display: grid; place-items: center;
+      border-radius: 5px; color: var(--muted); position: relative;
+    }
+    .icon-button:hover { background: #35383f; color: #e8e9eb; }
+    [data-tooltip]::after {
+      content: attr(data-tooltip); position: absolute; bottom: calc(100% + 8px);
+      left: 50%; transform: translateX(-50%); z-index: 5; background: #393d44;
+      color: #eef0f3; padding: 6px 8px; border: 1px solid #515661; border-radius: 4px;
+      font-size: 11px; white-space: nowrap; pointer-events: none; opacity: 0;
+      transition: opacity .12s;
+    }
+    [data-tooltip]:hover::after, [data-tooltip]:focus-visible::after { opacity: 1; }
+    .app-bar {
+      height: 52px; display: flex; align-items: center; gap: 12px;
+      padding: 0 24px; border-bottom: 1px solid #292c30; background: #1a1c20;
+    }
+    .app-brand { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+    .app-brand img { width: 24px; height: 24px; object-fit: contain; }
+    .bar-divider { width: 1px; height: 14px; background: #3a3d43; margin: 0 3px; }
+    .bar-label { color: var(--muted); font-size: 12px; }
+    .workspace {
+      max-width: 800px; min-height: calc(100dvh - 52px); margin: 0 auto;
+      padding: 24px; display: flex; flex-direction: column; justify-content: center;
+    }
+    .conversation-heading { display: flex; align-items: center; gap: 8px; color: #858b94; font-size: 12px; }
+    .conversation-heading strong { color: #b4b9c1; font-weight: 500; }
+    .conversation-heading .slash { color: #555c65; }
+    .picker-stage { position: relative; height: 530px; flex: 0 0 530px; }
+    .picker {
+      position: absolute; bottom: 12px; right: 0; width: 448px; max-width: 100%;
+      background: var(--panel); border: 1px solid #404349; border-radius: 8px;
+      box-shadow: 0 20px 65px #0006, 0 3px 12px #0003;
+      transform-origin: bottom right; animation: appear .14s ease-out;
+    }
+    @keyframes appear { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    .picker-heading {
+      height: 40px; padding: 0 12px 0 16px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .picker-heading h1 { font-size: 13px; font-weight: 600; margin: 0; color: #e0e2e6; }
+    .provider-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 0 12px 10px; }
+    .provider-tab {
+      display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 4px; min-width: 0; font-size: 12px;
+      height: 36px; position: relative; border-radius: 5px; color: #a4a9b2;
+      border: 1px solid transparent; font-weight: 500; transition: background .12s, color .12s;
+    }
+    .provider-tab:hover { background: #2c2f35; color: #e6e8ec; }
+    .provider-tab[aria-selected="true"] { background: #34373e; border-color: #4b4f59; color: #f1f2f4; }
+    .provider-mark { width: 19px; height: 19px; flex: 0 0 19px; display: inline-flex; align-items: center; justify-content: center; }
+    .provider-mark.claude { font-family: Georgia, serif; font-size: 25px; line-height: 1; color: #dfaa90; }
+    .provider-mark.codex { color: #d0d5de; }
+    .provider-mark.cursor { color: #eceef2; font-size: 15px; font-weight: 700; }
+    .provider-mark img { width: 19px; height: 19px; object-fit: contain; }
+    .search-wrap {
+      height: 40px; padding: 0 16px; display: flex; align-items: center; gap: 10px;
+      border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); color: #8c939e;
+    }
+    .search-wrap:focus-within { background: #262a30; box-shadow: inset 2px 0 0 var(--focus); }
+    .search-wrap input { width: 100%; min-width: 0; padding: 0; height: 30px; border: 0; background: transparent; outline: none; font-size: 12px; }
+    .search-wrap input::placeholder { color: #8f96a1; }
+    .search-wrap input:focus-visible { outline: none; }
+    .search-wrap .icon-button { width: 24px; height: 24px; flex-basis: 24px; }
+    .catalog-meta { display: flex; align-items: center; justify-content: space-between; height: 28px; padding: 0 16px; font-size: 10px; color: var(--muted); }
+    .connection { display: flex; gap: 5px; align-items: center; color: #a3b3a9; }
+    .connection-dot { width: 5px; height: 5px; border-radius: 50%; background: #82b69c; }
+    .model-list { height: 144px; margin: 0 8px 8px; overflow: auto; scrollbar-width: thin; scrollbar-color: #555b66 transparent; }
+    .model-row {
+      width: 100%; height: 46px; padding: 0 10px; margin-bottom: 2px;
+      border: 1px solid transparent; border-radius: 5px; display: flex;
+      align-items: center; gap: 10px; text-align: left;
+    }
+    .model-row:hover { background: #2c3036; }
+    .model-row[aria-checked="true"] { background: #2e3448; border-color: #424c70; }
+    .model-copy { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+    .model-name { font-size: 12px; font-weight: 500; color: #e1e3e7; }
+    .model-id { font-family: "SFMono-Regular", Consolas, monospace; color: #8c96a5; font-size: 10px; overflow-wrap: anywhere; }
+    .model-row[aria-checked="true"] .model-name { color: #d8dfff; }
+    .model-badge { font-size: 10px; color: #9aabba; white-space: nowrap; }
+    .selection-dot { flex: 0 0 14px; width: 14px; height: 14px; border: 1px solid #525965; border-radius: 50%; display: grid; place-items: center; }
+    .model-row[aria-checked="true"] .selection-dot { border-color: var(--accent); }
+    .model-row[aria-checked="true"] .selection-dot::after { content: ''; width: 6px; height: 6px; background: var(--accent); border-radius: 50%; }
+    .empty-state { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); font-size: 12px; }
+    .text-button { color: var(--accent); font-size: 12px; padding: 3px; border-radius: 3px; }
+    .effort-section { padding: 10px 16px 12px; border-top: 1px solid var(--line); }
+    .effort-heading { display: flex; align-items: center; gap: 7px; height: 24px; }
+    .effort-heading > .icon { color: #9ba4b3; width: 14px; height: 14px; flex-basis: 14px; }
+    .effort-heading label { color: #b9bfc8; font-size: 12px; }
+    .effort-heading output { color: #bbc6ff; font-size: 12px; font-weight: 500; margin-left: auto; }
+    .effort-heading .icon-button { margin-left: 5px; }
+    .range-shell { position: relative; height: 28px; margin: 10px 0 6px; border-radius: 16px; background: #343a45; border: 1px solid #404751; }
+    .range-fill { position: absolute; left: 0; top: 0; bottom: 0; width: var(--fill, 80%); border-radius: 16px; background: #414b65; pointer-events: none; }
+    .range-ticks { position: absolute; inset: 0 12px; display: flex; justify-content: space-between; align-items: center; pointer-events: none; }
+    .range-ticks span { width: 4px; height: 4px; background: #8993a3; border-radius: 50%; }
+    .range-shell input {
+      appearance: none; -webkit-appearance: none; position: absolute; inset: -1px 0; width: 100%; height: 28px;
+      margin: 0; background: transparent; cursor: pointer; border-radius: 16px;
+    }
+    .range-shell input::-webkit-slider-runnable-track { height: 26px; background: transparent; }
+    .range-shell input::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 26px; height: 26px; border-radius: 50%; background: #d0d7e4; border: 1px solid #dce2ed; box-shadow: 0 1px 4px #0004; }
+    .range-shell input::-moz-range-track { height: 26px; background: transparent; }
+    .range-shell input::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: #d0d7e4; border: 1px solid #dce2ed; }
+    .range-labels { display: flex; justify-content: space-between; font-size: 10px; color: #9aA2ae; }
+    .composer { border: 1px solid #373b42; border-radius: 8px; background: #202328; padding: 14px 14px 10px; }
+    .composer textarea { resize: none; display: block; width: 100%; height: 54px; min-height: 54px; border: 0; padding: 0; background: none; outline: none; line-height: 1.6; font-size: 13px; }
+    .composer textarea::placeholder { color: #7e8590; }
+    .composer:focus-within { border-color: #515b76; }
+    .composer textarea:focus-visible { outline: none; }
+    .composer-toolbar { display: flex; align-items: center; gap: 8px; min-height: 34px; }
+    .permission-status { display: inline-flex; align-items: center; gap: 5px; color: #9da4af; font-size: 11px; white-space: nowrap; }
+    .permission-status .icon { width: 13px; height: 13px; flex-basis: 13px; }
+    .selection-trigger {
+      margin-left: auto; display: flex; align-items: center; justify-content: flex-end; gap: 7px;
+      min-width: 0; min-height: 32px; padding: 4px 7px; border-radius: 5px; font-size: 11px; position: relative;
+    }
+    .selection-trigger:hover, .selection-trigger[aria-expanded="true"] { background: #2c3038; }
+    .trigger-copy { min-width: 0; display: flex; align-items: center; flex-wrap: wrap; column-gap: 6px; row-gap: 3px; text-align: left; }
+    .trigger-provider { color: #a3acb9; }
+    .trigger-model { color: #d0d7e3; }
+    .trigger-effort { color: #abb8ea; }
+    .trigger-separator { color: #727b88; }
+    .selection-trigger > .icon { width: 12px; height: 12px; flex-basis: 12px; color: #a7b3c7; transition: transform .15s; }
+    .selection-trigger[aria-expanded="true"] > .icon { transform: rotate(180deg); }
+    .send-button { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 34px; border-radius: 50%; background: #5b6bea; color: white; position: relative; }
+    .send-button .icon { width: 21px; height: 21px; flex-basis: 21px; }
+    .send-button:not(:disabled):hover { background: #6d7df6; }
+    .send-button:disabled { opacity: .5; }
+    .selection-receipt { margin: 0 0 14px; display: flex; flex-direction: column; gap: 6px; border-left: 2px solid #535f8f; padding: 2px 0 2px 12px; }
+    .selection-receipt p { margin: 0; font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .selection-receipt small { color: #9fa9bd; font-size: 11px; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+    @media (max-width: 520px) {
+      .app-bar { padding: 0 16px; }
+      .workspace { padding: 20px 16px; }
+      .picker-stage { height: 530px; }
+      .provider-tab { font-size: 12px; gap: 5px; }
+      .provider-tabs { padding-left: 8px; padding-right: 8px; }
+      .composer { padding: 12px 10px 10px; }
+      .composer-toolbar { gap: 5px; }
+      .permission-status { font-size: 0; gap: 0; }
+      .permission-status .icon { width: 15px; height: 15px; flex-basis: 15px; }
+      .selection-trigger { font-size: 10px; padding: 4px; gap: 5px; }
+      .trigger-copy { column-gap: 4px; }
+      .selection-trigger .provider-mark { display: none; }
+      .model-badge { font-size: 9px; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+    @media (max-width: 440px) {
+      .provider-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .picker-stage { height: 570px; flex-basis: 570px; }
+    }
+    @media (max-width: 340px) { .effort-heading { gap: 4px; } .effort-heading label { font-size: 11px; } }
+  </style>
+</head>
+<body>
+  <header class="app-bar">
+    <div class="app-brand"><img src="../assets/brand/ketplus-mark.png" alt="">KétPlus</div>
+    <span class="bar-divider" aria-hidden="true"></span>
+    <span class="bar-label">Agent Workspace</span>
+  </header>
+  <main class="workspace">
+    <div class="conversation-heading"><span class="icon i-branch" aria-hidden="true"></span><strong>ketplus</strong><span class="slash">/</span><span>New conversation</span></div>
+    <div class="picker-stage">
+      <section class="picker" id="model-picker" role="dialog" aria-labelledby="picker-title">
+        <div class="picker-heading">
+          <h1 id="picker-title">Model &amp; provider</h1>
+          <button class="icon-button" id="close-picker" aria-label="Close model picker" data-tooltip="Close"><span class="icon i-close" aria-hidden="true"></span></button>
+        </div>
+        <div class="provider-tabs" role="tablist" aria-label="Provider">
+          <button class="provider-tab" role="tab" id="tab-claude" aria-controls="provider-panel" aria-selected="false" tabindex="-1" data-provider="claude"><span class="provider-mark claude" aria-hidden="true">✳</span>Claude</button>
+          <button class="provider-tab" role="tab" id="tab-codex" aria-controls="provider-panel" aria-selected="true" data-provider="codex"><span class="provider-mark codex" aria-hidden="true"><span class="icon i-terminal"></span></span>Codex</button>
+          <button class="provider-tab" role="tab" id="tab-cursor" aria-controls="provider-panel" aria-selected="false" tabindex="-1" data-provider="cursor"><span class="provider-mark cursor" aria-hidden="true">C</span>Cursor</button>
+          <button class="provider-tab" role="tab" id="tab-ketrouter" aria-controls="provider-panel" aria-selected="false" tabindex="-1" data-provider="ketrouter"><span class="provider-mark" aria-hidden="true"><img src="../assets/brand/ketplus-mark.png" alt=""></span>KétRouter</button>
+        </div>
+        <div id="provider-panel" role="tabpanel" aria-labelledby="tab-codex">
+          <div class="search-wrap">
+            <span class="icon i-search" aria-hidden="true"></span>
+            <input id="model-search" type="text" placeholder="Search Codex models…" aria-label="Search models" autocomplete="off" spellcheck="false">
+            <button class="icon-button" id="clear-search" aria-label="Clear search" data-tooltip="Clear" hidden><span class="icon i-close" aria-hidden="true"></span></button>
+          </div>
+          <div class="catalog-meta"><span id="model-count">3 models</span><span class="connection"><span class="connection-dot" aria-hidden="true"></span>Connected</span></div>
+          <div class="model-list" id="model-list" role="radiogroup" aria-label="Codex models"></div>
+          <div class="effort-section">
+            <div class="effort-heading">
+              <span class="icon i-zap" aria-hidden="true"></span><label for="effort">Reasoning effort</label>
+              <output id="effort-value" for="effort">Extra high</output>
+              <button class="icon-button" id="reset-effort" aria-label="Reset effort to model default" data-tooltip="Reset effort"><span class="icon i-reset" aria-hidden="true"></span></button>
+            </div>
+            <div class="range-shell" id="range-shell"><div class="range-fill"></div><div class="range-ticks" id="range-ticks" aria-hidden="true"></div><input id="effort" type="range" min="0" max="5" value="4" step="1" aria-valuetext="Extra high"></div>
+            <div class="range-labels" aria-hidden="true"><span id="effort-min">Minimal</span><span id="effort-max">Max</span></div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div class="selection-receipt" id="selection-receipt" hidden><p id="sent-prompt"></p><small id="sent-config"></small></div>
+    <form class="composer" id="composer">
+      <label class="sr-only" for="prompt">Message</label>
+      <textarea id="prompt" placeholder="Ask anything, or plan your next change…" rows="2"></textarea>
+      <div class="composer-toolbar">
+        <span class="permission-status" title="Manual permissions"><span class="icon i-shield" aria-hidden="true"></span><span>Manual</span></span>
+        <button class="selection-trigger" type="button" id="selection-trigger" aria-haspopup="dialog" aria-controls="model-picker" aria-expanded="true">
+          <span class="provider-mark codex" id="trigger-mark" aria-hidden="true"><span class="icon i-terminal"></span></span>
+          <span class="trigger-copy"><span class="trigger-provider" id="trigger-provider">Codex</span><span class="trigger-separator" aria-hidden="true">·</span><span class="trigger-model" id="trigger-model">GPT-6-Astra</span><span class="trigger-effort" id="trigger-effort">Extra high</span></span>
+          <span class="icon i-arrow" aria-hidden="true"></span>
+        </button>
+        <button class="send-button" type="submit" id="send" aria-label="Send mock message" data-tooltip="Send" disabled><span class="icon i-arrow" aria-hidden="true"></span></button>
+      </div>
+    </form>
+    <div id="announcement" class="sr-only" role="status" aria-live="polite"></div>
+  </main>
+  <script>
+    // Illustrative catalog only. No discovery, authentication or provider requests are made.
+    const levels = {
+      claude: ['Low', 'Medium', 'High', 'Max'],
+      codex: ['Minimal', 'Low', 'Medium', 'High', 'Extra high', 'Max'],
+      lite: ['Low', 'Medium', 'High']
+    };
+    const providers = {
+      claude: { name: 'Claude', models: [
+        { id: 'claude-opus', name: 'Claude Opus', family: 'Anthropic', levels: levels.claude, defaultEffort: 'High' },
+        { id: 'claude-sonnet', name: 'Claude Sonnet', family: 'Anthropic', levels: levels.claude, defaultEffort: 'High' },
+        { id: 'claude-haiku', name: 'Claude Haiku', family: 'Anthropic', levels: levels.lite, defaultEffort: 'Medium' }
+      ] },
+      codex: { name: 'Codex', models: [
+        { id: 'gpt-6-astra', name: 'GPT-6-Astra', family: 'OpenAI', levels: levels.codex, defaultEffort: 'Extra high' },
+        { id: 'gpt-5.6-sol', name: 'GPT-5.6-Sol', family: 'OpenAI', levels: levels.codex, defaultEffort: 'High' },
+        { id: 'gpt-5.6-luna', name: 'GPT-5.6-Luna', family: 'OpenAI', levels: levels.lite, defaultEffort: 'Medium' }
+      ] },
+      cursor: { name: 'Cursor', models: [
+        { id: 'composer', name: 'Composer', family: 'Cursor', levels: levels.lite, defaultEffort: 'Medium' },
+        { id: 'claude-opus', name: 'Claude Opus', family: 'Anthropic', levels: levels.claude, defaultEffort: 'High' },
+        { id: 'gpt-6-astra', name: 'GPT-6-Astra', family: 'OpenAI', levels: levels.codex, defaultEffort: 'Extra high' }
+      ] },
+      ketrouter: { name: 'KétRouter', models: [
+        { id: 'anthropic/claude-opus', name: 'Claude Opus', family: 'Anthropic', levels: levels.claude, defaultEffort: 'High' },
+        { id: 'openai/gpt-6-astra', name: 'GPT-6-Astra', family: 'OpenAI', levels: levels.codex, defaultEffort: 'Extra high' },
+        { id: 'openai/gpt-5.6-luna', name: 'GPT-5.6-Luna', family: 'OpenAI', levels: levels.lite, defaultEffort: 'Medium' }
+      ] }
+    };
+    const storageKey = 'ketplus.provider-picker.mock.v1';
+    const byId = id => document.getElementById(id);
+    const picker = byId('model-picker');
+    const trigger = byId('selection-trigger');
+    const search = byId('model-search');
+    const list = byId('model-list');
+    const effort = byId('effort');
+    const tabs = [...document.querySelectorAll('.provider-tab')];
+    let providerId = 'codex';
+    const selections = Object.fromEntries(Object.entries(providers).map(([id, p]) => [id, p.models[0].id]));
+    const efforts = {};
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey));
+      if (saved && Object.hasOwn(providers, saved.providerId)) providerId = saved.providerId;
+      for (const [id, p] of Object.entries(providers)) {
+        if (p.models.some(model => model.id === saved?.selections?.[id])) selections[id] = saved.selections[id];
+        for (const model of p.models) {
+          const key = `${id}:${model.id}`;
+          if (model.levels.includes(saved?.efforts?.[key])) efforts[key] = saved.efforts[key];
+        }
+      }
+    } catch { /* Storage is optional for file URLs and private browsing. */ }
+    const currentModel = () => providers[providerId].models.find(model => model.id === selections[providerId]);
+    const currentKey = () => `${providerId}:${currentModel().id}`;
+    const currentEffort = () => efforts[currentKey()] || currentModel().defaultEffort;
+    function persist() {
+      try { localStorage.setItem(storageKey, JSON.stringify({ providerId, selections, efforts })); } catch { /* Keep the current in-memory selection. */ }
+    }
+    function announce() { byId('announcement').textContent = `${providers[providerId].name}, ${currentModel().name}, ${currentEffort()} effort`; }
+    function setOpen(open, restoreFocus = false) {
+      picker.hidden = !open;
+      trigger.setAttribute('aria-expanded', String(open));
+      if (open) search.focus({ preventScroll: true });
+      else if (restoreFocus) trigger.focus({ preventScroll: true });
+    }
+    function renderTrigger() {
+      byId('trigger-provider').textContent = providers[providerId].name;
+      byId('trigger-model').textContent = currentModel().name;
+      byId('trigger-effort').textContent = currentEffort();
+      const mark = byId(`tab-${providerId}`).querySelector('.provider-mark').cloneNode(true);
+      mark.id = 'trigger-mark';
+      byId('trigger-mark').replaceWith(mark);
+      trigger.setAttribute('aria-label', `Choose model: ${providers[providerId].name}, ${currentModel().name}, ${currentEffort()} effort`);
+    }
+    function renderEffort() {
+      const model = currentModel();
+      const index = model.levels.indexOf(currentEffort());
+      effort.max = model.levels.length - 1;
+      effort.value = index;
+      effort.setAttribute('aria-valuetext', currentEffort());
+      byId('effort-value').textContent = currentEffort();
+      byId('effort-min').textContent = model.levels[0];
+      byId('effort-max').textContent = model.levels.at(-1);
+      byId('range-shell').style.setProperty('--fill', `${index / (model.levels.length - 1) * 100}%`);
+      byId('range-ticks').replaceChildren(...model.levels.map(() => document.createElement('span')));
+      byId('reset-effort').disabled = currentEffort() === model.defaultEffort;
+    }
+    function selectModel(id) {
+      selections[providerId] = id;
+      renderModels(); renderEffort(); renderTrigger(); persist(); announce();
+      [...list.querySelectorAll('[role="radio"]')].find(row => row.dataset.model === id)?.focus({ preventScroll: true });
+    }
+    function renderModels() {
+      const query = search.value.trim().toLowerCase();
+      const models = providers[providerId].models.filter(model => `${model.name} ${model.id} ${model.family}`.toLowerCase().includes(query));
+      byId('model-count').textContent = `${models.length} ${models.length === 1 ? 'model' : 'models'}`;
+      byId('clear-search').hidden = !search.value;
+      list.setAttribute('aria-label', `${providers[providerId].name} models`);
+      list.replaceChildren();
+      if (!models.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        const text = document.createElement('span');
+        text.textContent = 'No models found';
+        const clear = document.createElement('button');
+        clear.className = 'text-button'; clear.textContent = 'Clear search';
+        clear.addEventListener('click', clearSearch);
+        empty.append(text, clear); list.append(empty); return;
+      }
+      const selectedVisible = models.some(model => model.id === selections[providerId]);
+      models.forEach((model, index) => {
+        const row = document.createElement('button');
+        row.className = 'model-row'; row.dataset.model = model.id;
+        row.setAttribute('role', 'radio'); row.setAttribute('aria-checked', String(model.id === selections[providerId]));
+        row.tabIndex = model.id === selections[providerId] || (!selectedVisible && index === 0) ? 0 : -1;
+        const copy = document.createElement('span'); copy.className = 'model-copy';
+        const name = document.createElement('span'); name.className = 'model-name'; name.textContent = model.name;
+        const id = document.createElement('span'); id.className = 'model-id'; id.textContent = model.id;
+        copy.append(name, id);
+        const badge = document.createElement('span'); badge.className = 'model-badge'; badge.textContent = model.family;
+        const dot = document.createElement('span'); dot.className = 'selection-dot'; dot.setAttribute('aria-hidden', 'true');
+        row.append(copy, badge, dot); row.addEventListener('click', () => selectModel(model.id));
+        list.append(row);
+      });
+    }
+    function renderProvider() {
+      tabs.forEach(tab => { const active = tab.dataset.provider === providerId; tab.setAttribute('aria-selected', String(active)); tab.tabIndex = active ? 0 : -1; });
+      byId('provider-panel').setAttribute('aria-labelledby', `tab-${providerId}`);
+      search.placeholder = `Search ${providers[providerId].name} models…`;
+      renderModels(); renderEffort(); renderTrigger();
+    }
+    function selectProvider(id) { providerId = id; search.value = ''; renderProvider(); persist(); announce(); }
+    function clearSearch() { search.value = ''; renderModels(); search.focus(); }
+    tabs.forEach(tab => tab.addEventListener('click', () => selectProvider(tab.dataset.provider)));
+    document.querySelector('.provider-tabs').addEventListener('keydown', event => {
+      const index = tabs.indexOf(document.activeElement);
+      if (index < 0 || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+      selectProvider(tabs[next].dataset.provider); tabs[next].focus();
+    });
+    list.addEventListener('keydown', event => {
+      if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+      const rows = [...list.querySelectorAll('[role="radio"]')];
+      const index = rows.indexOf(document.activeElement);
+      if (index < 0) return;
+      event.preventDefault();
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? rows.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length;
+      selectModel(rows[next].dataset.model);
+    });
+    search.addEventListener('input', renderModels);
+    search.addEventListener('keydown', event => {
+      if (event.key === 'ArrowDown') { event.preventDefault(); list.querySelector('[role="radio"][tabindex="0"]')?.focus(); }
+    });
+    byId('clear-search').addEventListener('click', clearSearch);
+    effort.addEventListener('input', () => {
+      efforts[currentKey()] = currentModel().levels[Number(effort.value)];
+      renderEffort(); renderTrigger(); persist(); announce();
+    });
+    byId('reset-effort').addEventListener('click', () => { delete efforts[currentKey()]; renderEffort(); renderTrigger(); persist(); announce(); effort.focus(); });
+    trigger.addEventListener('click', () => setOpen(picker.hidden));
+    byId('close-picker').addEventListener('click', () => setOpen(false, true));
+    document.addEventListener('pointerdown', event => {
+      if (!picker.hidden && !picker.contains(event.target) && !trigger.contains(event.target)) setOpen(false);
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && !picker.hidden) { event.preventDefault(); setOpen(false, true); }
+    });
+    // A send only records the mock selection locally; it never invokes an agent.
+    byId('prompt').addEventListener('input', () => { byId('send').disabled = !byId('prompt').value.trim(); });
+    byId('composer').addEventListener('submit', event => {
+      event.preventDefault();
+      const prompt = byId('prompt').value.trim();
+      if (!prompt) return;
+      byId('sent-prompt').textContent = prompt;
+      byId('sent-config').textContent = `${providers[providerId].name} · ${currentModel().name} · ${currentEffort()}`;
+      byId('selection-receipt').hidden = false;
+      byId('prompt').value = ''; byId('send').disabled = true; setOpen(false);
+    });
+    renderProvider();
+  </script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+UpdateCTestConfiguration  from :<build>/DartConfiguration.tcl
+Test project <build>
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 1
+    Start 1: r03_cloud_privacy_tests
+
+1: Test command: <build>/r03_cloud_privacy_tests
+1: Working Directory: <build>
+1: Test timeout computed to be: 10000000
+1: ********* Start testing of CloudPrivacyTest *********
+1: Config: Using QtTest library 6.11.1, Qt 6.11.1 (arm64-little_endian-lp64 shared (dynamic) release build; by Apple LLVM 21.0.0 (clang-2100.0.123.102)), macos 26.2.0
+1: PASS   : CloudPrivacyTest::initTestCase()
+1: PASS   : CloudPrivacyTest::freshUploadDecryptsToCommandMetadataOnly()
+1: PASS   : CloudPrivacyTest::retryAndReopenUseSameDurableEnvelope()
+1: XFAIL  : CloudPrivacyTest::legacyCachePrivacyViolationReproduced() PRIVACY FAIL: compatible cached envelope bypasses fresh output projection
+1:    Loc: [./tests/daemon/cloud-privacy/CloudPrivacyTest.cpp(246)]
+1: PASS   : CloudPrivacyTest::legacyCachePrivacyViolationReproduced()
+1: PASS   : CloudPrivacyTest::freshCryptoFailureAndMissingScopeDoNotUpload()
+1: PASS   : CloudPrivacyTest::decryptRejectsTamperAndWrongScopeGeneration()
+1: XFAIL  : CloudPrivacyTest::poisonedCacheScopeAndTamperAreForwarded() CACHE VALIDATION FAIL: upload forwards wrong-scope/generation or tampered cache
+1:    Loc: [./tests/daemon/cloud-privacy/CloudPrivacyTest.cpp(334)]
+1: XFAIL  : CloudPrivacyTest::poisonedCacheScopeAndTamperAreForwarded() CACHE VALIDATION FAIL: upload forwards wrong-scope/generation or tampered cache
+1:    Loc: [./tests/daemon/cloud-privacy/CloudPrivacyTest.cpp(334)]
+1: XFAIL  : CloudPrivacyTest::poisonedCacheScopeAndTamperAreForwarded() CACHE VALIDATION FAIL: upload forwards wrong-scope/generation or tampered cache
+1:    Loc: [./tests/daemon/cloud-privacy/CloudPrivacyTest.cpp(334)]
+1: PASS   : CloudPrivacyTest::poisonedCacheScopeAndTamperAreForwarded()
+1: PASS   : CloudPrivacyTest::nonCommandPlaintextRemainsUnchanged()
+1: PASS   : CloudPrivacyTest::cleanupTestCase()
+1: Totals: 9 passed, 0 failed, 0 skipped, 0 blacklisted, 164ms
+1: ********* Finished testing of CloudPrivacyTest *********
+1/2 Test #1: r03_cloud_privacy_tests ..........   Passed    0.62 sec
+test 2
+    Start 2: r03_daemon_protocol_regression
+
+2: Test command: <build>/r03_daemon_protocol_regression
+2: Working Directory: <build>
+2: Test timeout computed to be: 10000000
+2: ********* Start testing of DaemonProtocolTest *********
+2: Config: Using QtTest library 6.11.1, Qt 6.11.1 (arm64-little_endian-lp64 shared (dynamic) release build; by Apple LLVM 21.0.0 (clang-2100.0.123.102)), macos 26.2.0
+2: PASS   : DaemonProtocolTest::initTestCase()
+2: PASS   : DaemonProtocolTest::extendedProductionProjectionCharacterization()
+2: PASS   : DaemonProtocolTest::cloudCommandProjectionKeepsCommandAndStripsOutput()
+2: PASS   : DaemonProtocolTest::validatesRequiredEnvelopeFields()
+2: PASS   : DaemonProtocolTest::encodesBigEndianLengthPrefix()
+2: PASS   : DaemonProtocolTest::journalPersistsOrderedReplayAndDeduplication()
+2: PASS   : DaemonProtocolTest::journalRejectsOversizedPayloadBeforePersistence()
+2: PASS   : DaemonProtocolTest::compactedReplaySkipsCompletedDeltasAndRetainsPartialOutput()
+2: PASS   : DaemonProtocolTest::transcriptPagesNewestThreeTurnsAndLoadsOlderTurnsBackward()
+2: PASS   : DaemonProtocolTest::backfillsCompactedReplayForAnExistingJournal()
+2: PASS   : DaemonProtocolTest::replayPagesStayWithinTheIpcByteBudget()
+2: PASS   : DaemonProtocolTest::approvalHasOneAuthoritativeResolutionAndExpires()
+2: PASS   : DaemonProtocolTest::serviceCreatesProtectedStateAndRejectsEndpointCollision()
+2: PASS   : DaemonProtocolTest::cleanupTestCase()
+2: Totals: 14 passed, 0 failed, 0 skipped, 0 blacklisted, 419ms
+2: ********* Finished testing of DaemonProtocolTest *********
+2/2 Test #2: r03_daemon_protocol_regression ...   Passed    0.86 sec
+
+100% tests passed out of 2
+
+Total Test time (real) =   1.48 sec

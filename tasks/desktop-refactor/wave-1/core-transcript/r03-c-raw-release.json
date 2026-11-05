@@ -1,0 +1,732 @@
+{
+    "architecture": "arm64",
+    "buildSha": "56749d0d74b9fb579cebae1803bbc8d4ba2b0fda",
+    "buildType": "Release",
+    "compiler": "AppleClang-21.0.0.21000101",
+    "encryptionUpload": "not_verified",
+    "fixtureManifest": {
+        "generatedAt": "deterministic-manifest-v3",
+        "hashNotes": [
+            "specificationHash covers scenario metadata and expectations, not materialized payload bytes.",
+            "logicalCanonical hashes sorted-key JSON event records with one trailing newline per record.",
+            "exactJsonl hashes JSON.stringify(record) plus newline, matching materialized event files byte-for-byte.",
+            "operationsJsonl hashes workload operation JSONL separately from transcript events."
+        ],
+        "replaySemantics": {
+            "cursorNamespace": "(session_id, session_generation); never a global ordinal",
+            "gaps": "only negative-cursor-gap requires contiguous raw cursors; compact/cloud gaps are allowed",
+            "media": "reference parsing only; decode/render not_measured",
+            "order": "offset_ms ascending, then operation_ordinal ascending",
+            "pageReferences": "cursor_range is inclusive in the named session/generation; missing range means all matching events",
+            "selections": "selectConversation declares a selectable session/generation, including empty sessions"
+        },
+        "scenarios": [
+            {
+                "category": "valid",
+                "cloudProjection": {
+                    "bytes": 272245,
+                    "containsOutputMarker": false,
+                    "count": 1000,
+                    "representation": "generator-local expected cloud projection JSONL; command output events omitted",
+                    "sha256": "c8323dba9f2deacf8c0d4dacf582db4834d2b16d75dfe68e234c64c0b7ac0bc6"
+                },
+                "description": "1000 display items in one selected conversation for render/windowing stress.",
+                "eventCount": 1000,
+                "exactJsonl": {
+                    "bytes": 272245,
+                    "count": 1000,
+                    "representation": "exact materialized event JSONL bytes; JSON.stringify(record) plus \\n",
+                    "sha256": "c8323dba9f2deacf8c0d4dacf582db4834d2b16d75dfe68e234c64c0b7ac0bc6"
+                },
+                "expectations": {
+                    "replayable": true,
+                    "selectedConversationItemCount": 1000,
+                    "totalItemsAreInOneConversation": true
+                },
+                "files": {
+                    "events": "items-1k.events.jsonl",
+                    "expected": "items-1k.expected.json",
+                    "operations": "items-1k.operations.jsonl"
+                },
+                "logicalCanonical": {
+                    "bytes": 272245,
+                    "count": 1000,
+                    "representation": "logical canonical event JSON; sorted keys; one trailing newline per record",
+                    "sha256": "47b77756bd449a5d54083bc10f0d1863b891c69e3989e8f767d00078e749cbdb"
+                },
+                "name": "items-1k",
+                "operationCount": 2,
+                "operationsJsonl": {
+                    "bytes": 290,
+                    "count": 2,
+                    "representation": "exact materialized operation JSONL bytes; JSON.stringify(record) plus \\n",
+                    "sha256": "1b801839a9ac94b3688f7b9a48903a934caaa6968824b755c8724d2710a1f1cf"
+                },
+                "sessionCount": 1,
+                "specificationHash": "bca9fb97050888f0a84c87062ad0deca9677859f25232845d61635af1bbd53ab",
+                "turnCount": 500
+            },
+            {
+                "category": "valid",
+                "cloudProjection": {
+                    "bytes": 2772252,
+                    "containsOutputMarker": false,
+                    "count": 10000,
+                    "representation": "generator-local expected cloud projection JSONL; command output events omitted",
+                    "sha256": "dc3447e66cfbb61e8e3f50b51f84f1e00250d60cc737db20557ad4bc0866725e"
+                },
+                "description": "10000 display items in one selected conversation for render/windowing stress.",
+                "eventCount": 10000,
+                "exactJsonl": {
+                    "bytes": 2772252,
+                    "count": 10000,
+                    "representation": "exact materialized event JSONL bytes; JSON.stringify(record) plus \\n",
+                    "sha256": "dc3447e66cfbb61e8e3f50b51f84f1e00250d60cc737db20557ad4bc0866725e"
+                },
+                "expectations": {
+                    "replayable": true,
+                    "selectedConversationItemCount": 10000,
+                    "totalItemsAreInOneConversation": true
+                },
+                "files": {
+                    "events": "items-10k.events.jsonl",
+                    "expected": "items-10k.expected.json",
+                    "operations": "items-10k.operations.jsonl"
+                },
+                "logicalCanonical": {
+                    "bytes": 2772252,
+                    "count": 10000,
+                    "representation": "logical canonical event JSON; sorted keys; one trailing newline per record",
+                    "sha256": "dae3456c9ca88d0c68d40b923311ddbac9aaa2cd9f62a7d2af94669cfb60ee42"
+                },
+                "name": "items-10k",
+                "operationCount": 2,
+                "operationsJsonl": {
+                    "bytes": 293,
+                    "count": 2,
+                    "representation": "exact materialized operation JSONL bytes; JSON.stringify(record) plus \\n",
+                    "sha256": "f473f515b516d8f9bf3bd7c9c1ffc9c8da7d561976f062d03b64766b77fef347"
+                },
+                "sessionCount": 1,
+                "specificationHash": "676759885132fed28f9e22101e20a931024c671191b748d1198e6fd588dd7606",
+                "turnCount": 5000
+            },
+            {
+                "category": "valid",
+                "cloudProjection": {
+                    "bytes": 10780,
+                    "containsOutputMarker": false,
+                    "count": 40,
+                    "representation": "generator-local expected cloud projection JSONL; command output events omitted",
+                    "sha256": "97448fa923a1b8f5e4af4282f73254be27fab4c7dacc97f4949e827eb1b07d3e"
+                },
+                "description": "Twenty conversations plus one hundred deterministic selection operations.",
+                "eventCount": 40,
+                "exactJsonl": {
+                    "bytes": 10780,
+                    "count": 40,
+                    "representation": "exact materialized event JSONL bytes; JSON.stringify(record) plus \\n",
+                    "sha256": "97448fa923a1b8f5e4af4282f73254be27fab4c7dacc97f4949e827eb1b07d3e"
+                },
+                "expectations": {
+                    "conversationCount": 20,
+                    "replayable": true,
+                    "selectionOperationCount": 100
+                },
+                "files": {
+                    "events": "20-conversations-100-switches.events.jsonl",
+                    "expected": "20-conversations-100-switches.expected.json",
+                    "operations": "20-conversations-100-switches.operations.jsonl"
+                },
+                "logicalCanonical": {
+                    "bytes": 10780,
+                    "count": 40,
+                    "representation": "logical canonical event JSON; sorted keys; one trailing newline per record",
+                    "sha256": "c4c24090c0983eba691508eaf4e1c7e1109d5f2af0d011e7a7ab97ecc9a628ba"
+                },
+                "name": "20-conversations-100-switches",
+                "operationCount": 100,
+                "operationsJsonl": {
+                    "bytes": 13649,
+                    "count": 100,
+                    "representation": "exact materialized operation JSONL bytes; JSON.stringify(record) plus \\n",
+                    "sha256": "a729743a99f43734c6bbfe31a479d74a4d1c15ddcd4371050d1d6e9d41b85026"
+                },
+                "sessionCount": 20,
+                "specificationHash": "4bdeddeceb6189da70ac0de66ae0771da2fbc316f6738ecab3d04e8930b0265b",
+                "turnCount": 20
+            },
+            {
+                "category": "valid",
+                "cloudProjection": {
+                    "bytes": 8654101,
+                    "containsOutputMarker": false,
+                    "count": 514,
+                    "representation": "generator-local expected cloud projection JSONL; command output events omitted",
+                    "sha256": "b0604d69ab18ecb78540dda081a52fefa295faa800f0c81ed0dc1c2fb56f6bf9"
+                },
+                "description": "One assistant turn with more than 500 events and one >=8 MiB final item body.",
+                "eventCount": 514,
+                "exactJsonl": {
+                    "bytes": 8654101,
+                    "count": 514,
+                    "representation": "exact materialized event JSONL bytes; JSON.stringify(record) plus \\n",
+                    "sha256": "b0604d69ab18ecb78540dda081a52fefa295faa800f0c81ed0dc1c2fb56f6bf9"
+                },
+                "expectations": {
+                    "minEventsInTurn": 500,
+                    "minFinalItemUtf8Bytes": 8388608,
+                    "replayable": true
+                },
+                "files": {
+                    "events": "giant-turn.events.jsonl",
+                    "expected": "giant-turn.expected.json",
+                    "operations": "giant-turn.operations.jsonl"
+                },
+                "logicalCanonical": {
+                    "bytes": 8654101,
+                    "count": 514,
+                    "representation": "logical canonical event JSON; sorted keys; one trailing newline per record",
+                    "sha256": "39179ebc7dcbc6ae4ad053c4dbca34d75e7194a16421cb72777069ee421eebe5"
+                },
+                "name": "giant-turn",
+                "operationCount": 515,
+                "operationsJsonl": {
+                    "bytes": 78013,
+                    "count": 515,
+                    "representation": "exact materialized operation JSONL bytes; JSON.stringify(record) plus \\n",
+                    "sha256": "741d3293b6686a77aad2a759953f6ec7cc69e6c2547832c1f485c0efc3c6d3e5"
+                },
+                "sessionCount": 1,
+                "specificationHash": "d185d72abf02852550e289f45182453cdcba23991c88154e914de454ca5537b3",
+                "turnCount": 1
+            },
+            {
+                "category": "valid",
+                "cloudProjection": {
+                    "bytes": 1912,
+                    "containsOutputMarker": false,
+                    "count": 6,
+                    "representation": "generator-local expected cloud projection JSONL; command output events omitted",
+                    "sha256": "6e1ac36b3ece33fba771b70e8d6539259724efa9369d22817634c792445d9110"
+                },
+                "description": "Multiple assistant items and a tool item inside one turn.",
+                "eventCount": 6,
+                "exactJsonl": {
+                    "bytes": 1896,
+                    "count": 6,
+                    "representation": "exact materialized event JSONL bytes; JSON.stringify(record) plus \\n",
+                    "sha256": "203b08fa660b42ea51d536b5958373b3bb0ec28bf4ee14d01048d9fb415a381e"
+                },
+                "expectations": {
+                    "assistantItemsInTurnOne": [
+                        "assistant-a",
+                        "assistant-b"
+                    ],
+                    "replayable": true,
+                    "toolItemsInTurnOne": [
+                        "tool-1"
+                    ]
+                },
+                "files": {
+                    "events": "multi-assistant-tool-items.events.jsonl",
+                    "expected": "multi-assistant-tool-items.expected.json",
+                    "operations": "multi-assistant-tool-items.operations.jsonl"
+                },
+                "logicalCanonical": {
+                    "bytes": 1896,
+                    "count": 6,
+                    "representation": "logical canonical event JSON; sorted keys; one trailing newline per record",
+                    "sha256": "297a1c43221a21fff89055d8b4b521d9dd2626051a63bf97190be084c4e4c4c3"
+                },
+                "name": "multi-assistant-tool-items",
+                "operationCount": 1,
+                "operationsJsonl": {
+                    "bytes": 145,
+                    "count": 1,
+                    "representation": "exact materialized operation JSONL bytes; JSON.stringify(record) plus \\n",
+                    "sha256": "16afd6c5c54035937d6e4bf6a36be110a5f1b6b25ddd4656c59b00ed0a9df393"
+                },
+                "sessionCount": 1,
+                "specificationHash": "34f5239cf26e4d8585d9ac97cf0df9de3eae37cd5ab8ea03367411049d79c83a",
+                "turnCount": 1
+            },
+            {
+                "category": "valid",
+                "cloudProjection": {
+                    "bytes": 12571,
+                    "containsOutputMarker": false,
+                    "count": 50,
+                    "representation": "generator-local expected cloud projection JSONL; command output events omitted",
+                    "sha256": "f1913f091bdfa3ba4e683a424c415aaf7773e84afe0a8255cbfc386b3c27e2b4"
+                },
+                "description": "50 deltas/s schedule with page/live overlap, idempotent duplicates, and stale selection response context.",
+                "eventCount": 50,
+                "exactJsonl": {
+                    "bytes": 12571,
+                    "count": 50,
+                    "representation": "exact materialized event JSONL bytes; JSON.stringify(record) plus \\n",
+                    "sha256": "f1913f091bdfa3ba4e683a424c415aaf7773e84afe0a8255cbfc386b3c27e2b4"
+                },
+                "expectations": {
+                    "duplicateCursorRange": [
+                        20,
+                        40
+                    ],
+                    "liveRatePerSecond": 50,
+                    "replayable": true,
+                    "staleResponseHasSelectionEpoch": true
+                },
+                "files": {
+                    "events": "stream-overlap-duplicates-stale.events.jsonl",
+                    "expected": "stream-overlap-duplicates-stale.expected.json",
+                    "operations": "stream-overlap-duplicates-stale.operations.jsonl"
+                },
+                "logicalCanonical": {
+                    "bytes": 12571,
+                    "count": 50,
+                    "representation": "logical canonical event JSON; sorted keys; one trailing newline per record",
+                    "sha256": "7dd9439de8e208e7020690122557c041f46db8aa1e5f83cfe1aa4262e1cf52a0"
+                },
+                "name": "stream-overlap-duplicates-stale",
+                "operationCount": 54,
+                "operationsJsonl": {
+                    "bytes": 9783,
+                    "count": 54,
+                    "representation": "exact materialized operation JSONL bytes; JSON.stringify(record) plus \\n",
+                    "sha256": "a4847d72c53281698be856ae3d5dd939f4ae13fb306d6803c2a2e43d1e4920de"
+                },
+                "sessionCount": 1,
+                "specificationHash": "688421f8f2c4bf1e4ad91bae89b864d92ddd3c1f99b45e6d758cf8a1d0a34094",
+                "turnCount": 1
+            },
+            {
+                "category": "valid",
+                "cloudProjection": {
+                    "bytes": 1898,
+                    "containsOutputMarker": false,
+                    "count": 5,
+                    "representation": "generator-local expected cloud projection JSONL; command output events omitted",
+                    "sha256": "697bf1f1b0b78353030abd903a3ef60a74bf0754afb87c5c9c3bd80e99470611"
+                },
+                "description": "Markdown/code/table/Mermaid/media plus command lifecycle.",
+                "eventCount": 5,
+                "exactJsonl": {
+                    "bytes": 1882,
+                    "count": 5,
+                    "representation": "exact materialized event JSONL bytes; JSON.stringify(record) plus \\n",
+                    "sha256": "8d9807f5a06d36da1ba1e54ad8a63beda24dab6cc15bc925495cb430b7920604"
+                },
+                "expectations": {
+                    "commandLifecycle": true,
+                    "includesMarkdown": true,
+                    "includesMedia": true,
+                    "includesMermaid": true,
+                    "mediaCoverage": "reference parsing only; no asset resolver, decode or render measurement",
+                    "replayable": true
+                },
+                "files": {
+                    "events": "rich-markdown-media-command.events.jsonl",
+                    "expected": "rich-markdown-media-command.expected.json",
+                    "operations": "rich-markdown-media-command.operations.jsonl"
+                },
+                "logicalCanonical": {
+                    "bytes": 1882,
+                    "count": 5,
+                    "representation": "logical canonical event JSON; sorted keys; one trailing newline per record",
+                    "sha256": "582e487feaad036cf40a386b9e54f0213e553f6029c0fdb6b58e1ee3951a7eab"
+                },
+                "name": "rich-markdown-media-command",
+                "operationCount": 1,
+                "operationsJsonl": {
+                    "bytes": 152,
+                    "count": 1,
+                    "representation": "exact materialized operation JSONL bytes; JSON.stringify(record) plus \\n",
+                    "sha256": "db76bbc6be183d3f884d60c206a14994c8f3df7064bf94bd62c20ec3c5b1ea0a"
+                },
+                "sessionCount": 1,
+                "specificationHash": "3368189485d858184acb052a46b1e235dc66967974fae10923ad1a5425f31952",
+                "turnCount": 1
+            },
+            {
+                "category": "valid",
+                "cloudProjection": {
+                    "bytes": 979,
+                    "containsOutputMarker": false,
+                    "count": 2,
+                    "representation": "generator-local expected cloud projection JSONL; command output events omitted",
+                    "sha256": "45b8acdee5aeb782f8562398ace5f649fbc00b7dc3655a749d0fa6426e2dd96c"
+                },
+                "description": "Raw command output marker events plus expected command-only cloud projection.",
+                "eventCount": 4,
+                "exactJsonl": {
+                    "bytes": 1574,
+                    "count": 4,
+                    "representation": "exact materialized event JSONL bytes; JSON.stringify(record) plus \\n",
+                    "sha256": "ebe04c189292e8aeb2024c58cfcb0b7bc63246c41dfe0d237e07c644722f7ee7"
+                },
+                "expectations": {
+                    "commandOutputMarkersExistInRawFixture": true,
+                    "commandTextMustNotBeTruncated": true,
+                    "expectedCloudProjectionDropsOutput": true,
+                    "replayable": true
+                },
+                "files": {
+                    "events": "command-output-cloud-strip-marker.events.jsonl",
+                    "expected": "command-output-cloud-strip-marker.expected.json",
+                    "operations": "command-output-cloud-strip-marker.operations.jsonl"
+                },
+                "logicalCanonical": {
+                    "bytes": 1574,
+                    "count": 4,
+                    "representation": "logical canonical event JSON; sorted keys; one trailing newline per record",
+                    "sha256": "fd1994cc2b802a5076d975c98c29e692f4a1adc549eea7d3c0c2b09ef83b7411"
+                },
+                "name": "command-output-cloud-strip-marker",
+                "operationCount": 1,
+                "operationsJsonl": {
+                    "bytes": 158,
+                    "count": 1,
+                    "representation": "exact materialized operation JSONL bytes; JSON.stringify(record) plus \\n",
+                    "sha256": "5d1393a8d2bc50151cd725369a6a88600b3647638c0423fedbf362e55a9314f5"
+                },
+                "sessionCount": 1,
+                "specificationHash": "f03f708c3816dd9f987ff25c23bc8f724bbfda7efb0219cf75dd637aa5b7104c",
+                "turnCount": 1
+            },
+            {
+                "category": "negative",
+                "cloudProjection": {
+                    "bytes": 498,
+                    "containsOutputMarker": false,
+                    "count": 2,
+                    "representation": "generator-local expected cloud projection JSONL; command output events omitted",
+                    "sha256": "cc83a8cb3798fd862bf85d15013e193a5b1cb7108d668daee62461c0de95c9ad"
+                },
+                "description": "Intentional gap in a raw stream explicitly requiring contiguous cursors; compact/cloud streams may have gaps.",
+                "eventCount": 2,
+                "exactJsonl": {
+                    "bytes": 498,
+                    "count": 2,
+                    "representation": "exact materialized event JSONL bytes; JSON.stringify(record) plus \\n",
+                    "sha256": "cc83a8cb3798fd862bf85d15013e193a5b1cb7108d668daee62461c0de95c9ad"
+                },
+                "expectations": {
+                    "expectedFailure": "cursor_gap",
+                    "replayable": false,
+                    "requiresContiguousRawStream": true
+                },
+                "files": {
+                    "events": "negative-cursor-gap.events.jsonl",
+                    "expected": "negative-cursor-gap.expected.json",
+                    "operations": "negative-cursor-gap.operations.jsonl"
+                },
+                "logicalCanonical": {
+                    "bytes": 498,
+                    "count": 2,
+                    "representation": "logical canonical event JSON; sorted keys; one trailing newline per record",
+                    "sha256": "e5d63c4eb52031dfc8d39372784aa23ea23c86a22d867bfad3328e2318545fbc"
+                },
+                "name": "negative-cursor-gap",
+                "operationCount": 1,
+                "operationsJsonl": {
+                    "bytes": 132,
+                    "count": 1,
+                    "representation": "exact materialized operation JSONL bytes; JSON.stringify(record) plus \\n",
+                    "sha256": "95779f44e0df1930af21001c3a26166ee520839c3d5d30441c22f0e9f32d49c5"
+                },
+                "sessionCount": 1,
+                "specificationHash": "a995b4711f5bc7b3549d7439e4753ba3b0537f16c48f3721980a404c1f7f607c",
+                "turnCount": 1
+            },
+            {
+                "category": "negative",
+                "cloudProjection": {
+                    "bytes": 524,
+                    "containsOutputMarker": false,
+                    "count": 2,
+                    "representation": "generator-local expected cloud projection JSONL; command output events omitted",
+                    "sha256": "fb3ee9c18735c2c02e7b224a37141fc51151d3e011bbb1188997bda6f00c567f"
+                },
+                "description": "Same cursor with different payload; consumers should reject conflict.",
+                "eventCount": 2,
+                "exactJsonl": {
+                    "bytes": 524,
+                    "count": 2,
+                    "representation": "exact materialized event JSONL bytes; JSON.stringify(record) plus \\n",
+                    "sha256": "fb3ee9c18735c2c02e7b224a37141fc51151d3e011bbb1188997bda6f00c567f"
+                },
+                "expectations": {
+                    "expectedFailure": "conflicting_duplicate_cursor",
+                    "replayable": false
+                },
+                "files": {
+                    "events": "negative-conflicting-duplicate.events.jsonl",
+                    "expected": "negative-conflicting-duplicate.expected.json",
+                    "operations": "negative-conflicting-duplicate.operations.jsonl"
+                },
+                "logicalCanonical": {
+                    "bytes": 524,
+                    "count": 2,
+                    "representation": "logical canonical event JSON; sorted keys; one trailing newline per record",
+                    "sha256": "9b72b12bdf109ba654ba67f9e166063b50dddc2cde8424f89ebee8b942790b46"
+                },
+                "name": "negative-conflicting-duplicate",
+                "operationCount": 1,
+                "operationsJsonl": {
+                    "bytes": 155,
+                    "count": 1,
+                    "representation": "exact materialized operation JSONL bytes; JSON.stringify(record) plus \\n",
+                    "sha256": "5f608c91e5946d2670f0ba8754d8d49d239a1ae0faa2908f2621d95855870fcb"
+                },
+                "sessionCount": 1,
+                "specificationHash": "00c8ca7bdda5cabdd3cec94ad3221dc4c8ebcfe5984347d85360bee2defad8d0",
+                "turnCount": 1
+            },
+            {
+                "category": "negative",
+                "cloudProjection": {
+                    "bytes": 254,
+                    "containsOutputMarker": false,
+                    "count": 1,
+                    "representation": "generator-local expected cloud projection JSONL; command output events omitted",
+                    "sha256": "1ace1ef66cacd0284fddeaa576b31678ffe744a0efdcead8c9639b130bbf065d"
+                },
+                "description": "Page response is for stale session generation and stale selection epoch.",
+                "eventCount": 1,
+                "exactJsonl": {
+                    "bytes": 254,
+                    "count": 1,
+                    "representation": "exact materialized event JSONL bytes; JSON.stringify(record) plus \\n",
+                    "sha256": "1ace1ef66cacd0284fddeaa576b31678ffe744a0efdcead8c9639b130bbf065d"
+                },
+                "expectations": {
+                    "expectedFailure": "stale_generation_response",
+                    "replayable": false
+                },
+                "files": {
+                    "events": "negative-stale-generation-response.events.jsonl",
+                    "expected": "negative-stale-generation-response.expected.json",
+                    "operations": "negative-stale-generation-response.operations.jsonl"
+                },
+                "logicalCanonical": {
+                    "bytes": 254,
+                    "count": 1,
+                    "representation": "logical canonical event JSON; sorted keys; one trailing newline per record",
+                    "sha256": "341a6fde0b0e2468387a2d3b03af2ac2b1bf721cca4da358de479e1e20c6e198"
+                },
+                "name": "negative-stale-generation-response",
+                "operationCount": 2,
+                "operationsJsonl": {
+                    "bytes": 385,
+                    "count": 2,
+                    "representation": "exact materialized operation JSONL bytes; JSON.stringify(record) plus \\n",
+                    "sha256": "0c855639593298b3bd73889e298bbe6a39b3f154d27e2a83d00391082f58f82f"
+                },
+                "sessionCount": 1,
+                "specificationHash": "46e77f16b8af575a7b5b04526dba14628cbf63f5b46061ea69ac4dc8f210d329",
+                "turnCount": 1
+            }
+        ],
+        "scope": "workload fixtures only; not a canonical wire contract",
+        "seed": "ketplus-transcript-refactor-wave1",
+        "version": 3
+    },
+    "nativeViewportFrameLayoutWebView": "not_measured",
+    "percentiles": "not_estimated",
+    "platform": "macOS Tahoe (26.2)",
+    "qt": "6.11.1",
+    "rawMeasurements": [
+        {
+            "acceptedWorkloadEvents": 1000,
+            "appendElapsedNs": 218327375,
+            "compactReplayAndProjectionElapsedNs": 7191000,
+            "compactReplayEvents": 1000,
+            "compactReplaySerializedArrayBytes": 274139,
+            "hasMoreBefore": true,
+            "inputEvents": 1000,
+            "mappedPayloadBytes": 115460,
+            "newestPageElapsedNs": 361542,
+            "newestPageEvents": 6,
+            "newestPageSerializedBytes": 1652,
+            "projectedPayloadBytes": 115460,
+            "projectionAndSerializationElapsedNs": 1328500,
+            "rejectedWorkloadEvents": 0,
+            "reopenElapsedNs": 17174666,
+            "sample": 0,
+            "scenario": "items-1k",
+            "snapshotCursor": 1000,
+            "truncated": false
+        },
+        {
+            "acceptedWorkloadEvents": 1000,
+            "appendElapsedNs": 192053000,
+            "compactReplayAndProjectionElapsedNs": 7374750,
+            "compactReplayEvents": 1000,
+            "compactReplaySerializedArrayBytes": 274139,
+            "hasMoreBefore": true,
+            "inputEvents": 1000,
+            "mappedPayloadBytes": 115460,
+            "newestPageElapsedNs": 280625,
+            "newestPageEvents": 6,
+            "newestPageSerializedBytes": 1652,
+            "projectedPayloadBytes": 115460,
+            "projectionAndSerializationElapsedNs": 1380459,
+            "rejectedWorkloadEvents": 0,
+            "reopenElapsedNs": 15953750,
+            "sample": 1,
+            "scenario": "items-1k",
+            "snapshotCursor": 1000,
+            "truncated": false
+        },
+        {
+            "acceptedWorkloadEvents": 1000,
+            "appendElapsedNs": 165594875,
+            "compactReplayAndProjectionElapsedNs": 7623125,
+            "compactReplayEvents": 1000,
+            "compactReplaySerializedArrayBytes": 274139,
+            "hasMoreBefore": true,
+            "inputEvents": 1000,
+            "mappedPayloadBytes": 115460,
+            "newestPageElapsedNs": 342583,
+            "newestPageEvents": 6,
+            "newestPageSerializedBytes": 1652,
+            "projectedPayloadBytes": 115460,
+            "projectionAndSerializationElapsedNs": 1403167,
+            "rejectedWorkloadEvents": 0,
+            "reopenElapsedNs": 16442125,
+            "sample": 2,
+            "scenario": "items-1k",
+            "snapshotCursor": 1000,
+            "truncated": false
+        },
+        {
+            "acceptedWorkloadEvents": 10000,
+            "appendElapsedNs": 1620010541,
+            "compactReplayAndProjectionElapsedNs": 73794042,
+            "compactReplayEvents": 10000,
+            "compactReplaySerializedArrayBytes": 2786165,
+            "hasMoreBefore": true,
+            "inputEvents": 10000,
+            "mappedPayloadBytes": 1179465,
+            "newestPageElapsedNs": 2989750,
+            "newestPageEvents": 6,
+            "newestPageSerializedBytes": 1679,
+            "projectedPayloadBytes": 1179465,
+            "projectionAndSerializationElapsedNs": 13676622,
+            "rejectedWorkloadEvents": 0,
+            "reopenElapsedNs": 149032125,
+            "sample": 0,
+            "scenario": "items-10k",
+            "snapshotCursor": 10000,
+            "truncated": false
+        },
+        {
+            "acceptedWorkloadEvents": 10000,
+            "appendElapsedNs": 1527256958,
+            "compactReplayAndProjectionElapsedNs": 69731750,
+            "compactReplayEvents": 10000,
+            "compactReplaySerializedArrayBytes": 2786165,
+            "hasMoreBefore": true,
+            "inputEvents": 10000,
+            "mappedPayloadBytes": 1179465,
+            "newestPageElapsedNs": 3268416,
+            "newestPageEvents": 6,
+            "newestPageSerializedBytes": 1679,
+            "projectedPayloadBytes": 1179465,
+            "projectionAndSerializationElapsedNs": 13527706,
+            "rejectedWorkloadEvents": 0,
+            "reopenElapsedNs": 150479500,
+            "sample": 1,
+            "scenario": "items-10k",
+            "snapshotCursor": 10000,
+            "truncated": false
+        },
+        {
+            "acceptedWorkloadEvents": 10000,
+            "appendElapsedNs": 1590886958,
+            "compactReplayAndProjectionElapsedNs": 71294583,
+            "compactReplayEvents": 10000,
+            "compactReplaySerializedArrayBytes": 2786165,
+            "hasMoreBefore": true,
+            "inputEvents": 10000,
+            "mappedPayloadBytes": 1179465,
+            "newestPageElapsedNs": 3122125,
+            "newestPageEvents": 6,
+            "newestPageSerializedBytes": 1679,
+            "projectedPayloadBytes": 1179465,
+            "projectionAndSerializationElapsedNs": 13761041,
+            "rejectedWorkloadEvents": 0,
+            "reopenElapsedNs": 154430292,
+            "sample": 2,
+            "scenario": "items-10k",
+            "snapshotCursor": 10000,
+            "truncated": false
+        },
+        {
+            "acceptedWorkloadEvents": 513,
+            "appendElapsedNs": 109738750,
+            "compactReplayAndProjectionElapsedNs": 3321208,
+            "compactReplayEvents": 514,
+            "compactReplaySerializedArrayBytes": 120660,
+            "hasMoreBefore": false,
+            "inputEvents": 514,
+            "mappedPayloadBytes": 17072394,
+            "newestPageElapsedNs": 1864166,
+            "newestPageEvents": 500,
+            "newestPageSerializedBytes": 117369,
+            "projectedPayloadBytes": 39046,
+            "projectionAndSerializationElapsedNs": 493792,
+            "rejectedWorkloadEvents": 1,
+            "reopenElapsedNs": 10683209,
+            "sample": 0,
+            "scenario": "giant-turn",
+            "snapshotCursor": 514,
+            "truncated": true
+        },
+        {
+            "acceptedWorkloadEvents": 513,
+            "appendElapsedNs": 106099125,
+            "compactReplayAndProjectionElapsedNs": 3164250,
+            "compactReplayEvents": 514,
+            "compactReplaySerializedArrayBytes": 120660,
+            "hasMoreBefore": false,
+            "inputEvents": 514,
+            "mappedPayloadBytes": 17072394,
+            "newestPageElapsedNs": 1843917,
+            "newestPageEvents": 500,
+            "newestPageSerializedBytes": 117369,
+            "projectedPayloadBytes": 39046,
+            "projectionAndSerializationElapsedNs": 441875,
+            "rejectedWorkloadEvents": 1,
+            "reopenElapsedNs": 11645875,
+            "sample": 1,
+            "scenario": "giant-turn",
+            "snapshotCursor": 514,
+            "truncated": true
+        },
+        {
+            "acceptedWorkloadEvents": 513,
+            "appendElapsedNs": 131421625,
+            "compactReplayAndProjectionElapsedNs": 3029125,
+            "compactReplayEvents": 514,
+            "compactReplaySerializedArrayBytes": 120660,
+            "hasMoreBefore": false,
+            "inputEvents": 514,
+            "mappedPayloadBytes": 17072394,
+            "newestPageElapsedNs": 1876542,
+            "newestPageEvents": 500,
+            "newestPageSerializedBytes": 117369,
+            "projectedPayloadBytes": 39046,
+            "projectionAndSerializationElapsedNs": 424959,
+            "rejectedWorkloadEvents": 1,
+            "reopenElapsedNs": 10385292,
+            "sample": 2,
+            "scenario": "giant-turn",
+            "snapshotCursor": 514,
+            "truncated": true
+        }
+    ],
+    "rss": "not_measured",
+    "samplesPerScenario": 3
+}

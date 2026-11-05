@@ -1,0 +1,41 @@
+/* Product-owned composition; existing Két semantic and spacing tokens. */
+.model-context-dialog { display: flex; flex-direction: column; overflow: hidden; }
+.model-context-dialog > header, .model-context-dialog > footer { flex: none; }
+.model-context-dialog .modal-body { overflow-y: auto; min-height: 0; }
+.model-context-dialog .search-field { display: flex; align-items: center; gap: var(--kv-space-2); padding: 0 var(--kv-space-3); }
+.model-context-dialog .search-field input { min-width: 0; flex: 1; border: 0; background: transparent; padding-inline: 0; outline: none; }
+.model-context-dialog .search-field input:focus-visible { box-shadow: none; }
+.model-context-dialog .search-field:focus-within { border-color: var(--kv-focus-border); box-shadow: var(--kv-focus-ring); }
+.compact-control { margin-top: var(--kv-space-6); padding-top: var(--kv-space-5); border-top: 1px solid var(--kv-panel-border); }
+.compact-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--kv-space-2); justify-content: space-between; }
+.compact-heading h3 { font-size: var(--kp-text-md); font-weight: 600; }
+.model-capacity { color: var(--kv-text-muted); font-size: var(--kp-text-sm); }
+.compact-description { font-size: var(--kp-text-sm); line-height: 1.5; color: var(--kv-text-secondary); margin: var(--kv-space-2) 0 var(--kv-space-3); }
+.compact-presets { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--kv-space-2); padding: 0; border: 0; margin: 0; min-width: 0; }
+.compact-preset { position: relative; display: flex; min-width: 0; }
+.compact-preset input { position: absolute; inset: 0; appearance: none; opacity: 1; min-height: 0; width: 100%; height: 100%; padding: 0; margin: 0; background: transparent; border: 0; outline: none; }
+.compact-preset span { flex: 1; text-align: center; border: 1px solid var(--kv-border-default); background: var(--kv-surface-raised); border-radius: var(--kv-radius-sm); padding: var(--kv-space-2); font-size: var(--kp-text-md); cursor: pointer; font-variant-numeric: tabular-nums; }
+.compact-preset:hover span { background: var(--kv-surface-hover); }
+.compact-preset input:checked + span { border-color: var(--kv-accent); color: var(--kv-text-main); background: var(--kv-accent-subtle); font-weight: 600; }
+.compact-preset input:focus-visible + span { outline: 2px solid var(--kv-focus-border); outline-offset: 3px; }
+.compact-presets:disabled { opacity: .55; }
+.compact-presets:disabled span { cursor: not-allowed; }
+.compact-custom { margin-top: var(--kv-space-3); }
+.compact-custom > label { font-size: var(--kp-text-sm); display: block; margin-bottom: var(--kv-space-2); }
+.compact-input { display: flex; align-items: center; gap: var(--kv-space-3); }
+.compact-input input { flex: 1; min-width: 0; font-variant-numeric: tabular-nums; }
+.compact-input > span { font-size: var(--kp-text-sm); color: var(--kv-text-muted); }
+.compact-error, .compact-feedback { font-size: var(--kp-text-sm); color: var(--kv-danger); line-height: 1.5; margin-top: var(--kv-space-2); }
+.compact-notice { color: var(--kv-text-secondary); background: var(--kv-surface-raised); border: 1px solid var(--kv-border-default); border-radius: var(--kv-radius-sm); padding: var(--kv-space-3); font-size: var(--kp-text-sm); margin-top: var(--kv-space-3); }
+.compact-scope { color: var(--kv-text-muted); font-size: var(--kp-text-sm); margin-top: var(--kv-space-3); }
+.compact-control [hidden] { display: none; }
+.model-catalog-status { padding: var(--kv-space-5) 0; color: var(--kv-text-muted); font-size: var(--kp-text-md); }
+.model-context-dialog .model-option > span { min-width: 0; }
+.model-context-dialog .model-option b, .model-context-dialog .model-option small { overflow-wrap: anywhere; }
+@media (max-width: 420px) {
+    .compact-presets { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .model-context-dialog .provider-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--kv-space-1); }
+    .model-context-dialog .provider-tabs .btn { padding-inline: var(--kv-space-1); font-size: var(--kp-text-sm); min-width: 0; }
+}
+
+@media (min-width: 421px) { .compact-presets { grid-template-columns: repeat(auto-fit, minmax(min(100%, 5em), 1fr)); } }

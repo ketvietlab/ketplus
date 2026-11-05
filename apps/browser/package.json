@@ -1,0 +1,29 @@
+{
+  "name": "@ketplus/browser-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone canonical browser and visual comparison prototype",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "compare": "node src/compare-urls.mjs",
+    "start": "node src/cli.mjs",
+    "start:mcp": "node src/mcp.mjs",
+    "test": "node --test",
+    "install:browser": "playwright install chromium",
+    "package:runtime": "node scripts/package-runtime.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "pixelmatch": "7.2.0",
+    "playwright-core": "1.63.0",
+    "pngjs": "7.0.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "playwright": "1.63.0"
+  }
+}

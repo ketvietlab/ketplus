@@ -1,0 +1,359 @@
+#include "storage/McpMediaStore.h"
+
+#include <QCryptographicHash>
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonArray>
+#include <QSaveFile>
+#include <QSet>
+#include <QSize>
+#include <QtEndian>
+
+#include <utility>
+
+namespace ketplus::daemon {
+namespace {
+
+constexpr QFileDevice::Permissions ownerDirectory =
+    QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner;
+constexpr QFileDevice::Permissions ownerFile = QFileDevice::ReadOwner | QFileDevice::WriteOwner;
+
+QString extensionFor(const QString& mimeType, const QByteArray& bytes) {
+    if (mimeType == QStringLiteral("image/png") && bytes.startsWith("\x89PNG\r\n\x1a\n"))
+        return QStringLiteral("png");
+    if ((mimeType == QStringLiteral("image/jpeg") || mimeType == QStringLiteral("image/jpg")) &&
+        bytes.startsWith("\xff\xd8\xff"))
+        return QStringLiteral("jpg");
+    return {};
+}
+
+quint32 bigEndian32(const QByteArray& bytes, const qsizetype offset) {
+    return qFromBigEndian<quint32>(bytes.constData() + offset);
+}
+
+quint16 bigEndian16(const QByteArray& bytes, const qsizetype offset) {
+    return qFromBigEndian<quint16>(bytes.constData() + offset);
+}
+
+// Header-only dimension parsing; no QtGui in the daemon.
+QSize imageSize(const QString& extension, const QByteArray& bytes) {
+    if (extension == QStringLiteral("png")) {
+        if (bytes.size() >= 24 && bytes.mid(12, 4) == "IHDR")
+            return {static_cast<int>(bigEndian32(bytes, 16)),
+                    static_cast<int>(bigEndian32(bytes, 20))};
+        return {};
+    }
+    qsizetype offset = 2;
+    while (offset + 9 < bytes.size()) {
+        if (static_cast<uchar>(bytes.at(offset)) != 0xFF)
+            return {};
+        const uchar marker = static_cast<uchar>(bytes.at(offset + 1));
+        if (marker == 0xFF) {
+            ++offset;
+            continue;
+        }
+        if (marker == 0x01 || (marker >= 0xD0 && marker <= 0xD8)) {
+            offset += 2;
+            continue;
+        }
+        const bool startOfFrame =
+            marker >= 0xC0 && marker <= 0xCF && marker != 0xC4 && marker != 0xC8 && marker != 0xCC;
+        if (startOfFrame)
+            return {bigEndian16(bytes, offset + 7), bigEndian16(bytes, offset + 5)};
+        offset += 2 + bigEndian16(bytes, offset + 2);
+    }
+    return {};
+}
+
+QJsonObject omitted(const QString& type, const QString& reason) {
+    return {{QStringLiteral("type"), type},
+            {QStringLiteral("omitted"), true},
+            {QStringLiteral("reason"), reason}};
+}
+
+bool ensureOwnerDirectory(const QString& path) {
+    if (!QDir().mkpath(path))
+        return false;
+    return QFile::setPermissions(path, ownerDirectory);
+}
+
+QSet<QString> readRefs(const QString& path) {
+    QSet<QString> hashes;
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return hashes;
+    for (const QByteArray& line : file.readAll().split('\n')) {
+        if (line.size() == 64)
+            hashes.insert(QString::fromLatin1(line));
+    }
+    return hashes;
+}
+
+} // namespace
+
+McpMediaStore::McpMediaStore(QString directory, const qint64 capacityBytes)
+    : directory_(std::move(directory)), capacityBytes_(capacityBytes) {}
+
+QString McpMediaStore::directoryForJournal(const QString& journalPath) {
+    return QFileInfo(journalPath).absoluteDir().filePath(QStringLiteral("media"));
+}
+
+QString McpMediaStore::refsPath(const QString& sessionId) const {
+    return QDir(directory_)
+        .filePath(
+            QStringLiteral("refs/") +
+            QString::fromLatin1(
+                QCryptographicHash::hash(sessionId.toUtf8(), QCryptographicHash::Sha256).toHex()) +
+            QStringLiteral(".refs"));
+}
+
+QJsonObject McpMediaStore::externalizeItem(const QJsonObject& item, const QString& sessionId,
+                                           const QString& worktree) {
+    QJsonObject result = item.value(QStringLiteral("result")).toObject();
+    const QString itemType = item.value(QStringLiteral("type")).toString();
+    if (itemType == QStringLiteral("imageView") || itemType == QStringLiteral("imageGeneration")) {
+        QString path =
+            item.value(itemType == QStringLiteral("imageView") ? QStringLiteral("path")
+                                                               : QStringLiteral("savedPath"))
+                .toString();
+        if (!path.isEmpty() && !QDir::isAbsolutePath(path) && !worktree.isEmpty())
+            path = QDir(worktree).absoluteFilePath(path);
+        QJsonObject block = omitted(QStringLiteral("image"), QStringLiteral("source_unavailable"));
+        const QFileInfo info(path);
+        QFile source(path);
+        // Only regular local files, bounded before and during the read. The provider already
+        // viewed/generated this file; remote readers still need the journal's session grant.
+        if (QDir::isAbsolutePath(path) && info.isFile()) {
+            if (info.size() > maximumImageBytes) {
+                block = omitted(QStringLiteral("image"), QStringLiteral("too_large"));
+            } else if (source.open(QIODevice::ReadOnly)) {
+                const QByteArray bytes = source.read(maximumImageBytes + 1);
+                const QString mime = bytes.startsWith("\x89PNG\r\n\x1a\n")
+                                         ? QStringLiteral("image/png")
+                                         : QStringLiteral("image/jpeg");
+                const QJsonObject stored = storeImage(bytes, mime, sessionId);
+                block = stored.isEmpty()
+                            ? omitted(QStringLiteral("image"), QStringLiteral("invalid_image"))
+                            : stored;
+            }
+        }
+        result.insert(QStringLiteral("content"), QJsonArray{block});
+        QJsonObject externalized = item;
+        externalized.insert(QStringLiteral("result"), result);
+        return externalized;
+    }
+    const QJsonArray content = result.value(QStringLiteral("content")).toArray();
+    bool changed = false;
+    int stored = 0;
+    QStringList hashes;
+    QJsonArray blocks;
+    for (const QJsonValue& value : content) {
+        const QJsonObject block = value.toObject();
+        const QString type = block.value(QStringLiteral("type")).toString();
+        // Embedded resources ({type:"resource", resource:{uri, mimeType, blob}}) carry base64
+        // too; image blobs are stored like image blocks, every other blob is dropped.
+        const QJsonObject resource = block.value(QStringLiteral("resource")).toObject();
+        const bool resourceBlob =
+            type == QStringLiteral("resource") && resource.value(QStringLiteral("blob")).isString();
+        if (type != QStringLiteral("image") && type != QStringLiteral("audio") && !resourceBlob) {
+            blocks.append(value);
+            continue;
+        }
+        changed = true;
+        const QString mimeType = resourceBlob
+                                     ? resource.value(QStringLiteral("mimeType")).toString()
+                                     : block.value(QStringLiteral("mimeType")).toString();
+        if (type == QStringLiteral("audio") ||
+            (resourceBlob && !mimeType.startsWith(QStringLiteral("image/")))) {
+            blocks.append(omitted(type, QStringLiteral("unsupported_media")));
+            continue;
+        }
+        if (stored >= maximumImagesPerCall) {
+            blocks.append(omitted(type, QStringLiteral("too_many_images")));
+            continue;
+        }
+        const QString data = resourceBlob ? resource.value(QStringLiteral("blob")).toString()
+                                          : block.value(QStringLiteral("data")).toString();
+        if (data.size() > (maximumImageBytes / 3 + 1) * 4) {
+            blocks.append(omitted(type, QStringLiteral("too_large")));
+            continue;
+        }
+        const auto decoded = QByteArray::fromBase64Encoding(
+            data.toLatin1(), QByteArray::Base64Encoding | QByteArray::AbortOnBase64DecodingErrors);
+        if (!decoded || decoded.decoded.isEmpty() || decoded.decoded.size() > maximumImageBytes) {
+            blocks.append(omitted(type, QStringLiteral("invalid")));
+            continue;
+        }
+        const QByteArray& bytes = decoded.decoded;
+        const QString extension = extensionFor(mimeType, bytes);
+        if (extension.isEmpty()) {
+            blocks.append(omitted(type, QStringLiteral("unsupported_media")));
+            continue;
+        }
+        const QJsonObject reference = write(bytes, extension);
+        if (reference.isEmpty()) {
+            blocks.append(omitted(type, QStringLiteral("storage_unavailable")));
+            continue;
+        }
+        ++stored;
+        hashes.append(reference.value(QStringLiteral("media_ref")).toString().mid(7));
+        blocks.append(reference);
+    }
+    if (!changed)
+        return item;
+    result.insert(QStringLiteral("content"), blocks);
+    QJsonObject externalized = item;
+    externalized.insert(QStringLiteral("result"), result);
+    reference(sessionId, hashes);
+    return externalized;
+}
+
+void McpMediaStore::copySessionReferences(const QString& fromSessionId,
+                                          const QString& toSessionId) {
+    const QString source = refsPath(fromSessionId);
+    const QString target = refsPath(toSessionId);
+    if (!QFileInfo::exists(source) || !ensureOwnerDirectory(QFileInfo(target).absolutePath()))
+        return;
+    QFile::remove(target);
+    if (QFile::copy(source, target))
+        QFile::setPermissions(target, ownerFile);
+}
+
+QJsonObject McpMediaStore::storeImage(const QByteArray& bytes, const QString& mimeType,
+                                      const QString& sessionId) {
+    if (bytes.isEmpty() || bytes.size() > maximumImageBytes)
+        return {};
+    const QString extension = extensionFor(mimeType, bytes);
+    if (extension.isEmpty())
+        return {};
+    const QJsonObject stored = write(bytes, extension);
+    if (!stored.isEmpty())
+        reference(sessionId, {stored.value(QStringLiteral("media_ref")).toString().mid(7)});
+    return stored;
+}
+
+QJsonObject McpMediaStore::write(const QByteArray& bytes, const QString& extension) const {
+    const QString hex =
+        QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
+    const QString path = QDir(directory_).filePath(hex + QLatin1Char('.') + extension);
+    bool ok = ensureOwnerDirectory(directory_);
+    if (ok && QFileInfo::exists(path)) {
+        QFile existing(path); // dedupe hit: refresh the LRU timestamp
+        if (existing.open(QIODevice::ReadOnly))
+            existing.setFileTime(QDateTime::currentDateTime(), QFileDevice::FileModificationTime);
+    } else if (ok) {
+        QSaveFile file(path);
+        ok = file.open(QIODevice::WriteOnly) && file.setPermissions(ownerFile) &&
+             file.write(bytes) == bytes.size() && file.commit();
+    }
+    if (!ok)
+        return {};
+    QJsonObject reference{{QStringLiteral("type"), QStringLiteral("image")},
+                          {QStringLiteral("media_ref"), QStringLiteral("sha256:") + hex},
+                          {QStringLiteral("mime"), extension == QStringLiteral("png")
+                                                       ? QStringLiteral("image/png")
+                                                       : QStringLiteral("image/jpeg")},
+                          {QStringLiteral("bytes"), static_cast<qint64>(bytes.size())}};
+    const QSize size = imageSize(extension, bytes);
+    if (size.width() > 0 && size.height() > 0) {
+        reference.insert(QStringLiteral("width"), size.width());
+        reference.insert(QStringLiteral("height"), size.height());
+    }
+    return reference;
+}
+
+void McpMediaStore::reference(const QString& sessionId, const QStringList& hashes) {
+    if (hashes.isEmpty())
+        return;
+    const QString refs = refsPath(sessionId);
+    if (ensureOwnerDirectory(QFileInfo(refs).absolutePath())) {
+        QFile file(refs);
+        if (file.open(QIODevice::Append)) {
+            file.setPermissions(ownerFile);
+            file.write(hashes.join(QLatin1Char('\n')).toLatin1() + '\n');
+        }
+    }
+    enforceCapacity();
+}
+
+void McpMediaStore::releaseSession(const QString& sessionId) {
+    const QString refs = refsPath(sessionId);
+    const QSet<QString> released = readRefs(refs);
+    QFile::remove(refs);
+    if (released.isEmpty())
+        return;
+    QSet<QString> retained;
+    const QDir refsDirectory(QFileInfo(refs).absolutePath());
+    for (const QString& name : refsDirectory.entryList({QStringLiteral("*.refs")}, QDir::Files))
+        retained.unite(readRefs(refsDirectory.filePath(name)));
+    for (const QString& hash : released) {
+        if (retained.contains(hash))
+            continue;
+        QFile::remove(QDir(directory_).filePath(hash + QStringLiteral(".png")));
+        QFile::remove(QDir(directory_).filePath(hash + QStringLiteral(".jpg")));
+    }
+}
+
+void McpMediaStore::retainSessions(const QSet<QString>& sessionIds) {
+    const QDir refsDirectory(QDir(directory_).filePath(QStringLiteral("refs")));
+    if (!refsDirectory.exists())
+        return;
+    QSet<QString> live;
+    for (const QString& sessionId : sessionIds)
+        live.insert(QFileInfo(refsPath(sessionId)).fileName());
+    QSet<QString> released;
+    for (const QString& name : refsDirectory.entryList({QStringLiteral("*.refs")}, QDir::Files)) {
+        if (live.contains(name))
+            continue;
+        released.unite(readRefs(refsDirectory.filePath(name)));
+        QFile::remove(refsDirectory.filePath(name));
+    }
+    if (released.isEmpty())
+        return;
+    QSet<QString> retained;
+    for (const QString& name : refsDirectory.entryList({QStringLiteral("*.refs")}, QDir::Files))
+        retained.unite(readRefs(refsDirectory.filePath(name)));
+    for (const QString& hash : std::as_const(released)) {
+        if (retained.contains(hash))
+            continue;
+        QFile::remove(QDir(directory_).filePath(hash + QStringLiteral(".png")));
+        QFile::remove(QDir(directory_).filePath(hash + QStringLiteral(".jpg")));
+    }
+}
+
+void McpMediaStore::enforceCapacity() {
+    const QFileInfoList media =
+        QDir(directory_)
+            .entryInfoList({QStringLiteral("*.png"), QStringLiteral("*.jpg")}, QDir::Files,
+                           QDir::Time | QDir::Reversed);
+    qint64 total = 0;
+    for (const QFileInfo& file : media)
+        total += file.size();
+    if (total <= capacityBytes_)
+        return;
+    QSet<QString> referenced;
+    const QDir refsDirectory(QDir(directory_).filePath(QStringLiteral("refs")));
+    for (const QString& name : refsDirectory.entryList({QStringLiteral("*.refs")}, QDir::Files))
+        referenced.unite(readRefs(refsDirectory.filePath(name)));
+    // Unreferenced media goes first (oldest first); media a live session still shows is evicted
+    // only when that alone cannot bring the store under its cap.
+    for (const bool evictReferenced : {false, true}) {
+        for (const QFileInfo& file : media) {
+            if (total <= capacityBytes_)
+                return;
+            if (referenced.contains(file.baseName()) != evictReferenced ||
+                !QFileInfo::exists(file.absoluteFilePath()))
+                continue;
+            if (evictReferenced)
+                qWarning("MCP media store over capacity; evicting media still referenced by a "
+                         "session: %s",
+                         qUtf8Printable(file.fileName()));
+            if (QFile::remove(file.absoluteFilePath()))
+                total -= file.size();
+        }
+    }
+}
+
+} // namespace ketplus::daemon

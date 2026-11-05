@@ -1,0 +1,53 @@
+name: webrtc-spike
+
+# The WebRTC transport spike (ADR 0024) builds on the daemon's platforms and carries its data
+# channels directly and through a loopback TURN server there. The product build never includes
+# it, so it runs only when the spike changes.
+on:
+  pull_request:
+    paths:
+      - "benchmarks/webrtc-datachannel/**"
+      - ".github/workflows/webrtc-spike.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  spike:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    env:
+      KETPLUS_SPIKE_TURN_URL: turn:spike:spike@127.0.0.1:3479
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies and coturn
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev coturn
+          else
+            brew install ninja coturn
+            echo "OPENSSL_ROOT_DIR=$(brew --prefix openssl@3)" >> "$GITHUB_ENV"
+          fi
+      # Loopback peers need the CLI off: coturn 4.6 refuses them with a CLI that has no password.
+      - name: Start a loopback TURN server
+        run: |
+          turnserver -n --listening-ip=127.0.0.1 --relay-ip=127.0.0.1 --listening-port=3479 \
+            --min-port=49160 --max-port=49260 --lt-cred-mech --user=spike:spike --realm=ketplus.test \
+            --no-tls --allow-loopback-peers --no-cli --log-file=stdout --simple-log > "$RUNNER_TEMP/turn.log" 2>&1 &
+          for _ in $(seq 1 20); do nc -z 127.0.0.1 3479 && exit 0; sleep 0.5; done
+          tail -n 40 "$RUNNER_TEMP/turn.log"
+          exit 1
+      - name: Build
+        run: |
+          cmake -S benchmarks/webrtc-datachannel -B build/webrtc-spike -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/webrtc-spike
+      - name: Direct, TURN over UDP, and TURN over TCP refused by libjuice
+        run: ctest --test-dir build/webrtc-spike --output-on-failure
+      - name: TURN server log
+        if: failure()
+        run: tail -n 100 "$RUNNER_TEMP/turn.log"

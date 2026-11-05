@@ -1,0 +1,72 @@
+{
+    "provider": "codex",
+    "note": "Codex app-server methods and fields the daemon sends or reads (ADR 0015 step 3). Keep in sync with apps/daemon/src/providers/CodexAdapter.cpp, apps/daemon/src/runtime/SessionHost*.cpp and modules/browser/src/CodexServerRequests.h; the contract test fails when code uses a method this file does not declare.",
+    "requests": {
+        "initialize": {
+            "params": ["capabilities.experimentalApi", "clientInfo.name", "clientInfo.title", "clientInfo.version"]
+        },
+        "thread/start": {
+            "params": ["approvalPolicy", "approvalsReviewer", "config", "cwd", "ephemeral", "model", "sandbox"],
+            "response": ["thread.id"]
+        },
+        "thread/resume": {
+            "params": ["approvalPolicy", "approvalsReviewer", "config", "cwd", "excludeTurns", "sandbox", "threadId"]
+        },
+        "thread/fork": {
+            "params": ["config", "cwd", "ephemeral", "excludeTurns", "threadId"],
+            "response": ["thread.id"]
+        },
+        "thread/delete": {
+            "params": ["threadId"]
+        },
+        "thread/read": {
+            "params": ["includeTurns", "threadId"],
+            "response": ["thread.name"]
+        },
+        "thread/name/set": {
+            "params": ["name", "threadId"]
+        },
+        "turn/start": {
+            "params": ["approvalPolicy", "cwd", "effort", "input", "model", "sandboxPolicy", "threadId"],
+            "response": ["turn.id"]
+        },
+        "turn/steer": {
+            "params": ["expectedTurnId", "input", "input[].text", "input[].type", "threadId"]
+        },
+        "turn/interrupt": {
+            "params": ["threadId", "turnId"]
+        },
+        "model/list": {
+            "params": ["cursor", "limit"],
+            "response": ["data"]
+        },
+        "account/rateLimits/read": {
+            "params": []
+        },
+        "mcpServer/tool/call": {
+            "params": ["arguments", "server", "threadId", "tool"],
+            "response": ["isError"]
+        }
+    },
+    "notifications": {
+        "account/updated": [],
+        "account/rateLimits/updated": ["rateLimits"],
+        "turn/started": ["threadId", "turn.id"],
+        "turn/completed": ["threadId", "turn.id", "turn.status"],
+        "item/started": ["item", "threadId", "turnId"],
+        "item/completed": ["item", "threadId", "turnId"],
+        "item/agentMessage/delta": ["delta", "itemId", "threadId"],
+        "item/commandExecution/outputDelta": ["delta", "itemId", "threadId"],
+        "thread/tokenUsage/updated": ["threadId", "tokenUsage"],
+        "thread/name/updated": ["threadId"],
+        "error": ["error"]
+    },
+    "server_requests": {
+        "item/commandExecution/requestApproval": ["itemId", "threadId", "turnId"],
+        "item/fileChange/requestApproval": ["itemId", "threadId", "turnId"],
+        "item/permissions/requestApproval": [],
+        "item/tool/call": [],
+        "item/tool/requestUserInput": ["questions", "threadId", "turnId"],
+        "mcpServer/elicitation/request": ["threadId"]
+    }
+}

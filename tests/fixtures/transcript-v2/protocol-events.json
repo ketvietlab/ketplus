@@ -1,0 +1,164 @@
+{
+    "version": 1,
+    "source":
+        "Sanitized protocol-shape corpus based on event kinds observed in the local daemon journal.",
+    "cases": [
+        {
+            "type": "session.created",
+            "payload": {
+                "worktree_path": "/workspace",
+                "adapter": "codex"
+            },
+            "expectedPolicy": "metadata"
+        },
+        {
+            "type": "session.renamed",
+            "payload": {
+                "title": "Transcript work",
+                "custom_title": true
+            },
+            "expectedPolicy": "metadata"
+        },
+        {
+            "type": "turn.queued",
+            "payload": {},
+            "expectedPolicy": "metadata"
+        },
+        {
+            "type": "turn.started",
+            "payload": {
+                "turn_id": "turn"
+            },
+            "expectedPolicy": "metadata"
+        },
+        {
+            "type": "turn.steered",
+            "payload": {},
+            "expectedPolicy": "metadata"
+        },
+        {
+            "type": "turn.completed",
+            "payload": {
+                "status": "completed"
+            },
+            "expectedPolicy": "metadata"
+        },
+        {
+            "type": "user.message",
+            "payload": {
+                "text": "Prompt"
+            },
+            "expectedPolicy": "normalize-item"
+        },
+        {
+            "type": "item.started",
+            "payload": {
+                "item": {
+                    "id": "command",
+                    "type": "commandExecution",
+                    "command": "pwd"
+                }
+            },
+            "expectedPolicy": "normalize-item"
+        },
+        {
+            "type": "item.completed",
+            "payload": {
+                "item": {
+                    "id": "command",
+                    "type": "commandExecution",
+                    "command": "pwd",
+                    "status": "completed"
+                }
+            },
+            "expectedPolicy": "normalize-item"
+        },
+        {
+            "type": "assistant.delta",
+            "payload": {
+                "item_id": "answer",
+                "delta": "Done"
+            },
+            "expectedPolicy": "merge-delta"
+        },
+        {
+            "type": "command.output_delta",
+            "payload": {
+                "item_id": "command",
+                "delta": "output"
+            },
+            "expectedPolicy": "merge-delta"
+        },
+        {
+            "type": "approval.requested",
+            "payload": {
+                "approval_id": "approval",
+                "item_id": "command",
+                "kind": "command",
+                "questions": []
+            },
+            "expectedPolicy": "approval"
+        },
+        {
+            "type": "approval.resolved",
+            "payload": {
+                "approval_id": "approval"
+            },
+            "expectedPolicy": "approval"
+        },
+        {
+            "type": "approval.expired",
+            "payload": {
+                "approval_id": "approval"
+            },
+            "expectedPolicy": "approval"
+        },
+        {
+            "type": "runtime.error",
+            "payload": {
+                "code": "runtime",
+                "message": "token=CORPUS_SECRET"
+            },
+            "expectedPolicy": "error"
+        },
+        {
+            "type": "provider.request_declined",
+            "payload": {
+                "method": "mcpServer/elicitation/request",
+                "reason": "unsupported_elicitation",
+                "server_name": "docs"
+            },
+            "expectedPolicy": "generic"
+        },
+        {
+            "type": "provider.runtime",
+            "payload": {
+                "provider": "codex",
+                "status": "newer",
+                "version": "9.0.0",
+                "message":
+                    "Codex CLI 9.0.0 is newer than the newest version KetPlus has been tested with (0.154.0)."
+            },
+            "expectedPolicy": "generic"
+        },
+        {
+            "type": "provider.protocol_error",
+            "payload": {
+                "provider": "codex",
+                "method": "item/completed",
+                "missing": [
+                    "item.id"
+                ]
+            },
+            "expectedPolicy": "generic"
+        },
+        {
+            "type": "future.protocol.event",
+            "payload": {
+                "password": "CORPUS_SECRET",
+                "value": "kept"
+            },
+            "expectedPolicy": "generic"
+        }
+    ]
+}

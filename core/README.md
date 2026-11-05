@@ -1,11 +1,13 @@
-# KetPlus CM
+# KétPlus editor core
 
 <p align="center">
-  <img src="assets/brand/ketplus-mark.png" alt="KetPlus CM logo" width="144">
+  <img src="assets/brand/ketplus-mark.png" alt="KétPlus logo" width="144">
 </p>
 
-KetPlus CM is the open-source, fast, lightweight, cross-platform editor at the
-core of KetPlus for Windows, macOS, and Linux.
+`core/` is the fast, lightweight, cross-platform editor shared by both editions
+(ADR 0029). Built alone it is **KétPlus**, the Lite edition and the default
+editor on Lampion; KétPlus Pro adds its own modules on top. It was released as
+KetPlus CM until version 0.3.6.
 
 The first milestone deliberately stays small: reliable file editing, tabs,
 UTF-8, syntax lexing, and a native desktop experience without a browser runtime.
@@ -39,10 +41,12 @@ export QT_ROOT="$(brew --prefix qt)"
 
 ## Build and test
 
+From the repository root:
+
 ```sh
-cmake --preset dev
-cmake --build --preset dev
-ctest --preset dev
+cmake --preset lite-dev
+cmake --build --preset lite-dev
+ctest --preset lite-dev
 ```
 
 All presets share downloaded sources through `.cache/fetchcontent`. CMake uses
@@ -52,10 +56,10 @@ All presets share downloaded sources through `.cache/fetchcontent`. CMake uses
 Run the development build:
 
 ```sh
-open "build/dev/KetPlus CM.app"   # macOS
-open "build/dev/KetPlus Terminal.app" # standalone terminal on macOS
-./build/dev/ketplus-cm             # Linux
-build\\dev\\KetPlusCM.exe        # Windows
+open "build/lite-dev/core/KetPlus CM.app"   # macOS
+open "build/lite-dev/core/KetPlus Terminal.app" # standalone terminal on macOS
+./build/lite-dev/core/ketplus-cm             # Linux
+build\\lite-dev\\core\\KetPlusCM.exe        # Windows
 ```
 
 ### Standalone terminal for macOS

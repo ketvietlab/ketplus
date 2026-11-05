@@ -1,0 +1,936 @@
+{
+  "version": 1,
+  "manifest": "../../ketplus-desktop-redesign.ketatlas/atlas.json",
+  "designRevision": "1f42596a9dadb6ee7f0d3cb59e73e402937f5d04",
+  "designMergeRevision": "1f42596a9dadb6ee7f0d3cb59e73e402937f5d04",
+  "manifestSha256": "ba172fd07fe2399eef4f6f7e703141618585c7b0a88f44f18d29c6b542ca65bd",
+  "totals": {
+    "screens": 10,
+    "flows": 10,
+    "states": 112,
+    "nodes": 119,
+    "edges": 158
+  },
+  "screens": [
+    {
+      "id": "workspace",
+      "tasks": [
+        "R00",
+        "R01",
+        "R02",
+        "R03",
+        "R04",
+        "R05",
+        "R06",
+        "R07",
+        "R08",
+        "R14"
+      ],
+      "states": [
+        {
+          "id": "workspace-001",
+          "url": "./screens/workspace.html",
+          "nodes": [
+            "agent-journey/done",
+            "archive-journey/conversation"
+          ]
+        },
+        {
+          "id": "workspace-002",
+          "url": "./screens/workspace.html?state=empty",
+          "nodes": [
+            "agent-journey/new"
+          ]
+        },
+        {
+          "id": "workspace-003",
+          "url": "./screens/workspace.html?state=running",
+          "nodes": [
+            "agent-journey/running",
+            "history-journey/following"
+          ]
+        },
+        {
+          "id": "workspace-004",
+          "url": "./screens/workspace.html?state=question",
+          "nodes": [
+            "agent-journey/question"
+          ]
+        },
+        {
+          "id": "workspace-005",
+          "url": "./screens/workspace.html?panel=file",
+          "nodes": [
+            "agent-journey/file"
+          ]
+        },
+        {
+          "id": "workspace-006",
+          "url": "./screens/workspace.html?panel=terminal",
+          "nodes": [
+            "agent-journey/terminal"
+          ]
+        },
+        {
+          "id": "workspace-007",
+          "url": "./screens/workspace.html?state=error&turn=running",
+          "nodes": [
+            "agent-journey/error"
+          ]
+        },
+        {
+          "id": "workspace-008",
+          "url": "./screens/workspace.html?state=stopped",
+          "nodes": [
+            "agent-journey/stopped"
+          ]
+        },
+        {
+          "id": "workspace-009",
+          "url": "./screens/workspace.html?state=empty&dialog=model",
+          "nodes": [
+            "agent-journey/model"
+          ]
+        },
+        {
+          "id": "workspace-010",
+          "url": "./screens/workspace.html?state=restore",
+          "nodes": [
+            "agent-journey/restore"
+          ]
+        },
+        {
+          "id": "workspace-011",
+          "url": "./screens/workspace.html?state=sending",
+          "nodes": [
+            "agent-journey/sending"
+          ]
+        },
+        {
+          "id": "workspace-012",
+          "url": "./screens/workspace.html?state=steering",
+          "nodes": [
+            "agent-journey/steering"
+          ]
+        },
+        {
+          "id": "workspace-013",
+          "url": "./screens/workspace.html?state=stopping",
+          "nodes": [
+            "agent-journey/stopping"
+          ]
+        },
+        {
+          "id": "workspace-014",
+          "url": "./screens/workspace.html?state=question&question=2",
+          "nodes": [
+            "agent-journey/question-more"
+          ]
+        },
+        {
+          "id": "workspace-015",
+          "url": "./screens/workspace.html?state=answer-submitting&question=2",
+          "nodes": [
+            "agent-journey/answer-submitting"
+          ]
+        },
+        {
+          "id": "workspace-016",
+          "url": "./screens/workspace.html?state=answer-error&question=2",
+          "nodes": [
+            "agent-journey/answer-error"
+          ]
+        },
+        {
+          "id": "workspace-017",
+          "url": "./screens/workspace.html?state=reconnecting&turn=running",
+          "nodes": [
+            "agent-journey/reconnecting"
+          ]
+        },
+        {
+          "id": "workspace-018",
+          "url": "./screens/workspace.html?state=missing&turn=running",
+          "nodes": [
+            "agent-journey/missing-active"
+          ]
+        },
+        {
+          "id": "workspace-019",
+          "url": "./screens/workspace.html?state=running&answer=resolved",
+          "nodes": [
+            "agent-journey/reply-resolved"
+          ]
+        },
+        {
+          "id": "workspace-020",
+          "url": "./screens/workspace.html?state=running&send=failed",
+          "nodes": [
+            "agent-journey/steer-error"
+          ]
+        },
+        {
+          "id": "workspace-021",
+          "url": "./screens/workspace.html?state=question&question=2&secret=1",
+          "nodes": [
+            "agent-journey/private-question"
+          ]
+        },
+        {
+          "id": "workspace-022",
+          "url": "./screens/workspace.html?state=question&request=expired",
+          "nodes": [
+            "agent-journey/question-expired"
+          ]
+        },
+        {
+          "id": "workspace-023",
+          "url": "./screens/workspace.html?state=empty&tree=feature-navigation",
+          "nodes": [
+            "worktree-journey/created"
+          ]
+        },
+        {
+          "id": "workspace-024",
+          "url": "./screens/workspace.html?tree=feature-onboarding",
+          "nodes": [
+            "worktree-journey/switch"
+          ]
+        },
+        {
+          "id": "workspace-025",
+          "url": "./screens/workspace.html?state=missing",
+          "nodes": [
+            "worktree-journey/missing"
+          ]
+        },
+        {
+          "id": "workspace-026",
+          "url": "./screens/workspace.html?theme=dark&saved=appearance",
+          "nodes": [
+            "appearance-journey/applied"
+          ]
+        },
+        {
+          "id": "workspace-027",
+          "url": "./screens/workspace.html?state=ready",
+          "nodes": [
+            "history-journey/latest"
+          ]
+        },
+        {
+          "id": "workspace-028",
+          "url": "./screens/workspace.html?history=loading",
+          "nodes": [
+            "history-journey/loading"
+          ]
+        },
+        {
+          "id": "workspace-029",
+          "url": "./screens/workspace.html?history=older",
+          "nodes": [
+            "history-journey/older"
+          ]
+        },
+        {
+          "id": "workspace-030",
+          "url": "./screens/workspace.html?history=page-error",
+          "nodes": [
+            "history-journey/page-error"
+          ]
+        },
+        {
+          "id": "workspace-031",
+          "url": "./screens/workspace.html?history=partial",
+          "nodes": [
+            "history-journey/partial"
+          ]
+        },
+        {
+          "id": "workspace-032",
+          "url": "./screens/workspace.html?history=new-content&state=running",
+          "nodes": [
+            "history-journey/new-content"
+          ]
+        },
+        {
+          "id": "workspace-033",
+          "url": "./screens/workspace.html?history=retention",
+          "nodes": [
+            "history-journey/retention"
+          ]
+        },
+        {
+          "id": "workspace-034",
+          "url": "./screens/workspace.html?history=rich-loading",
+          "nodes": [
+            "history-journey/rich-loading"
+          ]
+        },
+        {
+          "id": "workspace-035",
+          "url": "./screens/workspace.html?history=rich-error",
+          "nodes": [
+            "history-journey/rich-error"
+          ]
+        },
+        {
+          "id": "workspace-036",
+          "url": "./screens/workspace.html?history=tool-errors",
+          "nodes": [
+            "history-journey/tool-errors"
+          ]
+        },
+        {
+          "id": "workspace-037",
+          "url": "./screens/workspace.html?dialog=manage&kind=conversation&target=navigation",
+          "nodes": [
+            "archive-journey/manage"
+          ]
+        },
+        {
+          "id": "workspace-038",
+          "url": "./screens/workspace.html?dialog=archive&kind=conversation&target=navigation",
+          "nodes": [
+            "archive-journey/archive"
+          ]
+        },
+        {
+          "id": "workspace-039",
+          "url": "./screens/workspace.html?state=resource-pending&dialog=archive&kind=conversation&target=navigation",
+          "nodes": [
+            "archive-journey/pending"
+          ]
+        },
+        {
+          "id": "workspace-040",
+          "url": "./screens/workspace.html?state=running&dialog=delete&kind=conversation&target=navigation",
+          "nodes": [
+            "delete-journey/blocked"
+          ]
+        },
+        {
+          "id": "workspace-041",
+          "url": "./screens/workspace.html?dialog=delete&kind=conversation&target=navigation",
+          "nodes": [
+            "delete-journey/conversation"
+          ]
+        },
+        {
+          "id": "workspace-042",
+          "url": "./screens/workspace.html?state=ready&activity=files",
+          "nodes": [
+            "agent-journey/activity-files"
+          ]
+        },
+        {
+          "id": "workspace-043",
+          "url": "./screens/workspace.html?state=ready&activity=images",
+          "nodes": [
+            "agent-journey/activity-images"
+          ]
+        },
+        {
+          "id": "workspace-044",
+          "url": "./screens/workspace.html?state=ready&activity=browser",
+          "nodes": [
+            "agent-journey/activity-browser"
+          ]
+        },
+        {
+          "id": "workspace-045",
+          "url": "./screens/workspace.html?state=ready&activity=unknown",
+          "nodes": [
+            "agent-journey/activity-unknown"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "editor",
+      "tasks": [
+        "R00",
+        "R01",
+        "R04",
+        "R11",
+        "R14"
+      ],
+      "states": [
+        {
+          "id": "editor-001",
+          "url": "./screens/editor.html",
+          "nodes": [
+            "code-review/edit",
+            "spotlight-journey/file"
+          ]
+        },
+        {
+          "id": "editor-002",
+          "url": "./screens/editor.html?preview=markdown",
+          "nodes": [
+            "code-review/preview"
+          ]
+        },
+        {
+          "id": "editor-003",
+          "url": "./screens/editor.html?panel=terminal",
+          "nodes": [
+            "code-review/terminal"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "changes",
+      "tasks": [
+        "R00",
+        "R01",
+        "R11",
+        "R14"
+      ],
+      "states": [
+        {
+          "id": "changes-001",
+          "url": "./screens/changes.html",
+          "nodes": [
+            "code-review/diff"
+          ]
+        },
+        {
+          "id": "changes-002",
+          "url": "./screens/changes.html?group=staged",
+          "nodes": [
+            "code-review/staged"
+          ]
+        },
+        {
+          "id": "changes-003",
+          "url": "./screens/changes.html?state=clean",
+          "nodes": [
+            "code-review/clean"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "worktrees",
+      "tasks": [
+        "R00",
+        "R01",
+        "R02",
+        "R03",
+        "R04",
+        "R08",
+        "R14"
+      ],
+      "states": [
+        {
+          "id": "worktrees-001",
+          "url": "./screens/worktrees.html",
+          "nodes": [
+            "worktree-journey/list",
+            "worktree-journey/recovered",
+            "spotlight-journey/worktree",
+            "archive-journey/worktrees"
+          ]
+        },
+        {
+          "id": "worktrees-002",
+          "url": "./screens/worktrees.html?dialog=create",
+          "nodes": [
+            "worktree-journey/create"
+          ]
+        },
+        {
+          "id": "worktrees-003",
+          "url": "./screens/worktrees.html?dialog=create&state=invalid",
+          "nodes": [
+            "worktree-journey/invalid"
+          ]
+        },
+        {
+          "id": "worktrees-004",
+          "url": "./screens/worktrees.html?state=creating",
+          "nodes": [
+            "worktree-journey/creating"
+          ]
+        },
+        {
+          "id": "worktrees-005",
+          "url": "./screens/worktrees.html?state=create-error",
+          "nodes": [
+            "worktree-journey/create-error"
+          ]
+        },
+        {
+          "id": "worktrees-006",
+          "url": "./screens/worktrees.html?dialog=archive&kind=worktree&targetTree=fix-scroll-anchor",
+          "nodes": [
+            "archive-journey/archive-worktree"
+          ]
+        },
+        {
+          "id": "worktrees-007",
+          "url": "./screens/worktrees.html?fixture=clean",
+          "nodes": [
+            "delete-journey/worktrees"
+          ]
+        },
+        {
+          "id": "worktrees-008",
+          "url": "./screens/worktrees.html?fixture=clean&dialog=delete&kind=worktree&targetTree=fix-scroll-anchor",
+          "nodes": [
+            "delete-journey/delete"
+          ]
+        },
+        {
+          "id": "worktrees-009",
+          "url": "./screens/worktrees.html?fixture=clean&state=resource-pending&dialog=delete&kind=worktree&targetTree=fix-scroll-anchor",
+          "nodes": [
+            "delete-journey/pending"
+          ]
+        },
+        {
+          "id": "worktrees-010",
+          "url": "./screens/worktrees.html?fixture=dirty&dialog=delete&kind=worktree&targetTree=fix-scroll-anchor",
+          "nodes": [
+            "delete-journey/dirty"
+          ]
+        },
+        {
+          "id": "worktrees-011",
+          "url": "./screens/worktrees.html?fixture=clean&state=resource-error&dialog=delete&kind=worktree&targetTree=fix-scroll-anchor",
+          "nodes": [
+            "delete-journey/error"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "atlas-library",
+      "tasks": [
+        "R00",
+        "R01",
+        "R04",
+        "R10",
+        "R14"
+      ],
+      "states": [
+        {
+          "id": "atlas-library-001",
+          "url": "./screens/atlas-library.html",
+          "nodes": [
+            "atlas-journey/library",
+            "spotlight-journey/atlas"
+          ]
+        },
+        {
+          "id": "atlas-library-002",
+          "url": "./screens/atlas-library.html?state=empty",
+          "nodes": [
+            "atlas-journey/empty"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "atlas-builder",
+      "tasks": [
+        "R00",
+        "R01",
+        "R04",
+        "R07",
+        "R10",
+        "R14"
+      ],
+      "states": [
+        {
+          "id": "atlas-builder-001",
+          "url": "./screens/atlas-builder.html",
+          "nodes": [
+            "atlas-journey/ready"
+          ]
+        },
+        {
+          "id": "atlas-builder-002",
+          "url": "./screens/atlas-builder.html?state=empty",
+          "nodes": [
+            "atlas-journey/brief"
+          ]
+        },
+        {
+          "id": "atlas-builder-003",
+          "url": "./screens/atlas-builder.html?state=building",
+          "nodes": [
+            "atlas-journey/building"
+          ]
+        },
+        {
+          "id": "atlas-builder-004",
+          "url": "./screens/atlas-builder.html?state=error",
+          "nodes": [
+            "atlas-journey/error"
+          ]
+        },
+        {
+          "id": "atlas-builder-005",
+          "url": "./screens/atlas-builder.html?chat=collapsed",
+          "nodes": [
+            "atlas-journey/map-wide"
+          ]
+        },
+        {
+          "id": "atlas-builder-006",
+          "url": "./screens/atlas-builder.html?dialog=flow",
+          "nodes": [
+            "atlas-journey/scope"
+          ]
+        },
+        {
+          "id": "atlas-builder-007",
+          "url": "./screens/atlas-builder.html?flow=workspace-recovery&scope=workspace-recovery",
+          "nodes": [
+            "atlas-journey/tagged"
+          ]
+        },
+        {
+          "id": "atlas-builder-008",
+          "url": "./screens/atlas-builder.html?state=building&flow=workspace-recovery&scope=workspace-recovery&requestFlow=workspace-recovery&hasAtlas=1&brief=Clarify+how+to+recover+a+missing+project.",
+          "nodes": [
+            "atlas-journey/editing"
+          ]
+        },
+        {
+          "id": "atlas-builder-009",
+          "url": "./screens/atlas-builder.html?flow=workspace-recovery&scope=workspace-recovery&requestFlow=workspace-recovery&hasAtlas=1&brief=Clarify+how+to+recover+a+missing+project.",
+          "nodes": [
+            "atlas-journey/updated"
+          ]
+        },
+        {
+          "id": "atlas-builder-010",
+          "url": "./screens/atlas-builder.html?state=building&hasAtlas=1",
+          "nodes": [
+            "atlas-journey/valid-working"
+          ]
+        },
+        {
+          "id": "atlas-builder-011",
+          "url": "./screens/atlas-builder.html?state=building&hasAtlas=1&bundleState=invalid",
+          "nodes": [
+            "atlas-journey/invalid-update"
+          ]
+        },
+        {
+          "id": "atlas-builder-012",
+          "url": "./screens/atlas-builder.html?bundle=mobile&bundleState=missing",
+          "nodes": [
+            "atlas-journey/missing-bundle"
+          ]
+        },
+        {
+          "id": "atlas-builder-013",
+          "url": "./screens/atlas-builder.html?bundle=mobile&chat=collapsed",
+          "nodes": [
+            "atlas-journey/mobile-bundle"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "atlas-preview",
+      "tasks": [
+        "R00",
+        "R01",
+        "R10",
+        "R14"
+      ],
+      "states": [
+        {
+          "id": "atlas-preview-001",
+          "url": "./screens/atlas-preview.html",
+          "nodes": [
+            "atlas-journey/preview"
+          ]
+        },
+        {
+          "id": "atlas-preview-002",
+          "url": "./screens/atlas-preview.html?state=missing-cli",
+          "nodes": [
+            "atlas-journey/missing-cli"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "connections",
+      "tasks": [
+        "R00",
+        "R01",
+        "R02",
+        "R04",
+        "R09",
+        "R14"
+      ],
+      "states": [
+        {
+          "id": "connections-001",
+          "url": "./screens/connections.html",
+          "nodes": [
+            "device-journey/connected"
+          ]
+        },
+        {
+          "id": "connections-002",
+          "url": "./screens/connections.html?state=signed-out",
+          "nodes": [
+            "device-journey/signin"
+          ]
+        },
+        {
+          "id": "connections-003",
+          "url": "./screens/connections.html?state=signin-error&dialog=signin",
+          "nodes": [
+            "device-journey/invalid"
+          ]
+        },
+        {
+          "id": "connections-004",
+          "url": "./screens/connections.html?dialog=pair",
+          "nodes": [
+            "device-journey/pair"
+          ]
+        },
+        {
+          "id": "connections-005",
+          "url": "./screens/connections.html?dialog=confirm",
+          "nodes": [
+            "device-journey/confirm"
+          ]
+        },
+        {
+          "id": "connections-006",
+          "url": "./screens/connections.html?state=paired",
+          "nodes": [
+            "device-journey/paired"
+          ]
+        },
+        {
+          "id": "connections-007",
+          "url": "./screens/connections.html?dialog=expired",
+          "nodes": [
+            "device-journey/expired"
+          ]
+        },
+        {
+          "id": "connections-008",
+          "url": "./screens/connections.html?state=offline",
+          "nodes": [
+            "device-journey/reconnect"
+          ]
+        },
+        {
+          "id": "connections-009",
+          "url": "./screens/connections.html?state=paired&dialog=revoke",
+          "nodes": [
+            "device-journey/revoke"
+          ]
+        },
+        {
+          "id": "connections-010",
+          "url": "./screens/connections.html?state=revoked",
+          "nodes": [
+            "device-journey/revoked"
+          ]
+        },
+        {
+          "id": "connections-011",
+          "url": "./screens/connections.html?state=signed-out&dialog=signin",
+          "nodes": [
+            "device-journey/signin-form"
+          ]
+        },
+        {
+          "id": "connections-012",
+          "url": "./screens/connections.html?state=signing-in&dialog=signin",
+          "nodes": [
+            "device-journey/signing-in"
+          ]
+        },
+        {
+          "id": "connections-013",
+          "url": "./screens/connections.html?state=confirming&dialog=confirm",
+          "nodes": [
+            "device-journey/confirming"
+          ]
+        },
+        {
+          "id": "connections-014",
+          "url": "./screens/connections.html?state=confirm-error&dialog=confirm",
+          "nodes": [
+            "device-journey/confirm-error"
+          ]
+        },
+        {
+          "id": "connections-015",
+          "url": "./screens/connections.html?state=revoking&dialog=revoke&device=iphone",
+          "nodes": [
+            "device-journey/revoking"
+          ]
+        },
+        {
+          "id": "connections-016",
+          "url": "./screens/connections.html?state=revoke-error&dialog=revoke&device=iphone",
+          "nodes": [
+            "device-journey/revoke-error"
+          ]
+        },
+        {
+          "id": "connections-017",
+          "url": "./screens/connections.html?state=auth-expired",
+          "nodes": [
+            "device-journey/auth-expired"
+          ]
+        },
+        {
+          "id": "connections-018",
+          "url": "./screens/connections.html?dialog=signout",
+          "nodes": [
+            "device-journey/signout"
+          ]
+        },
+        {
+          "id": "connections-019",
+          "url": "./screens/connections.html?dialog=cancel-error",
+          "nodes": [
+            "device-journey/cancel-error"
+          ]
+        },
+        {
+          "id": "connections-020",
+          "url": "./screens/connections.html?dialog=details&device=iphone",
+          "nodes": [
+            "device-journey/device-details"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "settings",
+      "tasks": [
+        "R00",
+        "R01",
+        "R02",
+        "R04",
+        "R08",
+        "R12",
+        "R14"
+      ],
+      "states": [
+        {
+          "id": "settings-001",
+          "url": "./screens/settings.html",
+          "nodes": [
+            "appearance-journey/light"
+          ]
+        },
+        {
+          "id": "settings-002",
+          "url": "./screens/settings.html?theme=dark",
+          "nodes": [
+            "appearance-journey/dark"
+          ]
+        },
+        {
+          "id": "settings-003",
+          "url": "./screens/settings.html?theme=dark&tab=typography",
+          "nodes": [
+            "appearance-journey/typography"
+          ]
+        },
+        {
+          "id": "settings-004",
+          "url": "./screens/settings.html?tab=archived&fixture=archived",
+          "nodes": [
+            "archive-journey/settings"
+          ]
+        },
+        {
+          "id": "settings-005",
+          "url": "./screens/settings.html?tab=archived&fixture=archived&dialog=restore-archive&kind=worktree&targetTree=fix-scroll-anchor",
+          "nodes": [
+            "archive-journey/restore"
+          ]
+        },
+        {
+          "id": "settings-006",
+          "url": "./screens/settings.html?tab=archived&fixture=archived&state=resource-pending&dialog=restore-archive&kind=worktree&targetTree=fix-scroll-anchor",
+          "nodes": [
+            "archive-journey/restoring"
+          ]
+        },
+        {
+          "id": "settings-007",
+          "url": "./screens/settings.html?tab=archived&saved=restored",
+          "nodes": [
+            "archive-journey/restored"
+          ]
+        },
+        {
+          "id": "settings-008",
+          "url": "./screens/settings.html?tab=archived&fixture=archived&state=resource-error&dialog=restore-archive&kind=worktree&targetTree=fix-scroll-anchor",
+          "nodes": [
+            "archive-journey/error"
+          ]
+        },
+        {
+          "id": "settings-009",
+          "url": "./screens/settings.html?tab=archived",
+          "nodes": [
+            "archive-journey/empty"
+          ]
+        },
+        {
+          "id": "settings-010",
+          "url": "./screens/settings.html?tab=archived&saved=delete",
+          "nodes": [
+            "delete-journey/deleted"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "search",
+      "tasks": [
+        "R00",
+        "R01",
+        "R04",
+        "R12",
+        "R14"
+      ],
+      "states": [
+        {
+          "id": "search-001",
+          "url": "./screens/search.html",
+          "nodes": [
+            "spotlight-journey/search"
+          ]
+        },
+        {
+          "id": "search-002",
+          "url": "./screens/search.html?q=%40repo",
+          "nodes": [
+            "spotlight-journey/repo"
+          ]
+        },
+        {
+          "id": "search-003",
+          "url": "./screens/search.html?q=no-matching-file",
+          "nodes": [
+            "spotlight-journey/empty"
+          ]
+        }
+      ]
+    }
+  ]
+}

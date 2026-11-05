@@ -2,51 +2,115 @@ name: build
 
 on:
   push:
+    # Pull requests already build their head; branch pushes would run it twice.
+    branches: [develop, main]
+    paths-ignore:
+      - "**/*.md"
   pull_request:
+    paths-ignore:
+      - "**/*.md"
+
+# A newer commit on the same branch or PR makes the running build obsolete.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
-    env:
-      SCCACHE_GHA_ENABLED: "true"
+  linux-daemon:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.11.1"
+          modules: qtwebsockets
+          cache: true
+      - name: Install headless build dependencies
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev libgl1-mesa-dev patchelf
+      - name: Configure independent daemon
+        run: cmake -S . -B build/daemon -G Ninja -DCMAKE_BUILD_TYPE=Release -DKETPLUS_EDITION=pro -DKETPLUS_BUILD_DESKTOP=OFF -DKETPLUS_BUILD_TESTS=ON
+      - name: Build and test without a display or provider quota
+        run: |
+          cmake --build build/daemon --parallel 4
+          ctest --test-dir build/daemon --output-on-failure --parallel 2
+      - name: Stage complete runtime and inspect build information
+        run: |
+          cmake --install build/daemon --prefix "$RUNNER_TEMP/ketplus-daemon"
+          env -u LD_LIBRARY_PATH "$RUNNER_TEMP/ketplus-daemon/bin/ketplus_daemon" --check-runtime
+          "$RUNNER_TEMP/ketplus-daemon/bin/ketplus_daemon" --build-info
+          cpack --config build/daemon/CPackConfig.cmake -B build/packages
+      - name: Verify installed daemon and CLI in a clean Ubuntu runtime
+        run: |
+          docker build -f packaging/linux/Dockerfile.runtime-test -t ketplus-daemon-runtime-test packaging/linux
+          docker run --rm -v "$RUNNER_TEMP/ketplus-daemon:/runtime:ro" ketplus-daemon-runtime-test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-daemon-x86_64
+          path: build/packages/*.tar.gz
+
+  browser:
+    runs-on: ubuntu-latest
+    # `playwright install --with-deps` once hung in apt for the 6-hour default.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/browser/package-lock.json
+      - name: Install browser test dependencies
+        working-directory: apps/browser
+        timeout-minutes: 8
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Browser protocol and socket regression tests
+        working-directory: apps/browser
+        env:
+          KETPLUS_BROWSER_ENGINE: playwright
+        run: npm test
+      - name: Claude browser integration without provider calls
+        run: node --test apps/daemon/providers/claude-sidecar/test/browser.test.mjs apps/daemon/providers/claude-sidecar/test/transcript.test.mjs apps/daemon/providers/claude-sidecar/test/input.test.mjs
+
+  lite:
+    # KétPlus, the editor alone, on every platform it ships on.
     strategy:
       fail-fast: false
       matrix:
         os: [macos-latest, ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-
+    timeout-minutes: 45
+    env:
+      SCCACHE_GHA_ENABLED: "true"
     steps:
       - uses: actions/checkout@v4
-
       - name: Restore Qt SDK
         uses: jurplel/install-qt-action@v4
         with:
           version: "6.10.*"
           modules: qt5compat
           cache: true
-
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
-
       - uses: seanmiddleditch/gha-setup-ninja@v5
-
       - name: Restore source dependencies
         uses: actions/cache@v5
         with:
           path: .cache/fetchcontent
-          key: fetchcontent-${{ runner.os }}-qt-6.10-${{ hashFiles('cmake/Dependencies.cmake') }}
-
+          key: fetchcontent-${{ runner.os }}-qt-6.10-${{ hashFiles('core/cmake/Dependencies.cmake') }}
       - name: Restore compiler objects
         uses: mozilla-actions/sccache-action@v0.0.11
-
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKETPLUS_EDITION=lite
       - name: Build
         run: cmake --build build
-
       - name: Test
         run: ctest --test-dir build --output-on-failure --verbose
-
       - name: Diagnose Windows test failures
         if: failure() && runner.os == 'Windows'
         shell: pwsh
@@ -55,3 +119,49 @@ jobs:
             Write-Host "== $($_.Name) =="
             Get-Content $_
           }
+
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        # Full Linux Desktop and Windows builds remain deferred; daemon has its own Linux lane.
+        os: [macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore Qt SDK
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.11.1"
+          modules: qt5compat qtwebsockets qtwebview
+          cache: true
+
+      - uses: seanmiddleditch/gha-setup-ninja@v5
+
+      # Every build stages the Claude sidecar with `npm ci`.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Restore source dependencies
+        uses: actions/cache@v5
+        with:
+          path: .cache/fetchcontent
+          key: fetchcontent-${{ runner.os }}-qt-6.11-${{ hashFiles('core/cmake/Dependencies.cmake') }}
+
+      - name: Restore compiler objects
+        uses: mozilla-actions/sccache-action@v0.0.11
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKETPLUS_EDITION=pro
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure

@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KetPlus — Agent Workspaces</title>
+  <style>
+    :root {
+      --app: #15181d;
+      --page: #1b1f24;
+      --sidebar: #171b20;
+      --panel: #1d2228;
+      --raised: #23282f;
+      --hover: #292f37;
+      --text: #cdd2d8;
+      --text-2: #b4bac4;
+      --muted: #858d99;
+      --dim: #505862;
+      --border: #292d33;
+      --border-2: #3a4048;
+      --accent: #5968df;
+      --accent-hi: #aab6ed;
+      --accent-bg: #252b42;
+      --green: #40c97b;
+      --yellow: #e5a93c;
+      --red: #ef665c;
+      --blue: #5968df;
+      --rail: 46px;
+      --sidebar-w: 278px;
+      --chat-w: 374px;
+      font-family: "Avenir Next", Avenir, ui-sans-serif, sans-serif;
+      color-scheme: dark;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    body {
+      background:
+        radial-gradient(circle at 75% -20%, rgba(89,104,223,.12), transparent 34%),
+        var(--app);
+      color: var(--text);
+      font-size: 12px;
+    }
+    button, textarea { font: inherit; }
+    button { color: inherit; }
+
+    .app {
+      width: 100vw;
+      height: 100vh;
+      min-width: 720px;
+      display: grid;
+      grid-template-rows: 39px 1fr 25px;
+      background: var(--page);
+    }
+
+    .titlebar {
+      display: grid;
+      grid-template-columns: 190px 1fr 190px;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      background: rgba(23,27,32,.96);
+      -webkit-app-region: drag;
+    }
+    .traffic { display: flex; align-items: center; gap: 8px; padding-left: 14px; }
+    .traffic i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+    .traffic i:nth-child(1) { background: #ff5f57; }
+    .traffic i:nth-child(2) { background: #febc2e; }
+    .traffic i:nth-child(3) { background: #28c840; }
+    .brand { display: flex; align-items: center; gap: 8px; margin-left: 14px; color: var(--muted); }
+    .brand img { width: 18px; height: 18px; object-fit: contain; }
+
+    .workspace-switch {
+      justify-self: center;
+      width: min(440px, 55vw);
+      height: 27px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      border: 1px solid var(--border-2);
+      border-radius: 6px;
+      background: #20252c;
+      color: var(--text-2);
+      cursor: pointer;
+      -webkit-app-region: no-drag;
+    }
+    .workspace-switch:hover { background: var(--hover); border-color: #48505b; }
+    .branch-glyph { color: var(--accent-hi); font-weight: 800; }
+    .keycap { margin-left: auto; margin-right: 7px; color: var(--dim); font-size: 10px; }
+    .window-actions { justify-self: end; display: flex; align-items: center; gap: 4px; padding-right: 9px; }
+    .quiet-button, .icon-button {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .quiet-button { padding: 5px 8px; }
+    .quiet-button:hover, .icon-button:hover { background: var(--hover); color: var(--text); }
+
+    .workbench { min-height: 0; display: grid; }
+    .workbench.ai-mode { grid-template-columns: var(--rail) var(--sidebar-w) minmax(0,1fr) minmax(0,1fr); }
+    .workbench.explorer-mode,
+    .workbench.source-mode { grid-template-columns: var(--rail) var(--sidebar-w) minmax(480px, 1fr); }
+    .rail {
+      border-right: 1px solid var(--border);
+      background: #15191e;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 7px 0;
+      gap: 3px;
+    }
+    .rail-button {
+      width: 36px; height: 36px; display: grid; place-items: center;
+      border: 0; border-radius: 7px; background: transparent; color: #737c88; cursor: pointer;
+      position: relative;
+    }
+    .rail-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+    .rail-button:hover { background: var(--hover); color: var(--text-2); }
+    .rail-button.active { color: var(--accent-hi); background: var(--accent-bg); }
+    .rail-button.active::before { content: ""; position: absolute; left: -5px; width: 2px; height: 18px; border-radius: 2px; background: var(--accent); }
+    .rail-spacer { flex: 1; }
+    .avatar { width: 25px; height: 25px; border-radius: 7px; background: linear-gradient(145deg,#7180ff,#4653bb); color: white; display:grid; place-items:center; font-size:10px; font-weight:800; }
+
+    .sidebar { min-width: 0; border-right: 1px solid var(--border); background: var(--sidebar); overflow: hidden; }
+    .side-view { height: 100%; display: none; flex-direction: column; }
+    .side-view.active { display: flex; animation: reveal .16s ease both; }
+    @keyframes reveal { from { opacity: 0; transform: translateX(-3px); } to { opacity: 1; transform: none; } }
+    .side-head { height: 39px; flex: 0 0 auto; display: flex; align-items: center; padding: 0 8px 0 12px; gap: 7px; }
+    .eyebrow { font-size: 10px; font-weight: 800; letter-spacing: .095em; color: var(--text-2); }
+    .side-head .icon-button { margin-left: auto; width: 26px; height: 26px; font-size: 17px; }
+    .repo-label { padding: 8px 12px 7px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); color: var(--muted); display: flex; gap: 7px; align-items: center; }
+    .repo-label strong { color: var(--text-2); font-size: 11px; }
+    .branch-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px rgba(64,201,123,.08); }
+    .watch-state { margin-left:auto; display:flex; align-items:center; gap:6px; color:#7f8995; font-size:9px; white-space:nowrap; }
+    .watch-pulse { width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 0 0 rgba(64,201,123,.35); animation:watch-pulse 2.1s ease-out infinite; }
+    @keyframes watch-pulse { 70%,100% { box-shadow:0 0 0 5px rgba(64,201,123,0); } }
+
+    .tree, .changes-list { padding: 7px 6px; overflow: auto; }
+    .tree-row { min-height: 26px; display: flex; align-items: center; gap: 7px; padding: 0 8px; border-radius: 5px; color: var(--text-2); cursor: pointer; }
+    .tree-row:hover, .change-row:hover { background: var(--hover); }
+    .tree-row.active { background: var(--accent-bg); color: var(--accent-hi); }
+    .tree-row.indent-1 { padding-left: 24px; }
+    .tree-row.indent-2 { padding-left: 42px; }
+    .file-icon { width: 13px; color: var(--muted); text-align: center; }
+    .file-icon.cpp { color: #77a9ff; }
+    .file-icon.md { color: #b8c0ca; }
+
+    .change-group { margin: 2px 0 9px; }
+    .group-title { display: flex; align-items: center; height: 28px; padding: 0 7px; color: var(--text-2); font-weight: 750; font-size: 10px; letter-spacing: .06em; }
+    .group-title .count { margin-left: auto; min-width: 19px; text-align: center; padding: 1px 6px; border-radius: 9px; color: var(--muted); background: var(--raised); letter-spacing: 0; }
+    .change-row { min-height: 31px; display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 0 8px 0 18px; border-radius: 5px; cursor: pointer; }
+    .change-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .change-path { margin-left: 5px; color: var(--dim); font-size: 10px; }
+    .status-letter { font: 700 11px "SFMono-Regular", Consolas, monospace; color: var(--yellow); }
+    .status-letter.add { color: var(--green); }
+
+    .worktree-list { padding: 4px 8px 12px; overflow: auto; }
+    .detected-section { margin:6px 0 10px; }
+    .detected-heading { min-height:24px; display:flex; align-items:center; padding:0 4px; color:var(--accent-hi); font-size:9px; font-weight:800; letter-spacing:.075em; }
+    .detected-heading time { margin-left:auto; color:var(--dim); font-weight:500; letter-spacing:0; }
+    .detected-card { position:relative; padding:10px; overflow:hidden; border:1px solid #44508a; border-radius:8px; background:linear-gradient(120deg,rgba(89,104,223,.16),rgba(35,40,47,.82) 62%); box-shadow:inset 2px 0 0 var(--accent); }
+    .detected-card::after { content:""; position:absolute; width:90px; height:90px; right:-45px; top:-58px; border:1px solid rgba(140,154,255,.13); border-radius:50%; }
+    .detected-top { position:relative; z-index:1; display:flex; align-items:center; gap:7px; min-width:0; }
+    .detected-top strong { overflow:hidden; color:var(--text); font-size:11px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
+    .new-pill { margin-left:auto; padding:2px 6px; border-radius:8px; background:var(--accent); color:white; font-size:8px; font-weight:850; letter-spacing:.08em; }
+    .detected-origin { display:flex; align-items:center; gap:6px; margin:7px 0 0 13px; color:var(--accent-hi); font-size:9px; }
+    .detected-origin svg { width:11px; height:11px; fill:none; stroke:currentColor; stroke-width:1.7; }
+    .detected-card .worktree-path { margin-bottom:9px; }
+    .detected-actions { display:flex; align-items:center; gap:6px; margin-left:13px; }
+    .open-detected { height:25px; padding:0 10px; border:1px solid #7485e8; border-radius:5px; background:var(--accent); color:white; font-size:9px; font-weight:750; cursor:pointer; }
+    .open-detected:hover { background:#7485e8; }
+    .dismiss-detected { height:25px; padding:0 8px; border:0; border-radius:5px; background:transparent; color:var(--muted); font-size:9px; cursor:pointer; }
+    .dismiss-detected:hover { background:var(--hover); color:var(--text); }
+    .worktree-card { width: 100%; display: block; margin: 4px 0; padding: 10px; border: 1px solid transparent; border-radius: 7px; background: transparent; text-align: left; cursor: pointer; }
+    .worktree-card:hover { background: var(--hover); }
+    .worktree-card.active { border-color: #3a436d; background: var(--accent-bg); }
+    .worktree-top { display: flex; align-items: center; gap: 7px; }
+    .worktree-top strong { font-size: 12px; color: var(--text); font-weight: 650; }
+    .active-pill { margin-left: auto; padding: 2px 6px; border-radius: 8px; background: rgba(89,104,223,.18); color: var(--accent-hi); font-size: 9px; font-weight: 800; letter-spacing: .05em; }
+    .worktree-path { margin: 6px 0 8px 13px; color: var(--dim); font: 10px "SFMono-Regular", Consolas, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .session-summary { display: flex; align-items: center; gap: 12px; margin-left: 13px; color: var(--muted); font-size: 10px; }
+    .agent-state { color:var(--muted); }
+    .agent-state.working { color:var(--accent-hi); }
+    .live-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--green); margin-right:5px; box-shadow:0 0 7px rgba(64,201,123,.5); }
+    .new-worktree { margin: 7px 8px; height: 31px; border: 1px dashed var(--border-2); border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+    .new-worktree:hover { border-color: var(--accent); color: var(--accent-hi); background: var(--accent-bg); }
+
+    .center { min-width: 0; min-height: 0; background: var(--panel); }
+    .workbench.ai-mode .center { display: contents; }
+    .workbench.explorer-mode .center { display: grid; grid-template-rows: minmax(260px,1fr) 224px; }
+    .workbench.source-mode .center { display: grid; grid-template-rows: 1fr; }
+    .editor { min-width: 0; min-height: 0; display: grid; grid-template-rows: 40px 31px 1fr; border-bottom: 1px solid var(--border); }
+    .tabs { display: flex; background: var(--page); border-bottom: 1px solid var(--border); overflow: hidden; }
+    .tab { min-width: 150px; max-width: 230px; display: flex; align-items: center; gap: 7px; padding: 0 12px; border-right: 1px solid var(--border); border-bottom: 2px solid transparent; color: var(--muted); cursor: pointer; }
+    .tab.active { background: var(--panel); color: var(--text); border-bottom-color: var(--accent); }
+    .tab .dirty { width: 6px; height: 6px; border-radius: 50%; background: var(--yellow); margin-left: auto; }
+    .tab .close { margin-left: auto; opacity: 0; color: var(--muted); }
+    .tab:hover .close { opacity: 1; }
+    .breadcrumb { display:flex; align-items:center; gap:6px; padding:0 13px; color:var(--muted); border-bottom:1px solid var(--border); font-size:11px; }
+    .breadcrumb b { color: var(--text-2); font-weight: 550; }
+    .code-wrap { min-width:0; min-height:0; overflow:auto; padding:13px 0 32px; background:linear-gradient(90deg,rgba(255,255,255,.012),transparent 30%); }
+    .code { margin:0; display:grid; grid-template-columns: 48px max-content; font: 12px/1.68 "SFMono-Regular", Menlo, Consolas, monospace; tab-size:4; }
+    .line { display:contents; }
+    .ln { padding-right:15px; text-align:right; color:#4e5661; user-select:none; }
+    .src { padding-right:32px; white-space:pre; }
+    .kw { color:#a7a0ff; } .type { color:#72b6f4; } .str { color:#b7d28b; } .fn { color:#e3c477; } .comment { color:#66717e; font-style:italic; }
+    .diff-add .src, .diff-add .ln { background:rgba(64,201,123,.10); } .diff-add .src { color:#9bdcb6; }
+    .diff-del .src, .diff-del .ln { background:rgba(239,102,92,.09); } .diff-del .src { color:#efaaa4; }
+
+    .terminal { min-width:0; min-height:0; display:grid; grid-template-rows:34px 1fr; background:#171b20; }
+    .workbench.ai-mode .terminal { grid-column:3; grid-row:1; grid-template-rows:40px 1fr; border-right:1px solid var(--border); border-bottom:0; }
+    .workbench.ai-mode .editor { grid-column:4; grid-row:1; }
+    .workbench.source-mode .terminal { display:none; }
+    .terminal-head { display:flex; align-items:center; border-bottom:1px solid var(--border); padding:0 8px; gap:2px; }
+    .panel-tab { height:34px; padding:0 10px; border:0; border-bottom:2px solid transparent; background:transparent; color:var(--muted); cursor:pointer; font-size:10px; letter-spacing:.05em; }
+    .panel-tab.active { color:var(--text); border-bottom-color:var(--accent); }
+    .terminal-mode-label { color:var(--text-2); font-size:9px; font-weight:800; letter-spacing:.08em; padding:0 8px 0 5px; }
+    .terminal-tab-chip { height:26px; padding:0 8px; border:0; border-radius:5px; background:transparent; color:var(--muted); cursor:pointer; font-size:10px; }
+    .terminal-tab-chip:hover { background:var(--hover); color:var(--text-2); }
+    .terminal-tab-chip.active { background:var(--accent-bg); color:var(--accent-hi); }
+    .terminal-tab-list { gap:3px; min-width:0; }
+    .loading-ring { display:inline-block; width:9px; height:9px; margin-right:5px; border:1.5px solid rgba(170,182,237,.28); border-top-color:var(--accent-hi); border-radius:50%; vertical-align:-1px; animation:spin .8s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .idle-dot { display:inline-block; width:6px; height:6px; margin-right:6px; border-radius:50%; background:var(--dim); vertical-align:1px; }
+    .ai-only { display:none; }
+    .workbench.ai-mode .ai-only { display:flex; align-items:center; }
+    .workbench.ai-mode .explorer-only { display:none; }
+    .terminal-head .spacer { flex:1; }
+    .terminal-session-button { height:25px; display:flex; align-items:center; gap:6px; padding:0 8px; border:1px solid var(--border); border-radius:5px; background:var(--raised); color:var(--text-2); cursor:pointer; position:relative; }
+    .terminal-session-button:hover { border-color:var(--border-2); background:var(--hover); }
+    .term-screen { overflow:auto; padding:11px 15px; color:#aeb6c0; font:11px/1.65 "SFMono-Regular",Menlo,Consolas,monospace; white-space:pre-wrap; }
+    .term-screen .muted { color:#697380; } .term-screen .prompt { color:#7e8cff; } .term-screen .ok { color:var(--green); }
+    .terminal-file-link { padding:0; border:0; background:transparent; color:#79a9ff; font:inherit; text-decoration:underline; text-decoration-color:rgba(121,169,255,.4); text-underline-offset:3px; cursor:pointer; }
+    .terminal-file-link:hover { color:#a9c7ff; text-decoration-color:currentColor; }
+    .worktree-event { display:block; margin:8px 0; padding:8px 9px; border-left:2px solid var(--accent); background:rgba(89,104,223,.09); color:var(--text-2); }
+    .worktree-event small { display:block; margin-top:2px; color:var(--muted); }
+    .terminal-worktree-link { padding:0; border:0; background:transparent; color:var(--accent-hi); font:inherit; cursor:pointer; text-decoration:underline; text-decoration-color:rgba(170,182,237,.35); text-underline-offset:3px; }
+    .cursor { display:inline-block; width:7px; height:14px; vertical-align:-2px; background:#aeb6c0; animation:blink 1s steps(1) infinite; }
+    @keyframes blink { 50% { opacity:0; } }
+
+    .session-popover { display:none; position:absolute; z-index:20; left:calc(var(--rail) + var(--sidebar-w) + 9px); top:72px; width:286px; padding:7px; border:1px solid var(--border-2); border-radius:8px; background:#23282f; box-shadow:0 18px 55px rgba(0,0,0,.45); }
+    .session-popover.open { display:block; animation:pop .12s ease both; }
+    @keyframes pop { from { opacity:0; transform:translateY(4px) scale(.98); } }
+    .popover-title { padding:6px 7px 8px; color:var(--muted); font-size:10px; letter-spacing:.08em; font-weight:800; }
+    .session-item { display:grid; grid-template-columns:1fr auto; gap:3px 8px; padding:8px; border-radius:6px; cursor:pointer; }
+    .session-item:hover, .session-item.active { background:var(--hover); }
+    .session-item strong { color:var(--text); font-size:11px; }
+    .session-item small { color:var(--muted); }
+    .session-item .alive { grid-row:1/3; grid-column:2; align-self:center; color:var(--green); font-size:10px; }
+
+    .chat { min-width:0; min-height:0; display:none; grid-template-rows:48px 1fr auto; background:#191d22; }
+    .chat-head { display:flex; align-items:center; padding:0 12px; gap:9px; border-bottom:1px solid var(--border); }
+    .agent-mark { width:27px; height:27px; border-radius:8px; display:grid; place-items:center; background:linear-gradient(145deg,#6575f2,#3f4ba8); color:white; font-weight:900; }
+    .chat-title { min-width:0; }
+    .chat-title strong { display:block; font-size:11px; }
+    .chat-title span { display:block; color:var(--muted); font-size:9px; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .chat-head .icon-button { margin-left:auto; width:26px; height:26px; }
+    .thread { display:none; overflow:auto; padding:15px 13px 24px; }
+    .thread.active { display:block; }
+    .message { margin:0 0 16px; }
+    .message-meta { display:flex; align-items:center; gap:6px; margin-bottom:6px; color:var(--muted); font-size:9px; font-weight:750; letter-spacing:.05em; }
+    .message-body { color:var(--text-2); line-height:1.55; }
+    .message.user .message-body { padding:9px 11px; border:1px solid var(--border-2); border-radius:9px 9px 3px 9px; background:var(--raised); color:var(--text); }
+    .agent-event { margin-top:9px; border:1px solid var(--border); border-radius:7px; overflow:hidden; }
+    .event-row { display:flex; align-items:center; gap:8px; padding:8px 9px; border-bottom:1px solid var(--border); color:var(--muted); font-size:10px; }
+    .event-row:last-child { border:0; }
+    .event-row b { color:var(--text-2); font-weight:550; }
+    .event-row .check { color:var(--green); }
+    .chat-compose { padding:10px; border-top:1px solid var(--border); background:#171b20; }
+    .composer { border:1px solid var(--border-2); border-radius:9px; background:#20252c; overflow:hidden; transition:border-color .15s, box-shadow .15s; }
+    .composer:focus-within { border-color:var(--accent); box-shadow:0 0 0 2px rgba(89,104,223,.13); }
+    .composer textarea { width:100%; height:58px; resize:none; border:0; outline:0; padding:10px 11px 4px; background:transparent; color:var(--text); line-height:1.4; }
+    .composer textarea::placeholder { color:#626b77; }
+    .compose-actions { height:32px; display:flex; align-items:center; padding:0 6px 5px 8px; color:var(--muted); }
+    .context-chip { padding:3px 7px; border-radius:5px; background:var(--accent-bg); color:var(--accent-hi); font:9px "SFMono-Regular",Consolas,monospace; }
+    .send { margin-left:auto; width:26px; height:24px; border:0; border-radius:6px; background:var(--accent); color:white; cursor:pointer; }
+    .send:hover { background:#7485e8; }
+
+    .statusbar { display:flex; align-items:center; gap:0; background:#171b20; border-top:1px solid var(--border); color:var(--muted); font-size:10px; }
+    .status-item { height:24px; display:flex; align-items:center; gap:5px; padding:0 9px; border-right:1px solid var(--border); }
+    .status-item.branch { color:var(--accent-hi); background:var(--accent-bg); }
+    .status-item.agent-live { color:var(--green); }
+    .status-spacer { flex:1; }
+    .toast { position:fixed; z-index:30; left:50%; bottom:42px; transform:translate(-50%,12px); padding:9px 13px; border:1px solid var(--border-2); border-radius:7px; background:#292f37; color:var(--text); box-shadow:0 14px 40px rgba(0,0,0,.4); opacity:0; pointer-events:none; transition:.2s ease; }
+    .toast.show { opacity:1; transform:translate(-50%,0); }
+
+    @media (max-width: 1180px) {
+      :root { --sidebar-w: 238px; }
+      .workbench.ai-mode { grid-template-columns:var(--rail) var(--sidebar-w) minmax(0,1fr) minmax(0,1fr); }
+    }
+    @media (max-width: 1000px) {
+      :root { --rail:40px; --sidebar-w:190px; }
+      .workbench.ai-mode { grid-template-columns:var(--rail) var(--sidebar-w) minmax(0,1fr) minmax(0,1fr); }
+      .workbench.explorer-mode,
+      .workbench.source-mode { grid-template-columns:var(--rail) var(--sidebar-w) minmax(480px,1fr); }
+      .worktree-card { padding:8px 7px; }
+      .worktree-path, .session-summary { margin-left:10px; }
+      .session-summary { gap:7px; }
+      .terminal-session-button { max-width:112px; overflow:hidden; white-space:nowrap; }
+      .chat-head { padding:0 8px; }
+      .thread { padding:12px 10px 20px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="titlebar">
+      <div class="traffic"><i></i><i></i><i></i><span class="brand"><img src="../assets/brand/ketplus-mark.png" alt=""><span>KetPlus</span></span></div>
+      <button class="workspace-switch" id="workspaceSwitch"><span class="branch-glyph">⑂</span><strong id="topWorkspace">feature/agent-sessions</strong><span class="keycap">⌘ K</span></button>
+      <div class="window-actions"><button class="quiet-button">Layout</button><button class="quiet-button">•••</button></div>
+    </header>
+
+    <section class="workbench ai-mode" id="workbench">
+      <nav class="rail" aria-label="Primary navigation">
+        <button class="rail-button" data-view="explorer" aria-label="Explorer"><svg viewBox="0 0 24 24"><path d="M4 5.5h6l2 2h8v11H4z"/></svg></button>
+        <button class="rail-button" data-view="source" aria-label="Source Control"><svg viewBox="0 0 24 24"><circle cx="7" cy="5" r="2"/><circle cx="17" cy="7" r="2"/><circle cx="7" cy="19" r="2"/><path d="M7 7v10M9 11c5 0 8-1 8-2"/></svg></button>
+        <button class="rail-button active" data-view="sessions" aria-label="Worktree Sessions"><svg viewBox="0 0 24 24"><path d="M5 5h14v10H9l-4 4z"/><path d="M9 9h6M9 12h4"/></svg></button>
+        <div class="rail-spacer"></div><div class="avatar">KD</div>
+      </nav>
+
+      <aside class="sidebar">
+        <section class="side-view" id="explorer-view">
+          <div class="side-head"><span class="eyebrow">EXPLORER</span><button class="icon-button">↻</button></div>
+          <div class="repo-label"><span>⌄</span><strong>KETPLUS</strong></div>
+          <div class="tree">
+            <div class="tree-row"><span>⌄</span><span>src</span></div>
+            <div class="tree-row indent-1"><span>⌄</span><span>app</span></div>
+            <div class="tree-row indent-2 active" data-open-file><span class="file-icon cpp">C</span><span>MainWindow.cpp</span></div>
+            <div class="tree-row indent-2"><span class="file-icon cpp">H</span><span>MainWindow.h</span></div>
+            <div class="tree-row indent-1"><span>›</span><span>git</span></div>
+            <div class="tree-row indent-1"><span>›</span><span>terminal</span></div>
+            <div class="tree-row"><span class="file-icon md">#</span><span>README.md</span></div>
+          </div>
+        </section>
+
+        <section class="side-view" id="source-view">
+          <div class="side-head"><span class="eyebrow">SOURCE CONTROL</span><button class="icon-button">↻</button></div>
+          <div class="repo-label"><span class="branch-dot"></span><strong id="sourceBranch">feature/agent-sessions</strong></div>
+          <div class="changes-list">
+            <div class="change-group"><div class="group-title">⌄ &nbsp; STAGED CHANGES <span class="count">2</span></div>
+              <div class="change-row" data-diff="staged"><span class="change-name">SessionRegistry.cpp <small class="change-path">src/terminal</small></span><b class="status-letter add">A</b></div>
+              <div class="change-row" data-diff="staged"><span class="change-name">SessionRegistry.h <small class="change-path">src/terminal</small></span><b class="status-letter add">A</b></div>
+            </div>
+            <div class="change-group"><div class="group-title">⌄ &nbsp; CHANGES <span class="count">3</span></div>
+              <div class="change-row" data-diff="working"><span class="change-name">MainWindow.cpp <small class="change-path">src/app</small></span><b class="status-letter">M</b></div>
+              <div class="change-row" data-diff="working"><span class="change-name">CMakeLists.txt</span><b class="status-letter">M</b></div>
+              <div class="change-row" data-diff="working"><span class="change-name">session-notes.md <small class="change-path">docs</small></span><b class="status-letter add">U</b></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="side-view active" id="sessions-view">
+          <div class="side-head"><span class="eyebrow">AGENT WORKSPACES</span><button class="icon-button" title="Refresh">↻</button></div>
+          <div class="repo-label"><span>◫</span><strong>ketplus</strong><span class="watch-state"><i class="watch-pulse"></i>Watching Git</span></div>
+          <div class="worktree-list">
+            <section class="detected-section" id="detectedSection" aria-label="Newly detected worktree">
+              <div class="detected-heading"><span>NEW WORKTREE DETECTED</span><time>just now</time></div>
+              <div class="detected-card">
+                <div class="detected-top"><span class="branch-dot"></span><strong>codex/file-links</strong><span class="new-pill">NEW</span></div>
+                <div class="worktree-path">~/dev/.codex/worktrees/ketplus/file-links</div>
+                <div class="detected-origin"><svg viewBox="0 0 16 16"><path d="M3 3h10v7H7l-3 3V3Z"/><path d="M6 6h4M6 8h3"/></svg><span>Created by agent · feature/agent-sessions</span></div>
+                <div class="detected-actions"><button class="open-detected" data-open-detected>Open worktree</button><button class="dismiss-detected" data-dismiss-detected>Dismiss</button></div>
+              </div>
+            </section>
+            <button class="worktree-card active" data-worktree="feature">
+              <div class="worktree-top"><span class="branch-dot"></span><strong>feature/agent-sessions</strong><span class="active-pill">ACTIVE</span></div>
+              <div class="worktree-path">~/dev/ketplus-agent-sessions</div>
+              <div class="session-summary"><span>2 terminal tabs</span><span class="agent-state working"><i class="loading-ring"></i>Agent working</span></div>
+            </button>
+            <button class="worktree-card" data-worktree="main">
+              <div class="worktree-top"><span class="branch-dot"></span><strong>main</strong></div>
+              <div class="worktree-path">~/dev/ketplus</div>
+              <div class="session-summary"><span>2 terminal tabs</span><span class="agent-state"><i class="idle-dot"></i>Agent idle</span></div>
+            </button>
+            <button class="worktree-card" data-worktree="preview">
+              <div class="worktree-top"><span class="branch-dot"></span><strong>feature/preview</strong></div>
+              <div class="worktree-path">~/dev/ketplus-preview</div>
+              <div class="session-summary"><span>2 terminal tabs</span><span class="agent-state working"><i class="loading-ring"></i>Agent working</span></div>
+            </button>
+          </div>
+          <button class="new-worktree">＋ Add linked worktree</button>
+        </section>
+      </aside>
+
+      <section class="center">
+        <div class="editor">
+          <div class="tabs"><div class="tab active" data-editor-view="code"><span class="file-icon cpp">C</span><span id="tabName">MainWindow.cpp</span><span class="dirty"></span></div><div class="tab" data-editor-view="header"><span class="file-icon cpp">H</span>SessionRegistry.h<span class="close">×</span></div></div>
+          <div class="breadcrumb"><span>ketplus</span><span>›</span><span id="crumbBranch">feature/agent-sessions</span><span>›</span><span>src</span><span>›</span><b id="crumbFile">MainWindow.cpp</b></div>
+          <div class="code-wrap"><pre class="code" id="code"></pre></div>
+        </div>
+
+        <div class="terminal">
+          <div class="terminal-head">
+            <span class="terminal-mode-label ai-only">TERMINAL</span><span class="terminal-tab-list ai-only" id="terminalTabs"></span>
+            <button class="panel-tab explorer-only active">TERMINAL <span style="color:var(--dim)">3</span></button><button class="panel-tab explorer-only">PROBLEMS</button><button class="panel-tab explorer-only">OUTPUT</button>
+            <span class="spacer"></span><span class="explorer-only" id="activeTerminal" style="color:var(--muted);font-size:10px">shell</span><button class="icon-button explorer-only" style="width:27px;height:27px">⌃</button>
+          </div>
+          <div class="term-screen" id="terminalScreen"></div>
+        </div>
+      </section>
+
+    </section>
+
+    <footer class="statusbar"><div class="status-item branch"><span>⑂</span><span id="statusBranch">feature/agent-sessions</span></div><div class="status-item agent-live" id="activeAgentStatus"><i class="loading-ring"></i>Agent working</div><div class="status-item" id="terminalCount">2 terminal tabs</div><div class="status-spacer"></div><div class="status-item">Ln 84, Col 18</div><div class="status-item">UTF-8</div><div class="status-item">C++</div></footer>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const state = {
+      active: 'feature',
+      worktrees: {
+        feature: { branch:'feature/agent-sessions', path:'~/dev/ketplus-agent-sessions', agentWorking:true, terminals:[{id:'agent',label:'agent',kind:'agent',working:true},{id:'shell',label:'shell',kind:'shell',working:false}] },
+        main: { branch:'main', path:'~/dev/ketplus', agentWorking:false, terminals:[{id:'agent',label:'agent',kind:'agent',working:false},{id:'dev',label:'dev server',kind:'shell',working:false}] },
+        preview: { branch:'feature/preview', path:'~/dev/ketplus-preview', agentWorking:true, terminals:[{id:'agent',label:'agent',kind:'agent',working:true},{id:'tests',label:'tests',kind:'shell',working:false}] },
+        agentLinks: { branch:'codex/file-links', path:'~/dev/.codex/worktrees/ketplus/file-links', agentWorking:true, terminals:[{id:'agent',label:'agent',kind:'agent',working:true}] }
+      },
+      activeTerminalByWorktree: { feature:'agent', main:'agent', preview:'agent', agentLinks:'agent' },
+      detectedPromoted: false
+    };
+
+    const codeSamples = {
+      feature: [
+        ['#include <QProcess>', 'kw'], ['#include "terminal/SessionRegistry.h"', 'kw'], ['', ''],
+        ['namespace ketplus {', ''], ['', ''],
+        ['void MainWindow::switchToWorktree(const QString& path) {', ''],
+        ['    sessionRegistry_->remember(activeWorktree_);', ''],
+        ['    openFolder(path);', ''],
+        ['    sessionRegistry_->attachLast(path);', ''],
+        ['    agentPanel_->restoreThread(path);', ''],
+        ['}', ''], ['', ''],
+        ['// Terminal processes remain owned by the session host.', 'comment'],
+        ['// Switching only changes the attached view.', 'comment'],
+        ['}', '']
+      ],
+      main: [
+        ['#include "app/MainWindow.h"', 'kw'], ['', ''], ['namespace ketplus {', ''],
+        ['MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)', ''],
+        ['    : QMainWindow(parent), theme_(theme) {', ''],
+        ['    setWindowTitle(QStringLiteral("KetPlus"));', ''],
+        ['    resize(1100, 720);', ''], ['    createActions();', ''], ['}', ''], ['', ''],
+        ['void MainWindow::openFolder(const QString& folderPath) {', ''],
+        ['    workspaceRoot_ = normalizedPath(folderPath);', ''], ['    explorer_->setRootPath(workspaceRoot_);', ''], ['}', ''], ['}', '']
+      ],
+      preview: [
+        ['void MarkdownPreviewPane::setSource(const QString& markdown) {', ''],
+        ['    pendingSource_ = markdown;', ''], ['    renderTimer_->start(120);', ''], ['}', ''], ['', ''],
+        ['void MarkdownPreviewPane::render() {', ''], ['    const auto html = renderer_.toHtml(pendingSource_);', ''], ['    document_->setHtml(html);', ''], ['}', '']
+      ],
+      agentLinks: [
+        ['#include "terminal/FileReferenceDetector.h"', 'kw'], ['', ''],
+        ['ResolvedReference FileReferenceDetector::resolve(', ''],
+        ['    const QString& token,', ''], ['    const WorktreeContext& context) const {', ''],
+        ['    return resolver_.inside(context.root, token);', ''], ['}', ''], ['', ''],
+        ['// This worktree was discovered from Git metadata.', 'comment']
+      ]
+    };
+
+    const shellSamples = {
+      feature: '<span class="muted">~/dev/ketplus-agent-sessions</span> <span class="prompt">feature/agent-sessions</span>\n$ cmake --build --preset dev\n[12/18] Building CXX object SessionRegistry.cpp.o\n[18/18] Linking CXX executable KetPlus\n<span class="ok">Build completed</span>\n$ ctest --preset dev\nTest #4: ketplus_terminal_tests ........ <span class="ok">Passed</span>\n$ <span class="cursor"></span>',
+      main: '<span class="muted">~/dev/ketplus</span> <span class="prompt">main</span>\n$ ./tools/dev-server\nKetPlus preview bridge listening on <span class="ok">http://localhost:4173</span>\nWatching 46 source files…\n<span class="muted">This process stayed alive while you visited another worktree.</span>\n<span class="cursor"></span>',
+      preview: '<span class="muted">~/dev/ketplus-preview</span> <span class="prompt">feature/preview</span>\n$ ctest --preset dev --repeat until-fail:10\n[==========] 42 of 58 checks passed\n[ RUN      ] MarkdownPreviewPaneTest.mermaidFallback\n<span class="cursor"></span>'
+      ,agentLinks: '<span class="muted">~/dev/.codex/worktrees/ketplus/file-links</span> <span class="prompt">codex/file-links</span>\n$ git status --short\n M src/terminal/FileReferenceDetector.cpp\n$ <span class="cursor"></span>'
+    };
+
+    const agentSamples = {
+      feature: '<span class="muted">Ket Agent · feature/agent-sessions</span>\n\n<span class="prompt">›</span> Thiết kế session manager để đổi worktree mà terminal đang chạy không bị tắt.\n\nTôi sẽ tách vòng đời terminal khỏi sidebar. Mỗi terminal được pin vào một worktree và chỉ attach lại khi workspace đó active.\n\n<span class="ok">✓</span> Inspected  workspace switching\n<span class="ok">✓</span> Created    <button class="terminal-file-link" data-file="src/terminal/SessionRegistry.cpp" data-line="42">src/terminal/SessionRegistry.cpp:42</button>\n<span class="worktree-event"><span class="ok">✓</span> Worktree created · <button class="terminal-worktree-link" data-open-detected>codex/file-links</button><small>~/dev/.codex/worktrees/ketplus/file-links</small></span><span style="color:var(--yellow)">●</span> Running    terminal lifecycle tests\n\n<span class="prompt">›</span> <span class="cursor"></span>',
+      main: '<span class="muted">Ket Agent · main</span>\n\n<span class="prompt">›</span> Kiểm tra benchmark sau khi merge preview.\n\n<span class="ok">✓</span> 5/5 test suites pass.\n<span class="ok">✓</span> Saved benchmark checkpoint.\n\n<span class="prompt">›</span> <span class="cursor"></span>',
+      preview: '<span class="muted">Ket Agent · feature/preview</span>\n\nMarkdown preview tests vẫn đang chạy trong session này. Bạn có thể chuyển worktree mà không dừng tiến trình.\n\n<span style="color:var(--yellow)">●</span> Running  MarkdownPreviewPaneTest\n\n<span class="prompt">›</span> <span class="cursor"></span>',
+      agentLinks: '<span class="muted">Ket Agent · codex/file-links</span>\n\nWorktree này được KetPlus phát hiện từ Git metadata và gắn với agent session đã tạo ra nó.\n\n<span style="color:var(--yellow)">●</span> Implementing  path reference detection\n\n<span class="prompt">›</span> <span class="cursor"></span>'
+    };
+
+    function renderCode(lines = codeSamples[state.active]) {
+      const root = document.getElementById('code');
+      root.innerHTML = lines.map((line, i) => `<span class="line ${line[1]}"><span class="ln">${i+1}</span><span class="src">${escapeHtml(line[0])}</span></span>`).join('');
+    }
+    function escapeHtml(value) { return value.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+    function toast(message) { const el=document.getElementById('toast'); el.textContent=message; el.classList.add('show'); clearTimeout(toast.timer); toast.timer=setTimeout(()=>el.classList.remove('show'),2200); }
+    function setEditorView(view) { document.querySelectorAll('[data-editor-view]').forEach(tab=>tab.classList.toggle('active',tab.dataset.editorView===view)); }
+    function currentTerminal() {
+      const worktree=state.worktrees[state.active];
+      const id=state.activeTerminalByWorktree[state.active];
+      return worktree.terminals.find(terminal=>terminal.id===id)||worktree.terminals[0];
+    }
+    function renderTerminalTabs() {
+      const activeId=state.activeTerminalByWorktree[state.active];
+      document.getElementById('terminalTabs').innerHTML=state.worktrees[state.active].terminals.map(terminal=>`<button class="terminal-tab-chip ${terminal.id===activeId?'active':''}" data-terminal-id="${terminal.id}">${terminal.working?'<i class="loading-ring"></i>':'<i class="idle-dot"></i>'}${terminal.label}</button>`).join('');
+    }
+    function updateTerminal() {
+      const aiMode=document.getElementById('workbench').classList.contains('ai-mode');
+      const terminal=currentTerminal();
+      const kind=aiMode?terminal.kind:'shell';
+      document.getElementById('terminalScreen').innerHTML=(kind==='agent'?agentSamples:shellSamples)[state.active];
+      document.getElementById('activeTerminal').textContent=`${state.worktrees[state.active].branch} · shell`;
+    }
+    function updateActiveAgentStatus() {
+      const status=document.getElementById('activeAgentStatus');
+      const worktree=state.worktrees[state.active];
+      const working=worktree.agentWorking;
+      status.classList.toggle('agent-live',working);
+      status.innerHTML=working?'<i class="loading-ring"></i>Agent working':'<i class="idle-dot"></i>Agent idle';
+      document.getElementById('terminalCount').textContent=`${worktree.terminals.length} terminal ${worktree.terminals.length===1?'tab':'tabs'}`;
+    }
+
+    function worktreeCard(id) {
+      const w=state.worktrees[id];
+      const working=w.agentWorking?'<span class="agent-state working"><i class="loading-ring"></i>Agent working</span>':'<span class="agent-state"><i class="idle-dot"></i>Agent idle</span>';
+      return `<button class="worktree-card" data-worktree="${id}"><div class="worktree-top"><span class="branch-dot"></span><strong>${w.branch}</strong></div><div class="worktree-path">${w.path}</div><div class="session-summary"><span>${w.terminals.length} terminal ${w.terminals.length===1?'tab':'tabs'}</span>${working}</div></button>`;
+    }
+
+    function promoteDetectedWorktree() {
+      if(!state.detectedPromoted) {
+        state.detectedPromoted=true;
+        const section=document.getElementById('detectedSection');
+        section.insertAdjacentHTML('afterend',worktreeCard('agentLinks'));
+        section.remove();
+      }
+      switchWorktree('agentLinks');
+      toast('Opened codex/file-links · previous terminal remains alive');
+    }
+
+    function switchWorktree(id) {
+      state.active=id; const w=state.worktrees[id];
+      document.querySelectorAll('.worktree-card').forEach(x=>x.classList.toggle('active',x.dataset.worktree===id));
+      document.querySelectorAll('.active-pill').forEach(x=>x.remove());
+      const card=document.querySelector(`.worktree-card[data-worktree="${id}"] .worktree-top`); const pill=document.createElement('span'); pill.className='active-pill'; pill.textContent='ACTIVE'; card.appendChild(pill);
+      ['topWorkspace','sourceBranch','crumbBranch','statusBranch'].forEach(key=>document.getElementById(key).textContent=w.branch);
+      renderTerminalTabs(); updateTerminal(); updateActiveAgentStatus();
+      renderCode(); toast(`Switched to ${w.branch} · other terminals remain alive`);
+    }
+
+    document.querySelectorAll('.rail-button[data-view]').forEach(button=>button.addEventListener('click',()=>{
+      document.querySelectorAll('.rail-button').forEach(x=>x.classList.remove('active')); button.classList.add('active');
+      document.querySelectorAll('.side-view').forEach(x=>x.classList.remove('active')); document.getElementById(`${button.dataset.view}-view`).classList.add('active');
+      const workbench=document.getElementById('workbench');
+      const mode=button.dataset.view==='sessions'?'ai-mode':`${button.dataset.view}-mode`;
+      workbench.className=`workbench ${mode}`;
+      setEditorView('code');
+      renderTerminalTabs(); updateTerminal();
+    }));
+    document.querySelectorAll('[data-editor-view]').forEach(tab=>tab.addEventListener('click',()=>{
+      setEditorView(tab.dataset.editorView);
+    }));
+    document.getElementById('terminalTabs').addEventListener('click',event=>{ const tab=event.target.closest('[data-terminal-id]'); if(!tab)return; state.activeTerminalByWorktree[state.active]=tab.dataset.terminalId; renderTerminalTabs(); updateTerminal(); });
+    document.querySelector('.worktree-list').addEventListener('click',event=>{ const card=event.target.closest('.worktree-card'); if(card)switchWorktree(card.dataset.worktree); });
+    document.getElementById('workspaceSwitch').addEventListener('click',()=>{ document.querySelector('[data-view="sessions"]').click(); toast('Choose a worktree — live terminals will not stop'); });
+    document.querySelectorAll('[data-diff]').forEach(row=>row.addEventListener('click',()=>{
+      const staged=row.dataset.diff==='staged'; document.getElementById('tabName').textContent=staged?'SessionRegistry.cpp · staged':'MainWindow.cpp · working tree'; document.getElementById('crumbFile').textContent='Git Diff';
+      setEditorView('code');
+      renderCode([[staged?'@@ staged changes @@':'@@ working tree changes @@',''],['-    terminal_->close();','diff-del'],['+    sessionRegistry_->detach(activeWorktree_);','diff-add'],['+    sessionRegistry_->attachLast(targetWorktree);','diff-add'],['','']]);
+    }));
+    document.querySelector('[data-open-file]').addEventListener('click',()=>{ document.getElementById('tabName').textContent='MainWindow.cpp'; document.getElementById('crumbFile').textContent='MainWindow.cpp'; setEditorView('code'); renderCode(); });
+    document.getElementById('terminalScreen').addEventListener('click',event=>{
+      const worktreeLink=event.target.closest('[data-open-detected]'); if(worktreeLink){ promoteDetectedWorktree(); return; }
+      const link=event.target.closest('.terminal-file-link'); if(!link)return;
+      const relativePath=link.dataset.file; const fileName=relativePath.split('/').pop();
+      document.getElementById('tabName').textContent=fileName;
+      document.getElementById('crumbFile').textContent=`${fileName} · line ${link.dataset.line}`;
+      setEditorView('code');
+      renderCode([['#include "terminal/SessionRegistry.h"','kw'],['',''],['void SessionRegistry::attachLast(const QString& worktreeRoot) {',''],['    auto& session = sessionsByWorktree_[worktreeRoot];',''],['    session.attach();',''],['}','']]);
+      toast(`Opened ${state.worktrees[state.active].path}/${relativePath}`);
+    });
+    document.getElementById('sessions-view').addEventListener('click',event=>{
+      if(event.target.closest('[data-open-detected]')) promoteDetectedWorktree();
+      if(event.target.closest('[data-dismiss-detected]')) { document.getElementById('detectedSection')?.remove(); toast('Worktree hidden from this notification'); }
+    });
+    renderCode(); renderTerminalTabs(); updateTerminal(); updateActiveAgentStatus();
+  </script>
+</body>
+</html>

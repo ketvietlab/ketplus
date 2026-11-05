@@ -1,0 +1,2294 @@
+{
+  "version": 1,
+  "screens": {
+    "workspace": {
+      "status": "in_review",
+      "tasks": [
+        "D01",
+        "D02",
+        "D03",
+        "D04",
+        "Archive",
+        "R00",
+        "R01",
+        "R02",
+        "R03",
+        "R04",
+        "R05",
+        "R06",
+        "R07",
+        "R08",
+        "R14",
+        "Transcript V2",
+        "Manual compact window",
+        "Daemon activity summaries"
+      ],
+      "summary": "Native Agent Workspace matches the shared KétAtlas shell and chat controls, while Transcript V2 covers exact command, image, browser/app and unknown-fallback activity states. Full native/reference raster approval remains pending. Execution-worktree picker mock added for user review; native/remote switch work remains unfinished. Manual compact-window Atlas mock is ready for design review; native model-picker wiring is pending. Daemon/Desktop summary-only grouping and on-demand details are implemented in the current feature branch; legacy mobile keeps raw events. Native expanded-group rendering was exercised at 1100 and 520 logical pixels. This does not complete unrelated Workspace acceptance checks. Atlas now opens from each conversation header into a right-side list tab; browser handoff, running badge, explicit Stop and last-tab-close states are mock fixtures. Native Atlas lifecycle and visual acceptance remain pending. Command activity now shows its input once, clipped to one line with an inline Show more control; native raster parity for the whole screen remains pending.",
+      "checks": [
+        {
+          "id": "scope",
+          "title": "Native scope isolation and draft preservation",
+          "done": false
+        },
+        {
+          "id": "lifecycle",
+          "title": "Native reconnect/answer/stop acknowledgments and stale response fencing",
+          "done": false
+        },
+        {
+          "id": "history",
+          "title": "Native bounded pagination, reading anchor and Latest under load",
+          "done": false
+        },
+        {
+          "id": "archive",
+          "title": "Native acknowledged Archive/Delete and sync tombstones",
+          "done": false
+        },
+        {
+          "id": "feature-parity",
+          "title": "Native functionality and API parity for every mapped state/edge; see tasks/desktop-refactor/01-screen-feature-matrix.md",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "agent-journey",
+              "nodeId": "new"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "running"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "question"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "done"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "file"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "terminal"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "error"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "stopped"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "model"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "restore"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "sending"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "steering"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "stopping"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "question-more"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "answer-submitting"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "answer-error"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "reconnecting"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "missing-active"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "reply-resolved"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "steer-error"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "private-question"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "question-expired"
+            },
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "created"
+            },
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "switch"
+            },
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "missing"
+            },
+            {
+              "flowId": "appearance-journey",
+              "nodeId": "applied"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "latest"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "loading"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "older"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "page-error"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "partial"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "new-content"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "following"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "retention"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "rich-loading"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "rich-error"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "tool-errors"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "conversation"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "manage"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "archive"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "pending"
+            },
+            {
+              "flowId": "delete-journey",
+              "nodeId": "blocked"
+            },
+            {
+              "flowId": "delete-journey",
+              "nodeId": "conversation"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "activity-files"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "activity-images"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "activity-browser"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "activity-unknown"
+            }
+          ]
+        },
+        {
+          "id": "pixel-perfect",
+          "title": "Pixel-perfect native/reference acceptance for all mapped states and required environment variants",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "agent-journey",
+              "nodeId": "new"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "running"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "question"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "done"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "file"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "terminal"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "error"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "stopped"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "model"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "restore"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "sending"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "steering"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "stopping"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "question-more"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "answer-submitting"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "answer-error"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "reconnecting"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "missing-active"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "reply-resolved"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "steer-error"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "private-question"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "question-expired"
+            },
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "created"
+            },
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "switch"
+            },
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "missing"
+            },
+            {
+              "flowId": "appearance-journey",
+              "nodeId": "applied"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "latest"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "loading"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "older"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "page-error"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "partial"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "new-content"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "following"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "retention"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "rich-loading"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "rich-error"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "tool-errors"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "conversation"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "manage"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "archive"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "pending"
+            },
+            {
+              "flowId": "delete-journey",
+              "nodeId": "blocked"
+            },
+            {
+              "flowId": "delete-journey",
+              "nodeId": "conversation"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "activity-files"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "activity-images"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "activity-browser"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "activity-unknown"
+            }
+          ]
+        },
+        {
+          "id": "performance",
+          "title": "Native performance, accessibility and regression gates for the mapped screen scope",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "agent-journey",
+              "nodeId": "new"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "running"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "question"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "done"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "file"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "terminal"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "error"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "stopped"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "model"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "restore"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "sending"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "steering"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "stopping"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "question-more"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "answer-submitting"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "answer-error"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "reconnecting"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "missing-active"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "reply-resolved"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "steer-error"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "private-question"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "question-expired"
+            },
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "created"
+            },
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "switch"
+            },
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "missing"
+            },
+            {
+              "flowId": "appearance-journey",
+              "nodeId": "applied"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "latest"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "loading"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "older"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "page-error"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "partial"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "new-content"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "following"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "retention"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "rich-loading"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "rich-error"
+            },
+            {
+              "flowId": "history-journey",
+              "nodeId": "tool-errors"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "conversation"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "manage"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "archive"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "pending"
+            },
+            {
+              "flowId": "delete-journey",
+              "nodeId": "blocked"
+            },
+            {
+              "flowId": "delete-journey",
+              "nodeId": "conversation"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "activity-files"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "activity-images"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "activity-browser"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "activity-unknown"
+            }
+          ]
+        },
+        {
+          "id": "transcript-v2-prototype",
+          "title": "KetAtlas Transcript V2 activity states and DOM contract",
+          "done": true,
+          "evidenceIds": [
+            "transcript-v2-dom"
+          ],
+          "nodes": [
+            {
+              "flowId": "agent-journey",
+              "nodeId": "activity-files"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "activity-images"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "activity-browser"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "activity-unknown"
+            }
+          ]
+        },
+        {
+          "id": "atlas-external-lifecycle",
+          "title": "Native conversation Atlas tab, managed external browser handoff, badge and lifecycle recovery",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "conversation"
+            },
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "library"
+            },
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "empty"
+            },
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "starting"
+            },
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "error"
+            },
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "running"
+            },
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "multiple"
+            },
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "stopped"
+            },
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "closed"
+            },
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "stopping"
+            },
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "elsewhere"
+            }
+          ]
+        },
+        {
+          "id": "atlas-bundle-identity",
+          "title": "Native stable bundle/worktree/flow identity, validated revision and missing-bundle recovery",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "library"
+            },
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "error"
+            }
+          ]
+        },
+        {
+          "id": "atlas-visual-performance",
+          "title": "Native Atlas tab and viewer accessibility, performance and visual acceptance across states and themes",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "library"
+            },
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "empty"
+            },
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "running"
+            },
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "multiple"
+            }
+          ]
+        },
+        {
+          "id": "daemon-activity-details",
+          "title": "Summary privacy, expanded live delta, collapse fencing, retry and export compatibility",
+          "done": true,
+          "nodes": [
+            {
+              "flowId": "agent-journey",
+              "nodeId": "activity-browser"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "activity-group-loading"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "activity-group-error"
+            },
+            {
+              "flowId": "agent-journey",
+              "nodeId": "activity-group-updated"
+            }
+          ],
+          "evidenceIds": [
+            "daemon-activity-details-tests"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "design-pr-16",
+          "kind": "pr",
+          "title": "Mock flow changes, not native implementation",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/pull/16",
+          "state": "merged",
+          "revision": "7efc058d99b37f269fdebd5b69044fff32b84195"
+        },
+        {
+          "id": "refactor-plan",
+          "kind": "reference",
+          "title": "Native refactor plan, screen matrix and acceptance gates",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/blob/design/desktop-ketatlas/tasks/desktop-refactor/README.md"
+        },
+        {
+          "id": "desktop-pixel-implementation",
+          "kind": "reference",
+          "title": "Desktop pixel alignment implementation",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
+        },
+        {
+          "id": "desktop-private-suite",
+          "kind": "test",
+          "title": "Full private deterministic suite: 21/21 passed",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "state": "passed",
+          "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
+        },
+        {
+          "id": "transcript-v2-dom",
+          "kind": "test",
+          "title": "Transcript V2 DOM/model regression",
+          "url": "../tests/design/ketatlas-flows.test.cjs",
+          "state": "passed",
+          "revision": "working-tree@8d464fbc2fe9",
+          "environment": "Node 24.14.1, jsdom 26.1.0, KetAtlas 0.3.0"
+        },
+        {
+          "id": "transcript-v2-screenshots",
+          "kind": "reference",
+          "title": "Transcript V2 light/dark review captures",
+          "url": "../tasks/transcript/evidence/ketatlas-transcript-actions-light.jpg"
+        },
+        {
+          "id": "mobile-alignment-mock-review",
+          "kind": "reference",
+          "title": "September mobile-design alignment: mock-only review, 172 passing DOM checks; native acceptance remains pending",
+          "url": "./REVIEW-2026-09.md",
+          "revision": "7b0771abed15986d323c26766ee9f53c11dec7e3 + uncommitted mock changes",
+          "environment": "Node/jsdom 26.1.0; KetAtlas 0.3.0; Chromium 153.0.8010.53",
+          "observedAt": "2026-09-28T04:06:41.119762+00:00"
+        },
+        {
+          "id": "context-menu-mock-review",
+          "kind": "reference",
+          "title": "Native context-menu inventory and 26 mock states; 206 passing DOM checks (not native acceptance)",
+          "url": "./CONTEXT-MENUS.md",
+          "revision": "7b0771abed15986d323c26766ee9f53c11dec7e3 + uncommitted mock changes",
+          "environment": "Node/jsdom 26.1.0; KetAtlas 0.3.0; Chromium 153.0.8010.53",
+          "observedAt": "2026-09-28T05:02:40.311557+00:00"
+        },
+        {
+          "id": "mock-theme-sync-050",
+          "kind": "test",
+          "title": "Mock-only: KetAtlas 0.5.0 theme bridge, state retention and preference restoration; 220 DOM checks passed",
+          "url": "./REVIEW-THEME-SYNC.md#automated-checks",
+          "state": "passed",
+          "environment": "Node 24.14.1, jsdom 26.1.0, KetAtlas 0.5.0; browser end-to-end verification incomplete",
+          "observedAt": "2026-09-29"
+        },
+        {
+          "id": "mock-sidebar-single-line",
+          "kind": "test",
+          "title": "Shared mock sidebar: single-line conversations and all five navigation labels at native Medium 14 px / weight 400; tooltip worktree and collapse behavior",
+          "url": "./README.md#verification",
+          "state": "passed",
+          "environment": "220 Node/jsdom tests; KetPlus browser Chromium 154.0.8037.92, direct light/dark mock at 1440x900",
+          "observedAt": "2026-09-30"
+        },
+        {
+          "id": "execution-worktree-mock-review",
+          "kind": "reference",
+          "title": "Execution worktree mock review; not native acceptance",
+          "url": "./EXECUTION-CONTEXT-REVIEW.md"
+        },
+        {
+          "id": "mock-nav-spacing-20261002",
+          "kind": "test",
+          "title": "Main navigation spacing: 36 px rows, 4 px gaps, 18 px icons; 14 px labels retained",
+          "url": "./README.md#verification",
+          "state": "passed",
+          "environment": "KetPlus browser, direct mock light/dark at 1440x900; not native raster acceptance",
+          "observedAt": "2026-10-02"
+        },
+        {
+          "id": "daemon-activity-details-tests",
+          "kind": "test",
+          "title": "Isolated Qt/SQLite/IPC group tests and native rendering; see ADR 0022 validation",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/blob/feat/daemon-activity-summary/docs/decisions/0022-daemon-activity-group-details.md",
+          "state": "passed",
+          "revision": "508e83a575be917499858208d0032c52928d701a",
+          "environment": "macOS 26.2 ARM64; Qt 6.11.1 Release; offscreen plus native Cocoa fixtures; no live providers"
+        },
+        {
+          "id": "command-input-collapse-native",
+          "kind": "test",
+          "title": "Command preview, expansion, scroll anchor and output regression; ketplus_agent_tests CTest passed",
+          "url": "../tests/TranscriptInteractionTest.cpp",
+          "state": "passed",
+          "revision": "528b57d7146b825fb9fb9001b8723d9d35d4dd29",
+          "environment": "macOS 26.2, Qt 6.11.1 offscreen, KetAtlas 0.6.1",
+          "observedAt": "2026-10-09T12:29:09Z"
+        }
+      ],
+      "updatedAt": "2026-10-09T12:29:18.422Z",
+      "owner": "Desktop UI integration / Workspace Transcript",
+      "blocker": "Full native/reference raster comparison at the locked macOS 1440×900 DPR 2 environment remains required across transcript, question, error, restore and panel variants."
+    },
+    "atlas-builder": {
+      "status": "in_review",
+      "tasks": [
+        "D06",
+        "D07",
+        "R00",
+        "R01",
+        "R04",
+        "R07",
+        "R10",
+        "R14"
+      ],
+      "summary": "Atlas Builder composition, controls and <=400 px inset AI overlay are implemented on feat/desktop-pixel-perfect and pass focused/full tests.",
+      "checks": [
+        {
+          "id": "identity",
+          "title": "Native stable bundle/flow/conversation bridge",
+          "done": false
+        },
+        {
+          "id": "preview",
+          "title": "Native invalid-update recovery and bounded preview lifecycle",
+          "done": false
+        },
+        {
+          "id": "feature-parity",
+          "title": "Native functionality and API parity for every mapped state/edge; see tasks/desktop-refactor/01-screen-feature-matrix.md",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "edit"
+            },
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "edit-invalid"
+            },
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "edit-missing"
+            }
+          ]
+        },
+        {
+          "id": "pixel-perfect",
+          "title": "Pixel-perfect native/reference acceptance for all mapped states and required environment variants",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "edit"
+            },
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "edit-invalid"
+            },
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "edit-missing"
+            }
+          ]
+        },
+        {
+          "id": "performance",
+          "title": "Native performance, accessibility and regression gates for the mapped screen scope",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "edit"
+            },
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "edit-invalid"
+            },
+            {
+              "flowId": "atlas-journey",
+              "nodeId": "edit-missing"
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "design-pr-16",
+          "kind": "pr",
+          "title": "Mock flow changes, not native implementation",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/pull/16",
+          "state": "merged",
+          "revision": "7efc058d99b37f269fdebd5b69044fff32b84195"
+        },
+        {
+          "id": "refactor-plan",
+          "kind": "reference",
+          "title": "Native refactor plan, screen matrix and acceptance gates",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/blob/design/desktop-ketatlas/tasks/desktop-refactor/README.md"
+        },
+        {
+          "id": "desktop-pixel-implementation",
+          "kind": "reference",
+          "title": "Desktop pixel alignment implementation",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
+        },
+        {
+          "id": "desktop-private-suite",
+          "kind": "test",
+          "title": "Full private deterministic suite: 21/21 passed",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "state": "passed",
+          "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
+        },
+        {
+          "id": "mobile-alignment-mock-review",
+          "kind": "reference",
+          "title": "September mobile-design alignment: mock-only review, 172 passing DOM checks; native acceptance remains pending",
+          "url": "./REVIEW-2026-09.md",
+          "revision": "7b0771abed15986d323c26766ee9f53c11dec7e3 + uncommitted mock changes",
+          "environment": "Node/jsdom 26.1.0; KetAtlas 0.3.0; Chromium 153.0.8010.53",
+          "observedAt": "2026-09-28T04:06:41.844412+00:00"
+        },
+        {
+          "id": "mock-theme-sync-050",
+          "kind": "test",
+          "title": "Mock-only: KetAtlas 0.5.0 theme bridge, state retention and preference restoration; 220 DOM checks passed",
+          "url": "./REVIEW-THEME-SYNC.md#automated-checks",
+          "state": "passed",
+          "environment": "Node 24.14.1, jsdom 26.1.0, KetAtlas 0.5.0; browser end-to-end verification incomplete",
+          "observedAt": "2026-09-29"
+        }
+      ],
+      "updatedAt": "2026-09-29T03:54:53.452Z",
+      "owner": "Private Atlas / Agent Workspace",
+      "blocker": "Native/reference raster comparison at the locked environment is still required before verification."
+    },
+    "editor": {
+      "status": "in_progress",
+      "owner": "Desktop shell / Public CM",
+      "tasks": [
+        "R00",
+        "R01",
+        "R04",
+        "R11",
+        "R14"
+      ],
+      "summary": "Product shell now uses one 216 px sidebar with no redundant global top bar; repository/worktree context stays in the sidebar, theme selection lives in Settings, and workspace content begins at the top edge. Full editor chrome and state-by-state visual parity still depend on public CM surfaces.",
+      "blocker": "Public CM editor/settings composition does not yet expose every geometry hook required by the approved full-page reference, and native raster evidence is unavailable.",
+      "checks": [
+        {
+          "id": "feature-parity",
+          "title": "Native functionality and API parity for every mapped state/edge; see tasks/desktop-refactor/01-screen-feature-matrix.md",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "code-review",
+              "nodeId": "edit"
+            },
+            {
+              "flowId": "code-review",
+              "nodeId": "preview"
+            },
+            {
+              "flowId": "code-review",
+              "nodeId": "terminal"
+            },
+            {
+              "flowId": "spotlight-journey",
+              "nodeId": "file"
+            }
+          ]
+        },
+        {
+          "id": "pixel-perfect",
+          "title": "Pixel-perfect native/reference acceptance for all mapped states and required environment variants",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "code-review",
+              "nodeId": "edit"
+            },
+            {
+              "flowId": "code-review",
+              "nodeId": "preview"
+            },
+            {
+              "flowId": "code-review",
+              "nodeId": "terminal"
+            },
+            {
+              "flowId": "spotlight-journey",
+              "nodeId": "file"
+            }
+          ]
+        },
+        {
+          "id": "performance",
+          "title": "Native performance, accessibility and regression gates for the mapped screen scope",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "code-review",
+              "nodeId": "edit"
+            },
+            {
+              "flowId": "code-review",
+              "nodeId": "preview"
+            },
+            {
+              "flowId": "code-review",
+              "nodeId": "terminal"
+            },
+            {
+              "flowId": "spotlight-journey",
+              "nodeId": "file"
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "design-pr-16",
+          "kind": "pr",
+          "title": "Mock design baseline, not native implementation",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/pull/16",
+          "state": "merged",
+          "revision": "7efc058d99b37f269fdebd5b69044fff32b84195"
+        },
+        {
+          "id": "refactor-plan",
+          "kind": "reference",
+          "title": "Native refactor plan, screen matrix and acceptance gates",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/blob/design/desktop-ketatlas/tasks/desktop-refactor/README.md"
+        },
+        {
+          "id": "desktop-pixel-implementation",
+          "kind": "reference",
+          "title": "Desktop pixel alignment implementation",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
+        },
+        {
+          "id": "desktop-private-suite",
+          "kind": "test",
+          "title": "Full private deterministic suite: 21/21 passed",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "state": "passed",
+          "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
+        },
+        {
+          "id": "mobile-alignment-mock-review",
+          "kind": "reference",
+          "title": "September mobile-design alignment: mock-only review, 172 passing DOM checks; native acceptance remains pending",
+          "url": "./REVIEW-2026-09.md",
+          "revision": "7b0771abed15986d323c26766ee9f53c11dec7e3 + uncommitted mock changes",
+          "environment": "Node/jsdom 26.1.0; KetAtlas 0.3.0; Chromium 153.0.8010.53",
+          "observedAt": "2026-09-28T04:06:41.584851+00:00"
+        },
+        {
+          "id": "context-menu-mock-review",
+          "kind": "reference",
+          "title": "Native context-menu inventory and 26 mock states; 206 passing DOM checks (not native acceptance)",
+          "url": "./CONTEXT-MENUS.md",
+          "revision": "7b0771abed15986d323c26766ee9f53c11dec7e3 + uncommitted mock changes",
+          "environment": "Node/jsdom 26.1.0; KetAtlas 0.3.0; Chromium 153.0.8010.53",
+          "observedAt": "2026-09-28T05:02:40.480696+00:00"
+        },
+        {
+          "id": "mock-theme-sync-050",
+          "kind": "test",
+          "title": "Mock-only: KetAtlas 0.5.0 theme bridge, state retention and preference restoration; 220 DOM checks passed",
+          "url": "./REVIEW-THEME-SYNC.md#automated-checks",
+          "state": "passed",
+          "environment": "Node 24.14.1, jsdom 26.1.0, KetAtlas 0.5.0; browser end-to-end verification incomplete",
+          "observedAt": "2026-09-29"
+        }
+      ],
+      "updatedAt": "2026-09-29T03:54:52.641Z"
+    },
+    "changes": {
+      "status": "in_review",
+      "owner": "Desktop shell / Public CM",
+      "tasks": [
+        "R00",
+        "R01",
+        "R11",
+        "R14"
+      ],
+      "summary": "The public ketplus-cm Source Control panel now owns the repository summary and matches the approved design: compact heading and refresh action, repository/branch metadata, Changes before Staged Changes, count badges, two-line file rows, semantic 16 px line icons, selected accent treatment, and staged/unstaged status colors. The desktop host only integrates the public component. Focused public CM and desktop workspace regression checks pass.",
+      "blocker": "Final native/reference raster acceptance is still required for clean and mixed staged/unstaged repository variants in the locked environment.",
+      "checks": [
+        {
+          "id": "feature-parity",
+          "title": "Native functionality and API parity for every mapped state/edge; see tasks/desktop-refactor/01-screen-feature-matrix.md",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "code-review",
+              "nodeId": "diff"
+            },
+            {
+              "flowId": "code-review",
+              "nodeId": "staged"
+            },
+            {
+              "flowId": "code-review",
+              "nodeId": "clean"
+            }
+          ]
+        },
+        {
+          "id": "pixel-perfect",
+          "title": "Pixel-perfect native/reference acceptance for all mapped states and required environment variants",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "code-review",
+              "nodeId": "diff"
+            },
+            {
+              "flowId": "code-review",
+              "nodeId": "staged"
+            },
+            {
+              "flowId": "code-review",
+              "nodeId": "clean"
+            }
+          ]
+        },
+        {
+          "id": "performance",
+          "title": "Native performance, accessibility and regression gates for the mapped screen scope",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "code-review",
+              "nodeId": "diff"
+            },
+            {
+              "flowId": "code-review",
+              "nodeId": "staged"
+            },
+            {
+              "flowId": "code-review",
+              "nodeId": "clean"
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "design-pr-16",
+          "kind": "pr",
+          "title": "Mock design baseline, not native implementation",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/pull/16",
+          "state": "merged",
+          "revision": "7efc058d99b37f269fdebd5b69044fff32b84195"
+        },
+        {
+          "id": "refactor-plan",
+          "kind": "reference",
+          "title": "Native refactor plan, screen matrix and acceptance gates",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/blob/design/desktop-ketatlas/tasks/desktop-refactor/README.md"
+        },
+        {
+          "id": "desktop-pixel-implementation",
+          "kind": "reference",
+          "title": "Desktop pixel alignment implementation",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
+        },
+        {
+          "id": "desktop-private-suite",
+          "kind": "test",
+          "title": "Full private deterministic suite: 21/21 passed",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "state": "passed",
+          "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
+        },
+        {
+          "id": "context-menu-mock-review",
+          "kind": "reference",
+          "title": "Native context-menu inventory and 26 mock states; 206 passing DOM checks (not native acceptance)",
+          "url": "./CONTEXT-MENUS.md",
+          "revision": "7b0771abed15986d323c26766ee9f53c11dec7e3 + uncommitted mock changes",
+          "environment": "Node/jsdom 26.1.0; KetAtlas 0.3.0; Chromium 153.0.8010.53",
+          "observedAt": "2026-09-28T05:02:40.649232+00:00"
+        },
+        {
+          "id": "mock-theme-sync-050",
+          "kind": "test",
+          "title": "Mock-only: KetAtlas 0.5.0 theme bridge, state retention and preference restoration; 220 DOM checks passed",
+          "url": "./REVIEW-THEME-SYNC.md#automated-checks",
+          "state": "passed",
+          "environment": "Node 24.14.1, jsdom 26.1.0, KetAtlas 0.5.0; browser end-to-end verification incomplete",
+          "observedAt": "2026-09-29"
+        }
+      ],
+      "updatedAt": "2026-09-29T03:54:52.853Z"
+    },
+    "worktrees": {
+      "status": "in_review",
+      "tasks": [
+        "D01",
+        "Archive",
+        "Delete",
+        "R00",
+        "R01",
+        "R02",
+        "R03",
+        "R04",
+        "R08",
+        "R14"
+      ],
+      "summary": "A dedicated full-page Worktrees workspace now presents linked branches, conversation and Agent activity, repository state, create/manage actions, archived routing, and scrolling for long lists in the shared product shell.",
+      "checks": [
+        {
+          "id": "ownership",
+          "title": "Native worktree identity and operation result reconciliation",
+          "done": false
+        },
+        {
+          "id": "delete",
+          "title": "Native clean/inactive/non-main delete guards and retained branch/history",
+          "done": false
+        },
+        {
+          "id": "feature-parity",
+          "title": "Native functionality and API parity for every mapped state/edge; see tasks/desktop-refactor/01-screen-feature-matrix.md",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "list"
+            },
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "create"
+            },
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "invalid"
+            },
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "recovered"
+            },
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "creating"
+            },
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "create-error"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "worktrees"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "archive-worktree"
+            },
+            {
+              "flowId": "delete-journey",
+              "nodeId": "worktrees"
+            },
+            {
+              "flowId": "delete-journey",
+              "nodeId": "delete"
+            },
+            {
+              "flowId": "delete-journey",
+              "nodeId": "pending"
+            },
+            {
+              "flowId": "delete-journey",
+              "nodeId": "dirty"
+            },
+            {
+              "flowId": "delete-journey",
+              "nodeId": "error"
+            }
+          ]
+        },
+        {
+          "id": "pixel-perfect",
+          "title": "Pixel-perfect native/reference acceptance for all mapped states and required environment variants",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "list"
+            },
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "create"
+            },
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "invalid"
+            },
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "recovered"
+            },
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "creating"
+            },
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "create-error"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "worktrees"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "archive-worktree"
+            },
+            {
+              "flowId": "delete-journey",
+              "nodeId": "worktrees"
+            },
+            {
+              "flowId": "delete-journey",
+              "nodeId": "delete"
+            },
+            {
+              "flowId": "delete-journey",
+              "nodeId": "pending"
+            },
+            {
+              "flowId": "delete-journey",
+              "nodeId": "dirty"
+            },
+            {
+              "flowId": "delete-journey",
+              "nodeId": "error"
+            }
+          ]
+        },
+        {
+          "id": "performance",
+          "title": "Native performance, accessibility and regression gates for the mapped screen scope",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "list"
+            },
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "create"
+            },
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "invalid"
+            },
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "recovered"
+            },
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "creating"
+            },
+            {
+              "flowId": "worktree-journey",
+              "nodeId": "create-error"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "worktrees"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "archive-worktree"
+            },
+            {
+              "flowId": "delete-journey",
+              "nodeId": "worktrees"
+            },
+            {
+              "flowId": "delete-journey",
+              "nodeId": "delete"
+            },
+            {
+              "flowId": "delete-journey",
+              "nodeId": "pending"
+            },
+            {
+              "flowId": "delete-journey",
+              "nodeId": "dirty"
+            },
+            {
+              "flowId": "delete-journey",
+              "nodeId": "error"
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "design-pr-16",
+          "kind": "pr",
+          "title": "Mock flow changes, not native implementation",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/pull/16",
+          "state": "merged",
+          "revision": "7efc058d99b37f269fdebd5b69044fff32b84195"
+        },
+        {
+          "id": "refactor-plan",
+          "kind": "reference",
+          "title": "Native refactor plan, screen matrix and acceptance gates",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/blob/design/desktop-ketatlas/tasks/desktop-refactor/README.md"
+        },
+        {
+          "id": "desktop-pixel-implementation",
+          "kind": "reference",
+          "title": "Desktop pixel alignment implementation",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
+        },
+        {
+          "id": "desktop-private-suite",
+          "kind": "test",
+          "title": "Full private deterministic suite: 21/21 passed",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "state": "passed",
+          "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
+        },
+        {
+          "id": "context-menu-mock-review",
+          "kind": "reference",
+          "title": "Native context-menu inventory and 26 mock states; 206 passing DOM checks (not native acceptance)",
+          "url": "./CONTEXT-MENUS.md",
+          "revision": "7b0771abed15986d323c26766ee9f53c11dec7e3 + uncommitted mock changes",
+          "environment": "Node/jsdom 26.1.0; KetAtlas 0.3.0; Chromium 153.0.8010.53",
+          "observedAt": "2026-09-28T05:02:40.819844+00:00"
+        },
+        {
+          "id": "mock-theme-sync-050",
+          "kind": "test",
+          "title": "Mock-only: KetAtlas 0.5.0 theme bridge, state retention and preference restoration; 220 DOM checks passed",
+          "url": "./REVIEW-THEME-SYNC.md#automated-checks",
+          "state": "passed",
+          "environment": "Node 24.14.1, jsdom 26.1.0, KetAtlas 0.5.0; browser end-to-end verification incomplete",
+          "observedAt": "2026-09-29"
+        }
+      ],
+      "updatedAt": "2026-09-29T03:54:53.046Z",
+      "owner": "Desktop lifecycle / Agent Workspace",
+      "blocker": "Native/reference raster comparison and acceptance of the remaining create/manage pending, error, and destructive-guard variants are still required before verification."
+    },
+    "connections": {
+      "status": "in_review",
+      "tasks": [
+        "D05",
+        "R00",
+        "R01",
+        "R02",
+        "R04",
+        "R09",
+        "R14"
+      ],
+      "summary": "Native Connections now follows the approved KétAtlas composition across the complete journey: compact signed-out welcome, 500 px sign-in/pair/confirm/expiry/cancellation/detail/revoke/sign-out dialogs, 204 px QR, signed-in device layout, offline/auth-expiry notices, and acknowledged error copy. The opt-in deterministic demo covers sign-in, QR, confirmation, expiry and sign-out; 6/6 focused checks pass.",
+      "checks": [
+        {
+          "id": "auth",
+          "title": "Real sign-in/expiry/sign-out behavior",
+          "done": false
+        },
+        {
+          "id": "pairing",
+          "title": "Real ticket cancellation, grant and revocation acknowledgments",
+          "done": false
+        },
+        {
+          "id": "feature-parity",
+          "title": "Native functionality and API parity for every mapped state/edge; see tasks/desktop-refactor/01-screen-feature-matrix.md",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "device-journey",
+              "nodeId": "signin"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "invalid"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "connected"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "pair"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "confirm"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "paired"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "expired"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "reconnect"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "revoke"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "revoked"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "signin-form"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "signing-in"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "confirming"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "confirm-error"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "revoking"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "revoke-error"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "auth-expired"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "signout"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "cancel-error"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "device-details"
+            }
+          ]
+        },
+        {
+          "id": "pixel-perfect",
+          "title": "Pixel-perfect native/reference acceptance for all mapped states and required environment variants",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "device-journey",
+              "nodeId": "signin"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "invalid"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "connected"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "pair"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "confirm"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "paired"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "expired"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "reconnect"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "revoke"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "revoked"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "signin-form"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "signing-in"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "confirming"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "confirm-error"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "revoking"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "revoke-error"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "auth-expired"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "signout"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "cancel-error"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "device-details"
+            }
+          ]
+        },
+        {
+          "id": "performance",
+          "title": "Native performance, accessibility and regression gates for the mapped screen scope",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "device-journey",
+              "nodeId": "signin"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "invalid"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "connected"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "pair"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "confirm"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "paired"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "expired"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "reconnect"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "revoke"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "revoked"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "signin-form"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "signing-in"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "confirming"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "confirm-error"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "revoking"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "revoke-error"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "auth-expired"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "signout"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "cancel-error"
+            },
+            {
+              "flowId": "device-journey",
+              "nodeId": "device-details"
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "design-pr-16",
+          "kind": "pr",
+          "title": "Mock flow changes, not native implementation",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/pull/16",
+          "state": "merged",
+          "revision": "7efc058d99b37f269fdebd5b69044fff32b84195"
+        },
+        {
+          "id": "refactor-plan",
+          "kind": "reference",
+          "title": "Native refactor plan, screen matrix and acceptance gates",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/blob/design/desktop-ketatlas/tasks/desktop-refactor/README.md"
+        },
+        {
+          "id": "desktop-pixel-implementation",
+          "kind": "reference",
+          "title": "Desktop pixel alignment implementation",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
+        },
+        {
+          "id": "desktop-private-suite",
+          "kind": "test",
+          "title": "Full private deterministic suite: 21/21 passed",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "state": "passed",
+          "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
+        },
+        {
+          "id": "mobile-alignment-mock-review",
+          "kind": "reference",
+          "title": "September mobile-design alignment: mock-only review, 172 passing DOM checks; native acceptance remains pending",
+          "url": "./REVIEW-2026-09.md",
+          "revision": "7b0771abed15986d323c26766ee9f53c11dec7e3 + uncommitted mock changes",
+          "environment": "Node/jsdom 26.1.0; KetAtlas 0.3.0; Chromium 153.0.8010.53",
+          "observedAt": "2026-09-28T04:06:42.083077+00:00"
+        },
+        {
+          "id": "mock-theme-sync-050",
+          "kind": "test",
+          "title": "Mock-only: KetAtlas 0.5.0 theme bridge, state retention and preference restoration; 220 DOM checks passed",
+          "url": "./REVIEW-THEME-SYNC.md#automated-checks",
+          "state": "passed",
+          "environment": "Node 24.14.1, jsdom 26.1.0, KetAtlas 0.5.0; browser end-to-end verification incomplete",
+          "observedAt": "2026-09-29"
+        }
+      ],
+      "updatedAt": "2026-09-29T03:54:53.867Z",
+      "owner": "Private remote UI",
+      "blocker": "Live staging evidence for real account expiry, device enrollment, cancellation failure and revocation acknowledgment remains required, plus final locked-environment light-theme raster acceptance for asynchronous error variants."
+    },
+    "settings": {
+      "status": "in_review",
+      "tasks": [
+        "Archive",
+        "R00",
+        "R01",
+        "R02",
+        "R04",
+        "R08",
+        "R12",
+        "R14"
+      ],
+      "summary": "Settings now matches the approved full-page content and type scale: five icon-led navigation rows, real Light and Dark theme cards, Follow system, Indigo accent, workspace preview, dedicated Typography controls, private Archived content, and working routes to Account & devices and Agent models. The hidden public CM host still owns preview, reset, validation, and persistence.",
+      "checks": [
+        {
+          "id": "restore",
+          "title": "Native scoped restore and missing-folder protection",
+          "done": false
+        },
+        {
+          "id": "archive-sync",
+          "title": "Native archive metadata and deletion tombstones across clients",
+          "done": false
+        },
+        {
+          "id": "feature-parity",
+          "title": "Native functionality and API parity for every mapped state/edge; see tasks/desktop-refactor/01-screen-feature-matrix.md",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "appearance-journey",
+              "nodeId": "light"
+            },
+            {
+              "flowId": "appearance-journey",
+              "nodeId": "dark"
+            },
+            {
+              "flowId": "appearance-journey",
+              "nodeId": "typography"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "settings"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "restore"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "restoring"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "restored"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "error"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "empty"
+            },
+            {
+              "flowId": "delete-journey",
+              "nodeId": "deleted"
+            }
+          ]
+        },
+        {
+          "id": "pixel-perfect",
+          "title": "Pixel-perfect native/reference acceptance for all mapped states and required environment variants",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "appearance-journey",
+              "nodeId": "light"
+            },
+            {
+              "flowId": "appearance-journey",
+              "nodeId": "dark"
+            },
+            {
+              "flowId": "appearance-journey",
+              "nodeId": "typography"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "settings"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "restore"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "restoring"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "restored"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "error"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "empty"
+            },
+            {
+              "flowId": "delete-journey",
+              "nodeId": "deleted"
+            }
+          ]
+        },
+        {
+          "id": "performance",
+          "title": "Native performance, accessibility and regression gates for the mapped screen scope",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "appearance-journey",
+              "nodeId": "light"
+            },
+            {
+              "flowId": "appearance-journey",
+              "nodeId": "dark"
+            },
+            {
+              "flowId": "appearance-journey",
+              "nodeId": "typography"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "settings"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "restore"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "restoring"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "restored"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "error"
+            },
+            {
+              "flowId": "archive-journey",
+              "nodeId": "empty"
+            },
+            {
+              "flowId": "delete-journey",
+              "nodeId": "deleted"
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "design-pr-16",
+          "kind": "pr",
+          "title": "Mock flow changes, not native implementation",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/pull/16",
+          "state": "merged",
+          "revision": "7efc058d99b37f269fdebd5b69044fff32b84195"
+        },
+        {
+          "id": "refactor-plan",
+          "kind": "reference",
+          "title": "Native refactor plan, screen matrix and acceptance gates",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/blob/design/desktop-ketatlas/tasks/desktop-refactor/README.md"
+        },
+        {
+          "id": "desktop-pixel-implementation",
+          "kind": "reference",
+          "title": "Desktop pixel alignment implementation",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
+        },
+        {
+          "id": "desktop-private-suite",
+          "kind": "test",
+          "title": "Full private deterministic suite: 21/21 passed",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "state": "passed",
+          "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
+        },
+        {
+          "id": "mobile-alignment-mock-review",
+          "kind": "reference",
+          "title": "September mobile-design alignment: mock-only review, 172 passing DOM checks; native acceptance remains pending",
+          "url": "./REVIEW-2026-09.md",
+          "revision": "7b0771abed15986d323c26766ee9f53c11dec7e3 + uncommitted mock changes",
+          "environment": "Node/jsdom 26.1.0; KetAtlas 0.3.0; Chromium 153.0.8010.53",
+          "observedAt": "2026-09-28T04:06:41.350235+00:00"
+        },
+        {
+          "id": "mock-theme-sync-050",
+          "kind": "test",
+          "title": "Mock-only: KetAtlas 0.5.0 theme bridge, state retention and preference restoration; 220 DOM checks passed",
+          "url": "./REVIEW-THEME-SYNC.md#automated-checks",
+          "state": "passed",
+          "environment": "Node 24.14.1, jsdom 26.1.0, KetAtlas 0.5.0; browser end-to-end verification incomplete",
+          "observedAt": "2026-09-29"
+        }
+      ],
+      "updatedAt": "2026-09-29T03:54:54.070Z",
+      "owner": "Public CM settings controls / Private desktop composition",
+      "blocker": "Final native/reference raster acceptance for light, dark, typography, and archived variants remains required before verification."
+    },
+    "search": {
+      "status": "in_review",
+      "owner": "Desktop routing",
+      "tasks": [
+        "R00",
+        "R01",
+        "R04",
+        "R12",
+        "R14"
+      ],
+      "summary": "Spotlight now follows the KétAtlas command-palette composition: compact content-driven height, reduced header/hint/footer spacing, grouped two-line results for files, repositories, worktrees, Atlases and navigation, 16 px semantic icons, keyboard affordances, and scoped routing. Focused Spotlight checks pass.",
+      "blocker": "Final native/reference raster acceptance is still required for the @repo and empty-result variants in the locked environment.",
+      "checks": [
+        {
+          "id": "feature-parity",
+          "title": "Native functionality and API parity for every mapped state/edge; see tasks/desktop-refactor/01-screen-feature-matrix.md",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "spotlight-journey",
+              "nodeId": "search"
+            },
+            {
+              "flowId": "spotlight-journey",
+              "nodeId": "empty"
+            }
+          ]
+        },
+        {
+          "id": "pixel-perfect",
+          "title": "Pixel-perfect native/reference acceptance for all mapped states and required environment variants",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "spotlight-journey",
+              "nodeId": "search"
+            },
+            {
+              "flowId": "spotlight-journey",
+              "nodeId": "empty"
+            }
+          ]
+        },
+        {
+          "id": "performance",
+          "title": "Native performance, accessibility and regression gates for the mapped screen scope",
+          "done": false,
+          "nodes": [
+            {
+              "flowId": "spotlight-journey",
+              "nodeId": "search"
+            },
+            {
+              "flowId": "spotlight-journey",
+              "nodeId": "empty"
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "design-pr-16",
+          "kind": "pr",
+          "title": "Mock design baseline, not native implementation",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/pull/16",
+          "state": "merged",
+          "revision": "7efc058d99b37f269fdebd5b69044fff32b84195"
+        },
+        {
+          "id": "refactor-plan",
+          "kind": "reference",
+          "title": "Native refactor plan, screen matrix and acceptance gates",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/blob/design/desktop-ketatlas/tasks/desktop-refactor/README.md"
+        },
+        {
+          "id": "desktop-pixel-implementation",
+          "kind": "reference",
+          "title": "Desktop pixel alignment implementation",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
+        },
+        {
+          "id": "desktop-private-suite",
+          "kind": "test",
+          "title": "Full private deterministic suite: 21/21 passed",
+          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "state": "passed",
+          "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
+        },
+        {
+          "id": "mock-theme-sync-050",
+          "kind": "test",
+          "title": "Mock-only: KetAtlas 0.5.0 theme bridge, state retention and preference restoration; 220 DOM checks passed",
+          "url": "./REVIEW-THEME-SYNC.md#automated-checks",
+          "state": "passed",
+          "environment": "Node 24.14.1, jsdom 26.1.0, KetAtlas 0.5.0; browser end-to-end verification incomplete",
+          "observedAt": "2026-09-29"
+        }
+      ],
+      "updatedAt": "2026-09-29T03:54:54.279Z"
+    },
+    "repository-picker-desktop": {
+      "status": "in_review",
+      "owner": "KétPlus product UI",
+      "tasks": [
+        "Conversation repository selection mock"
+      ],
+      "summary": "Interactive static prototype only. Shares the existing Két adapter, fixtures and presenter across Desktop and iPhone. Native Qt/SwiftUI, daemon switching and cross-device persistence are not implemented by this mock.",
+      "checks": [
+        {
+          "id": "mock-switch",
+          "title": "Prototype keeps current repository first and updates conversation/header/sidebar together",
+          "done": true,
+          "evidenceIds": [
+            "repository-picker-tests"
+          ]
+        },
+        {
+          "id": "mock-recovery",
+          "title": "Prototype preserves draft and scope through search, rejection, reconnect and retry",
+          "done": true,
+          "evidenceIds": [
+            "repository-picker-tests"
+          ]
+        },
+        {
+          "id": "native-implementation",
+          "title": "Native desktop/mobile implementation and cross-device acknowledgments",
+          "done": false
+        }
+      ],
+      "evidence": [
+        {
+          "id": "repository-picker-tests",
+          "kind": "test",
+          "title": "18 focused model/DOM tests and scoped KetPlus browser verification; mock only",
+          "url": "./evidence/repository-picker/verification.json",
+          "state": "passed",
+          "revision": "49c18f2d14d3 + prototype:942cdeeaecfc",
+          "environment": "Node 24.14.1 / jsdom 26.1.0 / KetPlus browser Chrome 155.0.8059.84; Desktop 1440x900 and iPhone 390x844 light/dark; layout 320/767/768px"
+        }
+      ]
+    },
+    "repository-picker-mobile": {
+      "status": "in_review",
+      "owner": "KétPlus product UI",
+      "tasks": [
+        "Conversation repository selection mock"
+      ],
+      "summary": "Interactive static prototype only. Shares the existing Két adapter, fixtures and presenter across Desktop and iPhone. Native Qt/SwiftUI, daemon switching and cross-device persistence are not implemented by this mock.",
+      "checks": [
+        {
+          "id": "mock-switch",
+          "title": "Prototype keeps current repository first and updates conversation/header/sidebar together",
+          "done": true,
+          "evidenceIds": [
+            "repository-picker-tests"
+          ]
+        },
+        {
+          "id": "mock-recovery",
+          "title": "Prototype preserves draft and scope through search, rejection, reconnect and retry",
+          "done": true,
+          "evidenceIds": [
+            "repository-picker-tests"
+          ]
+        },
+        {
+          "id": "native-implementation",
+          "title": "Native desktop/mobile implementation and cross-device acknowledgments",
+          "done": false
+        }
+      ],
+      "evidence": [
+        {
+          "id": "repository-picker-tests",
+          "kind": "test",
+          "title": "18 focused model/DOM tests and scoped KetPlus browser verification; mock only",
+          "url": "./evidence/repository-picker/verification.json",
+          "state": "passed",
+          "revision": "49c18f2d14d3 + prototype:942cdeeaecfc",
+          "environment": "Node 24.14.1 / jsdom 26.1.0 / KetPlus browser Chrome 155.0.8059.84; Desktop 1440x900 and iPhone 390x844 light/dark; layout 320/767/768px"
+        }
+      ]
+    }
+  }
+}

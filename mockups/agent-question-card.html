@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>KetPlus · Agent Question</title>
+  <style>
+    :root {
+      --app: #15191e;
+      --sidebar: #171b20;
+      --page: #1b1f24;
+      --raised: #22272e;
+      --raised-2: #272d35;
+      --hover: #2b3139;
+      --border: #2c3138;
+      --border-strong: #404854;
+      --text: #e3e6ea;
+      --text-2: #bdc3cc;
+      --muted: #858d99;
+      --dim: #626b77;
+      --accent: #5968df;
+      --accent-hi: #aab6ed;
+      --accent-bg: #252d4a;
+      --positive: #42c786;
+      --danger: #ee7067;
+      font-family: "Avenir Next", Avenir, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color-scheme: dark;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { width: 100%; min-width: 760px; height: 100%; margin: 0; overflow: hidden; }
+    body { background: var(--app); color: var(--text); font-size: 13px; }
+    button, input, textarea { font: inherit; color: inherit; }
+    button { border: 0; cursor: pointer; }
+    button:focus-visible, input:focus-visible, textarea:focus-visible {
+      outline: 2px solid #7485e8;
+      outline-offset: 2px;
+    }
+
+    .app {
+      width: min(1120px, 100vw);
+      height: 100vh;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 268px minmax(0, 1fr);
+      background: var(--page);
+      border-inline: 1px solid #20242a;
+    }
+
+    .sidebar {
+      min-width: 0;
+      border-right: 1px solid var(--border);
+      background: var(--sidebar);
+      padding: 22px 14px;
+    }
+    .side-title {
+      margin: 0 8px 14px;
+      color: #a7aeb8;
+      font-size: 11px;
+      font-weight: 760;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+    .section-head {
+      height: 34px;
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      color: var(--text-2);
+      font-size: 11px;
+      font-weight: 760;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+    }
+    .section-head span { margin-left: auto; color: var(--muted); font-size: 16px; font-weight: 400; }
+    .worktree, .conversation {
+      width: 100%;
+      margin: 3px 0;
+      padding: 10px 11px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+      text-align: left;
+    }
+    .worktree.active, .conversation.active { border-color: #3a436d; background: var(--accent-bg); }
+    .item-top { display: flex; align-items: center; gap: 8px; }
+    .item-top strong { min-width: 0; overflow: hidden; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }
+    .branch { color: #10d68b; font: 700 16px ui-monospace, monospace; }
+    .dot { width: 7px; height: 7px; margin-left: auto; border-radius: 50%; background: var(--positive); }
+    .item-detail { margin: 5px 0 0 25px; color: var(--muted); font-size: 11px; }
+    .conversation .item-detail { margin-left: 0; }
+    .sidebar-rule { height: 1px; margin: 14px 0 8px; background: var(--border); }
+
+    .main { min-width: 0; display: grid; grid-template-rows: 54px minmax(0, 1fr) auto; }
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 26px;
+      border-bottom: 1px solid var(--border);
+      background: #191d22;
+    }
+    .agent-mark {
+      width: 26px;
+      height: 26px;
+      display: grid;
+      place-items: center;
+      border: 1px solid #4351ae;
+      border-radius: 7px;
+      background: #242c50;
+      color: #91a0ff;
+      font-size: 14px;
+    }
+    .topbar-copy { min-width: 0; }
+    .topbar-copy strong { display: block; font-size: 13px; font-weight: 650; }
+    .topbar-copy small { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; }
+    .status { margin-left: auto; display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; }
+    .status i { width: 7px; height: 7px; border-radius: 50%; background: #e3aa43; box-shadow: 0 0 0 3px #e3aa4314; }
+
+    .timeline { overflow: auto; padding: 26px max(28px, calc((100% - 680px) / 2)); }
+    .message { margin-bottom: 25px; }
+    .message-head { display: flex; align-items: center; gap: 8px; height: 18px; color: var(--muted); font-size: 11px; font-weight: 650; }
+    .message-head .bot { color: #7787ff; font-size: 15px; }
+    .message p { margin: 10px 0 0; color: #d6dae0; font-size: 14px; line-height: 1.5; }
+    .user-message { display: flex; justify-content: flex-end; }
+    .user-bubble { max-width: 72%; padding: 10px 13px; border: 1px solid #39436c; border-radius: 10px; background: var(--accent-bg); line-height: 1.5; }
+
+    .question-card {
+      position: relative;
+      overflow: hidden;
+      margin-top: 11px;
+      border: 1px solid var(--border-strong);
+      border-radius: 10px;
+      background: #20252c;
+      box-shadow: 0 14px 42px #00000022;
+    }
+    .question-card::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 2px;
+      background: var(--accent);
+    }
+    .question-card.answered::before { background: var(--positive); }
+    .question-card-head {
+      min-height: 47px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--border);
+      background: #22272e;
+    }
+    .question-icon {
+      width: 23px;
+      height: 23px;
+      display: grid;
+      place-items: center;
+      border-radius: 6px;
+      background: #303a70;
+      color: #bcc5ff;
+      font: 750 13px Georgia, serif;
+    }
+    .question-card-head strong { font-size: 12px; font-weight: 700; }
+    .question-card-head small { margin-left: auto; color: var(--muted); font-size: 10px; }
+    .question-card-body { padding: 15px 16px 16px; }
+    .question-block { display: none; }
+    .question-block.current { display: block; animation: question-in .16s ease-out; }
+    .question-block.moving-back { animation-name: question-in-back; }
+    @keyframes question-in { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: none; } }
+    @keyframes question-in-back { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
+    .question-label { margin-bottom: 5px; color: var(--accent-hi); font-size: 10px; font-weight: 780; letter-spacing: .07em; text-transform: uppercase; }
+    .question-text { margin: 0 0 11px; color: var(--text); font-size: 13px; font-weight: 570; line-height: 1.45; }
+    .options { display: grid; gap: 7px; }
+    .option {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 16px minmax(0, 1fr);
+      gap: 10px;
+      padding: 9px 11px;
+      border: 1px solid #343b45;
+      border-radius: 7px;
+      background: #242a31;
+      text-align: left;
+      transition: border-color .12s ease, background .12s ease, transform .12s ease;
+    }
+    .option:hover { border-color: #4b5563; background: var(--hover); transform: translateY(-1px); }
+    .option.selected { border-color: #5968df; background: #293151; }
+    .radio {
+      width: 15px;
+      height: 15px;
+      display: grid;
+      place-items: center;
+      margin-top: 1px;
+      border: 1px solid #68717e;
+      border-radius: 50%;
+    }
+    .option.selected .radio { border-color: #9aa8ff; }
+    .option.selected .radio::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #8998ff; }
+    .option-title { display: block; color: #dce0e5; font-size: 12px; font-weight: 620; line-height: 1.25; }
+    .option-description { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; line-height: 1.35; }
+    .other-field {
+      display: none;
+      width: 100%;
+      min-height: 62px;
+      margin-top: 7px;
+      padding: 9px 11px;
+      resize: vertical;
+      border: 1px solid #4a5573;
+      border-radius: 7px;
+      background: #1c2026;
+      outline: 0;
+      line-height: 1.45;
+    }
+    .other-field.visible { display: block; animation: reveal .14s ease-out; }
+    .other-field::placeholder { color: #707987; }
+    @keyframes reveal { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+
+    .question-actions { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+    .step-dots { display: flex; align-items: center; gap: 5px; }
+    .step-dot { width: 18px; height: 3px; border-radius: 2px; background: #3a414b; }
+    .step-dot.current { background: #7c8bf3; }
+    .step-dot.complete { background: #4a8d71; }
+    .back-answer {
+      height: 31px;
+      margin-left: auto;
+      padding: 0 10px;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .back-answer:hover { background: var(--hover); color: var(--text-2); }
+    .back-answer[hidden] { display: none; }
+    .submit-answer {
+      height: 31px;
+      padding: 0 14px;
+      border-radius: 6px;
+      background: var(--accent);
+      color: white;
+      font-size: 11px;
+      font-weight: 680;
+    }
+    .submit-answer:not(:disabled):hover { background: #6f7def; }
+    .submit-answer:disabled { cursor: default; opacity: .38; }
+    .answer-receipt { display: none; gap: 8px; align-items: flex-start; color: var(--text-2); font-size: 12px; line-height: 1.45; }
+    .answered .question-block, .answered .question-actions { display: none; }
+    .answered .answer-receipt { display: grid; }
+    .check {
+      width: 18px;
+      height: 18px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: #214638;
+      color: #65daa3;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .receipt-list { display: grid; gap: 7px; }
+    .receipt-list b { color: var(--muted); font-size: 10px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
+
+    .composer-wrap { padding: 12px max(28px, calc((100% - 680px) / 2)) 18px; background: linear-gradient(transparent, var(--page) 18%); }
+    .composer {
+      border: 1px solid #3a4048;
+      border-radius: 10px;
+      background: #20252b;
+      box-shadow: 0 8px 28px #0003;
+    }
+    .composer textarea {
+      width: 100%;
+      height: 58px;
+      padding: 13px 14px 6px;
+      resize: none;
+      border: 0;
+      background: transparent;
+      outline: 0;
+      line-height: 1.45;
+    }
+    .composer textarea::placeholder { color: #747d88; }
+    .composer-tools { height: 38px; display: flex; align-items: center; gap: 7px; padding: 0 9px; }
+    .tool-button { height: 27px; padding: 0 8px; border-radius: 5px; background: transparent; color: var(--muted); font-size: 11px; }
+    .tool-button:hover { background: var(--hover); color: var(--text-2); }
+    .send { width: 28px; height: 28px; margin-left: auto; border-radius: 50%; background: var(--accent); color: white; }
+    .hint { margin: 7px 3px 0; color: #69727e; font-size: 9px; text-align: right; }
+
+    @media (max-width: 840px) {
+      .app { grid-template-columns: 220px minmax(0, 1fr); }
+      .timeline, .composer-wrap { padding-inline: 22px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <h1 class="side-title">Agent Workspace</h1>
+      <div class="section-head">Worktrees <span>＋</span></div>
+      <button class="worktree active">
+        <span class="item-top"><span class="branch">⑂</span><strong>develop</strong><i class="dot"></i></span>
+        <span class="item-detail">~/dev/ketplus-desktop</span>
+      </button>
+      <div class="sidebar-rule"></div>
+      <div class="section-head">Conversations <span>＋</span></div>
+      <button class="conversation active">
+        <span class="item-top"><strong>Question flow</strong><i class="dot"></i></span>
+        <span class="item-detail">Waiting for your answer…</span>
+      </button>
+      <button class="conversation">
+        <span class="item-top"><strong>Image gallery</strong></span>
+        <span class="item-detail">Ready</span>
+      </button>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <span class="agent-mark" aria-hidden="true">⌁</span>
+        <div class="topbar-copy"><strong>Question flow</strong><small>develop · Codex</small></div>
+        <div class="status"><i></i><span id="status-text">Waiting for your answer…</span></div>
+      </header>
+
+      <section class="timeline" aria-label="Conversation">
+        <div class="message user-message"><div class="user-bubble">Hãy triển khai Question cho hệ thống chat.</div></div>
+        <article class="message">
+          <div class="message-head"><span class="bot">⌁</span><span>Codex</span></div>
+          <p>Tôi đã kiểm tra protocol. Trước khi triển khai, tôi cần bạn xác nhận cách Question sẽ hoạt động trong giao diện.</p>
+
+          <form class="question-card" id="question-card">
+            <div class="question-card-head">
+              <span class="question-icon">?</span>
+              <strong>Question</strong>
+              <small id="card-state">Câu 1/2</small>
+            </div>
+            <div class="question-card-body">
+              <section class="question-block current" data-question="placement">
+                <div class="question-label">Vị trí</div>
+                <h2 class="question-text">Question nên xuất hiện ở đâu?</h2>
+                <div class="options" role="radiogroup" aria-label="Vị trí hiển thị">
+                  <button class="option" type="button" role="radio" aria-checked="false" data-value="Trong timeline">
+                    <span class="radio"></span><span><span class="option-title">Trong timeline (Recommended)</span><span class="option-description">Giữ câu hỏi đúng ngữ cảnh và tiếp tục mạch hội thoại tự nhiên.</span></span>
+                  </button>
+                  <button class="option" type="button" role="radio" aria-checked="false" data-value="Popup nổi">
+                    <span class="radio"></span><span><span class="option-title">Popup nổi</span><span class="option-description">Nổi bật hơn nhưng che nội dung đang đọc trong chat.</span></span>
+                  </button>
+                </div>
+              </section>
+
+              <section class="question-block" data-question="behavior">
+                <div class="question-label">Sau khi gửi</div>
+                <h2 class="question-text">Bạn muốn card giữ lại trạng thái nào?</h2>
+                <div class="options" role="radiogroup" aria-label="Trạng thái sau khi gửi">
+                  <button class="option" type="button" role="radio" aria-checked="false" data-value="Thu gọn thành câu trả lời">
+                    <span class="radio"></span><span><span class="option-title">Thu gọn thành câu trả lời (Recommended)</span><span class="option-description">Tiết kiệm không gian nhưng vẫn lưu lại quyết định trong transcript.</span></span>
+                  </button>
+                  <button class="option" type="button" role="radio" aria-checked="false" data-value="Giữ toàn bộ lựa chọn">
+                    <span class="radio"></span><span><span class="option-title">Giữ toàn bộ lựa chọn</span><span class="option-description">Dễ rà soát hơn nhưng làm timeline dài nhanh.</span></span>
+                  </button>
+                  <button class="option other-option" type="button" role="radio" aria-checked="false" data-value="__other__">
+                    <span class="radio"></span><span><span class="option-title">Khác…</span><span class="option-description">Nhập một cách xử lý riêng.</span></span>
+                  </button>
+                  <textarea class="other-field" aria-label="Câu trả lời khác" placeholder="Nhập câu trả lời của bạn…"></textarea>
+                </div>
+              </section>
+
+              <div class="question-actions">
+                <div class="step-dots" aria-label="Tiến độ câu hỏi">
+                  <i class="step-dot current"></i><i class="step-dot"></i>
+                </div>
+                <button class="back-answer" type="button" hidden>Quay lại</button>
+                <button class="submit-answer" type="submit" disabled>Tiếp tục</button>
+              </div>
+
+              <div class="answer-receipt" aria-live="polite">
+                <span class="check">✓</span>
+                <div class="receipt-list" id="receipt-list"></div>
+              </div>
+            </div>
+          </form>
+        </article>
+      </section>
+
+      <footer class="composer-wrap">
+        <div class="composer">
+          <textarea placeholder="Ask Codex anything…" aria-label="Prompt"></textarea>
+          <div class="composer-tools">
+            <button class="tool-button" type="button">＋ Attach</button>
+            <button class="tool-button" type="button">Workspace access</button>
+            <button class="send" type="button" aria-label="Send">↑</button>
+          </div>
+        </div>
+        <div class="hint">Mock tương tác: mỗi lần chỉ trả lời một câu · tải lại trang để reset</div>
+      </footer>
+    </main>
+  </div>
+
+  <script>
+    const card = document.querySelector('#question-card');
+    const blocks = [...card.querySelectorAll('.question-block')];
+    const submit = card.querySelector('.submit-answer');
+    const back = card.querySelector('.back-answer');
+    const state = document.querySelector('#card-state');
+    const dots = [...card.querySelectorAll('.step-dot')];
+    const answers = new Map();
+    let current = 0;
+
+    function showQuestion(index, movingBack = false) {
+      current = index;
+      blocks.forEach((block, blockIndex) => {
+        block.classList.toggle('current', blockIndex === current);
+        block.classList.toggle('moving-back', blockIndex === current && movingBack);
+      });
+      dots.forEach((dot, dotIndex) => {
+        dot.classList.toggle('current', dotIndex === current);
+        dot.classList.toggle('complete', dotIndex < current);
+      });
+      const value = answers.get(blocks[current].dataset.question);
+      state.textContent = `Câu ${current + 1}/${blocks.length}`;
+      back.hidden = current === 0;
+      submit.textContent = current === blocks.length - 1 ? 'Gửi câu trả lời' : 'Tiếp tục';
+      submit.disabled = !value || !value.trim();
+    }
+
+    blocks.forEach(block => {
+      const otherField = block.querySelector('.other-field');
+      block.querySelectorAll('.option').forEach(option => {
+        option.addEventListener('click', () => {
+          block.querySelectorAll('.option').forEach(item => {
+            item.classList.toggle('selected', item === option);
+            item.setAttribute('aria-checked', String(item === option));
+          });
+          const isOther = option.dataset.value === '__other__';
+          if (otherField) {
+            otherField.classList.toggle('visible', isOther);
+            if (isOther) requestAnimationFrame(() => otherField.focus());
+          }
+          answers.set(block.dataset.question, isOther ? (otherField?.value || '') : option.dataset.value);
+          if (blocks[current] === block) showQuestion(current);
+        });
+      });
+      otherField?.addEventListener('input', () => {
+        answers.set(block.dataset.question, otherField.value);
+        if (blocks[current] === block) showQuestion(current);
+      });
+    });
+
+    back.addEventListener('click', () => {
+      if (current > 0) showQuestion(current - 1, true);
+    });
+
+    card.addEventListener('submit', event => {
+      event.preventDefault();
+      if (submit.disabled) return;
+      if (current < blocks.length - 1) {
+        showQuestion(current + 1);
+        return;
+      }
+      const receipt = document.querySelector('#receipt-list');
+      receipt.innerHTML = blocks.map(block => {
+        const label = block.querySelector('.question-label').textContent;
+        const value = answers.get(block.dataset.question);
+        return `<div><b>${label}</b><div>${value.replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]))}</div></div>`;
+      }).join('');
+      card.classList.add('answered');
+      state.textContent = 'Đã trả lời';
+      document.querySelector('#status-text').textContent = 'Working…';
+    });
+
+    showQuestion(0);
+  </script>
+</body>
+</html>

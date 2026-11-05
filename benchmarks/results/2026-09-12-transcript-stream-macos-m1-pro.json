@@ -1,0 +1,298 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-09-12",
+  "kind": "synthetic_same_binary_presentation_path_comparison",
+  "runtimeSourceRevision": "1e5c9ac5d8a8c3df3e6fd3a6ba06c9bc1a9c6dd3",
+  "baseRevision": "3c28339",
+  "cmRevision": "9fb86c8ccf64bb75e1e5cdf31314cedf46d24439",
+  "cmTag": "cm-v0.1.5",
+  "environment": {
+    "cpu": "Apple M1 Pro",
+    "memoryBytes": 34359738368,
+    "architecture": "arm64",
+    "os": "macOS Tahoe (26.2)",
+    "qt": "6.11.1",
+    "configuration": "Release",
+    "platform": "offscreen"
+  },
+  "binaries": [
+    {
+      "path": "build/release/ketplus_agent_streaming_tests",
+      "sha256": "c7aabd776e89462e136817775f83b83d24122c53481c52e58caf5ee89fce569e"
+    },
+    {
+      "path": "build/release/KetPlus.app/Contents/MacOS/KetPlus",
+      "sha256": "603463b1630ec5c2c05c10f1281f46f90fdb1ecf11ed952dd07fdbb844daf2d5"
+    },
+    {
+      "path": "build/release/KetPlus.app/Contents/Helpers/ketplus_daemon",
+      "sha256": "e1851f3af157264429c7d42bc7b8fc6ee84d8490fc1ecb8d4ab6fbcc7110e05d"
+    }
+  ],
+  "methodology": {
+    "command": "bash benchmarks/run-transcript-stream.sh build/release /tmp/ketplus-transcript-stream-benchmark.log",
+    "fixture": "1000 or 10000 synthetic user rows and one active assistant; 300 growing prefixes of an 8320-character Markdown body",
+    "sampleOrder": "Three interleaved repetitions: 1000 direct, 1000 coalesced, 10000 direct, 10000 coalesced",
+    "updateWaitMs": 20,
+    "settleBeforeTimingMs": 250,
+    "settleAfterCompletionMs": 50,
+    "cpuClock": "std::clock(): process CPU milliseconds",
+    "wallClock": "QElapsedTimer: includes QTest::qWait and processing",
+    "publicationMetric": "QAbstractItemModel::dataChanged count",
+    "publishedCharacterMetric": "Sum of published body QString lengths; work proxy, not measured parser bytes",
+    "statistic": "median of three samples per condition"
+  },
+  "verification": {
+    "benchmark": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0,
+      "elapsedMs": 94232
+    },
+    "releaseCtest": {
+      "passedTargets": 19,
+      "totalTargets": 19,
+      "elapsedSeconds": 39.88,
+      "note": "Opt-in provider/native cases were not enabled; target success does not imply no skipped cases."
+    }
+  },
+  "limitations": [
+    "Same binary comparison; both paths include common renderer optimizations. Not a before/after installed-app or full-architecture measurement.",
+    "Offscreen Qt benchmark does not establish native frame time, FPS, RSS, GPU cost or pixel approval.",
+    "Timed loop includes a wait after each update, not independently scheduled provider/network arrivals.",
+    "Small repeated Markdown active body; does not characterize giant documents, rich-content parity, bounded restore or active-history memory.",
+    "No provider, user transcript, cloud, installed app or running daemon used or replaced."
+  ],
+  "summaries": [
+    {
+      "historyRows": 1000,
+      "paths": [
+        {
+          "coalesced": false,
+          "samples": 3,
+          "cpuMsMedian": 3174.634,
+          "wallMsMedian": 8135,
+          "publicationsMedian": 300,
+          "publishedCharactersMedian": 1252020
+        },
+        {
+          "coalesced": true,
+          "samples": 3,
+          "cpuMsMedian": 1013.504,
+          "wallMsMedian": 6831,
+          "publicationsMedian": 56,
+          "publishedCharactersMedian": 235958
+        }
+      ],
+      "cpuReductionPercent": 68.07493399239092,
+      "publicationReductionPercent": 81.33333333333333,
+      "publishedCharacterReductionPercent": 81.15381543425823
+    },
+    {
+      "historyRows": 10000,
+      "paths": [
+        {
+          "coalesced": false,
+          "samples": 3,
+          "cpuMsMedian": 3202.783,
+          "wallMsMedian": 8138,
+          "publicationsMedian": 300,
+          "publishedCharactersMedian": 1252020
+        },
+        {
+          "coalesced": true,
+          "samples": 3,
+          "cpuMsMedian": 1052.529,
+          "wallMsMedian": 6864,
+          "publicationsMedian": 56,
+          "publishedCharactersMedian": 237731
+        }
+      ],
+      "cpuReductionPercent": 67.13704924748258,
+      "publicationReductionPercent": 81.33333333333333,
+      "publishedCharacterReductionPercent": 81.01220427788694
+    }
+  ],
+  "samples": [
+    {
+      "architecture": "arm64",
+      "coalesced": false,
+      "cpuMs": 3140.956,
+      "deltas": 300,
+      "finalCharacters": 8320,
+      "historyRows": 1000,
+      "os": "macOS Tahoe (26.2)",
+      "platform": "offscreen",
+      "publications": 300,
+      "publishedCharacters": 1252020,
+      "qt": "6.11.1",
+      "sample": "1000-0-0",
+      "wallMs": 8089
+    },
+    {
+      "architecture": "arm64",
+      "coalesced": true,
+      "cpuMs": 1013.504,
+      "deltas": 300,
+      "finalCharacters": 8320,
+      "historyRows": 1000,
+      "os": "macOS Tahoe (26.2)",
+      "platform": "offscreen",
+      "publications": 56,
+      "publishedCharacters": 237818,
+      "qt": "6.11.1",
+      "sample": "1000-1-0",
+      "wallMs": 6800
+    },
+    {
+      "architecture": "arm64",
+      "coalesced": false,
+      "cpuMs": 3215.555,
+      "deltas": 300,
+      "finalCharacters": 8320,
+      "historyRows": 10000,
+      "os": "macOS Tahoe (26.2)",
+      "platform": "offscreen",
+      "publications": 300,
+      "publishedCharacters": 1252020,
+      "qt": "6.11.1",
+      "sample": "10000-0-0",
+      "wallMs": 8141
+    },
+    {
+      "architecture": "arm64",
+      "coalesced": true,
+      "cpuMs": 1044.232,
+      "deltas": 300,
+      "finalCharacters": 8320,
+      "historyRows": 10000,
+      "os": "macOS Tahoe (26.2)",
+      "platform": "offscreen",
+      "publications": 56,
+      "publishedCharacters": 237731,
+      "qt": "6.11.1",
+      "sample": "10000-1-0",
+      "wallMs": 6830
+    },
+    {
+      "architecture": "arm64",
+      "coalesced": false,
+      "cpuMs": 3174.634,
+      "deltas": 300,
+      "finalCharacters": 8320,
+      "historyRows": 1000,
+      "os": "macOS Tahoe (26.2)",
+      "platform": "offscreen",
+      "publications": 300,
+      "publishedCharacters": 1252020,
+      "qt": "6.11.1",
+      "sample": "1000-0-1",
+      "wallMs": 8135
+    },
+    {
+      "architecture": "arm64",
+      "coalesced": true,
+      "cpuMs": 894.118,
+      "deltas": 300,
+      "finalCharacters": 8320,
+      "historyRows": 1000,
+      "os": "macOS Tahoe (26.2)",
+      "platform": "offscreen",
+      "publications": 56,
+      "publishedCharacters": 234738,
+      "qt": "6.11.1",
+      "sample": "1000-1-1",
+      "wallMs": 6831
+    },
+    {
+      "architecture": "arm64",
+      "coalesced": false,
+      "cpuMs": 3202.783,
+      "deltas": 300,
+      "finalCharacters": 8320,
+      "historyRows": 10000,
+      "os": "macOS Tahoe (26.2)",
+      "platform": "offscreen",
+      "publications": 300,
+      "publishedCharacters": 1252020,
+      "qt": "6.11.1",
+      "sample": "10000-0-1",
+      "wallMs": 8138
+    },
+    {
+      "architecture": "arm64",
+      "coalesced": true,
+      "cpuMs": 1052.529,
+      "deltas": 300,
+      "finalCharacters": 8320,
+      "historyRows": 10000,
+      "os": "macOS Tahoe (26.2)",
+      "platform": "offscreen",
+      "publications": 56,
+      "publishedCharacters": 238842,
+      "qt": "6.11.1",
+      "sample": "10000-1-1",
+      "wallMs": 6872
+    },
+    {
+      "architecture": "arm64",
+      "coalesced": false,
+      "cpuMs": 3179.142,
+      "deltas": 300,
+      "finalCharacters": 8320,
+      "historyRows": 1000,
+      "os": "macOS Tahoe (26.2)",
+      "platform": "offscreen",
+      "publications": 300,
+      "publishedCharacters": 1252020,
+      "qt": "6.11.1",
+      "sample": "1000-0-2",
+      "wallMs": 8135
+    },
+    {
+      "architecture": "arm64",
+      "coalesced": true,
+      "cpuMs": 1019.764,
+      "deltas": 300,
+      "finalCharacters": 8320,
+      "historyRows": 1000,
+      "os": "macOS Tahoe (26.2)",
+      "platform": "offscreen",
+      "publications": 56,
+      "publishedCharacters": 235958,
+      "qt": "6.11.1",
+      "sample": "1000-1-2",
+      "wallMs": 6891
+    },
+    {
+      "architecture": "arm64",
+      "coalesced": false,
+      "cpuMs": 3174.462,
+      "deltas": 300,
+      "finalCharacters": 8320,
+      "historyRows": 10000,
+      "os": "macOS Tahoe (26.2)",
+      "platform": "offscreen",
+      "publications": 300,
+      "publishedCharacters": 1252020,
+      "qt": "6.11.1",
+      "sample": "10000-0-2",
+      "wallMs": 8127
+    },
+    {
+      "architecture": "arm64",
+      "coalesced": true,
+      "cpuMs": 1073.815,
+      "deltas": 300,
+      "finalCharacters": 8320,
+      "historyRows": 10000,
+      "os": "macOS Tahoe (26.2)",
+      "platform": "offscreen",
+      "publications": 55,
+      "publishedCharacters": 232573,
+      "qt": "6.11.1",
+      "sample": "10000-1-2",
+      "wallMs": 6864
+    }
+  ]
+}

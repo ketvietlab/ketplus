@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "observedAt": "2026-09-13",
+  "source": "Local KetPlus daemon raw journal and replay projection; only aggregate type counts are retained. No user content or payload values are included.",
+  "protocolEvents": [
+    {"type": "approval.expired", "rawCount": 7, "replayCount": 7},
+    {"type": "approval.requested", "rawCount": 50, "replayCount": 50},
+    {"type": "approval.resolved", "rawCount": 43, "replayCount": 43},
+    {"type": "assistant.delta", "rawCount": 210522, "replayCount": 41},
+    {"type": "command.output_delta", "rawCount": 113202, "replayCount": 0},
+    {"type": "item.completed", "rawCount": 22400, "replayCount": 22400},
+    {"type": "item.started", "rawCount": 22462, "replayCount": 22462},
+    {"type": "runtime.error", "rawCount": 14, "replayCount": 14},
+    {"type": "session.created", "rawCount": 27, "replayCount": 27},
+    {"type": "session.renamed", "rawCount": 3, "replayCount": 3},
+    {"type": "turn.completed", "rawCount": 291, "replayCount": 291},
+    {"type": "turn.queued", "rawCount": 296, "replayCount": 296},
+    {"type": "turn.started", "rawCount": 296, "replayCount": 296},
+    {"type": "turn.steered", "rawCount": 60, "replayCount": 60},
+    {"type": "user.message", "rawCount": 296, "replayCount": 296}
+  ],
+  "itemTypes": [
+    {"type": "agentMessage", "phases": ["commentary", "final_answer"]},
+    {"type": "collabAgentToolCall"},
+    {"type": "commandExecution"},
+    {"type": "contextCompaction"},
+    {"type": "fileChange"},
+    {"type": "imageGeneration"},
+    {"type": "imageView"},
+    {"type": "mcpToolCall"},
+    {"type": "reasoning"},
+    {"type": "sleep"},
+    {"type": "subAgentActivity"},
+    {"type": "userMessage"},
+    {"type": "webSearch"}
+  ]
+}
