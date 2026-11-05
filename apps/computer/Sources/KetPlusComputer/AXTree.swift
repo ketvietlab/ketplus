@@ -32,10 +32,23 @@ enum AXTree {
     static func snapshot(_ pid: pid_t, limit: Int) -> (nodes: [Node], truncated: Bool) {
         var nodes: [Node] = []
         var truncated = false
+        // Some apps (Qt among them) list the application among their windows or children,
+        // which would repeat the menu bar at every level until maxDepth. Visit each element once.
+        var seen: [CFHashCode: [AXUIElement]] = [:]
+        func firstVisit(_ element: AXUIElement) -> Bool {
+            let hash = CFHash(element)
+            if seen[hash, default: []].contains(where: { CFEqual($0, element) }) { return false }
+            seen[hash, default: []].append(element)
+            return true
+        }
         func walk(_ element: AXUIElement, depth: Int) {
-            guard depth < maxDepth else { return }
+            guard depth < maxDepth, firstVisit(element) else { return }
             guard nodes.count < limit else { truncated = true; return }
             let node = describe(element, depth: depth)
+            guard node.info.role != "AXApplication" else {
+                for child in children(element) { walk(child, depth: depth) }
+                return
+            }
             if node.info.role == "AXWindow" || !node.name.isEmpty || node.value != nil || !node.info.actions.isEmpty
                 || node.info.isTextInput {
                 nodes.append(node)
