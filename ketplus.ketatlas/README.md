@@ -199,7 +199,7 @@ It keeps the public Két AppShell contracts, runtime and semantic tokens;
 - Mobile's native Két adaptation informs navigation, activity and composer patterns.
   Desktop tokens are not replaced with copied mobile CSS or touch geometry.
 - KÉT Sans 1.1 (tag `v1.1.0`), Két Symbol 0.11.0 icons and unchanged KétPlus v1 branding
-  assets. `assets/icons.js` holds the unmodified 16 px Regular Két Symbol paths (CC BY 4.0,
+  assets. `assets/icons.js` holds the unmodified 16 px Light Két Symbol paths (CC BY 4.0,
   `licenses/Ket-Symbol-CC-BY-4.0.txt`; "Két Symbol © 2026 Két Việt, CC BY 4.0"), keyed by
   the Lucide names the screens use.
   `assets/fonts-inline.css` embeds the four released optical-size KÉT Sans WOFF2 files
