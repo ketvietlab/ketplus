@@ -1,6 +1,6 @@
 /// MCP tool definitions. Member names and inputs follow computer_toolset_20260801
 /// so a later API driver can reuse the agent; list_apps, request_access,
-/// open_application, observe and act are KetPlus additions (ADR 0026, 0027).
+/// open_application, observe and act are KetPlus additions (ADR 0030, 0031).
 /// Input runs in the background by default; `foreground` opts into the real pointer.
 enum ToolCatalog {
     static let maxWaitSeconds = 60.0

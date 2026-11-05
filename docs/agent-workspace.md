@@ -610,7 +610,7 @@ The agent app is the enforcement point:
 - Tiers: KetPlus, Keychain Access, password managers and `deniedApps` are
   blocked. Browsers other than Safari are view-only. Terminals and IDEs accept
   clicks only, and `act` `set_value` counts as typing.
-- Input runs in the background by default (ADR 0027). `observe` reads a granted
+- Input runs in the background by default (ADR 0031). `observe` reads a granted
   app's accessibility tree, even behind other windows, and `act` drives its
   elements by reference; references go stale after any input. `left_click`,
   `right_click` and `scroll` at screenshot coordinates become accessibility
@@ -624,7 +624,7 @@ The agent app is the enforcement point:
   keyboard input against the frontmost app, refused while secure input is
   active. Drags, pointer moves and double, triple, middle or modified clicks
   always need it.
-- The agent works on one display (ADR 0028). `display` is `secondary` (the
+- The agent works on one display (ADR 0032). `display` is `secondary` (the
   default: the first display that is not the main one, or the main display when
   it is alone) or `main`. After a grant, and when `open_application` opens or
   reveals an app, granted apps' windows move to the work display, and the

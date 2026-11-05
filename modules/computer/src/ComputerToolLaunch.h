@@ -11,7 +11,7 @@
 
 namespace ketplus::computer_tools {
 
-// ADR 0026. The KetPlus Computer agent app enforces access; this module decides whether a
+// ADR 0030. The KetPlus Computer agent app enforces access; this module decides whether a
 // conversation gets the stdio front at all and mints the token the agent checks.
 inline constexpr auto serverName = "ketplus_computer";
 inline constexpr auto agentAppName = "KetPlus Computer.app";
@@ -22,7 +22,7 @@ struct Settings final {
     bool enabled{false};
     // Bundle IDs the agent must never capture or control, on top of its built-in tiers.
     QStringList deniedApps;
-    // The agent's work display (ADR 0028): "secondary" (a display other than the main one,
+    // The agent's work display (ADR 0032): "secondary" (a display other than the main one,
     // falling back to the main display) or "main".
     QString display{QStringLiteral("secondary")};
 };
@@ -65,7 +65,7 @@ launchForConversation(const Settings& settings, const QString& conversationId,
                                               const std::optional<Launch>& launch);
 [[nodiscard]] QJsonArray withAcpMcpServer(QJsonArray servers, const std::optional<Launch>& launch);
 
-// While a remote client's turn runs, the agent refuses this conversation (ADR 0026).
+// While a remote client's turn runs, the agent refuses this conversation (ADR 0030).
 bool setRemoteTurn(const QString& conversationId, bool remote,
                    const QString& directory = agentDirectory());
 

@@ -2,7 +2,7 @@ import ApplicationServices
 import CoreGraphics
 
 /// TCC state of this process. The agent app is the only KetPlus process that
-/// asks for these grants (ADR 0026).
+/// asks for these grants (ADR 0030).
 enum Permissions {
     static var screenRecording: Bool { CGPreflightScreenCaptureAccess() }
     static var accessibility: Bool { AXIsProcessTrusted() }

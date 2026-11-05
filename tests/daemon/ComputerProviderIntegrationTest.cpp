@@ -46,7 +46,7 @@ QString envValue(const QJsonObject& server, const QString& name, bool claude) {
 }
 } // namespace
 
-// ADR 0026: settings decide whether each provider gets the per-conversation computer front;
+// ADR 0030: settings decide whether each provider gets the per-conversation computer front;
 // turn input cannot add or replace it. Uses fake providers only (no quota).
 class ComputerProviderIntegrationTest final : public QObject {
     Q_OBJECT

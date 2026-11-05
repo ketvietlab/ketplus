@@ -1,11 +1,11 @@
-# 0028: Computer use on a work display
+# 0032: Computer use on a work display
 
 Status: accepted
 Date: 2026-10-19
 
 ## Context
 
-Background input (ADR 0027) keeps the user's pointer and front app, but the
+Background input (ADR 0031) keeps the user's pointer and front app, but the
 granted apps still share the user's display. Their windows sit among the user's
 own windows, the overlay pointer and the banner appear over the user's work,
 and a screenshot of the main display only shows granted apps where they happen

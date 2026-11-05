@@ -2,7 +2,7 @@ import AppKit
 import ComputerProtocol
 import CoreGraphics
 
-/// The on-screen window order, front to back (ADR 0028).
+/// The on-screen window order, front to back (ADR 0032).
 enum WindowStack {
     struct Hidden {
         let pid: pid_t

@@ -1,4 +1,4 @@
-// Target app for computer-use checks (ADR 0026): a window with a text field and a
+// Target app for computer-use checks (ADR 0030): a window with a text field and a
 // Submit button. It prints both frames in global top-left points, then writes the
 // field's text to the output file when Submit is pressed, and exits.
 // Build with scripts/build-fixture.sh; run: "<app>/Contents/MacOS/KetPlusComputerFixture" <output>

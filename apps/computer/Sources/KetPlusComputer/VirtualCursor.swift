@@ -1,6 +1,6 @@
 import AppKit
 
-/// The agent's own pointer (ADR 0027): a click-through overlay that glides to each
+/// The agent's own pointer (ADR 0031): a click-through overlay that glides to each
 /// background action, so the user sees where the agent works while the real
 /// pointer stays theirs. It belongs to this agent, so screenshots never include it.
 @MainActor

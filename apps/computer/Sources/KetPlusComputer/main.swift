@@ -2,7 +2,7 @@ import AppKit
 import ComputerProtocol
 
 // KetPlus Computer: the only KetPlus process that captures the screen or posts
-// input, so TCC attributes both grants to this bundle (ADR 0026).
+// input, so TCC attributes both grants to this bundle (ADR 0030).
 let application = NSApplication.shared
 application.setActivationPolicy(.accessory)
 

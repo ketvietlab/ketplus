@@ -245,7 +245,7 @@ if(APPLE)
         DEPENDS ketplus ketplus_daemon ketplus_stage_claude_sidecar
         VERBATIM
     )
-    # ADR 0026: KetPlus Computer is a separately signed app nested in Contents/Helpers so TCC
+    # ADR 0030: KetPlus Computer is a separately signed app nested in Contents/Helpers so TCC
     # attributes Screen Recording and Accessibility to it. TCC keys grants to the signature's
     # designated requirement: an ad-hoc identity resets them on every rebuild.
     option(KETPLUS_BUNDLE_COMPUTER_AGENT

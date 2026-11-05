@@ -1,10 +1,10 @@
-# 0026: KetPlus Computer agent app for native desktop control
+# 0030: KetPlus Computer agent app for native desktop control
 
 Status: accepted
 Date: 2026-10-19
 
 Input became background-first in
-[ADR 0027](0027-background-computer-use.md).
+[ADR 0031](0031-background-computer-use.md).
 
 ## Context
 
@@ -189,7 +189,7 @@ The first implementation refines the decision as follows.
   Agents should report `CAPTURE_FAILED` rather than guess.
 - Not yet verified: the approval panel in a release build and the periodic
   Screen Recording re-prompt. Multiple displays are covered by
-  [ADR 0028](0028-computer-use-work-display.md).
+  [ADR 0032](0032-computer-use-work-display.md).
 
 ## Alternatives considered
 

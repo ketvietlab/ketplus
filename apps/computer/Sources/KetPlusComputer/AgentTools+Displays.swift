@@ -2,7 +2,7 @@ import AppKit
 import ComputerProtocol
 import Foundation
 
-/// The work display (ADR 0028): screenshots default to it and granted apps' windows
+/// The work display (ADR 0032): screenshots default to it and granted apps' windows
 /// move there, so the agent stays off the user's main display.
 extension AgentTools {
     /// Reads computer-tools.json on every call, so Settings changes apply at once.

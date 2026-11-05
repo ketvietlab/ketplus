@@ -2,9 +2,9 @@
 
 `KetPlus Computer.app` (`dev.ketplus.computer`) is the only KetPlus process that
 captures the screen or posts input, so macOS attributes Screen Recording and
-Accessibility to it. It also enforces who may control what (ADR 0026). Input runs
-in the background, so the user keeps their pointer and front app (ADR 0027).
-Granted apps move to a work display, a secondary display by default (ADR 0028).
+Accessibility to it. It also enforces who may control what (ADR 0030). Input runs
+in the background, so the user keeps their pointer and front app (ADR 0031).
+Granted apps move to a work display, a secondary display by default (ADR 0032).
 `ketplus-computer-mcp`, inside the same bundle, is the stdio MCP server that
 providers launch. It never captures or clicks itself.
 

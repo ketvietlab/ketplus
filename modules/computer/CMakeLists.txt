@@ -1,4 +1,4 @@
-# ADR 0026: host side of ketplus_computer (settings, per-conversation launch and policy text).
+# ADR 0030: host side of ketplus_computer (settings, per-conversation launch and policy text).
 add_library(ketplus_computer_tools STATIC
     src/ComputerAgentInstructions.cpp
     src/ComputerAgentInstructions.h

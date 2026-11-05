@@ -42,7 +42,7 @@ enum ScrollDirection: String {
 
 /// Posts synthetic events. HID events move the real pointer and carry this process's
 /// PID, which the kill switch uses to tell agent input from the user's own Esc.
-/// Keyboard events can instead go to one process (ADR 0027): they skip the HID
+/// Keyboard events can instead go to one process (ADR 0031): they skip the HID
 /// stream and the frontmost app, and use a private source so the user's held
 /// modifiers do not leak into them.
 enum InputControl {

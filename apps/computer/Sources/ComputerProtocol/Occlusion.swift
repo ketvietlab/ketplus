@@ -1,6 +1,6 @@
 import CoreGraphics
 
-/// How much of a window the windows above it hide (ADR 0028). Apps such as Qt stop
+/// How much of a window the windows above it hide (ADR 0032). Apps such as Qt stop
 /// repainting a covered window, so a capture of it can show old pixels.
 public enum Occlusion {
     /// Covered at least this much, a window counts as hidden.

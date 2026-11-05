@@ -2,7 +2,7 @@ import AppKit
 import ComputerProtocol
 import Foundation
 
-/// Background control (ADR 0027): accessibility actions and keyboard events sent to
+/// Background control (ADR 0031): accessibility actions and keyboard events sent to
 /// one process. The user's pointer, keyboard focus and frontmost app stay theirs.
 extension AgentTools {
     private static let actNames: [String: String] = [

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Per-conversation application grants and the single control lease (ADR 0026).
+/// Per-conversation application grants and the single control lease (ADR 0030).
 ///
 /// One conversation controls the desktop at a time. Its lease ends after
 /// `idleTimeout` without an action, or when the user presses Esc, which also

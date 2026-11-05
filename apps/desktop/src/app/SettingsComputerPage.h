@@ -10,7 +10,7 @@ class QLineEdit;
 
 namespace ketplus {
 
-// Settings → Computer use (ADR 0026, 0028): the opt-in for ketplus_computer, the work display and
+// Settings → Computer use (ADR 0030, 0032): the opt-in for ketplus_computer, the work display and
 // the user's deny list.
 // KetPlus Computer itself asks for per-app approval in every conversation; this page decides
 // whether agents receive the tool and where they work. The opt-in applies to the next turn; the

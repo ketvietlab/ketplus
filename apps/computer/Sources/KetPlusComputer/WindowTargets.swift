@@ -36,7 +36,7 @@ enum WindowTargets {
     }
 
     /// The granted app whose window is frontmost at a global point among granted
-    /// apps only (ADR 0027). Windows of other apps on top are ignored, because the
+    /// apps only (ADR 0031). Windows of other apps on top are ignored, because the
     /// screenshot does not show them either.
     static func grantedOwner(at point: CGPoint, among granted: Set<String>) -> (bundle: String, pid: pid_t)? {
         let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)

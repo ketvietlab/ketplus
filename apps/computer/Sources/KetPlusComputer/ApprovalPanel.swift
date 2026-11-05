@@ -3,7 +3,7 @@ import ComputerProtocol
 
 /// The native approval that grants apps to one conversation. It belongs to this
 /// agent, which is never captured or controllable, so the model can neither see
-/// nor press it (ADR 0026).
+/// nor press it (ADR 0030).
 @MainActor
 enum ApprovalPanel {
     static let timeout: TimeInterval = 120

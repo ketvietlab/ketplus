@@ -1,7 +1,7 @@
 import ComputerProtocol
 import Foundation
 
-// Thin stdio MCP front for KetPlus Computer (ADR 0026). It never captures the
+// Thin stdio MCP front for KetPlus Computer (ADR 0030). It never captures the
 // screen or posts input itself; every tool call is forwarded to the agent app.
 
 let serverVersion = "0.1.0"

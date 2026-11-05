@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds and signs "KetPlus Computer.app" (ADR 0026).
+# Builds and signs "KetPlus Computer.app" (ADR 0030).
 #
 # TCC keys its grants to the code signature's designated requirement. Sign with
 # a real identity (pass its SHA-1 hash with --identity) so grants survive

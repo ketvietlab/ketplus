@@ -299,9 +299,9 @@ same bundle, is the stdio MCP front that providers launch. It forwards
 opt-in settings, the host key and per-conversation tokens, the remote-turn
 markers, and the routing text. Claude receives the server per query, and
 Cursor receives it on session creation and loading. Codex does not receive it
-yet. See [ADR 0026](decisions/0026-ketplus-computer-agent-app.md) and
-[ADR 0027](decisions/0027-background-computer-use.md) and
-[ADR 0028](decisions/0028-computer-use-work-display.md).
+yet. See [ADR 0030](decisions/0030-ketplus-computer-agent-app.md) and
+[ADR 0031](decisions/0031-background-computer-use.md) and
+[ADR 0032](decisions/0032-computer-use-work-display.md).
 
 ## Local daemon slice
 

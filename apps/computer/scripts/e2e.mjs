@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// End-to-end check of KetPlus Computer on a real Mac (ADR 0026, 0027, 0028). Needs a test build
+// End-to-end check of KetPlus Computer on a real Mac (ADR 0030, 0031, 0032). Needs a test build
 // (build-app.sh --testing) that already holds Screen Recording and Accessibility, and the
 // fixture and fixture-cover from build-fixture.sh. Uses no provider quota. The background
 // part must not move the pointer; the foreground part moves and clicks the real pointer.
@@ -136,7 +136,7 @@ if (displays.length > 1) {
 }
 await settle(400);
 
-// ---- Background (ADR 0027): the fixture is covered by a bundle-less window and Finder is frontmost.
+// ---- Background (ADR 0031): the fixture is covered by a bundle-less window and Finder is frontmost.
 const placed = await capture();
 check("screenshot shows the work display", placed.id === work?.id && placed.words.includes("(work display)"),
   placed.words.slice(0, 90));
@@ -204,7 +204,7 @@ check("background input never moved the pointer to its targets",
 cover.kill();
 await settle(1200);
 
-// ---- Hidden windows (ADR 0028): an ordinary window over the whole work display hides the fixture.
+// ---- Hidden windows (ADR 0032): an ordinary window over the whole work display hides the fixture.
 if (work?.main === false) {
   const display = placed.toGlobal([0, 0, placed.width, placed.height]).map((value) => String(Math.round(value)));
   const wall = spawn(join(dirname(fixtureApp), "fixture-cover"), [...display, "normal"], { stdio: ["ignore", "pipe", "inherit"] });
@@ -221,7 +221,7 @@ if (work?.main === false) {
   await settle(600);
 }
 
-// ---- Foreground (ADR 0026): the real pointer and keyboard, fixture in front on the work display.
+// ---- Foreground (ADR 0030): the real pointer and keyboard, fixture in front on the work display.
 fixture = await launchFixture();
 const opened = json(await a.call("open_application", { app: fixtureId, foreground: true }));
 if (displays.length > 1) check("open_application moves the relaunched fixture to the work display", opened.movedToWorkDisplay === true);

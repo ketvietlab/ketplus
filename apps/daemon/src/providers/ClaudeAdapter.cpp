@@ -369,7 +369,7 @@ void ClaudeAdapter::sendCall(const QString& method, const QJsonObject& params, C
     if (method == QStringLiteral("turn/start")) {
         const auto launch =
             browser_tools::browserLaunchFromUserSettings(QCoreApplication::applicationDirPath());
-        // ADR 0026: the computer front is per conversation; the agent app enforces access.
+        // ADR 0030: the computer front is per conversation; the agent app enforces access.
         const auto computer = computer_tools::launchFromUserSettings(
             params.value(QStringLiteral("sessionId")).toString(),
             QCoreApplication::applicationDirPath());

@@ -22,7 +22,7 @@ void CursorAdapter::ensureAcpSession(const QString& ketplusSessionId, const QStr
     }
     const QJsonArray browserServers = browser_tools::acpMcpServers(launch);
     const bool browserInjected = !browserServers.isEmpty();
-    // ADR 0026: the computer front is bound to this conversation by its token.
+    // ADR 0030: the computer front is bound to this conversation by its token.
     const auto computer = computer_tools::launchFromUserSettings(
         ketplusSessionId, QCoreApplication::applicationDirPath());
     QJsonArray servers = computer_tools::withAcpMcpServer(browserServers, computer);

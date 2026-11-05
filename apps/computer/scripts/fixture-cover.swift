@@ -1,7 +1,7 @@
-// Occluder for background checks (ADR 0027): a red window from a process without a
+// Occluder for background checks (ADR 0031): a red window from a process without a
 // bundle, so its tier is blocked. It covers the given global top-left rectangle
 // above the fixture without becoming the frontmost app.
-// With "normal" it is an ordinary window, as another app's would be (ADR 0028).
+// With "normal" it is an ordinary window, as another app's would be (ADR 0032).
 // Run: fixture-cover <x> <y> <width> <height> [normal]
 import AppKit
 

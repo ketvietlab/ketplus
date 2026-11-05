@@ -1,11 +1,11 @@
-# 0027: Background computer use
+# 0031: Background computer use
 
 Status: accepted
 Date: 2026-10-19
 
 ## Context
 
-The first `KetPlus Computer` release (ADR 0026) posts HID events. It moves the
+The first `KetPlus Computer` release (ADR 0030) posts HID events. It moves the
 user's pointer, types into the frontmost app, and can only click a window that
 is on top at the point. The user cannot work while the agent acts. A system
 banner over the target makes a click fail. Codex computer use works in the
@@ -99,7 +99,7 @@ Stop.
 - Not yet verified: the approval panel in a release build, a turn started from
   the desktop app through the daemon, and apps with poor accessibility.
   Multiple displays are covered by
-  [ADR 0028](0028-computer-use-work-display.md).
+  [ADR 0032](0032-computer-use-work-display.md).
 
 ## Alternatives considered
 

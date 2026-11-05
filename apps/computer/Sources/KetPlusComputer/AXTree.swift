@@ -2,7 +2,7 @@ import ApplicationServices
 import ComputerProtocol
 import Foundation
 
-/// Reads and drives one application's accessibility tree (ADR 0027). Nothing here
+/// Reads and drives one application's accessibility tree (ADR 0031). Nothing here
 /// moves the pointer or changes the frontmost app.
 enum AXTree {
     struct Node {

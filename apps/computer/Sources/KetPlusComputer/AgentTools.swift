@@ -3,7 +3,7 @@ import Carbon.HIToolbox
 import ComputerProtocol
 import Foundation
 
-/// Tool semantics and policy enforcement (ADR 0026, 0027). Runs on socket threads;
+/// Tool semantics and policy enforcement (ADR 0030, 0031). Runs on socket threads;
 /// UI work hops to the main thread. Background tools are in AgentTools+Background.
 final class AgentTools {
     let paths: AgentPaths
@@ -50,7 +50,7 @@ final class AgentTools {
     }
 
     /// Esc is the user's own key unless they are in an app this agent controls or
-    /// the agent just used the real pointer (ADR 0027).
+    /// the agent just used the real pointer (ADR 0031).
     private func escapeStopsAgent() -> Bool {
         guard let holder = control.activeHolder else { return false }
         let since = lock.withLock { lastForeground.map { Date().timeIntervalSince($0) } }

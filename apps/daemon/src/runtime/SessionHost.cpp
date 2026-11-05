@@ -1227,7 +1227,7 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
             it->stored.title = conversation_title::suggest(displayText);
         }
     }
-    // ADR 0026: no desktop control while a remote client's turn runs. Busy sessions were
+    // ADR 0030: no desktop control while a remote client's turn runs. Busy sessions were
     // rejected above, so no turn is active here. A later local turn lifts the marker, so a
     // crash or a missed turn end can only leave control off.
     if (!computer_tools::setRemoteTurn(sessionId, !localClient) && !localClient &&

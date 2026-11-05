@@ -1,6 +1,6 @@
 import CoreGraphics
 
-/// The display the agent works on (ADR 0028): screenshots show it, and granted
+/// The display the agent works on (ADR 0032): screenshots show it, and granted
 /// apps' windows move there, so the user keeps the main display.
 public enum DisplayPreference: String, Sendable {
     /// The first display that is not the main one; the main display when it is alone.

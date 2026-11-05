@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Manual check of the real approval panel (ADR 0026) on a release build, for example
+// Manual check of the real approval panel (ADR 0030) on a release build, for example
 // KetPlus.app/Contents/Helpers/KetPlus Computer.app from the desktop build. Uses no
 // provider quota and posts no input. You answer the panel three times: Deny, Esc, Allow.
 // Allow is disabled for the first second after the panel appears.

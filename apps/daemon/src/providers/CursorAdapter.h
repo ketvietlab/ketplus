@@ -170,7 +170,7 @@ class CursorAdapter final : public ProviderAdapter {
     QHash<QString, QJsonObject> agentServers_;
     QHash<QString, QString> agentInstructions_;
     QSet<QString> agentSessions_;
-    // Sessions given the KetPlus Computer server (ADR 0026).
+    // Sessions given the KetPlus Computer server (ADR 0030).
     QSet<QString> computerSessions_;
     quint64 nextRequestId_{1};
     quint64 nextTurnNumber_{1};

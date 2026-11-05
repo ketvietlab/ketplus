@@ -1,6 +1,6 @@
 import Foundation
 
-/// Pure decisions for background control (ADR 0027): which accessibility action a
+/// Pure decisions for background control (ADR 0031): which accessibility action a
 /// click becomes, snapshot references, the kill-switch scope and scroll steps.
 /// The agent app supplies the accessibility data; these rules are unit-tested.
 

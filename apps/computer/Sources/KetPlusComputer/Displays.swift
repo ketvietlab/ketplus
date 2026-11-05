@@ -2,7 +2,7 @@ import AppKit
 import ApplicationServices
 import ComputerProtocol
 
-/// Connected displays and the agent's work display (ADR 0028).
+/// Connected displays and the agent's work display (ADR 0032).
 enum Displays {
     static func all() -> [DisplayInfo] {
         let primaryHeight = NSScreen.screens.first?.frame.height ?? 0

@@ -1,7 +1,7 @@
 // swift-tools-version:6.0
 import PackageDescription
 
-// ADR 0026 spike: the KetPlus Computer agent app and its stdio MCP front.
+// ADR 0030 spike: the KetPlus Computer agent app and its stdio MCP front.
 let package = Package(
     name: "KetPlusComputer",
     platforms: [.macOS(.v14)],

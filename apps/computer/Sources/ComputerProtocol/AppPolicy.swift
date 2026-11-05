@@ -1,4 +1,4 @@
-/// Built-in application tiers (ADR 0026). The agent app enforces them; model
+/// Built-in application tiers (ADR 0030). The agent app enforces them; model
 /// guidance cannot change them.
 public enum AppTier: String, Sendable {
     /// Never captured or controlled.
