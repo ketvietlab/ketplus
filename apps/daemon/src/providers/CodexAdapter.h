@@ -1,5 +1,7 @@
 #pragma once
 
+#include "providers/ProviderAdapter.h"
+
 #include "providers/ProviderLineReader.h"
 #include "providers/compat/ProviderCapabilities.h"
 #include "providers/compat/ProviderCompatibility.h"
@@ -9,7 +11,6 @@
 #include <QHash>
 #include <QJsonObject>
 #include <QJsonValue>
-#include <QObject>
 #include <QSet>
 
 #include <functional>
@@ -27,32 +28,33 @@ namespace compat {
 class ProviderVersionProbe;
 }
 
-class CodexAdapter final : public QObject {
+class CodexAdapter final : public ProviderAdapter {
     Q_OBJECT
 
   public:
-    using Callback = std::function<void(const QJsonObject&, const QString&)>;
-
     explicit CodexAdapter(const QString& executable = {}, QObject* parent = nullptr);
     ~CodexAdapter() override;
 
-    [[nodiscard]] bool isAvailable() const;
-    [[nodiscard]] bool isReady() const;
-    [[nodiscard]] QString executable() const;
+    [[nodiscard]] QString name() const override { return QStringLiteral("codex"); }
+    [[nodiscard]] QString missingMessage() const override;
+    [[nodiscard]] bool isAvailable() const override;
+    [[nodiscard]] bool isReady() const override;
+    [[nodiscard]] QString executable() const override;
 
-    void call(const QString& method, const QJsonObject& params, Callback callback);
+    void call(const QString& method, const QJsonObject& params, Callback callback) override;
     // Version and support status of the Codex CLI (ADR 0015). Launches check it first and an
     // outdated CLI is not started.
-    void runtimeStatus(std::function<void(const compat::Runtime&)> callback);
+    void runtimeStatus(std::function<void(const compat::Runtime&)> callback) override;
     // Whether the running CLI has `capability` (ADR 0015 §3). True until the version is known,
     // so a first call is still attempted; a "method not found" answer then removes it.
-    [[nodiscard]] bool supports(const QString& capability) const;
+    [[nodiscard]] bool supports(const QString& capability) const override;
     // Adapter-owned translation from provider-specific model/list fields into
     // the provider-neutral configuration catalog consumed by SessionHost.
-    void configurationCatalog(Callback callback);
-    void respond(const QJsonValue& requestId, const QJsonObject& result);
-    void respondError(const QJsonValue& requestId, const QString& code, const QString& message);
-    void stop();
+    void configurationCatalog(Callback callback) override;
+    void respond(const QJsonValue& requestId, const QJsonObject& result) override;
+    void respondError(const QJsonValue& requestId, const QString& code,
+                      const QString& message) override;
+    void stop() override;
 
     // Crash-restart backoff: 1 s doubling to 60 s, reset after a stable run.
     static constexpr int initialRestartDelayMs = 1000;
@@ -77,9 +79,6 @@ class CodexAdapter final : public QObject {
 
   signals:
     void notificationReceived(const QString& method, const QJsonObject& params);
-    void requestReceived(const QJsonValue& requestId, const QString& method,
-                         const QJsonObject& params);
-    void stopped(const QString& reason);
     // A notification too large to read was skipped; the process and its other threads go on.
     void notificationSkipped(const QString& method, const QString& threadId, qsizetype bytes);
     // A planned restart of an idle provider (reason "browser_settings"); not a failure.

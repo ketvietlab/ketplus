@@ -123,7 +123,8 @@ void SessionHost::backgroundTaskCommand(const QJsonObject& request, CommandCallb
         done(failure);
         return;
     }
-    if (session->stored.adapter != QStringLiteral("claude") || claude_ == nullptr) {
+    ProviderAdapter* const claude = provider(QStringLiteral("claude"));
+    if (session->stored.adapter != QStringLiteral("claude") || claude == nullptr) {
         done(taskError(QStringLiteral("unsupported_provider"),
                        QStringLiteral("Only Claude conversations report background tasks.")));
         return;
@@ -149,30 +150,30 @@ void SessionHost::backgroundTaskCommand(const QJsonObject& request, CommandCallb
                        QStringLiteral("This background task has already ended.")));
         return;
     }
-    claude_->call(stop ? QStringLiteral("task/stop") : QStringLiteral("task/output"),
-                  {{QStringLiteral("sessionId"), session->stored.id},
-                   {QStringLiteral("taskId"), taskId}},
-                  [stop, done = std::move(done)](const QJsonObject& result, const QString& error) {
-                      if (!error.isEmpty()) {
-                          done(taskError(QStringLiteral("task_unavailable"), error));
-                          return;
-                      }
-                      if (stop) {
-                          // The provider's next tasks.changed reports the stop.
-                          done({{QStringLiteral("ok"), true}});
-                          return;
-                      }
-                      QByteArray output = result.value(QStringLiteral("output")).toString().toUtf8();
-                      const bool cut = output.size() > maximumTaskOutputBytes;
-                      if (cut)
-                          output = output.right(maximumTaskOutputBytes);
-                      done({{QStringLiteral("ok"), true},
-                            {QStringLiteral("output"), QString::fromUtf8(output)},
-                            {QStringLiteral("total_bytes"),
-                             result.value(QStringLiteral("total_bytes")).toInteger()},
-                            {QStringLiteral("truncated"),
-                             cut || result.value(QStringLiteral("truncated")).toBool()}});
-                  });
+    claude->call(
+        stop ? QStringLiteral("task/stop") : QStringLiteral("task/output"),
+        {{QStringLiteral("sessionId"), session->stored.id}, {QStringLiteral("taskId"), taskId}},
+        [stop, done = std::move(done)](const QJsonObject& result, const QString& error) {
+            if (!error.isEmpty()) {
+                done(taskError(QStringLiteral("task_unavailable"), error));
+                return;
+            }
+            if (stop) {
+                // The provider's next tasks.changed reports the stop.
+                done({{QStringLiteral("ok"), true}});
+                return;
+            }
+            QByteArray output = result.value(QStringLiteral("output")).toString().toUtf8();
+            const bool cut = output.size() > maximumTaskOutputBytes;
+            if (cut)
+                output = output.right(maximumTaskOutputBytes);
+            done({{QStringLiteral("ok"), true},
+                  {QStringLiteral("output"), QString::fromUtf8(output)},
+                  {QStringLiteral("total_bytes"),
+                   result.value(QStringLiteral("total_bytes")).toInteger()},
+                  {QStringLiteral("truncated"),
+                   cut || result.value(QStringLiteral("truncated")).toBool()}});
+        });
 }
 
 } // namespace ketplus::daemon

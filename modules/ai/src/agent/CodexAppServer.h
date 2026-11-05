@@ -24,6 +24,13 @@ namespace remote {
 class DaemonClient;
 }
 
+// The Agent Workspace's provider connection, speaking Codex app-server JSON-RPC to the
+// workspace. It has two transports:
+// - daemon (default constructor): the application's only mode. Calls and journal events go
+//   through remote::DaemonClient (CodexAppServerDaemonSessions.cpp,
+//   CodexAppServerDaemonEvents.cpp).
+// - direct (executable constructor): a codex app-server child process over stdio
+//   (CodexAppServerProcess.cpp). Only tests use it, with a fake executable.
 class CodexAppServer final : public QObject {
     Q_OBJECT
 
@@ -31,6 +38,7 @@ class CodexAppServer final : public QObject {
     using ResponseCallback = std::function<void(const QJsonObject&, const QString&)>;
 
     explicit CodexAppServer(QObject* parent = nullptr);
+    // Direct mode, for tests: runs `executable` as a codex app-server.
     explicit CodexAppServer(const QString& executable, QObject* parent = nullptr);
     ~CodexAppServer() override;
 

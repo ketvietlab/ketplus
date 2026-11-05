@@ -65,6 +65,9 @@ add_library(ketplus_ai STATIC
     src/agent/AgentWorkspaceView.h
     src/agent/CodexAppServer.cpp
     src/agent/CodexAppServer.h
+    src/agent/CodexAppServerDaemonEvents.cpp
+    src/agent/CodexAppServerDaemonSessions.cpp
+    src/agent/CodexAppServerProcess.cpp
     src/agent/CodexDaemonTranscript.cpp
     src/agent/CodexDaemonDiscovery.cpp
     src/agent/CodexRateLimits.cpp

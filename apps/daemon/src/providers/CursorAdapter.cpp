@@ -370,7 +370,7 @@ bool looksRunnable(const QFileInfo& info) {
 } // namespace
 
 CursorAdapter::CursorAdapter(const QString& executable, QObject* parent)
-    : QObject(parent), executable_(executable.isEmpty() ? findExecutable() : executable) {
+    : ProviderAdapter(parent), executable_(executable.isEmpty() ? findExecutable() : executable) {
     process_ = new QProcess(this);
     versionProbe_ = new compat::ProviderVersionProbe(
         compat::policy(QStringLiteral("cursor")),
@@ -446,6 +446,8 @@ CursorAdapter::~CursorAdapter() {
 }
 
 bool CursorAdapter::isAvailable() const { return !executable_.isEmpty(); }
+
+QString CursorAdapter::missingMessage() const { return missingExecutableMessage(); }
 
 bool CursorAdapter::isReady() const { return ready_; }
 
