@@ -64,21 +64,19 @@ K.seedConversationTags = scope => {
 K.isTagFiltered = record => !K.demo.tagFilter || (record.tags || []).includes(K.demo.tagFilter);
 
 K.tagChip = (tag, extra = "") =>
-    `<span class="conversation-tag tag-${tag.color}" ${extra}><span class="tag-dot" aria-hidden="true"></span><span class="tag-label">${K.escape(tag.label)}</span></span>`;
-// Line 1: status, title and, while a message-started turn runs, its sender. Line 2: number and tags (or the status).
+    `<span class="conversation-tag tag-${tag.color}" ${extra}><span class="tag-label">${K.escape(tag.label)}</span></span>`;
+// Line 1: title. Line 2: number and tags (or the status). The status icon trails the row; the transcript, not the row, names an agent sender.
 K.conversationRowContent = (record, scope) => {
     // The active filter's tag leads, so a filtered row never hides the reason it matched.
     const tags = K.recordTags(record).sort((a, b) => (b.id === K.demo.tagFilter) - (a.id === K.demo.tagFilter));
     const status = K.conversationStatus(record.needsInput && K.isActiveTurn(record) ? "question" : record.turn);
-    const sender = record.agentFrom && K.isActiveTurn(record)
-        ? `<span class="conversation-sender" title="Started by a message from @agent/${K.escape(record.agentFrom)}">from ${K.escape(record.agentFrom)}</span>` : "";
     // Every chip is rendered; K.fitConversationTags hides whole chips that do not fit and counts them in +N.
     const chips = tags.map(tag => K.tagChip(tag, `data-tag-filter="${K.escape(tag.id)}" data-tag-label="${K.escape(tag.label)}" title="Show only ${K.escape(tag.label)}"`)).join("") +
         (tags.length ? `<span class="conversation-tag tag-more" hidden></span>` : "");
-    return `${K.conversationActivity(record)}<span class="conversation-lines">
-        <span class="conversation-line"><span class="conversation-title">${K.escape(record.title)}</span>${sender}</span>
+    return `<span class="conversation-lines">
+        <span class="conversation-line"><span class="conversation-title">${K.escape(record.title)}</span></span>
         <span class="conversation-line conversation-meta-line"><span class="conversation-number">${K.conversationNumber(scope, record)}</span>${chips ? `<span class="conversation-tags">${chips}</span>` : `<span class="conversation-meta-status status-${status.tone}">${status.label}</span>`}</span>
-    </span>`;
+    </span>${K.conversationActivity(record)}`;
 };
 K.tagFilterBar = () => {
     const tag = K.tagById(K.demo.tagFilter);

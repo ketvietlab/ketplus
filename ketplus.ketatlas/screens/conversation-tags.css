@@ -24,11 +24,10 @@
 .sidebar-context .conversation-meta-status { color: var(--kv-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .sidebar-context .conversation-meta-status.status-waiting { color: var(--kv-color-warning); }
 .sidebar-context .conversation-meta-status.status-error { color: var(--kv-color-danger); }
-.conversation-sender { flex: none; font-size: 12px; white-space: nowrap; color: var(--kv-text-muted); }
 
 .conversation-tag {
     --tag: var(--tag-slate);
-    display: inline-flex; align-items: center; gap: 5px; flex: none; max-width: 104px; height: 18px; padding: 0 6px;
+    display: inline-flex; align-items: center; flex: none; max-width: 104px; height: 18px; padding: 0 6px;
     border-radius: 4px; font-size: 11px; font-weight: 500; line-height: 18px; color: var(--kv-text-secondary);
     background: color-mix(in srgb, var(--tag) 13%, transparent);
 }
