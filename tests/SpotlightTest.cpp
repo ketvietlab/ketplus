@@ -105,6 +105,21 @@ class SpotlightTest final : public QObject {
         QCOMPARE(remoteOpen.count(), 0);
         QCOMPARE(errors.count(), 0);
     }
+    void dropsOversizedRoutingRequests() {
+        QTemporaryDir repo;
+        QWidget window;
+        ketplus::RepositoryRouter router;
+        router.registerWindow(repo.path(), &window);
+        QLocalSocket client;
+        client.connectToServer(ketplus::RepositoryRouter::endpointName(repo.path()));
+        QVERIFY(client.waitForConnected(1000));
+        // A client that never ends its line is cut off instead of buffering until the timeout.
+        client.write(QByteArray(32 * 1024, 'a'));
+        QVERIFY(client.waitForBytesWritten(1000));
+        QTRY_COMPARE_WITH_TIMEOUT(client.state(), QLocalSocket::UnconnectedState, 600);
+        QVERIFY(!window.isVisible());
+    }
+
     void registersWindowOffTheGuiThread() {
         QTemporaryDir first;
         QTemporaryDir second;

@@ -8,6 +8,7 @@
 
 class QWidget;
 class QLocalServer;
+class QLocalSocket;
 
 namespace ketplus {
 
@@ -39,6 +40,10 @@ class RepositoryRouter final : public QObject {
   private:
     static void remember(const QString& path);
     void registerLocation(const QString& normalized, const QString& worktree, QWidget* window);
+    // Answers a routed request once its repository lookup finished on the pool.
+    void answerRequest(QLocalSocket* socket, const QString& normalized, const QString& action,
+                       bool opensFile, const QString& identity, const QString& worktree,
+                       const QString& filePath);
     void requestRemote(const QString& identity, const QString& worktreePath,
                        const QString& filePath = {}, bool openDiff = false);
     QHash<QString, QPointer<QWidget>> windows_;

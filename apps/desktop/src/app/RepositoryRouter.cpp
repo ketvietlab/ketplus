@@ -39,6 +39,10 @@ RepositoryLocation locateRepository(const QString& path) {
     if (!git.waitForFinished(1500)) {
         git.kill();
         git.waitForFinished();
+        // A slow Git is not "no repository": keep the last verified identity, so linked
+        // worktrees still route to one window and endpoint.
+        if (const auto cached = RepositoryMetadataStore().lookup(canonical))
+            return {cached->identity, canonical};
         return {canonical, canonical};
     }
     const auto lines = QString::fromUtf8(git.readAllStandardOutput()).trimmed().split('\n');
@@ -54,6 +58,11 @@ QString endpointForIdentity(const QString& identity) {
     return "ketplus-repo-v2-" + QString::fromLatin1(
         QCryptographicHash::hash(key.toUtf8(), QCryptographicHash::Sha256).toHex().left(32));
 }
+
+// A routing request is one short JSON line; anything longer is not a KetPlus client.
+constexpr qint64 maximumRequestBytes = 16 * 1024;
+// Longer than two Git lookups, shorter than the client's 5 s wait.
+constexpr int requestLifetimeMs = 4500;
 
 void raiseWindow(QWidget* window) {
     if (window->isMinimized()) window->showNormal();
@@ -212,44 +221,76 @@ void RepositoryRouter::registerLocation(const QString& normalized, const QString
     connect(server, &QLocalServer::newConnection, this, [this, server, normalized] {
         while (auto* socket = server->nextPendingConnection()) {
             connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
-            QTimer::singleShot(1000, socket, &QObject::deleteLater);
+            QTimer::singleShot(requestLifetimeMs, socket, &QObject::deleteLater);
             connect(socket, &QLocalSocket::readyRead, socket, [this, socket, normalized] {
-                if (!socket->canReadLine()) return;
-                const auto request = QJsonDocument::fromJson(socket->readLine()).object();
+                if (!socket->canReadLine()) {
+                    if (socket->bytesAvailable() > maximumRequestBytes)
+                        socket->abort();
+                    return;
+                }
+                // One request per connection; later data is ignored.
+                disconnect(socket, &QLocalSocket::readyRead, socket, nullptr);
+                const auto request =
+                    QJsonDocument::fromJson(socket->readLine(maximumRequestBytes)).object();
                 const QString action = request.value("action").toString();
-                RepositoryLocation location = locateRepository(request.value("path").toString());
-                QString filePath;
                 const bool opensFile = action == QStringLiteral("openFile") ||
                                        action == QStringLiteral("openFileDiff");
-                if (opensFile) {
-                    filePath = canonicalPath(request.value("filePath").toString());
-                    if (!QFileInfo(filePath).isFile()) {
-                        socket->disconnectFromServer();
-                        return;
-                    }
-                    location = locateRepository(QFileInfo(filePath).absolutePath());
-                }
-                if ((action == QStringLiteral("activate") || opensFile) &&
-                    QFileInfo(location.worktree).isDir() && location.identity == normalized &&
-                    windows_.value(normalized)) {
-                    auto* window = windows_.value(normalized).data();
-                    if (windowPaths_.value(normalized) != location.worktree)
-                        emit worktreeRequested(window, location.worktree);
-                    if (!filePath.isEmpty()) {
-                        if (action == QStringLiteral("openFileDiff"))
-                            emit fileDiffRequested(window, filePath);
+                // Locating the repository runs Git, which must not block this window.
+                lookupPool_.start([router = QPointer<RepositoryRouter>(this),
+                                   client = QPointer<QLocalSocket>(socket), normalized, request,
+                                   action, opensFile] {
+                    RepositoryLocation location =
+                        locateRepository(request.value("path").toString());
+                    QString filePath;
+                    if (opensFile) {
+                        filePath = canonicalPath(request.value("filePath").toString());
+                        if (QFileInfo(filePath).isFile())
+                            location = locateRepository(QFileInfo(filePath).absolutePath());
                         else
-                            emit fileRequested(window, filePath);
+                            filePath.clear();
                     }
-                    raiseWindow(window);
-                    remember(location.worktree);
-                    socket->write("ok\n");
-                    socket->flush();
-                }
-                socket->disconnectFromServer();
+                    QMetaObject::invokeMethod(
+                        qApp,
+                        [router, client, normalized, action, opensFile, location, filePath] {
+                            if (router && client)
+                                router->answerRequest(client, normalized, action, opensFile,
+                                                      location.identity, location.worktree,
+                                                      filePath);
+                        },
+                        Qt::QueuedConnection);
+                });
             });
         }
     });
+}
+
+void RepositoryRouter::answerRequest(QLocalSocket* socket, const QString& normalized,
+                                     const QString& action, const bool opensFile,
+                                     const QString& identity, const QString& worktree,
+                                     const QString& filePath) {
+    const RepositoryLocation location{identity, worktree};
+    if (opensFile && filePath.isEmpty()) {
+        socket->disconnectFromServer();
+        return;
+    }
+    if ((action == QStringLiteral("activate") || opensFile) &&
+        QFileInfo(location.worktree).isDir() && location.identity == normalized &&
+        windows_.value(normalized)) {
+        auto* window = windows_.value(normalized).data();
+        if (windowPaths_.value(normalized) != location.worktree)
+            emit worktreeRequested(window, location.worktree);
+        if (!filePath.isEmpty()) {
+            if (action == QStringLiteral("openFileDiff"))
+                emit fileDiffRequested(window, filePath);
+            else
+                emit fileRequested(window, filePath);
+        }
+        raiseWindow(window);
+        remember(location.worktree);
+        socket->write("ok\n");
+        socket->flush();
+    }
+    socket->disconnectFromServer();
 }
 
 void RepositoryRouter::requestRemote(const QString& identity, const QString& worktreePath,

@@ -2,6 +2,7 @@
 
 #include <QDateTime>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QSqlDatabase>
 #include <QSqlQuery>
@@ -47,6 +48,28 @@ class Connection final {
   private:
     QString name_;
 };
+// A replaced checkout (deleted and re-cloned, or a worktree recreated for another
+// repository) keeps its path but not its Git metadata, so the root's `.git` must still
+// belong to the cached identity.
+bool rootBelongsToIdentity(const RepositoryMetadata& metadata) {
+    const QString identity = QFileInfo(metadata.identity).canonicalFilePath();
+    const QFileInfo git(QDir(metadata.root).filePath(QStringLiteral(".git")));
+    if (identity.isEmpty())
+        return false;
+    if (git.isDir())
+        return git.canonicalFilePath() == identity;
+    if (!git.isFile()) // A bare repository's root is its own identity.
+        return QFileInfo(metadata.root).canonicalFilePath() == identity;
+    QFile file(git.absoluteFilePath());
+    if (!file.open(QIODevice::ReadOnly))
+        return false;
+    const QString line = QString::fromUtf8(file.readLine(4096)).trimmed();
+    if (!line.startsWith(QStringLiteral("gitdir:")))
+        return false;
+    const QString target = QDir(metadata.root).absoluteFilePath(line.mid(7).trimmed());
+    const QString resolved = QFileInfo(target).canonicalFilePath();
+    return resolved == identity || resolved.startsWith(identity + QLatin1Char('/'));
+}
 } // namespace
 
 RepositoryMetadataStore::RepositoryMetadataStore(QString databasePath)
@@ -86,8 +109,9 @@ RepositoryMetadataStore::lookupAll(const QStringList& paths) const {
             continue;
         RepositoryMetadata metadata{path, query.value(0).toString(), query.value(1).toString()};
         query.finish();
-        // Never present a cached repo whose checkout or Git metadata disappeared.
-        if (QFileInfo(metadata.root).isDir() && QFileInfo::exists(metadata.identity))
+        // Never present a cached repo whose checkout or Git metadata disappeared or changed.
+        if (QFileInfo(metadata.root).isDir() && QFileInfo::exists(metadata.identity) &&
+            rootBelongsToIdentity(metadata))
             result.insert(path, metadata);
     }
     return result;

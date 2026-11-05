@@ -50,6 +50,29 @@ class RepositoryMetadataTest final : public QObject {
         QVERIFY(!store.lookup(linked));
     }
 
+    void replacedCheckoutDoesNotReuseItsOldIdentity() {
+        QTemporaryDir directory;
+        const auto root = directory.filePath("repo");
+        const auto other = directory.filePath("other");
+        QVERIFY(QDir().mkpath(root + "/.git"));
+        QVERIFY(QDir().mkpath(other + "/.git/worktrees/repo"));
+        ketplus::RepositoryMetadataStore store(directory.filePath("cache.sqlite"));
+        store.save({root, root + "/.git", root});
+        QVERIFY(store.lookup(root));
+
+        // The folder now holds a linked worktree of another repository.
+        QVERIFY(QDir(root + "/.git").removeRecursively());
+        QFile gitFile(root + "/.git");
+        QVERIFY(gitFile.open(QIODevice::WriteOnly));
+        gitFile.write(QStringLiteral("gitdir: %1/.git/worktrees/repo\n").arg(other).toUtf8());
+        gitFile.close();
+        QVERIFY(!store.lookup(root));
+
+        // A linked worktree of the cached repository still matches.
+        store.save({root, other + "/.git", root});
+        QVERIFY(store.lookup(root));
+    }
+
     void batchLookupReturnsOnlyValidEntries() {
         QTemporaryDir directory;
         const auto root = directory.filePath("repo");
