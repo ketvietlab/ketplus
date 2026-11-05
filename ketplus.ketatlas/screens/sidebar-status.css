@@ -172,10 +172,10 @@
     margin-top: 6px;
     margin-bottom: 6px;
 }
-/* Claude-style sidebar, widened 15% from 214 to 246 px (whole pixels); small repo
+/* Claude-style sidebar, widened 15% twice: 214 → 246 → 283 px (whole pixels); small repo
    headings with their conversations directly beneath, at Claude's density. */
 [data-ui="app-shell"] {
-    --kv-sidebar-width: 246px;
+    --kv-sidebar-width: 283px;
 }
 .sidebar-context .section-label {
     letter-spacing: 0;
