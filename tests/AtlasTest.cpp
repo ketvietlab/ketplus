@@ -54,6 +54,23 @@ class AtlasTest final : public QObject {
                 {}};
     }
   private slots:
+    void boundsTheWalkOutsideGit() {
+        QTemporaryDir root;
+        write(root.filePath(".hidden/secret.ketatlas/atlas.json"), config());
+        fixture(root.path());
+        bool truncated = true;
+        QCOMPARE(ketplus::AtlasIndex::scan(root.path(), {}, &truncated).size(), 1);
+        QVERIFY(!truncated);
+
+        // More folders than the walk visits, sorted after the bundle so the walk reaches them.
+        for (int index = 0; index < ketplus::AtlasIndex::maximumScannedDirectories; ++index)
+            QVERIFY(QDir(root.path()).mkpath(QStringLiteral("zz/d%1").arg(index)));
+        QElapsedTimer elapsed;
+        elapsed.start();
+        (void)ketplus::AtlasIndex::scan(root.path(), {}, &truncated);
+        QVERIFY(truncated);
+        QVERIFY(elapsed.elapsed() < ketplus::AtlasIndex::maximumScanMilliseconds + 1'000);
+    }
     void indexesOnlyAtlasManifests() {
         QTemporaryDir root;
         fixture(root.path());

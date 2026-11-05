@@ -1,6 +1,7 @@
 #include "workspace/AtlasIndex.h"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -73,13 +74,27 @@ QFileInfoList gitJsonFiles(const QString& root, const std::shared_ptr<std::atomi
     return files;
 }
 
+// Without Git there is no ignore list, and the root may be a home or data folder, so the walk is
+// bounded and skips hidden folders and ~/Library (listing it can raise macOS privacy prompts).
 QFileInfoList directoryJsonFiles(const QString& root,
-                                 const std::shared_ptr<std::atomic_bool>& cancelled) {
+                                 const std::shared_ptr<std::atomic_bool>& cancelled,
+                                 bool& truncated) {
+    truncated = false;
+    const QString library = QDir(QDir::homePath()).filePath(QStringLiteral("Library"));
+    QElapsedTimer elapsed;
+    elapsed.start();
     QFileInfoList files;
     QStringList directories{root};
+    int visited = 0;
     while (!directories.isEmpty()) {
         if (cancelled && cancelled->load())
             return {};
+        if (visited >= AtlasIndex::maximumScannedDirectories ||
+            elapsed.elapsed() >= AtlasIndex::maximumScanMilliseconds) {
+            truncated = true;
+            break;
+        }
+        ++visited;
         const QString directory = directories.takeLast();
         if (QFileInfo(directory).fileName().endsWith(atlasDirectorySuffix, Qt::CaseInsensitive)) {
             const QFileInfo manifest(QDir(directory).filePath(atlasManifestName));
@@ -90,10 +105,12 @@ QFileInfoList directoryJsonFiles(const QString& root,
         for (const auto& info : QDir(directory).entryInfoList(
                  QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::NoSymLinks,
                  QDir::Name)) {
-            if (excludedDirectories.contains(info.fileName()))
+            if (excludedDirectories.contains(info.fileName()) || !info.isDir() ||
+                (info.fileName().startsWith(u'.') &&
+                 !info.fileName().endsWith(atlasDirectorySuffix, Qt::CaseInsensitive)) ||
+                info.absoluteFilePath() == library)
                 continue;
-            if (info.isDir())
-                directories.append(info.absoluteFilePath());
+            directories.append(info.absoluteFilePath());
         }
     }
     return files;
@@ -247,8 +264,12 @@ void AtlasIndex::refresh() {
 QVector<AtlasDescriptor> AtlasIndex::atlases() const { return visibleAtlases(manifests_); }
 
 QVector<AtlasDescriptor> AtlasIndex::scan(const QString& root,
-                                          const std::shared_ptr<std::atomic_bool>& cancelled) {
-    return scanSnapshot(root, cancelled, {}, 0).manifests;
+                                          const std::shared_ptr<std::atomic_bool>& cancelled,
+                                          bool* truncated) {
+    Snapshot snapshot = scanSnapshot(root, cancelled, {}, 0);
+    if (truncated)
+        *truncated = snapshot.truncated;
+    return snapshot.manifests;
 }
 
 AtlasIndex::Snapshot AtlasIndex::scanSnapshot(const QString& suppliedRoot,
@@ -266,7 +287,7 @@ AtlasIndex::Snapshot AtlasIndex::scanSnapshot(const QString& suppliedRoot,
     bool gitSucceeded = false;
     QFileInfoList candidates = gitJsonFiles(root, cancelled, gitSucceeded);
     if (!gitSucceeded)
-        candidates = directoryJsonFiles(root, cancelled);
+        candidates = directoryJsonFiles(root, cancelled, snapshot.truncated);
 
     QSet<QString> visited;
     for (const auto& info : candidates) {

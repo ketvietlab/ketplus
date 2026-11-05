@@ -61,6 +61,12 @@ Qt application shell
 - `core/src/core` owns documents and persistence. It must not depend on Qt Widgets.
 - `core/src/workspace` owns the lightweight file tree and filesystem actions. It
   discovers entries only when folders are expanded and does not build an index.
+  Quick Open and Search list a Git working tree with
+  `git ls-files --cached --others --exclude-standard`, so `.gitignore` decides what
+  they cover; other folders are walked without hidden, dependency and build folders.
+  Explorer renames retarget open tabs, and trashing closes clean tabs of that path.
+  Search decodes files as the editor does. Replace All is off when results reached
+  the match limit.
 - `modules/ai/src` owns the GPU-rendered Agent Workspace shell. QML consumes semantic
   KetJS-derived tokens from `ThemeManager`; it does not own file persistence,
   terminal processes, or editor state. `AgentSessionManager` owns the transcript

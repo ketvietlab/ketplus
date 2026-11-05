@@ -227,6 +227,7 @@ void MainWindow::finishWorkspaceSearch(const WorkspaceSearchSummary& summary,
         return;
     }
     searchPanel_->setSearching(false);
+    searchPanel_->setResultsTruncated(summary.truncated);
     if (cancelled) {
         searchPanel_->setStatusText(QStringLiteral("Search cancelled"));
     } else if (summary.matchCount == 0) {
@@ -238,7 +239,9 @@ void MainWindow::finishWorkspaceSearch(const WorkspaceSearchSummary& summary,
                 .arg(summary.matchCount == 1 ? QStringLiteral("result") : QStringLiteral("results"))
                 .arg(summary.fileCount)
                 .arg(summary.fileCount == 1 ? QStringLiteral("file") : QStringLiteral("files"))
-                .arg(summary.truncated ? QStringLiteral(" (limit reached)") : QString()));
+                .arg(summary.truncated
+                         ? QStringLiteral(" (limit reached; narrow the search to replace)")
+                         : QString()));
     }
 }
 
@@ -263,6 +266,12 @@ void MainWindow::replaceInWorkspace() {
     const WorkspaceSearchOptions options = lastSearchOptions_;
     if (panel->options() != options) {
         panel->setStatusText(QStringLiteral("The search changed. Search again before replacing."));
+        return;
+    }
+    if (panel->resultsTruncated()) {
+        panel->setStatusText(QStringLiteral("The results stopped at %L1 matches. Narrow the search "
+                                            "before replacing.")
+                                 .arg(panel->resultMatchCount()));
         return;
     }
     QString error;

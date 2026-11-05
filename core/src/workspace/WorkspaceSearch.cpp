@@ -1,13 +1,11 @@
 #include "workspace/WorkspaceSearch.h"
 
+#include "core/Document.h"
 #include "workspace/WorkspaceFileIndex.h"
 
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QStringDecoder>
-
-#include <utility>
 
 namespace ketplus {
 namespace {
@@ -180,16 +178,14 @@ bool readSearchableFile(const QString& path, QString* text) {
         return false;
     }
     const QByteArray raw = file.readAll();
-    if (raw.left(binaryProbeBytes).contains('\0')) {
+    // The same detection the editor uses, so UTF-16 (which is full of NUL bytes) and Latin-1
+    // files are searched as the text the editor shows.
+    const TextEncoding encoding = Document::detectEncoding(raw);
+    const bool utf16 = encoding == TextEncoding::Utf16LE || encoding == TextEncoding::Utf16BE;
+    if (!utf16 && raw.left(binaryProbeBytes).contains('\0')) {
         return false;
     }
-    // Stateless, so a truncated sequence at the end of the file counts as invalid.
-    QStringDecoder decoder(QStringConverter::Utf8, QStringConverter::Flag::Stateless);
-    QString decoded = decoder.decode(raw);
-    if (decoder.hasError()) {
-        return false;
-    }
-    *text = std::move(decoded);
+    *text = QString::fromUtf8(Document::decodeToUtf8(raw, encoding));
     return true;
 }
 

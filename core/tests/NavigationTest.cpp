@@ -10,6 +10,7 @@
 #include <QDir>
 #include <QFile>
 #include <QLineEdit>
+#include <QProcess>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -23,6 +24,7 @@ class NavigationTest final : public QObject {
     void scoresFuzzyMatches();
     void filtersAndActivatesQuickOpenItems();
     void collectsWorkspaceFiles();
+    void listsRepositoryFilesByIgnoreRules();
     void extractsCppSymbols();
     void extractsScriptAndMarkdownSymbols();
     void movesCaretToPosition();
@@ -191,6 +193,44 @@ void NavigationTest::collectsWorkspaceFiles() {
     const auto stopped = ketplus::collectWorkspaceFiles(directory.path(), 100, &cancelled);
     QVERIFY(stopped.relativePaths.isEmpty());
     QVERIFY(stopped.truncated);
+}
+
+void NavigationTest::listsRepositoryFilesByIgnoreRules() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QDir root(directory.path());
+    const auto git = [&root](const QStringList& arguments) {
+        QProcess process;
+        process.start(QStringLiteral("git"),
+                      QStringList{QStringLiteral("-C"), root.path()} + arguments);
+        return process.waitForFinished() && process.exitCode() == 0;
+    };
+    QVERIFY(git({QStringLiteral("init"), QStringLiteral("-q")}));
+    for (const QString& path :
+         {QStringLiteral(".gitignore"), QStringLiteral("vendor/lib.c"),
+          QStringLiteral("src/out/gen.c"), QStringLiteral("cmake-build-debug/big.o"),
+          QStringLiteral("notes.txt"), QStringLiteral("gone.txt")}) {
+        QVERIFY(root.mkpath(QFileInfo(path).path()));
+        QFile file(root.filePath(path));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        if (path == QStringLiteral(".gitignore")) {
+            file.write("cmake-build-debug/\n");
+        }
+    }
+    QVERIFY(git({QStringLiteral("add"), QStringLiteral(".gitignore"), QStringLiteral("vendor"),
+                 QStringLiteral("src"), QStringLiteral("gone.txt")}));
+    QVERIFY(QFile::remove(root.filePath(QStringLiteral("gone.txt"))));
+
+    const auto files = ketplus::collectWorkspaceFiles(directory.path());
+    // Committed vendor/ and src/out/ are listed, the ignored folder and the deleted file are not,
+    // and untracked notes.txt is.
+    QCOMPARE(files.relativePaths,
+             QStringList({QStringLiteral(".gitignore"), QStringLiteral("notes.txt"),
+                          QStringLiteral("src/out/gen.c"), QStringLiteral("vendor/lib.c")}));
+    QVERIFY(!files.truncated);
+    const auto limited = ketplus::collectWorkspaceFiles(directory.path(), 2);
+    QCOMPARE(limited.relativePaths.size(), 2);
+    QVERIFY(limited.truncated);
 }
 
 void NavigationTest::extractsCppSymbols() {

@@ -17,7 +17,34 @@ class ExplorerPanelTest final : public QObject {
     void opensFilesFromTheTree();
     void togglesFoldersFromTheTree();
     void revealsAnOpenFile();
+    void reportsInlineRenames();
 };
+
+void ExplorerPanelTest::reportsInlineRenames() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("notes.md"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.close();
+
+    ketplus::ExplorerPanel explorer;
+    explorer.show();
+    explorer.setRootPath(directory.path());
+    auto* tree = explorer.findChild<QTreeView*>(QStringLiteral("explorerTree"));
+    QVERIFY(tree != nullptr);
+    auto* model = qobject_cast<QFileSystemModel*>(tree->model());
+    QVERIFY(model != nullptr);
+    QTRY_VERIFY_WITH_TIMEOUT(model->index(path).isValid(), 3000);
+
+    QSignalSpy renamed(&explorer, &ketplus::ExplorerPanel::pathRenamed);
+    // What the tree's inline editor commits.
+    QVERIFY(model->setData(model->index(path), QStringLiteral("todo.md")));
+    QCOMPARE(renamed.count(), 1);
+    QCOMPARE(QDir::cleanPath(renamed.constFirst().at(0).toString()), QDir::cleanPath(path));
+    QCOMPARE(QDir::cleanPath(renamed.constFirst().at(1).toString()),
+             QDir::cleanPath(directory.filePath(QStringLiteral("todo.md"))));
+}
 
 void ExplorerPanelTest::revealsAnOpenFile() {
     QTemporaryDir directory;

@@ -21,9 +21,10 @@ inline constexpr int maximumWorkspaceFileLimit = 5000000;
 // thousands of assets beside their source.
 [[nodiscard]] bool hasBinaryFileSuffix(const QString& path);
 
-// Lists files under `rootPath` relative to it, sorted, skipping VCS metadata,
-// dependency and build folders. Safe to call from a worker thread; stops early and
-// returns what it has when `cancelled` becomes true.
+// Lists files under `rootPath` relative to it, sorted. In a Git working tree these are the
+// files `git ls-files --cached --others --exclude-standard` names; elsewhere a walk skips VCS
+// metadata, hidden, dependency and build folders. Safe to call from a worker thread; stops
+// early and returns what it has when `cancelled` becomes true.
 [[nodiscard]] WorkspaceFileList collectWorkspaceFiles(const QString& rootPath,
                                                       int maximumFiles = defaultWorkspaceFileLimit,
                                                       const std::atomic_bool* cancelled = nullptr);

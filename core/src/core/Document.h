@@ -44,6 +44,8 @@ public:
     [[nodiscard]] TextEncoding textEncoding() const noexcept;
 
     void setModified(bool modified) noexcept;
+    // Follows a rename on disk; the content and modified state are unchanged.
+    void setFilePath(const QString& filePath);
     void setTextEncoding(TextEncoding encoding) noexcept;
 
     [[nodiscard]] static TextEncoding detectEncoding(const QByteArray& raw);

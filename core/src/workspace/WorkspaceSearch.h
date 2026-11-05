@@ -54,7 +54,8 @@ inline constexpr int maximumSearchPreviewLength = 300;
 [[nodiscard]] QList<WorkspaceSearchMatch> searchText(const QString& text,
                                                      const QRegularExpression& expression,
                                                      int maximumMatches);
-// Reads a file for searching. Returns false for missing, oversized, binary or non-UTF-8 files.
+// Reads a file for searching, decoded as the editor would (UTF-8, UTF-16 with a byte order
+// mark, or Latin-1). Returns false for missing, oversized or binary files.
 [[nodiscard]] bool readSearchableFile(const QString& path, QString* text);
 // Replaces matches line by line and keeps line endings. With `regex`, \1 or $1 insert groups.
 [[nodiscard]] QString replaceInText(const QString& text, const QRegularExpression& expression,

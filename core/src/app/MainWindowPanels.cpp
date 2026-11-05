@@ -4,6 +4,7 @@
 
 #include "app/SettingsDialog.h"
 #include "editor/EditorWidget.h"
+#include "editor/TabPaths.h"
 #include "git/GitChangesPanel.h"
 #include "git/GitDiffView.h"
 #include "git/GitService.h"
@@ -133,6 +134,28 @@ ExplorerPanel* MainWindow::ensureExplorer() {
             [this](const QString& path) { requestFileDiff(path); });
     connect(explorer_, &ExplorerPanel::openFolderRequested, this, &MainWindow::chooseFolder);
     connect(explorer_, &ExplorerPanel::hideRequested, this, [this] { setExplorerVisible(false); });
+    connect(explorer_, &ExplorerPanel::pathRenamed, this,
+            [this](const QString& from, const QString& to) {
+                for (EditorWidget* editor : tab_paths::retarget(tabs_, from, to)) {
+                    editor->configureLexerForPath(editor->document().filePath());
+                    editor->applyTheme(theme_.palette());
+                    updateTabTitle(editor);
+                }
+            });
+    // Clean tabs of a trashed file close; tabs with edits stay, as the confirmation said.
+    connect(explorer_, &ExplorerPanel::pathTrashed, this, [this](const QString& path) {
+        for (EditorWidget* editor : tab_paths::editorsWithin(tabs_, path)) {
+            if (!editor->document().isModified()) {
+                closeTab(tabs_->indexOf(editor));
+            }
+        }
+    });
+    explorer_->setUnsavedTabsQuery([this](const QString& path) {
+        const auto editors = tab_paths::editorsWithin(tabs_, path);
+        return static_cast<int>(std::count_if(editors.cbegin(), editors.cend(), [](auto* editor) {
+            return editor->document().isModified();
+        }));
+    });
 
     if (!workspaceRoot_.isEmpty()) {
         explorer_->setRootPath(workspaceRoot_);

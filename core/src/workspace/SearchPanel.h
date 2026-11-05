@@ -27,12 +27,17 @@ class SearchPanel final : public QWidget {
     [[nodiscard]] QString replacement() const;
     [[nodiscard]] QStringList resultPaths() const;
     [[nodiscard]] int resultMatchCount() const noexcept;
+    // Whether the search stopped at its match limit, so the list is not every match.
+    [[nodiscard]] bool resultsTruncated() const noexcept;
     [[nodiscard]] bool isSearching() const noexcept;
 
     void focusQuery(const QString& seed = {});
     void clearResults();
     void addFileResult(const WorkspaceSearchFileResult& result);
     void setSearching(bool searching);
+    // Replace All stays disabled for truncated results: it would change more than is listed
+    // in the listed files and nothing in the files past the limit.
+    void setResultsTruncated(bool truncated);
     void setStatusText(const QString& text);
     // Colors for the result rows, so a folder, a file name, a line number and the matched
     // text are told apart. Called with the theme's palette.
@@ -69,6 +74,7 @@ class SearchPanel final : public QWidget {
     } colors_;
     int matchCount_{0};
     bool searching_{false};
+    bool truncated_{false};
 };
 
 } // namespace ketplus

@@ -3,6 +3,8 @@
 #include <QModelIndex>
 #include <QWidget>
 
+#include <functional>
+
 class QFileSystemModel;
 class QLabel;
 class QStackedWidget;
@@ -22,9 +24,15 @@ class ExplorerPanel final : public QWidget {
     // a path whose folders are not there yet is revealed once they arrive.
     void revealPath(const QString& path);
     void focusTree();
+    // How many open tabs with unsaved edits are at or under a path, so Move to Trash can say.
+    void setUnsavedTabsQuery(std::function<int(const QString& path)> query);
 
   signals:
     void fileOpenRequested(const QString& path);
+    // After an inline rename. Tabs at or under `from` now belong at `to`.
+    void pathRenamed(const QString& from, const QString& to);
+    // After a file or folder went to the Trash.
+    void pathTrashed(const QString& path);
     void gitDiffRequested(const QString& path);
     void openFolderRequested();
     void hideRequested();
@@ -51,6 +59,7 @@ class ExplorerPanel final : public QWidget {
     QString rootPath_;
     QString pendingReveal_;
     bool showHiddenFiles_{false};
+    std::function<int(const QString& path)> unsavedTabs_;
 };
 
 } // namespace ketplus

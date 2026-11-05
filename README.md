@@ -118,7 +118,8 @@ The background Atlas index covers only the active workspace/worktree. Switching
 worktrees replaces the indexed root; inactive and linked worktrees are not
 scanned. Git workspaces use an exact `**/*.ketatlas/atlas.json` pathspec and
 respect ignore rules; non-Git workspaces walk directories but inspect only the
-same bundle pattern. Unchanged manifest results, including non-Atlas results,
+same bundle pattern. That walk skips hidden folders and `~/Library` and stops after
+10,000 folders or 2 s. Unchanged manifest results, including non-Atlas results,
 are cached. Filesystem events, workspace saves, opening the picker, and
 Spotlight trigger a debounced refresh. Unchanged snapshots do not redraw the
 Atlas UI.

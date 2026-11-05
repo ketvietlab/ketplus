@@ -7,6 +7,8 @@
 
 #include <QDir>
 #include <QFile>
+#include <QPushButton>
+#include <QStringEncoder>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -138,7 +140,15 @@ void SearchViewTest::readsOnlySearchableFiles() {
     QVERIFY(ketplus::readSearchableFile(text, &content));
     QCOMPARE(content, QStringLiteral("Xin chào"));
     QVERIFY(!ketplus::readSearchableFile(binary, &content));
-    QVERIFY(!ketplus::readSearchableFile(latin1, &content));
+    // Decoded as the editor shows them.
+    QVERIFY(ketplus::readSearchableFile(latin1, &content));
+    QCOMPARE(content, QStringLiteral("café"));
+    const QString utf16 = directory.filePath(QStringLiteral("Localizable.strings"));
+    QStringEncoder encoder(QStringConverter::Utf16LE);
+    QVERIFY(writeFile(utf16, QByteArray("\xFF\xFE", 2) + QByteArray(encoder.encode(QStringLiteral(
+                                                             "\"key\" = \"Xin chào\";")))));
+    QVERIFY(ketplus::readSearchableFile(utf16, &content));
+    QCOMPARE(content, QStringLiteral("\"key\" = \"Xin chào\";"));
     QVERIFY(!ketplus::readSearchableFile(directory.filePath(QStringLiteral("missing")), &content));
 }
 
@@ -224,9 +234,17 @@ void SearchViewTest::collectsSearchPanelResults() {
     QCOMPARE(panel.resultPaths(),
              QStringList({QStringLiteral("/tmp/a.txt"), QStringLiteral("/tmp/b.txt")}));
     QCOMPARE(panel.resultMatchCount(), 3);
+    auto* replaceAll = panel.findChild<QPushButton*>(QStringLiteral("searchReplaceAllButton"));
+    QVERIFY(replaceAll != nullptr);
+    QVERIFY(replaceAll->isEnabled());
+    // Past the match limit the list is not every match, so Replace All waits for a narrower search.
+    panel.setResultsTruncated(true);
+    QVERIFY(panel.resultsTruncated());
+    QVERIFY(!replaceAll->isEnabled());
     panel.clearResults();
     QVERIFY(panel.resultPaths().isEmpty());
     QCOMPARE(panel.resultMatchCount(), 0);
+    QVERIFY(!panel.resultsTruncated());
 }
 
 void SearchViewTest::highlightsSelectedWordMatches() {

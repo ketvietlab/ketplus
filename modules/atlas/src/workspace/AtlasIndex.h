@@ -63,8 +63,14 @@ class AtlasIndex final : public QObject {
     QVector<AtlasDescriptor> atlases() const;
     const QString& workspaceRoot() const { return workspaceRoot_; }
 
+    // Limits of the directory walk used when the root is not a Git checkout.
+    static constexpr int maximumScannedDirectories = 10'000;
+    static constexpr qint64 maximumScanMilliseconds = 2'000;
+
+    // `truncated` reports a directory walk that stopped at its limits.
     static QVector<AtlasDescriptor> scan(const QString& root,
-                                         const std::shared_ptr<std::atomic_bool>& cancelled = {});
+                                         const std::shared_ptr<std::atomic_bool>& cancelled = {},
+                                         bool* truncated = nullptr);
     static QVector<AtlasDescriptor> visibleAtlases(const QVector<AtlasDescriptor>& manifests);
 
   signals:
@@ -83,6 +89,7 @@ class AtlasIndex final : public QObject {
         QString root;
         qint64 rootModified{0};
         quint64 generation{0};
+        bool truncated{false};
     };
 
     static Snapshot scanSnapshot(const QString& root,
