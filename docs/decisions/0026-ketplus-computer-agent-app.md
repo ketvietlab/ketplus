@@ -157,6 +157,24 @@ The first implementation refines the decision as follows.
   `KETPLUS_COMPUTER_TEST_APPROVAL` override into the approval panel for
   `scripts/e2e.mjs`. Release builds never contain it.
 
+## Verification (2026-10-19, macOS 26.2)
+
+- `scripts/e2e.mjs --manual-esc` passed every check, including a real Esc key
+  press that ended the lease, returned `CANCELLED` and was audited.
+- A real Claude turn through the Claude sidecar, with the server entry the
+  daemon builds, called `request_access`, `screenshot`, `left_click` and `type`,
+  and the fixture received the typed text. The run took about 20 s. The daemon's
+  own injection is covered by `ComputerProviderIntegrationTest`, not by a live
+  turn.
+- In two of three live runs something else intervened. Once a Notification
+  Center banner covered the fixture, so the click was refused as
+  `APP_NOT_GRANTED`; an Esc from the keyboard then cancelled the turn. Once
+  WindowServer failed three captures in a row ("Error in creating screenshot")
+  while TCC still allowed access, and capture worked again seconds later.
+  Agents should report `CAPTURE_FAILED` rather than guess.
+- Not yet verified: the approval panel in a release build, multiple displays and
+  the periodic Screen Recording re-prompt.
+
 ## Alternatives considered
 
 - Reusing KetViewer's capture and input code. KetViewer is a separate commercial
