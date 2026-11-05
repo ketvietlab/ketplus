@@ -5,6 +5,7 @@
 #include <QMimeDatabase>
 #include <QMimeType>
 #include <QStringDecoder>
+#include <QUrl>
 
 namespace ketplus {
 namespace {
@@ -50,6 +51,39 @@ bool isTranscriptTextFile(const QString& path) {
             return false;
     }
     return true;
+}
+
+TranscriptFileAction transcriptFileAction(const QString& path) {
+    const QFileInfo info(path);
+    if (!info.exists())
+        return TranscriptFileAction::Missing;
+    // Text, scripts included, opens in the editor, where nothing runs.
+    if (isTranscriptTextFile(path))
+        return TranscriptFileAction::Edit;
+    if (info.isDir() || info.isBundle() || info.isExecutable())
+        return TranscriptFileAction::Reveal;
+    const QString type = QMimeDatabase().mimeTypeForFile(path).name();
+    if (type.startsWith("image/") || type.startsWith("audio/") || type.startsWith("video/") ||
+        type == "application/pdf")
+        return TranscriptFileAction::View;
+    return TranscriptFileAction::Reveal;
+}
+
+TranscriptUrlAction transcriptUrlAction(const QUrl& url) {
+    const QString scheme = url.scheme().toLower();
+    if (!url.isValid() || isRemoteFileLink(url.toString()))
+        return TranscriptUrlAction::Refuse;
+    if (scheme == "http" || scheme == "https" || scheme == "mailto")
+        return TranscriptUrlAction::Open;
+    return TranscriptUrlAction::Confirm;
+}
+
+bool isRemoteFileLink(const QString& link) {
+    if (link.startsWith("//") || link.startsWith("\\\\"))
+        return true;
+    const QUrl url(link);
+    return url.scheme().compare("file", Qt::CaseInsensitive) == 0 && !url.host().isEmpty() &&
+           url.host().compare("localhost", Qt::CaseInsensitive) != 0;
 }
 
 } // namespace ketplus

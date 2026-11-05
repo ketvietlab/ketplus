@@ -76,6 +76,8 @@ add_library(ketplus_ai STATIC
     src/agent/ProviderRuntimeStatus.h
     src/agent/FileMentions.cpp
     src/agent/FileMentions.h
+    src/agent/FileReveal.cpp
+    src/agent/FileReveal.h
 )
 target_link_libraries(ketplus_ai
     PUBLIC

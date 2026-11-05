@@ -34,7 +34,10 @@ milestone changes state.
   they do not pretend to expose prepaid balance or account spending limits.
 
 - Transcript links open text/source files in Agent detail editors; images, PDFs,
-  application bundles and other non-text resources use the platform default app.
+  audio and video use the platform default app (asking first outside the worktree);
+  folders, application bundles, executables and other types are revealed in the file
+  manager, never launched. Web and mail links open; other schemes ask with the full
+  URL, and network file locations (UNC, `file://host`) are refused.
   MIME and bounded content checks keep binary data out of transcript-opened editors.
 
 - Claude BYOK on macOS: Settings → Providers saves a host-scoped key in Keychain,

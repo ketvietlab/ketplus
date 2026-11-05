@@ -24,6 +24,7 @@
 class QCloseEvent;
 class QEvent;
 class QShortcut;
+class QUrl;
 class QAction;
 class QLabel;
 class QMenu;
@@ -282,6 +283,9 @@ class MainWindow final : public QMainWindow {
     void setSourceControlVisible(bool visible);
     void requestCurrentFileDiff();
     void openTranscriptFile(const QString& path, bool diff);
+    // A link clicked in an agent transcript: a path, `path:line`, or a URL.
+    void openTranscriptLink(const QString& link);
+    void openTranscriptUrl(const QUrl& url);
     void requestFileDiff(const QString& filePath, GitDiffMode mode = GitDiffMode::Combined);
     void showDiff(const QString& filePath, GitDiffMode mode, const QString& diff);
     void updateGitSnapshot(const GitSnapshot& snapshot);

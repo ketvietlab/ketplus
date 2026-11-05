@@ -519,15 +519,29 @@ void AgentWorkspaceViewTest::linksFileReferencesInInlineCode() {
     write(QStringLiteral("apps/web/src/components/Pages/Home/Hooks/usePostPreview.ts"));
     write(QStringLiteral("apps/web/src/components/Pages/MyPage/index.tsx"));
     write(QStringLiteral("apps/web/src/components/Pages/Tw/index.tsx"));
+    write(QStringLiteral("docs/hướng-dẫn/tài-liệu.md"));
     QProcess git;
     git.setWorkingDirectory(root.path());
     git.start(QStringLiteral("git"), {QStringLiteral("init"), QStringLiteral("-q")});
     QVERIFY(git.waitForFinished(10'000));
 
     ketplus::TranscriptFileLinks links;
+    int requests = 0;
+    links.setFileRequester([&requests] { ++requests; });
     links.setRoot(root.path());
     QCOMPARE(links.href(QStringLiteral("apps/api/src/comment/comment.service.ts:54")),
              QStringLiteral("apps/api/src/comment/comment.service.ts:54"));
+    QCOMPARE(requests, 0);
+    // Formatting never lists the tree itself: a suffix waits for the background listing, and
+    // the miss is not remembered.
+    QVERIFY(links.href(QStringLiteral("Pages/Tw/index.tsx")).isEmpty());
+    QCOMPARE(requests, 1);
+    QVERIFY(links.href(QStringLiteral("Pages/Home/Hooks/usePostPreview.ts")).isEmpty());
+    QCOMPARE(requests, 1);
+    links.setFiles(root.path(), ketplus::file_mentions::listEntries(root.path()));
+    // Listed with -z, so a non-ASCII name is not quoted away.
+    QCOMPARE(links.href(QStringLiteral("tài-liệu.md:3")),
+             QStringLiteral("docs/hướng-dẫn/tài-liệu.md:3"));
     // A range or column keeps its first line; a path from inside the tree finds its file.
     QCOMPARE(links.href(QStringLiteral("Pages/Home/Hooks/usePostPreview.ts:48-49")),
              QStringLiteral("apps/web/src/components/Pages/Home/Hooks/usePostPreview.ts:48"));

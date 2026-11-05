@@ -40,6 +40,7 @@ void AgentWorkspaceView::refreshFileMentions() {
                 self->fileMentionEntries_ = std::move(entries);
                 self->fileMentionFoldedEntries_ = std::move(folded);
                 self->fileMentionAge_.start();
+                self->fileLinks_.setFiles(root, self->fileMentionEntries_);
                 ++self->fileMentionRevision_;
                 emit self->fileMentionsChanged();
             },
