@@ -464,6 +464,25 @@ QSet<QString> AgentSessionManager::completedPaths() const {
     return result;
 }
 
+QSet<QString> AgentSessionManager::runningCheckoutPaths() const {
+    const auto canonical = [](const QString& path) {
+        const QString resolved = QFileInfo(path).canonicalFilePath();
+        return resolved.isEmpty() ? normalizedPath(path) : resolved;
+    };
+    QSet<QString> result;
+    for (auto iterator = conversationsByPath_.cbegin(); iterator != conversationsByPath_.cend();
+         ++iterator) {
+        for (const SessionPtr& session : iterator.value()) {
+            if (!session->running)
+                continue;
+            result.insert(canonical(iterator.key()));
+            if (!session->executionPath.isEmpty())
+                result.insert(canonical(session->executionPath));
+        }
+    }
+    return result;
+}
+
 QSet<QString> AgentSessionManager::runningPaths() const {
     QSet<QString> result;
     for (auto iterator = conversationsByPath_.cbegin(); iterator != conversationsByPath_.cend();

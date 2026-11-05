@@ -1,5 +1,6 @@
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
+#include "agent/CodexAppServer.h"
 #include "app/AgentWorktreeCreator.h"
 #include "app/AgentWorktreeDialog.h"
 #include "app/MainWindow.h"
@@ -26,6 +27,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QInputDialog>
+#include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
@@ -1128,6 +1130,16 @@ class AgentWorkspaceShellTest final : public QObject {
         }());
         notesEditor->replaceAllText("unsaved\n");
         QVERIFY(notesEditor->document().isModified());
+        // Another conversation, born in the main checkout, now runs in the linked worktree.
+        auto* appServer = window.findChild<ketplus::CodexAppServer*>();
+        QVERIFY(appServer);
+        emit appServer->daemonSessionDiscovered(
+            QJsonObject{{QStringLiteral("session_id"), QStringLiteral("running-elsewhere")},
+                        {QStringLiteral("session_generation"), 1},
+                        {QStringLiteral("conversation_path"), repository},
+                        {QStringLiteral("worktree_path"), linkedPath},
+                        {QStringLiteral("state"), QStringLiteral("running")}});
+        QVERIFY(manager->runningCheckoutPaths().contains(linkedPath));
         QSignalSpy deleted(manager, &ketplus::AgentSessionManager::conversationDeletionFinished);
         QTimer::singleShot(0, &window, [&window] {
             auto* dialog = window.findChild<QDialog*>(QStringLiteral("conversationDeleteDialog"));
@@ -1145,6 +1157,7 @@ class AgentWorkspaceShellTest final : public QObject {
         QTRY_VERIFY((kept = window.findChild<QMessageBox*>(
                          QStringLiteral("worktreeDeletionSkipped"))) != nullptr);
         QVERIFY(kept->text().contains(QStringLiteral("unsaved changes")));
+        QVERIFY(kept->text().contains(QStringLiteral("an agent is running")));
         kept->accept();
         QVERIFY(QFileInfo(QDir(linkedPath).filePath(QStringLiteral(".git"))).isFile());
     }

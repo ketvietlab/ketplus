@@ -149,13 +149,17 @@ QString MainWindow::worktreeRemovalBlocker(const QString& target) const {
         return !relative.isEmpty() && !QDir::isAbsolutePath(relative) &&
                relative != QStringLiteral("..") && !relative.startsWith(QStringLiteral("../"));
     };
+    QStringList reasons;
     for (const EditorWidget* editor : findChildren<EditorWidget*>()) {
-        if (editor->document().isModified() && contains(editor->document().filePath()))
-            return tr("an editor has unsaved changes in it");
+        if (editor->document().isModified() && contains(editor->document().filePath())) {
+            reasons.append(tr("an editor has unsaved changes in it"));
+            break;
+        }
     }
-    if (agentManager_->runningPaths().contains(target))
-        return tr("an agent is running in it");
-    return {};
+    // A conversation can run in a checkout other than the one it was started in.
+    if (agentManager_->runningCheckoutPaths().contains(target))
+        reasons.append(tr("an agent is running in it"));
+    return reasons.join(QStringLiteral("; "));
 }
 
 void MainWindow::showAgentWorktreeContextMenu(const QString& path) {

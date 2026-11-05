@@ -263,7 +263,7 @@ class MainWindow final : public QMainWindow {
     void clearPendingWorktreeDeletion();
     void removeNextPendingLinkedWorktree();
     // Empty when nothing in this window blocks removing the linked worktree `target`
-    // (canonical); otherwise the reason. Both deletion paths use it.
+    // (canonical); otherwise every reason, separated by "; ". Both deletion paths use it.
     [[nodiscard]] QString worktreeRemovalBlocker(const QString& target) const;
     bool archiveWorktree(const QString& path);
     bool restoreArchivedWorktree(const QString& path);

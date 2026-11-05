@@ -47,6 +47,9 @@ class AgentSessionManager final : public QObject {
     [[nodiscard]] QString status(const QString& worktreePath) const;
     [[nodiscard]] bool isRunning(const QString& worktreePath) const;
     [[nodiscard]] QSet<QString> runningPaths() const;
+    // Checkouts a running agent uses: each running session's execution worktree (canonical),
+    // which can differ from the conversation path runningPaths() is keyed by, plus that path.
+    [[nodiscard]] QSet<QString> runningCheckoutPaths() const;
     [[nodiscard]] QSet<QString> completedPaths() const;
     [[nodiscard]] QSet<QString> conversationPaths() const;
     [[nodiscard]] QString activeConversationId(const QString& worktreePath) const;
