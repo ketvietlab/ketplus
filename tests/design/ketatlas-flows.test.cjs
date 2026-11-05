@@ -1257,6 +1257,17 @@ test("no-result model search keeps the compact draft and recovers when cleared",
     a.input("#model-search", "");
     assert.equal(a.document.querySelector("#model-search-empty").hidden, true);
 });
+test("connections artwork shows real KetPlus Mobile captures for each theme", () => {
+    const s = screen("screens/connections.html?state=signed-out");
+    const shots = [...s.document.querySelectorAll(".connection-phone img.connection-phone-screen")];
+    assert.deepEqual(shots.map((img) => img.dataset.themeVariant), ["light", "dark"]);
+    assert.equal(s.document.querySelector(".connection-phone-question"), null);
+    for (const img of shots) {
+        const png = fs.readFileSync(path.join(root, "screens", img.getAttribute("src")));
+        assert.equal(png.toString("latin1", 1, 4), "PNG");
+        assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [786, 1704]);
+    }
+});
 test("mono text never renders below 13px", () => {
     const screens = path.join(root, "screens");
     const atLeast13 = size => /^max\(13px,/.test(size) || /^round\(max\(13px,/.test(size) ||

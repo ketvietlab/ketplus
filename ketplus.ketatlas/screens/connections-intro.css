@@ -36,18 +36,10 @@
 .connection-mini-chat > p { margin: 9px 0; font-size: 9px; line-height: 1.7; }
 .connection-sample-lines i { display: block; width: 68%; height: 3px; border-radius: 2px; background: var(--kv-border-default); margin-top: 5px; }
 .connection-sample-lines i:last-child { width: 45%; }
-.connection-phone { position: absolute; right: 18px; top: 134px; width: 157px; height: 230px; padding: 12px 9px; border: 3px solid var(--kv-text-main); border-radius: 23px; background: var(--kv-panel-bg); box-shadow: 0 12px 24px rgb(0 0 0 / 10%); }
-.connection-phone-camera { width: 40px; height: 5px; background: var(--kv-text-main); border-radius: 8px; margin: -3px auto 15px; }
-.connection-phone header { display: flex; gap: 4px; align-items: center; font-size: 9px; }
-.connection-phone header .icon { width: 11px; height: 11px; }
-.connection-phone > small { font-size: 8px; color: var(--kv-text-muted); display: block; margin: 7px 0 16px 15px; }
-.connection-phone-question { padding: 11px 8px; border: 1px solid var(--kv-panel-border); border-radius: 7px; background: var(--kv-page-bg); }
-.connection-phone-question > .icon { display: block; color: var(--kv-accent-text); width: 16px; height: 16px; margin-bottom: 9px; }
-.connection-phone-question b { font-size: 8px; display: block; }
-.connection-phone-question p { font-size: 8px; color: var(--kv-text-muted); line-height: 1.6; margin: 7px 0; }
-.connection-phone-question > span { display: flex; align-items: center; gap: 6px; padding: 6px; border-radius: 4px; background: var(--kv-accent-subtle); color: var(--kv-accent-text); font-size: 7px; }
-.connection-phone-question > span .icon { width: 10px; height: 10px; }
-.connection-phone-bottom { position: absolute; width: 40px; height: 3px; bottom: 7px; left: calc(50% - 20px); background: var(--kv-border-strong); border-radius: 5px; }
+/* Real KetPlus Mobile capture (ketplus-app ketplus-worktree-mobile.ketatlas @ bf9d14f6, 393×852 @2x). */
+.connection-phone { position: absolute; right: 18px; top: 26px; width: 160px; aspect-ratio: 393 / 852; padding: 4px; box-sizing: content-box; border-radius: 26px; background: #111214; box-shadow: 0 0 0 1px rgb(255 255 255 / 8%) inset, 0 18px 36px rgb(0 0 0 / 16%); }
+.connection-phone-screen { display: block; width: 100%; height: 100%; border-radius: 22px; }
+:root:not([data-theme="dark"]) .connection-phone-screen[data-theme-variant="dark"], :root[data-theme="dark"] .connection-phone-screen[data-theme-variant="light"] { display: none; }
 .connection-scene-caption { position: absolute; left: 25px; bottom: 23px; display: flex; align-items: center; gap: 7px; color: var(--kv-text-muted); font-size: 9px; }
 .connection-scene-caption .icon { width: 13px; height: 13px; }
 .connections-setup { border-top: 1px solid var(--kv-panel-border); padding-top: 28px; }
@@ -65,7 +57,7 @@
     .connections-hero { gap: 20px; }
     .connections-scene { height: 370px; }
     .connection-desktop { left: 15px; right: 25px; top: 35px; }
-    .connection-phone { top: 121px; right: 10px; }
+    .connection-phone { top: 18px; right: 10px; width: 150px; }
     .connection-scene-caption { left: 15px; bottom: 12px; font-size: 8px; }
     .connections-setup-heading { align-items: flex-start; flex-direction: column; gap: 8px; }
 }
@@ -74,6 +66,6 @@
     .connections-hero-copy > p { max-width: 480px; }
     .connections-scene { max-width: 500px; width: 100%; height: 380px; }
     .connection-desktop { left: 24px; right: 55px; }
-    .connection-phone { right: 20px; }
+    .connection-phone { top: 14px; right: 20px; }
     .connections-setup ol { grid-template-columns: 1fr; gap: 22px; }
 }
