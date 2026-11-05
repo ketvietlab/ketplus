@@ -9,6 +9,20 @@
 
 namespace ketplus::disk_change {
 
+bool restoreBeforeSave(QWidget* parent, EditorWidget* editor) {
+    if (!editor->isHibernated()) {
+        return true;
+    }
+    if (const auto result = editor->restoreFromDisk(); !result.ok) {
+        QMessageBox::critical(parent, QStringLiteral("Unable to save file"),
+                              QStringLiteral("%1 has not been read back since its tab was "
+                                             "unloaded, so there is nothing to save.\n\n%2")
+                                  .arg(editor->document().displayName(), result.error));
+        return false;
+    }
+    return true;
+}
+
 bool confirmSave(QWidget* parent, EditorWidget* editor) {
     const Document& document = editor->document();
     if (document.isUntitled() || !document.changedOnDisk()) {

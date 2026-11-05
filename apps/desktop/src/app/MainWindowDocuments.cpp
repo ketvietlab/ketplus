@@ -112,6 +112,9 @@ bool MainWindow::saveEditor(EditorWidget* editor, const bool choosePath) {
         // The split view shares its source tab's document; save through the tab.
         editor = splitSource_;
     }
+    if (!disk_change::restoreBeforeSave(this, editor)) {
+        return false;
+    }
     auto& document = editor->document();
     QString path = document.filePath();
     if (choosePath || document.isUntitled()) {

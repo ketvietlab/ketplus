@@ -139,6 +139,9 @@ void MainWindow::reopenClosedTab() {
 }
 
 bool MainWindow::saveEditor(EditorWidget* editor, const bool choosePath) {
+    if (!disk_change::restoreBeforeSave(this, editor)) {
+        return false;
+    }
     auto& document = editor->document();
     QString path = document.filePath();
     if (choosePath || document.isUntitled()) {
