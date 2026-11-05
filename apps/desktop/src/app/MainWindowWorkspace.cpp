@@ -402,7 +402,7 @@ void MainWindow::rebuildWorktreeMenu() {
         if (!directoryName.isEmpty() && directoryName != name) {
             name.append(QStringLiteral(" — %1").arg(directoryName));
         }
-        if (!worktree.lockReason.isEmpty()) {
+        if (worktree.locked) {
             name.append(QStringLiteral(" (locked)"));
         }
 

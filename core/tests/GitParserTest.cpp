@@ -100,17 +100,26 @@ void GitParserTest::parsesWorktreeList() {
         "HEAD fedcba98",
         "detached",
         "",
+        "worktree /repo-locked",
+        "HEAD 76543210",
+        "branch refs/heads/locked",
+        "locked",
+        "",
     });
 
     const auto worktrees =
         ketplus::git_parser::parseWorktrees(output, QDir::cleanPath(QStringLiteral("/repo")));
-    QCOMPARE(worktrees.size(), 3);
+    QCOMPARE(worktrees.size(), 4);
     QVERIFY(worktrees.at(0).current);
     QCOMPARE(worktrees.at(0).branch, QStringLiteral("main"));
     QCOMPARE(worktrees.at(1).branch, QStringLiteral("feature/git"));
+    QVERIFY(worktrees.at(1).locked);
     QCOMPARE(worktrees.at(1).lockReason, QStringLiteral("editing"));
+    QVERIFY(!worktrees.at(0).locked);
     QVERIFY(worktrees.at(2).detached);
     QCOMPARE(worktrees.at(2).head, QStringLiteral("fedcba98"));
+    QVERIFY(worktrees.at(3).locked);
+    QVERIFY(worktrees.at(3).lockReason.isEmpty());
 }
 
 void GitParserTest::discoversWorktreesAndProducesDiffs() {
