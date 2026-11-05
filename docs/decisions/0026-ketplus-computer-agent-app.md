@@ -157,10 +157,13 @@ The first implementation refines the decision as follows.
   second after the panel appears, so a click meant for something else cannot
   grant access. The panel is raised above other windows even when macOS refuses
   to activate the agent. The audit records each decision (`allow`, `deny`,
-  `dismissed`). A release-build run of `scripts/approval-check.mjs` once
-  reported a Deny click as a grant. Real clicks on the same panel code in a probe
-  app always gave the right answer, so the cause was not found; these changes
-  remove the paths that could explain it.
+  `dismissed`). During the first release-build runs of
+  `scripts/approval-check.mjs`, a Deny step returned a grant. A temporary trace
+  showed a hardware mouse-up inside the Allow button: the previous run ended on
+  Allow, and the next panel opened under the resting pointer. The panel worked as
+  built. The case shows why a panel that appears under the pointer needs the arm
+  delay. With deliberate clicks, Deny, Esc and Allow were all recorded correctly
+  on 2026-10-19.
 - **The opt-in** is in Settings → Computer use (`computer-tools.json`: `enabled`,
   default off, and `deniedApps`). Changes apply from the next turn.
 - **Codex** is not given the server yet. Its app-server binds MCP servers per
