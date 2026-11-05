@@ -13,7 +13,7 @@
     function sidebar() {
         return `<div class="rp-sidebar"><a href="workspace.html" class="rp-brand"><img src="../assets/brand/ketplus-v1/ketplus-mark-transparent.png" alt="" />KétPlus <small>${phone() ? "Mobile" : "Desktop"}</small></a>
             <a class="rp-quick" href="search.html">${icon("search")}Quick search <kbd>⌘ K</kbd></a>
-            <nav class="rp-navigation" aria-label="Main navigation">${[["workspace", "Agent Workspace", "messages-square"], ["editor", "Files & Editor", "folder"], ["changes", "Source Control", "git-branch"], ["connections", "Connections", "unplug"]].map(([route, title, glyph]) => `<a href="${route}.html?repo=${encodeURIComponent(state.repo)}&amp;tree=${encodeURIComponent(tree().branch)}" ${route === "workspace" ? 'aria-current="page"' : ""}>${icon(glyph)}${title}</a>`).join("")}</nav>
+            <nav class="rp-navigation" aria-label="Main navigation">${[["workspace", "Agent Workspace", "messages-square"], ["editor", "Files & Editor", "folder"], ["changes", "Source Control", "git-branch"], ["connections", "Connections", "connect"]].map(([route, title, glyph]) => `<a href="${route}.html?repo=${encodeURIComponent(state.repo)}&amp;tree=${encodeURIComponent(tree().branch)}" ${route === "workspace" ? 'aria-current="page"' : ""}>${icon(glyph)}${title}</a>`).join("")}</nav>
             <div class="rp-machine">${icon("monitor")}This Mac <span>Connected</span></div>
             <nav class="rp-repositories" aria-label="Repositories and conversations">${repositories().map(repo => {
                 const selected = repo.id === state.repo;

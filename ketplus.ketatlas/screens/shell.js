@@ -2,7 +2,7 @@ K.nav = [
     ["workspace", "Agent Workspace", "messages-square"],
     ["editor", "Files & Editor", "files"],
     ["changes", "Source Control", "git-branch"],
-    ["connections", "Connections", "unplug"],
+    ["connections", "Connections", "connect"],
 ];
 K.sidebar = function () {
     const active = K.page.startsWith("atlas")
@@ -48,7 +48,7 @@ K.sidebar = function () {
     ${host?.status === "offline" ? `<p class="machine-note">Offline · ${K.link("connections", "Reconnect in Connections", null, { remote: "offline" })}</p>` : ""}
     ${K.tagFilterBar?.() || ""}
     <nav class="repository-groups" aria-label="Repositories and conversations">${repositories || `<p class="repository-empty">${K.demo.tagFilter ? "No conversations with this tag." : empty}</p>`}</nav></div>
-    <div class="sidebar-bottom">${K.query.get("userMenu") === "open" ? `<div class="user-menu" role="menu"><div class="user-menu-heading"><span class="avatar">AN</span><div><b>An Nguyen</b><small>Personal workspace</small></div></div><div class="user-menu-rule"></div>${K.link("settings", "<span>Settings</span><kbd>⌘ ,</kbd>", "settings", { userMenu: null }, "user-menu-item")}${K.link("connections", "<span>Account & devices</span>", "unplug", { userMenu: null }, "user-menu-item")}</div>` : ""}
+    <div class="sidebar-bottom">${K.query.get("userMenu") === "open" ? `<div class="user-menu" role="menu"><div class="user-menu-heading"><span class="avatar">AN</span><div><b>An Nguyen</b><small>Personal workspace</small></div></div><div class="user-menu-rule"></div>${K.link("settings", "<span>Settings</span><kbd>⌘ ,</kbd>", "settings", { userMenu: null }, "user-menu-item")}${K.link("connections", "<span>Account & devices</span>", "connect", { userMenu: null }, "user-menu-item")}</div>` : ""}
     <button type="button" class="identity" data-action="user-menu" aria-expanded="${K.query.get("userMenu") === "open" ? "true" : "false"}"><span class="avatar">AN</span><span><b>An Nguyen</b><small>Personal workspace</small></span>${K.icon(K.query.get("userMenu") === "open" ? "chevron-up" : "chevron-down")}</button></div></div>`;
 };
 K.statusbar = () =>
