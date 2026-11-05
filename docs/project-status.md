@@ -273,6 +273,11 @@ future directory without first defining and testing its contract.
   question card extraction. New work should continue extracting cohesive
   transcript, composer, and attachment components instead of extending the
   monolith.
+- `CodexAppServer` keeps a direct codex app-server transport that only tests use
+  (26 constructions in 8 Agent Workspace test files); the application always goes
+  through the daemon. Its transports are separate translation units, but about 20
+  `usesDaemon()` branches in the `AgentSession*` sources still serve only that test
+  path. Retiring it means moving those tests onto a daemon fixture first.
 - Several test translation units exceed 400 lines. Split reusable fixtures and
   scenario groups when adding coverage, while preserving readable test intent.
 - Unsigned developer packages are implemented, but signing, notarization, and
