@@ -39,7 +39,7 @@ application.
 | Scintilla | `rel-5-5-2`, commit `a1c86144eed9e3d2187e3a8b391d11ca909f00d2` | Compiled statically | Scintilla permissive license | Preserve its copyright and permission notice in copies and supporting documentation |
 | Lexilla | `rel-5-5-2`, commit `3e6f317eed854bc312b4c4453206189d381c7ae7` | Compiled statically | Scintilla permissive license | Preserve its copyright and permission notice in copies and supporting documentation |
 | libvterm | `v0.3.3`, commit `9d6d2112335080312ef8c36667fa717ded4f7daf` | Compiled statically | MIT | Include its copyright and license text |
-| KetQt | commit `b286dce5344f05e55bcfd86c7c1d6e10a5ab2587` | Compiled statically into the Qt UI (ADR 0035) | MPL 2.0 | Ship the license text; publish source for any modified KetQt file |
+| KetQt | commit `d47638214f80695524cd2724996674da7afdbb6a` | Compiled statically into the Qt UI (ADR 0035) | MPL 2.0 | Ship the license text; publish source for any modified KetQt file |
 | Két Design System tokens | 0.1.44, inside KetQt | Compiled into KetQt | MIT | Include the copyright and license text |
 | Két Symbol | 0.12.0 SVGs, inside KetQt; `core/assets/brand/ketplus-terminal.svg` | Embedded in KetQt Qt resources; rendered into the KétPlus Terminal app icon | CC BY 4.0 | Credit "Két Symbol © 2026 Két Việt, CC BY 4.0" and ship the license text |
 | Inter | 4.1 archive pinned by SHA-256 | Font embedded in Qt resources | SIL OFL 1.1 | Include the copyright and complete OFL text in an easily accessible form |

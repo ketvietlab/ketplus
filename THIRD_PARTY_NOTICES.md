@@ -13,7 +13,7 @@ Their complete source-distribution license texts are stored in
 | Lexilla | `3e6f317eed854bc312b4c4453206189d381c7ae7` | `Lexilla.txt` |
 | libvterm | `9d6d2112335080312ef8c36667fa717ded4f7daf` | `libvterm-MIT.txt` |
 | Inter | 4.1 | `Inter-OFL-1.1.txt` |
-| KetQt | `b286dce5344f05e55bcfd86c7c1d6e10a5ab2587` — https://github.com/ketvietlab/ket-qt | `KetQt-MPL-2.0.txt` |
+| KetQt | `d47638214f80695524cd2724996674da7afdbb6a` — https://github.com/ketvietlab/ket-qt | `KetQt-MPL-2.0.txt` |
 | Két Design System tokens (in KetQt) | 0.1.44 | `Ket-Design-System-MIT.txt` |
 | Két Symbol (in KetQt and the KétPlus Terminal icon) | 0.12.0 — Két Symbol © 2026 Két Việt, CC BY 4.0 | `Ket-Symbol-CC-BY-4.0.txt` |
 | KÉT Sans | 1.1.0 — https://github.com/ketvietlab/ket-sans-font/releases/tag/v1.1.0 | `KET-Sans-OFL-1.1.txt` |
