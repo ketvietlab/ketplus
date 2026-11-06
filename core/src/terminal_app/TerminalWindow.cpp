@@ -216,7 +216,7 @@ void TerminalWindow::createMenus() {
         [this] { closeTab(tabs_->currentIndex()); });
     add(fileMenu, QStringLiteral("Close Window"), QKeySequence(QStringLiteral("Ctrl+Shift+W")),
         [this] { close(); });
-    QAction* quitAction = add(fileMenu, QStringLiteral("Quit KetPlus Terminal"), QKeySequence::Quit,
+    QAction* quitAction = add(fileMenu, QStringLiteral("Quit KétPlus Terminal"), QKeySequence::Quit,
                               [] { QApplication::closeAllWindows(); });
     quitAction->setMenuRole(QAction::QuitRole);
 
@@ -275,14 +275,14 @@ void TerminalWindow::createMenus() {
     }
 
     QMenu* helpMenu = menuBar()->addMenu(QStringLiteral("&Help"));
-    QAction* aboutAction = helpMenu->addAction(QStringLiteral("About KetPlus Terminal"));
+    QAction* aboutAction = helpMenu->addAction(QStringLiteral("About KétPlus Terminal"));
     aboutAction->setMenuRole(QAction::AboutRole);
     connect(aboutAction, &QAction::triggered, this, [this] {
         QMessageBox box(this);
-        box.setWindowTitle(QStringLiteral("About KetPlus Terminal"));
+        box.setWindowTitle(QStringLiteral("About KétPlus Terminal"));
         box.setIconPixmap(windowIcon().pixmap(64, 64));
         box.setText(
-            QStringLiteral("KetPlus Terminal %1").arg(QCoreApplication::applicationVersion()));
+            QStringLiteral("KétPlus Terminal %1").arg(QCoreApplication::applicationVersion()));
         box.setInformativeText(QStringLiteral("A lightweight native terminal for macOS.\n\n"
                                               "Icons: Két Symbol © 2026 Két Việt, CC BY 4.0."));
         box.exec();
@@ -370,8 +370,8 @@ void TerminalWindow::showStatus(const QString& message) { ket::Toast::showMessag
 void TerminalWindow::updateWindowTitle() {
     const TerminalTab* tab = currentTab();
     const QString title = tab == nullptr
-                              ? QStringLiteral("KetPlus Terminal")
-                              : QStringLiteral("%1 — KetPlus Terminal").arg(tab->title());
+                              ? QStringLiteral("KétPlus Terminal")
+                              : QStringLiteral("%1 — KétPlus Terminal").arg(tab->title());
     setWindowTitle(title);
 }
 

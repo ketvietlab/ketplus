@@ -24,7 +24,8 @@ FetchContent_Declare(ketqt
 FetchContent_MakeAvailable(ketqt)
 
 # KÉT Sans 1.1 (SIL OFL 1.1), the official release archive. KÉT Sans Mono 0.10.4 (SIL OFL
-# 1.1) has no public release, so its Medium TTF is committed under fonts/ with its licence.
+# 1.1) has no public release, so its Medium TTF is committed once under core/assets/fonts with
+# its licence.
 # Only Medium is bundled: every monospace text in the mock (numbers, code, diffs) is Medium.
 set(KETPLUS_MOCK_KET_SANS_ARCHIVE "" CACHE FILEPATH "Local copy of KETSans-1.100.zip")
 if(KETPLUS_MOCK_KET_SANS_ARCHIVE)
@@ -72,8 +73,8 @@ qt_add_resources(ketplus_qt_mock mock_fonts
 )
 qt_add_resources(ketplus_qt_mock mock_mono
     PREFIX "/fonts"
-    BASE fonts
-    FILES fonts/KETSansMono-Medium.ttf
+    BASE ../../core/assets/fonts
+    FILES ../../core/assets/fonts/KETSansMono-Medium.ttf
 )
 
 # The Mermaid samples' sources, shown by the fixtures and rendered by tools/render_mermaid.py.

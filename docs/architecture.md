@@ -97,7 +97,7 @@ Qt application shell
   public appearance persistence. The Pro desktop recomposes its live theme
   and typography controls inside the non-modal, full-page Két settings
   workspace, while the hidden public host continues to own preview, validation,
-  reset, and save behavior. Private chrome type embeds KÉT Sans 1.0.0 (the hinted
+  reset, and save behavior. Private chrome type embeds KÉT Sans 1.1 (the hinted
   static TTF Light/Regular/Medium/Bold faces), then falls back to SF Pro (named face, or the
   macOS system UI font), then the bundled Inter face, then the platform UI
   font; the Pro shell rewrites the live QWidget

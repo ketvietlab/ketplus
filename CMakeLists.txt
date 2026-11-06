@@ -126,7 +126,8 @@ if(KETPLUS_BUILD_DESKTOP)
         "$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/apps/desktop/src>"
     )
     ketplus_enable_warnings(ketplus_typography)
-    include(cmake/KetSans.cmake)
+    # KÉT Sans and KÉT Sans Mono from core (core/cmake/KetFonts.cmake); InterfaceFont loads them.
+    ketplus_cm_add_ket_fonts(ketplus_typography ketplus_ui_fonts)
 
     add_subdirectory(modules/ai)
     add_subdirectory(modules/atlas)
