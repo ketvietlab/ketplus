@@ -181,7 +181,11 @@ domain-separated challenge signature needs a matching relay change and is
 tracked in #85. A failed command poll or credential request waits before the
 next poll like a failed upload (one second doubling, up to five minutes after
 a refusal and one minute otherwise, with jitter); a relay wake-up or a
-successful poll ends the wait. Pairing is explicitly confirmed on the Mac; a
+successful poll ends the wait. Pairing is explicitly confirmed on the Mac, and
+the daemon recomputes the claim digest from the claimed keys before approving.
+Only devices pinned on this Mac (ADR 0034) receive session keys, have their
+commands accepted or open peer links; the devices active when pins were
+introduced were adopted once; a
 closed pairing dialog revokes its outstanding ticket and paired devices can be
 revoked from Connections.
 

@@ -378,6 +378,7 @@ class PeerTransportTest final : public QObject {
         CredentialStore deviceStore("peer-device");
         CloudCrypto device(&deviceStore);
         const auto deviceKeys = device.publicKeys();
+        Access::pinDevice(cloud, "device", 1, deviceKeys);
         network.statusForPath.insert("/v2/device-keys/device/1", 200);
         network.responseForPath.insert("/v2/device-keys/device/1",
                                        QJsonDocument(QJsonObject{{"keys", deviceKeys}}).toJson());

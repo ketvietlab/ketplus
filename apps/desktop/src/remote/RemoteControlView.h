@@ -34,6 +34,7 @@ class RemoteControlView final : public QWidget {
     void machinesChanged(const QStringList& ids, const QStringList& names);
 
   private:
+    friend class RemoteControlViewTest;
     QWidget* createSignInPage();
     QWidget* createControlPage();
     void refreshStatus();
@@ -96,6 +97,9 @@ class RemoteControlView final : public QWidget {
     QPushButton* pairingCancelButton_{nullptr};
     QPushButton* approveButton_{nullptr};
     QString ticketId_;
+    // The claim digest whose code the dialog showed; approval is bound to it.
+    QString shownClaimDigest_;
+    bool claimChanged_{false};
     quint64 pairingEpoch_{0};
     bool requestInFlight_{false};
     bool devicesRequestInFlight_{false};

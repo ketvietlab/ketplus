@@ -159,6 +159,7 @@ class WorktreeContextRelayTest final : public QObject {
         const QByteArray salt(32, 's');
         Access::pathSalt(client, salt);
         server.acceptHeartbeat = kind == "session.worktrees";
+        Access::pinDevice(client, "phone", 1, Access::crypto(client).publicKeys());
         server.senderKeys =
             QJsonDocument(QJsonObject{{"keys", Access::crypto(client).publicKeys()}})
                 .toJson(QJsonDocument::Compact);

@@ -131,7 +131,10 @@ the filesystem path as a routing identifier.
 
 Enter the pairing ticket/code in the iOS app (or a future Desktop pairing UI).
 Inspect the pending claim with `ketplusctl pairing status TICKET_ID`, compare its
-claim/device identity, and approve with `ketplusctl pairing approve TICKET_ID`.
+`claimDigest` with the code the phone shows, and approve that exact claim with
+`ketplusctl pairing approve TICKET_ID CLAIM_DIGEST`. The daemon refuses the
+approval when the ticket's digest changed or does not match the claimed keys,
+and pins the device only on this machine (ADR 0034).
 Enrollment is account authentication; pairing separately grants the device
 access to host-wrapped session keys. Revoke a ticket or device with
 `ketplusctl pairing revoke TICKET_ID` / `ketplusctl device revoke DEVICE_ID`.

@@ -108,6 +108,28 @@ class CloudPrivacyTestAccess {
         for (auto& entry : client.senderKeys_)
             entry.second = QDateTime::currentDateTimeUtc().addSecs(-1);
     }
+    // Pins a device on this Mac, as approving its pairing does.
+    static void pinDevice(CloudControlClient& client, const QString& id, int version,
+                          const QJsonObject& keys) {
+        if (!client.pins_.pin({{"id", id}, {"keyVersion", version}, {"keys", keys}}))
+            qFatal("Synthetic device pin failed");
+    }
+    static DevicePins& pins(CloudControlClient& client) { return client.pins_; }
+    static QString machineId(const CloudControlClient& client) { return client.machineId_; }
+    static void distributeKeys(CloudControlClient& client) { client.distributeKeys(); }
+    static void approvePairing(CloudControlClient& client, const QString& ticketId,
+                               const QString& confirmedDigest,
+                               CloudControlClient::LocalCallback done) {
+        client.approvePairing({{"ticket_id", ticketId}, {"claim_digest", confirmedDigest}},
+                              std::move(done));
+    }
+    // Enrolls with the relay as a completed sign-in does.
+    static void enroll(CloudControlClient& client, CloudControlClient::LocalCallback done) {
+        QString error;
+        const QJsonObject keys = client.crypto_.publicKeys(&error);
+        client.enrollMachine(client.accountEpoch_, "synthetic-user-token", "host_synthetic", keys,
+                             std::move(done));
+    }
     // Asks for a fresh daemon credential, as an expired token does.
     static void credential(CloudControlClient& client, CloudControlClient::ReadyCallback done) {
         client.daemonToken_.clear();
