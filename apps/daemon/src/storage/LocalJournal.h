@@ -1,6 +1,7 @@
 #pragma once
 
 #include "storage/AgentMessageRecord.h"
+#include "storage/JournalSpace.h"
 
 #include <QDateTime>
 #include <QHash>
@@ -246,6 +247,14 @@ class LocalJournal final {
     // failed read, with errorString() set.
     [[nodiscard]] std::optional<QList<RemoteCommandAudit>> remoteCommands(const QString& deviceId,
                                                                           int limit) const;
+    // The journal's pages (#128); nullopt on a failed read, with errorString() set.
+    [[nodiscard]] std::optional<journal_space::Usage> space() const;
+    // Returns up to `maximumPages` free pages to the disk when the journal is on incremental
+    // vacuum and holds at least minimumReclaimPages of them, then checkpoints the log so the
+    // file shrinks (again at the next call when a reader held that back): how many it returned,
+    // nullopt on a failed write. A batch is one short write, so it can run between turns.
+    static constexpr qint64 minimumReclaimPages = 256;
+    std::optional<qint64> reclaimFreePages(qint64 maximumPages);
     bool beginAttachment(const QString& sessionId, qint64 generation, const QString& attachmentId,
                          qint64 expectedRevision, const QString& name, const QString& mediaType,
                          qint64 totalBytes, int chunkCount, const QString& digestSha256,
@@ -315,6 +324,7 @@ class LocalJournal final {
     // The audit's 90-day, 10,000-row bound. Run from pruneRetention and every 256 audit rows,
     // because commands refused before they ran store no command result to trigger it.
     bool pruneRemoteAudit();
+    bool checkpointReclaimedPages();
     // Inside deleteSession's transaction: releases the number and ends undelivered messages.
     bool releaseAgentState(const QString& sessionId, qint64 generation, QString* error);
     bool writeCommandResult(const QString& messageId, const QJsonObject& result, bool replace);
@@ -356,6 +366,8 @@ class LocalJournal final {
     mutable QString error_;
     int commandResultsSincePrune_{0};
     int remoteCommandsSincePrune_{0};
+    // A reclaim whose checkpoint a reader held back: the file has not shrunk yet.
+    bool reclaimCheckpointPending_{false};
 };
 
 } // namespace ketplus::daemon

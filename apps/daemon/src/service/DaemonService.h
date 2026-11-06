@@ -6,6 +6,9 @@
 
 #include <memory>
 
+class QLockFile;
+class QTimer;
+
 namespace ketplus::daemon {
 
 class ClaudeAdapter;
@@ -38,10 +41,17 @@ class DaemonService final : public QObject {
     [[nodiscard]] static DaemonConfiguration defaultConfiguration();
 
   private:
+    // Free pages go back to the disk in batches while no turn runs (#128).
+    static constexpr int reclaimIntervalMs = 60'000;
+    static constexpr qint64 reclaimBatchPages = 4'096;
+
     [[nodiscard]] QByteArray loadOrCreateToken();
+    void compactJournal();
+    void reclaimJournalSpace();
 
     DaemonConfiguration configuration_;
     QString error_;
+    std::unique_ptr<QLockFile> journalLock_;
     std::unique_ptr<LocalJournal> journal_;
     std::unique_ptr<CodexAdapter> adapter_;
     std::unique_ptr<ClaudeCredentials> claudeCredentials_;
@@ -50,6 +60,7 @@ class DaemonService final : public QObject {
     std::unique_ptr<SessionHost> host_;
     std::unique_ptr<CloudControlClient> cloud_;
     std::unique_ptr<LocalIpcServer> ipc_;
+    QTimer* spaceTimer_{nullptr};
 };
 
 } // namespace ketplus::daemon

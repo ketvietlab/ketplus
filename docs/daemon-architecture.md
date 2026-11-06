@@ -251,6 +251,32 @@ large payloads its removed raw events name, finding replay manifests through
 the item index; the retention pass (at open, after a session delete and every
 256 command results) collects any other unreferenced payload.
 
+Deleted rows return their space to the disk (#128). A new journal is created
+with `auto_vacuum = INCREMENTAL`. An older one moves to it once at daemon start,
+before the endpoint listens:
+- the daemon holds `<journal>.lock`, so there is one daemon per journal (it waits
+  up to 5 s for a daemon that is being replaced);
+- its connection uses `locking_mode=EXCLUSIVE`. SQLite refuses that while any other
+  connection has the journal open, including a daemon from before the lock, so
+  the move waits for the next start and the file is not touched. The lock is
+  held until after the rename;
+- it runs `VACUUM INTO <journal>.compact`;
+- it checks the copy (`quick_check`, the same schema, incremental vacuum);
+- it syncs the copy and renames it over the original, then syncs the directory.
+
+The move runs only when the free disk exceeds the kept data plus the larger of
+256 MB and 10%. Otherwise it waits for the next start. If a move is interrupted,
+the original stays whole and the copy is removed at the next start. The move
+takes as long as one read of the kept data.
+
+After that, once a minute while no session is active, up to 4,096 free pages
+(16 MB at 4 KiB) go back to the disk in one transaction. A passive checkpoint
+then copies the smaller size into the file. It never waits for a reader: if a
+reader holds frames back, the next run finishes it. Emptying the log runs
+without the busy timeout. It is skipped while someone still reads the log: the
+file has already shrunk, and the next write reuses the log. Compacting old detail,
+the size limit and the storage warning are still to come (the rest of #128).
+
 Before an event enters the cloud encryption and retry path, the daemon projects
 command lifecycle payloads to the full command text plus identity, status and
 exit code. It removes aggregated output, output deltas and command actions. The

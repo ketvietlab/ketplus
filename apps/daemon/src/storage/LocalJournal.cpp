@@ -76,6 +76,9 @@ QString LocalJournal::errorString() const { return error_; }
 bool LocalJournal::initialize() {
     QSqlQuery query(database_);
     const QStringList statements{
+        // Takes effect only in a journal without tables: a new one. An older journal moves to
+        // it through journal_space::migrateToIncrementalVacuum.
+        QStringLiteral("PRAGMA auto_vacuum=INCREMENTAL"),
         QStringLiteral("PRAGMA journal_mode=WAL"),
         QStringLiteral("PRAGMA synchronous=FULL"),
         QStringLiteral("PRAGMA foreign_keys=ON"),
