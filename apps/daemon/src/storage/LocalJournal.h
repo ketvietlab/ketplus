@@ -255,6 +255,10 @@ class LocalJournal final {
     // nullopt on a failed write. A batch is one short write, so it can run between turns.
     static constexpr qint64 minimumReclaimPages = 256;
     std::optional<qint64> reclaimFreePages(qint64 maximumPages);
+    // Scan at most maximumRows replay rows per idle pass, retaining the last usage sample
+    // of each type in old, acknowledged completed turns outside the newest 20 turns.
+    // Returns deleted rows, or nullopt on error. The scan resumes in the next call.
+    std::optional<qint64> pruneUsageSamples(const QDateTime& olderThan, int maximumRows = 128);
     bool beginAttachment(const QString& sessionId, qint64 generation, const QString& attachmentId,
                          qint64 expectedRevision, const QString& name, const QString& mediaType,
                          qint64 totalBytes, int chunkCount, const QString& digestSha256,
@@ -368,6 +372,7 @@ class LocalJournal final {
     int remoteCommandsSincePrune_{0};
     // A reclaim whose checkpoint a reader held back: the file has not shrunk yet.
     bool reclaimCheckpointPending_{false};
+    qint64 usageRetentionScanRow_{0};
 };
 
 } // namespace ketplus::daemon

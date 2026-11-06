@@ -170,6 +170,7 @@ void DaemonService::compactJournal() {
 void DaemonService::reclaimJournalSpace() {
     if (!journal_ || (host_ && host_->hasActiveSessions()))
         return;
+    journal_->pruneUsageSamples(QDateTime::currentDateTimeUtc().addDays(-30));
     journal_->reclaimFreePages(reclaimBatchPages);
 }
 
