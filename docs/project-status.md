@@ -359,8 +359,10 @@ It compiles the shipped terminal from `core/src`, runs a real shell, and draws
 the window, colours and KÉT Sans Mono type from the Két Qt kit.
 
 Core links the Két Qt kit (`KetQt::Tokens`, `Icons`, `Widgets`) into `ketplus_ui`
-and requires Qt 6.8 (ADR 0035). Nothing draws from it yet; the shipped UI moves to
-it area by area (#141–#167).
+and requires Qt 6.8 (ADR 0035). KetPlus Terminal's window is the first shipped UI
+drawn by it (#146): `ket::Style`, the KétPlus profile and `ket::Appearance` replace
+`ThemeManager` in that app only; Lite and Pro keep `ThemeManager` until #142. The rest
+of the shipped UI moves to it area by area (#141–#167).
 
 ## Conversation repository selector design prototype
 

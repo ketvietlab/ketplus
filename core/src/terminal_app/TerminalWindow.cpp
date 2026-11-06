@@ -4,6 +4,14 @@
 #include "terminal_app/TerminalTab.h"
 #include "ui/Theme.h"
 
+#include "KetAppearance.h"
+#include "KetButton.h"
+#include "KetIcons.h"
+#include "KetProfile.h"
+#include "KetRecipes.h"
+#include "KetToast.h"
+#include "KetTokens.h"
+
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
@@ -11,22 +19,86 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileDialog>
+#include <QHBoxLayout>
 #include <QKeySequence>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QPainter>
 #include <QSettings>
-#include <QStatusBar>
 #include <QTabBar>
 #include <QTabWidget>
 
-#include <algorithm>
+#include <array>
+#include <utility>
 
 namespace ketplus {
 
-TerminalWindow::TerminalWindow(ThemeManager& theme, const QString& workingDirectory,
-                               const QString& commandPath, QWidget* parent)
-    : QMainWindow(parent), theme_(theme), tabs_(new QTabWidget(this)),
+namespace {
+
+constexpr auto appearanceKey = "appearance/theme";
+constexpr auto fontFamilyKey = "terminal/fontFamily";
+
+// The names ThemeManager saved, so an existing preference survives the move to the kit.
+constexpr std::array<std::pair<const char*, ket::Appearance::Mode>, 3> appearanceModes{{
+    {"system", ket::Appearance::Mode::System},
+    {"light", ket::Appearance::Mode::Light},
+    {"dark", ket::Appearance::Mode::Dark},
+}};
+
+QString token(QStringView name, const ket::Theme theme) {
+    return ket::Tokens::color(name, theme).name(QColor::HexArgb);
+}
+
+// The roles TerminalView reads, from Két DS tokens: the grid on the page background, the cursor
+// in the accent, matches in warning. The ANSI colours come from the tokens inside the view.
+ThemePalette terminalPalette(const ket::Theme theme) {
+    ThemePalette palette;
+    palette.dark = theme == ket::Theme::Dark;
+    palette.textMain = token(u"text-main", theme);
+    palette.panelSubtle = token(u"page-bg", theme);
+    palette.accent = token(u"accent", theme);
+    palette.accentMuted = token(u"accent-muted", theme);
+    palette.warning = token(u"warning", theme);
+    return palette;
+}
+
+// The tab strip's trailing area: the strip background and its bottom edge, so the actions sit
+// on the strip instead of the page.
+class TabActions final : public QWidget {
+  public:
+    using QWidget::QWidget;
+
+  protected:
+    void paintEvent(QPaintEvent*) override {
+        const ket::TabBarRecipe recipe = ket::tabBarRecipe(ket::Appearance::instance().theme());
+        QPainter painter(this);
+        painter.fillRect(rect(), recipe.background);
+        painter.fillRect(QRect(0, height() - 1, width(), 1), recipe.border);
+    }
+};
+
+ket::IconButton* actionButton(const QString& code, const QString& label, QWidget* parent) {
+    auto* button = new ket::IconButton(ket::Icons::icon(code), label, parent);
+    button->setToolTip(label);
+    return button;
+}
+
+} // namespace
+
+void restoreTerminalAppearance() {
+    const QString saved = QSettings().value(QLatin1StringView(appearanceKey)).toString();
+    for (const auto& [name, mode] : appearanceModes) {
+        if (saved == QLatin1StringView(name)) {
+            ket::Appearance::instance().setMode(mode);
+            return;
+        }
+    }
+}
+
+TerminalWindow::TerminalWindow(const QString& workingDirectory, const QString& commandPath,
+                               QWidget* parent)
+    : QMainWindow(parent), tabs_(new QTabWidget(this)),
       workingDirectory_(
           QDir::cleanPath(workingDirectory.isEmpty() ? QDir::homePath() : workingDirectory)) {
     setAttribute(Qt::WA_DeleteOnClose);
@@ -39,13 +111,39 @@ TerminalWindow::TerminalWindow(ThemeManager& theme, const QString& workingDirect
     tabs_->setElideMode(Qt::ElideMiddle);
     tabs_->tabBar()->setExpanding(false);
     setCentralWidget(tabs_);
-    createMenus();
-    statusBar()->hide();
-    connect(statusBar(), &QStatusBar::messageChanged, this, [this](const QString& message) {
-        if (message.isEmpty()) {
-            statusBar()->hide();
+
+    // The embedded panel's actions (core/src/terminal/TerminalPanel), beside the tabs.
+    auto* actions = new TabActions(tabs_);
+    actions->setObjectName(QStringLiteral("terminalTabActions"));
+    auto* actionsLayout = new QHBoxLayout(actions);
+    actionsLayout->setContentsMargins(4, 0, 6, 0);
+    actionsLayout->setSpacing(2);
+    auto* newTab = actionButton(QStringLiteral("plus"), QStringLiteral("New tab"), actions);
+    auto* find =
+        actionButton(QStringLiteral("search"), QStringLiteral("Find in terminal"), actions);
+    auto* clear =
+        actionButton(QStringLiteral("trash"), QStringLiteral("Clear terminal scrollback"), actions);
+    auto* restart = actionButton(QStringLiteral("refresh"),
+                                 QStringLiteral("Restart terminal session"), actions);
+    for (QWidget* button : {static_cast<QWidget*>(newTab), static_cast<QWidget*>(find),
+                            static_cast<QWidget*>(clear), static_cast<QWidget*>(restart)}) {
+        actionsLayout->addWidget(button);
+    }
+    tabs_->setCornerWidget(actions, Qt::TopRightCorner);
+    connect(newTab, &QAbstractButton::clicked, this, [this] { addTab(workingDirectory_); });
+    connect(find, &QAbstractButton::clicked, this, [this] {
+        if (TerminalTab* tab = currentTab()) {
+            tab->view()->openSearch();
         }
     });
+    connect(clear, &QAbstractButton::clicked, this, [this] {
+        if (TerminalTab* tab = currentTab()) {
+            tab->view()->clearScrollback();
+        }
+    });
+    connect(restart, &QAbstractButton::clicked, this, &TerminalWindow::restartSession);
+
+    createMenus();
 
     const QByteArray savedGeometry =
         QSettings().value(QStringLiteral("window/geometry")).toByteArray();
@@ -53,7 +151,10 @@ TerminalWindow::TerminalWindow(ThemeManager& theme, const QString& workingDirect
         restoreGeometry(savedGeometry);
     }
 
-    connect(&theme_, &ThemeManager::themeChanged, this, &TerminalWindow::applyTheme);
+    connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this,
+            &TerminalWindow::applyTheme);
+    connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, actions,
+            qOverload<>(&QWidget::update));
     connect(tabs_, &QTabWidget::tabCloseRequested, this, &TerminalWindow::closeTab);
     connect(tabs_, &QTabWidget::currentChanged, this, [this] {
         if (TerminalTab* tab = currentTab()) {
@@ -69,7 +170,6 @@ TerminalWindow::TerminalWindow(ThemeManager& theme, const QString& workingDirect
     });
 
     addTab(workingDirectory_, commandPath);
-    applyTheme();
 }
 
 void TerminalWindow::closeEvent(QCloseEvent* event) {
@@ -83,139 +183,116 @@ void TerminalWindow::closeEvent(QCloseEvent* event) {
 }
 
 void TerminalWindow::createMenus() {
+    const auto add = [this](QMenu* menu, const QString& text, const QKeySequence& shortcut,
+                            auto&& slot) {
+        QAction* action = menu->addAction(text);
+        action->setShortcut(shortcut);
+        connect(action, &QAction::triggered, this, std::forward<decltype(slot)>(slot));
+        return action;
+    };
+    const auto onView = [this](auto method) {
+        return [this, method] {
+            if (TerminalTab* tab = currentTab()) {
+                (tab->view()->*method)();
+            }
+        };
+    };
+
     QMenu* fileMenu = menuBar()->addMenu(QStringLiteral("&File"));
-    QAction* newWindowAction = fileMenu->addAction(QStringLiteral("New Window"));
-    newWindowAction->setShortcut(QKeySequence::New);
-    connect(newWindowAction, &QAction::triggered, this,
-            [this] { emit newWindowRequested(workingDirectory_); });
-
-    QAction* newTabAction = fileMenu->addAction(QStringLiteral("New Tab"));
-    newTabAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+T")));
-    connect(newTabAction, &QAction::triggered, this, [this] { addTab(workingDirectory_); });
-
-    QAction* openFolderAction = fileMenu->addAction(QStringLiteral("Open Folder in New Tab…"));
-    openFolderAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+O")));
-    connect(openFolderAction, &QAction::triggered, this, [this] {
-        const QString path = QFileDialog::getExistingDirectory(
-            this, QStringLiteral("Open Terminal in Folder"), workingDirectory_);
-        if (!path.isEmpty()) {
-            addTab(path);
-        }
-    });
+    add(fileMenu, QStringLiteral("New Window"), QKeySequence::New,
+        [this] { emit newWindowRequested(workingDirectory_); });
+    add(fileMenu, QStringLiteral("New Tab"), QKeySequence(QStringLiteral("Ctrl+T")),
+        [this] { addTab(workingDirectory_); });
+    add(fileMenu, QStringLiteral("Open Folder in New Tab…"), QKeySequence(QStringLiteral("Ctrl+O")),
+        [this] {
+            const QString path = QFileDialog::getExistingDirectory(
+                this, QStringLiteral("Open Terminal in Folder"), workingDirectory_);
+            if (!path.isEmpty()) {
+                addTab(path);
+            }
+        });
     fileMenu->addSeparator();
-    QAction* closeTabAction = fileMenu->addAction(QStringLiteral("Close Tab"));
-    closeTabAction->setShortcut(QKeySequence::Close);
-    connect(closeTabAction, &QAction::triggered, this, [this] { closeTab(tabs_->currentIndex()); });
-    QAction* closeWindowAction = fileMenu->addAction(QStringLiteral("Close Window"));
-    closeWindowAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+W")));
-    connect(closeWindowAction, &QAction::triggered, this, &QWidget::close);
-    QAction* quitAction = fileMenu->addAction(QStringLiteral("Quit KetPlus Terminal"));
+    add(fileMenu, QStringLiteral("Close Tab"), QKeySequence::Close,
+        [this] { closeTab(tabs_->currentIndex()); });
+    add(fileMenu, QStringLiteral("Close Window"), QKeySequence(QStringLiteral("Ctrl+Shift+W")),
+        [this] { close(); });
+    QAction* quitAction = add(fileMenu, QStringLiteral("Quit KetPlus Terminal"), QKeySequence::Quit,
+                              [] { QApplication::closeAllWindows(); });
     quitAction->setMenuRole(QAction::QuitRole);
-    quitAction->setShortcut(QKeySequence::Quit);
-    connect(quitAction, &QAction::triggered, qApp, &QApplication::closeAllWindows);
 
     QMenu* editMenu = menuBar()->addMenu(QStringLiteral("&Edit"));
-    QAction* copyAction = editMenu->addAction(QStringLiteral("Copy"));
-    copyAction->setShortcut(QKeySequence::Copy);
-    connect(copyAction, &QAction::triggered, this, [this] {
-        if (TerminalTab* tab = currentTab()) {
-            tab->view()->copySelection();
-        }
-    });
-    QAction* pasteAction = editMenu->addAction(QStringLiteral("Paste"));
-    pasteAction->setShortcut(QKeySequence::Paste);
-    connect(pasteAction, &QAction::triggered, this, [this] {
-        if (TerminalTab* tab = currentTab()) {
-            tab->view()->pasteClipboard();
-        }
-    });
-    QAction* selectAllAction = editMenu->addAction(QStringLiteral("Select All"));
-    selectAllAction->setShortcut(QKeySequence::SelectAll);
-    connect(selectAllAction, &QAction::triggered, this, [this] {
-        if (TerminalTab* tab = currentTab()) {
-            tab->view()->selectAll();
-        }
-    });
+    add(editMenu, QStringLiteral("Copy"), QKeySequence::Copy, onView(&TerminalView::copySelection));
+    add(editMenu, QStringLiteral("Paste"), QKeySequence::Paste,
+        onView(&TerminalView::pasteClipboard));
+    add(editMenu, QStringLiteral("Select All"), QKeySequence::SelectAll,
+        onView(&TerminalView::selectAll));
     editMenu->addSeparator();
-    QAction* findAction = editMenu->addAction(QStringLiteral("Find…"));
-    findAction->setShortcut(QKeySequence::Find);
-    connect(findAction, &QAction::triggered, this, [this] {
-        if (TerminalTab* tab = currentTab()) {
-            tab->view()->openSearch();
-        }
-    });
+    add(editMenu, QStringLiteral("Find…"), QKeySequence::Find, onView(&TerminalView::openSearch));
 
     QMenu* shellMenu = menuBar()->addMenu(QStringLiteral("&Shell"));
-    QAction* restartAction = shellMenu->addAction(QStringLiteral("Restart Session"));
-    restartAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+R")));
-    connect(restartAction, &QAction::triggered, this, &TerminalWindow::restartSession);
-    QAction* clearAction = shellMenu->addAction(QStringLiteral("Clear Scrollback"));
-    clearAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+K")));
-    connect(clearAction, &QAction::triggered, this, [this] {
-        if (TerminalTab* tab = currentTab()) {
-            tab->view()->clearScrollback();
-        }
-    });
+    add(shellMenu, QStringLiteral("Restart Session"), QKeySequence(QStringLiteral("Ctrl+Shift+R")),
+        [this] { restartSession(); });
+    add(shellMenu, QStringLiteral("Clear Scrollback"), QKeySequence(QStringLiteral("Ctrl+K")),
+        onView(&TerminalView::clearScrollback));
 
     QMenu* viewMenu = menuBar()->addMenu(QStringLiteral("&View"));
-    QAction* nextTabAction = viewMenu->addAction(QStringLiteral("Next Tab"));
+    QAction* nextTabAction = add(viewMenu, QStringLiteral("Next Tab"), QKeySequence(),
+                                 [this] { activateAdjacentTab(1); });
     nextTabAction->setShortcuts(
         {QKeySequence(QStringLiteral("Ctrl+Shift+]")), QKeySequence(QStringLiteral("Ctrl+Tab"))});
-    connect(nextTabAction, &QAction::triggered, this, [this] { activateAdjacentTab(1); });
-    QAction* previousTabAction = viewMenu->addAction(QStringLiteral("Previous Tab"));
+    QAction* previousTabAction = add(viewMenu, QStringLiteral("Previous Tab"), QKeySequence(),
+                                     [this] { activateAdjacentTab(-1); });
     previousTabAction->setShortcuts({QKeySequence(QStringLiteral("Ctrl+Shift+[")),
                                      QKeySequence(QStringLiteral("Ctrl+Shift+Tab"))});
-    connect(previousTabAction, &QAction::triggered, this, [this] { activateAdjacentTab(-1); });
     viewMenu->addSeparator();
-    QAction* zoomInAction = viewMenu->addAction(QStringLiteral("Bigger Text"));
-    zoomInAction->setShortcut(QKeySequence::ZoomIn);
-    connect(zoomInAction, &QAction::triggered, this, [this] { changeFontSize(1); });
-    QAction* zoomOutAction = viewMenu->addAction(QStringLiteral("Smaller Text"));
-    zoomOutAction->setShortcut(QKeySequence::ZoomOut);
-    connect(zoomOutAction, &QAction::triggered, this, [this] { changeFontSize(-1); });
-    QAction* actualSizeAction = viewMenu->addAction(QStringLiteral("Actual Size"));
-    actualSizeAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+0")));
-    connect(actualSizeAction, &QAction::triggered, this, [this] {
+    add(viewMenu, QStringLiteral("Bigger Text"), QKeySequence::ZoomIn,
+        [this] { changeFontSize(1); });
+    add(viewMenu, QStringLiteral("Smaller Text"), QKeySequence::ZoomOut,
+        [this] { changeFontSize(-1); });
+    add(viewMenu, QStringLiteral("Actual Size"), QKeySequence(QStringLiteral("Ctrl+0")), [this] {
         fontSizePixels_ = 14;
         lineHeightPixels_ = 22;
         applyTheme();
     });
     viewMenu->addSeparator();
-    QAction* fullScreenAction = viewMenu->addAction(QStringLiteral("Enter Full Screen"));
-    fullScreenAction->setShortcut(QKeySequence::FullScreen);
-    connect(fullScreenAction, &QAction::triggered, this,
-            [this] { isFullScreen() ? showNormal() : showFullScreen(); });
+    add(viewMenu, QStringLiteral("Enter Full Screen"), QKeySequence::FullScreen,
+        [this] { isFullScreen() ? showNormal() : showFullScreen(); });
 
     QMenu* appearanceMenu = viewMenu->addMenu(QStringLiteral("Appearance"));
     auto* appearanceGroup = new QActionGroup(this);
     appearanceGroup->setExclusive(true);
-    const auto addAppearance = [this, appearanceMenu, appearanceGroup](const QString& label,
-                                                                       ThemeManager::Mode mode) {
+    for (const auto& [name, mode] : appearanceModes) {
+        QString label = QString::fromLatin1(name);
+        label[0] = label[0].toUpper();
         QAction* action = appearanceMenu->addAction(label);
         action->setCheckable(true);
-        action->setChecked(theme_.mode() == mode);
+        action->setChecked(ket::Appearance::instance().mode() == mode);
         appearanceGroup->addAction(action);
-        connect(action, &QAction::triggered, this, [this, mode] { theme_.setMode(mode); });
-    };
-    addAppearance(QStringLiteral("System"), ThemeManager::Mode::System);
-    addAppearance(QStringLiteral("Light"), ThemeManager::Mode::Light);
-    addAppearance(QStringLiteral("Dark"), ThemeManager::Mode::Dark);
+        connect(action, &QAction::triggered, this, [name, mode] {
+            ket::Appearance::instance().setMode(mode);
+            QSettings().setValue(QLatin1StringView(appearanceKey), QLatin1StringView(name));
+        });
+    }
 
     QMenu* helpMenu = menuBar()->addMenu(QStringLiteral("&Help"));
     QAction* aboutAction = helpMenu->addAction(QStringLiteral("About KetPlus Terminal"));
     aboutAction->setMenuRole(QAction::AboutRole);
     connect(aboutAction, &QAction::triggered, this, [this] {
-        QMessageBox::about(
-            this, QStringLiteral("About KetPlus Terminal"),
-            QStringLiteral("KetPlus Terminal %1\nA lightweight native terminal for macOS.")
-                .arg(QCoreApplication::applicationVersion()));
+        QMessageBox box(this);
+        box.setWindowTitle(QStringLiteral("About KetPlus Terminal"));
+        box.setIconPixmap(windowIcon().pixmap(64, 64));
+        box.setText(
+            QStringLiteral("KetPlus Terminal %1").arg(QCoreApplication::applicationVersion()));
+        box.setInformativeText(QStringLiteral("A lightweight native terminal for macOS.\n\n"
+                                              "Icons: Két Symbol © 2026 Két Việt, CC BY 4.0."));
+        box.exec();
     });
 }
 
 void TerminalWindow::addTab(const QString& workingDirectory, const QString& commandPath) {
     auto* tab = new TerminalTab(workingDirectory, commandPath, tabs_);
-    tab->applyTheme(theme_.palette());
-    tab->setTypography(fontSizePixels_, lineHeightPixels_);
+    tab->applyTheme(terminalPalette(ket::Appearance::instance().theme()));
+    applyTypography(tab);
     const int index = tabs_->addTab(tab, tab->title());
     tabs_->setCurrentIndex(index);
     workingDirectory_ = tab->workingDirectory();
@@ -230,10 +307,7 @@ void TerminalWindow::addTab(const QString& workingDirectory, const QString& comm
             updateWindowTitle();
         }
     });
-    connect(tab, &TerminalTab::statusMessageRequested, this, [this](const QString& message) {
-        statusBar()->show();
-        statusBar()->showMessage(message, 5000);
-    });
+    connect(tab, &TerminalTab::statusMessageRequested, this, &TerminalWindow::showStatus);
     tab->start();
     updateWindowTitle();
 }
@@ -259,26 +333,39 @@ void TerminalWindow::activateAdjacentTab(const int delta) {
 }
 
 void TerminalWindow::applyTheme() {
+    const ThemePalette palette = terminalPalette(ket::Appearance::instance().theme());
     for (int index = 0; index < tabs_->count(); ++index) {
         if (auto* tab = qobject_cast<TerminalTab*>(tabs_->widget(index))) {
-            tab->applyTheme(theme_.palette());
-            tab->setTypography(fontSizePixels_, lineHeightPixels_);
+            tab->applyTheme(palette);
+            applyTypography(tab);
         }
     }
 }
 
+// The family saved under terminal/fontFamily, else the profile's monospace (KÉT Sans Mono when
+// it is installed, then the platform's).
+void TerminalWindow::applyTypography(TerminalTab* tab) const {
+    QString family = QSettings().value(QLatin1StringView(fontFamilyKey)).toString().trimmed();
+    if (family.isEmpty()) {
+        family = ket::Profile::current().monoFamily();
+    }
+    tab->setTypography(fontSizePixels_, lineHeightPixels_, family);
+}
+
 void TerminalWindow::restartSession() {
     if (TerminalTab* tab = currentTab(); tab != nullptr && !tab->restart()) {
-        statusBar()->show();
-        statusBar()->showMessage(QStringLiteral("Unable to restart the terminal session."), 5000);
+        showStatus(QStringLiteral("Unable to restart the terminal session."));
     }
 }
 
 void TerminalWindow::changeFontSize(const int delta) {
-    fontSizePixels_ = std::clamp(fontSizePixels_ + delta, 8, 48);
-    lineHeightPixels_ = std::clamp(fontSizePixels_ + 8, 12, 96);
+    fontSizePixels_ = qBound(10, fontSizePixels_ + delta, 28);
+    lineHeightPixels_ = qRound(fontSizePixels_ * 22.0 / 14.0);
     applyTheme();
+    showStatus(QStringLiteral("Text size %1 px").arg(fontSizePixels_));
 }
+
+void TerminalWindow::showStatus(const QString& message) { ket::Toast::showMessage(this, message); }
 
 void TerminalWindow::updateWindowTitle() {
     const TerminalTab* tab = currentTab();
