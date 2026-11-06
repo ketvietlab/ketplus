@@ -1,5 +1,6 @@
 #include "cloud/RemoteAudit.h"
 
+#include <QHash>
 #include <QJsonObject>
 #include <QSet>
 
@@ -16,14 +17,23 @@ bool remoteCommandMayChange(const QString& kind) {
                                      QStringLiteral("session.configuration.read"),
                                      QStringLiteral("session.worktrees"),
                                      QStringLiteral("session.resource.resolve"),
+                                     QStringLiteral("session.task.output"),
+                                     QStringLiteral("session.pending_approvals"),
+                                     QStringLiteral("session.output.read"),
+                                     QStringLiteral("session.media.read"),
                                      QStringLiteral("atlas.list")};
-    return !reads.contains(kind);
+    // Uploading an attachment takes a command per chunk; the message that sends it is recorded.
+    return !reads.contains(kind) && !kind.startsWith(QStringLiteral("attachment.stage."));
 }
 
-QJsonArray remoteAuditJson(const QList<RemoteCommandAudit>& entries) {
+QJsonArray remoteAuditJson(const QList<RemoteCommandAudit>& entries,
+                           const QHash<QString, QString>& titles) {
     QJsonArray result;
     for (const RemoteCommandAudit& entry : entries) {
+        const auto title = titles.constFind(entry.sessionId);
         result.append(QJsonObject{
+            {QStringLiteral("session_exists"), title != titles.cend()},
+            {QStringLiteral("session_title"), title != titles.cend() ? *title : QString()},
             {QStringLiteral("command_id"), entry.commandId},
             {QStringLiteral("kind"), entry.kind},
             {QStringLiteral("device_id"), entry.deviceId},
