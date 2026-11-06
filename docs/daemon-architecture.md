@@ -172,7 +172,9 @@ older Desktop never downgrades a newer daemon.
 Terminal ownership remains in KetPlus CM. The daemon now enrolls its locally
 generated X25519/Ed25519 identity through native Ketsuite credentials, obtains
 short-lived challenge credentials, publishes generation-fenced session state,
-uploads stable AES-256-GCM event envelopes from a durable retry cache, and polls
+uploads stable AES-256-GCM event envelopes from a durable retry cache (key epoch
+1 only, until rotation exists; decryption requires a 12-byte nonce and a 16-byte
+tag, because AES-GCM itself accepts others), and polls
 serialized encrypted commands. The machine signs a challenge only when it is
 exactly 32 canonical base64url bytes: the same Ed25519 key signs event
 envelopes, wrapped session keys and WebRTC answers, all longer, so a relay
@@ -407,6 +409,9 @@ KetPlus never asks for a password. Signing a Mac in is a browser handoff
    viewer in to the tenant and the viewer approves.
 3. The browser returns to the loopback port with a one-time code and the same
    `state`; a request with any other state is refused and does not end the wait.
+   An `error` with the right state (the viewer declined, or the tenant failed)
+   ends the sign-in at once with a fixed message, "Sign-in was declined." for
+   `access_denied`; `error_description` is never shown (#84).
 4. The daemon redeems the code at `/v2/auth/token` with the verifier and uses
    that user session once, to enroll the Mac. The session is not stored.
 
