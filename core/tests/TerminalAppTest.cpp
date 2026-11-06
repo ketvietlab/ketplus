@@ -4,6 +4,8 @@
 #include "terminal_app/TerminalTab.h"
 
 #include "KetAppearance.h"
+#include "KetProfile.h"
+#include "KetStyle.h"
 #include "KetTokens.h"
 
 #include <QAbstractButton>
@@ -36,6 +38,10 @@ void TerminalAppTest::initTestCase() {
     QCoreApplication::setOrganizationName(QStringLiteral("KetPlusTerminalAppTest"));
     QCoreApplication::setApplicationName(QStringLiteral("TerminalAppTest"));
     QSettings().clear();
+    // The app's own setup (main.cpp), so the window is tested under the profile and style it
+    // ships with.
+    ket::Profile::setCurrent(ket::Profile::ketPlus());
+    ket::Style::install(*qApp);
 }
 
 void TerminalAppTest::cleanup() {
