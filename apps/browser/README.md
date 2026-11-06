@@ -255,6 +255,11 @@ result fails or is blocked.
 ## Deliberate limits
 
 - Chromium-family browsers (Chrome, Edge, Chrome for Testing) are the only engines.
+- A service holds at most 8 open sessions (including ones still starting) and a
+  session at most 20 pages (`LIMITS.maxSessions`, `LIMITS.maxPagesPerSession`).
+  `browser.session.create` and `browser.open` past the cap fail with
+  `LIMIT_REACHED` (`details.limit`). A popup the site opens past the cap is
+  closed instead of adopted.
 - DOM mutation without navigation does not increment `documentRevision`. Node
   re-verification catches changes to tag, role, or accessible name, but not a
   node that keeps them while its meaning changes.

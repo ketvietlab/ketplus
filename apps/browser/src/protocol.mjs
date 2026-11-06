@@ -8,6 +8,10 @@ import { BrowserApiError } from "./errors.mjs";
 export const PROTOCOL_VERSION = "browser.v0";
 
 export const LIMITS = Object.freeze({
+  // Each session holds a browser context and an origin proxy, and each page its own process;
+  // an agent that never closes them would otherwise pile them up until its turn ends.
+  maxSessions: 8,
+  maxPagesPerSession: 20,
   maxViewportSize: 4096,
   maxDeviceScaleFactor: 3,
   // The largest capture a session can make (4096 x 4096 CSS pixels at 3x). A PNG

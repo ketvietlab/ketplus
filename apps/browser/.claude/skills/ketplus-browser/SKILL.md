@@ -145,6 +145,7 @@ Errors carry a stable string code (MCP: `structuredContent.code`; JSON-RPC:
 | `NAVIGATION_DENIED`, `REQUEST_DENIED` | URL or final page outside the session policy | Ask the user to allow the origin |
 | `ORIGIN_NOT_PERMITTED` | Session asked for more than the host ceiling | Same; do not widen from the session |
 | `EVIDENCE_MISMATCH` | Capture and snapshot come from different page states | Take both with one `observe(includeScreenshot:true)` |
+| `LIMIT_REACHED` | Too many open sessions (8) or pages in a session (20) | Close sessions or pages you no longer need, then retry |
 | `INVALID_PARAMS` | Schema violation (`details.issues` lists paths) | Fix the parameters |
 | `BROWSER_UNAVAILABLE` | No usable Chrome, Edge or Chrome for Testing | Tell the user what the message names; do not retry in a loop |
 
