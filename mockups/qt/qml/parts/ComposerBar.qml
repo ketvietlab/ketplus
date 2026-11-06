@@ -35,7 +35,9 @@ Item {
         leadingTools: [
             KetIconButton {
                 id: attach
-                controlSize: KetTheme.ControlSize.Small
+                controlSize: KetTheme.ControlSize.Medium
+                iconWeight: KetTheme.IconWeight.Regular
+                glyphSize: composer.recipe.attachIconSize
                 iconName: "plus"
                 text: "Add context"
                 onClicked: attachMenu.popup(attach, 0, -attachMenu.height)
