@@ -413,24 +413,6 @@ if(APPLE)
             COMMENT "Copying browser runtime into KetPlus.app"
             VERBATIM
         )
-        install(CODE "
-            execute_process(
-                COMMAND \"${CMAKE_COMMAND}\"
-                    \"-DKETPLUS_BROWSER_APP_DIR=${ketplus_browser_app_dir}\"
-                    \"-DKETPLUS_BROWSER_RUNTIME_DIR=${ketplus_browser_runtime_stage}\"
-                    \"-DKETPLUS_BROWSER_RUNTIME_ALLOW_STALE=${KETPLUS_BROWSER_RUNTIME_ALLOW_STALE}\"
-                    -P \"${PROJECT_SOURCE_DIR}/cmake/KetPlusBrowserRuntime.cmake\"
-                RESULT_VARIABLE ketplus_check_result)
-            if(NOT ketplus_check_result EQUAL 0)
-                message(FATAL_ERROR \"The browser runtime does not match this checkout\")
-            endif()"
-            COMPONENT Runtime
-        )
-        install(DIRECTORY "${ketplus_browser_runtime_stage}/"
-            DESTINATION "KetPlus.app/Contents/Resources/ketplus-browser"
-            USE_SOURCE_PERMISSIONS
-            COMPONENT Runtime
-        )
     endif()
 endif()
 
@@ -439,6 +421,43 @@ install(TARGETS ketplus
     RUNTIME DESTINATION bin
     COMPONENT Runtime
 )
+
+if(APPLE AND KETPLUS_BUNDLE_BROWSER_RUNTIME)
+    # After install(TARGETS ketplus): the bundle it copies embeds the runtime of its last build,
+    # which can predate the staged one. The staged runtime is checked, replaces the installed one
+    # (no files of the older one remain), and what was installed is checked again (#94).
+    set(ketplus_installed_browser_runtime
+        "\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/KetPlus.app/Contents/Resources/ketplus-browser")
+    foreach(ketplus_browser_runtime_phase IN ITEMS staged installed)
+        if(ketplus_browser_runtime_phase STREQUAL "staged")
+            set(ketplus_checked_runtime "${ketplus_browser_runtime_stage}")
+        else()
+            set(ketplus_checked_runtime "${ketplus_installed_browser_runtime}")
+        endif()
+        set(ketplus_browser_runtime_check_${ketplus_browser_runtime_phase} "
+            execute_process(
+                COMMAND \"${CMAKE_COMMAND}\"
+                    \"-DKETPLUS_BROWSER_APP_DIR=${ketplus_browser_app_dir}\"
+                    \"-DKETPLUS_BROWSER_RUNTIME_DIR=${ketplus_checked_runtime}\"
+                    \"-DKETPLUS_BROWSER_RUNTIME_ALLOW_STALE=${KETPLUS_BROWSER_RUNTIME_ALLOW_STALE}\"
+                    -P \"${PROJECT_SOURCE_DIR}/cmake/KetPlusBrowserRuntime.cmake\"
+                RESULT_VARIABLE ketplus_check_result)
+            if(NOT ketplus_check_result EQUAL 0)
+                message(FATAL_ERROR
+                    \"The ${ketplus_browser_runtime_phase} browser runtime does not match this checkout\")
+            endif()")
+    endforeach()
+    install(CODE "${ketplus_browser_runtime_check_staged}
+        file(REMOVE_RECURSE \"${ketplus_installed_browser_runtime}\")"
+        COMPONENT Runtime
+    )
+    install(DIRECTORY "${ketplus_browser_runtime_stage}/"
+        DESTINATION "KetPlus.app/Contents/Resources/ketplus-browser"
+        USE_SOURCE_PERMISSIONS
+        COMPONENT Runtime
+    )
+    install(CODE "${ketplus_browser_runtime_check_installed}" COMPONENT Runtime)
+endif()
 
 if(APPLE)
     install(TARGETS ketplus_daemon

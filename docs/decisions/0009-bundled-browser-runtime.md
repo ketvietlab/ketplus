@@ -52,7 +52,9 @@ runtime.json                     {name, version, nodeVersion, node, protocols:["
   otherwise). `KETPLUS_BROWSER_RUNTIME_DIR` bundles a prebuilt staged runtime
   without network, only if its `sourceSha256` (package files, `src/` and the
   skill) matches the checkout. The check runs at configure time and again before
-  every bundle (`ketplus_check_browser_runtime`) and install.
+  every bundle (`ketplus_check_browser_runtime`) and install. Install places the
+  runtime after the app bundle, whose copy embeds the runtime of its last build:
+  it replaces that copy entirely and checks the installed runtime as well.
   `KETPLUS_BROWSER_RUNTIME_ALLOW_STALE=ON` overrides it for local experiments (#94); `KETPLUS_NODE_CACHE` supplies the Node archive. Staging needs a
   build-host node >= 22 only to run the script.
 - **Browser selection, no Chromium in the bundle.** At the first session the

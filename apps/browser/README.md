@@ -83,7 +83,8 @@ public origin is refused; CI stages and smokes a runtime on every change.
 skill. CMake refuses a runtime whose digest differs from the checkout, unless
 `KETPLUS_BROWSER_RUNTIME_ALLOW_STALE=ON` is set. It checks at configure time and
 again before every bundle and install, since sources or the runtime can change
-after configure. See `docs/decisions/0009-bundled-browser-runtime.md`.
+after configure. Install replaces the runtime embedded in the built app bundle
+and checks the installed copy. See `docs/decisions/0009-bundled-browser-runtime.md`.
 
 Start the newline-delimited JSON-RPC 2.0 server:
 
