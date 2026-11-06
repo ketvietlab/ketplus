@@ -96,6 +96,40 @@ class BrowserSignInTest final : public QObject {
         QVERIFY(!late.waitForConnected(1000));
         QCOMPARE(received.count(), 1);
     }
+
+    void aDeclinedSignInEndsAtOnceWithAFixedMessage_data() {
+        QTest::addColumn<QByteArray>("error");
+        QTest::addColumn<QString>("message");
+        QTest::newRow("declined") << QByteArray("access_denied")
+                                  << QStringLiteral("Sign-in was declined.");
+        QTest::newRow("other") << QByteArray("server_error")
+                               << QStringLiteral("Sign-in did not finish. Try again.");
+    }
+
+    void aDeclinedSignInEndsAtOnceWithAFixedMessage() {
+        QFETCH(QByteArray, error);
+        QFETCH(QString, message);
+        BrowserSignIn signIn;
+        QString listenError;
+        QVERIFY2(signIn.listen(&listenError), qPrintable(listenError));
+        QSignalSpy received(&signIn, &BrowserSignIn::codeReceived);
+        QSignalSpy failed(&signIn, &BrowserSignIn::failed);
+        const QUrl redirect(signIn.redirectUri());
+        const QByteArray state = signIn.state().toLatin1();
+        // Another page's error cannot end this sign-in.
+        QCOMPARE(get(redirect, "/callback?error=" + error + "&state=wrong_state_0123456789"),
+                 QByteArray("HTTP/1.1 400 Bad Request"));
+        QCOMPARE(failed.count(), 0);
+        QCOMPARE(get(redirect, "/callback?error=" + error +
+                                   "&error_description=Visit%20evil.example&state=" + state),
+                 QByteArray("HTTP/1.1 200 OK"));
+        QCOMPARE(failed.count(), 1);
+        QCOMPARE(failed.at(0).at(0).toString(), message);
+        QCOMPARE(received.count(), 0);
+        QTcpSocket late;
+        late.connectToHost(redirect.host(), static_cast<quint16>(redirect.port()));
+        QVERIFY(!late.waitForConnected(1000));
+    }
 };
 
 QTEST_GUILESS_MAIN(BrowserSignInTest)

@@ -292,6 +292,13 @@ QJsonObject CloudCrypto::encrypt(const QByteArray& plaintext, const QByteArray& 
                                  const QString& sessionId, const qint64 generation,
                                  const int keyEpoch, const QString& senderDeviceId,
                                  const int senderKeyVersion, QString* error) {
+    // Only epoch 1 exists: an envelope labelled with another epoch would name a key it was not
+    // sealed with (#84).
+    if (keyEpoch != 1) {
+        if (error != nullptr)
+            *error = QStringLiteral("Session key epoch %1 does not exist.").arg(keyEpoch);
+        return {};
+    }
     const QByteArray key = sessionKey(sessionId, generation, error);
     const QByteArray nonce = randomBytes(12, error);
     QByteArray tag;
@@ -328,6 +335,12 @@ QByteArray CloudCrypto::decrypt(const QJsonObject& content, const QByteArray& as
     const QByteArray tag = fromBase64Url(content.value(QStringLiteral("tag")).toString());
     const QByteArray signature =
         fromBase64Url(content.value(QStringLiteral("signature")).toString());
+    // AES-GCM accepts other nonce lengths and truncated tags; the format allows only these.
+    if (nonce.size() != 12 || tag.size() != 16) {
+        if (error != nullptr)
+            *error = QStringLiteral("The encrypted envelope is malformed.");
+        return {};
+    }
     PKey key = rawPublic(senderSigningKey, EVP_PKEY_ED25519);
     DigestContext context(EVP_MD_CTX_new(), EVP_MD_CTX_free);
     QByteArray signingInput = associatedData;
@@ -370,6 +383,11 @@ QByteArray CloudCrypto::decryptSealed(const QJsonObject& content, const QByteArr
         fromBase64Url(content.value(QStringLiteral("signature")).toString());
     const QByteArray ephemeral =
         fromBase64Url(content.value(QStringLiteral("ephemeralPublicKey")).toString());
+    if (nonce.size() != 12 || tag.size() != 16) {
+        if (error)
+            *error = QStringLiteral("The sealed command envelope is invalid.");
+        return {};
+    }
     PKey signing = rawPublic(senderSigningKey, EVP_PKEY_ED25519);
     DigestContext context(EVP_MD_CTX_new(), EVP_MD_CTX_free);
     QByteArray input = associatedData;

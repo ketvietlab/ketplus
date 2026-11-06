@@ -107,8 +107,25 @@ void BrowserSignIn::read(QTcpSocket* socket) {
     const QString code = query.queryItemValue(QStringLiteral("code"), QUrl::FullyDecoded);
     static const QRegularExpression codePattern(QStringLiteral("^[A-Za-z0-9._~-]{16,256}$"));
     // A page that does not know the state cannot finish or spoil this sign-in.
-    if (!sameSecret(query.queryItemValue(QStringLiteral("state"), QUrl::FullyDecoded), state_) ||
-        !codePattern.match(code).hasMatch()) {
+    const bool ownState =
+        sameSecret(query.queryItemValue(QStringLiteral("state"), QUrl::FullyDecoded), state_);
+    // The relay's answer to a declined or failed sign-in ends it now, not at the timeout. Its
+    // error_description is never shown (#84).
+    if (ownState && query.hasQueryItem(QStringLiteral("error"))) {
+        const bool declined =
+            query.queryItemValue(QStringLiteral("error")) == QStringLiteral("access_denied");
+        finished_ = true;
+        expiry_.stop();
+        server_.close();
+        respond(socket, "200 OK",
+                declined ? QStringLiteral("Sign-in was declined. You can close this tab.")
+                         : QStringLiteral("Sign-in did not finish. Return to KetPlus to try "
+                                          "again."));
+        emit failed(declined ? QStringLiteral("Sign-in was declined.")
+                             : QStringLiteral("Sign-in did not finish. Try again."));
+        return;
+    }
+    if (!ownState || !codePattern.match(code).hasMatch()) {
         respond(socket, "400 Bad Request",
                 QStringLiteral("This sign-in link is not for this KetPlus."));
         return;

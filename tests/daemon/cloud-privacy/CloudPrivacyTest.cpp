@@ -2522,6 +2522,35 @@ class CloudPrivacyTest final : public QObject {
         QVERIFY(!Access::pins(*c.client).trustsKeys("earlier-phone", 1, phone));
     }
 
+    void envelopesUseOnlyTheirOwnKeyEpochAndExactNonceAndTagSizes() {
+        CredentialStore store("envelope-format");
+        CloudCrypto crypto(&store);
+        const QByteArray signing =
+            CloudCrypto::fromBase64Url(crypto.publicKeys().value("signingPublicKey").toString());
+        QString error;
+        QVERIFY(crypto.encrypt("text", "aad", "session", 1, 2, "machine", 1, &error).isEmpty());
+        QCOMPARE(error, QStringLiteral("Session key epoch 2 does not exist."));
+        const QJsonObject sealed = crypto.encrypt("text", "aad", "session", 1, 1, "machine", 1);
+        QCOMPARE(crypto.decrypt(sealed, "aad", signing, "session", 1), QByteArray("text"));
+        // A truncated tag, signed by the real sender, is refused by its size, not by luck.
+        const QByteArray nonce = CloudCrypto::fromBase64Url(sealed.value("nonce").toString());
+        const QByteArray ciphertext =
+            CloudCrypto::fromBase64Url(sealed.value("ciphertext").toString());
+        const QByteArray tag = CloudCrypto::fromBase64Url(sealed.value("tag").toString()).left(12);
+        QByteArray input = "aad";
+        input.append('\0');
+        input.append(nonce);
+        input.append(ciphertext);
+        input.append(tag);
+        QJsonObject truncated = sealed;
+        truncated.insert("tag", QString::fromLatin1(CloudCrypto::base64Url(tag)));
+        truncated.insert("signature",
+                         QString::fromLatin1(CloudCrypto::base64Url(crypto.sign(input))));
+        error.clear();
+        QVERIFY(crypto.decrypt(truncated, "aad", signing, "session", 1, &error).isEmpty());
+        QCOMPARE(error, QStringLiteral("The encrypted envelope is malformed."));
+    }
+
     void replyLostAfterItsHeaderIsAFailure() {
         QTemporaryDir dir;
         Context c(dir.filePath("journal.sqlite"));
