@@ -6,6 +6,7 @@
 #include <optional>
 
 class QApplication;
+class QFont;
 
 namespace ketplus {
 
@@ -88,6 +89,7 @@ class ThemeManager final : public QObject {
     void apply();
     [[nodiscard]] Mode effectiveMode() const noexcept;
     void loadInterFont();
+    void setApplicationFont(const QFont& font);
 
     QApplication& application_;
     Mode mode_{Mode::System};

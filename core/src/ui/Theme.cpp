@@ -2,6 +2,7 @@
 
 #include "KetAppearance.h"
 #include "KetProfile.h"
+#include "KetRecipes.h"
 #include "KetStyle.h"
 #include "KetSyntax.h"
 #include "KetTokens.h"
@@ -11,6 +12,7 @@
 #include <QFont>
 #include <QFontDatabase>
 #include <QSettings>
+#include <QToolTip>
 
 #include <utility>
 
@@ -906,7 +908,7 @@ void ThemeManager::setInterfaceFontSizePixels(const int fontSizePixels) {
     interfaceFontSizePixels_ = normalized;
     QFont font = application_.font();
     font.setPixelSize(interfaceFontSizePixels_);
-    application_.setFont(font);
+    setApplicationFont(font);
     apply();
 }
 
@@ -944,7 +946,17 @@ void ThemeManager::loadInterFont() {
     QFont font(uiFontFamily_);
     font.setPixelSize(interfaceFontSizePixels_);
     font.setWeight(QFont::Normal);
+    setApplicationFont(font);
+}
+
+void ThemeManager::setApplicationFont(const QFont& font) {
+    // QApplication::setFont without a class drops the per-class fonts, including the
+    // tooltip font ket::Style sets; put it back as the style does on a theme change.
     application_.setFont(font);
+    QFont tooltipFont = ket::Style::interfaceFont();
+    tooltipFont.setPixelSize(qRound(ket::Appearance::instance().scaled(
+        ket::tooltipRecipe(ket::Appearance::instance().theme()).fontPixels)));
+    QToolTip::setFont(tooltipFont);
 }
 
 } // namespace ketplus

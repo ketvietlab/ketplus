@@ -1,5 +1,6 @@
 #include "KetAppearance.h"
 #include "KetProfile.h"
+#include "KetRecipes.h"
 #include "KetStyle.h"
 #include "KetSyntax.h"
 #include "KetTokens.h"
@@ -284,6 +285,18 @@ void RefactorWave1ContractTest::themeInstallsTheKetStyle() {
         QCOMPARE(qApp->palette().color(QPalette::Highlight), expected.color(QPalette::Highlight));
         QCOMPARE(QToolTip::palette().color(QPalette::ToolTipBase),
                  expected.color(QPalette::ToolTipBase));
+    }
+    // Tooltips keep the kit's font size from the start, not only after a theme change, and
+    // after the interface size changes.
+    const auto tooltipPixels = [] {
+        return qRound(ket::Appearance::instance().scaled(
+            ket::tooltipRecipe(ket::Appearance::instance().theme()).fontPixels));
+    };
+    {
+        ketplus::ThemeManager fresh(*qApp);
+        QCOMPARE(QToolTip::font().pixelSize(), tooltipPixels());
+        fresh.setInterfaceFontSizePixels(fresh.interfaceFontSizePixels() + 2);
+        QCOMPARE(QToolTip::font().pixelSize(), tooltipPixels());
     }
     const QString styleSheet = qApp->styleSheet();
     for (const char* selector : {"QMenu {", "QMenu::item", "QToolTip {", "QTabBar::tab"}) {
