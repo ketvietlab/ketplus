@@ -57,11 +57,13 @@ milestone changes state.
   Claude transcript instead of reusing an older project-folder copy. Cursor remains
   gated. Installed-device acceptance requires the updated daemon.
 
-- Private desktop chrome and Agent Workspace UI use embedded KÉT Sans 1.0.0
+- Private desktop chrome and Agent Workspace UI use embedded KÉT Sans 1.1
   hinted TTF faces (Light/Regular/Medium/Bold), with the existing platform fallback
-  stack and unchanged editor/code monospace settings. The official archive is
-  SHA-256 pinned; font files stay in compiled resources and its license ships
-  with application notices. CM's defaults are unchanged.
+  stack and unchanged editor/code monospace settings; KÉT Sans Mono 0.10.4 Medium
+  is embedded and registered beside it. Both are SIL OFL 1.1. Core's
+  `ketplus_cm_add_ket_fonts()` (`core/cmake/KetFonts.cmake`) pins the official
+  KÉT Sans archive by SHA-256; font files stay in compiled resources and their
+  licenses ship with application notices. CM's defaults are unchanged.
 
 - Desktop compaction status reconciles daemon live events with retained transcript windows.
   Returning after an inactive completion clears the compacting overlay; restoring an
