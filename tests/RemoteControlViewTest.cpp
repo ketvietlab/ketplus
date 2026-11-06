@@ -1,5 +1,6 @@
 #include "remote/RemoteControlView.h"
 #include "remote/RemoteActivitySection.h"
+#include "remote/RemoteConnectionsIntro.h"
 
 #include <QAccessible>
 #include <QJsonArray>
@@ -8,10 +9,12 @@
 #include <QApplication>
 #include <QDateTime>
 #include <QDialog>
+#include <QGridLayout>
 #include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
+#include <QPixmap>
 #include <QPushButton>
 #include <QTest>
 #include <QTimer>
@@ -25,6 +28,7 @@ class RemoteControlViewTest final : public QObject {
 
   private slots:
     void opensOnSignInPrompt();
+    void signedOutIntroFollowsTheMockAtEveryWidth();
     void signInFormIsAnExplicitSecondaryFlow();
     void demoSignInOpensAddDeviceQr();
     void demoSignOutReturnsToSingleAction();
@@ -318,9 +322,73 @@ void RemoteControlViewTest::opensOnSignInPrompt() {
     auto* text = view.findChild<QLabel*>(QStringLiteral("remoteWelcomeText"));
     QVERIFY(title && text);
     QCOMPARE(title->text(), QStringLiteral("Connections"));
-    QCOMPARE(text->text(), QStringLiteral("Sign in to connect your phone to this Mac."));
-    QVERIFY(title->font().pixelSize() >= 28);
+    QVERIFY(text->text().startsWith(QStringLiteral("Continue a conversation from your phone")));
+    auto* headline = view.findChild<QLabel*>(QStringLiteral("remoteWelcomeHeadline"));
+    QVERIFY(headline);
+    QVERIFY(headline->font().pixelSize() >= 28);
+    QCOMPARE(signInPrompt->text(), QStringLiteral("Sign in"));
     QVERIFY(!view.findChild<QWidget*>(QStringLiteral("remotePageTitle"))->isVisible());
+}
+
+void RemoteControlViewTest::signedOutIntroFollowsTheMockAtEveryWidth() {
+    for (const auto* name : {"desktop-question", "mobile-question"})
+        for (const auto* theme : {"light", "dark"})
+            QVERIFY2(!QPixmap(QStringLiteral(":/connections/%1-%2.png")
+                                  .arg(QLatin1String(name), QLatin1String(theme)))
+                          .isNull(),
+                     name);
+
+    RemoteControlView view;
+    view.resize(1100, 900);
+    view.show();
+    QTest::qWait(1);
+    RemoteConnectionsIntro* intro = view.intro_;
+    QVERIFY(intro && intro->isVisible());
+    QVERIFY(!intro->narrow_);
+    auto* scene = intro->findChild<QWidget*>(QStringLiteral("remoteConnectionsScene"));
+    QVERIFY(scene);
+    QCOMPARE(scene->height(), 400);
+    QVERIFY(scene->x() > intro->copy_->x());
+    const auto position = [](QGridLayout* grid, QWidget* widget) {
+        int row = 0;
+        int column = 0;
+        int rowSpan = 0;
+        int columnSpan = 0;
+        grid->getItemPosition(grid->indexOf(widget), &row, &column, &rowSpan, &columnSpan);
+        return QPoint(column, row);
+    };
+    for (int index = 0; index < 3; ++index)
+        QCOMPARE(position(intro->steps_, intro->stepCells_[index]), QPoint(index, 0));
+    QCOMPARE(position(intro->stepsHeader_, intro->stepsNote_), QPoint(1, 0));
+    QCOMPARE(intro->stepCells_[1]->accessibleName(),
+             QStringLiteral("Step 2: Scan with KetPlus Mobile. Open the app on your phone and "
+                            "scan the pairing code."));
+
+    // Below 860 px the scene goes under the copy and the steps stack.
+    view.resize(760, 900);
+    QTest::qWait(1);
+    QVERIFY(intro->narrow_);
+    QCOMPARE(scene->height(), 380);
+    QVERIFY(scene->width() <= 500);
+    QVERIFY(scene->width() >= 400);
+    QVERIFY(scene->y() > intro->copy_->y() + intro->copy_->height() - 1);
+    for (int index = 0; index < 3; ++index)
+        QCOMPARE(position(intro->steps_, intro->stepCells_[index]), QPoint(0, index));
+    QCOMPARE(position(intro->stepsHeader_, intro->stepsNote_), QPoint(0, 1));
+    view.resize(1100, 900);
+    QTest::qWait(1);
+    QVERIFY(!intro->narrow_);
+    QCOMPARE(position(intro->steps_, intro->stepCells_[2]), QPoint(2, 0));
+
+    // An expired login says so above the introduction; signing in again hides it.
+    auto* expired = view.findChild<QWidget*>(QStringLiteral("remoteExpiredBanner"));
+    QVERIFY(expired && !expired->isVisible());
+    view.applyStatus({{QStringLiteral("configured"), false},
+                      {QStringLiteral("last_error"), QStringLiteral("token expired")}});
+    QVERIFY(expired->isVisible());
+    QVERIFY(!view.findChild<QWidget*>(QStringLiteral("remoteWelcomeNotice"))->isVisible());
+    view.applyStatus({{QStringLiteral("configured"), false}});
+    QVERIFY(!expired->isVisible());
 }
 
 void RemoteControlViewTest::signInFormIsAnExplicitSecondaryFlow() {
