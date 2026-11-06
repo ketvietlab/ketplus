@@ -43,7 +43,8 @@ application.
 | Két Design System tokens | 0.1.44, inside KetQt | Compiled into KetQt | MIT | Include the copyright and license text |
 | Két Symbol | 0.12.0 SVGs, inside KetQt; `core/assets/brand/ketplus-terminal.svg` | Embedded in KetQt Qt resources; rendered into the KétPlus Terminal app icon | CC BY 4.0 | Credit "Két Symbol © 2026 Két Việt, CC BY 4.0" and ship the license text |
 | Inter | 4.1 archive pinned by SHA-256 | Font embedded in Qt resources | SIL OFL 1.1 | Include the copyright and complete OFL text in an easily accessible form |
-| KÉT Sans | 1.0.0 official ZIP pinned by SHA-256 | Four unmodified hinted TTF faces fetched at build time and embedded in Pro Qt resources | KÉT Sans Font License 1.0, proprietary | App embedding only; no loose font redistribution; ship the complete license |
+| KÉT Sans | 1.1 official ZIP pinned by SHA-256 | Four unmodified hinted TTF faces fetched at build time and embedded in Qt resources of KétPlus, KétPlus Terminal and KétPlus Pro | SIL OFL 1.1, Reserved Font Names "KÉT" and "KET" | Ship the copyright and complete OFL text; a modified font must not use the reserved names |
+| KÉT Sans Mono | 0.10.4 Medium TTF in `core/assets/fonts` | Embedded in the same Qt resources | SIL OFL 1.1, Reserved Font Names "KÉT" and "KET" | As KÉT Sans; never use 0.10.3, which carries the old licence |
 | Két Design System | 0.1.44 Mermaid snapshots in `core/resources/mermaid` | Embedded configuration data | MIT | Include the publisher notice in CM Mermaid resources |
 | Lucide Static | 1.40.0 assets | Vendored SVG path data | ISC, plus Feather MIT for derived icons | Include both applicable notices |
 | Sparkle | 2.10.0 release archive pinned by SHA-256 | Unmodified framework in `Contents/Frameworks`, only when `KETPLUS_UPDATE_FEED_URL` is set (ADR 0019) | MIT, plus the bsdiff and other notices in its `LICENSE` | Ship `Sparkle-MIT.txt` complete |
@@ -243,6 +244,8 @@ licenses/
   Lexilla.txt
   libvterm-MIT.txt
   Inter-OFL-1.1.txt
+  KET-Sans-OFL-1.1.txt
+  KET-Sans-Mono-OFL-1.1.txt
   KetQt-MPL-2.0.txt
   Ket-Design-System-MIT.txt
   Ket-Symbol-CC-BY-4.0.txt

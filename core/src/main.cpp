@@ -1,4 +1,5 @@
 #include "app/MainWindow.h"
+#include "ui/KetFonts.h"
 #include "ui/Theme.h"
 
 #include <QApplication>
@@ -26,6 +27,7 @@ int main(int argc, char* argv[]) {
     QCoreApplication::setOrganizationName(QStringLiteral("Ketsuite"));
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/brand/ketplus-app-icon.png")));
 
+    ketplus::registerKetFonts();
     ketplus::ThemeManager theme(app);
     ketplus::MainWindow window(theme);
     window.show();

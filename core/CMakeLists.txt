@@ -32,6 +32,7 @@ find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Core5Compat Svg SvgWid
 
 include(cmake/CompilerCache.cmake)
 include(cmake/Dependencies.cmake)
+include(cmake/KetFonts.cmake)
 include(cmake/Warnings.cmake)
 
 set_property(GLOBAL PROPERTY
@@ -57,6 +58,8 @@ add_library(ketplus_ui STATIC
     src/ui/FindReplaceBar.h
     src/ui/Theme.cpp
     src/ui/Theme.h
+    src/ui/KetFonts.cpp
+    src/ui/KetFonts.h
 )
 target_link_libraries(ketplus_ui PUBLIC Qt6::Widgets KetQt::Tokens KetQt::Icons KetQt::Widgets)
 target_include_directories(ketplus_ui PUBLIC
@@ -298,6 +301,7 @@ if(KETPLUS_CM_BUILD_APP)
     )
     ketplus_enable_warnings(ketplus_cm)
     ketplus_cm_add_font_resources(ketplus_cm)
+    ketplus_cm_add_ket_fonts(ketplus_cm ketplus_ket_fonts)
 
     qt_add_resources(ketplus_cm "ketplus_brand"
         PREFIX "/brand"
@@ -376,6 +380,7 @@ if(APPLE AND KETPLUS_CM_BUILD_APP AND KETPLUS_CM_BUILD_TERMINAL_APP)
     )
     ketplus_enable_warnings(ketplus_terminal_app)
     ketplus_cm_add_font_resources(ketplus_terminal_app)
+    ketplus_cm_add_ket_fonts(ketplus_terminal_app ketplus_ket_fonts)
 
     # Finder shows the bundle's localized name instead of its ASCII file name (ADR 0029).
     foreach(ketplus_terminal_language IN ITEMS en vi)
@@ -570,6 +575,7 @@ if(KETPLUS_CM_BUILD_TESTS)
 
     if(APPLE AND TARGET ketplus_terminal_app_ui)
         add_executable(ketplus_terminal_app_tests tests/TerminalAppTest.cpp)
+        ketplus_cm_add_ket_fonts(ketplus_terminal_app_tests ketplus_ket_fonts)
         target_link_libraries(ketplus_terminal_app_tests
             PRIVATE Qt6::Test ketplus_terminal_app_ui
         )

@@ -34,7 +34,7 @@ build/terminal-mock/KetPlusTerminalMock.app/Contents/MacOS/KetPlusTerminalMock
 The kit and libvterm are pinned by commit in `CMakeLists.txt` (libvterm at the
 commit `core/cmake/Dependencies.cmake` uses). `-DFETCHCONTENT_SOURCE_DIR_KETQT`
 points at a local kit checkout; `-DKETPLUS_MOCK_KET_SANS_ARCHIVE` at an offline
-KÉT Sans archive. The KÉT Sans Mono TTF is shared with `mockups/qt/fonts`.
+KÉT Sans archive. The KÉT Sans Mono TTF is shared from `core/assets/fonts`.
 
 ## Evidence
 

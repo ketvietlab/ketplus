@@ -33,6 +33,8 @@ placing proprietary implementation in CM files.
 | Lexilla | `3e6f317eed854bc312b4c4453206189d381c7ae7` (`rel-5-5-2`) | Compiled statically | Scintilla permissive license |
 | libvterm | `9d6d2112335080312ef8c36667fa717ded4f7daf` (`v0.3.3`) | Compiled statically | MIT |
 | Inter | 4.1 | Font embedded in Qt resources | SIL OFL 1.1 |
+| KÉT Sans | 1.1 official ZIP pinned by SHA-256 | Four faces embedded in Qt resources | SIL OFL 1.1, Reserved Font Names "KÉT" and "KET" |
+| KÉT Sans Mono | 0.10.4 Medium, `assets/fonts` | Embedded in Qt resources | SIL OFL 1.1, Reserved Font Names "KÉT" and "KET" |
 | Két Design System | 0.1.44 | Mermaid configuration snapshots in Qt resources | MIT |
 | KetQt | `b286dce5344f05e55bcfd86c7c1d6e10a5ab2587` | Compiled statically (ADR 0035) | MPL 2.0 |
 | Két Design System tokens | 0.1.44, inside KetQt | Compiled into KetQt | MIT |
