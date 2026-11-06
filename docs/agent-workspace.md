@@ -541,8 +541,10 @@ prefers system Chrome, then Edge, then cached/downloaded Chrome for Testing.
 Settings probes never launch or download a browser. If automatic download is
 allowed, first use may still require network access.
 
-Settings → Browser controls "Let agents use a browser" and "All websites"
-(default, `*`) / "Only these origins". Every session uses an isolated temporary
+Settings → Browser controls "Let agents use a browser" and "Public websites
+and this computer" (default, `*`; never the local network, link-local or cloud
+metadata addresses) / "Only these origins" (named origins may reach the local
+network). Every session uses an isolated temporary
 profile. Missing runtime or invalid settings omit the injected MCP server.
 Browser calls from the injected server need no per-call approval; other tools
 retain the selected permission mode.

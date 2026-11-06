@@ -1,4 +1,6 @@
+import net from "node:net";
 import { BrowserApiError } from "./errors.mjs";
+import { addressKind } from "./network-address.mjs";
 import { safeUrl } from "./redaction.mjs";
 
 export { redactText, safeUrl } from "./redaction.mjs";
@@ -77,6 +79,36 @@ export class OriginPolicy {
   // API requests too, so either scheme for that authority is acceptable.
   allowsAuthority(authority) {
     return this.allows(`https://${authority}`) || this.allows(`http://${authority}`);
+  }
+
+  // Whether an allowed URL may connect to `address`, one of its resolved addresses.
+  // "*" means public websites and this computer: never the local network,
+  // link-local (cloud metadata) or reserved ranges. A loopback address needs a
+  // loopback name, so a public name cannot rebind to local services. A named
+  // origin may reach the private network; an IP-literal origin reaches exactly itself.
+  allowsAddress(value, address) {
+    if (!this.allows(value)) return false;
+    const url = new URL(value);
+    const scheme = NETWORK_SCHEMES.get(url.protocol);
+    const origin = new URL(`${scheme}//${url.host}`).origin;
+    const host = url.hostname.replace(/^\[|\]$/g, "");
+    const kind = addressKind(address);
+    const loopbackName = isLoopbackHost(url.hostname);
+    return this.entries.some((entry) => {
+      if (entry === "*") return kind === "public" || (kind === "loopback" && loopbackName);
+      if (entry === "loopback") return kind === "loopback" && loopbackName;
+      if (entry !== origin) return false;
+      if (net.isIP(host)) return true; // resolves to exactly itself
+      if (kind === "loopback") return loopbackName;
+      return kind === "public" || kind === "private";
+    });
+  }
+
+  allowsAuthorityAddress(authority, address) {
+    return (
+      this.allowsAddress(`https://${authority}`, address) ||
+      this.allowsAddress(`http://${authority}`, address)
+    );
   }
 
   permits(entry) {

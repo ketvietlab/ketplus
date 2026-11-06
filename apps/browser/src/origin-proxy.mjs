@@ -1,10 +1,15 @@
 import http from "node:http";
 import net from "node:net";
+import { resolveAddresses } from "./network-address.mjs";
 
 // Every browser-context network hop, including redirects, subframes, workers,
 // WebSockets and the session request context, is forced through this proxy.
 // Playwright route handlers do not see redirect hops, so they cannot enforce
-// an origin boundary on their own.
+// an origin boundary on their own. Each hop resolves its host once, keeps only
+// the addresses the policy permits and connects to one of them, so a name that
+// later resolves elsewhere (DNS rebinding) cannot move the connection. The proxy needs
+// no credentials: it grants no network access a local process lacks, and
+// Playwright disables the HTTP cache for contexts with proxy credentials.
 
 const HOP_BY_HOP = new Set([
   "connection",
@@ -47,19 +52,60 @@ function parseAuthority(authority) {
   }
 }
 
-export async function startOriginProxy({ allowsUrl, allowsAuthority, onBlocked = () => {} }) {
+async function permittedAddress(hostname, permits, lookup) {
+  let addresses;
+  try {
+    addresses = await resolveAddresses(hostname, lookup);
+  } catch {
+    return { unresolved: true };
+  }
+  const address = addresses.find(permits);
+  return address ? { address } : {};
+}
+
+export async function startOriginProxy({
+  allowsUrl,
+  allowsAuthority,
+  allowsAddress = () => false,
+  allowsAuthorityAddress = () => false,
+  onBlocked = () => {},
+  lookup = undefined,
+}) {
+  const refuseSocket = (socket, status) => {
+    socket.end(
+      status === 502
+        ? "HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n"
+        : "HTTP/1.1 403 Forbidden\r\n\r\n",
+    );
+  };
   const sockets = new Set();
-  const server = http.createServer((request, response) => {
+  const server = http.createServer(async (request, response) => {
     const url = parseAbsoluteHttpUrl(request.url);
-    if (!url || !allowsUrl(url.href)) {
+    const deny = () => {
       onBlocked(url?.href ?? String(request.url));
       response.writeHead(403, { "content-type": "text/plain; charset=utf-8" });
       response.end("Blocked by browser session origin policy");
       request.resume();
+    };
+    if (!url || !allowsUrl(url.href)) {
+      deny();
+      return;
+    }
+    const target = await permittedAddress(
+      url.hostname,
+      (address) => allowsAddress(url.href, address),
+      lookup,
+    );
+    if (target.unresolved || !target.address) {
+      if (target.unresolved) {
+        response.writeHead(502);
+        response.end();
+        request.resume();
+      } else deny();
       return;
     }
     const upstream = http.request({
-      host: url.hostname.replace(/^\[|\]$/g, ""),
+      host: target.address,
       port: url.port || 80,
       method: request.method,
       path: `${url.pathname}${url.search}`,
@@ -85,15 +131,25 @@ export async function startOriginProxy({ allowsUrl, allowsAuthority, onBlocked =
     request.pipe(upstream);
   });
 
-  server.on("connect", (request, clientSocket, head) => {
+  server.on("connect", async (request, clientSocket, head) => {
     const target = parseAuthority(request.url);
     if (!target || !allowsAuthority(request.url)) {
       onBlocked(target ? target.origin : String(request.url));
-      clientSocket.end("HTTP/1.1 403 Forbidden\r\n\r\n");
+      refuseSocket(clientSocket, 403);
+      return;
+    }
+    const resolved = await permittedAddress(
+      target.hostname,
+      (address) => allowsAuthorityAddress(request.url, address),
+      lookup,
+    );
+    if (!resolved.address) {
+      if (!resolved.unresolved) onBlocked(target.origin);
+      refuseSocket(clientSocket, resolved.unresolved ? 502 : 403);
       return;
     }
     const port = Number(request.url.slice(request.url.lastIndexOf(":") + 1)) || 443;
-    const upstream = net.connect(port, target.hostname.replace(/^\[|\]$/g, ""), () => {
+    const upstream = net.connect(port, resolved.address, () => {
       clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
       if (head.length) upstream.write(head);
       upstream.pipe(clientSocket);
@@ -104,14 +160,24 @@ export async function startOriginProxy({ allowsUrl, allowsAuthority, onBlocked =
     clientSocket.on("close", () => upstream.destroy());
   });
 
-  server.on("upgrade", (request, clientSocket, head) => {
+  server.on("upgrade", async (request, clientSocket, head) => {
     const url = parseAbsoluteHttpUrl(request.url);
     if (!url || !allowsUrl(url.href)) {
       onBlocked(url?.href ?? String(request.url));
-      clientSocket.end("HTTP/1.1 403 Forbidden\r\n\r\n");
+      refuseSocket(clientSocket, 403);
       return;
     }
-    const upstream = net.connect(Number(url.port || 80), url.hostname.replace(/^\[|\]$/g, ""), () => {
+    const resolved = await permittedAddress(
+      url.hostname,
+      (address) => allowsAddress(url.href, address),
+      lookup,
+    );
+    if (!resolved.address) {
+      if (!resolved.unresolved) onBlocked(url.href);
+      refuseSocket(clientSocket, resolved.unresolved ? 502 : 403);
+      return;
+    }
+    const upstream = net.connect(Number(url.port || 80), resolved.address, () => {
       const lines = [`${request.method} ${url.pathname}${url.search} HTTP/1.1`];
       for (let index = 0; index < request.rawHeaders.length; index += 2) {
         const name = request.rawHeaders[index];
