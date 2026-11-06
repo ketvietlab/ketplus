@@ -177,3 +177,5 @@ target_link_libraries(ketplus_worktree_picker_tests PRIVATE Qt6::Test ketplus_de
 
 ketplus_add_gui_test(ketplus_activity_group_loader_tests ActivityGroupLoaderTest.cpp)
 target_link_libraries(ketplus_activity_group_loader_tests PRIVATE Qt6::Test ketplus_ai)
+
+ketplus_tests_offscreen()

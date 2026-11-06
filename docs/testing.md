@@ -10,7 +10,10 @@ cmake --build --preset dev
 ctest --preset dev
 ```
 
-GUI tests run with `QT_QPA_PLATFORM=offscreen`. The Qt build and Release
+Every ctest test runs with `QT_QPA_PLATFORM=offscreen`: `ketplus_tests_offscreen()`
+(`cmake/OffscreenTests.cmake`) sets it for each test in `tests/` and `tests/daemon/`, over the
+test's own environment and the shell's, so a test run never opens windows on the screen. A
+test binary run directly needs it exported. The Qt build and Release
 characterization run on macOS only; Ubuntu builds are paused to cut CI cost and
 must be restored before a Linux release. The browser regression and design
 evidence checks still run on Ubuntu. Private Windows CI remains deferred until
