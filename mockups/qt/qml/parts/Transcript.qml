@@ -17,7 +17,8 @@ Item {
     readonly property string asset: "qrc:/qt/qml/KetPlusMock/assets/"
     property int questionStep: 0
     readonly property var blocks: ({ claude: TranscriptFixtures.claude, codex: TranscriptFixtures.codex,
-                                     cursor: TranscriptFixtures.cursor })[kind] || null
+                                     cursor: TranscriptFixtures.cursor,
+                                     "turn-report": TranscriptFixtures.turnReport })[kind] || null
 
     signal openDetails(string tab)
 

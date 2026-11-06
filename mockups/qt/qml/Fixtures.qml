@@ -41,6 +41,9 @@ QtObject {
         {
             name: "ketplus-desktop",
             conversations: [
+                { number: "4821", title: "Prepare the release", status: KetTheme.ConversationStatus.Completed,
+                  tags: [tag("Review")], worktree: "release/1.4", transcript: "turn-report", provider: "Codex",
+                  providerId: "codex", model: "GPT-5.6 Luna", effort: "Medium" },
                 { number: "2035", title: "Refine navigation", status: KetTheme.ConversationStatus.Completed,
                   tags: [tag("UI")], worktree: "develop", transcript: "activity" },
                 { number: "9410", title: "Review the startup flow", status: KetTheme.ConversationStatus.Working,

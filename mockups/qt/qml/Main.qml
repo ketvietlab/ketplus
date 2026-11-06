@@ -15,7 +15,7 @@ Basic.ApplicationWindow {
     readonly property var screenIds: [
         "workspace", "workspace/welcome", "workspace/running", "workspace/question",
         "workspace/error", "workspace/atlas", "workspace/details", "workspace/claude",
-        "workspace/codex", "workspace/cursor", "editor", "editor/terminal",
+        "workspace/codex", "workspace/cursor", "workspace/turn-report", "editor", "editor/terminal",
         "editor/markdown", "editor/markdown-source", "editor/samples",
         "changes", "worktrees", "connections", "connections/no-activity", "connections/signed-out",
         "connections/expired", "connections/sign-in", "settings", "settings/typography", "settings/account",
