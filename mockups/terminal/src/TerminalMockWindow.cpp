@@ -239,8 +239,7 @@ void TerminalMockWindow::createMenus() {
     connect(about, &QAction::triggered, this, [this] {
         QMessageBox box(this);
         box.setWindowTitle(QStringLiteral("About KetPlus Terminal"));
-        box.setIconPixmap(QPixmap(QStringLiteral(":/ketplus-terminal-icon.png"))
-                              .scaled(64, 64, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        box.setIconPixmap(windowIcon().pixmap(64, 64));
         box.setText(
             QStringLiteral("KetPlus Terminal %1").arg(QCoreApplication::applicationVersion()));
         box.setInformativeText(QStringLiteral("A lightweight native terminal for macOS."));

@@ -97,10 +97,12 @@ qt_add_resources(ketplus_terminal_mock terminal_mock_mono
     BASE ../qt/fonts
     FILES ../qt/fonts/KETSansMono-Medium.ttf
 )
+# The app icon from Két Symbol (CC BY 4.0, licence alongside), drawn for KetPlus Terminal and
+# Lampion OS. Credit: "Két Symbol © 2026 Két Việt, CC BY 4.0".
 qt_add_resources(ketplus_terminal_mock terminal_mock_assets
     PREFIX "/"
-    BASE "${core_dir}/assets/brand"
-    FILES "${core_dir}/assets/brand/ketplus-terminal-icon.png"
+    BASE assets
+    FILES assets/ketplus-terminal.svg
 )
 qt_add_resources(ketplus_terminal_mock terminal_mock_demo
     PREFIX "/"

@@ -17,6 +17,9 @@ What the mock owns:
   on `page-bg`, `accent` cursor, `accent-muted` selection, `warning` matches);
 - type: KÉT Sans Mono Medium at 14 px on a 22 px line (the app's actual size),
   KÉT Sans for the chrome; status messages are Két toasts.
+- the app icon: `assets/ketplus-terminal.svg` from Két Symbol (CC BY 4.0,
+  licence alongside; credit "Két Symbol © 2026 Két Việt, CC BY 4.0"), the
+  window and About icon. The same icon is meant for Lampion OS.
 
 ## Build and run
 

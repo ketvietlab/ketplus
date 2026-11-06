@@ -17,6 +17,7 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFontDatabase>
+#include <QIcon>
 #include <QLineEdit>
 #include <QStandardPaths>
 #include <QTimer>
@@ -42,6 +43,7 @@ int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
     QApplication::setApplicationName(QStringLiteral("KetPlus Terminal Mock"));
     QApplication::setApplicationVersion(QStringLiteral(PROJECT_VERSION));
+    QApplication::setWindowIcon(QIcon(QStringLiteral(":/ketplus-terminal.svg")));
 
     QCommandLineParser parser;
     parser.addHelpOption();
