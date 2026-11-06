@@ -16,8 +16,8 @@ Basic.ApplicationWindow {
         "workspace", "workspace/welcome", "workspace/running", "workspace/question",
         "workspace/error", "workspace/atlas", "workspace/details", "editor", "editor/terminal",
         "changes", "worktrees", "connections", "settings", "settings/typography", "settings/account",
-        "settings/providers", "settings/archived", "settings/updates", "atlas", "mobile-picker",
-        "workspace/compact"
+        "settings/browser", "settings/computer", "settings/providers", "settings/archived",
+        "settings/updates", "atlas", "mobile-picker", "workspace/compact"
     ]
     property string screen: "workspace"
     // The terminal below the editor (editor/terminal).
@@ -96,6 +96,12 @@ Basic.ApplicationWindow {
     }
 
     function notify(message) { toast.show(message) }
+
+    // Settings › Agent models opens the model picker in the Agent Workspace, as the app does.
+    function openAgentModels() {
+        showScreen("workspace")
+        Qt.callLater(() => workspace.openComposerPanel("model"))
+    }
 
     width: 1440
     height: 900

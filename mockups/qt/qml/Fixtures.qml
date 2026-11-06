@@ -281,4 +281,16 @@ QtObject {
         [],
         [["➜ ", "success"], ["ketplus-desktop ", "info"], ["git:(", "accent"], ["develop", "danger"], [") ", "accent"]]
     ]
+
+    // Settings › Providers, as SettingsProvidersPage reports them.
+    readonly property var providerStatus: [
+        { name: "Codex CLI", note: "Codex CLI 0.162.1 is newer than the newest version KetPlus has been tested with (0.154.0). It should work; some features may not.",
+          rows: [["Status", "Newer than tested"], ["Version", "0.162.1"], ["Supported", "0.142.1 or newer · tested up to 0.154.0"],
+                 ["Location", "~/.local/bin/codex"], ["Update with", "npm install -g @openai/codex@latest"]] },
+        { name: "Claude Agent SDK", note: "",
+          rows: [["Status", "Bundled with KetPlus"], ["Version", "Agent SDK 0.3.289 · Claude Code 2.1.289"],
+                 ["Location", "/Applications/KetPlus.app/Contents/Resources/claude-sidecar/index.mjs"]] },
+        { name: "Cursor CLI", note: "Cursor CLI was not found.",
+          rows: [["Status", "Not installed"], ["Supported", "2026.6.25 or newer · tested up to 2026.9.18"]] }
+    ]
 }
