@@ -56,9 +56,7 @@ Rectangle {
             hoverEnabled: true
             text: header.conversation.title
             onDoubleClicked: header.window.renameDialog.open()
-            Basic.ToolTip.visible: hovered
-            Basic.ToolTip.delay: 800
-            Basic.ToolTip.text: "Double-click to rename"
+            KetToolTip { visible: titleButton.hovered; text: "Double-click to rename" }
             background: null
             contentItem: Text {
                 text: titleButton.text

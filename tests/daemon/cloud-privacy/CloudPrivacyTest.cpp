@@ -2076,6 +2076,92 @@ class CloudPrivacyTest final : public QObject {
         QVERIFY(!Access::pins(*c.client).trustsKeys("phone", 1, phone));
     }
 
+    void machineSignsOnlyAThirtyTwoByteChallenge() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("journal.sqlite"));
+        c.start();
+        const QString challenges = QStringLiteral("/v2/daemon/challenges");
+        const QString credentials = QStringLiteral("/v2/daemon/credentials");
+        c.transport.statusForPath.insert(challenges, 201);
+        c.transport.statusForPath.insert(credentials, 503);
+        const auto requested = [&c](const QString& path) {
+            return std::count_if(c.transport.requests.cbegin(), c.transport.requests.cend(),
+                                 [&](const auto& request) { return request.url().path() == path; });
+        };
+        const auto attempt = [&](const QString& encoded) {
+            c.transport.responseForPath.insert(
+                challenges,
+                QJsonDocument(QJsonObject{{"id", "challenge_1"}, {"challenge", encoded}})
+                    .toJson(QJsonDocument::Compact));
+            std::optional<std::pair<bool, QString>> result;
+            Access::credential(*c.client, [&result](const bool ready, const QString& error) {
+                result = std::pair{ready, error};
+            });
+            [&] { QTRY_VERIFY(result.has_value()); }();
+            return result.value_or(std::pair{true, QString()});
+        };
+        const auto encode = [](const QByteArray& bytes) {
+            return QString::fromLatin1(CloudCrypto::base64Url(bytes));
+        };
+        // A relay asking for a host signature over something the host vouches for: a WebRTC
+        // answer carrying the relay's own SDP, or bytes of the wrong length.
+        const QByteArray answer =
+            CloudCrypto::canonical({"ketplus", 2, "webrtc-answer", "pc_synthetic",
+                                    "workspace-synthetic", "machine-synthetic", 1, "mobile-1",
+                                    "offer-hash", "2026-11-06T00:00:00.000Z", "relay-sdp-hash"});
+        for (const QString& forged :
+             {encode(answer), encode(QByteArray(33, 'k')), encode(QByteArray(31, 'k')),
+              encode(QByteArray(32, 'k')) + QStringLiteral("=="), QString()}) {
+            const auto [ready, error] = attempt(forged);
+            QVERIFY(!ready);
+            QCOMPARE(error, QStringLiteral("The relay sent an invalid machine challenge."));
+        }
+        QCOMPARE(requested(credentials), 0);
+
+        // The relay's real challenge is signed and sent.
+        const auto [ready, error] = attempt(encode(QByteArray(32, 'k')));
+        QVERIFY(!ready); // this fake credential endpoint is down
+        QVERIFY(error != QStringLiteral("The relay sent an invalid machine challenge."));
+        QCOMPARE(requested(credentials), 1);
+    }
+
+    void commandPollWaitsAfterFailuresUntilAWakeUp() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("journal.sqlite"));
+        c.start();
+        const QString poll = QStringLiteral("/v2/commands:poll");
+        c.transport.statusForPath.insert(poll, 503);
+        const auto polls = [&c, &poll] {
+            return std::count_if(c.transport.requests.cbegin(), c.transport.requests.cend(),
+                                 [&](const auto& request) { return request.url().path() == poll; });
+        };
+        Access::pollCommands(*c.client);
+        QTRY_VERIFY(!Access::commandPollInFlight(*c.client));
+        QCOMPARE(polls(), 1);
+        QVERIFY(Access::commandPollWaiting(*c.client));
+        // Timer ticks during the wait send nothing.
+        Access::pollCommands(*c.client);
+        Access::pollCommands(*c.client);
+        QCOMPARE(polls(), 1);
+
+        Access::expireCommandPollBackoff(*c.client);
+        Access::pollCommands(*c.client);
+        QTRY_VERIFY(!Access::commandPollInFlight(*c.client));
+        QCOMPARE(polls(), 2);
+        QCOMPARE(Access::commandPollFailures(*c.client), 2);
+
+        // A wake-up comes from the relay: poll at once.
+        c.transport.statusForPath.insert(poll, 200);
+        c.transport.responseForPath.insert(poll, R"({"commands":[]})");
+        Access::wakeCommandPoll(*c.client);
+        QTRY_VERIFY(!Access::commandPollInFlight(*c.client));
+        QCOMPARE(polls(), 3);
+        QCOMPARE(Access::commandPollFailures(*c.client), 0);
+        Access::pollCommands(*c.client);
+        QTRY_VERIFY(!Access::commandPollInFlight(*c.client));
+        QCOMPARE(polls(), 4);
+    }
+
     void replyLostAfterItsHeaderIsAFailure() {
         QTemporaryDir dir;
         Context c(dir.filePath("journal.sqlite"));

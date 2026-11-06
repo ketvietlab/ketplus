@@ -173,7 +173,15 @@ Terminal ownership remains in KetPlus CM. The daemon now enrolls its locally
 generated X25519/Ed25519 identity through native Ketsuite credentials, obtains
 short-lived challenge credentials, publishes generation-fenced session state,
 uploads stable AES-256-GCM event envelopes from a durable retry cache, and polls
-serialized encrypted commands. Pairing is explicitly confirmed on the Mac, and
+serialized encrypted commands. The machine signs a challenge only when it is
+exactly 32 canonical base64url bytes: the same Ed25519 key signs event
+envelopes, wrapped session keys and WebRTC answers, all longer, so a relay
+cannot obtain a host signature over one of them by calling it a challenge. A
+domain-separated challenge signature needs a matching relay change and is
+tracked in #85. A failed command poll or credential request waits before the
+next poll like a failed upload (one second doubling, up to five minutes after
+a refusal and one minute otherwise, with jitter); a relay wake-up or a
+successful poll ends the wait. Pairing is explicitly confirmed on the Mac, and
 the daemon recomputes the claim digest from the claimed keys before approving.
 Only devices pinned on this Mac (ADR 0034) receive session keys, have their
 commands accepted or open peer links; the devices active when pins were
@@ -232,7 +240,9 @@ carry a plaintext `itemKey` (a truncated SHA-256 of session, generation and
 item id, never the id itself), and a completion whose cloud payload holds the
 item's whole text carries `supersedesDeltas`, so the relay can drop the
 streamed copy the way the local journal does. Neither field is inside the
-signed content. Each session's cloud cursor is registered with the
+signed content. `itemKey` is a public linkage value: it hides the item id
+from casual reading, but the relay knows session and generation and can
+confirm a guessed provider item id. Each session's cloud cursor is registered with the
 journal once per sign-in, not on every upload, and an acknowledgement at or
 behind the stored cursor writes nothing. An acknowledgement checks only the
 large payloads its removed raw events name, finding replay manifests through

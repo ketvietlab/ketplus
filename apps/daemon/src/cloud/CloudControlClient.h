@@ -53,6 +53,7 @@ class CloudControlClient final : public QObject {
     // is lost must still be polled before then.
     static constexpr int wakeupBackstopPollMilliseconds = 10'000;
     static constexpr int disconnectedPollMilliseconds = 2'000;
+    static constexpr qsizetype machineChallengeBytes = 32;
     static constexpr int relayInterruptTtlMilliseconds = 15'000;
     static constexpr int senderKeyCacheMilliseconds = 10 * 60'000;
     static constexpr qsizetype maximumCachedSenderKeys = 64;
@@ -117,6 +118,7 @@ class CloudControlClient final : public QObject {
     // A wake-up that lands while a poll is in flight polls again once it returns: that poll
     // may have read before the command it announces was written.
     void wakeCommandPoll();
+    void noteCommandPollFailure(int status);
     // The active rows of a relay device list that are pinned here, adopting them on first use.
     QJsonArray trustedDevices(const QJsonArray& devices);
     using SenderKeysCallback = std::function<void(const QJsonObject&, const QString&)>;
@@ -208,6 +210,9 @@ class CloudControlClient final : public QObject {
     bool heartbeatInFlight_{false};
     bool commandPollInFlight_{false};
     bool commandPollAgain_{false};
+    // Consecutive failed polls or credential requests, and when the timer may poll again.
+    int commandPollFailures_{0};
+    QDeadlineTimer commandPollRetryAt_{0};
     QSet<QString> eventUploadsInFlight_;
     // session:generation pairs whose cloud cursor this process has registered with the journal.
     QSet<QString> registeredCloudCursors_;
