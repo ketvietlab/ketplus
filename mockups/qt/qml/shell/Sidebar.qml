@@ -280,7 +280,16 @@ Rectangle {
                                 status: modelData.status
                                 checked: sidebar.window.screen === "workspace"
                                          && sidebar.window.conversation.number === modelData.number
-                                KetToolTip { visible: row.hovered; text: row.modelData.worktree }
+                                // The worktree hint waits for a resting pointer, and a press hides it
+                                // until the pointer leaves the row: clicking never raises it.
+                                property bool tipDismissed: false
+                                onHoveredChanged: if (!hovered) tipDismissed = false
+                                onPressedChanged: if (pressed) tipDismissed = true
+                                KetToolTip {
+                                    visible: row.hovered && !row.pressed && !row.tipDismissed
+                                    delay: 1200
+                                    text: row.modelData.worktree
+                                }
                                 onClicked: sidebar.window.openConversation(repo.modelData.name,
                                                                            modelData)
                                 TapHandler {
