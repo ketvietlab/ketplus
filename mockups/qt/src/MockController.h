@@ -2,6 +2,7 @@
 #pragma once
 
 #include <QObject>
+#include <QUrl>
 
 // The mock's link to the kit's appearance: QML reads KetTheme, and changes the theme or the
 // zoom through this object (QML singleton `Mock` in KetPlusMock.Native).
@@ -27,6 +28,8 @@ class MockController final : public QObject {
     Q_INVOKABLE void setZoom(qreal zoom);
     // A bundled text resource, such as the repository document the editor previews.
     Q_INVOKABLE QString resourceText(const QString& path) const;
+    // The image viewer's Print: the system print dialog, as the app opens it.
+    Q_INVOKABLE bool printImage(const QUrl& source, int rotation, const QString& title) const;
 
     QString initialScreen = QStringLiteral("workspace");
     QString initialState;

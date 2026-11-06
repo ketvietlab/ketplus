@@ -8,14 +8,15 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Svg)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Svg Widgets)
 qt_standard_project_setup(REQUIRES 6.8)
 
 include(FetchContent)
 
 # The kit, pinned to a merged develop commit. FETCHCONTENT_SOURCE_DIR_KETQT points at a
-# local checkout instead.
-set(KETQT_BUILD_WIDGETS OFF CACHE BOOL "" FORCE)
+# local checkout instead. KetQt::Widgets is only for ket::printImage(), the image viewer's
+# Print: the system print dialog is a widget, as in the app.
+set(KETQT_BUILD_WIDGETS ON CACHE BOOL "" FORCE)
 FetchContent_Declare(ketqt
     GIT_REPOSITORY https://github.com/ketvietlab/ket-qt.git
     GIT_TAG 6ceb5385f59fdb5cd1f3be9e6b0c24bd32c2db3e # develop, through PR #26
@@ -78,5 +79,6 @@ qt_add_resources(ketplus_qt_mock mock_docs
     FILES ../../docs/licensing.md
 )
 
-target_link_libraries(ketplus_qt_mock PRIVATE KetQt::Quick KetQt::QuickPlugin Qt6::Gui Qt6::Qml
+target_link_libraries(ketplus_qt_mock PRIVATE KetQt::Quick KetQt::QuickPlugin KetQt::Widgets Qt6::Gui
+                                              Qt6::Qml Qt6::Widgets
                                               Qt6::Quick Qt6::QuickControls2 Qt6::Svg)

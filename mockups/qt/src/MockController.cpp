@@ -2,6 +2,7 @@
 #include "MockController.h"
 
 #include "KetAppearance.h"
+#include "KetPrint.h"
 
 #include <QFile>
 
@@ -39,4 +40,8 @@ void MockController::setZoom(qreal zoom) { Appearance::instance().setZoom(zoom);
 QString MockController::resourceText(const QString& path) const {
     QFile file(path);
     return file.open(QIODevice::ReadOnly) ? QString::fromUtf8(file.readAll()) : QString();
+}
+
+bool MockController::printImage(const QUrl& source, int rotation, const QString& title) const {
+    return ket::printImage(source, rotation, title);
 }

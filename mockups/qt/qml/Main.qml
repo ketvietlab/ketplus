@@ -278,13 +278,15 @@ Basic.ApplicationWindow {
         tools: KetTheme.LightboxTool.ZoomOut | KetTheme.LightboxTool.ZoomLevel
                | KetTheme.LightboxTool.ZoomIn | KetTheme.LightboxTool.Rotate
                | KetTheme.LightboxTool.Copy | KetTheme.LightboxTool.Download
-               | KetTheme.LightboxTool.Fullscreen
+               | KetTheme.LightboxTool.Print | KetTheme.LightboxTool.Fullscreen
         onToolTriggered: tool => {
             if (tool === KetTheme.LightboxTool.Copy)
                 app.notify("Copied the image")
             else if (tool === KetTheme.LightboxTool.Download)
                 app.notify("Saved " + (item ? item.caption.split(" · ").pop() : "the image")
                            + " to Downloads")
+            else if (tool === KetTheme.LightboxTool.Print && item)
+                Mock.printImage(item.source, rotationAngle, item.caption)
             else if (tool === KetTheme.LightboxTool.Fullscreen)
                 app.visibility = app.visibility === Window.FullScreen ? Window.Windowed
                                                                       : Window.FullScreen

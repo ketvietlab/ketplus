@@ -12,7 +12,7 @@
 #include <QCommandLineParser>
 #include <QDirIterator>
 #include <QFontDatabase>
-#include <QGuiApplication>
+#include <QApplication>
 #include <QQmlApplicationEngine>
 #include <QQuickWindow>
 #include <QTimer>
@@ -37,8 +37,10 @@ void countQmlProblems(QtMsgType type, const QMessageLogContext& context, const Q
 } // namespace
 
 int main(int argc, char* argv[]) {
-    QGuiApplication application(argc, argv);
-    QGuiApplication::setApplicationName(QStringLiteral("KetPlus Mock"));
+    // A QApplication, not QGuiApplication: the image viewer prints through the system print
+    // dialog, which is a widget.
+    QApplication application(argc, argv);
+    QApplication::setApplicationName(QStringLiteral("KetPlus Mock"));
     QCommandLineParser parser;
     parser.addHelpOption();
     const QCommandLineOption screen(QStringLiteral("screen"), QStringLiteral("Open <id>."),
@@ -113,18 +115,18 @@ int main(int argc, char* argv[]) {
         for (const QString& id : ids) {
             QMetaObject::invokeMethod(window, "showScreen", Q_ARG(QVariant, id));
             QTimer::singleShot(150, &application, &QCoreApplication::quit);
-            QGuiApplication::exec();
+            QApplication::exec();
         }
         QMetaObject::invokeMethod(window, "openEveryOverlay");
         QTimer::singleShot(300, &application, &QCoreApplication::quit);
-        QGuiApplication::exec();
+        QApplication::exec();
         std::fprintf(stderr, "%lld screens, %d QML problems\n", qlonglong(ids.size()), qmlProblems);
         return ids.isEmpty() || qmlProblems > 0 ? 1 : 0;
     }
     if (const QString file = parser.value(screenshot); !file.isEmpty()) {
         QTimer::singleShot(700, window, [window, file] {
-            QGuiApplication::exit(window->grabWindow().save(file) ? 0 : 1);
+            QApplication::exit(window->grabWindow().save(file) ? 0 : 1);
         });
     }
-    return QGuiApplication::exec();
+    return QApplication::exec();
 }
