@@ -11,6 +11,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QList>
+#include <QSet>
 #include <QSqlDatabase>
 #include <QString>
 
@@ -155,6 +156,9 @@ class LocalJournal final {
     [[nodiscard]] SessionTombstone sessionTombstone(const QString& sessionId,
                                                     qint64 generation) const;
     [[nodiscard]] QList<StoredSession> sessions() const;
+    // The id of every session, or nullopt when they could not all be read. sessions() returns
+    // an empty list on a failed read, which must not pass for every session being deleted.
+    [[nodiscard]] std::optional<QSet<QString>> sessionIds() const;
     [[nodiscard]] SessionHead sessionHead(const QString& sessionId) const;
     [[nodiscard]] QStringList worktreePaths() const;
     // Each catalog path with the repository recorded for it, empty when none was recorded.

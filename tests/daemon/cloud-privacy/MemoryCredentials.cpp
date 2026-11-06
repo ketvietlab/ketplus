@@ -38,34 +38,46 @@ bool CredentialStore::remove(const QString& account, QString* error) const {
 }
 bool CredentialStore::removeIf(const std::function<bool(const QString& account)>& match,
                                QString* error) const {
-    return rewrite(match, {}, error);
-}
-bool CredentialStore::rewrite(const std::function<bool(const QString& account)>& match,
-                              const QHash<QString, QByteArray>& writes, QString* error) const {
-    if ((r03::failWrites && !writes.isEmpty()) ||
-        (!r03::failWritesTo.isEmpty() && writes.contains(r03::failWritesTo))) {
-        if (error)
-            *error = "synthetic credential write failure";
-        return false;
-    }
-    const QString prefix = service_ + '/';
-    QStringList matching;
-    for (auto entry = r03::credentials.cbegin(); entry != r03::credentials.cend(); ++entry) {
-        if (entry.key().startsWith(prefix) && match(entry.key().mid(prefix.size())))
-            matching.append(entry.key());
-    }
     // Fails as a removal of the named account did, whether or not it is stored.
     if (r03::failRemovals || (!r03::failRemovalsOf.isEmpty() && match(r03::failRemovalsOf))) {
         if (error)
             *error = "synthetic credential removal failure";
         return false;
     }
-    if (matching.isEmpty() && writes.isEmpty())
+    return update(
+        [&match](QHash<QString, QByteArray>& accounts) {
+            accounts.removeIf([&match](const auto& entry) { return match(entry.key()); });
+        },
+        error);
+}
+bool CredentialStore::update(
+    const std::function<void(QHash<QString, QByteArray>& accounts)>& change, QString* error) const {
+    const QString prefix = service_ + '/';
+    QHash<QString, QByteArray> accounts;
+    for (auto entry = r03::credentials.cbegin(); entry != r03::credentials.cend(); ++entry) {
+        if (entry.key().startsWith(prefix))
+            accounts.insert(entry.key().mid(prefix.size()), entry.value());
+    }
+    const QHash<QString, QByteArray> before = accounts;
+    change(accounts);
+    if (accounts == before)
         return true;
-    for (const QString& key : matching)
-        r03::credentials.remove(key);
-    for (auto write = writes.cbegin(); write != writes.cend(); ++write)
-        r03::credentials.insert(prefix + write.key(), write.value());
+    // Fails as a write of each written account did.
+    for (auto entry = accounts.cbegin(); entry != accounts.cend(); ++entry) {
+        const bool written =
+            !before.contains(entry.key()) || before.value(entry.key()) != entry.value();
+        if (written && (r03::failWrites || entry.key() == r03::failWritesTo)) {
+            if (error)
+                *error = "synthetic credential write failure";
+            return false;
+        }
+    }
+    for (auto entry = before.cbegin(); entry != before.cend(); ++entry) {
+        if (!accounts.contains(entry.key()))
+            r03::credentials.remove(prefix + entry.key());
+    }
+    for (auto entry = accounts.cbegin(); entry != accounts.cend(); ++entry)
+        r03::credentials.insert(prefix + entry.key(), entry.value());
     ++r03::rewrites;
     return true;
 }

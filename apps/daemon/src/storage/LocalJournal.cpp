@@ -918,6 +918,23 @@ SessionTombstone LocalJournal::sessionTombstone(const QString& sessionId,
             query.value(3).toString(), query.value(4).toString()};
 }
 
+std::optional<QSet<QString>> LocalJournal::sessionIds() const {
+    QSqlQuery query(database_);
+    query.setForwardOnly(true);
+    if (!query.exec(QStringLiteral("SELECT id FROM sessions"))) {
+        setError(query.lastError().text());
+        return std::nullopt;
+    }
+    QSet<QString> ids;
+    while (query.next())
+        ids.insert(query.value(0).toString());
+    if (query.lastError().isValid()) {
+        setError(query.lastError().text());
+        return std::nullopt;
+    }
+    return ids;
+}
+
 SessionHead LocalJournal::sessionHead(const QString& sessionId) const {
     QSqlQuery query(database_);
     query.prepare(QStringLiteral("SELECT generation, last_cursor FROM sessions WHERE id = ?"));

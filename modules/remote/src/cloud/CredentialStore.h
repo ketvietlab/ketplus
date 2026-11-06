@@ -20,10 +20,11 @@ class CredentialStore final {
     // matches. Removing entries one by one rewrote the whole file for each of them.
     bool removeIf(const std::function<bool(const QString& account)>& match,
                   QString* error = nullptr) const;
-    // Removes the accounts `remove` accepts and writes `writes`, all in one rewrite of the file:
-    // either every change is stored or none is.
-    bool rewrite(const std::function<bool(const QString& account)>& remove,
-                 const QHash<QString, QByteArray>& writes, QString* error = nullptr) const;
+    // Applies `change` to every stored account and its value, then stores the result with one
+    // rewrite of the file: either every change is stored or none is. Nothing is written when
+    // `change` leaves the accounts as they were.
+    bool update(const std::function<void(QHash<QString, QByteArray>& accounts)>& change,
+                QString* error = nullptr) const;
 
     // Identifies one version of the credential file on disk: device, inode, size, and
     // modification and status-change times in nanoseconds. A save renames a new file into place.

@@ -32,16 +32,19 @@ KetPlus treats archive, restore, and delete as different operations:
   The enrollment pointers and every upload cursor go in one rewrite of the credential file.
 - Conversation content keys stay with sign-out, but they belong to one workspace (#84). The
   daemon records the workspace they were made in (`session-keys-workspace`, which sign-out
-  keeps). An enrollment into another workspace removes every content key, device wrap and upload
-  cursor and records the new workspace in the same rewrite, as the last step of storing the
-  enrollment, so the devices of the account signed out of cannot read what is uploaded next.
-  The daemon repeats the check at start, so a sign-in that stopped before that step is finished
-  on restart. Signing in to the same workspace keeps the keys, because the relay already holds
-  their wraps and refuses a different wrap under the same id. Keys from an install that was
-  signed out before the workspace was recorded cannot be attributed and are kept.
-- A deleted conversation's content keys, device wraps and upload cursor are removed from the
-  credential file when its deletion is announced, and any left by a conversation deleted while
-  the daemon was not running are swept at start.
+  keeps). An enrollment into another workspace sets the keys and device wraps in use aside under
+  the name of the workspace left, takes back any set aside for the workspace entered, drops the
+  upload cursors and records the new workspace, all in one rewrite and as the last step of
+  storing the enrollment. The devices of the account signed out of cannot read what is uploaded
+  next, and a return to a workspace finds the keys its history is encrypted with and the wraps
+  its relay holds (the relay refuses a different wrap under the same id). The daemon repeats the
+  check at start, so a sign-in that stopped before that step is finished on restart. Keys from
+  an install that was signed out before the workspace was recorded cannot be attributed and stay
+  in use.
+- A deleted conversation's content keys, device wraps (in use or set aside) and upload cursor are
+  removed from the credential file when its deletion is announced, and any left by a
+  conversation deleted while the daemon was not running are swept at start. The sweep runs only
+  on a complete read of the journal's sessions; a failed read removes nothing.
 
 These rules preserve local/provider ownership boundaries and avoid presenting a destructive action
 as complete before its owning subsystem acknowledges it.

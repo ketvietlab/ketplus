@@ -438,11 +438,14 @@ bool CloudControlClient::clearUploadProgress(QString* error) {
 }
 
 void CloudControlClient::pruneSessionCredentials() {
-    QSet<QString> live;
-    for (const StoredSession& session : journal_->sessions())
-        live.insert(session.id);
+    // Only a complete list of live sessions proves the others were deleted.
+    const std::optional<QSet<QString>> live = journal_->sessionIds();
+    if (!live) {
+        lastError_ = journal_->errorString();
+        return;
+    }
     QString error;
-    if (!sessionCredentials_.pruneDeleted(live, &error))
+    if (!sessionCredentials_.pruneDeleted(*live, &error))
         lastError_ = error;
 }
 
