@@ -14,8 +14,52 @@ Item {
     property var machines: [{ name: "build-node-01", detail: "Ubuntu 24.04 LTS · Ready for remote work", via: "Relay", online: true }]
     property bool historyOpen: false
     property int linuxMode: 0
+    // What paired devices did on this Mac (#86): the daemon's remote command audit, newest
+    // first. Only requests that can change something are recorded; reads are not.
+    readonly property var activity: screen.window.remoteActivity ? activityFixture : []
+    readonly property var activityFixture: [
+        { kind: "turn.start", device: "iPhone 16", target: "Fix login timeout", when: "2 min ago", result: "ok" },
+        { kind: "session.create", device: "iPhone 16", target: "New worktree feature/offline-cache", when: "18 min ago", result: "ok" },
+        { kind: "turn.interrupt", device: "iPhone 16", target: "Refactor sync engine", when: "1 hour ago", result: "ok" },
+        { kind: "session.create", device: "iPhone 16", target: "New worktree experiment/parser", when: "Yesterday, 21:14", result: "worktree_quota_exceeded" },
+        { kind: "session.configuration.apply", device: "iPad Air", target: "Release notes draft", when: "Mon, 09:02", result: "ok" },
+        { kind: "turn.start", device: "Unknown device", target: "Fix login timeout", when: "Sun, 23:40", result: "invalid_encrypted_command" },
+        { kind: "session.delete", device: "iPad Air", target: "Old spike", when: "28 Oct, 17:55", result: "ok" }
+    ]
+    // The device the activity dialog shows; empty for every device.
+    property string activityDevice
+    readonly property var activityShown: activityDevice === ""
+        ? activity : activity.filter(entry => entry.device === activityDevice)
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
+    function activityTitle(kind) {
+        return ({ "turn.start": "Sent a message",
+                  "turn.interrupt": "Stopped a turn",
+                  "session.create": "Started a conversation",
+                  "session.delete": "Deleted a conversation",
+                  "session.configuration.apply": "Changed conversation settings" })[kind]
+            || "Sent a " + kind + " request"
+    }
+    function activityIcon(kind) {
+        return ({ "turn.start": "send", "turn.interrupt": "stop-circle", "session.create": "branch",
+                  "session.delete": "trash", "session.configuration.apply": "sliders" })[kind] || "terminal"
+    }
+    // A refusal says why on the detail line; a sender that did not verify is named as the
+    // device it claimed, so it is marked as a danger.
+    function activityOutcome(result) {
+        if (result === "ok")
+            return { text: "Done", tone: KetTheme.BadgeTone.Success, reason: "" }
+        if (result === "worktree_quota_exceeded")
+            return { text: "Refused", tone: KetTheme.BadgeTone.Warning, reason: "Worktree limit reached" }
+        if (result === "invalid_encrypted_command" || result === "sender_key_unavailable")
+            return { text: "Refused", tone: KetTheme.BadgeTone.Danger, reason: "Sender not verified" }
+        return { text: "Refused", tone: KetTheme.BadgeTone.Warning, reason: result }
+    }
+    function openActivity(device) {
+        screen.activityDevice = device
+        activityDialog.open()
+    }
+    function closeActivity() { activityDialog.close() }
 
     component SectionTitle: Item {
         property string title
@@ -57,6 +101,54 @@ Item {
             Text { text: detail; color: KetTheme.t.textSecondary; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13) }
         }
         Row { id: trailingRow; anchors.right: parent.right; anchors.rightMargin: screen.px(22); anchors.verticalCenter: parent.verticalCenter; spacing: screen.px(8) }
+    }
+
+    // One audited request: what it was, which device sent it, on what, when, and how it ended.
+    component ActivityRow: Item {
+        required property var entry
+        property bool last: false
+        property bool showDevice: true
+        readonly property var outcome: screen.activityOutcome(entry.result)
+        width: parent.width
+        height: screen.px(56)
+        KetIcon {
+            x: screen.px(18)
+            anchors.verticalCenter: parent.verticalCenter
+            name: screen.activityIcon(entry.kind)
+            box: screen.px(16)
+            color: KetTheme.t.textSecondary
+        }
+        Column {
+            x: screen.px(50)
+            width: outcomeBadge.x - x - screen.px(16)
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: screen.px(4)
+            // When stays on the title line, so a long target never cuts it off.
+            Row {
+                width: parent.width
+                spacing: screen.px(8)
+                Text { id: titleText; width: Math.min(implicitWidth, parent.width - whenText.width - parent.spacing); elide: Text.ElideRight; text: screen.activityTitle(entry.kind); color: KetTheme.t.textMain; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13); font.weight: Font.Medium }
+                Text { id: whenText; anchors.baseline: titleText.baseline; text: entry.when; color: KetTheme.t.textMuted; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(12) }
+            }
+            Text {
+                id: detailText
+                width: parent.width
+                elide: Text.ElideRight
+                text: (outcome.reason ? outcome.reason + " · " : "") + (showDevice ? entry.device + " · " : "")
+                      + entry.target
+                color: KetTheme.t.textSecondary
+                font.family: KetTheme.fontFamily
+                font.pixelSize: screen.px(12)
+            }
+        }
+        HoverHandler { id: rowHover }
+        // The full detail when it is cut short.
+        KetToolTip {
+            visible: rowHover.hovered && (detailText.truncated || titleText.truncated)
+            text: titleText.text + ", " + whenText.text + "\n" + detailText.text
+        }
+        KetBadge { id: outcomeBadge; anchors.right: parent.right; anchors.rightMargin: screen.px(18); anchors.verticalCenter: parent.verticalCenter; text: outcome.text; tone: outcome.tone }
+        Rectangle { visible: !last; anchors.bottom: parent.bottom; x: screen.px(18); width: parent.width - 2 * x; height: 1; color: KetTheme.t.panelBorder }
     }
 
     Basic.ScrollView {
@@ -122,7 +214,7 @@ Item {
                     iconName: "smartphone"
                     name: modelData.name
                     detail: modelData.detail
-                    KetButton { text: "Details"; variant: KetTheme.ButtonVariant.Ghost; onClicked: screen.window.notify("Last seen 2 minutes ago · iOS 26") }
+                    KetButton { text: "Details"; variant: KetTheme.ButtonVariant.Ghost; onClicked: screen.openActivity(modelData.name) }
                     KetButton {
                         text: "Revoke access"
                         iconName: "wifi-off"
@@ -132,6 +224,56 @@ Item {
                             screen.window.notify("Revoked " + modelData.name)
                         }
                     }
+                }
+            }
+
+            SectionTitle { title: "Activity from paired devices"; count: "Last 90 days" }
+            KetEmptyState {
+                visible: screen.activity.length === 0
+                width: parent.width
+                iconName: "clock"
+                title: "No activity yet"
+                message: "Messages, new conversations and other changes a paired device makes on this Mac appear here."
+            }
+            Rectangle {
+                visible: screen.activity.length > 0
+                width: parent.width
+                height: recentColumn.height
+                radius: screen.px(7)
+                color: KetTheme.t.panelBg
+                border.color: KetTheme.t.panelBorder
+                Column {
+                    id: recentColumn
+                    width: parent.width
+                    Repeater {
+                        model: screen.activity.slice(0, 5)
+                        ActivityRow {
+                            required property var modelData
+                            required property int index
+                            entry: modelData
+                            last: index === Math.min(screen.activity.length, 5) - 1
+                        }
+                    }
+                }
+            }
+            Item {
+                visible: screen.activity.length > 0
+                width: parent.width
+                height: showAll.height
+                Row {
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: screen.px(8)
+                    KetIcon { name: "shield"; box: screen.px(13); color: KetTheme.t.textMuted; anchors.verticalCenter: parent.verticalCenter }
+                    Text { anchors.verticalCenter: parent.verticalCenter; text: "Recorded on this Mac as each request finishes. Reading files and transcripts is not listed."; color: KetTheme.t.textSecondary; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13) }
+                }
+                KetButton {
+                    id: showAll
+                    anchors.right: parent.right
+                    visible: screen.activity.length > 5
+                    text: "Show all " + screen.activity.length
+                    variant: KetTheme.ButtonVariant.Ghost
+                    controlSize: KetTheme.ControlSize.Small
+                    onClicked: screen.openActivity("")
                 }
             }
 
@@ -240,6 +382,71 @@ Item {
                     screen.window.notify("iPad Air paired")
                 }
             }
+        ]
+    }
+
+    KetDialog {
+        id: activityDialog
+        title: screen.activityDevice === "" ? "Activity from paired devices" : screen.activityDevice
+        // KetDialog lays its body out with no spacing; one column keeps the gaps and the sizes.
+        Column {
+            width: activityDialog.availableWidth
+            spacing: screen.px(12)
+            Text {
+                visible: screen.activityDevice !== ""
+                text: "KetPlus App · Paired · Last seen 2 minutes ago"
+                color: KetTheme.t.textSecondary
+                font.family: KetTheme.fontFamily
+                font.pixelSize: screen.px(13)
+            }
+            KetEmptyState {
+                visible: screen.activityShown.length === 0
+                width: parent.width
+                iconName: "clock"
+                title: "No activity yet"
+                message: "Nothing this device asked for has changed this Mac in the last 90 days."
+            }
+            // Six rows show at once; the rest scroll inside the panel.
+            Rectangle {
+                visible: screen.activityShown.length > 0
+                width: parent.width
+                height: activityList.height
+                radius: screen.px(7)
+                color: KetTheme.t.panelBg
+                border.color: KetTheme.t.panelBorder
+                ListView {
+                    id: activityList
+                    width: parent.width
+                    height: Math.min(screen.activityShown.length, 6) * screen.px(56)
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+                    model: screen.activityShown
+                    delegate: ActivityRow {
+                        required property var modelData
+                        required property int index
+                        width: activityList.width
+                        entry: modelData
+                        showDevice: screen.activityDevice === ""
+                        last: index === screen.activityShown.length - 1
+                    }
+                    Basic.ScrollBar.vertical: Basic.ScrollBar { policy: activityList.contentHeight > activityList.height ? Basic.ScrollBar.AsNeeded : Basic.ScrollBar.AlwaysOff }
+                }
+            }
+        }
+        actions: [
+            KetButton {
+                visible: screen.activityDevice !== ""
+                text: "Revoke access"
+                iconName: "wifi-off"
+                variant: KetTheme.ButtonVariant.GhostDanger
+                onClicked: {
+                    const device = screen.activityDevice
+                    screen.phones = screen.phones.filter(p => p.name !== device)
+                    activityDialog.accept()
+                    screen.window.notify("Revoked " + device)
+                }
+            },
+            KetButton { text: "Close"; variant: KetTheme.ButtonVariant.Primary; onClicked: activityDialog.accept() }
         ]
     }
 
