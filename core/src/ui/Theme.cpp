@@ -1,5 +1,8 @@
 #include "ui/Theme.h"
 
+#include "KetSyntax.h"
+#include "KetTokens.h"
+
 #include <QApplication>
 #include <QColor>
 #include <QFont>
@@ -14,89 +17,68 @@
 namespace ketplus {
 namespace {
 
-ThemePalette lightPalette() {
-    return {
-        .dark = false,
-        .appBackground = QStringLiteral("#F7F5F5"),
-        .pageBackground = QStringLiteral("#F7F5F5"),
-        .sidebarBackground = QStringLiteral("#F7F5F5"),
-        .panelBackground = QStringLiteral("#FFFFFF"),
-        .panelSubtle = QStringLiteral("#F7F5F5"),
-        .surfaceRaised = QStringLiteral("#FBFAFA"),
-        .surfaceHover = QStringLiteral("#F1EFF0"),
-        .textMain = QStringLiteral("#1A1C20"),
-        .textSecondary = QStringLiteral("#4E5156"),
-        .textMuted = QStringLiteral("#6A6E74"),
-        .textDisabled = QStringLiteral("#9A9EA2"),
-        .border = QStringLiteral("#E9E7E8"),
-        .borderStrong = QStringLiteral("#CCCCCD"),
-        .interactiveBackground = QStringLiteral("#FFFFFF"),
-        .interactiveHover = QStringLiteral("#F7F5F5"),
-        .interactiveActive = QStringLiteral("#EFEDEE"),
-        .accent = QStringLiteral("#1746FF"),
-        .accentHover = QStringLiteral("#1238DB"),
-        .accentActive = QStringLiteral("#102EB3"),
-        .accentSubtle = QStringLiteral("#EDF2FF"),
-        .accentMuted = QStringLiteral("#DDE6FF"),
-        .focus = QStringLiteral("#1746FF"),
-        .tabActiveText = QStringLiteral("#1238DB"),
-        .accentText = QStringLiteral("#1238DB"),
-        .actionPrimary = QStringLiteral("#365FD6"),
-        .actionPrimaryHover = QStringLiteral("#3151C6"),
-        .actionPrimaryActive = QStringLiteral("#2B46B7"),
-        .positive = QStringLiteral("#1D5D3B"),
-        .warning = QStringLiteral("#8B5C12"),
-        .danger = QStringLiteral("#B42318"),
-        .info = QStringLiteral("#0A7C9C"),
-        .syntaxKeyword = QStringLiteral("#3F4DB8"),
-        .syntaxString = QStringLiteral("#0F7A43"),
-        .syntaxNumber = QStringLiteral("#B45309"),
-        .syntaxType = QStringLiteral("#0A7C9C"),
-        .syntaxComment = QStringLiteral("#6A737D"),
-        .syntaxAttribute = QStringLiteral("#9A6700"),
-    };
+// One Két DS token in a theme, opaque: a translucent token (dark borders) is composited
+// over the panel, so stylesheets, HTML and QML read the same #RRGGBB everywhere.
+QString tokenColor(const QString& name, const ket::Theme theme) {
+    QColor color = ket::Tokens::color(name, theme);
+    if (color.alpha() < 255) {
+        const QColor base = ket::Tokens::color(QStringLiteral("panel-bg"), theme);
+        const qreal alpha = color.alphaF();
+        color = QColor::fromRgbF(color.redF() * alpha + base.redF() * (1 - alpha),
+                                 color.greenF() * alpha + base.greenF() * (1 - alpha),
+                                 color.blueF() * alpha + base.blueF() * (1 - alpha));
+    }
+    return color.name(QColor::HexRgb).toUpper();
 }
 
-ThemePalette darkPalette() {
+// The palette of a theme, from Két DS tokens (ket::Tokens) and the kit's syntax recipe;
+// the roles keep their names so the widgets that read them do not change.
+ThemePalette paletteFor(const ket::Theme theme) {
+    const auto token = [theme](const char* name) {
+        return tokenColor(QString::fromLatin1(name), theme);
+    };
+    const ket::SyntaxRecipe syntax = ket::syntaxRecipe(theme);
+    const auto hex = [](const QColor& color) { return color.name(QColor::HexRgb).toUpper(); };
     return {
-        .dark = true,
-        .appBackground = QStringLiteral("#15181D"),
-        .pageBackground = QStringLiteral("#1B1F24"),
-        .sidebarBackground = QStringLiteral("#171B20"),
-        .panelBackground = QStringLiteral("#1D2228"),
-        .panelSubtle = QStringLiteral("#171B20"),
-        .surfaceRaised = QStringLiteral("#23282F"),
-        .surfaceHover = QStringLiteral("#292F37"),
-        .textMain = QStringLiteral("#E8ECF1"),
-        .textSecondary = QStringLiteral("#C5CBD6"),
-        .textMuted = QStringLiteral("#9AA3B2"),
-        .textDisabled = QStringLiteral("#505862"),
-        .border = QStringLiteral("#292D33"),
-        .borderStrong = QStringLiteral("#3A4048"),
-        .interactiveBackground = QStringLiteral("#20252C"),
-        .interactiveHover = QStringLiteral("#292F37"),
-        .interactiveActive = QStringLiteral("#313844"),
-        .accent = QStringLiteral("#1746FF"),
-        .accentHover = QStringLiteral("#1238DB"),
-        .accentActive = QStringLiteral("#102EB3"),
-        .accentSubtle = QStringLiteral("#202C4B"),
-        .accentMuted = QStringLiteral("#23315D"),
-        .focus = QStringLiteral("#668CFF"),
-        .tabActiveText = QStringLiteral("#9EB5FF"),
-        .accentText = QStringLiteral("#9EB5FF"),
-        .actionPrimary = QStringLiteral("#365FD6"),
-        .actionPrimaryHover = QStringLiteral("#3151C6"),
-        .actionPrimaryActive = QStringLiteral("#2B46B7"),
-        .positive = QStringLiteral("#40C97B"),
-        .warning = QStringLiteral("#E5A93C"),
-        .danger = QStringLiteral("#EF665C"),
-        .info = QStringLiteral("#5EC8E8"),
-        .syntaxKeyword = QStringLiteral("#A8B4FC"),
-        .syntaxString = QStringLiteral("#7DDEA0"),
-        .syntaxNumber = QStringLiteral("#F0B429"),
-        .syntaxType = QStringLiteral("#6DD5F0"),
-        .syntaxComment = QStringLiteral("#8E98A8"),
-        .syntaxAttribute = QStringLiteral("#E8B35C"),
+        .dark = theme == ket::Theme::Dark,
+        .appBackground = token("page-bg"),
+        .pageBackground = token("page-bg"),
+        .sidebarBackground = token("sidebar-bg"),
+        .panelBackground = token("panel-bg"),
+        .panelSubtle = token("panel-bg-subtle"),
+        .surfaceRaised = token("surface-raised"),
+        .surfaceHover = token("surface-hover"),
+        .textMain = token("text-main"),
+        .textSecondary = token("text-secondary"),
+        .textMuted = token("text-muted"),
+        .textDisabled = token("text-disabled"),
+        .border = token("panel-border"),
+        .borderStrong = token("border-strong"),
+        .interactiveBackground = token("interactive-bg"),
+        .interactiveHover = token("interactive-hover"),
+        .interactiveActive = token("interactive-active"),
+        .accent = token("accent"),
+        .accentHover = token("accent-hover"),
+        .accentActive = token("accent-active"),
+        .accentSubtle = token("accent-subtle"),
+        .accentMuted = token("accent-muted"),
+        .focus = token("color-focus"),
+        .tabActiveText = token("tab-active-text"),
+        .accentText = token("accent-text"),
+        .actionPrimary = token("action-primary-bg"),
+        .actionPrimaryHover = token("action-primary-hover"),
+        .actionPrimaryActive = token("action-primary-active"),
+        .actionPrimaryInk = token("action-primary-ink"),
+        .positive = token("positive"),
+        .warning = token("warning"),
+        .danger = token("danger"),
+        .info = token("info"),
+        .syntaxKeyword = hex(syntax.keyword),
+        .syntaxString = hex(syntax.string),
+        .syntaxNumber = hex(syntax.number),
+        .syntaxType = hex(syntax.type),
+        .syntaxComment = hex(syntax.comment),
+        .syntaxAttribute = hex(syntax.attribute),
     };
 }
 
@@ -765,20 +747,20 @@ QWidget[kvRole="settingsPreview"] {
 QPushButton[kvRole="primaryAction"] {
     border-color: {{actionPrimary}};
     background: {{actionPrimary}};
-    color: #FFFFFF;
+    color: {{actionPrimaryInk}};
     font-weight: 600;
 }
 
 QPushButton[kvRole="primaryAction"]:hover {
     border-color: {{actionPrimaryHover}};
     background: {{actionPrimaryHover}};
-    color: #FFFFFF;
+    color: {{actionPrimaryInk}};
 }
 
 QPushButton[kvRole="primaryAction"]:pressed {
     border-color: {{actionPrimaryActive}};
     background: {{actionPrimaryActive}};
-    color: #FFFFFF;
+    color: {{actionPrimaryInk}};
 }
 
 QPushButton[kvRole="primaryAction"]:disabled {
@@ -919,6 +901,7 @@ QToolButton[kvRole="sidebarAction"]:hover {
         {"{{accentText}}", palette.accentText},
         {"{{actionPrimaryHover}}", palette.actionPrimaryHover},
         {"{{actionPrimaryActive}}", palette.actionPrimaryActive},
+        {"{{actionPrimaryInk}}", palette.actionPrimaryInk},
         {"{{actionPrimary}}", palette.actionPrimary},
         {"{{danger}}", palette.danger},
     };
@@ -995,7 +978,7 @@ void ThemeManager::setInterfaceFontSizePixels(const int fontSizePixels) {
 }
 
 void ThemeManager::apply() {
-    palette_ = useDarkPalette() ? darkPalette() : lightPalette();
+    palette_ = paletteFor(useDarkPalette() ? ket::Theme::Dark : ket::Theme::Light);
 
     QPalette nativePalette;
     nativePalette.setColor(QPalette::Window, QColor(palette_.pageBackground));

@@ -3,20 +3,19 @@
 Proposed extension: [installable themes and VS Code color-theme compatibility](theming.md).
 
 KetPlus adapts the Két Design System (`@ketvietlab/design-system`, now in
-`ketsuite/packages/design-system` of ketviet; this palette follows 0.1.44 at
-`e8adee2d`) to a native Qt Widgets and Qt Quick application. The goal is visual continuity
+`ketsuite/packages/design-system` of ketviet) to a native Qt Widgets and Qt Quick
+application. The colours come from its tokens through the Két Qt kit
+(`ket::Tokens`, at the ket-qt commit `core/cmake/Dependencies.cmake` pins). The goal is visual continuity
 without copying web-specific implementation details.
 
 ## Principles
 
 - Dense, operational layout with restrained decoration
 - Neutral canvas and panel surfaces with quiet borders
-- Két Blue for active and focused states. The palette follows Két Design System
-  0.1.44 (ketviet `e8adee2d`): accent `#1746FF` (hover `#1238DB`, active
-  `#102EB3`) for indicators, borders and focus; `accentText` (`#1238DB` light,
-  `#9EB5FF` dark) for accent-coloured text and icons; and the softer
-  `actionPrimary` `#365FD6` (hover `#3151C6`, pressed `#2B46B7`) for filled
-  primary buttons with white text
+- Két Blue for active and focused states: the `accent` tokens for indicators,
+  borders and focus (`color-focus`); `accent-text` for accent-coloured text and
+  icons; and `action-primary-bg` with `action-primary-ink` for filled primary
+  buttons
 - Two-pixel active-tab indicator
 - SF Pro for application chrome when present, then bundled Inter, then the
   platform UI font; Agent Workspace and QWidget chrome share that resolver.
@@ -26,8 +25,10 @@ without copying web-specific implementation details.
 
 ## Implementation
 
-`ThemeManager` owns the semantic light and dark palettes, applies the Qt palette
-and stylesheet, and follows the operating system by default. The selected mode
+`ThemeManager` builds its light and dark `ThemePalette` from Két DS tokens (a
+translucent token is composited over `panel-bg`, so every role is an opaque
+`#RRGGBB`) and syntax colours from the kit's `ket::syntaxRecipe`. It applies the
+Qt palette and stylesheet, and follows the operating system by default. The selected mode
 is persisted through `QSettings` and can be changed from `View > Appearance`.
 The shared Settings dialog also owns interface, editor, terminal, and Markdown
 preview typography. KetPlus Desktop applies one normalized snapshot to both CM

@@ -1,3 +1,5 @@
+#include "KetSyntax.h"
+#include "KetTokens.h"
 #include "app/SettingsDialog.h"
 #include "git/GitParser.h"
 #include "ui/Theme.h"
@@ -225,15 +227,21 @@ void RefactorWave1ContractTest::saveCurrentlyAppliesEveryExtensionPage() {
 
 void RefactorWave1ContractTest::currentNativePaletteBaseline() {
     ketplus::ThemeManager theme(*qApp);
+    const auto token = [](const char* name, const ket::Theme ketTheme) {
+        return ket::Tokens::color(QString::fromLatin1(name), ketTheme).name().toUpper();
+    };
 
+    // Every role comes from a Két DS token (or the kit's syntax recipe), not a literal.
     theme.setMode(ketplus::ThemeManager::Mode::Light);
     const auto light = theme.palette();
     QVERIFY(!light.dark);
-    QCOMPARE(light.pageBackground, QStringLiteral("#F7F5F5"));
-    QCOMPARE(light.panelBackground, QStringLiteral("#FFFFFF"));
-    QCOMPARE(light.textMain, QStringLiteral("#1A1C20"));
-    QCOMPARE(light.info, QStringLiteral("#0A7C9C"));
-    QCOMPARE(light.syntaxKeyword, QStringLiteral("#3F4DB8"));
+    QCOMPARE(light.pageBackground, token("page-bg", ket::Theme::Light));
+    QCOMPARE(light.panelBackground, token("panel-bg", ket::Theme::Light));
+    QCOMPARE(light.textMain, token("text-main", ket::Theme::Light));
+    QCOMPARE(light.accent, token("accent", ket::Theme::Light));
+    QCOMPARE(light.info, token("info", ket::Theme::Light));
+    QCOMPARE(light.actionPrimaryInk, token("action-primary-ink", ket::Theme::Light));
+    QCOMPARE(light.syntaxKeyword, ket::syntaxRecipe(ket::Theme::Light).keyword.name().toUpper());
     QVERIFY(light.syntaxKeyword != light.syntaxType);
     QVERIFY(light.syntaxNumber != light.syntaxKeyword);
     QVERIFY(!light.focus.isEmpty());
@@ -242,11 +250,14 @@ void RefactorWave1ContractTest::currentNativePaletteBaseline() {
     theme.setMode(ketplus::ThemeManager::Mode::Dark);
     const auto dark = theme.palette();
     QVERIFY(dark.dark);
-    QCOMPARE(dark.pageBackground, QStringLiteral("#1B1F24"));
-    QCOMPARE(dark.panelBackground, QStringLiteral("#1D2228"));
-    QCOMPARE(dark.accent, QStringLiteral("#1746FF")); // Két Blue, design system 0.1.44
-    QCOMPARE(dark.textMain, QStringLiteral("#E8ECF1"));
-    QCOMPARE(dark.info, QStringLiteral("#5EC8E8"));
+    QCOMPARE(dark.pageBackground, token("page-bg", ket::Theme::Dark));
+    QCOMPARE(dark.panelBackground, token("panel-bg", ket::Theme::Dark));
+    QCOMPARE(dark.accent, token("accent", ket::Theme::Dark));
+    QCOMPARE(dark.textMain, token("text-main", ket::Theme::Dark));
+    QCOMPARE(dark.info, token("info", ket::Theme::Dark));
+    // Translucent dark borders are composited over the panel: opaque #RRGGBB.
+    QCOMPARE(dark.border.size(), 7);
+    QVERIFY(dark.border != dark.panelBackground);
     QVERIFY(!dark.positive.isEmpty());
     QVERIFY(!dark.warning.isEmpty());
     QVERIFY(!dark.syntaxString.isEmpty());
