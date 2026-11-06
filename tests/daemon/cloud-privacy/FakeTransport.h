@@ -69,6 +69,8 @@ class Transport final : public QNetworkAccessManager {
             (!keyRead && (verb != "POST" || (!path.endsWith(QStringLiteral("/responses:append")) &&
                                              !path.endsWith(QStringLiteral("/ack")) &&
                                              path != QStringLiteral("/v2/events:append") &&
+                                             path != QStringLiteral("/v2/daemon/challenges") &&
+                                             path != QStringLiteral("/v2/daemon/credentials") &&
                                              path != QStringLiteral("/v2/daemon/heartbeat")))))
             qFatal("Unexpected request; fake transport never opens a socket");
         requests.append(request);

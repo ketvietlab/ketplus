@@ -108,6 +108,25 @@ class CloudPrivacyTestAccess {
         for (auto& entry : client.senderKeys_)
             entry.second = QDateTime::currentDateTimeUtc().addSecs(-1);
     }
+    // Asks for a fresh daemon credential, as an expired token does.
+    static void credential(CloudControlClient& client, CloudControlClient::ReadyCallback done) {
+        client.daemonToken_.clear();
+        client.ensureDaemonCredential(std::move(done));
+    }
+    static void pollCommands(CloudControlClient& client) { client.pollCommands(); }
+    static void wakeCommandPoll(CloudControlClient& client) { client.wakeCommandPoll(); }
+    static bool commandPollInFlight(const CloudControlClient& client) {
+        return client.commandPollInFlight_;
+    }
+    static bool commandPollWaiting(const CloudControlClient& client) {
+        return !client.commandPollRetryAt_.hasExpired();
+    }
+    static int commandPollFailures(const CloudControlClient& client) {
+        return client.commandPollFailures_;
+    }
+    static void expireCommandPollBackoff(CloudControlClient& client) {
+        client.commandPollRetryAt_ = QDeadlineTimer(0);
+    }
     static qsizetype cachedSenderKeys(const CloudControlClient& client) {
         return client.senderKeys_.size();
     }
