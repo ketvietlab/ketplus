@@ -312,6 +312,9 @@ class LocalJournal final {
   private:
     bool initializeAgents();
     bool initializeRemoteAudit();
+    // The audit's 90-day, 10,000-row bound. Run from pruneRetention and every 256 audit rows,
+    // because commands refused before they ran store no command result to trigger it.
+    bool pruneRemoteAudit();
     // Inside deleteSession's transaction: releases the number and ends undelivered messages.
     bool releaseAgentState(const QString& sessionId, qint64 generation, QString* error);
     bool writeCommandResult(const QString& messageId, const QJsonObject& result, bool replace);
@@ -352,6 +355,7 @@ class LocalJournal final {
     QSqlDatabase database_;
     mutable QString error_;
     int commandResultsSincePrune_{0};
+    int remoteCommandsSincePrune_{0};
 };
 
 } // namespace ketplus::daemon

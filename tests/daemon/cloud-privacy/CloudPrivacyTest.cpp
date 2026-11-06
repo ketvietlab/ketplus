@@ -2378,6 +2378,35 @@ class CloudPrivacyTest final : public QObject {
         QCOMPARE(outcomes.value("command-redelivered"), QStringLiteral("ok"));
     }
 
+    // Refused commands are audited without storing a command result, so the audit's own writes
+    // must keep it bounded.
+    void theRemoteCommandAuditStaysBoundedByItsOwnWrites() {
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite"));
+        const QDateTime expired =
+            QDateTime::currentDateTimeUtc().addDays(-LocalJournal::remoteCommandRetentionDays - 1);
+        const int written = LocalJournal::maximumRemoteCommands + 600;
+        for (int row = 0; row < written; ++row) {
+            QVERIFY(journal.recordRemoteCommand({QStringLiteral("command-%1").arg(row),
+                                                 "turn.start",
+                                                 "phone-1",
+                                                 1,
+                                                 {},
+                                                 "sender_key_unavailable",
+                                                 row < 100 ? expired : QDateTime{}}));
+        }
+        const auto kept = journal.remoteCommands({}, written);
+        QVERIFY(kept);
+        // Pruned every 256 rows: never more than 255 above the bound, and no expired row.
+        QVERIFY2(kept->size() <= LocalJournal::maximumRemoteCommands + 255,
+                 qPrintable(QString::number(kept->size())));
+        QVERIFY(kept->size() >= LocalJournal::maximumRemoteCommands);
+        QVERIFY(std::none_of(kept->cbegin(), kept->cend(), [&expired](const auto& entry) {
+            return entry.recordedAt <= expired;
+        }));
+        QCOMPARE(kept->first().commandId, QStringLiteral("command-%1").arg(written - 1));
+    }
+
     void remoteCommandsThatCanChangeSomethingAreAuditedOnce() {
         QTemporaryDir dir;
         Context c(dir.filePath("journal.sqlite"));

@@ -330,7 +330,9 @@ and time (#86). Only kinds known to read (`remoteCommandMayChange` in
 recorded. A redelivered command keeps the row of its first outcome. A command
 whose signature did not verify against a pinned device is recorded with that
 refusal's result code, so the device id is the one it claimed. Rows are kept
-for 90 days and at most 10,000. The local `remote.audit` request returns them
+for 90 days and at most 10,000, applied by the journal retention pass and by
+every 256th audit row (a command refused before it ran stores no command result
+to trigger that pass). The local `remote.audit` request returns them
 newest first (`limit`, 1–500, default 100; `device_id` to show one device's).
 
 Workspace file reads are fenced by the worktree revision the daemon publishes in

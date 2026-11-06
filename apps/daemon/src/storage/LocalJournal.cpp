@@ -805,12 +805,6 @@ bool LocalJournal::pruneRetention() {
         QStringLiteral("DELETE FROM session_tombstones WHERE datetime(deleted_at) < "
                        "datetime('now', '-%1 days')")
             .arg(tombstoneRetentionDays),
-        QStringLiteral("DELETE FROM remote_command_audit WHERE datetime(recorded_at) < "
-                       "datetime('now', '-%1 days')")
-            .arg(remoteCommandRetentionDays),
-        QStringLiteral("DELETE FROM remote_command_audit WHERE rowid NOT IN (SELECT rowid FROM "
-                       "remote_command_audit ORDER BY recorded_at DESC LIMIT %1)")
-            .arg(maximumRemoteCommands),
         QStringLiteral("DELETE FROM large_event_payload_chunks WHERE NOT EXISTS (SELECT 1 FROM "
                        "large_event_payloads p WHERE p.session_id = "
                        "large_event_payload_chunks.session_id AND p.generation = "
@@ -823,7 +817,7 @@ bool LocalJournal::pruneRetention() {
                        "WHERE s.id = background_tasks.session_id AND s.generation = "
                        "background_tasks.generation)"),
     };
-    if (!pruneOrphanLargePayloads())
+    if (!pruneOrphanLargePayloads() || !pruneRemoteAudit())
         return false;
     for (const QString& statement : statements) {
         if (!query.exec(statement)) {
