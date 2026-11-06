@@ -258,6 +258,16 @@ void RefactorWave1ContractTest::themeFollowsKetAppearance() {
     changes.clear();
     theme.setMode(ketplus::ThemeManager::Mode::Dark);
     QCOMPARE(changes.size(), 1);
+
+    // A change made on ket::Appearance itself (KétPlus Terminal, or the system scheme while
+    // following it) reaches the palette.
+    changes.clear();
+    appearance.setMode(ket::Appearance::Mode::Light);
+    QCOMPARE(changes.size(), 1);
+    QVERIFY(!theme.palette().dark);
+    appearance.setMode(ket::Appearance::Mode::Dark);
+    QCOMPARE(changes.size(), 2);
+    QVERIFY(theme.palette().dark);
 }
 
 void RefactorWave1ContractTest::themeInstallsTheKetStyle() {
