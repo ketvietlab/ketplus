@@ -47,6 +47,21 @@ struct StoredSession final {
     qint64 compactWindow{0};
 };
 
+// One command a paired device sent this Mac through the relay that could change something
+// (#86): who sent it, what it was and how it ended. The relay keeps its own record; this one
+// stays on the Mac.
+struct RemoteCommandAudit final {
+    QString commandId;
+    QString kind;
+    // As the command's content names it; the result code says whether its signature was
+    // verified against a pinned device.
+    QString deviceId;
+    int deviceKeyVersion{0};
+    QString sessionId;
+    QString resultCode;
+    QDateTime recordedAt;
+};
+
 struct SessionHead final {
     qint64 generation{0};
     qint64 cursor{0};
@@ -224,6 +239,13 @@ class LocalJournal final {
     // For an operation whose outcome is recorded in two steps: a provisional result before
     // the side effect, then the real one once it is known.
     bool replaceCommandResult(const QString& messageId, const QJsonObject& result);
+    // Records how a remote command ended. A redelivered command keeps the row of its first
+    // outcome, so the record shows what was done once.
+    bool recordRemoteCommand(const RemoteCommandAudit& entry);
+    // Newest first, at most `limit`, only those of deviceId unless it is empty; nullopt on a
+    // failed read, with errorString() set.
+    [[nodiscard]] std::optional<QList<RemoteCommandAudit>> remoteCommands(const QString& deviceId,
+                                                                          int limit) const;
     bool beginAttachment(const QString& sessionId, qint64 generation, const QString& attachmentId,
                          qint64 expectedRevision, const QString& name, const QString& mediaType,
                          qint64 totalBytes, int chunkCount, const QString& digestSha256,
@@ -253,6 +275,8 @@ class LocalJournal final {
     static constexpr int commandResultRetentionDays = 7;
     static constexpr int maximumCommandResults = 10000;
     static constexpr int tombstoneRetentionDays = 90;
+    static constexpr int remoteCommandRetentionDays = 90;
+    static constexpr int maximumRemoteCommands = 10000;
     bool pruneRetention();
     // The latest background task snapshot of each session that reported one.
     bool storeBackgroundTasks(const QString& sessionId, qint64 generation, const QJsonArray& tasks);
@@ -287,6 +311,7 @@ class LocalJournal final {
 
   private:
     bool initializeAgents();
+    bool initializeRemoteAudit();
     // Inside deleteSession's transaction: releases the number and ends undelivered messages.
     bool releaseAgentState(const QString& sessionId, qint64 generation, QString* error);
     bool writeCommandResult(const QString& messageId, const QJsonObject& result, bool replace);

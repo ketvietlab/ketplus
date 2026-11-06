@@ -83,6 +83,10 @@ class CloudPrivacyTestAccess {
     static void validCredential(CloudControlClient& client) {
         client.daemonTokenExpiresAt_ = QDateTime::currentDateTimeUtc().addSecs(3600);
     }
+    static void acknowledge(CloudControlClient& client, const QJsonObject& command,
+                            const QJsonObject& result) {
+        client.acknowledgeCommand(command, result);
+    }
     static void execute(CloudControlClient& client, const QJsonObject& command) {
         client.executeCommand(command);
     }

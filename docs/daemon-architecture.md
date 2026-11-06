@@ -322,6 +322,17 @@ repository's volume has less than 2 GiB free; both refuse with
 `worktree_quota_exceeded` before git runs (`RemoteWorktreeQuota`, in memory,
 #86).
 
+Every remote command that can change something is recorded in the journal's
+`remote_command_audit` table when it is acknowledged: command id, kind, the
+sending device id and key version its content names, session id, result code
+and time (#86). Only kinds known to read (`remoteCommandMayChange` in
+`RemoteAudit.cpp`) are left out, so a kind this build does not know is
+recorded. A redelivered command keeps the row of its first outcome. A command
+whose signature did not verify against a pinned device is recorded with that
+refusal's result code, so the device id is the one it claimed. Rows are kept
+for 90 days and at most 10,000. The local `remote.audit` request returns them
+newest first (`limit`, 1–500, default 100; `device_id` to show one device's).
+
 Workspace file reads are fenced by the worktree revision the daemon publishes in
 each heartbeat (a hash of HEAD, the status and dirty content). The relay only
 accepts a read naming the revision it lists, which trails the worktree by up to a
