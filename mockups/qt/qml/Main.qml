@@ -111,6 +111,12 @@ Basic.ApplicationWindow {
 
     function notify(message) { toast.show(message) }
 
+    // The image viewer over the whole window, as the app opens a capture or an image file.
+    function openImages(images, index) {
+        imageViewer.items = images
+        imageViewer.openAt(index)
+    }
+
     // Settings › Agent models opens the model picker in the Agent Workspace, as the app does.
     function openAgentModels() {
         showScreen("workspace")
@@ -128,7 +134,9 @@ Basic.ApplicationWindow {
 
     Component.onCompleted: {
         showScreen(Mock.initialScreen + (Mock.initialState ? "/" + Mock.initialState : ""))
-        if (Mock.initialPanel && screen === "workspace")
+        if (Mock.initialPanel === "images")
+            Qt.callLater(() => openImages(Fixtures.captures, 1))
+        else if (Mock.initialPanel && screen === "workspace")
             Qt.callLater(() => workspace.openComposerPanel(Mock.initialPanel))
     }
 
@@ -264,6 +272,26 @@ Basic.ApplicationWindow {
     property alias deleteDialog: deleteDialog
     property alias spotlight: spotlight
     property alias picker: picker
+
+    KetLightbox {
+        id: imageViewer
+        tools: KetTheme.LightboxTool.ZoomOut | KetTheme.LightboxTool.ZoomLevel
+               | KetTheme.LightboxTool.ZoomIn | KetTheme.LightboxTool.Rotate
+               | KetTheme.LightboxTool.Copy | KetTheme.LightboxTool.Download
+               | KetTheme.LightboxTool.Print | KetTheme.LightboxTool.Fullscreen
+        onToolTriggered: tool => {
+            if (tool === KetTheme.LightboxTool.Copy)
+                app.notify("Copied the image")
+            else if (tool === KetTheme.LightboxTool.Download)
+                app.notify("Saved " + (item ? item.caption.split(" · ").pop() : "the image")
+                           + " to Downloads")
+            else if (tool === KetTheme.LightboxTool.Print && item)
+                Mock.printImage(item.source, rotationAngle, item.caption)
+            else if (tool === KetTheme.LightboxTool.Fullscreen)
+                app.visibility = app.visibility === Window.FullScreen ? Window.Windowed
+                                                                      : Window.FullScreen
+        }
+    }
 
     KetToast { id: toast }
 }

@@ -1,0 +1,8 @@
+sequenceDiagram
+    participant U as User
+    participant D as KetPlus
+    participant A as Agent
+    U->>D: Send a message
+    D->>A: Start a turn
+    A-->>D: Activity and answer
+    D-->>U: Transcript, then Waiting for you

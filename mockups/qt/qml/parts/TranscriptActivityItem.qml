@@ -160,13 +160,14 @@ Column {
                 source: item.step.images && item.step.images.length ? item.step.images[0].source : ""
                 fillMode: Image.PreserveAspectCrop
             }
-            TapHandler { onTapped: item.window.notify("Opened the generated image") }
+            HoverHandler { cursorShape: Qt.PointingHandCursor }
+            TapHandler { onTapped: item.window.openImages(item.step.images, 0) }
         }
 
         KetGallery {
             visible: item.step.kind !== "generate" && !!(item.step.images && item.step.images.length)
             images: item.step.images || []
-            onActivated: index => item.window.notify("Opened " + item.step.images[index].caption)
+            onActivated: index => item.window.openImages(item.step.images, index)
         }
 
         // An image the agent generated, at reading size with its revised prompt.

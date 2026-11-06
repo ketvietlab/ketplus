@@ -1,0 +1,11 @@
+flowchart LR
+    subgraph Indicators
+        rows["Working rows"]
+        bars["Activity bars"]
+    end
+    clock(("animationClock"))
+    redraw["One window redraw"]
+    rows -->|hold| clock
+    bars -->|hold| clock
+    clock -->|"20 Hz in front"| redraw
+    clock -.->|"4 Hz behind"| redraw

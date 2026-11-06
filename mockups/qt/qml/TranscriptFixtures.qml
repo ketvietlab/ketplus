@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 pragma Singleton
 import QtQuick
+import KetPlusMock
 
 // One transcript per provider with every content type its journal events produce
 // (measured on a working journal: Claude Agent SDK, Codex app-server and Cursor CLI). The
@@ -98,7 +99,7 @@ QtObject {
               command: "ctest --test-dir build -R sidebar", output: "100% tests passed, 0 tests failed out of 2" },
             { kind: "tool", title: "Stopped a background task", detail: "dev server · port 5173" }
         ] },
-        { type: "answer", markdown: "The sidebar now steps every working row on **one shared clock**: 20 steps a second in front, 4 behind another app.\n\n| Build | Idle CPU |\n|---|---|\n| Before | 41–47% |\n| After | 0–2% |\n\n```qml\nrotation: 360 * (KetTheme.animationClock % spinMs) / spinMs\n```" },
+        { type: "answer", markdown: "The sidebar now steps every working row on **one shared clock**: 20 steps a second in front, 4 behind another app.\n\n| Build | Idle CPU |\n|---|---|\n| Before | 41–47% |\n| After | 0–2% |\n\n```qml\nrotation: 360 * (KetTheme.animationClock % spinMs) / spinMs\n```\n\nEvery indicator holds the same clock:\n\n```mermaid\n" + Fixtures.mermaid.sharedClock + "\n```" },
         { type: "changes", files: [
             { name: "AgentSidebar.qml", path: "modules/ai/src/agent/qml", added: 3, removed: 1 },
             { name: "SpinClock.qml", path: "modules/ai/src/agent/qml", added: 48, removed: 0 }] },

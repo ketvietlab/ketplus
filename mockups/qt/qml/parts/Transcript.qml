@@ -187,9 +187,9 @@ Item {
 
         KetGallery {
             visible: transcript.kind === "activity"
-            images: ["sidebar", "editor", "settings"].map(name => ({
-                source: transcript.asset + "screenshot-" + name + ".png", caption: name }))
-            onActivated: index => transcript.window.notify("Opened capture " + (index + 1))
+            images: Fixtures.captures.map(capture => ({ source: capture.source,
+                                                        caption: capture.caption.split(" · ")[1] }))
+            onActivated: index => transcript.window.openImages(Fixtures.captures, index)
         }
 
         Note {
@@ -199,9 +199,10 @@ Item {
             message: "Sent to @agent/9410 · Review the startup flow · started a turn · reply requested."
         }
 
-        KetMarkdown {
+        MarkdownView {
             visible: ["activity", "running", "short"].includes(transcript.kind)
             width: parent.width
+            window: transcript.window
             markdown: transcript.kind === "running" ? Fixtures.runningAnswer
                 : transcript.kind === "short" ? "The worktree is **clean**: no staged or unstaged changes, and `develop` is even with `origin/develop`."
                 : Fixtures.activityAnswer
