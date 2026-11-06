@@ -70,6 +70,11 @@ class ControlV2Client final : public QObject {
     QHash<QString, QJsonObject> pairingClaims_;
     // Ticket id -> the host its QR code named.
     QHash<QString, QJsonObject> pairingHosts_;
+    // "machine/version" -> host key fingerprint, written only by this client when it accepts a
+    // pairing, in its own credential account: nothing the relay returns can add one (#88).
+    QJsonObject hostPins_;
+    bool hostPinsStored_{false};
+    bool storeHostPins(const QJsonObject& pins, QString* error);
     // A rotated credential that could not be stored yet; written again on the next access.
     bool credentialUnsaved_{false};
     QString installationId_;

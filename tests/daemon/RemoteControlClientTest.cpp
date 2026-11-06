@@ -14,18 +14,23 @@ class RemoteControlTestAccess {
     static void transport(ControlV2Client& client, QNetworkAccessManager& transport) {
         client.transport_ = &transport;
     }
+    // As acceptPairing records it in the credential.
     static void paired(ControlV2Client& client) {
         client.deviceId_ = "remote-client";
         client.keyVersion_ = 1;
+        client.credential_.insert("deviceId", "remote-client");
+        client.credential_.insert("deviceKeyVersion", 1);
     }
     static void pinHost(ControlV2Client& client, const QString& machine, int version,
                         const QJsonObject& keys) {
-        auto pins = client.credential_.value("hostPins").toObject();
+        auto pins = client.hostPins_;
         pins.insert(QStringLiteral("%1/%2").arg(machine).arg(version),
                     CloudCrypto::keyFingerprint(keys));
-        client.credential_.insert("hostPins", pins);
+        if (!client.storeHostPins(pins, nullptr))
+            qFatal("Synthetic host pin failed");
     }
     static QJsonObject credential(const ControlV2Client& client) { return client.credential_; }
+    static QJsonObject hostPins(const ControlV2Client& client) { return client.hostPins_; }
     static void expireCredential(ControlV2Client& client) {
         client.credential_.insert("expiresAt", "2020-01-01T00:00:00.000Z");
     }
@@ -182,10 +187,7 @@ class RemoteControlClientTest final : public QObject {
         QVERIFY(!client.acceptPairing(foreign));
         QVERIFY(client.acceptPairing(ticket));
         // The host's keys from the QR code are pinned with the pairing.
-        QCOMPARE(RemoteControlTestAccess::credential(client)
-                     .value("hostPins")
-                     .toObject()
-                     .value("linux-host/1"),
+        QCOMPARE(RemoteControlTestAccess::hostPins(client).value("linux-host/1"),
                  host.value("fingerprint"));
         answered = false;
         client.claimPairing("ticket", QString(64, 'A'), "Desktop fixture", host,
@@ -298,6 +300,39 @@ class RemoteControlClientTest final : public QObject {
                 QJsonObject{{"deviceId", "linux-host"}, {"keyVersion", 1}, {"keys", relayKeys}});
             QCOMPARE(read(client), QStringLiteral("This host is not paired with this computer."));
         }
+    }
+    void hostPinsTheRelayReturnsWithACredentialAreIgnored() {
+        FixtureTransport network;
+        ControlV2Client client(QUrl("https://synthetic.invalid/native/ketplus"));
+        EncryptedFixture fixture(client, network);
+        CredentialStore relayStore("relay-pin-injection");
+        const QJsonObject relayKeys = CloudCrypto(&relayStore).publicKeys();
+        const QJsonObject injected{{"linux-host/1", CloudCrypto::keyFingerprint(relayKeys)},
+                                   {"linux-host/2", CloudCrypto::keyFingerprint(relayKeys)}};
+        // A refresh response naming pins changes nothing this client pinned.
+        RemoteControlTestAccess::expireCredential(client);
+        auto rotated = credential();
+        rotated.insert("hostPins", injected);
+        network.replies.insert(prefix + "/v2/auth/refresh", rotated);
+        network.replies.insert(prefix + "/v2/mobile/worktrees", QJsonArray{});
+        QString failure = "unanswered";
+        client.listWorktrees([&](auto, auto error) { failure = error; });
+        QTRY_VERIFY(failure != "unanswered");
+        QCOMPARE(failure, QString{});
+        QCOMPARE(RemoteControlTestAccess::hostPins(client),
+                 (QJsonObject{{"linux-host/1", CloudCrypto::keyFingerprint(fixture.hostKeys)}}));
+        network.replies.insert(
+            prefix + "/v2/mobile/device-keys/linux-host/1",
+            QJsonObject{{"deviceId", "linux-host"}, {"keyVersion", 1}, {"keys", relayKeys}});
+        failure = "unanswered";
+        client.events(session, 0, [&](auto, auto error) { failure = error; });
+        QTRY_VERIFY(failure != "unanswered");
+        QCOMPARE(failure, QStringLiteral("This host is not paired with this computer."));
+        // Nor does a sign-in credential: a new account starts with no pins at all.
+        auto signedIn = credential();
+        signedIn.insert("hostPins", injected);
+        QVERIFY(client.setCredential(signedIn));
+        QVERIFY(RemoteControlTestAccess::hostPins(client).isEmpty());
     }
     void terminalResultsRequireTheHostSignatureAndOriginalCommandScope() {
         FixtureTransport network;
@@ -515,7 +550,7 @@ class RemoteControlClientTest final : public QObject {
         client.listWorktrees([&](auto, auto error) { failure = error; });
         QTRY_VERIFY(failure != "unanswered");
         QCOMPARE(stored().value("refreshToken"), rotated.value("refreshToken"));
-        QVERIFY(stored().value("hostPins").toObject().contains("linux-host/1"));
+        QVERIFY(RemoteControlTestAccess::hostPins(client).contains("linux-host/1"));
     }
     void refreshRetriesKeepOneOperationIdentityAfterTransportLoss() {
         FixtureTransport network;

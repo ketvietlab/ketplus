@@ -29,6 +29,16 @@ ControlV2Client::ControlV2Client(QUrl origin, QObject* parent)
     credential_ = QJsonDocument::fromJson(credentials_.read("user-session")).object();
     deviceId_ = credential_.value("deviceId").toString();
     keyVersion_ = credential_.value("deviceKeyVersion").toInt(1);
+    const QByteArray pins = credentials_.read("host-pins");
+    hostPinsStored_ = !pins.isEmpty();
+    hostPins_ = QJsonDocument::fromJson(pins).object();
+}
+bool ControlV2Client::storeHostPins(const QJsonObject& pins, QString* error) {
+    if (!credentials_.write("host-pins", QJsonDocument(pins).toJson(QJsonDocument::Compact), error))
+        return false;
+    hostPins_ = pins;
+    hostPinsStored_ = true;
+    return true;
 }
 QJsonObject ControlV2Client::identity(QString* error) {
     if (installationId_.isEmpty()) {

@@ -35,6 +35,11 @@ bool ControlV2Client::setCredential(const QJsonObject& credential, QString* erro
     auto value = withDeadline(credential);
     value.remove("deviceId");
     value.remove("deviceKeyVersion");
+    // Another account starts unpaired: no host pins carry over.
+    if (!credentials_.remove("host-pins", error))
+        return false;
+    hostPins_ = {};
+    hostPinsStored_ = false;
     if (!credentials_.write("user-session", QJsonDocument(value).toJson(QJsonDocument::Compact),
                             error))
         return false;
@@ -187,8 +192,6 @@ void ControlV2Client::accessToken(std::function<void(const QString&, const QStri
                 auto value = withDeadline(response.toObject());
                 value.insert("deviceId", deviceId_);
                 value.insert("deviceKeyVersion", keyVersion_);
-                if (credential_.contains("hostPins"))
-                    value.insert("hostPins", credential_.value("hostPins"));
                 // The old refresh token may already be spent: this process keeps the rotated
                 // one, and the write is retried on the next access. The refresh operation stays
                 // until it is stored, so a restart replays the same rotation (#88).
@@ -232,6 +235,11 @@ void ControlV2Client::signOut(Callback done) {
     QString localError;
     if (!credentials_.remove("user-session", &localError) && localError.isEmpty())
         localError = "Unable to remove local credentials.";
+    QString pinsError;
+    if (!credentials_.remove("host-pins", &pinsError) && localError.isEmpty())
+        localError = pinsError.isEmpty() ? "Unable to remove host pins." : pinsError;
+    hostPins_ = {};
+    hostPinsStored_ = false;
     QString operationError;
     if (!credentials_.remove("refresh-operation", &operationError) && localError.isEmpty())
         localError =
@@ -395,12 +403,13 @@ bool ControlV2Client::acceptPairing(const QJsonObject& ticket, QString* error) {
     value.insert("deviceId", device.value("id"));
     value.insert("deviceKeyVersion", device.value("keyVersion"));
     // "machine/version" -> key fingerprint: senderKey accepts only these host keys (#88).
-    auto pins = credential_.value("hostPins").toObject();
+    auto pins = hostPins_;
     pins.insert(QStringLiteral("%1/%2")
                     .arg(host.value("machineId").toString())
                     .arg(host.value("keyVersion").toInt()),
                 host.value("fingerprint"));
-    value.insert("hostPins", pins);
+    if (!storeHostPins(pins, error))
+        return false;
     if (!credentials_.write("user-session", QJsonDocument(value).toJson(QJsonDocument::Compact),
                             error))
         return false;
