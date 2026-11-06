@@ -106,6 +106,9 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/LocalJournalLargeEvents.cpp
     src/storage/LocalJournalOutput.cpp
     src/storage/LocalJournalRemoteAudit.cpp
+    src/storage/LocalJournalSpace.cpp
+    src/storage/JournalSpace.cpp
+    src/storage/JournalSpace.h
     src/storage/LocalJournalTranscriptWindow.cpp
     src/storage/LocalJournal.h
     src/storage/McpMediaPreview.cpp

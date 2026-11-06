@@ -9,15 +9,18 @@
 #include "providers/CodexAdapter.h"
 #include "providers/CursorAdapter.h"
 #include "runtime/SessionHost.h"
+#include "storage/JournalSpace.h"
 #include "storage/LocalJournal.h"
 
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QLockFile>
 #include <QRandomGenerator>
 #include <QSaveFile>
 #include <QStandardPaths>
+#include <QTimer>
 
 #include <utility>
 
@@ -79,6 +82,16 @@ bool DaemonService::start() {
     if (token.isEmpty()) {
         return false;
     }
+    // One daemon per journal: the startup compaction below replaces the file, which must not
+    // happen under another daemon's open connection. A daemon being replaced may still be
+    // closing.
+    journalLock_ = std::make_unique<QLockFile>(configuration_.statePath + QStringLiteral(".lock"));
+    if (!journalLock_->tryLock(5'000)) {
+        error_ = QStringLiteral("Another KetPlus Daemon uses this journal.");
+        journalLock_.reset();
+        return false;
+    }
+    compactJournal();
     journal_ = std::make_unique<LocalJournal>(configuration_.statePath);
     if (!journal_->isOpen()) {
         error_ = journal_->errorString();
@@ -126,7 +139,38 @@ bool DaemonService::start() {
     // ADR 0027: agents reach this endpoint through `ketplus_daemon --mcp-agents`.
     host_->setAgentEndpoint(ipc_->fullServerName(), QCoreApplication::applicationFilePath());
     cloud_->start();
+    spaceTimer_ = new QTimer(this);
+    spaceTimer_->setInterval(reclaimIntervalMs);
+    connect(spaceTimer_, &QTimer::timeout, this, &DaemonService::reclaimJournalSpace);
+    spaceTimer_->start();
     return true;
+}
+
+void DaemonService::compactJournal() {
+    const auto megabytes = [](const qint64 bytes) { return double(bytes) / (1024.0 * 1024.0); };
+    const auto result = journal_space::migrateToIncrementalVacuum(configuration_.statePath);
+    switch (result.outcome) {
+    case journal_space::Migration::NotNeeded:
+        return;
+    case journal_space::Migration::Migrated:
+        qInfo("journal: compacted %.0f MB to %.0f MB; free pages are now reclaimed while idle",
+              megabytes(result.before.pageCount * result.before.pageSize),
+              megabytes(result.after.pageCount * result.after.pageSize));
+        return;
+    case journal_space::Migration::Deferred:
+    case journal_space::Migration::Failed:
+        // The journal keeps working as it was; the next start tries again.
+        qWarning("journal: compaction %s: %s",
+                 result.outcome == journal_space::Migration::Deferred ? "deferred" : "failed",
+                 qPrintable(result.error));
+        return;
+    }
+}
+
+void DaemonService::reclaimJournalSpace() {
+    if (!journal_ || (host_ && host_->hasActiveSessions()))
+        return;
+    journal_->reclaimFreePages(reclaimBatchPages);
 }
 
 QString DaemonService::errorString() const { return error_; }

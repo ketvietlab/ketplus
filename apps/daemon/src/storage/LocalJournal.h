@@ -1,6 +1,7 @@
 #pragma once
 
 #include "storage/AgentMessageRecord.h"
+#include "storage/JournalSpace.h"
 
 #include <QDateTime>
 #include <QHash>
@@ -246,6 +247,13 @@ class LocalJournal final {
     // failed read, with errorString() set.
     [[nodiscard]] std::optional<QList<RemoteCommandAudit>> remoteCommands(const QString& deviceId,
                                                                           int limit) const;
+    // The journal's pages (#128); nullopt on a failed read, with errorString() set.
+    [[nodiscard]] std::optional<journal_space::Usage> space() const;
+    // Returns up to `maximumPages` free pages to the disk when the journal is on incremental
+    // vacuum and holds at least minimumReclaimPages of them: how many it returned, nullopt on a
+    // failed write. A batch is one short write, so it can run between turns.
+    static constexpr qint64 minimumReclaimPages = 256;
+    std::optional<qint64> reclaimFreePages(qint64 maximumPages);
     bool beginAttachment(const QString& sessionId, qint64 generation, const QString& attachmentId,
                          qint64 expectedRevision, const QString& name, const QString& mediaType,
                          qint64 totalBytes, int chunkCount, const QString& digestSha256,
