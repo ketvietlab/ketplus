@@ -48,8 +48,6 @@ KetPlusTerminalMock --cwd=<folder> --zoom=1.25
 the first tab. The prompt and tab titles come from your own shell, so captures
 show your user and host name: do not commit them.
 
-## Known gaps in the shipped terminal
-
-- The 16 ANSI colours are libvterm's defaults (`TerminalSession` only takes the
-  default foreground and background), so dark blue is hard to read on the dark
-  theme. A token-based ANSI palette needs a `core` change.
+The shipped terminal now takes its font family and its 16 ANSI colours from the
+Két Qt kit (`terminal-ansi-0` … `terminal-ansi-15`), so the mock no longer works
+around either. The standalone window chrome is #146.

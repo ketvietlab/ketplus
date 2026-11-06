@@ -19,7 +19,7 @@ set(KETQT_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(KETQT_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(ketqt
     GIT_REPOSITORY https://github.com/ketvietlab/ket-qt.git
-    GIT_TAG 6ceb5385f59fdb5cd1f3be9e6b0c24bd32c2db3e # develop, through PR #26
+    GIT_TAG b286dce5344f05e55bcfd86c7c1d6e10a5ab2587 # terminal ANSI tokens, PR #29
 )
 
 # libvterm at the commit core/cmake/Dependencies.cmake pins.
@@ -75,7 +75,7 @@ add_library(terminal_mock_core STATIC
     "${core_dir}/src/terminal_app/TerminalTab.h"
 )
 target_include_directories(terminal_mock_core PUBLIC "${core_dir}/src")
-target_link_libraries(terminal_mock_core PUBLIC Qt6::Widgets terminal_mock_vterm)
+target_link_libraries(terminal_mock_core PUBLIC Qt6::Widgets KetQt::Tokens terminal_mock_vterm)
 if(UNIX AND NOT APPLE)
     target_link_libraries(terminal_mock_core PRIVATE util)
 endif()

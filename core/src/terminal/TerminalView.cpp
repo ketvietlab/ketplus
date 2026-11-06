@@ -2,6 +2,8 @@
 
 #include "terminal/TerminalSession.h"
 
+#include "KetTokens.h"
+
 #include <QAction>
 #include <QApplication>
 #include <QClipboard>
@@ -151,6 +153,13 @@ void TerminalView::applyTheme(const ThemePalette& palette) {
     viewportPalette.setColor(QPalette::Window, background_);
     viewportPalette.setColor(QPalette::Base, background_);
     viewport()->setPalette(viewportPalette);
+    // The 16 ANSI colours are Két DS tokens chosen to read on the terminal background.
+    const ket::Theme theme = palette.dark ? ket::Theme::Dark : ket::Theme::Light;
+    for (int index = 0; index < 16; ++index) {
+        const QColor ansi =
+            ket::Tokens::color(QStringLiteral("terminal-ansi-%1").arg(index), theme);
+        session_.setAnsiColor(index, ansi.red(), ansi.green(), ansi.blue());
+    }
     session_.setDefaultColors(foreground_.red(), foreground_.green(), foreground_.blue(),
                               background_.red(), background_.green(), background_.blue());
     viewport()->update();

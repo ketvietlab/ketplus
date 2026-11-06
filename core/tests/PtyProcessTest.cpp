@@ -4,6 +4,8 @@
 #include "terminal/TerminalView.h"
 #include "ui/Theme.h"
 
+#include "KetTokens.h"
+
 #include <QClipboard>
 #include <QDir>
 #include <QEvent>
@@ -15,6 +17,8 @@
 #include <QSignalSpy>
 #include <QTest>
 #include <QVBoxLayout>
+
+#include <cmath>
 
 namespace ketplus {
 namespace {
@@ -40,6 +44,7 @@ class PtyProcessTest final : public QObject {
   private slots:
     void runsInteractiveShellInRequestedDirectory();
     void rendersAnsiOutputThroughVterm();
+    void drawsAnsiColoursFromKetTokens();
     void usesSystemFixedFont();
     void appliesTerminalTypography();
     void appliesTerminalFontFamily();
@@ -92,6 +97,53 @@ void PtyProcessTest::rendersAnsiOutputThroughVterm() {
 #else
     QSKIP("The first PTY backend targets macOS and Linux.");
 #endif
+}
+
+void PtyProcessTest::drawsAnsiColoursFromKetTokens() {
+    // The 16 ANSI colours are Két DS tokens. Each reads at 4.5:1 on the terminal background
+    // except the background's own slot, and a theme switch recolours output already on screen.
+    ThemeManager theme(*qApp);
+    TerminalSession session;
+    TerminalView terminal(session);
+    QByteArray output;
+    for (int index = 0; index < 16; ++index) {
+        output += QByteArray("\x1b[") + QByteArray::number(index < 8 ? 30 + index : 82 + index) +
+                  QByteArray("mX");
+    }
+    output += QByteArray("\x1b[0m");
+
+    const auto luminance = [](const QColor& colour) {
+        const auto linear = [](const qreal value) {
+            return value <= 0.04045 ? value / 12.92 : std::pow((value + 0.055) / 1.055, 2.4);
+        };
+        return 0.2126 * linear(colour.redF()) + 0.7152 * linear(colour.greenF()) +
+               0.0722 * linear(colour.blueF());
+    };
+    for (const auto mode : {ThemeManager::Mode::Dark, ThemeManager::Mode::Light}) {
+        theme.setMode(mode);
+        terminal.applyTheme(theme.palette());
+        if (mode == ThemeManager::Mode::Dark) {
+            session.feedOutput(output);
+        }
+        QCOMPARE(session.lineText(0), QStringLiteral("XXXXXXXXXXXXXXXX"));
+        const ket::Theme kit = theme.palette().dark ? ket::Theme::Dark : ket::Theme::Light;
+        const qreal background = luminance(QColor(theme.palette().panelSubtle));
+        for (int index = 0; index < 16; ++index) {
+            VTermColor colour = session.cellAt(0, index).fg;
+            QVERIFY(VTERM_COLOR_IS_INDEXED(&colour));
+            session.convertColorToRgb(colour);
+            const QColor drawn(colour.rgb.red, colour.rgb.green, colour.rgb.blue);
+            const QString name = QStringLiteral("terminal-ansi-%1").arg(index);
+            QCOMPARE(drawn, ket::Tokens::color(name, kit));
+            if (index == (theme.palette().dark ? 0 : 15)) {
+                continue;
+            }
+            const qreal ink = luminance(drawn);
+            const qreal ratio = (qMax(ink, background) + 0.05) / (qMin(ink, background) + 0.05);
+            QVERIFY2(ratio >= 4.5,
+                     qPrintable(QStringLiteral("%1 is %2:1").arg(name).arg(ratio, 0, 'f', 2)));
+        }
+    }
 }
 
 void PtyProcessTest::usesSystemFixedFont() {
