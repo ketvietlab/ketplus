@@ -36,7 +36,7 @@ placing proprietary implementation in CM files.
 | Két Design System | 0.1.44 | Mermaid configuration snapshots in Qt resources | MIT |
 | KetQt | `b286dce5344f05e55bcfd86c7c1d6e10a5ab2587` | Compiled statically (ADR 0035) | MPL 2.0 |
 | Két Design System tokens | 0.1.44, inside KetQt | Compiled into KetQt | MIT |
-| Két Symbol | 0.12.0 SVGs, inside KetQt | Embedded in KetQt Qt resources | CC BY 4.0; credit "Két Symbol © 2026 Két Việt, CC BY 4.0" |
+| Két Symbol | 0.12.0 SVGs, inside KetQt; `assets/brand/ketplus-terminal.svg` | Embedded in KetQt Qt resources; rendered into the KétPlus Terminal app icon | CC BY 4.0; credit "Két Symbol © 2026 Két Việt, CC BY 4.0" |
 
 The Mermaid theme snapshots retain their upstream source revision and hashes in
 `resources/mermaid/SOURCE.json`. The publisher's MIT license is bundled alongside

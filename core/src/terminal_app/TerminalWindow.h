@@ -14,7 +14,7 @@ class TerminalTab;
 // ket::Appearance. Call once, before the first window.
 void restoreTerminalAppearance();
 
-// A KetPlus Terminal window drawn with the Két Qt kit: document tabs with New tab, Find, Clear
+// A KétPlus Terminal window drawn with the Két Qt kit: document tabs with New tab, Find, Clear
 // scrollback and Restart beside them, status messages as Két toasts, and colours from Két DS
 // tokens. ket::Style must be installed on the application.
 class TerminalWindow final : public QMainWindow {

@@ -377,6 +377,17 @@ if(APPLE AND KETPLUS_CM_BUILD_APP AND KETPLUS_CM_BUILD_TERMINAL_APP)
     ketplus_enable_warnings(ketplus_terminal_app)
     ketplus_cm_add_font_resources(ketplus_terminal_app)
 
+    # Finder shows the bundle's localized name instead of its ASCII file name (ADR 0029).
+    foreach(ketplus_terminal_language IN ITEMS en vi)
+        set(ketplus_terminal_strings
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/terminal_app/${ketplus_terminal_language}.lproj/InfoPlist.strings"
+        )
+        target_sources(ketplus_terminal_app PRIVATE "${ketplus_terminal_strings}")
+        set_source_files_properties("${ketplus_terminal_strings}" PROPERTIES
+            MACOSX_PACKAGE_LOCATION "Resources/${ketplus_terminal_language}.lproj"
+        )
+    endforeach()
+
     qt_add_resources(ketplus_terminal_app "ketplus_terminal_brand"
         PREFIX "/brand"
         BASE "${CMAKE_CURRENT_SOURCE_DIR}/assets/brand"
@@ -385,7 +396,7 @@ if(APPLE AND KETPLUS_CM_BUILD_APP AND KETPLUS_CM_BUILD_TERMINAL_APP)
 
     set_target_properties(ketplus_terminal_app PROPERTIES
         OUTPUT_NAME "KetPlus Terminal"
-        MACOSX_BUNDLE_BUNDLE_NAME "KetPlus Terminal"
+        MACOSX_BUNDLE_BUNDLE_NAME "KétPlus Terminal"
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.ketsuite.ketplus.terminal"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
         MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"

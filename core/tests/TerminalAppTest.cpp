@@ -31,6 +31,7 @@ class TerminalAppTest final : public QObject {
     void followsTheKitAppearance();
     void savesAndRestoresTheAppearance();
     void usesTheSavedFontFamily();
+    void showsTheKetPlusName();
 };
 
 void TerminalAppTest::initTestCase() {
@@ -154,6 +155,20 @@ void TerminalAppTest::usesTheSavedFontFamily() {
     QSettings().setValue(QStringLiteral("terminal/fontFamily"), QStringLiteral(" %1 ").arg(family));
     TerminalWindow window(QDir::tempPath());
     QCOMPARE(QFontInfo(window.currentTab()->view()->font()).family(), family);
+}
+
+void TerminalAppTest::showsTheKetPlusName() {
+    // ADR 0029: users see KétPlus Terminal; the application name keeps naming the settings.
+    TerminalWindow window(QDir::tempPath());
+    QVERIFY2(window.windowTitle().endsWith(QStringLiteral(" — KétPlus Terminal")),
+             qPrintable(window.windowTitle()));
+    QStringList texts;
+    for (const QAction* action : window.findChildren<QAction*>()) {
+        texts.append(action->text());
+    }
+    QVERIFY(texts.contains(QStringLiteral("Quit KétPlus Terminal")));
+    QVERIFY(texts.contains(QStringLiteral("About KétPlus Terminal")));
+    QVERIFY(!texts.join(QLatin1Char('\n')).contains(QStringLiteral("KetPlus Terminal")));
 }
 
 } // namespace ketplus
