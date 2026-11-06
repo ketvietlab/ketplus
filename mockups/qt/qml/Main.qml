@@ -17,7 +17,8 @@ Basic.ApplicationWindow {
         "workspace/error", "workspace/atlas", "workspace/details", "workspace/claude",
         "workspace/codex", "workspace/cursor", "editor", "editor/terminal",
         "editor/markdown", "editor/markdown-source", "editor/samples",
-        "changes", "worktrees", "connections", "connections/no-activity", "settings", "settings/typography", "settings/account",
+        "changes", "worktrees", "connections", "connections/no-activity", "connections/signed-out",
+        "connections/expired", "connections/sign-in", "settings", "settings/typography", "settings/account",
         "settings/browser", "settings/computer", "settings/providers", "settings/archived",
         "settings/updates", "settings/storage", "workspace/storage-warning", "atlas", "mobile-picker", "workspace/compact"
     ]
@@ -28,6 +29,10 @@ Basic.ApplicationWindow {
     property string editorFile: ""
     property bool editorSource: false
     property string settingsTab: "appearance"
+    // The KetSuite account that Connections needs; signed out shows its welcome
+    // (connections/signed-out), and an expired login also says why (connections/expired).
+    property bool signedIn: true
+    property bool signInExpired: false
     property var conversation: Fixtures.repositories[0].conversations[0]
     property string repository: Fixtures.repositories[0].name
     property string machine: Fixtures.machines[0]
@@ -85,8 +90,13 @@ Basic.ApplicationWindow {
         }
         if (name === "settings")
             settingsTab = state || "appearance"
-        if (name === "connections")
+        if (name === "connections") {
             remoteActivity = state !== "no-activity"
+            signedIn = !["signed-out", "expired", "sign-in"].includes(state)
+            signInExpired = state === "expired"
+            if (state === "sign-in")
+                Qt.callLater(connections.openSignIn)
+        }
         if (name === "editor") {
             editorTerminal = state === "terminal"
             editorFile = state.startsWith("markdown") ? "licensing.md"

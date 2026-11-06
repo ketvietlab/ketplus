@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MPL-2.0
 import QtQuick
 import QtQuick.Controls.Basic as Basic
+import QtQuick.Layouts
 import Ket
 import KetPlusMock
 
 // Connections: this Mac, paired phones and trusted Linux machines (SSH or the KetPlus
-// Relay), and the account. Pairing and trust are deterministic prototype states.
+// Relay), and the account. Pairing and trust are deterministic prototype states. Signed
+// out, it shows the app's welcome and its browser sign-in dialog instead.
 Item {
     id: screen
 
@@ -30,6 +32,14 @@ Item {
     property string activityDevice
     readonly property var activityShown: activityDevice === ""
         ? activity : activity.filter(entry => entry.device === activityDevice)
+
+    // The sign-in dialog after Continue in browser, until the simulated browser returns.
+    property bool signInWaiting: false
+
+    function openSignIn() {
+        screen.signInWaiting = false
+        signInDialog.open()
+    }
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
     function activityTitle(kind) {
@@ -190,8 +200,58 @@ Item {
         Rectangle { visible: !last; anchors.bottom: parent.bottom; x: screen.px(18); width: parent.width - 2 * x; height: 1; color: KetTheme.t.panelBorder }
     }
 
+    // Signed out, as RemoteControlView's unlinked content: no page header, a centred welcome.
+    Column {
+        visible: !screen.window.signedIn
+        x: (parent.width - width) / 2
+        y: screen.px(36 + 64)
+        width: Math.min(parent.width - screen.px(2 * (42 + 24)), screen.px(640))
+        spacing: screen.px(16)
+
+        KetIcon { anchors.horizontalCenter: parent.horizontalCenter; name: "disconnect"; box: screen.px(18); color: KetTheme.t.textSecondary }
+        Text {
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
+            text: "Connections"
+            color: KetTheme.t.textMain
+            font.family: KetTheme.fontFamily
+            font.pixelSize: screen.px(30)
+            font.weight: Font.DemiBold
+        }
+        Column {
+            width: parent.width
+            Text {
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+                text: "Sign in to connect your phone to this Mac."
+                color: KetTheme.t.textMain
+                font.family: KetTheme.fontFamily
+                font.pixelSize: screen.px(15)
+            }
+            Text {
+                visible: screen.window.signInExpired
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+                text: "Please sign in again. Your login expired. Local work is preserved."
+                color: KetTheme.t.danger
+                font.family: KetTheme.fontFamily
+                font.pixelSize: screen.px(13)
+            }
+        }
+        KetButton {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: "Sign in"
+            iconName: "log-in"
+            variant: KetTheme.ButtonVariant.Primary
+            onClicked: screen.openSignIn()
+        }
+    }
+
     Basic.ScrollView {
         id: scroll
+        visible: screen.window.signedIn
         anchors.fill: parent
         contentWidth: availableWidth
 
@@ -361,7 +421,7 @@ Item {
                         Text { text: "Personal workspace"; color: KetTheme.t.textSecondary; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(12) }
                     }
                 }
-                KetButton { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: "Sign out"; iconName: "log-out"; variant: KetTheme.ButtonVariant.Ghost; onClicked: screen.window.notify("Signed out of the demo account") }
+                KetButton { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: "Sign out"; iconName: "log-out"; variant: KetTheme.ButtonVariant.Ghost; onClicked: { screen.window.signInExpired = false; screen.window.signedIn = false } }
             }
 
             KetButton {
@@ -522,5 +582,65 @@ Item {
                 }
             }
         ]
+    }
+
+    // The app's sign-in dialog: the browser signs in with the KetSuite account, and the
+    // mock's browser returns after a moment.
+    KetDialog {
+        id: signInDialog
+        title: "Sign in"
+        onClosed: { screen.signInWaiting = false; browserReturn.stop() }
+        // The body is a ColumnLayout: its children fill the width through Layout.
+        Text {
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            text: "Continue in your browser to sign in with your KetSuite account. KetPlus never sees your password."
+            color: KetTheme.t.textSecondary
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.px(KetTheme.t.textMd, KetTheme.zoom)
+            lineHeight: 1.4
+        }
+        Text {
+            visible: screen.signInWaiting
+            Layout.fillWidth: true
+            Layout.topMargin: screen.px(12)
+            wrapMode: Text.Wrap
+            text: "Finish signing in in your browser, then return here."
+            color: KetTheme.t.textSecondary
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.px(KetTheme.t.textMd, KetTheme.zoom)
+        }
+        actions: [
+            KetButton {
+                text: screen.signInWaiting ? "Waiting for your browser…" : "Continue in browser"
+                iconName: "log-in"
+                variant: KetTheme.ButtonVariant.Primary
+                onClicked: {
+                    if (screen.signInWaiting)
+                        return
+                    screen.signInWaiting = true
+                    browserReturn.start()
+                }
+            }
+        ]
+    }
+
+    Timer {
+        id: browserReturn
+        interval: 1600
+        onTriggered: {
+            screen.window.signInExpired = false
+            screen.window.signedIn = true
+            signInDialog.accept()
+            screen.window.notify("Signed in as An Nguyen")
+        }
+    }
+
+    Connections {
+        target: screen.window
+        function onScreenChanged() {
+            if (screen.window.screen !== "connections")
+                signInDialog.close()
+        }
     }
 }
