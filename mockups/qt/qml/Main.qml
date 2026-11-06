@@ -42,6 +42,8 @@ Basic.ApplicationWindow {
     property bool storageWarning: false
     // Each provider's setup state (a Fixtures.providerSetup key), or "" when it is ready.
     property var providerIssues: ({ codex: "", claude: "", cursor: "" })
+    // Providers whose guide the user hid above the composer; a new setup state shows it again.
+    property var hiddenSetups: ({})
     property string tagFilter
     property bool compact: false
     property size wideSize: Qt.size(1440, 900)
@@ -67,6 +69,31 @@ Basic.ApplicationWindow {
         const next = Object.assign({}, providerIssues)
         next[provider] = state
         providerIssues = next
+        showSetup(provider)
+    }
+
+    function hideSetup(provider) {
+        const next = Object.assign({}, hiddenSetups)
+        next[provider] = true
+        hiddenSetups = next
+    }
+
+    function showSetup(provider) {
+        if (!hiddenSetups[provider])
+            return
+        const next = Object.assign({}, hiddenSetups)
+        delete next[provider]
+        hiddenSetups = next
+    }
+
+    // The guide of a provider's setup state in a dialog, from anywhere (Model & context).
+    function openSetupGuide(provider) {
+        const state = providerIssues[provider] || ""
+        if (!Fixtures.providerSetup[state])
+            return
+        setupDialog.provider = provider
+        setupDialog.setupId = state
+        setupDialog.open()
     }
 
     // A provider's setup state in the Agent Workspace. One that cannot start a turn opens a new
@@ -179,6 +206,9 @@ Basic.ApplicationWindow {
         picker.close()
         renameDialog.open()
         renameDialog.close()
+        setupDialog.setupId = "cli-missing"
+        setupDialog.open()
+        setupDialog.close()
         deleteDialog.open()
         deleteDialog.close()
         toast.show("Smoke test")
@@ -211,6 +241,8 @@ Basic.ApplicationWindow {
         showScreen(Mock.initialScreen + (Mock.initialState ? "/" + Mock.initialState : ""))
         if (Mock.initialPanel === "images")
             Qt.callLater(() => openImages(Fixtures.captures, 1))
+        else if (Mock.initialPanel === "setup")
+            Qt.callLater(() => openSetupGuide(conversation.providerId || "claude"))
         else if (Mock.initialPanel && screen === "workspace")
             Qt.callLater(() => workspace.openComposerPanel(Mock.initialPanel))
     }
@@ -292,6 +324,27 @@ Basic.ApplicationWindow {
     RepositoryPicker {
         id: picker
         window: app
+    }
+
+    // A provider's setup guide (Model & context → Show setup steps). It closes once the
+    // provider is fixed.
+    KetDialog {
+        id: setupDialog
+        property string provider
+        property string setupId
+        readonly property var setup: Fixtures.providerSetup[setupId] || ({})
+        readonly property bool resolved: provider !== "" && !app.providerIssues[provider]
+        onResolvedChanged: if (resolved && visible) close()
+        title: setup.title || ""
+        ProviderSetupCard {
+            Layout.fillWidth: true
+            setupId: setupDialog.setupId
+            window: app
+            inDialog: true
+        }
+        actions: [
+            KetButton { text: "Close"; variant: KetTheme.ButtonVariant.Ghost; onClicked: setupDialog.reject() }
+        ]
     }
 
     KetDialog {

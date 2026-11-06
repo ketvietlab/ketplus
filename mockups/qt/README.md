@@ -44,6 +44,7 @@ Screens and states (`--screen` / `--state`):
 | `workspace` | `storage-warning` | The sidebar's journal warning above Update ready; it opens Settings → Storage and clears after Compact now |
 | `workspace` | `setup-cli-missing`, `setup-cli-outdated`, `setup-signed-out`, `setup-claude-signed-out`, `setup-sidecar-missing` | A provider that cannot start a turn: a new conversation with its setup guide above the composer, which keeps the draft (see Provider setup) |
 | `workspace` | `setup-expired`, `setup-key-rejected`, `setup-limit`, `setup-capacity`, `setup-plan-blocked` | A turn the provider ended: the guide closes the turn, with Retry (see Provider setup) |
+| `workspace` + `--open=model` or `--open=setup` | any `setup-*` | Model & context names the provider's problem with Show setup steps; `setup` opens that guide in a dialog |
 | `settings` | `providers-setup` | Settings → Providers with Cursor not installed and Claude's sign-in expired; each provider shows its badge, details and the same guide |
 | `atlas` | | Edit an Atlas: flows, map, AI Chat |
 | `mobile-picker` | | Repository & worktree picker on iPhone |
@@ -93,8 +94,12 @@ provider's own message, numbered steps with the exact commands, and one primary 
 Each command can be copied or typed into a terminal beside the conversation, where the user
 presses Return; KetPlus never runs it and never stores a provider's credentials. Check again
 and Retry walk the live states (checking, failing once more for `cli-missing`, fixed). The
-same guide appears in Settings → Providers, which drops the turn-only steps, and the Model &
-context caption names a provider that cannot start a turn.
+same guide appears in Settings → Providers, which drops the turn-only steps.
+
+Hiding the guide above the composer is never a dead end: the model button then shows a
+warning, Model & context shows the problem with Show setup steps (for any provider tab, not
+only the conversation's), which opens the guide in a dialog, and Send brings the guide back
+while keeping the draft. A new setup state shows a hidden guide again.
 
 | State | Provider | What the daemon reports | Guide |
 |---|---|---|---|

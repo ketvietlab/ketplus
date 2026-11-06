@@ -16,7 +16,7 @@ KetDialog {
     readonly property var draftSetup: {
         const id = window ? window.providerIssues[draftProvider] || "" : ""
         const setup = Fixtures.providerSetup[id]
-        return setup && setup.blocking ? setup : null
+        return setup || null
     }
     property string model: ""
     property string effort: "Medium"
@@ -69,13 +69,29 @@ KetDialog {
                                    dialog.chooseProvider(currentIndex)
     }
 
+    // A provider with a setup state: what is wrong and the way to its guide, whether or not
+    // the conversation still shows it (the user may have hidden it, or browse another tab).
+    KetBanner {
+        visible: !!dialog.draftSetup
+        Layout.fillWidth: true
+        Layout.topMargin: dialog.px(10)
+        Layout.bottomMargin: dialog.px(12)
+        tone: dialog.draftSetup && dialog.draftSetup.tone === "danger" ? KetTheme.BannerTone.Danger : KetTheme.BannerTone.Warning
+        title: dialog.draftSetup ? dialog.draftSetup.title : ""
+        message: !dialog.draftSetup ? ""
+               : dialog.draftSetup.blocking ? "You can choose a model now. " + dialog.draftSetup.name + " starts turns once it is set up."
+               : dialog.draftSetup.summary || dialog.draftSetup.reason
+        actionText: "Show setup steps"
+        onActionTriggered: dialog.window.openSetupGuide(dialog.draftProvider)
+    }
+
     Text {
+        visible: !dialog.draftSetup
         Layout.fillWidth: true
         topPadding: dialog.px(10)
         bottomPadding: dialog.px(12)
-        text: dialog.draftSetup ? dialog.draftSetup.title + ". The conversation shows how to set it up; you can still choose a model now."
-                                : Fixtures.providers[dialog.providerIndex(dialog.draftProvider)].caption
-        color: dialog.draftSetup ? KetTheme.t.danger : KetTheme.t.textMuted
+        text: Fixtures.providers[dialog.providerIndex(dialog.draftProvider)].caption
+        color: KetTheme.t.textMuted
         font.family: KetTheme.fontFamily
         font.pixelSize: dialog.px(13)
         wrapMode: Text.Wrap

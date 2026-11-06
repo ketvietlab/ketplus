@@ -25,6 +25,7 @@ Item {
         const setup = Fixtures.providerSetup[id]
         return setup && setup.blocking ? id : ""
     }
+    readonly property var providerSetup: Fixtures.providerSetup[window.providerIssues[providerId] || ""] || null
     property bool showTasks: running
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
@@ -110,13 +111,14 @@ Item {
                 }
 
                 Loader {
-                    active: screen.setupId !== ""
+                    active: screen.setupId !== "" && !screen.window.hiddenSetups[screen.providerId]
                     visible: active
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: Math.min(parent.width - screen.px(48), screen.px(760))
                     sourceComponent: ProviderSetupCard {
                         setupId: screen.setupId
                         window: screen.window
+                        canHide: true
                     }
                 }
 
@@ -129,6 +131,7 @@ Item {
                     // The conversation's provider and model, when its fixture names them.
                     provider: screen.providerId
                     blocked: screen.setupId !== ""
+                    setup: screen.providerSetup
                     model: (screen.conversation && screen.conversation.model) || "Opus 5.5"
                     effort: (screen.conversation && screen.conversation.effort) || "Medium"
                     placeholder: blocked ? "Write your message now; it sends once " + providerLabel + " is set up"

@@ -8,6 +8,9 @@ import KetPlusMock
 // action. It sits above the composer when the provider cannot start a turn, closes the turn a
 // provider ended, and repeats in Settings → Providers.
 //
+// Above the composer the user can hide it; the model button, the Model & context dialog and
+// Settings → Providers open it again (window.openSetupGuide), so hiding is never a dead end.
+//
 // A command is copied, or typed into a terminal beside the conversation for the user to run
 // with Return; KetPlus never runs it. Check again and Retry walk the mock's live states:
 // checking, then still failing once when the state has `still`, then fixed.
@@ -20,16 +23,25 @@ Rectangle {
     // checks the provider again (Retry belongs to the conversation), and only links to other
     // pages stay.
     property bool inSettings: false
+    // Inside the guide dialog, which carries the title and the frame.
+    property bool inDialog: false
+    // Above the composer: a Hide button.
+    property bool canHide: false
     readonly property var setup: Fixtures.providerSetup[setupId] || ({})
     readonly property bool danger: setup.tone === "danger"
+    // Outside a conversation (Settings, the dialog) the card checks the provider again and
+    // leaves out the steps and actions that belong to a turn.
+    readonly property bool detached: inSettings || inDialog
     readonly property string primaryAction: {
         const action = setup.primaryAction || ""
+        if (inDialog)
+            return ""
         if (!inSettings)
             return action
         return action.startsWith("settings/") && action !== "settings/providers" ? action : ""
     }
     readonly property bool navigates: primaryAction !== "" && primaryAction !== "retry"
-    readonly property bool checks: setup.blocking || inSettings
+    readonly property bool checks: setup.blocking || detached
     // idle | checking | still (the check failed again) | settled (a retried turn was sent)
     property string phase: "idle"
     property bool checkedOnce: false
@@ -52,9 +64,10 @@ Rectangle {
     }
 
     width: parent ? parent.width : 0
-    implicitHeight: column.implicitHeight + px(28)
+    implicitHeight: column.implicitHeight + (inDialog ? 0 : px(28))
     radius: px(8)
-    color: KetTheme.t.panelBg
+    color: inDialog ? "transparent" : KetTheme.t.panelBg
+    border.width: inDialog ? 0 : 1
     border.color: phase === "settled" ? KetTheme.t.panelBorder
                 : danger ? KetTheme.t.dangerBorder : KetTheme.t.warningBorder
     Accessible.role: Accessible.Grouping
@@ -83,13 +96,13 @@ Rectangle {
 
     Column {
         id: column
-        x: card.px(16)
-        y: card.px(14)
+        x: card.inDialog ? 0 : card.px(16)
+        y: card.inDialog ? 0 : card.px(14)
         width: parent.width - 2 * x
         spacing: card.px(12)
 
         Row {
-            visible: !card.inSettings
+            visible: !card.inSettings && !card.inDialog
             width: parent.width
             spacing: card.px(10)
             KetIcon {
@@ -102,7 +115,8 @@ Rectangle {
             Text {
                 id: title
                 anchors.verticalCenter: parent.verticalCenter
-                width: Math.min(implicitWidth, parent.width - icon.width - badge.width - 2 * parent.spacing)
+                width: Math.min(implicitWidth, parent.width - icon.width - badge.width - 2 * parent.spacing
+                                               - (hide.visible ? hide.width + parent.spacing : 0))
                 elide: Text.ElideRight
                 text: card.phase === "settled" ? card.setup.name + " is working on your message again" : card.setup.title || ""
                 color: KetTheme.t.textMain
@@ -124,7 +138,7 @@ Rectangle {
             width: parent.width
             wrapMode: Text.Wrap
             text: card.phase === "settled" ? "This turn ended with: " + card.setup.title + "."
-                : card.inSettings && card.setup.summary ? card.setup.summary : card.setup.reason || ""
+                : card.detached && card.setup.summary ? card.setup.summary : card.setup.reason || ""
             color: KetTheme.t.textSecondary
             font.family: KetTheme.fontFamily
             font.pixelSize: card.px(13)
@@ -157,7 +171,7 @@ Rectangle {
             width: parent.width
             spacing: card.px(10)
             Repeater {
-                model: (card.setup.steps || []).filter(entry => !(card.inSettings && entry.turn))
+                model: (card.setup.steps || []).filter(entry => !(card.detached && entry.turn))
                 Row {
                     id: stepRow
                     required property var modelData
@@ -228,7 +242,7 @@ Rectangle {
             spacing: card.px(10)
             KetButton {
                 text: card.phase === "checking" ? (card.checks ? "Checking…" : "Retrying…")
-                    : card.inSettings && !card.navigates ? "Check again" : card.setup.primary || "Check again"
+                    : card.detached && !card.navigates ? "Check again" : card.setup.primary || "Check again"
                 variant: KetTheme.ButtonVariant.Primary
                 enabled: card.phase !== "checking"
                 onClicked: card.act(card.primaryAction)
@@ -238,12 +252,29 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
             }
             KetButton {
-                visible: !!card.setup.secondary && !card.inSettings
+                visible: !!card.setup.secondary && !card.detached
                 text: card.setup.secondary || ""
                 variant: KetTheme.ButtonVariant.Ghost
                 enabled: card.phase !== "checking"
                 onClicked: card.act(card.setup.secondaryAction)
             }
+        }
+    }
+
+    // Hide, top right; the toast says where the guide comes back from.
+    KetIconButton {
+        id: hide
+        visible: card.canHide
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.topMargin: card.px(8)
+        anchors.rightMargin: card.px(8)
+        iconName: "close"
+        controlSize: KetTheme.ControlSize.Small
+        Accessible.name: "Hide setup steps"
+        onClicked: {
+            card.window.hideSetup(card.setup.provider)
+            card.window.notify("Setup steps hidden. Open them again from the model button below, or Settings › Providers.")
         }
     }
 }

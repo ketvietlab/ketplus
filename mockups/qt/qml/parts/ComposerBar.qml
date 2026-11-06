@@ -16,6 +16,8 @@ Item {
     property bool busy: false
     // The provider cannot start a turn yet: Send keeps the draft and says why.
     property bool blocked: false
+    // The provider's setup state (Fixtures.providerSetup), shown on the model button.
+    property var setup: null
     property bool compact: false // narrow columns keep only the mode's icon
     property string provider: "claude"
     property string model: "Opus 5.5"
@@ -62,6 +64,7 @@ Item {
         placeholderText: bar.placeholder
         onSubmitted: text => {
             if (bar.blocked) {
+                bar.window.showSetup(bar.provider)
                 bar.window.notify("Set up " + bar.providerLabel + " first. Your message is kept.")
                 return
             }
@@ -109,9 +112,12 @@ Item {
             id: modelButton
             Layout.maximumWidth: Math.max(bar.px(40), bar.width - bar.px(bar.compact ? 120 : 240))
             text: bar.providerLabel + " · " + bar.model + "   " + bar.effort
+            iconName: bar.setup ? "warning" : ""
+            warning: !!bar.setup
             open: modelDialog.visible
             Accessible.name: "Choose model and reasoning effort"
             Accessible.description: bar.providerLabel + " · " + bar.model + " · " + bar.effort + " effort"
+                                    + (bar.setup ? ". " + bar.setup.title : "")
             onClicked: modelDialog.open()
         }
 
