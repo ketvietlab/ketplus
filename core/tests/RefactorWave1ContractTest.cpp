@@ -1,4 +1,6 @@
 #include "KetAppearance.h"
+#include "KetProfile.h"
+#include "KetStyle.h"
 #include "KetSyntax.h"
 #include "KetTokens.h"
 #include "app/SettingsDialog.h"
@@ -11,6 +13,7 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QTemporaryDir>
+#include <QToolTip>
 #include <QtTest>
 
 #include <cmath>
@@ -100,6 +103,7 @@ class RefactorWave1ContractTest final : public QObject {
     void saveCurrentlyAppliesEveryExtensionPage();
     void currentNativePaletteBaseline();
     void themeFollowsKetAppearance();
+    void themeInstallsTheKetStyle();
     void parserReadsObservedWorktreeFlags();
 };
 
@@ -254,6 +258,27 @@ void RefactorWave1ContractTest::themeFollowsKetAppearance() {
     changes.clear();
     theme.setMode(ketplus::ThemeManager::Mode::Dark);
     QCOMPARE(changes.size(), 1);
+}
+
+void RefactorWave1ContractTest::themeInstallsTheKetStyle() {
+    // KétPlus metrics (code at 14 px) and the kit's style: it keeps the application and
+    // tooltip palettes on ket::Appearance, and draws menus, tooltips and tab bars, which the
+    // stylesheet leaves to it.
+    ketplus::ThemeManager theme(*qApp);
+    QCOMPARE(ket::Profile::current().codePixels, ket::Profile::ketPlus().codePixels);
+    for (const auto mode :
+         {ketplus::ThemeManager::Mode::Dark, ketplus::ThemeManager::Mode::Light}) {
+        theme.setMode(mode);
+        const QPalette expected = ket::Style::paletteFor(ket::Appearance::instance().theme());
+        QCOMPARE(qApp->palette().color(QPalette::Window), expected.color(QPalette::Window));
+        QCOMPARE(qApp->palette().color(QPalette::Highlight), expected.color(QPalette::Highlight));
+        QCOMPARE(QToolTip::palette().color(QPalette::ToolTipBase),
+                 expected.color(QPalette::ToolTipBase));
+    }
+    const QString styleSheet = qApp->styleSheet();
+    for (const char* selector : {"QMenu {", "QMenu::item", "QToolTip {", "QTabBar::tab"}) {
+        QVERIFY2(!styleSheet.contains(QLatin1String(selector)), selector);
+    }
 }
 
 void RefactorWave1ContractTest::currentNativePaletteBaseline() {

@@ -30,8 +30,13 @@ translucent token is composited over `panel-bg`, so every role is an opaque
 `#RRGGBB`) and syntax colours from the kit's `ket::syntaxRecipe`. Light, dark and
 following the system go through `ket::Appearance`, which QML (`KetTheme`), the
 kit's style and KétPlus Terminal also read; a mode, a Settings preview and its
-cancel set it, and its theme changes reach the palette. It applies the Qt palette
-and stylesheet, and follows the operating system by default. The selected mode
+cancel set it, and its theme changes reach the palette. It installs the KétPlus
+`ket::Profile` and the kit's `ket::Style`, which keeps the application and tooltip
+palettes on `ket::Appearance` and draws menus, tooltips, tab bars, select popups,
+progress bars and sliders from Két DS recipes; the stylesheet styles the rest and
+leaves those selectors out. Run the app with `QT_QPA_PLATFORM=offscreen
+KETPLUS_CAPTURE=<file>` (and `KETPLUS_CAPTURE_THEME=light|dark`) to save the window
+for a review without a screen. It applies the stylesheet, and follows the operating system by default. The selected mode
 is persisted through `QSettings` and can be changed from `View > Appearance`.
 The shared Settings dialog also owns interface, editor, terminal, and Markdown
 preview typography. KetPlus Desktop applies one normalized snapshot to both CM
