@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // KetPlus Qt mock. Options make review evidence repeatable:
 //   --screen=<id> --state=<state> --dark|--light --zoom=1.25   open one screen
+//   --open=model|mode|limits                                    open a composer panel
 //   --screenshot=<file>                                         save the window and exit
 //   --smoke                                  open every screen; exit non-zero on QML warnings
 #include "KetAppearance.h"
@@ -43,6 +44,9 @@ int main(int argc, char* argv[]) {
     const QCommandLineOption state(QStringLiteral("state"),
                                    QStringLiteral("Screen state, e.g. running or welcome."),
                                    QStringLiteral("state"));
+    const QCommandLineOption open(QStringLiteral("open"),
+                                  QStringLiteral("Open a composer panel: model, mode or limits."),
+                                  QStringLiteral("panel"));
     const QCommandLineOption dark(QStringLiteral("dark"), QStringLiteral("Start in dark mode."));
     const QCommandLineOption light(QStringLiteral("light"), QStringLiteral("Start in light mode."));
     const QCommandLineOption zoom(QStringLiteral("zoom"), QStringLiteral("Interface zoom."),
@@ -52,7 +56,7 @@ int main(int argc, char* argv[]) {
                                         QStringLiteral("file"));
     const QCommandLineOption smoke(QStringLiteral("smoke"),
                                    QStringLiteral("Open every screen; fail on QML warnings."));
-    parser.addOptions({screen, state, dark, light, zoom, screenshot, smoke});
+    parser.addOptions({screen, state, open, dark, light, zoom, screenshot, smoke});
     parser.process(application);
 
     previousHandler = qInstallMessageHandler(countQmlProblems);
@@ -73,6 +77,7 @@ int main(int argc, char* argv[]) {
     if (parser.isSet(screen))
         controller.initialScreen = parser.value(screen);
     controller.initialState = parser.value(state);
+    controller.initialPanel = parser.value(open);
     qmlRegisterSingletonInstance("KetPlusMock.Native", 1, 0, "Mock", &controller);
 
     QQmlApplicationEngine engine;

@@ -25,13 +25,14 @@ KÉT Sans archive with `-DKETPLUS_MOCK_KET_SANS_ARCHIVE=<path>/KETSans-1.100.zip
 ```sh
 KetPlusMock --smoke                                    # every screen, fails on QML warnings
 KetPlusMock --screen=workspace --state=running --dark --zoom=1.25 --screenshot=out.png
+KetPlusMock --screen=workspace --open=model --screenshot=model.png  # model, mode or limits
 ```
 
 Screens and states (`--screen` / `--state`):
 
 | Screen | States | Covers |
 |---|---|---|
-| `workspace` | `welcome`, `running`, `question`, `error`, `atlas`, `details`, `compact` | Agent Workspace: 44 px header, transcript activity, gallery, agent messages, changed files, question card, Atlas result, provider error, background tasks, composer with model, effort, permissions and Context & limits, details pane (changes, Atlas, terminal) |
+| `workspace` | `welcome`, `running`, `question`, `error`, `atlas`, `details`, `compact` | Agent Workspace: 44 px header, transcript activity, gallery, agent messages, changed files, question card, Atlas result, provider error, background tasks, composer (card, then attach, Mode menu, Model & context dialog and the Context & limits ring below it), details pane (changes, Atlas, terminal) |
 | `editor` | | Files & Editor: explorer, tabs, breadcrumb, code, status bars |
 | `changes` | | Source Control: changes, staged changes, diff |
 | `worktrees` | | Manage worktrees, create dialog, manage menu |

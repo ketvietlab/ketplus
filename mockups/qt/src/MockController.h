@@ -12,6 +12,7 @@ class MockController final : public QObject {
     Q_PROPERTY(qreal zoom READ zoom NOTIFY appearanceChanged)
     Q_PROPERTY(QString initialScreen MEMBER initialScreen CONSTANT)
     Q_PROPERTY(QString initialState MEMBER initialState CONSTANT)
+    Q_PROPERTY(QString initialPanel MEMBER initialPanel CONSTANT)
 
   public:
     explicit MockController(QObject* parent = nullptr);
@@ -26,6 +27,7 @@ class MockController final : public QObject {
 
     QString initialScreen = QStringLiteral("workspace");
     QString initialState;
+    QString initialPanel; // a composer panel to open: model, mode or limits
 
   signals:
     void appearanceChanged();

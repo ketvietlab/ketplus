@@ -18,7 +18,7 @@ include(FetchContent)
 set(KETQT_BUILD_WIDGETS OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(ketqt
     GIT_REPOSITORY https://github.com/ketvietlab/ket-qt.git
-    GIT_TAG f3c8cd0fbfa993f25b736ab56e07295286a956c5 # develop, composer fixes (PR #17, #18)
+    GIT_TAG 0366efbf933c19ebe43371e81f733cb153edb91b # develop, menu sections and warning items (PR #19)
 )
 FetchContent_MakeAvailable(ketqt)
 

@@ -102,8 +102,11 @@ Basic.ApplicationWindow {
     color: KetTheme.t.pageBg
     font.family: KetTheme.fontFamily
 
-    Component.onCompleted: showScreen(Mock.initialScreen
-                                      + (Mock.initialState ? "/" + Mock.initialState : ""))
+    Component.onCompleted: {
+        showScreen(Mock.initialScreen + (Mock.initialState ? "/" + Mock.initialState : ""))
+        if (Mock.initialPanel && screen === "workspace")
+            Qt.callLater(() => workspace.openComposerPanel(Mock.initialPanel))
+    }
 
     Shortcut {
         sequences: ["Ctrl+K", "Meta+K"]
