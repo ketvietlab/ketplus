@@ -333,6 +333,10 @@ if(KETPLUS_CM_BUILD_APP)
     install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE" THIRD_PARTY_NOTICES.md
         DESTINATION share/licenses/ketplus-cm
     )
+    # THIRD_PARTY_NOTICES.md names these texts by their path in this tree.
+    install(DIRECTORY third_party/licenses/
+        DESTINATION share/licenses/ketplus-cm/third_party/licenses
+    )
 endif()
 
 if(APPLE AND KETPLUS_CM_BUILD_APP AND KETPLUS_CM_BUILD_TERMINAL_APP)
@@ -391,6 +395,15 @@ if(APPLE AND KETPLUS_CM_BUILD_APP AND KETPLUS_CM_BUILD_TERMINAL_APP)
     )
 
     install(TARGETS ketplus_terminal_app BUNDLE DESTINATION .)
+    # The bundle ships on its own, so it carries the notices and every license text they name.
+    # Installed before the bundle is signed below.
+    set(ketplus_terminal_licenses "KetPlus Terminal.app/Contents/Resources/licenses")
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE" THIRD_PARTY_NOTICES.md
+        DESTINATION "${ketplus_terminal_licenses}"
+    )
+    install(DIRECTORY third_party/licenses/
+        DESTINATION "${ketplus_terminal_licenses}/third_party/licenses"
+    )
     qt_generate_deploy_app_script(
         TARGET ketplus_terminal_app
         OUTPUT_SCRIPT ketplus_terminal_deploy_script
