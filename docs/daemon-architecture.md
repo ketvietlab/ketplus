@@ -430,6 +430,23 @@ mobile app
 - Redact secrets and user content from routine logs. Security audit events must
   identify subjects/devices without recording command payloads by default.
 
+### Daemon challenge authentication
+
+The daemon requests only `signatureVersion: 2` and `signatureAlgorithm: "Ed25519"`
+on both challenge issuance and credential redemption. Before signing, it checks the
+same scheme in the reply, the enrolled machine/key binding, ASCII identifiers and
+a canonical unpadded base64url nonce of exactly 32 bytes. Missing or legacy fields
+fail closed; there is no retry using a raw nonce signature.
+
+The identity key signs UTF-8 compact JSON
+`["ketplus",2,"daemon-challenge",id,machineId,keyVersion]`, one NUL byte, then the
+decoded nonce. The fixed domain prevents a relay from obtaining signatures for
+other identity-key protocols. The relay owns challenge expiry and atomic one-time
+redemption. Deploy a v2-capable relay before this client; an old relay cannot issue
+new credentials to it. Existing cached credentials remain usable until refresh.
+See [ADR 0036](decisions/0036-daemon-challenge-domain-separation.md) for the exact
+contract and compatibility rules. This documents client behavior, not relay deployment.
+
 ### Relay address and sign-in
 
 The relay is the standalone KétPlus runtime (`https://ketplus-staging.ketviet.vn`
