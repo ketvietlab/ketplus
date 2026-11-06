@@ -36,7 +36,7 @@ placing proprietary implementation in CM files.
 | KÉT Sans | 1.1 official ZIP pinned by SHA-256 | Four faces embedded in Qt resources | SIL OFL 1.1, Reserved Font Names "KÉT" and "KET" |
 | KÉT Sans Mono | 0.10.4 Medium, `assets/fonts` | Embedded in Qt resources | SIL OFL 1.1, Reserved Font Names "KÉT" and "KET" |
 | Két Design System | 0.1.44 | Mermaid configuration snapshots in Qt resources | MIT |
-| KetQt | `b286dce5344f05e55bcfd86c7c1d6e10a5ab2587` | Compiled statically (ADR 0035) | MPL 2.0 |
+| KetQt | `d47638214f80695524cd2724996674da7afdbb6a` | Compiled statically (ADR 0035) | MPL 2.0 |
 | Két Design System tokens | 0.1.44, inside KetQt | Compiled into KetQt | MIT |
 | Két Symbol | 0.12.0 SVGs, inside KetQt; `assets/brand/ketplus-terminal.svg` | Embedded in KetQt Qt resources; rendered into the KétPlus Terminal app icon | CC BY 4.0; credit "Két Symbol © 2026 Két Việt, CC BY 4.0" |
 

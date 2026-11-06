@@ -41,6 +41,8 @@ struct ThemePalette final {
     QString actionPrimary;
     QString actionPrimaryHover;
     QString actionPrimaryActive;
+    // Text and icons on a filled primary button (DS action-primary-ink).
+    QString actionPrimaryInk;
     QString positive;
     QString warning;
     QString danger;
