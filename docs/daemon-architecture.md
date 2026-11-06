@@ -325,9 +325,10 @@ repository's volume has less than 2 GiB free; both refuse with
 Every remote command that can change something is recorded in the journal's
 `remote_command_audit` table when it is acknowledged: command id, kind, the
 sending device id and key version its content names, session id, result code
-and time (#86). Only kinds known to read (`remoteCommandMayChange` in
-`RemoteAudit.cpp`) are left out, so a kind this build does not know is
-recorded. A redelivered command keeps the row of its first outcome. A command
+and time (#86). Kinds known to read (`remoteCommandMayChange` in
+`RemoteAudit.cpp`) and the `attachment.stage.*` steps of an upload (the message
+that sends the attachment is recorded) are left out, so a kind this build does
+not know is recorded. A `session.create` row names the conversation it created. A redelivered command keeps the row of its first outcome. A command
 whose signature did not verify against a pinned device is recorded with that
 refusal's result code, so the device id is the one it claimed. Rows are kept
 for 90 days and at most 10,000, applied by the journal retention pass and by

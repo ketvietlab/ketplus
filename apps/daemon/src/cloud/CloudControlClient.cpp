@@ -236,12 +236,17 @@ void CloudControlClient::handleLocal(const QString& type, const QJsonObject& pay
         const auto entries = journal_->remoteCommands(
             payload.value(QStringLiteral("device_id")).toString(),
             qBound(1, payload.value(QStringLiteral("limit")).toInt(100), 500));
-        if (!entries)
+        if (!entries) {
             callback({}, journal_->errorString());
-        else
+        } else {
+            // Titles of the conversations still here; a deleted one has none.
+            QHash<QString, QString> titles;
+            for (const StoredSession& session : journal_->sessions())
+                titles.insert(session.id, session.title);
             callback({{QStringLiteral("ok"), true},
-                      {QStringLiteral("entries"), remoteAuditJson(*entries)}},
+                      {QStringLiteral("entries"), remoteAuditJson(*entries, titles)}},
                      {});
+        }
     } else {
         callback({}, QStringLiteral("Unsupported remote-control operation."));
     }
