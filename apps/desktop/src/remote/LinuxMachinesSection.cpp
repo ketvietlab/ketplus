@@ -10,6 +10,7 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QJsonArray>
+#include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPointer>
@@ -205,8 +206,14 @@ void LinuxMachinesSection::startPairing() {
             }
             check->setEnabled(false);
             feedback->setText(tr("Checking the Linux pairing request…"));
+            // The link names the Linux host's keys; the client pins them (#88).
+            const QJsonObject host{
+                {QStringLiteral("machineId"),
+                 query.queryItemValue(QStringLiteral("machine"), QUrl::FullyDecoded)},
+                {QStringLiteral("keyVersion"), query.queryItemValue(QStringLiteral("kv")).toInt()},
+                {QStringLiteral("fingerprint"), query.queryItemValue(QStringLiteral("fp"))}};
             client_->claimPairing(
-                ticket, secret, QStringLiteral("KetPlus Desktop"),
+                ticket, secret, QStringLiteral("KetPlus Desktop"), host,
                 [feedback, match, check, ticketId, ticket, dialogGuard](const QJsonValue& value,
                                                                         const QString& error) {
                     if (!dialogGuard)

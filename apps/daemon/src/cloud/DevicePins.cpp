@@ -53,14 +53,7 @@ QString DevicePins::confirmationCode(const QString& claimDigest) {
 }
 
 QString DevicePins::hostFingerprint(const QJsonObject& keys) {
-    const QByteArray signing =
-        CloudCrypto::fromBase64Url(keys.value(QStringLiteral("signingPublicKey")).toString());
-    const QByteArray agreement =
-        CloudCrypto::fromBase64Url(keys.value(QStringLiteral("agreementPublicKey")).toString());
-    if (signing.size() != 32 || agreement.size() != 32)
-        return {};
-    return QString::fromLatin1(CloudCrypto::base64Url(
-        QCryptographicHash::hash(signing + agreement, QCryptographicHash::Sha256)));
+    return CloudCrypto::keyFingerprint(keys);
 }
 
 QJsonObject DevicePins::read(QString* error) const {

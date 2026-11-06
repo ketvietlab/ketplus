@@ -52,15 +52,38 @@ void ControlV2Client::senderKey(const QString& id, int version,
                                 std::function<void(const QByteArray&, const QString&)> done) {
     authorized(
         "GET", "/v2/mobile/device-keys/" + segment(id) + "/" + QString::number(version), {},
-        [id, version, done = std::move(done)](const QJsonValue& value, const QString& error) {
+        [this, id, version, done = std::move(done)](const QJsonValue& value, const QString& error) {
             const auto object = value.toObject();
             const auto keys = object.value("keys").toObject();
             const auto signing =
                 daemon::CloudCrypto::fromBase64Url(keys.value("signingPublicKey").toString());
+            const auto fingerprint = daemon::CloudCrypto::keyFingerprint(keys);
             if (!error.isEmpty() || object.value("deviceId").toString() != id ||
                 object.value("keyVersion").toInt() != version ||
-                keys.value("signingAlgorithm").toString() != "Ed25519" || signing.size() != 32) {
+                keys.value("signingAlgorithm").toString() != "Ed25519" || signing.size() != 32 ||
+                fingerprint.isEmpty()) {
                 done({}, error.isEmpty() ? "Invalid host signing identity." : error);
+                return;
+            }
+            // The relay serves these keys; only ones pinned when this client paired with the
+            // host are accepted. A new host key version needs a new pairing (#88).
+            const auto pin = QStringLiteral("%1/%2").arg(id).arg(version);
+            if (!credential_.contains("hostPins")) {
+                // Paired before pins: the first host seen is adopted once, then pins apply.
+                auto value = credential_;
+                value.insert("hostPins", QJsonObject{{pin, fingerprint}});
+                QString storageError;
+                if (!credentials_.write("user-session",
+                                        QJsonDocument(value).toJson(QJsonDocument::Compact),
+                                        &storageError)) {
+                    done({},
+                         storageError.isEmpty() ? "Unable to store the host pin." : storageError);
+                    return;
+                }
+                credential_ = value;
+            } else if (credential_.value("hostPins").toObject().value(pin).toString() !=
+                       fingerprint) {
+                done({}, "This host is not paired with this computer.");
                 return;
             }
             done(signing, {});

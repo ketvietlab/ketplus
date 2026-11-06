@@ -18,6 +18,14 @@ class RemoteControlTestAccess {
         client.deviceId_ = "remote-client";
         client.keyVersion_ = 1;
     }
+    static void pinHost(ControlV2Client& client, const QString& machine, int version,
+                        const QJsonObject& keys) {
+        auto pins = client.credential_.value("hostPins").toObject();
+        pins.insert(QStringLiteral("%1/%2").arg(machine).arg(version),
+                    CloudCrypto::keyFingerprint(keys));
+        client.credential_.insert("hostPins", pins);
+    }
+    static QJsonObject credential(const ControlV2Client& client) { return client.credential_; }
     static void expireCredential(ControlV2Client& client) {
         client.credential_.insert("expiresAt", "2020-01-01T00:00:00.000Z");
     }
@@ -67,11 +75,13 @@ struct EncryptedFixture {
     CloudCrypto host{&hostStore};
     QJsonObject hostKeys = host.publicKeys();
     QJsonObject wrapped;
-    EncryptedFixture(ControlV2Client& client, FixtureTransport& network) {
+    EncryptedFixture(ControlV2Client& client, FixtureTransport& network, bool pinned = true) {
         RemoteControlTestAccess::transport(client, network);
         if (!client.setCredential(credential()))
             qFatal("Invalid credential fixture");
         RemoteControlTestAccess::paired(client);
+        if (pinned)
+            RemoteControlTestAccess::pinHost(client, "linux-host", 1, hostKeys);
         const auto own = client.identity();
         wrapped = host.wrapSessionKey(
             "opaque-session", 3, 1,
@@ -132,7 +142,12 @@ class RemoteControlClientTest final : public QObject {
                                                              keys.value("agreementPublicKey"),
                                                              keys.value("signingPublicKey")}),
                                      QCryptographicHash::Sha256)
-                .toHex());
+                .toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals));
+        CredentialStore hostStore("pairing-host");
+        const QJsonObject host{
+            {"machineId", "linux-host"},
+            {"keyVersion", 1},
+            {"fingerprint", CloudCrypto::keyFingerprint(CloudCrypto(&hostStore).publicKeys())}};
         QJsonObject ticket{
             {"id", "ticket"},
             {"machineId", "linux-host"},
@@ -145,21 +160,39 @@ class RemoteControlClientTest final : public QObject {
                                           {"status", "pending"}}}};
         network.replies.insert(prefix + "/v2/mobile/pairing/tickets/ticket/claim", ticket);
         bool answered = false;
-        client.claimPairing("ticket", QString(64, 'A'), "Desktop fixture", [&](auto, auto error) {
-            QVERIFY(error.isEmpty());
-            answered = true;
-        });
+        // A code that does not name its host's keys is refused before anything is claimed.
+        client.claimPairing("ticket", QString(64, 'A'), "Desktop fixture",
+                            {{"machineId", "linux-host"}, {"keyVersion", 1}},
+                            [&](auto, auto error) {
+                                QVERIFY(!error.isEmpty());
+                                answered = true;
+                            });
+        QTRY_VERIFY(answered);
+        QVERIFY(network.paths.isEmpty());
+        answered = false;
+        client.claimPairing("ticket", QString(64, 'A'), "Desktop fixture", host,
+                            [&](auto, auto error) {
+                                QVERIFY2(error.isEmpty(), qPrintable(error));
+                                answered = true;
+                            });
         QTRY_VERIFY(answered);
         ticket.insert("status", "approved");
         auto foreign = ticket;
         foreign.insert("machineId", "another-host");
         QVERIFY(!client.acceptPairing(foreign));
         QVERIFY(client.acceptPairing(ticket));
+        // The host's keys from the QR code are pinned with the pairing.
+        QCOMPARE(RemoteControlTestAccess::credential(client)
+                     .value("hostPins")
+                     .toObject()
+                     .value("linux-host/1"),
+                 host.value("fingerprint"));
         answered = false;
-        client.claimPairing("ticket", QString(64, 'A'), "Desktop fixture", [&](auto, auto error) {
-            QVERIFY(!error.isEmpty());
-            answered = true;
-        });
+        client.claimPairing("ticket", QString(64, 'A'), "Desktop fixture", host,
+                            [&](auto, auto error) {
+                                QVERIFY(!error.isEmpty());
+                                answered = true;
+                            });
         client.cancelPairing();
         QTRY_VERIFY(answered);
         QVERIFY(!client.acceptPairing(ticket));
@@ -212,6 +245,59 @@ class RemoteControlClientTest final : public QObject {
             answered = true;
         });
         QTRY_VERIFY(answered);
+    }
+    void hostKeysTheRelayServesMustMatchThePinFromPairing() {
+        const QString keysPath = prefix + "/v2/mobile/device-keys/linux-host/1";
+        const QString eventsPath = prefix + "/v2/mobile/sessions/opaque-session/events";
+        CredentialStore relayStore("relay-host-substitute");
+        const QJsonObject relayKeys = CloudCrypto(&relayStore).publicKeys();
+        const auto read = [&](ControlV2Client& client) {
+            QString failure;
+            bool answered = false;
+            client.events(session, 0, [&](auto, auto error) {
+                failure = error;
+                answered = true;
+            });
+            [&] { QTRY_VERIFY(answered); }();
+            return failure;
+        };
+        {
+            FixtureTransport network;
+            ControlV2Client client(QUrl("https://synthetic.invalid/native/ketplus"));
+            EncryptedFixture fixture(client, network);
+            network.replies.insert(eventsPath,
+                                   QJsonObject{{"sessionId", "opaque-session"},
+                                               {"sessionGeneration", 3},
+                                               {"afterCursor", 0},
+                                               {"nextCursor", 1},
+                                               {"events", QJsonArray{fixture.event()}}});
+            // The relay serves its own keys for the host: refused, whatever they sign.
+            network.replies.insert(
+                keysPath,
+                QJsonObject{{"deviceId", "linux-host"}, {"keyVersion", 1}, {"keys", relayKeys}});
+            QCOMPARE(read(client), QStringLiteral("This host is not paired with this computer."));
+            network.replies.insert(keysPath, QJsonObject{{"deviceId", "linux-host"},
+                                                         {"keyVersion", 1},
+                                                         {"keys", fixture.hostKeys}});
+            QCOMPARE(read(client), QString{});
+        }
+        {
+            // Paired before pins: the first host keys are adopted once, then pinned.
+            FixtureTransport network;
+            ControlV2Client client(QUrl("https://synthetic.invalid/native/ketplus"));
+            EncryptedFixture fixture(client, network, false);
+            network.replies.insert(eventsPath,
+                                   QJsonObject{{"sessionId", "opaque-session"},
+                                               {"sessionGeneration", 3},
+                                               {"afterCursor", 0},
+                                               {"nextCursor", 1},
+                                               {"events", QJsonArray{fixture.event()}}});
+            QCOMPARE(read(client), QString{});
+            network.replies.insert(
+                keysPath,
+                QJsonObject{{"deviceId", "linux-host"}, {"keyVersion", 1}, {"keys", relayKeys}});
+            QCOMPARE(read(client), QStringLiteral("This host is not paired with this computer."));
+        }
     }
     void terminalResultsRequireTheHostSignatureAndOriginalCommandScope() {
         FixtureTransport network;
@@ -370,6 +456,66 @@ class RemoteControlClientTest final : public QObject {
         QTRY_VERIFY(answered);
         client.listSessions([&](auto, auto error) { QVERIFY(!error.isEmpty()); });
         QCOMPARE(network.paths.size(), 1);
+    }
+    void signOutRevokesTheServerSessionEvenWithAnExpiredAccessToken() {
+        FixtureTransport network;
+        ControlV2Client client(QUrl("https://synthetic.invalid/native/ketplus"));
+        RemoteControlTestAccess::transport(client, network);
+        QVERIFY(client.setCredential(credential()));
+        RemoteControlTestAccess::expireCredential(client);
+        network.replies.insert(prefix + "/v2/auth/refresh", credential());
+        network.replies.insert(prefix + "/v2/auth/logout", QJsonObject{{"ok", true}});
+        QString failure = "unanswered";
+        client.signOut([&](auto, auto error) { failure = error; });
+        QTRY_VERIFY(failure != "unanswered");
+        QCOMPARE(failure, QString{});
+        QCOMPARE(network.paths,
+                 (QList<QString>{prefix + "/v2/auth/refresh", prefix + "/v2/auth/logout"}));
+
+        // A 401 left the refresh token valid on the server: not a clean sign-out.
+        QVERIFY(client.setCredential(credential()));
+        network.statuses.insert(prefix + "/v2/auth/logout", 401);
+        failure = "unanswered";
+        client.signOut([&](auto, auto error) { failure = error; });
+        QTRY_VERIFY(failure != "unanswered");
+        QCOMPARE(failure, QStringLiteral("Local sign-out completed; remote revocation failed."));
+    }
+    void aRotatedCredentialThatCannotBeStoredKeepsThisProcessSignedIn() {
+        FixtureTransport network;
+        ControlV2Client client(QUrl("https://synthetic.invalid/native/ketplus"));
+        RemoteControlTestAccess::transport(client, network);
+        QVERIFY(client.setCredential(credential()));
+        RemoteControlTestAccess::paired(client);
+        CredentialStore hostStore("rotation-host");
+        RemoteControlTestAccess::pinHost(client, "linux-host", 1,
+                                         CloudCrypto(&hostStore).publicKeys());
+        RemoteControlTestAccess::expireCredential(client);
+        auto rotated = credential();
+        rotated.insert("accessToken", "ketplus_access_" + QString(43, 'C'));
+        rotated.insert("refreshToken", "ketplus_refresh_" + QString(43, 'D'));
+        network.replies.insert(prefix + "/v2/auth/refresh", rotated);
+        network.replies.insert(prefix + "/v2/mobile/worktrees", QJsonArray{});
+        const auto stored = [] {
+            for (auto it = r03::credentials.cbegin(); it != r03::credentials.cend(); ++it)
+                if (it.key().endsWith("/user-session"))
+                    return QJsonDocument::fromJson(it.value()).object();
+            return QJsonObject{};
+        };
+        r03::failWritesTo = "user-session";
+        QString failure = "unanswered";
+        client.listWorktrees([&](auto, auto error) { failure = error; });
+        QTRY_VERIFY(failure != "unanswered");
+        QCOMPARE(failure, QString{});
+        QCOMPARE(RemoteControlTestAccess::credential(client).value("refreshToken"),
+                 rotated.value("refreshToken"));
+        QVERIFY(stored().value("refreshToken") != rotated.value("refreshToken"));
+        // The next access stores it, keeping the host pins.
+        r03::failWritesTo.clear();
+        failure = "unanswered";
+        client.listWorktrees([&](auto, auto error) { failure = error; });
+        QTRY_VERIFY(failure != "unanswered");
+        QCOMPARE(stored().value("refreshToken"), rotated.value("refreshToken"));
+        QVERIFY(stored().value("hostPins").toObject().contains("linux-host/1"));
     }
     void refreshRetriesKeepOneOperationIdentityAfterTransportLoss() {
         FixtureTransport network;
