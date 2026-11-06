@@ -2,6 +2,7 @@
 // KetPlus Qt mock. Options make review evidence repeatable:
 //   --screen=<id> --state=<state> --dark|--light --zoom=1.25   open one screen
 //   --open=model|mode|limits|reviewer|composer                          open a composer panel
+//   --scroll=0.5                                   scroll the transcript (0 top, 1 end)
 //   --screenshot=<file>                                         save the window and exit
 //   --smoke                                  open every screen; exit non-zero on QML warnings
 #include "KetAppearance.h"
@@ -57,7 +58,10 @@ int main(int argc, char* argv[]) {
                                         QStringLiteral("file"));
     const QCommandLineOption smoke(QStringLiteral("smoke"),
                                    QStringLiteral("Open every screen; fail on QML warnings."));
-    parser.addOptions({screen, state, open, dark, light, zoom, screenshot, smoke});
+    const QCommandLineOption scroll(QStringLiteral("scroll"),
+                                    QStringLiteral("Scroll the transcript, 0 (top) to 1 (end)."),
+                                    QStringLiteral("fraction"));
+    parser.addOptions({screen, state, open, dark, light, zoom, scroll, screenshot, smoke});
     parser.process(application);
 
     previousHandler = qInstallMessageHandler(countQmlProblems);
@@ -94,6 +98,8 @@ int main(int argc, char* argv[]) {
         controller.initialScreen = parser.value(screen);
     controller.initialState = parser.value(state);
     controller.initialPanel = parser.value(open);
+    if (parser.isSet(scroll))
+        controller.initialScroll = parser.value(scroll).toDouble();
     qmlRegisterSingletonInstance("KetPlusMock.Native", 1, 0, "Mock", &controller);
 
     QQmlApplicationEngine engine;

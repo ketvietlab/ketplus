@@ -5,7 +5,8 @@ import Ket
 import KetPlusMock
 
 // A conversation's transcript at the 760 px reading width. `kind` picks the fixture:
-// activity, running, question, atlas, error, short or welcome.
+// activity, running, question, atlas, error, short or welcome; claude, codex and cursor
+// replay every content type of that provider's journal (TranscriptFixtures).
 Item {
     id: transcript
 
@@ -15,12 +16,14 @@ Item {
     readonly property real column: Math.min(width - px(48), px(760))
     readonly property string asset: "qrc:/qt/qml/KetPlusMock/assets/"
     property int questionStep: 0
+    readonly property var blocks: ({ claude: TranscriptFixtures.claude, codex: TranscriptFixtures.codex,
+                                     cursor: TranscriptFixtures.cursor })[kind] || null
 
     signal openDetails(string tab)
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
 
-    implicitHeight: body.implicitHeight + px(48)
+    implicitHeight: (blocks ? journal.implicitHeight : body.implicitHeight) + px(48)
 
     component Note: Rectangle {
         property string iconName
@@ -85,7 +88,26 @@ Item {
     }
 
     Column {
+        id: journal
+        visible: !!transcript.blocks
+        x: (transcript.width - width) / 2
+        y: transcript.px(24)
+        width: transcript.column
+        spacing: transcript.px(18)
+        Repeater {
+            model: transcript.blocks || []
+            TranscriptBlock {
+                required property var modelData
+                block: modelData
+                window: transcript.window
+                provider: transcript.conversation.provider || "the agent"
+            }
+        }
+    }
+
+    Column {
         id: body
+        visible: !transcript.blocks
         x: (transcript.width - width) / 2
         y: transcript.px(24)
         width: transcript.column

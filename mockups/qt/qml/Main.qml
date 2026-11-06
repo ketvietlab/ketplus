@@ -14,11 +14,12 @@ Basic.ApplicationWindow {
     // Screens, in sidebar order. A state follows a slash: "workspace/welcome".
     readonly property var screenIds: [
         "workspace", "workspace/welcome", "workspace/running", "workspace/question",
-        "workspace/error", "workspace/atlas", "workspace/details", "editor", "editor/terminal",
+        "workspace/error", "workspace/atlas", "workspace/details", "workspace/claude",
+        "workspace/codex", "workspace/cursor", "editor", "editor/terminal",
         "editor/markdown", "editor/markdown-source", "editor/samples",
         "changes", "worktrees", "connections", "settings", "settings/typography", "settings/account",
         "settings/browser", "settings/computer", "settings/providers", "settings/archived",
-        "settings/updates", "atlas", "mobile-picker", "workspace/compact"
+        "settings/updates", "settings/storage", "workspace/storage-warning", "atlas", "mobile-picker", "workspace/compact"
     ]
     property string screen: "workspace"
     // The terminal below the editor (editor/terminal).
@@ -31,6 +32,9 @@ Basic.ApplicationWindow {
     property string repository: Fixtures.repositories[0].name
     property string machine: Fixtures.machines[0]
     property bool updateReady: true
+    // The journal is over its size limit (settings/storage, workspace/storage-warning); the
+    // sidebar warns until it is compacted.
+    property bool storageWarning: false
     property string tagFilter
     property bool compact: false
     property size wideSize: Qt.size(1440, 900)
@@ -61,6 +65,8 @@ Basic.ApplicationWindow {
             return
         }
         setCompact(false)
+        if (state === "storage-warning" || id === "settings/storage")
+            storageWarning = true
         if (name === "workspace") {
             const kind = state === "details" ? "activity" : state
             if (kind) {

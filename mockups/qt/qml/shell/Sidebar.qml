@@ -337,6 +337,22 @@ Rectangle {
             }
         }
 
+        // The journal passed its size limit; the banner opens Settings → Storage.
+        KetBanner {
+            id: storageBanner
+            Layout.fillWidth: true
+            Layout.leftMargin: sidebar.inset
+            Layout.rightMargin: sidebar.inset
+            Layout.bottomMargin: sidebar.px(6)
+            visible: sidebar.window.storageWarning
+            tone: KetTheme.BannerTone.Warning
+            title: "Journal is " + Fixtures.journalStorage.totalGb.toFixed(1) + " GB"
+            message: "Over its " + Fixtures.journalStorage.limitGb + " GB limit"
+            Accessible.role: Accessible.Button
+            TapHandler { onTapped: sidebar.window.showScreen("settings/storage") }
+            HoverHandler { cursorShape: Qt.PointingHandCursor }
+        }
+
         KetUpdatePill {
             Layout.fillWidth: true
             Layout.leftMargin: sidebar.inset

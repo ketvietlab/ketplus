@@ -4,6 +4,7 @@ import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
 import Ket
 import KetPlusMock
+import KetPlusMock.Native
 
 // Agent Workspace: the conversation's 44 px header, its transcript, background tasks and the
 // composer, with an optional details pane (changes and Atlases) on the right.
@@ -57,6 +58,13 @@ Item {
                 Layout.fillHeight: true
                 clip: true
                 contentWidth: availableWidth
+                // --scroll: start the transcript part of the way down, for review captures.
+                Timer {
+                    running: Mock.initialScroll >= 0
+                    interval: 250
+                    onTriggered: scroll.contentItem.contentY = Mock.initialScroll
+                                 * Math.max(0, scroll.contentItem.contentHeight - scroll.height)
+                }
 
                 Transcript {
                     width: scroll.availableWidth
@@ -99,6 +107,10 @@ Item {
                     width: Math.min(parent.width - screen.px(48), screen.px(760))
                     window: screen.window
                     busy: screen.running
+                    // The conversation's provider and model, when its fixture names them.
+                    provider: (screen.conversation && screen.conversation.providerId) || "claude"
+                    model: (screen.conversation && screen.conversation.model) || "Opus 5.5"
+                    effort: (screen.conversation && screen.conversation.effort) || "Medium"
                     placeholder: screen.kind === "welcome" ? "Describe what you want to build…"
                                                            : "Message " + providerLabel + "…"
                 }

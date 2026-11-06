@@ -13,6 +13,7 @@ class MockController final : public QObject {
     Q_PROPERTY(QString initialScreen MEMBER initialScreen CONSTANT)
     Q_PROPERTY(QString initialState MEMBER initialState CONSTANT)
     Q_PROPERTY(QString initialPanel MEMBER initialPanel CONSTANT)
+    Q_PROPERTY(qreal initialScroll MEMBER initialScroll CONSTANT)
 
   public:
     explicit MockController(QObject* parent = nullptr);
@@ -30,6 +31,7 @@ class MockController final : public QObject {
     QString initialScreen = QStringLiteral("workspace");
     QString initialState;
     QString initialPanel; // a panel to open: model, mode, limits or reviewer
+    qreal initialScroll = -1; // where the transcript starts, 0 (top) to 1 (end); -1 keeps the top
 
   signals:
     void appearanceChanged();
