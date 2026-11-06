@@ -8,7 +8,8 @@ namespace ketplus::daemon {
 
 // Bounds the worktrees paired devices create on this Mac (#86). Each creation is a full
 // checkout beside the repository, so a looping or compromised phone app could otherwise fill
-// the disk. Creations are counted per repository over the last hour, and none starts while
+// the disk. Creations are counted per repository (keyed by its Git common directory, which all
+// its checkouts share) over the last hour, and none starts while
 // the repository's volume is low on space.
 class RemoteWorktreeQuota final {
   public:

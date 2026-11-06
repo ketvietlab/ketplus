@@ -11,6 +11,11 @@ class LocalJournal;
 /// Empty when the worktree is gone or is not a Git checkout.
 QString worktreeGitDirectory(const QString& worktree);
 
+/// The canonical Git common directory every checkout of one repository shares, including linked
+/// checkouts of a bare repository, which `worktreeRepository` tells apart. Empty when the
+/// worktree is not a Git checkout.
+QString worktreeCommonDirectory(const QString& worktree);
+
 /// The main checkout a linked worktree belongs to, or the worktree itself.
 QString worktreeRepository(const QString& worktree);
 

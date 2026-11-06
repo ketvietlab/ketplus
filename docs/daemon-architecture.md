@@ -310,7 +310,8 @@ checkout still runs the repository's hooks and filters, just as
 A redelivered `session.create` (its acknowledgement was lost) answers with the
 result the first attempt journaled instead of running git again, so the phone
 never sees `branch_exists` for a conversation that started. Paired devices can
-create at most 10 worktrees per repository per hour, and none while the
+create at most 10 worktrees per repository per hour (counted by the Git common
+directory, so every checkout of a repository, bare or not, shares it), and none while the
 repository's volume has less than 2 GiB free; both refuse with
 `worktree_quota_exceeded` before git runs (`RemoteWorktreeQuota`, in memory,
 #86).

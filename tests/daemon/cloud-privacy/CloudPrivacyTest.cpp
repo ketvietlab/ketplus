@@ -2132,6 +2132,84 @@ class CloudPrivacyTest final : public QObject {
         QVERIFY(!branchExists("low-space"));
     }
 
+    void linkedCheckoutsOfOneBareRepositoryShareTheWorktreeQuota() {
+        QTemporaryDir dir;
+        const auto git = [](const QString& directory, const QStringList& arguments) {
+            return QProcess::execute("git", QStringList{"-C", directory, "-c", "user.name=Fixture",
+                                                        "-c", "user.email=fixture@example.invalid",
+                                                        "-c", "commit.gpgsign=false"} +
+                                                arguments);
+        };
+        const QString source = dir.filePath("source");
+        const QString bare = dir.filePath("repo.git");
+        const QString a = dir.filePath("checkout-a");
+        const QString b = dir.filePath("checkout-b");
+        QVERIFY(QDir().mkpath(source));
+        QCOMPARE(git(source, {"init", "-q", "-b", "main"}), 0);
+        QCOMPARE(git(source, {"commit", "--allow-empty", "-qm", "initial"}), 0);
+        QCOMPARE(git(dir.path(), {"clone", "-q", "--bare", source, bare}), 0);
+        QCOMPARE(git(bare, {"worktree", "add", "-q", a, "main"}), 0);
+        QCOMPARE(git(bare, {"worktree", "add", "-q", "-b", "other", b, "main"}), 0);
+        Context c(dir.filePath("journal.sqlite"));
+        c.start();
+        QVERIFY(c.journal.rememberWorktree(QFileInfo(a).canonicalFilePath()));
+        QVERIFY(c.journal.rememberWorktree(QFileInfo(b).canonicalFilePath()));
+        const QByteArray salt(32, 's');
+        Access::pathSalt(*c.client, salt);
+        CredentialStore phoneStore("bare-repository-phone");
+        const QByteArray phone = CloudCrypto::fromBase64Url(
+            CloudCrypto(&phoneStore).publicKeys().value("agreementPublicKey").toString());
+        const auto create = [&](const QString& checkout, const QString& commandId,
+                                const QString& branch) {
+            const auto id = [&](const QByteArray& label) {
+                return QString::fromLatin1(
+                    QMessageAuthenticationCode::hash(
+                        label + '\n' + QFileInfo(checkout).canonicalFilePath().toUtf8(), salt,
+                        QCryptographicHash::Sha256)
+                        .toHex());
+            };
+            const qsizetype before = c.transport.requests.size();
+            Access::worktreeCommand(
+                *c.client,
+                {{"id", commandId},
+                 {"kind", "session.create"},
+                 {"attempt", 1},
+                 {"workspaceId", "workspace-synthetic"},
+                 {"sessionGeneration", 0},
+                 {"expectedCatalogRevision", 0},
+                 {"expectedLifecycleRevision", 0},
+                 {"repositoryId", id("repository")},
+                 {"worktreeId", id("worktree")},
+                 {"content", QJsonObject{{"recipientDeviceId", "machine-synthetic"},
+                                         {"recipientKeyVersion", 1}}}},
+                {{"prompt", "Start here"},
+                 {"new_worktree", QJsonObject{{"branch", branch}, {"base", "main"}}}},
+                phone);
+            const QString ack = QStringLiteral("/v2/commands/%1/ack").arg(commandId);
+            QString resultCode;
+            [&] {
+                QTRY_VERIFY(std::any_of(
+                    c.transport.requests.cbegin() + before, c.transport.requests.cend(),
+                    [&ack](const auto& request) { return request.url().path() == ack; }));
+            }();
+            for (qsizetype i = before; i < c.transport.requests.size(); ++i) {
+                if (c.transport.requests.at(i).url().path() == ack)
+                    resultCode = QJsonDocument::fromJson(c.transport.bodies.at(i))
+                                     .object()
+                                     .value("resultCode")
+                                     .toString();
+            }
+            return resultCode;
+        };
+
+        Access::worktreeQuota(*c.client).perHour = 1;
+        QCOMPARE(create(a, "command-through-a", "through-a"), QStringLiteral("ok"));
+        // The other checkout shares the repository's allowance.
+        QCOMPARE(create(b, "command-through-b", "through-b"),
+                 QStringLiteral("worktree_quota_exceeded"));
+        QVERIFY(git(bare, {"show-ref", "--verify", "--quiet", "refs/heads/through-b"}) != 0);
+    }
+
     void replyLostAfterItsHeaderIsAFailure() {
         QTemporaryDir dir;
         Context c(dir.filePath("journal.sqlite"));

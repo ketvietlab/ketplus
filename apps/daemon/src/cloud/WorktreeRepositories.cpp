@@ -26,6 +26,21 @@ QString worktreeGitDirectory(const QString& worktree) {
                                              : QDir(worktree).absoluteFilePath(candidate);
 }
 
+QString worktreeCommonDirectory(const QString& worktree) {
+    const QString gitDirectory = worktreeGitDirectory(worktree);
+    if (gitDirectory.isEmpty())
+        return {};
+    // A linked checkout's Git directory names the shared one in its commondir file.
+    QString common = gitDirectory;
+    QFile marker(QDir(gitDirectory).filePath(QStringLiteral("commondir")));
+    if (marker.open(QIODevice::ReadOnly)) {
+        const QString value = QString::fromUtf8(marker.readLine()).trimmed();
+        if (!value.isEmpty())
+            common = QFileInfo(value).isAbsolute() ? value : QDir(gitDirectory).filePath(value);
+    }
+    return QFileInfo(common).canonicalFilePath();
+}
+
 QString worktreeRepository(const QString& worktree) {
     const QString gitDirectory = worktreeGitDirectory(worktree);
     const qsizetype linked = gitDirectory.indexOf(QStringLiteral("/.git/worktrees/"));

@@ -140,8 +140,12 @@ void CloudControlClient::executeWorktreeCommand(const QJsonObject& command,
             acknowledgeCommand(command, cached, senderAgreementKey);
             return;
         }
+        // Every checkout of a repository shares its allowance, including linked checkouts of a
+        // bare repository, which have no common main checkout.
+        const QString commonDirectory = worktreeCommonDirectory(worktreePath);
         const QString refusal = worktreeQuota_.reserve(
-            repository, QDateTime::currentMSecsSinceEpoch(),
+            commonDirectory.isEmpty() ? repository : commonDirectory,
+            QDateTime::currentMSecsSinceEpoch(),
             QStorageInfo(repository).isValid() ? QStorageInfo(repository).bytesAvailable() : -1);
         if (!refusal.isEmpty()) {
             qWarning("command %s refused: remote worktree quota",
