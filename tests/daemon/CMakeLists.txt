@@ -123,3 +123,5 @@ target_sources(ketplus_daemon_peer_transport_tests PRIVATE cloud-privacy/MemoryC
 set_tests_properties(ketplus_daemon_peer_transport_tests PROPERTIES TIMEOUT 45)
 
 ketplus_add_daemon_test(ketplus_async_question_lifetime_tests AsyncQuestionLifetimeTest.cpp)
+
+ketplus_tests_offscreen()

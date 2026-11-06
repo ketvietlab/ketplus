@@ -89,6 +89,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 include(cmake/Warnings.cmake)
+include(cmake/OffscreenTests.cmake)
 
 configure_file(
     cmake/KetPlusProductVersion.h.in
