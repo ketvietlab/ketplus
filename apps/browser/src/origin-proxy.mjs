@@ -52,15 +52,28 @@ function parseAuthority(authority) {
   }
 }
 
-async function permittedAddress(hostname, permits, lookup) {
+async function permittedAddresses(hostname, permits, lookup) {
   let addresses;
   try {
     addresses = await resolveAddresses(hostname, lookup);
   } catch {
-    return { unresolved: true };
+    return { unresolved: true, addresses: [] };
   }
-  const address = addresses.find(permits);
-  return address ? { address } : {};
+  return { addresses: addresses.filter(permits) };
+}
+
+// Dials only the checked addresses, in resolver order, falling back to the next on
+// failure (localhost answers ::1 before 127.0.0.1 for an IPv4-only server). The name is
+// never resolved again.
+function pinnedConnection(addresses) {
+  const answers = addresses.map((address) => ({ address, family: net.isIP(address) }));
+  return {
+    autoSelectFamily: true,
+    lookup(_hostname, options, callback) {
+      if (options?.all) callback(null, answers);
+      else callback(null, answers[0].address, answers[0].family);
+    },
+  };
 }
 
 export async function startOriginProxy({
@@ -91,12 +104,12 @@ export async function startOriginProxy({
       deny();
       return;
     }
-    const target = await permittedAddress(
+    const target = await permittedAddresses(
       url.hostname,
       (address) => allowsAddress(url.href, address),
       lookup,
     );
-    if (target.unresolved || !target.address) {
+    if (!target.addresses.length) {
       if (target.unresolved) {
         response.writeHead(502);
         response.end();
@@ -105,7 +118,10 @@ export async function startOriginProxy({
       return;
     }
     const upstream = http.request({
-      host: target.address,
+      ...pinnedConnection(target.addresses),
+      // A pooled socket keyed by host:port could carry another session's pinned address.
+      agent: false,
+      host: url.hostname.replace(/^\[|\]$/g, ""),
       port: url.port || 80,
       method: request.method,
       path: `${url.pathname}${url.search}`,
@@ -138,18 +154,22 @@ export async function startOriginProxy({
       refuseSocket(clientSocket, 403);
       return;
     }
-    const resolved = await permittedAddress(
+    const resolved = await permittedAddresses(
       target.hostname,
       (address) => allowsAuthorityAddress(request.url, address),
       lookup,
     );
-    if (!resolved.address) {
+    if (!resolved.addresses.length) {
       if (!resolved.unresolved) onBlocked(target.origin);
       refuseSocket(clientSocket, resolved.unresolved ? 502 : 403);
       return;
     }
     const port = Number(request.url.slice(request.url.lastIndexOf(":") + 1)) || 443;
-    const upstream = net.connect(port, resolved.address, () => {
+    const upstream = net.connect({
+      ...pinnedConnection(resolved.addresses),
+      host: target.hostname.replace(/^\[|\]$/g, ""),
+      port,
+    }, () => {
       clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
       if (head.length) upstream.write(head);
       upstream.pipe(clientSocket);
@@ -167,17 +187,21 @@ export async function startOriginProxy({
       refuseSocket(clientSocket, 403);
       return;
     }
-    const resolved = await permittedAddress(
+    const resolved = await permittedAddresses(
       url.hostname,
       (address) => allowsAddress(url.href, address),
       lookup,
     );
-    if (!resolved.address) {
+    if (!resolved.addresses.length) {
       if (!resolved.unresolved) onBlocked(url.href);
       refuseSocket(clientSocket, resolved.unresolved ? 502 : 403);
       return;
     }
-    const upstream = net.connect(Number(url.port || 80), resolved.address, () => {
+    const upstream = net.connect({
+      ...pinnedConnection(resolved.addresses),
+      host: url.hostname.replace(/^\[|\]$/g, ""),
+      port: Number(url.port || 80),
+    }, () => {
       const lines = [`${request.method} ${url.pathname}${url.search} HTTP/1.1`];
       for (let index = 0; index < request.rawHeaders.length; index += 2) {
         const name = request.rawHeaders[index];

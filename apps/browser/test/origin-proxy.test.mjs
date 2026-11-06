@@ -167,3 +167,42 @@ test("resolved-address policy for each origin entry", () => {
   assert.ok(named.allowsAddress("http://10.0.0.5:3000/", "10.0.0.5"));
   assert.ok(!named.allowsAddress("https://other.test/", "93.184.215.14"));
 });
+
+test("a narrowed session keeps the host's address ceiling", () => {
+  const all = new OriginPolicy(["*"]);
+  const metadata = all.narrow(["http://169.254.169.254"]);
+  assert.ok(metadata.allows("http://169.254.169.254/latest/"));
+  assert.ok(!metadata.allowsAddress("http://169.254.169.254/latest/", "169.254.169.254"));
+  const intranet = all.narrow(["https://intranet.test"]);
+  assert.ok(!intranet.allowsAddress("https://intranet.test/", "10.0.0.1"));
+  assert.ok(intranet.allowsAddress("https://intranet.test/", "93.184.215.14"));
+  assert.ok(!all.narrow().allowsAddress("https://example.com/", "10.0.0.1"));
+
+  const loopback = new OriginPolicy(["loopback"]).narrow(["http://localhost:3000"]);
+  assert.ok(!loopback.allowsAddress("http://localhost:3000/", "10.0.0.1"));
+  assert.ok(loopback.allowsAddress("http://localhost:3000/", "127.0.0.1"));
+});
+
+test("a hop falls back to the next permitted address", { timeout: 5000 }, async (t) => {
+  const server = http.createServer((_request, response) => response.end("ipv4"));
+  server.listen(0, "127.0.0.1"); // IPv4 only, while localhost answers ::1 first
+  await once(server, "listening");
+  t.after(() => server.close());
+  const { port } = server.address();
+  const proxy = await policyProxy(new OriginPolicy(["loopback"]), {
+    lookup: async () => [
+      { address: "::1", family: 6 },
+      { address: "127.0.0.1", family: 4 },
+    ],
+  });
+  t.after(() => proxy.close());
+  const reply = await proxyGet(proxy, `http://localhost:${port}/`);
+  assert.equal(reply.status, 200);
+  assert.equal(reply.body, "ipv4");
+  const { text } = await rawProxyRequest(
+    t,
+    proxy,
+    `CONNECT localhost:${port} HTTP/1.1\r\nHost: localhost:${port}\r\n\r\n`,
+  );
+  assert.match(text, /^HTTP\/1\.1 200 Connection Established/);
+});
