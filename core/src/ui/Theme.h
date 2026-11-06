@@ -58,6 +58,10 @@ struct ThemePalette final {
     QString syntaxAttribute;
 };
 
+// The tooltip font size of the kit's recipe at the current theme and zoom; the stylesheet
+// sets it on QToolTip so the base QWidget rule does not.
+[[nodiscard]] int tooltipFontPixels();
+
 class ThemeManager final : public QObject {
     Q_OBJECT
 
@@ -90,6 +94,7 @@ class ThemeManager final : public QObject {
     [[nodiscard]] Mode effectiveMode() const noexcept;
     void loadInterFont();
     void setApplicationFont(const QFont& font);
+    void restoreTooltipFont();
 
     QApplication& application_;
     Mode mode_{Mode::System};

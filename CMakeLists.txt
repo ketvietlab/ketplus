@@ -123,6 +123,8 @@ if(KETPLUS_BUILD_DESKTOP)
         apps/desktop/src/ui/LucideIcon.h
     )
     target_link_libraries(ketplus_typography PUBLIC Qt6::Gui Qt6::Svg Qt6::Widgets)
+    # ThemeManager's tooltipFontPixels(): the stylesheet keeps tooltips at the kit's size.
+    target_link_libraries(ketplus_typography PRIVATE KetPlusCM::ui)
     target_include_directories(ketplus_typography PUBLIC
         "$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/apps/desktop/src>"
     )

@@ -10,6 +10,7 @@
 
 #include <QApplication>
 #include <QDialogButtonBox>
+#include <QFontInfo>
 #include <QListWidget>
 #include <QPushButton>
 #include <QSettings>
@@ -285,6 +286,10 @@ void RefactorWave1ContractTest::themeInstallsTheKetStyle() {
         QCOMPARE(qApp->palette().color(QPalette::Highlight), expected.color(QPalette::Highlight));
         QCOMPARE(QToolTip::palette().color(QPalette::ToolTipBase),
                  expected.color(QPalette::ToolTipBase));
+        // A theme switch rewrites the stylesheet, which drops per-class fonts.
+        QCOMPARE(QToolTip::font().pixelSize(),
+                 qRound(ket::Appearance::instance().scaled(
+                     ket::tooltipRecipe(ket::Appearance::instance().theme()).fontPixels)));
     }
     // Tooltips keep the kit's font size from the start, not only after a theme change, and
     // after the interface size changes.
@@ -292,16 +297,45 @@ void RefactorWave1ContractTest::themeInstallsTheKetStyle() {
         return qRound(ket::Appearance::instance().scaled(
             ket::tooltipRecipe(ket::Appearance::instance().theme()).fontPixels));
     };
+    // The label a tooltip shows: the stylesheet's base QWidget size must not reach it.
+    const auto shownTooltipPixels = [] {
+        QWidget anchor;
+        anchor.resize(80, 40);
+        anchor.show();
+        QToolTip::showText(anchor.mapToGlobal(QPoint(10, 10)), QStringLiteral("Tip"), &anchor);
+        int pixels = -1;
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            if (widget->inherits("QTipLabel") && widget->isVisible()) {
+                widget->ensurePolished();
+                pixels = QFontInfo(widget->font()).pixelSize();
+            }
+        }
+        QToolTip::hideText();
+        return pixels;
+    };
     {
+        // A clean start: the application has no stylesheet yet, as in main().
+        qApp->setStyleSheet(QString());
         ketplus::ThemeManager fresh(*qApp);
         QCOMPARE(QToolTip::font().pixelSize(), tooltipPixels());
-        fresh.setInterfaceFontSizePixels(fresh.interfaceFontSizePixels() + 2);
+        QCOMPARE(shownTooltipPixels(), tooltipPixels());
+        fresh.setInterfaceFontSizePixels(fresh.interfaceFontSizePixels() + 4);
         QCOMPARE(QToolTip::font().pixelSize(), tooltipPixels());
+        QCOMPARE(shownTooltipPixels(), tooltipPixels());
+        QCOMPARE(ketplus::tooltipFontPixels(), tooltipPixels());
     }
     const QString styleSheet = qApp->styleSheet();
-    for (const char* selector : {"QMenu {", "QMenu::item", "QToolTip {", "QTabBar::tab"}) {
+    for (const char* selector : {"QMenu {", "QMenu::item", "QTabBar::tab"}) {
         QVERIFY2(!styleSheet.contains(QLatin1String(selector)), selector);
     }
+    // The tooltip rule sets only the size; the kit's style still draws the panel.
+    const qsizetype tooltipRule = styleSheet.indexOf(QLatin1String("QToolTip {"));
+    QVERIFY(tooltipRule >= 0);
+    const QString tooltipBody = styleSheet.mid(
+        tooltipRule, styleSheet.indexOf(QLatin1Char('}'), tooltipRule) - tooltipRule);
+    QVERIFY(!tooltipBody.contains(QLatin1String("background")));
+    QVERIFY(!tooltipBody.contains(QLatin1String("border")));
+    QVERIFY(!tooltipBody.contains(QLatin1String("padding")));
 }
 
 void RefactorWave1ContractTest::currentNativePaletteBaseline() {
