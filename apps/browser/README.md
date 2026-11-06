@@ -211,9 +211,12 @@ them with a scoped observation to exclude the same chrome from structured
 evidence. `policy.allowViewportWidthMismatch` is honored only when both raster
 regions are given with equal sizes and the viewport heights match.
 
-Both rasters are checked from their PNG header before decoding: a file that is
-not a PNG fails with `INVALID_RASTER`, and one larger than `maxRasterPixels`
+Both rasters are checked from their PNG chunk structure before decoding. A file
+that is not a PNG, is truncated, does not start with exactly one 13-byte IHDR,
+or is interlaced fails with `INVALID_RASTER`; one larger than `maxRasterPixels`
 (the largest session capture, 4096 x 4096 at 3x) fails with `RASTER_TOO_LARGE`.
+pngjs would otherwise adopt a later IHDR's size and inflates interlaced data
+without an output limit.
 
 ## Artifacts
 

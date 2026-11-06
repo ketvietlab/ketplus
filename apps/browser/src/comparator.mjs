@@ -191,20 +191,36 @@ const scaleRegion = (region, scale) => ({
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
-// Reads the IHDR size so an oversized image is refused before pngjs allocates it.
+// Walks the chunk structure before pngjs sees it: pngjs takes the size of any later IHDR
+// and inflates interlaced data without an output limit, so neither may reach it. Captures
+// from Chromium and macOS are non-interlaced with a single leading IHDR.
 function decodeBounded(bytes, side) {
-  const header = bytes.length >= 24 && bytes.subarray(0, 8).equals(PNG_SIGNATURE) &&
-    bytes.toString("latin1", 12, 16) === "IHDR";
-  const width = header ? bytes.readUInt32BE(16) : 0;
-  const height = header ? bytes.readUInt32BE(20) : 0;
-  if (!header || !width || !height) {
-    throw new BrowserApiError("INVALID_RASTER", `${side} raster is not a PNG`);
-  }
-  if (width * height > LIMITS.maxRasterPixels) {
-    throw new BrowserApiError("RASTER_TOO_LARGE", `${side} raster exceeds ${LIMITS.maxRasterPixels} pixels`, {
-      width,
-      height,
-    });
+  const invalid = (reason) => new BrowserApiError("INVALID_RASTER", `${side} raster ${reason}`);
+  if (bytes.length < 8 || !bytes.subarray(0, 8).equals(PNG_SIGNATURE)) throw invalid("is not a PNG");
+  let width = 0;
+  let height = 0;
+  let headers = 0;
+  for (let offset = 8; ; ) {
+    if (offset + 12 > bytes.length) throw invalid("is truncated");
+    const length = bytes.readUInt32BE(offset);
+    const type = bytes.toString("latin1", offset + 4, offset + 8);
+    if (length > bytes.length - offset - 12) throw invalid("is truncated");
+    if (offset === 8 && (type !== "IHDR" || length !== 13)) throw invalid("does not start with IHDR");
+    if (type === "IHDR") {
+      if (++headers > 1) throw invalid("has more than one IHDR");
+      width = bytes.readUInt32BE(offset + 8);
+      height = bytes.readUInt32BE(offset + 12);
+      if (!width || !height) throw invalid("has no pixels");
+      if (width * height > LIMITS.maxRasterPixels) {
+        throw new BrowserApiError("RASTER_TOO_LARGE", `${side} raster exceeds ${LIMITS.maxRasterPixels} pixels`, {
+          width,
+          height,
+        });
+      }
+      if (bytes[offset + 20] !== 0) throw invalid("is interlaced");
+    }
+    offset += length + 12;
+    if (type === "IEND") break;
   }
   return PNG.sync.read(bytes);
 }
