@@ -207,6 +207,9 @@ Every build stages that tree with
 `apps/daemon/providers/claude-sidecar/package-sidecar.mjs` (a build-host Node and
 network access for `npm ci`, or `KETPLUS_CLAUDE_SIDECAR_DIR` pointing at a staged
 tree); there is no option to leave it out, and the bundle check fails without it.
+`cmake --install` copies the staged sidecar and `assets/agent-skills` after the
+bundle and replaces the installed copies, so neither keeps files from the tree
+the bundle was last built with (#124), as for the browser runtime (#94).
 
 A Cursor adapter can run beside Codex and Claude when the user-installed
 Cursor CLI is available. Discovery uses `PATH`, `KETPLUS_CURSOR_AGENT`,

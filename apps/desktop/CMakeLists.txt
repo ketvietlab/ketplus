@@ -222,12 +222,8 @@ if(APPLE)
     #
     # ADR 0009: JavaScript trees must not live in Contents/Helpers (codesign
     # treats every file there as nested code). The Claude sidecar is JS +
-    # node_modules in Resources; Node is reused from ketplus-browser.
-    install(DIRECTORY "${KETPLUS_CLAUDE_SIDECAR_STAGE}/"
-        DESTINATION "KetPlus.app/Contents/Resources/claude-sidecar"
-        USE_SOURCE_PERMISSIONS
-        COMPONENT Runtime
-    )
+    # node_modules in Resources; Node is reused from ketplus-browser. It is
+    # installed after install(TARGETS ketplus), below.
     add_custom_target(ketplus_bundle_daemon ALL
         COMMAND "${CMAKE_COMMAND}" -E make_directory
             "$<TARGET_BUNDLE_DIR:ketplus>/Contents/Helpers"
@@ -276,13 +272,6 @@ if(APPLE)
             COMPONENT Runtime
         )
     endif()
-    # Default agent skills (ket-atlas, enterprise-grade, ket-design-system). Desktop and the
-    # daemon both find them at ../Resources/agent-skills.
-    install(DIRECTORY "${PROJECT_SOURCE_DIR}/assets/agent-skills"
-        DESTINATION "KetPlus.app/Contents/Resources"
-        COMPONENT Runtime
-    )
-
     # ADR 0009: the browser.v0 runtime (pinned Node + apps/browser production
     # dependencies + skill) lives in Contents/Resources/ketplus-browser. It is
     # not in Contents/Helpers because codesign treats every file there as nested
@@ -457,6 +446,28 @@ if(APPLE AND KETPLUS_BUNDLE_BROWSER_RUNTIME)
         COMPONENT Runtime
     )
     install(CODE "${ketplus_browser_runtime_check_installed}" COMPONENT Runtime)
+endif()
+
+if(APPLE)
+    # After install(TARGETS ketplus) for the same reason: the bundle embeds the Claude sidecar and
+    # the default agent skills (ket-atlas, enterprise-grade, ket-design-system) of its last
+    # build. Installed before it, a tree changed since was overwritten file by file with the
+    # older one, and files the new one no longer has remained. Each now replaces the installed
+    # copy (#124). Desktop and the daemon find the skills at ../Resources/agent-skills.
+    install(CODE "file(REMOVE_RECURSE
+        \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/KetPlus.app/Contents/Resources/claude-sidecar\"
+        \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/KetPlus.app/Contents/Resources/agent-skills\")"
+        COMPONENT Runtime
+    )
+    install(DIRECTORY "${KETPLUS_CLAUDE_SIDECAR_STAGE}/"
+        DESTINATION "KetPlus.app/Contents/Resources/claude-sidecar"
+        USE_SOURCE_PERMISSIONS
+        COMPONENT Runtime
+    )
+    install(DIRECTORY "${PROJECT_SOURCE_DIR}/assets/agent-skills"
+        DESTINATION "KetPlus.app/Contents/Resources"
+        COMPONENT Runtime
+    )
 endif()
 
 if(APPLE)
