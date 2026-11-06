@@ -30,11 +30,12 @@ QString compactPath(const QString& path) { return path + QStringLiteral(".compac
 // A connection of its own, removed when it goes out of scope.
 class Connection final {
   public:
-    explicit Connection(const QString& path)
+    explicit Connection(const QString& path, const QString& options = {})
         : name_(QStringLiteral("ketplus-journal-space-%1")
                     .arg(QUuid::createUuid().toString(QUuid::WithoutBraces))) {
         database_ = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), name_);
         database_.setDatabaseName(path);
+        database_.setConnectOptions(options);
         database_.open();
     }
     Connection(const Connection&) = delete;
@@ -141,9 +142,27 @@ MigrationResult migrateToIncrementalVacuum(const QString& path) {
         return result;
 
     QString error;
-    Connection source(path);
+    // Exclusive from its first read to its close: SQLite refuses it while any other connection
+    // has the journal open, a daemon from before the journal lock included, and refuses every
+    // other connection while it is open. The copy and the rename happen under it.
+    Connection source(path, QStringLiteral("QSQLITE_BUSY_TIMEOUT=2000"));
     if (!source.database().isOpen())
         return failed(result, path, source.database().lastError().text());
+    QSqlQuery first(source.database());
+    if (!first.exec(QStringLiteral("PRAGMA locking_mode=EXCLUSIVE")))
+        return failed(result, path, first.lastError().text());
+    if (!first.exec(QStringLiteral("SELECT count(*) FROM sqlite_schema")) || !first.next()) {
+        const QString code = first.lastError().nativeErrorCode();
+        // SQLITE_BUSY or SQLITE_LOCKED: open elsewhere. The file is not touched.
+        if (code == QStringLiteral("5") || code == QStringLiteral("6")) {
+            result.outcome = Migration::Deferred;
+            result.error = QStringLiteral("The journal is open in another process.");
+            return result;
+        }
+        return failed(result, path, first.lastError().text());
+    }
+    const qint64 tables = first.value(0).toLongLong();
+    first.finish();
     const auto before = readUsage(source.database(), &error);
     if (!before)
         return failed(result, path, error);
@@ -169,10 +188,8 @@ MigrationResult migrateToIncrementalVacuum(const QString& path) {
     if (checkpoint.value(0).toInt() != 0)
         return failed(result, path, QStringLiteral("The journal is in use."));
     checkpoint.finish();
-    const auto tables =
-        scalar(source.database(), QStringLiteral("SELECT count(*) FROM sqlite_schema"), &error);
-    if (!tables)
-        return failed(result, path, error);
+    if (QFileInfo(path + QStringLiteral("-wal")).size() > 0)
+        return failed(result, path, QStringLiteral("The journal's log was not emptied."));
 
     // The copy takes the pending auto_vacuum; the original is not changed.
     QSqlQuery vacuum(source.database());
@@ -183,13 +200,6 @@ MigrationResult migrateToIncrementalVacuum(const QString& path) {
     if (!vacuum.exec())
         return failed(result, path, vacuum.lastError().text());
     vacuum.finish();
-    source.close();
-    for (const QString& suffix : {QStringLiteral("-wal"), QStringLiteral("-shm")}) {
-        const QFileInfo sidecar(path + suffix);
-        if (sidecar.exists() && suffix == QStringLiteral("-wal") && sidecar.size() > 0)
-            return failed(result, path, QStringLiteral("The journal was written while copied."));
-        QFile::remove(sidecar.filePath());
-    }
 
     {
         Connection copy(compactPath(path));
@@ -207,7 +217,7 @@ MigrationResult migrateToIncrementalVacuum(const QString& path) {
         const auto after = readUsage(copy.database(), &error);
         if (!copiedTables || !after)
             return failed(result, path, error);
-        if (copiedTables->toLongLong() != tables->toLongLong() || after->autoVacuum != 2)
+        if (copiedTables->toLongLong() != tables || after->autoVacuum != 2)
             return failed(result, path,
                           QStringLiteral("The compacted journal does not match the original."));
         result.after = *after;
@@ -217,10 +227,18 @@ MigrationResult migrateToIncrementalVacuum(const QString& path) {
 #endif
     if (!syncFile(compactPath(path)))
         return failed(result, path, QStringLiteral("The compacted journal could not be synced."));
+#if defined(Q_OS_WIN)
+    // Windows cannot replace an open file; the journal lock still keeps new daemons out.
+    source.close();
+#endif
     if (!replaceFile(compactPath(path), path))
         return failed(result, path,
                       QStringLiteral("The compacted journal could not replace the original."));
     syncDirectory(QFileInfo(path).absolutePath());
+    source.close();
+    // The old log, emptied before the copy, would only be an empty file beside the new journal.
+    if (QFileInfo(path + QStringLiteral("-wal")).size() == 0)
+        QFile::remove(path + QStringLiteral("-wal"));
     result.outcome = Migration::Migrated;
     return result;
 }

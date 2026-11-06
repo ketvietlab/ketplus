@@ -2,6 +2,7 @@
 #include "service/DaemonService.h"
 #include "storage/LocalJournal.h"
 
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QSqlDatabase>
@@ -37,6 +38,7 @@ class Database final {
         QSqlQuery query(database_);
         return query.exec(statement);
     }
+    QSqlDatabase& database() { return database_; }
     QVariant value(const QString& statement) {
         QSqlQuery query(database_);
         return query.exec(statement) && query.next() ? query.value(0) : QVariant();
@@ -96,9 +98,8 @@ class JournalSpaceTest final : public QObject {
         QCOMPARE(result.after.autoVacuum, 2);
         QCOMPARE(result.after.freePages, 0);
         QVERIFY(QFileInfo(path).size() < sizeBefore / 2);
-        for (const QString& suffix :
-             {QStringLiteral(".compact"), QStringLiteral(".compact-journal"),
-              QStringLiteral("-wal"), QStringLiteral("-shm")})
+        for (const QString& suffix : {QStringLiteral(".compact"),
+                                      QStringLiteral(".compact-journal"), QStringLiteral("-wal")})
             QVERIFY2(!QFileInfo::exists(path + suffix), qPrintable(suffix));
 #if !defined(Q_OS_WIN)
         QCOMPARE(QFile::permissions(path) & (QFileDevice::ReadGroup | QFileDevice::ReadOther),
@@ -152,6 +153,28 @@ class JournalSpaceTest final : public QObject {
         QCOMPARE(kept.readAll(), bytes);
     }
 
+    void aJournalOpenInAnOlderDaemonIsNotReplaced() {
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("journal.sqlite3"));
+        writeJournalWithFreePages(path);
+        // A daemon from before the journal lock: it owns only its endpoint lock, and keeps its
+        // connection open while idle.
+        Database older(path);
+        QVERIFY(older.exec(QStringLiteral("PRAGMA journal_mode=WAL")));
+        QCOMPARE(older.value(QStringLiteral("SELECT count(*) FROM blobs")).toInt(), 500);
+        const qint64 sizeBefore = QFileInfo(path).size();
+
+        const auto result = journal_space::migrateToIncrementalVacuum(path);
+        QCOMPARE(result.outcome, journal_space::Migration::Deferred);
+        QCOMPARE(result.error, QStringLiteral("The journal is open in another process."));
+        QVERIFY(!QFileInfo::exists(path + QStringLiteral(".compact")));
+        QCOMPARE(QFileInfo(path).size(), sizeBefore);
+        // Its journal still works.
+        QVERIFY(older.exec(QStringLiteral("INSERT INTO blobs VALUES (100000, x'00')")));
+        QCOMPARE(older.value(QStringLiteral("SELECT count(*) FROM blobs")).toInt(), 501);
+        QCOMPARE(older.value(QStringLiteral("PRAGMA auto_vacuum")).toInt(), 0);
+    }
+
     void aNewJournalNeedsNoCopyAndStartsOnIncrementalVacuum() {
         QTemporaryDir directory;
         const QString path = directory.filePath(QStringLiteral("journal.sqlite3"));
@@ -179,7 +202,7 @@ class JournalSpaceTest final : public QObject {
                  journal_space::Migration::Migrated);
         {
             Database database(path);
-            QVERIFY(database.exec(QStringLiteral("DELETE FROM blobs WHERE id % 40 != 0")));
+            QVERIFY(database.exec(QStringLiteral("DELETE FROM blobs WHERE id % 100 != 0")));
         }
         LocalJournal journal(path);
         QVERIFY2(journal.isOpen(), qPrintable(journal.errorString()));
@@ -188,12 +211,40 @@ class JournalSpaceTest final : public QObject {
                  qPrintable(QString::number(freed)));
         const qint64 pagesBefore = journal.space()->pageCount;
 
+        const qint64 pageSize = journal.space()->pageSize;
+        const auto fileShrunkTo = [&](const qint64 pages) {
+            return QFileInfo(path).size() == pages * pageSize &&
+                   QFileInfo(path + QStringLiteral("-wal")).size() == 0;
+        };
+
+        // The disk gets the pages back while the journal stays open.
         QCOMPARE(journal.reclaimFreePages(100), std::optional<qint64>(100));
         QCOMPARE(journal.space()->freePages, freed - 100);
         QCOMPARE(journal.space()->pageCount, pagesBefore - 100);
-        QCOMPARE(journal.reclaimFreePages(freed - 200), std::optional<qint64>(freed - 200));
-        QCOMPARE(journal.space()->freePages, 100);
+        QVERIFY2(fileShrunkTo(pagesBefore - 100),
+                 qPrintable(QString::number(QFileInfo(path).size())));
+
+        // A reader holds the checkpoint back. The batch leaves fewer free pages than the minimum,
+        // so the next call has nothing to reclaim and only finishes the checkpoint.
+        const qint64 batch = journal.space()->freePages - 100;
+        QVERIFY(100 < LocalJournal::minimumReclaimPages);
+        {
+            Database reader(path);
+            QVERIFY(reader.database().transaction());
+            QVERIFY(reader.value(QStringLiteral("SELECT count(*) FROM blobs")).isValid());
+            QElapsedTimer elapsed;
+            elapsed.start();
+            QCOMPARE(journal.reclaimFreePages(batch), std::optional<qint64>(batch));
+            // It does not wait for the reader: the daemon's thread stays free.
+            QVERIFY2(elapsed.elapsed() < 1'000, qPrintable(QString::number(elapsed.elapsed())));
+            QVERIFY(!fileShrunkTo(pagesBefore - 100 - batch));
+            reader.database().commit();
+        }
+        QCOMPARE(journal.reclaimFreePages(100'000), std::optional<qint64>(0));
+        QVERIFY2(fileShrunkTo(pagesBefore - 100 - batch),
+                 qPrintable(QString::number(QFileInfo(path).size())));
         // Below the minimum a batch is not worth a write.
+        QCOMPARE(journal.space()->freePages, 100);
         QCOMPARE(journal.reclaimFreePages(100'000), std::optional<qint64>(0));
         QCOMPARE(journal.space()->freePages, 100);
     }

@@ -21,7 +21,31 @@ std::optional<journal_space::Usage> LocalJournal::space() const {
     return journal_space::Usage{values[0], values[1], values[2], int(values[3])};
 }
 
+bool LocalJournal::checkpointReclaimedPages() {
+    // The smaller size is committed to the write-ahead log; the file shrinks only when the log
+    // is copied back. A passive checkpoint never waits: when a reader holds frames back it stops
+    // and the next call tries again. Only a complete one is followed by emptying the log.
+    QSqlQuery query(database_);
+    if (!query.exec(QStringLiteral("PRAGMA wal_checkpoint(PASSIVE)")) || !query.next()) {
+        setError(query.lastError().text());
+        return false;
+    }
+    reclaimCheckpointPending_ =
+        query.value(0).toInt() != 0 || query.value(1).toInt() != query.value(2).toInt();
+    query.finish();
+    if (reclaimCheckpointPending_)
+        return true;
+    if (!query.exec(QStringLiteral("PRAGMA wal_checkpoint(TRUNCATE)")) || !query.next()) {
+        setError(query.lastError().text());
+        return false;
+    }
+    reclaimCheckpointPending_ = query.value(0).toInt() != 0;
+    return true;
+}
+
 std::optional<qint64> LocalJournal::reclaimFreePages(const qint64 maximumPages) {
+    if (reclaimCheckpointPending_ && !checkpointReclaimedPages())
+        return std::nullopt;
     const auto before = space();
     if (!before)
         return std::nullopt;
@@ -54,6 +78,8 @@ std::optional<qint64> LocalJournal::reclaimFreePages(const qint64 maximumPages) 
         database_.rollback();
         return std::nullopt;
     }
+    if (!checkpointReclaimedPages())
+        return std::nullopt;
     const auto after = space();
     if (!after)
         return std::nullopt;
