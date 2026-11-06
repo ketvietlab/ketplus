@@ -19,7 +19,7 @@ set(KETQT_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(KETQT_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(ketqt
     GIT_REPOSITORY https://github.com/ketvietlab/ket-qt.git
-    GIT_TAG bacf1e52cbf651149a56f64b9e62bd03651c487c # develop, styled tooltips and centred bubble text (PR #20)
+    GIT_TAG 6ceb5385f59fdb5cd1f3be9e6b0c24bd32c2db3e # develop, through PR #26
 )
 
 # libvterm at the commit core/cmake/Dependencies.cmake pins.
