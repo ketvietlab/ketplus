@@ -273,6 +273,14 @@ test("sessions and pages are capped and closing one frees its slot", async (t) =
   assert.ok(limit("LIMIT_REACHED", LIMITS.maxSessions)(created.find((r) => r.status === "rejected").reason));
   await service.closeSession({ sessionId: sessions.pop().sessionId });
   const session = await service.createSession(options);
+  // Count the pages the engine is asked for: concurrent opens past the cap must not reach it.
+  const context = service.sessions.get(session.sessionId).context;
+  const newPage = context.newPage.bind(context);
+  let engineOpens = 0;
+  context.newPage = (...args) => {
+    engineOpens += 1;
+    return newPage(...args);
+  };
 
   const opened = await Promise.allSettled(
     Array.from({ length: LIMITS.maxPagesPerSession + 1 }, () =>
@@ -281,13 +289,13 @@ test("sessions and pages are capped and closing one frees its slot", async (t) =
   const pages = opened.filter((result) => result.status === "fulfilled").map((result) => result.value);
   assert.equal(pages.length, LIMITS.maxPagesPerSession);
   assert.ok(limit("LIMIT_REACHED", LIMITS.maxPagesPerSession)(opened.find((r) => r.status === "rejected").reason));
+  assert.equal(engineOpens, LIMITS.maxPagesPerSession);
   await assert.rejects(
     service.open({ sessionId: session.sessionId, url: `${fixture.origin}/` }),
     limit("LIMIT_REACHED", LIMITS.maxPagesPerSession),
   );
   // A page the site opens past the cap (a popup) is closed rather than adopted.
-  const context = service.sessions.get(session.sessionId).context;
-  const popup = await context.newPage().catch(() => null);
+  const popup = await newPage().catch(() => null);
   if (popup && !popup.isClosed()) await popup.waitForEvent("close", { timeout: 5_000 });
   assert.equal(context.pages().length, LIMITS.maxPagesPerSession);
   assert.equal((await service.pages({ sessionId: session.sessionId })).pages.length, LIMITS.maxPagesPerSession);

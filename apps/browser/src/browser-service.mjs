@@ -261,6 +261,7 @@ export class BrowserService {
       context: null,
       proxy: null,
       pages: new Map(),
+      openingPages: 0,
       pageByHandle: new WeakMap(),
       blockedRequests: [],
       blockedRequestCount: 0,
@@ -467,12 +468,17 @@ export class BrowserService {
         `At most ${LIMITS.maxPagesPerSession} pages can be open in a session; close one first`,
         { limit: LIMITS.maxPagesPerSession },
       );
-    if (session.pages.size >= LIMITS.maxPagesPerSession) throw pageLimit();
+    // Pages still being created hold a slot, so concurrent opens never ask the engine for more
+    // pages than the cap allows.
+    if (session.pages.size + session.openingPages >= LIMITS.maxPagesPerSession) throw pageLimit();
+    session.openingPages += 1;
     let page;
     try {
       page = await session.context.newPage();
     } catch (error) {
       throw toApiError(error, "PAGE_CREATE_FAILED");
+    } finally {
+      session.openingPages -= 1;
     }
     // Concurrent opens or popups may have taken the last slot meanwhile.
     const record = this.admitPage(session, page);
