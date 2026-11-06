@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Svg Widgets)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Svg Test Widgets)
 qt_standard_project_setup(REQUIRES 6.8)
 
 include(FetchContent)
@@ -19,7 +19,7 @@ include(FetchContent)
 set(KETQT_BUILD_WIDGETS ON CACHE BOOL "" FORCE)
 FetchContent_Declare(ketqt
     GIT_REPOSITORY https://github.com/ketvietlab/ket-qt.git
-    GIT_TAG 5f310ce5a25677768c5e33646f68c7cfa45f5523 # develop, through PR #27
+    GIT_TAG c897a54458631f40a24b42e6fb4ff32910178e9c # develop, through PR #30
 )
 FetchContent_MakeAvailable(ketqt)
 
@@ -92,5 +92,5 @@ qt_add_resources(ketplus_qt_mock mock_docs
 )
 
 target_link_libraries(ketplus_qt_mock PRIVATE KetQt::Quick KetQt::QuickPlugin KetQt::Widgets Qt6::Gui
-                                              Qt6::Qml Qt6::Widgets
+                                              Qt6::Qml Qt6::Test Qt6::Widgets
                                               Qt6::Quick Qt6::QuickControls2 Qt6::Svg)

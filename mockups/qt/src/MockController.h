@@ -15,6 +15,8 @@ class MockController final : public QObject {
     Q_PROPERTY(QString initialState MEMBER initialState CONSTANT)
     Q_PROPERTY(QString initialPanel MEMBER initialPanel CONSTANT)
     Q_PROPERTY(qreal initialScroll MEMBER initialScroll CONSTANT)
+    Q_PROPERTY(QString edition MEMBER edition CONSTANT)
+    Q_PROPERTY(QString chrome MEMBER chrome CONSTANT)
 
   public:
     explicit MockController(QObject* parent = nullptr);
@@ -35,6 +37,10 @@ class MockController final : public QObject {
     QString initialState;
     QString initialPanel; // a panel to open: model, mode, limits, reviewer, composer, images or mermaid
     qreal initialScroll = -1; // where the transcript starts, 0 (top) to 1 (end); -1 keeps the top
+    QString edition = QStringLiteral("pro"); // "pro" (Main.qml) or "lite" (LiteMain.qml)
+    // Window chrome of the Lite window: "macos" (the system menu bar), "windows" or "linux"
+    // (a title bar and a menu bar drawn in the window).
+    QString chrome = QStringLiteral("macos");
 
   signals:
     void appearanceChanged();
