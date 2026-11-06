@@ -127,8 +127,9 @@ void TerminalPanel::focusTerminal() {
 
 void TerminalPanel::applyTheme(const ThemePalette& palette) { terminal_->applyTheme(palette); }
 
-void TerminalPanel::setTypography(const int fontSizePixels, const int lineHeightPixels) {
-    terminal_->setTypography(fontSizePixels, lineHeightPixels);
+void TerminalPanel::setTypography(const int fontSizePixels, const int lineHeightPixels,
+                                  const QString& fontFamily) {
+    terminal_->setTypography(fontSizePixels, lineHeightPixels, fontFamily);
 }
 
 bool TerminalPanel::isSessionRunning() const { return session_->isRunning(); }

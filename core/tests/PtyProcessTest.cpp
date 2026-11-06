@@ -42,6 +42,8 @@ class PtyProcessTest final : public QObject {
     void rendersAnsiOutputThroughVterm();
     void usesSystemFixedFont();
     void appliesTerminalTypography();
+    void appliesTerminalFontFamily();
+    void keepsTerminalFontFamilyUnderTheme();
     void echoesTypedTextBeforeEnter();
     void restoresFocusAfterAnActionMenuCloses();
     void rendersInputMethodPreedit();
@@ -106,6 +108,76 @@ void PtyProcessTest::appliesTerminalTypography() {
     TerminalView terminal(session);
     terminal.setTypography(17, 29);
     QCOMPARE(terminal.font().pixelSize(), 17);
+}
+
+void PtyProcessTest::appliesTerminalFontFamily() {
+    const QString fixedFamily =
+        QFontInfo(QFontDatabase::systemFont(QFontDatabase::FixedFont)).family();
+    QString family;
+    for (const QString& candidate : QFontDatabase::families()) {
+        if (QFontDatabase::isFixedPitch(candidate) && candidate != fixedFamily &&
+            QFontInfo(QFont(candidate)).family() == candidate) {
+            family = candidate;
+            break;
+        }
+    }
+    if (family.isEmpty())
+        QSKIP("No second fixed-pitch family is installed");
+
+    TerminalSession session;
+    TerminalView terminal(session);
+    terminal.resize(800, 600);
+    terminal.setTypography(16, 20, family);
+    QCOMPARE(QFontInfo(terminal.font()).family(), family);
+    QCOMPARE(terminal.font().pixelSize(), 16);
+    const int rows = session.rows();
+    const int columns = session.columns();
+
+    // A taller line and a larger size take effect on the grid and the PTY at once.
+    terminal.setTypography(24, 40, family);
+    QVERIFY(session.rows() < rows);
+    QVERIFY(session.columns() < columns);
+
+    // A family this system does not have falls back to the platform's fixed-pitch font.
+    terminal.setTypography(16, 20, QStringLiteral("No Such Terminal Font 7f3a"));
+    QCOMPARE(QFontInfo(terminal.font()).family(), fixedFamily);
+    QCOMPARE(session.rows(), rows);
+}
+
+void PtyProcessTest::keepsTerminalFontFamilyUnderTheme() {
+    // The application style sheet names the platform's fixed-pitch family for this view; the
+    // requested family must survive polish and a theme change.
+    const QString fixedFamily =
+        QFontInfo(QFontDatabase::systemFont(QFontDatabase::FixedFont)).family();
+    QString family;
+    for (const QString& candidate : QFontDatabase::families()) {
+        if (QFontDatabase::isFixedPitch(candidate) && candidate != fixedFamily &&
+            QFontInfo(QFont(candidate)).family() == candidate) {
+            family = candidate;
+            break;
+        }
+    }
+    if (family.isEmpty())
+        QSKIP("No second fixed-pitch family is installed");
+
+    ThemeManager theme(*qApp);
+    theme.setMode(ThemeManager::Mode::Light);
+    TerminalSession session;
+    TerminalView terminal(session);
+    terminal.resize(800, 600);
+    terminal.setTypography(16, 20, family);
+    terminal.show();
+    terminal.ensurePolished();
+    QCoreApplication::processEvents();
+    QCOMPARE(QFontInfo(terminal.font()).family(), family);
+    QCOMPARE(terminal.font().pixelSize(), 16);
+    const int columns = session.columns();
+
+    theme.setMode(ThemeManager::Mode::Dark);
+    QCoreApplication::processEvents();
+    QCOMPARE(QFontInfo(terminal.font()).family(), family);
+    QCOMPARE(terminal.font().pixelSize(), 16);
+    QCOMPARE(session.columns(), columns);
 }
 
 void PtyProcessTest::echoesTypedTextBeforeEnter() {

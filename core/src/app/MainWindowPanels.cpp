@@ -83,7 +83,8 @@ TerminalPanel* MainWindow::ensureTerminal() {
     terminal_ = new TerminalPanel(mainSplit_);
     terminal_->applyTheme(theme_.palette());
     terminal_->setTypography(appearanceSettings_.terminal.fontSizePixels,
-                             appearanceSettings_.terminal.lineHeightPixels);
+                             appearanceSettings_.terminal.lineHeightPixels,
+                             appearanceSettings_.terminalFontFamily);
     mainSplit_->addWidget(terminal_);
     mainSplit_->setStretchFactor(mainSplit_->indexOf(workspaceSplit_), 1);
     mainSplit_->setStretchFactor(mainSplit_->indexOf(terminal_), 0);

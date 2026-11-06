@@ -34,7 +34,9 @@ class TerminalView final : public QAbstractScrollArea {
     explicit TerminalView(TerminalSession& session, QWidget* parent = nullptr);
 
     void applyTheme(const ThemePalette& palette);
-    void setTypography(int fontSizePixels, int lineHeightPixels);
+    // An empty family, or one this system does not have, uses the platform's fixed-pitch font.
+    // The grid and the PTY take the new cell size at once.
+    void setTypography(int fontSizePixels, int lineHeightPixels, const QString& fontFamily = {});
     void start(const QString& workingDirectory);
     bool restart();
     void pasteClipboard();
@@ -58,6 +60,7 @@ class TerminalView final : public QAbstractScrollArea {
     bool eventFilter(QObject* watched, QEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
+    void changeEvent(QEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;

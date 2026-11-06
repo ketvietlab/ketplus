@@ -50,8 +50,6 @@ show your user and host name: do not commit them.
 
 ## Known gaps in the shipped terminal
 
-- `TerminalView::setTypography` always picks the platform fixed font; the mock
-  sets KÉT Sans Mono afterwards and replays a viewport resize.
 - The 16 ANSI colours are libvterm's defaults (`TerminalSession` only takes the
   default foreground and background), so dark blue is hard to read on the dark
   theme. A token-based ANSI palette needs a `core` change.

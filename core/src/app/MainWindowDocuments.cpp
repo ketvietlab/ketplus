@@ -949,7 +949,8 @@ void MainWindow::applyAppearanceSettings(const AppearanceSettings& settings) {
     }
     if (terminal_ != nullptr) {
         terminal_->setTypography(appearanceSettings_.terminal.fontSizePixels,
-                                 appearanceSettings_.terminal.lineHeightPixels);
+                                 appearanceSettings_.terminal.lineHeightPixels,
+                                 appearanceSettings_.terminalFontFamily);
     }
     if (markdownPreview_ != nullptr) {
         markdownPreview_->setTypography(appearanceSettings_.preview.fontSizePixels,
