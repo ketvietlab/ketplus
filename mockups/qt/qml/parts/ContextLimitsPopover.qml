@@ -5,115 +5,261 @@ import QtQuick.Layouts
 import Ket
 import KetPlusMock
 
-// Context & limits, opened from the composer's ring, as KetPlus desktop's usage popover:
-// the context window, the provider's conversation and organization usage (Claude), then the
-// plan limits shared across conversations.
-KetPopover {
+// Context & limits, opened from the composer's ring: a port of KetPlus desktop's
+// UsageLimitsPopover and ClaudeUsageSection. No title; sections split by rules: the
+// context window, then for Claude the conversation and organization usage, then the plan
+// limits shared across conversations. Codex offers Compact session instead.
+Basic.Popup {
     id: popover
 
-    property string provider: "codex"
-    property real contextUsed: 0.16
+    property string provider: "claude"
+    property real contextUsed: 0.156
     readonly property bool claude: provider === "claude"
+    readonly property color track: KetTheme.t.panelBorder
+    readonly property var limitRows: claude ? [
+        { label: "Session · 5 hours", resets: "Resets Fri, 06 Nov  12:10 PM", used: 2 },
+        { label: "Weekly · all models", resets: "Resets Sun, 08 Nov  7:00 AM", used: 85 },
+        { label: "Weekly · Fable", resets: "Resets Sun, 08 Nov  7:00 AM", used: 0 }
+    ] : [
+        { label: "Session · 5 hours", resets: "Resets Fri, 06 Nov  9:40 PM", used: 38 },
+        { label: "Weekly · all models", resets: "Resets Mon, 09 Nov  9:00 AM", used: 71 }
+    ]
+    // CloseOnPressOutside runs before the ring's click; skip the matching reopen.
+    property bool suppressReopen: false
 
     signal compactRequested()
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
+    function fill(percent) {
+        return percent >= 90 ? KetTheme.t.danger : percent >= 75 ? KetTheme.t.warning : KetTheme.t.accent
+    }
+    // Above the anchor, right edges aligned, inside the window.
+    function toggleAbove(anchor) {
+        if (visible) {
+            close()
+            return
+        }
+        if (suppressReopen) {
+            suppressReopen = false
+            return
+        }
+        const point = anchor.mapToItem(parent, anchor.width, 0)
+        x = Math.max(px(8), Math.min(point.x - width, parent.width - width - px(8)))
+        y = Math.max(px(8), point.y - height - px(8))
+        open()
+    }
+
+    component Rule: Rectangle {
+        Layout.fillWidth: true
+        Layout.leftMargin: popover.px(16)
+        Layout.rightMargin: popover.px(16)
+        Layout.preferredHeight: 1
+        color: popover.track
+    }
+    component Track: Rectangle {
+        property real percent: 0
+        Layout.fillWidth: true
+        Layout.preferredHeight: popover.px(5)
+        radius: height / 2
+        color: popover.track
+        Rectangle {
+            width: parent.width * Math.max(0, Math.min(100, parent.percent)) / 100
+            height: parent.height
+            radius: height / 2
+            color: popover.fill(parent.percent)
+        }
+    }
+    component Label: Text {
+        property int size: 15
+        color: KetTheme.t.textMain
+        font.family: KetTheme.fontFamily
+        font.pixelSize: popover.px(size)
+    }
+    component Note: Label {
+        Layout.fillWidth: true
+        size: 13
+        color: KetTheme.t.textMuted
+        wrapMode: Text.WordWrap
+    }
 
     parent: Basic.Overlay.overlay
-    title: "Context & limits"
-
-    KetMeter {
-        width: parent.width
-        label: "Context window"
-        valueText: Math.round(500 * popover.contextUsed) + "k / 500k (" + Math.round(100 * popover.contextUsed) + "%)"
-        fraction: popover.contextUsed
-        caption: popover.claude ? "Context compaction is managed by the provider"
-                                : "Compacts automatically at 90%"
-    }
-    Item {
-        width: parent.width
-        visible: !popover.claude
-        height: visible ? compact.implicitHeight + popover.px(8) : 0
-        KetButton {
-            id: compact
-            anchors.bottom: parent.bottom
-            controlSize: KetTheme.ControlSize.Small
-            text: "Compact session"
-            onClicked: { popover.close(); popover.compactRequested() }
-        }
+    width: px(430)
+    padding: 0
+    modal: false
+    focus: true
+    closePolicy: Basic.Popup.CloseOnEscape | Basic.Popup.CloseOnPressOutside
+    onAboutToHide: {
+        suppressReopen = true
+        Qt.callLater(() => suppressReopen = false)
     }
 
-    KetPopoverDivider { visible: popover.claude }
-    KetPopoverText { visible: popover.claude; role: "heading"; text: "Conversation · Runtime authentication" }
-    Repeater {
-        model: popover.claude ? [
-            { name: "SDK session estimate", value: "$139.6424" },
-            { name: "Input / output tokens", value: "22,383 / 1,561,880" },
-            { name: "Cache read / write", value: "400,672,151 / 3,522,600" },
-            { name: "Query budget", value: "Managed by runtime" }
-        ] : []
-        RowLayout {
-            required property var modelData
-            width: parent.width
-            height: popover.px(25)
-            Text {
+    background: Rectangle {
+        color: KetTheme.t.panelBg
+        radius: popover.px(10)
+        border.width: 1
+        border.color: popover.track
+    }
+
+    contentItem: ColumnLayout {
+        spacing: 0
+
+        // Context window
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.margins: popover.px(16)
+            Layout.topMargin: popover.px(15)
+            Layout.bottomMargin: popover.px(14)
+            spacing: popover.px(8)
+
+            RowLayout {
                 Layout.fillWidth: true
-                text: modelData.name
-                color: KetTheme.t.textMuted
-                font.family: KetTheme.fontFamily
-                font.pixelSize: popover.px(13)
-                elide: Text.ElideRight
+                Label { text: "Context window" }
+                Item { Layout.fillWidth: true }
+                Label {
+                    text: Math.round(500 * popover.contextUsed) + "k / 500k ("
+                          + Math.round(100 * popover.contextUsed) + "%)"
+                    color: KetTheme.t.textMuted
+                }
             }
-            Text {
-                text: modelData.value
-                color: KetTheme.t.textMain
-                font.family: KetTheme.fontFamily
-                font.pixelSize: popover.px(13)
-                font.features: { "tnum": 1 }
+            Track { percent: 100 * popover.contextUsed }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: popover.px(8)
+                Label {
+                    Layout.fillWidth: true
+                    size: 14
+                    text: popover.claude ? "Context compaction is managed by the provider"
+                                         : "Compacts automatically at 90%"
+                    color: KetTheme.t.textMuted
+                }
+                Basic.Button {
+                    id: compactButton
+                    visible: !popover.claude
+                    implicitWidth: compactText.implicitWidth + popover.px(12)
+                    implicitHeight: popover.px(24)
+                    padding: 0
+                    hoverEnabled: true
+                    onClicked: { popover.close(); popover.compactRequested() }
+                    KetToolTip { visible: compactButton.hovered; text: "Compact this Codex conversation" }
+                    contentItem: Label {
+                        id: compactText
+                        size: 14
+                        text: "Compact session"
+                        color: compactButton.hovered ? KetTheme.t.accentActive : KetTheme.t.accent
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        radius: popover.px(4)
+                        color: compactButton.hovered ? KetTheme.t.accentSubtle : "transparent"
+                    }
+                }
             }
         }
-    }
-    KetPopoverText {
-        visible: popover.claude
-        topPadding: popover.px(4)
-        text: "Session totals include restored history and subagents. The query budget counts only the current query's spend, so these values are not a budget progress ratio. SDK cost is an estimate."
-    }
 
-    KetPopoverDivider { visible: popover.claude }
-    KetPopoverText { visible: popover.claude; role: "heading"; text: "Organization · month to date (UTC)" }
-    KetPopoverText { visible: popover.claude; role: "body"; text: "Add a separate Admin API key in Settings → Providers." }
-    KetPopoverText {
-        visible: popover.claude
-        text: "All products and keys in the Admin key's organization, which may differ from the inference key's account. Cost is after discounts, before credits; balance and spending limits are available in Console."
-    }
-    Row {
-        visible: popover.claude
-        height: visible ? implicitHeight + popover.px(4) : 0
-        topPadding: popover.px(8)
-        spacing: popover.px(8)
-        KetButton { controlSize: KetTheme.ControlSize.Small; text: "Refresh" }
-        KetButton { controlSize: KetTheme.ControlSize.Small; text: "Open Anthropic Console" }
-    }
+        Rule {}
 
-    KetPopoverDivider {}
-    KetPopoverText { text: "Plan usage limits" }
-    Repeater {
-        model: popover.claude ? [
-            { label: "Session · 5 hours", resets: "Resets Fri, 06 Nov  12:10 PM", used: 0.02 },
-            { label: "Weekly · all models", resets: "Resets Sun, 08 Nov  7:00 AM", used: 0.85 },
-            { label: "Weekly · Fable", resets: "Resets Sun, 08 Nov  7:00 AM", used: 0 }
-        ] : [
-            { label: "5-hour limit", resets: "Resets 21:40", used: 0.38 },
-            { label: "Weekly limit", resets: "Resets Mon, 09 Nov  9:00 AM", used: 0.71 }
-        ]
-        KetMeter {
-            required property var modelData
-            width: parent.width
-            label: modelData.label
-            valueText: modelData.resets + "  " + Math.round(100 * modelData.used) + "%"
-            fraction: modelData.used
+        // Claude: this conversation's runtime session and the Admin key's organization.
+        ColumnLayout {
+            visible: popover.claude
+            Layout.fillWidth: true
+            Layout.margins: popover.px(16)
+            spacing: popover.px(8)
+
+            Label { Layout.fillWidth: true; text: "Conversation · Runtime authentication" }
+            Repeater {
+                model: [
+                    { name: "SDK session estimate", value: "$139.6424" },
+                    { name: "Input / output tokens", value: "22.383 / 1.561.880" },
+                    { name: "Cache read / write", value: "400.672.151 / 3.522.600" },
+                    { name: "Query budget", value: "Managed by runtime" }
+                ]
+                RowLayout {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    Label { Layout.fillWidth: true; size: 14; text: modelData.name; color: KetTheme.t.textMuted; elide: Text.ElideRight }
+                    Label { size: 14; text: modelData.value; font.features: { "tnum": 1 } }
+                }
+            }
+            Note { text: "Session totals include restored history and subagents. The query budget counts only the current query's spend, so these values are not a budget progress ratio. SDK cost is an estimate." }
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.topMargin: popover.px(4)
+                Layout.bottomMargin: popover.px(4)
+                Layout.preferredHeight: 1
+                color: popover.track
+            }
+            Label { Layout.fillWidth: true; text: "Organization · month to date (UTC)" }
+            Label { Layout.fillWidth: true; size: 14; text: "Add a separate Admin API key in Settings → Providers."; wrapMode: Text.WordWrap }
+            Note { text: "All products and keys in the Admin key's organization, which may differ from the inference key's account. Cost is after discounts, before credits; balance and spending limits are available in Console." }
+            RowLayout {
+                spacing: popover.px(8)
+                Repeater {
+                    model: ["Refresh", "Open Anthropic Console"]
+                    Basic.Button {
+                        id: accountButton
+                        required property string modelData
+                        implicitWidth: accountText.implicitWidth + popover.px(20)
+                        implicitHeight: popover.px(32)
+                        hoverEnabled: true
+                        contentItem: Label {
+                            id: accountText
+                            size: 14
+                            text: accountButton.modelData
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        background: Rectangle {
+                            radius: popover.px(5)
+                            color: accountButton.hovered ? KetTheme.t.surfaceHover : "transparent"
+                            border.width: 1
+                            border.color: accountButton.activeFocus ? KetTheme.t.accent : popover.track
+                        }
+                    }
+                }
+            }
+        }
+
+        // Plan limits, shared by every conversation on this provider.
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: popover.px(16)
+            Layout.rightMargin: popover.px(16)
+            Layout.topMargin: popover.px(13)
+            Layout.bottomMargin: popover.px(12)
+            spacing: popover.px(11)
+
+            Label { size: 14; text: "Plan usage limits"; color: KetTheme.t.textMuted }
+            Repeater {
+                model: popover.limitRows
+                ColumnLayout {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    spacing: popover.px(6)
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: popover.px(8)
+                        Label { Layout.fillWidth: true; text: modelData.label; elide: Text.ElideRight }
+                        Label {
+                            size: 14
+                            text: modelData.resets + "  " + modelData.used + "%"
+                            color: KetTheme.t.textMuted
+                            horizontalAlignment: Text.AlignRight
+                        }
+                    }
+                    Track { percent: modelData.used }
+                }
+            }
+        }
+
+        Rule {}
+
+        Note {
+            Layout.leftMargin: popover.px(16)
+            Layout.rightMargin: popover.px(16)
+            Layout.topMargin: popover.px(11)
+            Layout.bottomMargin: popover.px(13)
+            text: "Limits are shared across conversations for this provider."
         }
     }
-    KetPopoverDivider {}
-    KetPopoverText { text: "Limits are shared across conversations for this provider." }
 }
