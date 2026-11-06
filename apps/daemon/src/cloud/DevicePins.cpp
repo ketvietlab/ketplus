@@ -45,6 +45,24 @@ QString DevicePins::claimDigest(const QString& ticketId, const QJsonObject& devi
         QCryptographicHash::Sha256)));
 }
 
+QString DevicePins::confirmationCode(const QString& claimDigest) {
+    QString code = claimDigest.toUpper();
+    code.remove(QLatin1Char('-'));
+    code.remove(QLatin1Char(' '));
+    return code.size() < 6 ? QString{} : code.left(6);
+}
+
+QString DevicePins::hostFingerprint(const QJsonObject& keys) {
+    const QByteArray signing =
+        CloudCrypto::fromBase64Url(keys.value(QStringLiteral("signingPublicKey")).toString());
+    const QByteArray agreement =
+        CloudCrypto::fromBase64Url(keys.value(QStringLiteral("agreementPublicKey")).toString());
+    if (signing.size() != 32 || agreement.size() != 32)
+        return {};
+    return QString::fromLatin1(CloudCrypto::base64Url(
+        QCryptographicHash::hash(signing + agreement, QCryptographicHash::Sha256)));
+}
+
 QJsonObject DevicePins::read(QString* error) const {
     QString readError;
     const QByteArray bytes = store_->read(account, &readError);

@@ -47,8 +47,12 @@ add a device row with its own keys and read every session, send commands and ope
   that was already malicious at that moment is not detected.
 - Remaining work tracked in #83:
   - #85: a domain-separated machine-challenge signature, which needs a relay change.
-  - #88 and #89: a host fingerprint in the pairing QR code, so that clients pin the host as
-    well.
+  - #88: clients pin the host through the fingerprint the pairing QR code now carries.
+- Since #89, `remote.pairing.status` derives the confirmation code itself and gives none for a
+  claim whose keys do not reproduce its digest; Desktop shows only that code, with no fixed
+  fallback. The QR code adds `machine`, `kv` and
+  `fp=base64url(SHA-256(signing public key || agreement public key))` after `ticket` and
+  `secret`.
 
 ## Alternatives considered
 

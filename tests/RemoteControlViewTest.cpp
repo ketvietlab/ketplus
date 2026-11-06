@@ -1,6 +1,7 @@
 #include "remote/RemoteControlView.h"
 
 #include <QApplication>
+#include <QDateTime>
 #include <QDialog>
 #include <QJsonObject>
 #include <QLabel>
@@ -23,6 +24,7 @@ class RemoteControlViewTest final : public QObject {
     void demoSignInOpensAddDeviceQr();
     void demoSignOutReturnsToSingleAction();
     void aClaimThatChangesAfterItsCodeWasShownCannotBeApproved();
+    void pairingShowsOnlyTheDaemonsCodeAndForgetsAFinishedTicket();
 };
 
 void RemoteControlViewTest::aClaimThatChangesAfterItsCodeWasShownCannotBeApproved() {
@@ -37,23 +39,72 @@ void RemoteControlViewTest::aClaimThatChangesAfterItsCodeWasShownCannotBeApprove
         return view.approveButton_->property("pairAction").toString() == QStringLiteral("approve");
     };
     view.ticketId_ = QStringLiteral("ticket");
-    view.showPairing(claim(QStringLiteral("digest-a")));
+    view.showPairing(claim(QStringLiteral("digest-a")), QStringLiteral("ABC123"));
     QVERIFY(approvable());
     QCOMPARE(view.shownClaimDigest_, QStringLiteral("digest-a"));
     // The relay clears the digest, then presents another claim: neither replaces the one shown.
-    view.showPairing(claim({}));
+    view.showPairing(claim({}), QStringLiteral("ABC123"));
     QVERIFY(!approvable());
-    view.showPairing(claim(QStringLiteral("digest-b")));
+    view.showPairing(claim(QStringLiteral("digest-b")), QStringLiteral("ABC123"));
     QVERIFY(!approvable());
-    view.showPairing(claim(QStringLiteral("digest-a")));
+    view.showPairing(claim(QStringLiteral("digest-a")), QStringLiteral("ABC123"));
     QVERIFY(!approvable());
     QCOMPARE(view.shownClaimDigest_, QStringLiteral("digest-a"));
     // Closing the dialog starts the next ticket clean (no ticket, so nothing is revoked).
     view.ticketId_.clear();
     view.closePairing();
     view.ticketId_ = QStringLiteral("next");
-    view.showPairing(claim(QStringLiteral("digest-b")));
+    view.showPairing(claim(QStringLiteral("digest-b")), QStringLiteral("ABC123"));
     QVERIFY(approvable());
+}
+
+void RemoteControlViewTest::pairingShowsOnlyTheDaemonsCodeAndForgetsAFinishedTicket() {
+    RemoteControlView view;
+    const QJsonObject claimed{
+        {QStringLiteral("status"), QStringLiteral("claimed")},
+        {QStringLiteral("claimDigest"), QStringLiteral("digest")},
+        {QStringLiteral("claimedDevice"),
+         QJsonObject{{QStringLiteral("displayName"), QStringLiteral("Phone")}}}};
+    const auto approvable = [&view] {
+        return view.approveButton_->property("pairAction").toString() == QStringLiteral("approve");
+    };
+    view.ticketId_ = QStringLiteral("ticket");
+    view.pairingCode_->setText(QStringLiteral("ketplus://pair?ticket=t&secret=s"));
+    view.showPairing({{QStringLiteral("status"), QStringLiteral("open")},
+                      {QStringLiteral("expiresAt"),
+                       QDateTime::currentDateTimeUtc().addSecs(125).toString(Qt::ISODateWithMs)}});
+    QVERIFY(view.pairingTimer_->text().startsWith(QStringLiteral("Code expires in 2:0")));
+
+    // Without a code from the daemon (an unverified claim), there is nothing to compare: no
+    // fixed fallback code, and no approval.
+    view.showPairing(claimed);
+    QVERIFY(!approvable());
+    QVERIFY(view.pairingConfirmationCode_->text() != QStringLiteral("482 619"));
+    QVERIFY(view.pairingCode_->text().isEmpty());
+
+    view.ticketId_.clear(); // nothing to revoke
+    view.closePairing();
+    view.ticketId_ = QStringLiteral("next");
+    view.showPairing(claimed, QStringLiteral("ABC123"));
+    QVERIFY(approvable());
+    QCOMPARE(view.pairingConfirmationCode_->text(), QStringLiteral("ABC 123"));
+    QVERIFY(!view.deviceClaim_->text().contains(QStringLiteral("Account")));
+
+    view.pairingCode_->setText(QStringLiteral("ketplus://pair?ticket=t&secret=s"));
+    // The relay keeps the claim's digest on a finished ticket.
+    view.showPairing({{QStringLiteral("status"), QStringLiteral("revoked")},
+                      {QStringLiteral("claimDigest"), QStringLiteral("digest")}});
+    QCOMPARE(view.pairingDialogTitle_->text(), QStringLiteral("Pairing cancelled"));
+    QVERIFY(view.pairingCode_->text().isEmpty());
+    // The relay keeps the claim's digest on a finished ticket.
+    view.showPairing({{QStringLiteral("status"), QStringLiteral("expired")},
+                      {QStringLiteral("claimDigest"), QStringLiteral("digest")}});
+    QCOMPARE(view.pairingDialogTitle_->text(), QStringLiteral("Pairing code expired"));
+
+    view.pairingCode_->setText(QStringLiteral("ketplus://pair?ticket=t&secret=s"));
+    view.ticketId_.clear(); // nothing to revoke
+    view.closePairing();
+    QVERIFY(view.pairingCode_->text().isEmpty());
 }
 
 void RemoteControlViewTest::opensOnSignInPrompt() {

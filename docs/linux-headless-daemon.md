@@ -130,9 +130,11 @@ unregistration. Paths are encrypted in remote metadata; the relay does not expos
 the filesystem path as a routing identifier.
 
 Enter the pairing ticket/code in the iOS app (or a future Desktop pairing UI).
-Inspect the pending claim with `ketplusctl pairing status TICKET_ID`, compare its
-`claimDigest` with the code the phone shows, and approve that exact claim with
-`ketplusctl pairing approve TICKET_ID CLAIM_DIGEST`. The daemon refuses the
+Inspect the pending claim with `ketplusctl pairing status TICKET_ID`. For a claim
+whose keys reproduce its digest it prints `claim_verified: true`, the
+`confirmation_code` to compare with the code the phone shows, and the
+`claim_digest`; an unverified claim has no code and cannot be approved. Approve
+that exact claim with `ketplusctl pairing approve TICKET_ID CLAIM_DIGEST`. The daemon refuses the
 approval when the ticket's digest changed or does not match the claimed keys,
 and pins the device only on this machine (ADR 0034).
 Enrollment is account authentication; pairing separately grants the device

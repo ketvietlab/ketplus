@@ -21,6 +21,12 @@ class DevicePins final {
     // base64url(SHA-256(["<ticket>","<device>",<version>,"<agreement>","<signing>"])), the
     // relay's and the phone's formula; its first characters are the code compared on both screens.
     [[nodiscard]] static QString claimDigest(const QString& ticketId, const QJsonObject& device);
+    // The six characters both screens show for a claim digest, derived as the phone does; empty
+    // for a digest too short to give them (#89).
+    [[nodiscard]] static QString confirmationCode(const QString& claimDigest);
+    // base64url(SHA-256(signing public key || agreement public key)): the host identity the
+    // pairing QR code carries, so the phone can pin this Mac (#89). Empty for invalid keys.
+    [[nodiscard]] static QString hostFingerprint(const QJsonObject& keys);
 
     // Whether pins have been initialized; before that the first device list is adopted.
     [[nodiscard]] bool initialized(QString* error = nullptr) const;

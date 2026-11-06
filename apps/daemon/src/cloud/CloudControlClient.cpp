@@ -515,9 +515,22 @@ void CloudControlClient::createPairing(LocalCallback callback) {
             callback({}, error);
             return;
         }
+        // The QR code is the one channel the relay cannot touch: it names this Mac's keys, so
+        // the phone can refuse host keys the relay substitutes (#89).
+        QString keyError;
+        const QString fingerprint = DevicePins::hostFingerprint(crypto_.publicKeys(&keyError));
+        if (fingerprint.isEmpty()) {
+            callback({},
+                     keyError.isEmpty() ? QStringLiteral("This Mac has no valid keys.") : keyError);
+            return;
+        }
+        const QString host = QStringLiteral("&machine=%1&kv=%2&fp=%3")
+                                 .arg(QString::fromUtf8(QUrl::toPercentEncoding(machineId_)))
+                                 .arg(machineKeyVersion_)
+                                 .arg(fingerprint);
         request("POST", QStringLiteral("/v2/pairing/tickets"), QJsonObject{}, daemonToken_, {},
-                [callback = std::move(callback)](const int status, const QJsonValue& value,
-                                                 const QString& transportError) {
+                [host, callback = std::move(callback)](const int status, const QJsonValue& value,
+                                                       const QString& transportError) {
                     const QJsonObject pairing = object(value);
                     const QJsonObject ticket = pairing.value(QStringLiteral("ticket")).toObject();
                     const QString secret = pairing.value(QStringLiteral("secret")).toString();
@@ -528,10 +541,12 @@ void CloudControlClient::createPairing(LocalCallback callback) {
                                          : transportError);
                         return;
                     }
-                    const QString qr = QStringLiteral("ketplus://pair?ticket=%1&secret=%2")
-                                           .arg(QString::fromUtf8(QUrl::toPercentEncoding(
-                                                    ticket.value(QStringLiteral("id")).toString())),
-                                                QString::fromUtf8(QUrl::toPercentEncoding(secret)));
+                    const QString qr =
+                        QStringLiteral("ketplus://pair?ticket=%1&secret=%2")
+                            .arg(QString::fromUtf8(QUrl::toPercentEncoding(
+                                     ticket.value(QStringLiteral("id")).toString())),
+                                 QString::fromUtf8(QUrl::toPercentEncoding(secret))) +
+                        host;
                     callback({{QStringLiteral("ok"), true},
                               {QStringLiteral("ticket"), ticket},
                               {QStringLiteral("pairing_code"), qr}},
@@ -554,17 +569,34 @@ void CloudControlClient::pairingStatus(const QJsonObject& payload, LocalCallback
         }
         request("GET", QStringLiteral("/v2/pairing/tickets/%1").arg(encodedPathSegment(ticketId)),
                 {}, daemonToken_, {},
-                [callback = std::move(callback)](const int status, const QJsonValue& value,
-                                                 const QString& transportError) {
+                [ticketId, callback = std::move(callback)](
+                    const int status, const QJsonValue& value, const QString& transportError) {
                     if (status != 200 || !transportError.isEmpty()) {
                         callback({}, transportError.isEmpty()
                                          ? responseCode(value, QStringLiteral("pairing_not_found"))
                                          : transportError);
-                    } else {
-                        callback({{QStringLiteral("ok"), true},
-                                  {QStringLiteral("ticket"), object(value)}},
-                                 {});
+                        return;
                     }
+                    const QJsonObject ticket = object(value);
+                    QJsonObject result{{QStringLiteral("ok"), true},
+                                       {QStringLiteral("ticket"), ticket}};
+                    // The code to compare comes from this daemon, not the relay: a digest the
+                    // claimed keys do not reproduce gives no code (#89).
+                    const QJsonObject device =
+                        ticket.value(QStringLiteral("claimedDevice")).toObject();
+                    const QString digest = ticket.value(QStringLiteral("claimDigest")).toString();
+                    if (!device.isEmpty() || !digest.isEmpty()) {
+                        const bool verified = !device.isEmpty() && !digest.isEmpty() &&
+                                              DevicePins::claimDigest(ticketId, device) == digest &&
+                                              !DevicePins::confirmationCode(digest).isEmpty();
+                        result.insert(QStringLiteral("claim_verified"), verified);
+                        if (verified) {
+                            result.insert(QStringLiteral("claim_digest"), digest);
+                            result.insert(QStringLiteral("confirmation_code"),
+                                          DevicePins::confirmationCode(digest));
+                        }
+                    }
+                    callback(result, {});
                 });
     });
 }
