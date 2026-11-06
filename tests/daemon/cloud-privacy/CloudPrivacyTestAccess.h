@@ -90,6 +90,13 @@ class CloudPrivacyTestAccess {
                                const QJsonObject& payload) {
         client.executeWorkspaceFiles(command, payload);
     }
+    static void worktreeCommand(CloudControlClient& client, const QJsonObject& command,
+                                const QJsonObject& payload, const QByteArray& senderKey) {
+        client.executeWorktreeCommand(command, payload, senderKey);
+    }
+    static RemoteWorktreeQuota& worktreeQuota(CloudControlClient& client) {
+        return client.worktreeQuota_;
+    }
     static void workspace(CloudControlClient& client, const QString& workspace) {
         client.workspaceId_ = workspace;
     }

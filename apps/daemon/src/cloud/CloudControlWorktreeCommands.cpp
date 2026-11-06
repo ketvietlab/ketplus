@@ -28,6 +28,7 @@
 #include <QPointer>
 #include <QRandomGenerator>
 #include <QRegularExpression>
+#include <QStorageInfo>
 #include <QThreadPool>
 
 #include <algorithm>
@@ -129,9 +130,37 @@ void CloudControlClient::executeWorktreeCommand(const QJsonObject& command,
         startCreatedConversation(command, payload, worktreePath, senderAgreementKey);
         return;
     }
+    const QString repository = worktreeRepository(worktreePath);
+    if (!listing) {
+        // A command redelivered after its acknowledgement was lost answers with what the first
+        // attempt journaled, instead of failing on the branch that attempt created (#86).
+        if (const QJsonObject cached =
+                journal_->commandResult(command.value(QStringLiteral("id")).toString());
+            !cached.isEmpty()) {
+            acknowledgeCommand(command, cached, senderAgreementKey);
+            return;
+        }
+        // Every checkout of a repository shares its allowance, including linked checkouts of a
+        // bare repository, which have no common main checkout.
+        const QString commonDirectory = worktreeCommonDirectory(worktreePath);
+        const QString refusal = worktreeQuota_.reserve(
+            commonDirectory.isEmpty() ? repository : commonDirectory,
+            QDateTime::currentMSecsSinceEpoch(),
+            QStorageInfo(repository).isValid() ? QStorageInfo(repository).bytesAvailable() : -1);
+        if (!refusal.isEmpty()) {
+            qWarning("command %s refused: remote worktree quota",
+                     qUtf8Printable(command.value(QStringLiteral("id")).toString()));
+            acknowledgeCommand(
+                command,
+                {{QStringLiteral("ok"), false},
+                 {QStringLiteral("error_code"), QStringLiteral("worktree_quota_exceeded")},
+                 {QStringLiteral("error_message"), refusal}},
+                senderAgreementKey);
+            return;
+        }
+    }
     // Git can take seconds on a large repository, so it runs off the main thread; the
     // answer is dropped if the Mac left the account meanwhile.
-    const QString repository = worktreeRepository(worktreePath);
     const quint64 requestEpoch = accountEpoch_;
     const QPointer<CloudControlClient> guard(this);
     workspaceFilesPool_.start([guard, command, payload, senderAgreementKey, repository, listing,

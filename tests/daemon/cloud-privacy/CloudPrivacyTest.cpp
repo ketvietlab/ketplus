@@ -8,12 +8,16 @@
 #include "runtime/SessionHost.h"
 #include <QCryptographicHash>
 #include <QDateTime>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <QJsonDocument>
+#include <QMessageAuthenticationCode>
+#include <QProcess>
 #include <QTemporaryDir>
 #include <QtTest>
 #include <algorithm>
+#include <limits>
 #include <optional>
 
 using namespace ketplus::daemon;
@@ -2164,6 +2168,186 @@ class CloudPrivacyTest final : public QObject {
         Access::pollCommands(*c.client);
         QTRY_VERIFY(!Access::commandPollInFlight(*c.client));
         QCOMPARE(polls(), 4);
+    }
+
+    void remoteWorktreeQuotaCountsEachRepositoryForAnHourAndNeedsFreeSpace() {
+        RemoteWorktreeQuota quota;
+        quota.perHour = 2;
+        quota.minimumFreeBytes = 100;
+        const qint64 hour = 60 * 60 * 1000;
+        QVERIFY(quota.reserve("repo-a", 0, 1000).isEmpty());
+        QVERIFY(quota.reserve("repo-a", 10, -1).isEmpty()); // free space unknown
+        QVERIFY(!quota.reserve("repo-a", 20, 1000).isEmpty());
+        QVERIFY(quota.reserve("repo-b", 20, 1000).isEmpty());
+        // Low space refuses without using up the hour's allowance.
+        QVERIFY(!quota.reserve("repo-b", 30, 99).isEmpty());
+        QVERIFY(quota.reserve("repo-b", 40, 1000).isEmpty());
+        // A creation leaves the window an hour after it happened.
+        QVERIFY(quota.reserve("repo-a", hour, 1000).isEmpty());
+        QVERIFY(!quota.reserve("repo-a", hour + 5, 1000).isEmpty());
+        QVERIFY(quota.reserve("repo-a", hour + 10, 1000).isEmpty());
+    }
+
+    void aRedeliveredNewWorktreeAnswersWithItsFirstResultAndCreationIsBounded() {
+        QTemporaryDir dir;
+        const QString repository = dir.filePath("repo");
+        QVERIFY(QDir().mkpath(repository));
+        const auto git = [&repository](const QStringList& arguments) {
+            return QProcess::execute("git", QStringList{"-C", repository, "-c", "user.name=Fixture",
+                                                        "-c", "user.email=fixture@example.invalid",
+                                                        "-c", "commit.gpgsign=false"} +
+                                                arguments);
+        };
+        QCOMPARE(git({"init", "-q", "-b", "main"}), 0);
+        QCOMPARE(git({"commit", "--allow-empty", "-qm", "initial"}), 0);
+        Context c(dir.filePath("journal.sqlite"));
+        c.start();
+        QVERIFY(c.journal.rememberWorktree(QFileInfo(repository).canonicalFilePath()));
+        const QByteArray salt(32, 's');
+        Access::pathSalt(*c.client, salt);
+        const auto id = [&](const QByteArray& label) {
+            return QString::fromLatin1(
+                QMessageAuthenticationCode::hash(
+                    label + '\n' + QFileInfo(repository).canonicalFilePath().toUtf8(), salt,
+                    QCryptographicHash::Sha256)
+                    .toHex());
+        };
+        CredentialStore phoneStore("worktree-phone");
+        const QByteArray phone = CloudCrypto::fromBase64Url(
+            CloudCrypto(&phoneStore).publicKeys().value("agreementPublicKey").toString());
+        const auto create = [&](const QString& commandId, const QString& branch) {
+            const QJsonObject command{
+                {"id", commandId},
+                {"kind", "session.create"},
+                {"attempt", 1},
+                {"workspaceId", "workspace-synthetic"},
+                {"sessionGeneration", 0},
+                {"expectedCatalogRevision", 0},
+                {"expectedLifecycleRevision", 0},
+                {"repositoryId", id("repository")},
+                {"worktreeId", id("worktree")},
+                {"content", QJsonObject{{"recipientDeviceId", "machine-synthetic"},
+                                        {"recipientKeyVersion", 1}}}};
+            const QJsonObject payload{
+                {"prompt", "Start here"},
+                {"new_worktree", QJsonObject{{"branch", branch}, {"base", "main"}}}};
+            const qsizetype before = c.transport.requests.size();
+            Access::worktreeCommand(*c.client, command, payload, phone);
+            QString resultCode;
+            [&] {
+                QTRY_VERIFY(std::any_of(
+                    c.transport.requests.cbegin() + before, c.transport.requests.cend(),
+                    [](const auto& request) { return request.url().path().endsWith("/ack"); }));
+            }();
+            for (qsizetype i = before; i < c.transport.requests.size(); ++i) {
+                if (c.transport.requests.at(i).url().path() ==
+                    QStringLiteral("/v2/commands/%1/ack").arg(commandId))
+                    resultCode = QJsonDocument::fromJson(c.transport.bodies.at(i))
+                                     .object()
+                                     .value("resultCode")
+                                     .toString();
+            }
+            return resultCode;
+        };
+        const auto branchExists = [&git](const QString& branch) {
+            return git({"show-ref", "--verify", "--quiet", "refs/heads/" + branch}) == 0;
+        };
+
+        // The first attempt created the branch and started its conversation, but its
+        // acknowledgement was lost. The redelivery answers with the journaled result.
+        QCOMPARE(git({"branch", "first-attempt"}), 0);
+        QVERIFY(c.journal.storeCommandResult(
+            "command-redelivered", {{"ok", true}, {"session_id", "session-first-attempt"}}));
+        QCOMPARE(create("command-redelivered", "first-attempt"), QStringLiteral("ok"));
+
+        // Creation is refused, before git runs, past the hourly allowance or when space is low.
+        Access::worktreeQuota(*c.client).perHour = 0;
+        QCOMPARE(create("command-over-quota", "over-quota"),
+                 QStringLiteral("worktree_quota_exceeded"));
+        QVERIFY(!branchExists("over-quota"));
+        Access::worktreeQuota(*c.client).perHour = RemoteWorktreeQuota::defaultPerHour;
+        Access::worktreeQuota(*c.client).minimumFreeBytes = std::numeric_limits<qint64>::max();
+        QCOMPARE(create("command-low-space", "low-space"),
+                 QStringLiteral("worktree_quota_exceeded"));
+        QVERIFY(!branchExists("low-space"));
+    }
+
+    void linkedCheckoutsOfOneBareRepositoryShareTheWorktreeQuota() {
+        QTemporaryDir dir;
+        const auto git = [](const QString& directory, const QStringList& arguments) {
+            return QProcess::execute("git", QStringList{"-C", directory, "-c", "user.name=Fixture",
+                                                        "-c", "user.email=fixture@example.invalid",
+                                                        "-c", "commit.gpgsign=false"} +
+                                                arguments);
+        };
+        const QString source = dir.filePath("source");
+        const QString bare = dir.filePath("repo.git");
+        const QString a = dir.filePath("checkout-a");
+        const QString b = dir.filePath("checkout-b");
+        QVERIFY(QDir().mkpath(source));
+        QCOMPARE(git(source, {"init", "-q", "-b", "main"}), 0);
+        QCOMPARE(git(source, {"commit", "--allow-empty", "-qm", "initial"}), 0);
+        QCOMPARE(git(dir.path(), {"clone", "-q", "--bare", source, bare}), 0);
+        QCOMPARE(git(bare, {"worktree", "add", "-q", a, "main"}), 0);
+        QCOMPARE(git(bare, {"worktree", "add", "-q", "-b", "other", b, "main"}), 0);
+        Context c(dir.filePath("journal.sqlite"));
+        c.start();
+        QVERIFY(c.journal.rememberWorktree(QFileInfo(a).canonicalFilePath()));
+        QVERIFY(c.journal.rememberWorktree(QFileInfo(b).canonicalFilePath()));
+        const QByteArray salt(32, 's');
+        Access::pathSalt(*c.client, salt);
+        CredentialStore phoneStore("bare-repository-phone");
+        const QByteArray phone = CloudCrypto::fromBase64Url(
+            CloudCrypto(&phoneStore).publicKeys().value("agreementPublicKey").toString());
+        const auto create = [&](const QString& checkout, const QString& commandId,
+                                const QString& branch) {
+            const auto id = [&](const QByteArray& label) {
+                return QString::fromLatin1(
+                    QMessageAuthenticationCode::hash(
+                        label + '\n' + QFileInfo(checkout).canonicalFilePath().toUtf8(), salt,
+                        QCryptographicHash::Sha256)
+                        .toHex());
+            };
+            const qsizetype before = c.transport.requests.size();
+            Access::worktreeCommand(
+                *c.client,
+                {{"id", commandId},
+                 {"kind", "session.create"},
+                 {"attempt", 1},
+                 {"workspaceId", "workspace-synthetic"},
+                 {"sessionGeneration", 0},
+                 {"expectedCatalogRevision", 0},
+                 {"expectedLifecycleRevision", 0},
+                 {"repositoryId", id("repository")},
+                 {"worktreeId", id("worktree")},
+                 {"content", QJsonObject{{"recipientDeviceId", "machine-synthetic"},
+                                         {"recipientKeyVersion", 1}}}},
+                {{"prompt", "Start here"},
+                 {"new_worktree", QJsonObject{{"branch", branch}, {"base", "main"}}}},
+                phone);
+            const QString ack = QStringLiteral("/v2/commands/%1/ack").arg(commandId);
+            QString resultCode;
+            [&] {
+                QTRY_VERIFY(std::any_of(
+                    c.transport.requests.cbegin() + before, c.transport.requests.cend(),
+                    [&ack](const auto& request) { return request.url().path() == ack; }));
+            }();
+            for (qsizetype i = before; i < c.transport.requests.size(); ++i) {
+                if (c.transport.requests.at(i).url().path() == ack)
+                    resultCode = QJsonDocument::fromJson(c.transport.bodies.at(i))
+                                     .object()
+                                     .value("resultCode")
+                                     .toString();
+            }
+            return resultCode;
+        };
+
+        Access::worktreeQuota(*c.client).perHour = 1;
+        QCOMPARE(create(a, "command-through-a", "through-a"), QStringLiteral("ok"));
+        // The other checkout shares the repository's allowance.
+        QCOMPARE(create(b, "command-through-b", "through-b"),
+                 QStringLiteral("worktree_quota_exceeded"));
+        QVERIFY(git(bare, {"show-ref", "--verify", "--quiet", "refs/heads/through-b"}) != 0);
     }
 
     void aNewEnrollmentTrustsNoDeviceUntilOneIsApproved() {
