@@ -27,8 +27,11 @@ without copying web-specific implementation details.
 
 `ThemeManager` builds its light and dark `ThemePalette` from Két DS tokens (a
 translucent token is composited over `panel-bg`, so every role is an opaque
-`#RRGGBB`) and syntax colours from the kit's `ket::syntaxRecipe`. It applies the
-Qt palette and stylesheet, and follows the operating system by default. The selected mode
+`#RRGGBB`) and syntax colours from the kit's `ket::syntaxRecipe`. Light, dark and
+following the system go through `ket::Appearance`, which QML (`KetTheme`), the
+kit's style and KétPlus Terminal also read; a mode, a Settings preview and its
+cancel set it, and its theme changes reach the palette. It applies the Qt palette
+and stylesheet, and follows the operating system by default. The selected mode
 is persisted through `QSettings` and can be changed from `View > Appearance`.
 The shared Settings dialog also owns interface, editor, terminal, and Markdown
 preview typography. KetPlus Desktop applies one normalized snapshot to both CM

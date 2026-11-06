@@ -1,3 +1,4 @@
+#include "KetAppearance.h"
 #include "KetSyntax.h"
 #include "KetTokens.h"
 #include "app/SettingsDialog.h"
@@ -98,6 +99,7 @@ class RefactorWave1ContractTest final : public QObject {
     void themePreviewRollsBackOnCancel();
     void saveCurrentlyAppliesEveryExtensionPage();
     void currentNativePaletteBaseline();
+    void themeFollowsKetAppearance();
     void parserReadsObservedWorktreeFlags();
 };
 
@@ -224,6 +226,34 @@ void RefactorWave1ContractTest::saveCurrentlyAppliesEveryExtensionPage() {
     QCOMPARE(cleanPage->applyCount, 1);
     QCOMPARE(storage.value(QStringLiteral("dirty/value")).toInt(), 9);
     QCOMPARE(storage.value(QStringLiteral("clean/value")).toInt(), 2);
+}
+
+void RefactorWave1ContractTest::themeFollowsKetAppearance() {
+    // The mode, a preview and its cancel go through ket::Appearance, which QML (KetTheme),
+    // the kit's style and KétPlus Terminal read; a theme change there reaches the palette.
+    ketplus::ThemeManager theme(*qApp);
+    auto& appearance = ket::Appearance::instance();
+    QSignalSpy changes(&theme, &ketplus::ThemeManager::themeChanged);
+
+    theme.setMode(ketplus::ThemeManager::Mode::Dark);
+    QCOMPARE(appearance.mode(), ket::Appearance::Mode::Dark);
+    QVERIFY(theme.palette().dark);
+
+    theme.previewMode(ketplus::ThemeManager::Mode::Light);
+    QCOMPARE(appearance.mode(), ket::Appearance::Mode::Light);
+    QVERIFY(!theme.palette().dark);
+    theme.cancelPreview();
+    QCOMPARE(appearance.mode(), ket::Appearance::Mode::Dark);
+    QVERIFY(theme.palette().dark);
+
+    theme.setMode(ketplus::ThemeManager::Mode::System);
+    QCOMPARE(appearance.mode(), ket::Appearance::Mode::System);
+    QCOMPARE(theme.palette().dark, appearance.dark());
+
+    // Each switch applies once, not again when Appearance reports the same change.
+    changes.clear();
+    theme.setMode(ketplus::ThemeManager::Mode::Dark);
+    QCOMPARE(changes.size(), 1);
 }
 
 void RefactorWave1ContractTest::currentNativePaletteBaseline() {
