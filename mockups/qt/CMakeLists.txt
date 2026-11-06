@@ -69,5 +69,12 @@ qt_add_resources(ketplus_qt_mock mock_mono
     FILES fonts/KETSansMono-Medium.ttf
 )
 
+# The repository's licensing document, the long Markdown sample the editor previews.
+qt_add_resources(ketplus_qt_mock mock_docs
+    PREFIX "/docs"
+    BASE ../../docs
+    FILES ../../docs/licensing.md
+)
+
 target_link_libraries(ketplus_qt_mock PRIVATE KetQt::Quick KetQt::QuickPlugin Qt6::Gui Qt6::Qml
                                               Qt6::Quick Qt6::QuickControls2 Qt6::Svg)

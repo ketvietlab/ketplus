@@ -15,6 +15,7 @@ Basic.ApplicationWindow {
     readonly property var screenIds: [
         "workspace", "workspace/welcome", "workspace/running", "workspace/question",
         "workspace/error", "workspace/atlas", "workspace/details", "editor", "editor/terminal",
+        "editor/markdown", "editor/markdown-source",
         "changes", "worktrees", "connections", "settings", "settings/typography", "settings/account",
         "settings/browser", "settings/computer", "settings/providers", "settings/archived",
         "settings/updates", "atlas", "mobile-picker", "workspace/compact"
@@ -22,6 +23,9 @@ Basic.ApplicationWindow {
     property string screen: "workspace"
     // The terminal below the editor (editor/terminal).
     property bool editorTerminal: false
+    // A file the editor opens (editor/markdown), and whether Markdown shows its source.
+    property string editorFile: ""
+    property bool editorSource: false
     property string settingsTab: "appearance"
     property var conversation: Fixtures.repositories[0].conversations[0]
     property string repository: Fixtures.repositories[0].name
@@ -72,8 +76,11 @@ Basic.ApplicationWindow {
         }
         if (name === "settings")
             settingsTab = state || "appearance"
-        if (name === "editor")
+        if (name === "editor") {
             editorTerminal = state === "terminal"
+            editorFile = state.startsWith("markdown") ? "licensing.md" : ""
+            editorSource = state === "markdown-source"
+        }
         screen = name
     }
 

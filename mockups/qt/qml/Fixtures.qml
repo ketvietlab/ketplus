@@ -167,6 +167,7 @@ QtObject {
         { name: "docs", folder: true, depth: 1, open: true },
         { name: "architecture.md", depth: 2, path: "docs" },
         { name: "design-system.md", depth: 2, path: "docs" },
+        { name: "licensing.md", depth: 2, path: "docs" },
         { name: "README.md", depth: 1, path: "" },
         { name: "CMakeLists.txt", depth: 1, path: "" }
     ]
