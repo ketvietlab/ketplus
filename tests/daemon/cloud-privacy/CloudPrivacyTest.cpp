@@ -2204,6 +2204,47 @@ class CloudPrivacyTest final : public QObject {
         QVERIFY(!Access::pins(*c.client).trustsKeys("other-phone", 1, other));
     }
 
+    void aNewEnrollmentDropsEarlierPinsAndStoresNothingIfThePinsCannotBeWritten() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("journal.sqlite"));
+        c.start();
+        c.transport.statusForPath.insert("/v2/machines:enroll", 201);
+        c.transport.responseForPath.insert(
+            "/v2/machines:enroll",
+            R"({"id":"machine-synthetic","workspaceId":"workspace-synthetic","keyVersion":1})");
+        const auto storedMachineId = [] {
+            return std::any_of(r03::credentials.keyBegin(), r03::credentials.keyEnd(),
+                               [](const QString& key) { return key.endsWith("/machine-id"); });
+        };
+        QVERIFY(!storedMachineId());
+        // Writing the empty pin set fails: no enrollment is stored, so a restart cannot take
+        // this Mac for one enrolled before pins and adopt the relay's device list.
+        r03::failWritesTo = "device-pins";
+        QString failure;
+        bool answered = false;
+        Access::enroll(*c.client, [&](const QJsonObject&, const QString& error) {
+            failure = error;
+            answered = true;
+        });
+        QTRY_VERIFY(answered);
+        QCOMPARE(failure, QStringLiteral("synthetic credential write failure"));
+        QVERIFY(!storedMachineId());
+        QVERIFY(!Access::pins(*c.client).initialized());
+        r03::failWritesTo.clear();
+
+        // A phone approved under an earlier enrollment is not trusted by the next one.
+        CredentialStore phoneStore("earlier-phone");
+        const QJsonObject phone = CloudCrypto(&phoneStore).publicKeys();
+        Access::pinDevice(*c.client, "earlier-phone", 1, phone);
+        answered = false;
+        Access::enroll(*c.client,
+                       [&answered](const QJsonObject&, const QString&) { answered = true; });
+        QTRY_VERIFY(answered);
+        QVERIFY(storedMachineId());
+        QVERIFY(Access::pins(*c.client).initialized());
+        QVERIFY(!Access::pins(*c.client).trustsKeys("earlier-phone", 1, phone));
+    }
+
     void replyLostAfterItsHeaderIsAFailure() {
         QTemporaryDir dir;
         Context c(dir.filePath("journal.sqlite"));

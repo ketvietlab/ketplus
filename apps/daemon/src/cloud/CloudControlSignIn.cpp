@@ -189,15 +189,18 @@ void CloudControlClient::enrollMachine(const quint64 signInEpoch, const QString&
             machineId_ = machine.value(QStringLiteral("id")).toString();
             workspaceId_ = machine.value(QStringLiteral("workspaceId")).toString();
             machineKeyVersion_ = machine.value(QStringLiteral("keyVersion")).toInt(1);
+            // A new enrollment trusts no device yet: only an existing enrollment adopts the
+            // devices it already served when pins were introduced (ADR 0034). The empty pin set
+            // is written before the machine id, so a failed write never leaves an enrollment
+            // that a restart would mistake for one from before pins.
             const bool stored =
+                pins_.reset(&storageError) &&
                 storeString(QStringLiteral("control-url"), baseUrl_.toString(), &storageError) &&
                 storeString(QStringLiteral("machine-id"), machineId_, &storageError) &&
                 storeString(QStringLiteral("workspace-id"), workspaceId_, &storageError) &&
                 storeString(QStringLiteral("machine-key-version"),
                             QString::number(machineKeyVersion_), &storageError);
-            // A new enrollment trusts no device yet: only an existing enrollment adopts the
-            // devices it already served when pins were introduced (ADR 0034).
-            if (!stored || !pins_.adopt({}, &storageError)) {
+            if (!stored) {
                 callback({}, storageError);
                 return;
             }

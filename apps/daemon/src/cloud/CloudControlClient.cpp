@@ -396,7 +396,8 @@ void CloudControlClient::signOut(LocalCallback callback) {
         }
         for (const QString& account :
              {QStringLiteral("machine-id"), QStringLiteral("workspace-id"),
-              QStringLiteral("machine-key-version"), QStringLiteral("control-url")}) {
+              QStringLiteral("machine-key-version"), QStringLiteral("control-url"),
+              QStringLiteral("device-pins")}) {
             if (!credentials_.remove(account, &removalError)) {
                 callback({}, removalError);
                 return;

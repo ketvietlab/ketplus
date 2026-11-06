@@ -1195,6 +1195,7 @@ void RemoteControlView::createPairing() {
             const QJsonObject ticket = result.value(QStringLiteral("ticket")).toObject();
             ticketId_ = ticket.value(QStringLiteral("id")).toString();
             shownClaimDigest_.clear();
+            claimChanged_ = false;
             if (!pairingDialog_->isVisible()) {
                 closePairing();
                 return;
@@ -1226,11 +1227,12 @@ void RemoteControlView::refreshPairing() {
 void RemoteControlView::showPairing(const QJsonObject& ticket) {
     const QJsonObject device = ticket.value(QStringLiteral("claimedDevice")).toObject();
     const QString claimDigest = ticket.value(QStringLiteral("claimDigest")).toString();
-    // A claim whose digest changes after its code was shown is not the device the user saw.
-    const bool claimChanged =
-        !shownClaimDigest_.isEmpty() && !claimDigest.isEmpty() && claimDigest != shownClaimDigest_;
-    const QString state = claimChanged ? QStringLiteral("claim changed")
-                                       : ticket.value(QStringLiteral("status")).toString();
+    // Once a code was shown, only that claim may be approved. A digest that changes or disappears
+    // ends this ticket, even if a later refresh shows the first digest again.
+    claimChanged_ =
+        claimChanged_ || (!shownClaimDigest_.isEmpty() && claimDigest != shownClaimDigest_);
+    const QString state = claimChanged_ ? QStringLiteral("claim changed")
+                                        : ticket.value(QStringLiteral("status")).toString();
     const bool ready = state == QStringLiteral("claimed") && !device.isEmpty();
     pairingState_->setProperty("claimReady", ready);
     pairingNotice_->hide();
@@ -1336,7 +1338,8 @@ void RemoteControlView::approvePairing() {
     if (ticketId_.isEmpty() || requestInFlight_)
         return;
     if (demoMode_) {
-        showPairing({{QStringLiteral("status"), QStringLiteral("approved")}});
+        showPairing({{QStringLiteral("status"), QStringLiteral("approved")},
+                     {QStringLiteral("claimDigest"), shownClaimDigest_}});
         return;
     }
     setBusy(true);
@@ -1397,6 +1400,7 @@ void RemoteControlView::revokeDevice(const QString& deviceId) {
 void RemoteControlView::closePairing() {
     ++pairingEpoch_;
     shownClaimDigest_.clear();
+    claimChanged_ = false;
     const QString ticketId = std::exchange(ticketId_, {});
     setBusy(false);
     if (demoMode_ || ticketId.isEmpty())

@@ -28,11 +28,12 @@ add a device row with its own keys and read every session, send commands and ope
   unchanged and equals
   `base64url(SHA-256(["<ticket>","<device>",<version>,"<agreement>","<signing>"]))` recomputed
   from the claimed keys. This stops the relay from swapping keys and digest together between
-  display and approval, and the dialog treats a digest that changes while open as a failed
-  pairing. The pin is written after the relay accepts the approval. Revoking a device removes
+  display and approval. Once the dialog has shown a code, a digest that changes or
+  disappears fails that pairing for good, even if the first digest comes back. The pin is written after the relay accepts the approval. Revoking a device removes
   all of its pins.
-- **One-time adoption, only for existing enrollments.** A new enrollment starts with an empty pin
-  set. A Mac that was already enrolled when this change shipped pins the devices active in its
+- **One-time adoption, only for existing enrollments.** A new enrollment replaces any pins with an
+  empty set, written before the machine id. A failed write therefore never leaves an enrollment
+  that a restart would take for one from before pins. Signing out removes the pins. A Mac that was already enrolled when this change shipped pins the devices active in its
   first device list (trust on first use), so existing pairings keep working. After that, a
   device joins only through an approval on this Mac.
 - **Pairing a phone with one Mac does not grant it another Mac's sessions.** Each Mac approves its

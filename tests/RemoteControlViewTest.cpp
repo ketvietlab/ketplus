@@ -2,6 +2,7 @@
 
 #include <QApplication>
 #include <QDialog>
+#include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
@@ -21,7 +22,39 @@ class RemoteControlViewTest final : public QObject {
     void signInFormIsAnExplicitSecondaryFlow();
     void demoSignInOpensAddDeviceQr();
     void demoSignOutReturnsToSingleAction();
+    void aClaimThatChangesAfterItsCodeWasShownCannotBeApproved();
 };
+
+void RemoteControlViewTest::aClaimThatChangesAfterItsCodeWasShownCannotBeApproved() {
+    RemoteControlView view;
+    const auto claim = [](const QString& digest) {
+        return QJsonObject{{QStringLiteral("status"), QStringLiteral("claimed")},
+                           {QStringLiteral("claimDigest"), digest},
+                           {QStringLiteral("claimedDevice"),
+                            QJsonObject{{QStringLiteral("displayName"), QStringLiteral("Phone")}}}};
+    };
+    const auto approvable = [&view] {
+        return view.approveButton_->property("pairAction").toString() == QStringLiteral("approve");
+    };
+    view.ticketId_ = QStringLiteral("ticket");
+    view.showPairing(claim(QStringLiteral("digest-a")));
+    QVERIFY(approvable());
+    QCOMPARE(view.shownClaimDigest_, QStringLiteral("digest-a"));
+    // The relay clears the digest, then presents another claim: neither replaces the one shown.
+    view.showPairing(claim({}));
+    QVERIFY(!approvable());
+    view.showPairing(claim(QStringLiteral("digest-b")));
+    QVERIFY(!approvable());
+    view.showPairing(claim(QStringLiteral("digest-a")));
+    QVERIFY(!approvable());
+    QCOMPARE(view.shownClaimDigest_, QStringLiteral("digest-a"));
+    // Closing the dialog starts the next ticket clean (no ticket, so nothing is revoked).
+    view.ticketId_.clear();
+    view.closePairing();
+    view.ticketId_ = QStringLiteral("next");
+    view.showPairing(claim(QStringLiteral("digest-b")));
+    QVERIFY(approvable());
+}
 
 void RemoteControlViewTest::opensOnSignInPrompt() {
     RemoteControlView view;

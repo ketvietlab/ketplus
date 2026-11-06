@@ -5,10 +5,12 @@ namespace r03 {
 QHash<QString, QByteArray> credentials;
 bool failWrites = false;
 bool failRemovals = false;
+QString failWritesTo;
 void resetCredentials() {
     credentials.clear();
     failWrites = false;
     failRemovals = false;
+    failWritesTo.clear();
 }
 } // namespace r03
 namespace ketplus::daemon {
@@ -17,7 +19,7 @@ QByteArray CredentialStore::read(const QString& account, QString*) const {
     return r03::credentials.value(service_ + '/' + account);
 }
 bool CredentialStore::write(const QString& account, const QByteArray& value, QString* error) const {
-    if (r03::failWrites) {
+    if (r03::failWrites || (!r03::failWritesTo.isEmpty() && account == r03::failWritesTo)) {
         if (error)
             *error = "synthetic credential write failure";
         return false;

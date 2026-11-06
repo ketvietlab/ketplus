@@ -83,6 +83,11 @@ bool DevicePins::adopt(const QJsonArray& devices, QString* error) const {
     return write({{QStringLiteral("version"), 1}, {QStringLiteral("devices"), pinned}}, error);
 }
 
+bool DevicePins::reset(QString* error) const {
+    return write({{QStringLiteral("version"), 1}, {QStringLiteral("devices"), QJsonObject{}}},
+                 error);
+}
+
 bool DevicePins::pin(const QJsonObject& device, QString* error) const {
     const QString id = device.value(QStringLiteral("id")).toString();
     const QString print = fingerprint(device.value(QStringLiteral("keys")).toObject());

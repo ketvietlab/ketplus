@@ -26,6 +26,8 @@ class DevicePins final {
     [[nodiscard]] bool initialized(QString* error = nullptr) const;
     // Pins every active row of the relay's device list, once.
     bool adopt(const QJsonArray& devices, QString* error = nullptr) const;
+    // Initializes an empty pin set, replacing any earlier one: a new enrollment trusts no device.
+    bool reset(QString* error = nullptr) const;
     bool pin(const QJsonObject& device, QString* error = nullptr) const;
     // Removes every key version of the device.
     bool unpin(const QString& deviceId, QString* error = nullptr) const;
