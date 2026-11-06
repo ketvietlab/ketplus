@@ -23,8 +23,9 @@ component in that mock, with KetPlus metrics in `ket::Profile`.
 - **Standalone build.** The mock is its own CMake project, not part of the Lite
   or Pro build. It pins the kit by commit through FetchContent, fetches KÉT
   Sans 1.1 from its official release with a SHA-256 hash, and commits the
-  KÉT Sans Mono 0.10.4 Regular TTF (SIL OFL 1.1, licence alongside), which has
-  no public release.
+  KÉT Sans Mono 0.10.4 Medium TTF (SIL OFL 1.1, licence alongside), which has
+  no public release. Only the Medium face is bundled, so every monospace text
+  in the mock is Medium (Jay, 2026-11-06).
 - **Evidence is repeatable.** `--screen`, `--state`, `--dark`, `--zoom` and
   `--screenshot` render any screen; `--smoke` opens every screen and fails on
   any QML warning.
