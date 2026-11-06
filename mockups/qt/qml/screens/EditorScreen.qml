@@ -271,8 +271,9 @@ Item {
                         contentHeight: document.height + screen.px(160)
                         boundsBehavior: Flickable.StopAtBounds
                         Basic.ScrollBar.vertical: Basic.ScrollBar {}
-                        KetMarkdown {
+                        MarkdownView {
                             id: document
+                            window: screen.window
                             x: Math.max(screen.px(32), (preview.width - width) / 2)
                             y: screen.px(28)
                             width: Math.min(preview.width - screen.px(64), screen.px(960))

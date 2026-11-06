@@ -199,9 +199,10 @@ Item {
             message: "Sent to @agent/9410 · Review the startup flow · started a turn · reply requested."
         }
 
-        KetMarkdown {
+        MarkdownView {
             visible: ["activity", "running", "short"].includes(transcript.kind)
             width: parent.width
+            window: transcript.window
             markdown: transcript.kind === "running" ? Fixtures.runningAnswer
                 : transcript.kind === "short" ? "The worktree is **clean**: no staged or unstaged changes, and `develop` is even with `origin/develop`."
                 : Fixtures.activityAnswer

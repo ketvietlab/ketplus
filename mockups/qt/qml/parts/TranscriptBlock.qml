@@ -91,6 +91,7 @@ Loader {
                     model: host.block.images || []
                     Rectangle {
                         required property var modelData
+                        required property int index
                         width: host.px(120)
                         height: host.px(78)
                         radius: host.px(8)
@@ -98,6 +99,8 @@ Loader {
                         color: KetTheme.t.panelBgSubtle
                         border.color: KetTheme.t.panelBorder
                         Image { anchors.fill: parent; anchors.margins: 1; source: modelData.source; fillMode: Image.PreserveAspectCrop }
+                        HoverHandler { cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: host.window.openImages(host.block.images, index) }
                     }
                 }
             }
@@ -128,7 +131,8 @@ Loader {
     // agentMessage with phase "commentary": what the agent says between steps.
     Component {
         id: commentary
-        KetMarkdown {
+        MarkdownView {
+            window: host.window
             markdown: host.block.text
             onLinkActivated: link => host.window.notify("Opened " + link)
         }
@@ -139,8 +143,9 @@ Loader {
         id: answer
         Column {
             spacing: host.px(10)
-            KetMarkdown {
+            MarkdownView {
                 width: parent.width
+                window: host.window
                 markdown: host.block.markdown
                 onLinkActivated: link => host.window.notify("Opened " + link)
             }

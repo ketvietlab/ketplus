@@ -25,7 +25,7 @@ KÉT Sans archive with `-DKETPLUS_MOCK_KET_SANS_ARCHIVE=<path>/KETSans-1.100.zip
 ```sh
 KetPlusMock --smoke                                    # every screen, fails on QML warnings
 KetPlusMock --screen=workspace --state=running --dark --zoom=1.25 --screenshot=out.png
-KetPlusMock --screen=workspace --open=model --screenshot=model.png  # model, mode, limits, reviewer, composer (focused) or images (the image viewer)
+KetPlusMock --screen=workspace --open=model --screenshot=model.png  # model, mode, limits, reviewer, composer (focused) images (the image viewer) or mermaid (diagrams instead of their source)
 ```
 
 Screens and states (`--screen` / `--state`):
@@ -90,9 +90,26 @@ the steps of an activity group.
   `KetTheme.px(value, KetTheme.zoom)` so zoom applies.
 - Keep `--smoke` at zero QML problems.
 
+## Mermaid and the image viewer
+
+A ```` ```mermaid ```` fence in an answer or a Markdown file (`parts/MarkdownView.qml`) shows its
+source by default, as the app does. The Source | Mermaid switch shows the diagram, and a click
+opens it in the kit's image viewer (`KetLightbox`). Captures, viewed and generated images and
+images attached to a message open there too.
+
+The mock does not run mermaid-cli. Its diagrams (`mermaid/*.mmd`) are rendered ahead of time
+with the app's Két theme (`core/resources/mermaid`):
+
+```sh
+python3 tools/render_mermaid.py   # needs mmdc on PATH; writes assets/mermaid/*@2x.png
+```
+
+A fence that is not one of these samples stays source only.
+
 ## Assets
 
 The sidebar logo is the bare KétPlus Pro mark (`assets/ketplus-mark-bare-{dark,light}.svg`) and
 the tile `assets/ketplus-mark.svg` from Két Symbol, licensed CC BY 4.0
 (`assets/LICENSE-CC-BY-4.0.txt`): "Két Symbol © 2026 Két Việt, CC BY 4.0". The name KétPlus is a
-trademark and is not licensed.
+trademark and is not licensed. The Mermaid renderings use the Két Mermaid theme from the Két
+Design System (MIT, `core/resources/mermaid/KetDesignSystem-LICENSE.txt`).

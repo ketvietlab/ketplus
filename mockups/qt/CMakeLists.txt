@@ -55,6 +55,8 @@ qt_add_qml_module(ketplus_qt_mock
     RESOURCES assets/ketplus-mark.svg assets/ketplus-mark-bare-dark.svg
               assets/ketplus-mark-bare-light.svg assets/screenshot-sidebar.png assets/screenshot-editor.png
               assets/screenshot-settings.png
+              assets/mermaid/shared-clock-light@2x.png assets/mermaid/shared-clock-dark@2x.png
+              assets/mermaid/agent-turn-light@2x.png assets/mermaid/agent-turn-dark@2x.png
 )
 
 qt_add_resources(ketplus_qt_mock mock_fonts
@@ -70,6 +72,13 @@ qt_add_resources(ketplus_qt_mock mock_mono
     PREFIX "/fonts"
     BASE fonts
     FILES fonts/KETSansMono-Medium.ttf
+)
+
+# The Mermaid samples' sources, shown by the fixtures and rendered by tools/render_mermaid.py.
+qt_add_resources(ketplus_qt_mock mock_mermaid
+    PREFIX "/mermaid"
+    BASE mermaid
+    FILES mermaid/shared-clock.mmd mermaid/agent-turn.mmd
 )
 
 # The repository's licensing document, the long Markdown sample the editor previews.

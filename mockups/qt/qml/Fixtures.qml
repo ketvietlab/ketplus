@@ -2,10 +2,29 @@
 pragma Singleton
 import QtQuick
 import Ket
+import KetPlusMock.Native
 
 // Deterministic sample data for every screen. Nothing here talks to a daemon, Git or a
 // provider; the mock only presents these values.
 QtObject {
+    // Mermaid samples (mermaid/*.mmd), rendered ahead of time by tools/render_mermaid.py.
+    readonly property var mermaid: ({
+        sharedClock: Mock.resourceText(":/mermaid/shared-clock.mmd").trim(),
+        agentTurn: Mock.resourceText(":/mermaid/agent-turn.mmd").trim()
+    })
+    readonly property var mermaidNames: ({ sharedClock: "shared-clock", agentTurn: "agent-turn" })
+
+    // The rendering of a Mermaid fence in this theme; empty for a diagram the mock lacks.
+    function mermaidImage(source, dark) {
+        const text = source.trim()
+        for (const key in mermaid) {
+            if (mermaid[key] === text)
+                return "qrc:/qt/qml/KetPlusMock/assets/mermaid/" + mermaidNames[key]
+                    + (dark ? "-dark" : "-light") + "@2x.png"
+        }
+        return ""
+    }
+
     // The browser captures an activity shows; the gallery opens them in the image viewer.
     readonly property var captures: ["sidebar", "editor", "settings"].map(name => ({
         source: "qrc:/qt/qml/KetPlusMock/assets/screenshot-" + name + ".png",
@@ -212,7 +231,10 @@ QtObject {
         + "if (profile.monoFamily().isEmpty())\n    return 1;\n```\n\n"
         + "```sh\n# Build and capture the mock.\ncmake --build build/mock --parallel 8\n"
         + "KetPlusMock --screen=editor --state=markdown --dark --screenshot=\"$OUT/md.png\"\n```\n\n"
-        + "```json\n{\n  \"name\": \"ket-qt\",\n  \"version\": \"0.4.0\",\n  \"private\": false\n}\n```\n"
+        + "```json\n{\n  \"name\": \"ket-qt\",\n  \"version\": \"0.4.0\",\n  \"private\": false\n}\n```\n\n"
+        + "## Diagrams\n\nA Mermaid fence shows its source; switch it to Mermaid for the diagram, "
+        + "and click the diagram to open it in the image viewer.\n\n"
+        + "```mermaid\n" + mermaid.agentTurn + "\n```\n"
 
     // Manage worktrees.
     readonly property var worktrees: [

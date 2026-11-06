@@ -33,7 +33,7 @@ class MockController final : public QObject {
 
     QString initialScreen = QStringLiteral("workspace");
     QString initialState;
-    QString initialPanel; // a panel to open: model, mode, limits, reviewer, composer or images
+    QString initialPanel; // a panel to open: model, mode, limits, reviewer, composer, images or mermaid
     qreal initialScroll = -1; // where the transcript starts, 0 (top) to 1 (end); -1 keeps the top
 
   signals:
