@@ -304,4 +304,22 @@ QtObject {
         { name: "Cursor CLI", note: "Cursor CLI was not found.",
           rows: [["Status", "Not installed"], ["Supported", "2026.6.25 or newer · tested up to 2026.9.18"]] }
     ]
+
+    // Settings → Storage. Proportions follow a six-week journal measured on a working Mac
+    // (most of the file was free pages SQLite never returned); the conversations are made up.
+    readonly property var journalStorage: ({
+        totalGb: 9.0, limitGb: 5, warnPercent: 80, oldest: "24 Sep 2026", lastCompaction: "Never",
+        parts: [
+            { label: "Conversation history", detail: "Messages, tool calls and command output", gb: 2.3 },
+            { label: "Generated images", detail: "422 images at full size", gb: 1.2 },
+            { label: "Activity and usage index", detail: "Activity groups, usage samples", gb: 0.3 },
+            { label: "Free space", detail: "Left by deleted data; compacting returns it to macOS", gb: 5.2 }
+        ],
+        largest: [
+            { number: "5498", title: "Port the image pipeline", provider: "Codex", size: "349 MB", note: "318 generated images" },
+            { number: "5208", title: "Browser screenshot audit", provider: "Codex", size: "123 MB", note: "2,140 browser tool results" },
+            { number: "7045", title: "Refactor the daemon journal", provider: "Codex", size: "115 MB", note: "6,800 commands" },
+            { number: "8854", title: "Review the startup flow", provider: "Claude", size: "80 MB", note: "5,200 commands" }
+        ]
+    })
 }

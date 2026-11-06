@@ -39,7 +39,8 @@ Screens and states (`--screen` / `--state`):
 | `changes` | | Source Control: changes, staged changes, diff |
 | `worktrees` | | Manage worktrees, create dialog, manage menu |
 | `connections` | | This Mac, phones, Linux machines (SSH or Relay), pairing dialogs, account |
-| `settings` | `typography`, `account`, `browser`, `computer`, `providers`, `archived`, `updates` | The app's order: Appearance (live theme, follow system, zoom), typography, account, Agent models (opens the model picker), browser, computer use, providers (CLI status, Claude API access, organization usage), archive, updates |
+| `settings` | `typography`, `account`, `browser`, `computer`, `providers`, `archived`, `storage`, `updates` | The app's order: Appearance (live theme, follow system, zoom), typography, account, Agent models (opens the model picker), browser, computer use, providers (CLI status, Claude API access, organization usage), archive, storage (journal size by part, retention, size limit and warning, largest conversations, Compact now), updates |
+| `workspace` | `storage-warning` | The sidebar's journal warning above Update ready; it opens Settings → Storage and clears after Compact now |
 | `atlas` | | Edit an Atlas: flows, map, AI Chat |
 | `mobile-picker` | | Repository & worktree picker on iPhone |
 

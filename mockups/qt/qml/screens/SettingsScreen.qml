@@ -21,6 +21,7 @@ Item {
         { id: "computer", text: "Computer use", icon: "display" },
         { id: "providers", text: "Providers", icon: "package" },
         { id: "archived", text: "Archived", icon: "archive" },
+        { id: "storage", text: "Storage", icon: "layers" },
         { id: "updates", text: "Updates", icon: "download" }
     ]
     readonly property var current: tabs.find(t => t.id === window.settingsTab) || tabs[0]
@@ -167,7 +168,8 @@ Item {
                         width: parent.width
                         sourceComponent: ({ appearance: appearance, typography: typography, account: account,
                                             browser: browser, computer: computer, providers: providers,
-                                            archived: archived, updates: updates })[screen.current.id]
+                                            archived: archived, storage: storage,
+                                            updates: updates })[screen.current.id]
                     }
                 }
             }
@@ -502,6 +504,117 @@ Item {
             SettingRow { label: "Channel"; KetSelect { width: parent.width; model: ["Stable", "Beta"] } }
             KetCheckbox { text: "Download updates automatically"; checked: true }
             KetButton { text: "Check for updates"; iconName: "refresh"; onClicked: screen.window.notify("KétPlus Pro is up to date") }
+        }
+    }
+
+    // The daemon journal: what it holds, how long full detail is kept, the size limit and
+    // its warning, and compaction. See ketvietlab/ketplus issue "Journal grows without bound".
+    Component {
+        id: storage
+        Column {
+            id: storagePage
+            readonly property var info: Fixtures.journalStorage
+            property bool compacted: false
+            readonly property real totalGb: compacted ? info.totalGb - info.parts[3].gb : info.totalGb
+            spacing: screen.px(20)
+
+            function compact() {
+                compacted = true
+                screen.window.storageWarning = false
+                screen.window.notify("Journal compacted · " + info.totalGb.toFixed(1) + " GB → "
+                                     + totalGb.toFixed(1) + " GB")
+            }
+
+            Body { text: "KetPlus keeps every conversation in a local journal so transcripts, remote devices and restarts can replay them. Choose how long it keeps full detail and how large it may grow." }
+
+            KetBanner {
+                width: parent.width
+                visible: !storagePage.compacted
+                tone: KetTheme.BannerTone.Warning
+                title: "The journal is over its size limit"
+                message: storagePage.info.totalGb.toFixed(1) + " GB on disk, limit " + storagePage.info.limitGb
+                         + " GB. " + storagePage.info.parts[3].gb.toFixed(1)
+                         + " GB of it is free space that compacting returns to macOS."
+                actionText: "Compact now"
+                onActionTriggered: storagePage.compact()
+            }
+
+            KetMeter {
+                width: parent.width
+                label: "Journal"
+                valueText: storagePage.totalGb.toFixed(1) + " GB of " + storagePage.info.limitGb + " GB"
+                fraction: Math.min(1, storagePage.totalGb / storagePage.info.limitGb)
+                caption: "~/Library/Application Support/Ketsuite/KetPlus/daemon · full detail since "
+                         + storagePage.info.oldest
+            }
+
+            Column {
+                width: parent.width
+                spacing: screen.px(10)
+                Repeater {
+                    model: storagePage.info.parts
+                    KetMeter {
+                        required property var modelData
+                        required property int index
+                        width: parent.width
+                        label: modelData.label
+                        readonly property real gb: storagePage.compacted && index === 3 ? 0 : modelData.gb
+                        valueText: gb.toFixed(1) + " GB"
+                        fraction: gb / storagePage.info.totalGb
+                        caption: modelData.detail
+                    }
+                }
+            }
+
+            Divider {}
+            SubHeading { text: "Retention" }
+            SettingRow {
+                label: "Keep full detail for"
+                help: "Older turns keep their messages, diffs and the end of each command output; large tool results and images become a short summary in the transcript."
+                KetSelect { width: parent.width; model: ["7 days", "30 days", "90 days", "Forever"]; currentIndex: 1 }
+            }
+            SettingRow {
+                label: "Journal size limit"
+                help: "Past the limit, KetPlus trims the oldest detail first. Running turns and the latest 20 turns of every conversation are never trimmed."
+                KetSelect { width: parent.width; model: ["1 GB", "2 GB", "5 GB", "10 GB", "No limit"]; currentIndex: 2 }
+            }
+            SettingRow {
+                label: "Generated images"
+                help: "After the detail period, keep the full image, a 512 px preview, or only its caption."
+                KetSelect { width: parent.width; model: ["Keep full image", "Keep preview", "Caption only"]; currentIndex: 1 }
+            }
+            SettingRow {
+                label: "Archived conversations"
+                help: "Delete the history of a conversation this long after it is archived."
+                KetSelect { width: parent.width; model: ["30 days", "90 days", "1 year", "Never"]; currentIndex: 1 }
+            }
+            KetCheckbox { text: "Warn me when the journal passes " + storagePage.info.warnPercent + "% of its limit"; checked: true }
+            KetCheckbox { text: "Compact automatically while KetPlus is idle"; checked: true }
+
+            Divider {}
+            SubHeading { text: "Largest conversations" }
+            Column {
+                width: parent.width
+                spacing: screen.px(8)
+                Repeater {
+                    model: storagePage.info.largest
+                    InfoRow {
+                        required property var modelData
+                        label: "@agent/" + modelData.number
+                        value: modelData.title + " · " + modelData.provider + " · " + modelData.size
+                               + " · " + modelData.note
+                    }
+                }
+            }
+
+            Divider {}
+            InfoRow { label: "Last compaction"; value: storagePage.compacted ? "Just now" : storagePage.info.lastCompaction }
+            Row {
+                spacing: screen.px(10)
+                KetButton { text: "Compact now"; variant: KetTheme.ButtonVariant.Primary; enabled: !storagePage.compacted; onClicked: storagePage.compact() }
+                KetButton { text: "Export conversations…"; iconName: "download"; onClicked: screen.window.notify("Exported 88 conversations") }
+            }
+            Help { text: "Compacting rewrites the journal while KetPlus is idle and needs free disk space about the size of the kept data. Running turns keep working." }
         }
     }
 }
