@@ -5,6 +5,7 @@
 //   --scroll=0.5                                   scroll the transcript or the Connections intro (0 top, 1 end)
 //   --screenshot=<file>                                         save the window and exit
 //   --smoke                                  open every screen; exit non-zero on QML warnings
+//   --edition=lite --chrome=windows|linux       KétPlus instead of Pro, with that platform's chrome
 #include "KetAppearance.h"
 #include "KetProfile.h"
 #include "MockController.h"
@@ -63,7 +64,14 @@ int main(int argc, char* argv[]) {
     const QCommandLineOption scroll(QStringLiteral("scroll"),
                                     QStringLiteral("Scroll the transcript, 0 (top) to 1 (end)."),
                                     QStringLiteral("fraction"));
-    parser.addOptions({screen, state, open, dark, light, zoom, scroll, screenshot, smoke});
+    const QCommandLineOption edition(QStringLiteral("edition"),
+                                     QStringLiteral("pro (KétPlus Pro) or lite (KétPlus)."),
+                                     QStringLiteral("edition"), QStringLiteral("pro"));
+    const QCommandLineOption chrome(QStringLiteral("chrome"),
+                                    QStringLiteral("Lite window chrome: macos, windows or linux."),
+                                    QStringLiteral("platform"), QStringLiteral("macos"));
+    parser.addOptions(
+        {screen, state, open, dark, light, zoom, scroll, screenshot, smoke, edition, chrome});
     parser.process(application);
 
     previousHandler = qInstallMessageHandler(countQmlProblems);
@@ -96,6 +104,13 @@ int main(int argc, char* argv[]) {
     ket::Appearance::instance().setZoom(parser.value(zoom).toDouble());
 
     MockController controller;
+    controller.edition = parser.value(edition) == QLatin1String("lite") ? QStringLiteral("lite")
+                                                                        : QStringLiteral("pro");
+    if (const QString platform = parser.value(chrome);
+        platform == QLatin1String("windows") || platform == QLatin1String("linux"))
+        controller.chrome = platform;
+    if (controller.edition == QLatin1String("lite"))
+        controller.initialScreen = QStringLiteral("explorer");
     if (parser.isSet(screen))
         controller.initialScreen = parser.value(screen);
     controller.initialState = parser.value(state);
@@ -105,7 +120,8 @@ int main(int argc, char* argv[]) {
     qmlRegisterSingletonInstance("KetPlusMock.Native", 1, 0, "Mock", &controller);
 
     QQmlApplicationEngine engine;
-    engine.loadFromModule("KetPlusMock", "Main");
+    engine.loadFromModule("KetPlusMock",
+                          controller.edition == QLatin1String("lite") ? "LiteMain" : "Main");
     if (engine.rootObjects().isEmpty())
         return 1;
     auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().constFirst());

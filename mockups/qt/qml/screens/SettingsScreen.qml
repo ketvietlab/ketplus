@@ -12,7 +12,12 @@ Item {
     id: screen
 
     required property var window
-    readonly property var tabs: [
+    // The pages this edition has, by id; null shows them all (KétPlus Pro). KétPlus has
+    // Appearance and Typography only.
+    property var tabIds: null
+    property string shortcut: "⌘ ,"
+    readonly property var tabs: allTabs.filter(t => !tabIds || tabIds.includes(t.id))
+    readonly property var allTabs: [
         { id: "appearance", text: "Appearance", icon: "palette" },
         { id: "typography", text: "Typography", icon: "text-size" },
         { id: "account", text: "Account & devices", icon: "display" },
@@ -130,7 +135,7 @@ Item {
                 eyebrow: "MAKE IT YOUR OWN"
                 title: "Settings"
                 description: "One consistent look across your entire workspace."
-                KetKbd { text: "⌘ ," }
+                KetKbd { text: screen.shortcut }
             }
 
             Row {

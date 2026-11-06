@@ -12,6 +12,11 @@ Item {
     id: screen
 
     required property var window
+    // KétPlus (LiteMain.qml) puts Search beside the editor instead of the explorer, names
+    // itself in the status bar and uses Ctrl on Windows and Linux.
+    property bool explorerVisible: true
+    property string productName: "KétPlus Pro"
+    property string quickOpenKey: "⌘ K"
     property var openFolders: Fixtures.explorer.filter(f => f.folder && f.open).map(f => f.name)
     property var tabs: ["NavigationRail.qml", "design-system.md"]
     property string current: "NavigationRail.qml"
@@ -101,6 +106,7 @@ Item {
 
             // Explorer.
             Rectangle {
+                visible: screen.explorerVisible
                 Layout.fillHeight: true
                 Layout.preferredWidth: screen.px(248)
                 color: KetTheme.t.sidebarBg
@@ -214,7 +220,7 @@ Item {
                     Layout.fillHeight: true
                     iconName: "file"
                     title: "No file open"
-                    message: "Pick a file in the explorer or press ⌘ K."
+                    message: "Pick a file in the explorer or press " + screen.quickOpenKey + "."
                     actionText: "Quick search"
                     actionIcon: "search"
                     onActionTriggered: screen.window.spotlight.open()
@@ -331,7 +337,7 @@ Item {
             trailing: [
                 KetStatusItem { text: "UTF-8" },
                 KetStatusItem { text: "LF" },
-                KetStatusItem { text: "KétPlus Pro" }
+                KetStatusItem { text: screen.productName }
             ]
         }
     }
