@@ -189,14 +189,34 @@ const scaleRegion = (region, scale) => ({
   height: Math.round(region.height * scale),
 });
 
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+// Reads the IHDR size so an oversized image is refused before pngjs allocates it.
+function decodeBounded(bytes, side) {
+  const header = bytes.length >= 24 && bytes.subarray(0, 8).equals(PNG_SIGNATURE) &&
+    bytes.toString("latin1", 12, 16) === "IHDR";
+  const width = header ? bytes.readUInt32BE(16) : 0;
+  const height = header ? bytes.readUInt32BE(20) : 0;
+  if (!header || !width || !height) {
+    throw new BrowserApiError("INVALID_RASTER", `${side} raster is not a PNG`);
+  }
+  if (width * height > LIMITS.maxRasterPixels) {
+    throw new BrowserApiError("RASTER_TOO_LARGE", `${side} raster exceeds ${LIMITS.maxRasterPixels} pixels`, {
+      width,
+      height,
+    });
+  }
+  return PNG.sync.read(bytes);
+}
+
 export async function compareRaster(referenceCapture, candidateCapture, diffPath, policy) {
   const scale = referenceCapture.environment.deviceScaleFactor;
   const [referenceBytes, candidateBytes] = await Promise.all([
     fs.readFile(referenceCapture.path),
     fs.readFile(candidateCapture.path),
   ]);
-  let reference = PNG.sync.read(referenceBytes);
-  let candidate = PNG.sync.read(candidateBytes);
+  let reference = decodeBounded(referenceBytes, "Reference");
+  let candidate = decodeBounded(candidateBytes, "Candidate");
   const crop = (image, region, side) => {
     if (!region) return image;
     const { x, y, width, height } = scaleRegion(region, scale);
