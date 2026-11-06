@@ -108,6 +108,18 @@ class CloudPrivacyTestAccess {
         for (auto& entry : client.senderKeys_)
             entry.second = QDateTime::currentDateTimeUtc().addSecs(-1);
     }
+    // Pins a device on this Mac, as approving its pairing does.
+    static void pinDevice(CloudControlClient& client, const QString& id, int version,
+                          const QJsonObject& keys) {
+        if (!client.pins_.pin({{"id", id}, {"keyVersion", version}, {"keys", keys}}))
+            qFatal("Synthetic device pin failed");
+    }
+    static DevicePins& pins(CloudControlClient& client) { return client.pins_; }
+    static void distributeKeys(CloudControlClient& client) { client.distributeKeys(); }
+    static void approvePairing(CloudControlClient& client, const QString& ticketId,
+                               CloudControlClient::LocalCallback done) {
+        client.approvePairing({{"ticket_id", ticketId}}, std::move(done));
+    }
     static qsizetype cachedSenderKeys(const CloudControlClient& client) {
         return client.senderKeys_.size();
     }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cloud/CloudCrypto.h"
+#include "cloud/DevicePins.h"
 #include "cloud/RelayWakeups.h"
 #include "transport/RemotePeers.h"
 #include "transport/Signaling.h"
@@ -116,6 +117,8 @@ class CloudControlClient final : public QObject {
     // A wake-up that lands while a poll is in flight polls again once it returns: that poll
     // may have read before the command it announces was written.
     void wakeCommandPoll();
+    // The active rows of a relay device list that are pinned here, adopting them on first use.
+    QJsonArray trustedDevices(const QJsonArray& devices);
     using SenderKeysCallback = std::function<void(const QJsonObject&, const QString&)>;
     // A phone's published keys, read from the relay at most once per senderKeyCacheMilliseconds.
     void withSenderKeys(const QString& senderId, int version, SenderKeysCallback callback);
@@ -180,6 +183,7 @@ class CloudControlClient final : public QObject {
     SessionHost* host_{nullptr};
     CredentialStore credentials_;
     CloudCrypto crypto_;
+    DevicePins pins_;
     QNetworkAccessManager network_;
     QNetworkAccessManager* transport_{&network_};
     QTimer syncTimer_;

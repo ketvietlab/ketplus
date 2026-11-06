@@ -422,6 +422,13 @@ void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qin
         });
 }
 
+QJsonArray CloudControlClient::trustedDevices(const QJsonArray& devices) {
+    QString error;
+    if (!pins_.adopt(devices, &error))
+        lastError_ = error;
+    return pins_.trusted(devices);
+}
+
 void CloudControlClient::distributeKeys() {
     if (machineId_.isEmpty() || daemonToken_.isEmpty())
         return;
@@ -432,10 +439,12 @@ void CloudControlClient::distributeKeys() {
                         lastError_ = transportError;
                     return;
                 }
-                signaling_->refreshDevices(value.toArray());
+                // Only devices pinned on this Mac receive session keys (#87).
+                const QJsonArray devices = trustedDevices(value.toArray());
+                signaling_->refreshDevices(devices);
                 QJsonArray envelopes;
                 QString cryptoError;
-                for (const QJsonValue& deviceValue : value.toArray()) {
+                for (const QJsonValue& deviceValue : devices) {
                     const QJsonObject device = deviceValue.toObject();
                     for (const StoredSession& session : journal_->sessions()) {
                         if (refusedSessions_.contains(session.id))

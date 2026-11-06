@@ -97,7 +97,7 @@ QUrl controlBaseUrl() {
 } // namespace
 
 CloudControlClient::CloudControlClient(LocalJournal* journal, SessionHost* host, QObject* parent)
-    : QObject(parent), journal_(journal), host_(host), crypto_(&credentials_),
+    : QObject(parent), journal_(journal), host_(host), crypto_(&credentials_), pins_(&credentials_),
       baseUrl_(controlBaseUrl()),
       wakeups_(baseUrl_, [this](std::function<void(const QString&)> answer) {
           ensureDaemonCredential(
@@ -590,6 +590,13 @@ void CloudControlClient::approvePairing(const QJsonObject& payload, LocalCallbac
                                      : transportError);
                     return;
                 }
+                // The code the user compared is this digest. Recomputed from the claimed keys, it
+                // proves those keys are the phone's, not ones the relay substituted (#87).
+                if (DevicePins::claimDigest(ticket.value(QStringLiteral("id")).toString(),
+                                            device) != digest) {
+                    callback({}, QStringLiteral("The device claim does not match its keys."));
+                    return;
+                }
                 QJsonArray envelopes;
                 QString cryptoError;
                 for (const StoredSession& session : journal_->sessions()) {
@@ -622,15 +629,20 @@ void CloudControlClient::approvePairing(const QJsonObject& payload, LocalCallbac
                 if (!envelopes.isEmpty())
                     body.insert(QStringLiteral("sessionKeys"), envelopes);
                 request("POST", path + QStringLiteral("/approve"), body, daemonToken_, {},
-                        [callback = std::move(callback)](const int approveStatus,
-                                                         const QJsonValue& approveValue,
-                                                         const QString& approveError) {
+                        [this, device, callback = std::move(callback)](
+                            const int approveStatus, const QJsonValue& approveValue,
+                            const QString& approveError) {
+                            QString pinError;
                             if (approveStatus != 200 || !approveError.isEmpty()) {
                                 callback({}, approveError.isEmpty()
                                                  ? responseCode(
                                                        approveValue,
                                                        QStringLiteral("pairing_approval_failed"))
                                                  : approveError);
+                            } else if (!pins_.pin(device, &pinError)) {
+                                callback({}, pinError.isEmpty()
+                                                 ? QStringLiteral("Unable to remember the device.")
+                                                 : pinError);
                             } else {
                                 callback({{QStringLiteral("ok"), true},
                                           {QStringLiteral("ticket"), object(approveValue)}},
@@ -694,6 +706,12 @@ void CloudControlClient::revokeDevice(const QJsonObject& payload, LocalCallback 
                         return;
                     }
                     signaling_->receive({{"type", "device.revoked"}, {"deviceId", deviceId}});
+                    senderKeys_.clear();
+                    QString pinError;
+                    if (!pins_.unpin(deviceId, &pinError)) {
+                        callback({}, pinError);
+                        return;
+                    }
                     callback({{QStringLiteral("ok"), true}}, {});
                 });
     });

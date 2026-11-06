@@ -173,7 +173,11 @@ Terminal ownership remains in KetPlus CM. The daemon now enrolls its locally
 generated X25519/Ed25519 identity through native Ketsuite credentials, obtains
 short-lived challenge credentials, publishes generation-fenced session state,
 uploads stable AES-256-GCM event envelopes from a durable retry cache, and polls
-serialized encrypted commands. Pairing is explicitly confirmed on the Mac; a
+serialized encrypted commands. Pairing is explicitly confirmed on the Mac, and
+the daemon recomputes the claim digest from the claimed keys before approving.
+Only devices pinned on this Mac (ADR 0034) receive session keys, have their
+commands accepted or open peer links; the devices active when pins were
+introduced were adopted once; a
 closed pairing dialog revokes its outstanding ticket and paired devices can be
 revoked from Connections.
 

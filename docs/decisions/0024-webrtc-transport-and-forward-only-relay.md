@@ -13,7 +13,7 @@ the number of events rather than the number of users or sessions. Phones read th
 catch up after backgrounding from that table.
 
 The daemon journal is already the full-history authority, and the relay cannot read the content it
-stores. Staging `productivity-web` has crashed on heap exhaustion; memory was raised as a stopgap
+stores (against an active relay only since devices are pinned per Mac, [ADR 0034](0034-relay-is-not-trusted-for-device-identity.md)). Staging `productivity-web` has crashed on heap exhaustion; memory was raised as a stopgap
 and the dominant heap owner has not been identified.
 
 KétViewer already uses WebRTC between two devices, with in-memory signaling and short-lived TURN

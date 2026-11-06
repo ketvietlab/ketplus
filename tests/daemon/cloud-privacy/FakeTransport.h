@@ -64,10 +64,13 @@ class Transport final : public QNetworkAccessManager {
         const bool keyRead =
             verb == "GET" &&
             (path.startsWith(QStringLiteral("/v2/device-keys/")) ||
-             path == QStringLiteral("/v2/commands:poll") || path == QStringLiteral("/v2/devices"));
+             path == QStringLiteral("/v2/commands:poll") || path == QStringLiteral("/v2/devices") ||
+             path.startsWith(QStringLiteral("/v2/pairing/tickets/")));
         if (operation != CustomOperation ||
             (!keyRead && (verb != "POST" || (!path.endsWith(QStringLiteral("/responses:append")) &&
                                              !path.endsWith(QStringLiteral("/ack")) &&
+                                             !path.endsWith(QStringLiteral("/approve")) &&
+                                             path != QStringLiteral("/v2/session-keys:append") &&
                                              path != QStringLiteral("/v2/events:append") &&
                                              path != QStringLiteral("/v2/daemon/heartbeat")))))
             qFatal("Unexpected request; fake transport never opens a socket");
