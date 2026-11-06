@@ -25,7 +25,7 @@ KÉT Sans archive with `-DKETPLUS_MOCK_KET_SANS_ARCHIVE=<path>/KETSans-1.100.zip
 ```sh
 KetPlusMock --smoke                                    # every screen, fails on QML warnings
 KetPlusMock --screen=workspace --state=running --dark --zoom=1.25 --screenshot=out.png
-KetPlusMock --screen=workspace --open=model --screenshot=model.png  # model, mode, limits, reviewer or composer (focused)
+KetPlusMock --screen=workspace --open=model --screenshot=model.png  # model, mode, limits, reviewer, composer (focused) or images (the image viewer)
 ```
 
 Screens and states (`--screen` / `--state`):

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // KetPlus Qt mock. Options make review evidence repeatable:
 //   --screen=<id> --state=<state> --dark|--light --zoom=1.25   open one screen
-//   --open=model|mode|limits|reviewer|composer                          open a composer panel
+//   --open=model|mode|limits|reviewer|composer|images   open a composer panel, or the image viewer
 //   --scroll=0.5                                   scroll the transcript (0 top, 1 end)
 //   --screenshot=<file>                                         save the window and exit
 //   --smoke                                  open every screen; exit non-zero on QML warnings

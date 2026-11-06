@@ -187,9 +187,9 @@ Item {
 
         KetGallery {
             visible: transcript.kind === "activity"
-            images: ["sidebar", "editor", "settings"].map(name => ({
-                source: transcript.asset + "screenshot-" + name + ".png", caption: name }))
-            onActivated: index => transcript.window.notify("Opened capture " + (index + 1))
+            images: Fixtures.captures.map(capture => ({ source: capture.source,
+                                                        caption: capture.caption.split(" · ")[1] }))
+            onActivated: index => transcript.window.openImages(Fixtures.captures, index)
         }
 
         Note {

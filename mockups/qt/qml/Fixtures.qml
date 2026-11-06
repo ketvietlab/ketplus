@@ -6,6 +6,10 @@ import Ket
 // Deterministic sample data for every screen. Nothing here talks to a daemon, Git or a
 // provider; the mock only presents these values.
 QtObject {
+    // The browser captures an activity shows; the gallery opens them in the image viewer.
+    readonly property var captures: ["sidebar", "editor", "settings"].map(name => ({
+        source: "qrc:/qt/qml/KetPlusMock/assets/screenshot-" + name + ".png",
+        caption: "Browser capture · " + name + ".png" }))
     // Tag colours are user data, so they are literals rather than tokens.
     readonly property var tagColors: ({
         UI: "#4f6bed", Performance: "#c2780a", Review: "#7c5cd6", Atlas: "#3f8f7a",
