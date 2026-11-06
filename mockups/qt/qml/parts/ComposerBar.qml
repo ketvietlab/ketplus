@@ -43,6 +43,8 @@ Item {
             permissionButton.clicked()
         else if (name === "limits")
             limits.toggleAbove(ring)
+        else if (name === "composer")
+            composer.focusInput()
     }
     function choosePermission(index) {
         bar.permission = Fixtures.permissionModes[index].label
