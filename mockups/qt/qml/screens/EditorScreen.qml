@@ -139,10 +139,21 @@ Item {
                             }
                         }
                     }
-                    KetIconButton {
-                        iconName: "terminal"
-                        text: "Toggle terminal"
-                        onClicked: screen.window.notify("Terminal opens below the editor")
+                    // The strip's own fill and rule, so overflowing tabs pass beneath the button.
+                    Rectangle {
+                        readonly property var strip: KetTheme.tabBarRecipe(KetTheme.dark, KetTheme.zoom)
+                        implicitHeight: strip.height
+                        implicitWidth: terminalButton.implicitWidth + screen.px(8)
+                        color: strip.background
+                        Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: parent.strip.border }
+                        Rectangle { width: 1; height: parent.height - 1; color: parent.strip.border }
+                        KetIconButton {
+                            id: terminalButton
+                            anchors.centerIn: parent
+                            iconName: "terminal"
+                            text: "Toggle terminal"
+                            onClicked: screen.window.notify("Terminal opens below the editor")
+                        }
                     }
                 }
 
