@@ -39,7 +39,7 @@ Screens and states (`--screen` / `--state`):
 | `changes` | | Source Control: changes, staged changes, diff |
 | `worktrees` | | Manage worktrees, create dialog, manage menu |
 | `connections` | `no-activity` | This Mac, phones, activity from paired devices (the daemon's remote command audit, #86: done and refused requests, a sender that did not verify) or its empty state, Linux machines (SSH or Relay), pairing dialogs, account. `--open=activity` shows all activity, `--open=device` one phone's details, `--open=device-focus` the same with a truncated row focused from the keyboard |
-| `connections` | `signed-out`, `expired`, `sign-in` | Signed out: the welcome, the expired-login notice, the browser sign-in dialog |
+| `connections` | `signed-out`, `expired`, `sign-in` | Signed out: the introduction (this Mac and KetPlus Mobile, the three pairing steps), the expired-login banner, the browser sign-in dialog |
 | `settings` | `typography`, `account`, `browser`, `computer`, `providers`, `archived`, `storage`, `updates` | The app's order: Appearance (live theme, follow system, zoom), typography, account, Agent models (opens the model picker), browser, computer use, providers (CLI status, Claude API access, organization usage), archive, storage (journal size by part, retention, size limit and warning, largest conversations, Compact now), updates |
 | `workspace` | `claude`, `codex`, `cursor` | One transcript per provider with every content type its journal produces (see Transcript content types); the composer follows the conversation's provider and model. `--scroll=0.5` starts the transcript part of the way down |
 | `workspace` | `storage-warning` | The sidebar's journal warning above Update ready; it opens Settings → Storage and clears after Compact now |
@@ -90,6 +90,18 @@ the steps of an activity group.
 - Colours come from `KetTheme.t` tokens; lengths go through
   `KetTheme.px(value, KetTheme.zoom)` so zoom applies.
 - Keep `--smoke` at zero QML problems.
+
+## Connections captures
+
+The signed-out Connections introduction shows this mock and the KetPlus Mobile mock answering a
+question (`assets/connections/{desktop,mobile}-question-{light,dark}.png`). Capture them again
+when either screen changes:
+
+- Desktop: `KetPlusMock --screen=workspace --state=question --light --screenshot=out.png` (and
+  `--dark`), scaled to 1440 × 900.
+- Mobile: `ketplus-worktree-mobile.ketatlas/screens/conversation.html?thread=mobile-ui&question=pending&theme=light`
+  (and `theme=dark`) from `ketvietlab/ketplus-app` `develop`, at 393 × 852 CSS pixels and 2×,
+  with focus moved off the sheet's Close button.
 
 ## Mermaid and the image viewer
 

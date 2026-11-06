@@ -4,10 +4,12 @@ import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
 import Ket
 import KetPlusMock
+import KetPlusMock.Native
 
 // Connections: this Mac, paired phones and trusted Linux machines (SSH or the KetPlus
 // Relay), and the account. Pairing and trust are deterministic prototype states. Signed
-// out, it shows the app's welcome and its browser sign-in dialog instead.
+// out, it introduces connecting (parts/ConnectionsIntro) and opens the app's browser
+// sign-in dialog.
 Item {
     id: screen
 
@@ -200,52 +202,27 @@ Item {
         Rectangle { visible: !last; anchors.bottom: parent.bottom; x: screen.px(18); width: parent.width - 2 * x; height: 1; color: KetTheme.t.panelBorder }
     }
 
-    // Signed out, as RemoteControlView's unlinked content: no page header, a centred welcome.
-    Column {
+    // Signed out: what connecting gives, the pairing steps and the Sign in action.
+    Basic.ScrollView {
+        id: introScroll
         visible: !screen.window.signedIn
-        x: (parent.width - width) / 2
-        y: screen.px(36 + 64)
-        width: Math.min(parent.width - screen.px(2 * (42 + 24)), screen.px(640))
-        spacing: screen.px(16)
+        anchors.fill: parent
+        contentWidth: availableWidth
+        // --scroll: start part of the way down, for review captures.
+        Timer {
+            running: Mock.initialScroll >= 0 && Mock.initialScreen === "connections"
+            interval: 250
+            onTriggered: introScroll.contentItem.contentY = Mock.initialScroll
+                         * Math.max(0, introScroll.contentItem.contentHeight - introScroll.height)
+        }
 
-        KetIcon { anchors.horizontalCenter: parent.horizontalCenter; name: "disconnect"; box: screen.px(18); color: KetTheme.t.textSecondary }
-        Text {
-            width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            text: "Connections"
-            color: KetTheme.t.textMain
-            font.family: KetTheme.fontFamily
-            font.pixelSize: screen.px(30)
-            font.weight: Font.DemiBold
-        }
-        Column {
-            width: parent.width
-            Text {
-                width: parent.width
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.Wrap
-                text: "Sign in to connect your phone to this Mac."
-                color: KetTheme.t.textMain
-                font.family: KetTheme.fontFamily
-                font.pixelSize: screen.px(15)
-            }
-            Text {
-                visible: screen.window.signInExpired
-                width: parent.width
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.Wrap
-                text: "Please sign in again. Your login expired. Local work is preserved."
-                color: KetTheme.t.danger
-                font.family: KetTheme.fontFamily
-                font.pixelSize: screen.px(13)
-            }
-        }
-        KetButton {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: "Sign in"
-            iconName: "log-in"
-            variant: KetTheme.ButtonVariant.Primary
-            onClicked: screen.openSignIn()
+        ConnectionsIntro {
+            x: Math.max(screen.px(42), (introScroll.availableWidth - width) / 2)
+            y: screen.px(36)
+            width: Math.min(introScroll.availableWidth - screen.px(84), screen.px(1080))
+            bottomPadding: screen.px(40)
+            window: screen.window
+            onSignInRequested: screen.openSignIn()
         }
     }
 

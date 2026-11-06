@@ -57,6 +57,8 @@ qt_add_qml_module(ketplus_qt_mock
               assets/screenshot-settings.png
               assets/mermaid/shared-clock-light@2x.png assets/mermaid/shared-clock-dark@2x.png
               assets/mermaid/agent-turn-light@2x.png assets/mermaid/agent-turn-dark@2x.png
+              assets/connections/desktop-question-light.png assets/connections/desktop-question-dark.png
+              assets/connections/mobile-question-light.png assets/connections/mobile-question-dark.png
 )
 
 qt_add_resources(ketplus_qt_mock mock_fonts
