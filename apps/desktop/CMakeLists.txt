@@ -10,6 +10,8 @@ add_library(ketplus_desktop_support STATIC
     src/remote/RemoteControlView.h
     src/remote/LinuxMachinesSection.cpp
     src/remote/LinuxMachinesSection.h
+    src/remote/RemoteConnectionsIntro.cpp
+    src/remote/RemoteConnectionsIntro.h
     src/app/RepositoryMetadataStore.cpp
     src/app/RepositoryMetadataStore.h
     src/app/RepositoryRouter.cpp
@@ -44,6 +46,16 @@ target_compile_definitions(ketplus_desktop_support PUBLIC
     $<$<AND:$<BOOL:${KETPLUS_ENABLE_REMOTE_DEMO}>,$<CONFIG:Debug>>:KETPLUS_REMOTE_DEMO_AVAILABLE=1>
 )
 ketplus_enable_warnings(ketplus_desktop_support)
+# Connections before sign-in shows the Qt mock's captures, kept in one place for both.
+qt_add_resources(ketplus_desktop_support "ketplus_connections_intro"
+    PREFIX "/connections"
+    BASE "${PROJECT_SOURCE_DIR}/mockups/qt/assets/connections"
+    FILES
+        "${PROJECT_SOURCE_DIR}/mockups/qt/assets/connections/desktop-question-dark.png"
+        "${PROJECT_SOURCE_DIR}/mockups/qt/assets/connections/desktop-question-light.png"
+        "${PROJECT_SOURCE_DIR}/mockups/qt/assets/connections/mobile-question-dark.png"
+        "${PROJECT_SOURCE_DIR}/mockups/qt/assets/connections/mobile-question-light.png"
+)
 
 # ADR 0019: the process-wide in-app updater. Without a configured feed, or off macOS, it is a
 # disabled implementation that never contacts a server.

@@ -5,6 +5,7 @@
 #include "DaemonClient.h"
 #include "remote/LinuxMachinesSection.h"
 #include "remote/PairingQrCode.h"
+#include "remote/RemoteConnectionsIntro.h"
 #include "ui/TypeScale.h"
 
 #include <QApplication>
@@ -216,6 +217,14 @@ QLabel[remoteRole="dialogTitle"] { color:@text@; font-size:{{heading}}px; font-w
 QLabel[remoteRole="pairTitle"] { color:@text@; font-size:{{title}}px; font-weight:600; }
 QLabel[remoteRole="welcomeTitle"] { color:@text@; font-size:{{display}}px; font-weight:620; }
 QLabel[remoteRole="welcomeText"] { color:@text@; font-size:{{reading}}px; }
+QLabel[remoteRole="introTitle"] { color:@text@; font-size:{{heading}}px; font-weight:600; }
+QLabel[remoteRole="introState"] { color:@muted@; font-size:{{body}}px; }
+QLabel[remoteRole="introNote"] { color:@secondary@; font-size:{{body}}px; }
+QLabel[remoteRole="introIcon"] { color:@muted@; }
+QLabel[remoteRole="introSection"] { color:@text@; font-size:{{title}}px; font-weight:600; }
+QLabel[remoteRole="introStepTitle"] { color:@text@; font-size:{{body}}px; font-weight:600; }
+QLabel[remoteRole="introStepNumber"] { color:@muted@; font-family:"SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size:{{body}}px; }
+QFrame[remoteRole="introStepBar"] { border:0; background:@accent@; }
 QLabel[remoteRole="overviewTitle"] { color:@text@; font-size:{{heading}}px; font-weight:600; }
 QLabel#linuxMachinesTitle { color:@text@; font-size:{{title}}px; font-weight:600; }
 QLabel#linuxMachinesCount, QLabel#linuxMachinesFootnote { color:@muted@; font-size:{{caption}}px; }
@@ -269,6 +278,7 @@ QLabel[remoteRole="pairCode"] { min-height:70px; padding:0 18px; border:1px soli
 QLabel[remoteRole="pairFacts"] { padding:14px; border:1px solid @border@; border-radius:7px;
  background:@raised@; color:@secondary@; font-size:{{reading}}px; }
 QFrame[remoteRole="notice"] { border:1px solid @accentBorder@; border-left:3px solid @accent@; border-radius:5px; background:@accentSubtle@; }
+QFrame[remoteRole="notice"][remoteTone="warning"] { border-color:@warningBorder@; border-left-color:@warning@; background:@warningBg@; }
 QLabel[remoteRole="noticeTitle"] { color:@text@; font-size:{{body}}px; font-weight:700; }
 QLabel[remoteRole="noticeText"] { color:@secondary@; font-size:{{body}}px; }
 QLabel[remoteRole="noticeText"][remoteFailure="true"] { color:@danger@; }
@@ -369,8 +379,13 @@ void RemoteControlView::applyDesignSystemStyle() {
     const int basePixels = QApplication::font().pixelSize() > 0
                                ? QApplication::font().pixelSize()
                                : InterfaceZoomMetrics::mediumPixels;
-    setStyleSheet(
-        remoteStyle(kdsPalette(palette().color(QPalette::Window).lightness() < 128), basePixels));
+    const bool dark = palette().color(QPalette::Window).lightness() < 128;
+    const KdsPalette colors = kdsPalette(dark);
+    setStyleSheet(remoteStyle(colors, basePixels));
+    if (intro_)
+        intro_->setSceneColors({QColor(colors.accentSubtle), QColor(colors.page),
+                                QColor(colors.border), QColor(colors.strong), QColor(colors.panel),
+                                QColor(colors.muted), dark});
     chrome_geometry::apply(this, basePixels);
     applyingDesignSystemStyle_ = false;
 }
@@ -525,48 +540,18 @@ QWidget* RemoteControlView::createControlPage() {
     auto* unlinkedLayout = new QVBoxLayout(unlinkedContent_);
     chrome_geometry::margins(unlinkedLayout, 0, 0, 0, 0);
     chrome_geometry::spacing(unlinkedLayout, 0);
-    chrome_geometry::margins(unlinkedLayout, 24, 64, 24, 0);
-    auto* empty = new QWidget(unlinkedContent_);
-    empty->setObjectName(QStringLiteral("remoteConnectionsWelcome"));
-    chrome_geometry::maximumWidth(empty, 640);
-    auto* emptyLayout = new QVBoxLayout(empty);
-    chrome_geometry::margins(emptyLayout, 0, 0, 0, 0);
-    chrome_geometry::spacing(emptyLayout, 0);
-    emptyLayout->setAlignment(Qt::AlignCenter);
-    auto* emptyIcon = new LucideIconLabel(unplugIcon, 18, empty);
-    emptyIcon->setAlignment(Qt::AlignCenter);
-    emptyLayout->addWidget(emptyIcon, 0, Qt::AlignHCenter);
-    chrome_geometry::addSpacing(emptyLayout, 16);
-    auto* emptyTitle = label(QStringLiteral("Connections"), "welcomeTitle");
-    emptyTitle->setObjectName(QStringLiteral("remoteWelcomeTitle"));
-    emptyTitle->setAlignment(Qt::AlignCenter);
-    emptyLayout->addWidget(emptyTitle);
-    auto* emptyText =
-        label(QStringLiteral("Sign in to connect your phone to this Mac."), "welcomeText");
-    emptyText->setObjectName(QStringLiteral("remoteWelcomeText"));
-    emptyText->setAlignment(Qt::AlignCenter);
-    chrome_geometry::addSpacing(emptyLayout, 16);
-    emptyLayout->addWidget(emptyText);
-    welcomeNotice_ = label({}, "noticeText");
-    welcomeNotice_->setObjectName(QStringLiteral("remoteWelcomeNotice"));
-    welcomeNotice_->setAlignment(Qt::AlignCenter);
-    welcomeNotice_->hide();
-    emptyLayout->addWidget(welcomeNotice_);
-    chrome_geometry::addSpacing(emptyLayout, 16);
-    signInPromptButton_ = new QPushButton(QStringLiteral("Đăng nhập"));
-    signInPromptButton_->setObjectName(QStringLiteral("remoteSignInPromptButton"));
-    signInPromptButton_->setProperty("remotePrimary", true);
-    signInPromptButton_->setIcon(lucideIcon(logInIcon, Qt::white));
-    chrome_geometry::iconSize(signInPromptButton_, QSize(15, 15));
-    connect(signInPromptButton_, &QPushButton::clicked, this, [this] {
+    chrome_geometry::margins(unlinkedLayout, 24, 28, 24, 32);
+    intro_ = new RemoteConnectionsIntro(unlinkedContent_);
+    welcomeNotice_ = intro_->notice();
+    signInPromptButton_ = intro_->signInButton();
+    connect(intro_, &RemoteConnectionsIntro::signInRequested, this, [this] {
         setSignInNotice({});
         signInDialog_->show();
         signInDialog_->raise();
         signInDialog_->activateWindow();
         signInButton_->setFocus();
     });
-    emptyLayout->addWidget(signInPromptButton_, 0, Qt::AlignHCenter);
-    unlinkedLayout->addWidget(empty, 0, Qt::AlignHCenter);
+    unlinkedLayout->addWidget(intro_);
     unlinkedLayout->addStretch();
     bodyLayout->addWidget(unlinkedContent_, 1);
 
@@ -1006,11 +991,8 @@ void RemoteControlView::applyStatus(const QJsonObject& status) {
                                  offline_ ? QStringLiteral("warning") : QStringLiteral("positive"));
     overviewStatus_->style()->unpolish(overviewStatus_);
     overviewStatus_->style()->polish(overviewStatus_);
-    if (!configured_ && !lastError.isEmpty())
-        setNotice(QStringLiteral("Please sign in again. Your login expired. Local work is "
-                                 "preserved."),
-                  true);
-    else if (offline_)
+    intro_->setExpired(!configured_ && !lastError.isEmpty());
+    if (offline_)
         setNotice(QStringLiteral("This Mac is offline. Your local sessions keep running. Remote "
                                  "updates resume when connected."));
     else

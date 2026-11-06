@@ -141,6 +141,9 @@ when either screen changes:
   (and `theme=dark`) from `ketvietlab/ketplus-app` `develop`, at 393 × 852 CSS pixels and 2×,
   with focus moved off the sheet's Close button.
 
+The desktop app's Connections page (`RemoteConnectionsIntro`) shows the same files as resources
+under `:/connections`, so a new capture updates both.
+
 ## Mermaid and the image viewer
 
 A ```` ```mermaid ```` fence in an answer or a Markdown file (`parts/MarkdownView.qml`) shows its

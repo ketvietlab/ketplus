@@ -14,6 +14,7 @@ class QVBoxLayout;
 class QDialog;
 namespace ketplus {
 class LinuxMachinesSection;
+class RemoteConnectionsIntro;
 }
 
 namespace ketplus::remote {
@@ -66,6 +67,7 @@ class RemoteControlView final : public QWidget {
     QPushButton* signInButton_{nullptr};
     QPushButton* signInPromptButton_{nullptr};
     QWidget* unlinkedContent_{nullptr};
+    RemoteConnectionsIntro* intro_{nullptr};
     QWidget* linkedContent_{nullptr};
     LinuxMachinesSection* linuxMachines_{nullptr};
     QLabel* notice_{nullptr};
