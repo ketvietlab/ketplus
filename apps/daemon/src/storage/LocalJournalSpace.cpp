@@ -22,9 +22,9 @@ std::optional<journal_space::Usage> LocalJournal::space() const {
 }
 
 bool LocalJournal::checkpointReclaimedPages() {
-    // The smaller size is committed to the write-ahead log; the file shrinks only when the log
-    // is copied back. A passive checkpoint never waits: when a reader holds frames back it stops
-    // and the next call tries again. Only a complete one is followed by emptying the log.
+    // The smaller size is committed to the write-ahead log; the file shrinks when a checkpoint
+    // copies all of it back. A passive checkpoint never waits: when a reader holds frames back it
+    // stops and the next call tries again.
     QSqlQuery query(database_);
     if (!query.exec(QStringLiteral("PRAGMA wal_checkpoint(PASSIVE)")) || !query.next()) {
         setError(query.lastError().text());
@@ -33,13 +33,26 @@ bool LocalJournal::checkpointReclaimedPages() {
     reclaimCheckpointPending_ =
         query.value(0).toInt() != 0 || query.value(1).toInt() != query.value(2).toInt();
     query.finish();
-    if (reclaimCheckpointPending_)
-        return true;
-    if (!query.exec(QStringLiteral("PRAGMA wal_checkpoint(TRUNCATE)")) || !query.next()) {
+    // Emptying the log as well waits for anyone still reading it, so it runs without the busy
+    // timeout. Skipped, it costs nothing: the file has shrunk and the next write reuses the log.
+    if (!query.exec(QStringLiteral("PRAGMA busy_timeout")) || !query.next()) {
         setError(query.lastError().text());
         return false;
     }
-    reclaimCheckpointPending_ = query.value(0).toInt() != 0;
+    const int busyTimeout = query.value(0).toInt();
+    query.finish();
+    if (!query.exec(QStringLiteral("PRAGMA busy_timeout=0"))) {
+        setError(query.lastError().text());
+        return false;
+    }
+    query.finish();
+    // Busy is a result here, not a failure.
+    query.exec(QStringLiteral("PRAGMA wal_checkpoint(TRUNCATE)"));
+    query.finish();
+    if (!query.exec(QStringLiteral("PRAGMA busy_timeout=%1").arg(busyTimeout))) {
+        setError(query.lastError().text());
+        return false;
+    }
     return true;
 }
 

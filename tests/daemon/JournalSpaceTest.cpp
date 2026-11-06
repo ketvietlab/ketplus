@@ -13,6 +13,8 @@
 #include <QUuid>
 #include <QVariant>
 
+#include <memory>
+
 #if !defined(Q_OS_WIN)
 #include <sys/stat.h>
 #endif
@@ -228,21 +230,34 @@ class JournalSpaceTest final : public QObject {
         // so the next call has nothing to reclaim and only finishes the checkpoint.
         const qint64 batch = journal.space()->freePages - 100;
         QVERIFY(100 < LocalJournal::minimumReclaimPages);
-        {
-            Database reader(path);
-            QVERIFY(reader.database().transaction());
-            QVERIFY(reader.value(QStringLiteral("SELECT count(*) FROM blobs")).isValid());
-            QElapsedTimer elapsed;
-            elapsed.start();
-            QCOMPARE(journal.reclaimFreePages(batch), std::optional<qint64>(batch));
-            // It does not wait for the reader: the daemon's thread stays free.
-            QVERIFY2(elapsed.elapsed() < 1'000, qPrintable(QString::number(elapsed.elapsed())));
-            QVERIFY(!fileShrunkTo(pagesBefore - 100 - batch));
-            reader.database().commit();
-        }
+        const qint64 shrunk = pagesBefore - 100 - batch;
+        const auto within = [](QElapsedTimer& elapsed) {
+            // The daemon's thread never waits for a reader.
+            return elapsed.elapsed() < 1'000;
+        };
+        auto older = std::make_unique<Database>(path);
+        QVERIFY(older->database().transaction());
+        QVERIFY(older->value(QStringLiteral("SELECT count(*) FROM blobs")).isValid());
+        QElapsedTimer elapsed;
+        elapsed.start();
+        QCOMPARE(journal.reclaimFreePages(batch), std::optional<qint64>(batch));
+        QVERIFY2(within(elapsed), qPrintable(QString::number(elapsed.elapsed())));
+        QVERIFY(QFileInfo(path).size() > shrunk * pageSize);
+
+        // The next reader starts on the newest snapshot, then the first one ends: the log can be
+        // copied back but not emptied while the second one reads it.
+        Database newer(path);
+        QVERIFY(newer.database().transaction());
+        QVERIFY(newer.value(QStringLiteral("SELECT count(*) FROM blobs")).isValid());
+        older->database().commit();
+        older.reset();
+        elapsed.restart();
         QCOMPARE(journal.reclaimFreePages(100'000), std::optional<qint64>(0));
-        QVERIFY2(fileShrunkTo(pagesBefore - 100 - batch),
-                 qPrintable(QString::number(QFileInfo(path).size())));
+        QVERIFY2(within(elapsed), qPrintable(QString::number(elapsed.elapsed())));
+        QCOMPARE(QFileInfo(path).size(), shrunk * pageSize);
+        newer.database().commit();
+        QCOMPARE(journal.reclaimFreePages(100'000), std::optional<qint64>(0));
+        QCOMPARE(QFileInfo(path).size(), shrunk * pageSize);
         // Below the minimum a batch is not worth a write.
         QCOMPARE(journal.space()->freePages, 100);
         QCOMPARE(journal.reclaimFreePages(100'000), std::optional<qint64>(0));

@@ -272,8 +272,9 @@ takes as long as one read of the kept data.
 After that, once a minute while no session is active, up to 4,096 free pages
 (16 MB at 4 KiB) go back to the disk in one transaction. A passive checkpoint
 then copies the smaller size into the file. It never waits for a reader: if a
-reader holds frames back, the next run finishes it. Only a complete checkpoint
-is followed by emptying the log. Compacting old detail,
+reader holds frames back, the next run finishes it. Emptying the log runs
+without the busy timeout. It is skipped while someone still reads the log: the
+file has already shrunk, and the next write reuses the log. Compacting old detail,
 the size limit and the storage warning are still to come (the rest of #128).
 
 Before an event enters the cloud encryption and retry path, the daemon projects
