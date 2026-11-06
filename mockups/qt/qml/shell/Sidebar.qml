@@ -279,9 +279,7 @@ Rectangle {
                                 status: modelData.status
                                 checked: sidebar.window.screen === "workspace"
                                          && sidebar.window.conversation.number === modelData.number
-                                Basic.ToolTip.visible: hovered
-                                Basic.ToolTip.delay: 600
-                                Basic.ToolTip.text: modelData.worktree
+                                KetToolTip { visible: row.hovered; text: row.modelData.worktree }
                                 onClicked: sidebar.window.openConversation(repo.modelData.name,
                                                                            modelData)
                                 TapHandler {
