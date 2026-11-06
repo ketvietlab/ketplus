@@ -63,8 +63,48 @@ QtObject {
     // Agent Workspace: models and permission modes in the composer toolbar.
     readonly property var models: ["Codex · GPT-5.6 Luna", "Codex · GPT-5.6 Sol", "Claude · Opus 5.5",
                                    "Claude · Sonnet 5.5"]
-    readonly property var efforts: ["Low", "Medium", "High", "Extra high"]
+    readonly property var efforts: ["Light", "Medium", "High", "Extra high", "Maximum"]
     readonly property var permissions: ["Workspace", "Read only", "Full access"]
+
+    // The composer's Mode menu, as KetPlus desktop lists it; keys 1–3 choose.
+    readonly property var permissionModes: [
+        { label: "Read only", icon: "lock", elevated: false,
+          description: "Inspect files; stays in plan mode" },
+        { label: "Workspace", icon: "folder", elevated: false,
+          description: "Edit project files; asks before commands" },
+        { label: "Full access", icon: "shield", elevated: true,
+          description: "Skip permission prompts" }
+    ]
+
+    // Model & context: providers, their captions and models. KétRouter is not available yet.
+    readonly property var providers: [
+        { id: "codex", label: "Codex", caption: "Codex is ready. Claude and Cursor are available." },
+        { id: "claude", label: "Claude", caption: "Claude uses the local Agent SDK sidecar." },
+        { id: "cursor", label: "Cursor", caption: "Cursor lists models from the installed CLI (`agent models`)." },
+        { id: "ketrouter", label: "KétRouter", caption: "KétRouter is not available yet." }
+    ]
+    readonly property var providerModels: ({
+        codex: [
+            { name: "GPT-5.6 Luna", description: "Fast frontier model for everyday coding", isDefault: true },
+            { name: "GPT-5.6 Sol", description: "Deeper reasoning for long, multi-step tasks" },
+            { name: "GPT-5.6 Mini", description: "Quick edits and small questions" }
+        ],
+        claude: [
+            { name: "Default (recommended)", short: "Sonnet 5.5", description: "Sonnet 5.5 · Efficient for routine tasks", isDefault: true },
+            { name: "Opus 5.5", description: "For complex work and everyday tasks" },
+            { name: "Fable 5.1", description: "For your toughest challenges" }
+        ],
+        cursor: [
+            { name: "Auto", description: "Cursor picks a model for each request", isDefault: true },
+            { name: "Composer 2", description: "Cursor's own coding model" }
+        ],
+        ketrouter: []
+    })
+    // Auto-compact thresholds; 1M exceeds the 500k capacity, so it is unavailable.
+    readonly property var compactChoices: [
+        { label: "Auto", tokens: 0 }, { label: "272k", tokens: 272000 },
+        { label: "500k", tokens: 500000 }, { label: "1M", tokens: 1000000 }, { label: "Custom", tokens: -1 }
+    ]
 
     readonly property var suggestions: [
         { title: "Explain this repository", caption: "Architecture, modules and entry points",

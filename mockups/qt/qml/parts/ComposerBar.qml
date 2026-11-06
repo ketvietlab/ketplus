@@ -1,25 +1,55 @@
 // SPDX-License-Identifier: MPL-2.0
 import QtQuick
 import QtQuick.Controls.Basic as Basic
+import QtQuick.Layouts
 import Ket
 import KetPlusMock
 
-// The composer with its lower toolbar: attachments and permissions on the left; the model,
-// effort and the Context & limits ring on the right. The ring opens its panel in place.
+// The composer as KetPlus desktop lays it out: the card holds only the message and its
+// send/stop circle; the row below holds attachments and the mode on the left, then the
+// model with its effort and the Context & limits ring on the right. The model button opens
+// Model & context; the ring opens its panel in place.
 Item {
     id: bar
 
     required property var window
     property bool busy: false
-    property bool compact: false // narrow columns hide the permission and the effort
+    property bool compact: false // narrow columns keep only the mode's icon
     property string placeholder: "Message Codex…"
-    property string model: Fixtures.models[0]
+    property string provider: "codex"
+    property string model: "GPT-5.6 Luna"
     property string effort: "Medium"
     property string permission: "Workspace"
+    property real contextUsed: 0.16
+    readonly property var mode: {
+        for (const entry of Fixtures.permissionModes)
+            if (entry.label === bar.permission)
+                return entry
+        return Fixtures.permissionModes[1]
+    }
+    readonly property string providerLabel: {
+        for (const entry of Fixtures.providers)
+            if (entry.id === bar.provider)
+                return entry.label
+        return ""
+    }
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
+    // Review evidence: --open=model|mode|limits.
+    function openPanel(name) {
+        if (name === "model")
+            modelDialog.open()
+        else if (name === "mode")
+            permissionButton.clicked()
+        else if (name === "limits")
+            limits.openAbove(ring)
+    }
+    function choosePermission(index) {
+        bar.permission = Fixtures.permissionModes[index].label
+        permissionMenu.close()
+    }
 
-    implicitHeight: composer.implicitHeight
+    implicitHeight: composer.implicitHeight + footer.anchors.topMargin + footer.height
 
     KetComposer {
         id: composer
@@ -27,54 +57,62 @@ Item {
         busy: bar.busy
         placeholderText: bar.placeholder
         onSubmitted: text => {
-            bar.window.notify("Sent to " + bar.model.split(" · ")[0])
+            bar.window.notify("Sent to " + bar.providerLabel)
             composer.text = ""
         }
         onStopRequested: bar.window.notify("Stopped the turn")
+    }
 
-        leadingTools: [
-            KetIconButton {
-                id: attach
-                controlSize: KetTheme.ControlSize.Medium
-                iconWeight: KetTheme.IconWeight.Regular
-                glyphSize: composer.recipe.attachIconSize
-                iconName: "plus"
-                text: "Add context"
-                onClicked: attachMenu.popup(attach, 0, -attachMenu.height)
-            },
-            KetButton {
-                id: permissionButton
-                visible: !bar.compact
-                controlSize: KetTheme.ControlSize.Small
-                variant: KetTheme.ButtonVariant.Ghost
-                iconName: "shield"
-                text: bar.permission
-                onClicked: permissionMenu.popup(permissionButton, 0, -permissionMenu.height)
-            }
-        ]
+    RowLayout {
+        id: footer
+        anchors.top: composer.bottom
+        anchors.topMargin: bar.px(4)
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.leftMargin: bar.px(2)
+        anchors.rightMargin: bar.px(2)
+        height: bar.px(28)
+        spacing: bar.px(2)
 
-        trailingTools: [
-            KetButton {
-                id: modelButton
-                controlSize: KetTheme.ControlSize.Small
-                variant: KetTheme.ButtonVariant.Ghost
-                text: bar.compact ? bar.model.split(" · ")[1] : bar.model
-                onClicked: modelMenu.popup(modelButton, 0, -modelMenu.height)
-            },
-            KetButton {
-                id: effortButton
-                visible: !bar.compact
-                controlSize: KetTheme.ControlSize.Small
-                variant: KetTheme.ButtonVariant.Ghost
-                text: bar.effort
-                onClicked: effortMenu.popup(effortButton, 0, -effortMenu.height)
-            },
-            KetUsageRing {
-                id: ring
-                value: 0.62
-                onClicked: usage.openAbove(ring)
-            }
-        ]
+        KetIconButton {
+            id: attach
+            controlSize: KetTheme.ControlSize.Small
+            iconWeight: KetTheme.IconWeight.Regular
+            glyphSize: composer.recipe.attachIconSize
+            iconName: "plus"
+            text: "Add images or text files"
+            onClicked: attachMenu.popup(attach, 0, -attachMenu.height - bar.px(4))
+        }
+
+        ComposerFooterButton {
+            id: permissionButton
+            iconName: bar.mode.icon
+            text: bar.mode.label
+            warning: bar.mode.elevated
+            showLabel: !bar.compact
+            open: permissionMenu.visible
+            Accessible.description: "Permissions for the next message. Restricted actions are blocked without approval prompts."
+            onClicked: permissionMenu.popup(permissionButton, 0, -permissionMenu.height - bar.px(4))
+        }
+
+        Item { Layout.fillWidth: true }
+
+        ComposerFooterButton {
+            id: modelButton
+            Layout.maximumWidth: Math.max(bar.px(40), bar.width - bar.px(bar.compact ? 120 : 240))
+            text: bar.providerLabel + " · " + bar.model + "   " + bar.effort
+            open: modelDialog.visible
+            Accessible.name: "Choose model and reasoning effort"
+            Accessible.description: bar.providerLabel + " · " + bar.model + " · " + bar.effort + " effort"
+            onClicked: modelDialog.open()
+        }
+
+        KetUsageRing {
+            id: ring
+            Layout.alignment: Qt.AlignVCenter
+            value: bar.contextUsed
+            onClicked: limits.openAbove(ring)
+        }
     }
 
     KetMenu {
@@ -86,65 +124,51 @@ Item {
 
     KetMenu {
         id: permissionMenu
+        width: Math.min(bar.px(340), bar.window.width - bar.px(24))
+        KetMenuSection { text: "Mode" }
         Repeater {
-            model: [
-                { text: "Workspace", description: "Edit files in this worktree; ask before anything else" },
-                { text: "Read only", description: "Read and search; never edit or run commands" },
-                { text: "Full access", description: "Edit, run commands and use the network without asking" }
-            ]
+            model: Fixtures.permissionModes
             KetMenuItem {
                 required property var modelData
-                text: modelData.text
+                required property int index
+                text: modelData.label
                 description: modelData.description
+                iconName: modelData.icon
+                warning: modelData.elevated
+                shortcut: String(index + 1)
                 checkable: true
-                checked: bar.permission === modelData.text
-                onTriggered: bar.permission = modelData.text
+                checked: bar.permission === modelData.label
+                onTriggered: bar.choosePermission(index)
+                // The highlighted item has focus: 1–3 choose from anywhere in the menu.
+                Keys.onPressed: event => {
+                    const choice = event.key - Qt.Key_1
+                    if (choice >= 0 && choice < Fixtures.permissionModes.length) {
+                        bar.choosePermission(choice)
+                        event.accepted = true
+                    }
+                }
             }
         }
     }
 
-    KetMenu {
-        id: modelMenu
-        Repeater {
-            model: Fixtures.models
-            KetMenuItem {
-                required property string modelData
-                text: modelData
-                checkable: true
-                checked: bar.model === modelData
-                onTriggered: bar.model = modelData
-            }
-        }
-    }
-
-    KetMenu {
-        id: effortMenu
-        Repeater {
-            model: Fixtures.efforts
-            KetMenuItem {
-                required property string modelData
-                text: modelData
-                checkable: true
-                checked: bar.effort === modelData
-                onTriggered: bar.effort = modelData
-            }
-        }
-    }
-
-    // Weekly usage appears only inside Context & limits.
-    KetPopover {
-        id: usage
+    ModelContextDialog {
+        id: modelDialog
         parent: Basic.Overlay.overlay
-        title: "Context & limits"
-        KetMeter { width: parent.width; label: "Context window"; valueText: "62%"; fraction: 0.62; caption: "124k of 200k tokens" }
-        KetPopoverDivider {}
-        KetMeter { width: parent.width; label: "5-hour limit"; valueText: "38%"; fraction: 0.38; caption: "Resets at 21:40" }
-        KetMeter { width: parent.width; label: "Weekly limit"; valueText: "71%"; fraction: 0.71; caption: "Resets Monday" }
-        KetPopoverText { text: "Compact the conversation to free context without losing the summary." }
-        footer: KetButton {
-            text: "Compact now"
-            controlSize: KetTheme.ControlSize.Small
-            onClicked: { usage.close(); bar.window.notify("Compacting the conversation") }
+        provider: bar.provider
+        model: bar.model
+        effort: bar.effort
+        onChosen: (provider, model, effort) => {
+            bar.provider = provider
+            bar.model = model
+            bar.effort = effort
+            bar.window.notify("Applies from the next turn")
         }
+    }
+
+    ContextLimitsPopover {
+        id: limits
+        provider: bar.provider
+        contextUsed: bar.contextUsed
+        onCompactRequested: bar.window.notify("Compacting the conversation")
     }
 }

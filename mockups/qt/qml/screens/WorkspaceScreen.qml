@@ -19,6 +19,7 @@ Item {
     property bool showTasks: running
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
+    function openComposerPanel(name) { composerBar.openPanel(name) }
 
     RowLayout {
         anchors.fill: parent
@@ -87,6 +88,7 @@ Item {
                 }
 
                 ComposerBar {
+                    id: composerBar
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: Math.min(parent.width - screen.px(48), screen.px(760))
                     window: screen.window
