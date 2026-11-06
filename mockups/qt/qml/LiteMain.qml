@@ -52,7 +52,7 @@ Basic.ApplicationWindow {
             editorSource = false
         }
         if (name === "search")
-            search.query = state === "no-results" ? "KetGradient" : "KetTheme"
+            search.query = state === "no-results" ? "KetGradient" : "theme"
         if (name === "settings")
             settingsTab = state || "appearance"
         screen = name
@@ -61,6 +61,18 @@ Basic.ApplicationWindow {
     function openEveryOverlay() {
         spotlight.open()
         spotlight.close()
+        // Every search result opens its file at a line that holds the match.
+        showScreen("search")
+        for (const group of search.results) {
+            for (const match of group.lines) {
+                search.lineChosen(group.file, match.line)
+                const shown = editor.lines[editor.cursorLine - 1] || ""
+                if (editor.current !== group.file || editor.previewing
+                        || !shown.toLowerCase().includes(search.query.toLowerCase()))
+                    console.warn("QML search check: " + group.file + ":" + match.line
+                                 + " opened " + editor.current + ":" + editor.cursorLine)
+            }
+        }
         toast.show("Smoke test")
     }
 
@@ -151,12 +163,10 @@ Basic.ApplicationWindow {
                 Layout.preferredWidth: app.px(280)
                 visible: app.screen === "search" && !app.welcome
                 window: app
-                onLineChosen: (file, line) => {
-                    if (!editor.tabs.includes(file))
-                        editor.tabs = editor.tabs.concat([file])
-                    editor.current = file
-                    editor.cursorLine = line
-                }
+                sources: editor.sources
+                paths: ({ "NavigationRail.qml": "modules/ai/src/agent/qml",
+                          "design-system.md": "docs", "licensing.md": "docs" })
+                onLineChosen: (file, line) => editor.openAt(file, line)
             }
 
             StackLayout {
@@ -258,8 +268,9 @@ Basic.ApplicationWindow {
         id: spotlight
         groups: {
             const query = spotlight.query.toLowerCase()
-            const files = Fixtures.explorer.filter(f => !f.folder).map(f => ({
-                id: "file:" + f.name, title: f.name, detail: f.path || "", screen: "explorer"
+            // The files the editor has a source for, so each one opens with its text.
+            const files = Object.keys(editor.sources).map(name => ({
+                id: "file:" + name, title: name, detail: search.paths[name] || "", screen: "explorer"
             }))
             const all = [{ title: "Files", items: files }]
             if (!query)
@@ -272,10 +283,7 @@ Basic.ApplicationWindow {
         placeholderText: "Go to file"
         onActivated: item => {
             app.showScreen(item.screen)
-            const file = item.id.slice(5)
-            if (!editor.tabs.includes(file))
-                editor.tabs = editor.tabs.concat([file])
-            editor.current = file
+            editor.openFile(item.id.slice(5))
         }
     }
 

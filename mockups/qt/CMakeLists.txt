@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Svg Widgets)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Svg Test Widgets)
 qt_standard_project_setup(REQUIRES 6.8)
 
 include(FetchContent)
@@ -91,5 +91,5 @@ qt_add_resources(ketplus_qt_mock mock_docs
 )
 
 target_link_libraries(ketplus_qt_mock PRIVATE KetQt::Quick KetQt::QuickPlugin KetQt::Widgets Qt6::Gui
-                                              Qt6::Qml Qt6::Widgets
+                                              Qt6::Qml Qt6::Test Qt6::Widgets
                                               Qt6::Quick Qt6::QuickControls2 Qt6::Svg)

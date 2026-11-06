@@ -7,41 +7,40 @@ import KetPlusMock
 
 // KétPlus Search, in the left column: a query across the open folder, results grouped by
 // file with the matching lines, and the empty state when nothing matches. Choosing a line
-// opens its file at that line in the editor.
+// opens its file at that line in the editor (a Markdown file in Source).
 Rectangle {
     id: pane
 
     required property var window
-    property string query: "KetTheme"
+    // The files Search reads: name → text, the same sources the editor opens, so a result
+    // opens its file at a line that holds the match. `paths` gives each file's folder.
+    property var sources: ({})
+    property var paths: ({})
+    property string query: "theme"
     signal lineChosen(string file, int line)
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
 
-    // Matches per file in the open folder (Fixtures.explorer), as the search reads them.
-    readonly property var corpus: [
-        { file: "NavigationRail.qml", path: "modules/ai/src/agent/qml", lines: [
-            { line: 8, text: "    color: KetTheme.t.sidebarBg" },
-            { line: 14, text: "    readonly property real rowHeight: KetTheme.px(28, KetTheme.zoom)" },
-            { line: 31, text: "        font.family: KetTheme.fontFamily" }
-        ] },
-        { file: "WorktreeItem.qml", path: "modules/ai/src/agent/qml", lines: [
-            { line: 22, text: "    color: hovered ? KetTheme.t.surfaceHover : \"transparent\"" }
-        ] },
-        { file: "design-system.md", path: "docs", lines: [
-            { line: 40, text: "QML reads the tokens as `KetTheme.t` with camelCase keys." }
-        ] }
-    ]
     readonly property var results: {
         const needle = query.trim().toLowerCase()
         if (needle === "")
             return []
-        return corpus.map(group => ({ file: group.file, path: group.path,
-                                       lines: group.lines.filter(l => l.text.toLowerCase().includes(needle)) }))
-                     .filter(group => group.lines.length > 0)
+        const groups = []
+        for (const file of Object.keys(sources)) {
+            const lines = []
+            sources[file].split("\n").forEach((text, index) => {
+                if (text.toLowerCase().includes(needle))
+                    lines.push({ line: index + 1, text: text })
+            })
+            if (lines.length > 0)
+                groups.push({ file: file, path: paths[file] || "", lines: lines })
+        }
+        return groups
     }
     readonly property int matchCount: results.reduce((sum, group) => sum + group.lines.length, 0)
 
-    // The line with the match in the accent, the rest escaped.
+    // The line with the match in the accent, the rest escaped. A match far into the line
+    // keeps 12 characters before it, so the end of a long line elides instead of the match.
     function marked(text) {
         const escape = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;")
         const trimmed = text.trim()
@@ -49,7 +48,8 @@ Rectangle {
         if (at < 0)
             return escape(trimmed)
         const end = at + query.trim().length
-        return escape(trimmed.slice(0, at)) + "<b><font color='" + KetTheme.t.accentText + "'>"
+        const from = at > 16 ? at - 12 : 0
+        return (from > 0 ? "…" : "") + escape(trimmed.slice(from, at)) + "<b><font color='" + KetTheme.t.accentText + "'>"
                + escape(trimmed.slice(at, end)) + "</font></b>" + escape(trimmed.slice(end))
     }
 

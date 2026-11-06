@@ -61,6 +61,15 @@ Item {
         next[current] = mode
         markdownModes = next
     }
+    // Opens a file at a line, as a search result or Go to Line does: Markdown in Source, so
+    // the line shows, scrolled into view.
+    function openAt(name, line) {
+        openFile(name)
+        if (markdown)
+            setMarkdownMode("source")
+        cursorLine = line
+        code.positionViewAtIndex(line - 1, ListView.Center)
+    }
 
     Component.onCompleted: {
         if (window.editorFile !== "") {

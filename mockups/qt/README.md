@@ -24,7 +24,9 @@ KÉT Sans archive with `-DKETPLUS_MOCK_KET_SANS_ARCHIVE=<path>/KETSans-1.100.zip
 
 ```sh
 KetPlusMock --smoke                                    # every screen, fails on QML warnings
-KetPlusMock --edition=lite --smoke                     # the same for KétPlus
+KetPlusMock --edition=lite --smoke                     # the same for KétPlus, and every Search result
+KetPlusMock --edition=lite --smoke --keys              # also chooses View > Search in Files by keyboard
+KetPlusMock --smoke --display=secondary                # on another display, leaving the main one free
 KetPlusMock --edition=lite --chrome=windows --screen=search --screenshot=search.png
 KetPlusMock --screen=workspace --state=running --dark --zoom=1.25 --screenshot=out.png
 KetPlusMock --screen=workspace --open=model --screenshot=model.png  # model, mode, limits, reviewer, composer (focused) images (the image viewer) or mermaid (diagrams instead of their source)
@@ -57,6 +59,13 @@ KétPlus (Lite) runs with `--edition=lite` (`qml/LiteMain.qml`): the editor of
 pages Lite has. `--chrome=windows` or `--chrome=linux` draws the title bar and
 the in-window menu bar (File, Edit, Go, Git, View, with the labels and
 shortcuts of `core/src/app/MainWindowActions.cpp`); macOS keeps the system's.
+The menu bar works without a pointer: F10 focuses File, Alt with the app's
+mnemonic opens File, Edit, Go or View, Left and Right move between headings, and
+Enter, Space or Down opens one. `--keys` activates the window to check this, so
+it takes the keyboard focus for a moment; without an active window it reports
+"skipped". Search reads the editor's own file sources, so each result opens its
+file at a line that holds the match (Markdown in Source); the Lite smoke checks
+every result.
 
 | Screen (`--edition=lite`) | States | Covers |
 |---|---|---|

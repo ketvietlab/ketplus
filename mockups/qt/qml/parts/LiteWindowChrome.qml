@@ -118,6 +118,117 @@ Column {
         }
     }
 
+    // The menus of core/src/app/MainWindowActions.cpp, in its order.
+    readonly property var menus: [
+        { title: "File", items: [
+            { text: "New Tab", shortcut: "Ctrl+T" },
+            { text: "Open…", shortcut: "Ctrl+O" },
+            { text: "Open Folder…", shortcut: "Ctrl+K, Ctrl+O", screen: "explorer/welcome" },
+            { separator: true },
+            { text: "Close Tab", shortcut: "Ctrl+W" },
+            { text: "Reopen Closed Tab", shortcut: "Ctrl+Shift+T" },
+            { separator: true },
+            { text: "Save", shortcut: "Ctrl+S" },
+            { text: "Save As…", shortcut: "Ctrl+Shift+S" },
+            { text: "Save All", shortcut: "Ctrl+Alt+S" },
+            { separator: true },
+            { text: "Quit", shortcut: "Ctrl+Q" }
+        ] },
+        { title: "Edit", items: [
+            { text: "Undo", shortcut: "Ctrl+Z" },
+            { text: "Redo", shortcut: "Ctrl+Shift+Z" },
+            { separator: true },
+            { text: "Cut", shortcut: "Ctrl+X" },
+            { text: "Copy", shortcut: "Ctrl+C" },
+            { text: "Paste", shortcut: "Ctrl+V" },
+            { text: "Select All", shortcut: "Ctrl+A" },
+            { separator: true },
+            { text: "Find…", shortcut: "Ctrl+F" },
+            { text: "Replace…", shortcut: "Ctrl+H" },
+            { separator: true },
+            { text: "Add Next Occurrence", shortcut: "Ctrl+D" },
+            { text: "Add Cursor Below", shortcut: "Ctrl+Alt+Down" },
+            { separator: true },
+            { text: "Settings…", shortcut: "Ctrl+,", screen: "settings" }
+        ] },
+        { title: "Go", items: [
+            { text: "Command Palette…", shortcut: "Ctrl+Shift+P", palette: true },
+            { text: "Go to File…", shortcut: "Ctrl+P", palette: true },
+            { text: "Go to Symbol…", shortcut: "Ctrl+Shift+O" },
+            { text: "Go to Definition", shortcut: "F12" },
+            { text: "Go to Line…", shortcut: "Ctrl+L" },
+            { separator: true },
+            { text: "Back", shortcut: "Alt+Left" },
+            { text: "Forward", shortcut: "Alt+Right" }
+        ] },
+        { title: "Git", items: [
+            { text: "Source Control", shortcut: "Ctrl+Shift+G", screen: "changes" },
+            { text: "Switch Worktree" }
+        ] },
+        { title: "View", items: [
+            { text: "Explorer", shortcut: "Ctrl+B", screen: "explorer" },
+            { text: "Search in Files", shortcut: "Ctrl+Shift+F", screen: "search" },
+            { separator: true },
+            { text: "Terminal", shortcut: "Ctrl+`", terminal: true },
+            { separator: true },
+            { text: "Zoom In", shortcut: "Ctrl+=" },
+            { text: "Zoom Out", shortcut: "Ctrl+-" },
+            { text: "Reset Zoom", shortcut: "Ctrl+0" }
+        ] }
+    ]
+
+    // Runs a menu item: opens its screen, toggles the terminal or opens the palette.
+    function run(item) {
+        if (item.screen)
+            window.showScreen(item.screen)
+        else if (item.palette)
+            window.spotlight.open()
+        else if (item.terminal)
+            window.editorTerminal = !window.editorTerminal
+        else
+            window.notify(item.text.replace("…", ""))
+    }
+
+    // Keyboard entry, as on Windows and Linux: F10 focuses File, and Alt with the mnemonic of
+    // the app's "&File", "&Edit", "&Go" and "&View" opens that menu ("&Git" shares G with
+    // Go, so Git is one Right away). Left and Right move between headings; Enter, Space or
+    // Down opens the focused one, and the menu takes the arrows from there.
+    function focusMenu(index) { headings.itemAt(index).forceActiveFocus(Qt.ShortcutFocusReason) }
+    function openMenu(index) {
+        const heading = headings.itemAt(index)
+        heading.forceActiveFocus(Qt.ShortcutFocusReason)
+        heading.open()
+    }
+    Shortcut {
+        enabled: chrome.visible
+        sequence: "F10"
+        onActivated: chrome.focusMenu(0)
+    }
+    Repeater {
+        model: chrome.visible ? ["F", "E", "G", "", "V"] : []
+        Item {
+            required property string modelData
+            required property int index
+            Shortcut {
+                enabled: modelData !== ""
+                sequence: "Alt+" + modelData
+                onActivated: chrome.openMenu(index)
+            }
+        }
+    }
+
+    Component {
+        id: itemComponent
+        KetMenuItem {
+            property var item
+            onTriggered: chrome.run(item)
+        }
+    }
+    Component {
+        id: separatorComponent
+        KetMenuSeparator {}
+    }
+
     // Menu bar.
     Rectangle {
         width: chrome.width
@@ -128,74 +239,37 @@ Column {
             anchors.left: parent.left
             anchors.leftMargin: chrome.px(KetTheme.t.space1)
             height: parent.height
+            Accessible.role: Accessible.MenuBar
+            Accessible.name: "Menu bar"
 
             Repeater {
-                model: [
-                    { title: "File", items: [
-                        { text: "New Tab", shortcut: "Ctrl+T" },
-                        { text: "Open…", shortcut: "Ctrl+O" },
-                        { text: "Open Folder…", shortcut: "Ctrl+K, Ctrl+O", screen: "explorer/welcome" },
-                        { separator: true },
-                        { text: "Close Tab", shortcut: "Ctrl+W" },
-                        { text: "Reopen Closed Tab", shortcut: "Ctrl+Shift+T" },
-                        { separator: true },
-                        { text: "Save", shortcut: "Ctrl+S" },
-                        { text: "Save As…", shortcut: "Ctrl+Shift+S" },
-                        { text: "Save All", shortcut: "Ctrl+Alt+S" },
-                        { separator: true },
-                        { text: "Quit", shortcut: "Ctrl+Q" }
-                    ] },
-                    { title: "Edit", items: [
-                        { text: "Undo", shortcut: "Ctrl+Z" },
-                        { text: "Redo", shortcut: "Ctrl+Shift+Z" },
-                        { separator: true },
-                        { text: "Cut", shortcut: "Ctrl+X" },
-                        { text: "Copy", shortcut: "Ctrl+C" },
-                        { text: "Paste", shortcut: "Ctrl+V" },
-                        { text: "Select All", shortcut: "Ctrl+A" },
-                        { separator: true },
-                        { text: "Find…", shortcut: "Ctrl+F" },
-                        { text: "Replace…", shortcut: "Ctrl+H" },
-                        { separator: true },
-                        { text: "Add Next Occurrence", shortcut: "Ctrl+D" },
-                        { text: "Add Cursor Below", shortcut: "Ctrl+Alt+Down" },
-                        { separator: true },
-                        { text: "Settings…", shortcut: "Ctrl+,", screen: "settings" }
-                    ] },
-                    { title: "Go", items: [
-                        { text: "Command Palette…", shortcut: "Ctrl+Shift+P", palette: true },
-                        { text: "Go to File…", shortcut: "Ctrl+P", palette: true },
-                        { text: "Go to Symbol…", shortcut: "Ctrl+Shift+O" },
-                        { text: "Go to Definition", shortcut: "F12" },
-                        { text: "Go to Line…", shortcut: "Ctrl+L" },
-                        { separator: true },
-                        { text: "Back", shortcut: "Alt+Left" },
-                        { text: "Forward", shortcut: "Alt+Right" }
-                    ] },
-                    { title: "Git", items: [
-                        { text: "Source Control", shortcut: "Ctrl+Shift+G", screen: "changes" },
-                        { text: "Switch Worktree" }
-                    ] },
-                    { title: "View", items: [
-                        { text: "Explorer", shortcut: "Ctrl+B", screen: "explorer" },
-                        { text: "Search in Files", shortcut: "Ctrl+Shift+F", screen: "search" },
-                        { separator: true },
-                        { text: "Terminal", shortcut: "Ctrl+`", terminal: true },
-                        { separator: true },
-                        { text: "Zoom In", shortcut: "Ctrl+=" },
-                        { text: "Zoom Out", shortcut: "Ctrl+-" },
-                        { text: "Reset Zoom", shortcut: "Ctrl+0" }
-                    ] }
-                ]
+                id: headings
+                model: chrome.menus
 
                 Rectangle {
                     id: entry
                     required property var modelData
+                    required property int index
+                    function open() { menu.popup(entry, 0, entry.height) }
+
                     width: label.implicitWidth + chrome.px(KetTheme.t.space4)
                     height: parent.height
                     radius: chrome.px(KetTheme.t.radiusSm)
-                    color: menu.visible ? KetTheme.t.interactiveActive
+                    color: menu.visible || entry.activeFocus ? KetTheme.t.interactiveActive
                            : entryHover.hovered ? KetTheme.t.surfaceHover : "transparent"
+                    activeFocusOnTab: true
+                    Accessible.role: Accessible.MenuItem
+                    Accessible.name: modelData.title
+                    Accessible.onPressAction: open()
+
+                    Keys.onReturnPressed: open()
+                    Keys.onEnterPressed: open()
+                    Keys.onSpacePressed: open()
+                    Keys.onDownPressed: open()
+                    Keys.onLeftPressed: chrome.focusMenu((index + chrome.menus.length - 1) % chrome.menus.length)
+                    Keys.onRightPressed: chrome.focusMenu((index + 1) % chrome.menus.length)
+                    Keys.onEscapePressed: entry.focus = false
+
                     Text {
                         id: label
                         anchors.centerIn: parent
@@ -205,28 +279,21 @@ Column {
                         font.pixelSize: chrome.px(KetTheme.t.textSm)
                     }
                     HoverHandler { id: entryHover }
-                    TapHandler { onTapped: menu.popup(entry, 0, entry.height) }
+                    TapHandler { onTapped: entry.open() }
 
                     KetMenu {
                         id: menu
-                        Repeater {
-                            model: entry.modelData.items
-                            KetMenuItem {
-                                required property var modelData
-                                visible: !modelData.separator
-                                height: modelData.separator ? 0 : implicitHeight
-                                text: modelData.text || ""
-                                shortcut: modelData.shortcut || ""
-                                onTriggered: {
-                                    if (modelData.screen)
-                                        chrome.window.showScreen(modelData.screen)
-                                    else if (modelData.palette)
-                                        chrome.window.spotlight.open()
-                                    else if (modelData.terminal)
-                                        chrome.window.editorTerminal = !chrome.window.editorTerminal
-                                    else
-                                        chrome.window.notify(modelData.text.replace("…", ""))
-                                }
+                        objectName: "menu-" + entry.modelData.title
+                        // Escape closes the menu and gives the heading its focus back.
+                        onClosed: if (chrome.visible) entry.forceActiveFocus()
+                        Component.onCompleted: {
+                            for (const item of entry.modelData.items) {
+                                menu.addItem(item.separator ? separatorComponent.createObject(null)
+                                                            : itemComponent.createObject(null, {
+                                                                  text: item.text,
+                                                                  shortcut: item.shortcut || "",
+                                                                  item: item
+                                                              }))
                             }
                         }
                     }
