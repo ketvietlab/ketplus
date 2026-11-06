@@ -19,7 +19,12 @@ Basic.ApplicationWindow {
         "editor/markdown", "editor/markdown-source", "editor/samples",
         "changes", "worktrees", "connections", "settings", "settings/typography", "settings/account",
         "settings/browser", "settings/computer", "settings/providers", "settings/archived",
-        "settings/updates", "settings/storage", "workspace/storage-warning", "atlas", "mobile-picker", "workspace/compact"
+        "settings/updates", "settings/storage", "workspace/storage-warning", "atlas", "mobile-picker", "workspace/compact",
+        // Provider setup (Fixtures.providerSetup): the provider cannot start a turn, or ended one.
+        "workspace/setup-cli-missing", "workspace/setup-cli-outdated", "workspace/setup-signed-out",
+        "workspace/setup-claude-signed-out", "workspace/setup-sidecar-missing", "workspace/setup-expired",
+        "workspace/setup-key-rejected", "workspace/setup-limit", "workspace/setup-capacity",
+        "workspace/setup-plan-blocked", "settings/providers-setup"
     ]
     property string screen: "workspace"
     // The terminal below the editor (editor/terminal).
@@ -35,6 +40,8 @@ Basic.ApplicationWindow {
     // The journal is over its size limit (settings/storage, workspace/storage-warning); the
     // sidebar warns until it is compacted.
     property bool storageWarning: false
+    // Each provider's setup state (a Fixtures.providerSetup key), or "" when it is ready.
+    property var providerIssues: ({ codex: "", claude: "", cursor: "" })
     property string tagFilter
     property bool compact: false
     property size wideSize: Qt.size(1440, 900)
@@ -56,10 +63,78 @@ Basic.ApplicationWindow {
         { number: "0871", title: "Old onboarding copy", repository: "ketplus-desktop", when: "Oct 12" }
     ]
 
+    function setProviderIssue(provider, state) {
+        const next = Object.assign({}, providerIssues)
+        next[provider] = state
+        providerIssues = next
+    }
+
+    // A provider's setup state in the Agent Workspace. One that cannot start a turn opens a new
+    // conversation with that provider, its guide above the composer; one that ended a turn
+    // opens a conversation whose last turn failed with it.
+    function openSetup(state) {
+        const setup = Fixtures.providerSetup[state]
+        if (!setup)
+            return
+        if (!setup.transient)
+            setProviderIssue(setup.provider, state)
+        const number = setup.blocking ? "1204" : "7310"
+        for (const r of Fixtures.repositories) {
+            const base = r.conversations.find(c => c.number === number)
+            if (base) {
+                openConversation(r.name, Object.assign({}, base, {
+                    title: setup.topic || base.title, provider: setup.name, providerId: setup.provider, model: setup.model,
+                    effort: setup.provider === "cursor" ? "Default" : "Medium",
+                    transcript: setup.blocking ? "welcome" : "setup", setup: state }))
+                return
+            }
+        }
+    }
+
+    // "Use Codex instead": the new conversation's provider changes before anything was sent.
+    function switchProvider(provider) {
+        const entry = Fixtures.providers.find(p => p.id === provider)
+        conversation = Object.assign({}, conversation, {
+            provider: entry ? entry.label : provider, providerId: provider,
+            model: Fixtures.providerModels[provider][0].name,
+            effort: provider === "cursor" ? "Default" : "Medium" })
+        notify("This conversation now uses " + (entry ? entry.label : provider))
+    }
+
+    function newConversation(provider) {
+        for (const r of Fixtures.repositories) {
+            const base = r.conversations.find(c => c.transcript === "welcome")
+            if (base) {
+                openConversation(r.name, base)
+                switchProvider(provider)
+                return
+            }
+        }
+    }
+
+    function openComposerPanel(name) {
+        screen = "workspace"
+        Qt.callLater(() => workspace.openComposerPanel(name))
+    }
+
     function showScreen(id) {
         const parts = String(id).split("/")
         const name = parts[0]
         const state = parts[1] || ""
+        if (name === "workspace" && state.startsWith("setup-")) {
+            setCompact(false)
+            workspace.detailsOpen = false
+            openSetup(state.slice(6))
+            return
+        }
+        if (id === "settings/providers-setup") {
+            // Settings → Providers with two providers to fix.
+            setProviderIssue("cursor", "cli-missing")
+            setProviderIssue("claude", "expired")
+            settingsTab = "providers"
+            screen = "settings"
+            return
+        }
         if (state === "compact") {
             setCompact(true)
             return

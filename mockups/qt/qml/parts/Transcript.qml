@@ -5,7 +5,7 @@ import Ket
 import KetPlusMock
 
 // A conversation's transcript at the 760 px reading width. `kind` picks the fixture:
-// activity, running, question, atlas, error, short or welcome; claude, codex and cursor
+// activity, running, question, atlas, error, setup, short or welcome; claude, codex and cursor
 // replay every content type of that provider's journal (TranscriptFixtures).
 Item {
     id: transcript
@@ -170,12 +170,13 @@ Item {
                 : transcript.kind === "atlas" ? "Design an onboarding flow for KetPlus Desktop, from opening a project to the first conversation."
                 : transcript.kind === "error" ? "Profile the editor startup on a cold cache."
                 : transcript.kind === "short" ? "Check this worktree and tell me if anything is uncommitted."
+                : transcript.kind === "setup" ? (Fixtures.providerSetup[transcript.conversation.setup] || {}).prompt || ""
                 : "Make transcript activity explicit and easier to scan."
         }
 
         // The work performed, collapsed into groups.
         KetActivityGroup {
-            visible: ["activity", "running", "atlas", "error"].includes(transcript.kind)
+            visible: ["activity", "running", "atlas", "error", "setup"].includes(transcript.kind)
             width: parent.width
             text: transcript.kind === "running" ? "Explored 6 files, ran 2 commands" : "Used KetPlus editor and browser"
             expanded: transcript.kind === "running"
@@ -289,6 +290,17 @@ Item {
                 spacing: transcript.px(8)
                 KetButton { text: "Edit in KétPlus"; iconName: "edit"; variant: KetTheme.ButtonVariant.Primary; onClicked: transcript.window.showScreen("atlas") }
                 KetButton { text: "Open in browser"; iconName: "open"; onClicked: transcript.window.notify("Opened the preview in the browser") }
+            }
+        }
+
+        // A turn the provider ended (Fixtures.providerSetup): the guide closes the turn.
+        Loader {
+            active: transcript.kind === "setup"
+            visible: active
+            width: parent.width
+            sourceComponent: ProviderSetupCard {
+                setupId: transcript.conversation.setup || ""
+                window: transcript.window
             }
         }
 

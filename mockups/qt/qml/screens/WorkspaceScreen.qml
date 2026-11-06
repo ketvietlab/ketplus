@@ -17,6 +17,14 @@ Item {
     readonly property var conversation: window.conversation
     readonly property string kind: conversation.transcript
     readonly property bool running: kind === "running"
+    readonly property string providerId: (conversation && conversation.providerId) || "claude"
+    // The provider cannot start a turn (Fixtures.providerSetup, blocking): its guide sits above
+    // the composer, which keeps the draft instead of sending it.
+    readonly property string setupId: {
+        const id = window.providerIssues[providerId] || ""
+        const setup = Fixtures.providerSetup[id]
+        return setup && setup.blocking ? id : ""
+    }
     property bool showTasks: running
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
@@ -101,6 +109,17 @@ Item {
                     onDismissRequested: index => tasks.tasks = tasks.tasks.filter((t, i) => i !== index)
                 }
 
+                Loader {
+                    active: screen.setupId !== ""
+                    visible: active
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: Math.min(parent.width - screen.px(48), screen.px(760))
+                    sourceComponent: ProviderSetupCard {
+                        setupId: screen.setupId
+                        window: screen.window
+                    }
+                }
+
                 ComposerBar {
                     id: composerBar
                     anchors.horizontalCenter: parent.horizontalCenter
@@ -108,11 +127,13 @@ Item {
                     window: screen.window
                     busy: screen.running
                     // The conversation's provider and model, when its fixture names them.
-                    provider: (screen.conversation && screen.conversation.providerId) || "claude"
+                    provider: screen.providerId
+                    blocked: screen.setupId !== ""
                     model: (screen.conversation && screen.conversation.model) || "Opus 5.5"
                     effort: (screen.conversation && screen.conversation.effort) || "Medium"
-                    placeholder: screen.kind === "welcome" ? "Describe what you want to build…"
-                                                           : "Message " + providerLabel + "…"
+                    placeholder: blocked ? "Write your message now; it sends once " + providerLabel + " is set up"
+                               : screen.kind === "welcome" ? "Describe what you want to build…"
+                               : "Message " + providerLabel + "…"
                 }
             }
         }

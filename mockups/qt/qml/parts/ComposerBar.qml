@@ -14,6 +14,8 @@ Item {
 
     required property var window
     property bool busy: false
+    // The provider cannot start a turn yet: Send keeps the draft and says why.
+    property bool blocked: false
     property bool compact: false // narrow columns keep only the mode's icon
     property string provider: "claude"
     property string model: "Opus 5.5"
@@ -59,6 +61,10 @@ Item {
         busy: bar.busy
         placeholderText: bar.placeholder
         onSubmitted: text => {
+            if (bar.blocked) {
+                bar.window.notify("Set up " + bar.providerLabel + " first. Your message is kept.")
+                return
+            }
             bar.window.notify("Sent to " + bar.providerLabel)
             composer.text = ""
         }
@@ -158,6 +164,7 @@ Item {
         parent: Basic.Overlay.overlay
         provider: bar.provider
         model: bar.model
+        window: bar.window
         effort: bar.effort
         onChosen: (provider, model, effort) => {
             bar.provider = provider

@@ -11,6 +11,13 @@ KetDialog {
     id: dialog
 
     property string provider: "codex"
+    // The app window, for each provider's setup state (Fixtures.providerSetup).
+    property var window: null
+    readonly property var draftSetup: {
+        const id = window ? window.providerIssues[draftProvider] || "" : ""
+        const setup = Fixtures.providerSetup[id]
+        return setup && setup.blocking ? setup : null
+    }
     property string model: ""
     property string effort: "Medium"
     property string draftProvider: provider
@@ -66,8 +73,9 @@ KetDialog {
         Layout.fillWidth: true
         topPadding: dialog.px(10)
         bottomPadding: dialog.px(12)
-        text: Fixtures.providers[dialog.providerIndex(dialog.draftProvider)].caption
-        color: KetTheme.t.textMuted
+        text: dialog.draftSetup ? dialog.draftSetup.title + ". The conversation shows how to set it up; you can still choose a model now."
+                                : Fixtures.providers[dialog.providerIndex(dialog.draftProvider)].caption
+        color: dialog.draftSetup ? KetTheme.t.danger : KetTheme.t.textMuted
         font.family: KetTheme.fontFamily
         font.pixelSize: dialog.px(13)
         wrapMode: Text.Wrap
