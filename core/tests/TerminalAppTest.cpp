@@ -2,6 +2,7 @@
 
 #include "terminal/TerminalView.h"
 #include "terminal_app/TerminalTab.h"
+#include "ui/KetFonts.h"
 
 #include "KetAppearance.h"
 #include "KetProfile.h"
@@ -32,6 +33,7 @@ class TerminalAppTest final : public QObject {
     void savesAndRestoresTheAppearance();
     void usesTheSavedFontFamily();
     void showsTheKetPlusName();
+    void drawsTheTerminalInKetSansMono();
 };
 
 void TerminalAppTest::initTestCase() {
@@ -169,6 +171,17 @@ void TerminalAppTest::showsTheKetPlusName() {
     QVERIFY(texts.contains(QStringLiteral("Quit KétPlus Terminal")));
     QVERIFY(texts.contains(QStringLiteral("About KétPlus Terminal")));
     QVERIFY(!texts.join(QLatin1Char('\n')).contains(QStringLiteral("KetPlus Terminal")));
+}
+
+void TerminalAppTest::drawsTheTerminalInKetSansMono() {
+    // The app registers the embedded KÉT fonts at startup (main.cpp); with no saved family the
+    // terminal uses the profile's monospace, which is KÉT Sans Mono once it is installed.
+    const QStringList families = registerKetFonts();
+    QVERIFY2(families.contains(QStringLiteral("KET Sans")), qPrintable(families.join(u',')));
+    QVERIFY2(families.contains(QStringLiteral("KET Sans Mono")), qPrintable(families.join(u',')));
+    TerminalWindow window(QDir::tempPath());
+    QCOMPARE(QFontInfo(window.currentTab()->view()->font()).family(),
+             QStringLiteral("KET Sans Mono"));
 }
 
 } // namespace ketplus

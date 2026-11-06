@@ -91,11 +91,11 @@ qt_add_resources(ketplus_terminal_mock terminal_mock_fonts
         "${ketplus_mock_ket_sans_SOURCE_DIR}/TTF/KETSans-Regular.ttf"
         "${ketplus_mock_ket_sans_SOURCE_DIR}/TTF/KETSans-Medium.ttf"
 )
-# KÉT Sans Mono 0.10.4 Medium (SIL OFL 1.1), committed once under mockups/qt/fonts.
+# KÉT Sans Mono 0.10.4 Medium (SIL OFL 1.1), committed once under core/assets/fonts.
 qt_add_resources(ketplus_terminal_mock terminal_mock_mono
     PREFIX "/fonts"
-    BASE ../qt/fonts
-    FILES ../qt/fonts/KETSansMono-Medium.ttf
+    BASE ../../core/assets/fonts
+    FILES ../../core/assets/fonts/KETSansMono-Medium.ttf
 )
 # The app icon from Két Symbol (CC BY 4.0, licence alongside), drawn for KetPlus Terminal and
 # Lampion OS. Credit: "Két Symbol © 2026 Két Việt, CC BY 4.0".
