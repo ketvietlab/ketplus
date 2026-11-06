@@ -47,12 +47,15 @@ add a device row with its own keys and read every session, send commands and ope
   that was already malicious at that moment is not detected.
 - Remaining work tracked in #83:
   - #85: a domain-separated machine-challenge signature, which needs a relay change.
-  - #88: clients pin the host through the fingerprint the pairing QR code now carries.
 - Since #89, `remote.pairing.status` derives the confirmation code itself and gives none for a
   claim whose keys do not reproduce its digest; Desktop shows only that code, with no fixed
   fallback. The QR code adds `machine`, `kv` and
   `fp=base64url(SHA-256(signing public key || agreement public key))` after `ticket` and
   `secret`.
+- Since #88, the Desktop remote client (`ControlV2Client`) requires that fingerprint to pair,
+  pins it per host and key version, and accepts relay-served host keys only when they match.
+  A client paired before pins adopts the first host keys it reads once, as hosts do with
+  devices.
 
 ## Alternatives considered
 

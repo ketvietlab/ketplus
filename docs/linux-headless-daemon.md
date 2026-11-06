@@ -172,6 +172,22 @@ host-signed command-result decryption. Persist the prepared envelope and retry
 exactly that ciphertext. It never resolves server paths or starts a local daemon.
 Revoked credentials fence in-flight responses. Sign-out also reports a local
 credential-file removal failure instead of claiming a durable successful logout.
+It revokes the server session only with a live access token: an expired one is
+rotated once first, and anything but a 200 reports that remote revocation
+failed. A rotated credential that cannot be stored stays in memory and is
+written again on the next access.
+
+Pairing pins the host (#88). The pairing link must carry `machine`, `kv` and
+`fp` (the host key fingerprint, ADR 0034); a link without them is refused. The
+claimed ticket must name that machine, and accepting the pairing stores the
+pin (`machine/version` -> fingerprint) in the client's own `host-pins`
+credential account. Nothing the relay returns at sign-in or refresh can add a
+pin. Signing in to another account or signing out empties the pin set before
+the credential changes, so a credential that survives a failed write or removal
+never adopts host keys, even after a restart. Host keys the
+relay serves are used only when they match a pin, so a new host key version
+needs a new pairing. A client paired before pins adopts the first host keys it
+reads once. The claim digest is base64url, as the relay computes it.
 
 Desktop now uses a loopback PKCE browser handoff to obtain a UserSession for the
 backend's installation ID, and Connections can claim and approve a Linux pairing

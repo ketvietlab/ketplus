@@ -29,8 +29,10 @@ class ControlV2Client final : public QObject {
     void startSignIn(Callback done);
     void cancelSignIn();
     void signOut(Callback done);
+    // host is what the pairing QR code names: {machineId, keyVersion, fingerprint}. The host's
+    // keys are pinned to it when the pairing is accepted (#88).
     void claimPairing(const QString& ticketId, const QString& secret, const QString& displayName,
-                      Callback done);
+                      const QJsonObject& host, Callback done);
     void pairingStatus(const QString& ticketId, Callback done);
     void cancelPairing();
     bool acceptPairing(const QJsonObject& approvedTicket, QString* error = nullptr);
@@ -66,6 +68,15 @@ class ControlV2Client final : public QObject {
     QNetworkAccessManager* transport_{&network_};
     QJsonObject credential_;
     QHash<QString, QJsonObject> pairingClaims_;
+    // Ticket id -> the host its QR code named.
+    QHash<QString, QJsonObject> pairingHosts_;
+    // "machine/version" -> host key fingerprint, written only by this client when it accepts a
+    // pairing, in its own credential account: nothing the relay returns can add one (#88).
+    QJsonObject hostPins_;
+    bool hostPinsStored_{false};
+    bool storeHostPins(const QJsonObject& pins, QString* error);
+    // A rotated credential that could not be stored yet; written again on the next access.
+    bool credentialUnsaved_{false};
     QString installationId_;
     QString deviceId_;
     int keyVersion_{1};

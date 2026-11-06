@@ -35,13 +35,20 @@ bool ControlV2Client::setCredential(const QJsonObject& credential, QString* erro
     auto value = withDeadline(credential);
     value.remove("deviceId");
     value.remove("deviceKeyVersion");
+    // Another account starts unpaired: no host pins carry over. The pin set is emptied, not
+    // removed, and before the credential is replaced: if that write fails, the old pairing
+    // stays with no pins rather than one that would adopt the next host keys it reads (#88).
+    if (!storeHostPins({}, error))
+        return false;
     if (!credentials_.write("user-session", QJsonDocument(value).toJson(QJsonDocument::Compact),
                             error))
         return false;
     ++epoch_;
     credential_ = value;
+    credentialUnsaved_ = false;
     deviceId_.clear();
     pairingClaims_.clear();
+    pairingHosts_.clear();
     refreshing_ = false;
     ++pairingEpoch_;
     credentials_.remove("refresh-operation");
@@ -141,6 +148,12 @@ void ControlV2Client::accessToken(std::function<void(const QString&, const QStri
         done({}, "Sign in before connecting to a remote host.");
         return;
     }
+    if (credentialUnsaved_ &&
+        credentials_.write("user-session",
+                           QJsonDocument(credential_).toJson(QJsonDocument::Compact))) {
+        credentialUnsaved_ = false;
+        credentials_.remove("refresh-operation");
+    }
     if (QDateTime::fromString(credential_.value("expiresAt").toString(), Qt::ISODateWithMs) >
         QDateTime::currentDateTimeUtc().addSecs(30)) {
         done(credential_.value("accessToken").toString(), {});
@@ -179,15 +192,19 @@ void ControlV2Client::accessToken(std::function<void(const QString&, const QStri
                 auto value = withDeadline(response.toObject());
                 value.insert("deviceId", deviceId_);
                 value.insert("deviceKeyVersion", keyVersion_);
-                if (!credentials_.write("user-session",
-                                        QJsonDocument(value).toJson(QJsonDocument::Compact),
-                                        &failure)) {
-                    if (failure.isEmpty())
-                        failure = "Unable to store rotated credentials.";
-                } else {
-                    credential_ = value;
+                // The old refresh token may already be spent: this process keeps the rotated
+                // one, and the write is retried on the next access. The refresh operation stays
+                // until it is stored, so a restart replays the same rotation (#88).
+                credential_ = value;
+                QString storageError;
+                credentialUnsaved_ = !credentials_.write(
+                    "user-session", QJsonDocument(value).toJson(QJsonDocument::Compact),
+                    &storageError);
+                if (credentialUnsaved_)
+                    qWarning("Unable to store rotated remote credentials: %s",
+                             qUtf8Printable(storageError));
+                else
                     credentials_.remove("refresh-operation");
-                }
             }
             if (status == 401) {
                 ++epoch_;
@@ -206,33 +223,64 @@ void ControlV2Client::accessToken(std::function<void(const QString&, const QStri
 }
 void ControlV2Client::signOut(Callback done) {
     cancelSignIn();
-    const auto token = credential_.value("accessToken").toString();
+    const auto previous = credential_;
     ++epoch_;
     credential_ = {};
+    credentialUnsaved_ = false;
     deviceId_.clear();
     pairingClaims_.clear();
+    pairingHosts_.clear();
     refreshing_ = false;
     ++pairingEpoch_;
+    // Emptied before the credential is removed, as in setCredential: a credential that
+    // survives a failed removal must not adopt host keys on the next start (#88).
     QString localError;
-    if (!credentials_.remove("user-session", &localError) && localError.isEmpty())
-        localError = "Unable to remove local credentials.";
+    if (!storeHostPins({}, &localError) && localError.isEmpty())
+        localError = "Unable to clear host pins.";
+    hostPins_ = {};
+    hostPinsStored_ = true;
+    QString sessionError;
+    if (!credentials_.remove("user-session", &sessionError) && localError.isEmpty())
+        localError = sessionError.isEmpty() ? "Unable to remove local credentials." : sessionError;
     QString operationError;
     if (!credentials_.remove("refresh-operation", &operationError) && localError.isEmpty())
         localError =
             operationError.isEmpty() ? "Unable to remove local refresh identity." : operationError;
     for (const auto& waiter : std::exchange(refreshWaiters_, {}))
         waiter({}, "Signed out.");
+    const auto token = previous.value("accessToken").toString();
     if (token.isEmpty()) {
         done(QJsonObject{{"ok", localError.isEmpty()}}, localError);
         return;
     }
-    request("POST", "/v2/auth/logout", QJsonObject{}, token,
-            [done = std::move(done), localError](int status, const QJsonValue& value,
-                                                 const QString& error) {
-                done(value, !localError.isEmpty() ? localError
-                            : status == 200 || status == 401
-                                ? error
-                                : "Local sign-out completed; remote revocation failed.");
+    // Only a 200 revoked the session on the server; a 401 means the access token had expired
+    // and the refresh token is still valid there (#88).
+    const auto failed = QStringLiteral("Local sign-out completed; remote revocation failed.");
+    auto logout = [this, done, localError, failed](const QString& accessToken) {
+        request(
+            "POST", "/v2/auth/logout", QJsonObject{}, accessToken,
+            [done, localError, failed](int status, const QJsonValue& value, const QString& error) {
+                done(value, !localError.isEmpty() ? localError : status == 200 ? error : failed);
+            });
+    };
+    if (QDateTime::fromString(previous.value("expiresAt").toString(), Qt::ISODateWithMs) >
+        QDateTime::currentDateTimeUtc().addSecs(30)) {
+        logout(token);
+        return;
+    }
+    // An expired access token cannot revoke anything: rotate once, then revoke the new session.
+    request("POST", "/v2/auth/refresh",
+            QJsonObject{{"refreshToken", previous.value("refreshToken")},
+                        {"operationId", QUuid::createUuid().toString(QUuid::Id128)},
+                        {"installationId", installationId_}},
+            {},
+            [done, localError, failed, logout = std::move(logout)](
+                int status, const QJsonValue& response, const QString& error) {
+                if (status == 200 && error.isEmpty() && validCredential(response.toObject())) {
+                    logout(response.toObject().value("accessToken").toString());
+                    return;
+                }
+                done(QJsonObject{{"ok", false}}, localError.isEmpty() ? failed : localError);
             });
 }
 bool ControlV2Client::validatePairing(const QJsonObject& ticket, QString* error) {
@@ -244,8 +292,10 @@ bool ControlV2Client::validatePairing(const QJsonObject& ticket, QString* error)
                 {ticket.value("id"), device.value("id"), device.value("keyVersion"),
                  keys.value("agreementPublicKey"), keys.value("signingPublicKey")}),
             QCryptographicHash::Sha256)
-            .toHex());
+            .toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals));
     const auto previous = pairingClaims_.value(ticket.value("id").toString());
+    // The ticket must belong to the host the QR code named.
+    const auto host = pairingHosts_.value(ticket.value("id").toString());
     if (keys.isEmpty() ||
         !QStringList{"claimed", "approved"}.contains(ticket.value("status").toString()) ||
         !QStringList{"pending", "active"}.contains(device.value("status").toString()) ||
@@ -254,6 +304,7 @@ bool ControlV2Client::validatePairing(const QJsonObject& ticket, QString* error)
         device.value("platform").toString() != daemon::hostPlatform() ||
         device.value("keyVersion").toInt() < 1 ||
         ticket.value("claimDigest").toString() != digest ||
+        (!host.isEmpty() && ticket.value("machineId").toString() != host.value("machineId")) ||
         (!previous.isEmpty() &&
          (previous.value("machineId") != ticket.value("machineId") ||
           previous.value("claimDigest") != ticket.value("claimDigest") ||
@@ -265,7 +316,8 @@ bool ControlV2Client::validatePairing(const QJsonObject& ticket, QString* error)
     return true;
 }
 void ControlV2Client::claimPairing(const QString& ticketId, const QString& secret,
-                                   const QString& displayName, Callback done) {
+                                   const QString& displayName, const QJsonObject& host,
+                                   Callback done) {
     cancelPairing();
     const auto attempt = pairingEpoch_;
     QString error;
@@ -274,6 +326,15 @@ void ControlV2Client::claimPairing(const QString& ticketId, const QString& secre
         done({}, error.isEmpty() ? "Invalid pairing code." : error);
         return;
     }
+    // Without the host's fingerprint this client could only take the relay's word for the
+    // host's keys (#88).
+    if (host.value("machineId").toString().isEmpty() || host.value("keyVersion").toInt() < 1 ||
+        daemon::CloudCrypto::fromBase64Url(host.value("fingerprint").toString()).size() != 32) {
+        done({}, "This pairing code does not identify its host. Update KetPlus on the host and "
+                 "create a new code.");
+        return;
+    }
+    pairingHosts_.insert(ticketId, host);
     authorized("POST",
                "/v2/mobile/pairing/tickets/" +
                    QString::fromUtf8(QUrl::toPercentEncoding(ticketId)) + "/claim",
@@ -324,6 +385,7 @@ void ControlV2Client::pairingStatus(const QString& ticketId, Callback done) {
 void ControlV2Client::cancelPairing() {
     ++pairingEpoch_;
     pairingClaims_.clear();
+    pairingHosts_.clear();
 }
 bool ControlV2Client::acceptPairing(const QJsonObject& ticket, QString* error) {
     if (!pairingClaims_.contains(ticket.value("id").toString()) ||
@@ -332,10 +394,24 @@ bool ControlV2Client::acceptPairing(const QJsonObject& ticket, QString* error) {
             *error = "Pairing is not approved for the current attempt.";
         return false;
     }
+    const auto host = pairingHosts_.value(ticket.value("id").toString());
+    if (host.isEmpty()) {
+        if (error)
+            *error = "Pairing is not approved for the current attempt.";
+        return false;
+    }
     auto value = credential_;
     const auto device = ticket.value("claimedDevice").toObject();
     value.insert("deviceId", device.value("id"));
     value.insert("deviceKeyVersion", device.value("keyVersion"));
+    // "machine/version" -> key fingerprint: senderKey accepts only these host keys (#88).
+    auto pins = hostPins_;
+    pins.insert(QStringLiteral("%1/%2")
+                    .arg(host.value("machineId").toString())
+                    .arg(host.value("keyVersion").toInt()),
+                host.value("fingerprint"));
+    if (!storeHostPins(pins, error))
+        return false;
     if (!credentials_.write("user-session", QJsonDocument(value).toJson(QJsonDocument::Compact),
                             error))
         return false;
@@ -343,6 +419,7 @@ bool ControlV2Client::acceptPairing(const QJsonObject& ticket, QString* error) {
     deviceId_ = device.value("id").toString();
     keyVersion_ = device.value("keyVersion").toInt();
     pairingClaims_.clear();
+    pairingHosts_.clear();
     return true;
 }
 } // namespace ketplus::remote

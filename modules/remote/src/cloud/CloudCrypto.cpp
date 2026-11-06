@@ -162,6 +162,17 @@ QByteArray CloudCrypto::fromBase64Url(const QString& value) {
     return QByteArray::fromBase64(value.toLatin1(), QByteArray::Base64UrlEncoding);
 }
 
+QString CloudCrypto::keyFingerprint(const QJsonObject& keys) {
+    const QByteArray signing =
+        fromBase64Url(keys.value(QStringLiteral("signingPublicKey")).toString());
+    const QByteArray agreement =
+        fromBase64Url(keys.value(QStringLiteral("agreementPublicKey")).toString());
+    if (signing.size() != 32 || agreement.size() != 32)
+        return {};
+    return QString::fromLatin1(
+        base64Url(QCryptographicHash::hash(signing + agreement, QCryptographicHash::Sha256)));
+}
+
 QByteArray CloudCrypto::canonical(const QJsonArray& values) {
     return QJsonDocument(values).toJson(QJsonDocument::Compact);
 }

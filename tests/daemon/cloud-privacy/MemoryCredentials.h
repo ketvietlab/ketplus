@@ -8,5 +8,7 @@ extern bool failWrites;
 extern bool failRemovals;
 // Fails writes to this account only.
 extern QString failWritesTo;
+// Fails removals of this account only.
+extern QString failRemovalsOf;
 void resetCredentials();
 } // namespace r03

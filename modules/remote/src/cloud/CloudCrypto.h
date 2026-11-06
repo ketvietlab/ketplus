@@ -47,6 +47,9 @@ class CloudCrypto final {
     [[nodiscard]] static QByteArray base64Url(const QByteArray& value);
     [[nodiscard]] static QByteArray fromBase64Url(const QString& value);
     [[nodiscard]] static QByteArray canonical(const QJsonArray& values);
+    // base64url(SHA-256(signing public key || agreement public key)) of a key set: the host
+    // identity a pairing QR code carries and clients pin (#89, #88). Empty for invalid keys.
+    [[nodiscard]] static QString keyFingerprint(const QJsonObject& keys);
 
   private:
     [[nodiscard]] QByteArray privateKey(const QString& account, int keyType, QString* error);
