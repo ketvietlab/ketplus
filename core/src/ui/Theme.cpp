@@ -1,5 +1,6 @@
 #include "ui/Theme.h"
 
+#include "KetAppearance.h"
 #include "KetSyntax.h"
 #include "KetTokens.h"
 
@@ -10,7 +11,6 @@
 #include <QPalette>
 #include <QSettings>
 #include <QStyleFactory>
-#include <QStyleHints>
 
 #include <utility>
 
@@ -923,13 +923,14 @@ ThemeManager::ThemeManager(QApplication& application, QObject* parent)
     mode_ = modeFromName(
         settings.value(QStringLiteral("appearance/theme"), QStringLiteral("system")).toString());
 
-    connect(application_.styleHints(), &QStyleHints::colorSchemeChanged, this,
-            [this](Qt::ColorScheme) {
-                if (effectiveMode() == Mode::System) {
-                    apply();
-                }
-            });
-    apply();
+    // ket::Appearance owns light, dark and following the system; QML (KetTheme), the kit's
+    // style and KétPlus Terminal read it, so the palette follows it too.
+    connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this, [this] {
+        if (!syncingAppearance_) {
+            apply();
+        }
+    });
+    syncAppearance();
 }
 
 ThemeManager::Mode ThemeManager::mode() const noexcept { return mode_; }
@@ -946,7 +947,7 @@ void ThemeManager::setMode(const Mode mode) {
     if (!needsApply) {
         return;
     }
-    apply();
+    syncAppearance();
 }
 
 void ThemeManager::previewMode(const Mode mode) {
@@ -954,7 +955,7 @@ void ThemeManager::previewMode(const Mode mode) {
         return;
     }
     previewMode_ = mode;
-    apply();
+    syncAppearance();
 }
 
 void ThemeManager::cancelPreview() {
@@ -962,7 +963,7 @@ void ThemeManager::cancelPreview() {
         return;
     }
     previewMode_.reset();
-    apply();
+    syncAppearance();
 }
 
 void ThemeManager::setInterfaceFontSizePixels(const int fontSizePixels) {
@@ -977,8 +978,18 @@ void ThemeManager::setInterfaceFontSizePixels(const int fontSizePixels) {
     apply();
 }
 
+void ThemeManager::syncAppearance() {
+    const Mode mode = effectiveMode();
+    syncingAppearance_ = true;
+    ket::Appearance::instance().setMode(mode == Mode::Dark    ? ket::Appearance::Mode::Dark
+                                        : mode == Mode::Light ? ket::Appearance::Mode::Light
+                                                              : ket::Appearance::Mode::System);
+    syncingAppearance_ = false;
+    apply();
+}
+
 void ThemeManager::apply() {
-    palette_ = paletteFor(useDarkPalette() ? ket::Theme::Dark : ket::Theme::Light);
+    palette_ = paletteFor(ket::Appearance::instance().theme());
 
     QPalette nativePalette;
     nativePalette.setColor(QPalette::Window, QColor(palette_.pageBackground));
@@ -994,16 +1005,6 @@ void ThemeManager::apply() {
     application_.setStyleSheet(styleSheetFor(palette_, uiFontFamily_, interfaceFontSizePixels_));
 
     emit themeChanged();
-}
-
-bool ThemeManager::useDarkPalette() const {
-    if (effectiveMode() == Mode::Dark) {
-        return true;
-    }
-    if (effectiveMode() == Mode::Light) {
-        return false;
-    }
-    return application_.styleHints()->colorScheme() == Qt::ColorScheme::Dark;
 }
 
 ThemeManager::Mode ThemeManager::effectiveMode() const noexcept {

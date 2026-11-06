@@ -84,14 +84,15 @@ class ThemeManager final : public QObject {
     void themeChanged();
 
   private:
+    void syncAppearance();
     void apply();
     [[nodiscard]] Mode effectiveMode() const noexcept;
-    [[nodiscard]] bool useDarkPalette() const;
     void loadInterFont();
 
     QApplication& application_;
     Mode mode_{Mode::System};
     std::optional<Mode> previewMode_;
+    bool syncingAppearance_{false};
     ThemePalette palette_;
     QString uiFontFamily_;
     int interfaceFontSizePixels_{14};
