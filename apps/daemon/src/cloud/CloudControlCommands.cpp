@@ -1,11 +1,12 @@
-#include "cloud/CloudControlClient.h"
-#include "cloud/CloudControlSupport.h"
 #include "atlas/AtlasLiveRuntime.h"
 #include "cloud/CloudControlBatching.h"
+#include "cloud/CloudControlClient.h"
+#include "cloud/CloudControlSupport.h"
 #include "cloud/CloudEventProjection.h"
 #include "cloud/ControlEndpoint.h"
 #include "cloud/WorktreeBranches.h"
 #include "cloud/WorktreeRepositories.h"
+#include <QRandomGenerator>
 #include <QUrlQuery>
 
 #include "KetPlusProductVersion.h"
@@ -54,13 +55,14 @@ bool isWorktreeCommand(const QJsonObject& command) {
 } // namespace
 
 void CloudControlClient::pollCommands() {
-    if (machineId_.isEmpty() || commandPollInFlight_)
+    if (machineId_.isEmpty() || commandPollInFlight_ || !commandPollRetryAt_.hasExpired())
         return;
     commandPollInFlight_ = true;
     ensureDaemonCredential([this](const bool ready, const QString& error) {
         if (!ready) {
             commandPollInFlight_ = false;
             lastError_ = error;
+            noteCommandPollFailure(0);
             return;
         }
         request(
@@ -80,8 +82,10 @@ void CloudControlClient::pollCommands() {
                                  qUtf8Printable(transportError));
                     if (status == 401)
                         daemonToken_.clear();
+                    noteCommandPollFailure(status);
                     return;
                 }
+                commandPollFailures_ = 0;
                 for (const QJsonValue& command :
                      object(value).value(QStringLiteral("commands")).toArray()) {
                     executeCommand(command.toObject());
@@ -90,7 +94,20 @@ void CloudControlClient::pollCommands() {
     });
 }
 
+// A relay that is down or has revoked this machine is asked again after a growing wait, as
+// uploads are, instead of every 2 seconds; jitter spreads the machines an outage disconnected.
+void CloudControlClient::noteCommandPollFailure(const int status) {
+    ++commandPollFailures_;
+    const qint64 delay =
+        eventUploadBackoffMilliseconds(commandPollFailures_, eventUploadRefused(status));
+    commandPollRetryAt_.setRemainingTime(delay / 2 +
+                                         QRandomGenerator::global()->bounded(delay / 2 + 1));
+}
+
 void CloudControlClient::wakeCommandPoll() {
+    // A wake-up comes from the relay, so it is reachable again.
+    commandPollFailures_ = 0;
+    commandPollRetryAt_ = QDeadlineTimer(0);
     if (commandPollInFlight_)
         commandPollAgain_ = true;
     else

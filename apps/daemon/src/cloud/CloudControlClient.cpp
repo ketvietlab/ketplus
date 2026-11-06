@@ -319,10 +319,18 @@ void CloudControlClient::ensureDaemonCredential(ReadyCallback callback) {
                                : transportError);
                 return;
             }
+            // The relay issues 32 random bytes. Every envelope, wrapped key and WebRTC answer
+            // this key signs is longer, so a relay cannot pass one off as a challenge (#85).
+            const QString encoded = challenge.value(QStringLiteral("challenge")).toString();
+            const QByteArray bytes = CloudCrypto::fromBase64Url(encoded);
+            if (bytes.size() != machineChallengeBytes ||
+                CloudCrypto::base64Url(bytes) != encoded.toLatin1()) {
+                finishCredentialWaiters(
+                    false, QStringLiteral("The relay sent an invalid machine challenge."));
+                return;
+            }
             QString cryptoError;
-            const QByteArray signature = crypto_.sign(
-                CloudCrypto::fromBase64Url(challenge.value(QStringLiteral("challenge")).toString()),
-                &cryptoError);
+            const QByteArray signature = crypto_.sign(bytes, &cryptoError);
             if (signature.isEmpty()) {
                 finishCredentialWaiters(false, cryptoError);
                 return;
