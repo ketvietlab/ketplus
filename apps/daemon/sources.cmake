@@ -25,6 +25,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/cloud/CloudControlSync.cpp
     src/cloud/CloudControlWorktreeCommands.cpp
     src/cloud/RemoteWorktreeQuota.cpp
+    src/cloud/RemoteAudit.cpp
     src/cloud/CloudControlClient.h
     src/cloud/CloudControlDeviceSignIn.cpp
     src/cloud/DevicePins.cpp
@@ -104,6 +105,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/LocalJournalFork.cpp
     src/storage/LocalJournalLargeEvents.cpp
     src/storage/LocalJournalOutput.cpp
+    src/storage/LocalJournalRemoteAudit.cpp
     src/storage/LocalJournalTranscriptWindow.cpp
     src/storage/LocalJournal.h
     src/storage/McpMediaPreview.cpp

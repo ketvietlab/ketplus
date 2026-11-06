@@ -2318,7 +2318,9 @@ class CloudPrivacyTest final : public QObject {
                 {"repositoryId", id("repository")},
                 {"worktreeId", id("worktree")},
                 {"content", QJsonObject{{"recipientDeviceId", "machine-synthetic"},
-                                        {"recipientKeyVersion", 1}}}};
+                                        {"recipientKeyVersion", 1},
+                                        {"senderDeviceId", "worktree-phone"},
+                                        {"senderKeyVersion", 1}}}};
             const QJsonObject payload{
                 {"prompt", "Start here"},
                 {"new_worktree", QJsonObject{{"branch", branch}, {"base", "main"}}}};
@@ -2361,6 +2363,138 @@ class CloudPrivacyTest final : public QObject {
         QCOMPARE(create("command-low-space", "low-space"),
                  QStringLiteral("worktree_quota_exceeded"));
         QVERIFY(!branchExists("low-space"));
+
+        // The Mac keeps a record of which device asked for each, and how it ended (#86).
+        const auto audit = c.journal.remoteCommands("worktree-phone", 10);
+        QVERIFY(audit);
+        QHash<QString, QString> outcomes;
+        for (const RemoteCommandAudit& entry : *audit) {
+            QCOMPARE(entry.kind, QStringLiteral("session.create"));
+            QCOMPARE(entry.deviceKeyVersion, 1);
+            outcomes.insert(entry.commandId, entry.resultCode);
+        }
+        QCOMPARE(outcomes.value("command-over-quota"), QStringLiteral("worktree_quota_exceeded"));
+        QCOMPARE(outcomes.value("command-low-space"), QStringLiteral("worktree_quota_exceeded"));
+        QCOMPARE(outcomes.value("command-redelivered"), QStringLiteral("ok"));
+    }
+
+    // Refused commands are audited without storing a command result, so the audit's own writes
+    // must keep it bounded.
+    void theRemoteCommandAuditStaysBoundedByItsOwnWrites() {
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite"));
+        const QDateTime expired =
+            QDateTime::currentDateTimeUtc().addDays(-LocalJournal::remoteCommandRetentionDays - 1);
+        const int written = LocalJournal::maximumRemoteCommands + 600;
+        for (int row = 0; row < written; ++row) {
+            QVERIFY(journal.recordRemoteCommand({QStringLiteral("command-%1").arg(row),
+                                                 "turn.start",
+                                                 "phone-1",
+                                                 1,
+                                                 {},
+                                                 "sender_key_unavailable",
+                                                 row < 100 ? expired : QDateTime{}}));
+        }
+        const auto kept = journal.remoteCommands({}, written);
+        QVERIFY(kept);
+        // Pruned every 256 rows: never more than 255 above the bound, and no expired row.
+        QVERIFY2(kept->size() <= LocalJournal::maximumRemoteCommands + 255,
+                 qPrintable(QString::number(kept->size())));
+        QVERIFY(kept->size() >= LocalJournal::maximumRemoteCommands);
+        QVERIFY(std::none_of(kept->cbegin(), kept->cend(), [&expired](const auto& entry) {
+            return entry.recordedAt <= expired;
+        }));
+        QCOMPARE(kept->first().commandId, QStringLiteral("command-%1").arg(written - 1));
+    }
+
+    void remoteCommandsThatCanChangeSomethingAreAuditedOnce() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("journal.sqlite"));
+        c.start();
+        const auto command = [](const QString& id, const QString& kind, const QString& device) {
+            return QJsonObject{
+                {"id", id},
+                {"kind", kind},
+                {"attempt", 1},
+                {"sessionId", "session-synthetic"},
+                {"sessionGeneration", 1},
+                {"content", QJsonObject{{"senderDeviceId", device}, {"senderKeyVersion", 2}}}};
+        };
+        const auto acknowledge = [&c](const QJsonObject& sent, const QJsonObject& result) {
+            const qsizetype before = c.transport.requests.size();
+            Access::acknowledge(*c.client, sent, result);
+            QTRY_VERIFY(c.transport.requests.size() > before);
+        };
+        const QJsonObject ok{{"ok", true}};
+        acknowledge(command("command-turn", "turn.start", "phone-1"), ok);
+        // A redelivery keeps the first outcome.
+        acknowledge(command("command-turn", "turn.start", "phone-1"),
+                    {{"ok", false}, {"error_code", "duplicate"}});
+        // Reads are not recorded; a kind this build does not know is.
+        acknowledge(command("command-read", "workspace.files.tree", "phone-1"), ok);
+        acknowledge(command("command-future", "future.kind", "phone-2"),
+                    {{"ok", false}, {"error_code", "unsupported_command"}});
+
+        const auto all = c.journal.remoteCommands({}, 10);
+        QVERIFY(all);
+        QCOMPARE(all->size(), 2);
+        QCOMPARE(all->at(0).commandId, QStringLiteral("command-future"));
+        QCOMPARE(all->at(0).resultCode, QStringLiteral("unsupported_command"));
+        QCOMPARE(all->at(1).commandId, QStringLiteral("command-turn"));
+        QCOMPARE(all->at(1).kind, QStringLiteral("turn.start"));
+        QCOMPARE(all->at(1).deviceId, QStringLiteral("phone-1"));
+        QCOMPARE(all->at(1).deviceKeyVersion, 2);
+        QCOMPARE(all->at(1).sessionId, QStringLiteral("session-synthetic"));
+        QCOMPARE(all->at(1).resultCode, QStringLiteral("ok"));
+
+        // The desktop reads them over the local connection, all or one device's.
+        const auto audit = [&c](const QJsonObject& payload) {
+            QJsonObject reply;
+            QString failure = "unanswered";
+            c.client->handleLocal("remote.audit", payload,
+                                  [&](const QJsonObject& value, const QString& error) {
+                                      reply = value;
+                                      failure = error;
+                                  });
+            return std::make_pair(reply, failure);
+        };
+        QVERIFY(c.client->handles("remote.audit"));
+        auto [reply, failure] = audit({{"device_id", "phone-1"}});
+        QVERIFY2(failure.isEmpty(), qPrintable(failure));
+        const QJsonArray entries = reply.value("entries").toArray();
+        QCOMPARE(entries.size(), 1);
+        QCOMPARE(entries.at(0).toObject().value("command_id").toString(),
+                 QStringLiteral("command-turn"));
+        QCOMPARE(entries.at(0).toObject().value("device_key_version").toInt(), 2);
+        QVERIFY(QDateTime::fromString(entries.at(0).toObject().value("recorded_at").toString(),
+                                      Qt::ISODateWithMs)
+                    .isValid());
+        QCOMPARE(audit({{"limit", 1}}).first.value("entries").toArray().size(), 1);
+
+        // Kept for 90 days.
+        QVERIFY(c.journal.recordRemoteCommand(
+            {"command-old", "turn.start", "phone-1", 2, "session-synthetic", "ok",
+             QDateTime::currentDateTimeUtc().addDays(-LocalJournal::remoteCommandRetentionDays -
+                                                     1)}));
+        QCOMPARE(c.journal.remoteCommands({}, 10)->size(), 3);
+        QVERIFY(c.journal.pruneRetention());
+        QCOMPARE(c.journal.remoteCommands({}, 10)->size(), 2);
+
+        // A failed read is reported, not answered as an empty record.
+        QSqlDatabase blocker = QSqlDatabase::addDatabase("QSQLITE", "audit-blocker");
+        blocker.setDatabaseName(dir.filePath("journal.sqlite"));
+        QVERIFY(blocker.open());
+        QVERIFY(QSqlQuery(blocker).exec(
+            "ALTER TABLE remote_command_audit RENAME TO remote_command_audit_hidden"));
+        const auto [unread, readFailure] = audit({});
+        QVERIFY(readFailure != "unanswered");
+        QVERIFY(!readFailure.isEmpty());
+        QVERIFY(!unread.contains("entries"));
+        QVERIFY(QSqlQuery(blocker).exec(
+            "ALTER TABLE remote_command_audit_hidden RENAME TO remote_command_audit"));
+        blocker.close();
+        blocker = {};
+        QSqlDatabase::removeDatabase("audit-blocker");
     }
 
     void linkedCheckoutsOfOneBareRepositoryShareTheWorktreeQuota() {

@@ -175,7 +175,7 @@ bool LocalJournal::initialize() {
         }
     }
     return migrateTranscriptSchema() && purgeExpiredAttachments() && backfillTurnSequences() &&
-           backfillReplayProjection() && pruneRetention();
+           backfillReplayProjection() && initializeRemoteAudit() && pruneRetention();
 }
 
 bool LocalJournal::purgeExpiredAttachments() {
@@ -817,7 +817,7 @@ bool LocalJournal::pruneRetention() {
                        "WHERE s.id = background_tasks.session_id AND s.generation = "
                        "background_tasks.generation)"),
     };
-    if (!pruneOrphanLargePayloads())
+    if (!pruneOrphanLargePayloads() || !pruneRemoteAudit())
         return false;
     for (const QString& statement : statements) {
         if (!query.exec(statement)) {
