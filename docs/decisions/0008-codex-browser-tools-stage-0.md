@@ -17,11 +17,15 @@ every session uses an isolated temporary profile.
   `allowedOrigins` on every save, so they carry no explicit choice: they load as
   enabled, and an `allowedOrigins` of exactly `loopback` loads as `*` (a custom
   list is kept). Any save writes version 2, after which `enabled: false` sticks.
+  The migration widens such a file from this computer to public websites as
+  well, but not to the local network: since #92, `*` excludes private,
+  link-local and reserved addresses ([ADR 0011](0011-browser-tools-for-all-providers.md)).
 - **All origins.** `allowedOrigins` defaults to `*`, passed as
   `KETPLUS_BROWSER_ALLOWED_ORIGINS="*"`. `normalizeAllowedOrigins` accepts `*`
   (any `*` entry wins; other entries are still validated), and still normalizes
-  explicit lists with IPv6 brackets. The browser proxy only blocks and records
-  requests when the user narrows the list. The profile is always a fresh
+  explicit lists with IPv6 brackets. The browser proxy checks every hop's
+  resolved address under `*` too (#92), and also blocks origins outside a
+  narrowed list. The profile is always a fresh
   ephemeral Playwright context; the user's browser profile is never used.
 - **Runtimes.** `resolveBrowserLaunch` registers `BundledRuntimeProvider` first
   when `modules/browser/src/BundledBrowserRuntime.cpp` exists (CMake sets

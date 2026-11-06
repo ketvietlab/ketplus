@@ -34,8 +34,9 @@ scope and source-checkout prerequisites in ADR 0008.
   to the browser package directory. Each Claude query closes its workers when
   finished. Providers still own their MCP processes; no in-process linking,
   public-CM dependency or new daemon/cloud browser protocol is introduced.
-- The built-in skill resolves from the bundled manifest before a source path,
-  including when an installed app opens an unrelated repository. Settings uses
+- The built-in skill resolves from the bundled manifest, then from the source
+  checkout the app was launched from. It never comes from the repository the
+  agent works in, which could otherwise supply its own browser instructions (#94). Settings uses
   the runtime's Chrome/Edge/Chrome-for-Testing selection without launching or
   downloading a browser. When automatic download is allowed, readiness means
   the runtime can attempt that download on first use, not that offline launch

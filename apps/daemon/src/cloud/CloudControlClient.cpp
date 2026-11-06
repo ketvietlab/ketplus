@@ -97,7 +97,7 @@ QUrl controlBaseUrl() {
 } // namespace
 
 CloudControlClient::CloudControlClient(LocalJournal* journal, SessionHost* host, QObject* parent)
-    : QObject(parent), journal_(journal), host_(host), crypto_(&credentials_),
+    : QObject(parent), journal_(journal), host_(host), crypto_(&credentials_), pins_(&credentials_),
       baseUrl_(controlBaseUrl()),
       wakeups_(baseUrl_, [this](std::function<void(const QString&)> answer) {
           ensureDaemonCredential(
@@ -396,7 +396,8 @@ void CloudControlClient::signOut(LocalCallback callback) {
         }
         for (const QString& account :
              {QStringLiteral("machine-id"), QStringLiteral("workspace-id"),
-              QStringLiteral("machine-key-version"), QStringLiteral("control-url")}) {
+              QStringLiteral("machine-key-version"), QStringLiteral("control-url"),
+              QStringLiteral("device-pins")}) {
             if (!credentials_.remove(account, &removalError)) {
                 callback({}, removalError);
                 return;
@@ -570,12 +571,15 @@ void CloudControlClient::pairingStatus(const QJsonObject& payload, LocalCallback
 
 void CloudControlClient::approvePairing(const QJsonObject& payload, LocalCallback callback) {
     const QString ticketId = payload.value(QStringLiteral("ticket_id")).toString();
-    if (ticketId.isEmpty()) {
-        callback({}, QStringLiteral("A pairing ticket is required."));
+    // The claim the user confirmed on this Mac; the ticket is read again below, and the relay
+    // must not swap keys and digest together in between.
+    const QString confirmed = payload.value(QStringLiteral("claim_digest")).toString();
+    if (ticketId.isEmpty() || confirmed.isEmpty()) {
+        callback({}, QStringLiteral("A pairing ticket and its confirmed claim are required."));
         return;
     }
-    ensureDaemonCredential([this, ticketId, callback = std::move(callback)](const bool ready,
-                                                                            const QString& error) {
+    ensureDaemonCredential([this, ticketId, confirmed, callback = std::move(callback)](
+                               const bool ready, const QString& error) {
         if (!ready) {
             callback({}, error);
             return;
@@ -584,8 +588,8 @@ void CloudControlClient::approvePairing(const QJsonObject& payload, LocalCallbac
             QStringLiteral("/v2/pairing/tickets/%1").arg(encodedPathSegment(ticketId));
         request(
             "GET", path, {}, daemonToken_, {},
-            [this, path, callback = std::move(callback)](const int status, const QJsonValue& value,
-                                                         const QString& transportError) {
+            [this, path, confirmed, callback = std::move(callback)](
+                const int status, const QJsonValue& value, const QString& transportError) {
                 const QJsonObject ticket = object(value);
                 const QJsonObject device = ticket.value(QStringLiteral("claimedDevice")).toObject();
                 const QString digest = ticket.value(QStringLiteral("claimDigest")).toString();
@@ -596,6 +600,14 @@ void CloudControlClient::approvePairing(const QJsonObject& payload, LocalCallbac
                     callback({}, transportError.isEmpty()
                                      ? QStringLiteral("The mobile key claim is not ready.")
                                      : transportError);
+                    return;
+                }
+                // The code the user compared is this digest. Recomputed from the claimed keys, it
+                // proves those keys are the phone's, not ones the relay substituted (#87).
+                if (digest != confirmed ||
+                    DevicePins::claimDigest(ticket.value(QStringLiteral("id")).toString(),
+                                            device) != digest) {
+                    callback({}, QStringLiteral("The device claim does not match its keys."));
                     return;
                 }
                 QJsonArray envelopes;
@@ -630,15 +642,20 @@ void CloudControlClient::approvePairing(const QJsonObject& payload, LocalCallbac
                 if (!envelopes.isEmpty())
                     body.insert(QStringLiteral("sessionKeys"), envelopes);
                 request("POST", path + QStringLiteral("/approve"), body, daemonToken_, {},
-                        [callback = std::move(callback)](const int approveStatus,
-                                                         const QJsonValue& approveValue,
-                                                         const QString& approveError) {
+                        [this, device, callback = std::move(callback)](
+                            const int approveStatus, const QJsonValue& approveValue,
+                            const QString& approveError) {
+                            QString pinError;
                             if (approveStatus != 200 || !approveError.isEmpty()) {
                                 callback({}, approveError.isEmpty()
                                                  ? responseCode(
                                                        approveValue,
                                                        QStringLiteral("pairing_approval_failed"))
                                                  : approveError);
+                            } else if (!pins_.pin(device, &pinError)) {
+                                callback({}, pinError.isEmpty()
+                                                 ? QStringLiteral("Unable to remember the device.")
+                                                 : pinError);
                             } else {
                                 callback({{QStringLiteral("ok"), true},
                                           {QStringLiteral("ticket"), object(approveValue)}},
@@ -702,6 +719,12 @@ void CloudControlClient::revokeDevice(const QJsonObject& payload, LocalCallback 
                         return;
                     }
                     signaling_->receive({{"type", "device.revoked"}, {"deviceId", deviceId}});
+                    senderKeys_.clear();
+                    QString pinError;
+                    if (!pins_.unpin(deviceId, &pinError)) {
+                        callback({}, pinError);
+                        return;
+                    }
                     callback({{QStringLiteral("ok"), true}}, {});
                 });
     });

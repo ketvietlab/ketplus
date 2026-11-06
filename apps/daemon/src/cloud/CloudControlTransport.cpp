@@ -26,8 +26,9 @@ void CloudControlClient::initializePeerTransport() {
                             callback({});
                             return;
                         }
-                        signaling_->refreshDevices(value.toArray());
-                        for (const auto& row : value.toArray()) {
+                        const auto devices = trustedDevices(value.toArray());
+                        signaling_->refreshDevices(devices);
+                        for (const auto& row : devices) {
                             const auto keys = row.toObject();
                             if (keys.value("id") == device &&
                                 keys.value("keyVersion").toInt() == version &&

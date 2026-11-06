@@ -186,19 +186,28 @@ void CloudControlClient::enrollMachine(const quint64 signInEpoch, const QString&
             }
             otherRelay_.clear();
             signaling_->configure({}, {}, 1, false);
-            machineId_ = machine.value(QStringLiteral("id")).toString();
-            workspaceId_ = machine.value(QStringLiteral("workspaceId")).toString();
-            machineKeyVersion_ = machine.value(QStringLiteral("keyVersion")).toInt(1);
+            const QString machineId = machine.value(QStringLiteral("id")).toString();
+            const QString workspaceId = machine.value(QStringLiteral("workspaceId")).toString();
+            const int machineKeyVersion = machine.value(QStringLiteral("keyVersion")).toInt(1);
+            // A new enrollment trusts no device yet: only an existing enrollment adopts the
+            // devices it already served when pins were introduced (ADR 0034). The empty pin set
+            // is written before the machine id, and the enrollment takes effect in memory only
+            // once everything is stored, so a failed write never leaves an enrollment that this
+            // daemon or a restart would mistake for one from before pins.
             const bool stored =
+                pins_.reset(&storageError) &&
                 storeString(QStringLiteral("control-url"), baseUrl_.toString(), &storageError) &&
-                storeString(QStringLiteral("machine-id"), machineId_, &storageError) &&
-                storeString(QStringLiteral("workspace-id"), workspaceId_, &storageError) &&
+                storeString(QStringLiteral("machine-id"), machineId, &storageError) &&
+                storeString(QStringLiteral("workspace-id"), workspaceId, &storageError) &&
                 storeString(QStringLiteral("machine-key-version"),
-                            QString::number(machineKeyVersion_), &storageError);
+                            QString::number(machineKeyVersion), &storageError);
             if (!stored) {
                 callback({}, storageError);
                 return;
             }
+            machineId_ = machineId;
+            workspaceId_ = workspaceId;
+            machineKeyVersion_ = machineKeyVersion;
             if (!registerCloudCursors()) {
                 callback({}, lastError_);
                 return;

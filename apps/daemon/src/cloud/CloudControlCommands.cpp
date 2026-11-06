@@ -233,22 +233,43 @@ void CloudControlClient::withSenderKeys(const QString& senderId, const int versi
     const QString keyPath = QStringLiteral("/v2/device-keys/%1/%2")
                                 .arg(QString::fromUtf8(QUrl::toPercentEncoding(senderId)))
                                 .arg(version);
-    request("GET", keyPath, {}, daemonToken_, {},
-            [this, cacheKey, callback = std::move(callback)](
-                const int status, const QJsonValue& value, const QString& transportError) {
-                if (status != 200 || !transportError.isEmpty()) {
-                    callback({}, transportError.isEmpty()
-                                     ? QStringLiteral("The sender key is unavailable.")
-                                     : transportError);
+    request(
+        "GET", keyPath, {}, daemonToken_, {},
+        [this, senderId, version, cacheKey, callback = std::move(callback)](
+            const int status, const QJsonValue& value, const QString& transportError) mutable {
+            if (status != 200 || !transportError.isEmpty()) {
+                callback({}, transportError.isEmpty()
+                                 ? QStringLiteral("The sender key is unavailable.")
+                                 : transportError);
+                return;
+            }
+            const QJsonObject keys = object(value).value(QStringLiteral("keys")).toObject();
+            // The relay names the keys; only a device pinned on this Mac may use them (#87).
+            auto accept = [this, senderId, version, cacheKey, keys,
+                           callback = std::move(callback)]() {
+                if (!pins_.trustsKeys(senderId, version, keys)) {
+                    callback({}, QStringLiteral("The sender is not paired with this Mac."));
                     return;
                 }
-                const QJsonObject keys = object(value).value(QStringLiteral("keys")).toObject();
                 if (senderKeys_.size() >= maximumCachedSenderKeys)
                     senderKeys_.clear();
                 senderKeys_.insert(cacheKey, {keys, QDateTime::currentDateTimeUtc().addMSecs(
                                                         senderKeyCacheMilliseconds)});
                 callback(keys, {});
-            });
+            };
+            if (pins_.initialized()) {
+                accept();
+                return;
+            }
+            // Before the first device list, the devices already active are adopted.
+            request("GET", QStringLiteral("/v2/devices"), {}, daemonToken_, {},
+                    [this, accept = std::move(accept)](const int listStatus, const QJsonValue& list,
+                                                       const QString& listError) {
+                        if (listStatus == 200 && list.isArray() && listError.isEmpty())
+                            (void)trustedDevices(list.toArray());
+                        accept();
+                    });
+        });
 }
 
 void CloudControlClient::executeCommand(const QJsonObject& command) {

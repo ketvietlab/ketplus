@@ -117,8 +117,8 @@ bool preferSkill(const QVariantMap& candidate, const QVariantMap& current) {
 // The ketplus-browser skill ships with the browser tools. While the tools are enabled it is
 // offered as a built-in skill in every repository (not auto-enabled: its full text is only
 // added to a turn when the user mentions $ketplus-browser or enables it).
-QString builtInBrowserSkillFile(const QString& activePath) {
-    return browser_tools::browserSkillFile(browser_tools::loadSettings(), activePath);
+QString builtInBrowserSkillFile() {
+    return browser_tools::browserSkillFile(browser_tools::loadSettings());
 }
 
 QString skillSettingsKey(const QString& activePath) {
@@ -199,7 +199,7 @@ QVariantList scanSkills(const QString& activePath, const QSet<QString>& enabledS
     }
     // Agents are told when to read the default skills (hostAgentInstructions); listing them
     // here lets the user also mention or enable them.
-    QStringList builtInSkills{builtInBrowserSkillFile(activePath)};
+    QStringList builtInSkills{builtInBrowserSkillFile()};
     for (const auto& bundled : agent_skills::bundledSkills(QCoreApplication::applicationDirPath()))
         builtInSkills.append(bundled.file);
     for (const QString& file : std::as_const(builtInSkills)) {

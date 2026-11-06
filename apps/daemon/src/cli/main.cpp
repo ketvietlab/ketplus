@@ -20,7 +20,8 @@ int main(int argc, char** argv) {
         "command",
         "status | login | logout | doctor | workspace | pairing | device | sessions | call");
     parser.addPositionalArgument("arguments",
-                                 "workspace add/list/remove; pairing create/status/approve/revoke; "
+                                 "workspace add/list/remove; pairing create/status/revoke TICKET, "
+                                 "pairing approve TICKET CLAIM_DIGEST; "
                                  "device revoke; call OPERATION [JSON|-]",
                                  "[arguments...]");
     parser.process(app);
@@ -57,8 +58,12 @@ int main(int argc, char** argv) {
         const auto action = args.takeFirst();
         if (command == "pairing" && action == "create")
             operation = "remote.pairing.create";
-        else if ((action == "status" || action == "approve" || action == "revoke") &&
-                 args.size() == 1) {
+        else if (command == "pairing" && action == "approve" && args.size() == 2) {
+            // Approval names the claim digest `pairing status` showed (ADR 0034).
+            operation = "remote.pairing.approve";
+            payload.insert("ticket_id", args.takeFirst());
+            payload.insert("claim_digest", args.takeFirst());
+        } else if ((action == "status" || action == "revoke") && args.size() == 1) {
             operation = "remote." + command + "." + action;
             payload.insert(command == "pairing" ? "ticket_id" : "device_id", args.takeFirst());
         }

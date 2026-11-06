@@ -224,6 +224,7 @@ class CloudPrivacyTest final : public QObject {
         c.start();
         auto& crypto = Access::crypto(*c.client);
         const QJsonObject keys = crypto.publicKeys();
+        Access::pinDevice(*c.client, "mobile-fork", 1, keys);
         c.transport.statusForPath.insert("/v2/device-keys/mobile-fork/1", 200);
         c.transport.responseForPath.insert(
             "/v2/device-keys/mobile-fork/1",
@@ -1908,8 +1909,11 @@ class CloudPrivacyTest final : public QObject {
         Context c(dir.filePath("journal.sqlite"));
         c.start();
         const QString path = QStringLiteral("/v2/device-keys/mobile-1/1");
+        const QJsonObject senderKeys = Access::crypto(*c.client).publicKeys();
+        Access::pinDevice(*c.client, "mobile-1", 1, senderKeys);
         c.transport.statusForPath.insert(path, 200);
-        c.transport.responseForPath.insert(path, R"({"keys":{"signingPublicKey":"synthetic"}})");
+        c.transport.responseForPath.insert(
+            path, QJsonDocument(QJsonObject{{"keys", senderKeys}}).toJson(QJsonDocument::Compact));
         c.transport.statusForPath.insert(QStringLiteral("/v2/device-keys/mobile-1/2"), 503);
         const auto reads = [&c](const QString& keyPath) {
             return std::count_if(
@@ -1925,8 +1929,8 @@ class CloudPrivacyTest final : public QObject {
         };
         keys(1);
         QTRY_COMPARE(answers.size(), 1);
-        QCOMPARE(answers.last().first.value("signingPublicKey").toString(),
-                 QStringLiteral("synthetic"));
+        QCOMPARE(answers.last().first.value("signingPublicKey"),
+                 senderKeys.value("signingPublicKey"));
         keys(1);
         QCOMPARE(answers.size(), 2);
         QCOMPARE(answers.last().first, answers.first().first);
@@ -1942,6 +1946,142 @@ class CloudPrivacyTest final : public QObject {
         QTRY_COMPARE(answers.size(), 4);
         QVERIFY(!answers.last().second.isEmpty());
         QCOMPARE(Access::cachedSenderKeys(*c.client), 1);
+    }
+
+    void onlyDevicesPinnedHereReceiveKeysOrSendCommands() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("journal.sqlite"));
+        c.start();
+        CredentialStore phoneStore("pinned-phone");
+        CredentialStore intruderStore("relay-intruder");
+        const QJsonObject phone = CloudCrypto(&phoneStore).publicKeys();
+        const QJsonObject intruder = CloudCrypto(&intruderStore).publicKeys();
+        const auto row = [](const QString& id, const QJsonObject& keys) {
+            return QJsonObject{{"id", id}, {"keyVersion", 1}, {"status", "active"}, {"keys", keys}};
+        };
+        const auto recipients = [&c] {
+            QStringList ids;
+            for (qsizetype index = 0; index < c.transport.requests.size(); ++index) {
+                if (c.transport.requests.at(index).url().path() != "/v2/session-keys:append")
+                    continue;
+                ids.clear();
+                for (const auto& envelope : QJsonDocument::fromJson(c.transport.bodies.at(index))
+                                                .object()
+                                                .value("envelopes")
+                                                .toArray())
+                    ids.append(envelope.toObject().value("recipientDeviceId").toString());
+            }
+            return ids;
+        };
+        const auto distribute = [&](const QJsonArray& devices) {
+            const qsizetype before = c.transport.requests.size();
+            c.transport.statusForPath.insert("/v2/devices", 200);
+            c.transport.responseForPath.insert("/v2/devices", QJsonDocument(devices).toJson());
+            c.transport.statusForPath.insert("/v2/session-keys:append", 202);
+            Access::distributeKeys(*c.client);
+            QTRY_VERIFY(std::any_of(c.transport.requests.cbegin() + before,
+                                    c.transport.requests.cend(), [](const auto& request) {
+                                        return request.url().path() == "/v2/session-keys:append";
+                                    }));
+        };
+
+        // The first device list after the upgrade is adopted: existing pairings keep working.
+        QVERIFY(!Access::pins(*c.client).initialized());
+        distribute({row("phone", phone)});
+        QCOMPARE(recipients(), QStringList{"phone"});
+        QVERIFY(Access::pins(*c.client).initialized());
+
+        // A device the relay adds later, or the phone's id with substituted keys, gets nothing.
+        distribute({row("phone", phone), row("intruder", intruder)});
+        QCOMPARE(recipients(), QStringList{"phone"});
+        QVERIFY(!Access::pins(*c.client).trusts(row("phone", intruder)));
+
+        QList<std::pair<QJsonObject, QString>> answers;
+        for (const auto& [id, keys] :
+             {std::pair{QString("intruder"), intruder}, std::pair{QString("phone"), intruder},
+              std::pair{QString("phone"), phone}}) {
+            const QString path = QStringLiteral("/v2/device-keys/%1/1").arg(id);
+            c.transport.statusForPath.insert(path, 200);
+            c.transport.responseForPath.insert(
+                path, QJsonDocument(QJsonObject{{"keys", keys}}).toJson(QJsonDocument::Compact));
+            const qsizetype expected = answers.size() + 1;
+            Access::senderKeys(*c.client, id, 1,
+                               [&answers](const QJsonObject& value, const QString& error) {
+                                   answers.append({value, error});
+                               });
+            QTRY_COMPARE(answers.size(), expected);
+            Access::expireSenderKeys(*c.client);
+        }
+        QTRY_COMPARE(answers.size(), 3);
+        QCOMPARE(answers.at(0).second, QStringLiteral("The sender is not paired with this Mac."));
+        QCOMPARE(answers.at(1).second, QStringLiteral("The sender is not paired with this Mac."));
+        QVERIFY(answers.at(2).second.isEmpty());
+        QCOMPARE(answers.at(2).first.value("signingPublicKey"), phone.value("signingPublicKey"));
+    }
+
+    void approvalRecomputesTheClaimDigestAndPinsTheDevice() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("journal.sqlite"));
+        c.start();
+        QVERIFY(Access::pins(*c.client).adopt({})); // pins exist, nothing pinned yet
+        CredentialStore phoneStore("claiming-phone");
+        CredentialStore relayStore("relay-substitute");
+        const QJsonObject phone = CloudCrypto(&phoneStore).publicKeys();
+        const QJsonObject relay = CloudCrypto(&relayStore).publicKeys();
+        // The relay's and the phone's formula, written out independently of DevicePins.
+        const auto digest = [](const QJsonObject& keys) {
+            const QByteArray json = QStringLiteral("[\"ticket-1\",\"phone\",1,\"%1\",\"%2\"]")
+                                        .arg(keys.value("agreementPublicKey").toString(),
+                                             keys.value("signingPublicKey").toString())
+                                        .toUtf8();
+            return QString::fromLatin1(
+                QCryptographicHash::hash(json, QCryptographicHash::Sha256)
+                    .toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals));
+        };
+        const QString ticketPath = QStringLiteral("/v2/pairing/tickets/ticket-1");
+        const auto approve = [&](const QJsonObject& claimedKeys, const QString& claimDigest,
+                                 const QString& confirmed) {
+            c.transport.statusForPath.insert(ticketPath, 200);
+            c.transport.responseForPath.insert(
+                ticketPath,
+                QJsonDocument(QJsonObject{{"id", "ticket-1"},
+                                          {"status", "claimed"},
+                                          {"claimedDevice", QJsonObject{{"id", "phone"},
+                                                                        {"keyVersion", 1},
+                                                                        {"status", "pending"},
+                                                                        {"keys", claimedKeys}}},
+                                          {"claimDigest", claimDigest}})
+                    .toJson(QJsonDocument::Compact));
+            c.transport.statusForPath.insert(ticketPath + "/approve", 200);
+            std::optional<QString> result;
+            Access::approvePairing(
+                *c.client, "ticket-1", confirmed,
+                [&result](const QJsonObject&, const QString& error) { result = error; });
+            [&] { QTRY_VERIFY(result.has_value()); }();
+            return result.value_or(QStringLiteral("no answer"));
+        };
+        const auto approvals = [&] {
+            return std::count_if(c.transport.requests.cbegin(), c.transport.requests.cend(),
+                                 [&](const auto& request) {
+                                     return request.url().path() == ticketPath + "/approve";
+                                 });
+        };
+
+        // The relay substitutes its own keys but keeps the digest the phone shows.
+        QCOMPARE(approve(relay, digest(phone), digest(phone)),
+                 QStringLiteral("The device claim does not match its keys."));
+        // Or swaps keys and digest together after the user confirmed the phone's code.
+        QCOMPARE(approve(relay, digest(relay), digest(phone)),
+                 QStringLiteral("The device claim does not match its keys."));
+        QCOMPARE(approvals(), 0);
+        QVERIFY(!Access::pins(*c.client).trustsKeys("phone", 1, relay));
+
+        QCOMPARE(approve(phone, digest(phone), digest(phone)), QString());
+        QCOMPARE(approvals(), 1);
+        QVERIFY(Access::pins(*c.client).trustsKeys("phone", 1, phone));
+        QVERIFY(!Access::pins(*c.client).trustsKeys("phone", 1, relay));
+        QVERIFY(Access::pins(*c.client).unpin("phone"));
+        QVERIFY(!Access::pins(*c.client).trustsKeys("phone", 1, phone));
     }
 
     void machineSignsOnlyAThirtyTwoByteChallenge() {
@@ -2208,6 +2348,89 @@ class CloudPrivacyTest final : public QObject {
         QCOMPARE(create(b, "command-through-b", "through-b"),
                  QStringLiteral("worktree_quota_exceeded"));
         QVERIFY(git(bare, {"show-ref", "--verify", "--quiet", "refs/heads/through-b"}) != 0);
+    }
+
+    void aNewEnrollmentTrustsNoDeviceUntilOneIsApproved() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("journal.sqlite"));
+        c.start();
+        c.transport.statusForPath.insert("/v2/machines:enroll", 201);
+        c.transport.responseForPath.insert(
+            "/v2/machines:enroll",
+            R"({"id":"machine-synthetic","workspaceId":"workspace-synthetic","keyVersion":1})");
+        bool answered = false;
+        Access::enroll(*c.client, [&answered](const QJsonObject&, const QString&) {
+            answered = true; // the fake relay has no credential endpoint; enrollment is stored
+        });
+        QTRY_VERIFY(answered);
+        QVERIFY(Access::pins(*c.client).initialized());
+
+        // Phones another Mac of this workspace paired are listed, but not adopted here.
+        CredentialStore otherStore("other-macs-phone");
+        const QJsonObject other = CloudCrypto(&otherStore).publicKeys();
+        Access::configure(*c.client, c.transport);
+        c.transport.statusForPath.insert("/v2/devices", 200);
+        c.transport.responseForPath.insert(
+            "/v2/devices", QJsonDocument(QJsonArray{QJsonObject{{"id", "other-phone"},
+                                                                {"keyVersion", 1},
+                                                                {"status", "active"},
+                                                                {"keys", other}}})
+                               .toJson());
+        const qsizetype before = c.transport.requests.size();
+        Access::distributeKeys(*c.client);
+        QTRY_VERIFY(
+            std::any_of(c.transport.requests.cbegin() + before, c.transport.requests.cend(),
+                        [](const auto& request) { return request.url().path() == "/v2/devices"; }));
+        QTest::qWait(100);
+        QVERIFY(std::none_of(
+            c.transport.requests.cbegin() + before, c.transport.requests.cend(),
+            [](const auto& request) { return request.url().path() == "/v2/session-keys:append"; }));
+        QVERIFY(!Access::pins(*c.client).trustsKeys("other-phone", 1, other));
+    }
+
+    void aNewEnrollmentDropsEarlierPinsAndStoresNothingIfThePinsCannotBeWritten() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("journal.sqlite"));
+        c.start();
+        c.transport.statusForPath.insert("/v2/machines:enroll", 201);
+        c.transport.responseForPath.insert(
+            "/v2/machines:enroll",
+            R"({"id":"machine-new","workspaceId":"workspace-synthetic","keyVersion":1})");
+        const auto storedMachineId = [] {
+            return std::any_of(r03::credentials.keyBegin(), r03::credentials.keyEnd(),
+                               [](const QString& key) { return key.endsWith("/machine-id"); });
+        };
+        QVERIFY(!storedMachineId());
+        // Writing the empty pin set fails: no enrollment is stored, so a restart cannot take
+        // this Mac for one enrolled before pins and adopt the relay's device list.
+        r03::failWritesTo = "device-pins";
+        QString failure;
+        bool answered = false;
+        Access::enroll(*c.client, [&](const QJsonObject&, const QString& error) {
+            failure = error;
+            answered = true;
+        });
+        QTRY_VERIFY(answered);
+        QCOMPARE(failure, QStringLiteral("synthetic credential write failure"));
+        QVERIFY(!storedMachineId());
+        QVERIFY(!Access::pins(*c.client).initialized());
+        // Nor does it take effect in memory: once storage recovers, this daemon must not sync
+        // (and adopt the relay's device list) as an enrollment from before pins.
+        QCOMPARE(Access::machineId(*c.client), QStringLiteral("machine-synthetic"));
+        r03::failWritesTo.clear();
+
+        // A phone approved under an earlier enrollment is not trusted by the next one.
+        CredentialStore phoneStore("earlier-phone");
+        const QJsonObject phone = CloudCrypto(&phoneStore).publicKeys();
+        Access::pinDevice(*c.client, "earlier-phone", 1, phone);
+        answered = false;
+        Access::enroll(*c.client,
+                       [&answered](const QJsonObject&, const QString&) { answered = true; });
+        QTRY_VERIFY(answered);
+        QVERIFY(storedMachineId());
+        QCOMPARE(Access::machineId(*c.client), QStringLiteral("machine-new"));
+        QVERIFY(Access::pins(*c.client).initialized());
+        QVERIFY(!Access::pins(*c.client).trustsKeys("earlier-phone", 1, phone));
     }
 
     void replyLostAfterItsHeaderIsAFailure() {

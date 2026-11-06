@@ -25,8 +25,10 @@ inline constexpr auto turnEndFileVariable = "KETPLUS_BROWSER_TURN_END_FILE";
                                         const QString& conversationId);
 bool signalTurnEnd(const QString& path);
 
+// The skill of the runtime the daemon launches: the bundled one, else the source checkout named
+// in settings or containing `applicationDir`. Never the open repository, which may be untrusted.
 [[nodiscard]] QString
-browserSkillFile(const Settings& settings, const QString& activePath,
+browserSkillFile(const Settings& settings,
                  const QString& applicationDir = QCoreApplication::applicationDirPath());
 
 } // namespace ketplus::browser_tools
