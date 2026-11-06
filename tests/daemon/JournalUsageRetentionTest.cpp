@@ -33,6 +33,15 @@ class Database {
         qWarning() << query.lastError();
         return false;
     }
+    QString queryPlan(const QString& statement) {
+        QSqlQuery query(db_);
+        if (!query.exec("EXPLAIN QUERY PLAN " + statement))
+            return query.lastError().text();
+        QStringList details;
+        while (query.next())
+            details.append(query.value(3).toString());
+        return details.join('\n');
+    }
     qint64 scalar(const QString& statement) {
         QSqlQuery query(db_);
         if (!query.exec(statement) || !query.next())
@@ -269,6 +278,48 @@ class JournalUsageRetentionTest final : public QObject {
         QVERIFY(elapsed < 1000);
         QVERIFY(written);
         QCOMPARE(sweep(journal), 24);
+    }
+
+    void rawBacklogUsesTurnLookup_data() {
+        QTest::addColumn<bool>("upgrade");
+        QTest::newRow("fresh") << false;
+        QTest::newRow("existing-journal") << true;
+    }
+
+    void rawBacklogUsesTurnLookup() {
+        QFETCH(bool, upgrade);
+        QTemporaryDir directory;
+        const QString path = directory.filePath("journal.sqlite");
+        {
+            LocalJournal journal(path);
+            QVERIFY(seed(journal, path));
+        }
+        Database database(path);
+        // A later unacknowledged turn must not make each older-turn ACK probe scan
+        // the entire raw backlog. This is synthetic storage, never a provider call.
+        QVERIFY(database.exec(
+            "WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<300000) "
+            "INSERT INTO "
+            "events(session_id,generation,cursor,event_type,payload,sent_at,turn_sequence) "
+            "SELECT 'session',1,1000+x,'usage.context','{}','2020-01-01T00:00:00.000Z',24 FROM n"));
+        if (upgrade)
+            QVERIFY(database.exec("DROP INDEX IF EXISTS events_turn"));
+        LocalJournal journal(path); // also installs the index on pre-existing journals
+        Database migrated(path);    // fresh reader sees the migrated schema, not a cached plan
+        const auto plan = migrated.queryPlan(
+            "SELECT 1 FROM events WHERE session_id='session' AND generation=1 AND turn_sequence=1");
+        QElapsedTimer timer;
+        timer.start();
+        const auto removed = journal.pruneUsageSamples(cutoff(), 128);
+        const auto elapsed = timer.elapsed();
+        qInfo().noquote() << "300000 raw events, 128 replay rows:" << elapsed << "ms;" << plan;
+        QCOMPARE(removed, std::optional<qint64>(24));
+        QCOMPARE(database.scalar("SELECT count(*) FROM events"), 300000);
+        QVERIFY2(plan.contains("COVERING INDEX events_turn") &&
+                     plan.contains("session_id=? AND generation=? AND turn_sequence=?"),
+                 qPrintable(plan));
+        // Wide headroom for slow runners; query-plan assertion is the deterministic guard.
+        QVERIFY2(elapsed < 1000, "Idle retention stalled on unrelated raw backlog");
     }
 
     void invalidLimitsDoNotTouchHistory() {

@@ -367,3 +367,21 @@ checks the optional effective configuration report, unknown generation rejection
 mutation through a reporting payload, and no organization report in session history.
 The separate analytics service tests cover report pagination, cents conversion, cached reads,
 credential rotation and sanitized provider failures with fake networking. No inference calls.
+
+### Usage retention backlog regression
+
+`JournalUsageRetentionTest::rawBacklogUsesTurnLookup` creates 300,000 synthetic raw
+rows in a later turn, then measures a 128-row idle pass over older replay turns.
+It checks a covering ACK lookup on all three `events_turn` keys, preserves the
+raw backlog, and covers both fresh and pre-existing journals missing the index.
+The plan assertion is deterministic; a one-second timing ceiling has generous
+runner headroom. No live journal or provider is used. Reproduce Release timings:
+
+```sh
+cmake --preset daemon-release -DKETPLUS_BUILD_TESTS=ON
+cmake --build build/daemon-release --target ketplus_daemon_usage_retention_tests
+benchmarks/run-usage-retention.sh > /tmp/usage-retention-results.txt
+```
+
+The script records hardware and three runs. Timings exclude fixture creation and
+the one-time index build on journal open; they are not a multi-GB startup benchmark.

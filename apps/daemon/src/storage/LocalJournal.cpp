@@ -297,6 +297,12 @@ bool LocalJournal::migrateTranscriptSchema() {
     if (!initializeContexts())
         return false;
     QSqlQuery index(database_);
+    // Retention probes a specific turn, not the whole session's raw backlog.
+    if (!index.exec(QStringLiteral("CREATE INDEX IF NOT EXISTS events_turn ON "
+                                   "events(session_id, generation, turn_sequence)"))) {
+        setError(index.lastError().text());
+        return false;
+    }
     if (!index.exec(
             QStringLiteral("CREATE INDEX IF NOT EXISTS replay_events_turn ON "
                            "replay_events(session_id, generation, turn_sequence, cursor)"))) {

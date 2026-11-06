@@ -15,7 +15,11 @@ storage API permits 1–256 rows per call. The scan position advances only after
 successful transaction, wraps at the end and starts again after restart. Rows
 that are recent or unacknowledged are therefore reconsidered on later sweeps.
 This bounds the outer scan and mutation batch, not the total wall-clock cost of
-the indexed eligibility checks within an unusually large turn.
+the indexed eligibility checks within an unusually large turn. Journal initialization
+adds `events_turn(session_id, generation, turn_sequence)` to both new and existing
+journals. The ACK probe uses this covering index instead of scanning a session's
+raw backlog for every candidate. Building the index is a one-time startup cost
+for existing journals; it is not part of the idle-pass time budget.
 
 A usage row can be removed only when:
 
