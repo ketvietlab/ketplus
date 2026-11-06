@@ -115,6 +115,7 @@ class CloudPrivacyTestAccess {
             qFatal("Synthetic device pin failed");
     }
     static DevicePins& pins(CloudControlClient& client) { return client.pins_; }
+    static QString machineId(const CloudControlClient& client) { return client.machineId_; }
     static void distributeKeys(CloudControlClient& client) { client.distributeKeys(); }
     static void approvePairing(CloudControlClient& client, const QString& ticketId,
                                const QString& confirmedDigest,

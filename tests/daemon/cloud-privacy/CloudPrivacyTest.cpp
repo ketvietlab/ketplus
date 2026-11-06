@@ -2211,7 +2211,7 @@ class CloudPrivacyTest final : public QObject {
         c.transport.statusForPath.insert("/v2/machines:enroll", 201);
         c.transport.responseForPath.insert(
             "/v2/machines:enroll",
-            R"({"id":"machine-synthetic","workspaceId":"workspace-synthetic","keyVersion":1})");
+            R"({"id":"machine-new","workspaceId":"workspace-synthetic","keyVersion":1})");
         const auto storedMachineId = [] {
             return std::any_of(r03::credentials.keyBegin(), r03::credentials.keyEnd(),
                                [](const QString& key) { return key.endsWith("/machine-id"); });
@@ -2230,6 +2230,9 @@ class CloudPrivacyTest final : public QObject {
         QCOMPARE(failure, QStringLiteral("synthetic credential write failure"));
         QVERIFY(!storedMachineId());
         QVERIFY(!Access::pins(*c.client).initialized());
+        // Nor does it take effect in memory: once storage recovers, this daemon must not sync
+        // (and adopt the relay's device list) as an enrollment from before pins.
+        QCOMPARE(Access::machineId(*c.client), QStringLiteral("machine-synthetic"));
         r03::failWritesTo.clear();
 
         // A phone approved under an earlier enrollment is not trusted by the next one.
@@ -2241,6 +2244,7 @@ class CloudPrivacyTest final : public QObject {
                        [&answered](const QJsonObject&, const QString&) { answered = true; });
         QTRY_VERIFY(answered);
         QVERIFY(storedMachineId());
+        QCOMPARE(Access::machineId(*c.client), QStringLiteral("machine-new"));
         QVERIFY(Access::pins(*c.client).initialized());
         QVERIFY(!Access::pins(*c.client).trustsKeys("earlier-phone", 1, phone));
     }
