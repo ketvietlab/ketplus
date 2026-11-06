@@ -46,7 +46,9 @@ add a device row with its own keys and read every session, send commands and ope
 - Devices paired before the upgrade are trusted as the relay listed them at adoption. A relay
   that was already malicious at that moment is not detected.
 - Remaining work tracked in #83:
-  - #85: a domain-separated machine-challenge signature, which needs a relay change.
+  - #85: coordinate relay deployment for the v2-only machine-challenge client
+    ([ADR 0036](0036-daemon-challenge-domain-separation.md)); client implementation
+    alone does not complete the rollout.
 - Since #89, `remote.pairing.status` derives the confirmation code itself and gives none for a
   claim whose keys do not reproduce its digest; Desktop shows only that code, with no fixed
   fallback. The QR code adds `machine`, `kv` and

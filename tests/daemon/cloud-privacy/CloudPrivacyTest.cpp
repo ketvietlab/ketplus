@@ -2189,9 +2189,13 @@ class CloudPrivacyTest final : public QObject {
         };
         const auto attempt = [&](const QString& encoded) {
             c.transport.responseForPath.insert(
-                challenges,
-                QJsonDocument(QJsonObject{{"id", "challenge_1"}, {"challenge", encoded}})
-                    .toJson(QJsonDocument::Compact));
+                challenges, QJsonDocument(QJsonObject{{"id", "challenge_1"},
+                                                      {"challenge", encoded},
+                                                      {"machineId", "machine-synthetic"},
+                                                      {"keyVersion", 1},
+                                                      {"signatureVersion", 2},
+                                                      {"signatureAlgorithm", "Ed25519"}})
+                                .toJson(QJsonDocument::Compact));
             std::optional<std::pair<bool, QString>> result;
             Access::credential(*c.client, [&result](const bool ready, const QString& error) {
                 result = std::pair{ready, error};

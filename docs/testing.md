@@ -10,10 +10,11 @@ cmake --build --preset dev
 ctest --preset dev
 ```
 
-Every ctest test runs with `QT_QPA_PLATFORM=offscreen`: `ketplus_tests_offscreen()`
+Every Pro/daemon ctest test runs with `QT_QPA_PLATFORM=offscreen`: `ketplus_tests_offscreen()`
 (`cmake/OffscreenTests.cmake`) sets it for each test in `tests/` and `tests/daemon/`, over the
 test's own environment and the shell's, so a test run never opens windows on the screen. A
-test binary run directly needs it exported. The Qt build and Release
+test binary run directly needs it exported. This override does not cover Lite tests in
+`core/`. The Qt build and Release
 characterization run on macOS only; Ubuntu builds are paused to cut CI cost and
 must be restored before a Linux release. The browser regression and design
 evidence checks still run on Ubuntu. Private Windows CI remains deferred until
@@ -60,6 +61,7 @@ obsolete run. See `docs/release-process.md`.
 | Workspace boundary | `ketplus_workspace_tests` | Pro shell with CM explorer behavior |
 | Async question lifetime | `ketplus_async_question_lifetime_tests` | turn expiry, session/generation isolation, late items and stale answers |
 | Daemon protocol/storage | `ketplus_daemon_protocol_tests` | framing, journal, deduplication, approval expiry |
+| Daemon challenge v2 (#85) | `ketplus_daemon_machine_challenge_tests` | relay conformance bytes/signature, strict schema and machine/key binding, no legacy retry or credential request on rejection, and real HTTP serialization/signing with an in-memory credential store |
 | Journal space (#128) | `ketplus_daemon_journal_space_tests` | the move to incremental vacuum keeps every row, drops the free pages and the copy is owner-only; an interrupted copy is discarded; an unreadable journal, or one open in an older daemon, is left as it is; new journals start on incremental vacuum; batched reclaim, the file shrinking while open, readers deferring the checkpoint, then the log emptying, without a wait, and the minimum; one daemon per journal |
 | Economic context harness | `ketplus_context_harness_tests` | strict window validation, journal migration/inheritance, Codex start/resume/fork/reset, idle configuration fences, Claude inherited turn options; fake providers only |
 | Browser provider wiring | `ketplus_browser_provider_integration_tests` | host routing instructions for direct/daemon Codex and new/resumed Claude/Cursor, prompt/image preservation, scoped approvals, disabled/damaged/missing runtime |
