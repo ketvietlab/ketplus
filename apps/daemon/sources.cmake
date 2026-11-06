@@ -28,6 +28,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/cloud/CloudControlClient.h
     src/cloud/CloudControlDeviceSignIn.cpp
     src/cloud/DevicePins.cpp
+    src/cloud/SessionCredentials.cpp
     src/cloud/CloudControlSignIn.cpp
     src/cloud/CloudControlBatching.h
     src/cloud/WorktreeBranches.cpp

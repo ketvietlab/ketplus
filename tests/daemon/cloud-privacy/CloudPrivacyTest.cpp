@@ -14,6 +14,8 @@
 #include <QJsonDocument>
 #include <QMessageAuthenticationCode>
 #include <QProcess>
+#include <QSqlDatabase>
+#include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QUrlQuery>
 #include <QtTest>
@@ -2520,6 +2522,214 @@ class CloudPrivacyTest final : public QObject {
         QCOMPARE(Access::machineId(*c.client), QStringLiteral("machine-new"));
         QVERIFY(Access::pins(*c.client).initialized());
         QVERIFY(!Access::pins(*c.client).trustsKeys("earlier-phone", 1, phone));
+    }
+
+    // #84: what the credential file keeps for each conversation is bounded by the journal.
+    void signingOutRemovesTheEnrollmentAndEveryCursorInOneRewrite() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("journal.sqlite"));
+        const QString service = QStringLiteral("dev.ketplus.daemon.control/");
+        r03::credentials.insert(service + "machine-id", "machine-synthetic");
+        r03::credentials.insert(service + "workspace-id", "workspace-synthetic");
+        r03::credentials.insert(service + "control-url",
+                                CloudControlClient::configuredControlUrl().toString().toUtf8());
+        for (int session = 0; session < 5; ++session)
+            r03::credentials.insert(
+                service + QStringLiteral("uploaded-cursor-gone-%1-1").arg(session), "9");
+        r03::credentials.insert(service + "uploaded-cursor-session-synthetic-1", "42");
+        CloudControlClient client(&c.journal, &c.host);
+        r03::rewrites = 0;
+        QString error = "unanswered";
+        client.handleLocal("remote.sign_out", {},
+                           [&error](const QJsonObject&, const QString& detail) { error = detail; });
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QCOMPARE(r03::rewrites, 1);
+        const auto stored = [&service](const QString& prefix) {
+            return std::any_of(
+                r03::credentials.keyBegin(), r03::credentials.keyEnd(),
+                [&](const QString& key) { return key.startsWith(service + prefix); });
+        };
+        QVERIFY(!stored("uploaded-cursor-"));
+        QVERIFY(!stored("machine-id"));
+        // The workspace its content keys were made in outlives the enrollment.
+        QCOMPARE(r03::credentials.value(service + "session-keys-workspace"),
+                 QByteArray("workspace-synthetic"));
+    }
+
+    void deletedConversationsLoseTheirKeysWrapsAndCursors() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("journal.sqlite"));
+        const QString service = QStringLiteral("dev.ketplus.daemon.control/");
+        const auto accounts = [&service](const QString& session) {
+            return QStringList{service + QStringLiteral("session-key-%1-1-1")
+                                             .arg(QString::fromLatin1(
+                                                 QCryptographicHash::hash(
+                                                     session.toUtf8(), QCryptographicHash::Sha256)
+                                                     .toHex())),
+                               service + QStringLiteral("wrapped-%1-1-mobile-1-1").arg(session),
+                               service + QStringLiteral("uploaded-cursor-%1-1").arg(session)};
+        };
+        // "session" is a prefix of the live id: its entries must not pass for the live one's.
+        for (const QString& gone : {QStringLiteral("session-gone"), QStringLiteral("session")}) {
+            for (const QString& account : accounts(gone))
+                r03::credentials.insert(account, "stale");
+        }
+        for (const QString& account : accounts("session-synthetic"))
+            r03::credentials.insert(account, "live");
+        r03::credentials.insert(service + "path-id-salt", "salt");
+        // Keys and wraps set aside for a workspace this Mac left are bounded the same way.
+        const QString setAside =
+            QStringLiteral("workspace-keys-%1-")
+                .arg(QString::fromLatin1(
+                    QCryptographicHash::hash("workspace-left", QCryptographicHash::Sha256)
+                        .toHex()));
+        const QString goneAside = service + setAside + "wrapped-session-gone-1-mobile-1-1";
+        const QString liveAside = service + setAside + "wrapped-session-synthetic-1-mobile-1-1";
+        r03::credentials.insert(goneAside, "stale");
+        r03::credentials.insert(liveAside, "live");
+
+        // A conversation deleted while the daemon was not running is swept at start.
+        CloudControlClient client(&c.journal, &c.host);
+        client.start();
+        for (const QString& gone : {QStringLiteral("session-gone"), QStringLiteral("session")}) {
+            for (const QString& account : accounts(gone))
+                QVERIFY2(!r03::credentials.contains(account), qPrintable(account));
+        }
+        for (const QString& account : accounts("session-synthetic"))
+            QVERIFY2(r03::credentials.contains(account), qPrintable(account));
+        QVERIFY(r03::credentials.contains(service + "path-id-salt"));
+        QVERIFY(!r03::credentials.contains(goneAside));
+        QVERIFY(r03::credentials.contains(liveAside));
+
+        // One deleted now loses them as the deletion is announced.
+        QVERIFY(c.journal.deleteSession("session-synthetic", 1));
+        emit c.host.eventReady(
+            {{"session_id", "session-synthetic"}, {"event_type", "session.deleted"}});
+        for (const QString& account : accounts("session-synthetic"))
+            QVERIFY2(!r03::credentials.contains(account), qPrintable(account));
+        QVERIFY(r03::credentials.contains(service + "path-id-salt"));
+    }
+
+    void enrollingIntoAnotherWorkspaceMakesNewContentKeys() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("journal.sqlite"));
+        c.start();
+        const auto enrollInto = [&c](const QString& workspace) {
+            c.transport.statusForPath.insert("/v2/machines:enroll", 201);
+            c.transport.responseForPath.insert(
+                "/v2/machines:enroll",
+                QStringLiteral(R"({"id":"machine-%1","workspaceId":"%1","keyVersion":1})")
+                    .arg(workspace)
+                    .toUtf8());
+            QString failure = "unanswered";
+            Access::enroll(*c.client, [&failure](const QJsonObject&, const QString& error) {
+                failure = error;
+            });
+            QTest::qWaitFor([&failure] { return failure != "unanswered"; });
+            return failure;
+        };
+        enrollInto("workspace-a");
+        const QByteArray first = Access::crypto(*c.client).sessionKey("session-synthetic", 1);
+        QCOMPARE(first.size(), 32);
+        const QString wrap =
+            QStringLiteral("dev.ketplus.daemon.control/wrapped-session-synthetic-1-phone-a-1");
+        r03::credentials.insert(wrap, "wrapped for a phone of workspace-a");
+        const QString cursor =
+            QStringLiteral("dev.ketplus.daemon.control/uploaded-cursor-session-synthetic-1");
+        r03::credentials.insert(cursor, "42");
+
+        // Signing in to the same workspace again keeps them: the relay holds their wraps.
+        enrollInto("workspace-a");
+        QCOMPARE(Access::crypto(*c.client).sessionKey("session-synthetic", 1), first);
+        QVERIFY(r03::credentials.contains(wrap));
+
+        // Another workspace's devices never received these keys, and the old one's must not
+        // read what is uploaded next. If that cannot be stored, the daemon keeps running the
+        // enrollment it had, with its keys; a restart into the stored enrollment replaces them.
+        r03::failWritesTo = "session-keys-workspace";
+        QVERIFY(!enrollInto("workspace-b").isEmpty());
+        QCOMPARE(Access::machineId(*c.client), QStringLiteral("machine-workspace-a"));
+        QCOMPARE(Access::crypto(*c.client).sessionKey("session-synthetic", 1), first);
+        QVERIFY(r03::credentials.contains(wrap));
+        r03::failWritesTo.clear();
+        {
+            // This build's relay, as the enrollment would have been stored outside the test.
+            r03::credentials.insert("dev.ketplus.daemon.control/control-url",
+                                    CloudControlClient::configuredControlUrl().toString().toUtf8());
+            CloudControlClient restarted(&c.journal, &c.host);
+            QCOMPARE(Access::machineId(restarted), QStringLiteral("machine-workspace-b"));
+            QVERIFY(!r03::credentials.contains(wrap));
+            // Progress uploaded to workspace-a would resume workspace-b mid-history.
+            QVERIFY(!r03::credentials.contains(cursor));
+            QVERIFY(Access::crypto(restarted).sessionKey("session-synthetic", 1) != first);
+        }
+        const QByteArray second = Access::crypto(*c.client).sessionKey("session-synthetic", 1);
+        QCOMPARE(second.size(), 32);
+        r03::credentials.insert(wrap, "wrapped for a phone of workspace-b");
+
+        // Returning to a workspace takes back its keys and wraps: its relay holds those wraps
+        // under the same ids, and its history is encrypted with those keys.
+        enrollInto("workspace-a");
+        QCOMPARE(Access::machineId(*c.client), QStringLiteral("machine-workspace-a"));
+        QCOMPARE(Access::crypto(*c.client).sessionKey("session-synthetic", 1), first);
+        QCOMPARE(r03::credentials.value(wrap), QByteArray("wrapped for a phone of workspace-a"));
+        enrollInto("workspace-b");
+        QCOMPARE(Access::crypto(*c.client).sessionKey("session-synthetic", 1), second);
+        QCOMPARE(r03::credentials.value(wrap), QByteArray("wrapped for a phone of workspace-b"));
+
+        // A workspace never used here starts with no key.
+        enrollInto("workspace-c");
+        QVERIFY(!r03::credentials.contains(wrap));
+        const QByteArray third = Access::crypto(*c.client).sessionKey("session-synthetic", 1);
+        QCOMPARE(third.size(), 32);
+        QVERIFY(third != first && third != second);
+    }
+
+    // sessions() reads as empty when the journal cannot be read; that is no proof that every
+    // conversation was deleted.
+    void aFailedJournalReadRemovesNoConversationCredentials() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("journal.sqlite"));
+        const QString service = QStringLiteral("dev.ketplus.daemon.control/");
+        const QStringList accounts{service +
+                                       QStringLiteral("wrapped-session-synthetic-1-mobile-1-1"),
+                                   service + QStringLiteral("uploaded-cursor-session-synthetic-1")};
+        for (const QString& account : accounts)
+            r03::credentials.insert(account, "live");
+        const QByteArray key = [&c] {
+            CloudControlClient owner(&c.journal, &c.host);
+            return Access::crypto(owner).sessionKey("session-synthetic", 1);
+        }();
+        QCOMPARE(key.size(), 32);
+        {
+            QSqlDatabase blocker = QSqlDatabase::addDatabase("QSQLITE", "journal-blocker");
+            blocker.setDatabaseName(dir.filePath("journal.sqlite"));
+            QVERIFY(blocker.open());
+            QVERIFY(QSqlQuery(blocker).exec("ALTER TABLE sessions RENAME TO sessions_hidden"));
+            CloudControlClient client(&c.journal, &c.host);
+            client.start();
+            QVERIFY(!Access::error(client).isEmpty());
+            QVERIFY(QSqlQuery(blocker).exec("ALTER TABLE sessions_hidden RENAME TO sessions"));
+            blocker.close();
+        }
+        QSqlDatabase::removeDatabase("journal-blocker");
+        for (const QString& account : accounts)
+            QVERIFY2(r03::credentials.contains(account), qPrintable(account));
+        CloudControlClient after(&c.journal, &c.host);
+        QCOMPARE(Access::crypto(after).sessionKey("session-synthetic", 1), key);
+    }
+
+    // An enrollment from before #84 records its workspace at start, so a later sign-out and
+    // sign-in to another workspace still replaces its keys.
+    void anEarlierEnrollmentRecordsItsWorkspaceAtStart() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("journal.sqlite"));
+        const QString service = QStringLiteral("dev.ketplus.daemon.control/");
+        r03::credentials.insert(service + "machine-id", "machine-legacy");
+        r03::credentials.insert(service + "workspace-id", "workspace-legacy");
+        CloudControlClient client(&c.journal, &c.host);
+        QCOMPARE(r03::credentials.value(service + "session-keys-workspace"),
+                 QByteArray("workspace-legacy"));
     }
 
     void envelopesUseOnlyTheirOwnKeyEpochAndExactNonceAndTagSizes() {

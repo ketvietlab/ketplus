@@ -98,7 +98,7 @@ QUrl controlBaseUrl() {
 
 CloudControlClient::CloudControlClient(LocalJournal* journal, SessionHost* host, QObject* parent)
     : QObject(parent), journal_(journal), host_(host), crypto_(&credentials_), pins_(&credentials_),
-      baseUrl_(controlBaseUrl()),
+      sessionCredentials_(&credentials_), baseUrl_(controlBaseUrl()),
       wakeups_(baseUrl_, [this](std::function<void(const QString&)> answer) {
           ensureDaemonCredential(
               [this, answer = std::move(answer)](const bool ready, const QString&) {
@@ -124,6 +124,14 @@ CloudControlClient::CloudControlClient(LocalJournal* journal, SessionHost* host,
         workspaceId_.clear();
         lastError_ = QStringLiteral("This Mac is enrolled with %1, not %2.")
                          .arg(enrolledRelay, baseUrl_.toString());
+    }
+    // An enrollment stored by a sign-in that did not finish storing it is completed here, and one
+    // from before #84 records its workspace.
+    QString keysError;
+    if (!machineId_.isEmpty() && !sessionCredentials_.adoptWorkspace(workspaceId_, &keysError)) {
+        machineId_.clear();
+        workspaceId_.clear();
+        lastError_ = keysError;
     }
     if (!machineId_.isEmpty())
         registerCloudCursors();
@@ -158,6 +166,8 @@ CloudControlClient::CloudControlClient(LocalJournal* journal, SessionHost* host,
         // Phones read a conversation's state from the heartbeat. A turn that starts or ends
         // must not wait up to 15s for the next one, or they keep showing it as it was.
         const QString type = event.value(QStringLiteral("event_type")).toString();
+        if (type == QStringLiteral("session.deleted"))
+            pruneSessionCredentials();
         if (type == QStringLiteral("turn.started") || type == QStringLiteral("turn.completed"))
             stateSyncTimer_.start(300);
     });
@@ -174,6 +184,7 @@ CloudControlClient::~CloudControlClient() {
 QUrl CloudControlClient::configuredControlUrl() { return controlBaseUrl(); }
 
 void CloudControlClient::start() {
+    pruneSessionCredentials();
     syncTimer_.start();
     commandTimer_.start();
     if (!machineId_.isEmpty()) {
@@ -389,20 +400,19 @@ void CloudControlClient::signOut(LocalCallback callback) {
     QString removalError;
     // This build is not enrolled with its relay when the stored enrollment is another relay's;
     // that enrollment and its upload progress stay for a build that talks to it.
-    if (otherRelay_.isEmpty()) {
-        if (!clearUploadProgress(&removalError)) {
-            callback({}, removalError);
-            return;
-        }
-        for (const QString& account :
-             {QStringLiteral("machine-id"), QStringLiteral("workspace-id"),
-              QStringLiteral("machine-key-version"), QStringLiteral("control-url"),
-              QStringLiteral("device-pins")}) {
-            if (!credentials_.remove(account, &removalError)) {
-                callback({}, removalError);
-                return;
-            }
-        }
+    // The enrollment and its upload progress (see clearUploadProgress) go in one rewrite of the
+    // credential file.
+    const QSet<QString> enrollment{QStringLiteral("machine-id"), QStringLiteral("workspace-id"),
+                                   QStringLiteral("machine-key-version"),
+                                   QStringLiteral("control-url"), QStringLiteral("device-pins")};
+    if (otherRelay_.isEmpty() && !credentials_.removeIf(
+                                     [&enrollment](const QString& account) {
+                                         return enrollment.contains(account) ||
+                                                SessionCredentials::isUploadCursor(account);
+                                     },
+                                     &removalError)) {
+        callback({}, removalError);
+        return;
     }
     wakeups_.stop();
     credentialRequestInFlight_ = false;
@@ -424,13 +434,19 @@ bool CloudControlClient::clearUploadProgress(QString* error) {
     // Upload progress belongs to the relay being left. Keeping it made the next enrollment
     // resume mid-history, so that relay never received earlier events and rejected the rest
     // as a cursor gap.
-    for (const StoredSession& session : journal_->sessions()) {
-        if (!credentials_.remove(
-                QStringLiteral("uploaded-cursor-%1-%2").arg(session.id).arg(session.generation),
-                error))
-            return false;
+    return sessionCredentials_.clearUploadCursors(error);
+}
+
+void CloudControlClient::pruneSessionCredentials() {
+    // Only a complete list of live sessions proves the others were deleted.
+    const std::optional<QSet<QString>> live = journal_->sessionIds();
+    if (!live) {
+        lastError_ = journal_->errorString();
+        return;
     }
-    return true;
+    QString error;
+    if (!sessionCredentials_.pruneDeleted(*live, &error))
+        lastError_ = error;
 }
 
 QJsonObject CloudControlClient::status() const {

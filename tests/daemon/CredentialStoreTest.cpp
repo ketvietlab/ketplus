@@ -10,6 +10,7 @@ namespace ketplus::daemon {
 class CredentialStoreTestAccess final {
   public:
     static int fileReads(const CredentialStore& store) { return store.fileReads_; }
+    static int fileWrites(const CredentialStore& store) { return store.fileWrites_; }
 };
 } // namespace ketplus::daemon
 
@@ -55,6 +56,29 @@ class CredentialStoreTest final : public QObject {
         QVERIFY(store.remove(QStringLiteral("machine-id")));
         QCOMPARE(store.read(QStringLiteral("machine-id")), QByteArray());
         QCOMPARE(store.read(QStringLiteral("signing-private-key")), secret);
+    }
+
+    void removesMatchingAccountsWithOneWrite() {
+        const QString service = QStringLiteral("credential-store-batch");
+        QFile::remove(credentialFile(service));
+        CredentialStore store(service);
+        for (int session = 0; session < 5; ++session)
+            QVERIFY(store.write(QStringLiteral("uploaded-cursor-%1-1").arg(session), "7"));
+        QVERIFY(store.write(QStringLiteral("machine-id"), "machine-a"));
+        const int writes = CredentialStoreTestAccess::fileWrites(store);
+        QVERIFY(store.removeIf([](const QString& account) {
+            return account.startsWith(QStringLiteral("uploaded-cursor-"));
+        }));
+        QCOMPARE(CredentialStoreTestAccess::fileWrites(store), writes + 1);
+        QCOMPARE(CredentialStore(service).read(QStringLiteral("uploaded-cursor-3-1")),
+                 QByteArray());
+        QCOMPARE(CredentialStore(service).read(QStringLiteral("machine-id")),
+                 QByteArray("machine-a"));
+
+        // Nothing to remove leaves the file alone.
+        QVERIFY(store.removeIf([](const QString&) { return false; }));
+        QVERIFY(store.remove(QStringLiteral("uploaded-cursor-3-1")));
+        QCOMPARE(CredentialStoreTestAccess::fileWrites(store), writes + 1);
     }
 
     void readsTheFileAgainOnlyWhenItChanges() {

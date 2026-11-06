@@ -193,14 +193,17 @@ void CloudControlClient::enrollMachine(const quint64 signInEpoch, const QString&
             // devices it already served when pins were introduced (ADR 0034). The empty pin set
             // is written before the machine id, and the enrollment takes effect in memory only
             // once everything is stored, so a failed write never leaves an enrollment that this
-            // daemon or a restart would mistake for one from before pins.
+            // daemon or a restart would mistake for one from before pins. Content keys made in
+            // another workspace are removed last, so this daemon keeps the keys of the
+            // enrollment it still runs if a write fails; a restart removes them (#84).
             const bool stored =
                 pins_.reset(&storageError) &&
                 storeString(QStringLiteral("control-url"), baseUrl_.toString(), &storageError) &&
                 storeString(QStringLiteral("machine-id"), machineId, &storageError) &&
                 storeString(QStringLiteral("workspace-id"), workspaceId, &storageError) &&
                 storeString(QStringLiteral("machine-key-version"),
-                            QString::number(machineKeyVersion), &storageError);
+                            QString::number(machineKeyVersion), &storageError) &&
+                sessionCredentials_.adoptWorkspace(workspaceId, &storageError);
             if (!stored) {
                 callback({}, storageError);
                 return;
