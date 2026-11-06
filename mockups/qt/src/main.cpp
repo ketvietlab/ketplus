@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // KetPlus Qt mock. Options make review evidence repeatable:
 //   --screen=<id> --state=<state> --dark|--light --zoom=1.25   open one screen
-//   --open=model|mode|limits|reviewer                                   open a composer panel
+//   --open=model|mode|limits|reviewer|composer                          open a composer panel
 //   --screenshot=<file>                                         save the window and exit
 //   --smoke                                  open every screen; exit non-zero on QML warnings
 #include "KetAppearance.h"
@@ -68,11 +68,19 @@ int main(int argc, char* argv[]) {
         if (QFontDatabase::addApplicationFont(fonts.next()) < 0)
             std::fprintf(stderr, "Could not load %s\n", qPrintable(fonts.filePath()));
 
-    // Monospace text (code, diffs, inline code, conversation numbers) reads at 14 px; the rest
-    // of the KetPlus profile is unchanged.
+    // Mock overrides of the KetPlus profile. Monospace text (code, diffs, inline code,
+    // conversation numbers) reads at 14 px.
     ket::Profile profile = ket::Profile::ketPlus();
     profile.codePixels = 14;
     profile.conversationNumberPixels = 14;
+    // The composer's context ring reads lighter at 15 px with a 2 px stroke (kit: 19 and 3).
+    profile.usageRingSize = 15;
+    profile.usageRingStroke = 2;
+    // Sidebar text in Medium: conversation titles (selected or not) and their status line.
+    profile.conversationTitleWeight = 500;
+    profile.conversationSelectedTitleWeight = 500;
+    profile.conversationMetaWeight = 500;
+    profile.navItemActiveWeight = 500;
     ket::Profile::setCurrent(profile);
 
     if (parser.isSet(dark))

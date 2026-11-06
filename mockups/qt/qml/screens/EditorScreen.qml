@@ -4,9 +4,10 @@ import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
 import Ket
 import KetPlusMock
+import KetPlusMock.Native
 
 // Files & Editor: the explorer, editor tabs, breadcrumb, a read-only code view and the
-// status bars. Folders open and close; files open in tabs.
+// status bars, and the terminal below the editor. Folders open and close; files open in tabs.
 Item {
     id: screen
 
@@ -34,22 +35,59 @@ Item {
         return result
     }
 
-    readonly property string source: current.endsWith(".md") ? Fixtures.designSystem
-                                                            : Fixtures.navigationRail
+    readonly property var sources: ({
+        "NavigationRail.qml": Fixtures.navigationRail,
+        "design-system.md": Fixtures.designSystem,
+        "licensing.md": Mock.resourceText(":/docs/licensing.md")
+    })
+    readonly property string source: sources[current] || ""
+    // Markdown opens in Preview; each file keeps its own Preview or Source choice.
+    property var markdownModes: ({})
+    readonly property bool markdown: current.endsWith(".md")
+    readonly property bool previewing: markdown && markdownModes[current] !== "source"
+
+    function openFile(name) {
+        if (!tabs.includes(name))
+            tabs = tabs.concat([name])
+        current = name
+    }
+    function setMarkdownMode(mode) {
+        const next = Object.assign({}, markdownModes)
+        next[current] = mode
+        markdownModes = next
+    }
+
+    Component.onCompleted: {
+        if (window.editorFile !== "") {
+            openFile(window.editorFile)
+            if (window.editorSource)
+                setMarkdownMode("source")
+        }
+    }
+    Connections {
+        target: screen.window
+        function onEditorFileChanged() {
+            if (screen.window.editorFile !== "")
+                screen.openFile(screen.window.editorFile)
+        }
+        function onEditorSourceChanged() {
+            if (screen.markdown)
+                screen.setMarkdownMode(screen.window.editorSource ? "source" : "preview")
+        }
+    }
     readonly property var lines: source.replace(/\n$/, "").split("\n")
 
-    // A small QML highlighter for the sample; colours are semantic tokens.
-    function highlight(line) {
+    // Code lines coloured by the kit's syntax highlighter (Két tokens), as code blocks are.
+    readonly property var highlighted: markdown ? [] : KetTheme.highlightedLines(
+        source.replace(/\n$/, ""), current.split(".").pop(), KetTheme.dark)
+
+    // Markdown source: headings in the accent, the rest plain (URLs are not comments).
+    function highlight(line, index) {
+        if (!markdown)
+            return highlighted[index] || ""
         const escape = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/ /g, "&nbsp;")
-        const comment = line.indexOf("//")
-        let code = comment >= 0 ? line.slice(0, comment) : line
-        let html = escape(code)
-            .replace(/(&quot;|")([^"]*)"/g, "<font color='" + KetTheme.t.success + "'>\"$2\"</font>")
-            .replace(/\b(import|property|string|var|id)\b/g, "<font color='" + KetTheme.t.accentText + "'>$1</font>")
-            .replace(/^((?:&nbsp;)*)([a-z][A-Za-z.]*)(:)/, "$1<font color='" + KetTheme.t.info + "'>$2</font>$3")
-        if (comment >= 0)
-            html += "<font color='" + KetTheme.t.textMuted + "'>" + escape(line.slice(comment)) + "</font>"
-        return html
+        return /^#{1,6} /.test(line) ? "<font color='" + KetTheme.t.accentText + "'>" + escape(line) + "</font>"
+                                     : escape(line)
     }
 
     ColumnLayout {
@@ -98,9 +136,7 @@ Item {
                                         ? screen.openFolders.concat([modelData.name])
                                         : screen.openFolders.filter(n => n !== modelData.name)
                                 } else {
-                                    if (!screen.tabs.includes(modelData.name))
-                                        screen.tabs = screen.tabs.concat([modelData.name])
-                                    screen.current = modelData.name
+                                    screen.openFile(modelData.name)
                                 }
                             }
                         }
@@ -152,7 +188,7 @@ Item {
                             anchors.centerIn: parent
                             iconName: "terminal"
                             text: "Toggle terminal"
-                            onClicked: screen.window.notify("Terminal opens below the editor")
+                            onClicked: screen.window.editorTerminal = !screen.window.editorTerminal
                         }
                     }
                 }
@@ -160,7 +196,7 @@ Item {
                 KetBreadcrumb {
                     Layout.fillWidth: true
                     visible: screen.current !== ""
-                    path: screen.current.endsWith(".md") ? ["docs", screen.current]
+                    path: screen.markdown ? ["docs", screen.current]
                           : ["modules", "ai", "src", "agent", "qml", screen.current]
                     KetButton {
                         visible: !screen.current.endsWith(".md")
@@ -184,42 +220,95 @@ Item {
                     onActionTriggered: screen.window.spotlight.open()
                 }
 
-                ListView {
-                    id: code
+                Item {
                     visible: screen.current !== ""
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    clip: true
-                    topMargin: screen.px(14)
-                    model: screen.lines
-                    boundsBehavior: Flickable.StopAtBounds
-                    Basic.ScrollBar.vertical: Basic.ScrollBar {}
-                    delegate: Rectangle {
-                        required property string modelData
-                        required property int index
-                        width: code.width
-                        height: screen.px(24.6)
-                        color: index + 1 === screen.cursorLine ? KetTheme.t.accentSubtle : "transparent"
-                        Text {
-                            width: screen.px(48)
-                            anchors.verticalCenter: parent.verticalCenter
-                            horizontalAlignment: Text.AlignRight
-                            text: index + 1
-                            color: index + 1 === screen.cursorLine ? KetTheme.t.textSecondary : KetTheme.t.textMuted
-                            font.family: KetTheme.monoFontFamily
-                            font.pixelSize: screen.px(14)
+
+                    ListView {
+                        id: code
+                        anchors.fill: parent
+                        visible: !screen.previewing
+                        clip: true
+                        topMargin: screen.px(14)
+                        model: screen.lines
+                        boundsBehavior: Flickable.StopAtBounds
+                        Basic.ScrollBar.vertical: Basic.ScrollBar {}
+                        delegate: Rectangle {
+                            required property string modelData
+                            required property int index
+                            width: code.width
+                            height: screen.px(24.6)
+                            color: index + 1 === screen.cursorLine ? KetTheme.t.accentSubtle : "transparent"
+                            Text {
+                                width: screen.px(48)
+                                anchors.verticalCenter: parent.verticalCenter
+                                horizontalAlignment: Text.AlignRight
+                                text: index + 1
+                                color: index + 1 === screen.cursorLine ? KetTheme.t.textSecondary : KetTheme.t.textMuted
+                                font.family: KetTheme.monoFontFamily
+                                font.pixelSize: screen.px(14)
+                            }
+                            Text {
+                                x: screen.px(70)
+                                anchors.verticalCenter: parent.verticalCenter
+                                textFormat: Text.StyledText
+                                text: screen.highlight(modelData, index)
+                                color: KetTheme.t.textMain
+                                font.family: KetTheme.monoFontFamily
+                                font.pixelSize: screen.px(14)
+                            }
+                            TapHandler { onTapped: screen.cursorLine = index + 1 }
                         }
-                        Text {
-                            x: screen.px(70)
-                            anchors.verticalCenter: parent.verticalCenter
-                            textFormat: Text.StyledText
-                            text: screen.highlight(modelData)
-                            color: KetTheme.t.textMain
-                            font.family: KetTheme.monoFontFamily
-                            font.pixelSize: screen.px(14)
-                        }
-                        TapHandler { onTapped: screen.cursorLine = index + 1 }
                     }
+
+                    // Markdown Preview: the rendered document, at most 960 px wide.
+                    Flickable {
+                        id: preview
+                        anchors.fill: parent
+                        visible: screen.previewing
+                        clip: true
+                        contentHeight: document.height + screen.px(160)
+                        boundsBehavior: Flickable.StopAtBounds
+                        Basic.ScrollBar.vertical: Basic.ScrollBar {}
+                        KetMarkdown {
+                            id: document
+                            x: Math.max(screen.px(32), (preview.width - width) / 2)
+                            y: screen.px(28)
+                            width: Math.min(preview.width - screen.px(64), screen.px(960))
+                            markdown: screen.previewing ? screen.source : ""
+                            onLinkActivated: link => screen.window.notify("Opens " + link)
+                        }
+                    }
+
+                    // The floating Preview/Source switch: centred, 100 px above the document's
+                    // bottom edge, on a raised surface.
+                    Rectangle {
+                        visible: screen.markdown
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: screen.px(100)
+                        width: modeSwitch.implicitWidth + screen.px(8)
+                        height: modeSwitch.implicitHeight + screen.px(8)
+                        radius: screen.px(10)
+                        color: KetTheme.t.panelBg
+                        border.color: KetTheme.t.panelBorder
+                        KetSegmentedControl {
+                            id: modeSwitch
+                            anchors.centerIn: parent
+                            options: ["Preview", "Source"]
+                            currentIndex: screen.previewing ? 0 : 1
+                            onActivated: index => screen.setMarkdownMode(index === 0 ? "preview" : "source")
+                        }
+                    }
+                }
+
+                TerminalPanel {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: screen.px(280)
+                    visible: screen.window.editorTerminal
+                    window: screen.window
+                    onHideRequested: screen.window.editorTerminal = false
                 }
 
                 KetStatusBar {

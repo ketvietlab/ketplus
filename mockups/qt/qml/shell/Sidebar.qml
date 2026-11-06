@@ -32,7 +32,10 @@ Rectangle {
 
             Image {
                 anchors.verticalCenter: parent.verticalCenter
-                source: "qrc:/qt/qml/KetPlusMock/assets/ketplus-mark.svg"
+                // The bare KétPlus Pro mark (Két Symbol, CC BY 4.0): two Chàm tones on light,
+                // Chàm and a near-white plus on dark.
+                source: "qrc:/qt/qml/KetPlusMock/assets/ketplus-mark-bare-"
+                        + (KetTheme.dark ? "dark" : "light") + ".svg"
                 sourceSize: Qt.size(width * 2, height * 2)
                 width: sidebar.px(24)
                 height: width
@@ -81,6 +84,7 @@ Rectangle {
                     x: sidebar.px(29)
                     anchors.verticalCenter: parent.verticalCenter
                     text: search.text
+                    font.weight: Font.Medium
                     color: KetTheme.t.textMuted
                     font.family: KetTheme.fontFamily
                     font.pixelSize: sidebar.px(12)
@@ -90,6 +94,7 @@ Rectangle {
                     anchors.rightMargin: sidebar.px(9)
                     anchors.verticalCenter: parent.verticalCenter
                     text: "⌘ K"
+                    font.weight: Font.Medium
                     color: KetTheme.t.textMuted
                     font.family: KetTheme.fontFamily
                     font.pixelSize: sidebar.px(11)
@@ -116,6 +121,7 @@ Rectangle {
                 KetNavItem {
                     required property var modelData
                     width: parent.width
+                    font.weight: Font.Medium
                     text: modelData.text
                     iconName: modelData.icon
                     count: modelData.count || -1
@@ -211,7 +217,7 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: sidebar.px(6)
                 KetIcon { anchors.verticalCenter: parent.verticalCenter; name: "filter"; box: sidebar.px(12); color: KetTheme.t.accentText }
-                Text { anchors.verticalCenter: parent.verticalCenter; text: "Tagged " + sidebar.window.tagFilter; color: KetTheme.t.accentText; font.family: KetTheme.fontFamily; font.pixelSize: sidebar.px(12) }
+                Text { anchors.verticalCenter: parent.verticalCenter; text: "Tagged " + sidebar.window.tagFilter; color: KetTheme.t.accentText; font.family: KetTheme.fontFamily; font.pixelSize: sidebar.px(12); font.weight: Font.Medium }
             }
             KetIconButton {
                 anchors.right: parent.right
@@ -280,7 +286,16 @@ Rectangle {
                                 status: modelData.status
                                 checked: sidebar.window.screen === "workspace"
                                          && sidebar.window.conversation.number === modelData.number
-                                KetToolTip { visible: row.hovered; text: row.modelData.worktree }
+                                // The worktree hint waits for a resting pointer, and a press hides it
+                                // until the pointer leaves the row: clicking never raises it.
+                                property bool tipDismissed: false
+                                onHoveredChanged: if (!hovered) tipDismissed = false
+                                onPressedChanged: if (pressed) tipDismissed = true
+                                KetToolTip {
+                                    visible: row.hovered && !row.pressed && !row.tipDismissed
+                                    delay: 1200
+                                    text: row.modelData.worktree
+                                }
                                 onClicked: sidebar.window.openConversation(repo.modelData.name,
                                                                            modelData)
                                 TapHandler {
@@ -311,6 +326,7 @@ Rectangle {
                                 color: parent.hovered ? KetTheme.t.textMain : KetTheme.t.textSecondary
                                 font.family: KetTheme.fontFamily
                                 font.pixelSize: sidebar.px(13)
+                                font.weight: Font.Medium
                             }
                             background: null
                         }
@@ -371,6 +387,7 @@ Rectangle {
                         color: KetTheme.t.textMuted
                         font.family: KetTheme.fontFamily
                         font.pixelSize: sidebar.px(10)
+                        font.weight: Font.Medium
                     }
                 }
                 KetIcon {

@@ -47,6 +47,7 @@ Rectangle {
         case KetTheme.ConversationStatus.Completed: return KetTheme.BadgeTone.Success
         case KetTheme.ConversationStatus.Working: return KetTheme.BadgeTone.Accent
         case KetTheme.ConversationStatus.NeedsInput: return KetTheme.BadgeTone.Warning
+        case KetTheme.ConversationStatus.AwaitingReply: return KetTheme.BadgeTone.Info
         case KetTheme.ConversationStatus.Error: return KetTheme.BadgeTone.Danger
         }
         return KetTheme.BadgeTone.Neutral
@@ -62,12 +63,45 @@ Rectangle {
         color: KetTheme.t.panelBorder
     }
 
+    // The header gives way from the right as the conversation narrows (the details pane takes
+    // half the workspace): tags first, then the Reviewer label, then the title elides.
+    readonly property real gap: px(8)
+    readonly property real room: width - px(16) - actions.width - px(10) - px(24)
+    readonly property real fixedWidth: numberLabel.implicitWidth + statusBadge.implicitWidth
+                                       + (worktreeButton.visible ? worktreeButton.implicitWidth + gap : 0) + 2 * gap
+    readonly property bool fullReviewer: fixedWidth + titleButton.implicitWidth + gap
+                                         + reviewerProbe.implicitWidth <= room
+    readonly property bool showTags: fullReviewer && fixedWidth + titleButton.implicitWidth + gap
+                                     + reviewerProbe.implicitWidth + tagsProbe.implicitWidth <= room
+
+    // Off-screen measures of the full Reviewer button and the tag group.
+    Row {
+        visible: false
+        KetButton {
+            id: reviewerProbe
+            controlSize: KetTheme.ControlSize.Small
+            iconName: "eye"
+            text: reviewerButton.fullText
+        }
+        Row {
+            id: tagsProbe
+            spacing: header.gap
+            leftPadding: header.gap
+            Repeater {
+                model: header.conversation.tags
+                KetTag { required property var modelData; text: modelData.label; tagColor: modelData.color }
+            }
+            KetIconButton { controlSize: KetTheme.ControlSize.Small; iconName: "plus"; text: "Add tag" }
+        }
+    }
+
     Row {
         x: header.px(16)
         anchors.verticalCenter: parent.verticalCenter
-        spacing: header.px(8)
+        spacing: header.gap
 
         Text {
+            id: numberLabel
             anchors.verticalCenter: parent.verticalCenter
             text: "@agent/" + header.conversation.number
             color: KetTheme.t.textMuted
@@ -78,6 +112,8 @@ Rectangle {
         Basic.AbstractButton {
             id: titleButton
             anchors.verticalCenter: parent.verticalCenter
+            width: Math.max(header.px(80), Math.min(implicitWidth, header.room - header.fixedWidth - header.gap
+                            - (reviewerButton.visible ? reviewerButton.implicitWidth : 0)))
             hoverEnabled: true
             text: header.conversation.title
             onDoubleClicked: header.window.renameDialog.open()
@@ -85,6 +121,7 @@ Rectangle {
             background: null
             contentItem: Text {
                 text: titleButton.text
+                elide: Text.ElideRight
                 color: KetTheme.t.textMain
                 font.family: KetTheme.fontFamily
                 font.pixelSize: header.px(15)
@@ -93,12 +130,14 @@ Rectangle {
         }
 
         KetBadge {
+            id: statusBadge
             anchors.verticalCenter: parent.verticalCenter
             text: KetTheme.conversationStatusLabel(header.status)
             tone: header.tone(header.status)
         }
 
         KetButton {
+            id: worktreeButton
             visible: !header.window.compact
             anchors.verticalCenter: parent.verticalCenter
             controlSize: KetTheme.ControlSize.Small
@@ -114,16 +153,18 @@ Rectangle {
             controlSize: KetTheme.ControlSize.Small
             variant: header.reviewer ? KetTheme.ButtonVariant.Secondary : KetTheme.ButtonVariant.Ghost
             iconName: "eye"
-            text: (header.reviewer ? "Reviewer · " + header.reviewer : "Reviewer") + "  ▾"
+            readonly property string fullText: (header.reviewer ? "Reviewer · " + header.reviewer : "Reviewer") + "  ▾"
+            text: header.fullReviewer ? fullText : "▾"
             onClicked: header.openReviewerMenu()
             KetToolTip {
                 visible: reviewerButton.hovered && !reviewerMenu.visible
-                text: "An agent reviews each finished turn and replies to this conversation. Reviewers never merge."
+                text: (header.fullReviewer ? "" : (header.reviewer ? "Reviewer: " + header.reviewer + ". " : "Reviewer. "))
+                      + "An agent reviews each finished turn and replies to this conversation. Reviewers never merge."
             }
         }
 
         Repeater {
-            model: header.window.compact ? [] : header.conversation.tags
+            model: header.window.compact || !header.showTags ? [] : header.conversation.tags
             KetTag {
                 required property var modelData
                 anchors.verticalCenter: parent.verticalCenter
@@ -136,7 +177,7 @@ Rectangle {
 
         KetIconButton {
             id: addTag
-            visible: !header.window.compact
+            visible: !header.window.compact && header.showTags
             anchors.verticalCenter: parent.verticalCenter
             controlSize: KetTheme.ControlSize.Small
             iconName: "plus"
@@ -146,6 +187,7 @@ Rectangle {
     }
 
     Row {
+        id: actions
         anchors.right: parent.right
         anchors.rightMargin: header.px(10)
         anchors.verticalCenter: parent.verticalCenter

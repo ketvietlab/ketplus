@@ -3,6 +3,8 @@
 
 #include "KetAppearance.h"
 
+#include <QFile>
+
 using ket::Appearance;
 
 MockController::MockController(QObject* parent) : QObject(parent) {
@@ -33,3 +35,8 @@ void MockController::setFollowSystem(bool follow) {
 }
 
 void MockController::setZoom(qreal zoom) { Appearance::instance().setZoom(zoom); }
+
+QString MockController::resourceText(const QString& path) const {
+    QFile file(path);
+    return file.open(QIODevice::ReadOnly) ? QString::fromUtf8(file.readAll()) : QString();
+}

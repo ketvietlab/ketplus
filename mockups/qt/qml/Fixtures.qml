@@ -26,7 +26,8 @@ QtObject {
                   tags: [tag("Atlas")], worktree: "develop", transcript: "atlas" },
                 { number: "9079", title: "Check this worktree", status: KetTheme.ConversationStatus.Completed,
                   tags: [], worktree: "feature-onboarding", transcript: "short" },
-                { number: "7542", title: "Check this worktree", status: KetTheme.ConversationStatus.Completed,
+                // The turn finished with a request for approval: "Waiting for you", not Completed.
+                { number: "7542", title: "Check this worktree", status: KetTheme.ConversationStatus.AwaitingReply,
                   tags: [], worktree: "fix-scroll-anchor", transcript: "short" },
                 { number: "3366", title: "Review feature onboarding", status: KetTheme.ConversationStatus.NeedsInput,
                   tags: [tag("Review")], worktree: "feature-onboarding", transcript: "question" },
@@ -167,6 +168,7 @@ QtObject {
         { name: "docs", folder: true, depth: 1, open: true },
         { name: "architecture.md", depth: 2, path: "docs" },
         { name: "design-system.md", depth: 2, path: "docs" },
+        { name: "licensing.md", depth: 2, path: "docs" },
         { name: "README.md", depth: 1, path: "" },
         { name: "CMakeLists.txt", depth: 1, path: "" }
     ]
@@ -187,7 +189,16 @@ QtObject {
     readonly property string designSystem:
         "# Design system\n\nKetPlus uses **Két Design System** through the Két Qt kit.\n\n"
         + "- Colours come only from tokens.\n- Product metrics live in `ket::Profile`.\n"
-        + "- Every component has a Qt Widgets and a Qt Quick twin.\n"
+        + "- Every component has a Qt Widgets and a Qt Quick twin.\n\n"
+        + "## Code samples\n\nSyntax colours follow the fence's language.\n\n"
+        + "```qml\n// A row in the worktree list.\nItem {\n    id: row\n    property bool selected: false\n"
+        + "    height: 32\n    Text { text: qsTr(\"Agent working\"); color: theme.success }\n}\n```\n\n"
+        + "```cpp\n#include <QString>\n\n/* Profile overrides\n   for the mock. */\n"
+        + "ket::Profile profile = ket::Profile::ketPlus();\nprofile.codePixels = 14;\n"
+        + "if (profile.monoFamily().isEmpty())\n    return 1;\n```\n\n"
+        + "```sh\n# Build and capture the mock.\ncmake --build build/mock --parallel 8\n"
+        + "KetPlusMock --screen=editor --state=markdown --dark --screenshot=\"$OUT/md.png\"\n```\n\n"
+        + "```json\n{\n  \"name\": \"ket-qt\",\n  \"version\": \"0.4.0\",\n  \"private\": false\n}\n```\n"
 
     // Manage worktrees.
     readonly property var worktrees: [
@@ -259,5 +270,38 @@ QtObject {
     readonly property var atlasFlows: [
         { title: "Getting started", screens: 2 },
         { title: "Reconnect a workspace", screens: 2 }
+    ]
+
+    // KetPlus Terminal sample output (mockups/terminal/demo/demo.sh): spans of [text, role],
+    // where the role names a token colour; "" is text-main.
+    readonly property var terminalLines: [
+        [["$ ", "muted"], ["git status --short --branch", ""]],
+        [["## develop", "success"], ["...", ""], ["origin/develop", "danger"], [" [ahead 2]", ""]],
+        [[" M", "danger"], [" core/src/terminal/TerminalView.cpp", ""]],
+        [[" M", "danger"], [" mockups/terminal/src/TerminalMockWindow.cpp", ""]],
+        [["??", "danger"], [" mockups/terminal/demo/", ""]],
+        [],
+        [["$ ", "muted"], ["ctest --test-dir build -R terminal", ""]],
+        [["1/3 Test #12: terminal_session ...........   ", ""], ["Passed", "success"], ["    0.41 sec", ""]],
+        [["2/3 Test #13: terminal_view ..............   ", ""], ["Passed", "success"], ["    0.88 sec", ""]],
+        [["3/3 Test #14: terminal_app ...............   ", ""], ["Passed", "success"], ["    1.02 sec", ""]],
+        [],
+        [["100% tests passed", "success"], [", 0 tests failed out of 3", ""]],
+        [],
+        [["info", "info"], ["  ", ""], ["warn", "warning"], ["  ", ""], ["error", "danger"], ["  ", ""], ["accent", "accent"], ["  ", ""], ["dim", "muted"]],
+        [],
+        [["➜ ", "success"], ["ketplus-desktop ", "info"], ["git:(", "accent"], ["develop", "danger"], [") ", "accent"]]
+    ]
+
+    // Settings › Providers, as SettingsProvidersPage reports them.
+    readonly property var providerStatus: [
+        { name: "Codex CLI", note: "Codex CLI 0.162.1 is newer than the newest version KetPlus has been tested with (0.154.0). It should work; some features may not.",
+          rows: [["Status", "Newer than tested"], ["Version", "0.162.1"], ["Supported", "0.142.1 or newer · tested up to 0.154.0"],
+                 ["Location", "~/.local/bin/codex"], ["Update with", "npm install -g @openai/codex@latest"]] },
+        { name: "Claude Agent SDK", note: "",
+          rows: [["Status", "Bundled with KetPlus"], ["Version", "Agent SDK 0.3.289 · Claude Code 2.1.289"],
+                 ["Location", "/Applications/KetPlus.app/Contents/Resources/claude-sidecar/index.mjs"]] },
+        { name: "Cursor CLI", note: "Cursor CLI was not found.",
+          rows: [["Status", "Not installed"], ["Supported", "2026.6.25 or newer · tested up to 2026.9.18"]] }
     ]
 }

@@ -14,12 +14,18 @@ Basic.ApplicationWindow {
     // Screens, in sidebar order. A state follows a slash: "workspace/welcome".
     readonly property var screenIds: [
         "workspace", "workspace/welcome", "workspace/running", "workspace/question",
-        "workspace/error", "workspace/atlas", "workspace/details", "editor", "changes",
-        "worktrees", "connections", "settings", "settings/typography", "settings/account",
-        "settings/providers", "settings/archived", "settings/updates", "atlas", "mobile-picker",
-        "workspace/compact"
+        "workspace/error", "workspace/atlas", "workspace/details", "editor", "editor/terminal",
+        "editor/markdown", "editor/markdown-source", "editor/samples",
+        "changes", "worktrees", "connections", "settings", "settings/typography", "settings/account",
+        "settings/browser", "settings/computer", "settings/providers", "settings/archived",
+        "settings/updates", "atlas", "mobile-picker", "workspace/compact"
     ]
     property string screen: "workspace"
+    // The terminal below the editor (editor/terminal).
+    property bool editorTerminal: false
+    // A file the editor opens (editor/markdown), and whether Markdown shows its source.
+    property string editorFile: ""
+    property bool editorSource: false
     property string settingsTab: "appearance"
     property var conversation: Fixtures.repositories[0].conversations[0]
     property string repository: Fixtures.repositories[0].name
@@ -70,6 +76,12 @@ Basic.ApplicationWindow {
         }
         if (name === "settings")
             settingsTab = state || "appearance"
+        if (name === "editor") {
+            editorTerminal = state === "terminal"
+            editorFile = state.startsWith("markdown") ? "licensing.md"
+                       : state === "samples" ? "design-system.md" : ""
+            editorSource = state === "markdown-source"
+        }
         screen = name
     }
 
@@ -92,6 +104,12 @@ Basic.ApplicationWindow {
     }
 
     function notify(message) { toast.show(message) }
+
+    // Settings › Agent models opens the model picker in the Agent Workspace, as the app does.
+    function openAgentModels() {
+        showScreen("workspace")
+        Qt.callLater(() => workspace.openComposerPanel("model"))
+    }
 
     width: 1440
     height: 900

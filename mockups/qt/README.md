@@ -25,7 +25,7 @@ KÉT Sans archive with `-DKETPLUS_MOCK_KET_SANS_ARCHIVE=<path>/KETSans-1.100.zip
 ```sh
 KetPlusMock --smoke                                    # every screen, fails on QML warnings
 KetPlusMock --screen=workspace --state=running --dark --zoom=1.25 --screenshot=out.png
-KetPlusMock --screen=workspace --open=model --screenshot=model.png  # model, mode, limits or reviewer
+KetPlusMock --screen=workspace --open=model --screenshot=model.png  # model, mode, limits, reviewer or composer (focused)
 ```
 
 Screens and states (`--screen` / `--state`):
@@ -34,10 +34,12 @@ Screens and states (`--screen` / `--state`):
 |---|---|---|
 | `workspace` | `welcome`, `running`, `question`, `error`, `atlas`, `details`, `compact` | Agent Workspace: 44 px header, transcript activity, gallery, agent messages, changed files, question card, Atlas result, provider error, background tasks, composer (card, then attach, Mode menu, Model & context dialog and the Context & limits ring below it), details pane (changes, Atlas, terminal) |
 | `editor` | | Files & Editor: explorer, tabs, breadcrumb, code, status bars |
+| `editor` | `terminal` | The terminal below the editor, drawn like `mockups/terminal`, with fixture output |
+| `editor` | `markdown`, `markdown-source`, `samples` | `docs/licensing.md` (bundled from the repository) in Preview or Source, with the floating Preview/Source switch 100 px above the bottom; `samples` opens `design-system.md` with QML, C++, shell and JSON code blocks in syntax colours |
 | `changes` | | Source Control: changes, staged changes, diff |
 | `worktrees` | | Manage worktrees, create dialog, manage menu |
 | `connections` | | This Mac, phones, Linux machines (SSH or Relay), pairing dialogs, account |
-| `settings` | `typography`, `account`, `providers`, `archived`, `updates` | Appearance (live theme, follow system, zoom), typography, providers and browser, archive, updates |
+| `settings` | `typography`, `account`, `browser`, `computer`, `providers`, `archived`, `updates` | The app's order: Appearance (live theme, follow system, zoom), typography, account, Agent models (opens the model picker), browser, computer use, providers (CLI status, Claude API access, organization usage), archive, updates |
 | `atlas` | | Edit an Atlas: flows, map, AI Chat |
 | `mobile-picker` | | Repository & worktree picker on iPhone |
 
@@ -52,3 +54,10 @@ context menu (rename, fork, change worktree, archive, delete), tag filter
 - Colours come from `KetTheme.t` tokens; lengths go through
   `KetTheme.px(value, KetTheme.zoom)` so zoom applies.
 - Keep `--smoke` at zero QML problems.
+
+## Assets
+
+The sidebar logo is the bare KétPlus Pro mark (`assets/ketplus-mark-bare-{dark,light}.svg`) and
+the tile `assets/ketplus-mark.svg` from Két Symbol, licensed CC BY 4.0
+(`assets/LICENSE-CC-BY-4.0.txt`): "Két Symbol © 2026 Két Việt, CC BY 4.0". The name KétPlus is a
+trademark and is not licensed.

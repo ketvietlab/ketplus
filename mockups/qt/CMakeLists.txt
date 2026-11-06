@@ -18,7 +18,7 @@ include(FetchContent)
 set(KETQT_BUILD_WIDGETS OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(ketqt
     GIT_REPOSITORY https://github.com/ketvietlab/ket-qt.git
-    GIT_TAG bacf1e52cbf651149a56f64b9e62bd03651c487c # develop, styled tooltips and centred bubble text (PR #20)
+    GIT_TAG 6ceb5385f59fdb5cd1f3be9e6b0c24bd32c2db3e # develop, through PR #26
 )
 FetchContent_MakeAvailable(ketqt)
 
@@ -50,7 +50,8 @@ qt_add_qml_module(ketplus_qt_mock
     URI KetPlusMock
     VERSION 1.0
     QML_FILES ${mock_qml}
-    RESOURCES assets/ketplus-mark.svg assets/screenshot-sidebar.png assets/screenshot-editor.png
+    RESOURCES assets/ketplus-mark.svg assets/ketplus-mark-bare-dark.svg
+              assets/ketplus-mark-bare-light.svg assets/screenshot-sidebar.png assets/screenshot-editor.png
               assets/screenshot-settings.png
 )
 
@@ -67,6 +68,13 @@ qt_add_resources(ketplus_qt_mock mock_mono
     PREFIX "/fonts"
     BASE fonts
     FILES fonts/KETSansMono-Medium.ttf
+)
+
+# The repository's licensing document, the long Markdown sample the editor previews.
+qt_add_resources(ketplus_qt_mock mock_docs
+    PREFIX "/docs"
+    BASE ../../docs
+    FILES ../../docs/licensing.md
 )
 
 target_link_libraries(ketplus_qt_mock PRIVATE KetQt::Quick KetQt::QuickPlugin Qt6::Gui Qt6::Qml

@@ -5,8 +5,9 @@ import Ket
 import KetPlusMock
 import KetPlusMock.Native
 
-// Settings: Appearance (live theme and zoom), Typography, Account & devices, Providers &
-// browser, Archived and Updates.
+// Settings, in the order of apps/desktop SettingsWorkspacePage: Appearance (live theme and
+// zoom), Typography, Account & devices, Agent models (opens the model picker in the Agent
+// Workspace), Browser, Computer use, Providers, Archived and Updates.
 Item {
     id: screen
 
@@ -15,7 +16,10 @@ Item {
         { id: "appearance", text: "Appearance", icon: "palette" },
         { id: "typography", text: "Typography", icon: "text-size" },
         { id: "account", text: "Account & devices", icon: "display" },
-        { id: "providers", text: "Providers & browser", icon: "sliders" },
+        { id: "agent-models", text: "Agent models", icon: "sliders" },
+        { id: "browser", text: "Browser", icon: "globe" },
+        { id: "computer", text: "Computer use", icon: "display" },
+        { id: "providers", text: "Providers", icon: "package" },
         { id: "archived", text: "Archived", icon: "archive" },
         { id: "updates", text: "Updates", icon: "download" }
     ]
@@ -73,6 +77,34 @@ Item {
             implicitHeight: children.length ? children[0].implicitHeight : 0
         }
     }
+    // A status line of a provider: a fixed label column, then the value.
+    component InfoRow: Row {
+        property string label
+        property string value
+        width: parent.width
+        Text {
+            width: screen.px(180)
+            text: parent.label
+            color: KetTheme.t.textMain
+            font.family: KetTheme.fontFamily
+            font.pixelSize: screen.px(14)
+        }
+        Text {
+            width: parent.width - screen.px(180)
+            text: parent.value
+            wrapMode: Text.Wrap
+            color: KetTheme.t.textMain
+            font.family: KetTheme.fontFamily
+            font.pixelSize: screen.px(14)
+        }
+    }
+    component Help: Text {
+        width: parent.width
+        wrapMode: Text.Wrap
+        color: KetTheme.t.textMuted
+        font.family: KetTheme.fontFamily
+        font.pixelSize: screen.px(13)
+    }
     component Body: Text {
         width: parent.width
         wrapMode: Text.Wrap
@@ -116,7 +148,8 @@ Item {
                             iconName: modelData.icon
                             checkable: false
                             checked: screen.current.id === modelData.id
-                            onClicked: screen.window.showScreen(modelData.id === "appearance" ? "settings" : "settings/" + modelData.id)
+                            onClicked: modelData.id === "agent-models" ? screen.window.openAgentModels()
+                                       : screen.window.showScreen(modelData.id === "appearance" ? "settings" : "settings/" + modelData.id)
                         }
                     }
                 }
@@ -133,7 +166,8 @@ Item {
                     Loader {
                         width: parent.width
                         sourceComponent: ({ appearance: appearance, typography: typography, account: account,
-                                            providers: providers, archived: archived, updates: updates })[screen.current.id]
+                                            browser: browser, computer: computer, providers: providers,
+                                            archived: archived, updates: updates })[screen.current.id]
                     }
                 }
             }
@@ -292,17 +326,101 @@ Item {
     }
 
     Component {
+        id: browser
+        Column {
+            spacing: screen.px(14)
+            Row {
+                spacing: screen.px(12)
+                Body { width: implicitWidth; anchors.verticalCenter: parent.verticalCenter; text: "Ready · bundled browser runtime" }
+                KetButton { text: "Check again"; controlSize: KetTheme.ControlSize.Small; onClicked: screen.window.notify("Browser runtime is ready") }
+            }
+            KetChoice { width: parent.width; checked: true; text: "Let agents use a browser"; description: "Chromium in its own profile; pages, captures and visual comparison" }
+            Divider {}
+            SubHeading { text: "Websites" }
+            KetChoice { width: parent.width; kind: KetTheme.ToggleKind.Radio; text: "All websites" }
+            KetChoice { width: parent.width; kind: KetTheme.ToggleKind.Radio; checked: true; text: "Only these origins" }
+            SettingRow { label: "Allowed origins"; help: "Separate origins with commas. localhost is always allowed."; KetTextField { width: parent.width; text: "https://ketviet.vn" } }
+            SettingRow { label: "Source checkout path"; help: "Only needed for a source checkout"; KetTextField { width: parent.width; placeholderText: "~/dev/ketplus" } }
+        }
+    }
+
+    Component {
+        id: computer
+        Column {
+            spacing: screen.px(14)
+            Body { text: "Let agents see and control native Mac apps through KetPlus Computer, for tasks no command or the KetPlus browser can do." }
+            KetChoice { width: parent.width; checked: true; text: "Allow agents to use this computer" }
+            Divider {}
+            SubHeading { text: "Work display" }
+            SettingRow { label: "Work display"; help: "The agent works on this display: approved apps move there and screenshots show it. With a single display, it uses the main one."; KetSelect { width: parent.width; model: ["Secondary display", "Main display"] } }
+            Divider {}
+            SubHeading { text: "Blocked apps" }
+            SettingRow { label: "Blocked app bundle IDs"; help: "Bundle IDs separated by commas. KetPlus, Keychain Access and password managers are always blocked. Terminals and IDEs accept clicks only, and browsers other than Safari are view-only."; KetTextField { width: parent.width; placeholderText: "com.example.Banking, com.example.Mail" } }
+            Divider {}
+            SubHeading { text: "Safety" }
+            Help { text: "Screenshots show only the apps you approved; other apps and KetPlus stay hidden. Agents work in the background without taking your pointer. Press Stop on the banner, or Esc in an approved app, to stop: the agent loses its approvals and must ask again. Turns started from your phone cannot control this Mac." }
+            Divider {}
+            SubHeading { text: "macOS permissions" }
+            Help { text: "KetPlus Computer asks for Screen Recording and Accessibility the first time an agent needs them. Grant both to KetPlus Computer, not to KetPlus." }
+            KetButton { text: "Open Privacy & Security"; iconName: "shield"; onClicked: screen.window.notify("Opens System Settings › Privacy & Security") }
+            Help { text: "KetPlus Computer is installed with this app." }
+        }
+    }
+
+    Component {
         id: providers
         Column {
             spacing: screen.px(14)
-            Body { text: "Agents KetPlus can start, and the browser they use." }
-            KetChoice { width: parent.width; kind: KetTheme.ToggleKind.Radio; checked: true; text: "Codex"; description: "Signed in with ChatGPT · GPT-5.6 Luna by default" }
-            KetChoice { width: parent.width; kind: KetTheme.ToggleKind.Radio; text: "Claude Code"; description: "Signed in with Claude · Opus 5.5 by default" }
-            SettingRow { label: "Default effort"; KetSelect { width: parent.width; model: Fixtures.efforts; currentIndex: 1 } }
+            Body { text: "Codex and Cursor run from the CLIs installed on this computer; Claude runs from the Agent SDK bundled with KetPlus. KetPlus supports CLI releases from about the last three months." }
+            Row {
+                spacing: screen.px(12)
+                Body { width: implicitWidth; anchors.verticalCenter: parent.verticalCenter; color: KetTheme.t.textMain; text: "1 provider(s) need attention." }
+                KetButton { text: "Check again"; controlSize: KetTheme.ControlSize.Small; onClicked: screen.window.notify("Provider versions checked") }
+            }
+            Repeater {
+                model: Fixtures.providerStatus
+                Column {
+                    required property var modelData
+                    width: parent.width
+                    spacing: screen.px(8)
+                    topPadding: screen.px(6)
+                    SubHeading { text: modelData.name }
+                    Repeater {
+                        model: modelData.rows
+                        InfoRow { required property var modelData; label: modelData[0]; value: modelData[1] }
+                    }
+                    Help { visible: text !== ""; text: modelData.note }
+                }
+            }
             Divider {}
-            SubHeading { text: "Browser" }
-            KetChoice { width: parent.width; checked: true; text: "Let Agents use the built-in browser"; description: "Chromium in its own profile; pages, captures and visual comparison" }
-            KetChoice { width: parent.width; text: "Allow any origin"; description: "Otherwise only localhost and origins you approve" }
+            SubHeading { text: "Claude API access" }
+            Help { text: "Use your own Anthropic API key on this Mac. Paired phones use the same configuration. Changes apply to new queries after current work finishes." }
+            SettingRow { label: "Authentication"; KetSelect { width: parent.width; model: ["Existing Claude runtime authentication", "My Anthropic API key"] } }
+            SettingRow { label: "API key"; KetTextField { width: parent.width; placeholderText: "Enter a new key; leave blank to keep the saved key" } }
+            SettingRow { label: "Query budget"; KetSelect { width: parent.width; model: ["No query limit", "50.00 USD", "100.00 USD", "195.00 USD"]; currentIndex: 3 } }
+            Help { text: "Stored in macOS Keychain. Usage is billed to the key's Anthropic account. The query budget uses an estimate and can be exceeded; check Anthropic Console for actual charges." }
+            Flow {
+                width: parent.width
+                spacing: screen.px(8)
+                KetButton { text: "Save Claude settings"; variant: KetTheme.ButtonVariant.Primary; onClicked: screen.window.notify("Claude settings saved") }
+                KetButton { text: "Check connection"; onClicked: screen.window.notify("Anthropic accepted the saved key. No model inference was run.") }
+                KetButton { text: "Remove key…"; variant: KetTheme.ButtonVariant.GhostDanger }
+                KetButton { text: "Refresh"; variant: KetTheme.ButtonVariant.Ghost }
+            }
+            Body { color: KetTheme.t.textMain; text: "Key saved. New queries use existing Claude runtime authentication." }
+            Help { text: "Last observed credential: runtime login or other provider credential. Latest SDK session estimate: 163.68 USD." }
+            Divider {}
+            SubHeading { text: "Claude organization usage" }
+            Help { text: "Optional Admin API key for organization-wide monthly usage and cost. Stored separately in macOS Keychain; never sent to the agent. This key may belong to a different organization from your inference key. Reports include all organization products and keys." }
+            SettingRow { label: "Admin API key"; KetTextField { width: parent.width; placeholderText: "sk-ant-admin01-…" } }
+            Flow {
+                width: parent.width
+                spacing: screen.px(8)
+                KetButton { text: "Save Admin key"; onClicked: screen.window.notify("Admin key saved") }
+                KetButton { text: "Remove Admin key…"; variant: KetTheme.ButtonVariant.GhostDanger }
+                KetButton { text: "Refresh organization usage"; variant: KetTheme.ButtonVariant.Ghost }
+            }
+            Help { text: "Organization month-to-date: 412.80 USD · 38.2M tokens. Updated 10:42." }
         }
     }
 

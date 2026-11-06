@@ -354,6 +354,10 @@ from the Két Qt kit. It covers every screen and workflow of the frozen
 `ketplus.ketatlas` with deterministic fixtures, and `--smoke` fails on any QML
 warning. It is a standalone CMake project, not part of the Lite or Pro build.
 
+KetPlus Terminal has its own Qt Widgets mock in `mockups/terminal` (ADR 0034).
+It compiles the shipped terminal from `core/src`, runs a real shell, and draws
+the window, colours and KÉT Sans Mono type from the Két Qt kit.
+
 ## Conversation repository selector design prototype
 
 The Desktop Atlas now includes shared Desktop/iPhone repository-and-worktree

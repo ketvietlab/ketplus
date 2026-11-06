@@ -24,6 +24,8 @@ class MockController final : public QObject {
     Q_INVOKABLE void setDark(bool dark);
     Q_INVOKABLE void setFollowSystem(bool follow);
     Q_INVOKABLE void setZoom(qreal zoom);
+    // A bundled text resource, such as the repository document the editor previews.
+    Q_INVOKABLE QString resourceText(const QString& path) const;
 
     QString initialScreen = QStringLiteral("workspace");
     QString initialState;
