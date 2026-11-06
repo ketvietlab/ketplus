@@ -32,7 +32,10 @@ Rectangle {
 
             Image {
                 anchors.verticalCenter: parent.verticalCenter
-                source: "qrc:/qt/qml/KetPlusMock/assets/ketplus-mark.svg"
+                // The bare KétPlus Pro mark (Két Symbol, CC BY 4.0): two Chàm tones on light,
+                // Chàm and a near-white plus on dark.
+                source: "qrc:/qt/qml/KetPlusMock/assets/ketplus-mark-bare-"
+                        + (KetTheme.dark ? "dark" : "light") + ".svg"
                 sourceSize: Qt.size(width * 2, height * 2)
                 width: sidebar.px(24)
                 height: width

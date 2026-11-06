@@ -50,7 +50,8 @@ qt_add_qml_module(ketplus_qt_mock
     URI KetPlusMock
     VERSION 1.0
     QML_FILES ${mock_qml}
-    RESOURCES assets/ketplus-mark.svg assets/screenshot-sidebar.png assets/screenshot-editor.png
+    RESOURCES assets/ketplus-mark.svg assets/ketplus-mark-bare-dark.svg
+              assets/ketplus-mark-bare-light.svg assets/screenshot-sidebar.png assets/screenshot-editor.png
               assets/screenshot-settings.png
 )
 

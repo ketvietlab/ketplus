@@ -54,3 +54,10 @@ context menu (rename, fork, change worktree, archive, delete), tag filter
 - Colours come from `KetTheme.t` tokens; lengths go through
   `KetTheme.px(value, KetTheme.zoom)` so zoom applies.
 - Keep `--smoke` at zero QML problems.
+
+## Assets
+
+The sidebar logo is the bare KétPlus Pro mark (`assets/ketplus-mark-bare-{dark,light}.svg`) and
+the tile `assets/ketplus-mark.svg` from Két Symbol, licensed CC BY 4.0
+(`assets/LICENSE-CC-BY-4.0.txt`): "Két Symbol © 2026 Két Việt, CC BY 4.0". The name KétPlus is a
+trademark and is not licensed.
