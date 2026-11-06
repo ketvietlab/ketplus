@@ -39,7 +39,25 @@ FetchContent_Declare(
     GIT_TAG 9d6d2112335080312ef8c36667fa717ded4f7daf
 )
 
-FetchContent_MakeAvailable(scintilla ketplus_syntax inter_font libvterm)
+# Két Design System tokens, Két Symbol icons and Qt Widgets components (ADR 0035). The kit is
+# linked statically, so its tests, examples and install rules stay off; an app that needs the QML
+# module sets KETQT_BUILD_QUICK before including core.
+FetchContent_Declare(
+    ketqt
+    GIT_REPOSITORY https://github.com/ketvietlab/ket-qt.git
+    GIT_TAG 10cacc1d8972c5bff362ed06619a15afbe878248
+    # Unlike the source-only dependencies above, the kit builds its own targets. Keep them in this
+    # build tree: the shared cache is used by every build and edition at once.
+    BINARY_DIR "${CMAKE_BINARY_DIR}/_deps/ketqt-build"
+)
+set(KETQT_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(KETQT_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(KETQT_INSTALL OFF CACHE BOOL "" FORCE)
+if(NOT DEFINED KETQT_BUILD_QUICK)
+    set(KETQT_BUILD_QUICK OFF CACHE BOOL "Build the Ket QML module (KetQt::Quick)")
+endif()
+
+FetchContent_MakeAvailable(scintilla ketplus_syntax inter_font libvterm ketqt)
 
 add_library(ketplus_vterm STATIC
     "${libvterm_SOURCE_DIR}/src/encoding.c"

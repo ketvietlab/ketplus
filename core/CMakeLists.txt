@@ -28,7 +28,7 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Core5Compat Svg SvgWidgets)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Core5Compat Svg SvgWidgets)
 
 include(cmake/CompilerCache.cmake)
 include(cmake/Dependencies.cmake)
@@ -58,7 +58,7 @@ add_library(ketplus_ui STATIC
     src/ui/Theme.cpp
     src/ui/Theme.h
 )
-target_link_libraries(ketplus_ui PUBLIC Qt6::Widgets)
+target_link_libraries(ketplus_ui PUBLIC Qt6::Widgets KetQt::Tokens KetQt::Icons KetQt::Widgets)
 target_include_directories(ketplus_ui PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
 )
@@ -333,6 +333,10 @@ if(KETPLUS_CM_BUILD_APP)
     install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE" THIRD_PARTY_NOTICES.md
         DESTINATION share/licenses/ketplus-cm
     )
+    # THIRD_PARTY_NOTICES.md names these texts by their path in this tree.
+    install(DIRECTORY third_party/licenses/
+        DESTINATION share/licenses/ketplus-cm/third_party/licenses
+    )
 endif()
 
 if(APPLE AND KETPLUS_CM_BUILD_APP AND KETPLUS_CM_BUILD_TERMINAL_APP)
@@ -391,6 +395,15 @@ if(APPLE AND KETPLUS_CM_BUILD_APP AND KETPLUS_CM_BUILD_TERMINAL_APP)
     )
 
     install(TARGETS ketplus_terminal_app BUNDLE DESTINATION .)
+    # The bundle ships on its own, so it carries the notices and every license text they name.
+    # Installed before the bundle is signed below.
+    set(ketplus_terminal_licenses "KetPlus Terminal.app/Contents/Resources/licenses")
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE" THIRD_PARTY_NOTICES.md
+        DESTINATION "${ketplus_terminal_licenses}"
+    )
+    install(DIRECTORY third_party/licenses/
+        DESTINATION "${ketplus_terminal_licenses}/third_party/licenses"
+    )
     qt_generate_deploy_app_script(
         TARGET ketplus_terminal_app
         OUTPUT_SCRIPT ketplus_terminal_deploy_script
@@ -435,7 +448,7 @@ endif()
 
 if(KETPLUS_CM_BUILD_TESTS)
     enable_testing()
-    find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
+    find_package(Qt6 6.8 REQUIRED COMPONENTS Test)
 
     function(ketplus_cm_add_test test_name target)
         if(WIN32)

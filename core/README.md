@@ -28,7 +28,7 @@ application chrome.
 
 - CMake 3.24+
 - Ninja
-- Qt 6.5+ with `Core5Compat`, `Svg`, and `SvgWidgets`
+- Qt 6.8+ with `Core5Compat`, `Svg`, `SvgWidgets`, and `PrintSupport`
 - A C++20 compiler
 - Optional: `sccache` or `ccache` for persistent local compiler caching
 

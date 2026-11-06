@@ -13,6 +13,9 @@ Their complete source-distribution license texts are stored in
 | Lexilla | `3e6f317eed854bc312b4c4453206189d381c7ae7` | `Lexilla.txt` |
 | libvterm | `9d6d2112335080312ef8c36667fa717ded4f7daf` | `libvterm-MIT.txt` |
 | Inter | 4.1 | `Inter-OFL-1.1.txt` |
+| KetQt | `10cacc1d8972c5bff362ed06619a15afbe878248` — https://github.com/ketvietlab/ket-qt | `KetQt-MPL-2.0.txt` |
+| Két Design System tokens (in KetQt) | 0.1.44 | `Ket-Design-System-MIT.txt` |
+| Két Symbol (in KetQt) | 0.12.0 — Két Symbol © 2026 Két Việt, CC BY 4.0 | `Ket-Symbol-CC-BY-4.0.txt` |
 | KÉT Sans | 1.0.0 — https://github.com/ketvietlab/ket-sans-font/releases/tag/v1.0.0 | `KET-Sans-Font-License-1.0.txt` (app embedding only) |
 | Lucide Static | 1.40.0 | `Lucide-ISC-and-Feather-MIT.txt` |
 | Sparkle (macOS builds with in-app updates) | 2.10.0 — https://github.com/sparkle-project/Sparkle/releases/tag/2.10.0 | `Sparkle-MIT.txt` |
