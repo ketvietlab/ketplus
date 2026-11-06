@@ -2,7 +2,7 @@
 // KetPlus Qt mock. Options make review evidence repeatable:
 //   --screen=<id> --state=<state> --dark|--light --zoom=1.25   open one screen
 //   --open=model|mode|limits|reviewer|composer|images|mermaid   a composer panel, the image viewer or diagrams
-//   --scroll=0.5                                   scroll the transcript (0 top, 1 end)
+//   --scroll=0.5                                   scroll the transcript or the Connections intro (0 top, 1 end)
 //   --screenshot=<file>                                         save the window and exit
 //   --smoke                                  open every screen; exit non-zero on QML warnings
 #include "KetAppearance.h"
