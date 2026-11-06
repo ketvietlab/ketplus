@@ -2,6 +2,8 @@
 
 #include "editor/EditorSettings.h"
 
+#include <QString>
+
 class QSettings;
 
 namespace ketplus {
@@ -27,6 +29,8 @@ struct AppearanceSettings final {
     int interfaceFontSizePixels{14};
     EditorSettings editor{EditorSettings::defaults()};
     TextTypographySettings terminal{13, 20};
+    // The terminal's font family; empty uses the platform's fixed-pitch font.
+    QString terminalFontFamily;
     TextTypographySettings preview{14, 22};
 
     [[nodiscard]] static AppearanceSettings defaults();

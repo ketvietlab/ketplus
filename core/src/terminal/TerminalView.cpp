@@ -154,8 +154,15 @@ void TerminalView::applyTheme(const ThemePalette& palette) {
     viewport()->update();
 }
 
-void TerminalView::setTypography(const int fontSizePixels, const int lineHeightPixels) {
+void TerminalView::setTypography(const int fontSizePixels, const int lineHeightPixels,
+                                 const QString& fontFamily) {
     QFont terminalFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    const QString family = fontFamily.trimmed();
+    if (!family.isEmpty() && QFontDatabase::hasFamily(family)) {
+        terminalFont = QFont(family);
+        terminalFont.setStyleHint(QFont::Monospace);
+        terminalFont.setFixedPitch(true);
+    }
     terminalFont.setPixelSize(qBound(8, fontSizePixels, 48));
     setFont(terminalFont);
     lineHeightPixels_ = qBound(qMax(12, terminalFont.pixelSize()), lineHeightPixels, 96);

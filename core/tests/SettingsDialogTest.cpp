@@ -123,6 +123,7 @@ void SettingsDialogTest::persistsAndNormalizesAppearance() {
     settings.editor.lineHeightPixels = 17;
     settings.terminal = {16, 12};
     settings.preview = {17, 31};
+    settings.terminalFontFamily = QStringLiteral("  KET Sans Mono  ");
     settings.save(storage);
     storage.sync();
 
@@ -133,6 +134,12 @@ void SettingsDialogTest::persistsAndNormalizesAppearance() {
     QCOMPARE(loaded.editor.lineHeightPixels, 18);
     QCOMPARE(loaded.terminal, (ketplus::TextTypographySettings{16, 16}));
     QCOMPARE(loaded.preview, (ketplus::TextTypographySettings{17, 31}));
+    QCOMPARE(loaded.terminalFontFamily, QStringLiteral("KET Sans Mono"));
+
+    // The dialog has no terminal font picker, so saving it keeps the stored family.
+    ketplus::ThemeManager theme(*qApp);
+    ketplus::SettingsDialog dialog(loaded, theme);
+    QCOMPARE(dialog.appearanceSettings().terminalFontFamily, QStringLiteral("KET Sans Mono"));
 }
 
 void SettingsDialogTest::previewsAndCancelsThemeSelection() {

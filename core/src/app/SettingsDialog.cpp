@@ -302,6 +302,7 @@ AppearanceSettings SettingsDialog::appearanceSettings() const {
             },
         .terminal =
             TextTypographySettings{terminalFontSizeBox_->value(), terminalLineHeightBox_->value()},
+        .terminalFontFamily = terminalFontFamily_,
         .preview =
             TextTypographySettings{previewFontSizeBox_->value(), previewLineHeightBox_->value()},
     }
@@ -313,6 +314,7 @@ EditorSettings SettingsDialog::settings() const { return appearanceSettings().ed
 void SettingsDialog::setAppearanceSettings(const AppearanceSettings& settings) {
     const auto value = settings.normalized();
     editorFontFamily_ = value.editor.fontFamily;
+    terminalFontFamily_ = value.terminalFontFamily;
     const int existingFont = editorFontBox_->findText(editorFontFamily_);
     if (existingFont < 0) {
         editorFontBox_->addItem(editorFontFamily_);

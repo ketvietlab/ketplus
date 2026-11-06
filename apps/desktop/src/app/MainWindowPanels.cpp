@@ -101,7 +101,8 @@ void MainWindow::applyTerminalTypography(TerminalPanel* terminal) {
     if (terminal == nullptr)
         return;
     const int fontSize = appearanceSettings_.terminal.fontSizePixels;
-    terminal->setTypography(fontSize, appearanceSettings_.terminal.lineHeightPixels);
+    terminal->setTypography(fontSize, appearanceSettings_.terminal.lineHeightPixels,
+                            appearanceSettings_.terminalFontFamily);
     // The product theme owns the global interface font. A local rule keeps the
     // independently configurable terminal font from inheriting that size.
     terminal->setStyleSheet(

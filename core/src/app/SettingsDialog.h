@@ -124,6 +124,8 @@ class SettingsDialog final : public QDialog, public SettingsHost {
     QListWidget* themeList_{nullptr};
     QComboBox* editorFontBox_{nullptr};
     QString editorFontFamily_;
+    // Kept as loaded: the dialog has no terminal font picker yet.
+    QString terminalFontFamily_;
     QSpinBox* interfaceFontSizeBox_{nullptr};
     QSpinBox* editorFontSizeBox_{nullptr};
     QSpinBox* editorLineHeightBox_{nullptr};

@@ -17,12 +17,10 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileDialog>
-#include <QFontDatabase>
 #include <QHBoxLayout>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPainter>
-#include <QResizeEvent>
 #include <QTabBar>
 #include <QTabWidget>
 
@@ -43,15 +41,6 @@ ketplus::ThemePalette terminalPalette(ket::Theme theme) {
     palette.accentMuted = token(u"accent-muted", theme);
     palette.warning = token(u"warning", theme);
     return palette;
-}
-
-QFont terminalFont(int pixels) {
-    const QString family = ket::Profile::current().monoFamily();
-    QFont font =
-        family.isEmpty() ? QFontDatabase::systemFont(QFontDatabase::FixedFont) : QFont(family);
-    font.setPixelSize(pixels);
-    font.setWeight(QFont::Medium);
-    return font;
 }
 
 // The tab strip's trailing area: the strip background and its bottom edge, so the actions sit
@@ -304,14 +293,9 @@ void TerminalMockWindow::applyTheme() {
     }
 }
 
-// TerminalView::setTypography always picks the platform fixed font, so the mock sets KÉT Sans
-// Mono afterwards and replays a viewport resize to rebuild the cell grid with its metrics.
+// KÉT Sans Mono from the profile; only its Medium face is bundled, so that is the one drawn.
 void TerminalMockWindow::applyTypography(ketplus::TerminalTab* tab) const {
-    tab->setTypography(fontSizePixels_, lineHeightPixels_);
-    ketplus::TerminalView* view = tab->view();
-    view->setFont(terminalFont(fontSizePixels_));
-    QResizeEvent resize(view->viewport()->size(), view->viewport()->size());
-    QCoreApplication::sendEvent(view->viewport(), &resize);
+    tab->setTypography(fontSizePixels_, lineHeightPixels_, ket::Profile::current().monoFamily());
 }
 
 void TerminalMockWindow::showStatus(const QString& message) {

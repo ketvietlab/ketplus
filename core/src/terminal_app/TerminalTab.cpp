@@ -78,8 +78,9 @@ void TerminalTab::stop() { session_.stop(); }
 
 void TerminalTab::applyTheme(const ThemePalette& palette) { terminal_->applyTheme(palette); }
 
-void TerminalTab::setTypography(const int fontSizePixels, const int lineHeightPixels) {
-    terminal_->setTypography(fontSizePixels, lineHeightPixels);
+void TerminalTab::setTypography(const int fontSizePixels, const int lineHeightPixels,
+                                const QString& fontFamily) {
+    terminal_->setTypography(fontSizePixels, lineHeightPixels, fontFamily);
 }
 
 void TerminalTab::setTitle(const QString& title) {
