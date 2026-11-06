@@ -19,7 +19,7 @@ include(FetchContent)
 set(KETQT_BUILD_WIDGETS ON CACHE BOOL "" FORCE)
 FetchContent_Declare(ketqt
     GIT_REPOSITORY https://github.com/ketvietlab/ket-qt.git
-    GIT_TAG 6ceb5385f59fdb5cd1f3be9e6b0c24bd32c2db3e # develop, through PR #26
+    GIT_TAG 0e65f4231eb4e7bb8477f56de43e017440905ea3 # ket-qt PR #27 head; move to its merge commit
 )
 FetchContent_MakeAvailable(ketqt)
 
