@@ -72,7 +72,7 @@ Rectangle {
             text: "@agent/" + header.conversation.number
             color: KetTheme.t.textMuted
             font.family: KetTheme.monoFontFamily
-            font.pixelSize: header.px(13)
+            font.pixelSize: header.px(14)
         }
 
         Basic.AbstractButton {

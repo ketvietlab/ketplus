@@ -207,7 +207,7 @@ Item {
                             text: index + 1
                             color: index + 1 === screen.cursorLine ? KetTheme.t.textSecondary : KetTheme.t.textMuted
                             font.family: KetTheme.monoFontFamily
-                            font.pixelSize: screen.px(13)
+                            font.pixelSize: screen.px(14)
                         }
                         Text {
                             x: screen.px(70)
@@ -216,7 +216,7 @@ Item {
                             text: screen.highlight(modelData)
                             color: KetTheme.t.textMain
                             font.family: KetTheme.monoFontFamily
-                            font.pixelSize: screen.px(13)
+                            font.pixelSize: screen.px(14)
                         }
                         TapHandler { onTapped: screen.cursorLine = index + 1 }
                     }

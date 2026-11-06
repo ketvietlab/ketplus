@@ -205,7 +205,7 @@ Item {
             KetFieldRow { width: parent.width; label: "Interface font size"; KetSelect { width: parent.width; model: ["13 px", "14 px", "15 px", "16 px"]; currentIndex: 2 } }
             KetFieldRow { width: parent.width; label: "Conversation width"; help: "Applies to Agent Workspace. Atlas keeps its compact reading column."; KetSelect { width: parent.width; model: ["Default · 760 px", "Wide · 864 px", "Extra wide · 1200 px", "Full width"] } }
             KetFieldRow { width: parent.width; label: "Editor font"; KetSelect { width: parent.width; model: ["KÉT Sans Mono", "Menlo", "Monospace"] } }
-            KetFieldRow { width: parent.width; label: "Editor font size"; KetSelect { width: parent.width; model: ["12 px", "13 px", "14 px"]; currentIndex: 1 } }
+            KetFieldRow { width: parent.width; label: "Editor font size"; KetSelect { width: parent.width; model: ["12 px", "13 px", "14 px", "15 px", "16 px"]; currentIndex: 2 } }
             Rectangle {
                 width: parent.width
                 height: sample.implicitHeight + screen.px(32)
@@ -218,8 +218,8 @@ Item {
                     spacing: screen.px(8)
                     Text { text: "PREVIEW"; color: KetTheme.t.textMuted; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(11); font.letterSpacing: 1 }
                     Text { text: "A space for what you are creating."; color: KetTheme.t.textMain; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(15) }
-                    Text { text: "const workspace = \"develop\";\nagent.continue(workspace);"; color: KetTheme.t.textMain; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(13) }
-                    Text { text: "➜ ketplus-desktop git:(develop)"; color: KetTheme.t.textMuted; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(13) }
+                    Text { text: "const workspace = \"develop\";\nagent.continue(workspace);"; color: KetTheme.t.textMain; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(14) }
+                    Text { text: "➜ ketplus-desktop git:(develop)"; color: KetTheme.t.textMuted; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(14) }
                 }
             }
         }

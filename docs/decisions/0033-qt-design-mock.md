@@ -26,6 +26,9 @@ component in that mock, with KetPlus metrics in `ket::Profile`.
   KÉT Sans Mono 0.10.4 Medium TTF (SIL OFL 1.1, licence alongside), which has
   no public release. Only the Medium face is bundled, so every monospace text
   in the mock is Medium (Jay, 2026-11-06).
+  Monospace text defaults to 14 px (code, diffs, inline code, conversation
+  numbers) while all other text keeps the KetPlus profile sizes; the mock sets
+  this through `ket::Profile::setCurrent` without kit changes (Jay, 2026-11-06).
 - **Evidence is repeatable.** `--screen`, `--state`, `--dark`, `--zoom` and
   `--screenshot` render any screen; `--smoke` opens every screen and fails on
   any QML warning.

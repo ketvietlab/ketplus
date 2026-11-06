@@ -5,6 +5,7 @@
 //   --screenshot=<file>                                         save the window and exit
 //   --smoke                                  open every screen; exit non-zero on QML warnings
 #include "KetAppearance.h"
+#include "KetProfile.h"
 #include "MockController.h"
 
 #include <QCommandLineParser>
@@ -66,6 +67,13 @@ int main(int argc, char* argv[]) {
     while (fonts.hasNext())
         if (QFontDatabase::addApplicationFont(fonts.next()) < 0)
             std::fprintf(stderr, "Could not load %s\n", qPrintable(fonts.filePath()));
+
+    // Monospace text (code, diffs, inline code, conversation numbers) reads at 14 px; the rest
+    // of the KetPlus profile is unchanged.
+    ket::Profile profile = ket::Profile::ketPlus();
+    profile.codePixels = 14;
+    profile.conversationNumberPixels = 14;
+    ket::Profile::setCurrent(profile);
 
     if (parser.isSet(dark))
         ket::Appearance::instance().setMode(ket::Appearance::Mode::Dark);

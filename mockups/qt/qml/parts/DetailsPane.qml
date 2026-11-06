@@ -126,7 +126,7 @@ Rectangle {
                 wrapMode: Text.WrapAnywhere
                 color: KetTheme.t.textMain
                 font.family: KetTheme.monoFontFamily
-                font.pixelSize: pane.px(13)
+                font.pixelSize: pane.px(14)
                 lineHeight: 1.35
                 text: "➜ ketplus-desktop git:(develop) ✗ cmake --build build\n"
                       + "[214/214] Linking CXX executable KetPlus.app\n"

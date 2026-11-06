@@ -157,7 +157,7 @@ Item {
                         Row {
                             spacing: screen.px(12)
                             Rectangle { width: screen.px(32); height: width; radius: screen.px(6); color: KetTheme.t.panelBg; border.color: KetTheme.t.panelBorder
-                                Text { anchors.centerIn: parent; text: "0" + (screen.flow + 1); color: KetTheme.t.textSecondary; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(12) } }
+                                Text { anchors.centerIn: parent; text: "0" + (screen.flow + 1); color: KetTheme.t.textSecondary; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(14) } }
                             Column {
                                 Text { text: Fixtures.atlasFlows[screen.flow].title; color: KetTheme.t.textMain; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(20); font.weight: Font.DemiBold }
                                 Text { text: screen.flow === 0 ? "From opening a project to a workspace ready for your Agent." : "Reopen a workspace after the Mac restarts."; color: KetTheme.t.textSecondary; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(14) }

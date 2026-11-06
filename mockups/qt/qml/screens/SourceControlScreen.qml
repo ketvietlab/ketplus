@@ -198,8 +198,8 @@ Item {
                             anchors.rightMargin: screen.px(20)
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: screen.px(8)
-                            Text { text: "+28"; color: KetTheme.t.success; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(13) }
-                            Text { text: "−9"; color: KetTheme.t.danger; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(13) }
+                            Text { text: "+28"; color: KetTheme.t.success; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(14) }
+                            Text { text: "−9"; color: KetTheme.t.danger; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(14) }
                         }
                     }
                     KetDiffView {
