@@ -1,5 +1,6 @@
 #include "ui/InterfaceFont.h"
 
+#include "ui/Theme.h"
 #include "ui/TypeScale.h"
 
 #include <QApplication>
@@ -150,8 +151,13 @@ void InterfaceUiFont::apply(QApplication& application, const int pixelSize) {
     static const QRegularExpression baseRule(
         QStringLiteral(R"((QWidget\s*\{[^}]*font-size:\s*)\d+px)"));
     sheet.replace(baseRule, QStringLiteral("\\1{{resolvedInterfaceSize}}px"));
+    // Tooltips keep the kit's recipe size (ThemeManager); do not scale it as a CM literal.
+    static const QRegularExpression tooltipRule(
+        QStringLiteral(R"((QToolTip\s*\{[^}]*font-size:\s*)\d+px)"));
+    sheet.replace(tooltipRule, QStringLiteral("\\1{{tooltipSize}}px"));
     sheet = TypeScale::scaleLiteralFontSizes(sheet, pixelSize);
     sheet.replace(QStringLiteral("{{resolvedInterfaceSize}}"), QString::number(pixelSize));
+    sheet.replace(QStringLiteral("{{tooltipSize}}"), QString::number(tooltipFontPixels()));
     application.setStyleSheet(sheet);
 }
 

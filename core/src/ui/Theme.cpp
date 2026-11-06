@@ -2,6 +2,7 @@
 
 #include "KetAppearance.h"
 #include "KetProfile.h"
+#include "KetRecipes.h"
 #include "KetStyle.h"
 #include "KetSyntax.h"
 #include "KetTokens.h"
@@ -11,6 +12,7 @@
 #include <QFont>
 #include <QFontDatabase>
 #include <QSettings>
+#include <QToolTip>
 
 #include <utility>
 
@@ -104,6 +106,17 @@ ThemeManager::Mode modeFromName(const QString& name) {
     return ThemeManager::Mode::System;
 }
 
+} // namespace
+
+// The tooltip size of the kit's recipe. The base QWidget rule would otherwise set tooltip
+// labels to the interface size: a stylesheet font wins over QToolTip::setFont.
+int tooltipFontPixels() {
+    const ket::Appearance& appearance = ket::Appearance::instance();
+    return qRound(appearance.scaled(ket::tooltipRecipe(appearance.theme()).fontPixels));
+}
+
+namespace {
+
 QString styleSheetFor(const ThemePalette& palette, const QString& fontFamily,
                       const int interfaceFontSizePixels) {
     const QString terminalFontFamily = QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
@@ -114,6 +127,10 @@ QWidget {
     font-size: {{interfaceFontSize}}px;
     selection-background-color: {{accentMuted}};
     selection-color: {{textMain}};
+}
+
+QToolTip {
+    font-size: {{tooltipFontSize}}px;
 }
 
 QMainWindow, QDialog, QMessageBox {
@@ -805,6 +822,7 @@ QToolButton[kvRole="sidebarAction"]:hover {
         {"{{fontFamily}}", fontFamily},
         {"{{terminalFontFamily}}", terminalFontFamily},
         {"{{interfaceFontSize}}", QString::number(interfaceFontSizePixels)},
+        {"{{tooltipFontSize}}", QString::number(tooltipFontPixels())},
         {"{{pageBackground}}", palette.pageBackground},
         {"{{panelBackground}}", palette.panelBackground},
         {"{{panelSubtle}}", palette.panelSubtle},
@@ -906,7 +924,7 @@ void ThemeManager::setInterfaceFontSizePixels(const int fontSizePixels) {
     interfaceFontSizePixels_ = normalized;
     QFont font = application_.font();
     font.setPixelSize(interfaceFontSizePixels_);
-    application_.setFont(font);
+    setApplicationFont(font);
     apply();
 }
 
@@ -924,6 +942,7 @@ void ThemeManager::apply() {
     palette_ = paletteFor(ket::Appearance::instance().theme());
 
     application_.setStyleSheet(styleSheetFor(palette_, uiFontFamily_, interfaceFontSizePixels_));
+    restoreTooltipFont();
 
     emit themeChanged();
 }
@@ -944,7 +963,20 @@ void ThemeManager::loadInterFont() {
     QFont font(uiFontFamily_);
     font.setPixelSize(interfaceFontSizePixels_);
     font.setWeight(QFont::Normal);
+    setApplicationFont(font);
+}
+
+void ThemeManager::setApplicationFont(const QFont& font) {
+    // QApplication::setFont without a class drops the per-class fonts, including the
+    // tooltip font ket::Style sets; put it back as the style does on a theme change.
     application_.setFont(font);
+    restoreTooltipFont();
+}
+
+void ThemeManager::restoreTooltipFont() {
+    QFont tooltipFont = ket::Style::interfaceFont();
+    tooltipFont.setPixelSize(tooltipFontPixels());
+    QToolTip::setFont(tooltipFont);
 }
 
 } // namespace ketplus

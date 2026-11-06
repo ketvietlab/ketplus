@@ -11,6 +11,7 @@
 #include <QAction>
 #include <QComboBox>
 #include <QDir>
+#include <QFontInfo>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
@@ -21,6 +22,7 @@
 #include <QSpinBox>
 #include <QTemporaryDir>
 #include <QToolButton>
+#include <QToolTip>
 #include <QtTest>
 
 using namespace ketplus;
@@ -173,6 +175,34 @@ class DesktopZoomTest final : public QObject {
             QCOMPARE(layout->itemAt(0)->spacerItem()->sizeHint().width(),
                      InterfaceZoomMetrics::geometry(12, pixels));
         }
+    }
+
+    void tooltipsKeepTheKitSizeAtEveryInterfaceSize() {
+        // InterfaceUiFont rewrites and scales the stylesheet; the tooltip rule keeps the
+        // kit's recipe size at Medium and Large and after a theme change.
+        ThemeManager theme(*qApp);
+        installFontOverlay(theme);
+        QWidget anchor;
+        anchor.resize(80, 40);
+        anchor.show();
+        const auto shownPixels = [&anchor] {
+            QToolTip::showText(anchor.mapToGlobal(QPoint(10, 10)), QStringLiteral("Tip"), &anchor);
+            int pixels = -1;
+            for (QWidget* widget : QApplication::topLevelWidgets()) {
+                if (widget->inherits("QTipLabel") && widget->isVisible()) {
+                    widget->ensurePolished();
+                    pixels = QFontInfo(widget->font()).pixelSize();
+                }
+            }
+            QToolTip::hideText();
+            return pixels;
+        };
+        QCOMPARE(shownPixels(), tooltipFontPixels());
+        theme.setInterfaceFontSizePixels(18);
+        QCOMPARE(shownPixels(), tooltipFontPixels());
+        theme.setMode(ThemeManager::Mode::Dark);
+        QCOMPARE(shownPixels(), tooltipFontPixels());
+        QVERIFY(tooltipFontPixels() < 18);
     }
 
     void appearanceUpdatesAllWindowsAndMonoWithoutZoom() {
