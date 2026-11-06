@@ -84,6 +84,7 @@ Rectangle {
                     x: sidebar.px(29)
                     anchors.verticalCenter: parent.verticalCenter
                     text: search.text
+                    font.weight: Font.Medium
                     color: KetTheme.t.textMuted
                     font.family: KetTheme.fontFamily
                     font.pixelSize: sidebar.px(12)
@@ -93,6 +94,7 @@ Rectangle {
                     anchors.rightMargin: sidebar.px(9)
                     anchors.verticalCenter: parent.verticalCenter
                     text: "⌘ K"
+                    font.weight: Font.Medium
                     color: KetTheme.t.textMuted
                     font.family: KetTheme.fontFamily
                     font.pixelSize: sidebar.px(11)
@@ -119,6 +121,7 @@ Rectangle {
                 KetNavItem {
                     required property var modelData
                     width: parent.width
+                    font.weight: Font.Medium
                     text: modelData.text
                     iconName: modelData.icon
                     count: modelData.count || -1
@@ -214,7 +217,7 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: sidebar.px(6)
                 KetIcon { anchors.verticalCenter: parent.verticalCenter; name: "filter"; box: sidebar.px(12); color: KetTheme.t.accentText }
-                Text { anchors.verticalCenter: parent.verticalCenter; text: "Tagged " + sidebar.window.tagFilter; color: KetTheme.t.accentText; font.family: KetTheme.fontFamily; font.pixelSize: sidebar.px(12) }
+                Text { anchors.verticalCenter: parent.verticalCenter; text: "Tagged " + sidebar.window.tagFilter; color: KetTheme.t.accentText; font.family: KetTheme.fontFamily; font.pixelSize: sidebar.px(12); font.weight: Font.Medium }
             }
             KetIconButton {
                 anchors.right: parent.right
@@ -323,6 +326,7 @@ Rectangle {
                                 color: parent.hovered ? KetTheme.t.textMain : KetTheme.t.textSecondary
                                 font.family: KetTheme.fontFamily
                                 font.pixelSize: sidebar.px(13)
+                                font.weight: Font.Medium
                             }
                             background: null
                         }
@@ -383,6 +387,7 @@ Rectangle {
                         color: KetTheme.t.textMuted
                         font.family: KetTheme.fontFamily
                         font.pixelSize: sidebar.px(10)
+                        font.weight: Font.Medium
                     }
                 }
                 KetIcon {

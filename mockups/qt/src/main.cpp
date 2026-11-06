@@ -76,6 +76,11 @@ int main(int argc, char* argv[]) {
     // The composer's context ring reads lighter at 15 px with a 2 px stroke (kit: 19 and 3).
     profile.usageRingSize = 15;
     profile.usageRingStroke = 2;
+    // Sidebar text in Medium: conversation titles (selected or not) and their status line.
+    profile.conversationTitleWeight = 500;
+    profile.conversationSelectedTitleWeight = 500;
+    profile.conversationMetaWeight = 500;
+    profile.navItemActiveWeight = 500;
     ket::Profile::setCurrent(profile);
 
     if (parser.isSet(dark))
