@@ -128,7 +128,7 @@ Basic.ApplicationWindow {
         Sidebar {
             id: sidebar
             Layout.fillHeight: true
-            Layout.preferredWidth: KetTheme.px(283, KetTheme.zoom)
+            Layout.preferredWidth: KetTheme.px(240, KetTheme.zoom) // 283 less 15%
             visible: app.screen !== "mobile-picker" && !app.compact
             window: app
         }

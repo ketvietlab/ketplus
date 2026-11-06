@@ -19,7 +19,12 @@ Item {
     property bool showTasks: running
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
-    function openComposerPanel(name) { composerBar.openPanel(name) }
+    function openComposerPanel(name) {
+        if (name === "reviewer")
+            conversationHeader.openReviewerMenu()
+        else
+            composerBar.openPanel(name)
+    }
 
     RowLayout {
         anchors.fill: parent
@@ -31,6 +36,7 @@ Item {
             spacing: 0
 
             ConversationHeader {
+                id: conversationHeader
                 Layout.fillWidth: true
                 window: screen.window
                 conversation: screen.conversation

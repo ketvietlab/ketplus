@@ -34,23 +34,65 @@ Item {
         }
     }
 
-    component ChangeRow: Basic.AbstractButton {
-        required property var file
-        width: parent.width
-        height: screen.px(56)
-        hoverEnabled: true
-        checked: screen.selected === file.name
-        onClicked: screen.selected = file.name
-        background: Rectangle { color: parent.checked ? KetTheme.t.accentSubtle : parent.hovered ? KetTheme.t.surfaceHover : "transparent" }
-        contentItem: Item {
-            KetIcon { x: screen.px(14); anchors.verticalCenter: parent.verticalCenter; name: "file-code"; box: screen.px(14); color: KetTheme.t.textMuted }
-            Column {
-                x: screen.px(34)
-                anchors.verticalCenter: parent.verticalCenter
-                Text { text: file.name; color: checked ? KetTheme.t.accentText : KetTheme.t.textMain; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(14) }
-                Text { text: file.path; color: KetTheme.t.textMuted; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(11) }
+    // Changed files as the Explorer's tree: folders from their paths, a folder with a single
+    // subfolder and no files compacted into "src / agent / qml", files under their folder.
+    property var closedFolders: []
+    function treeRows(files, section) {
+        const root = { dirs: {}, files: [] }
+        for (const file of files) {
+            let node = root
+            for (const part of file.path.split("/"))
+                node = node.dirs[part] = node.dirs[part] || { dirs: {}, files: [] }
+            node.files.push(file)
+        }
+        const rows = []
+        const walk = (node, depth, path) => {
+            for (const name of Object.keys(node.dirs).sort()) {
+                let child = node.dirs[name]
+                let label = name
+                let key = path + "/" + name
+                while (child.files.length === 0 && Object.keys(child.dirs).length === 1) {
+                    const only = Object.keys(child.dirs)[0]
+                    label += " / " + only
+                    key += "/" + only
+                    child = child.dirs[only]
+                }
+                const open = !screen.closedFolders.includes(section + key)
+                rows.push({ folder: true, name: label, depth: depth, key: section + key, open: open })
+                if (open)
+                    walk(child, depth + 1, key)
             }
-            Text { anchors.right: parent.right; anchors.rightMargin: screen.px(14); anchors.verticalCenter: parent.verticalCenter; text: "M"; color: KetTheme.t.warning; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(11); font.weight: Font.DemiBold }
+            for (const file of node.files)
+                rows.push({ folder: false, name: file.name, depth: depth, status: file.status || "M" })
+        }
+        walk(root, 0, "")
+        return rows
+    }
+
+    component ChangeTree: Column {
+        property var files: []
+        property string section
+        width: parent.width
+        Repeater {
+            model: screen.treeRows(parent.files, parent.section)
+            KetFileRow {
+                required property var modelData
+                width: parent.width
+                text: modelData.name
+                folder: modelData.folder
+                depth: modelData.depth
+                status: modelData.folder ? "" : modelData.status
+                checked: modelData.folder && modelData.open
+                active: !modelData.folder && screen.selected === modelData.name
+                onClicked: {
+                    if (modelData.folder)
+                        screen.closedFolders = modelData.open
+                            ? screen.closedFolders.concat([modelData.key])
+                            : screen.closedFolders.filter(key => key !== modelData.key)
+                    else
+                        screen.selected = modelData.name
+                }
+            }
         }
     }
 
@@ -60,7 +102,7 @@ Item {
 
         Rectangle {
             Layout.fillHeight: true
-            Layout.preferredWidth: screen.px(224)
+            Layout.preferredWidth: screen.px(248) // as wide as the Explorer
             color: KetTheme.t.sidebarBg
 
             ColumnLayout {
@@ -87,9 +129,9 @@ Item {
                 Column {
                     Layout.fillWidth: true
                     Section { id: changes; title: "Changes"; count: Fixtures.changedFiles.length }
-                    Repeater { model: changes.open ? Fixtures.changedFiles : []; ChangeRow { required property var modelData; file: modelData } }
+                    ChangeTree { visible: changes.open; files: Fixtures.changedFiles; section: "changes" }
                     Section { id: staged; title: "Staged Changes"; count: Fixtures.stagedFiles.length }
-                    Repeater { model: staged.open ? Fixtures.stagedFiles : []; ChangeRow { required property var modelData; file: modelData } }
+                    ChangeTree { visible: staged.open; files: Fixtures.stagedFiles; section: "staged" }
                 }
 
                 Item { Layout.fillHeight: true }
@@ -156,8 +198,8 @@ Item {
                             anchors.rightMargin: screen.px(20)
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: screen.px(8)
-                            Text { text: "+28"; color: KetTheme.t.success; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(13) }
-                            Text { text: "−9"; color: KetTheme.t.danger; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(13) }
+                            Text { text: "+28"; color: KetTheme.t.success; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(14) }
+                            Text { text: "−9"; color: KetTheme.t.danger; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(14) }
                         }
                     }
                     KetDiffView {

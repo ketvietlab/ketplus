@@ -4,8 +4,8 @@ import QtQuick.Controls.Basic as Basic
 import Ket
 import KetPlusMock
 
-// The conversation's 44 px chat-local header: reference, title, status, worktree, tags and the
-// pane toggles.
+// The conversation's 44 px chat-local header: reference, title, status, worktree, reviewer,
+// tags and the pane toggles.
 Rectangle {
     id: header
 
@@ -14,7 +14,32 @@ Rectangle {
     property bool detailsOpen: false
     readonly property int status: conversation.status
 
+    // The agent that reviews each finished turn and replies here, by conversation number.
+    // A reviewer never merges. The running conversation starts with one, for the mock.
+    property var reviewers: ({ "9410": "Claude · Opus 5.5" })
+    readonly property string reviewer: reviewers[conversation.number] || ""
+    readonly property var reviewCandidates: {
+        const found = []
+        for (const r of Fixtures.repositories)
+            for (const c of r.conversations)
+                if (c.number !== header.conversation.number && c.tags.some(t => t.label === "Review"))
+                    found.push(c)
+        return found
+    }
+
     signal toggleDetails(string tab)
+
+    function openReviewerMenu() { reviewerMenu.popup(reviewerButton, 0, reviewerButton.height) }
+    function chooseReviewer(name) {
+        const next = Object.assign({}, reviewers)
+        if (name)
+            next[conversation.number] = name
+        else
+            delete next[conversation.number]
+        reviewers = next
+        window.notify(name ? name + " reviews each finished turn of @agent/" + conversation.number
+                           : "Turns finish without a review")
+    }
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
     function tone(status) {
@@ -47,7 +72,7 @@ Rectangle {
             text: "@agent/" + header.conversation.number
             color: KetTheme.t.textMuted
             font.family: KetTheme.monoFontFamily
-            font.pixelSize: header.px(13)
+            font.pixelSize: header.px(14)
         }
 
         Basic.AbstractButton {
@@ -80,6 +105,21 @@ Rectangle {
             iconName: "branch"
             text: header.conversation.worktree + "  ▾"
             onClicked: header.window.picker.open()
+        }
+
+        KetButton {
+            id: reviewerButton
+            visible: !header.window.compact
+            anchors.verticalCenter: parent.verticalCenter
+            controlSize: KetTheme.ControlSize.Small
+            variant: header.reviewer ? KetTheme.ButtonVariant.Secondary : KetTheme.ButtonVariant.Ghost
+            iconName: "eye"
+            text: (header.reviewer ? "Reviewer · " + header.reviewer : "Reviewer") + "  ▾"
+            onClicked: header.openReviewerMenu()
+            KetToolTip {
+                visible: reviewerButton.hovered && !reviewerMenu.visible
+                text: "An agent reviews each finished turn and replies to this conversation. Reviewers never merge."
+            }
         }
 
         Repeater {
@@ -156,5 +196,50 @@ Rectangle {
         }
         KetMenuSeparator {}
         KetMenuItem { text: "Manage tags…"; iconName: "settings"; onTriggered: header.window.notify("Tags are managed from any conversation") }
+    }
+
+    KetMenu {
+        id: reviewerMenu
+        KetMenuItem {
+            text: "No reviewer"
+            description: "Turns finish without a review"
+            checkable: true
+            checked: header.reviewer === ""
+            onTriggered: header.chooseReviewer("")
+        }
+        KetMenuSection { text: "New review agent" }
+        KetMenuItem {
+            text: "Claude · Opus 5.5"
+            description: "Starts a reviewer in this worktree, read only"
+            iconName: "bot"
+            checkable: true
+            checked: header.reviewer === text
+            onTriggered: header.chooseReviewer(text)
+        }
+        KetMenuItem {
+            text: "Codex · GPT-5.6 Sol"
+            description: "Starts a reviewer in this worktree, read only"
+            iconName: "bot"
+            checkable: true
+            checked: header.reviewer === text
+            onTriggered: header.chooseReviewer(text)
+        }
+        KetMenuSection { text: "Existing conversation" }
+        // Appended in order after the section: a Repeater inside a Menu misplaces its items.
+        Instantiator {
+            model: header.reviewCandidates
+            onObjectAdded: (index, object) => reviewerMenu.addItem(object)
+            onObjectRemoved: (index, object) => reviewerMenu.removeItem(object)
+            KetMenuItem {
+                required property var modelData
+                readonly property string label: "@agent/" + modelData.number
+                text: modelData.title
+                description: label + " · " + modelData.worktree
+                iconName: "chat"
+                checkable: true
+                checked: header.reviewer === label
+                onTriggered: header.chooseReviewer(label)
+            }
+        }
     }
 }

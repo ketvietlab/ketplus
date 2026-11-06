@@ -41,7 +41,7 @@ Rectangle {
             Rectangle { anchors.horizontalCenter: parent.horizontalCenter; y: screen.px(12); width: screen.px(120); height: screen.px(34); radius: height / 2; color: KetTheme.t.textMain }
 
             Text { x: screen.px(28); y: screen.px(70); text: "Review the startup flow"; color: KetTheme.t.textMain; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(17); font.weight: Font.DemiBold }
-            Text { x: screen.px(28); y: screen.px(96); text: "@agent/9410 · Working"; color: KetTheme.t.textMuted; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(12) }
+            Text { x: screen.px(28); y: screen.px(96); text: "@agent/9410 · Working"; color: KetTheme.t.textMuted; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(14) }
 
             // The bottom sheet.
             Rectangle {

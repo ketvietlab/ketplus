@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MPL-2.0
 // KetPlus Qt mock. Options make review evidence repeatable:
 //   --screen=<id> --state=<state> --dark|--light --zoom=1.25   open one screen
-//   --open=model|mode|limits                                    open a composer panel
+//   --open=model|mode|limits|reviewer                                   open a composer panel
 //   --screenshot=<file>                                         save the window and exit
 //   --smoke                                  open every screen; exit non-zero on QML warnings
 #include "KetAppearance.h"
+#include "KetProfile.h"
 #include "MockController.h"
 
 #include <QCommandLineParser>
@@ -45,7 +46,7 @@ int main(int argc, char* argv[]) {
                                    QStringLiteral("Screen state, e.g. running or welcome."),
                                    QStringLiteral("state"));
     const QCommandLineOption open(QStringLiteral("open"),
-                                  QStringLiteral("Open a composer panel: model, mode or limits."),
+                                  QStringLiteral("Open a panel: model, mode, limits or reviewer."),
                                   QStringLiteral("panel"));
     const QCommandLineOption dark(QStringLiteral("dark"), QStringLiteral("Start in dark mode."));
     const QCommandLineOption light(QStringLiteral("light"), QStringLiteral("Start in light mode."));
@@ -66,6 +67,13 @@ int main(int argc, char* argv[]) {
     while (fonts.hasNext())
         if (QFontDatabase::addApplicationFont(fonts.next()) < 0)
             std::fprintf(stderr, "Could not load %s\n", qPrintable(fonts.filePath()));
+
+    // Monospace text (code, diffs, inline code, conversation numbers) reads at 14 px; the rest
+    // of the KetPlus profile is unchanged.
+    ket::Profile profile = ket::Profile::ketPlus();
+    profile.codePixels = 14;
+    profile.conversationNumberPixels = 14;
+    ket::Profile::setCurrent(profile);
 
     if (parser.isSet(dark))
         ket::Appearance::instance().setMode(ket::Appearance::Mode::Dark);

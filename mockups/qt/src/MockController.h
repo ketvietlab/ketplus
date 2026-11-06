@@ -27,7 +27,7 @@ class MockController final : public QObject {
 
     QString initialScreen = QStringLiteral("workspace");
     QString initialState;
-    QString initialPanel; // a composer panel to open: model, mode or limits
+    QString initialPanel; // a panel to open: model, mode, limits or reviewer
 
   signals:
     void appearanceChanged();

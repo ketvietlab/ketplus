@@ -30,6 +30,49 @@ Item {
         font.weight: Font.Medium
     }
     component Divider: Rectangle { width: parent.width; height: 1; color: KetTheme.t.panelBorder }
+    // A settings row: label and help on the left, the control right-aligned and at most
+    // 200 px wide.
+    component SettingRow: Item {
+        id: settingRow
+        property string label
+        property string help
+        default property alias control: slot.data
+        readonly property var recipe: KetTheme.fieldRowRecipe(KetTheme.dark, KetTheme.zoom)
+        width: parent.width
+        implicitHeight: Math.max(texts.implicitHeight, slot.implicitHeight)
+
+        Column {
+            id: texts
+            anchors.left: parent.left
+            anchors.right: slot.left
+            anchors.rightMargin: settingRow.recipe.gap
+            topPadding: settingRow.recipe.labelTop
+            spacing: settingRow.recipe.helpGap
+            Text {
+                width: parent.width
+                text: settingRow.label
+                wrapMode: Text.WordWrap
+                color: settingRow.recipe.label
+                font.family: KetTheme.fontFamily
+                font.pixelSize: settingRow.recipe.labelPixels
+            }
+            Text {
+                width: parent.width
+                visible: text !== ""
+                text: settingRow.help
+                wrapMode: Text.WordWrap
+                color: settingRow.recipe.help
+                font.family: KetTheme.fontFamily
+                font.pixelSize: settingRow.recipe.helpPixels
+            }
+        }
+        Item {
+            id: slot
+            anchors.right: parent.right
+            width: Math.min(screen.px(200), settingRow.width)
+            implicitHeight: children.length ? children[0].implicitHeight : 0
+        }
+    }
     component Body: Text {
         width: parent.width
         wrapMode: Text.Wrap
@@ -201,11 +244,11 @@ Item {
         Column {
             spacing: screen.px(18)
             Body { text: "Adjust readability across your workspace." }
-            KetFieldRow { width: parent.width; label: "Interface font"; help: "KetPlus uses KÉT Sans throughout the interface."; KetSelect { width: parent.width; model: ["KÉT Sans"] } }
-            KetFieldRow { width: parent.width; label: "Interface font size"; KetSelect { width: parent.width; model: ["13 px", "14 px", "15 px", "16 px"]; currentIndex: 2 } }
-            KetFieldRow { width: parent.width; label: "Conversation width"; help: "Applies to Agent Workspace. Atlas keeps its compact reading column."; KetSelect { width: parent.width; model: ["Default · 760 px", "Wide · 864 px", "Extra wide · 1200 px", "Full width"] } }
-            KetFieldRow { width: parent.width; label: "Editor font"; KetSelect { width: parent.width; model: ["KÉT Sans Mono", "Menlo", "Monospace"] } }
-            KetFieldRow { width: parent.width; label: "Editor font size"; KetSelect { width: parent.width; model: ["12 px", "13 px", "14 px"]; currentIndex: 1 } }
+            SettingRow { label: "Interface font"; help: "KetPlus uses KÉT Sans throughout the interface."; KetSelect { width: parent.width; model: ["KÉT Sans"] } }
+            SettingRow { label: "Interface font size"; KetSelect { width: parent.width; model: ["13 px", "14 px", "15 px", "16 px"]; currentIndex: 2 } }
+            SettingRow { label: "Conversation width"; help: "Applies to Agent Workspace. Atlas keeps its compact reading column."; KetSelect { width: parent.width; model: ["Default · 760 px", "Wide · 864 px", "Extra wide · 1200 px", "Full width"] } }
+            SettingRow { label: "Editor font"; KetSelect { width: parent.width; model: ["KÉT Sans Mono", "Menlo", "Monospace"] } }
+            SettingRow { label: "Editor font size"; KetSelect { width: parent.width; model: ["12 px", "13 px", "14 px", "15 px", "16 px"]; currentIndex: 2 } }
             Rectangle {
                 width: parent.width
                 height: sample.implicitHeight + screen.px(32)
@@ -218,8 +261,8 @@ Item {
                     spacing: screen.px(8)
                     Text { text: "PREVIEW"; color: KetTheme.t.textMuted; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(11); font.letterSpacing: 1 }
                     Text { text: "A space for what you are creating."; color: KetTheme.t.textMain; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(15) }
-                    Text { text: "const workspace = \"develop\";\nagent.continue(workspace);"; color: KetTheme.t.textMain; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(13) }
-                    Text { text: "➜ ketplus-desktop git:(develop)"; color: KetTheme.t.textMuted; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(13) }
+                    Text { text: "const workspace = \"develop\";\nagent.continue(workspace);"; color: KetTheme.t.textMain; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(14) }
+                    Text { text: "➜ ketplus-desktop git:(develop)"; color: KetTheme.t.textMuted; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(14) }
                 }
             }
         }
@@ -255,7 +298,7 @@ Item {
             Body { text: "Agents KetPlus can start, and the browser they use." }
             KetChoice { width: parent.width; kind: KetTheme.ToggleKind.Radio; checked: true; text: "Codex"; description: "Signed in with ChatGPT · GPT-5.6 Luna by default" }
             KetChoice { width: parent.width; kind: KetTheme.ToggleKind.Radio; text: "Claude Code"; description: "Signed in with Claude · Opus 5.5 by default" }
-            KetFieldRow { width: parent.width; label: "Default effort"; KetSelect { width: parent.width; model: Fixtures.efforts; currentIndex: 1 } }
+            SettingRow { label: "Default effort"; KetSelect { width: parent.width; model: Fixtures.efforts; currentIndex: 1 } }
             Divider {}
             SubHeading { text: "Browser" }
             KetChoice { width: parent.width; checked: true; text: "Let Agents use the built-in browser"; description: "Chromium in its own profile; pages, captures and visual comparison" }
@@ -338,7 +381,7 @@ Item {
                 badges: KetBadge { text: "Up to date"; tone: KetTheme.BadgeTone.Neutral }
                 detail: "Checked just now."
             }
-            KetFieldRow { width: parent.width; label: "Channel"; KetSelect { width: parent.width; model: ["Stable", "Beta"] } }
+            SettingRow { label: "Channel"; KetSelect { width: parent.width; model: ["Stable", "Beta"] } }
             KetCheckbox { text: "Download updates automatically"; checked: true }
             KetButton { text: "Check for updates"; iconName: "refresh"; onClicked: screen.window.notify("KétPlus Pro is up to date") }
         }
