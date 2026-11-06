@@ -4,6 +4,7 @@
 #include "cloud/DevicePins.h"
 #include "cloud/RelayWakeups.h"
 #include "cloud/RemoteWorktreeQuota.h"
+#include "cloud/SessionCredentials.h"
 #include "transport/RemotePeers.h"
 #include "transport/Signaling.h"
 
@@ -141,6 +142,8 @@ class CloudControlClient final : public QObject {
                             const QByteArray& recipientAgreementKey = {});
     [[nodiscard]] QJsonObject status() const;
     bool clearUploadProgress(QString* error);
+    // Removes what the credential file keeps for conversations no longer in the journal (#84).
+    void pruneSessionCredentials();
     [[nodiscard]] static QJsonArray
     sessionSnapshots(const QList<StoredSession>& stored, const QString& workspaceId,
                      const QString& machineId, const QByteArray& pathIdSalt,
@@ -187,6 +190,7 @@ class CloudControlClient final : public QObject {
     CredentialStore credentials_;
     CloudCrypto crypto_;
     DevicePins pins_;
+    SessionCredentials sessionCredentials_;
     QNetworkAccessManager network_;
     QNetworkAccessManager* transport_{&network_};
     QTimer syncTimer_;

@@ -29,6 +29,19 @@ KetPlus treats archive, restore, and delete as different operations:
 - Sign-out removes the local enrolled-machine account pointers and daemon credential, fences late
   authentication replies, and stops cloud polling. Installation identity and device cryptographic
   keys remain local so a later sign-in can safely re-enroll. Sign-out is not device revocation.
+  The enrollment pointers and every upload cursor go in one rewrite of the credential file.
+- Conversation content keys stay with sign-out, but they belong to one workspace (#84). The
+  daemon records the workspace they were made in (`session-keys-workspace`, which sign-out
+  keeps). An enrollment into another workspace removes every content key, device wrap and upload
+  cursor and records the new workspace in the same rewrite, as the last step of storing the
+  enrollment, so the devices of the account signed out of cannot read what is uploaded next.
+  The daemon repeats the check at start, so a sign-in that stopped before that step is finished
+  on restart. Signing in to the same workspace keeps the keys, because the relay already holds
+  their wraps and refuses a different wrap under the same id. Keys from an install that was
+  signed out before the workspace was recorded cannot be attributed and are kept.
+- A deleted conversation's content keys, device wraps and upload cursor are removed from the
+  credential file when its deletion is announced, and any left by a conversation deleted while
+  the daemon was not running are swept at start.
 
 These rules preserve local/provider ownership boundaries and avoid presenting a destructive action
 as complete before its owning subsystem acknowledges it.

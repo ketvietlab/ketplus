@@ -162,6 +162,7 @@ bool CredentialStore::write(const QString& account, const QByteArray& value, QSt
     if (!load(&values, error))
         return false;
     values.insert(account, QString::fromLatin1(value.toBase64()));
+    ++fileWrites_;
     if (!save(credentialPath(service_), values, error)) {
         snapshot_ = {};
         return false;
@@ -171,12 +172,33 @@ bool CredentialStore::write(const QString& account, const QByteArray& value, QSt
 }
 
 bool CredentialStore::remove(const QString& account, QString* error) const {
+    return removeIf([&account](const QString& candidate) { return candidate == account; }, error);
+}
+
+bool CredentialStore::removeIf(const std::function<bool(const QString& account)>& match,
+                               QString* error) const {
+    return rewrite(match, {}, error);
+}
+
+bool CredentialStore::rewrite(const std::function<bool(const QString& account)>& remove,
+                              const QHash<QString, QByteArray>& writes, QString* error) const {
     QJsonObject values;
     if (!load(&values, error))
         return false;
-    if (!values.contains(account))
+    bool changed = !writes.isEmpty();
+    for (auto entry = values.begin(); entry != values.end();) {
+        if (remove(entry.key())) {
+            entry = values.erase(entry);
+            changed = true;
+        } else {
+            ++entry;
+        }
+    }
+    for (auto write = writes.cbegin(); write != writes.cend(); ++write)
+        values.insert(write.key(), QString::fromLatin1(write.value().toBase64()));
+    if (!changed)
         return true;
-    values.remove(account);
+    ++fileWrites_;
     if (!save(credentialPath(service_), values, error)) {
         snapshot_ = {};
         return false;
