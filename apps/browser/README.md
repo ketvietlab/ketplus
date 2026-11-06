@@ -76,8 +76,15 @@ self-contained runtime that macOS Release builds copy into
 one). It contains the Node.js version pinned with its sha256 in
 `runtime/node-runtime.json`, `src/`, production `node_modules` from `npm ci
 --omit=dev`, the skill, third-party notices and `runtime.json`. `node
-scripts/smoke-runtime.mjs <dir>` starts the staged MCP server with the staged node
-and captures a local page. See `docs/decisions/0009-bundled-browser-runtime.md`.
+scripts/smoke-runtime.mjs <dir>` (`npm run smoke:runtime -- <dir>`) starts the
+staged MCP server with the staged node, captures a local page and checks that a
+public origin is refused; CI stages and smokes a runtime on every change.
+`runtime.json` records `sourceSha256`, a digest of the package files and the
+skill. CMake refuses a runtime whose digest differs from the checkout, unless
+`KETPLUS_BROWSER_RUNTIME_ALLOW_STALE=ON` is set. It checks at configure time and
+again before every bundle and install, since sources or the runtime can change
+after configure. Install replaces the runtime embedded in the built app bundle
+and checks the installed copy. See `docs/decisions/0009-bundled-browser-runtime.md`.
 
 Start the newline-delimited JSON-RPC 2.0 server:
 

@@ -13,7 +13,8 @@
     "start:mcp": "node src/mcp.mjs",
     "test": "node --test",
     "install:browser": "playwright install chromium",
-    "package:runtime": "node scripts/package-runtime.mjs"
+    "package:runtime": "node scripts/package-runtime.mjs",
+    "smoke:runtime": "node scripts/smoke-runtime.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",

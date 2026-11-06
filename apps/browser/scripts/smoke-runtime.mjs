@@ -44,6 +44,11 @@ try {
   console.log(`tools (${tools.length}): ${tools.map((tool) => tool.name).join(", ")}`);
   const session = (await call("browser_create_session", { viewport: { width: 800, height: 600 } })).structuredContent;
   const page = (await call("browser_open", { sessionId: session.sessionId, url: `${origin}/` })).structuredContent;
+  // The host's KETPLUS_BROWSER_ALLOWED_ORIGINS reached the bundled server: a public
+  // origin is refused before any page loads.
+  const denied = await client.callTool({ name: "browser_open", arguments: { sessionId: session.sessionId, url: "https://example.com/" } });
+  assert.ok(denied.isError, "a non-loopback origin is refused under the loopback policy");
+  assert.equal(denied.structuredContent.code, "NAVIGATION_DENIED");
   const capture = await call("browser_capture", { sessionId: session.sessionId, pageId: page.pageId, label: "smoke" });
   const image = capture.content.find((block) => block.type === "image");
   const pngPath = capture.structuredContent.path;

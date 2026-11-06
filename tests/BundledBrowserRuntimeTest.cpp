@@ -224,12 +224,35 @@ class BundledBrowserRuntimeTest final : public QObject {
         const QString expected =
             QFileInfo(bundle.runtime() + QStringLiteral("/.claude/skills/ketplus-browser/SKILL.md"))
                 .canonicalFilePath();
-        QCOMPARE(browserSkillFile(settings, workspace.path(), bundle.macos()), expected);
+        QCOMPARE(browserSkillFile(settings, bundle.macos()), expected);
         // Match runtime precedence even if a saved checkout path is stale.
         settings.browserAppPath = workspace.filePath(QStringLiteral("missing"));
-        QCOMPARE(browserSkillFile(settings, workspace.path(), bundle.macos()), expected);
+        QCOMPARE(browserSkillFile(settings, bundle.macos()), expected);
         settings.enabled = false;
-        QVERIFY(browserSkillFile(settings, workspace.path(), bundle.macos()).isEmpty());
+        QVERIFY(browserSkillFile(settings, bundle.macos()).isEmpty());
+    }
+
+    void sourceSkillComesFromTheLaunchedCheckoutNotTheOpenRepository() {
+        // An application directory outside any checkout, with no bundled runtime.
+        QTemporaryDir application;
+        QTemporaryDir repository;
+        const QString planted =
+            repository.filePath(QStringLiteral("apps/browser/.claude/skills/ketplus-browser"));
+        QVERIFY(QDir().mkpath(planted));
+        QVERIFY(QDir().mkpath(repository.filePath(QStringLiteral("apps/browser/src"))));
+        for (const QString& file :
+             {planted + QStringLiteral("/SKILL.md"),
+              repository.filePath(QStringLiteral("apps/browser/src/mcp.mjs"))}) {
+            QFile written(file);
+            QVERIFY(written.open(QIODevice::WriteOnly));
+            written.write("planted");
+        }
+        Settings settings;
+        QVERIFY(browserSkillFile(settings, application.path()).isEmpty());
+        // A checkout the user named in settings is used.
+        settings.browserAppPath = repository.filePath(QStringLiteral("apps/browser"));
+        QCOMPARE(QFileInfo(browserSkillFile(settings, application.path())).canonicalFilePath(),
+                 QFileInfo(planted + QStringLiteral("/SKILL.md")).canonicalFilePath());
     }
 
     void defaultSkillsAreFoundFromDesktopAndDaemonDirectories() {
