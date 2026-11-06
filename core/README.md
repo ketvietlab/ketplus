@@ -64,7 +64,11 @@ build\\lite-dev\\core\\KetPlusCM.exe        # Windows
 
 ### Standalone terminal for macOS
 
-macOS builds `KetPlus Terminal.app` by default alongside the editor. It is a
+macOS builds `KetPlus Terminal.app` by default alongside the editor; Finder, the
+Dock and the menu bar show it as KétPlus Terminal (ADR 0029), while the file name,
+bundle identifier and settings stay. Its icon is the Két Symbol drawing
+`assets/brand/ketplus-terminal.svg` (CC BY 4.0); `assets/icons/generate-terminal-icon.sh`
+renders the `.icns` and window icon from it. It is a
 small native terminal app backed by the same PTY, libvterm core, and bounded
 scrollback as the embedded panel, with tabs, multiple windows, copy/paste,
 search, clear/restart, zoom, full screen, and system/light/dark appearance.

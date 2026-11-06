@@ -41,7 +41,10 @@ LaunchTarget targetForPath(const QString& path) {
 
 int main(int argc, char* argv[]) {
     ketplus::TerminalApplication app(argc, argv);
+    // The application name also names the settings domain, so it stays ASCII; users see the
+    // display name (ADR 0029).
     QCoreApplication::setApplicationName(QStringLiteral("KetPlus Terminal"));
+    QGuiApplication::setApplicationDisplayName(QStringLiteral("KétPlus Terminal"));
     QCoreApplication::setApplicationVersion(QStringLiteral(KETPLUS_CM_VERSION));
     QCoreApplication::setOrganizationName(QStringLiteral("Ketsuite"));
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/brand/ketplus-terminal-icon.png")));
