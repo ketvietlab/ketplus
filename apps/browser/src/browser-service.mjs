@@ -262,6 +262,9 @@ export class BrowserService {
     session.proxy = await startOriginProxy({
       allowsUrl: (url) => policy.allows(url),
       allowsAuthority: (authority) => policy.allowsAuthority(authority),
+      allowsAddress: (url, address) => policy.allowsAddress(url, address),
+      allowsAuthorityAddress: (authority, address) =>
+        policy.allowsAuthorityAddress(authority, address),
       onBlocked: (url) => {
         session.blockedRequestCount += 1;
         if (session.blockedRequests.length < 50) session.blockedRequests.push(safeUrl(url));

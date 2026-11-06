@@ -160,7 +160,8 @@ milestone changes state.
   on macOS Release builds. Its JSON-RPC/MCP API accepts caller-supplied URLs and
   compares semantic, accessibility, geometry, style, and raster snapshots.
 - Browser tools for Codex, Claude and Cursor (ADRs 0008, 0009, 0011): on by
-  default, all websites allowed, isolated temporary profile. Every provider
+  default, public websites and loopback allowed (never the local network or
+  metadata addresses, checked on the resolved IP), isolated temporary profile. Every provider
   uses the first runtime that resolves (bundled, then source checkout), and
   starts without browser tools when none resolves. Settings changes restart
   idle Codex processes and apply to Claude/Cursor on their next turn. The

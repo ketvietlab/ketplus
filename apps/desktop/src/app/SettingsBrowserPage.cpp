@@ -89,7 +89,7 @@ SettingsBrowserPage::SettingsBrowserPage(QString settingsPath, QString searchSta
     layout->addWidget(
         textLabel(tr("Websites"), QStringLiteral("settingsWorkspaceSubheading"), this));
     layout->addSpacing(10);
-    allOrigins_ = new QRadioButton(tr("All websites"), this);
+    allOrigins_ = new QRadioButton(tr("Public websites and this computer"), this);
     allOrigins_->setObjectName(QStringLiteral("browserToolsAllOrigins"));
     onlyOrigins_ = new QRadioButton(tr("Only these origins"), this);
     onlyOrigins_->setObjectName(QStringLiteral("browserToolsOnlyOrigins"));

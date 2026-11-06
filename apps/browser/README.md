@@ -145,6 +145,20 @@ The host sets the origin ceiling with `KETPLUS_BROWSER_ALLOWED_ORIGINS`
 `allowedOrigins` may only narrow that ceiling, so a model cannot grant itself
 new origins.
 
+`*` means public websites and this computer. It never reaches the local
+network (10/8, 172.16/12, 192.168/16, 100.64/10, fc00::/7), link-local
+addresses (169.254/16 including cloud metadata, fe80::/10) or reserved ranges.
+Loopback addresses need a loopback name (`localhost`, `127.x`, `::1`), so a
+public name cannot rebind to a local service. A named origin may also reach the
+private network (`https://staging.internal`), and an IP-literal origin
+(`http://10.0.0.5:3000`) reaches exactly that address.
+
+The proxy resolves each hop's host once, keeps only the addresses the policy
+permits and connects to one of them, so a later DNS answer cannot move an
+allowed connection elsewhere. The proxy listens on loopback without
+credentials: it grants no access that a local process lacks, and Playwright
+disables the HTTP cache for contexts that use proxy credentials.
+
 Each session runs its browser context through a private local proxy. Every
 network hop is checked there: top-level and frame navigations, each redirect
 hop, subresources, `fetch`, WebSockets, popups, and `browser.session.request`.

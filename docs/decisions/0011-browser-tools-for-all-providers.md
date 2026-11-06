@@ -43,6 +43,14 @@ scope and source-checkout prerequisites in ADR 0008.
 - The origin proxy handles socket errors before policy rejection and closes
   upstream connections when their clients disconnect. A rejected CONNECT or
   WebSocket reset must not terminate the MCP worker.
+- Browser tools never prompt, so `*` cannot mean every reachable address. It
+  means public websites and this computer, checked on the address each hop
+  connects to: never the local network, link-local (cloud metadata) or
+  reserved ranges, and loopback only under a loopback name. The proxy resolves
+  once and dials the checked address, which defeats DNS rebinding. Reaching a
+  local-network service needs a named origin. The proxy stays unauthenticated:
+  it grants no access a local process lacks, and proxy credentials would make
+  Playwright disable the HTTP cache (#92).
 
 ## Consequences
 
