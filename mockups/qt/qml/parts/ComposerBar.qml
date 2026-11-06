@@ -14,6 +14,10 @@ Item {
 
     required property var window
     property bool busy: false
+    // The provider cannot start a turn yet: Send keeps the draft and says why.
+    property bool blocked: false
+    // The provider's setup state (Fixtures.providerSetup), shown on the model button.
+    property var setup: null
     property bool compact: false // narrow columns keep only the mode's icon
     property string provider: "claude"
     property string model: "Opus 5.5"
@@ -59,6 +63,13 @@ Item {
         busy: bar.busy
         placeholderText: bar.placeholder
         onSubmitted: text => {
+            if (bar.blocked) {
+                // KetComposer clears its input before it emits submitted; put the draft back.
+                composer.text = text
+                bar.window.showSetup(bar.provider)
+                bar.window.notify("Set up " + bar.providerLabel + " first. Your message is kept.")
+                return
+            }
             bar.window.notify("Sent to " + bar.providerLabel)
             composer.text = ""
         }
@@ -103,9 +114,12 @@ Item {
             id: modelButton
             Layout.maximumWidth: Math.max(bar.px(40), bar.width - bar.px(bar.compact ? 120 : 240))
             text: bar.providerLabel + " · " + bar.model + "   " + bar.effort
+            iconName: bar.setup ? "warning" : ""
+            warning: !!bar.setup
             open: modelDialog.visible
             Accessible.name: "Choose model and reasoning effort"
             Accessible.description: bar.providerLabel + " · " + bar.model + " · " + bar.effort + " effort"
+                                    + (bar.setup ? ". " + bar.setup.title : "")
             onClicked: modelDialog.open()
         }
 
@@ -158,19 +172,18 @@ Item {
         parent: Basic.Overlay.overlay
         provider: bar.provider
         model: bar.model
+        window: bar.window
         effort: bar.effort
-        onChosen: (provider, model, effort) => {
-            bar.provider = provider
-            bar.model = model
-            bar.effort = effort
-            bar.window.notify("Applies from the next turn")
-        }
+        // The choice changes the conversation, so its setup state and the composer follow it.
+        onChosen: (provider, model, effort) => bar.window.chooseModel(provider, model, effort)
     }
 
     ContextLimitsPopover {
         id: limits
         provider: bar.provider
         contextUsed: bar.contextUsed
+        // A used-up limit shows the same quota and reset as its setup guide.
+        rows: bar.setup && bar.setup.limits ? bar.setup.limits : null
         onCompactRequested: bar.window.notify("Compacting the conversation")
     }
 }

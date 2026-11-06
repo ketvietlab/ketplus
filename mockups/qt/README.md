@@ -42,6 +42,10 @@ Screens and states (`--screen` / `--state`):
 | `settings` | `typography`, `account`, `browser`, `computer`, `providers`, `archived`, `storage`, `updates` | The app's order: Appearance (live theme, follow system, zoom), typography, account, Agent models (opens the model picker), browser, computer use, providers (CLI status, Claude API access, organization usage), archive, storage (journal size by part, retention, size limit and warning, largest conversations, Compact now), updates |
 | `workspace` | `claude`, `codex`, `cursor` | One transcript per provider with every content type its journal produces (see Transcript content types); the composer follows the conversation's provider and model. `--scroll=0.5` starts the transcript part of the way down |
 | `workspace` | `storage-warning` | The sidebar's journal warning above Update ready; it opens Settings → Storage and clears after Compact now |
+| `workspace` | `setup-cli-missing`, `setup-cli-outdated`, `setup-signed-out`, `setup-claude-signed-out`, `setup-sidecar-missing` | A provider that cannot start a turn: a new conversation with its setup guide above the composer, which keeps the draft (see Provider setup) |
+| `workspace` | `setup-expired`, `setup-key-rejected`, `setup-limit`, `setup-capacity`, `setup-plan-blocked` | A turn the provider ended: the guide closes the turn, with Retry (see Provider setup) |
+| `workspace` + `--open=model` or `--open=setup` | any `setup-*` | Model & context names the provider's problem with Show setup steps; `setup` opens that guide in a dialog |
+| `settings` | `providers-setup` | Settings → Providers with Cursor not installed and Claude's sign-in expired; each provider shows its badge, details and the same guide |
 | `atlas` | | Edit an Atlas: flows, map, AI Chat |
 | `mobile-picker` | | Repository & worktree picker on iPhone |
 
@@ -81,6 +85,40 @@ the steps of an activity group.
 | Reconnecting, turn-ending error | `runtime.error` (`will_retry`) | ✓ | ✓ | ✓ |
 | Turn end: completed, stopped, failed; Claude cost | `turn.completed`, `usage.session` | ✓ | ✓ | ✓ |
 | Detail trimmed by journal compaction | ketvietlab/ketplus#128 | ✓ | – | – |
+
+## Provider setup
+
+`qml/Fixtures.qml` (`providerSetup`) lists what stops a provider and how the user fixes it;
+`qml/parts/ProviderSetupCard.qml` draws the guide: what happened in plain words, the
+provider's own message, numbered steps with the exact commands, and one primary action.
+Each command can be copied. In the app, Type in Terminal types it into a terminal beside the
+conversation for the user to run with Return, and KetPlus never runs it; in the mock it only
+shows a toast. Codex and Cursor sign-ins stay with their CLIs; the optional Anthropic API key is
+the one credential KetPlus saves (Keychain, Settings → Providers). Check again
+and Retry walk the live states (checking, failing once more for `cli-missing`, fixed). The
+same guide appears in Settings → Providers, which drops the turn-only steps.
+
+Hiding the guide above the composer is never a dead end: the model button then shows a
+warning, Model & context shows the problem with Show setup steps (for any provider tab, not
+only the conversation's), which opens the guide in a dialog, and Send brings the guide back
+while keeping the draft. A new setup state shows a hidden guide again.
+
+| State | Provider | What the daemon reports | Guide |
+|---|---|---|---|
+| `cli-missing` | Cursor | Version check `missing`; `CursorAdapter::missingExecutableMessage` | `curl https://cursor.com/install -fsS \| bash`, `agent login`, Check again |
+| `cli-outdated` | Codex | Version check `outdated` (below `minimum` in `provider-compatibility.json`) | `npm install -g @openai/codex@latest` or `brew upgrade codex` |
+| `signed-out` | Codex | The CLI has no account | `codex login`, or `codex login --with-api-key` from standard input |
+| `claude-signed-out` | Claude | Credential source `none` (`ClaudeCredentials::observe`), a cached observation from the last query, not a fresh probe | Claude Code `/login`, or an API key in Settings → Providers |
+| `sidecar-missing` | Claude | `provider_unavailable`: "Claude Agent SDK sidecar was not found." | Reinstall KetPlus from Settings → Updates (see #124) |
+| `expired` | Claude | `runtime.error`: "Failed to authenticate: OAuth session expired and could not be refreshed" | `/login` again, Retry |
+| `key-rejected` | Claude | HTTP 401 on the explicit credential check: "Anthropic rejected this API key." (not yet a turn `runtime.error`) | A new key in Settings → Providers |
+| `limit` | Codex | `runtime.error`: "You've hit your weekly limit · resets …" | Wait for the reset (Limits), or another provider |
+| `capacity` | Codex | `runtime.error`: "Selected model is at capacity." | Choose another model, Retry; not flagged in Settings |
+| `plan-blocked` | Cursor | `CursorAdapter::planLimitMessage` | `agent login` with the right account, or Auto |
+
+The mock's checks and retries are timers, not evidence of these backend behaviours (#170). The
+quoted texts are the ones the daemon and the providers write (seen in a daemon journal
+or in the source); the email address and the times are made up.
 
 ## Changing the mock
 

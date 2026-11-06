@@ -375,23 +375,55 @@ Item {
             spacing: screen.px(14)
             Body { text: "Codex and Cursor run from the CLIs installed on this computer; Claude runs from the Agent SDK bundled with KetPlus. KetPlus supports CLI releases from about the last three months." }
             Row {
+                readonly property int attention: Object.values(screen.window.providerIssues).filter(id => !!id).length
                 spacing: screen.px(12)
-                Body { width: implicitWidth; anchors.verticalCenter: parent.verticalCenter; color: KetTheme.t.textMain; text: "1 provider(s) need attention." }
+                Body {
+                    width: implicitWidth
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: KetTheme.t.textMain
+                    text: parent.attention === 0 ? "All providers are ready."
+                        : parent.attention === 1 ? "1 provider needs attention." : parent.attention + " providers need attention."
+                }
                 KetButton { text: "Check again"; controlSize: KetTheme.ControlSize.Small; onClicked: screen.window.notify("Provider versions checked") }
             }
+            // Each provider: its status badge and details, then the setup guide when it has a
+            // setup state (Fixtures.providerSetup), the same guide the conversation shows.
             Repeater {
                 model: Fixtures.providerStatus
                 Column {
+                    id: providerSection
                     required property var modelData
+                    readonly property string setupId: screen.window.providerIssues[modelData.id] || ""
+                    readonly property var setup: Fixtures.providerSetup[setupId] || null
+                    readonly property string tone: setup ? setup.tone : modelData.tone
                     width: parent.width
                     spacing: screen.px(8)
                     topPadding: screen.px(6)
-                    SubHeading { text: modelData.name }
+                    Row {
+                        spacing: screen.px(10)
+                        SubHeading { anchors.verticalCenter: parent.verticalCenter; text: providerSection.modelData.name }
+                        KetBadge {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: providerSection.setup ? providerSection.setup.badge : providerSection.modelData.badge
+                            tone: providerSection.tone === "danger" ? KetTheme.BadgeTone.Danger
+                                : providerSection.tone === "warning" ? KetTheme.BadgeTone.Warning : KetTheme.BadgeTone.Success
+                        }
+                    }
                     Repeater {
-                        model: modelData.rows
+                        model: providerSection.setup ? providerSection.setup.rows : providerSection.modelData.rows
                         InfoRow { required property var modelData; label: modelData[0]; value: modelData[1] }
                     }
-                    Help { visible: text !== ""; text: modelData.note }
+                    Help { visible: !providerSection.setup && text !== ""; text: providerSection.modelData.note }
+                    Loader {
+                        active: !!providerSection.setup
+                        visible: active
+                        width: parent.width
+                        sourceComponent: ProviderSetupCard {
+                            setupId: providerSection.setupId
+                            window: screen.window
+                            inSettings: true
+                        }
+                    }
                 }
             }
             Divider {}

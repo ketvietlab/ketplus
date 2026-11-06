@@ -11,6 +11,13 @@ KetDialog {
     id: dialog
 
     property string provider: "codex"
+    // The app window, for each provider's setup state (Fixtures.providerSetup).
+    property var window: null
+    readonly property var draftSetup: {
+        const id = window ? window.providerIssues[draftProvider] || "" : ""
+        const setup = Fixtures.providerSetup[id]
+        return setup || null
+    }
     property string model: ""
     property string effort: "Medium"
     property string draftProvider: provider
@@ -62,7 +69,24 @@ KetDialog {
                                    dialog.chooseProvider(currentIndex)
     }
 
+    // A provider with a setup state: what is wrong and the way to its guide, whether or not
+    // the conversation still shows it (the user may have hidden it, or browse another tab).
+    KetBanner {
+        visible: !!dialog.draftSetup
+        Layout.fillWidth: true
+        Layout.topMargin: dialog.px(10)
+        Layout.bottomMargin: dialog.px(12)
+        tone: dialog.draftSetup && dialog.draftSetup.tone === "danger" ? KetTheme.BannerTone.Danger : KetTheme.BannerTone.Warning
+        title: dialog.draftSetup ? dialog.draftSetup.title : ""
+        message: !dialog.draftSetup ? ""
+               : dialog.draftSetup.blocking ? "You can choose a model now. " + dialog.draftSetup.name + " starts turns once it is set up."
+               : dialog.draftSetup.summary || dialog.draftSetup.reason
+        actionText: "Show setup steps"
+        onActionTriggered: dialog.window.openSetupGuide(dialog.draftProvider)
+    }
+
     Text {
+        visible: !dialog.draftSetup
         Layout.fillWidth: true
         topPadding: dialog.px(10)
         bottomPadding: dialog.px(12)

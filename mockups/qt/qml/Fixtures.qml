@@ -58,6 +58,10 @@ QtObject {
                   tags: [tag("Review")], worktree: "fix-scroll-anchor", transcript: "running" },
                 { number: "6120", title: "Profile the editor startup", status: KetTheme.ConversationStatus.Error,
                   tags: [tag("Performance"), tag("Bug")], worktree: "develop", transcript: "error" },
+                // A turn the provider ended: the guide in the transcript (workspace/setup-expired…).
+                { number: "7310", title: "Speed up the cold start", status: KetTheme.ConversationStatus.Error,
+                  tags: [tag("Performance")], worktree: "develop", transcript: "setup", setup: "expired",
+                  provider: "Claude", providerId: "claude", model: "Opus 5.5", effort: "Medium" },
                 { number: "5904", title: "Draft release notes", status: KetTheme.ConversationStatus.Stopped,
                   tags: [tag("Docs")], worktree: "develop", transcript: "short" }
             ]
@@ -330,16 +334,179 @@ QtObject {
     ]
 
     // Settings › Providers, as SettingsProvidersPage reports them.
+    // Settings → Providers when nothing needs the user. A provider with a setup state
+    // (providerSetup) shows that state's badge, rows and guide instead.
     readonly property var providerStatus: [
-        { name: "Codex CLI", note: "Codex CLI 0.162.1 is newer than the newest version KetPlus has been tested with (0.154.0). It should work; some features may not.",
-          rows: [["Status", "Newer than tested"], ["Version", "0.162.1"], ["Supported", "0.142.1 or newer · tested up to 0.154.0"],
+        { id: "codex", name: "Codex CLI", note: "Codex CLI 0.162.1 is newer than the newest version KetPlus has been tested with (0.154.0). It should work; some features may not.",
+          badge: "Newer than tested", tone: "warning",
+          rows: [["Version", "0.162.1"], ["Supported", "0.142.1 or newer · tested up to 0.154.0"],
                  ["Location", "~/.local/bin/codex"], ["Update with", "npm install -g @openai/codex@latest"]] },
-        { name: "Claude Agent SDK", note: "",
-          rows: [["Status", "Bundled with KetPlus"], ["Version", "Agent SDK 0.3.289 · Claude Code 2.1.289"],
+        { id: "claude", name: "Claude Agent SDK", note: "", badge: "Ready", tone: "success",
+          rows: [["Version", "Agent SDK 0.3.289 · Claude Code 2.1.289"], ["Signed in", "Claude subscription"],
                  ["Location", "/Applications/KetPlus.app/Contents/Resources/claude-sidecar/index.mjs"]] },
-        { name: "Cursor CLI", note: "Cursor CLI was not found.",
-          rows: [["Status", "Not installed"], ["Supported", "2026.6.25 or newer · tested up to 2026.9.18"]] }
+        { id: "cursor", name: "Cursor CLI", note: "", badge: "Ready", tone: "success",
+          rows: [["Version", "2026.9.18"], ["Supported", "2026.6.25 or newer · tested up to 2026.9.18"],
+                 ["Location", "~/.local/bin/agent"]] }
     ]
+
+    // What stops a provider and how the user fixes it. Each state follows what the daemon
+    // reports: the version check (provider-compatibility.json: missing, outdated),
+    // provider_unavailable, Claude's credential source ("none") and the provider's own text in
+    // runtime.error (error, quoted as the provider wrote it). The commands are the daemon's
+    // (CursorAdapter, the compatibility manifest) and the providers' documented ones. In the app,
+    // Type in Terminal types a command for the user to run with Return; KetPlus never runs it.
+    // Codex and Cursor sign-ins stay with their CLIs; only the optional Anthropic API key is
+    // saved by KetPlus (Keychain, Settings → Providers). Here Type in Terminal only shows a toast.
+    //   limits: rows for the Context & limits popover while this state lasts.
+    //   blocking: the provider cannot start a turn, so the guide sits above the composer;
+    //   otherwise a turn ended with it and the guide closes that turn in the transcript.
+    //   source: who wrote `error` when it is not the provider (KetPlus's own messages).
+    //   summary: the reason as Settings → Providers says it, outside any turn.
+    //   transient: about one model at one moment, so Settings does not flag the provider.
+    //   topic: the failed conversation's title, when it is not "Speed up the cold start".
+    //   A step with `turn` only applies in the conversation.
+    readonly property var providerSetup: ({
+        "cli-missing": {
+            provider: "cursor", name: "Cursor", model: "Composer 2", blocking: true, tone: "danger",
+            badge: "Not installed", title: "Cursor CLI isn't installed",
+            reason: "KetPlus runs Cursor through the Cursor CLI on this Mac and couldn't find it. The Cursor app alone is not enough.",
+            error: "Cursor CLI was not found.", source: "KetPlus",
+            steps: [
+                { text: "Install the Cursor CLI in a terminal.", command: "curl https://cursor.com/install -fsS | bash" },
+                { text: "Sign in with the account that has your Cursor plan. A browser window opens.", command: "agent login" },
+                { text: "Check again. Your message stays in the composer." }
+            ],
+            primary: "Check again", secondary: "Use Codex instead", secondaryAction: "switch:codex",
+            still: "Still not found. Run agent --version in a terminal: if it fails there too, the install didn't finish. If it works there, quit and reopen KetPlus so it sees the new location.",
+            ready: "Cursor CLI 2026.9.18 is ready",
+            rows: [["Supported", "2026.6.25 or newer · tested up to 2026.9.18"], ["Looked for", "agent and cursor-agent on PATH"]]
+        },
+        "cli-outdated": {
+            provider: "codex", name: "Codex", model: "GPT-5.6 Luna", blocking: true, tone: "danger",
+            badge: "Update needed", title: "Codex CLI 0.139.0 is too old",
+            reason: "KetPlus needs Codex CLI 0.142.1 or newer to talk to it. Updating keeps your Codex sign-in and settings.",
+            steps: [
+                { text: "Update the Codex CLI in a terminal.", command: "npm install -g @openai/codex@latest" },
+                { text: "Installed it with Homebrew? Use this instead.", command: "brew upgrade codex" },
+                { text: "Check again." }
+            ],
+            primary: "Check again", secondary: "Use Claude instead", secondaryAction: "switch:claude",
+            ready: "Codex CLI 0.154.0 is ready",
+            rows: [["Version", "0.139.0"], ["Supported", "0.142.1 or newer · tested up to 0.154.0"], ["Location", "~/.local/bin/codex"]]
+        },
+        "signed-out": {
+            provider: "codex", name: "Codex", model: "GPT-5.6 Luna", blocking: true, tone: "danger",
+            badge: "Not signed in", title: "Codex CLI isn't signed in",
+            reason: "Codex is installed but has no account on this Mac. KetPlus uses the CLI's own sign-in and does not store Codex credentials.",
+            steps: [
+                { text: "Sign in in a terminal. A browser window opens for your ChatGPT account.", command: "codex login" },
+                { text: "Using an OpenAI API key instead? Pass it on standard input.", command: "printenv OPENAI_API_KEY | codex login --with-api-key" },
+                { text: "Check again." }
+            ],
+            primary: "Check again", secondary: "Use Claude instead", secondaryAction: "switch:claude",
+            ready: "Codex is signed in",
+            rows: [["Version", "0.154.0"], ["Signed in", "No"], ["Location", "~/.local/bin/codex"]]
+        },
+        "claude-signed-out": {
+            provider: "claude", name: "Claude", model: "Opus 5.5", blocking: true, tone: "danger",
+            badge: "Not signed in", title: "Claude needs a sign-in",
+            reason: "Claude runs from the Agent SDK bundled with KetPlus. It can use your Claude subscription, signed in through Claude Code, or your own Anthropic API key.",
+            steps: [
+                { text: "Subscription: install Claude Code if you don't have it.", command: "curl -fsSL https://claude.ai/install.sh | bash" },
+                { text: "Start it, type /login and finish in the browser.", command: "claude" },
+                { text: "API key instead: add it in Settings › Providers › Claude API access." }
+            ],
+            primary: "Check again", secondary: "Add an API key", secondaryAction: "settings/providers",
+            ready: "Claude is signed in",
+            rows: [["Version", "Agent SDK 0.3.289 · Claude Code 2.1.289"], ["Signed in", "No credential found"]]
+        },
+        "sidecar-missing": {
+            provider: "claude", name: "Claude", model: "Opus 5.5", blocking: true, tone: "danger",
+            badge: "Damaged install", title: "KetPlus can't find its Claude runtime",
+            reason: "The Claude Agent SDK that ships inside KetPlus is missing, often after an interrupted update. Your conversations are safe.",
+            error: "Claude Agent SDK sidecar was not found.", source: "KetPlus",
+            steps: [
+                { text: "Install the latest KetPlus over this copy from Settings › Updates, or download it again." },
+                { text: "Reopen KetPlus. Nothing else needs to change." }
+            ],
+            primary: "Check for updates", primaryAction: "settings/updates",
+            secondary: "Use Codex instead", secondaryAction: "switch:codex",
+            ready: "Claude is ready",
+            rows: [["Version", "Not found"], ["Expected at", "/Applications/KetPlus.app/Contents/Resources/claude-sidecar/index.mjs"]]
+        },
+        "expired": {
+            provider: "claude", name: "Claude", model: "Opus 5.5", blocking: false, tone: "danger",
+            badge: "Sign-in expired", title: "Your Claude sign-in expired",
+            reason: "Claude stopped this turn because its sign-in could not be renewed. Your message and the work so far are kept.",
+            summary: "Claude's sign-in expired and could not be renewed. New turns fail until you sign in again.",
+            error: "Failed to authenticate: OAuth session expired and could not be refreshed",
+            steps: [
+                { text: "Sign in again: start Claude Code in a terminal, type /login and finish in the browser.", command: "claude" },
+                { text: "Retry. KetPlus sends your last message again.", turn: true }
+            ],
+            primary: "Retry", secondary: "Use an API key", secondaryAction: "settings/providers",
+            prompt: "Find what makes the first window take four seconds on a cold start.",
+            rows: [["Version", "Agent SDK 0.3.289 · Claude Code 2.1.289"], ["Signed in", "Expired at 09:12"]]
+        },
+        "key-rejected": {
+            provider: "claude", name: "Claude", model: "Opus 5.5", blocking: false, tone: "danger",
+            badge: "Key rejected", title: "Anthropic rejected your API key",
+            reason: "KetPlus is set to use your Anthropic API key, and Anthropic refused it. The key may have been revoked, or its organization disabled.",
+            summary: "Anthropic refuses the saved API key, so Claude turns fail. The key may have been revoked, or its organization disabled.",
+            error: "Anthropic rejected this API key.", source: "KetPlus",
+            steps: [
+                { text: "Create a new key in Anthropic Console › API keys." },
+                { text: "Paste it in Settings › Providers › Claude API access and save." },
+                { text: "Retry, or set Authentication back to your Claude subscription.", turn: true }
+            ],
+            primary: "Open Settings", primaryAction: "settings/providers", secondary: "Retry", secondaryAction: "retry",
+            prompt: "Find what makes the first window take four seconds on a cold start.",
+            rows: [["Version", "Agent SDK 0.3.289 · Claude Code 2.1.289"], ["Signed in", "API key · rejected"]]
+        },
+        "limit": {
+            provider: "codex", name: "Codex", model: "GPT-5.6 Luna", blocking: false, tone: "warning",
+            badge: "Limit reached", title: "You've used this week's Codex limit",
+            reason: "Codex stopped here until your weekly limit resets on Nov 13 at 07:00. Nothing is lost; continue this conversation after the reset.",
+            summary: "This week's Codex limit is used up. Codex turns fail until it resets on Nov 13 at 07:00.",
+            error: "You've hit your weekly limit · resets Nov 13 at 7am",
+            steps: [
+                { text: "Wait for the reset. Limits in the composer shows the time left." },
+                { text: "Or carry on in a new conversation with Claude or Cursor.", turn: true }
+            ],
+            primary: "View limits", primaryAction: "limits", secondary: "New conversation with Claude", secondaryAction: "new:claude",
+            limits: [{ label: "Session · 5 hours", resets: "Resets Fri, 06 Nov  9:40 PM", used: 12 },
+                     { label: "Weekly · all models", resets: "Resets Fri, 13 Nov  7:00 AM", used: 100 }],
+            prompt: "Add a size limit and a warning to the journal, with a setting for it.", topic: "Journal size limit",
+            rows: [["Version", "0.154.0"], ["Weekly limit", "100% used · resets Nov 13, 07:00"]]
+        },
+        "capacity": {
+            provider: "codex", name: "Codex", model: "GPT-5.6 Luna", blocking: false, tone: "warning",
+            badge: "Model busy", title: "GPT-5.6 Luna is at capacity",
+            reason: "OpenAI couldn't run this model right now. Your account and limits are fine.", transient: true,
+            error: "Selected model is at capacity. Please try a different model.",
+            steps: [
+                { text: "Choose another model for this conversation, then retry." },
+                { text: "Or retry later with the same model." }
+            ],
+            primary: "Choose model", primaryAction: "model", secondary: "Retry", secondaryAction: "retry",
+            prompt: "Add a size limit and a warning to the journal, with a setting for it.", topic: "Journal size limit",
+            rows: [["Version", "0.154.0"], ["Last error", "Model at capacity · 10:42"]]
+        },
+        "plan-blocked": {
+            provider: "cursor", name: "Cursor", model: "Composer 2", blocking: false, tone: "warning",
+            badge: "Not on plan", title: "The Cursor CLI account can't use Composer 2",
+            reason: "The Cursor app and the Cursor CLI sign in separately. The CLI is signed in to an account whose plan doesn't include this model.",
+            summary: "The Cursor CLI is signed in to an account whose plan doesn't include Composer 2. The Cursor app signs in separately.",
+            error: "Cursor blocked this model for the Cursor Agent CLI account (dev@example.com).",
+            steps: [
+                { text: "Sign the CLI in to the account that has this model.", command: "agent login" },
+                { text: "Or choose Auto, or another model on the CLI's plan, and retry.", turn: true }
+            ],
+            primary: "Choose model", primaryAction: "model", secondary: "Retry", secondaryAction: "retry",
+            prompt: "Trace how a staging tenant is created, end to end.", topic: "Trace the staging tenant flow",
+            rows: [["Version", "2026.9.18"], ["Signed in", "dev@example.com · plan without Composer 2"]]
+        }
+    })
 
     // Settings → Storage. Proportions follow a six-week journal measured on a working Mac
     // (most of the file was free pages SQLite never returned); the conversations are made up.

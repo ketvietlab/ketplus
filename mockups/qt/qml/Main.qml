@@ -19,7 +19,12 @@ Basic.ApplicationWindow {
         "editor/markdown", "editor/markdown-source", "editor/samples",
         "changes", "worktrees", "connections", "connections/no-activity", "settings", "settings/typography", "settings/account",
         "settings/browser", "settings/computer", "settings/providers", "settings/archived",
-        "settings/updates", "settings/storage", "workspace/storage-warning", "atlas", "mobile-picker", "workspace/compact"
+        "settings/updates", "settings/storage", "workspace/storage-warning", "atlas", "mobile-picker", "workspace/compact",
+        // Provider setup (Fixtures.providerSetup): the provider cannot start a turn, or ended one.
+        "workspace/setup-cli-missing", "workspace/setup-cli-outdated", "workspace/setup-signed-out",
+        "workspace/setup-claude-signed-out", "workspace/setup-sidecar-missing", "workspace/setup-expired",
+        "workspace/setup-key-rejected", "workspace/setup-limit", "workspace/setup-capacity",
+        "workspace/setup-plan-blocked", "settings/providers-setup"
     ]
     property string screen: "workspace"
     // The terminal below the editor (editor/terminal).
@@ -35,6 +40,10 @@ Basic.ApplicationWindow {
     // The journal is over its size limit (settings/storage, workspace/storage-warning); the
     // sidebar warns until it is compacted.
     property bool storageWarning: false
+    // Each provider's setup state (a Fixtures.providerSetup key), or "" when it is ready.
+    property var providerIssues: ({ codex: "", claude: "", cursor: "" })
+    // Providers whose guide the user hid above the composer; a new setup state shows it again.
+    property var hiddenSetups: ({})
     // Paired devices have done something on this Mac (connections); none yet in
     // connections/no-activity.
     property bool remoteActivity: true
@@ -59,10 +68,111 @@ Basic.ApplicationWindow {
         { number: "0871", title: "Old onboarding copy", repository: "ketplus-desktop", when: "Oct 12" }
     ]
 
+    function setProviderIssue(provider, state) {
+        const next = Object.assign({}, providerIssues)
+        next[provider] = state
+        providerIssues = next
+        showSetup(provider)
+    }
+
+    function hideSetup(provider) {
+        const next = Object.assign({}, hiddenSetups)
+        next[provider] = true
+        hiddenSetups = next
+    }
+
+    function showSetup(provider) {
+        if (!hiddenSetups[provider])
+            return
+        const next = Object.assign({}, hiddenSetups)
+        delete next[provider]
+        hiddenSetups = next
+    }
+
+    // The guide of a provider's setup state in a dialog, from anywhere (Model & context).
+    function openSetupGuide(provider) {
+        const state = providerIssues[provider] || ""
+        if (!Fixtures.providerSetup[state])
+            return
+        setupDialog.provider = provider
+        setupDialog.setupId = state
+        setupDialog.open()
+    }
+
+    // A provider's setup state in the Agent Workspace. One that cannot start a turn opens a new
+    // conversation with that provider, its guide above the composer; one that ended a turn
+    // opens a conversation whose last turn failed with it.
+    function openSetup(state) {
+        const setup = Fixtures.providerSetup[state]
+        if (!setup)
+            return
+        if (!setup.transient)
+            setProviderIssue(setup.provider, state)
+        const number = setup.blocking ? "1204" : "7310"
+        for (const r of Fixtures.repositories) {
+            const base = r.conversations.find(c => c.number === number)
+            if (base) {
+                openConversation(r.name, Object.assign({}, base, {
+                    title: setup.topic || base.title, provider: setup.name, providerId: setup.provider, model: setup.model,
+                    effort: setup.provider === "cursor" ? "Default" : "Medium",
+                    transcript: setup.blocking ? "welcome" : "setup", setup: state }))
+                return
+            }
+        }
+    }
+
+    // "Use Codex instead": the new conversation's provider changes before anything was sent.
+    function switchProvider(provider) {
+        const entry = Fixtures.providers.find(p => p.id === provider)
+        conversation = Object.assign({}, conversation, {
+            provider: entry ? entry.label : provider, providerId: provider,
+            model: Fixtures.providerModels[provider][0].name,
+            effort: provider === "cursor" ? "Default" : "Medium" })
+        notify("This conversation now uses " + (entry ? entry.label : provider))
+    }
+
+    // Model & context → Apply: the conversation's provider, model and effort.
+    function chooseModel(provider, model, effort) {
+        const entry = Fixtures.providers.find(p => p.id === provider)
+        conversation = Object.assign({}, conversation, {
+            provider: entry ? entry.label : provider, providerId: provider, model: model, effort: effort })
+        notify("Applies from the next turn")
+    }
+
+    function newConversation(provider) {
+        for (const r of Fixtures.repositories) {
+            const base = r.conversations.find(c => c.transcript === "welcome")
+            if (base) {
+                openConversation(r.name, base)
+                switchProvider(provider)
+                return
+            }
+        }
+    }
+
+    function openComposerPanel(name) {
+        screen = "workspace"
+        Qt.callLater(() => workspace.openComposerPanel(name))
+    }
+
     function showScreen(id) {
         const parts = String(id).split("/")
         const name = parts[0]
         const state = parts[1] || ""
+        if (name === "workspace" && state.startsWith("setup-")) {
+            setCompact(false)
+            workspace.detailsOpen = false
+            openSetup(state.slice(6))
+            return
+        }
+        if (id === "settings/providers-setup") {
+            // Settings → Providers with two providers to fix.
+            setProviderIssue("cursor", "cli-missing")
+            setProviderIssue("claude", "expired")
+            settingsTab = "providers"
+            screen = "settings"
+            return
+        }
         if (state === "compact") {
             setCompact(true)
             return
@@ -109,6 +219,9 @@ Basic.ApplicationWindow {
         picker.close()
         renameDialog.open()
         renameDialog.close()
+        setupDialog.setupId = "cli-missing"
+        setupDialog.open()
+        setupDialog.close()
         deleteDialog.open()
         deleteDialog.close()
         connections.openActivity("iPhone 16")
@@ -143,6 +256,8 @@ Basic.ApplicationWindow {
         showScreen(Mock.initialScreen + (Mock.initialState ? "/" + Mock.initialState : ""))
         if (Mock.initialPanel === "images")
             Qt.callLater(() => openImages(Fixtures.captures, 1))
+        else if (Mock.initialPanel === "setup")
+            Qt.callLater(() => openSetupGuide(conversation.providerId || "claude"))
         else if (["activity", "device", "device-focus"].includes(Mock.initialPanel) && screen === "connections") {
             Qt.callLater(() => connections.openActivity(Mock.initialPanel === "activity" ? "" : "iPhone 16"))
             if (Mock.initialPanel === "device-focus")
@@ -229,6 +344,27 @@ Basic.ApplicationWindow {
     RepositoryPicker {
         id: picker
         window: app
+    }
+
+    // A provider's setup guide (Model & context → Show setup steps). It closes once the
+    // provider is fixed.
+    KetDialog {
+        id: setupDialog
+        property string provider
+        property string setupId
+        readonly property var setup: Fixtures.providerSetup[setupId] || ({})
+        readonly property bool resolved: provider !== "" && !app.providerIssues[provider]
+        onResolvedChanged: if (resolved && visible) close()
+        title: setup.title || ""
+        ProviderSetupCard {
+            Layout.fillWidth: true
+            setupId: setupDialog.setupId
+            window: app
+            inDialog: true
+        }
+        actions: [
+            KetButton { text: "Close"; variant: KetTheme.ButtonVariant.Ghost; onClicked: setupDialog.reject() }
+        ]
     }
 
     KetDialog {

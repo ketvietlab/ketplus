@@ -16,7 +16,9 @@ Basic.Popup {
     property real contextUsed: 0.156
     readonly property bool claude: provider === "claude"
     readonly property color track: KetTheme.t.panelBorder
-    readonly property var limitRows: claude ? [
+    // A provider's setup state can supply its own rows (Fixtures.providerSetup.limit).
+    property var rows: null
+    readonly property var limitRows: rows ? rows : claude ? [
         { label: "Session · 5 hours", resets: "Resets Fri, 06 Nov  12:10 PM", used: 2 },
         { label: "Weekly · all models", resets: "Resets Sun, 08 Nov  7:00 AM", used: 85 },
         { label: "Weekly · Fable", resets: "Resets Sun, 08 Nov  7:00 AM", used: 0 }
