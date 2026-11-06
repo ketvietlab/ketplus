@@ -50,4 +50,5 @@ show your user and host name: do not commit them.
 
 The shipped terminal now takes its font family and its 16 ANSI colours from the
 Két Qt kit (`terminal-ansi-0` … `terminal-ansi-15`), so the mock no longer works
-around either. The standalone window chrome is #146.
+around either. Since #146 the shipped `TerminalWindow` is a port of this mock's
+window; a change to one belongs in the other.

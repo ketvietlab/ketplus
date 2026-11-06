@@ -68,6 +68,11 @@ macOS builds `KetPlus Terminal.app` by default alongside the editor. It is a
 small native terminal app backed by the same PTY, libvterm core, and bounded
 scrollback as the embedded panel, with tabs, multiple windows, copy/paste,
 search, clear/restart, zoom, full screen, and system/light/dark appearance.
+The window is drawn by the Két Qt kit (`ket::Style`, KétPlus profile): document
+tabs with New tab, Find, Clear scrollback and Restart beside them, Két toasts for
+status messages, and terminal colours from Két DS tokens. It keeps the
+`appearance/theme` preference, and `terminal/fontFamily` overrides the profile's
+monospace family (KÉT Sans Mono when installed, then the platform's).
 
 - `Cmd+T` opens a tab; `Cmd+W` closes the active tab.
 - `Cmd+Shift+[` / `Cmd+Shift+]` or `Ctrl+Shift+Tab` / `Ctrl+Tab` switch tabs.
