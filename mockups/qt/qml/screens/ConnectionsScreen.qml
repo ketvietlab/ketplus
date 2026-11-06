@@ -312,7 +312,7 @@ Item {
                     id: showAll
                     anchors.right: parent.right
                     visible: screen.activity.length > 5
-                    text: "Show all " + screen.activity.length
+                    text: "Show all"
                     variant: KetTheme.ButtonVariant.Ghost
                     controlSize: KetTheme.ControlSize.Small
                     onClicked: screen.openActivity("")
