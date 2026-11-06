@@ -24,6 +24,10 @@ KÉT Sans archive with `-DKETPLUS_MOCK_KET_SANS_ARCHIVE=<path>/KETSans-1.100.zip
 
 ```sh
 KetPlusMock --smoke                                    # every screen, fails on QML warnings
+KetPlusMock --edition=lite --smoke                     # the same for KétPlus, and every Search result
+KetPlusMock --edition=lite --smoke --keys              # also chooses View > Search in Files by keyboard
+KetPlusMock --smoke --display=secondary                # on another display, leaving the main one free
+KetPlusMock --edition=lite --chrome=windows --screen=search --screenshot=search.png
 KetPlusMock --screen=workspace --state=running --dark --zoom=1.25 --screenshot=out.png
 KetPlusMock --screen=workspace --open=model --screenshot=model.png  # model, mode, limits, reviewer, composer (focused) images (the image viewer) or mermaid (diagrams instead of their source)
 ```
@@ -49,6 +53,28 @@ Screens and states (`--screen` / `--state`):
 | `settings` | `providers-setup` | Settings → Providers with Cursor not installed and Claude's sign-in expired; each provider shows its badge, details and the same guide |
 | `atlas` | | Edit an Atlas: flows, map, AI Chat |
 | `mobile-picker` | | Repository & worktree picker on iPhone |
+
+KétPlus (Lite) runs with `--edition=lite` (`qml/LiteMain.qml`): the editor of
+`core/src/app` with one side panel at a time, the terminal and the two Settings
+pages Lite has. `--chrome=windows` or `--chrome=linux` draws the title bar and
+the in-window menu bar (File, Edit, Go, Git, View, with the labels and
+shortcuts of `core/src/app/MainWindowActions.cpp`); macOS keeps the system's.
+The menu bar works without a pointer: F10 focuses File, Alt with the app's
+mnemonic opens File, Edit, Go or View, Left and Right move between headings, and
+Enter, Space or Down opens one. `--keys` activates the window to check this, so
+it takes the keyboard focus for a moment; without an active window it reports
+"skipped". Search reads the editor's own file sources, so each result opens its
+file at a line that holds the match (Markdown in Source); the Lite smoke checks
+every result.
+
+| Screen (`--edition=lite`) | States | Covers |
+|---|---|---|
+| `explorer` | `terminal`, `markdown` | Activity bar, explorer, tabs, editor, the terminal below it, `docs/licensing.md` in Preview |
+| `explorer` | `welcome` | No folder open: Open Folder and recent folders |
+| `explorer` | `windows`, `linux` | The same window with that platform's chrome, whatever `--chrome` says |
+| `search` | `no-results` | Search in Files: matches grouped by file, the match in the accent, a line opens its file; the empty state |
+| `changes` | | Source Control, as in Pro |
+| `settings` | `typography` | Appearance and Typography only |
 
 App-wide: Quick search (⌘K), the repository and worktree picker, conversation
 context menu (rename, fork, change worktree, archive, delete), tag filter

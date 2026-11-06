@@ -1,5 +1,10 @@
 #include "remote/RemoteControlView.h"
+#include "remote/RemoteActivitySection.h"
 #include "remote/RemoteConnectionsIntro.h"
+
+#include <QAccessible>
+#include <QJsonArray>
+#include <QTimeZone>
 
 #include <QApplication>
 #include <QDateTime>
@@ -29,7 +34,192 @@ class RemoteControlViewTest final : public QObject {
     void demoSignOutReturnsToSingleAction();
     void aClaimThatChangesAfterItsCodeWasShownCannotBeApproved();
     void pairingShowsOnlyTheDaemonsCodeAndForgetsAFinishedTicket();
+    void activityWordsFollowTheAudit();
+    void activityRowsAreReadableFromTheKeyboardAndScreenReaders();
+    void activityDropsRepliesFromBeforeSignOut();
 };
+
+namespace {
+QJsonObject auditEntry(const QString& id, const QString& kind, const QString& device,
+                       const QString& result, const QDateTime& at, const QString& session = {},
+                       const bool exists = true, const QString& title = {}) {
+    return {{QStringLiteral("command_id"), id},
+            {QStringLiteral("kind"), kind},
+            {QStringLiteral("device_id"), device},
+            {QStringLiteral("device_key_version"), 1},
+            {QStringLiteral("session_id"), session},
+            {QStringLiteral("session_exists"), exists},
+            {QStringLiteral("session_title"), title},
+            {QStringLiteral("result_code"), result},
+            {QStringLiteral("recorded_at"), at.toUTC().toString(Qt::ISODateWithMs)}};
+}
+} // namespace
+
+void RemoteControlViewTest::activityWordsFollowTheAudit() {
+    using namespace remote_activity;
+    QCOMPARE(action(QStringLiteral("session.start_turn")), QStringLiteral("Sent a message"));
+    QCOMPARE(action(QStringLiteral("session.create")), QStringLiteral("Started a conversation"));
+    // A kind this build does not know is still named.
+    QCOMPARE(action(QStringLiteral("future.kind")), QStringLiteral("Sent a future.kind request"));
+
+    QCOMPARE(outcome(QStringLiteral("ok")).text, QStringLiteral("Done"));
+    QVERIFY(outcome(QStringLiteral("ok")).reason.isEmpty());
+    QCOMPARE(outcome(QStringLiteral("worktree_quota_exceeded")).reason,
+             QStringLiteral("Worktree limit reached"));
+    QCOMPARE(outcome(QStringLiteral("worktree_quota_exceeded")).tone, QStringLiteral("warning"));
+    // A sender that did not verify is only the device it claimed to be.
+    QCOMPARE(outcome(QStringLiteral("invalid_encrypted_command")).tone, QStringLiteral("danger"));
+    QCOMPARE(outcome(QStringLiteral("sender_key_unavailable")).reason,
+             QStringLiteral("Sender not verified"));
+    QCOMPARE(outcome(QStringLiteral("branch_exists")).reason, QStringLiteral("branch_exists"));
+
+    const QDateTime now(QDate(2026, 11, 6), QTime(15, 30), QTimeZone::LocalTime);
+    QCOMPARE(when(now.addSecs(-20), now), QStringLiteral("Just now"));
+    QCOMPARE(when(now.addSecs(-12 * 60), now), QStringLiteral("12 min ago"));
+    QCOMPARE(when(now.addSecs(-3 * 3600), now), QStringLiteral("3 hours ago"));
+    QCOMPARE(when(QDateTime(QDate(2026, 11, 5), QTime(21, 14), QTimeZone::LocalTime), now),
+             QStringLiteral("Yesterday, 21:14"));
+    QCOMPARE(when(QDateTime(QDate(2026, 11, 2), QTime(9, 2), QTimeZone::LocalTime), now),
+             QStringLiteral("Mon, 09:02"));
+    QCOMPARE(when(QDateTime(QDate(2026, 10, 28), QTime(17, 55), QTimeZone::LocalTime), now),
+             QStringLiteral("28 Oct, 17:55"));
+
+    QCOMPARE(target(auditEntry("a", "session.start_turn", "d", "ok", now, "s", true, "Fix login")),
+             QStringLiteral("Fix login"));
+    QCOMPARE(target(auditEntry("a", "session.delete", "d", "ok", now, "s", false)),
+             QStringLiteral("Deleted conversation"));
+    QCOMPARE(target(auditEntry("a", "session.rename", "d", "ok", now, "s", true, {})),
+             QStringLiteral("Untitled conversation"));
+    // A refused new conversation names none.
+    QVERIFY(
+        target(auditEntry("a", "session.create", "d", "worktree_quota_exceeded", now)).isEmpty());
+    const QHash<QString, QString> names{{QStringLiteral("phone-1"), QStringLiteral("iPhone 16")}};
+    QCOMPARE(device(auditEntry("a", "k", "phone-1", "ok", now), names),
+             QStringLiteral("iPhone 16"));
+    QCOMPARE(device(auditEntry("a", "k", "phone-9", "ok", now), names),
+             QStringLiteral("Unknown device"));
+}
+
+void RemoteControlViewTest::activityRowsAreReadableFromTheKeyboardAndScreenReaders() {
+    RemoteActivitySection section(nullptr);
+    section.setDeviceNames({{QStringLiteral("phone-1"), QStringLiteral("iPhone 16")}});
+    section.resize(900, 600);
+    section.show();
+    const auto rows = [&section] {
+        QList<QFrame*> found;
+        for (QFrame* frame : section.findChildren<QFrame*>()) {
+            if (frame->property("remoteRole").toString() == QStringLiteral("activityRow"))
+                found.append(frame);
+        }
+        return found;
+    };
+    auto* showAll = section.findChild<QPushButton*>(QStringLiteral("remoteActivityShowAll"));
+    QVERIFY(showAll);
+
+    section.render({});
+    QTest::qWait(1);
+    QVERIFY(section.findChild<QLabel*>(QStringLiteral("remoteActivityEmpty")));
+    QVERIFY(!showAll->isVisible());
+
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    QJsonArray entries;
+    entries.append(auditEntry("c0", "session.create", "phone-1", "worktree_quota_exceeded",
+                              now.addSecs(-120)));
+    for (int index = 1; index < 7; ++index)
+        entries.append(auditEntry(QStringLiteral("c%1").arg(index), "session.start_turn", "phone-1",
+                                  "ok", now.addSecs(-120 - index * 600), "session-1", true,
+                                  QStringLiteral("A conversation title long enough to be cut "
+                                                 "short in a narrow window %1")
+                                      .arg(index)));
+    section.render(entries);
+    QTest::qWait(1);
+    QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    const QList<QFrame*> shown = rows();
+    // The newest five; the sixth entry asked for says there are more.
+    QCOMPARE(shown.size(), RemoteActivitySection::shownRows);
+    QVERIFY(showAll->isVisible());
+
+    QFrame* first = shown.first();
+    QCOMPARE(first->accessibleName(),
+             QStringLiteral("Started a conversation, 2 min ago. Refused: Worktree limit reached. "
+                            "iPhone 16."));
+    QVERIFY(first->focusPolicy() & Qt::TabFocus);
+    QAccessibleInterface* item = QAccessible::queryAccessibleInterface(first);
+    QVERIFY(item);
+    QCOMPARE(item->role(), QAccessible::ListItem);
+    QAccessibleInterface* list =
+        QAccessible::queryAccessibleInterface(section.findChild<QFrame*>("remoteActivityPanel"));
+    QVERIFY(list);
+    QCOMPARE(list->role(), QAccessible::List);
+
+    // The arrow keys move between rows.
+    first->setFocus(Qt::TabFocusReason);
+    QTest::keyClick(first, Qt::Key_Down);
+    QCOMPARE(QApplication::focusWidget(), shown.at(1));
+
+    // Cut short, a row offers its whole entry; whole, it needs no tooltip.
+    QFrame* second = shown.at(1);
+    QVERIFY(second->toolTip().isEmpty());
+    section.resize(360, 600);
+    QTest::qWait(1);
+    QApplication::processEvents();
+    QCOMPARE(second->toolTip(), second->accessibleName());
+    QVERIFY(second->accessibleName().contains(QStringLiteral("narrow window 1.")));
+
+    // A refresh rebuilds the rows but keeps the one being read focused...
+    const auto focusedCommand = [] {
+        QWidget* focused = QApplication::focusWidget();
+        return focused ? focused->property("remoteCommandId").toString() : QString();
+    };
+    second->setFocus(Qt::TabFocusReason);
+    section.render(entries);
+    QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QCOMPARE(focusedCommand(), QStringLiteral("c1"));
+    QTest::keyClick(QApplication::focusWidget(), Qt::Key_Down);
+    QCOMPARE(focusedCommand(), QStringLiteral("c2"));
+    // ...or, when its entry is gone, the row now in its place.
+    QJsonArray without = entries;
+    without.removeAt(2);
+    section.render(without);
+    QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QCOMPARE(focusedCommand(), QStringLiteral("c3"));
+    // A new request arriving above it does not move focus off the entry.
+    QJsonArray newer{auditEntry("c-new", "session.interrupt", "phone-1", "ok", now)};
+    for (const QJsonValue& entry : std::as_const(without))
+        newer.append(entry);
+    section.render(newer);
+    QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QCOMPARE(focusedCommand(), QStringLiteral("c3"));
+}
+
+void RemoteControlViewTest::activityDropsRepliesFromBeforeSignOut() {
+    RemoteActivitySection section(nullptr);
+    section.setDeviceNames({{QStringLiteral("phone-1"), QStringLiteral("iPhone 16")}});
+    const auto shownRows = [&section] {
+        QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        int count = 0;
+        for (QFrame* frame : section.findChildren<QFrame*>())
+            count += frame->property("remoteRole").toString() == QStringLiteral("activityRow");
+        return count;
+    };
+    const QJsonObject reply{
+        {QStringLiteral("entries"), QJsonArray{auditEntry("c0", "session.start_turn", "phone-1",
+                                                          "ok", QDateTime::currentDateTimeUtc())}}};
+
+    // A request is outstanding when the account signs out.
+    section.requestInFlight_ = true;
+    const quint64 beforeSignOut = section.generation_;
+    section.clear();
+    QVERIFY(!section.requestInFlight_);
+    QVERIFY(section.names_.isEmpty());
+    section.received(beforeSignOut, reply, {});
+    QCOMPARE(shownRows(), 0);
+    QVERIFY(section.entries_.isEmpty());
+
+    // The next account's own reply is shown.
+    section.received(section.generation_, reply, {});
+    QCOMPARE(shownRows(), 1);
+}
 
 void RemoteControlViewTest::aClaimThatChangesAfterItsCodeWasShownCannotBeApproved() {
     RemoteControlView view;

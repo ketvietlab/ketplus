@@ -5,6 +5,9 @@
 //   --scroll=0.5                                   scroll the transcript or the Connections intro (0 top, 1 end)
 //   --screenshot=<file>                                         save the window and exit
 //   --smoke                                  open every screen; exit non-zero on QML warnings
+//   --edition=lite --chrome=windows|linux       KétPlus instead of Pro, with that platform's chrome
+//   --display=secondary|<index>      open on another display, leaving the main one free
+//   --keys                     with --smoke and --edition=lite: drive the menu bar by keyboard
 #include "KetAppearance.h"
 #include "KetProfile.h"
 #include "MockController.h"
@@ -15,6 +18,8 @@
 #include <QApplication>
 #include <QQmlApplicationEngine>
 #include <QQuickWindow>
+#include <QScreen>
+#include <QTest>
 #include <QTimer>
 #include <QtQml/qqmlextensionplugin.h>
 
@@ -63,7 +68,22 @@ int main(int argc, char* argv[]) {
     const QCommandLineOption scroll(QStringLiteral("scroll"),
                                     QStringLiteral("Scroll the transcript, 0 (top) to 1 (end)."),
                                     QStringLiteral("fraction"));
-    parser.addOptions({screen, state, open, dark, light, zoom, scroll, screenshot, smoke});
+    const QCommandLineOption edition(QStringLiteral("edition"),
+                                     QStringLiteral("pro (KétPlus Pro) or lite (KétPlus)."),
+                                     QStringLiteral("edition"), QStringLiteral("pro"));
+    const QCommandLineOption chrome(QStringLiteral("chrome"),
+                                    QStringLiteral("Lite window chrome: macos, windows or linux."),
+                                    QStringLiteral("platform"), QStringLiteral("macos"));
+    const QCommandLineOption display(
+        QStringLiteral("display"),
+        QStringLiteral("Display to open on: secondary (the first that is not the main one) or "
+                       "an index."),
+        QStringLiteral("display"));
+    const QCommandLineOption keys(
+        QStringLiteral("keys"),
+        QStringLiteral("With --smoke: choose a menu item by keyboard. It activates the window."));
+    parser.addOptions({screen, state, open, dark, light, zoom, scroll, screenshot, smoke, edition,
+                       chrome, display, keys});
     parser.process(application);
 
     previousHandler = qInstallMessageHandler(countQmlProblems);
@@ -96,6 +116,13 @@ int main(int argc, char* argv[]) {
     ket::Appearance::instance().setZoom(parser.value(zoom).toDouble());
 
     MockController controller;
+    controller.edition = parser.value(edition) == QLatin1String("lite") ? QStringLiteral("lite")
+                                                                        : QStringLiteral("pro");
+    if (const QString platform = parser.value(chrome);
+        platform == QLatin1String("windows") || platform == QLatin1String("linux"))
+        controller.chrome = platform;
+    if (controller.edition == QLatin1String("lite"))
+        controller.initialScreen = QStringLiteral("explorer");
     if (parser.isSet(screen))
         controller.initialScreen = parser.value(screen);
     controller.initialState = parser.value(state);
@@ -105,10 +132,33 @@ int main(int argc, char* argv[]) {
     qmlRegisterSingletonInstance("KetPlusMock.Native", 1, 0, "Mock", &controller);
 
     QQmlApplicationEngine engine;
-    engine.loadFromModule("KetPlusMock", "Main");
+    engine.loadFromModule("KetPlusMock",
+                          controller.edition == QLatin1String("lite") ? "LiteMain" : "Main");
     if (engine.rootObjects().isEmpty())
         return 1;
     auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().constFirst());
+    if (parser.isSet(display)) {
+        const QList<QScreen*> screens = QGuiApplication::screens();
+        QScreen* target = nullptr;
+        if (parser.value(display) == QLatin1String("secondary")) {
+            for (QScreen* candidate : screens)
+                if (candidate != QGuiApplication::primaryScreen() && !target)
+                    target = candidate;
+        } else {
+            bool ok = false;
+            const int index = parser.value(display).toInt(&ok);
+            if (ok && index >= 0 && index < screens.size())
+                target = screens.at(index);
+        }
+        if (target) {
+            window->setScreen(target);
+            window->setPosition(target->availableGeometry().topLeft() + QPoint(40, 40));
+            std::fprintf(stderr, "Opening on %s\n", qPrintable(target->name()));
+        } else {
+            std::fprintf(stderr, "No display %s; opening on the main one\n",
+                         qPrintable(parser.value(display)));
+        }
+    }
 
     if (parser.isSet(smoke)) {
         const QStringList ids = window->property("screenIds").toStringList();
@@ -120,6 +170,38 @@ int main(int argc, char* argv[]) {
         QMetaObject::invokeMethod(window, "openEveryOverlay");
         QTimer::singleShot(300, &application, &QCoreApplication::quit);
         QApplication::exec();
+        if (controller.edition == QLatin1String("lite") && parser.isSet(keys)) {
+            // The Windows menu bar without a pointer: F10 focuses File, Right ×4 reaches
+            // View, Down opens it, Down Down Enter chooses Search in Files. Keys reach Qt
+            // Quick only in the active window; when another app keeps the focus, say so and
+            // skip rather than report the mock.
+            QMetaObject::invokeMethod(window, "showScreen",
+                                      Q_ARG(QVariant, QStringLiteral("explorer/windows")));
+            window->requestActivate();
+            if (!QTest::qWaitForWindowActive(window)) {
+                std::fprintf(stderr, "Keyboard check skipped: the window is not active\n");
+            } else {
+                QTest::qWait(150);
+                QTest::keyClick(window, Qt::Key_F10);
+                for (int i = 0; i < 4; ++i)
+                    QTest::keyClick(window, Qt::Key_Right);
+                for (const Qt::Key key : {Qt::Key_Down, Qt::Key_Down, Qt::Key_Down, Qt::Key_Return}) {
+                    QTest::qWait(50);
+                    QTest::keyClick(window, key);
+                }
+                const bool opened = QTest::qWaitFor(
+                    [window] {
+                        return window->property("screen").toString() == QLatin1String("search");
+                    },
+                    1000);
+                if (!opened) {
+                    std::fprintf(stderr, "QML keyboard check: View > Search in Files did not open it\n");
+                    ++qmlProblems;
+                } else {
+                    std::fprintf(stderr, "Keyboard check: View > Search in Files opened Search\n");
+                }
+            }
+        }
         std::fprintf(stderr, "%lld screens, %d QML problems\n", qlonglong(ids.size()), qmlProblems);
         return ids.isEmpty() || qmlProblems > 0 ? 1 : 0;
     }

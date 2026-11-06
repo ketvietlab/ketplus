@@ -5,6 +5,7 @@
 #include "DaemonClient.h"
 #include "remote/LinuxMachinesSection.h"
 #include "remote/PairingQrCode.h"
+#include "remote/RemoteActivitySection.h"
 #include "remote/RemoteConnectionsIntro.h"
 #include "ui/TypeScale.h"
 
@@ -246,6 +247,15 @@ QLabel[remoteRole="statusValue"][remoteTone="danger"] { color:@danger@; }
 QLabel[remoteRole="badge"] { min-height:20px; padding:0 8px; border:1px solid @border@; border-radius:10px; background:@raised@; color:@secondary@; font-size:{{micro}}px; font-weight:600; }
 QLabel[remoteRole="badge"][remoteTone="positive"] { border-color:@positiveBorder@; background:@positiveBg@; color:@positive@; }
 QLabel[remoteRole="badge"][remoteTone="warning"] { border-color:@warningBorder@; background:@warningBg@; color:@warning@; }
+QLabel[remoteRole="badge"][remoteTone="danger"] { border-color:@dangerBorder@; background:@dangerBg@; color:@danger@; }
+QFrame[remoteRole="activityList"] { border:1px solid @border@; border-radius:7px; background:@panel@; }
+QScrollArea#remoteActivityDialogScroll QFrame[remoteRole="activityList"] { border-radius:7px; }
+QFrame[remoteRole="activityRow"] { border:0; border-top:1px solid @border@; background:transparent; }
+QFrame[remoteRole="activityRow"][remoteFirst="true"] { border-top:0; }
+QFrame[remoteRole="activityRow"]:focus { border:2px solid @accent@; border-radius:5px; }
+QLabel[remoteRole="activityIcon"] { color:@muted@; }
+QLabel[remoteRole="activityTitle"] { color:@text@; font-size:{{body}}px; font-weight:500; }
+QLabel[remoteRole="activityTime"], QLabel[remoteRole="activityDetail"] { color:@muted@; font-size:{{caption}}px; }
 QFrame[remoteRole="routeNode"] { border:1px solid @border@; border-radius:5px; background:@raised@; }
 QLabel[remoteRole="routeIcon"] { color:@accentText@; font-size:{{glyphSmall}}px; font-weight:600; }
 QLabel[remoteRole="routeTitle"] { color:@text@; font-size:{{body}}px; font-weight:600; }
@@ -611,6 +621,9 @@ QWidget* RemoteControlView::createControlPage() {
     chrome_geometry::minimumHeight(devicesEmpty_, 118);
     devicesLayout_->addWidget(devicesEmpty_);
     linkedLayout->addWidget(devices);
+    // What paired devices did on this Mac (#86).
+    activity_ = new RemoteActivitySection(daemon_, linkedContent_);
+    linkedLayout->addWidget(activity_);
 
     auto* account = new QWidget(linkedContent_);
     account->setObjectName(QStringLiteral("remoteAccountStrip"));
@@ -999,6 +1012,11 @@ void RemoteControlView::applyStatus(const QJsonObject& status) {
         setNotice({});
     if (configured_ && (!wasConfigured || !devicesLoaded_))
         refreshDevices();
+    // Demo data has no audit; a real sign-in shows it, signing out forgets it.
+    if (configured_ && !demoMode_)
+        activity_->refresh(!wasConfigured);
+    else if (!configured_)
+        activity_->clear();
 }
 
 void RemoteControlView::refreshDevices() {
@@ -1034,6 +1052,14 @@ void RemoteControlView::renderDevices(const QJsonArray& devices) {
     }
     devicesEmpty_ = nullptr;
     deviceCount_->setText(QStringLiteral("%1 paired").arg(devices.size()));
+    QHash<QString, QString> names;
+    for (const QJsonValue& value : devices) {
+        const QJsonObject device = value.toObject();
+        names.insert(
+            device.value(QStringLiteral("id")).toString(),
+            device.value(QStringLiteral("displayName")).toString(QStringLiteral("KetPlus Remote")));
+    }
+    activity_->setDeviceNames(names);
     if (devices.isEmpty()) {
         devicesEmpty_ = label(QStringLiteral("No devices connected yet."), "emptyText");
         devicesEmpty_->setObjectName(QStringLiteral("remoteDevicesEmpty"));
@@ -1087,12 +1113,8 @@ void RemoteControlView::renderDevices(const QJsonArray& devices) {
 }
 
 void RemoteControlView::showDeviceDetails(const QString& deviceId, const QString& displayName) {
-    if (runDecisionDialog(this, QStringLiteral("remoteDeviceDetailsDialog"), displayName,
-                          QStringLiteral("KetPlus App · Paired with this Mac"),
-                          QStringLiteral("You can revoke this device at any time."),
-                          QStringLiteral("Close"), QStringLiteral("Revoke access"), true,
-                          unplugIcon) == DialogChoice::Confirm)
-        revokeDevice(deviceId);
+    // Its details are what it did on this Mac (#86), with the way to revoke it.
+    activity_->showDevice(deviceId, displayName, [this, deviceId] { revokeDevice(deviceId); });
 }
 
 void RemoteControlView::createPairing() {

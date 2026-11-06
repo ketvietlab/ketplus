@@ -1,5 +1,6 @@
 #include "terminal_app/TerminalApplication.h"
 #include "terminal_app/TerminalWindow.h"
+#include "ui/KetFonts.h"
 
 #include "KetProfile.h"
 #include "KetStyle.h"
@@ -41,13 +42,17 @@ LaunchTarget targetForPath(const QString& path) {
 
 int main(int argc, char* argv[]) {
     ketplus::TerminalApplication app(argc, argv);
+    // The application name also names the settings domain, so it stays ASCII; users see the
+    // display name (ADR 0029).
     QCoreApplication::setApplicationName(QStringLiteral("KetPlus Terminal"));
+    QGuiApplication::setApplicationDisplayName(QStringLiteral("KétPlus Terminal"));
     QCoreApplication::setApplicationVersion(QStringLiteral(KETPLUS_CM_VERSION));
     QCoreApplication::setOrganizationName(QStringLiteral("Ketsuite"));
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/brand/ketplus-terminal-icon.png")));
 
-    // The kit draws the window: KétPlus metrics, the saved appearance, then the style. Its
-    // font-sans falls back to Inter, which the app embeds; KÉT Sans is not shipped here.
+    // The kit draws the window: the KÉT fonts (its font-sans and the profile's monospace), the
+    // KétPlus metrics, the saved appearance, then the style. Inter stays as font-sans' fallback.
+    ketplus::registerKetFonts();
     QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/InterVariable.ttf"));
     ket::Profile::setCurrent(ket::Profile::ketPlus());
     ketplus::restoreTerminalAppearance();

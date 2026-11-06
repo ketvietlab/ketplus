@@ -900,7 +900,9 @@ void CloudControlClient::acknowledgeCommand(const QJsonObject& command,
                  kind,
                  content.value(QStringLiteral("senderDeviceId")).toString(),
                  content.value(QStringLiteral("senderKeyVersion")).toInt(),
-                 sessionId,
+                 // A conversation a command created is named by its result.
+                 sessionId.isEmpty() ? localResult.value(QStringLiteral("session_id")).toString()
+                                     : sessionId,
                  resultCode,
                  {}}))
             qWarning("Remote command %s was not audited: %s", qUtf8Printable(commandId),

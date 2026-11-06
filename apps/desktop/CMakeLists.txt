@@ -10,6 +10,8 @@ add_library(ketplus_desktop_support STATIC
     src/remote/RemoteControlView.h
     src/remote/LinuxMachinesSection.cpp
     src/remote/LinuxMachinesSection.h
+    src/remote/RemoteActivitySection.cpp
+    src/remote/RemoteActivitySection.h
     src/remote/RemoteConnectionsIntro.cpp
     src/remote/RemoteConnectionsIntro.h
     src/app/RepositoryMetadataStore.cpp

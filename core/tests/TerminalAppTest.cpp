@@ -2,6 +2,7 @@
 
 #include "terminal/TerminalView.h"
 #include "terminal_app/TerminalTab.h"
+#include "ui/KetFonts.h"
 
 #include "KetAppearance.h"
 #include "KetProfile.h"
@@ -31,6 +32,8 @@ class TerminalAppTest final : public QObject {
     void followsTheKitAppearance();
     void savesAndRestoresTheAppearance();
     void usesTheSavedFontFamily();
+    void showsTheKetPlusName();
+    void drawsTheTerminalInKetSansMono();
 };
 
 void TerminalAppTest::initTestCase() {
@@ -154,6 +157,31 @@ void TerminalAppTest::usesTheSavedFontFamily() {
     QSettings().setValue(QStringLiteral("terminal/fontFamily"), QStringLiteral(" %1 ").arg(family));
     TerminalWindow window(QDir::tempPath());
     QCOMPARE(QFontInfo(window.currentTab()->view()->font()).family(), family);
+}
+
+void TerminalAppTest::showsTheKetPlusName() {
+    // ADR 0029: users see KétPlus Terminal; the application name keeps naming the settings.
+    TerminalWindow window(QDir::tempPath());
+    QVERIFY2(window.windowTitle().endsWith(QStringLiteral(" — KétPlus Terminal")),
+             qPrintable(window.windowTitle()));
+    QStringList texts;
+    for (const QAction* action : window.findChildren<QAction*>()) {
+        texts.append(action->text());
+    }
+    QVERIFY(texts.contains(QStringLiteral("Quit KétPlus Terminal")));
+    QVERIFY(texts.contains(QStringLiteral("About KétPlus Terminal")));
+    QVERIFY(!texts.join(QLatin1Char('\n')).contains(QStringLiteral("KetPlus Terminal")));
+}
+
+void TerminalAppTest::drawsTheTerminalInKetSansMono() {
+    // The app registers the embedded KÉT fonts at startup (main.cpp); with no saved family the
+    // terminal uses the profile's monospace, which is KÉT Sans Mono once it is installed.
+    const QStringList families = registerKetFonts();
+    QVERIFY2(families.contains(QStringLiteral("KET Sans")), qPrintable(families.join(u',')));
+    QVERIFY2(families.contains(QStringLiteral("KET Sans Mono")), qPrintable(families.join(u',')));
+    TerminalWindow window(QDir::tempPath());
+    QCOMPARE(QFontInfo(window.currentTab()->view()->font()).family(),
+             QStringLiteral("KET Sans Mono"));
 }
 
 } // namespace ketplus

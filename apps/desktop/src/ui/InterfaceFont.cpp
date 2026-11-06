@@ -8,7 +8,10 @@
 #include <QGuiApplication>
 #include <QStringList>
 
-static void initializeInterfaceFontResources() { Q_INIT_RESOURCE(ketplus_ui_fonts); }
+static void initializeInterfaceFontResources() {
+    Q_INIT_RESOURCE(ketplus_ui_fonts);
+    Q_INIT_RESOURCE(ketplus_ui_fonts_mono);
+}
 
 namespace ketplus {
 namespace {
@@ -24,6 +27,11 @@ QString loadedKetSansFamily() {
                 qWarning("Unable to register embedded KET Sans %s", style);
                 return QString{};
             }
+        }
+        // KÉT Sans Mono Medium ships beside it for code and the terminal (#141).
+        if (QFontDatabase::addApplicationFont(
+                QStringLiteral(":/ketplus/fonts/KETSansMono-Medium.ttf")) < 0) {
+            qWarning("Unable to register embedded KET Sans Mono");
         }
         return QStringLiteral("KET Sans");
     }();

@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Svg Widgets)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Svg Test Widgets)
 qt_standard_project_setup(REQUIRES 6.8)
 
 include(FetchContent)
@@ -19,12 +19,13 @@ include(FetchContent)
 set(KETQT_BUILD_WIDGETS ON CACHE BOOL "" FORCE)
 FetchContent_Declare(ketqt
     GIT_REPOSITORY https://github.com/ketvietlab/ket-qt.git
-    GIT_TAG 5f310ce5a25677768c5e33646f68c7cfa45f5523 # develop, through PR #27
+    GIT_TAG c897a54458631f40a24b42e6fb4ff32910178e9c # develop, through PR #30
 )
 FetchContent_MakeAvailable(ketqt)
 
 # KÉT Sans 1.1 (SIL OFL 1.1), the official release archive. KÉT Sans Mono 0.10.4 (SIL OFL
-# 1.1) has no public release, so its Medium TTF is committed under fonts/ with its licence.
+# 1.1) has no public release, so its Medium TTF is committed once under core/assets/fonts with
+# its licence.
 # Only Medium is bundled: every monospace text in the mock (numbers, code, diffs) is Medium.
 set(KETPLUS_MOCK_KET_SANS_ARCHIVE "" CACHE FILEPATH "Local copy of KETSans-1.100.zip")
 if(KETPLUS_MOCK_KET_SANS_ARCHIVE)
@@ -72,8 +73,8 @@ qt_add_resources(ketplus_qt_mock mock_fonts
 )
 qt_add_resources(ketplus_qt_mock mock_mono
     PREFIX "/fonts"
-    BASE fonts
-    FILES fonts/KETSansMono-Medium.ttf
+    BASE ../../core/assets/fonts
+    FILES ../../core/assets/fonts/KETSansMono-Medium.ttf
 )
 
 # The Mermaid samples' sources, shown by the fixtures and rendered by tools/render_mermaid.py.
@@ -91,5 +92,5 @@ qt_add_resources(ketplus_qt_mock mock_docs
 )
 
 target_link_libraries(ketplus_qt_mock PRIVATE KetQt::Quick KetQt::QuickPlugin KetQt::Widgets Qt6::Gui
-                                              Qt6::Qml Qt6::Widgets
+                                              Qt6::Qml Qt6::Test Qt6::Widgets
                                               Qt6::Quick Qt6::QuickControls2 Qt6::Svg)

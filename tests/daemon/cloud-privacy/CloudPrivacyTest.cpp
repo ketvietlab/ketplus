@@ -2376,6 +2376,12 @@ class CloudPrivacyTest final : public QObject {
         QCOMPARE(outcomes.value("command-over-quota"), QStringLiteral("worktree_quota_exceeded"));
         QCOMPARE(outcomes.value("command-low-space"), QStringLiteral("worktree_quota_exceeded"));
         QCOMPARE(outcomes.value("command-redelivered"), QStringLiteral("ok"));
+        // A command that created a conversation is recorded with the conversation it created.
+        const auto created = std::find_if(audit->cbegin(), audit->cend(), [](const auto& entry) {
+            return entry.commandId == QStringLiteral("command-redelivered");
+        });
+        QVERIFY(created != audit->cend());
+        QCOMPARE(created->sessionId, QStringLiteral("session-first-attempt"));
     }
 
     // Refused commands are audited without storing a command result, so the audit's own writes
@@ -2432,6 +2438,11 @@ class CloudPrivacyTest final : public QObject {
                     {{"ok", false}, {"error_code", "duplicate"}});
         // Reads are not recorded; a kind this build does not know is.
         acknowledge(command("command-read", "workspace.files.tree", "phone-1"), ok);
+        for (const QString& kind :
+             {QStringLiteral("session.output.read"), QStringLiteral("session.media.read"),
+              QStringLiteral("session.pending_approvals"), QStringLiteral("session.task.output"),
+              QStringLiteral("attachment.stage.chunk")})
+            acknowledge(command("command-" + kind, kind, "phone-1"), ok);
         acknowledge(command("command-future", "future.kind", "phone-2"),
                     {{"ok", false}, {"error_code", "unsupported_command"}});
 
@@ -2466,6 +2477,16 @@ class CloudPrivacyTest final : public QObject {
         QCOMPARE(entries.at(0).toObject().value("command_id").toString(),
                  QStringLiteral("command-turn"));
         QCOMPARE(entries.at(0).toObject().value("device_key_version").toInt(), 2);
+        QVERIFY(entries.at(0).toObject().value("session_exists").toBool());
+        QCOMPARE(entries.at(0).toObject().value("session_title").toString(),
+                 c.journal.sessions().first().title);
+        // A deleted conversation is reported as such, so the desktop does not guess a name.
+        QVERIFY(c.journal.recordRemoteCommand(
+            {"command-gone", "session.delete", "phone-3", 1, "session-gone", "ok", {}}));
+        const QJsonObject gone =
+            audit({{"device_id", "phone-3"}}).first.value("entries").toArray().at(0).toObject();
+        QVERIFY(!gone.value("session_exists").toBool());
+        QVERIFY(gone.value("session_title").toString().isEmpty());
         QVERIFY(QDateTime::fromString(entries.at(0).toObject().value("recorded_at").toString(),
                                       Qt::ISODateWithMs)
                     .isValid());
@@ -2476,9 +2497,9 @@ class CloudPrivacyTest final : public QObject {
             {"command-old", "turn.start", "phone-1", 2, "session-synthetic", "ok",
              QDateTime::currentDateTimeUtc().addDays(-LocalJournal::remoteCommandRetentionDays -
                                                      1)}));
-        QCOMPARE(c.journal.remoteCommands({}, 10)->size(), 3);
+        QCOMPARE(c.journal.remoteCommands({}, 10)->size(), 4);
         QVERIFY(c.journal.pruneRetention());
-        QCOMPARE(c.journal.remoteCommands({}, 10)->size(), 2);
+        QCOMPARE(c.journal.remoteCommands({}, 10)->size(), 3);
 
         // A failed read is reported, not answered as an empty record.
         QSqlDatabase blocker = QSqlDatabase::addDatabase("QSQLITE", "audit-blocker");

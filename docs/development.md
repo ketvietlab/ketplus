@@ -89,12 +89,14 @@ remote service. CMake does not compile it into Release builds.
 
 ## Developer packages
 
-Desktop embeds KÉT Sans 1.0.0 from the official `KETSans-1.000.zip` release,
-verified by SHA-256 in `cmake/KetSans.cmake`. Configure downloads it once; offline
-builds can set `-DKETPLUS_KET_SANS_ARCHIVE=/path/to/KETSans-1.000.zip` (the same
-hash is required). The four unmodified hinted TTFs are compiled into Qt resources;
-no loose font files are installed. Its license ships with the application notices.
-This is Pro product typography; the Lite editor in `core/` retains its own font defaults.
+KétPlus, KétPlus Terminal and KétPlus Pro embed KÉT Sans 1.1 from the official
+`KETSans-1.100.zip` release, verified by SHA-256 in `core/cmake/KetFonts.cmake`, and
+KÉT Sans Mono 0.10.4 Medium from `core/assets/fonts` (no public release yet). Both are
+SIL OFL 1.1. Configure downloads the archive once; offline builds can set
+`-DKETPLUS_KET_SANS_ARCHIVE=/path/to/KETSans-1.100.zip` (the same hash is required).
+The fonts are compiled into Qt resources and registered at startup; their licences
+ship with the application notices. The Lite editor keeps Inter as its interface
+default until #141 and #142 switch the defaults.
 
 The macOS package contains one `KetPlus.app`; its per-user daemon is embedded at
 `Contents/Helpers/ketplus_daemon`. Codex CLI and Cursor CLI remain external
