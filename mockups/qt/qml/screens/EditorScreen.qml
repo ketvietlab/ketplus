@@ -77,22 +77,17 @@ Item {
     }
     readonly property var lines: source.replace(/\n$/, "").split("\n")
 
-    // A small QML highlighter for the sample; colours are semantic tokens.
-    function highlight(line) {
+    // Code lines coloured by the kit's syntax highlighter (Két tokens), as code blocks are.
+    readonly property var highlighted: markdown ? [] : KetTheme.highlightedLines(
+        source.replace(/\n$/, ""), current.split(".").pop(), KetTheme.dark)
+
+    // Markdown source: headings in the accent, the rest plain (URLs are not comments).
+    function highlight(line, index) {
+        if (!markdown)
+            return highlighted[index] || ""
         const escape = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/ /g, "&nbsp;")
-        // Markdown source: headings in the accent, the rest plain (URLs are not comments).
-        if (markdown)
-            return /^#{1,6} /.test(line) ? "<font color='" + KetTheme.t.accentText + "'>" + escape(line) + "</font>"
-                                         : escape(line)
-        const comment = line.indexOf("//")
-        let code = comment >= 0 ? line.slice(0, comment) : line
-        let html = escape(code)
-            .replace(/(&quot;|")([^"]*)"/g, "<font color='" + KetTheme.t.success + "'>\"$2\"</font>")
-            .replace(/\b(import|property|string|var|id)\b/g, "<font color='" + KetTheme.t.accentText + "'>$1</font>")
-            .replace(/^((?:&nbsp;)*)([a-z][A-Za-z.]*)(:)/, "$1<font color='" + KetTheme.t.info + "'>$2</font>$3")
-        if (comment >= 0)
-            html += "<font color='" + KetTheme.t.textMuted + "'>" + escape(line.slice(comment)) + "</font>"
-        return html
+        return /^#{1,6} /.test(line) ? "<font color='" + KetTheme.t.accentText + "'>" + escape(line) + "</font>"
+                                     : escape(line)
     }
 
     ColumnLayout {
@@ -258,7 +253,7 @@ Item {
                                 x: screen.px(70)
                                 anchors.verticalCenter: parent.verticalCenter
                                 textFormat: Text.StyledText
-                                text: screen.highlight(modelData)
+                                text: screen.highlight(modelData, index)
                                 color: KetTheme.t.textMain
                                 font.family: KetTheme.monoFontFamily
                                 font.pixelSize: screen.px(14)

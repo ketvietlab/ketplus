@@ -188,7 +188,16 @@ QtObject {
     readonly property string designSystem:
         "# Design system\n\nKetPlus uses **Két Design System** through the Két Qt kit.\n\n"
         + "- Colours come only from tokens.\n- Product metrics live in `ket::Profile`.\n"
-        + "- Every component has a Qt Widgets and a Qt Quick twin.\n"
+        + "- Every component has a Qt Widgets and a Qt Quick twin.\n\n"
+        + "## Code samples\n\nSyntax colours follow the fence's language.\n\n"
+        + "```qml\n// A row in the worktree list.\nItem {\n    id: row\n    property bool selected: false\n"
+        + "    height: 32\n    Text { text: qsTr(\"Agent working\"); color: theme.success }\n}\n```\n\n"
+        + "```cpp\n#include <QString>\n\n/* Profile overrides\n   for the mock. */\n"
+        + "ket::Profile profile = ket::Profile::ketPlus();\nprofile.codePixels = 14;\n"
+        + "if (profile.monoFamily().isEmpty())\n    return 1;\n```\n\n"
+        + "```sh\n# Build and capture the mock.\ncmake --build build/mock --parallel 8\n"
+        + "KetPlusMock --screen=editor --state=markdown --dark --screenshot=\"$OUT/md.png\"\n```\n\n"
+        + "```json\n{\n  \"name\": \"ket-qt\",\n  \"version\": \"0.4.0\",\n  \"private\": false\n}\n```\n"
 
     // Manage worktrees.
     readonly property var worktrees: [

@@ -15,7 +15,7 @@ Basic.ApplicationWindow {
     readonly property var screenIds: [
         "workspace", "workspace/welcome", "workspace/running", "workspace/question",
         "workspace/error", "workspace/atlas", "workspace/details", "editor", "editor/terminal",
-        "editor/markdown", "editor/markdown-source",
+        "editor/markdown", "editor/markdown-source", "editor/samples",
         "changes", "worktrees", "connections", "settings", "settings/typography", "settings/account",
         "settings/browser", "settings/computer", "settings/providers", "settings/archived",
         "settings/updates", "atlas", "mobile-picker", "workspace/compact"
@@ -78,7 +78,8 @@ Basic.ApplicationWindow {
             settingsTab = state || "appearance"
         if (name === "editor") {
             editorTerminal = state === "terminal"
-            editorFile = state.startsWith("markdown") ? "licensing.md" : ""
+            editorFile = state.startsWith("markdown") ? "licensing.md"
+                       : state === "samples" ? "design-system.md" : ""
             editorSource = state === "markdown-source"
         }
         screen = name
