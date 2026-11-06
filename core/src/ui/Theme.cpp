@@ -1,6 +1,8 @@
 #include "ui/Theme.h"
 
 #include "KetAppearance.h"
+#include "KetProfile.h"
+#include "KetStyle.h"
 #include "KetSyntax.h"
 #include "KetTokens.h"
 
@@ -8,9 +10,7 @@
 #include <QColor>
 #include <QFont>
 #include <QFontDatabase>
-#include <QPalette>
 #include <QSettings>
-#include <QStyleFactory>
 
 #include <utility>
 
@@ -137,69 +137,6 @@ QMenuBar::item {
 QMenuBar::item:selected {
     background: {{accentSubtle}};
     color: {{accentText}};
-}
-
-QMenu {
-    padding: 5px;
-    border: 1px solid {{borderStrong}};
-    border-radius: 7px;
-    background: {{panelBackground}};
-    color: {{textMain}};
-}
-
-QMenu::item {
-    min-height: 24px;
-    padding: 4px 28px 4px 10px;
-    border-radius: 5px;
-}
-
-QMenu::item:selected {
-    background: {{accentSubtle}};
-    color: {{accentText}};
-}
-
-QMenu::separator {
-    height: 1px;
-    margin: 5px 7px;
-    background: {{border}};
-}
-
-QTabWidget::pane {
-    border: 0;
-    background: {{panelBackground}};
-}
-
-QTabBar {
-    qproperty-drawBase: 0;
-    background: {{pageBackground}};
-}
-
-QTabBar::tab {
-    min-width: 104px;
-    min-height: 40px;
-    padding: 0 14px;
-    border: 0;
-    border-right: 1px solid {{border}};
-    border-bottom: 2px solid transparent;
-    background: {{pageBackground}};
-    color: {{textMuted}};
-    font-size: 12px;
-    font-weight: 500;
-}
-
-QTabBar::tab:hover:!selected {
-    background: {{surfaceHover}};
-    color: {{textSecondary}};
-}
-
-QTabBar::tab:selected {
-    border-bottom: 2px solid {{accent}};
-    background: {{panelBackground}};
-    color: {{tabActiveText}};
-}
-
-QTabBar::close-button {
-    margin-left: 7px;
 }
 
 QToolButton[kvRole="tabClose"] {
@@ -830,15 +767,6 @@ QScrollBar::add-page, QScrollBar::sub-page {
     background: transparent;
 }
 
-QToolTip {
-    padding: 6px 8px;
-    border: 1px solid {{borderStrong}};
-    border-radius: 5px;
-    background: {{surfaceRaised}};
-    color: {{textMain}};
-    font-size: 12px;
-}
-
 QPushButton[kvRole="findClose"] {
     min-width: 28px;
     max-width: 28px;
@@ -916,7 +844,11 @@ QToolButton[kvRole="sidebarAction"]:hover {
 
 ThemeManager::ThemeManager(QApplication& application, QObject* parent)
     : QObject(parent), application_(application) {
-    application_.setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
+    // The kit's style draws menus, tooltips, tab bars, select popups, progress bars and
+    // sliders from Két DS recipes, and keeps the application palette on ket::Appearance;
+    // the stylesheet below styles the rest. The profile goes first: the style reads it.
+    ket::Profile::setCurrent(ket::Profile::ketPlus());
+    ket::Style::install(application_);
     loadInterFont();
 
     QSettings settings;
@@ -991,17 +923,6 @@ void ThemeManager::syncAppearance() {
 void ThemeManager::apply() {
     palette_ = paletteFor(ket::Appearance::instance().theme());
 
-    QPalette nativePalette;
-    nativePalette.setColor(QPalette::Window, QColor(palette_.pageBackground));
-    nativePalette.setColor(QPalette::WindowText, QColor(palette_.textMain));
-    nativePalette.setColor(QPalette::Base, QColor(palette_.panelBackground));
-    nativePalette.setColor(QPalette::AlternateBase, QColor(palette_.panelSubtle));
-    nativePalette.setColor(QPalette::Text, QColor(palette_.textMain));
-    nativePalette.setColor(QPalette::Button, QColor(palette_.interactiveBackground));
-    nativePalette.setColor(QPalette::ButtonText, QColor(palette_.textSecondary));
-    nativePalette.setColor(QPalette::Highlight, QColor(palette_.accentMuted));
-    nativePalette.setColor(QPalette::HighlightedText, QColor(palette_.textMain));
-    application_.setPalette(nativePalette);
     application_.setStyleSheet(styleSheetFor(palette_, uiFontFamily_, interfaceFontSizePixels_));
 
     emit themeChanged();
