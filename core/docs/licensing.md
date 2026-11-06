@@ -34,7 +34,7 @@ placing proprietary implementation in CM files.
 | libvterm | `9d6d2112335080312ef8c36667fa717ded4f7daf` (`v0.3.3`) | Compiled statically | MIT |
 | Inter | 4.1 | Font embedded in Qt resources | SIL OFL 1.1 |
 | Két Design System | 0.1.44 | Mermaid configuration snapshots in Qt resources | MIT |
-| KetQt | `10cacc1d8972c5bff362ed06619a15afbe878248` | Compiled statically (ADR 0035) | MPL 2.0 |
+| KetQt | `b286dce5344f05e55bcfd86c7c1d6e10a5ab2587` | Compiled statically (ADR 0035) | MPL 2.0 |
 | Két Design System tokens | 0.1.44, inside KetQt | Compiled into KetQt | MIT |
 | Két Symbol | 0.12.0 SVGs, inside KetQt | Embedded in KetQt Qt resources | CC BY 4.0; credit "Két Symbol © 2026 Két Việt, CC BY 4.0" |
 

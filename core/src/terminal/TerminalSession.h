@@ -58,6 +58,9 @@ class TerminalSession final : public QObject {
     [[nodiscard]] QString lineText(int absoluteRow, bool trimTrailing = true) const;
     void setDefaultColors(int foregroundRed, int foregroundGreen, int foregroundBlue,
                           int backgroundRed, int backgroundGreen, int backgroundBlue);
+    // One of the 16 ANSI colours (0-15). Cells keep the index, so the next paint of existing
+    // output uses the new colour. Does not emit contentChanged; setDefaultColors does.
+    void setAnsiColor(int index, int red, int green, int blue);
     void convertColorToRgb(VTermColor& color) const;
 
   signals:

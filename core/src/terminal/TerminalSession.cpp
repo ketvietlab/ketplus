@@ -256,6 +256,17 @@ void TerminalSession::setDefaultColors(const int foregroundRed, const int foregr
     emit contentChanged();
 }
 
+void TerminalSession::setAnsiColor(const int index, const int red, const int green,
+                                   const int blue) {
+    if (index < 0 || index > 15) {
+        return;
+    }
+    VTermColor color;
+    vterm_color_rgb(&color, static_cast<uint8_t>(red), static_cast<uint8_t>(green),
+                    static_cast<uint8_t>(blue));
+    vterm_state_set_palette_color(vterm_obtain_state(terminal_), index, &color);
+}
+
 void TerminalSession::convertColorToRgb(VTermColor& color) const {
     vterm_screen_convert_color_to_rgb(screen_, &color);
 }
