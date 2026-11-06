@@ -2035,7 +2035,8 @@ class CloudPrivacyTest final : public QObject {
                     .toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals));
         };
         const QString ticketPath = QStringLiteral("/v2/pairing/tickets/ticket-1");
-        const auto approve = [&](const QJsonObject& claimedKeys, const QString& claimDigest) {
+        const auto approve = [&](const QJsonObject& claimedKeys, const QString& claimDigest,
+                                 const QString& confirmed) {
             c.transport.statusForPath.insert(ticketPath, 200);
             c.transport.responseForPath.insert(
                 ticketPath,
@@ -2050,7 +2051,7 @@ class CloudPrivacyTest final : public QObject {
             c.transport.statusForPath.insert(ticketPath + "/approve", 200);
             std::optional<QString> result;
             Access::approvePairing(
-                *c.client, "ticket-1",
+                *c.client, "ticket-1", confirmed,
                 [&result](const QJsonObject&, const QString& error) { result = error; });
             [&] { QTRY_VERIFY(result.has_value()); }();
             return result.value_or(QStringLiteral("no answer"));
@@ -2063,12 +2064,15 @@ class CloudPrivacyTest final : public QObject {
         };
 
         // The relay substitutes its own keys but keeps the digest the phone shows.
-        QCOMPARE(approve(relay, digest(phone)),
+        QCOMPARE(approve(relay, digest(phone), digest(phone)),
+                 QStringLiteral("The device claim does not match its keys."));
+        // Or swaps keys and digest together after the user confirmed the phone's code.
+        QCOMPARE(approve(relay, digest(relay), digest(phone)),
                  QStringLiteral("The device claim does not match its keys."));
         QCOMPARE(approvals(), 0);
         QVERIFY(!Access::pins(*c.client).trustsKeys("phone", 1, relay));
 
-        QCOMPARE(approve(phone, digest(phone)), QString());
+        QCOMPARE(approve(phone, digest(phone), digest(phone)), QString());
         QCOMPARE(approvals(), 1);
         QVERIFY(Access::pins(*c.client).trustsKeys("phone", 1, phone));
         QVERIFY(!Access::pins(*c.client).trustsKeys("phone", 1, relay));
@@ -2160,6 +2164,44 @@ class CloudPrivacyTest final : public QObject {
         Access::pollCommands(*c.client);
         QTRY_VERIFY(!Access::commandPollInFlight(*c.client));
         QCOMPARE(polls(), 4);
+    }
+
+    void aNewEnrollmentTrustsNoDeviceUntilOneIsApproved() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("journal.sqlite"));
+        c.start();
+        c.transport.statusForPath.insert("/v2/machines:enroll", 201);
+        c.transport.responseForPath.insert(
+            "/v2/machines:enroll",
+            R"({"id":"machine-synthetic","workspaceId":"workspace-synthetic","keyVersion":1})");
+        bool answered = false;
+        Access::enroll(*c.client, [&answered](const QJsonObject&, const QString&) {
+            answered = true; // the fake relay has no credential endpoint; enrollment is stored
+        });
+        QTRY_VERIFY(answered);
+        QVERIFY(Access::pins(*c.client).initialized());
+
+        // Phones another Mac of this workspace paired are listed, but not adopted here.
+        CredentialStore otherStore("other-macs-phone");
+        const QJsonObject other = CloudCrypto(&otherStore).publicKeys();
+        Access::configure(*c.client, c.transport);
+        c.transport.statusForPath.insert("/v2/devices", 200);
+        c.transport.responseForPath.insert(
+            "/v2/devices", QJsonDocument(QJsonArray{QJsonObject{{"id", "other-phone"},
+                                                                {"keyVersion", 1},
+                                                                {"status", "active"},
+                                                                {"keys", other}}})
+                               .toJson());
+        const qsizetype before = c.transport.requests.size();
+        Access::distributeKeys(*c.client);
+        QTRY_VERIFY(
+            std::any_of(c.transport.requests.cbegin() + before, c.transport.requests.cend(),
+                        [](const auto& request) { return request.url().path() == "/v2/devices"; }));
+        QTest::qWait(100);
+        QVERIFY(std::none_of(
+            c.transport.requests.cbegin() + before, c.transport.requests.cend(),
+            [](const auto& request) { return request.url().path() == "/v2/session-keys:append"; }));
+        QVERIFY(!Access::pins(*c.client).trustsKeys("other-phone", 1, other));
     }
 
     void replyLostAfterItsHeaderIsAFailure() {

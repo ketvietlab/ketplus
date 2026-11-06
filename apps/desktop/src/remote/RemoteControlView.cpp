@@ -1194,6 +1194,7 @@ void RemoteControlView::createPairing() {
             }
             const QJsonObject ticket = result.value(QStringLiteral("ticket")).toObject();
             ticketId_ = ticket.value(QStringLiteral("id")).toString();
+            shownClaimDigest_.clear();
             if (!pairingDialog_->isVisible()) {
                 closePairing();
                 return;
@@ -1223,8 +1224,13 @@ void RemoteControlView::refreshPairing() {
 }
 
 void RemoteControlView::showPairing(const QJsonObject& ticket) {
-    const QString state = ticket.value(QStringLiteral("status")).toString();
     const QJsonObject device = ticket.value(QStringLiteral("claimedDevice")).toObject();
+    const QString claimDigest = ticket.value(QStringLiteral("claimDigest")).toString();
+    // A claim whose digest changes after its code was shown is not the device the user saw.
+    const bool claimChanged =
+        !shownClaimDigest_.isEmpty() && !claimDigest.isEmpty() && claimDigest != shownClaimDigest_;
+    const QString state = claimChanged ? QStringLiteral("claim changed")
+                                       : ticket.value(QStringLiteral("status")).toString();
     const bool ready = state == QStringLiteral("claimed") && !device.isEmpty();
     pairingState_->setProperty("claimReady", ready);
     pairingNotice_->hide();
@@ -1250,7 +1256,8 @@ void RemoteControlView::showPairing(const QJsonObject& ticket) {
         qrCode_->hide();
         pairingTimer_->hide();
         pairingSteps_->hide();
-        QString code = ticket.value(QStringLiteral("claimDigest")).toString().toUpper();
+        shownClaimDigest_ = claimDigest;
+        QString code = shownClaimDigest_.toUpper();
         code.remove(QChar('-'));
         code.remove(QChar(' '));
         code = code.left(6);
@@ -1336,8 +1343,11 @@ void RemoteControlView::approvePairing() {
     approveButton_->setText(QStringLiteral("Connecting…"));
     const QString ticketId = ticketId_;
     const quint64 pairingEpoch = pairingEpoch_;
+    // The daemon approves only the claim whose code this dialog showed.
     daemon_->call(QStringLiteral("remote.pairing.approve"),
-                  {{QStringLiteral("ticket_id"), ticketId}}, {}, -1,
+                  {{QStringLiteral("ticket_id"), ticketId},
+                   {QStringLiteral("claim_digest"), shownClaimDigest_}},
+                  {}, -1,
                   [this, pairingEpoch, ticketId](const QJsonObject& result, const QString& error) {
                       if (pairingEpoch != pairingEpoch_ || ticketId != ticketId_)
                           return;
@@ -1386,6 +1396,7 @@ void RemoteControlView::revokeDevice(const QString& deviceId) {
 
 void RemoteControlView::closePairing() {
     ++pairingEpoch_;
+    shownClaimDigest_.clear();
     const QString ticketId = std::exchange(ticketId_, {});
     setBusy(false);
     if (demoMode_ || ticketId.isEmpty())

@@ -71,6 +71,7 @@ class Transport final : public QNetworkAccessManager {
                                              !path.endsWith(QStringLiteral("/ack")) &&
                                              !path.endsWith(QStringLiteral("/approve")) &&
                                              path != QStringLiteral("/v2/session-keys:append") &&
+                                             path != QStringLiteral("/v2/machines:enroll") &&
                                              path != QStringLiteral("/v2/events:append") &&
                                              path != QStringLiteral("/v2/daemon/challenges") &&
                                              path != QStringLiteral("/v2/daemon/credentials") &&

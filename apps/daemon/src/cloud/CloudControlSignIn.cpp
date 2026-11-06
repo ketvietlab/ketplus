@@ -195,7 +195,9 @@ void CloudControlClient::enrollMachine(const quint64 signInEpoch, const QString&
                 storeString(QStringLiteral("workspace-id"), workspaceId_, &storageError) &&
                 storeString(QStringLiteral("machine-key-version"),
                             QString::number(machineKeyVersion_), &storageError);
-            if (!stored) {
+            // A new enrollment trusts no device yet: only an existing enrollment adopts the
+            // devices it already served when pins were introduced (ADR 0034).
+            if (!stored || !pins_.adopt({}, &storageError)) {
                 callback({}, storageError);
                 return;
             }

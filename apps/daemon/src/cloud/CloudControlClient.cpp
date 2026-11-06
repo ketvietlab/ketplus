@@ -570,12 +570,15 @@ void CloudControlClient::pairingStatus(const QJsonObject& payload, LocalCallback
 
 void CloudControlClient::approvePairing(const QJsonObject& payload, LocalCallback callback) {
     const QString ticketId = payload.value(QStringLiteral("ticket_id")).toString();
-    if (ticketId.isEmpty()) {
-        callback({}, QStringLiteral("A pairing ticket is required."));
+    // The claim the user confirmed on this Mac; the ticket is read again below, and the relay
+    // must not swap keys and digest together in between.
+    const QString confirmed = payload.value(QStringLiteral("claim_digest")).toString();
+    if (ticketId.isEmpty() || confirmed.isEmpty()) {
+        callback({}, QStringLiteral("A pairing ticket and its confirmed claim are required."));
         return;
     }
-    ensureDaemonCredential([this, ticketId, callback = std::move(callback)](const bool ready,
-                                                                            const QString& error) {
+    ensureDaemonCredential([this, ticketId, confirmed, callback = std::move(callback)](
+                               const bool ready, const QString& error) {
         if (!ready) {
             callback({}, error);
             return;
@@ -584,8 +587,8 @@ void CloudControlClient::approvePairing(const QJsonObject& payload, LocalCallbac
             QStringLiteral("/v2/pairing/tickets/%1").arg(encodedPathSegment(ticketId));
         request(
             "GET", path, {}, daemonToken_, {},
-            [this, path, callback = std::move(callback)](const int status, const QJsonValue& value,
-                                                         const QString& transportError) {
+            [this, path, confirmed, callback = std::move(callback)](
+                const int status, const QJsonValue& value, const QString& transportError) {
                 const QJsonObject ticket = object(value);
                 const QJsonObject device = ticket.value(QStringLiteral("claimedDevice")).toObject();
                 const QString digest = ticket.value(QStringLiteral("claimDigest")).toString();
@@ -600,7 +603,8 @@ void CloudControlClient::approvePairing(const QJsonObject& payload, LocalCallbac
                 }
                 // The code the user compared is this digest. Recomputed from the claimed keys, it
                 // proves those keys are the phone's, not ones the relay substituted (#87).
-                if (DevicePins::claimDigest(ticket.value(QStringLiteral("id")).toString(),
+                if (digest != confirmed ||
+                    DevicePins::claimDigest(ticket.value(QStringLiteral("id")).toString(),
                                             device) != digest) {
                     callback({}, QStringLiteral("The device claim does not match its keys."));
                     return;

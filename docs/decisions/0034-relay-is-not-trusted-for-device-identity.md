@@ -21,14 +21,20 @@ add a device row with its own keys and read every session, send commands and ope
   a fingerprint of both public keys in the daemon's credential file. A row from the relay is
   only a hint. Session keys are wrapped, `/v2/device-keys` answers are accepted, and WebRTC
   offers are verified only for pinned devices whose keys match their pins.
-- **Pins come from an approval on this Mac.** `approvePairing` recomputes
-  `base64url(SHA-256(["<ticket>","<device>",<version>,"<agreement>","<signing>"]))` from the
-  claimed keys and refuses a ticket whose `claimDigest` differs. The user compares that digest
-  with the phone. The pin is written after the relay accepts the approval. Revoking a device
-  removes all of its pins.
-- **One-time adoption.** The first device list after this change pins the devices that are active
-  at that moment (trust on first use), so existing pairings keep working. After that, a device
-  joins only through an approval on this Mac.
+- **Pins come from an approval on this Mac.** `remote.pairing.approve` carries the
+  `claim_digest` whose code the user compared with the phone. Desktop sends the digest its dialog
+  showed, and `ketplusctl pairing approve TICKET_ID CLAIM_DIGEST` sends the one that `pairing
+  status` printed. The daemon reads the ticket again and refuses it unless that digest is
+  unchanged and equals
+  `base64url(SHA-256(["<ticket>","<device>",<version>,"<agreement>","<signing>"]))` recomputed
+  from the claimed keys. This stops the relay from swapping keys and digest together between
+  display and approval, and the dialog treats a digest that changes while open as a failed
+  pairing. The pin is written after the relay accepts the approval. Revoking a device removes
+  all of its pins.
+- **One-time adoption, only for existing enrollments.** A new enrollment starts with an empty pin
+  set. A Mac that was already enrolled when this change shipped pins the devices active in its
+  first device list (trust on first use), so existing pairings keep working. After that, a
+  device joins only through an approval on this Mac.
 - **Pairing a phone with one Mac does not grant it another Mac's sessions.** Each Mac approves its
   own devices.
 
