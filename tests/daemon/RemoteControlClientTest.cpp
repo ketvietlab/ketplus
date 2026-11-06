@@ -31,6 +31,18 @@ class RemoteControlTestAccess {
     }
     static QJsonObject credential(const ControlV2Client& client) { return client.credential_; }
     static QJsonObject hostPins(const ControlV2Client& client) { return client.hostPins_; }
+    // A store written before host pins existed: no host-pins account at all.
+    static void beforePins(ControlV2Client& client) {
+        if (!client.credentials_.remove("host-pins"))
+            qFatal("Synthetic pin removal failed");
+        client.hostPins_ = {};
+        client.hostPinsStored_ = false;
+    }
+    // Stores the in-memory credential, as a paired client finds it on its next start.
+    static void persist(ControlV2Client& client) {
+        if (!client.credentials_.write("user-session", QJsonDocument(client.credential_).toJson()))
+            qFatal("Synthetic credential write failed");
+    }
     static void expireCredential(ControlV2Client& client) {
         client.credential_.insert("expiresAt", "2020-01-01T00:00:00.000Z");
     }
@@ -87,6 +99,8 @@ struct EncryptedFixture {
         RemoteControlTestAccess::paired(client);
         if (pinned)
             RemoteControlTestAccess::pinHost(client, "linux-host", 1, hostKeys);
+        else
+            RemoteControlTestAccess::beforePins(client);
         const auto own = client.identity();
         wrapped = host.wrapSessionKey(
             "opaque-session", 3, 1,
@@ -333,6 +347,62 @@ class RemoteControlClientTest final : public QObject {
         signedIn.insert("hostPins", injected);
         QVERIFY(client.setCredential(signedIn));
         QVERIFY(RemoteControlTestAccess::hostPins(client).isEmpty());
+    }
+    void aFailedAccountSwitchOrSignOutNeverReopensHostAdoption() {
+        const QUrl origin("https://synthetic.invalid/native/ketplus");
+        CredentialStore relayStore("relay-after-storage-failure");
+        const QJsonObject relayKeys = CloudCrypto(&relayStore).publicKeys();
+        const auto refusesRelayKeys = [&](ControlV2Client& client, FixtureTransport& network,
+                                          const QJsonObject& event, const QJsonObject& wrapped) {
+            RemoteControlTestAccess::transport(client, network);
+            network.replies.insert(prefix + "/v2/mobile/sessions/opaque-session/keys",
+                                   QJsonArray{wrapped});
+            network.replies.insert(prefix + "/v2/mobile/sessions/opaque-session/events",
+                                   QJsonObject{{"sessionId", "opaque-session"},
+                                               {"sessionGeneration", 3},
+                                               {"afterCursor", 0},
+                                               {"nextCursor", 1},
+                                               {"events", QJsonArray{event}}});
+            network.replies.insert(
+                prefix + "/v2/mobile/device-keys/linux-host/1",
+                QJsonObject{{"deviceId", "linux-host"}, {"keyVersion", 1}, {"keys", relayKeys}});
+            QString failure = "unanswered";
+            client.events(session, 0, [&](auto, auto error) { failure = error; });
+            [&] { QTRY_VERIFY(failure != "unanswered"); }();
+            return failure == QStringLiteral("This host is not paired with this computer.");
+        };
+        for (const bool signingOut : {false, true}) {
+            r03::resetCredentials();
+            FixtureTransport network;
+            QJsonObject event;
+            QJsonObject wrapped;
+            {
+                ControlV2Client client(origin);
+                EncryptedFixture fixture(client, network);
+                RemoteControlTestAccess::persist(client);
+                event = fixture.event();
+                wrapped = fixture.wrapped;
+                if (signingOut) {
+                    // The credential survives a failed removal; the pins do not.
+                    r03::failRemovalsOf = "user-session";
+                    network.replies.insert(prefix + "/v2/auth/logout", QJsonObject{{"ok", true}});
+                    bool answered = false;
+                    client.signOut([&](auto, auto) { answered = true; });
+                    QTRY_VERIFY(answered);
+                    r03::failRemovalsOf.clear();
+                } else {
+                    // The new account's credential cannot be written; the old pairing stays.
+                    r03::failWritesTo = "user-session";
+                    QVERIFY(!client.setCredential(credential("another-owner")));
+                    r03::failWritesTo.clear();
+                    QVERIFY(refusesRelayKeys(client, network, event, wrapped));
+                }
+            }
+            // After a restart, the surviving pairing still adopts no host keys.
+            FixtureTransport restarted;
+            ControlV2Client client(origin);
+            QVERIFY(refusesRelayKeys(client, restarted, event, wrapped));
+        }
     }
     void terminalResultsRequireTheHostSignatureAndOriginalCommandScope() {
         FixtureTransport network;

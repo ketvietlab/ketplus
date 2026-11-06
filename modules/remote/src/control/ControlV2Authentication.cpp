@@ -35,11 +35,11 @@ bool ControlV2Client::setCredential(const QJsonObject& credential, QString* erro
     auto value = withDeadline(credential);
     value.remove("deviceId");
     value.remove("deviceKeyVersion");
-    // Another account starts unpaired: no host pins carry over.
-    if (!credentials_.remove("host-pins", error))
+    // Another account starts unpaired: no host pins carry over. The pin set is emptied, not
+    // removed, and before the credential is replaced: if that write fails, the old pairing
+    // stays with no pins rather than one that would adopt the next host keys it reads (#88).
+    if (!storeHostPins({}, error))
         return false;
-    hostPins_ = {};
-    hostPinsStored_ = false;
     if (!credentials_.write("user-session", QJsonDocument(value).toJson(QJsonDocument::Compact),
                             error))
         return false;
@@ -232,14 +232,16 @@ void ControlV2Client::signOut(Callback done) {
     pairingHosts_.clear();
     refreshing_ = false;
     ++pairingEpoch_;
+    // Emptied before the credential is removed, as in setCredential: a credential that
+    // survives a failed removal must not adopt host keys on the next start (#88).
     QString localError;
-    if (!credentials_.remove("user-session", &localError) && localError.isEmpty())
-        localError = "Unable to remove local credentials.";
-    QString pinsError;
-    if (!credentials_.remove("host-pins", &pinsError) && localError.isEmpty())
-        localError = pinsError.isEmpty() ? "Unable to remove host pins." : pinsError;
+    if (!storeHostPins({}, &localError) && localError.isEmpty())
+        localError = "Unable to clear host pins.";
     hostPins_ = {};
-    hostPinsStored_ = false;
+    hostPinsStored_ = true;
+    QString sessionError;
+    if (!credentials_.remove("user-session", &sessionError) && localError.isEmpty())
+        localError = sessionError.isEmpty() ? "Unable to remove local credentials." : sessionError;
     QString operationError;
     if (!credentials_.remove("refresh-operation", &operationError) && localError.isEmpty())
         localError =

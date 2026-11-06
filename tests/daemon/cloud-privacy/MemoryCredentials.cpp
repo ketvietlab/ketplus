@@ -6,11 +6,13 @@ QHash<QString, QByteArray> credentials;
 bool failWrites = false;
 bool failRemovals = false;
 QString failWritesTo;
+QString failRemovalsOf;
 void resetCredentials() {
     credentials.clear();
     failWrites = false;
     failRemovals = false;
     failWritesTo.clear();
+    failRemovalsOf.clear();
 }
 } // namespace r03
 namespace ketplus::daemon {
@@ -28,7 +30,7 @@ bool CredentialStore::write(const QString& account, const QByteArray& value, QSt
     return true;
 }
 bool CredentialStore::remove(const QString& account, QString* error) const {
-    if (r03::failRemovals) {
+    if (r03::failRemovals || (!r03::failRemovalsOf.isEmpty() && account == r03::failRemovalsOf)) {
         if (error)
             *error = "synthetic credential removal failure";
         return false;

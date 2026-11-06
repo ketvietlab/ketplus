@@ -182,7 +182,9 @@ Pairing pins the host (#88). The pairing link must carry `machine`, `kv` and
 claimed ticket must name that machine, and accepting the pairing stores the
 pin (`machine/version` -> fingerprint) in the client's own `host-pins`
 credential account. Nothing the relay returns at sign-in or refresh can add a
-pin, and signing in to another account or signing out removes them. Host keys the
+pin. Signing in to another account or signing out empties the pin set before
+the credential changes, so a credential that survives a failed write or removal
+never adopts host keys, even after a restart. Host keys the
 relay serves are used only when they match a pin, so a new host key version
 needs a new pairing. A client paired before pins adopts the first host keys it
 reads once. The claim digest is base64url, as the relay computes it.
