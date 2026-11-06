@@ -143,8 +143,11 @@ Basic.ApplicationWindow {
         showScreen(Mock.initialScreen + (Mock.initialState ? "/" + Mock.initialState : ""))
         if (Mock.initialPanel === "images")
             Qt.callLater(() => openImages(Fixtures.captures, 1))
-        else if ((Mock.initialPanel === "activity" || Mock.initialPanel === "device") && screen === "connections")
-            Qt.callLater(() => connections.openActivity(Mock.initialPanel === "device" ? "iPhone 16" : ""))
+        else if (["activity", "device", "device-focus"].includes(Mock.initialPanel) && screen === "connections") {
+            Qt.callLater(() => connections.openActivity(Mock.initialPanel === "activity" ? "" : "iPhone 16"))
+            if (Mock.initialPanel === "device-focus")
+                Qt.callLater(() => Qt.callLater(() => connections.focusActivityRow(3)))
+        }
         else if (Mock.initialPanel && screen === "workspace")
             Qt.callLater(() => workspace.openComposerPanel(Mock.initialPanel))
     }

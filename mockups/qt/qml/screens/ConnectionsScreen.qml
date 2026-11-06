@@ -60,6 +60,12 @@ Item {
         activityDialog.open()
     }
     function closeActivity() { activityDialog.close() }
+    // Gives a dialog row keyboard focus, as Tab does (--open=device-focus).
+    function focusActivityRow(index) {
+        activityList.positionViewAtIndex(index, ListView.Contain)
+        const row = activityList.itemAtIndex(index)
+        if (row) row.forceActiveFocus(Qt.TabFocusReason)
+    }
 
     component SectionTitle: Item {
         property string title
@@ -104,13 +110,43 @@ Item {
     }
 
     // One audited request: what it was, which device sent it, on what, when, and how it ended.
+    // Rows take keyboard focus (Tab, or the arrow keys in a list) and expose the whole entry to
+    // screen readers; a focused or hovered row shows the full text when any of it is cut short.
     component ActivityRow: Item {
+        id: activityRow
         required property var entry
         property bool last: false
         property bool showDevice: true
+        property int rowIndex: -1
         readonly property var outcome: screen.activityOutcome(entry.result)
+        readonly property string fullText: screen.activityTitle(entry.kind) + ", " + entry.when + ". "
+            + outcome.text + (outcome.reason ? ": " + outcome.reason : "") + ". "
+            + entry.device + ", " + entry.target + "."
         width: parent.width
         height: screen.px(56)
+        activeFocusOnTab: true
+        Accessible.role: Accessible.ListItem
+        Accessible.name: fullText
+        Accessible.focusable: true
+        Accessible.focused: activeFocus
+        Keys.onDownPressed: event => {
+            const next = nextItemInFocusChain(true)
+            if (next) next.forceActiveFocus(Qt.TabFocusReason)
+        }
+        Keys.onUpPressed: event => {
+            const previous = nextItemInFocusChain(false)
+            if (previous) previous.forceActiveFocus(Qt.BacktabFocusReason)
+        }
+        // Rows below the visible part of a list scroll into view as they take focus.
+        onActiveFocusChanged: if (activeFocus && ListView.view) ListView.view.positionViewAtIndex(rowIndex, ListView.Contain)
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: screen.px(2)
+            radius: screen.px(5)
+            color: "transparent"
+            border.width: screen.px(2)
+            border.color: activityRow.activeFocus ? KetTheme.t.focusBorder : "transparent"
+        }
         KetIcon {
             x: screen.px(18)
             anchors.verticalCenter: parent.verticalCenter
@@ -144,7 +180,10 @@ Item {
         HoverHandler { id: rowHover }
         // The full detail when it is cut short.
         KetToolTip {
-            visible: rowHover.hovered && (detailText.truncated || titleText.truncated)
+            id: rowToolTip
+            // At once for keyboard focus, which has no pointer to rest on the row.
+            delay: activityRow.activeFocus ? 0 : recipe.delayMs
+            visible: (rowHover.hovered || activityRow.activeFocus) && (detailText.truncated || titleText.truncated)
             text: titleText.text + ", " + whenText.text + "\n" + detailText.text
         }
         KetBadge { id: outcomeBadge; anchors.right: parent.right; anchors.rightMargin: screen.px(18); anchors.verticalCenter: parent.verticalCenter; text: outcome.text; tone: outcome.tone }
@@ -245,12 +284,15 @@ Item {
                 Column {
                     id: recentColumn
                     width: parent.width
+                    Accessible.role: Accessible.List
+                    Accessible.name: "Activity from paired devices"
                     Repeater {
                         model: screen.activity.slice(0, 5)
                         ActivityRow {
                             required property var modelData
                             required property int index
                             entry: modelData
+                            rowIndex: index
                             last: index === Math.min(screen.activity.length, 5) - 1
                         }
                     }
@@ -417,6 +459,8 @@ Item {
                 ListView {
                     id: activityList
                     width: parent.width
+                    Accessible.role: Accessible.List
+                    Accessible.name: activityDialog.title
                     height: Math.min(screen.activityShown.length, 6) * screen.px(56)
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
@@ -426,6 +470,7 @@ Item {
                         required property int index
                         width: activityList.width
                         entry: modelData
+                        rowIndex: index
                         showDevice: screen.activityDevice === ""
                         last: index === screen.activityShown.length - 1
                     }
