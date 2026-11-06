@@ -15,9 +15,9 @@ Item {
     required property var window
     property bool busy: false
     property bool compact: false // narrow columns keep only the mode's icon
-    property string placeholder: "Message Codex…"
-    property string provider: "codex"
-    property string model: "GPT-5.6 Luna"
+    property string provider: "claude"
+    property string model: "Opus 5.5"
+    property string placeholder: "Message " + providerLabel + "…"
     property string effort: "Medium"
     property string permission: "Workspace"
     property real contextUsed: 0.16
@@ -42,7 +42,7 @@ Item {
         else if (name === "mode")
             permissionButton.clicked()
         else if (name === "limits")
-            limits.openAbove(ring)
+            limits.toggleAbove(ring)
     }
     function choosePermission(index) {
         bar.permission = Fixtures.permissionModes[index].label
@@ -111,7 +111,7 @@ Item {
             id: ring
             Layout.alignment: Qt.AlignVCenter
             value: bar.contextUsed
-            onClicked: limits.openAbove(ring)
+            onClicked: limits.toggleAbove(ring)
         }
     }
 

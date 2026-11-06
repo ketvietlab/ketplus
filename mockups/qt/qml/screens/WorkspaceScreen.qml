@@ -94,7 +94,7 @@ Item {
                     window: screen.window
                     busy: screen.running
                     placeholder: screen.kind === "welcome" ? "Describe what you want to build…"
-                                                           : "Message Codex…"
+                                                           : "Message " + providerLabel + "…"
                 }
             }
         }
