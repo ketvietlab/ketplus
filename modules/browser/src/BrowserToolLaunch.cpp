@@ -99,15 +99,12 @@ bool signalTurnEnd(const QString& path) {
     return file.commit();
 }
 
-QString browserSkillFile(const Settings& settings, const QString& activePath,
-                         const QString& applicationDir) {
+QString browserSkillFile(const Settings& settings, const QString& applicationDir) {
     if (!settings.enabled)
         return {};
     if (const auto runtime = findBundledBrowserRuntime(applicationDir))
         return runtime->skillFile;
     QString appPath = settings.browserAppPath;
-    if (appPath.isEmpty() && !activePath.isEmpty())
-        appPath = detectBrowserAppPath(activePath);
     if (appPath.isEmpty())
         appPath = detectBrowserAppPath(applicationDir);
     if (appPath.isEmpty())

@@ -27,7 +27,8 @@ package.json, package-lock.json
 .claude/skills/ketplus-browser/  the skill shipped with its tool
 THIRD_PARTY_NOTICES.md, licenses/
 runtime.json                     {name, version, nodeVersion, node, protocols:["browser.v0"],
-                                  entrypoints:{mcp, jsonrpc}, skill, playwrightCore, packageLockSha256}
+                                  entrypoints:{mcp, jsonrpc}, skill, playwrightCore, packageLockSha256,
+                                  sourceSha256}
 ```
 
 - **Node binary plus app directory**, not a single-executable application. SEA
@@ -49,7 +50,9 @@ runtime.json                     {name, version, nodeVersion, node, protocols:["
 - **Build integration.** `apps/desktop` target `ketplus_bundle_browser_runtime`,
   option `KETPLUS_BUNDLE_BROWSER_RUNTIME` (default ON for macOS Release, OFF
   otherwise). `KETPLUS_BROWSER_RUNTIME_DIR` bundles a prebuilt staged runtime
-  without network; `KETPLUS_NODE_CACHE` supplies the Node archive. Staging needs a
+  without network, only if its `sourceSha256` (package files, `src/` and the
+  skill) matches the checkout; `KETPLUS_BROWSER_RUNTIME_ALLOW_STALE=ON` overrides
+  this for local experiments (#94); `KETPLUS_NODE_CACHE` supplies the Node archive. Staging needs a
   build-host node >= 22 only to run the script.
 - **Browser selection, no Chromium in the bundle.** At the first session the
   server picks, in order: installed Google Chrome, installed Microsoft Edge, a

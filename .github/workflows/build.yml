@@ -79,6 +79,14 @@ jobs:
         env:
           KETPLUS_BROWSER_ENGINE: playwright
         run: npm test
+      - name: Stage and smoke the bundled browser runtime
+        working-directory: apps/browser
+        env:
+          KETPLUS_BROWSER_ENGINE: playwright
+        run: |
+          out="$RUNNER_TEMP/ketplus-browser-runtime"
+          node scripts/package-runtime.mjs --out "$out"
+          node scripts/smoke-runtime.mjs "$out"
       - name: Claude browser integration without provider calls
         run: node --test apps/daemon/providers/claude-sidecar/test/browser.test.mjs apps/daemon/providers/claude-sidecar/test/transcript.test.mjs apps/daemon/providers/claude-sidecar/test/input.test.mjs
 

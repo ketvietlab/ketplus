@@ -21,6 +21,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { sourceDigest } from "./source-digest.mjs";
 
 const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const pin = JSON.parse(fs.readFileSync(path.join(appDir, "runtime", "node-runtime.json"), "utf8"));
@@ -242,6 +243,7 @@ async function main() {
       skill: ".claude/skills/ketplus-browser/SKILL.md",
       playwrightCore: pkg.dependencies["playwright-core"],
       packageLockSha256: lockHash,
+      sourceSha256: sourceDigest(appDir),
     };
     fs.writeFileSync(path.join(stage, "runtime.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 

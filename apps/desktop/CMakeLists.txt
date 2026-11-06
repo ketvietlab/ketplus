@@ -345,6 +345,26 @@ if(APPLE)
                     "ketplus-browser node ${ketplus_node_pin_version} ${ketplus_browser_runtime_platform}. "
                     "Re-stage it with apps/browser/scripts/package-runtime.mjs.")
             endif()
+            # A runtime staged from another commit would ship stale src/ (for example an older
+            # origin policy) without any other mismatch (#94).
+            include("${PROJECT_SOURCE_DIR}/cmake/KetPlusBrowserRuntime.cmake")
+            ketplus_browser_source_digest("${ketplus_browser_app_dir}" ketplus_browser_source_sha256)
+            string(JSON ketplus_browser_runtime_source ERROR_VARIABLE ketplus_json_error
+                GET "${ketplus_browser_runtime_json}" sourceSha256)
+            option(KETPLUS_BROWSER_RUNTIME_ALLOW_STALE
+                "Bundle a prebuilt browser runtime whose sources differ from this checkout" OFF)
+            if(NOT ketplus_browser_runtime_source STREQUAL ketplus_browser_source_sha256)
+                if(KETPLUS_BROWSER_RUNTIME_ALLOW_STALE)
+                    message(WARNING "KETPLUS_BROWSER_RUNTIME_DIR was staged from other sources.")
+                else()
+                    message(FATAL_ERROR
+                        "KETPLUS_BROWSER_RUNTIME_DIR ${KETPLUS_BROWSER_RUNTIME_DIR} was staged from "
+                        "sources '${ketplus_browser_runtime_source}', not this checkout's "
+                        "'${ketplus_browser_source_sha256}'. Re-stage it with "
+                        "apps/browser/scripts/package-runtime.mjs, or pass "
+                        "-DKETPLUS_BROWSER_RUNTIME_ALLOW_STALE=ON deliberately.")
+                endif()
+            endif()
             set(ketplus_browser_runtime_stage "${KETPLUS_BROWSER_RUNTIME_DIR}")
             set(ketplus_browser_runtime_stamp "${KETPLUS_BROWSER_RUNTIME_DIR}/runtime.json")
         else()
