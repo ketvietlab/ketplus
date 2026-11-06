@@ -10,6 +10,9 @@ export const PROTOCOL_VERSION = "browser.v0";
 export const LIMITS = Object.freeze({
   maxViewportSize: 4096,
   maxDeviceScaleFactor: 3,
+  // The largest capture a session can make (4096 x 4096 CSS pixels at 3x). A PNG
+  // claiming more is refused from its header, before it is decoded.
+  maxRasterPixels: (4096 * 3) ** 2,
   defaultMaxNodes: 300,
   maxNodes: 1000,
   defaultMaxAriaChars: 20_000,

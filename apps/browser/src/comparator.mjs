@@ -189,14 +189,50 @@ const scaleRegion = (region, scale) => ({
   height: Math.round(region.height * scale),
 });
 
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+// Walks the chunk structure before pngjs sees it: pngjs takes the size of any later IHDR
+// and inflates interlaced data without an output limit, so neither may reach it. Captures
+// from Chromium and macOS are non-interlaced with a single leading IHDR.
+function decodeBounded(bytes, side) {
+  const invalid = (reason) => new BrowserApiError("INVALID_RASTER", `${side} raster ${reason}`);
+  if (bytes.length < 8 || !bytes.subarray(0, 8).equals(PNG_SIGNATURE)) throw invalid("is not a PNG");
+  let width = 0;
+  let height = 0;
+  let headers = 0;
+  for (let offset = 8; ; ) {
+    if (offset + 12 > bytes.length) throw invalid("is truncated");
+    const length = bytes.readUInt32BE(offset);
+    const type = bytes.toString("latin1", offset + 4, offset + 8);
+    if (length > bytes.length - offset - 12) throw invalid("is truncated");
+    if (offset === 8 && (type !== "IHDR" || length !== 13)) throw invalid("does not start with IHDR");
+    if (type === "IHDR") {
+      if (++headers > 1) throw invalid("has more than one IHDR");
+      width = bytes.readUInt32BE(offset + 8);
+      height = bytes.readUInt32BE(offset + 12);
+      if (!width || !height) throw invalid("has no pixels");
+      if (width * height > LIMITS.maxRasterPixels) {
+        throw new BrowserApiError("RASTER_TOO_LARGE", `${side} raster exceeds ${LIMITS.maxRasterPixels} pixels`, {
+          width,
+          height,
+        });
+      }
+      if (bytes[offset + 20] !== 0) throw invalid("is interlaced");
+    }
+    offset += length + 12;
+    if (type === "IEND") break;
+  }
+  return PNG.sync.read(bytes);
+}
+
 export async function compareRaster(referenceCapture, candidateCapture, diffPath, policy) {
   const scale = referenceCapture.environment.deviceScaleFactor;
   const [referenceBytes, candidateBytes] = await Promise.all([
     fs.readFile(referenceCapture.path),
     fs.readFile(candidateCapture.path),
   ]);
-  let reference = PNG.sync.read(referenceBytes);
-  let candidate = PNG.sync.read(candidateBytes);
+  let reference = decodeBounded(referenceBytes, "Reference");
+  let candidate = decodeBounded(candidateBytes, "Candidate");
   const crop = (image, region, side) => {
     if (!region) return image;
     const { x, y, width, height } = scaleRegion(region, scale);
