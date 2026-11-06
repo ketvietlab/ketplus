@@ -41,7 +41,8 @@ Rectangle {
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 textFormat: Text.StyledText
-                text: "Két<font color='" + KetTheme.t.accentText + "'>Plus</font> Pro"
+                // The wordmark is Bold (700); "Pro" keeps the label weight.
+                text: "<b>Két<font color='" + KetTheme.t.accentText + "'>Plus</font></b> Pro"
                 color: KetTheme.t.textMain
                 font.family: KetTheme.fontFamily
                 font.pixelSize: sidebar.px(17)
