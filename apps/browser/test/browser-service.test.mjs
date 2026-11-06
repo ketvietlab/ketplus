@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { BrowserService } from "../src/browser-service.mjs";
+import { LIMITS } from "../src/protocol.mjs";
 
 const fixtureRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
 
@@ -249,4 +250,56 @@ test("session requests establish browser cookies without exposing response secre
   const page = await service.open({ sessionId: session.sessionId, url: `${fixture.origin}/protected` });
   const observation = await service.observe({ sessionId: session.sessionId, pageId: page.pageId });
   assert.equal(observation.nodes.find((node) => node.stableId === "authenticated").text, "Authenticated");
+});
+
+test("sessions and pages are capped and closing one frees its slot", async (t) => {
+  const fixture = await startFixtureServer();
+  const artifactsDir = await fs.mkdtemp(path.join(os.tmpdir(), "ketplus-browser-limits-"));
+  const service = new BrowserService({ artifactsDir });
+  t.after(async () => {
+    await service.close();
+    await fixture.close();
+    await fs.rm(artifactsDir, { recursive: true, force: true });
+  });
+  const limit = (code, max) => (error) => error.code === code && error.data?.limit === max;
+  const options = { allowedOrigins: [fixture.origin] };
+
+  // Sessions still starting count, so concurrent creates cannot overshoot the cap.
+  const created = await Promise.allSettled(
+    Array.from({ length: LIMITS.maxSessions + 1 }, () => service.createSession(options)),
+  );
+  const sessions = created.filter((result) => result.status === "fulfilled").map((result) => result.value);
+  assert.equal(sessions.length, LIMITS.maxSessions);
+  assert.ok(limit("LIMIT_REACHED", LIMITS.maxSessions)(created.find((r) => r.status === "rejected").reason));
+  await service.closeSession({ sessionId: sessions.pop().sessionId });
+  const session = await service.createSession(options);
+  // Count the pages the engine is asked for: concurrent opens past the cap must not reach it.
+  const context = service.sessions.get(session.sessionId).context;
+  const newPage = context.newPage.bind(context);
+  let engineOpens = 0;
+  context.newPage = (...args) => {
+    engineOpens += 1;
+    return newPage(...args);
+  };
+
+  const opened = await Promise.allSettled(
+    Array.from({ length: LIMITS.maxPagesPerSession + 1 }, () =>
+      service.open({ sessionId: session.sessionId, url: `${fixture.origin}/` })),
+  );
+  const pages = opened.filter((result) => result.status === "fulfilled").map((result) => result.value);
+  assert.equal(pages.length, LIMITS.maxPagesPerSession);
+  assert.ok(limit("LIMIT_REACHED", LIMITS.maxPagesPerSession)(opened.find((r) => r.status === "rejected").reason));
+  assert.equal(engineOpens, LIMITS.maxPagesPerSession);
+  await assert.rejects(
+    service.open({ sessionId: session.sessionId, url: `${fixture.origin}/` }),
+    limit("LIMIT_REACHED", LIMITS.maxPagesPerSession),
+  );
+  // A page the site opens past the cap (a popup) is closed rather than adopted.
+  const popup = await newPage().catch(() => null);
+  if (popup && !popup.isClosed()) await popup.waitForEvent("close", { timeout: 5_000 });
+  assert.equal(context.pages().length, LIMITS.maxPagesPerSession);
+  assert.equal((await service.pages({ sessionId: session.sessionId })).pages.length, LIMITS.maxPagesPerSession);
+
+  await service.closePage({ sessionId: session.sessionId, pageId: pages[0].pageId });
+  await service.open({ sessionId: session.sessionId, url: `${fixture.origin}/` });
 });

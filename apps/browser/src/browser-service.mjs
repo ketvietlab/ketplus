@@ -107,6 +107,8 @@ export class BrowserService {
     this.browser = null;
     this.browserPromise = null;
     this.sessions = new Map();
+    // Sessions still starting count against LIMITS.maxSessions too.
+    this.startingSessions = 0;
     this.snapshots = new Map();
     this.captures = new Map();
     this.diffs = new Map();
@@ -224,7 +226,22 @@ export class BrowserService {
     return this.browserPromise;
   }
 
-  async createSession({
+  async createSession(options = {}) {
+    assertApi(
+      this.sessions.size + this.startingSessions < LIMITS.maxSessions,
+      "LIMIT_REACHED",
+      `At most ${LIMITS.maxSessions} browser sessions can be open; close one first`,
+      { limit: LIMITS.maxSessions },
+    );
+    this.startingSessions += 1;
+    try {
+      return await this.startSession(options);
+    } finally {
+      this.startingSessions -= 1;
+    }
+  }
+
+  async startSession({
     viewport = { width: 1440, height: 900 },
     deviceScaleFactor = 1,
     theme = "light",
@@ -244,6 +261,7 @@ export class BrowserService {
       context: null,
       proxy: null,
       pages: new Map(),
+      openingPages: 0,
       pageByHandle: new WeakMap(),
       blockedRequests: [],
       blockedRequestCount: 0,
@@ -286,7 +304,7 @@ export class BrowserService {
       await session.proxy.close();
       throw toApiError(error, "SESSION_CREATE_FAILED");
     }
-    session.context.on("page", (page) => this.adoptPage(session, page));
+    session.context.on("page", (page) => this.admitPage(session, page));
     this.sessions.set(sessionId, session);
     return {
       sessionId,
@@ -306,6 +324,17 @@ export class BrowserService {
     const record = session.pages.get(pageId);
     assertApi(record && !record.page.isClosed(), "PAGE_NOT_FOUND", `Unknown browser page: ${pageId}`);
     return record;
+  }
+
+  // Adopts a page the session opened or a site opened as a popup, or closes it past the cap.
+  admitPage(session, page) {
+    const existing = session.pageByHandle.get(page);
+    if (existing) return existing;
+    if (session.pages.size >= LIMITS.maxPagesPerSession) {
+      page.close().catch(() => {});
+      return null;
+    }
+    return this.adoptPage(session, page);
   }
 
   adoptPage(session, page) {
@@ -433,13 +462,27 @@ export class BrowserService {
   async open({ sessionId, url, waitUntil = "domcontentloaded", timeoutMs = 15_000 }) {
     const session = this.getSession(sessionId);
     session.policy.require(url);
+    const pageLimit = () =>
+      new BrowserApiError(
+        "LIMIT_REACHED",
+        `At most ${LIMITS.maxPagesPerSession} pages can be open in a session; close one first`,
+        { limit: LIMITS.maxPagesPerSession },
+      );
+    // Pages still being created hold a slot, so concurrent opens never ask the engine for more
+    // pages than the cap allows.
+    if (session.pages.size + session.openingPages >= LIMITS.maxPagesPerSession) throw pageLimit();
+    session.openingPages += 1;
     let page;
     try {
       page = await session.context.newPage();
     } catch (error) {
       throw toApiError(error, "PAGE_CREATE_FAILED");
+    } finally {
+      session.openingPages -= 1;
     }
-    const record = this.adoptPage(session, page);
+    // Concurrent opens or popups may have taken the last slot meanwhile.
+    const record = this.admitPage(session, page);
+    if (!record) throw pageLimit();
     await record.diagnostics.ready;
     return this.withPage(sessionId, record.pageId, async () => {
       try {
