@@ -43,6 +43,7 @@ class PtyProcessTest final : public QObject {
     void usesSystemFixedFont();
     void appliesTerminalTypography();
     void appliesTerminalFontFamily();
+    void keepsTerminalFontFamilyUnderTheme();
     void echoesTypedTextBeforeEnter();
     void restoresFocusAfterAnActionMenuCloses();
     void rendersInputMethodPreedit();
@@ -141,6 +142,42 @@ void PtyProcessTest::appliesTerminalFontFamily() {
     terminal.setTypography(16, 20, QStringLiteral("No Such Terminal Font 7f3a"));
     QCOMPARE(QFontInfo(terminal.font()).family(), fixedFamily);
     QCOMPARE(session.rows(), rows);
+}
+
+void PtyProcessTest::keepsTerminalFontFamilyUnderTheme() {
+    // The application style sheet names the platform's fixed-pitch family for this view; the
+    // requested family must survive polish and a theme change.
+    const QString fixedFamily =
+        QFontInfo(QFontDatabase::systemFont(QFontDatabase::FixedFont)).family();
+    QString family;
+    for (const QString& candidate : QFontDatabase::families()) {
+        if (QFontDatabase::isFixedPitch(candidate) && candidate != fixedFamily &&
+            QFontInfo(QFont(candidate)).family() == candidate) {
+            family = candidate;
+            break;
+        }
+    }
+    if (family.isEmpty())
+        QSKIP("No second fixed-pitch family is installed");
+
+    ThemeManager theme(*qApp);
+    theme.setMode(ThemeManager::Mode::Light);
+    TerminalSession session;
+    TerminalView terminal(session);
+    terminal.resize(800, 600);
+    terminal.setTypography(16, 20, family);
+    terminal.show();
+    terminal.ensurePolished();
+    QCoreApplication::processEvents();
+    QCOMPARE(QFontInfo(terminal.font()).family(), family);
+    QCOMPARE(terminal.font().pixelSize(), 16);
+    const int columns = session.columns();
+
+    theme.setMode(ThemeManager::Mode::Dark);
+    QCoreApplication::processEvents();
+    QCOMPARE(QFontInfo(terminal.font()).family(), family);
+    QCOMPARE(terminal.font().pixelSize(), 16);
+    QCOMPARE(session.columns(), columns);
 }
 
 void PtyProcessTest::echoesTypedTextBeforeEnter() {
