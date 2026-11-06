@@ -64,6 +64,8 @@ Item {
         placeholderText: bar.placeholder
         onSubmitted: text => {
             if (bar.blocked) {
+                // KetComposer clears its input before it emits submitted; put the draft back.
+                composer.text = text
                 bar.window.showSetup(bar.provider)
                 bar.window.notify("Set up " + bar.providerLabel + " first. Your message is kept.")
                 return
@@ -172,18 +174,16 @@ Item {
         model: bar.model
         window: bar.window
         effort: bar.effort
-        onChosen: (provider, model, effort) => {
-            bar.provider = provider
-            bar.model = model
-            bar.effort = effort
-            bar.window.notify("Applies from the next turn")
-        }
+        // The choice changes the conversation, so its setup state and the composer follow it.
+        onChosen: (provider, model, effort) => bar.window.chooseModel(provider, model, effort)
     }
 
     ContextLimitsPopover {
         id: limits
         provider: bar.provider
         contextUsed: bar.contextUsed
+        // A used-up limit shows the same quota and reset as its setup guide.
+        rows: bar.setup && bar.setup.limits ? bar.setup.limits : null
         onCompactRequested: bar.window.notify("Compacting the conversation")
     }
 }

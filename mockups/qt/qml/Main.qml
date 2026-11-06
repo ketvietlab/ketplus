@@ -128,6 +128,14 @@ Basic.ApplicationWindow {
         notify("This conversation now uses " + (entry ? entry.label : provider))
     }
 
+    // Model & context → Apply: the conversation's provider, model and effort.
+    function chooseModel(provider, model, effort) {
+        const entry = Fixtures.providers.find(p => p.id === provider)
+        conversation = Object.assign({}, conversation, {
+            provider: entry ? entry.label : provider, providerId: provider, model: model, effort: effort })
+        notify("Applies from the next turn")
+    }
+
     function newConversation(provider) {
         for (const r of Fixtures.repositories) {
             const base = r.conversations.find(c => c.transcript === "welcome")

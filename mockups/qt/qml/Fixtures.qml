@@ -353,9 +353,11 @@ QtObject {
     // reports: the version check (provider-compatibility.json: missing, outdated),
     // provider_unavailable, Claude's credential source ("none") and the provider's own text in
     // runtime.error (error, quoted as the provider wrote it). The commands are the daemon's
-    // (CursorAdapter, the compatibility manifest) and the providers' documented ones. KetPlus
-    // types a command in a terminal and the user presses Return; it never runs one itself, and
-    // it never stores a provider's credentials.
+    // (CursorAdapter, the compatibility manifest) and the providers' documented ones. In the app,
+    // Type in Terminal types a command for the user to run with Return; KetPlus never runs it.
+    // Codex and Cursor sign-ins stay with their CLIs; only the optional Anthropic API key is
+    // saved by KetPlus (Keychain, Settings → Providers). Here Type in Terminal only shows a toast.
+    //   limits: rows for the Context & limits popover while this state lasts.
     //   blocking: the provider cannot start a turn, so the guide sits above the composer;
     //   otherwise a turn ended with it and the guide closes that turn in the transcript.
     //   source: who wrote `error` when it is not the provider (KetPlus's own messages).
@@ -472,6 +474,8 @@ QtObject {
                 { text: "Or carry on in a new conversation with Claude or Cursor.", turn: true }
             ],
             primary: "View limits", primaryAction: "limits", secondary: "New conversation with Claude", secondaryAction: "new:claude",
+            limits: [{ label: "Session · 5 hours", resets: "Resets Fri, 06 Nov  9:40 PM", used: 12 },
+                     { label: "Weekly · all models", resets: "Resets Fri, 13 Nov  7:00 AM", used: 100 }],
             prompt: "Add a size limit and a warning to the journal, with a setting for it.", topic: "Journal size limit",
             rows: [["Version", "0.154.0"], ["Weekly limit", "100% used · resets Nov 13, 07:00"]]
         },

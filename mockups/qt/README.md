@@ -91,8 +91,10 @@ the steps of an activity group.
 `qml/Fixtures.qml` (`providerSetup`) lists what stops a provider and how the user fixes it;
 `qml/parts/ProviderSetupCard.qml` draws the guide: what happened in plain words, the
 provider's own message, numbered steps with the exact commands, and one primary action.
-Each command can be copied or typed into a terminal beside the conversation, where the user
-presses Return; KetPlus never runs it and never stores a provider's credentials. Check again
+Each command can be copied. In the app, Type in Terminal types it into a terminal beside the
+conversation for the user to run with Return, and KetPlus never runs it; in the mock it only
+shows a toast. Codex and Cursor sign-ins stay with their CLIs; the optional Anthropic API key is
+the one credential KetPlus saves (Keychain, Settings → Providers). Check again
 and Retry walk the live states (checking, failing once more for `cli-missing`, fixed). The
 same guide appears in Settings → Providers, which drops the turn-only steps.
 
@@ -106,15 +108,16 @@ while keeping the draft. A new setup state shows a hidden guide again.
 | `cli-missing` | Cursor | Version check `missing`; `CursorAdapter::missingExecutableMessage` | `curl https://cursor.com/install -fsS \| bash`, `agent login`, Check again |
 | `cli-outdated` | Codex | Version check `outdated` (below `minimum` in `provider-compatibility.json`) | `npm install -g @openai/codex@latest` or `brew upgrade codex` |
 | `signed-out` | Codex | The CLI has no account | `codex login`, or `codex login --with-api-key` from standard input |
-| `claude-signed-out` | Claude | Credential source `none` (`ClaudeCredentials::observe`) | Claude Code `/login`, or an API key in Settings → Providers |
+| `claude-signed-out` | Claude | Credential source `none` (`ClaudeCredentials::observe`), a cached observation from the last query, not a fresh probe | Claude Code `/login`, or an API key in Settings → Providers |
 | `sidecar-missing` | Claude | `provider_unavailable`: "Claude Agent SDK sidecar was not found." | Reinstall KetPlus from Settings → Updates (see #124) |
 | `expired` | Claude | `runtime.error`: "Failed to authenticate: OAuth session expired and could not be refreshed" | `/login` again, Retry |
-| `key-rejected` | Claude | HTTP 401: "Anthropic rejected this API key." | A new key in Settings → Providers |
+| `key-rejected` | Claude | HTTP 401 on the explicit credential check: "Anthropic rejected this API key." (not yet a turn `runtime.error`) | A new key in Settings → Providers |
 | `limit` | Codex | `runtime.error`: "You've hit your weekly limit · resets …" | Wait for the reset (Limits), or another provider |
 | `capacity` | Codex | `runtime.error`: "Selected model is at capacity." | Choose another model, Retry; not flagged in Settings |
 | `plan-blocked` | Cursor | `CursorAdapter::planLimitMessage` | `agent login` with the right account, or Auto |
 
-The quoted texts are the ones the daemon and the providers write (seen in a daemon journal
+The mock's checks and retries are timers, not evidence of these backend behaviours (#170). The
+quoted texts are the ones the daemon and the providers write (seen in a daemon journal
 or in the source); the email address and the times are made up.
 
 ## Changing the mock

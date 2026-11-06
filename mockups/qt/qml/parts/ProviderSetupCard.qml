@@ -11,8 +11,9 @@ import KetPlusMock
 // Above the composer the user can hide it; the model button, the Model & context dialog and
 // Settings → Providers open it again (window.openSetupGuide), so hiding is never a dead end.
 //
-// A command is copied, or typed into a terminal beside the conversation for the user to run
-// with Return; KetPlus never runs it. Check again and Retry walk the mock's live states:
+// A command is copied, or (in the app) typed into a terminal beside the conversation for the
+// user to run with Return; KetPlus never runs it. The mock's Type in Terminal only shows a
+// toast. Check again and Retry walk the mock's live states:
 // checking, then still failing once when the state has `still`, then fixed.
 Rectangle {
     id: card
