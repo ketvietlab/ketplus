@@ -2,6 +2,7 @@
 
 #include "cloud/CloudCrypto.h"
 #include "cloud/RelayWakeups.h"
+#include "cloud/RemoteWorktreeQuota.h"
 #include "transport/RemotePeers.h"
 #include "transport/Signaling.h"
 
@@ -233,6 +234,7 @@ class CloudControlClient final : public QObject {
     QHash<QString, std::pair<QJsonObject, QDateTime>> senderKeys_;
     // Command id -> when this daemon claimed it, for the result log line.
     QHash<QString, qint64> commandStartedAt_;
+    RemoteWorktreeQuota worktreeQuota_;
     int machineKeyVersion_{1};
     quint64 accountEpoch_{0};
     QThreadPool workspaceFilesPool_;

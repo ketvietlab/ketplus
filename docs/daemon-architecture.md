@@ -307,6 +307,13 @@ after rehashing stat-dirty files even with optional locks off. As a result, Git 
 Remote worktree creation uses the same environment with fsmonitor off. Its
 checkout still runs the repository's hooks and filters, just as
 `git worktree add` does on this machine.
+A redelivered `session.create` (its acknowledgement was lost) answers with the
+result the first attempt journaled instead of running git again, so the phone
+never sees `branch_exists` for a conversation that started. Paired devices can
+create at most 10 worktrees per repository per hour, and none while the
+repository's volume has less than 2 GiB free; both refuse with
+`worktree_quota_exceeded` before git runs (`RemoteWorktreeQuota`, in memory,
+#86).
 
 Workspace file reads are fenced by the worktree revision the daemon publishes in
 each heartbeat (a hash of HEAD, the status and dirty content). The relay only
