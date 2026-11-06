@@ -6,7 +6,7 @@ import Ket
 import KetPlusMock
 
 // Files & Editor: the explorer, editor tabs, breadcrumb, a read-only code view and the
-// status bars. Folders open and close; files open in tabs.
+// status bars, and the terminal below the editor. Folders open and close; files open in tabs.
 Item {
     id: screen
 
@@ -152,7 +152,7 @@ Item {
                             anchors.centerIn: parent
                             iconName: "terminal"
                             text: "Toggle terminal"
-                            onClicked: screen.window.notify("Terminal opens below the editor")
+                            onClicked: screen.window.editorTerminal = !screen.window.editorTerminal
                         }
                     }
                 }
@@ -220,6 +220,14 @@ Item {
                         }
                         TapHandler { onTapped: screen.cursorLine = index + 1 }
                     }
+                }
+
+                TerminalPanel {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: screen.px(280)
+                    visible: screen.window.editorTerminal
+                    window: screen.window
+                    onHideRequested: screen.window.editorTerminal = false
                 }
 
                 KetStatusBar {

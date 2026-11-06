@@ -260,4 +260,25 @@ QtObject {
         { title: "Getting started", screens: 2 },
         { title: "Reconnect a workspace", screens: 2 }
     ]
+
+    // KetPlus Terminal sample output (mockups/terminal/demo/demo.sh): spans of [text, role],
+    // where the role names a token colour; "" is text-main.
+    readonly property var terminalLines: [
+        [["$ ", "muted"], ["git status --short --branch", ""]],
+        [["## develop", "success"], ["...", ""], ["origin/develop", "danger"], [" [ahead 2]", ""]],
+        [[" M", "danger"], [" core/src/terminal/TerminalView.cpp", ""]],
+        [[" M", "danger"], [" mockups/terminal/src/TerminalMockWindow.cpp", ""]],
+        [["??", "danger"], [" mockups/terminal/demo/", ""]],
+        [],
+        [["$ ", "muted"], ["ctest --test-dir build -R terminal", ""]],
+        [["1/3 Test #12: terminal_session ...........   ", ""], ["Passed", "success"], ["    0.41 sec", ""]],
+        [["2/3 Test #13: terminal_view ..............   ", ""], ["Passed", "success"], ["    0.88 sec", ""]],
+        [["3/3 Test #14: terminal_app ...............   ", ""], ["Passed", "success"], ["    1.02 sec", ""]],
+        [],
+        [["100% tests passed", "success"], [", 0 tests failed out of 3", ""]],
+        [],
+        [["info", "info"], ["  ", ""], ["warn", "warning"], ["  ", ""], ["error", "danger"], ["  ", ""], ["accent", "accent"], ["  ", ""], ["dim", "muted"]],
+        [],
+        [["➜ ", "success"], ["ketplus-desktop ", "info"], ["git:(", "accent"], ["develop", "danger"], [") ", "accent"]]
+    ]
 }

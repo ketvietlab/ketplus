@@ -34,6 +34,7 @@ Screens and states (`--screen` / `--state`):
 |---|---|---|
 | `workspace` | `welcome`, `running`, `question`, `error`, `atlas`, `details`, `compact` | Agent Workspace: 44 px header, transcript activity, gallery, agent messages, changed files, question card, Atlas result, provider error, background tasks, composer (card, then attach, Mode menu, Model & context dialog and the Context & limits ring below it), details pane (changes, Atlas, terminal) |
 | `editor` | | Files & Editor: explorer, tabs, breadcrumb, code, status bars |
+| `editor` | `terminal` | The terminal below the editor, drawn like `mockups/terminal`, with fixture output |
 | `changes` | | Source Control: changes, staged changes, diff |
 | `worktrees` | | Manage worktrees, create dialog, manage menu |
 | `connections` | | This Mac, phones, Linux machines (SSH or Relay), pairing dialogs, account |

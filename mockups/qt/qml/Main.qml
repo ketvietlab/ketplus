@@ -14,12 +14,14 @@ Basic.ApplicationWindow {
     // Screens, in sidebar order. A state follows a slash: "workspace/welcome".
     readonly property var screenIds: [
         "workspace", "workspace/welcome", "workspace/running", "workspace/question",
-        "workspace/error", "workspace/atlas", "workspace/details", "editor", "changes",
-        "worktrees", "connections", "settings", "settings/typography", "settings/account",
+        "workspace/error", "workspace/atlas", "workspace/details", "editor", "editor/terminal",
+        "changes", "worktrees", "connections", "settings", "settings/typography", "settings/account",
         "settings/providers", "settings/archived", "settings/updates", "atlas", "mobile-picker",
         "workspace/compact"
     ]
     property string screen: "workspace"
+    // The terminal below the editor (editor/terminal).
+    property bool editorTerminal: false
     property string settingsTab: "appearance"
     property var conversation: Fixtures.repositories[0].conversations[0]
     property string repository: Fixtures.repositories[0].name
@@ -70,6 +72,8 @@ Basic.ApplicationWindow {
         }
         if (name === "settings")
             settingsTab = state || "appearance"
+        if (name === "editor")
+            editorTerminal = state === "terminal"
         screen = name
     }
 
