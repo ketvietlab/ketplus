@@ -115,7 +115,8 @@ Item {
         DetailsPane {
             visible: screen.detailsOpen
             Layout.fillHeight: true
-            Layout.preferredWidth: screen.px(460)
+            // Half of the workspace beside the rule: the pane matches the conversation's width.
+            Layout.preferredWidth: Math.floor((screen.width - 1) / 2)
             window: screen.window
             tab: screen.detailsTab
             onTabChosen: tab => screen.detailsTab = tab
