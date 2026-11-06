@@ -54,7 +54,8 @@ class RemoteControlView final : public QWidget {
     void closePairing();
     void setNotice(const QString& text, bool failure = false);
     void setBusy(bool busy);
-    void showPairing(const QJsonObject& ticket);
+    // confirmationCode is the daemon's six-character code for a verified claim.
+    void showPairing(const QJsonObject& ticket, const QString& confirmationCode = {});
 
   protected:
     void changeEvent(QEvent* event) override;

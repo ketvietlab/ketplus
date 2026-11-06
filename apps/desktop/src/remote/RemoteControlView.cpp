@@ -8,6 +8,7 @@
 #include "ui/TypeScale.h"
 
 #include <QApplication>
+#include <QDateTime>
 #include <QDesktopServices>
 #include <QDialog>
 #include <QEvent>
@@ -15,6 +16,7 @@
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QJsonObject>
+#include <QJsonValue>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
@@ -24,6 +26,7 @@
 #include <QStackedWidget>
 #include <QStyle>
 #include <QStyleOptionButton>
+#include <QTimeZone>
 #include <QTimer>
 #include <QUrl>
 #include <QUuid>
@@ -800,7 +803,8 @@ QWidget* RemoteControlView::createControlPage() {
                          {QStringLiteral("claimDigest"), QStringLiteral("482619")},
                          {QStringLiteral("claimedDevice"),
                           QJsonObject{{QStringLiteral("displayName"), QStringLiteral("Pixel 9")},
-                                      {QStringLiteral("platform"), QStringLiteral("android")}}}});
+                                      {QStringLiteral("platform"), QStringLiteral("android")}}}},
+                        QStringLiteral("482619"));
             return;
         }
         approvePairing();
@@ -1220,20 +1224,50 @@ void RemoteControlView::refreshPairing() {
                   {{QStringLiteral("ticket_id"), ticketId}}, {}, -1,
                   [this, pairingEpoch, ticketId](const QJsonObject& result, const QString& error) {
                       if (pairingEpoch == pairingEpoch_ && ticketId == ticketId_ && error.isEmpty())
-                          showPairing(result.value(QStringLiteral("ticket")).toObject());
+                          showPairing(result.value(QStringLiteral("ticket")).toObject(),
+                                      result.value(QStringLiteral("confirmation_code")).toString());
                   });
 }
 
-void RemoteControlView::showPairing(const QJsonObject& ticket) {
+namespace {
+
+// "Code expires in 4:59" from a ticket's expiresAt (an ISO time or epoch milliseconds). Pairing
+// status refreshes every two seconds, which keeps it current.
+QString pairingExpiryText(const QJsonValue& expiresAt) {
+    const QDateTime at = expiresAt.isDouble()
+                             ? QDateTime::fromMSecsSinceEpoch(
+                                   static_cast<qint64>(expiresAt.toDouble()), QTimeZone::UTC)
+                             : QDateTime::fromString(expiresAt.toString(), Qt::ISODateWithMs);
+    if (!at.isValid())
+        return QStringLiteral("Code expires shortly");
+    const qint64 seconds = QDateTime::currentDateTimeUtc().secsTo(at);
+    if (seconds <= 0)
+        return QStringLiteral("Code expired");
+    return QStringLiteral("Code expires in %1:%2")
+        .arg(seconds / 60)
+        .arg(seconds % 60, 2, 10, QLatin1Char('0'));
+}
+
+} // namespace
+
+void RemoteControlView::showPairing(const QJsonObject& ticket, const QString& confirmationCode) {
     const QJsonObject device = ticket.value(QStringLiteral("claimedDevice")).toObject();
     const QString claimDigest = ticket.value(QStringLiteral("claimDigest")).toString();
     // Once a code was shown, only that claim may be approved. A digest that changes or disappears
     // ends this ticket, even if a later refresh shows the first digest again.
     claimChanged_ =
         claimChanged_ || (!shownClaimDigest_.isEmpty() && claimDigest != shownClaimDigest_);
-    const QString state = claimChanged_ ? QStringLiteral("claim changed")
-                                        : ticket.value(QStringLiteral("status")).toString();
+    QString state = claimChanged_ ? QStringLiteral("claim changed")
+                                  : ticket.value(QStringLiteral("status")).toString();
+    // The daemon gives a code only for a claim whose keys reproduce its digest (#89).
+    if (state == QStringLiteral("claimed") && confirmationCode.size() != 6)
+        state = QStringLiteral("claim unverified");
     const bool ready = state == QStringLiteral("claimed") && !device.isEmpty();
+    // A finished ticket's QR code and secret are of no further use.
+    if (state != QStringLiteral("open") && !ready) {
+        pairingCode_->clear();
+        qrCode_->clear();
+    }
     pairingState_->setProperty("claimReady", ready);
     pairingNotice_->hide();
     if (state == QStringLiteral("open")) {
@@ -1242,7 +1276,7 @@ void RemoteControlView::showPairing(const QJsonObject& ticket) {
         pairingHelp_->setText(QStringLiteral("In KetPlus on your phone, choose Scan QR code."));
         pairingScanSection_->show();
         qrCode_->show();
-        pairingTimer_->setText(QStringLiteral("Code expires shortly"));
+        pairingTimer_->setText(pairingExpiryText(ticket.value(QStringLiteral("expiresAt"))));
         pairingTimer_->show();
         pairingSteps_->show();
         pairingConfirmationCode_->hide();
@@ -1259,18 +1293,13 @@ void RemoteControlView::showPairing(const QJsonObject& ticket) {
         pairingTimer_->hide();
         pairingSteps_->hide();
         shownClaimDigest_ = claimDigest;
-        QString code = shownClaimDigest_.toUpper();
-        code.remove(QChar('-'));
-        code.remove(QChar(' '));
-        code = code.left(6);
-        if (code.size() < 6)
-            code = QStringLiteral("482619");
-        pairingConfirmationCode_->setText(code.left(3) + QChar(' ') + code.mid(3, 3));
+        pairingConfirmationCode_->setText(confirmationCode.left(3) + QChar(' ') +
+                                          confirmationCode.mid(3, 3));
         pairingConfirmationCode_->show();
         const QString deviceName =
             device.value(QStringLiteral("displayName")).toString(QStringLiteral("Mobile device"));
-        deviceClaim_->setText(
-            QStringLiteral("Device     %1\nAccount    Same signed-in account").arg(deviceName));
+        // Only what was checked: the relay does not report the phone's account.
+        deviceClaim_->setText(QStringLiteral("Device     %1").arg(deviceName));
         deviceClaim_->show();
         pairingDemoNoteHost_->hide();
         pairingCancelButton_->setText(QStringLiteral("Decline"));
@@ -1295,8 +1324,11 @@ void RemoteControlView::showPairing(const QJsonObject& ticket) {
         refreshDevices();
         QTimer::singleShot(900, pairingDialog_, &QDialog::accept);
     } else if (state == QStringLiteral("expired") || state == QStringLiteral("revoked")) {
-        pairingDialogTitle_->setText(QStringLiteral("Pairing code expired"));
-        pairingState_->setText(QStringLiteral("This pairing code is no longer valid"));
+        const bool revoked = state == QStringLiteral("revoked");
+        pairingDialogTitle_->setText(revoked ? QStringLiteral("Pairing cancelled")
+                                             : QStringLiteral("Pairing code expired"));
+        pairingState_->setText(revoked ? QStringLiteral("This pairing was cancelled")
+                                       : QStringLiteral("This pairing code is no longer valid"));
         pairingHelp_->setText(QStringLiteral("No device was connected."));
         pairingScanSection_->hide();
         qrCode_->hide();
@@ -1401,6 +1433,8 @@ void RemoteControlView::closePairing() {
     ++pairingEpoch_;
     shownClaimDigest_.clear();
     claimChanged_ = false;
+    pairingCode_->clear();
+    qrCode_->clear();
     const QString ticketId = std::exchange(ticketId_, {});
     setBusy(false);
     if (demoMode_ || ticketId.isEmpty())

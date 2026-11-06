@@ -124,6 +124,13 @@ class CloudPrivacyTestAccess {
     static DevicePins& pins(CloudControlClient& client) { return client.pins_; }
     static QString machineId(const CloudControlClient& client) { return client.machineId_; }
     static void distributeKeys(CloudControlClient& client) { client.distributeKeys(); }
+    static void createPairing(CloudControlClient& client, CloudControlClient::LocalCallback done) {
+        client.createPairing(std::move(done));
+    }
+    static void pairingStatus(CloudControlClient& client, const QString& ticketId,
+                              CloudControlClient::LocalCallback done) {
+        client.pairingStatus({{"ticket_id", ticketId}}, std::move(done));
+    }
     static void approvePairing(CloudControlClient& client, const QString& ticketId,
                                const QString& confirmedDigest,
                                CloudControlClient::LocalCallback done) {

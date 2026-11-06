@@ -15,6 +15,7 @@
 #include <QMessageAuthenticationCode>
 #include <QProcess>
 #include <QTemporaryDir>
+#include <QUrlQuery>
 #include <QtTest>
 #include <algorithm>
 #include <limits>
@@ -2017,6 +2018,94 @@ class CloudPrivacyTest final : public QObject {
         QCOMPARE(answers.at(1).second, QStringLiteral("The sender is not paired with this Mac."));
         QVERIFY(answers.at(2).second.isEmpty());
         QCOMPARE(answers.at(2).first.value("signingPublicKey"), phone.value("signingPublicKey"));
+    }
+
+    void pairingStatusGivesTheDaemonsCodeOnlyForAVerifiedClaim() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("journal.sqlite"));
+        c.start();
+        CredentialStore phoneStore("status-phone");
+        CredentialStore relayStore("status-relay");
+        const QJsonObject phone = CloudCrypto(&phoneStore).publicKeys();
+        const QJsonObject relay = CloudCrypto(&relayStore).publicKeys();
+        const QString phoneDigest = QString::fromLatin1(
+            QCryptographicHash::hash(QStringLiteral("[\"ticket-1\",\"phone\",1,\"%1\",\"%2\"]")
+                                         .arg(phone.value("agreementPublicKey").toString(),
+                                              phone.value("signingPublicKey").toString())
+                                         .toUtf8(),
+                                     QCryptographicHash::Sha256)
+                .toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals));
+        const QString ticketPath = QStringLiteral("/v2/pairing/tickets/ticket-1");
+        const auto status = [&](const QJsonObject& claimedKeys, const QString& digest) {
+            c.transport.statusForPath.insert(ticketPath, 200);
+            c.transport.responseForPath.insert(
+                ticketPath,
+                QJsonDocument(QJsonObject{{"id", "ticket-1"},
+                                          {"status", "claimed"},
+                                          {"claimedDevice", QJsonObject{{"id", "phone"},
+                                                                        {"keyVersion", 1},
+                                                                        {"keys", claimedKeys}}},
+                                          {"claimDigest", digest}})
+                    .toJson());
+            QJsonObject answer;
+            bool answered = false;
+            Access::pairingStatus(*c.client, "ticket-1",
+                                  [&](const QJsonObject& result, const QString& error) {
+                                      QVERIFY2(error.isEmpty(), qPrintable(error));
+                                      answer = result;
+                                      answered = true;
+                                  });
+            [&] { QTRY_VERIFY(answered); }();
+            return answer;
+        };
+        QString expected = phoneDigest.toUpper();
+        expected.remove('-');
+        expected = expected.left(6);
+
+        const QJsonObject verified = status(phone, phoneDigest);
+        QCOMPARE(verified.value("claim_verified").toBool(), true);
+        QCOMPARE(verified.value("confirmation_code").toString(), expected);
+        QCOMPARE(verified.value("claim_digest").toString(), phoneDigest);
+        // The relay's keys under the phone's digest: no code to compare, so nothing to approve.
+        const QJsonObject substituted = status(relay, phoneDigest);
+        QCOMPARE(substituted.value("claim_verified").toBool(true), false);
+        QVERIFY(!substituted.contains("confirmation_code"));
+        // A digest too short for a code never falls back to a fixed one.
+        const QJsonObject empty = status(phone, {});
+        QCOMPARE(empty.value("claim_verified").toBool(true), false);
+        QVERIFY(!empty.contains("confirmation_code"));
+    }
+
+    void thePairingQrCodeNamesThisMacsKeys() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("journal.sqlite"));
+        c.start();
+        c.transport.statusForPath.insert("/v2/pairing/tickets", 201);
+        c.transport.responseForPath.insert(
+            "/v2/pairing/tickets", R"({"ticket":{"id":"ticket-1","status":"open"},"secret":"s"})");
+        QString code;
+        bool answered = false;
+        Access::createPairing(*c.client, [&](const QJsonObject& result, const QString& error) {
+            QVERIFY2(error.isEmpty(), qPrintable(error));
+            code = result.value("pairing_code").toString();
+            answered = true;
+        });
+        QTRY_VERIFY(answered);
+        const QJsonObject keys = Access::crypto(*c.client).publicKeys();
+        const QByteArray raw =
+            QByteArray::fromBase64(keys.value("signingPublicKey").toString().toLatin1(),
+                                   QByteArray::Base64UrlEncoding) +
+            QByteArray::fromBase64(keys.value("agreementPublicKey").toString().toLatin1(),
+                                   QByteArray::Base64UrlEncoding);
+        const QString fingerprint = QString::fromLatin1(
+            QCryptographicHash::hash(raw, QCryptographicHash::Sha256)
+                .toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals));
+        const QUrlQuery query(QUrl(code).query());
+        QCOMPARE(query.queryItemValue("ticket"), QStringLiteral("ticket-1"));
+        QCOMPARE(query.queryItemValue("secret"), QStringLiteral("s"));
+        QCOMPARE(query.queryItemValue("machine"), QStringLiteral("machine-synthetic"));
+        QCOMPARE(query.queryItemValue("kv"), QStringLiteral("1"));
+        QCOMPARE(query.queryItemValue("fp"), fingerprint);
     }
 
     void approvalRecomputesTheClaimDigestAndPinsTheDevice() {
