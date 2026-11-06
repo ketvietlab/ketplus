@@ -45,7 +45,17 @@ QtObject {
                 { number: "7992", title: "Refine navigation", status: KetTheme.ConversationStatus.Completed,
                   tags: [tag("Account"), tag("UI")], worktree: "main", transcript: "activity" },
                 { number: "8503", title: "Review the startup flow", status: KetTheme.ConversationStatus.Working,
-                  tags: [tag("Account"), tag("Bug"), tag("Review")], worktree: "main", transcript: "running" }
+                  tags: [tag("Account"), tag("Bug"), tag("Review")], worktree: "main", transcript: "running" },
+                // Every content type of one provider's journal (workspace/claude, codex, cursor).
+                { number: "6120", title: "Fix the choppy sidebar spinner", status: KetTheme.ConversationStatus.Completed,
+                  tags: [tag("Performance")], worktree: "main", transcript: "claude", provider: "Claude",
+                  providerId: "claude", model: "Opus 5.5", effort: "Medium" },
+                { number: "6188", title: "Journal size warning", status: KetTheme.ConversationStatus.Stopped,
+                  tags: [tag("Bug")], worktree: "feat/journal-storage", transcript: "codex", provider: "Codex",
+                  providerId: "codex", model: "GPT-5.6 Luna", effort: "Medium" },
+                { number: "6203", title: "Trace the staging tenant flow", status: KetTheme.ConversationStatus.Error,
+                  tags: [], worktree: "main", transcript: "cursor", provider: "Cursor",
+                  providerId: "cursor", model: "Composer 2", effort: "Default" }
             ]
         },
         {

@@ -45,7 +45,8 @@ qt_add_executable(ketplus_qt_mock MACOSX_BUNDLE src/main.cpp src/MockController.
 set_target_properties(ketplus_qt_mock PROPERTIES OUTPUT_NAME "KetPlusMock")
 
 file(GLOB_RECURSE mock_qml RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" CONFIGURE_DEPENDS qml/*.qml)
-set_source_files_properties(qml/Fixtures.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(qml/Fixtures.qml qml/TranscriptFixtures.qml PROPERTIES
+                            QT_QML_SINGLETON_TYPE TRUE)
 qt_add_qml_module(ketplus_qt_mock
     URI KetPlusMock
     VERSION 1.0

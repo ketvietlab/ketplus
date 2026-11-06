@@ -14,7 +14,8 @@ Basic.ApplicationWindow {
     // Screens, in sidebar order. A state follows a slash: "workspace/welcome".
     readonly property var screenIds: [
         "workspace", "workspace/welcome", "workspace/running", "workspace/question",
-        "workspace/error", "workspace/atlas", "workspace/details", "editor", "editor/terminal",
+        "workspace/error", "workspace/atlas", "workspace/details", "workspace/claude",
+        "workspace/codex", "workspace/cursor", "editor", "editor/terminal",
         "editor/markdown", "editor/markdown-source", "editor/samples",
         "changes", "worktrees", "connections", "settings", "settings/typography", "settings/account",
         "settings/browser", "settings/computer", "settings/providers", "settings/archived",
