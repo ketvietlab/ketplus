@@ -28,7 +28,7 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Core5Compat Svg SvgWidgets)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Core5Compat Svg SvgWidgets)
 
 include(cmake/CompilerCache.cmake)
 include(cmake/Dependencies.cmake)
@@ -58,7 +58,7 @@ add_library(ketplus_ui STATIC
     src/ui/Theme.cpp
     src/ui/Theme.h
 )
-target_link_libraries(ketplus_ui PUBLIC Qt6::Widgets)
+target_link_libraries(ketplus_ui PUBLIC Qt6::Widgets KetQt::Tokens KetQt::Icons KetQt::Widgets)
 target_include_directories(ketplus_ui PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
 )
@@ -435,7 +435,7 @@ endif()
 
 if(KETPLUS_CM_BUILD_TESTS)
     enable_testing()
-    find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
+    find_package(Qt6 6.8 REQUIRED COMPONENTS Test)
 
     function(ketplus_cm_add_test test_name target)
         if(WIN32)
