@@ -32,6 +32,7 @@ class RemoteControlViewTest final : public QObject {
     void pairingShowsOnlyTheDaemonsCodeAndForgetsAFinishedTicket();
     void activityWordsFollowTheAudit();
     void activityRowsAreReadableFromTheKeyboardAndScreenReaders();
+    void activityDropsRepliesFromBeforeSignOut();
 };
 
 namespace {
@@ -160,6 +161,60 @@ void RemoteControlViewTest::activityRowsAreReadableFromTheKeyboardAndScreenReade
     QApplication::processEvents();
     QCOMPARE(second->toolTip(), second->accessibleName());
     QVERIFY(second->accessibleName().contains(QStringLiteral("narrow window 1.")));
+
+    // A refresh rebuilds the rows but keeps the one being read focused...
+    const auto focusedCommand = [] {
+        QWidget* focused = QApplication::focusWidget();
+        return focused ? focused->property("remoteCommandId").toString() : QString();
+    };
+    second->setFocus(Qt::TabFocusReason);
+    section.render(entries);
+    QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QCOMPARE(focusedCommand(), QStringLiteral("c1"));
+    QTest::keyClick(QApplication::focusWidget(), Qt::Key_Down);
+    QCOMPARE(focusedCommand(), QStringLiteral("c2"));
+    // ...or, when its entry is gone, the row now in its place.
+    QJsonArray without = entries;
+    without.removeAt(2);
+    section.render(without);
+    QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QCOMPARE(focusedCommand(), QStringLiteral("c3"));
+    // A new request arriving above it does not move focus off the entry.
+    QJsonArray newer{auditEntry("c-new", "session.interrupt", "phone-1", "ok", now)};
+    for (const QJsonValue& entry : std::as_const(without))
+        newer.append(entry);
+    section.render(newer);
+    QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QCOMPARE(focusedCommand(), QStringLiteral("c3"));
+}
+
+void RemoteControlViewTest::activityDropsRepliesFromBeforeSignOut() {
+    RemoteActivitySection section(nullptr);
+    section.setDeviceNames({{QStringLiteral("phone-1"), QStringLiteral("iPhone 16")}});
+    const auto shownRows = [&section] {
+        QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        int count = 0;
+        for (QFrame* frame : section.findChildren<QFrame*>())
+            count += frame->property("remoteRole").toString() == QStringLiteral("activityRow");
+        return count;
+    };
+    const QJsonObject reply{
+        {QStringLiteral("entries"), QJsonArray{auditEntry("c0", "session.start_turn", "phone-1",
+                                                          "ok", QDateTime::currentDateTimeUtc())}}};
+
+    // A request is outstanding when the account signs out.
+    section.requestInFlight_ = true;
+    const quint64 beforeSignOut = section.generation_;
+    section.clear();
+    QVERIFY(!section.requestInFlight_);
+    QVERIFY(section.names_.isEmpty());
+    section.received(beforeSignOut, reply, {});
+    QCOMPARE(shownRows(), 0);
+    QVERIFY(section.entries_.isEmpty());
+
+    // The next account's own reply is shown.
+    section.received(section.generation_, reply, {});
+    QCOMPARE(shownRows(), 1);
 }
 
 void RemoteControlViewTest::aClaimThatChangesAfterItsCodeWasShownCannotBeApproved() {

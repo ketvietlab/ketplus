@@ -62,6 +62,7 @@ class RemoteActivitySection final : public QWidget {
 
   private:
     friend class RemoteControlViewTest;
+    void received(quint64 generation, const QJsonObject& result, const QString& error);
     void render(const QJsonArray& entries);
     void showAll();
     void runDialog(const QString& title, const QString& deviceId, const QString& status,
@@ -75,6 +76,8 @@ class RemoteActivitySection final : public QWidget {
     QLabel* empty_{nullptr};
     QPushButton* showAll_{nullptr};
     bool requestInFlight_{false};
+    // Bumped by each request and by clear(), so a reply from before sign-out is dropped.
+    quint64 generation_{0};
     QElapsedTimer lastRefresh_;
 };
 

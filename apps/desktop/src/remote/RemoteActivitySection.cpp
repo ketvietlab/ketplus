@@ -6,6 +6,7 @@
 
 #include <QAccessible>
 #include <QAccessibleWidget>
+#include <QApplication>
 #include <QDialog>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -195,6 +196,7 @@ class ActivityRow final : public QFrame {
                 const bool showDevice, const QDateTime& now, QWidget* parent = nullptr)
         : QFrame(parent) {
         setProperty("remoteRole", QStringLiteral("activityRow"));
+        setProperty("remoteCommandId", entry.value(QStringLiteral("command_id")).toString());
         setFocusPolicy(Qt::StrongFocus);
         chrome_geometry::fixedHeight(this, 56);
         const QString kind = entry.value(QStringLiteral("kind")).toString();
@@ -374,30 +376,45 @@ void RemoteActivitySection::refresh(const bool force) {
         return;
     requestInFlight_ = true;
     lastRefresh_.start();
+    const quint64 generation = ++generation_;
     // One more than is shown tells whether there are older entries.
-    daemon_->call(QStringLiteral("remote.audit"), {{QStringLiteral("limit"), shownRows + 1}}, {},
-                  -1, [self = QPointer(this)](const QJsonObject& result, const QString& error) {
-                      if (!self)
-                          return;
-                      self->requestInFlight_ = false;
-                      if (!error.isEmpty()) {
-                          self->entries_ = {};
-                          self->render({});
-                          self->empty_->setText(
-                              QStringLiteral("Activity is temporarily unavailable."));
-                          return;
-                      }
-                      self->render(result.value(QStringLiteral("entries")).toArray());
-                  });
+    daemon_->call(
+        QStringLiteral("remote.audit"), {{QStringLiteral("limit"), shownRows + 1}}, {}, -1,
+        [self = QPointer(this), generation](const QJsonObject& result, const QString& error) {
+            if (self)
+                self->received(generation, result, error);
+        });
+}
+
+void RemoteActivitySection::received(const quint64 generation, const QJsonObject& result,
+                                     const QString& error) {
+    // A reply asked for before sign-out belongs to the account that signed out.
+    if (generation != generation_)
+        return;
+    requestInFlight_ = false;
+    if (!error.isEmpty()) {
+        render({});
+        empty_->setText(QStringLiteral("Activity is temporarily unavailable."));
+        return;
+    }
+    render(result.value(QStringLiteral("entries")).toArray());
 }
 
 void RemoteActivitySection::clear() {
+    ++generation_;
+    requestInFlight_ = false;
     lastRefresh_.invalidate();
-    entries_ = {};
+    names_.clear();
     render({});
 }
 
 void RemoteActivitySection::render(const QJsonArray& entries) {
+    // Rows are rebuilt on every refresh; the one a keyboard or screen reader user is on keeps
+    // focus, or the row now in its place when its entry is gone.
+    QWidget* focused = QApplication::focusWidget();
+    const int focusedIndex = focused ? rows_->indexOf(focused) : -1;
+    const QString focusedCommand =
+        focusedIndex >= 0 ? focused->property("remoteCommandId").toString() : QString();
     entries_ = entries;
     clearLayout(rows_);
     empty_ = nullptr;
@@ -414,6 +431,19 @@ void RemoteActivitySection::render(const QJsonArray& entries) {
     for (qsizetype index = 0; index < qMin<qsizetype>(entries.size(), shownRows); ++index)
         shown.append(entries.at(index));
     fillRows(rows_, shown, true);
+    if (focusedIndex < 0)
+        return;
+    // The layout shows new rows later; a hidden row cannot take focus.
+    QWidget* next = nullptr;
+    for (int index = 0; index < rows_->count(); ++index) {
+        QWidget* row = rows_->itemAt(index)->widget();
+        row->show();
+        if (!next && row->property("remoteCommandId").toString() == focusedCommand)
+            next = row;
+    }
+    if (!next)
+        next = rows_->itemAt(qMin(focusedIndex, rows_->count() - 1))->widget();
+    next->setFocus(Qt::OtherFocusReason);
 }
 
 void RemoteActivitySection::fillRows(QVBoxLayout* rows, const QJsonArray& entries,
