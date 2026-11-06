@@ -12,6 +12,7 @@
 #include <QTemporaryDir>
 #include <QtTest>
 
+#include <cmath>
 #include <initializer_list>
 #include <utility>
 
@@ -262,6 +263,26 @@ void RefactorWave1ContractTest::currentNativePaletteBaseline() {
     QVERIFY(!dark.warning.isEmpty());
     QVERIFY(!dark.syntaxString.isEmpty());
     QVERIFY(dark.syntaxKeyword != dark.syntaxNumber);
+
+    // Code on the editor's panel reads at 4.5:1 (WCAG AA for 12 px text) in both themes.
+    const auto luminance = [](const QColor& c) {
+        const auto linear = [](qreal v) {
+            return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
+        };
+        return 0.2126 * linear(c.redF()) + 0.7152 * linear(c.greenF()) + 0.0722 * linear(c.blueF());
+    };
+    for (const auto& palette : {light, dark}) {
+        const qreal panel = luminance(QColor(palette.panelBackground));
+        for (const QString& role :
+             {palette.syntaxKeyword, palette.syntaxString, palette.syntaxNumber, palette.syntaxType,
+              palette.syntaxComment, palette.syntaxAttribute}) {
+            const qreal a = luminance(QColor(role));
+            const qreal ratio = (qMax(a, panel) + 0.05) / (qMin(a, panel) + 0.05);
+            QVERIFY2(ratio >= 4.5, qPrintable(QStringLiteral("%1 on %2 is %3:1")
+                                                  .arg(role, palette.panelBackground)
+                                                  .arg(ratio)));
+        }
+    }
 }
 
 void RefactorWave1ContractTest::parserReadsObservedWorktreeFlags() {
