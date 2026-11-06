@@ -323,6 +323,7 @@ if(APPLE)
             set(ketplus_browser_runtime_arch arm64)
         endif()
         set(ketplus_browser_runtime_platform "darwin-${ketplus_browser_runtime_arch}")
+        include("${PROJECT_SOURCE_DIR}/cmake/KetPlusBrowserRuntime.cmake")
         if(KETPLUS_BROWSER_RUNTIME_DIR)
             if(NOT EXISTS "${KETPLUS_BROWSER_RUNTIME_DIR}/runtime.json")
                 message(FATAL_ERROR
@@ -345,26 +346,10 @@ if(APPLE)
                     "ketplus-browser node ${ketplus_node_pin_version} ${ketplus_browser_runtime_platform}. "
                     "Re-stage it with apps/browser/scripts/package-runtime.mjs.")
             endif()
-            # A runtime staged from another commit would ship stale src/ (for example an older
-            # origin policy) without any other mismatch (#94).
-            include("${PROJECT_SOURCE_DIR}/cmake/KetPlusBrowserRuntime.cmake")
-            ketplus_browser_source_digest("${ketplus_browser_app_dir}" ketplus_browser_source_sha256)
-            string(JSON ketplus_browser_runtime_source ERROR_VARIABLE ketplus_json_error
-                GET "${ketplus_browser_runtime_json}" sourceSha256)
             option(KETPLUS_BROWSER_RUNTIME_ALLOW_STALE
                 "Bundle a prebuilt browser runtime whose sources differ from this checkout" OFF)
-            if(NOT ketplus_browser_runtime_source STREQUAL ketplus_browser_source_sha256)
-                if(KETPLUS_BROWSER_RUNTIME_ALLOW_STALE)
-                    message(WARNING "KETPLUS_BROWSER_RUNTIME_DIR was staged from other sources.")
-                else()
-                    message(FATAL_ERROR
-                        "KETPLUS_BROWSER_RUNTIME_DIR ${KETPLUS_BROWSER_RUNTIME_DIR} was staged from "
-                        "sources '${ketplus_browser_runtime_source}', not this checkout's "
-                        "'${ketplus_browser_source_sha256}'. Re-stage it with "
-                        "apps/browser/scripts/package-runtime.mjs, or pass "
-                        "-DKETPLUS_BROWSER_RUNTIME_ALLOW_STALE=ON deliberately.")
-                endif()
-            endif()
+            ketplus_browser_check_runtime("${ketplus_browser_app_dir}"
+                "${KETPLUS_BROWSER_RUNTIME_DIR}" "${KETPLUS_BROWSER_RUNTIME_ALLOW_STALE}")
             set(ketplus_browser_runtime_stage "${KETPLUS_BROWSER_RUNTIME_DIR}")
             set(ketplus_browser_runtime_stamp "${KETPLUS_BROWSER_RUNTIME_DIR}/runtime.json")
         else()
@@ -404,15 +389,42 @@ if(APPLE)
             )
         endif()
 
+        # Sources or the runtime can change after configure: check again before every bundle
+        # and install (#94). A custom target always runs.
+        set(ketplus_browser_runtime_check
+            "${CMAKE_COMMAND}" "-DKETPLUS_BROWSER_APP_DIR=${ketplus_browser_app_dir}"
+            "-DKETPLUS_BROWSER_RUNTIME_DIR=${ketplus_browser_runtime_stage}"
+            "-DKETPLUS_BROWSER_RUNTIME_ALLOW_STALE=${KETPLUS_BROWSER_RUNTIME_ALLOW_STALE}"
+            -P "${PROJECT_SOURCE_DIR}/cmake/KetPlusBrowserRuntime.cmake")
+        add_custom_target(ketplus_check_browser_runtime
+            COMMAND ${ketplus_browser_runtime_check}
+            DEPENDS "${ketplus_browser_runtime_stamp}"
+            COMMENT "Checking the browser runtime against this checkout"
+            VERBATIM
+        )
         set(ketplus_browser_runtime_bundle_dir
             "$<TARGET_BUNDLE_DIR:ketplus>/Contents/Resources/ketplus-browser")
         add_custom_target(ketplus_bundle_browser_runtime ALL
             COMMAND "${CMAKE_COMMAND}" -E rm -rf "${ketplus_browser_runtime_bundle_dir}"
             # cp -R keeps the executable bit of bin/node and never follows links.
             COMMAND /bin/cp -R "${ketplus_browser_runtime_stage}" "${ketplus_browser_runtime_bundle_dir}"
-            DEPENDS ketplus ketplus_bundle_daemon "${ketplus_browser_runtime_stamp}"
+            DEPENDS ketplus ketplus_bundle_daemon ketplus_check_browser_runtime
+                "${ketplus_browser_runtime_stamp}"
             COMMENT "Copying browser runtime into KetPlus.app"
             VERBATIM
+        )
+        install(CODE "
+            execute_process(
+                COMMAND \"${CMAKE_COMMAND}\"
+                    \"-DKETPLUS_BROWSER_APP_DIR=${ketplus_browser_app_dir}\"
+                    \"-DKETPLUS_BROWSER_RUNTIME_DIR=${ketplus_browser_runtime_stage}\"
+                    \"-DKETPLUS_BROWSER_RUNTIME_ALLOW_STALE=${KETPLUS_BROWSER_RUNTIME_ALLOW_STALE}\"
+                    -P \"${PROJECT_SOURCE_DIR}/cmake/KetPlusBrowserRuntime.cmake\"
+                RESULT_VARIABLE ketplus_check_result)
+            if(NOT ketplus_check_result EQUAL 0)
+                message(FATAL_ERROR \"The browser runtime does not match this checkout\")
+            endif()"
+            COMPONENT Runtime
         )
         install(DIRECTORY "${ketplus_browser_runtime_stage}/"
             DESTINATION "KetPlus.app/Contents/Resources/ketplus-browser"

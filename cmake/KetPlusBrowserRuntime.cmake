@@ -13,8 +13,41 @@ function(ketplus_browser_source_digest app_dir out_var)
     set(${out_var} "${ketplus_digest}" PARENT_SCOPE)
 endfunction()
 
-# `cmake -DKETPLUS_BROWSER_APP_DIR=<dir> -P cmake/KetPlusBrowserRuntime.cmake` prints it.
+# Fails unless the staged runtime's sourceSha256 matches app_dir. A runtime staged from another
+# commit would ship stale src/ (for example an older origin policy) without any other mismatch
+# (#94). This runs at configure time and again before every bundle and install, because sources
+# or the runtime can change after configure.
+function(ketplus_browser_check_runtime app_dir runtime_dir allow_stale)
+    if(NOT EXISTS "${runtime_dir}/runtime.json")
+        message(FATAL_ERROR "The browser runtime has no runtime.json: ${runtime_dir}")
+    endif()
+    file(READ "${runtime_dir}/runtime.json" ketplus_runtime_json)
+    string(JSON ketplus_runtime_source ERROR_VARIABLE ketplus_json_error
+        GET "${ketplus_runtime_json}" sourceSha256)
+    ketplus_browser_source_digest("${app_dir}" ketplus_checkout_source)
+    if(ketplus_runtime_source STREQUAL ketplus_checkout_source)
+        return()
+    endif()
+    if(allow_stale)
+        message(WARNING "The browser runtime ${runtime_dir} was staged from other sources.")
+    else()
+        message(FATAL_ERROR
+            "The browser runtime ${runtime_dir} was staged from sources "
+            "'${ketplus_runtime_source}', not this checkout's '${ketplus_checkout_source}'. "
+            "Re-stage it with apps/browser/scripts/package-runtime.mjs, or pass "
+            "-DKETPLUS_BROWSER_RUNTIME_ALLOW_STALE=ON deliberately.")
+    endif()
+endfunction()
+
+# Script mode, with -DKETPLUS_BROWSER_APP_DIR=<dir>:
+#   alone, prints the digest;
+#   with -DKETPLUS_BROWSER_RUNTIME_DIR=<dir> [-DKETPLUS_BROWSER_RUNTIME_ALLOW_STALE=ON], checks it.
 if(CMAKE_SCRIPT_MODE_FILE STREQUAL CMAKE_CURRENT_LIST_FILE)
-    ketplus_browser_source_digest("${KETPLUS_BROWSER_APP_DIR}" ketplus_digest_result)
-    message("${ketplus_digest_result}")
+    if(DEFINED KETPLUS_BROWSER_RUNTIME_DIR)
+        ketplus_browser_check_runtime("${KETPLUS_BROWSER_APP_DIR}" "${KETPLUS_BROWSER_RUNTIME_DIR}"
+            "${KETPLUS_BROWSER_RUNTIME_ALLOW_STALE}")
+    else()
+        ketplus_browser_source_digest("${KETPLUS_BROWSER_APP_DIR}" ketplus_digest_result)
+        message("${ketplus_digest_result}")
+    endif()
 endif()

@@ -60,3 +60,40 @@ test("the repository's own sources digest the same way in Node and CMake", (t) =
   if (fromCmake === null) return t.skip("cmake not found");
   assert.equal(fromCmake, sourceDigest(appDir));
 });
+
+test("the build-time check refuses a runtime the sources moved away from", (t) => {
+  try {
+    execFileSync("cmake", ["--version"], { stdio: "ignore" });
+  } catch {
+    return t.skip("cmake not found");
+  }
+  const dir = fixture(t);
+  const runtime = fs.mkdtempSync(path.join(os.tmpdir(), "ketplus-runtime-check-"));
+  t.after(() => fs.rmSync(runtime, { recursive: true, force: true }));
+  const stage = () =>
+    fs.writeFileSync(path.join(runtime, "runtime.json"), JSON.stringify({ sourceSha256: sourceDigest(dir) }));
+  const check = (allowStale = "OFF") =>
+    spawnSync("cmake", [`-DKETPLUS_BROWSER_APP_DIR=${dir}`, `-DKETPLUS_BROWSER_RUNTIME_DIR=${runtime}`,
+      `-DKETPLUS_BROWSER_RUNTIME_ALLOW_STALE=${allowStale}`, "-P", cmakeModule], { encoding: "utf8" });
+
+  stage();
+  assert.equal(check().status, 0, check().stderr);
+  // A source edited after configure.
+  fs.writeFileSync(path.join(dir, "src/nested/policy.mjs"), "export const a = 2;");
+  assert.notEqual(check().status, 0);
+  assert.match(check().stderr, /was staged from sources/);
+  assert.equal(check("ON").status, 0);
+  stage();
+  // A source added after configure.
+  fs.writeFileSync(path.join(dir, "src/added.mjs"), "export {};");
+  assert.notEqual(check().status, 0);
+  stage();
+  // A source removed after configure.
+  fs.rmSync(path.join(dir, "src/added.mjs"));
+  assert.notEqual(check().status, 0);
+  stage();
+  assert.equal(check().status, 0);
+  // A runtime.json replaced after configure.
+  fs.writeFileSync(path.join(runtime, "runtime.json"), JSON.stringify({ sourceSha256: "0".repeat(64) }));
+  assert.notEqual(check().status, 0);
+});

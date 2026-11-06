@@ -80,8 +80,10 @@ scripts/smoke-runtime.mjs <dir>` (`npm run smoke:runtime -- <dir>`) starts the
 staged MCP server with the staged node, captures a local page and checks that a
 public origin is refused; CI stages and smokes a runtime on every change.
 `runtime.json` records `sourceSha256`, a digest of the package files and the
-skill, and CMake refuses a prebuilt `KETPLUS_BROWSER_RUNTIME_DIR` whose digest
-differs from the checkout unless `KETPLUS_BROWSER_RUNTIME_ALLOW_STALE=ON`. See `docs/decisions/0009-bundled-browser-runtime.md`.
+skill. CMake refuses a runtime whose digest differs from the checkout, unless
+`KETPLUS_BROWSER_RUNTIME_ALLOW_STALE=ON` is set. It checks at configure time and
+again before every bundle and install, since sources or the runtime can change
+after configure. See `docs/decisions/0009-bundled-browser-runtime.md`.
 
 Start the newline-delimited JSON-RPC 2.0 server:
 
