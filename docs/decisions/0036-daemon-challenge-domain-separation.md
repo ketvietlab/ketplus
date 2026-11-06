@@ -56,8 +56,11 @@ after old clients are retired. The agreed relay compatibility flag is
 `KETPLUS_ALLOW_LEGACY_DAEMON_CHALLENGE`; `false` blocks legacy issuance and redemption,
 including outstanding old challenges. Legacy is initially enabled for relay-first
 rollout. Explicit version 1, partially supplied scheme fields, null or unknown
-request schemes are rejected. Only stored challenges whose two scheme fields are
-both null from before migration can use the legacy branch under that flag.
+request schemes are rejected. Stored legacy challenges include new rows with
+`signatureVersion: 1` and `signatureAlgorithm: "Ed25519"`, as well as pre-migration
+rows whose two scheme fields are both null. Both forms can use the legacy branch
+only while the flag allows it. This stored representation does not make explicit
+version 1 valid in a client request.
 
 The new client never retries legacy. Cached credentials remain valid until their
 normal refresh boundary. Rolling the relay back to legacy while these clients
