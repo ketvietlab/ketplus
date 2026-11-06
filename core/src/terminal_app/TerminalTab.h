@@ -25,7 +25,7 @@ class TerminalTab final : public QWidget {
     bool restart();
     void stop();
     void applyTheme(const ThemePalette& palette);
-    void setTypography(int fontSizePixels, int lineHeightPixels);
+    void setTypography(int fontSizePixels, int lineHeightPixels, const QString& fontFamily = {});
 
   signals:
     void titleChanged(const QString& title);

@@ -1,9 +1,10 @@
 #include "cloud/CloudControlClient.h"
-#include "cloud/CloudControlSupport.h"
 #include "atlas/AtlasLiveRuntime.h"
 #include "cloud/CloudControlBatching.h"
+#include "cloud/CloudControlSupport.h"
 #include "cloud/CloudEventProjection.h"
 #include "cloud/ControlEndpoint.h"
+#include "cloud/RemoteAudit.h"
 #include "cloud/WorktreeBranches.h"
 #include "cloud/WorktreeRepositories.h"
 #include <QUrlQuery>
@@ -203,7 +204,7 @@ bool CloudControlClient::handles(const QString& type) const {
            type == QStringLiteral("remote.pairing.status") ||
            type == QStringLiteral("remote.pairing.approve") ||
            type == QStringLiteral("remote.pairing.revoke") ||
-           type == QStringLiteral("remote.device.revoke");
+           type == QStringLiteral("remote.device.revoke") || type == QStringLiteral("remote.audit");
 }
 
 void CloudControlClient::handleLocal(const QString& type, const QJsonObject& payload,
@@ -230,6 +231,17 @@ void CloudControlClient::handleLocal(const QString& type, const QJsonObject& pay
         revokePairing(payload, std::move(callback));
     } else if (type == QStringLiteral("remote.device.revoke")) {
         revokeDevice(payload, std::move(callback));
+    } else if (type == QStringLiteral("remote.audit")) {
+        // What paired devices did on this Mac (#86), newest first; one device's with device_id.
+        const auto entries = journal_->remoteCommands(
+            payload.value(QStringLiteral("device_id")).toString(),
+            qBound(1, payload.value(QStringLiteral("limit")).toInt(100), 500));
+        if (!entries)
+            callback({}, journal_->errorString());
+        else
+            callback({{QStringLiteral("ok"), true},
+                      {QStringLiteral("entries"), remoteAuditJson(*entries)}},
+                     {});
     } else {
         callback({}, QStringLiteral("Unsupported remote-control operation."));
     }

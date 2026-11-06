@@ -6,8 +6,10 @@
 #include <QApplication>
 #include <QClipboard>
 #include <QContextMenuEvent>
+#include <QEvent>
 #include <QFocusEvent>
 #include <QFontDatabase>
+#include <QFontInfo>
 #include <QFontMetrics>
 #include <QHBoxLayout>
 #include <QInputMethodEvent>
@@ -154,13 +156,36 @@ void TerminalView::applyTheme(const ThemePalette& palette) {
     viewport()->update();
 }
 
-void TerminalView::setTypography(const int fontSizePixels, const int lineHeightPixels) {
+void TerminalView::setTypography(const int fontSizePixels, const int lineHeightPixels,
+                                 const QString& fontFamily) {
     QFont terminalFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    const QString family = fontFamily.trimmed();
+    if (!family.isEmpty() && QFontDatabase::hasFamily(family)) {
+        terminalFont = QFont(family);
+        terminalFont.setStyleHint(QFont::Monospace);
+        terminalFont.setFixedPitch(true);
+    }
     terminalFont.setPixelSize(qBound(8, fontSizePixels, 48));
     setFont(terminalFont);
+    // The application style sheet gives every widget the interface font and this view the
+    // platform's fixed-pitch family; a rule of the view's own wins over both, so the terminal
+    // keeps the requested font through polish and theme changes.
+    setStyleSheet(QStringLiteral("QAbstractScrollArea[kvRole=\"terminalView\"] { font-family: "
+                                 "\"%1\"; font-size: %2px; }")
+                      .arg(QFontInfo(terminalFont).family())
+                      .arg(terminalFont.pixelSize()));
     lineHeightPixels_ = qBound(qMax(12, terminalFont.pixelSize()), lineHeightPixels, 96);
     updateGeometryFromViewport();
     viewport()->update();
+}
+
+void TerminalView::changeEvent(QEvent* event) {
+    QAbstractScrollArea::changeEvent(event);
+    // A style sheet can change the font after setTypography; the cell grid follows it.
+    if (event->type() == QEvent::FontChange) {
+        updateGeometryFromViewport();
+        viewport()->update();
+    }
 }
 
 void TerminalView::start(const QString& workingDirectory) {

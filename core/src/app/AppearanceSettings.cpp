@@ -9,6 +9,7 @@ namespace {
 constexpr auto interfaceFontSizeKey = "appearance/interfaceFontSizePixels";
 constexpr auto terminalFontSizeKey = "terminal/fontSizePixels";
 constexpr auto terminalLineHeightKey = "terminal/lineHeightPixels";
+constexpr auto terminalFontFamilyKey = "terminal/fontFamily";
 constexpr auto previewFontSizeKey = "preview/fontSizePixels";
 constexpr auto previewLineHeightKey = "preview/lineHeightPixels";
 
@@ -59,6 +60,9 @@ AppearanceSettings AppearanceSettings::load(const QSettings& settings) {
         .editor = EditorSettings::load(settings),
         .terminal =
             loadTypography(settings, terminalFontSizeKey, terminalLineHeightKey, fallback.terminal),
+        .terminalFontFamily =
+            settings.value(QString::fromLatin1(terminalFontFamilyKey), fallback.terminalFontFamily)
+                .toString(),
         .preview =
             loadTypography(settings, previewFontSizeKey, previewLineHeightKey, fallback.preview),
     }
@@ -75,6 +79,7 @@ void AppearanceSettings::save(QSettings& settings) const {
     settings.setValue(QString::fromLatin1(interfaceFontSizeKey), value.interfaceFontSizePixels);
     value.editor.save(settings);
     saveTypography(settings, terminalFontSizeKey, terminalLineHeightKey, value.terminal);
+    settings.setValue(QString::fromLatin1(terminalFontFamilyKey), value.terminalFontFamily);
     saveTypography(settings, previewFontSizeKey, previewLineHeightKey, value.preview);
 }
 
@@ -85,6 +90,7 @@ AppearanceSettings AppearanceSettings::normalized() const {
                maximumInterfaceFontSizePixels);
     value.editor = value.editor.normalized();
     value.terminal = value.terminal.normalized();
+    value.terminalFontFamily = value.terminalFontFamily.trimmed();
     value.preview = value.preview.normalized();
     return value;
 }

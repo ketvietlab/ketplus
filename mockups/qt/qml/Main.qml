@@ -17,7 +17,7 @@ Basic.ApplicationWindow {
         "workspace/error", "workspace/atlas", "workspace/details", "workspace/claude",
         "workspace/codex", "workspace/cursor", "editor", "editor/terminal",
         "editor/markdown", "editor/markdown-source", "editor/samples",
-        "changes", "worktrees", "connections", "settings", "settings/typography", "settings/account",
+        "changes", "worktrees", "connections", "connections/no-activity", "settings", "settings/typography", "settings/account",
         "settings/browser", "settings/computer", "settings/providers", "settings/archived",
         "settings/updates", "settings/storage", "workspace/storage-warning", "atlas", "mobile-picker", "workspace/compact",
         // Provider setup (Fixtures.providerSetup): the provider cannot start a turn, or ended one.
@@ -44,6 +44,9 @@ Basic.ApplicationWindow {
     property var providerIssues: ({ codex: "", claude: "", cursor: "" })
     // Providers whose guide the user hid above the composer; a new setup state shows it again.
     property var hiddenSetups: ({})
+    // Paired devices have done something on this Mac (connections); none yet in
+    // connections/no-activity.
+    property bool remoteActivity: true
     property string tagFilter
     property bool compact: false
     property size wideSize: Qt.size(1440, 900)
@@ -192,6 +195,8 @@ Basic.ApplicationWindow {
         }
         if (name === "settings")
             settingsTab = state || "appearance"
+        if (name === "connections")
+            remoteActivity = state !== "no-activity"
         if (name === "editor") {
             editorTerminal = state === "terminal"
             editorFile = state.startsWith("markdown") ? "licensing.md"
@@ -219,6 +224,8 @@ Basic.ApplicationWindow {
         setupDialog.close()
         deleteDialog.open()
         deleteDialog.close()
+        connections.openActivity("iPhone 16")
+        connections.closeActivity()
         toast.show("Smoke test")
     }
 
@@ -251,6 +258,11 @@ Basic.ApplicationWindow {
             Qt.callLater(() => openImages(Fixtures.captures, 1))
         else if (Mock.initialPanel === "setup")
             Qt.callLater(() => openSetupGuide(conversation.providerId || "claude"))
+        else if (["activity", "device", "device-focus"].includes(Mock.initialPanel) && screen === "connections") {
+            Qt.callLater(() => connections.openActivity(Mock.initialPanel === "activity" ? "" : "iPhone 16"))
+            if (Mock.initialPanel === "device-focus")
+                Qt.callLater(() => Qt.callLater(() => connections.focusActivityRow(3)))
+        }
         else if (Mock.initialPanel && screen === "workspace")
             Qt.callLater(() => workspace.openComposerPanel(Mock.initialPanel))
     }
@@ -297,7 +309,7 @@ Basic.ApplicationWindow {
             EditorScreen { window: app }
             SourceControlScreen { window: app }
             WorktreesScreen { window: app }
-            ConnectionsScreen { window: app }
+            ConnectionsScreen { id: connections; window: app }
             SettingsScreen { window: app }
             AtlasBuilderScreen { window: app }
             MobilePickerScreen { window: app }

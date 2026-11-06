@@ -4,6 +4,7 @@
 #include "cloud/CloudControlSupport.h"
 #include "cloud/CloudEventProjection.h"
 #include "cloud/ControlEndpoint.h"
+#include "cloud/RemoteAudit.h"
 #include "cloud/WorktreeBranches.h"
 #include "cloud/WorktreeRepositories.h"
 #include <QRandomGenerator>
@@ -890,6 +891,21 @@ void CloudControlClient::acknowledgeCommand(const QJsonObject& command,
     const int attempt = command.value(QStringLiteral("attempt")).toInt();
     const bool creating = isWorktreeCommand(command);
     const QString commandId = command.value(QStringLiteral("id")).toString();
+    const QString kind = command.value(QStringLiteral("kind")).toString();
+    if (remoteCommandMayChange(kind)) {
+        const QJsonObject content = command.value(QStringLiteral("content")).toObject();
+        // Recorded however the acknowledgement fares: the outcome already happened here.
+        if (!journal_->recordRemoteCommand(
+                {commandId,
+                 kind,
+                 content.value(QStringLiteral("senderDeviceId")).toString(),
+                 content.value(QStringLiteral("senderKeyVersion")).toInt(),
+                 sessionId,
+                 resultCode,
+                 {}}))
+            qWarning("Remote command %s was not audited: %s", qUtf8Printable(commandId),
+                     qUtf8Printable(journal_->errorString()));
+    }
     const qint64 startedAt = commandStartedAt_.take(commandId);
     qInfo("command %s %s %s/%s after %lldms", qUtf8Printable(commandId),
           qUtf8Printable(command.value(QStringLiteral("kind")).toString()), qUtf8Printable(status),
