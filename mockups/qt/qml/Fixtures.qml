@@ -26,7 +26,8 @@ QtObject {
                   tags: [tag("Atlas")], worktree: "develop", transcript: "atlas" },
                 { number: "9079", title: "Check this worktree", status: KetTheme.ConversationStatus.Completed,
                   tags: [], worktree: "feature-onboarding", transcript: "short" },
-                { number: "7542", title: "Check this worktree", status: KetTheme.ConversationStatus.Completed,
+                // The turn finished with a request for approval: "Waiting for you", not Completed.
+                { number: "7542", title: "Check this worktree", status: KetTheme.ConversationStatus.AwaitingReply,
                   tags: [], worktree: "fix-scroll-anchor", transcript: "short" },
                 { number: "3366", title: "Review feature onboarding", status: KetTheme.ConversationStatus.NeedsInput,
                   tags: [tag("Review")], worktree: "feature-onboarding", transcript: "question" },

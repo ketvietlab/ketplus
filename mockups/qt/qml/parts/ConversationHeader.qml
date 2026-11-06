@@ -47,6 +47,7 @@ Rectangle {
         case KetTheme.ConversationStatus.Completed: return KetTheme.BadgeTone.Success
         case KetTheme.ConversationStatus.Working: return KetTheme.BadgeTone.Accent
         case KetTheme.ConversationStatus.NeedsInput: return KetTheme.BadgeTone.Warning
+        case KetTheme.ConversationStatus.AwaitingReply: return KetTheme.BadgeTone.Info
         case KetTheme.ConversationStatus.Error: return KetTheme.BadgeTone.Danger
         }
         return KetTheme.BadgeTone.Neutral
