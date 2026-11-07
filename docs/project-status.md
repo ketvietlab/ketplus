@@ -5,6 +5,10 @@ milestone changes state.
 
 ## Implemented
 
+- Provider version probes bound merged output while reading and require successful
+  exit before accepting a banner (ADR 0072). Concurrent executable generations
+  retain their own result; failed probes remain retryable without a cached version.
+
 - Existing media blobs are validated before dedup returns a reference (ADR 0066):
   exact bounded bytes, regular nonsymlink files and owner-only permissions.
   Invalid entries remain intact for repair; reference durability remains open.

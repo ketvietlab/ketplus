@@ -582,6 +582,12 @@ and `sign_in_error` when it failed; `remote.sign_in.cancel` and sign-out stop it
 
 ## Lifecycle
 
+Provider version probes retain at most 4 KiB of merged output, kill excess output
+and accept banners only after successful normal exit (ADR 0072). Failed probes
+remain Unknown under the existing launch policy and are retried. Only matching
+executable fingerprints share an in-flight result; other checks are deferred and
+revalidated, including a binary replaced while the first probe is running.
+
 The intended state flow is `registered -> connecting -> online -> draining ->
 stopped`, with a recoverable `offline` state. Session state is separate from
 connection state so a temporary network outage does not kill a local process.
