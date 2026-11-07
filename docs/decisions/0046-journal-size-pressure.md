@@ -47,7 +47,9 @@ fail instead of replaying after reconnect. Saving never starts compaction or pro
 the existing idle timer performs work. Retention replies add `size_policy_supported: true`; older daemons omit it and
 Desktop keeps the existing detail-only page. All storage methods stay daemon-only
 and cannot fall through to a provider. Size saves validate policy and revision ACK,
-and errors/conflicts/timeouts require reload. Size status and optional measurements
+and errors/conflicts/timeouts require reload. An unsaved size draft survives an
+unrelated detail save; a changed size revision blocks that draft until explicit
+reload instead of silently rebasing or replacing it. Size status and optional measurements
 refresh after read/save; missing metrics never imply a healthy target.
 
 Desktop and CLI can configure the backend; sidebar/remote warnings,

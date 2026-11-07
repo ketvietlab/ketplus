@@ -38,6 +38,8 @@ class SettingsStoragePage final : public QWidget {
     QSpinBox* warning_{};
     QPushButton* saveSize_{};
     QLabel* sizeStatus_{};
+    QLabel* sizeDraftStatus_{};
+    bool sizeDraftDirty_{false};
     qint64 sizeRevision_{-1};
     qint64 revision_{-1};
     bool busy_{false};

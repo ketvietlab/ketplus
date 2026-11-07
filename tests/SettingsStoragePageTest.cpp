@@ -68,6 +68,55 @@ void choose(SettingsStoragePage& page, int value) {
 class SettingsStoragePageTest final : public QObject {
     Q_OBJECT
   private slots:
+    void sizeDraftSurvivesDetailSave_data() {
+        QTest::addColumn<bool>("conflict");
+        QTest::newRow("preserved") << false;
+        QTest::newRow("changed-revision") << true;
+    }
+    void sizeDraftSurvivesDetailSave() {
+        QFETCH(bool, conflict);
+        bool detailSaved = false;
+        QJsonObject submitted;
+        SettingsStoragePage page([&](const QString& op, const QJsonObject& payload, auto reply) {
+            if (op == "read")
+                reply(supportedState(), {});
+            else if (op == "size.read")
+                reply(sizeState(detailSaved && conflict ? 1 : 0), {});
+            else if (op == "apply") {
+                detailSaved = true;
+                auto response = state(1, 90);
+                response.insert("size_policy_supported", true);
+                reply(response, {});
+            } else {
+                submitted = payload;
+                reply(sizeState(1, 0, 95), {});
+            }
+        });
+        auto* save = page.findChild<QPushButton*>("storageSizeSave");
+        auto* limit = page.findChild<QComboBox*>("storageSizeLimit");
+        auto* warning = page.findChild<QSpinBox*>("storageWarningPercent");
+        QTRY_VERIFY(save->isEnabled());
+        limit->setCurrentIndex(limit->findData(qint64(0)));
+        warning->setValue(95);
+        auto* draft = page.findChild<QLabel*>("storageSizeDraftStatus");
+        QVERIFY(draft->text().contains("Unsaved"));
+        choose(page, 90);
+        QCOMPARE(limit->currentData().toLongLong(), qint64(0));
+        QCOMPARE(warning->value(), 95);
+        if (conflict) {
+            QVERIFY(!save->isEnabled());
+            QVERIFY(status(page)->text().contains("another window"));
+            QVERIFY(submitted.isEmpty());
+        } else {
+            QVERIFY(save->isEnabled());
+            save->click();
+            QCOMPARE(submitted.value("expected_revision").toInteger(), 0);
+            QCOMPARE(submitted.value("policy").toObject().value("limit_bytes").toInteger(),
+                     qint64(0));
+            QCOMPARE(submitted.value("policy").toObject().value("warning_percent").toInt(), 95);
+            QVERIFY(draft->text().isEmpty());
+        }
+    }
     void sizeRequiresExplicitSaveAndKeepsIndependentRevision() {
         QStringList calls;
         QJsonObject submitted;
@@ -461,6 +510,7 @@ class SettingsStoragePageTest final : public QObject {
         auto* limit = page->findChild<QComboBox*>("storageSizeLimit");
         auto* warning = page->findChild<QSpinBox*>("storageWarningPercent");
         QTRY_VERIFY(save->isEnabled());
+        warning->setValue(95);
         QTRY_VERIFY(save->isVisible());
         scroll.ensureWidgetVisible(save);
         QTRY_VERIFY(scroll.viewport()->rect().contains(

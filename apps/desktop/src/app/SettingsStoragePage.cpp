@@ -5,6 +5,7 @@
 #include <QLocale>
 #include <QPointer>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -110,6 +111,17 @@ SettingsStoragePage::SettingsStoragePage(Requester requester, QWidget* parent)
                                 "settingsWorkspaceIntro", sizeGroup_));
     sizeStatus_ = label({}, "storageSizeStatus", sizeGroup_);
     sizeLayout->addWidget(sizeStatus_);
+    sizeDraftStatus_ = label({}, "storageSizeDraftStatus", sizeGroup_);
+    sizeLayout->addWidget(sizeDraftStatus_);
+    const auto draftChanged = [this] {
+        if (busy_ || sizeRevision_ < 0)
+            return;
+        sizeDraftDirty_ = true;
+        sizeDraftStatus_->setText(
+            tr("Unsaved database target changes. Status above describes the saved target."));
+    };
+    connect(limit_, &QComboBox::currentIndexChanged, this, draftChanged);
+    connect(warning_, &QSpinBox::valueChanged, this, draftChanged);
     saveSize_ = new QPushButton(tr("Save database target"), sizeGroup_);
     saveSize_->setObjectName("storageSizeSave");
     saveSize_->setMinimumHeight(32);
@@ -142,6 +154,8 @@ void SettingsStoragePage::setBusy(bool busy) {
 void SettingsStoragePage::refresh() {
     revision_ = -1;
     sizeRevision_ = -1;
+    sizeDraftDirty_ = false;
+    sizeDraftStatus_->clear();
     sizeGroup_->hide();
     status_->setText(tr("Loading storage settings…"));
     request("read", {});
@@ -208,6 +222,8 @@ void SettingsStoragePage::receive(const QJsonObject& result, const QString& erro
         return;
     }
     sizeRevision_ = -1;
+    sizeDraftDirty_ = false;
+    sizeDraftStatus_->clear();
     sizeGroup_->hide();
     status_->setText(saving ? tr("Saved. Changes apply while KetPlus is idle.")
                             : tr("Settings are up to date."));
@@ -298,9 +314,20 @@ void SettingsStoragePage::receiveSize(const QJsonObject& result, const QString& 
             "The daemon did not confirm the database target. Reload to check the saved settings."));
         return;
     }
+    const bool preserveDraft = !saving && sizeDraftDirty_;
+    if (preserveDraft && result.value("revision").toInteger() != sizeRevision_) {
+        fail(tr("The database target changed in another window. Reload before saving your draft."));
+        return;
+    }
     sizeRevision_ = result.value("revision").toInteger();
-    limit_->setCurrentIndex(index);
-    warning_->setValue(warning.toInt());
+    if (!preserveDraft) {
+        const QSignalBlocker limitBlocker(limit_);
+        const QSignalBlocker warningBlocker(warning_);
+        limit_->setCurrentIndex(index);
+        warning_->setValue(warning.toInt());
+        sizeDraftDirty_ = false;
+        sizeDraftStatus_->clear();
+    }
     sizeGroup_->show();
     showUsage(result);
     const auto state = result.value("status").toObject();
