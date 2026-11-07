@@ -5,6 +5,10 @@ milestone changes state.
 
 ## Implemented
 
+- Claude/Cursor stdout enforces the 16-MiB limit per raw line before parsing,
+  including complete lines and partial suffixes after valid lines (ADR 0071).
+  Bounded reads and failure draining preserve valid frames and fresh generations.
+
 - Existing media blobs are validated before dedup returns a reference (ADR 0066):
   exact bounded bytes, regular nonsymlink files and owner-only permissions.
   Invalid entries remain intact for repair; reference durability remains open.
