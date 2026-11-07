@@ -20,5 +20,6 @@ for run in 1 2 3; do
         toolAndReasoningRetentionUsesTurnGuards:mcpToolCall-eligible \
         toolAndReasoningRetentionUsesTurnGuards:dynamicToolCall-eligible \
         toolAndReasoningRetentionUsesTurnGuards:reasoning-eligible \
-        toolAndReasoningRetentionUsesTurnGuards:fileChange-eligible
+        toolAndReasoningRetentionUsesTurnGuards:fileChange-eligible \
+        supersededStartsKeepGuardsAndIncompleteSnapshots:eligible
 done

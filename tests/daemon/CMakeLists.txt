@@ -46,6 +46,9 @@ ketplus_add_daemon_test(ketplus_daemon_transcript_window_tests DaemonTranscriptW
 ketplus_add_daemon_test(ketplus_daemon_workspace_files_tests DaemonWorkspaceFilesTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_lifecycle_tests DaemonLifecycleTest.cpp)
 if(KETPLUS_BUILD_DESKTOP)
+ketplus_add_daemon_test(ketplus_desktop_start_retention_tests DesktopStartRetentionTest.cpp)
+target_link_libraries(ketplus_desktop_start_retention_tests PRIVATE ketplus_ai)
+
     ketplus_add_daemon_test(ketplus_browser_provider_integration_tests BrowserProviderIntegrationTest.cpp)
     target_link_libraries(ketplus_browser_provider_integration_tests PRIVATE ketplus_ai)
 endif()

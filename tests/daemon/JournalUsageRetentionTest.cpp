@@ -33,12 +33,13 @@ class Database {
         qWarning() << query.lastError();
         return false;
     }
-    bool patchCompletedItems(const QJsonObject& fields) {
+    bool patchItems(const QJsonObject& fields, const QString& eventType = "item.completed") {
         QSqlQuery query(db_);
         query.prepare("UPDATE replay_events SET payload=json_patch(payload,?) WHERE "
-                      "event_type='item.completed'");
+                      "event_type=?");
         query.addBindValue(QString::fromUtf8(
             QJsonDocument(QJsonObject{{"item", fields}}).toJson(QJsonDocument::Compact)));
+        query.addBindValue(eventType);
         return query.exec();
     }
     QString queryPlan(const QString& statement) {
@@ -243,7 +244,7 @@ class JournalUsageRetentionTest final : public QObject {
             QCOMPARE(raw.size(), before.size());
             QVERIFY(journal.acknowledgeCursor("slow", "session", 1,
                                               raw.last().toObject().value("cursor").toInteger()));
-            QCOMPARE(sweep(journal), commands ? 28 : 24); // ineligible rows are revisited
+            QCOMPARE(sweep(journal), commands ? 32 : 24); // ineligible rows are revisited
         }
     }
 
@@ -370,9 +371,16 @@ class JournalUsageRetentionTest final : public QObject {
         QVERIFY(seed(journal, path, true, 24, output));
         const auto before = allReplay(journal);
         const auto window = journal.transcriptWindow("session", 1);
-        QCOMPARE(sweep(journal), 28);
+        QCOMPARE(sweep(journal), 32); // usage, four starts and four output previews
         const auto after = allReplay(journal);
-        auto expected = withoutUsage(before);
+        QJsonArray expected;
+        for (const auto& value : withoutUsage(before)) {
+            const auto event = value.toObject();
+            if (event.value("event_type") == "item.started" &&
+                event.value("turn_sequence").toInteger() <= 4)
+                continue;
+            expected.append(value);
+        }
         const auto actual = withoutUsage(after);
         QCOMPARE(actual.size(), expected.size());
         int trimmed = 0;
@@ -437,7 +445,12 @@ class JournalUsageRetentionTest final : public QObject {
                 << "ms";
         const auto first = database.scalar("SELECT count(*) FROM replay_events WHERE "
                                            "json_type(payload,'$.item.compacted')='object'");
-        QVERIFY(first > 0 && first <= 4);
+        QCOMPARE(first, 1); // one start/completion pair plus its completion consumes 690 KiB
+        QVERIFY(sweep(journal) > 0);
+        QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE "
+                                 "json_type(payload,'$.item.compacted')='object'"),
+                 9);
+        // Pair parsing shares the budget, so ten large turns need more than eight passes.
         QVERIFY(sweep(journal) > 0);
         QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE "
                                  "json_type(payload,'$.item.compacted')='object'"),
@@ -508,7 +521,7 @@ class JournalUsageRetentionTest final : public QObject {
                          QJsonObject{{"type", "text"}, {"text", QString(10000, 'x')}},
                          QJsonObject{{"type", "image"}, {"media_ref", "sha256:synthetic"}}}}});
         }
-        QVERIFY(database.patchCompletedItems(fields));
+        QVERIFY(database.patchItems(fields));
         if (guard == "running")
             QVERIFY(database.exec("UPDATE sessions SET state='running'"));
         if (guard == "recent")
@@ -531,6 +544,93 @@ class JournalUsageRetentionTest final : public QObject {
         QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE turn_sequence>4 AND "
                                  "json_type(payload,'$.item.compacted')='object'"),
                  0);
+        QCOMPARE(sweep(journal), 0);
+    }
+
+    void supersededStartsKeepGuardsAndIncompleteSnapshots_data() {
+        QTest::addColumn<QString>("guard");
+        for (const char* guard :
+             {"eligible", "failed", "empty-progress", "unacknowledged", "running", "recent",
+              "unknown-start-field", "changed-field", "marked", "oversized", "nonterminal",
+              "wrong-id", "wrong-type", "large-manifest", "question"})
+            QTest::newRow(guard) << QString(guard);
+    }
+    void supersededStartsKeepGuardsAndIncompleteSnapshots() {
+        QFETCH(QString, guard);
+        QTemporaryDir directory;
+        const auto path = directory.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(seed(journal, path, guard != "unacknowledged"));
+        Database database(path);
+        QJsonObject fields{
+            {"type", "mcpToolCall"},    {"server", "synthetic"},
+            {"tool", "lookup"},         {"arguments", QJsonObject{{"query", QString(80000, 'x')}}},
+            {"result", "small result"}, {"status", guard == "failed" ? "failed" : "completed"}};
+        if (guard == "oversized")
+            fields.insert("arguments", QJsonObject{{"query", QString(550000, 'x')}});
+        QVERIFY(database.patchItems(fields));
+        fields.insert("status", "inProgress");
+        if (guard == "empty-progress")
+            fields.insert("result", QJsonObject{});
+        QVERIFY(database.patchItems(fields, "item.started"));
+        if (guard == "running")
+            QVERIFY(database.exec("UPDATE sessions SET state='running'"));
+        if (guard == "recent")
+            QVERIFY(database.exec(
+                "UPDATE replay_events SET sent_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')"));
+        if (guard == "unknown-start-field")
+            QVERIFY(database.exec(
+                "UPDATE replay_events SET payload=json_set(payload,'$.item.unknown','keep') WHERE "
+                "event_type='item.started'"));
+        if (guard == "changed-field")
+            QVERIFY(database.exec("UPDATE replay_events SET "
+                                  "payload=json_set(payload,'$.item.arguments.query','different') "
+                                  "WHERE event_type='item.completed'"));
+        if (guard == "marked")
+            QVERIFY(database.exec(
+                "UPDATE replay_events SET payload=json_set(payload,'$.item.compacted',json('{}')) "
+                "WHERE event_type='item.completed'"));
+        if (guard == "nonterminal")
+            QVERIFY(database.exec(
+                "UPDATE replay_events SET payload=json_set(payload,'$.item.status','inProgress') "
+                "WHERE event_type='item.completed'"));
+        if (guard == "wrong-id")
+            QVERIFY(database.exec(
+                "UPDATE replay_events SET payload=json_set(payload,'$.item.id','different') WHERE "
+                "event_type='item.completed'"));
+        if (guard == "wrong-type")
+            QVERIFY(database.exec(
+                "UPDATE replay_events SET payload=json_set(payload,'$.item.type','unknown') WHERE "
+                "event_type='item.completed'"));
+        if (guard == "large-manifest")
+            QVERIFY(database.exec(
+                "UPDATE replay_events SET payload=json_set(payload,'$.large_event',json('{}')) "
+                "WHERE event_type='item.completed'"));
+        if (guard == "question")
+            QVERIFY(database.exec("UPDATE replay_events SET event_type='question.requested' WHERE "
+                                  "event_type='usage.limits'"));
+        const auto before = allReplay(journal);
+        QElapsedTimer timer;
+        timer.start();
+        QVERIFY(sweep(journal) >= 0);
+        if (guard == "eligible")
+            qInfo() << "Adjacent-start retention, 80000-byte arguments:" << timer.elapsed() << "ms";
+        const bool eligible = guard == "eligible" || guard == "failed" || guard == "empty-progress";
+        QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE "
+                                 "event_type='item.started' AND turn_sequence<=4"),
+                 eligible ? 0 : 4);
+        QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE "
+                                 "event_type='item.started' AND turn_sequence>4"),
+                 20);
+        QJsonArray expected;
+        for (const auto& value : withoutUsage(before)) {
+            const auto event = value.toObject();
+            if (eligible && event.value("event_type") == "item.started" &&
+                event.value("turn_sequence").toInteger() <= 4)
+                continue;
+            expected.append(value);
+        }
+        QCOMPARE(withoutUsage(allReplay(journal)), expected);
         QCOMPARE(sweep(journal), 0);
     }
 
