@@ -5,6 +5,12 @@ milestone changes state.
 
 ## Implemented
 
+- Global large-payload orphan GC now runs bounded transactional passes with durable
+  cursors, generation-wide pending-raw protection and exact replay-transfer lookups
+  (ADR 0048). Idle maintenance continues chunk cleanup across passes. Unsupported
+  oversized legacy blobs/chunks remain retained; other retention sweeps and complete
+  media/archive enforcement remain in the backend hardening plan.
+
 - Bounded large-tool manifests now use existing detail transformers when the
   hydrated JSON plus manifest fits the shared 1 MiB pass budget. Digest/identity
   validation and transactional replay/blob cleanup preserve corrupt, shared,

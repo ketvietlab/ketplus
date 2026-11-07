@@ -72,6 +72,11 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
   final row count. Exercise raw and retained backlogs, many candidates, repeated
   item IDs and busy readers/writers. Inspect production correlated query plans;
   retain shared references and ACK/generation fences. **Current item.**
+  - [x] Reproduce global-GC blocking in actual Qt reopen and command-result paths.
+  - [x] Implement bounded transactional global metadata/chunk GC and focused regressions.
+  - [ ] Final-head full Pro matrix, independent review, merge and cleanup for GC.
+  - [ ] Audit remaining command/tombstone/audit/cursor/task sweeps and targeted ACK cleanup.
+  - [ ] Close H1.1 only when those remaining work bounds have evidence.
 - [ ] H1.2 Verify migration/reopen safety: old schema, repeat open, partial failure,
   unknown/newer formats, one-time index creation and low-space conditions. Add
   explicit compatibility handling only after reproducing the actual gap.
@@ -180,7 +185,7 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | Item | State | Evidence / remaining work | Next action / owner |
 | --- | --- | --- | --- |
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
-| H1.1 | In progress | Global orphan-GC source path found outside bounded detail pass; synthetic probe recorded below | Reproduce in Qt/production harness, then bound work / #2739 |
+| H1.1 | In progress | Qt red regression and bounded GC implemented; focused 21/21 PASS; final gate pending, other sweeps still unchecked | Finish GC matrix/review, then audit other sweeps / #2739 |
 | H1.2–H1.7 | Not started | No claim that #128 backend acceptance is complete | Follow H1.1, prioritize a confirmed safety finding / #2739 |
 | H2–H3 | Not started | Open daemon/provider review issues mapped | Execute after storage, or independent audit while waiting review / #2739 |
 | H4.1–H4.3 | Not started | Existing remote fixes are not a full #85 closure | Audit local transport/privacy with fixtures / #2739 |
@@ -214,7 +219,27 @@ work in this synthetic query, not measured latency of the Qt production process.
 No user data was read or changed; temporary databases were removed. Raw results:
 [evidence/h1-global-orphan-scan.json](evidence/h1-global-orphan-scan.json).
 
-**Next executable task:** add a Qt regression for this global path, including
-reopen and a command-result-triggered pass, then choose a bounded/transactional
-cleanup strategy preserving raw/replay references. Re-run the affected daemon
-matrix and request #6212 review; do not reuse #212's PASS for this new change.
+### H1.1 global GC implementation
+
+The production Qt Release regression on the original source reproduced 7,172 ms
+at reopen and 7,066 ms on the 256th command result. The bounded implementation
+reduced the same fixtures to 22 ms and under 1 ms in the latest focused run;
+300,000 retained rows sharing an item ID took 12 ms in the earlier focused run.
+The 45-MiB chunk fixture completed in 45 passes, each deleting at most 1 MiB.
+Focused tests: 21/21, including ignored writes, commit failure and rollback,
+persistent cursors, generation/shared-reference fences, busy writer and WAL reader.
+These are synthetic macOS/Qt results, not Windows/live-journal/multi-GB acceptance.
+Raw measurements and mutation outcomes:
+[evidence/h1-global-gc-qt.json](evidence/h1-global-gc-qt.json).
+
+The next sweep audit confirms full scans in command/audit age pruning and global
+cap DELETEs. In a preliminary in-memory SQLite fixture, 100,000 command rows make
+the cap delete remove 90,000 rows in one statement (about 2.44 million VM steps),
+versus zero removals for 10,000 rows. This is SQL-only evidence, not Qt acceptance;
+[evidence/h1-other-retention-sweeps.json](evidence/h1-other-retention-sweeps.json)
+records plans and measurements. Reproduce the actual journal paths before fixing
+these in the next package; the GC change does not bound them.
+
+**Next executable task:** finish the final-head full Pro matrix and independent
+review of global GC, merge and clean its worktree, then audit the remaining H1.1
+retention sweeps. Do not mark the full H1.1 or H1 domain complete on this subset.

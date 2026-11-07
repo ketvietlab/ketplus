@@ -303,6 +303,8 @@ class LocalJournal final {
     static constexpr int remoteCommandRetentionDays = 90;
     static constexpr int maximumRemoteCommands = 10000;
     bool pruneRetention();
+    // Opportunistic bounded orphan maintenance; busy transactions defer without advancing.
+    bool pruneLargePayloadGarbage();
     // The latest background task snapshot of each session that reported one.
     bool storeBackgroundTasks(const QString& sessionId, qint64 generation, const QJsonArray& tasks);
     [[nodiscard]] QHash<QString, QJsonArray> backgroundTaskSnapshots() const;
@@ -370,7 +372,6 @@ class LocalJournal final {
                                           QString* error = nullptr);
     bool pruneUnreferencedLargePayloads(const QString& sessionId, qint64 generation,
                                         const QStringList& transferIds);
-    bool pruneOrphanLargePayloads();
     bool initializeActivityGroups();
     bool updateActivityGroups(const QString& sessionId, qint64 generation, qint64 cursor,
                               qint64 turnSequence, const QString& type, const QJsonObject& payload,

@@ -92,6 +92,11 @@ bool LocalJournal::initialize() {
             "singleton INTEGER PRIMARY KEY CHECK(singleton=1), "
             "revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision>0), "
             "policy TEXT NOT NULL CHECK(length(CAST(policy AS BLOB))<=4096))"),
+        QStringLiteral("CREATE TABLE IF NOT EXISTS journal_gc_state ("
+                       "singleton INTEGER PRIMARY KEY CHECK(singleton=1), "
+                       "payload_row INTEGER NOT NULL DEFAULT 0 CHECK(payload_row>=0), "
+                       "chunk_row INTEGER NOT NULL DEFAULT 0 CHECK(chunk_row>=0))"),
+        QStringLiteral("INSERT OR IGNORE INTO journal_gc_state(singleton) VALUES(1)"),
         QStringLiteral("CREATE TABLE IF NOT EXISTS sessions ("
                        "id TEXT PRIMARY KEY, worktree_path TEXT NOT NULL, adapter TEXT NOT NULL, "
                        "thread_id TEXT NOT NULL, turn_id TEXT NOT NULL, state TEXT NOT NULL, "
@@ -832,11 +837,6 @@ bool LocalJournal::pruneRetention() {
         QStringLiteral("DELETE FROM session_tombstones WHERE datetime(deleted_at) < "
                        "datetime('now', '-%1 days')")
             .arg(tombstoneRetentionDays),
-        QStringLiteral("DELETE FROM large_event_payload_chunks WHERE NOT EXISTS (SELECT 1 FROM "
-                       "large_event_payloads p WHERE p.session_id = "
-                       "large_event_payload_chunks.session_id AND p.generation = "
-                       "large_event_payload_chunks.generation AND p.transfer_id = "
-                       "large_event_payload_chunks.transfer_id)"),
         QStringLiteral("DELETE FROM client_cursors WHERE NOT EXISTS (SELECT 1 FROM sessions s "
                        "WHERE s.id = client_cursors.session_id AND s.generation = "
                        "client_cursors.generation)"),
@@ -844,7 +844,7 @@ bool LocalJournal::pruneRetention() {
                        "WHERE s.id = background_tasks.session_id AND s.generation = "
                        "background_tasks.generation)"),
     };
-    if (!pruneOrphanLargePayloads() || !pruneRemoteAudit())
+    if (!pruneLargePayloadGarbage() || !pruneRemoteAudit())
         return false;
     for (const QString& statement : statements) {
         if (!query.exec(statement)) {
@@ -903,25 +903,6 @@ bool LocalJournal::pruneUnreferencedLargePayloads(const QString& sessionId, cons
                 setError(remove.lastError().text());
                 return false;
             }
-        }
-    }
-    return true;
-}
-
-// A backstop for payloads no acknowledgement will reach: those left by earlier releases, which
-// pruned only on acknowledgements, or by a session that stopped before its manifests were sent.
-bool LocalJournal::pruneOrphanLargePayloads() {
-    QSqlQuery query(database_);
-    const QString orphans = QStringLiteral("SELECT p.session_id, p.generation, p.transfer_id FROM "
-                                           "large_event_payloads p WHERE %1")
-                                .arg(detail::largePayloadUnreferenced());
-    for (const QString& table :
-         {QStringLiteral("large_event_payload_chunks"), QStringLiteral("large_event_payloads")}) {
-        if (!query.exec(QStringLiteral("DELETE FROM %1 WHERE (session_id, generation, transfer_id) "
-                                       "IN (%2)")
-                            .arg(table, orphans))) {
-            setError(query.lastError().text());
-            return false;
         }
     }
     return true;

@@ -284,8 +284,13 @@ confirm a guessed provider item id. Each session's cloud cursor is registered wi
 journal once per sign-in, not on every upload, and an acknowledgement at or
 behind the stored cursor writes nothing. An acknowledgement checks only the
 large payloads its removed raw events name, finding replay manifests through
-the item index; the retention pass (at open, after a session delete and every
-256 command results) collects any other unreferenced payload.
+the transfer expression index. Global orphan GC runs at open, after a session delete,
+every 256 command results and on idle maintenance. Each transactional pass scans up
+to 32 metadata and 128 chunk candidates, deletes at most 1 MiB, and persists cursors
+for restart/wrap. A generation with pending raw delivery is deferred without a JSON
+backlog scan; retained replay references protect shared payloads. Unreachable chunks
+may wait for later passes. Oversized legacy blobs and malformed rows remain retained;
+see [ADR 0048](decisions/0048-bounded-global-payload-gc.md).
 
 Deleted rows return their space to the disk (#128). A new journal is created
 with `auto_vacuum = INCREMENTAL`. An older one moves to it once at daemon start,
