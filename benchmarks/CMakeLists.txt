@@ -17,7 +17,7 @@ target_link_libraries(ketplus_agent_benchmark PRIVATE
     KetPlusCM::ui
 )
 ketplus_enable_warnings(ketplus_agent_benchmark)
-ketplus_cm_add_font_resources(ketplus_agent_benchmark)
+
 
 qt_add_executable(ketplus_daemon_restore_benchmark DaemonRestoreBenchmark.cpp)
 target_link_libraries(ketplus_daemon_restore_benchmark PRIVATE
@@ -45,7 +45,7 @@ target_link_libraries(ketplus_conversation_return_benchmark PRIVATE
     KetPlusCM::ui
 )
 ketplus_enable_warnings(ketplus_conversation_return_benchmark)
-ketplus_cm_add_font_resources(ketplus_conversation_return_benchmark)
+
 
 # Needs a private daemon journal to replay, so it is never part of a default
 # build: enable it explicitly when measuring transcript scroll behaviour.
@@ -72,5 +72,5 @@ if(KETPLUS_BUILD_TRANSCRIPT_SCROLL_BENCH)
     )
     target_link_libraries(ketplus_synthetic_transcript_journal PRIVATE ketplus_daemon_core)
     ketplus_enable_warnings(ketplus_synthetic_transcript_journal)
-    ketplus_cm_add_font_resources(ketplus_transcript_scroll_benchmark)
+
 endif()

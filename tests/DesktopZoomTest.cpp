@@ -172,8 +172,8 @@ class DesktopZoomTest final : public QObject {
     }
 
     void tooltipsKeepTheKitSizeAtEveryInterfaceSize() {
-        // InterfaceUiFont rewrites and scales the stylesheet; the tooltip rule keeps the
-        // kit's recipe size at Medium and Large and after a theme change.
+        // ThemeManager scales compatibility QSS once; the font overlay preserves the
+        // kit's tooltip recipe at each numeric size and after a theme change.
         ThemeManager theme(*qApp);
         installFontOverlay(theme);
         QWidget anchor;

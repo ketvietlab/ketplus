@@ -27,13 +27,6 @@ set(KETPLUS_SYNTAX_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(KETPLUS_SYNTAX_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
 
 FetchContent_Declare(
-    inter_font
-    URL https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip
-    URL_HASH SHA256=9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e
-    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-)
-
-FetchContent_Declare(
     libvterm
     GIT_REPOSITORY https://github.com/neovim/libvterm.git
     GIT_TAG 9d6d2112335080312ef8c36667fa717ded4f7daf
@@ -57,7 +50,7 @@ if(NOT DEFINED KETQT_BUILD_QUICK)
     set(KETQT_BUILD_QUICK OFF CACHE BOOL "Build the Ket QML module (KetQt::Quick)")
 endif()
 
-FetchContent_MakeAvailable(scintilla ketplus_syntax inter_font libvterm ketqt)
+FetchContent_MakeAvailable(scintilla ketplus_syntax libvterm ketqt)
 
 add_library(ketplus_vterm STATIC
     "${libvterm_SOURCE_DIR}/src/encoding.c"

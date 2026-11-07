@@ -731,7 +731,7 @@ Basic.Popup {
                 horizontalPadding: Metrics.px(15, tokens)
                 contentItem: Text {
                     text: applyButton.text
-                    color: "#ffffff"
+                    color: Kit.KetTheme.t.actionPrimaryInk
                     font.family: picker.tokens.uiFont
                     font.pixelSize: picker.tokens.body
                     horizontalAlignment: Text.AlignHCenter

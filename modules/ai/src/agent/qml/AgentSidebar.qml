@@ -13,7 +13,7 @@ Rectangle {
     SplitView.preferredWidth: 216
     SplitView.minimumWidth: 188
     SplitView.maximumWidth: Math.max(188, workspace.width - 326)
-    color: workspace.t.sidebarBackground || "#171b20"
+    color: workspace.t.sidebarBackground
 
     ColumnLayout {
         anchors.fill: parent

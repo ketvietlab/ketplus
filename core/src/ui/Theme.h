@@ -94,7 +94,7 @@ class ThemeManager final : public QObject {
 
   private:
     void syncAppearance();
-    void apply();
+    void apply(bool notify = true);
     [[nodiscard]] Mode effectiveMode() const noexcept;
     void loadInterfaceFont();
     void setApplicationFont(const QFont& font);
@@ -103,7 +103,6 @@ class ThemeManager final : public QObject {
     QApplication& application_;
     Mode mode_{Mode::System};
     std::optional<Mode> previewMode_;
-    bool syncingAppearance_{false};
     ThemePalette palette_;
     QString uiFontFamily_;
     int interfaceFontSizePixels_{14};

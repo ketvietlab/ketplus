@@ -9,7 +9,6 @@ are stored in `third_party/licenses` and must accompany binary distributions.
 | Scintilla | `rel-5-5-2` | `third_party/licenses/Scintilla.txt` |
 | Lexilla | `rel-5-5-2` | `third_party/licenses/Lexilla.txt` |
 | libvterm | `v0.3.3` | `third_party/licenses/libvterm-MIT.txt` |
-| Inter | 4.1 | `third_party/licenses/Inter-OFL-1.1.txt` |
 | KÉT Sans | 1.1.0 | `third_party/licenses/KET-Sans-OFL-1.1.txt` |
 | KÉT Sans Mono | 0.10.4 Medium | `third_party/licenses/KET-Sans-Mono-OFL-1.1.txt` |
 | KetQt | `d47638214f80695524cd2724996674da7afdbb6a` — https://github.com/ketvietlab/ket-qt | `third_party/licenses/KetQt-MPL-2.0.txt` |

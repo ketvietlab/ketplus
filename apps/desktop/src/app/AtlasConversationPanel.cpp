@@ -80,7 +80,7 @@ void AtlasConversationPanel::applyPalette(const QPalette& colors) {
                                : InterfaceZoomMetrics::mediumPixels;
     setStyleSheet(TypeScale::apply(QStringLiteral(R"QSS(
 QWidget#conversationAtlasPanel, QWidget#conversationAtlasScroll { background:%1; color:%3; }
-QLabel#conversationAtlasTitle { font-weight:600; font-size:18px; }
+QLabel#conversationAtlasTitle { font-weight:600; font-size:{{px:18}}px; }
 QLabel#conversationAtlasCount, QLabel[atlasMeta="true"] { color:%4; }
 QWidget[atlasRow="true"] { background:%2; border:1px solid %5; border-radius:7px; }
 

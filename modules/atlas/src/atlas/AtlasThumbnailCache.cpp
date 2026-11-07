@@ -1,4 +1,5 @@
 #include "atlas/AtlasThumbnailCache.h"
+#include "KetTokens.h"
 
 #include <QCryptographicHash>
 #include <QFileInfo>
@@ -80,29 +81,33 @@ QImage AtlasThumbnailCache::render(const AtlasDescriptor& atlas) {
         QCryptographicHash::hash(atlas.path.toUtf8(), QCryptographicHash::Sha256);
     const int hue = uchar(digest.at(0)) * 360 / 255;
     const QColor accent = QColor::fromHsl(hue, 120, 128);
+    // A cached placeholder illustration uses the stable light token palette.
+    const auto color = [](QStringView token) {
+        return ket::Tokens::color(token, ket::Theme::Light);
+    };
     QImage image(width, height, QImage::Format_ARGB32_Premultiplied);
-    image.fill(QColor(246, 247, 249));
+    image.fill(color(u"page-bg"));
     QPainter painter(&image);
     painter.setRenderHint(QPainter::Antialiasing);
-    painter.fillRect(QRect(0, 0, width, 26), QColor(229, 232, 237));
+    painter.fillRect(QRect(0, 0, width, 26), color(u"surface-raised"));
     for (int x = 12; x < 42; x += 10) {
-        painter.setBrush(QColor(145, 151, 161));
+        painter.setBrush(color(u"text-muted"));
         painter.setPen(Qt::NoPen);
         painter.drawEllipse(QPointF(x, 13), 2.5, 2.5);
     }
-    painter.fillRect(QRect(0, 26, 54, height - 26), QColor(236, 239, 243));
+    painter.fillRect(QRect(0, 26, 54, height - 26), color(u"sidebar-bg"));
     painter.fillRect(QRect(12, 46, 30, 5), accent);
-    painter.setBrush(QColor(255, 255, 255));
-    painter.setPen(QPen(QColor(214, 219, 226), 1));
+    painter.setBrush(color(u"panel-bg"));
+    painter.setPen(QPen(color(u"panel-border"), 1));
     painter.drawRoundedRect(QRectF(78, 50, 144, 76), 7, 7);
     painter.drawRoundedRect(QRectF(244, 50, 164, 76), 7, 7);
     painter.drawRoundedRect(QRectF(78, 145, 330, 62), 7, 7);
     painter.fillRect(QRect(92, 65, 74, 8), accent.lighter(135));
-    painter.fillRect(QRect(92, 82, 102, 5), QColor(205, 210, 218));
+    painter.fillRect(QRect(92, 82, 102, 5), color(u"border-strong"));
     painter.fillRect(QRect(258, 65, 112, 8), accent);
-    painter.fillRect(QRect(258, 82, 126, 5), QColor(205, 210, 218));
-    painter.fillRect(QRect(92, 160, 190, 7), QColor(164, 171, 181));
-    painter.fillRect(QRect(92, 178, 270, 5), QColor(214, 219, 226));
+    painter.fillRect(QRect(258, 82, 126, 5), color(u"border-strong"));
+    painter.fillRect(QRect(92, 160, 190, 7), color(u"text-muted"));
+    painter.fillRect(QRect(92, 178, 270, 5), color(u"panel-border"));
     return image;
 }
 

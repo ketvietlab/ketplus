@@ -1,4 +1,5 @@
 #include "remote/RemoteControlView.h"
+#include "KetAppearance.h"
 #include "KetButton.h"
 #include "KetIcons.h"
 #include "KetProfile.h"
@@ -49,7 +50,6 @@ constexpr auto monitorIcon = "monitor";
 constexpr auto phoneIcon = "smartphone";
 constexpr auto shieldIcon = "shield";
 constexpr auto unplugIcon = "unplug";
-constexpr auto closeIcon = "x";
 constexpr auto logInIcon = "log-in";
 constexpr auto plusIcon = "plus";
 constexpr auto logOutIcon = "log-out";
@@ -145,8 +145,11 @@ DialogChoice runDecisionDialog(QWidget* parent, const QString& objectName, const
     confirm->setObjectName(objectName + QStringLiteral("Confirm"));
     confirm->setProperty(danger ? "remoteDanger" : "remotePrimary", true);
     if (!confirmIcon.isEmpty()) {
-        confirm->setIcon(
-            symbolIcon(confirmIcon, danger ? QColor(QStringLiteral("#B42318")) : Qt::white, 14));
+        confirm->setIcon(symbolIcon(
+            confirmIcon,
+            danger ? ket::Tokens::color(u"danger", ket::Appearance::instance().theme())
+                   : ket::Tokens::color(u"action-primary-ink", ket::Appearance::instance().theme()),
+            14));
         chrome_geometry::iconSize(confirm, QSize(14, 14));
     }
     QObject::connect(confirm, &QAbstractButton::clicked, &dialog, &QDialog::accept);
@@ -211,17 +214,17 @@ QFrame[remoteRole="contextBar"] { min-height:34px; max-height:34px; border:0; bo
 QLabel[remoteRole="context"] { color:@muted@; font-size:{{caption}}px; font-weight:600; }
 QFrame[remoteRole="pageHeader"] { border:0; background:@page@; }
 QLabel[remoteRole="title"] { color:@text@; font-size:{{heading}}px; font-weight:600; }
-QLabel[remoteRole="connectionsTitle"] { color:@text@; font-size:30px; font-weight:600; }
+QLabel[remoteRole="connectionsTitle"] { color:@text@; font-size:{{px:30}}px; font-weight:600; }
 QLabel[remoteRole="eyebrow"] { color:@accentText@; font-size:{{micro}}px; font-weight:600; letter-spacing:1px; }
-QLabel[remoteRole="heroTitle"] { color:@text@; font-size:40px; font-weight:600; }
-QLabel[remoteRole="heroCopy"] { color:@muted@; font-size:14px; }
+QLabel[remoteRole="heroTitle"] { color:@text@; font-size:{{px:40}}px; font-weight:600; }
+QLabel[remoteRole="heroCopy"] { color:@muted@; font-size:{{px:14}}px; }
 QLabel[remoteRole="description"] { color:@muted@; font-size:{{body}}px; }
 QLabel[remoteRole="surfaceTitle"] { color:@text@; font-size:{{title}}px; font-weight:600; }
 QLabel[remoteRole="dialogTitle"] { color:@text@; font-size:{{heading}}px; font-weight:600; }
 QLabel[remoteRole="pairTitle"] { color:@text@; font-size:{{title}}px; font-weight:600; }
 QLabel[remoteRole="welcomeTitle"] { color:@text@; font-size:{{display}}px; font-weight:620; }
 QLabel[remoteRole="welcomeText"] { color:@text@; font-size:{{reading}}px; }
-QLabel[remoteRole="introTitle"] { color:@text@; font-size:22px; font-weight:500; }
+QLabel[remoteRole="introTitle"] { color:@text@; font-size:{{px:22}}px; font-weight:500; }
 QLabel[remoteRole="introState"] { color:@muted@; font-size:{{body}}px; }
 QLabel[remoteRole="introNote"] { color:@secondary@; font-size:{{body}}px; }
 QLabel[remoteRole="introIcon"] { color:@muted@; }
@@ -519,7 +522,8 @@ QWidget* RemoteControlView::createControlPage() {
     signOutButton_ = new ket::Button(QStringLiteral("Sign out"), ket::ButtonVariant::Ghost);
     signOutButton_->setObjectName(QStringLiteral("remoteSignOutButton"));
     signOutButton_->setProperty("remoteTertiary", true);
-    signOutButton_->setIcon(symbolIcon(logOutIcon, QColor(QStringLiteral("#717373")), 14));
+    signOutButton_->setIcon(symbolIcon(
+        logOutIcon, ket::Tokens::color(u"text-muted", ket::Appearance::instance().theme()), 14));
     chrome_geometry::iconSize(signOutButton_, QSize(14, 14));
     signOutButton_->hide();
     connect(signOutButton_, &QAbstractButton::clicked, this, &RemoteControlView::signOut);
@@ -653,7 +657,8 @@ QWidget* RemoteControlView::createControlPage() {
         new ket::Button(QStringLiteral("About your history"), ket::ButtonVariant::Ghost, history);
     historyButton->setObjectName(QStringLiteral("remoteHistoryButton"));
     historyButton->setProperty("remoteTertiary", true);
-    historyButton->setIcon(symbolIcon(shieldIcon, QColor(QStringLiteral("#717373")), 14));
+    historyButton->setIcon(symbolIcon(
+        shieldIcon, ket::Tokens::color(u"text-muted", ket::Appearance::instance().theme()), 14));
     chrome_geometry::iconSize(historyButton, QSize(14, 14));
     historyButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     historyLayout->addWidget(historyButton, 0, Qt::AlignLeft);
@@ -1111,7 +1116,8 @@ void RemoteControlView::renderDevices(const QJsonArray& devices) {
         auto* revoke =
             new ket::Button(QStringLiteral("Revoke access"), ket::ButtonVariant::GhostDanger);
         revoke->setProperty("remoteDanger", true);
-        revoke->setIcon(symbolIcon(unplugIcon, QColor(QStringLiteral("#B42318")), 14));
+        revoke->setIcon(symbolIcon(
+            unplugIcon, ket::Tokens::color(u"danger", ket::Appearance::instance().theme()), 14));
         chrome_geometry::iconSize(revoke, QSize(14, 14));
         revoke->setEnabled(!deviceId.isEmpty());
         connect(revoke, &QAbstractButton::clicked, this,

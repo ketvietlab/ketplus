@@ -1,3 +1,4 @@
+import Ket as Kit
 import "ChromeMetrics.js" as Metrics
 import QtQuick
 import Ket 1.0 as Kit
@@ -265,7 +266,7 @@ Column {
                 wrapMode: root.commandExpanded ? TextEdit.WrapAnywhere : TextEdit.NoWrap
                 color: root.tokens.textSecondary
                 selectionColor: root.tokens.accent
-                selectedTextColor: "#ffffff"
+                selectedTextColor: Kit.KetTheme.t.actionPrimaryInk
                 font.family: root.tokens.monoFont
                 font.pixelSize: root.tokens.body
                 Keys.onShortcutOverride: event => event.accepted = (event.matches(StandardKey.Copy) && selectedText.length > 0) || event.matches(StandardKey.SelectAll)
@@ -330,7 +331,7 @@ Column {
             wrapMode: TextEdit.WrapAnywhere
             color: root.tokens.textMuted
             selectionColor: root.tokens.accent
-            selectedTextColor: "#ffffff"
+            selectedTextColor: Kit.KetTheme.t.actionPrimaryInk
             font.family: root.subtype === "command" || root.subtype === "generic" ? root.tokens.monoFont : root.tokens.uiFont
             font.pixelSize: root.tokens.body
         }
@@ -374,7 +375,7 @@ Column {
                     wrapMode: TextEdit.WrapAnywhere
                     color: root.tokens.textMuted
                     selectionColor: root.tokens.accent
-                    selectedTextColor: "#ffffff"
+                    selectedTextColor: Kit.KetTheme.t.actionPrimaryInk
                     font.family: root.tokens.monoFont
                     font.pixelSize: root.tokens.body
                 }

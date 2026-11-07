@@ -1,6 +1,7 @@
 #include "workspace/ActivityBar.h"
 #include "ui/ChromeGeometry.h"
 #include "ui/SymbolIcon.h"
+#include <QApplication>
 
 #include "KetBanner.h"
 #include "KetButton.h"
@@ -73,7 +74,7 @@ class SidebarResizeHandle final : public QWidget {
 
 // Icons render at the size they are shown so the stroke keeps its on-screen width.
 QIcon symbolIcon(const QByteArray& body, const QSize& size,
-                 const QColor& color = QColor(QStringLiteral("#6b7280"))) {
+                 const QColor& color = QApplication::palette().color(QPalette::PlaceholderText)) {
     return QIcon(symbol_icon::pixmap(body, color, size));
 }
 
