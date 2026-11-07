@@ -347,6 +347,7 @@ class AgentWorkspaceView final : public QWidget {
     Q_INVOKABLE void openRelativeFile(const QString& path);
     Q_INVOKABLE void requestTerminal();
     Q_INVOKABLE void requestSettings() { emit settingsRequested(); }
+    Q_INVOKABLE void requestTagFilter(const QString& tag) { emit tagFilterRequested(tag); }
     Q_INVOKABLE void requestProductNavigation(const QString& destination) {
         if (!destination.isEmpty())
             emit productNavigationRequested(destination);
@@ -432,6 +433,7 @@ class AgentWorkspaceView final : public QWidget {
     }
 
   signals:
+    void tagFilterRequested(const QString& tag);
     void activityGroupRequested(const QString& scope, const QString& key, bool expanded);
     void historyStateChanged();
     void findActionsProvidedChanged();

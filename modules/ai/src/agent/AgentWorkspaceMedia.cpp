@@ -1,3 +1,4 @@
+#include "KetProfile.h"
 #include "agent/AgentMessageFormatter.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/ChatMarkdown.h"
@@ -538,7 +539,7 @@ void AgentWorkspaceView::formatComposerDocument(QObject* document, qreal fontPix
     if (!quick || !quick->textDocument() || fontPixelSize <= 0)
         return;
     auto* doc = quick->textDocument();
-    const qreal height = fontPixelSize * messageLineHeightFactor;
+    const qreal height = qFloor(fontPixelSize * ket::Profile::current().composerLineHeight);
     QTextCursor edit(doc);
     bool editing = false;
     for (auto block = doc->begin(); block.isValid(); block = block.next()) {

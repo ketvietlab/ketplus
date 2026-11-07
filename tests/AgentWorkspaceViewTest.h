@@ -129,6 +129,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void pastesImagesAndOpensIndividualFiles();
     void composerPreview();
     void composerFormattingSettles();
+    void composerPlaceholderTracksCaret();
     void worktreeHeaderKeepsLabelVisible();
     void tooltipsFollowDesignSystem();
     void contextMenuFollowsDesignSystem();

@@ -402,6 +402,12 @@ void ActivityBar::setSourceControlCount(const int count) {
     sourceControlButton_->setCount(count > 0 ? std::optional<int>(count) : std::nullopt);
 }
 
+void ActivityBar::setTagFilter(const QString& tag) {
+    const int index = tagFilter_->findData(tag);
+    if (index >= 0)
+        tagFilter_->setCurrentIndex(index);
+}
+
 void ActivityBar::setRepositories(const QVector<SidebarRepository>& repositories) {
     repositoryList_->setRepositories(repositories);
     QStringList labels;
