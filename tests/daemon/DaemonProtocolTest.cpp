@@ -20,9 +20,11 @@
 #include <QProcess>
 #include <QScopeGuard>
 #include <QSignalSpy>
-#include <QStandardPaths>
 #include <QSqlDatabase>
+#include <QSqlError>
 #include <QSqlQuery>
+#include <QSqlRecord>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QUuid>
 #include <QtTest>
@@ -1114,6 +1116,158 @@ class DaemonProtocolTest final : public QObject {
         QCOMPARE(addWorktree(repository, "bad name", "develop").errorCode,
                  QStringLiteral("invalid_branch_name"));
         QVERIFY(!QFileInfo::exists(root.filePath(QStringLiteral("app-fresh"))));
+    }
+
+    void appendRequiresEveryDurableWrite_data() {
+        QTest::addColumn<QString>("fault");
+        QTest::addColumn<bool>("large");
+        for (bool large : {false, true})
+            for (const auto& fault :
+                 {QString("raw"), QString("replay"), QString("state-insert"),
+                  QString("state-update"), QString("session"), QString("commit"),
+                  QString("revision"), QString("activity-head-insert"),
+                  QString("activity-head-update"), QString("activity-item-insert"),
+                  QString("activity-item-update"), QString("activity-summary-insert"),
+                  QString("activity-summary-update")})
+                QTest::newRow(qPrintable((large ? "large-" : "small-") + fault)) << fault << large;
+        QTest::newRow("large-manifest") << "manifest" << true;
+        QTest::newRow("large-fragment") << "fragment" << true;
+        QTest::newRow("large-fragment-late") << "fragment-late" << true;
+        QTest::newRow("large-raw-late") << "raw-late" << true;
+        QTest::newRow("large-state-chunk") << "state-chunk" << true;
+    }
+    void appendRequiresEveryDurableWrite() {
+        QFETCH(QString, fault);
+        QFETCH(bool, large);
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(journal.upsertSession({"s", dir.path(), "codex", {}, {}, "ready", 1, 0, 0, {}}));
+        QCOMPARE(journal.appendEvent("s", 1, "user.message", {{"text", "before"}}), 1);
+        if (fault == "revision")
+            QVERIFY(journal.appendEvent("s", 1, "assistant.delta",
+                                        {{"item_id", "probe"}, {"delta", "old"}}) > 1);
+        if (fault.startsWith("activity-"))
+            QVERIFY(journal.appendEvent("s", 1, "item.started",
+                                        {{"item_id", "probe"},
+                                         {"item_type", "mcpToolCall"},
+                                         {"item", QJsonObject{{"id", "probe"},
+                                                              {"type", "mcpToolCall"},
+                                                              {"tool", "read_file"}}}}) > 1);
+        const auto rawBefore = journal.eventsAfter("s", 1, 0);
+        const auto replayBefore = journal.compactedEventsAfter("s", 1, 0, 500).events;
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == path)
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        const auto snapshot = [&] {
+            QVariantMap result;
+            for (const auto& table : {"events", "replay_events", "replay_projection_state",
+                                      "large_event_payloads", "large_event_payload_chunks",
+                                      "activity_heads", "activity_items", "activity_summaries"}) {
+                QSqlQuery q(db);
+                if (!q.exec(QString("SELECT count(*) FROM %1").arg(table)) || !q.next()) {
+                    QTest::qFail(qPrintable(q.lastError().text()), __FILE__, __LINE__);
+                    return QVariantMap{};
+                }
+                result.insert(table, q.value(0));
+            }
+            for (const auto& table : {"replay_projection_state", "activity_heads", "activity_items",
+                                      "activity_summaries"}) {
+                QSqlQuery rows(db);
+                if (!rows.exec(QString("SELECT * FROM %1 ORDER BY 1,2,3").arg(table))) {
+                    QTest::qFail(qPrintable(rows.lastError().text()), __FILE__, __LINE__);
+                    return QVariantMap{};
+                }
+                QVariantList values;
+                while (rows.next())
+                    for (int i = 0; i < rows.record().count(); ++i)
+                        values.append(rows.value(i));
+                result.insert(QString(table) + "-values", values);
+            }
+            QSqlQuery q(db);
+            if (!q.exec("SELECT last_cursor,current_turn_sequence FROM sessions WHERE id='s'") ||
+                !q.next()) {
+                QTest::qFail(qPrintable(q.lastError().text()), __FILE__, __LINE__);
+                return QVariantMap{};
+            }
+            result.insert("cursor", q.value(0));
+            result.insert("turn", q.value(1));
+            return result;
+        };
+        const auto before = snapshot();
+        QSqlQuery q(db);
+        if (fault == "commit") {
+            QVERIFY(q.exec("CREATE TABLE append_parent(id INTEGER PRIMARY KEY)"));
+            QVERIFY(q.exec("CREATE TABLE append_child(id INTEGER REFERENCES append_parent(id) "
+                           "DEFERRABLE INITIALLY DEFERRED)"));
+            QVERIFY(q.exec("CREATE TRIGGER fail_append AFTER UPDATE ON sessions "
+                           "WHEN NEW.last_cursor>OLD.last_cursor BEGIN INSERT INTO append_child "
+                           "VALUES(1); END"));
+        } else {
+            QString action = "INSERT";
+            QString condition;
+            QString table = fault.startsWith("raw")        ? "events"
+                            : fault == "replay"            ? "replay_events"
+                            : fault == "session"           ? "sessions"
+                            : fault == "manifest"          ? "large_event_payloads"
+                            : fault.startsWith("fragment") ? "large_event_payload_chunks"
+                                                           : "replay_projection_state";
+            if (fault.startsWith("activity-head"))
+                table = "activity_heads";
+            if (fault.startsWith("activity-item"))
+                table = "activity_items";
+            if (fault.startsWith("activity-summary"))
+                table = "activity_summaries";
+            if (fault == "session" || fault.endsWith("update") || fault == "revision")
+                action = "UPDATE";
+            if (fault == "revision")
+                condition = "WHEN NEW.revision > OLD.revision";
+            if (fault == "fragment-late")
+                condition = "WHEN NEW.chunk_offset > 0";
+            if (fault == "raw-late")
+                condition = "WHEN NEW.cursor > 2";
+            if (fault == "state-chunk")
+                condition = "WHEN NEW.last_cursor = 3";
+            QVERIFY(q.exec(QString("CREATE TRIGGER fail_append BEFORE %1 ON %2 %3 "
+                                   "BEGIN SELECT RAISE(IGNORE); END")
+                               .arg(action, table, condition)));
+        }
+        const bool item = large || fault == "revision" || fault.startsWith("activity-");
+        const QString type = item ? "item.completed" : "assistant.delta";
+        const QString itemType = fault.startsWith("activity-") ? "mcpToolCall" : "agentMessage";
+        const QJsonObject payload =
+            item ? QJsonObject{{"item_id", "probe"},
+                               {"item_type", itemType},
+                               {"item",
+                                QJsonObject{
+                                    {"id", "probe"},
+                                    {"type", itemType},
+                                    {"tool", "read_file"},
+                                    {"text",
+                                     QString(large ? 2 * protocol::maximumEventPayloadBytes : 32,
+                                             'x')}}}}
+                 : QJsonObject{{"item_id", "probe"}, {"delta", "after"}};
+        QString error;
+        QCOMPARE(journal.appendEvent("s", 1, type, payload, &error), -1);
+        QVERIFY(!error.isEmpty());
+        QVERIFY2(q.exec("BEGIN"), qPrintable(q.lastError().text()));
+        QVERIFY(q.exec("ROLLBACK"));
+        QCOMPARE(snapshot(), before);
+        QCOMPARE(journal.eventsAfter("s", 1, 0), rawBefore);
+        QCOMPARE(journal.compactedEventsAfter("s", 1, 0, 500).events, replayBefore);
+        QVERIFY(q.exec("DROP TRIGGER fail_append"));
+        const auto accepted = journal.appendEvent("s", 1, type, payload, &error);
+        QVERIFY2(accepted > 1, qPrintable(error));
+        QCOMPARE(journal.sessionHead("s").cursor, accepted);
+        LocalJournal reopened(path);
+        QVERIFY(reopened.isOpen());
+        QCOMPARE(reopened.sessionHead("s").cursor, accepted);
+        QCOMPARE(reopened.eventsAfter("s", 1, 0), journal.eventsAfter("s", 1, 0));
+        QCOMPARE(reopened.compactedEventsAfter("s", 1, 0, 500).events,
+                 journal.compactedEventsAfter("s", 1, 0, 500).events);
     }
 
     void journalRejectsOversizedPayloadBeforePersistence() {

@@ -337,7 +337,9 @@ Cursor adapters, normalized session events, approval arbitration, and a SQLite W
 journal. Its user-restricted `QLocalSocket` protocol is defined by ADR 0002 and
 tested with client disconnect/reconnect. `modules/remote` implements the Desktop
 client, daemon discovery/startup, reconnect, idempotent request retry, and replay
-pagination. Desktop's existing presentation model is retained behind a protocol
+pagination. Journal append commits mandatory delivery/replay/activity/blob writes
+and the session cursor as one unit; ignored single-row writes fail the transaction
+(ADR 0058). Desktop's existing presentation model is retained behind a protocol
 translation facade; raw Codex JSON-RPC is not exposed over IPC.
 
 Remote session creation is a worktree-scoped command and does not require an

@@ -505,3 +505,10 @@ expression index with 300,000 retained same-item updates. It verifies index
 creation, correlated production-predicate query-plan selection with bound parameters,
 25 exact GC lookups and retained-row preservation;
 timings separate startup index construction from the idle pass.
+
+The ADR 0058 `DaemonProtocolTest::appendRequiresEveryDurableWrite` fixture injects
+ignored mandatory row writes and deferred-constraint commit failures for ordinary
+and chunked appends. It verifies unchanged delivery/replay/projection state,
+transaction release, repair/retry and reopen. Run the protocol target plus affected
+activity, retention, compaction, lifecycle, worktree/fork and cloud privacy targets.
+It does not exercise a live journal or spend provider quota.

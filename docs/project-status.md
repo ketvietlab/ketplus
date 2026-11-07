@@ -5,6 +5,11 @@ milestone changes state.
 
 ## Implemented
 
+- Journal append requires each mandatory delivery/replay/activity/blob row and
+  session cursor to be stored before reporting success (ADR 0058). Ignored writes
+  roll back partial changes; commit diagnostics survive rollback. Multirow
+  projection cleanup and counter bounds remain separate hardening work.
+
 - Provider cleanup also validates the ownership JSON shape before deciding a
   thread is unreferenced (ADR 0057). Malformed/newer metadata keeps local deletion
   and queued cleanup pending without rewriting the unsupported value.
