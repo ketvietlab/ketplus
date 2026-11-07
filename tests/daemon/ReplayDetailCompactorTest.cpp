@@ -26,6 +26,124 @@ QJsonObject tool(const QString& type = "mcpToolCall") {
 class ReplayDetailCompactorTest final : public QObject {
     Q_OBJECT
   private slots:
+    void structuredResultsAreExplicitSanitizedAndIdempotent_data() {
+        QTest::addColumn<QString>("policy");
+        for (const char* policy : {"", "tool-result-text-v1", "tool-arguments-v1"})
+            QTest::newRow(*policy ? policy : "fresh") << QString(policy);
+    }
+    void structuredResultsAreExplicitSanitizedAndIdempotent() {
+        QFETCH(QString, policy);
+        auto original = tool();
+        original.insert("status", "completed");
+        original.remove("error");
+        const QJsonObject structured{{"access_token", "synthetic-secret"},
+                                     {"rows", QJsonArray{QString(6000, QChar(0x754c))}}};
+        original.insert("result",
+                        QJsonObject{{"structuredContent", structured},
+                                    {"content", QJsonArray{QJsonObject{{"type", "image"},
+                                                                       {"data", "keep-image"}}}},
+                                    {"isError", false},
+                                    {"extension", "keep"}});
+        if (!policy.isEmpty())
+            original.insert("compacted", QJsonObject{{"policy", policy}, {"original_bytes", 123}});
+        const auto changed = compactCompletedReplayItem(original, cutoff());
+        QVERIFY(changed);
+        auto result = changed->value("result").toObject();
+        QVERIFY(!result.contains("structuredContent"));
+        const auto excerpt = result.take("structuredContent_excerpt").toString();
+        QVERIFY(excerpt.startsWith("[Structured result trimmed"));
+        QVERIFY(!excerpt.contains("synthetic-secret"));
+        QVERIFY(!excerpt.contains(QChar::ReplacementCharacter));
+        const auto retained = excerpt.mid(excerpt.indexOf('\n') + 1).toUtf8();
+        QVERIFY(retained.size() <= 4096);
+        auto expected = original.value("result").toObject();
+        expected.remove("structuredContent");
+        QCOMPARE(result, expected);
+        auto unchanged = *changed;
+        unchanged.remove("result");
+        const auto info = unchanged.take("compacted").toObject();
+        auto originalRest = original;
+        originalRest.remove("result");
+        originalRest.remove("compacted");
+        QCOMPARE(unchanged, originalRest);
+        const auto details = info.value("structured_result").toObject();
+        QCOMPARE(details.value("retained_bytes").toInteger(), retained.size());
+        QCOMPARE(details.value("original_bytes").toInteger(),
+                 QJsonDocument(structured).toJson(QJsonDocument::Compact).size());
+        QVERIFY(details.value("redacted_before_excerpt").toBool());
+        QVERIFY(details.value("excerpt_only").toBool());
+        if (!policy.isEmpty()) {
+            QCOMPARE(info.value("policy"), QJsonValue(policy));
+            QCOMPARE(info.value("original_bytes"), QJsonValue(123));
+        }
+        QVERIFY(!compactCompletedReplayItem(*changed, cutoff()));
+    }
+    void structuredArraysShareTheTextBudget() {
+        auto original = tool("dynamicToolCall");
+        original.insert("status", "completed");
+        original.remove("error");
+        original.insert(
+            "result",
+            QJsonObject{{"structuredContent", QJsonArray{QString(6000, 'x')}},
+                        {"content",
+                         QJsonArray{QJsonObject{{"type", "text"}, {"text", QString(3000, 't')}}}}});
+        const auto changed = compactCompletedReplayItem(original, cutoff());
+        QVERIFY(changed);
+        const auto result = changed->value("result").toObject();
+        QCOMPARE(result.value("content"), original.value("result").toObject().value("content"));
+        QCOMPARE(changed->value("compacted")
+                     .toObject()
+                     .value("structured_result")
+                     .toObject()
+                     .value("retained_bytes")
+                     .toInteger(),
+                 1096);
+        QVERIFY(!compactCompletedReplayItem(*changed, cutoff()));
+    }
+    void structuredResultsKeepErrorsResourcesAndUnknownMarkers_data() {
+        QTest::addColumn<QString>("guard");
+        for (const char* guard :
+             {"small", "failed", "running", "error", "unknown", "excerpt", "media", "resource",
+              "uri", "inline", "deep", "malformed-error", "item-error"})
+            QTest::newRow(guard) << QString(guard);
+    }
+    void structuredResultsKeepErrorsResourcesAndUnknownMarkers() {
+        QFETCH(QString, guard);
+        auto original = tool();
+        original.insert("status", "completed");
+        original.remove("error");
+        QJsonObject structured{{"rows", QString(6000, 'x')}};
+        if (guard == "small")
+            structured.insert("rows", "small");
+        if (guard == "media")
+            structured.insert("nested", QJsonObject{{"type", "image"}});
+        if (guard == "resource")
+            structured.insert("resource", "keep");
+        if (guard == "uri")
+            structured.insert("uri", "asset:keep");
+        if (guard == "inline")
+            structured.insert("value", "data:image/png;base64,keep");
+        if (guard == "deep")
+            for (int n = 0; n < 66; ++n)
+                structured = {{"nested", structured}};
+        QJsonObject result{{"structuredContent", structured}};
+        if (guard == "excerpt")
+            result.insert("structuredContent_excerpt", "existing");
+        if (guard == "error")
+            result.insert("isError", true);
+        if (guard == "item-error")
+            original.insert("error", QJsonObject{{"message", "keep details"}});
+        if (guard == "malformed-error")
+            result.insert("isError", "false");
+        if (guard == "failed")
+            original.insert("status", "failed");
+        if (guard == "running")
+            original.insert("status", "inProgress");
+        if (guard == "unknown")
+            original.insert("compacted", QJsonObject{{"policy", "future"}});
+        original.insert("result", result);
+        QVERIFY(!compactCompletedReplayItem(original, cutoff()));
+    }
     void argumentExcerptsAreBoundedExplicitAndIdempotent_data() {
         QTest::addColumn<QString>("shape");
         QTest::addColumn<bool>("previous");

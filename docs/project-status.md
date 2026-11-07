@@ -7,8 +7,9 @@ milestone changes state.
 
 - Completed MCP/dynamic tool arguments above 5 KiB can retain a 4 KiB display-only
   excerpt with a visible trim label (ADR 0043), including a one-time upgrade of
-  text-only compaction markers. Structured results and large-payload/media retention
-  remain separate work; existing turn/ACK/idle guards are unchanged.
+  text-only compaction markers. Successful plain structured results now support
+  sanitized display-only excerpts sharing the result text budget (ADR 0044).
+  Resource-bearing shapes and large-payload/media retention remain separate work; existing turn/ACK/idle guards are unchanged.
 
 - Journal replay-detail retention now also stores explicit file-diff excerpts with
   original line statistics (ADR 0040), following command output (ADR 0038) and tool

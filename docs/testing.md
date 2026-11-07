@@ -440,3 +440,12 @@ active-item preservation, latest-turn/ACK/question guards, idempotence, and visi
 normal/browser labels with accessible names. `benchmarks/run-usage-retention.sh`
 includes fresh and prior-marker argument passes alongside the raw-backlog lookup.
 No live provider or installed journal is used.
+
+### Structured tool-result retention (#128)
+
+Run `ketplus_daemon_detail_compactor_tests`, `ketplus_daemon_usage_retention_tests`
+and `ketplus_agent_tests`. Fixtures cover explicit/sanitized UTF-8 object/array
+excerpts, shared text budget, error/resource/depth preservation, idempotence, both
+known-marker upgrades, the existing turn-guard matrix and rendered trim notices.
+Use `structuredRetentionUsesTurnGuards` in the Release journal test for timing.
+No installed journal or live provider is used.
