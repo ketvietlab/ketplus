@@ -17,9 +17,9 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             width: Metrics.px(46, workspace.t)
             height: Metrics.px(46, workspace.t)
-            source: "qrc:/agent/icons/ketplus-mark.png"
+            source: "qrc:/agent/icons/ketplus-mark-" + (workspace.t.dark ? "dark" : "light") + ".svg"
             fillMode: Image.PreserveAspectFit
-            Accessible.name: "KetPlus"
+            Accessible.name: "KétPlus Pro"
         }
         Text {
             width: parent.width

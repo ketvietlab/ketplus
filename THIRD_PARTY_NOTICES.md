@@ -14,7 +14,7 @@ Their complete source-distribution license texts are stored in
 | libvterm | `9d6d2112335080312ef8c36667fa717ded4f7daf` | `libvterm-MIT.txt` |
 | KetQt | `d47638214f80695524cd2724996674da7afdbb6a` — https://github.com/ketvietlab/ket-qt | `KetQt-MPL-2.0.txt` |
 | Két Design System tokens (in KetQt) | 0.1.44 | `Ket-Design-System-MIT.txt` |
-| Két Symbol (in KetQt and the KétPlus Terminal icon) | 0.12.0 — Két Symbol © 2026 Két Việt, CC BY 4.0 | `Ket-Symbol-CC-BY-4.0.txt` |
+| Két Symbol (in KetQt and the KétPlus / Terminal app icons) | 0.12.0 — Két Symbol © 2026 Két Việt, CC BY 4.0 | `Ket-Symbol-CC-BY-4.0.txt` |
 | KÉT Sans | 1.1.0 — https://github.com/ketvietlab/ket-sans-font/releases/tag/v1.1.0 | `KET-Sans-OFL-1.1.txt` |
 | KÉT Sans Mono | 0.10.4 Medium | `KET-Sans-Mono-OFL-1.1.txt` |
 | Sparkle (macOS builds with in-app updates) | 2.10.0 — https://github.com/sparkle-project/Sparkle/releases/tag/2.10.0 | `Sparkle-MIT.txt` |

@@ -29,8 +29,8 @@ Record technical verification separately from the later review/acceptance phase.
 
 - [x] Reconcile the current repository layout and merged baseline.
 - [x] Foundation: fonts/defaults #141; profile, tokens and zoom #142 (implementation; native acceptance deferred).
-- [ ] Foundation: symbol icons #143.
-- [ ] Terminal: remaining implementation gaps #144–#147.
+- [x] Foundation: symbol icons #143, including approved app-icon source/export formats (OS installation acceptance deferred).
+- [x] Terminal: UI #144–#146 and #147 name/font/icon source assets; packaging/platform qualification remains phase 7.
 - [x] Lite: shell #149, using the merged #148 mock (including kit status bar).
 - [x] Lite: Explorer/Search #150 and editor #151 (implementation; acceptance deferred).
 - [x] Lite: Git/diff #152 and Markdown/preview #153 (implementation; acceptance deferred).
@@ -177,3 +177,11 @@ the PR; native acceptance and installed-bundle checks remain deferred.
 Foundation cleanup verification: Lite 16/16 test targets and five focused Pro
 targets pass (Atlas workspace, desktop zoom, font contract, symbols, Settings
 integration). The native WebView test stays opt-in/skipped.
+
+Foundation cleanup: draft PR #231 on #229. The brand-assets layer copies the
+approved mock Két Symbol tile/bare marks, exports PNG/ICNS and six-size ICOs,
+removes the old mark PNGs, and selects the Pro vector mark by theme. Exact source
+hashes and reproducible export commands are in `assets/icons/README.md`.
+Lite 16/16 and two selected Agent Workspace cases pass; ICO PNG entries and ICNS
+container lengths are verified. Terminal remains macOS-only; Linux desktop
+entries and Windows Terminal packaging are still phase 7, not delivered here.
