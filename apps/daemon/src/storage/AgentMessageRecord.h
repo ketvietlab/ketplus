@@ -23,9 +23,9 @@ struct AgentMessageRecord final {
     bool expectReply{false};
     bool urgent{false};
     QString body;
-    // "queued", "delivered", "answered", "held", "expired" or "failed".
+    // "queued", "releasing", "delivered", "answered", "held", "expired" or "failed".
     QString state;
-    // How it reached the receiver: "auto" (a turn it started), "user_turn" or "steer".
+    // "auto", "user_turn", "steer", or "user_authorized:<UI command id>".
     QString delivery;
     qint64 deliveredTurn{0};
     QString error;

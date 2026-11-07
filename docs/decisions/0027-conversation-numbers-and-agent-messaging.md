@@ -111,6 +111,43 @@ are mandatory:
   and held messages are delivered with the receiver's next user-started turn.
 - A conversation cannot message itself.
 
+### Explicit Desktop release of held messages (#130)
+
+The UI implementation stack adds two authenticated **local Desktop** operations:
+`session.agent_messages.read` and `session.agent_messages.release`. Both take the
+receiving session/generation and `payload.message_ids` (1–100 unique IDs for
+release). They are separately advertised in `daemon.hello` capabilities. An old
+daemon leaves the UI with an update/status error, never an emulated user prompt.
+Agent-token connections and cloud-control clients cannot invoke these operations;
+the `agents.*` MCP surface does not expose them. Generation checks run before a
+cached command result can be returned.
+
+Desktop renders an incoming held notice with sender/reason, a one-message scope,
+and **Receive and continue**. Reading it only queries state. Clicking is the user
+authorization and states that an agent turn/provider quota may follow. Pending
+clicks are fenced, failures can refresh/retry, and a conversation switch rejects
+late responses. Multiple IDs are supported by the protocol, but the current UI
+explicitly releases one visible message per action.
+
+The journal atomically validates the whole selection, rejects stale/expired or
+already-delivered messages and marks only those IDs queued with
+`delivery=user_authorized:<command-id>`. The existing command result cache makes
+transport retries idempotent. The broker delivers one authorized batch separately
+from unrelated queued messages, bypassing hop/chain/hourly guards for that batch
+only. A busy receiver waits until its normal turn finishes, even for an urgent
+message. New automatic messages retain their existing limits and reply semantics.
+A new ordinary user turn can still consume pending held/authorized messages.
+
+Before invoking the provider, the broker persists a `releasing` claim and the
+expected turn sequence. The journaled input carries `user_release_id` and the
+original attributed message IDs. After a restart, that marker proves delivery:
+claimed inputs already journaled are not started again; a claim with no input is
+failed and requires another explicit retry. A journal read failure never grants
+permission to repeat the turn. Authorization, progress and outcome are separate
+`agent_message.state` notices, rather than forged user prose. No installed daemon
+is replaced by this implementation work; packaging/version distribution remains
+a later phase.
+
 ### Sender identity and trust
 
 - The daemon mints a random 256-bit capability token per conversation

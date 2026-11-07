@@ -86,6 +86,12 @@ class AgentBroker final : public QObject {
     void forget(const QString& sessionId);
     // Delivers messages that were queued while the daemon was not running.
     void resume();
+    // Called only by authenticated local UI IPC, never by the agents.* dispatcher.
+    [[nodiscard]] QJsonObject heldMessages(const QString& sessionId, qint64 generation,
+                                           const QStringList& ids) const;
+    [[nodiscard]] QJsonObject releaseHeldMessages(const QString& sessionId, qint64 generation,
+                                                  const QStringList& ids,
+                                                  const QString& authorizationId);
     // Conversations whose running turn a message started, by session id: the first sender's
     // `number`, `title` and `kind`. Clients show the sender on the conversation's row.
     [[nodiscard]] QHash<QString, QJsonObject> automaticTurnSenders() const;
