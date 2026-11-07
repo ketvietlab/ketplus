@@ -5,6 +5,12 @@ milestone changes state.
 
 ## Implemented
 
+- Journal replay-detail retention now also stores explicit file-diff excerpts with
+  original line statistics (ADR 0040), following command output (ADR 0038) and tool
+  text/reasoning (ADR 0039). The existing age/acknowledgment/latest-turn guards and
+  per-pass byte budget apply. Configurable budgets, blob/media policies and Storage
+  settings remain tracked in #128; these changes do not imply a deployed daemon.
+
 - Desktop discovers conversations created by a phone or another daemon client while
   it remains connected, without switching the selected conversation or reloading
   existing transcripts. Catalog/event races recover through journal cursors.

@@ -962,3 +962,51 @@ void AgentWorkspaceViewTest::retainedToolTextNoticeRemainsVisible() {
     QVERIFY(accessible);
     QVERIFY(accessible->text(QAccessible::Name).contains("Text trimmed"));
 }
+
+void AgentWorkspaceViewTest::retainedFileDiffNoticeRemainsVisible() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 700);
+    view.show();
+    auto file = ketplus::agent_message::fileChangeMessage(
+        {{"id", "retained-file"},
+         {"type", "fileChange"},
+         {"status", "completed"},
+         {"compacted", QJsonObject{{"policy", "file-diff-v1"}}},
+         {"changes", QJsonArray{QJsonObject{
+                         {"path", "src/Old.cpp"},
+                         {"kind", QJsonObject{{"type", "update"}, {"move_path", "src/New.cpp"}}},
+                         {"diff_excerpt", "@@ -1 +1 @@\n+partial\n"},
+                         {"compacted", QJsonObject{{"policy", "file-diff-v1"},
+                                                   {"stats", QJsonObject{{"known", true},
+                                                                         {"added", 5000},
+                                                                         {"removed", 4500}}}}}}}}},
+        true);
+    const auto stats = file.value("fileChanges").toList().first().toMap();
+    QCOMPARE(stats.value("added").toInt(), 5000);
+    QCOMPARE(stats.value("removed").toInt(), 4500);
+    QVERIFY(stats.value("known").toBool());
+    QCOMPARE(stats.value("operation").toString(), "Moved");
+    QCOMPARE(stats.value("destination").toString(), "src/New.cpp");
+    file.insert("messageKey", "retained-file");
+    view.resetMessages(
+        {QVariantMap{{"messageKey", "user"}, {"kind", "user"}, {"body", "History"}}, file},
+        "retained-file");
+    QTRY_COMPARE(view.messageModel()->count(), 2);
+    auto* root = view.quickView()->rootObject();
+    QVERIFY(root);
+    QQuickItem* title = nullptr;
+    QTRY_VERIFY((title = findVisualItem(root, "transcriptActivityTitle")) && title->isVisible());
+    auto* row = findVisualItem(root, "transcriptActivityRow");
+    QVERIFY(row);
+    for (bool compact : {false, true}) {
+        row->setProperty("compact", compact);
+        QTRY_VERIFY(title->property("text").toString().contains("Diff trimmed"));
+        if (compact)
+            QVERIFY(title->property("text").toString().contains("Moved New.cpp"));
+        QVERIFY(title->width() > 0 && title->height() > 0);
+        auto* accessible = QAccessible::queryAccessibleInterface(row);
+        QVERIFY(accessible);
+        QVERIFY(accessible->text(QAccessible::Name).contains("Diff trimmed"));
+    }
+}

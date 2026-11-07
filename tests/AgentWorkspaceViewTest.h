@@ -36,6 +36,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void describedCommandsReadAboveTheirCommand();
     void readRowTitleOpensTheFileAtItsLine();
     void retainedCommandNoticeRemainsVisible();
+    void retainedFileDiffNoticeRemainsVisible();
     void retainedToolTextNoticeRemainsVisible_data();
     void retainedToolTextNoticeRemainsVisible();
     void transcriptRendererInteractionMatrix();

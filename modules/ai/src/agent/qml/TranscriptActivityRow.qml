@@ -92,7 +92,7 @@ Column {
     readonly property bool hasDetails: !browserActivity && (subtype === "command" || subtype === "fileChange" || subtype === "imageView" || subtype === "imageGeneration" || target.length > 0 || summary.length > 0 || detailsRef.length > 0 || payloadRef.length > 0 || Object.keys(payload).length > 0)
     readonly property bool describedCommand: command.length > 0 && commandDescription.length > 0
     readonly property string singleFileTitle: compact && subtype === "fileChange" && files.length === 1
-        ? (files[0].operation || "Edited") + " " + String(files[0].destination || files[0].path || "file").split(/[\\/]/).pop()
+        ? (files[0].operation || "Edited") + " " + String(files[0].destination || files[0].path || "file").split(/[\\/]/).pop() + (files[0].diffTrimmed ? " · Diff trimmed" : "")
         : ""
     readonly property string displayTitle: (singleFileTitle.length > 0 ? singleFileTitle : describedCommand ? commandDescription : title.length > 0 ? title : (running ? "Working" : "Activity")) + (status === "failed" ? " · Failed" : status === "interrupted" ? " · Interrupted" : "")
 
