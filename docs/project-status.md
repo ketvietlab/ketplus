@@ -5,6 +5,10 @@ milestone changes state.
 
 ## Implemented
 
+- Provider cleanup also validates the ownership JSON shape before deciding a
+  thread is unreferenced (ADR 0057). Malformed/newer metadata keeps local deletion
+  and queued cleanup pending without rewriting the unsupported value.
+
 - Provider cleanup requires a complete successful ownership-catalog read before
   deleting a provider thread or accepting a new local deletion (ADR 0056).
   Query and mid-fetch failures keep queued work pending and local history intact;

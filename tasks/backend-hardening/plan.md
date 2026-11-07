@@ -536,7 +536,23 @@ thread; a new local deletion also succeeded when ownership could not be read.
 `readSessions()` now distinguishes a complete empty catalog from read failure.
 Both new deletion and queued cleanup fail closed on the latter; pending work and
 history survive, and repair/restart permits safe progress. Focused provider suite
-passes 13/13 including positive retry after repair. Full Pro, independent review
-and merge are pending (shared interface changed).
+passes 13/13 including positive retry after repair. Final head `0dba2be9` passed
+full Pro 96/96 (298.15 s) and independent exact-head review; #242 merged at
+`b74fa25eba040012db76a232c78f75f435d5b67c`. Generated build removed; source
+cleanup remains separately tracked.
 See [ADR 0056](../../docs/decisions/0056-fail-closed-provider-ownership-reads.md).
 Malformed ownership JSON and catalog/per-record bounds remain separate audits.
+
+### H1.3 unsupported provider ownership metadata
+
+Following the database-read guard, fake-provider probes reproduced unsafe cleanup
+when ownership JSON had unsupported syntax/structure. The expanded baseline fails
+23 new scenarios; an empty-provider local case was already refused. A checked
+ownership reader now preserves malformed/unknown metadata and blocks queued/new
+local deletion before destructive effects. Both source and retained records are
+covered; repair/restart recovers safe shared-target processing. Focused provider
+suite passes 37/37. Affected Release/headless matrix passes 7/7 (31.07 s); review/merge remain pending. Parent #242 full Pro
+96/96 and independent review have completed. See
+[ADR 0057](../../docs/decisions/0057-preserve-unsupported-provider-ownership.md).
+Catalog/per-record bounds, unsupported SQL column types and handoff normalization
+remain explicitly open.
