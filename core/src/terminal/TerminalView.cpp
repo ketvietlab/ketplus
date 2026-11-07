@@ -2,6 +2,7 @@
 
 #include "terminal/TerminalSession.h"
 
+#include "KetProfile.h"
 #include "KetTokens.h"
 
 #include <QAction>
@@ -136,6 +137,8 @@ TerminalView::TerminalView(TerminalSession& session, QWidget* parent)
     connect(&session_, &TerminalSession::bellRequested, this, [] { QApplication::beep(); });
     connect(verticalScrollBar(), &QScrollBar::valueChanged, this, [this] { requestRender(); });
 
+    applyTheme(currentThemePalette());
+    setTypography(14, 22);
     updateGeometryFromViewport();
 }
 
@@ -168,9 +171,12 @@ void TerminalView::applyTheme(const ThemePalette& palette) {
 void TerminalView::setTypography(const int fontSizePixels, const int lineHeightPixels,
                                  const QString& fontFamily) {
     QFont terminalFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-    const QString family = fontFamily.trimmed();
+    const QString family = fontFamily.trimmed().isEmpty() ? ket::Profile::current().monoFamily()
+                                                          : fontFamily.trimmed();
     if (!family.isEmpty() && QFontDatabase::hasFamily(family)) {
         terminalFont = QFont(family);
+        if (family == QStringLiteral("KÉT Sans Mono"))
+            terminalFont.setWeight(QFont::Medium);
         terminalFont.setStyleHint(QFont::Monospace);
         terminalFont.setFixedPitch(true);
     }

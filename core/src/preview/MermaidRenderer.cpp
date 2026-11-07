@@ -1,5 +1,7 @@
 #include "preview/MermaidRenderer.h"
 
+#include "ui/Theme.h"
+
 #include <QByteArrayView>
 #include <QCryptographicHash>
 #include <QDir>
@@ -10,6 +12,7 @@
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
+#include <QSet>
 #include <QStandardPaths>
 
 static void initializeMermaidThemeResources() {
@@ -26,7 +29,7 @@ namespace {
 // v5: node labels carry an explicit fill; cached state diagrams drew them black.
 // v6: Qt-readable class colours, Két theme, early stylesheets and rounded rectangles.
 // v8: Két Blue theme snapshots from design system 0.1.44 (v7: 12px diagram corners).
-constexpr auto cacheVersion = "ketplus-mermaid-v8";
+constexpr auto cacheVersion = "ketplus-mermaid-v9";
 
 bool isExecutableFile(const QString& path) {
     const QFileInfo file(path);
@@ -39,7 +42,16 @@ QByteArray mermaidConfiguration(const bool darkTheme) {
                              : QStringLiteral(":/ketplus/mermaid/light.json"));
     if (!resource.open(QIODevice::ReadOnly))
         return {};
-    QJsonObject configuration = QJsonDocument::fromJson(resource.readAll()).object();
+    QString source = QString::fromUtf8(resource.readAll());
+    const QRegularExpression token(QStringLiteral(R"(\{\{([a-z0-9-]+)\}\})"));
+    auto matches = token.globalMatch(source);
+    QSet<QString> names;
+    while (matches.hasNext())
+        names.insert(matches.next().captured(1));
+    for (const auto& name : names)
+        source.replace(QStringLiteral("{{%1}}").arg(name),
+                       themeTokenColor(name, darkTheme).toLower());
+    QJsonObject configuration = QJsonDocument::fromJson(source.toUtf8()).object();
     if (configuration.isEmpty())
         return {};
     QJsonObject variables = configuration.value(QStringLiteral("themeVariables")).toObject();

@@ -15,8 +15,10 @@ File icon and product icon themes are separate future features.
 
 ## Current integration points
 
-- `core/src/ui/Theme.h/.cpp`: `ThemeManager` selects built-in light/dark palettes using
-  `Mode::System/Light/Dark`, persists `appearance/theme`, and applies QPalette/QSS.
+- `core/src/ui/Theme.h/.cpp`: `ThemeManager` persists `appearance/theme`, drives
+  `ket::Appearance` for light/dark/system and interface zoom, and projects Két
+  tokens into the legacy `ThemePalette`/QSS. `ket::Style` owns the application
+  palette and shared control drawing; `ket::Profile::ketPlus()` supplies metrics.
 - `apps/desktop/src/app/MainWindow.cpp`: appearance menu and `themeChanged` propagation.
 - `modules/ai/src/agent/AgentWorkspaceView.cpp`: palette-to-QML token mapping.
 - `core/src/editor/EditorWidget.cpp`: Lexilla styles use dedicated
@@ -28,6 +30,14 @@ File icon and product icon themes are separate future features.
 
 Preserve these consumers while migrating them; do not replace the editor or
 recreate the chat view as part of theme support.
+
+An imported theme must eventually reach the Két token/recipe consumers as well
+as the legacy palette. Updating QPalette or QSS alone would leave kit Widgets and
+QML on the built-in colours. The current kit exposes built-in light/dark tokens;
+the importer needs a reviewed shared token-override API before it can promise
+consistent custom colours. Keep geometry, profile metrics and zoom outside
+that colour override. [design-system.md](design-system.md) lists the current
+semantic roles and migration boundaries.
 
 ## Architecture
 

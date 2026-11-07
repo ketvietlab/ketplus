@@ -5,6 +5,13 @@ milestone changes state.
 
 ## Implemented
 
+- Két UI stack: Lite and Pro use KÉT Sans as the primary interface face, with
+  Inter/platform fallback; fresh editor settings use KÉT Sans Mono Medium at
+  14 px without rewriting saved choices. Interface zoom is published to the
+  kit's Appearance, terminal initial colours resolve tokens, and Mermaid theme
+  resources resolve token placeholders at rendering time. Overall UI acceptance
+  and rollout remain deferred; see `tasks/ui-implementation-stack.md`.
+
 - The owner-only size-policy backend supports revisioned 1/2/5/10 GB SQLite-page
   targets and warning status (ADR 0046). Recent-detail pressure is opt-in via an
   explicit policy save until Desktop size controls/rollout are complete. It reclaims

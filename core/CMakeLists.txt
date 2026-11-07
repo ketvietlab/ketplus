@@ -58,6 +58,7 @@ add_library(ketplus_ui STATIC
     src/ui/FindReplaceBar.h
     src/ui/Theme.cpp
     src/ui/Theme.h
+    src/ui/InterfaceZoom.h
     src/ui/KetFonts.cpp
     src/ui/KetFonts.h
 )
