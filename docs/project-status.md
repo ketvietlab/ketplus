@@ -5,6 +5,11 @@ milestone changes state.
 
 ## Implemented
 
+- Local turn acceptance commits state/configuration and its two/three events
+  together before publication (ADR 0076). Failed queued/configuration/projection/
+  commit writes leave no accepted prompt; repair/retry and independent-reader
+  visibility are covered. Whole-command idempotency/crash recovery remains open.
+
 - Existing media blobs are validated before dedup returns a reference (ADR 0066):
   exact bounded bytes, regular nonsymlink files and owner-only permissions.
   Invalid entries remain intact for repair; reference durability remains open.

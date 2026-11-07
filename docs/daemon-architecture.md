@@ -108,6 +108,13 @@ discovery are tracked by generation/cursor and journal replay fills any gap afte
 the catalog snapshot. Discovery responses from an old connection are discarded.
 The reconciliation lives in `CodexDaemonDiscovery.cpp`; the existing large
 `CodexAppServer.cpp` retains only transport lifecycle and event-dispatch hooks.
+Local turn acceptance commits the starting session/configuration, pinned context,
+`user.message`, `turn.queued` and optional `session.configuration_changed` in one
+transaction. Its bounded receipt is read before commit and published afterward;
+failed acceptance cannot retain a rejected prompt (ADR 0076). Existing stream
+recovery is drained first; command-result persistence and provider-side effects
+remain separate transaction boundaries.
+
 Streamed text reaches the journal coalesced: consecutive `assistant.delta` or
 `command.output_delta` notifications for one item are held for at most 150 ms
 (or 16 KiB) and journaled as one event. Any other event, a delta of another

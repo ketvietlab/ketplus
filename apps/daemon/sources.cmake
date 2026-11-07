@@ -14,6 +14,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/service/UnixSignals.cpp
     src/runtime/SessionHostWorktrees.cpp
     src/storage/LocalJournalContexts.cpp
+    src/storage/LocalJournalTurnStart.cpp
+    src/runtime/SessionHostTurnStart.cpp
     src/storage/LocalJournalDeletion.cpp
     src/runtime/SessionHostDeletion.cpp
     src/storage/LocalJournalTasks.cpp
