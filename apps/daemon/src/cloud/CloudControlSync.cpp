@@ -279,7 +279,10 @@ void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qin
         QJsonObject cloudEvent = journal_->cloudEvent(sessionId, generation, cursor);
         if (!cloudEvent.isEmpty() && cloudEvent.value(QStringLiteral("turnSequence")) !=
                                          event.value(QStringLiteral("turn_sequence"))) {
-            journal_->removeCloudEventsThrough(sessionId, generation, cursor);
+            if (!journal_->discardCloudEvent(sessionId, generation, cursor)) {
+                lastError_ = journal_->errorString();
+                return;
+            }
             cloudEvent = {};
         }
         if (!cloudEvent.isEmpty()) {
@@ -316,9 +319,9 @@ void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qin
             if (!metadataMatches || plaintext.isEmpty() || plaintext != expectedPlaintext) {
                 // Fail this upload closed, but make the condition recoverable.
                 // The local journal remains authoritative, so the next retry
-                // will recreate every removed envelope through this cursor
-                // using the current projection policy and current key scope.
-                if (!journal_->removeCloudEventsThrough(sessionId, generation, cursor)) {
+                // will recreate this envelope using the current projection policy
+                // and current key scope.
+                if (!journal_->discardCloudEvent(sessionId, generation, cursor)) {
                     lastError_ = journal_->errorString();
                     return;
                 }
@@ -345,15 +348,27 @@ void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qin
     for (const QJsonValue& sent : cloud)
         highestSent =
             qMax(highestSent, sent.toObject().value(QStringLiteral("cursor")).toInteger());
+    if (!journal_->prepareCloudEventUpload(cloud)) {
+        lastError_ = journal_->errorString();
+        return;
+    }
+    const quint64 requestEpoch = accountEpoch_;
+    const QString requestWorkspace = workspaceId_;
+    const QString requestMachine = machineId_;
     eventUploadsInFlight_.insert(uploadKey);
     request(
         "POST", QStringLiteral("/v2/events:append"),
         QJsonObject{{QStringLiteral("machineId"), machineId_}, {QStringLiteral("events"), cloud}},
         daemonToken_, {},
-        [this, sessionId, generation, afterCursor, uploadKey, highestSent,
-         sent = int(cloud.size())](const int status, const QJsonValue& value,
-                                   const QString& transportError) {
+        [this, sessionId, generation, afterCursor, uploadKey, highestSent, cloud, requestEpoch,
+         requestWorkspace, requestMachine, sent = int(cloud.size())](
+            const int status, const QJsonValue& value, const QString& transportError) {
             eventUploadsInFlight_.remove(uploadKey);
+            // This request owns the slot until its callback; stale account replies
+            // release that slot but must not mutate progress, receipts or backoff.
+            if (requestEpoch != accountEpoch_ || requestWorkspace != workspaceId_ ||
+                requestMachine != machineId_)
+                return;
             // The batch was too large for the relay, or for a proxy or tunnel in front of it that
             // answers in HTML: send half as many events rather than the same refused batch again.
             if (status == 413 && sent > 1) {
@@ -413,7 +428,8 @@ void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qin
                         QString::number(accepted), &storageError) ||
                     !journal_->acknowledgeCursor(QStringLiteral("cloud-control-v2"), sessionId,
                                                  generation, accepted) ||
-                    !journal_->removeCloudEventsThrough(sessionId, generation, accepted)) {
+                    !journal_->acknowledgeCloudEventUpload(cloud, accepted) ||
+                    !journal_->pruneAcknowledgedCloudEvents()) {
                     lastError_ = storageError.isEmpty() ? journal_->errorString() : storageError;
                     return;
                 }

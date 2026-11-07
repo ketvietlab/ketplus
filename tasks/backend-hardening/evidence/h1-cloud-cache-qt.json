@@ -1,0 +1,48 @@
+{
+  "baseline": "8f0858bc67b0eba99b9b5529bf5d123f2b179678",
+  "fixture": "Synthetic macOS Qt 6.11.2 Release; 100000 cached envelopes, about 1 KiB each",
+  "before": {
+    "prefix_delete_rows": 100000,
+    "milliseconds": 269
+  },
+  "after_initial": {
+    "ack_removed_rows": 256,
+    "ack_milliseconds": 2,
+    "exact_invalidation_milliseconds": 0,
+    "cloud_cache_suite_passed": 18,
+    "cloud_privacy_suite_passed": 62
+  },
+  "limits": [
+    "Final full Pro and exact-head review gates recorded in plan/PR",
+    "No live journal, Windows or mixed multi-GB acceptance",
+    "Cache JSON read/recovery and explicit session deletion remain separate",
+    "Legacy unmarked cache is retained for future verified receipts or separate recovery"
+  ],
+  "final_focused": {
+    "cache": 26,
+    "privacy": 63,
+    "targets_passed": 2,
+    "seconds": 8.72,
+    "configuration": "Release Qt 6.11.2 offscreen"
+  },
+  "safety_regression": {
+    "scenario": "old cloud cursor with regenerated ciphertext",
+    "before_remaining": 0,
+    "expected_remaining": 1,
+    "now": "PASS; per-entry receipt with pre-dispatch reset"
+  },
+  "mutations": [
+    {
+      "change": "invalidation byte budget 1 MiB to 16 MiB",
+      "caught": true
+    },
+    {
+      "change": "remove encrypted-content receipt match",
+      "caught": true
+    },
+    {
+      "change": "remove stale account callback guard",
+      "caught": true
+    }
+  ]
+}

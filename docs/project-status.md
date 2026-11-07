@@ -5,6 +5,12 @@ milestone changes state.
 
 ## Implemented
 
+- Cloud envelope ACK cleanup uses bounded transactional metadata maintenance;
+  invalidation instead removes one exact cache identity before retry (ADR 0053).
+  Pending envelopes and regenerated ciphertext cannot inherit an old cursor or
+  receipt; stale account upload callbacks cannot restore progress. Oversized cache
+  invalidation fails closed; legacy unmarked cache and decoding need separate recovery.
+
 - Provider/cloud deletion completion updates only the identified durable work row;
   completed jobs are reclaimed by bounded metadata maintenance (ADR 0052).
   Indexed pending pages preserve round-robin order without scanning completed
