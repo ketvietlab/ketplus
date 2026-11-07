@@ -5,6 +5,11 @@ milestone changes state.
 
 ## Implemented
 
+- Current staged-attachment cancellation now bounds candidates and mutation bytes
+  (ADR 0054). Logical cancellation retires the identity until all revisions drain
+  through existing maintenance. Unknown/oversized manifests remain unchanged for
+  recovery; ignored writes, busy writers and commit failures cannot report success.
+
 - Session deletion rolls back and releases its transaction on commit failure;
   ignored tombstone/work writes and incomplete history deletion fail without
   committing partial state (ADR 0055). Retry preserves generation/operation fences.

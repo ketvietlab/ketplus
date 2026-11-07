@@ -58,8 +58,9 @@ untouched. For a current upload, cancellation removes the requested revision's
 chunks; if any other revision remains, it retires the manifest instead of removing
 it. Only an identity with no chunks can be released. Ignored manifest writes or a
 failed commit roll back, including releasing the failed transaction for retry.
-The 1-MiB maintenance budget does not cover synchronous explicit cancellation of
-a current upload; remaining explicit-delete bounds stay in the hardening plan.
+ADR 0054 subsequently bounds explicit cancellation of a current upload with a
+shared 1-MiB manifest/chunk budget and 128 candidates across all revisions.
+Remaining explicit session-delete bounds stay in the hardening plan.
 Older cancellation code does not enforce this mixed-revision fence, so partial
 retirement must be drained or recovered before a downgrade; rollback acceptance
 remains a migration/release gate, not a claim of this focused change.

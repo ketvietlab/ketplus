@@ -461,7 +461,13 @@ Current and unknown-format parents protect their chunks. Cancellation retains a
 retiring identity and cannot touch a newer manifest revision; remaining mixed
 revisions keep the retirement marker until bounded cleanup finishes. Deletions,
 retirement markers and durable rowid cursors commit together; busy work defers.
-See [ADR 0051](decisions/0051-bounded-staged-attachment-expiry.md) for limits and retry behavior.
+Explicit cancellation reads at most 128 chunk candidates, including other
+revisions, and shares a 1-MiB mutation budget with the manifest. It releases an
+empty identity immediately; otherwise it commits the retirement marker and the
+bounded chunk deletion together. Unsupported/oversized manifests fail unchanged;
+oversized chunks remain reserved for recovery. See
+[ADR 0051](decisions/0051-bounded-staged-attachment-expiry.md) and
+[ADR 0054](decisions/0054-bounded-attachment-cancellation.md) for limits and retries.
 
 Assistant/tool lifecycle payloads larger than 256 KiB use the bounded, versioned
 chunk and terminal-manifest representation in

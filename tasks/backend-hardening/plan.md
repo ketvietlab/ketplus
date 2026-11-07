@@ -96,18 +96,19 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
     Source/build cleanup remains separately tracked.
   - [x] Reproduce global deletion-completion sweeps and implement bounded completed
     work GC plus indexed pending pages; malformed/ignored completion regressions.
-  - [x] Completed-deletion work #235: head `7ffc9709`, author and independent
-    affected Release/headless 10/10 targets; merged `f0d73d30d49d06dab8290edf01971e1a3a06fa18`.
-    Source/build cleanup remains separately tracked.
-  - [x] Reproduce cloud-cache prefix cleanup and separate bounded ACK reclamation
-    from exact synchronous invalidation (ADR 0053); initial focused 2/2 targets.
-  - [x] Cloud cache #237: final head `4e654c1a`, full Pro 96/96 and independent
-    exact-head PASS; merged `0f6f39e05a007d889064760ffc64b6f1673851ac`.
-    Generated build removed; linked-source cleanup remains separately tracked.
-  - [ ] Bounded explicit attachment cancellation #240: final head `4e1ff5dd`,
-    affected Release/headless 11/11 (68.55 s); independent review/merge pending.
-  - [ ] Explicit session deletion: atomic-failure regressions reproduced and fixed;
-    affected matrix/review/merge pending; work bounds remain open.
+  - [x] Completed-deletion #235: final-head affected Release/headless 10/10 and
+    independent exact-head review PASS; merged `f0d73d30d49d06dab8290edf01971e1a3a06fa18`.
+    Generated build removed; source cleanup remains tracked separately.
+  - [x] Cloud cache #237: exact invalidation, per-envelope receipt and scoped
+    recovery cursor; final head `4e654c1a` full Pro 96/96 and independent PASS.
+    Merged `0f6f39e05a007d889064760ffc64b6f1673851ac`. Generated build removed;
+    source cleanup remains separately tracked.
+  - [x] Reproduce explicit attachment cancellation bounds and preservation gaps;
+    implement shared 1-MiB/128-candidate cancellation and retirement fencing.
+  - [ ] Cancellation final affected matrix/review/merge and safe cleanup.
+  - [x] Session deletion transaction recovery #241: final head `71607352`,
+    affected Release/headless 12/12 (55.64 s), independent exact-head PASS;
+    merged `187566a6bad4626f1d5380cd51ab1e24795291b6`. Cleanup remains tracked separately.
   - [ ] Audit cloud-event cleanup and explicit deletion paths.
   - [ ] Close H1.1 only when those remaining work bounds have evidence.
 - [ ] H1.2 Verify migration/reopen safety: old schema, repeat open, partial failure,
@@ -218,8 +219,9 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | Item | State | Evidence / remaining work | Next action / owner |
 | --- | --- | --- | --- |
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
-| H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230, deletion work #235 and cloud #237 merged; cancellation #240 and deletion atomicity gates pending | Finish exact-head gates; bound explicit session deletion and tombstone enumeration / #2739 |
-| H1.2–H1.7 | Not started | No claim that #128 backend acceptance is complete | Follow H1.1, prioritize a confirmed safety finding / #2739 |
+| H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 and cloud #237 merged; transaction recovery #241 merged; bounded cancellation #240 gates pending | Finish cancellation gates; audit explicit session deletion / #2739 |
+| H1.2/H1.4–H1.7 | Not started | No claim that #128 backend acceptance is complete | Follow H1.1; prioritize a confirmed safety finding / #2739 |
+| H1.3 | In progress | Session-delete transaction recovery #241 merged; other operations and ownership read errors still under audit | Reproduce provider cleanup read failures / #2739 |
 | H2–H3 | Not started | Open daemon/provider review issues mapped | Execute after storage, or independent audit while waiting review / #2739 |
 | H4.1–H4.3 | Not started | Existing remote fixes are not a full #85 closure | Audit local transport/privacy with fixtures / #2739 |
 | H4.4 | Waiting, external | Relay code merged; no deployment/readiness evidence supplied | Relay release operator, unassigned; #2739 tracks gate |
@@ -414,7 +416,9 @@ The focused suite passes 32/32, and all 10 affected Release/headless targets pas
 (63.25 s). Replacing the pending-state index with a session-ID index makes the
 actual prepared-plan regression fail; restored sources pass. No shared interface,
 CMake/core or app composition changed, so the documented affected matrix applies.
-Independent review and merge remain pending.
+Independent exact-head review passed; #235 merged at
+`f0d73d30d49d06dab8290edf01971e1a3a06fa18`. Generated build removed; linked-source
+cleanup remains separately tracked.
 See [ADR 0052](../../docs/decisions/0052-bounded-completed-deletion-work.md) and
 [Qt evidence](evidence/h1-deletion-work-qt.json). Per-record JSON size, index startup,
 explicit session deletion and tombstone enumeration remain open.
@@ -422,6 +426,25 @@ explicit session deletion and tombstone enumeration remain open.
 The independent cloud-cache probe removed 100,000 cached 1-KiB rows in 269 ms.
 The same API serves both successful upload ACK and policy/key invalidation;
 async cleanup must preserve invalidation semantics before changing that path.
+
+### H1.1 explicit attachment cancellation
+
+A current synthetic 640-chunk upload removed all 20 MiB in one synchronous
+cancellation. Unknown parent state and an oversized manifest were also discarded.
+Cancellation now reads at most 128 candidates across all revisions, reserves
+manifest cost in a shared 1-MiB mutation budget and commits a retirement marker
+when chunks remain. The identity stays unavailable until bounded maintenance
+finishes; unsupported data remains recoverable.
+
+Focused Release/offscreen tests pass 41/41. Mutations increasing the row or byte
+budget, or moving revision filtering into the SQL range, each fail regression.
+The actual production query uses the identity primary index without a sort; a
+100k other-revision backlog does not expand the candidate read. The affected
+10-target Release/headless matrix passes (76.98 s), with the live lifecycle case
+skipped by design. Independent review and merge are pending. See
+[ADR 0054](../../docs/decisions/0054-bounded-attachment-cancellation.md).
+Explicit session deletion, tombstone enumeration and large-record recovery remain
+open; neither cancellation nor prior expiry evidence completes H1.1/H1.2.
 
 
 Deletion-work final head `7ffc9709325c9ef740df3f47f39e6592c5c0cae5` passed independent
@@ -472,7 +495,17 @@ ignored-receipt retry/reopen probe, identical ciphertext on retry, and credentia
 failure followed by restart/cache reclamation without resending an accepted event.
 Scoped progress and receipts roll back together on ignored writes or failed commits.
 Upload-progress handling now has its own owning file; the sync file is below 500
-lines. Full Pro and independent exact-head review are still required.
+lines. Final head `4e654c1afe25774ba48ffa99643f2e8c65f593b7` passed full Pro
+96/96 (321.03 s) and independent exact-head review. #237 merged at
+`0f6f39e05a007d889064760ffc64b6f1673851ac`. Generated build removed; linked-source
+cleanup remains separately tracked.
+
+Independent review of #240 found a read-time bound gap: unsupported revision
+TEXT/BLOB values were projected verbatim before candidate filtering. Both new
+actual-query regressions reproduced 64 MiB of returned metadata (32 malformed
+rows) while deleting no chunks. Projection now emits only integer or NULL;
+revision filtering still follows LIMIT. Final affected matrix and exact-head
+re-review are required before merge.
 
 ### H1.3 session deletion failure recovery (prioritized safety finding)
 
@@ -483,7 +516,9 @@ one rollback guard; mandatory inserts require one affected row and each existing
 history-table DELETE must leave no row for that identity/generation.
 Focused provider deletion passes 10/10, including retry/reopen and unrelated-session
 preservation. The 12-target Release/headless matrix passes (75.49 s), with one
-live lifecycle case skipped deliberately. Independent review and merge remain pending. See [ADR 0055](../../docs/decisions/0055-session-delete-transaction-recovery.md).
+live lifecycle case skipped deliberately. Independent exact-head review passed; #241 merged at
+`187566a6bad4626f1d5380cd51ab1e24795291b6`. Final formatted head passed 12/12
+(55.64 s). Source/build cleanup remains separately tracked. See [ADR 0055](../../docs/decisions/0055-session-delete-transaction-recovery.md).
 This does not finish bulk-delete work bounds or previously committed-state recovery.
 
 Next safety audit: provider cleanup reads `sessions()` to protect shared threads,
