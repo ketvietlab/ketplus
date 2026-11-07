@@ -371,6 +371,12 @@ capacity can remain above its limit pending recovery. Valid ownership retains th
 existing eviction order. This guard does not establish reference-write durability
 or a cross-file transaction; see ADR 0065.
 
+Image attachment and externalization publish new references only after a checked
+ownership-file commit (ADR 0067). The store preserves unsupported metadata and
+writes unique canonical hashes atomically with owner-only permissions; failure
+uses the existing omission path. Blob/ownership/database coordination remains
+separate, and a failed ownership update can leave unreferenced blob bytes.
+
 Media deduplication checks the existing file type, size, bounded contents and
 owner-only permissions before publishing a blob reference (ADR 0066). Unsupported
 entries are preserved for repair. The store rejects symlinks at its requested

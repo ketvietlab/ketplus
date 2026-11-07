@@ -223,7 +223,7 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
 | H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 and cloud #237 merged; transaction recovery #241 merged; cancellation #240 merged; explicit session-delete bounds still open | Audit explicit session deletion and tombstone enumeration / #2739 |
 | H1.2 | In progress | Startup commit failure #250 merged; other migration/read/crash cases remain | Continue remaining failure-path audit / #2739 |
-| H1.4 | In progress | Cleanup #251 merged; dedup validation under verification; reference-write false success reproduced | Finish dedup gate, then reference persistence / #2739 |
+| H1.4 | In progress | Cleanup #251 and dedup #252 merged; ownership publication under verification | Finish publication gate, then fork-copy coordination / #2739 |
 | H1.5–H1.7 | Not started | No claim that #128 backend acceptance is complete | Continue storage acceptance / #2739 |
 | H1.3 | In progress | Delete/ownership #241–243, append #244–245 and fork #246–247 merged; stream recovery #248 merged; replay/activity #249 merged; startup #250 merged | Continue caller atomicity/read failures / #2739 |
 | H2–H3 | Partially started | H2.3 volatile retry subset #248 merged; full lifecycle and provider audits remain | Continue remaining daemon/provider checks / #2739 |
@@ -698,7 +698,24 @@ remain explicitly open.
   permissions before returning a reference; reject linked/non-directory roots.
   Preserve unsupported entries for repair (ADR 0066).
 - [x] Focused 26/26; initial head `51d1a49c` affected 14/14 (101.57 s).
-- [ ] Final integration matrix after #251, independent exact-head review, merge
-  and cleanup.
+- [x] #252 final head `e16fb511`: integrated #251; affected 14/14 (92.20 s).
+- [x] #252 independent exact-head 3/3 (73.75 s; protocol 171, lifecycle
+  42 pass/1 skip, fork 32). Merged `886fbe201ad88e2bbd466c8e0689f3fc7a423223`;
+  cleanup tracked separately.
 - [ ] Continue reference writes/copies, ancestor/path races, decode and enumeration
   bounds. This package does not complete H1.4 or change retention defaults.
+
+
+### H1.4 require ownership persistence before media publication
+
+- [x] Actual-source standalone probe confirms attachment and inline publication
+  return a media reference when the session reference path is a directory.
+- [x] Original source fails all 27 cases: 24 ownership failures plus three
+  repeated-hash growth cases. The actual partial-write probe also fails.
+- [x] Checked atomic reference publication preserves unsupported metadata and
+  withholds references on failure; repeated hashes are deduplicated (ADR 0067).
+  Focused media set 91/91, including POSIX partial-write rollback/repair.
+- [ ] Focused tests plus full Pro build/suite for the shared private-header change;
+  independent exact-head review, integration, merge and cleanup.
+- [ ] Fork-copy/journal coordination, crash durability, write-admission/blob cleanup
+  after failure and broader path/decode/enumeration bounds remain separate work.

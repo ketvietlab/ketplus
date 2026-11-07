@@ -66,8 +66,9 @@ class McpMediaStore final {
     [[nodiscard]] QString refsPath(const QString& sessionId) const;
     // Writes (or refreshes) the content-addressed file; empty on failure.
     [[nodiscard]] QJsonObject write(const QByteArray& bytes, const QString& extension) const;
-    // Records that sessionId references these hashes, then enforces capacity.
-    void reference(const QString& sessionId, const QStringList& hashes);
+    // Atomically records ownership before publishing references; false preserves
+    // unsupported metadata. Capacity enforcement follows a successful commit.
+    [[nodiscard]] bool reference(const QString& sessionId, const QStringList& hashes);
 
     QString directory_;
     qint64 capacityBytes_;

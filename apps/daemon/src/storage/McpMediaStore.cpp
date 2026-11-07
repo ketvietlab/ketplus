@@ -209,6 +209,7 @@ QJsonObject McpMediaStore::externalizeItem(const QJsonObject& item, const QStrin
     bool changed = false;
     int stored = 0;
     QStringList hashes;
+    QList<QPair<qsizetype, QString>> storedBlocks;
     QJsonArray blocks;
     for (const QJsonValue& value : content) {
         const QJsonObject block = value.toObject();
@@ -260,14 +261,18 @@ QJsonObject McpMediaStore::externalizeItem(const QJsonObject& item, const QStrin
         }
         ++stored;
         hashes.append(reference.value(QStringLiteral("media_ref")).toString().mid(7));
+        storedBlocks.append({blocks.size(), type});
         blocks.append(reference);
     }
     if (!changed)
         return item;
+    if (!reference(sessionId, hashes)) {
+        for (const auto& [index, type] : storedBlocks)
+            blocks[index] = omitted(type, QStringLiteral("storage_unavailable"));
+    }
     result.insert(QStringLiteral("content"), blocks);
     QJsonObject externalized = item;
     externalized.insert(QStringLiteral("result"), result);
-    reference(sessionId, hashes);
     return externalized;
 }
 
@@ -290,8 +295,9 @@ QJsonObject McpMediaStore::storeImage(const QByteArray& bytes, const QString& mi
     if (extension.isEmpty())
         return {};
     const QJsonObject stored = write(bytes, extension);
-    if (!stored.isEmpty())
-        reference(sessionId, {stored.value(QStringLiteral("media_ref")).toString().mid(7)});
+    if (!stored.isEmpty() &&
+        !reference(sessionId, {stored.value(QStringLiteral("media_ref")).toString().mid(7)}))
+        return {};
     return stored;
 }
 
@@ -334,18 +340,48 @@ QJsonObject McpMediaStore::write(const QByteArray& bytes, const QString& extensi
     return reference;
 }
 
-void McpMediaStore::reference(const QString& sessionId, const QStringList& hashes) {
+bool McpMediaStore::reference(const QString& sessionId, const QStringList& hashes) {
     if (hashes.isEmpty())
-        return;
+        return true;
     const QString refs = refsPath(sessionId);
-    if (ensureOwnerDirectory(QFileInfo(refs).absolutePath())) {
-        QFile file(refs);
-        if (file.open(QIODevice::Append)) {
-            file.setPermissions(ownerFile);
-            file.write(hashes.join(QLatin1Char('\n')).toLatin1() + '\n');
+    if (!ensureOwnerDirectory(QFileInfo(refs).absolutePath()))
+        return false;
+    const QFileInfo info(refs);
+    if (info.isSymLink() || (info.exists() && !info.isFile()) ||
+        info.size() > maximumReferenceFileBytes)
+        return false;
+    QSet<QString> owned;
+    if (info.exists()) {
+        QFile existing(refs);
+        if (!existing.open(QIODevice::ReadOnly))
+            return false;
+        const auto bytes = existing.read(maximumReferenceFileBytes + 1);
+        if (existing.error() != QFileDevice::NoError || bytes.size() > maximumReferenceFileBytes)
+            return false;
+        for (const auto& line : bytes.split('\n')) {
+            if (line.isEmpty())
+                continue;
+            if (!isDigest(line))
+                return false;
+            owned.insert(QString::fromLatin1(line));
         }
     }
+    for (const auto& hash : hashes) {
+        if (!isDigest(hash.toLatin1()))
+            return false;
+        owned.insert(hash);
+    }
+    auto sorted = owned.values();
+    std::sort(sorted.begin(), sorted.end());
+    const auto bytes = sorted.join(QLatin1Char('\n')).toLatin1() + '\n';
+    if (bytes.size() > maximumReferenceFileBytes)
+        return false;
+    QSaveFile file(refs);
+    if (!file.open(QIODevice::WriteOnly) || !file.setPermissions(ownerFile) ||
+        file.write(bytes) != bytes.size() || !file.commit())
+        return false;
     enforceCapacity();
+    return true;
 }
 
 void McpMediaStore::releaseSession(const QString& sessionId) {

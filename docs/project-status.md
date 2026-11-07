@@ -5,6 +5,11 @@ milestone changes state.
 
 ## Implemented
 
+- Image publication requires a checked atomic ownership-file update (ADR 0067).
+  Invalid metadata is preserved, repeated hashes are deduplicated and failed
+  writes cannot publish successful new references. Fork-copy and orphan bounds
+  remain separate work.
+
 - Existing media blobs are validated before dedup returns a reference (ADR 0066):
   exact bounded bytes, regular nonsymlink files and owner-only permissions.
   Invalid entries remain intact for repair; reference durability remains open.
