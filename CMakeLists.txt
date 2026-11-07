@@ -107,6 +107,7 @@ add_subdirectory(modules/remote)
 add_subdirectory(apps/daemon)
 
 if(KETPLUS_BUILD_DESKTOP)
+    set(KETQT_BUILD_QUICK ON CACHE BOOL "Build Két QML components for Pro" FORCE)
     set(KETPLUS_CM_BUILD_APP OFF CACHE BOOL "" FORCE)
     set(KETPLUS_CM_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set(KETPLUS_CM_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)

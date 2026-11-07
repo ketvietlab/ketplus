@@ -14,6 +14,7 @@
 #include <QGuiApplication>
 #include <QRawFont>
 #include <QRegularExpression>
+#include <QScopeGuard>
 #include <QSet>
 #include <QSettings>
 #include <QTemporaryDir>
@@ -102,17 +103,24 @@ void InterfaceFontTest::agentTokensShareUiResolverAndEditorMono() {
              ketplus::InterfaceUiFont::resolvedFamily());
     QCOMPARE(view.tokens().value(QStringLiteral("monoFont")).toString(),
              QStringLiteral("Courier New"));
-    QCOMPARE(view.tokens().value(QStringLiteral("reading")).toInt(), 16);
-    QCOMPARE(view.tokens().value(QStringLiteral("body")).toInt(), 14);
-    QCOMPARE(view.tokens().value(QStringLiteral("micro")).toInt(), 12);
-    QCOMPARE(view.tokens().value(QStringLiteral("title")).toInt(), 18);
-    QCOMPARE(view.tokens().value(QStringLiteral("glyphSmall")).toInt(), 16);
+    const auto original = ket::Profile::current();
+    const auto restore = qScopeGuard([original] { ket::Profile::setCurrent(original); });
+    QCOMPARE(view.tokens().value(QStringLiteral("reading")).toInt(),
+             qRound(original.readingPixels));
+    QCOMPARE(view.tokens().value(QStringLiteral("body")).toInt(),
+             qRound(original.buttonFontPixels));
+    QCOMPARE(view.tokens().value(QStringLiteral("micro")).toInt(),
+             qRound(original.dayDividerPixels));
+    QCOMPARE(view.tokens().value(QStringLiteral("title")).toInt(),
+             qRound(original.dialogTitlePixels));
+    QCOMPARE(view.tokens().value(QStringLiteral("glyphSmall")).toInt(), qRound(original.iconSize));
     QVERIFY(!view.tokens().contains(QStringLiteral("px9")));
-
-    view.applyTheme(palette, ketplus::InterfaceZoomMetrics::largePixels);
-    QCOMPARE(view.tokens().value(QStringLiteral("reading")).toInt(), 18);
-    QCOMPARE(view.tokens().value(QStringLiteral("body")).toInt(), 16);
-    QCOMPARE(view.tokens().value(QStringLiteral("glyphSmall")).toInt(), 18);
+    auto custom = original;
+    custom.readingPixels = 19;
+    ket::Profile::setCurrent(custom);
+    view.applyTheme(palette, 18);
+    QCOMPARE(view.tokens().value(QStringLiteral("zoomFactor")).toDouble(), 18.0 / 14);
+    QCOMPARE(view.tokens().value(QStringLiteral("reading")).toInt(), qRound(19 * 18.0 / 14));
 }
 
 void InterfaceFontTest::typeScaleApplyAndLiteralScalingAreMediumInert() {
@@ -121,13 +129,19 @@ void InterfaceFontTest::typeScaleApplyAndLiteralScalingAreMediumInert() {
         "QToolButton { font-size: {{title}}px; }");
     const QString medium =
         ketplus::TypeScale::apply(templateSheet, ketplus::InterfaceZoomMetrics::mediumPixels);
-    QCOMPARE(medium, QStringLiteral("QLabel { font-size: 12px; } QPushButton { font-size: 14px; } "
-                                    "QToolButton { font-size: 16px; }"));
-
-    const QString large =
-        ketplus::TypeScale::apply(templateSheet, ketplus::InterfaceZoomMetrics::largePixels);
-    QCOMPARE(large, QStringLiteral("QLabel { font-size: 14px; } QPushButton { font-size: 16px; } "
-                                   "QToolButton { font-size: 18px; }"));
+    const auto& p = ket::Profile::current();
+    const auto expected = [&p](int pixels) {
+        const auto px = [pixels](qreal n) {
+            return ketplus::InterfaceZoomMetrics::scale(qRound(n), pixels);
+        };
+        return QStringLiteral("QLabel { font-size: %1px; } QPushButton { font-size: %2px; } "
+                              "QToolButton { font-size: %3px; }")
+            .arg(px(p.buttonFontPixels))
+            .arg(px(p.readingPixels))
+            .arg(px(p.dialogTitlePixels));
+    };
+    QCOMPARE(medium, expected(14));
+    QCOMPARE(ketplus::TypeScale::apply(templateSheet, 16), expected(16));
 
     // Input samples for scaleLiteralFontSizes — intentional raw literals.
     const QString literals =

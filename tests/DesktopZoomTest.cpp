@@ -8,6 +8,10 @@
 #include "ui/Theme.h"
 #include "workspace/ActivityBar.h"
 
+#include "KetProfile.h"
+#include "KetStepSlider.h"
+
+#include <QAbstractButton>
 #include <QAction>
 #include <QComboBox>
 #include <QDir>
@@ -15,7 +19,6 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
-#include <QPushButton>
 #include <QQuickItem>
 #include <QQuickView>
 #include <QSettings>
@@ -38,7 +41,7 @@ void openSettings(MainWindow& window) {
     action->trigger();
 }
 void saveSettings(MainWindow& window) {
-    for (auto* button : window.findChildren<QPushButton*>()) {
+    for (auto* button : window.findChildren<QAbstractButton*>()) {
         if (button->property("kvRole") == QStringLiteral("primaryAction")) {
             button->click();
             return;
@@ -119,7 +122,7 @@ class DesktopZoomTest final : public QObject {
         auto* header = root->findChild<QQuickItem*>("agentWorkspaceHeader");
         auto* footer = root->findChild<QQuickItem*>("composerFooter");
         QVERIFY(header && footer);
-        for (int pixels : {12, 14, 16, 12, 16, 14}) {
+        for (int pixels : {12, 14, 16, 18, 12, 16, 14}) {
             theme.setInterfaceFontSizePixels(pixels);
             bar->applyPalette(theme.palette(), pixels);
             agent->applyTheme(theme.palette(), pixels);
@@ -221,12 +224,20 @@ class DesktopZoomTest final : public QObject {
         auto* two = second.findChild<AgentWorkspaceView*>();
         QVERIFY(one && two);
         openSettings(first);
-        first.findChild<QToolButton*>("interfaceZoomLarge")->click();
+        auto* zoom = first.findChild<ket::StepSlider*>("interfaceZoomSteps");
+        QVERIFY(zoom);
+        zoom->setCurrentIndex(16 - AppearanceSettings::minimumInterfaceFontSizePixels);
         saveSettings(first);
-        QTRY_COMPARE(one->tokens().value("reading").toInt(), 18);
-        QTRY_COMPARE(two->tokens().value("reading").toInt(), 18);
+        QTRY_COMPARE(
+            one->tokens().value("reading").toInt(),
+            InterfaceZoomMetrics::scale(qRound(ket::Profile::current().readingPixels), 16));
+        QTRY_COMPARE(two->tokens().value("reading").toInt(),
+                     one->tokens().value("reading").toInt());
         openSettings(second);
-        QVERIFY(second.findChild<QToolButton*>("interfaceZoomLarge")->isChecked());
+        auto* secondZoom = second.findChild<ket::StepSlider*>("interfaceZoomSteps");
+        QVERIFY(secondZoom);
+        QCOMPARE(secondZoom->currentIndex(),
+                 16 - AppearanceSettings::minimumInterfaceFontSizePixels);
         auto* family = second.findChild<QComboBox*>("editorFontFamily");
         QVERIFY(family);
         family->addItem(QStringLiteral("Courier New"));
