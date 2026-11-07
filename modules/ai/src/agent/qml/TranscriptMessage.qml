@@ -74,7 +74,8 @@ Item {
     readonly property var messageImages: imageSources || []
     readonly property var messageQuestions: questionData || []
     readonly property var messageQuestionAnswers: questionAnswerData || ({})
-    readonly property bool activityRow: category === "activity"
+    readonly property bool activityRow: category === "activity" && !noticeRow
+    readonly property bool noticeRow: subtype !== "question" && subtype !== "approval" && (category === "system" || subtype === "notice" || subtype === "compaction" || kind === "error")
     readonly property bool commandRow: activityRow && subtype === "command"
     readonly property string displayBody: shell.displayMessageBody(kind, body)
     readonly property string userExpansionKey: JSON.stringify(["user-message", view.cacheScope, messageKey])
@@ -243,6 +244,27 @@ Item {
                 font: agentOrigin.font
             }
 
+            TranscriptNotice {
+                objectName: "transcriptNotice"
+                width: parent.width
+                visible: messageDelegate.noticeRow
+                height: visible ? implicitHeight : 0
+                tokens: shell.t
+                title: messageDelegate.title || (kind === "error" ? "Agent error" : meta || "Conversation update")
+                message: messageDelegate.displayBody
+                status: kind === "error" ? "failed" : messageDelegate.status
+                subtype: messageDelegate.subtype
+            }
+            Text {
+                objectName: "transcriptSteerNotice"
+                visible: eventType === "turn.steered"
+                width: parent.width
+                text: "Sent while the agent was working · joined the running turn"
+                color: shell.t.textMuted
+                font.family: shell.t.uiFont
+                font.pixelSize: shell.t.caption
+                wrapMode: Text.Wrap
+            }
             Loader {
                 active: messageDelegate.groupLeader
                 visible: active
@@ -361,7 +383,7 @@ Item {
             Row {
                 height: Metrics.px(16, shell.t)
                 spacing: Metrics.px(7, shell.t)
-                visible: !messageDelegate.activityRow && !messageDelegate.chunkContinuation && kind !== "user" && kind !== "assistant" && subtype !== "question" && subtype !== "approval"
+                visible: !messageDelegate.noticeRow && !messageDelegate.activityRow && !messageDelegate.chunkContinuation && kind !== "user" && kind !== "assistant" && subtype !== "question" && subtype !== "approval"
                 TintedIcon {
                     anchors.verticalCenter: parent.verticalCenter
                     width: Metrics.px(15, shell.t)
@@ -677,7 +699,7 @@ Item {
                             bodyText.refreshRenderedSource();
                     }
                 }
-                visible: !messageDelegate.activityRow && subtype !== "question" && subtype !== "approval" && kind !== "file"
+                visible: !messageDelegate.noticeRow && !messageDelegate.activityRow && subtype !== "question" && subtype !== "approval" && kind !== "file"
                 readOnly: true
                 selectByMouse: true
                 persistentSelection: true

@@ -1,5 +1,6 @@
 #include "BrowserAgentInstructions.h"
 #include "agent/CodexAppServer.h"
+#include "agent/DaemonTranscriptNotices.h"
 
 #include "agent/DaemonTranscriptProjection.h"
 #include <algorithm>
@@ -106,6 +107,32 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
     const QJsonObject payload = envelope.value(QStringLiteral("payload")).toObject();
     const QString type = payload.value(QStringLiteral("event_type")).toString();
     const QJsonObject data = payload.value(QStringLiteral("data")).toObject();
+    const auto emitNotice = [&] {
+        auto notice =
+            agent_message::daemonEventNotice(type, data, agent_message::daemonNoticeItemId(cursor));
+        if (notice.isEmpty())
+            return;
+        if (daemonHasTranscriptWindow_ &&
+            (!found->windowReady || sessionId != daemonRestorePrioritySession_)) {
+            if (found->windowReady) {
+                found->windowReady = false;
+                emit daemonTranscriptInvalidated(sessionId);
+            }
+            return;
+        }
+        notice.insert("messageKey",
+                      agent_message::daemonMessageKey(envelope.value("turn_sequence").toInteger(),
+                                                      notice.value("itemId").toString()));
+        notice.insert("turnId",
+                      agent_message::daemonTurnId(envelope.value("turn_sequence").toInteger()));
+        emit notificationReceived("daemon/providerNotice",
+                                  {{"threadId", sessionId},
+                                   {"itemId", notice.value("itemId").toString()},
+                                   {"presentation", QJsonObject::fromVariantMap(notice)}});
+    };
+    if (type != "turn.completed")
+        emitNotice();
+
     if (type == "session.deleted") {
         daemonSessions_.remove(sessionId);
         emit daemonSessionDeleted(sessionId, generation);
@@ -275,6 +302,7 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
             QStringLiteral("daemon/userMessage"),
             {{QStringLiteral("threadId"), sessionId},
              {QStringLiteral("itemId"), QStringLiteral("steer:%1").arg(cursor)},
+             {QStringLiteral("eventType"), QStringLiteral("turn.steered")},
              {QStringLiteral("text"), data.value(QStringLiteral("text"))},
              {QStringLiteral("agentMessages"), data.value(QStringLiteral("agent_messages"))}});
         return;
@@ -341,6 +369,7 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
              {QStringLiteral("turn"),
               QJsonObject{{QStringLiteral("id"), found->turnId},
                           {QStringLiteral("status"), data.value(QStringLiteral("status"))}}}});
+        emitNotice();
         found->turnId.clear();
         return;
     }
@@ -388,6 +417,8 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
         return;
     }
     if (type == QStringLiteral("runtime.error") || type == QStringLiteral("runtime.stopped")) {
+        if (data.value("will_retry").toBool() || data.value("willRetry").toBool())
+            return;
         emit notificationReceived(
             QStringLiteral("error"),
             {{QStringLiteral("threadId"), sessionId},

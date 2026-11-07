@@ -1,4 +1,5 @@
 #include "FakeCodex.h"
+#include "agent/DaemonTranscriptNotices.h"
 #include "agent/DaemonTranscriptProjection.h"
 #include "cloud/CloudEventProjection.h"
 #include "providers/CodexAdapter.h"
@@ -13,6 +14,49 @@ using namespace ketplus::agent_message;
 class ProviderTranscriptTest : public QObject {
     Q_OBJECT
   private slots:
+    void lifecycleNoticesAreProjectedWithoutInventingSuccess() {
+        const QJsonArray events{
+            QJsonObject{{"cursor", 1},
+                        {"turn_sequence", 1},
+                        {"event_type", "session.provider_changed"},
+                        {"payload", QJsonObject{{"from", "codex"}, {"to", "claude"}}}},
+            QJsonObject{{"cursor", 2},
+                        {"turn_sequence", 1},
+                        {"event_type", "session.configuration_changed"},
+                        {"payload", QJsonObject{{"effective", QJsonObject{{"model", "test-model"},
+                                                                          {"effort", "high"}}}}}},
+            QJsonObject{{"cursor", 3},
+                        {"turn_sequence", 1},
+                        {"event_type", "conversation.context_changed"},
+                        {"payload", QJsonObject{{"context_revision", 2}}}},
+            QJsonObject{{"cursor", 4},
+                        {"turn_sequence", 1},
+                        {"event_type", "usage.session"},
+                        {"payload", QJsonObject{{"estimatedCostUsd", 0.125}}}},
+            QJsonObject{{"cursor", 5},
+                        {"turn_sequence", 1},
+                        {"event_type", "turn.completed"},
+                        {"payload", QJsonObject{{"status", "completed"}}}}};
+        const auto rows = daemonWindowMessages({{"events", events}});
+        QCOMPARE(rows.size(), 4);
+        QCOMPARE(rows[0].toMap().value("title").toString(), "Provider changed");
+        QCOMPARE(rows[1].toMap().value("body").toString(), "test-model · high");
+        QCOMPARE(rows[2].toMap().value("body").toString(), "Context revision 2");
+        QCOMPARE(rows[3].toMap().value("body").toString(), "Session estimate: $0.1250 USD");
+        QCOMPARE(rows[3].toMap().value("messageKey").toString(), "daemon:1:notice:5");
+        for (const auto& state : {"failed", "interrupted", "completed"}) {
+            const auto note = daemonEventNotice("turn.completed", {{"status", state}}, "receipt");
+            QCOMPARE(note.value("status").toString(), QString::fromLatin1(state));
+            QVERIFY(note.value("body").toString().isEmpty());
+        }
+        QVERIFY(daemonEventNotice("turn.completed", {{"status", "unknown"}}, "receipt").isEmpty());
+        QVERIFY(sessionEstimateText({{"estimatedCostUsd", -1}}).isEmpty());
+        const auto retry = daemonEventNotice(
+            "runtime.error", {{"will_retry", true}, {"message", "Network interrupted"}}, "retry");
+        QCOMPARE(retry.value("subtype").toString(), "reconnecting");
+        QCOMPARE(retry.value("status").toString(), "running");
+        QVERIFY(daemonEventNotice("runtime.error", {{"message", "Fatal"}}, "error").isEmpty());
+    }
     void agentMessagesShowTheirSenderAndHeldNotices() {
         const QJsonObject origin{
             {"origin", "agent"},

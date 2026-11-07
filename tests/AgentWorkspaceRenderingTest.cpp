@@ -2076,3 +2076,55 @@ void AgentWorkspaceViewTest::transcriptDayDividersUseJournalDates() {
              ket::Appearance::scale(ket::Profile::current().codePadding, 18.0 / 14));
     QCOMPARE(doc->textDocument()->toPlainText(), QString("return 42;"));
 }
+
+void AgentWorkspaceViewTest::transcriptNoticesUseRuntimeState() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 900);
+    view.show();
+    view.resetMessages({QVariantMap{{"kind", "tool"},
+                                    {"category", "system"},
+                                    {"subtype", "event"},
+                                    {"title", "Model configuration changed"},
+                                    {"body", "Model A · high"}},
+                        QVariantMap{{"kind", "error"},
+                                    {"category", "system"},
+                                    {"title", "Agent error"},
+                                    {"body", "<b>Untrusted error text</b>"},
+                                    {"status", "failed"}},
+                        QVariantMap{{"kind", "tool"},
+                                    {"category", "system"},
+                                    {"subtype", "turnEnd"},
+                                    {"title", "Turn completed"},
+                                    {"body", "Session estimate: $0.1250 USD"},
+                                    {"status", "completed"}}},
+                       "notices");
+    auto* root = view.quickView()->rootObject();
+    QVERIFY(root);
+    QStringList titles, bodies;
+    const auto collect = [&] {
+        titles.clear();
+        bodies.clear();
+        const auto visit = [&](auto&& self, QQuickItem* item) -> void {
+            if (item->isVisible() && item->objectName() == "transcriptNoticeTitle")
+                titles << item->property("text").toString();
+            if (item->isVisible() && item->objectName() == "transcriptNoticeBody") {
+                bodies << item->property("text").toString();
+                QVERIFY(item->property("readOnly").toBool());
+                QVERIFY(item->property("selectByMouse").toBool());
+            }
+            for (auto* child : item->childItems())
+                self(self, child);
+        };
+        visit(visit, root);
+        return titles.size();
+    };
+    QTRY_COMPARE(collect(), 3);
+    QVERIFY(titles.contains("Turn completed"));
+    QVERIFY(bodies.contains("<b>Untrusted error text</b>"));
+    const auto capture = qEnvironmentVariable("KETPLUS_NOTICE_CAPTURE");
+    if (!capture.isEmpty()) {
+        QTest::qWait(80);
+        QVERIFY(view.quickView()->grabWindow().save(capture));
+    }
+}
