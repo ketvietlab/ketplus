@@ -23,12 +23,14 @@ bool referenced(const QList<StoredSession>& sessions, const QString& except,
 }
 } // namespace
 
-QJsonArray SessionHost::providerCleanupTargets(const StoredSession& session) const {
+std::optional<QJsonArray> SessionHost::providerCleanupTargets(const StoredSession& session) const {
     QJsonArray targets;
-    const auto retained = journal_->sessions();
+    const auto retained = journal_->readSessions();
+    if (!retained)
+        return std::nullopt;
     for (const auto& value : threadsOf(session)) {
         const auto target = value.toObject();
-        if (!referenced(retained, session.id, target.value("provider").toString(),
+        if (!referenced(*retained, session.id, target.value("provider").toString(),
                         target.value("thread_id").toString()))
             targets.append(target);
     }
@@ -52,7 +54,13 @@ void SessionHost::processDeletionWork() {
             if (providerCleanupInFlight_.contains(key))
                 continue;
             // A retained conversation wins over a queued cleanup, including after restart.
-            if (referenced(journal_->sessions(), {}, provider, thread)) {
+            const auto retained = journal_->readSessions();
+            if (!retained) {
+                qWarning(
+                    "Provider cleanup deferred: retained session ownership could not be read.");
+                return;
+            }
+            if (referenced(*retained, {}, provider, thread)) {
                 journal_->completeProviderCleanup(id, generation, provider, thread);
                 continue;
             }

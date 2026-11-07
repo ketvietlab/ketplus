@@ -105,7 +105,9 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
     source cleanup remains separately tracked.
   - [x] Reproduce explicit attachment cancellation bounds and preservation gaps;
     implement shared 1-MiB/128-candidate cancellation and retirement fencing.
-  - [ ] Cancellation final affected matrix/review/merge and safe cleanup.
+  - [x] Cancellation #240: final head `b4d49e6b`, affected Release/headless 12/12
+    (98.81 s), independent exact-head PASS after unsupported revision projection fix;
+    merged `0455bd89919a28c7b17f832ed4ef97bb8bef80bf`. Cleanup remains tracked separately.
   - [x] Session deletion transaction recovery #241: final head `71607352`,
     affected Release/headless 12/12 (55.64 s), independent exact-head PASS;
     merged `187566a6bad4626f1d5380cd51ab1e24795291b6`. Cleanup remains tracked separately.
@@ -219,7 +221,7 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | Item | State | Evidence / remaining work | Next action / owner |
 | --- | --- | --- | --- |
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
-| H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 and cloud #237 merged; transaction recovery #241 merged; bounded cancellation #240 gates pending | Finish cancellation gates; audit explicit session deletion / #2739 |
+| H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 and cloud #237 merged; transaction recovery #241 merged; cancellation #240 merged; explicit session-delete bounds still open | Audit explicit session deletion and tombstone enumeration / #2739 |
 | H1.2/H1.4–H1.7 | Not started | No claim that #128 backend acceptance is complete | Follow H1.1; prioritize a confirmed safety finding / #2739 |
 | H1.3 | In progress | Session-delete transaction recovery #241 merged; other operations and ownership read errors still under audit | Reproduce provider cleanup read failures / #2739 |
 | H2–H3 | Not started | Open daemon/provider review issues mapped | Execute after storage, or independent audit while waiting review / #2739 |
@@ -525,3 +527,16 @@ Next safety audit: provider cleanup reads `sessions()` to protect shared threads
 but that method also returns an empty list after a read error. Reproduce this with
 fake providers before changing the ownership check; it is a candidate, not yet a
 confirmed live data-loss event. No user data or provider quota is involved.
+
+### H1.3 provider ownership read failures
+
+Three Qt/fake-provider regressions reproduced unsafe cleanup: query failure and
+failure after a partial catalog both sent `thread/delete` for a retained shared
+thread; a new local deletion also succeeded when ownership could not be read.
+`readSessions()` now distinguishes a complete empty catalog from read failure.
+Both new deletion and queued cleanup fail closed on the latter; pending work and
+history survive, and repair/restart permits safe progress. Focused provider suite
+passes 13/13 including positive retry after repair. Full Pro, independent review
+and merge are pending (shared interface changed).
+See [ADR 0056](../../docs/decisions/0056-fail-closed-provider-ownership-reads.md).
+Malformed ownership JSON and catalog/per-record bounds remain separate audits.

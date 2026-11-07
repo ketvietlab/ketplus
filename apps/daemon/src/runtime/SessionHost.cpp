@@ -1507,7 +1507,11 @@ QJsonObject SessionHost::deleteSession(const QJsonObject& request) {
                          "Stop background tasks before deleting this conversation.");
     }
     const auto targets = providerCleanupTargets(session->stored);
-    for (const auto& value : targets) {
+    if (!targets)
+        return error(QStringLiteral("journal_error"),
+                     QStringLiteral("Provider thread ownership could not be read; the conversation "
+                                    "was kept."));
+    for (const auto& value : *targets) {
         const auto provider = value.toObject().value("provider").toString();
         if (provider != "codex" && provider != "claude")
             return error(
@@ -1517,7 +1521,7 @@ QJsonObject SessionHost::deleteSession(const QJsonObject& request) {
     const auto lastCursor = session->stored.lastCursor;
     QString journalError;
     if (!journal_->deleteSession(sessionId, generation, operationId, lifecycleRevision,
-                                 &journalError, targets)) {
+                                 &journalError, *targets)) {
         return error(QStringLiteral("journal_error"), journalError);
     }
     if (!threadId.isEmpty())

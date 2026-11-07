@@ -164,7 +164,8 @@ class SessionHost final : public QObject, private AgentHostPort {
     void recordWorktreeActivity(Session& session, const QString& type, const QJsonObject& payload,
                                 qint64 cursor);
     void processDeletionWork();
-    [[nodiscard]] QJsonArray providerCleanupTargets(const StoredSession& session) const;
+    [[nodiscard]] std::optional<QJsonArray>
+    providerCleanupTargets(const StoredSession& session) const;
     QSet<QString> providerCleanupInFlight_;
     qint64 deletionWorkCursor_{0};
     [[nodiscard]] QJsonObject resolveResource(const QJsonObject& request);

@@ -940,7 +940,7 @@ SessionHead LocalJournal::sessionHead(const QString& sessionId) const {
     return {query.value(0).toLongLong(), query.value(1).toLongLong()};
 }
 
-QList<StoredSession> LocalJournal::sessions() const {
+std::optional<QList<StoredSession>> LocalJournal::readSessions() const {
     QList<StoredSession> result;
     QSqlQuery query(database_);
     if (!query.exec(QStringLiteral(
@@ -950,7 +950,7 @@ QList<StoredSession> LocalJournal::sessions() const {
             "context_revision, compact_window "
             "FROM sessions ORDER BY id"))) {
         setError(query.lastError().text());
-        return result;
+        return std::nullopt;
     }
     while (query.next()) {
         result.append({query.value(0).toString(),    query.value(1).toString(),
@@ -964,7 +964,15 @@ QList<StoredSession> LocalJournal::sessions() const {
                        query.value(16).toLongLong(), query.value(17).toString(),
                        query.value(18).toLongLong(), query.value(19).toLongLong()});
     }
+    if (query.lastError().isValid()) {
+        setError(query.lastError().text());
+        return std::nullopt;
+    }
     return result;
+}
+
+QList<StoredSession> LocalJournal::sessions() const {
+    return readSessions().value_or(QList<StoredSession>{});
 }
 
 QStringList LocalJournal::worktreePaths() const {
