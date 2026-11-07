@@ -37,7 +37,9 @@ TranscriptEvent ActivityNormalizer::normalize(const QJsonObject& item,
         presentation = agent_message::message(QStringLiteral("user"), textValue,
                                               QStringLiteral("You"), {}, itemId);
         presentation.insert(QStringLiteral("category"), QStringLiteral("user"));
-        presentation.insert(QStringLiteral("eventType"), QStringLiteral("user.message"));
+        presentation.insert(QStringLiteral("eventType"), item.value("eventType") == "turn.steered"
+                                                             ? QStringLiteral("turn.steered")
+                                                             : QStringLiteral("user.message"));
         presentation.insert(QStringLiteral("title"), QStringLiteral("You"));
         presentation.insert(QStringLiteral("timestamp"),
                             item.value(QStringLiteral("timestamp")).toString());
@@ -148,6 +150,10 @@ QSet<QString> ActivityNormalizer::registeredProtocolEventTypes() {
             QStringLiteral("runtime.error"),
             QStringLiteral("session.created"),
             QStringLiteral("session.renamed"),
+            QStringLiteral("session.provider_changed"),
+            QStringLiteral("session.configuration_changed"),
+            QStringLiteral("conversation.context_changed"),
+            QStringLiteral("session.forked"),
             QStringLiteral("turn.completed"),
             QStringLiteral("turn.queued"),
             QStringLiteral("turn.started"),

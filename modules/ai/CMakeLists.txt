@@ -23,6 +23,8 @@ add_library(ketplus_ai STATIC
     src/agent/AgentSessionHistory.cpp
     src/agent/AgentSessionDaemonHistory.cpp
     src/agent/AgentSessionDaemonCatchup.cpp
+    src/agent/DaemonTranscriptNotices.cpp
+    src/agent/DaemonTranscriptNotices.h
     src/agent/DaemonTranscriptProjection.cpp
     src/agent/DaemonTranscriptProjection.h
     src/agent/AgentSessionManager.cpp
@@ -151,6 +153,7 @@ set_source_files_properties(
     src/agent/qml/TranscriptRemoteGroup.qml
     PROPERTIES QT_RESOURCE_ALIAS "TranscriptRemoteGroup.qml"
 )
+set_source_files_properties(src/agent/qml/TranscriptNotice.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptNotice.qml")
 set_source_files_properties(src/agent/qml/TranscriptActivityHeader.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptActivityHeader.qml")
 set_source_files_properties(src/agent/qml/TranscriptChangedFiles.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptChangedFiles.qml")
 set_source_files_properties(
@@ -270,6 +273,7 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
         src/agent/qml/ModelPicker.qml
         src/agent/qml/MessageImageGallery.qml
         src/agent/qml/TranscriptRemoteGroup.qml
+        src/agent/qml/TranscriptNotice.qml
         src/agent/qml/TranscriptActivityRow.qml
         src/agent/qml/TranscriptActivityHeader.qml
         src/agent/qml/TranscriptChangedFiles.qml

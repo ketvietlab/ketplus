@@ -160,3 +160,11 @@ expansion hit targets and multiline command summaries. Group headers consume
 ActivityGroupRecipe while the message model retains virtualized child ownership.
 ChangedFilesRecipe composes path/rename/removed-file context actions; the generic
 card cannot replace those identities. Detail bodies remain loaded on expansion.
+
+System notices use a shared plain-text, selectable presentation. Known journal
+provider/model/context/fork/rename events and turn-end receipts share live/replay
+projection and stable message keys. Receipt cost is labelled `Session estimate`
+because Claude SDK accounting is cumulative; a page without usage evidence omits
+it. Retryable errors show reconnecting without changing the running lifecycle.
+Older retained-output/diff/text markers stay visible. Unsupported queue actions
+are not shown; queued status follows the daemon state.

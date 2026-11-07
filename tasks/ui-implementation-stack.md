@@ -40,7 +40,8 @@ Record technical verification separately from the later review/acceptance phase.
 - [x] Pro: header/composer #159 existing-runtime UI; #120 reviewer dependency remains separate.
 - [x] Pro: messages #160 (implementation; native acceptance deferred).
 - [x] Pro: activity #161 UI and provider step mapping (native acceptance deferred).
-- [ ] Pro: notices #162, questions/details #163.
+- [x] Pro: notices #162 using available journal/runtime state (native acceptance deferred).
+- [ ] Pro: questions/details #163.
 - [ ] Pro: overlays #164, worktrees/connections #165, settings #166, Atlas #167.
 
 Behaviour dependencies (#120, #125, #126, #128, #130, #170) must be represented
@@ -92,3 +93,12 @@ virtual group expansion and reader anchoring. Explicit tool names map to wait,
 monitor, wake, skill, tool search, stop, subagent, plan and web steps; private
 reasoning remains hidden under the existing contract. Focused interaction,
 light/dark detail, grouping and synthetic mapping checks pass.
+
+Activity: PR #219 on #218. Notices layer shares live/replay projection for provider,
+model, execution-context and fork/rename events, and adds one turn-end receipt.
+SDK cost is explicitly a cumulative session estimate, omitted when unavailable;
+unknown turn states never become success. Steers retain their label, reconnecting
+notices do not fail a turn, and existing trimmed-detail receipts remain visible.
+Queued state uses the actual session status; no unsupported queue mutation controls
+are fabricated. UI checks (14 cases), provider projection and daemon replay pass;
+two old last-row assertions now check both preserved final text and one receipt.
