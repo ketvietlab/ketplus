@@ -10,6 +10,9 @@ milestone changes state.
   text/reasoning (ADR 0039). The existing age/acknowledgment/latest-turn guards and
   per-pass byte budget apply. Configurable budgets, blob/media policies and Storage
   settings remain tracked in #128; these changes do not imply a deployed daemon.
+  Adjacent redundant tool starts can also be removed without changing transcript
+  order or dropping start-only fields; interleaved and incomplete cases remain
+  protected (ADR 0041).
 
 - Desktop discovers conversations created by a phone or another daemon client while
   it remains connected, without switching the selected conversation or reloading

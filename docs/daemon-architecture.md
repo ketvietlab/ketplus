@@ -131,8 +131,11 @@ latest 20 actual turns per conversation/generation, any turn with raw events
 still awaiting acknowledgment, any turn containing questions or approvals, and
 sessions outside an explicitly idle state. The same pass trims eligible inline completed
 command output to its first 4 KiB and last 16 KiB on UTF-8 boundaries, with an explicit
-notice and `item.compacted` metadata. Messages, images and `item.started` rows are
-unchanged. Known tool result text is also capped to a shared 4 KiB prefix, preserving
+notice and `item.compacted` metadata. Messages and images remain unchanged.
+Redundant tool starts are removed only when the immediately following retained
+event is their same-turn completion and preserves start data (except lifecycle
+status and empty known progress placeholders); interleaved/partial/large cases
+remain (ADR 0041). Known tool result text is also capped to a shared 4 KiB prefix, preserving
 media/resource blocks, arguments, errors and structured result fields. Reasoning raw
 content is removed only when a nonempty summary remains. Large file diffs retain a
 UTF-8 prefix in an explicit `diff_excerpt` field plus original line statistics, with

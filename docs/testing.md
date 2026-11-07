@@ -417,3 +417,9 @@ accessible `Diff trimmed` label in normal and compact single-file rows. The shar
 statistics header requires the full Pro build/test matrix, in addition to the
 focused daemon and render cases. Native VoiceOver, Windows and live multi-GB journals
 remain separate acceptance work.
+
+Adjacent-start retention (ADR 0041) extends the journal guard matrix and adds
+`ketplus_desktop_start_retention_tests`. The latter compares actual desktop
+projection content/order, activity group identity, replay/page agreement and stale
+continuation rejection for adjacent versus interleaved tool lifecycles. It uses
+synthetic temporary journals and no provider processes.
