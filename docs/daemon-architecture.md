@@ -134,9 +134,12 @@ command output to its first 4 KiB and last 16 KiB on UTF-8 boundaries, with an e
 notice and `item.compacted` metadata. Messages, images and `item.started` rows are
 unchanged. Known tool result text is also capped to a shared 4 KiB prefix, preserving
 media/resource blocks, arguments, errors and structured result fields. Reasoning raw
-content is removed only when a nonempty summary remains. See
+content is removed only when a nonempty summary remains. Large file diffs retain a
+UTF-8 prefix in an explicit `diff_excerpt` field plus original line statistics, with
+a visible `Diff trimmed` label; partial patches never occupy the full `diff` field. See
 [ADR 0038](decisions/0038-command-output-retention.md) and
-[ADR 0039](decisions/0039-tool-text-and-reasoning-retention.md). The 30-day value is currently fixed;
+[ADR 0039](decisions/0039-tool-text-and-reasoning-retention.md) and
+[ADR 0040](decisions/0040-file-diff-retention.md). The 30-day value is currently fixed;
 configurable retention and the remaining detail compaction are still tracked in #128.
 
 Each minute's idle pass examines at most 128 replay rows, resumes its scan on the

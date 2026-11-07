@@ -116,10 +116,11 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
     // the separate blob-retention path; never materialize them in this idle pass.
     candidate.prepare(
         QStringLiteral("SELECT r.payload FROM replay_events AS r WHERE ") + eligible +
-        QStringLiteral("AND length(CAST(r.payload AS BLOB)) <= 1048576 "
-                       "AND json_extract(r.payload,'$.item.type') IN "
-                       "('commandExecution','mcpToolCall','dynamicToolCall','reasoning') "
-                       "AND json_type(r.payload,'$.item.compacted') IS NULL"));
+        QStringLiteral(
+            "AND length(CAST(r.payload AS BLOB)) <= 1048576 "
+            "AND json_extract(r.payload,'$.item.type') IN "
+            "('commandExecution','mcpToolCall','dynamicToolCall','reasoning','fileChange') "
+            "AND json_type(r.payload,'$.item.compacted') IS NULL"));
     QSqlQuery update(database_);
     update.prepare(QStringLiteral("UPDATE replay_events SET payload = ? WHERE rowid = ?"));
     qint64 parsedBytes = 0;

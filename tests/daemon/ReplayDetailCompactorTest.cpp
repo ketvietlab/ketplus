@@ -1,4 +1,5 @@
 #include "storage/ReplayDetailCompactor.h"
+#include "agent/FileChangeStatistics.h"
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QtTest>
@@ -131,6 +132,103 @@ class ReplayDetailCompactorTest final : public QObject {
         missing = original;
         missing.insert("content", QJsonArray{QJsonObject{{"media_ref", "keep-unknown-shape"}}});
         QVERIFY(!compactCompletedReplayItem(missing, cutoff()));
+    }
+    void fileDiffPreservesIdentityAndFullStatistics_data() {
+        QTest::addColumn<QString>("kind");
+        for (const char* kind : {"add", "delete", "update", "move", "unknown"})
+            QTest::newRow(kind) << QString(kind);
+    }
+    void fileDiffPreservesIdentityAndFullStatistics() {
+        QFETCH(QString, kind);
+        QString diff;
+        if (kind == "update" || kind == "move")
+            diff = "diff --git a/old b/new\n--- a/old\n+++ b/new\n@@ -1,5000 +1,5000 @@\n";
+        for (int i = 0; i < 5000; ++i)
+            diff += QStringLiteral("+界 added line\n-removed line\n");
+        QJsonObject change{
+            {"path", "src/old.cpp"},
+            {"kind", QJsonObject{{"type", kind == "move" ? "update" : kind},
+                                 {"move_path", kind == "move" ? "src/new.cpp" : ""}}},
+            {"diff", diff},
+            {"opaque", "keep"}};
+        const QJsonObject small{{"path", "small"}, {"diff", "keep small"}};
+        const QJsonObject original{{"id", "edit"},
+                                   {"type", "fileChange"},
+                                   {"status", "completed"},
+                                   {"changes", QJsonArray{change, small}},
+                                   {"other", "keep"}};
+        const auto changed = compactCompletedReplayItem(original, cutoff());
+        QVERIFY(changed);
+        const auto changes = changed->value("changes").toArray();
+        QCOMPARE(changes.at(1).toObject(), small);
+        auto retained = changes.first().toObject();
+        QVERIFY(!retained.contains("diff"));
+        const auto preview = retained.take("diff_excerpt").toString();
+        QVERIFY(preview.toUtf8().size() <= 63 * 1024);
+        QVERIFY(diff.startsWith(preview));
+        QVERIFY(!preview.contains(QChar::ReplacementCharacter));
+        const auto stats = ketplus::fileChangeStatistics(changes.first().toObject());
+        QCOMPARE(stats.known, kind != "unknown");
+        QCOMPARE(stats.added, kind == "add"                        ? 10000
+                              : kind == "update" || kind == "move" ? 5000
+                                                                   : 0);
+        QCOMPARE(stats.removed, kind == "delete"                     ? 10000
+                                : kind == "update" || kind == "move" ? 5000
+                                                                     : 0);
+        QVERIFY(!ketplus::rawFileChangeStatistics(changes.first().toObject()).known);
+        const auto info = retained.take("compacted").toObject();
+        QCOMPARE(info.value("original_bytes").toInteger(), diff.toUtf8().size());
+        QCOMPARE(info.value("retained_bytes").toInteger(), preview.toUtf8().size());
+        QVERIFY(info.value("excerpt_only").toBool());
+        change.remove("diff");
+        QCOMPARE(retained, change);
+        auto remaining = *changed;
+        remaining.remove("changes");
+        remaining.remove("compacted");
+        auto expected = original;
+        expected.remove("changes");
+        QCOMPARE(remaining, expected);
+        QVERIFY(!compactCompletedReplayItem(*changed, cutoff()));
+    }
+    void fileDiffCutsAtUtf8Boundary() {
+        const QString prefix(63 * 1024 - 1, 'x');
+        const QString diff = prefix + QString(1000, QChar(0x754c));
+        const QJsonObject item{
+            {"type", "fileChange"},
+            {"status", "failed"},
+            {"changes", QJsonArray{QJsonObject{{"path", "utf8"}, {"diff", diff}}}}};
+        const auto changed = compactCompletedReplayItem(item, cutoff());
+        QVERIFY(changed);
+        QCOMPARE(
+            changed->value("changes").toArray().first().toObject().value("diff_excerpt").toString(),
+            prefix);
+    }
+    void fileDiffRejectsAmbiguousShapes() {
+        QJsonObject change{{"diff", QString(65536, 'x')}};
+        QJsonObject item{
+            {"type", "fileChange"}, {"status", "completed"}, {"changes", QJsonArray{change}}};
+        QVERIFY(!compactCompletedReplayItem(item, cutoff()));
+        change.insert("diff", QString(70000, 'x'));
+        for (const char* field : {"compacted", "diff_excerpt"}) {
+            auto marked = change;
+            marked.insert(field, QJsonObject{});
+            item.insert("changes", QJsonArray{marked});
+            QVERIFY(!compactCompletedReplayItem(item, cutoff()));
+        }
+        item.insert("changes", QJsonArray{change});
+        item.insert("status", "inProgress");
+        QVERIFY(!compactCompletedReplayItem(item, cutoff()));
+    }
+    void storedStatisticsRejectInvalidCounts() {
+        for (const auto& invalid : QJsonArray{-1, 1.5, 2147483648.0, "3", QJsonValue()}) {
+            const QJsonObject change{
+                {"diff_excerpt", "@@ -1 +1 @@\n+partial\n"},
+                {"compacted",
+                 QJsonObject{
+                     {"policy", "file-diff-v1"},
+                     {"stats", QJsonObject{{"known", true}, {"added", invalid}, {"removed", 0}}}}}};
+            QVERIFY(!ketplus::fileChangeStatistics(change).known);
+        }
     }
     void invalidCutoffDoesNotTransform() {
         QVERIFY(!compactCompletedReplayItem(tool(), {}));

@@ -1,4 +1,5 @@
 #include "agent/AgentMessageFormatter.h"
+#include "agent/FileChangeStatistics.h"
 #include "agent/McpToolResultMedia.h"
 #include "agent/TranscriptFileLocation.h"
 #include "agent/TranscriptNormalizer.h"
@@ -175,35 +176,14 @@ QVariantMap fileChangeMessage(const QJsonObject& item, bool completed) {
         if (path.isEmpty())
             continue;
         paths.append(path);
-        const auto diff = change.value(QStringLiteral("diff")).toString();
         const auto kind = change.value(QStringLiteral("kind"))
                               .toObject()
                               .value(QStringLiteral("type"))
                               .toString();
-        int added = 0;
-        int removed = 0;
-        bool known = false;
-        if (change.value(QStringLiteral("diff")).isString() &&
-            (kind == QStringLiteral("add") || kind == QStringLiteral("delete"))) {
-            const int lines =
-                diff.isEmpty() ? 0 : int(diff.count('\n')) + (diff.endsWith('\n') ? 0 : 1);
-            added = kind == QStringLiteral("add") ? lines : 0;
-            removed = kind == QStringLiteral("delete") ? lines : 0;
-            known = true;
-        } else {
-            bool inHunk = false;
-            for (const auto& line : diff.split('\n')) {
-                if (line.startsWith(QStringLiteral("@@ "))) {
-                    inHunk = true;
-                    known = true;
-                } else if (line.startsWith(QStringLiteral("diff --git ")))
-                    inHunk = false;
-                else if (inHunk && line.startsWith('+'))
-                    ++added;
-                else if (inHunk && line.startsWith('-'))
-                    ++removed;
-            }
-        }
+        const auto stats = fileChangeStatistics(change);
+        const int added = stats.added;
+        const int removed = stats.removed;
+        const bool known = stats.known;
         const auto changeKind = change.value(QStringLiteral("kind")).toObject();
         const auto destination =
             changeKind.value(QStringLiteral("move_path"))
@@ -212,21 +192,26 @@ QVariantMap fileChangeMessage(const QJsonObject& item, bool completed) {
                                   : kind == QStringLiteral("add")    ? QStringLiteral("Created")
                                   : kind == QStringLiteral("delete") ? QStringLiteral("Deleted")
                                                                      : QStringLiteral("Edited");
-        statistics.append(QVariantMap{{"path", path},
-                                      {"added", added},
-                                      {"removed", removed},
-                                      {"known", known},
-                                      {"operation", operation},
-                                      {"destination", destination}});
+        statistics.append(
+            QVariantMap{{"path", path},
+                        {"added", added},
+                        {"removed", removed},
+                        {"known", known},
+                        {"operation", operation},
+                        {"destination", destination},
+                        {"diffTrimmed",
+                         change.value("compacted").toObject().value("policy") == "file-diff-v1"}});
     }
     const QString state =
         completed ? item.value(QStringLiteral("status")).toString() : QStringLiteral("running");
     const QString verb = completed ? QStringLiteral("Edited") : QStringLiteral("Editing");
-    const QString title =
-        QStringLiteral("%1 %2 %3")
-            .arg(verb)
-            .arg(paths.size())
-            .arg(paths.size() == 1 ? QStringLiteral("file") : QStringLiteral("files"));
+    QString title = QStringLiteral("%1 %2 %3")
+                        .arg(verb)
+                        .arg(paths.size())
+                        .arg(paths.size() == 1 ? QStringLiteral("file") : QStringLiteral("files"));
+    if (item.value(QStringLiteral("compacted")).toObject().value(QStringLiteral("policy")) ==
+        QStringLiteral("file-diff-v1"))
+        title += QStringLiteral(" · Diff trimmed");
     auto entry = message(QStringLiteral("file"),
                          paths.isEmpty() ? QStringLiteral("File changes") : paths.join('\n'), title,
                          paths.value(0), item.value(QStringLiteral("id")).toString());

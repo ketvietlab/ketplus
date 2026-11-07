@@ -473,8 +473,8 @@ class JournalUsageRetentionTest final : public QObject {
     void toolAndReasoningRetentionUsesTurnGuards_data() {
         QTest::addColumn<QString>("kind");
         QTest::addColumn<QString>("guard");
-        for (const QString& kind :
-             {QString("mcpToolCall"), QString("dynamicToolCall"), QString("reasoning")})
+        for (const QString& kind : {QString("mcpToolCall"), QString("dynamicToolCall"),
+                                    QString("reasoning"), QString("fileChange")})
             for (const QString& guard : {QString("eligible"), QString("unacknowledged"),
                                          QString("running"), QString("recent")})
                 QTest::newRow(qPrintable(kind + "-" + guard)) << kind << guard;
@@ -488,7 +488,12 @@ class JournalUsageRetentionTest final : public QObject {
         QVERIFY(seed(journal, path, guard != "unacknowledged"));
         Database database(path);
         QJsonObject fields{{"type", kind}};
-        if (kind == "reasoning") {
+        if (kind == "fileChange") {
+            fields.insert("status", "completed");
+            fields.insert("changes", QJsonArray{QJsonObject{{"path", "synthetic.cpp"},
+                                                            {"kind", QJsonObject{{"type", "add"}}},
+                                                            {"diff", QString(80000, 'x')}}});
+        } else if (kind == "reasoning") {
             fields.insert("summary", QJsonArray{"summary stays"});
             fields.insert("content", QJsonArray{QString(10000, 'x')});
         } else {

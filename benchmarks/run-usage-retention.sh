@@ -19,5 +19,6 @@ for run in 1 2 3; do
     "$build_dir/ketplus_daemon_usage_retention_tests" rawBacklogUsesTurnLookup commandBudgetResumesAndRollbackRestoresPayloads \
         toolAndReasoningRetentionUsesTurnGuards:mcpToolCall-eligible \
         toolAndReasoningRetentionUsesTurnGuards:dynamicToolCall-eligible \
-        toolAndReasoningRetentionUsesTurnGuards:reasoning-eligible
+        toolAndReasoningRetentionUsesTurnGuards:reasoning-eligible \
+        toolAndReasoningRetentionUsesTurnGuards:fileChange-eligible
 done

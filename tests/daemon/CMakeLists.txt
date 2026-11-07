@@ -65,6 +65,8 @@ target_compile_definitions(ketplus_daemon_machine_challenge_tests PRIVATE
     KETPLUS_CHALLENGE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/daemon-challenge-v2.json")
 ketplus_add_daemon_test(ketplus_daemon_usage_retention_tests JournalUsageRetentionTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_detail_compactor_tests ReplayDetailCompactorTest.cpp)
+target_include_directories(ketplus_daemon_detail_compactor_tests PRIVATE
+    "${PROJECT_SOURCE_DIR}/modules/ai/src")
 ketplus_add_daemon_test(ketplus_claude_account_usage_tests ClaudeAccountUsageTest.cpp)
 ketplus_add_daemon_test(ketplus_claude_credentials_tests ClaudeCredentialsTest.cpp)
 target_link_libraries(ketplus_claude_credentials_tests PRIVATE ketplus_remote)

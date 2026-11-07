@@ -1,4 +1,5 @@
 #include "storage/ReplayDetailCompactor.h"
+#include "agent/FileChangeStatistics.h"
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <algorithm>
@@ -97,6 +98,39 @@ std::optional<QJsonObject> compactCompletedReplayItem(const QJsonObject& origina
     const auto status = item.value("status").toString();
     if (status != "completed" && status != "failed")
         return std::nullopt;
+    if (type == "fileChange") {
+        auto changes = item.value("changes").toArray();
+        qint64 originalBytes = 0;
+        qint64 retainedBytes = 0;
+        for (qsizetype i = 0; i < changes.size(); ++i) {
+            auto change = changes.at(i).toObject();
+            if (!change.value("diff").isString() || change.contains("compacted") ||
+                change.contains("diff_excerpt"))
+                continue;
+            const auto diff = change.value("diff").toString().toUtf8();
+            if (diff.size() <= 64 * 1024)
+                continue;
+            const auto stats = rawFileChangeStatistics(change);
+            // Leave margin for metadata while keeping the excerpt under the 64 KiB cap.
+            const auto excerpt = prefix(diff, 63 * 1024);
+            auto info = marker(cutoff, "file-diff-v1", diff.size(), excerpt.size());
+            info.insert("stats", QJsonObject{{"added", stats.added},
+                                             {"removed", stats.removed},
+                                             {"known", stats.known}});
+            info.insert("excerpt_only", true);
+            change.remove("diff"); // legacy readers must not mistake a prefix for a complete patch
+            change.insert("diff_excerpt", QString::fromUtf8(excerpt));
+            change.insert("compacted", info);
+            changes.replace(i, change);
+            originalBytes += diff.size();
+            retainedBytes += excerpt.size();
+        }
+        if (originalBytes == 0)
+            return std::nullopt;
+        item.insert("changes", changes);
+        item.insert("compacted", marker(cutoff, "file-diff-v1", originalBytes, retainedBytes));
+        return item;
+    }
     if (type == "commandExecution") {
         const auto output = item.value("aggregatedOutput").toString().toUtf8();
         if (output.size() <= 21 * 1024)

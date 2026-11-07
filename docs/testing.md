@@ -408,3 +408,12 @@ passes on synthetic eligible MCP, dynamic-tool and reasoning fixtures (fixture s
 excluded). Qt transcript tests check the visible and accessible `Text trimmed` title
 on ordinary MCP, browser and dynamic-tool rows. This does not replace native VoiceOver
 or installed-device verification.
+
+File-diff retention (ADR 0040) adds transformer cases for add/delete/update/rename,
+unknown formats, full original statistics, UTF-8 excerpts, idempotence and invalid
+stored counts. The journal guard matrix and Release benchmark include file changes.
+Qt transcript tests assert the original counts, rename identity, and visible and
+accessible `Diff trimmed` label in normal and compact single-file rows. The shared
+statistics header requires the full Pro build/test matrix, in addition to the
+focused daemon and render cases. Native VoiceOver, Windows and live multi-GB journals
+remain separate acceptance work.
