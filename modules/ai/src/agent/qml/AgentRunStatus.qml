@@ -1,5 +1,6 @@
 import "ChromeMetrics.js" as Metrics
 import QtQuick
+import Ket
 import QtQuick.Layouts
 
 Item {
@@ -20,22 +21,13 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         spacing: Metrics.px(9, workspace.t)
 
-        TintedIcon {
+        KetActivityIndicator {
             id: workingIcon
             objectName: "workingAnimationIcon"
             Layout.preferredWidth: Metrics.px(16, workspace.t)
             Layout.preferredHeight: Metrics.px(16, workspace.t)
-            source: "qrc:/agent/icons/zap.svg"
             color: workspace.t.accentHover
-            SequentialAnimation on opacity {
-                objectName: "workingOpacityAnimator"
-                running: status.animationAllowed
-                loops: Animation.Infinite
-                // Animator-only groups run on the scene graph render thread.
-                OpacityAnimator { from: 1; to: 0.56; duration: 520; easing.type: Easing.InOutQuad }
-                OpacityAnimator { from: 0.56; to: 1; duration: 520; easing.type: Easing.InOutQuad }
-                onStopped: workingIcon.opacity = 1
-            }
+            running: status.animationAllowed
         }
         Text {
             objectName: "workingStatusLabel"

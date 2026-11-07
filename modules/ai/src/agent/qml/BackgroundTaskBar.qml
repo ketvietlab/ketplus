@@ -1,5 +1,6 @@
 import "ChromeMetrics.js" as Metrics
 import QtQuick
+import Ket
 import QtQuick.Controls
 import QtQuick.Layouts
 
@@ -139,16 +140,23 @@ Rectangle {
                 spacing: Metrics.px(8, bar.t)
                 objectName: "backgroundTask_" + modelData.task_id
 
-                Rectangle {
-                    Layout.preferredWidth: Metrics.px(8, bar.t)
-                    Layout.preferredHeight: Metrics.px(8, bar.t)
-                    radius: width / 2
-                    color: bar.statusColor(row.modelData)
-                    SequentialAnimation on opacity {
-                        running: row.modelData.status === "running" && !bar.offline
-                        loops: Animation.Infinite
-                        NumberAnimation { to: 0.35; duration: 700 }
-                        NumberAnimation { to: 1; duration: 700 }
+                Item {
+                    Layout.preferredWidth: Metrics.px(16, bar.t)
+                    Layout.preferredHeight: Metrics.px(16, bar.t)
+                    readonly property bool working: row.modelData.status === "running" && !bar.offline
+                    KetActivityIndicator {
+                        anchors.centerIn: parent
+                        visible: parent.working
+                        color: bar.statusColor(row.modelData)
+                        running: visible && bar.visible && agentHost.workingMotionEnabled
+                            && Window.window !== null && Window.window.visible && Window.window.active
+                            && Window.window.visibility !== Window.Minimized
+                    }
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: Metrics.px(8, bar.t); height: width; radius: width / 2
+                        visible: !parent.working
+                        color: bar.statusColor(row.modelData)
                     }
                 }
                 TintedIcon {

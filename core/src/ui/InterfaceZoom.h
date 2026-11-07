@@ -36,10 +36,9 @@ struct InterfaceZoomMetrics final {
         return mediumPixels;
     }
 
-    [[nodiscard]] static int snap(const int storedPixels) {
-        return pixels(fromPixels(storedPixels));
-    }
+    [[nodiscard]] static int snap(const int storedPixels) { return qBound(8, storedPixels, 24); }
 
+    // Numeric Settings values remain exact; named shortcuts still select 12/14/16.
     // Geometry has no text legibility floor: zero stays zero, hairlines stay one.
     [[nodiscard]] static double factor(const int basePixels) {
         return double(snap(basePixels)) / designedAtPixels;

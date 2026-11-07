@@ -1,5 +1,6 @@
 #pragma once
 
+#include "KetProfile.h"
 #include "ui/InterfaceZoom.h"
 
 #include <QRegularExpression>
@@ -9,8 +10,8 @@
 
 namespace ketplus {
 
-// Text and glyph size steps designed at Medium (14px). Call sites use only these
-// named steps; temporary px* aliases were collapsed onto the ladder in PR D.
+// Compatibility names for existing product adapters. Each resolves a published Két
+// profile role; new surfaces consume the kit component/recipe directly.
 enum class TypeStep {
     Micro,
     Caption,
@@ -25,25 +26,26 @@ enum class TypeStep {
 
 struct TypeScale final {
     [[nodiscard]] static int designed(const TypeStep step) {
+        const auto& p = ket::Profile::current();
         switch (step) {
         case TypeStep::Micro:
-            return 10;
+            return qRound(p.dayDividerPixels);
         case TypeStep::Caption:
-            return 11;
+            return qRound(p.messageTimePixels);
         case TypeStep::Body:
-            return 12;
+            return qRound(p.buttonFontPixels);
         case TypeStep::Reading:
-            return 14;
+            return qRound(p.readingPixels);
         case TypeStep::Title:
-            return 16;
+            return qRound(p.dialogTitlePixels);
         case TypeStep::Heading:
-            return 22;
+            return qRound(p.markdownHeading2Pixels);
         case TypeStep::Display:
-            return 29;
+            return qRound(p.markdownHeading1Pixels);
         case TypeStep::GlyphSmall:
-            return 16;
+            return qRound(p.iconSize);
         case TypeStep::GlyphLarge:
-            return 34;
+            return qRound(p.emptyIconSize);
         }
         return InterfaceZoomMetrics::mediumPixels;
     }
@@ -53,9 +55,8 @@ struct TypeScale final {
     }
 
     // Scales literal QSS geometry and expands {{micro}}, {{caption}}, … font steps.
-    // `biasPixels` is added after zoom scaling (ActivityBar uses +2).
     [[nodiscard]] static QString apply(QString sheet, const int basePixels,
-                                       const int biasPixels = 0) {
+                                       const int /*legacyBiasPixels*/ = 0) {
         // Only literal geometry is present before expanding font placeholders.
         static const QRegularExpression geometry(QStringLiteral(R"((?<![\w.])(\d+)px)"));
         auto matches = geometry.globalMatch(sheet);
@@ -67,8 +68,7 @@ struct TypeScale final {
                           QString::number(
                               InterfaceZoomMetrics::geometry(it->captured(1).toInt(), basePixels)));
         const auto put = [&](const char* key, const TypeStep step) {
-            sheet.replace(QLatin1String(key),
-                          QString::number(pixels(step, basePixels) + biasPixels));
+            sheet.replace(QLatin1String(key), QString::number(pixels(step, basePixels)));
         };
         put("{{micro}}", TypeStep::Micro);
         put("{{caption}}", TypeStep::Caption);
@@ -104,11 +104,9 @@ struct TypeScale final {
     }
 
     // Merged into Agent Workspace QML tokens. Named steps only (7 text + 2 glyph).
-    // `biasPixels` applies to text steps only (glyphs stay on the icon ladder).
-    [[nodiscard]] static QVariantMap tokens(const int basePixels, const int biasPixels = 0) {
-        const auto text = [basePixels, biasPixels](const TypeStep step) {
-            return pixels(step, basePixels) + biasPixels;
-        };
+    [[nodiscard]] static QVariantMap tokens(const int basePixels,
+                                            const int /*legacyBiasPixels*/ = 0) {
+        const auto text = [basePixels](const TypeStep step) { return pixels(step, basePixels); };
         return QVariantMap{
             {QStringLiteral("zoomFactor"), InterfaceZoomMetrics::factor(basePixels)},
             {QStringLiteral("micro"), text(TypeStep::Micro)},

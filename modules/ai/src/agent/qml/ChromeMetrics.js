@@ -1,7 +1,7 @@
 .pragma library
+.import Ket 1.0 as Kit
 
-// Match InterfaceZoomMetrics::geometry; font tokens are already scaled.
+// Existing product geometry calls use the same rounding and hairline rules as kit controls.
 function px(value, tokens) {
-    if (value <= 1) return value;
-    return Math.round(value * (tokens.zoomFactor || 1));
+    return Kit.KetTheme.px(value, tokens.zoomFactor || Kit.KetTheme.zoom)
 }
