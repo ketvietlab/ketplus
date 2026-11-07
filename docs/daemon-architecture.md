@@ -628,6 +628,13 @@ generation tombstone and durable deletion work. Live background tasks must first
 stop. Attached Desktop clients receive `session.deleted`; `session.list` also
 returns `deleted_sessions` so reconnecting clients remove stale persisted entries.
 Newer generations are not removed by an older tombstone.
+The tombstone and cleanup-work inserts must each affect one row, and each
+history-table delete must leave no matching row. A failed statement or commit
+rolls back and releases the transaction before returning failure, so retries
+cannot observe uncommitted deletion state. See
+[ADR 0055](decisions/0055-session-delete-transaction-recovery.md). Explicit deletion
+still performs synchronous work proportional to that session's history; bounded
+retirement remains a separate hardening item.
 
 The heartbeat optionally carries `deletions` (session ID, generation, lifecycle
 revision and operation ID). Only an exact `acceptedDeletions` receipt clears cloud

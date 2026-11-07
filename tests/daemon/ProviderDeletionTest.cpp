@@ -5,6 +5,9 @@
 #include "storage/LocalJournal.h"
 #include <QFile>
 #include <QSignalSpy>
+#include <QSqlDatabase>
+#include <QSqlError>
+#include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -12,6 +15,84 @@ using namespace ketplus::daemon;
 class ProviderDeletionTest final : public QObject {
     Q_OBJECT
   private slots:
+    void failedSessionDeletionRollsBackAndCanRetry_data() {
+        QTest::addColumn<QString>("fault");
+        QTest::newRow("commit") << "commit";
+        QTest::newRow("ignored-tombstone") << "session_tombstones";
+        QTest::newRow("ignored-work") << "session_deletion_work";
+        QTest::newRow("ignored-history") << "events";
+    }
+    void failedSessionDeletionRollsBackAndCanRetry() {
+        QFETCH(QString, fault);
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(journal.isOpen());
+        StoredSession session;
+        session.id = "deleted";
+        session.generation = 1;
+        session.worktreePath = dir.path();
+        session.adapter = "codex";
+        session.state = "ready";
+        QVERIFY(journal.upsertSession(session));
+        const auto number = journal.assignConversationNumber(session.id, 1);
+        QVERIFY(!number.isEmpty());
+        QVERIFY(journal.appendEvent(session.id, 1, "assistant.delta", {{"text", "keep"}}) > 0);
+        const auto before = journal.eventsAfter(session.id, 1, 0);
+        session.id = "unrelated";
+        QVERIFY(journal.upsertSession(session));
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == path)
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        QSqlQuery q(db);
+        if (fault == "commit") {
+            QVERIFY(q.exec("CREATE TABLE deletion_parent(id INTEGER PRIMARY KEY)"));
+            QVERIFY(q.exec("CREATE TABLE deletion_child(id INTEGER REFERENCES deletion_parent(id) "
+                           "DEFERRABLE INITIALLY DEFERRED)"));
+            QVERIFY(q.exec("CREATE TRIGGER fail_delete AFTER DELETE ON sessions "
+                           "BEGIN INSERT INTO deletion_child VALUES(1); END"));
+        } else if (fault == "events") {
+            QVERIFY(q.exec("CREATE TRIGGER fail_delete BEFORE DELETE ON events "
+                           "BEGIN SELECT RAISE(IGNORE); END"));
+        } else {
+            QVERIFY(q.exec(QString("CREATE TRIGGER fail_delete BEFORE INSERT ON %1 "
+                                   "BEGIN SELECT RAISE(IGNORE); END")
+                               .arg(fault)));
+        }
+        QString error;
+        const QJsonArray targets{QJsonObject{{"provider", "codex"}, {"thread_id", "owned"}}};
+        QVERIFY(!journal.deleteSession("deleted", 1, "delete-op", 1, &error, targets));
+        QVERIFY(!error.isEmpty());
+        // A failed commit must release the write transaction, not expose an
+        // uncommitted tombstone that would falsely succeed on the next retry.
+        QVERIFY2(q.exec("BEGIN"), qPrintable(q.lastError().text()));
+        QVERIFY(q.exec("ROLLBACK"));
+        QCOMPARE(journal.sessions().size(), 2);
+        QCOMPARE(journal.eventsAfter("deleted", 1, 0), before);
+        QCOMPARE(journal.conversationNumber("deleted", 1), number);
+        QVERIFY(journal.sessionTombstone("deleted", 1).sessionId.isEmpty());
+        QVERIFY(journal.deletionWork().isEmpty());
+        QVERIFY(q.exec("DROP TRIGGER fail_delete"));
+        QVERIFY2(journal.deleteSession("deleted", 1, "delete-op", 1, &error, targets),
+                 qPrintable(error));
+        QCOMPARE(journal.sessions().size(), 1);
+        QCOMPARE(journal.sessions().first().id, QString("unrelated"));
+        QVERIFY(journal.eventsAfter("deleted", 1, 0).isEmpty());
+        QCOMPARE(journal.sessionTombstone("deleted", 1).operationId, QString("delete-op"));
+        QCOMPARE(journal.deletionWork().size(), 1);
+        QCOMPARE(journal.deletionWork().first().toObject().value("provider_targets").toArray(),
+                 targets);
+        QVERIFY(journal.deleteSession("deleted", 1, "delete-op", 1, &error, targets));
+        QVERIFY(!journal.deleteSession("deleted", 1, "different-op", 1, &error, targets));
+        LocalJournal reopened(path);
+        QVERIFY(reopened.isOpen());
+        QCOMPARE(reopened.sessions().size(), 1);
+        QCOMPARE(reopened.sessionTombstone("deleted", 1).operationId, QString("delete-op"));
+        QCOMPARE(reopened.deletionWork().size(), 1);
+    }
     void purgeIsDurableAndScopedToUnsharedProviderThreads() {
         QTemporaryDir directory;
         const auto executable = directory.filePath("codex");

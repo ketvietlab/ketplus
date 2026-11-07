@@ -5,6 +5,11 @@ milestone changes state.
 
 ## Implemented
 
+- Session deletion rolls back and releases its transaction on commit failure;
+  ignored tombstone/work writes and incomplete history deletion fail without
+  committing partial state (ADR 0055). Retry preserves generation/operation fences.
+  Whole-session deletion work bounds remain a separate hardening item.
+
 - Cloud envelope ACK cleanup uses bounded transactional metadata maintenance;
   invalidation instead removes one exact cache identity before retry (ADR 0053).
   Receipts commit with a scoped recovery cursor before credential mirroring/raw
