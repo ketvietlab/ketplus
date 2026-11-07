@@ -288,10 +288,15 @@ QString itemSummary(const QJsonObject& item) {
 }
 
 QString retainedTextSuffix(const QJsonObject& item) {
-    return item.value(QStringLiteral("compacted")).toObject().value(QStringLiteral("policy")) ==
-                   QStringLiteral("tool-result-text-v1")
-               ? QStringLiteral(" · Text trimmed")
-               : QString{};
+    const auto info = item.value(QStringLiteral("compacted")).toObject();
+    const bool text = info.value(QStringLiteral("policy")) == QStringLiteral("tool-result-text-v1");
+    const bool arguments =
+        info.value(QStringLiteral("arguments")).toObject().value(QStringLiteral("policy")) ==
+        QStringLiteral("tool-arguments-v1");
+    if (arguments)
+        return text ? QStringLiteral(" · Text and arguments trimmed")
+                    : QStringLiteral(" · Arguments trimmed");
+    return text ? QStringLiteral(" · Text trimmed") : QString{};
 }
 
 // KetPlus browser API (apps/browser MCP facade, ADR 0008). Inline screenshots go to the

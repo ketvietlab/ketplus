@@ -429,3 +429,13 @@ revision-fenced persistence/reopen/rollback, actual configured retention, malfor
 policy fail-closed behavior and local-only API/cache boundaries. The agent-token
 IPC test also rejects both retention operations. Changes to the shared journal or
 host headers require the full Pro build and suite. No provider quota is consumed.
+
+### Tool-argument retention (#128)
+
+Run `ketplus_daemon_detail_compactor_tests`, `ketplus_daemon_usage_retention_tests`
+and `ketplus_agent_tests` after changing argument excerpts. Fixtures cover UTF-8
+object/array/string prefixes, previous text-marker upgrades, unknown-marker and
+active-item preservation, latest-turn/ACK/question guards, idempotence, and visible
+normal/browser labels with accessible names. `benchmarks/run-usage-retention.sh`
+includes fresh and prior-marker argument passes alongside the raw-backlog lookup.
+No live provider or installed journal is used.
