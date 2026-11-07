@@ -159,6 +159,52 @@ QJsonArray withoutUsage(const QJsonArray& events) {
 class JournalUsageRetentionTest final : public QObject {
     Q_OBJECT
   private slots:
+    void largePayloadGcUsesIndexedReplayReferencesOnReopen() {
+        QTemporaryDir directory;
+        const auto path = directory.filePath("journal.sqlite");
+        {
+            LocalJournal journal(path);
+            QVERIFY(seed(journal, path, true, 21, QString(300000, 'x'), true));
+        }
+        Database database(path);
+        // Emulate a journal predating the index, with a same-item retained backlog.
+        QVERIFY(database.exec("DROP INDEX IF EXISTS replay_events_item_transfer"));
+        QVERIFY(database.exec("UPDATE replay_events SET cursor=cursor+400000"));
+        QVERIFY(database.exec(
+            "WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<300000) "
+            "INSERT INTO replay_events "
+            "(session_id,generation,cursor,event_type,item_id,payload,sent_at,turn_sequence) "
+            "SELECT 'session',1,x,'item.started','item-1', "
+            "json_object('item',json_object('id','item-1','type','mcpToolCall',"
+            "'status','inProgress','progress',printf('%1000s','x'))), "
+            "'2020-01-01T00:00:00.000Z',21 FROM n"));
+        QElapsedTimer timer;
+        timer.start();
+        LocalJournal journal(path);
+        const auto reopenMs = timer.elapsed();
+        QVERIFY2(journal.isOpen(), qPrintable(journal.errorString()));
+        QCOMPARE(database.scalar(
+                     "SELECT count(*) FROM sqlite_master WHERE name='replay_events_item_transfer'"),
+                 1);
+        const auto plan = database.queryPlan(
+            "SELECT 1 FROM replay_events r WHERE r.session_id='session' AND r.generation=1 "
+            "AND r.item_id='item-1' AND "
+            "json_extract(r.payload,'$.large_event.transfer_id')='missing-transfer'");
+        QVERIFY2(plan.contains("replay_events_item_transfer"), qPrintable(plan));
+        QVERIFY2(plan.contains("<expr>=?"), qPrintable(plan));
+        timer.restart();
+        const auto changed = journal.pruneReplayDetails(cutoff(), 16);
+        const auto elapsed = timer.elapsed();
+        QVERIFY(changed.has_value());
+        QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE "
+                                 "json_type(payload,'$.item.compacted')='object'"),
+                 1);
+        QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE cursor<=300000"),
+                 300000);
+        qInfo() << "300000 retained same-item rows: reopen/index ms" << reopenMs
+                << "16-row retention pass ms" << elapsed << plan;
+        QVERIFY2(elapsed < 1000, "Retention stalled on same-item replay backlog");
+    }
     void boundedLargePayloadsCompactAtomically_data() {
         QTest::addColumn<bool>("revisionFailure");
         QTest::newRow("blob-delete") << false;

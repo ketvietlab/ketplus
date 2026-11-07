@@ -325,6 +325,14 @@ bool LocalJournal::migrateTranscriptSchema() {
         setError(index.lastError().text());
         return false;
     }
+    // Blob GC must seek the transfer instead of parsing every replay row for an item.
+    // This initializer also runs when opening journals created before this index.
+    if (!index.exec(QStringLiteral("CREATE INDEX IF NOT EXISTS replay_events_item_transfer ON "
+                                   "replay_events(session_id, generation, item_id, "
+                                   "json_extract(payload,'$.large_event.transfer_id'))"))) {
+        setError(index.lastError().text());
+        return false;
+    }
     return true;
 }
 

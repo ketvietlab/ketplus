@@ -37,3 +37,11 @@ messages or unsupported resource results. Asynchronous preview conversion,
 media policy, large payloads above this bound, archive expiry and complete
 storage-limit acceptance remain separate #128 work. No deployment or installed
 journal migration is implied.
+
+The retained-reference lookup uses `replay_events_item_transfer` on session,
+generation, item ID and the manifest transfer expression. Journal initialization
+creates it for existing databases too, so GC seeks an exact transfer instead of
+JSON-parsing every retained update for the item. Building that index is a one-time
+startup cost proportional to retained history; multi-GB startup is not yet
+validated. The regression reopens an old-format journal with 300,000 same-item
+replay rows, checks the expression query plan and preserves those protected rows.
