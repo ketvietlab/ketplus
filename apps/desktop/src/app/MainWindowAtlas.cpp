@@ -23,6 +23,7 @@
 #include "workspace/ActivityBar.h"
 #include "workspace/ExplorerPanel.h"
 
+#include "ui/SymbolIcon.h"
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
@@ -50,7 +51,6 @@
 #include <QSplitter>
 #include <QStatusBar>
 #include <QStyleOptionToolButton>
-#include <QSvgRenderer>
 #include <QTabBar>
 #include <QTabWidget>
 #include <QTimer>
@@ -73,9 +73,7 @@ class AtlasIconButton final : public QToolButton {
   public:
     AtlasIconButton(const QString& resource, const QString& label, QWidget* parent)
         : QToolButton(parent) {
-        QFile file(resource);
-        if (file.open(QIODevice::ReadOnly))
-            svg_ = file.readAll();
+        symbol_ = QFileInfo(resource).baseName().toUtf8();
         setAutoRaise(true);
         setFixedSize(32, 32);
         setStyleSheet(QStringLiteral(
@@ -93,14 +91,12 @@ class AtlasIconButton final : public QToolButton {
         QStyleOptionToolButton option;
         initStyleOption(&option);
         style()->drawComplexControl(QStyle::CC_ToolButton, &option, &painter, this);
-        auto svg = svg_;
-        svg.replace("#fff", palette().color(QPalette::ButtonText).name().toUtf8());
-        QSvgRenderer renderer(svg);
-        renderer.render(&painter, QRectF((width() - 20) / 2.0, (height() - 20) / 2.0, 20, 20));
+        ketplus::symbol_icon::paint(painter, symbol_, palette().color(QPalette::ButtonText),
+                                    QRectF((width() - 20) / 2.0, (height() - 20) / 2.0, 20, 20));
     }
 
   private:
-    QByteArray svg_;
+    QByteArray symbol_;
 };
 
 class AtlasTabWidget final : public QTabWidget {

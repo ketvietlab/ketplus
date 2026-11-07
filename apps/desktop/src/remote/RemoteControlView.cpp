@@ -1,6 +1,6 @@
 #include "remote/RemoteControlView.h"
 #include "ui/ChromeGeometry.h"
-#include "ui/LucideIcon.h"
+#include "ui/SymbolIcon.h"
 
 #include "DaemonClient.h"
 #include "remote/LinuxMachinesSection.h"
@@ -39,28 +39,23 @@
 namespace ketplus {
 namespace {
 
-// Lucide ISC path data, kept private and limited to Connections glyphs.
-constexpr auto monitorIcon =
-    R"(<rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>)";
-constexpr auto phoneIcon =
-    R"(<rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/>)";
-constexpr auto shieldIcon =
-    R"(<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>)";
-constexpr auto unplugIcon =
-    R"(<path d="m19 5 3-3"/><path d="m2 22 3-3"/><path d="M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-2.3 2.3a2.4 2.4 0 0 0 0 3.4Z"/><path d="M7.5 13.5 10 11"/><path d="M10.5 16.5 13 14"/><path d="m12 6 6 6 2.3-2.3a2.4 2.4 0 0 0 0-3.4l-2.6-2.6a2.4 2.4 0 0 0-3.4 0Z"/>)";
-constexpr auto closeIcon = R"(<path d="M18 6 6 18"/><path d="m6 6 12 12"/>)";
-constexpr auto logInIcon =
-    R"(<path d="m10 17 5-5-5-5"/><path d="M15 12H3"/><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>)";
-constexpr auto plusIcon = R"(<path d="M5 12h14"/><path d="M12 5v14"/>)";
-constexpr auto logOutIcon = R"(<path d="m14 8 4 4-4 4"/><path d="M18 12H3"/><path d="M21 3v18"/>)";
+// Semantic Két Symbol names used by Connections.
+constexpr auto monitorIcon = "monitor";
+constexpr auto phoneIcon = "smartphone";
+constexpr auto shieldIcon = "shield";
+constexpr auto unplugIcon = "unplug";
+constexpr auto closeIcon = "x";
+constexpr auto logInIcon = "log-in";
+constexpr auto plusIcon = "plus";
+constexpr auto logOutIcon = "log-out";
 
-QIcon lucideIcon(const QByteArray& body, const QColor& color, const int size = 16) {
-    return QIcon(lucide_icon::pixmap(body, color, QSize(size, size)));
+QIcon symbolIcon(const QByteArray& body, const QColor& color, const int size = 16) {
+    return QIcon(symbol_icon::pixmap(body, color, QSize(size, size)));
 }
 
-class LucideIconLabel final : public QLabel {
+class SymbolIconLabel final : public QLabel {
   public:
-    LucideIconLabel(QByteArray body, int size, QWidget* parent = nullptr)
+    SymbolIconLabel(QByteArray body, int size, QWidget* parent = nullptr)
         : QLabel(parent), body_(std::move(body)) {
         setFixedSize(size, size);
     }
@@ -68,16 +63,16 @@ class LucideIconLabel final : public QLabel {
   protected:
     void paintEvent(QPaintEvent*) override {
         QPainter painter(this);
-        lucide_icon::paint(painter, body_, palette().color(QPalette::Highlight), rect());
+        symbol_icon::paint(painter, body_, palette().color(QPalette::Highlight), rect());
     }
 
   private:
     QByteArray body_;
 };
 
-class LucideIconButton final : public QPushButton {
+class SymbolIconButton final : public QPushButton {
   public:
-    LucideIconButton(QByteArray body, QWidget* parent = nullptr)
+    SymbolIconButton(QByteArray body, QWidget* parent = nullptr)
         : QPushButton(parent), body_(std::move(body)) {}
 
   protected:
@@ -88,7 +83,7 @@ class LucideIconButton final : public QPushButton {
         option.text.clear();
         option.icon = {};
         style()->drawControl(QStyle::CE_PushButton, &option, &painter, this);
-        lucide_icon::paint(painter, body_, palette().color(QPalette::ButtonText),
+        symbol_icon::paint(painter, body_, palette().color(QPalette::ButtonText),
                            QRectF((width() - 17) / 2.0, (height() - 17) / 2.0, 17, 17));
     }
 
@@ -133,7 +128,7 @@ DialogChoice runDecisionDialog(QWidget* parent, const QString& objectName, const
     chrome_geometry::margins(headerLayout, 22, 14, 14, 14);
     chrome_geometry::spacing(headerLayout, 12);
     headerLayout->addWidget(label(title, "modalTitle"), 1);
-    auto* close = new LucideIconButton(closeIcon, header);
+    auto* close = new SymbolIconButton(closeIcon, header);
     close->setProperty("remoteTertiary", true);
     close->setAccessibleName(QStringLiteral("Close"));
     chrome_geometry::fixedSize(close, 30, 30);
@@ -166,7 +161,7 @@ DialogChoice runDecisionDialog(QWidget* parent, const QString& objectName, const
     confirm->setProperty(danger ? "remoteDanger" : "remotePrimary", true);
     if (!confirmIcon.isEmpty()) {
         confirm->setIcon(
-            lucideIcon(confirmIcon, danger ? QColor(QStringLiteral("#B42318")) : Qt::white, 14));
+            symbolIcon(confirmIcon, danger ? QColor(QStringLiteral("#B42318")) : Qt::white, 14));
         chrome_geometry::iconSize(confirm, QSize(14, 14));
     }
     QObject::connect(confirm, &QPushButton::clicked, &dialog, &QDialog::accept);
@@ -420,7 +415,7 @@ QWidget* RemoteControlView::createSignInPage() {
     chrome_geometry::margins(headerLayout, 22, 14, 14, 14);
     chrome_geometry::spacing(headerLayout, 12);
     headerLayout->addWidget(label(QStringLiteral("Sign in"), "modalTitle"), 1);
-    auto* back = new LucideIconButton(closeIcon, header);
+    auto* back = new SymbolIconButton(closeIcon, header);
     back->setObjectName(QStringLiteral("remoteSignInBackButton"));
     back->setProperty("remoteTertiary", true);
     back->setAccessibleName(QStringLiteral("Close"));
@@ -449,7 +444,7 @@ QWidget* RemoteControlView::createSignInPage() {
     signInButton_ = new QPushButton;
     signInButton_->setObjectName(QStringLiteral("remoteSignInButton"));
     signInButton_->setProperty("remotePrimary", true);
-    signInButton_->setIcon(lucideIcon(logInIcon, Qt::white));
+    signInButton_->setIcon(symbolIcon(logInIcon, Qt::white));
     chrome_geometry::iconSize(signInButton_, QSize(15, 15));
     resetSignInButton();
     connect(signInButton_, &QPushButton::clicked, this, &RemoteControlView::signIn);
@@ -498,7 +493,7 @@ QWidget* RemoteControlView::createControlPage() {
     pairButton_ = new QPushButton(QStringLiteral("Add"));
     pairButton_->setObjectName(QStringLiteral("remotePairButton"));
     pairButton_->setProperty("remotePrimary", true);
-    pairButton_->setIcon(lucideIcon(plusIcon, Qt::white));
+    pairButton_->setIcon(symbolIcon(plusIcon, Qt::white));
     chrome_geometry::iconSize(pairButton_, QSize(15, 15));
     pairButton_->setEnabled(false);
     connect(pairButton_, &QPushButton::clicked, this, [this] {
@@ -515,7 +510,7 @@ QWidget* RemoteControlView::createControlPage() {
     signOutButton_ = new QPushButton(QStringLiteral("Sign out"));
     signOutButton_->setObjectName(QStringLiteral("remoteSignOutButton"));
     signOutButton_->setProperty("remoteTertiary", true);
-    signOutButton_->setIcon(lucideIcon(logOutIcon, QColor(QStringLiteral("#717373")), 14));
+    signOutButton_->setIcon(symbolIcon(logOutIcon, QColor(QStringLiteral("#717373")), 14));
     chrome_geometry::iconSize(signOutButton_, QSize(14, 14));
     signOutButton_->hide();
     connect(signOutButton_, &QPushButton::clicked, this, &RemoteControlView::signOut);
@@ -582,7 +577,7 @@ QWidget* RemoteControlView::createControlPage() {
     computer->setProperty("remoteRole", QStringLiteral("deviceIllustration"));
     chrome_geometry::fixedSize(computer, 83, 68);
     auto* computerLayout = new QVBoxLayout(computer);
-    auto* computerIcon = new LucideIconLabel(monitorIcon, 44, computer);
+    auto* computerIcon = new SymbolIconLabel(monitorIcon, 44, computer);
     computerIcon->setAlignment(Qt::AlignCenter);
     computerLayout->addWidget(computerIcon);
     overviewLayout->addWidget(computer);
@@ -648,7 +643,7 @@ QWidget* RemoteControlView::createControlPage() {
     auto* historyButton = new QPushButton(QStringLiteral("About your history"), history);
     historyButton->setObjectName(QStringLiteral("remoteHistoryButton"));
     historyButton->setProperty("remoteTertiary", true);
-    historyButton->setIcon(lucideIcon(shieldIcon, QColor(QStringLiteral("#717373")), 14));
+    historyButton->setIcon(symbolIcon(shieldIcon, QColor(QStringLiteral("#717373")), 14));
     chrome_geometry::iconSize(historyButton, QSize(14, 14));
     historyButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     historyLayout->addWidget(historyButton, 0, Qt::AlignLeft);
@@ -681,7 +676,7 @@ QWidget* RemoteControlView::createControlPage() {
     pairingDialogTitle_->setObjectName(QStringLiteral("remotePairingDialogTitle"));
     pairingHeading->addWidget(pairingDialogTitle_);
     pairingHeading->addStretch();
-    auto* closePairing = new LucideIconButton(closeIcon, pairingHeader);
+    auto* closePairing = new SymbolIconButton(closeIcon, pairingHeader);
     closePairing->setObjectName(QStringLiteral("remotePairingCloseButton"));
     closePairing->setProperty("remoteTertiary", true);
     closePairing->setToolTip(QStringLiteral("Close"));
@@ -1080,7 +1075,7 @@ void RemoteControlView::renderDevices(const QJsonArray& devices) {
         chrome_geometry::fixedSize(iconSurface, 40, 40);
         auto* iconLayout = new QVBoxLayout(iconSurface);
         chrome_geometry::margins(iconLayout, 10, 10, 10, 10);
-        auto* icon = new LucideIconLabel(phoneIcon, 20, iconSurface);
+        auto* icon = new SymbolIconLabel(phoneIcon, 20, iconSurface);
         icon->setAlignment(Qt::AlignCenter);
         iconLayout->addWidget(icon);
         rowLayout->addWidget(iconSurface);
@@ -1103,7 +1098,7 @@ void RemoteControlView::renderDevices(const QJsonArray& devices) {
         rowLayout->addWidget(details);
         auto* revoke = new QPushButton(QStringLiteral("Revoke access"));
         revoke->setProperty("remoteDanger", true);
-        revoke->setIcon(lucideIcon(unplugIcon, QColor(QStringLiteral("#B42318")), 14));
+        revoke->setIcon(symbolIcon(unplugIcon, QColor(QStringLiteral("#B42318")), 14));
         chrome_geometry::iconSize(revoke, QSize(14, 14));
         revoke->setEnabled(!deviceId.isEmpty());
         connect(revoke, &QPushButton::clicked, this, [this, deviceId] { revokeDevice(deviceId); });

@@ -43,7 +43,7 @@ class SidebarRepositoryList final : public QWidget {
 
   signals:
     // A conversation changed visual status without rebuilding its row; the owner redraws its
-    // Lucide pixmap using the current palette.
+    // Két Symbol pixmap using the current palette.
     void iconPresentationChanged();
     void repositoryRequested(const QString& path);
     void newConversationRequested(const QString& repositoryPath);

@@ -22,7 +22,7 @@ add_library(ketplus_desktop_support STATIC
     src/app/SpotlightDialog.h
     src/workspace/ActivityBar.cpp
     src/workspace/ActivityBar.h
-    src/workspace/LucideIcons.h
+    src/workspace/SymbolIcons.h
     src/workspace/SidebarRepositoryList.cpp
     src/workspace/SidebarRepositoryList.h
 )

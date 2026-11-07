@@ -8,7 +8,7 @@
 
 #include "agent/CodexAppServer.h"
 #include "agent/FileReveal.h"
-#include "agent/LucideImageProvider.h"
+#include "agent/SymbolImageProvider.h"
 #include "agent/TranscriptTrace.h"
 #include "app/AppearanceSettings.h"
 #include "ui/InterfaceFont.h"
@@ -212,7 +212,7 @@ AgentWorkspaceView::AgentWorkspaceView(QWidget* parent)
     };
     mergeTypeScaleTokens(tokens_, InterfaceZoomMetrics::mediumPixels);
     view_->rootContext()->setContextProperty(QStringLiteral("agentHost"), this);
-    view_->engine()->addImageProvider(QStringLiteral("lucide"), new LucideImageProvider);
+    view_->engine()->addImageProvider(QStringLiteral("symbols"), new SymbolImageProvider);
     view_->setSource(QUrl(QStringLiteral("qrc:/agent/AgentWorkspace.qml")));
     if (view_->rootObject())
         transcriptPolish_ = new TranscriptPolish(view_->rootObject());

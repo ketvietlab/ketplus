@@ -1,6 +1,6 @@
 #include "app/WorktreesWorkspacePage.h"
 #include "ui/ChromeGeometry.h"
-#include "ui/LucideIcon.h"
+#include "ui/SymbolIcon.h"
 
 #include "ui/Theme.h"
 #include "ui/TypeScale.h"
@@ -21,10 +21,8 @@
 namespace ketplus {
 namespace {
 
-constexpr auto gitBranchIcon =
-    R"(<line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>)";
-constexpr auto archiveIcon =
-    R"(<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>)";
+constexpr auto gitBranchIcon = "git-branch";
+constexpr auto archiveIcon = "archive";
 
 QString normalizedPath(const QString& path) {
     const QFileInfo info(path);
@@ -201,7 +199,7 @@ void WorktreesWorkspacePage::rebuild() {
         auto* icon = new QLabel(identity);
         icon->setObjectName(QStringLiteral("worktreesWorkspaceIcon"));
         chrome_geometry::fixedSize(icon, 17, 17);
-        icon->setPixmap(lucide_icon::pixmap(gitBranchIcon, QColor(textMuted_), icon->size()));
+        icon->setPixmap(symbol_icon::pixmap(gitBranchIcon, QColor(textMuted_), icon->size()));
         identityLayout->addWidget(icon, 0, Qt::AlignTop);
 
         auto* open = new QToolButton(identity);
@@ -316,9 +314,9 @@ QLabel#worktreesWorkspaceState[warning="true"] { border-color:%8; color:%8; }
                             surfaceRaised_, positive_, warning_));
     chrome_geometry::apply(this, interfaceFontSizePixels);
     if (auto* archived = findChild<QToolButton*>(QStringLiteral("worktreesArchivedButton")))
-        archived->setIcon(lucide_icon::pixmap(archiveIcon, QColor(textMuted_), QSize(15, 15)));
+        archived->setIcon(symbol_icon::pixmap(archiveIcon, QColor(textMuted_), QSize(15, 15)));
     for (auto* icon : findChildren<QLabel*>(QStringLiteral("worktreesWorkspaceIcon")))
-        icon->setPixmap(lucide_icon::pixmap(gitBranchIcon, QColor(textMuted_), icon->size()));
+        icon->setPixmap(symbol_icon::pixmap(gitBranchIcon, QColor(textMuted_), icon->size()));
 }
 
 } // namespace ketplus

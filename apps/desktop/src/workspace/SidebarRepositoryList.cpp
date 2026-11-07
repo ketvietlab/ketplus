@@ -2,7 +2,7 @@
 #include "ui/ChromeGeometry.h"
 #include "ui/InterfaceZoom.h"
 
-#include "workspace/LucideIcons.h"
+#include "workspace/SymbolIcons.h"
 
 #include <QEvent>
 #include <QFileInfo>
@@ -68,24 +68,25 @@ ConversationPresentation conversationPresentation(const QVariantMap& conversatio
     if (conversation.value(QStringLiteral("needsInput")).toBool() ||
         status.contains(QStringLiteral("input")) || status.contains(QStringLiteral("question")) ||
         status == QStringLiteral("waiting for your answer…"))
-        return {QStringLiteral("Needs input"), QStringLiteral("warning"), lucide::pauseCircle};
+        return {QStringLiteral("Needs input"), QStringLiteral("warning"), symbols::pauseCircle};
     if (conversation.value(QStringLiteral("running")).toBool())
         // The main text colour: the accent loader was too dark to read on the dark sidebar.
-        return {QStringLiteral("Working"), QStringLiteral("main"), lucide::loaderCircle, true};
+        return {QStringLiteral("Working"), QStringLiteral("main"), symbols::loaderCircle, true};
     if (status.contains(QStringLiteral("fail")) || status.contains(QStringLiteral("error")) ||
         status.contains(QStringLiteral("disconnect")) ||
         status.contains(QStringLiteral("missing")) || status.contains(QStringLiteral("not found")))
-        return {QStringLiteral("Disconnected"), QStringLiteral("danger"), lucide::triangleAlert};
+        return {QStringLiteral("Disconnected"), QStringLiteral("danger"), symbols::triangleAlert};
     if (status.contains(QStringLiteral("stop")))
-        return {QStringLiteral("Stopped"), QStringLiteral("muted"), lucide::square};
+        return {QStringLiteral("Stopped"), QStringLiteral("muted"), symbols::square};
     if (!conversation.value(QStringLiteral("started")).toBool())
-        return {QStringLiteral("Not started"), QStringLiteral("muted"), lucide::circle};
+        return {QStringLiteral("Not started"), QStringLiteral("muted"), symbols::circle};
     if (!conversation.value(QStringLiteral("selected")).toBool() && !seen)
-        return {QStringLiteral("Completed, unread"), QStringLiteral("accent"), lucide::circleCheck};
-    return {QStringLiteral("Completed"), QStringLiteral("muted"), lucide::circleCheck};
+        return {QStringLiteral("Completed, unread"), QStringLiteral("accent"),
+                symbols::circleCheck};
+    return {QStringLiteral("Completed"), QStringLiteral("muted"), symbols::circleCheck};
 }
 
-// QLabel has no rotation property. Paint the normal Lucide pixmap through a rotating painter so
+// QLabel has no rotation property. Paint the normal Két Symbol pixmap through a rotating painter so
 // the loader remains crisp at its native device-pixel ratio and stops immediately with the turn.
 class RotatingIconLabel final : public QLabel {
   public:
@@ -124,7 +125,7 @@ class RotatingIconLabel final : public QLabel {
         painter.setRenderHint(QPainter::SmoothPixmapTransform);
         painter.translate(width() / 2.0, height() / 2.0);
         painter.rotate(angle_);
-        // The source rect is in physical pixels (the Lucide pixmap is 2× retina), while the
+        // The source rect is in physical pixels (the Két Symbol pixmap is 2× retina), while the
         // destination is in widget coordinates. Using the device-independent size for both
         // sampled only the pixmap's upper-left quadrant and visibly clipped the spinner.
         painter.drawPixmap(QRectF(-width() / 2.0, -height() / 2.0, width(), height()), icon,
@@ -166,8 +167,8 @@ QStringList structureOf(const QVector<SidebarRepository>& repositories) {
 RotatingIconLabel* iconLabel(const QByteArray& body, const QString& role, const bool spinning,
                              const int size, QWidget* parent) {
     auto* icon = new RotatingIconLabel(parent);
-    icon->setProperty("lucideBody", body);
-    icon->setProperty("lucideColorRole", role);
+    icon->setProperty("symbolName", body);
+    icon->setProperty("symbolColorRole", role);
     chrome_geometry::fixedSize(icon, size, size);
     icon->setAttribute(Qt::WA_TransparentForMouseEvents);
     icon->setSpinning(spinning);
@@ -333,7 +334,7 @@ void SidebarRepositoryList::setRepositories(const QVector<SidebarRepository>& pr
             auto* create = new QToolButton(header);
             create->setObjectName(QStringLiteral("productNewConversationButton"));
             create->setProperty("kvRole", QStringLiteral("productSectionAction"));
-            create->setProperty("lucideBody", QByteArray(lucide::plus));
+            create->setProperty("symbolName", QByteArray(symbols::plus));
             create->setToolTip(tr("New conversation in %1").arg(repository.name));
             create->setAccessibleName(create->toolTip());
             chrome_geometry::iconSize(create, QSize(14, 14));
@@ -493,8 +494,8 @@ void SidebarRepositoryList::updateRows(const QVector<SidebarRepository>& reposit
             button->setAccessibleDescription(presentation.label);
             if (auto* status =
                     button->findChild<QLabel*>(QStringLiteral("productConversationStatusIcon"))) {
-                status->setProperty("lucideBody", presentation.icon);
-                status->setProperty("lucideColorRole", presentation.tone);
+                status->setProperty("symbolName", presentation.icon);
+                status->setProperty("symbolColorRole", presentation.tone);
                 static_cast<RotatingIconLabel*>(status)->setSpinning(presentation.spinning);
             }
             for (auto* title : button->findChildren<QLabel*>()) {
