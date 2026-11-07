@@ -16,6 +16,7 @@
 
 #include "app/SpotlightDialog.h"
 #include "workspace/ActivityBar.h"
+#include <QAbstractButton>
 #include <QAction>
 #include <QCheckBox>
 #include <QClipboard>
@@ -90,7 +91,7 @@ class AgentWorkspaceShellTest final : public QObject {
         window.openFolder(workspace.path());
         window.resize(1200, 800);
         window.show();
-        window.findChild<QToolButton*>("agentWorkspaceActivityButton")->click();
+        window.findChild<QAbstractButton*>("agentWorkspaceActivityButton")->click();
         const auto path = workspace.filePath("refresh.txt");
         const auto write = [&](const QByteArray& text) {
             QSaveFile file(path);
@@ -135,7 +136,7 @@ class AgentWorkspaceShellTest final : public QObject {
         window.openFolder(workspace.path());
         window.resize(1440, 900);
         window.show();
-        window.findChild<QToolButton*>(QStringLiteral("agentWorkspaceActivityButton"))->click();
+        window.findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"))->click();
         QFile file(QDir(workspace.path()).filePath(QStringLiteral("notes.txt")));
         QVERIFY(file.open(QIODevice::WriteOnly));
         file.write("first\nsecond needle\nthird\nfourth needle\n");
@@ -222,7 +223,7 @@ class AgentWorkspaceShellTest final : public QObject {
         window.openFolder(workspace.path());
         window.resize(1440, 900);
         window.show();
-        window.findChild<QToolButton*>(QStringLiteral("agentWorkspaceActivityButton"))->click();
+        window.findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"))->click();
         auto* agentWorkspace = window.findChild<ketplus::AgentWorkspaceView*>();
         QVERIFY(agentWorkspace);
         const QString answer = QStringLiteral("Alpha beta gamma delta epsilon zeta eta theta");
@@ -344,7 +345,7 @@ class AgentWorkspaceShellTest final : public QObject {
         window.openFolder(workspace.path());
         window.show();
         auto* agent =
-            window.findChild<QToolButton*>(QStringLiteral("agentWorkspaceActivityButton"));
+            window.findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"));
         QVERIFY(agent);
         agent->click();
         auto* view = window.findChild<ketplus::AgentWorkspaceView*>();
@@ -389,7 +390,7 @@ class AgentWorkspaceShellTest final : public QObject {
         window.show();
 
         auto* sidebar = window.findChild<ketplus::ActivityBar*>(QStringLiteral("activityBar"));
-        auto* search = window.findChild<QToolButton*>(QStringLiteral("quickSearchButton"));
+        auto* search = window.findChild<QAbstractButton*>(QStringLiteral("quickSearchButton"));
         auto* addRepository =
             window.findChild<QToolButton*>(QStringLiteral("productAddRepositoryButton"));
         auto* settingsAction = window.findChild<QAction*>(QStringLiteral("productSettingsAction"));
@@ -413,8 +414,8 @@ class AgentWorkspaceShellTest final : public QObject {
         QVERIFY(window.findChild<QToolButton*>(QStringLiteral("productThemeButton")) == nullptr);
         QCOMPARE(mainSplit->mapTo(productSurface, QPoint()).y(), 0);
         QTRY_VERIFY([&] {
-            const auto groups =
-                sidebar->findChildren<QToolButton*>(QStringLiteral("productRepositoryGroupButton"));
+            const auto groups = sidebar->findChildren<QAbstractButton*>(
+                QStringLiteral("productRepositoryGroupButton"));
             return std::any_of(
                 groups.cbegin(), groups.cend(), [&workspace](const QToolButton* group) {
                     return group->accessibleName() == QFileInfo(workspace.path()).fileName() &&
@@ -440,7 +441,7 @@ class AgentWorkspaceShellTest final : public QObject {
         window.findChild<ketplus::SpotlightDialog*>()->close();
 
         auto* agent =
-            window.findChild<QToolButton*>(QStringLiteral("agentWorkspaceActivityButton"));
+            window.findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"));
         QVERIFY(agent);
         agent->click();
         QTRY_VERIFY(sidebar->isVisible());
@@ -545,7 +546,7 @@ class AgentWorkspaceShellTest final : public QObject {
         window.resize(1200, 800);
         window.show();
         auto* agent =
-            window.findChild<QToolButton*>(QStringLiteral("agentWorkspaceActivityButton"));
+            window.findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"));
         QVERIFY(agent);
         agent->click();
         const auto activeRepositoryGroup = [&window] {
@@ -570,7 +571,7 @@ class AgentWorkspaceShellTest final : public QObject {
         // A linked worktree keeps the main repository identity.
         QCOMPARE(activeRepositoryGroup(), QStringLiteral("ketviet"));
         auto* sourceControl =
-            window.findChild<QToolButton*>(QStringLiteral("sourceControlActivityButton"));
+            window.findChild<QAbstractButton*>(QStringLiteral("sourceControlActivityButton"));
         QVERIFY(sourceControl);
         QTRY_VERIFY(sourceControl->isEnabled());
 
@@ -628,7 +629,7 @@ class AgentWorkspaceShellTest final : public QObject {
 
         auto* editorSplit = window.findChild<QSplitter*>(QStringLiteral("editorSplit"));
         auto* explorerButton =
-            window.findChild<QToolButton*>(QStringLiteral("explorerActivityButton"));
+            window.findChild<QAbstractButton*>(QStringLiteral("explorerActivityButton"));
         QVERIFY(editorSplit && explorerButton);
         showWorktreesPage();
         QTRY_VERIFY(worktreesPage->isVisible());
@@ -698,7 +699,7 @@ class AgentWorkspaceShellTest final : public QObject {
             window.resize(1200, 800);
             window.show();
             auto* explorerButton =
-                window.findChild<QToolButton*>(QStringLiteral("explorerActivityButton"));
+                window.findChild<QAbstractButton*>(QStringLiteral("explorerActivityButton"));
             QVERIFY(explorerButton);
             explorerButton->click();
             QVERIFY(window.close());
@@ -709,7 +710,7 @@ class AgentWorkspaceShellTest final : public QObject {
         window.resize(1200, 800);
         window.show();
         auto* agentButton =
-            window.findChild<QToolButton*>(QStringLiteral("agentWorkspaceActivityButton"));
+            window.findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"));
         QVERIFY(agentButton);
         agentButton->click();
         auto* view = window.findChild<ketplus::AgentWorkspaceView*>();
@@ -738,7 +739,7 @@ class AgentWorkspaceShellTest final : public QObject {
         ketplus::MainWindow window(theme);
         window.openFolder(workspace.path());
         window.show();
-        auto* button = window.findChild<QToolButton*>("agentWorkspaceActivityButton");
+        auto* button = window.findChild<QAbstractButton*>("agentWorkspaceActivityButton");
         QVERIFY(button);
         button->click();
         auto* view = window.findChild<ketplus::AgentWorkspaceView*>();
@@ -797,7 +798,7 @@ class AgentWorkspaceShellTest final : public QObject {
         window.resize(1200, 800);
         window.show();
         auto* agentButton =
-            window.findChild<QToolButton*>(QStringLiteral("agentWorkspaceActivityButton"));
+            window.findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"));
         QVERIFY(agentButton);
         agentButton->click();
         auto* view = window.findChild<ketplus::AgentWorkspaceView*>();
@@ -872,9 +873,9 @@ class AgentWorkspaceShellTest final : public QObject {
         window.show();
 
         auto* agentButton =
-            window.findChild<QToolButton*>(QStringLiteral("agentWorkspaceActivityButton"));
+            window.findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"));
         auto* explorerButton =
-            window.findChild<QToolButton*>(QStringLiteral("explorerActivityButton"));
+            window.findChild<QAbstractButton*>(QStringLiteral("explorerActivityButton"));
         QVERIFY(agentButton && explorerButton);
         agentButton->click();
 
@@ -894,8 +895,8 @@ class AgentWorkspaceShellTest final : public QObject {
         explorerButton->click();
         QTRY_VERIFY(!view->isVisible());
         const auto conversationButton = [&window](const QString& title) -> QToolButton* {
-            for (auto* button :
-                 window.findChildren<QToolButton*>(QStringLiteral("productConversationButton"))) {
+            for (auto* button : window.findChildren<QAbstractButton*>(
+                     QStringLiteral("productConversationButton"))) {
                 if (button->accessibleName() == title)
                     return button;
             }
@@ -967,14 +968,14 @@ class AgentWorkspaceShellTest final : public QObject {
         window.resize(1200, 800);
         window.show();
         auto* agent =
-            window.findChild<QToolButton*>(QStringLiteral("agentWorkspaceActivityButton"));
+            window.findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"));
         QVERIFY(agent);
         agent->click();
         auto* view = window.findChild<ketplus::AgentWorkspaceView*>();
         QVERIFY(view);
         const auto conversationButton = [&window](const QString& title) -> QToolButton* {
-            for (auto* button :
-                 window.findChildren<QToolButton*>(QStringLiteral("productConversationButton"))) {
+            for (auto* button : window.findChildren<QAbstractButton*>(
+                     QStringLiteral("productConversationButton"))) {
                 if (button->accessibleName() == title)
                     return button;
             }
@@ -1022,14 +1023,14 @@ class AgentWorkspaceShellTest final : public QObject {
         window.resize(1200, 800);
         window.show();
         auto* agent =
-            window.findChild<QToolButton*>(QStringLiteral("agentWorkspaceActivityButton"));
+            window.findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"));
         QVERIFY(agent);
         agent->click();
         auto* view = window.findChild<ketplus::AgentWorkspaceView*>();
         QVERIFY(view);
         const auto conversationButton = [&window](const QString& title) -> QToolButton* {
-            for (auto* button :
-                 window.findChildren<QToolButton*>(QStringLiteral("productConversationButton"))) {
+            for (auto* button : window.findChildren<QAbstractButton*>(
+                     QStringLiteral("productConversationButton"))) {
                 if (button->accessibleName() == title)
                     return button;
             }
@@ -1177,7 +1178,7 @@ class AgentWorkspaceShellTest final : public QObject {
             window.openFolder(path);
             window.show();
             auto* agentButton =
-                window.findChild<QToolButton*>(QStringLiteral("agentWorkspaceActivityButton"));
+                window.findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"));
             QVERIFY(agentButton);
             agentButton->click();
             auto* manager = window.findChild<ketplus::AgentSessionManager*>();
@@ -1228,7 +1229,7 @@ class AgentWorkspaceShellTest final : public QObject {
         ketplus::MainWindow window(theme);
         window.openFolder(directory.path());
         window.show();
-        auto* button = window.findChild<QToolButton*>("agentWorkspaceActivityButton");
+        auto* button = window.findChild<QAbstractButton*>("agentWorkspaceActivityButton");
         QVERIFY(button);
         button->click();
         auto* view = window.findChild<ketplus::AgentWorkspaceView*>();
@@ -1319,7 +1320,7 @@ class AgentWorkspaceShellTest final : public QObject {
         window.resize(1200, 800);
         window.show();
         auto* agentButton =
-            window.findChild<QToolButton*>(QStringLiteral("agentWorkspaceActivityButton"));
+            window.findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"));
         QVERIFY(agentButton);
         agentButton->click();
         auto* view = window.findChild<ketplus::AgentWorkspaceView*>();
@@ -1333,8 +1334,8 @@ class AgentWorkspaceShellTest final : public QObject {
         const QString id = manager->activeConversationId(linkedPath);
         manager->renameConversation(linkedPath, id, QStringLiteral("Refactor conversation"));
         const auto conversationButton = [&window]() -> QToolButton* {
-            for (auto* button :
-                 window.findChildren<QToolButton*>(QStringLiteral("productConversationButton"))) {
+            for (auto* button : window.findChildren<QAbstractButton*>(
+                     QStringLiteral("productConversationButton"))) {
                 if (button->accessibleName() == QStringLiteral("Refactor conversation"))
                     return button;
             }
@@ -1629,7 +1630,7 @@ class AgentWorkspaceShellTest final : public QObject {
         window.resize(1200, 800);
         window.show();
         auto* agent =
-            window.findChild<QToolButton*>(QStringLiteral("agentWorkspaceActivityButton"));
+            window.findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"));
         QVERIFY(agent);
         agent->click();
         QTRY_VERIFY(!window.statusBar()->isVisible());
@@ -1676,14 +1677,14 @@ class AgentWorkspaceShellTest final : public QObject {
         window.resize(1100, 700);
         window.show();
 
-        auto* agentButton = window.findChild<QToolButton*>("agentWorkspaceActivityButton");
+        auto* agentButton = window.findChild<QAbstractButton*>("agentWorkspaceActivityButton");
         QVERIFY(agentButton);
         agentButton->click();
         auto* agentWorkspace = window.findChild<ketplus::AgentWorkspaceView*>();
         QVERIFY(agentWorkspace);
         QTRY_VERIFY(agentWorkspace->isVisible());
         QTRY_COMPARE(agentWorkspace->repositoryName(), QFileInfo(workspace.path()).fileName());
-        auto* sourceButton = window.findChild<QToolButton*>("sourceControlActivityButton");
+        auto* sourceButton = window.findChild<QAbstractButton*>("sourceControlActivityButton");
         QVERIFY(sourceButton);
         // A folder without Git disables the activity button; invoke the shell slot instead.
         QAction* sourceAction = nullptr;

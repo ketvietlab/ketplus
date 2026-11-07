@@ -2,6 +2,7 @@
 #include "editor/EditorWidget.h"
 #include "terminal/TerminalPanel.h"
 #include "ui/Theme.h"
+#include <QAbstractButton>
 #include <QAction>
 #include <QFile>
 #include <QFileInfo>
@@ -31,7 +32,7 @@ class DesktopDocumentModesTest final : public QObject {
         window.resize(1200, 800);
         window.openFolder(directory.path());
         window.show();
-        window.findChild<QToolButton*>("explorerActivityButton")->click();
+        window.findChild<QAbstractButton*>("explorerActivityButton")->click();
         window.openFile(path);
         ketplus::EditorWidget* editor = nullptr;
         for (auto* candidate : window.findChildren<ketplus::EditorWidget*>())

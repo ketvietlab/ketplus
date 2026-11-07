@@ -27,6 +27,7 @@
 #include <QJsonObject>
 #include <QThread>
 
+#include <QAbstractButton>
 #include <QFrame>
 #include <QLabel>
 #include <QLineEdit>
@@ -408,7 +409,7 @@ void MainWindowSettingsTest::appliesSavedAppearanceToPublicAndPrivateSurfaces() 
     terminalAction->setChecked(false);
 
     auto* agentButton =
-        window.findChild<QToolButton*>(QStringLiteral("agentWorkspaceActivityButton"));
+        window.findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"));
     QVERIFY(agentButton != nullptr);
     agentButton->click();
     auto* agentWorkspace = window.findChild<ketplus::AgentWorkspaceView*>();
@@ -727,7 +728,7 @@ void MainWindowSettingsTest::updatesPageAndReminderDriveTheUpdater() {
     QCOMPARE(updater.checks_, 2);
 
     // A scheduled check found an update while KetPlus was not in focus.
-    auto* reminder = window.findChild<QToolButton*>(QStringLiteral("productUpdateReadyButton"));
+    auto* reminder = window.findChild<QAbstractButton*>(QStringLiteral("productUpdateReadyButton"));
     QVERIFY(reminder != nullptr);
     QVERIFY(reminder->isHidden());
     updater.remind(QStringLiteral("0.1.18"));

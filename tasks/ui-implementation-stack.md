@@ -36,7 +36,8 @@ Record technical verification separately from the later review/acceptance phase.
 - [x] Lite: Git/diff #152 and Markdown/preview #153 (implementation; acceptance deferred).
 - [x] Lite: embedded terminal #154, settings #155, common controls #156 (implementation; acceptance deferred).
 - [ ] Pro: kit/QML foundation #157.
-- [ ] Pro: sidebar #158, header/composer #159, messages #160.
+- [x] Pro: sidebar #158 UI composition (metadata/acceptance limits below).
+- [ ] Pro: header/composer #159, messages #160.
 - [ ] Pro: activity #161, notices #162, questions/details #163.
 - [ ] Pro: overlays #164, worktrees/connections #165, settings #166, Atlas #167.
 
@@ -70,3 +71,7 @@ Lite controls: PR #211. The model layer `feat/ui-stack-lite-models` adds virtual
 Model layer validation: all 16 Lite targets pass; Source Control rendered offscreen at 224 × 640 with real grouped snapshot data. No full native/theme/zoom acceptance or release work claimed.
 
 Lite models: PR #213 on #211. Pro foundation now links the offline Ket QML module, resolves profile typography without the old +2 bias, retains numeric zoom, draws QML symbols/tooltips with kit components and shares the gated animation clock. Runtime selected QML checks pass; font, zoom and Lite regression evidence is recorded in the PR.
+
+Pro foundation: PR #214 on #213. Pro sidebar layer migrates native and QML navigation/conversations, tag filtering, group collapse/create, update pills and authoritative journal-size warnings. It preserves context actions and blocking/async attention. Tags and awaiting-reply consume supplied metadata; automatic classification and reviewer orchestration remain separate behaviour dependencies. Review/native acceptance is still deferred.
+
+Sidebar validation: 16/16 Lite targets, Pro workspace/attention/zoom targets, three selected QML checks and four local-daemon storage cases pass. A 214 px offscreen capture verifies tag rows and warning layout. Integration exposed a Settings navigation callback holding a deleted QListWidgetItem; persistent model indices now fence that lifecycle, with a focused regression test. No native acceptance/review/release claimed.

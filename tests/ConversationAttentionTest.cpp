@@ -1,3 +1,4 @@
+#include "KetConversationRow.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/CodexAppServer.h"
 #include "ui/Theme.h"
@@ -69,9 +70,9 @@ for line in sys.stdin:
         QSignalSpy changes(&manager, &AgentSessionManager::conversationsChanged);
         manager.submitPrompt(path, "Synthetic attention test");
         QTRY_COMPARE(manager.messages(path).size(), 2);
-        QLabel* icon = nullptr;
-        QTRY_VERIFY((icon = bar.findChild<QLabel*>("productConversationStatusIcon")));
-        QVERIFY(icon->property("spinning").toBool());
+        ket::ConversationRow* icon = nullptr;
+        QTRY_VERIFY((icon = bar.findChild<ket::ConversationRow*>("productConversationButton")));
+        QVERIFY((icon->status() == ket::ConversationStatus::Working));
 
         // This conversation is now in the background; attention must still update its row.
         manager.activate(directory.filePath("other"));
@@ -89,18 +90,14 @@ for line in sys.stdin:
                       {"question", "Continue?"},
                       {"options", QJsonArray{QJsonObject{{"id", "yes"}, {"label", "Yes"}}}}}}}});
         };
-        const auto paused = [&] {
-            return icon->property("symbolName").toByteArray() == QByteArray(symbols::pauseCircle) &&
-                   !icon->property("spinning").toBool();
-        };
+        const auto paused = [&] { return icon->status() == ket::ConversationStatus::NeedsInput; };
         changes.clear();
         request("first");
         QVERIFY(!changes.isEmpty());
         QVERIFY(manager.conversations(path).first().toMap().value("needsInput").toBool());
         QVERIFY(manager.isRunning(path));
         QVERIFY(paused());
-        QCOMPARE(icon->property("rotationAngle").toInt(), 0);
-        QCOMPARE(icon->parentWidget()->accessibleDescription(), "Needs input");
+        QCOMPARE(icon->accessibleDescription(), "Needs input");
         if (!blocking)
             QCOMPARE(manager.status(path), "Working…");
         const QString key = manager.messages(path).last().toMap().value("messageKey").toString();
@@ -113,27 +110,27 @@ for line in sys.stdin:
             {{"threadId", "attention-thread"}, {"requestId", "second"}, {"expired", true}});
         QVERIFY(!changes.isEmpty());
         QVERIFY(!manager.conversations(path).first().toMap().value("needsInput").toBool());
-        QVERIFY(icon->property("spinning").toBool());
+        QVERIFY((icon->status() == ket::ConversationStatus::Working));
         request("answer-only");
         QVERIFY(paused());
         const QString answerKey =
             manager.messages(path).last().toMap().value("messageKey").toString();
         manager.answerQuestion(path, answerKey,
                                {{"q", QVariantMap{{"option_ids", QStringList{"yes"}}}}});
-        QVERIFY(icon->property("spinning").toBool());
+        QVERIFY((icon->status() == ket::ConversationStatus::Working));
         request("third");
         QVERIFY(paused());
         server.notificationReceived("daemon/approvalEnded",
                                     {{"threadId", "attention-thread"}, {"approvalId", "third"}});
-        QVERIFY(icon->property("spinning").toBool());
+        QVERIFY((icon->status() == ket::ConversationStatus::Working));
         request("completed-pending");
         QVERIFY(paused());
         server.notificationReceived(
             "turn/completed",
             {{"threadId", "attention-thread"},
              {"turn", QJsonObject{{"id", "attention-turn"}, {"status", "completed"}}}});
-        QVERIFY(!icon->property("spinning").toBool());
-        QCOMPARE(icon->property("symbolName").toByteArray(), QByteArray(symbols::circleCheck));
+        QVERIFY(!(icon->status() == ket::ConversationStatus::Working));
+        QCOMPARE(icon->status(), ket::ConversationStatus::Completed);
     }
 
     void nativeStatusMarks() {
@@ -156,12 +153,11 @@ for line in sys.stdin:
             bar.setRepositories({{"/synthetic/repository", "Repository", true, conversations}});
             bar.show();
             QVERIFY(QTest::qWaitForWindowExposed(&bar));
-            const auto icons = bar.findChildren<QLabel*>("productConversationStatusIcon");
+            const auto icons = bar.findChildren<ket::ConversationRow*>("productConversationButton");
             QCOMPARE(icons.size(), 4);
             for (int index = 0; index < icons.size(); ++index) {
-                QVERIFY(!icons.at(index)->pixmap().isNull());
-                QCOMPARE(icons.at(index)->property("spinning").toBool(),
-                         icons.at(index)->parentWidget()->property("conversationId") == "Working");
+                QCOMPARE((icons.at(index)->status() == ket::ConversationStatus::Working),
+                         icons.at(index)->property("conversationId") == "Working");
                 QVERIFY(icons.at(index)->isVisible());
             }
             const auto capture = qEnvironmentVariable("KETPLUS_ATTENTION_CAPTURE");

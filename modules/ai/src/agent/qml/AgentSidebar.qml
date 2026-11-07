@@ -1,5 +1,6 @@
 import "ChromeMetrics.js" as Metrics
 import QtQuick
+import Ket as Kit
 import QtQuick.Controls
 import QtQuick.Controls.Basic as Basic
 import QtQuick.Effects
@@ -493,7 +494,7 @@ Rectangle {
                         }
                     }
 
-                    delegate: Rectangle {
+                    delegate: Kit.KetConversationRow {
                         id: conversationRow
                         required property var modelData
                         readonly property string conversationId: modelData.id
@@ -501,95 +502,32 @@ Rectangle {
                         property alias renameMenuItem: renameConversationMenuItem
                         objectName: "conversationRow_" + conversationId
                         width: conversationList.width
-                        height: Metrics.px(49, workspace.t)
-                        radius: Metrics.px(5, workspace.t)
-                        color: modelData.active ? workspace.t.accentSubtle
-                                                : conversationMouse.containsMouse
-                                                  ? workspace.t.surfaceHover : "transparent"
-                        border.color: modelData.active ? workspace.t.borderStrong : "transparent"
-
-                        Column {
-                            anchors.left: parent.left
-                            anchors.right: conversationStatus.left
-                            anchors.leftMargin: Metrics.px(9, workspace.t)
-                            anchors.rightMargin: Metrics.px(9, workspace.t)
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: Metrics.px(3, workspace.t)
-                            Row {
-                                width: parent.width
-                                spacing: Metrics.px(6, workspace.t)
-                                // ADR 0027: agents and the user call a conversation by number.
-                                Text {
-                                    id: conversationNumberText
-                                    objectName: "conversationNumber_" + conversationId
-                                    visible: (modelData.number || "").length > 0
-                                    text: "#" + (modelData.number || "")
-                                    color: workspace.t.textMuted
-                                    font.family: workspace.t.monoFont
-                                    font.pixelSize: workspace.t.caption
-                                    anchors.verticalCenter: parent.verticalCenter
-                                }
-                                Text {
-                                    width: parent.width - (conversationNumberText.visible
-                                                           ? conversationNumberText.implicitWidth + parent.spacing : 0)
-                                    text: modelData.title || ""
-                                    color: workspace.t.textSecondary
-                                    elide: Text.ElideRight
-                                    font.family: workspace.t.uiFont
-                                    font.pixelSize: workspace.t.reading
-                                    font.weight: modelData.active ? Font.DemiBold : Font.Medium
-                                }
-                            }
-                            Item {
-                                width: parent.width
-                                height: statusText.height
-                                clip: true
-                                Text {
-                                    id: statusText
-                                    width: parent.width
-                                    text: modelData.status || ""
-                                    color: workspace.t.textMuted
-                                    elide: Text.ElideRight
-                                    font.family: workspace.t.uiFont
-                                    font.pixelSize: workspace.t.caption
-                                }
-                                Item {
-                                    id: statusShine
-                                    objectName: "conversationStatusShine_" + conversationId
-                                    readonly property bool animating: agentHost.motionEnabled && modelData.running
-                                        && visible && Window.window !== null
-                                        && Window.window.visible
-                                        && Window.window.visibility !== Window.Minimized
-                                        && conversationRow.y + conversationRow.height > conversationList.contentY
-                                        && conversationRow.y < conversationList.contentY + conversationList.height
-                                    visible: agentHost.motionEnabled && modelData.running
-                                    width: Math.min(Metrics.px(32, workspace.t), statusText.paintedWidth)
-                                    height: statusText.height
-                                    clip: true
-                                    Text {
-                                        x: -statusShine.x
-                                        width: statusText.width
-                                        text: statusText.text
-                                        color: workspace.t.textMain
-                                        elide: Text.ElideRight
-                                        font: statusText.font
-                                    }
-                                    MotionClock { id: shineClock; running: statusShine.animating }
-                                    x: -width + Math.min((shineClock.time % 1570) / 1350, 1)
-                                       * (Math.min(statusText.paintedWidth, statusText.width) + width)
-                                }
+                        text: modelData.title || "New conversation"
+                        number: modelData.number || ""
+                        checked: !!modelData.active
+                        tags: modelData.tags || []
+                        status: modelData.needsInput ? Kit.KetTheme.ConversationStatus.NeedsInput
+                              : modelData.awaitingReply ? Kit.KetTheme.ConversationStatus.AwaitingReply
+                              : modelData.running ? Kit.KetTheme.ConversationStatus.Working
+                              : /fail|error|disconnect|missing/i.test(modelData.status || "") ? Kit.KetTheme.ConversationStatus.Error
+                              : /stop/i.test(modelData.status || "") ? Kit.KetTheme.ConversationStatus.Stopped
+                              : modelData.started ? Kit.KetTheme.ConversationStatus.Completed
+                              : Kit.KetTheme.ConversationStatus.NotStarted
+                        statusLabel: modelData.status || Kit.KetTheme.conversationStatusLabel(status)
+                        readonly property bool animationAllowed: agentHost.motionEnabled
+                            && !agentHost.restoringHistory && workspace.visible
+                            && workspace.Window.active && workspace.Window.visibility !== Window.Minimized
+                            && visible && y + height >= conversationList.contentY
+                            && y <= conversationList.contentY + conversationList.height
+                        // Preserve the host's motion/visibility policy while sharing the kit clock.
+                        function syncClock() {
+                            const active = spins && animationAllowed
+                            if (holdsClock !== active) {
+                                holdsClock = active
+                                Kit.KetTheme.holdAnimationClock(active)
                             }
                         }
-                        Rectangle {
-                            id: conversationStatus
-                            anchors.right: parent.right
-                            anchors.rightMargin: Metrics.px(9, workspace.t)
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: Metrics.px(6, workspace.t)
-                            height: Metrics.px(6, workspace.t)
-                            radius: Metrics.px(3, workspace.t)
-                            color: modelData.running ? workspace.t.positive : "transparent"
-                        }
+                        onAnimationAllowedChanged: syncClock()
                         MouseArea {
                             id: conversationMouse
                             anchors.fill: parent

@@ -15,6 +15,8 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QListWidget>
+#include <QPersistentModelIndex>
+#include <QPointer>
 #include <QRegularExpression>
 #include <QShortcut>
 #include <QSignalBlocker>
@@ -210,12 +212,22 @@ void SettingsDialog::addNavigationPage(const QString& id, const QString& title, 
         navigation_);
     item->setSizeHint(row->sizeHint());
     navigation_->setItemWidget(item, row);
-    connect(row, &QAbstractButton::clicked, navigation_,
-            [this, item] { navigation_->setCurrentItem(item); });
-    connect(navigation_, &QListWidget::currentItemChanged, row,
-            [row, item](QListWidgetItem* current) { row->setChecked(current == item); });
+    const QPersistentModelIndex index(navigation_->indexFromItem(item));
+    const QPointer<QListWidget> navigation(navigation_);
+    connect(row, &QAbstractButton::clicked, navigation_, [navigation, index] {
+        if (navigation && index.isValid())
+            navigation->setCurrentIndex(index);
+    });
+    connect(navigation_, &QListWidget::currentItemChanged, row, [navigation, row, index] {
+        row->setChecked(navigation && index.isValid() && navigation->currentIndex() == index);
+    });
+    // QListWidget deletes items immediately but defers deleting their widgets. A zoom
+    // signal can arrive in that interval while Pro rebuilds its extension pages.
     connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, row,
-            [row, item] { item->setSizeHint(row->sizeHint()); });
+            [navigation, row, index] {
+                if (navigation && index.isValid())
+                    navigation->item(index.row())->setSizeHint(row->sizeHint());
+            });
     pages_->addWidget(page);
 }
 

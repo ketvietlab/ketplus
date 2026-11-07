@@ -14,6 +14,12 @@ class QLabel;
 class QMenu;
 class QResizeEvent;
 class QToolButton;
+namespace ket {
+class NavItem;
+class UpdatePill;
+class Select;
+class Banner;
+} // namespace ket
 
 namespace ketplus {
 
@@ -42,6 +48,7 @@ class ActivityBar final : public QWidget {
                      const QString& selectedId);
     void setRemoteMachineSelected(bool selected);
     // Shows the "Update ready" reminder above the identity button; empty hides it.
+    void setStorageStatus(const QVariantMap& result);
     void setPendingUpdate(const QString& version);
     void applyPalette(const ThemePalette& palette, int interfaceFontSizePixels = 14);
     [[nodiscard]] Mode mode() const noexcept;
@@ -66,23 +73,24 @@ class ActivityBar final : public QWidget {
     void resizeEvent(QResizeEvent* event) override;
 
   private:
-    QToolButton* addModeButton(const QByteArray& svgBody, const QString& label, Mode mode);
+    ket::NavItem* addModeButton(const QByteArray& svgBody, const QString& label, Mode mode);
     void refreshIcons();
 
     QButtonGroup* group_{nullptr};
-    QToolButton* quickSearchButton_{nullptr};
+    ket::NavItem* quickSearchButton_{nullptr};
     QLabel* brandWordmark_{nullptr};
-    QLabel* quickSearchShortcut_{nullptr};
-    QToolButton* explorerButton_{nullptr};
-    QToolButton* sourceControlButton_{nullptr};
-    QLabel* sourceControlCount_{nullptr};
-    QToolButton* agentButton_{nullptr};
-    QToolButton* remoteButton_{nullptr};
+    ket::NavItem* explorerButton_{nullptr};
+    ket::NavItem* sourceControlButton_{nullptr};
+    ket::NavItem* agentButton_{nullptr};
+    ket::NavItem* remoteButton_{nullptr};
+    ket::Select* tagFilter_{nullptr};
+    QWidget* storageNotice_{nullptr};
+    ket::Banner* storageBanner_{nullptr};
     SidebarRepositoryList* repositoryList_{nullptr};
     QComboBox* machineSelect_{nullptr};
     QToolButton* repositoryAction_{nullptr};
     QLabel* machineNotice_{nullptr};
-    QToolButton* updateReadyButton_{nullptr};
+    ket::UpdatePill* updateReadyButton_{nullptr};
     QToolButton* identityButton_{nullptr};
     QMenu* userMenu_{nullptr};
     QWidget* resizeHandle_{nullptr};

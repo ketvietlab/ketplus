@@ -7,6 +7,7 @@
 #include "workspace/ActivityBar.h"
 #include "workspace/AtlasIndex.h"
 
+#include <QAbstractButton>
 #include <QAction>
 #include <QComboBox>
 #include <QDir>
@@ -58,7 +59,7 @@ class AtlasWorkspaceTest final : public QObject {
         QVERIFY(bar);
         QVERIFY(!bar->findChild<QToolButton*>(QStringLiteral("atlasActivityButton")));
         auto* agentButton =
-            bar->findChild<QToolButton*>(QStringLiteral("agentWorkspaceActivityButton"));
+            bar->findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"));
         QVERIFY(agentButton);
         agentButton->click();
         auto* workspaceView = window.findChild<ketplus::AgentWorkspaceView*>();
@@ -168,7 +169,7 @@ class AtlasWorkspaceTest final : public QObject {
         window.show();
         auto* bar = window.findChild<ketplus::ActivityBar*>();
         auto* atlasButton = window.findChild<QToolButton*>("atlasActivityButton");
-        auto* explorerButton = window.findChild<QToolButton*>("explorerActivityButton");
+        auto* explorerButton = window.findChild<QAbstractButton*>("explorerActivityButton");
         auto* newAtlas = window.findChild<QAction*>("newAtlasTabAction");
         QVERIFY(bar && explorerButton && newAtlas);
         QVERIFY(!atlasButton); // Atlas is reached from the conversation header, not the sidebar.

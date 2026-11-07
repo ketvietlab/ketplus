@@ -145,6 +145,7 @@ void MainWindow::ensureAgentWorkspace() {
     updateRepositoryName();
     agentWorktreeCreator_ = new AgentWorktreeCreator(this);
     agentManager_ = new AgentSessionManager(this);
+    setupSidebarStorage();
     connect(
         agentManager_, &AgentSessionManager::executionContextChanged, this,
         [this](const QString& path, const QString& conversation, const QString& branch,
