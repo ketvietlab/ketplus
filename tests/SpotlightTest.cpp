@@ -1,3 +1,4 @@
+#include "KetCommandPalette.h"
 #include "app/RepositoryRouter.h"
 #include "app/SpotlightDialog.h"
 #include "ui/Theme.h"
@@ -61,30 +62,29 @@ class SpotlightTest final : public QObject {
                            {"two", "Website.md", "/dev/client/website", "Files"},
                            {"missing", "Missing.md", "/old/missing", "Files", false}});
         dialog.show();
-        QCOMPARE(dialog.width(), 640);
-        QCOMPARE(dialog.height(), 318);
-        QCOMPARE(dialog.findChild<QWidget*>(QStringLiteral("spotlightSearchHeader"))->height(), 54);
-        QCOMPARE(dialog.findChild<QWidget*>(QStringLiteral("spotlightHint"))->height(), 34);
-        QCOMPARE(dialog.findChild<QWidget*>(QStringLiteral("spotlightFooter"))->height(), 40);
+        QVERIFY(dialog.isWindow());
+        QVERIFY(dialog.windowFlags().testFlag(Qt::Popup));
+        QVERIFY(dialog.commandPalette()->isOpen());
+        QVERIFY(dialog.commandPalette()->panel()->width() < dialog.width());
         const auto capture = qEnvironmentVariable("KETPLUS_SPOTLIGHT_CAPTURE");
         if (!capture.isEmpty()) {
             QTest::qWait(100);
             QVERIFY(dialog.grab().save(capture));
         }
         auto* query = dialog.findChild<QLineEdit*>("spotlightQuery");
-        auto* results = dialog.findChild<QListWidget*>("spotlightResults");
+        auto* results = dialog.commandPalette();
         QVERIFY(query && results);
         QCOMPARE(query->placeholderText(), QStringLiteral("Search files and Atlases…"));
-        QCOMPARE(results->count(), 3);
-        QCOMPARE(results->item(0)->data(Qt::UserRole + 3).toString(), QStringLiteral("FILES"));
-        QVERIFY(results->item(0)->data(Qt::UserRole + 4).toBool());
-        QCOMPARE(results->item(0)->sizeHint().height(), 80);
-        QCOMPARE(results->item(1)->sizeHint().height(), 54);
+        QCOMPARE(results->groups().size(), 1);
+        QCOMPARE(results->groups().first().title, QStringLiteral("FILES"));
+        QCOMPARE(results->groups().first().items.size(), 2); // Unavailable entries cannot activate.
         query->setText("CLIENT web");
-        QCOMPARE(results->count(), 1);
-        QCOMPARE(results->currentItem()->data(Qt::UserRole).toString(), QStringLiteral("two"));
+        QCOMPARE(results->groups().first().items.size(), 1);
+        QCOMPARE(results->groups().first().items.first().id, QStringLiteral("two"));
+        query->setText("Missing");
+        QVERIFY(results->groups().isEmpty());
         query->setText("nothing-found");
-        QCOMPARE(results->count(), 0);
+        QVERIFY(results->groups().isEmpty());
         query->clear();
         QSignalSpy activated(&dialog, &ketplus::SpotlightDialog::entryActivated);
         QTest::keyClick(query, Qt::Key_Down);
@@ -222,18 +222,14 @@ class SpotlightTest final : public QObject {
                            {"atlas", "Checkout", "/worktrees/pos/docs/atlas.json", "Atlases", true,
                             "atlas", "/other/linked-checkout/docs/atlas.json"}});
         auto* query = dialog.findChild<QLineEdit*>("spotlightQuery");
-        auto* results = dialog.findChild<QListWidget*>("spotlightResults");
-        QCOMPARE(results->count(), 2);
-        QCOMPARE(results->item(1)->data(Qt::UserRole + 3).toString(), QStringLiteral("ATLAS"));
+        auto* results = dialog.commandPalette();
+        QCOMPARE(results->groups().size(), 2);
+        QCOMPARE(results->groups().at(1).title, QStringLiteral("ATLAS"));
         query->setText("linked-checkout");
-        QCOMPARE(results->count(), 1);
-        QCOMPARE(results->currentItem()->data(Qt::UserRole).toString(), "atlas");
-        // Repository and worktree scopes are gone; '@' has no special meaning.
+        QCOMPARE(results->groups().size(), 1);
+        QCOMPARE(results->groups().first().items.first().id, QStringLiteral("atlas"));
         query->setText("@repo");
-        QCOMPARE(results->count(), 0);
-        QCOMPARE(dialog.findChild<QLabel*>(QStringLiteral("spotlightAnywhere"))->text(),
-                 QStringLiteral("FILES & ATLASES"));
-        QVERIFY(dialog.findChild<QLabel*>(QStringLiteral("spotlightScope")) == nullptr);
+        QVERIFY(results->groups().isEmpty());
     }
     void recentRepositoriesCollapseLinkedWorktrees() {
         QTemporaryDir directory;

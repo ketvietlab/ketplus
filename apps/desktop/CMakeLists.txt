@@ -97,6 +97,7 @@ add_library(ketplus_desktop_shell STATIC
     src/app/MainWindow.h
     src/app/MainWindowActions.cpp
     src/app/MainWindowStorage.cpp
+    src/app/MainWindowCompact.cpp
     src/app/MainWindowAgent.cpp
     src/app/MainWindowTranscriptLinks.cpp
     src/app/TranscriptFileType.cpp

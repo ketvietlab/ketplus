@@ -372,6 +372,13 @@ void AgentWorkspaceView::setCompactMode(const bool compact) {
     emit compactModeChanged();
 }
 
+void AgentWorkspaceView::setCompactWindow(const bool compact) {
+    if (compactWindow_ == compact)
+        return;
+    compactWindow_ = compact;
+    emit compactWindowChanged();
+}
+
 void AgentWorkspaceView::setProductSidebarVisible(const bool visible) {
     if (productSidebarVisible_ == visible) {
         return;

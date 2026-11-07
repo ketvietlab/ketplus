@@ -1,6 +1,7 @@
 #include "AgentWorkspaceViewTest.h"
 #include "CodexBrowserTools.h"
 #include "KetAppearance.h"
+#include "KetRecipes.h"
 #include "agent/AgentMessageModel.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
@@ -1012,8 +1013,12 @@ void AgentWorkspaceViewTest::restoringDoesNotCoverChatPane() {
     QVERIFY(header);
     QVERIFY(newConversation);
     QVERIFY(terminal);
-    QCOMPARE(newConversation->size(), QSizeF(28, 28));
-    QCOMPARE(terminal->size(), QSizeF(28, 28));
+    const auto headerRecipe =
+        ket::iconButtonRecipe(ket::ControlSize::Small, {}, ket::Appearance::instance().theme());
+    const auto headerSize =
+        ket::Appearance::scale(headerRecipe.height, ket::Appearance::instance().zoom());
+    QCOMPARE(newConversation->size(), QSizeF(headerSize, headerSize));
+    QCOMPARE(terminal->size(), QSizeF(headerSize, headerSize));
 
     // Transcripts restore fast enough that a full-pane overlay only caused a flash.
     QSignalSpy changed(&view, &ketplus::AgentWorkspaceView::restoringChanged);

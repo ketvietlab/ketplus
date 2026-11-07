@@ -115,3 +115,15 @@ uses repository → conversation, removing the inherited worktree rail and its
 filter/reveal logic. The native shell already groups conversations by repository.
 Six focused cases pass, including a 120-worktree catalog without sidebar rows,
 group collapse/create, resizing and context actions; the dark capture is inspected.
+
+Sidebar correction: draft PR #224 on #222. Overlays layer composes kit Quick
+search and QML context menus, adds the real Change worktree route and desktop
+compact-window presentation. The latter reuses the mounted conversation/draft;
+provider context-token compaction is a separate existing feature. Spotlight suite:
+17 pass, 1 helper-only skip; final popup-specific and editor navigation reruns pass.
+Four QML interaction cases and compact geometry/draft checks pass. Picker skinning
+continues with #165. No review, release or native acceptance started.
+
+Overlays additional checks: native sidebar composition and closable file details
+pass. Narrow compact header hides scope/actions per mock and keeps its expand
+button in bounds. The final popup-specific search/editor checks pass.

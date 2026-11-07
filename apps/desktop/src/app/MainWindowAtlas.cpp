@@ -135,12 +135,9 @@ void MainWindow::showSpotlight() {
     }
     auto* dialog = new SpotlightDialog(this);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
-    dialog->setFixedWidth(qMin(640, qMax(280, width() - 40)));
-    dialog->setAvailableHeight(qMin(680, qMax(360, height() - 60)));
     atlasIndex_->scheduleRefresh(0);
     refreshWorkspaceFileIndex(false);
     populateSpotlight();
-    dialog->move(mapToGlobal(QPoint((width() - dialog->width()) / 2, qMax(30, height() / 6))));
     connect(dialog, &SpotlightDialog::entryActivated, this, [this](const QString& id) {
         const int separator = id.indexOf(':');
         const auto type = id.left(separator);

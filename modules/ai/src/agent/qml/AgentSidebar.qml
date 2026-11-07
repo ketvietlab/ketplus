@@ -105,122 +105,43 @@ Rectangle {
                         }
                     }
                 }
-                Basic.Menu {
+                Kit.KetMenu {
                     id: conversationMenu
                     objectName: "conversationContextMenu"
-                    readonly property color backgroundColor: workspace.t.panelBackground || workspace.t.surfaceRaised || "#20252b"
-                    readonly property color borderColor: workspace.t.borderStrong || "#3b424c"
-                    readonly property real cornerRadius: 7
-                    padding: Metrics.px(5, workspace.t)
-                    margins: 8
-                    opacity: 1
-                    font.family: workspace.t.uiFont
-                    font.pixelSize: workspace.t.reading
-                    background: Rectangle {
-                        implicitWidth: Metrics.px(180, workspace.t)
-                        implicitHeight: Metrics.px(146, workspace.t)
-                        color: conversationMenu.backgroundColor
-                        border.color: conversationMenu.borderColor
-                        border.width: 1
-                        radius: conversationMenu.cornerRadius
-                    }
-                    Basic.MenuItem {
+                    Kit.KetMenuItem {
                         id: renameConversationMenuItem
                         objectName: "renameConversationMenuItem"
-                        text: "Rename..."
-                        width: conversationMenu.availableWidth
-                        implicitHeight: Metrics.px(34, workspace.t)
-                        leftPadding: Metrics.px(10, workspace.t)
-                        rightPadding: Metrics.px(28, workspace.t)
-                        topPadding: Metrics.px(4, workspace.t)
-                        bottomPadding: Metrics.px(4, workspace.t)
-                        contentItem: Text {
-                            text: renameConversationMenuItem.text
-                            color: !renameConversationMenuItem.enabled ? workspace.t.textDisabled : renameConversationMenuItem.highlighted ? workspace.t.accentText : workspace.t.textMain
-                            font: renameConversationMenuItem.font
-                            verticalAlignment: Text.AlignVCenter
-                            elide: Text.ElideRight
-                        }
-                        background: Rectangle {
-                            color: renameConversationMenuItem.highlighted ? workspace.t.accentSubtle : "transparent"
-                            border.color: renameConversationMenuItem.visualFocus ? workspace.t.focus : "transparent"
-                            border.width: renameConversationMenuItem.visualFocus ? 1 : 0
-                            radius: Metrics.px(5, workspace.t)
-                        }
-                        onTriggered: Qt.callLater(function () {
-                            agentHost.requestRenameConversation(conversationId);
-                        })
+                        text: "Rename…"
+                        iconName: "edit"
+                        onTriggered: Qt.callLater(() => agentHost.requestRenameConversation(conversationId))
                     }
-                    Basic.MenuItem {
-                        id: forkConversationMenuItem
+                    Kit.KetMenuItem {
                         objectName: "forkConversationMenuItem"
                         text: "Fork this conversation"
+                        iconName: "branch"
                         enabled: modelData.forkable === true
-                        width: conversationMenu.availableWidth
-                        implicitHeight: Metrics.px(34, workspace.t)
-                        leftPadding: Metrics.px(10, workspace.t)
-                        rightPadding: Metrics.px(28, workspace.t)
-                        contentItem: Text {
-                            text: forkConversationMenuItem.text
-                            color: !forkConversationMenuItem.enabled ? workspace.t.textDisabled : forkConversationMenuItem.highlighted ? workspace.t.accentText : workspace.t.textMain
-                            font: forkConversationMenuItem.font
-                            verticalAlignment: Text.AlignVCenter
-                            elide: Text.ElideRight
-                        }
-                        background: Rectangle {
-                            color: forkConversationMenuItem.highlighted ? workspace.t.accentSubtle : "transparent"
-                            radius: Metrics.px(5, workspace.t)
-                        }
-                        onTriggered: Qt.callLater(function () {
-                            agentHost.requestForkConversation(conversationId);
-                        })
+                        onTriggered: Qt.callLater(() => agentHost.requestForkConversation(conversationId))
                     }
-                    Basic.MenuItem {
-                        id: deleteConversationMenuItem
-                        objectName: "deleteConversationMenuItem"
-                        text: "Delete…"
-                        enabled: !modelData.running
-                        width: conversationMenu.availableWidth
-                        implicitHeight: Metrics.px(34, workspace.t)
-                        leftPadding: Metrics.px(10, workspace.t)
-                        rightPadding: Metrics.px(28, workspace.t)
-                        contentItem: Text {
-                            text: deleteConversationMenuItem.text
-                            color: deleteConversationMenuItem.enabled ? (deleteConversationMenuItem.highlighted ? workspace.t.accentText : workspace.t.danger) : workspace.t.textDisabled
-                            font: deleteConversationMenuItem.font
-                            verticalAlignment: Text.AlignVCenter
-                            elide: Text.ElideRight
-                        }
-                        background: Rectangle {
-                            color: deleteConversationMenuItem.highlighted ? workspace.t.accentSubtle : "transparent"
-                            radius: Metrics.px(5, workspace.t)
-                        }
-                        onTriggered: Qt.callLater(function () {
-                            agentHost.requestDeleteConversation(conversationId);
-                        })
+                    Kit.KetMenuItem {
+                        objectName: "changeConversationWorktreeMenuItem"
+                        text: "Change worktree…"
+                        iconName: "folder"
+                        onTriggered: Qt.callLater(() => agentHost.requestConversationWorktree(conversationId))
                     }
-                    Basic.MenuItem {
-                        id: archiveConversationMenuItem
+                    Kit.KetMenuSeparator {}
+                    Kit.KetMenuItem {
                         objectName: "archiveConversationMenuItem"
                         text: "Archive"
-                        width: conversationMenu.availableWidth
-                        implicitHeight: Metrics.px(34, workspace.t)
-                        leftPadding: Metrics.px(10, workspace.t)
-                        rightPadding: Metrics.px(28, workspace.t)
-                        contentItem: Text {
-                            text: archiveConversationMenuItem.text
-                            color: archiveConversationMenuItem.enabled ? (archiveConversationMenuItem.highlighted ? workspace.t.accentText : workspace.t.textMain) : workspace.t.textDisabled
-                            font: archiveConversationMenuItem.font
-                            verticalAlignment: Text.AlignVCenter
-                            elide: Text.ElideRight
-                        }
-                        background: Rectangle {
-                            color: archiveConversationMenuItem.highlighted ? workspace.t.accentSubtle : "transparent"
-                            radius: Metrics.px(5, workspace.t)
-                        }
-                        onTriggered: Qt.callLater(function () {
-                            agentHost.requestArchiveConversation(conversationId);
-                        })
+                        iconName: "archive"
+                        onTriggered: Qt.callLater(() => agentHost.requestArchiveConversation(conversationId))
+                    }
+                    Kit.KetMenuItem {
+                        objectName: "deleteConversationMenuItem"
+                        text: "Delete…"
+                        iconName: "trash"
+                        danger: true
+                        enabled: !modelData.running
+                        onTriggered: Qt.callLater(() => agentHost.requestDeleteConversation(conversationId))
                     }
                 }
             }
