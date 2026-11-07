@@ -106,6 +106,7 @@ class JournalSizePolicyTest final : public QObject {
         QVERIFY(saved.value("ok").toBool());
         QCOMPARE(saved.value("revision").toInteger(), 1);
         QVERIFY(!saved.value("status").toObject().value("pressure_enabled").toBool());
+        QVERIFY(!saved.value("status").toObject().value("warning").toBool());
         QCOMPARE(host.handleCommand(write, "local"), saved);
         QCOMPARE(host.handleCommand(write, "cloud-control-v2").value("error_code"),
                  QJsonValue("forbidden"));
@@ -191,6 +192,13 @@ class JournalSizePolicyTest final : public QObject {
             QVERIFY(sql(path, "UPDATE sessions SET state='ready'"));
             QVERIFY(journal.setSizePolicy({1'000'000'000LL, 80, 0}, 1)); // restart expired sweep
             QElapsedTimer pressureTimer;
+            QVERIFY(
+                sql(path,
+                    "CREATE TRIGGER abort_pressure BEFORE UPDATE OF revision ON "
+                    "replay_projection_state BEGIN SELECT RAISE(ABORT,'synthetic rollback'); END"));
+            QVERIFY(!journal.pruneConfiguredReplayDetails(QDateTime::currentDateTimeUtc()));
+            QCOMPARE(marked(journal), 0);
+            QVERIFY(sql(path, "DROP TRIGGER abort_pressure"));
             pressureTimer.start();
             QCOMPARE(
                 journal.pruneConfiguredReplayDetails(QDateTime::currentDateTimeUtc()).value_or(-1),
@@ -232,6 +240,16 @@ class JournalSizePolicyTest final : public QObject {
             QVERIFY(status.value("over_limit").toBool()); // unsupported fixture keeps target unmet
             QVERIFY(status.value("warning").toBool());
             QVERIFY(status.value("pressure_enabled").toBool());
+            QVERIFY(journal.setSizePolicy({0, 80, 0}, 3));
+            QVERIFY(journal.appendEvent("s", 1, "user.message", {{"text", "new turn"}}) > 0);
+            QVERIFY(journal.appendEvent("s", 1, "turn.started", {}) > 0);
+            QVERIFY(journal.appendEvent("s", 1, "turn.completed", {}) > 0);
+            QVERIFY(sql(path, "DELETE FROM events"));
+            for (int pass = 0; pass < 4; ++pass)
+                QCOMPARE(journal.pruneConfiguredReplayDetails(QDateTime::currentDateTimeUtc())
+                             .value_or(-1),
+                         0);
+            QCOMPARE(marked(journal), 4); // newly eligible recent turn 5 stays full under no-limit
             QVERIFY(sql(path, "DELETE FROM pressure_fixture WHERE rowid=1"));
             QVERIFY(sql(path,
                         "UPDATE replay_events SET payload=json_remove(payload,'$.item.compacted') "
@@ -241,7 +259,7 @@ class JournalSizePolicyTest final : public QObject {
                         "payload=json_set(payload,'$.item.aggregatedOutput',printf('%60000s','x')"
                         ") WHERE turn_sequence=1 AND event_type='item.completed'"));
             QVERIFY(journal.space()->freePages >= LocalJournal::minimumReclaimPages);
-            QVERIFY(journal.setSizePolicy({1'000'000'000LL, 80, 0}, 3));
+            QVERIFY(journal.setSizePolicy({1'000'000'000LL, 80, 0}, 4));
             QCOMPARE(
                 journal.pruneConfiguredReplayDetails(QDateTime::currentDateTimeUtc()).value_or(-1),
                 0);
