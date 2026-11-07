@@ -5,6 +5,10 @@ milestone changes state.
 
 ## Implemented
 
+- Oversized Codex line scanning retains at most 64 routing frames, tracking deeper
+  containers with a scalar depth (ADR 0070). Shallow fields after the nested value
+  still route correctly; broader provider framing remains under audit.
+
 - Existing media blobs are validated before dedup returns a reference (ADR 0066):
   exact bounded bytes, regular nonsymlink files and owner-only permissions.
   Invalid entries remain intact for repair; reference durability remains open.
