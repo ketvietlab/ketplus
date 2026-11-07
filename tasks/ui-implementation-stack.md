@@ -73,7 +73,7 @@ The base/head/draft chain is checked against GitHub at final publication.
 | [233](https://github.com/ketvietlab/ketplus/pull/233) | Provider operation aliases / checklist | `feat/ui-stack-completion-ledger` | `feat/ui-stack-brand-assets` |
 | [236](https://github.com/ketvietlab/ketplus/pull/236) | Explicit held-message release | `feat/ui-stack-held-messages` | `feat/ui-stack-completion-ledger` |
 | [238](https://github.com/ketvietlab/ketplus/pull/238) | Atlas result receipts | `feat/ui-stack-atlas-receipts` | `feat/ui-stack-held-messages` |
-| This layer | UI / history regression fixtures | `feat/ui-stack-regression-fixtures` | `feat/ui-stack-atlas-receipts` |
+| [239](https://github.com/ketvietlab/ketplus/pull/239) | UI / history regression fixtures | `feat/ui-stack-regression-fixtures` | `feat/ui-stack-atlas-receipts` |
 
 The activity-alias layer renders `ScheduleWakeup` as a scheduled wake-up and
 `EnterPlanMode` as entering plan mode, with running/completed labels. This is
