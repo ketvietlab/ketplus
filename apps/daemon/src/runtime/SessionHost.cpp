@@ -346,11 +346,11 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAda
         }
         // Clients read a turn as running until its turn.completed arrives, so an interrupted
         // turn without one kept the phone's composer locked.
-        if (session.stored.state == QStringLiteral("interrupted") &&
-            journal_->hasOpenTurn(session.stored.id, session.stored.generation))
-            (void)appendEvent(session, QStringLiteral("turn.completed"),
-                              {{QStringLiteral("status"), QStringLiteral("interrupted")}});
         auto inserted = sessions_.insert(stored.id, session);
+        if (inserted->stored.state == QStringLiteral("interrupted") &&
+            journal_->hasOpenTurn(stored.id, stored.generation))
+            (void)appendEvent(*inserted, QStringLiteral("turn.completed"),
+                              {{QStringLiteral("status"), QStringLiteral("interrupted")}});
         // Older builds could persist an entire pasted handoff as a provider title.
         // Repair only that recognizable shape; ordinary and manual titles stay intact.
         if (stored.title.contains(QStringLiteral("<ketplus_response_preferences>")) &&

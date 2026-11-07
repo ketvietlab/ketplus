@@ -627,6 +627,9 @@ remain explicitly open.
 - [x] Focused Release/headless 17/17 (42.88 s): recovery, no ghost prompt,
   per-session/global count and byte caps, deletion budget release, subscriber
   deletion, shutdown, real busy writer and normal coalescing.
+- [x] Full Pro caught a constructor regression: interrupted-session completion
+  ran before runtime registration. Register the session before the append;
+  rerun the existing restart regression and full Pro before accepting the fix.
 - [ ] Full Pro matrix at final head and independent review; merge and cleanup.
 - [ ] Continue multirow replay/activity mutation and caller command atomicity
   audits. Volatile recovery does not finish crash/startup/backfill acceptance.
