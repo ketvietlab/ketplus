@@ -463,6 +463,11 @@ runs with umask 077; its state and token directories are owner-only, and the
 token, journal and SQLite WAL/SHM files are 0600. A token file that is a symlink
 or owned by another account is rejected.
 
+The local Qt client's unread socket buffer is capped at one maximum IPC frame
+plus its four-byte header, including the hello phase. Paused dispatch applies
+backpressure; valid pipelined frames resume without loss (ADR 0079). This is not
+a process-wide memory or request-work limit.
+
 Advanced model, effort and execution controls are revision-fenced daemon
 commands backed by the active adapter's advertised capabilities. Encrypted
 attachments use bounded, individually durable command chunks and a locally

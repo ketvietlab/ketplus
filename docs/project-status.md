@@ -5,6 +5,9 @@ milestone changes state.
 
 ## Implemented
 
+- The local Qt client applies transport backpressure before hello (ADR 0079),
+  limiting unread socket bytes to one maximum frame plus header while preserving
+  valid pipelined events. Broader IPC work/queue/lifetime bounds remain open.
 - Existing media blobs are validated before dedup returns a reference (ADR 0066):
   exact bounded bytes, regular nonsymlink files and owner-only permissions.
   Invalid entries remain intact for repair; reference durability remains open.
