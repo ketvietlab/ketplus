@@ -6,6 +6,7 @@
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QJsonDocument>
+#include <QScopeGuard>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QUuid>
@@ -734,6 +735,11 @@ bool LocalJournal::deleteSession(const QString& sessionId, const qint64 generati
             *error = database_.lastError().text();
         return false;
     }
+    bool transaction = true;
+    const auto rollback = qScopeGuard([&] {
+        if (transaction)
+            database_.rollback();
+    });
     QSqlQuery tombstone(database_);
     tombstone.prepare(
         QStringLiteral("INSERT INTO session_tombstones(session_id, generation, lifecycle_revision, "
@@ -743,10 +749,11 @@ bool LocalJournal::deleteSession(const QString& sessionId, const qint64 generati
     tombstone.addBindValue(lifecycleRevision);
     tombstone.addBindValue(operationId);
     tombstone.addBindValue(QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs));
-    if (!tombstone.exec()) {
-        database_.rollback();
+    if (!tombstone.exec() || tombstone.numRowsAffected() != 1) {
         if (error != nullptr)
-            *error = tombstone.lastError().text();
+            *error = tombstone.lastError().isValid()
+                         ? tombstone.lastError().text()
+                         : QStringLiteral("The deletion tombstone was not stored.");
         return false;
     }
     const QJsonObject deletion{
@@ -764,14 +771,14 @@ bool LocalJournal::deleteSession(const QString& sessionId, const qint64 generati
     cleanup.addBindValue(QString::fromUtf8(QJsonDocument(deletion).toJson(QJsonDocument::Compact)));
     cleanup.addBindValue(
         QString::fromUtf8(QJsonDocument(providerTargets).toJson(QJsonDocument::Compact)));
-    if (!cleanup.exec()) {
-        database_.rollback();
+    if (!cleanup.exec() || cleanup.numRowsAffected() != 1) {
         if (error)
-            *error = cleanup.lastError().text();
+            *error = cleanup.lastError().isValid()
+                         ? cleanup.lastError().text()
+                         : QStringLiteral("The deletion work was not stored.");
         return false;
     }
     if (QString agentError; !releaseAgentState(sessionId, generation, &agentError)) {
-        database_.rollback();
         if (error != nullptr)
             *error = agentError;
         return false;
@@ -790,9 +797,23 @@ bool LocalJournal::deleteSession(const QString& sessionId, const qint64 generati
         query.addBindValue(sessionId);
         query.addBindValue(generation);
         if (!query.exec()) {
-            database_.rollback();
             if (error != nullptr)
                 *error = query.lastError().text();
+            return false;
+        }
+        query.finish();
+        // A successful statement can still ignore rows (for example a trigger).
+        // Never commit a tombstone while this generation's history remains.
+        query.prepare(QStringLiteral("SELECT 1 FROM %1 WHERE session_id=? AND generation=? "
+                                     "LIMIT 1")
+                          .arg(table));
+        query.addBindValue(sessionId);
+        query.addBindValue(generation);
+        if (!query.exec() || query.next() || query.lastError().isValid()) {
+            if (error != nullptr)
+                *error = query.lastError().isValid()
+                             ? query.lastError().text()
+                             : QStringLiteral("Session history cleanup was incomplete.");
             return false;
         }
     }
@@ -801,7 +822,6 @@ bool LocalJournal::deleteSession(const QString& sessionId, const qint64 generati
     session.addBindValue(sessionId);
     session.addBindValue(generation);
     if (!session.exec() || session.numRowsAffected() != 1) {
-        database_.rollback();
         if (error != nullptr)
             *error = session.lastError().text().isEmpty()
                          ? QStringLiteral("The session no longer exists.")
@@ -813,6 +833,7 @@ bool LocalJournal::deleteSession(const QString& sessionId, const qint64 generati
             *error = database_.lastError().text();
         return false;
     }
+    transaction = false;
     // Retention failure must not turn a committed delete into a reported failure.
     if (!pruneRetention())
         qWarning("Journal retention pass failed: %s", qUtf8Printable(error_));

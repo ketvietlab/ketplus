@@ -106,6 +106,9 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
   - [x] Reproduce explicit attachment cancellation bounds and preservation gaps;
     implement shared 1-MiB/128-candidate cancellation and retirement fencing.
   - [ ] Cancellation final affected matrix/review/merge and safe cleanup.
+  - [x] Session deletion transaction recovery #241: final head `71607352`,
+    affected Release/headless 12/12 (55.64 s), independent exact-head PASS;
+    merged `187566a6bad4626f1d5380cd51ab1e24795291b6`. Cleanup remains tracked separately.
   - [ ] Audit cloud-event cleanup and explicit deletion paths.
   - [ ] Close H1.1 only when those remaining work bounds have evidence.
 - [ ] H1.2 Verify migration/reopen safety: old schema, repeat open, partial failure,
@@ -216,8 +219,9 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | Item | State | Evidence / remaining work | Next action / owner |
 | --- | --- | --- | --- |
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
-| H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 and cloud #237 merged; bounded cancellation #240 gates pending | Finish cancellation gates; audit explicit session deletion / #2739 |
-| H1.2–H1.7 | Not started | No claim that #128 backend acceptance is complete | Follow H1.1, prioritize a confirmed safety finding / #2739 |
+| H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 and cloud #237 merged; transaction recovery #241 merged; bounded cancellation #240 gates pending | Finish cancellation gates; audit explicit session deletion / #2739 |
+| H1.2/H1.4–H1.7 | Not started | No claim that #128 backend acceptance is complete | Follow H1.1; prioritize a confirmed safety finding / #2739 |
+| H1.3 | In progress | Session-delete transaction recovery #241 merged; other operations and ownership read errors still under audit | Reproduce provider cleanup read failures / #2739 |
 | H2–H3 | Not started | Open daemon/provider review issues mapped | Execute after storage, or independent audit while waiting review / #2739 |
 | H4.1–H4.3 | Not started | Existing remote fixes are not a full #85 closure | Audit local transport/privacy with fixtures / #2739 |
 | H4.4 | Waiting, external | Relay code merged; no deployment/readiness evidence supplied | Relay release operator, unassigned; #2739 tracks gate |
@@ -502,3 +506,22 @@ actual-query regressions reproduced 64 MiB of returned metadata (32 malformed
 rows) while deleting no chunks. Projection now emits only integer or NULL;
 revision filtering still follows LIMIT. Final affected matrix and exact-head
 re-review are required before merge.
+
+### H1.3 session deletion failure recovery (prioritized safety finding)
+
+Four synthetic Qt regressions fail on the prior source: failed COMMIT leaves a
+transaction open, ignored tombstone/work inserts report deletion success, and an
+ignored raw-history DELETE commits incomplete cleanup. The transaction now has
+one rollback guard; mandatory inserts require one affected row and each existing
+history-table DELETE must leave no row for that identity/generation.
+Focused provider deletion passes 10/10, including retry/reopen and unrelated-session
+preservation. The 12-target Release/headless matrix passes (75.49 s), with one
+live lifecycle case skipped deliberately. Independent exact-head review passed; #241 merged at
+`187566a6bad4626f1d5380cd51ab1e24795291b6`. Final formatted head passed 12/12
+(55.64 s). Source/build cleanup remains separately tracked. See [ADR 0055](../../docs/decisions/0055-session-delete-transaction-recovery.md).
+This does not finish bulk-delete work bounds or previously committed-state recovery.
+
+Next safety audit: provider cleanup reads `sessions()` to protect shared threads,
+but that method also returns an empty list after a read error. Reproduce this with
+fake providers before changing the ownership check; it is a candidate, not yet a
+confirmed live data-loss event. No user data or provider quota is involved.

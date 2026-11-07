@@ -61,6 +61,7 @@ obsolete run. See `docs/release-process.md`.
 | Chat Mermaid | `ketplus_chat_mermaid_tests` | Markdown and Mermaid integration |
 | Workspace boundary | `ketplus_workspace_tests` | Pro shell with CM explorer behavior |
 | Async question lifetime | `ketplus_async_question_lifetime_tests` | turn expiry, session/generation isolation, late items and stale answers |
+| Session/provider deletion | `ketplus_provider_deletion_tests` | Failed commit releases the transaction; ignored tombstone/work/history mutations roll back; retry/reopen preserves history, conversation number, cleanup work and unrelated sessions; shared provider threads and unsupported providers remain protected |
 | Daemon protocol/storage | `ketplus_daemon_protocol_tests` | framing, journal, deduplication, approval expiry |
 | Daemon challenge v2 (#85) | `ketplus_daemon_machine_challenge_tests` | relay conformance bytes/signature, strict schema and machine/key binding, no legacy retry or credential request on rejection, and real HTTP serialization/signing with an in-memory credential store |
 | Journal usage retention (#128) | `ketplus_daemon_usage_retention_tests` | final usage samples, unchanged content/order, replay/page agreement, revision fencing, latest 20 actual turns including sequence gaps, raw-event acknowledgment, active/open/recent/question/approval/generation guards, bounded scan progress, transactional rollback and nonblocking writer contention with timeout restoration |
