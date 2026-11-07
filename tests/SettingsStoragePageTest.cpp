@@ -325,14 +325,18 @@ class SettingsStoragePageTest final : public QObject {
         page.resize(width, 650);
         page.show();
         QTRY_VERIFY(days(page)->isEnabled());
+        auto* usage = page.findChild<QLabel*>("storageUsage");
+        QVERIFY(usage->text().contains("Low disk space"));
+        QVERIFY(page.rect().contains(usage->geometry()));
+        QTRY_VERIFY2(usage->height() >= usage->heightForWidth(usage->width()),
+                     qPrintable(QString("actual=%1 required=%2 width=%3")
+                                    .arg(usage->height())
+                                    .arg(usage->heightForWidth(usage->width()))
+                                    .arg(usage->width())));
         QVERIFY(page.width() <= width);
         QVERIFY(page.rect().contains(days(page)->geometry()));
         QVERIFY(page.rect().contains(automatic(page)->geometry()));
         QVERIFY(page.rect().contains(reload(page)->geometry()));
-        auto* usage = page.findChild<QLabel*>("storageUsage");
-        QVERIFY(usage->text().contains("Low disk space"));
-        QVERIFY(page.rect().contains(usage->geometry()));
-        QVERIFY(usage->height() >= usage->heightForWidth(usage->width()));
         auto* accessible = QAccessible::queryAccessibleInterface(days(page));
         QVERIFY(accessible);
         QCOMPARE(accessible->text(QAccessible::Name), days(page)->currentText());
