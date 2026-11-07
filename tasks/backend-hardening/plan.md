@@ -816,8 +816,10 @@ remain explicitly open.
 - [x] Preserve bounded raw tokens, validate/decode JSON strings, refuse dotted-key
   aliases and withhold all routing when captured metadata is invalid (ADR 0073).
   Expanded focused suite 91/91 includes depth/memory and next-line recovery.
-- [ ] Full Pro shared-header matrix, integrate parent #256, independent exact-head
-  review, merge and cleanup. No UI implementation change.
+- [x] Full Pro build and 97/97 tests pass at `6fd79e51` (308.05 seconds).
+  Draft #259 is pushed; generated builds are removed. No UI implementation change.
+- [ ] Integrate parent #256, revalidate/review the final head, merge and source
+  cleanup. Review dispatch remains held by KetPlus `chain_limit`.
 - [ ] Duplicate keys/outer structure, RPC request-id typing, timeout/recovery and
   broader stderr/normal-frame encoding remain open; this is selective extraction.
 
@@ -829,8 +831,23 @@ remain explicitly open.
 - [x] Use a shared typed positive-integer lookup guard. Focused 39/39 passes;
   invalid ids preserve pending initialize, followed by exactly one valid completion
   (ADR 0074). Numeric boundary controls also pass.
-- [ ] Full Pro shared-header matrix, independent exact-head review, merge and
-  cleanup. This package branches from merged integration, independently of the
-  waiting metadata/string packages.
+- [x] Full Pro build and 97/97 tests pass at `d835d334` (316.56 seconds).
+  Draft #260 is pushed; generated build is removed. It branches from merged
+  integration, independently of the waiting metadata/string packages.
+- [ ] Independent exact-head review, merge and source cleanup; dispatch held.
 - [ ] Continue result/error-envelope validation, incoming ids, duplicate fields,
   counter exhaustion and pending-call admission/timeout/cancellation checks.
+
+### H3.4 validate matched response envelopes
+
+- [x] Reproduce 72 malformed-envelope failures on the original three adapters;
+  17 control/setup checks pass. Missing/scalar results can falsely complete
+  initialize; ambiguous/error-shape failures also lack a protocol diagnostic.
+- [x] Share a bounded envelope guard (ADR 0075): one object/null result or object
+  error, static failure, exactly-once callback. Combined focused 126/126 PASS,
+  including outstanding-call isolation, duplicate replies and valid recovery.
+- [ ] Full Pro shared-header gate, integrate parent #260, independent exact-head
+  review, merge and cleanup. No UI implementation changes.
+- [ ] Continue pending-call/counter/lifecycle and method-schema audit; broader H3
+  remains open. The next independent safety audit is H1.3 start-turn atomicity:
+  a committed user.message followed by failed turn.queued can leave a ghost prompt.

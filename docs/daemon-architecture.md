@@ -587,6 +587,11 @@ that type and numeric value across all three adapters, including Codex oversized
 responses (ADR 0074). Invalid/unrelated ids leave pending calls untouched; incoming
 provider request ids and pending-call timeout policy remain separate.
 
+Matched replies must contain exactly one result (object or explicit null) or error
+(object). Invalid envelopes fail that callback with a static protocol diagnostic;
+initialize uses its existing failure path, while other pending calls survive.
+Provider-specific result schemas remain separate (ADR 0075).
+
 The intended state flow is `registered -> connecting -> online -> draining ->
 stopped`, with a recoverable `offline` state. Session state is separate from
 connection state so a temporary network outage does not kill a local process.

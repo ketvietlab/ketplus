@@ -4,6 +4,7 @@
 #include "ComputerAgentInstructions.h"
 #include "ComputerToolLaunch.h"
 #include "providers/ClaudeCredentials.h"
+#include "providers/ProviderResponseEnvelope.h"
 #include "providers/ProviderResponseId.h"
 #include "runtime/ResponseGuidance.h"
 #include <QRegularExpression>
@@ -464,7 +465,9 @@ void ClaudeAdapter::consumeLine(const QByteArray& line) {
     if (!callback) {
         return;
     }
-    if (object.contains(QStringLiteral("error"))) {
+    if (!validProviderResponseEnvelope(object)) {
+        callback({}, QStringLiteral("Malformed provider response envelope."));
+    } else if (object.contains(QStringLiteral("error"))) {
         callback({}, errorText(object.value(QStringLiteral("error")).toObject()));
     } else {
         callback(object.value(QStringLiteral("result")).toObject(), {});

@@ -1,5 +1,6 @@
 #include "providers/CodexAdapter.h"
 #include "BrowserAgentInstructions.h"
+#include "providers/ProviderResponseEnvelope.h"
 #include "providers/ProviderResponseId.h"
 
 #include "CodexBrowserTools.h"
@@ -473,7 +474,9 @@ void CodexAdapter::consumeLine(const QByteArray& line) {
     if (!callback) {
         return;
     }
-    if (object.contains(QStringLiteral("error"))) {
+    if (!validProviderResponseEnvelope(object)) {
+        callback({}, QStringLiteral("Malformed provider response envelope."));
+    } else if (object.contains(QStringLiteral("error"))) {
         const QJsonObject error = object.value(QStringLiteral("error")).toObject();
         if (error.value(QStringLiteral("code")).toInt() == -32601)
             (void)narrowing_.methodNotFound(method);

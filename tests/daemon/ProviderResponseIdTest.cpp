@@ -44,6 +44,41 @@ QJsonValue alteredId(const QJsonValue& id, QString mode) {
     return id.toDouble(); // Integral JSON numbers retain the same request identity.
 }
 
+QJsonObject envelope(const QJsonValue& id, const QString& shape) {
+    QJsonObject result{{"id", id}};
+    if (shape == "missing")
+        return result;
+    if (shape == "both" || shape == "both-null") {
+        result.insert("result", QJsonObject{{"unexpected", true}});
+        result.insert("error",
+                      shape == "both"
+                          ? QJsonValue(QJsonObject{{"code", -32601}, {"message", "fixture error"}})
+                          : QJsonValue(QJsonValue::Null));
+        return result;
+    }
+    const bool failure = shape.startsWith("error-");
+    const QString type = shape.mid(shape.indexOf('-') + 1);
+    QJsonValue value;
+    if (type == "string")
+        value = QString("fixture-private-marker");
+    else if (type == "number")
+        value = 7;
+    else if (type == "bool")
+        value = true;
+    else if (type == "array")
+        value = QJsonArray{QJsonObject{{"fixture-private-marker", true}}};
+    else if (type == "object")
+        value = QJsonObject{{"ok", true}};
+    else if (type == "message")
+        value = QJsonObject{{"message", "fixture error"}};
+    else if (type == "stringcode")
+        value = QJsonObject{{"code", "fixture_error"}, {"message", "fixture error"}};
+    else if (type == "empty")
+        value = QJsonObject{};
+    result.insert(failure ? "error" : "result", value);
+    return result;
+}
+
 int serveFixture(const QString& executable) {
     QFile scenario(QFileInfo(executable).dir().filePath("scenario"));
     if (!scenario.open(QIODevice::ReadOnly))
@@ -58,6 +93,7 @@ int serveFixture(const QString& executable) {
         return output.write(bytes) == bytes.size() && output.flush();
     };
     QJsonValue initializeId;
+    QJsonValue heldId(QJsonValue::Undefined);
     const QJsonObject initialized{
         {"protocolVersion", 1}, {"agentCapabilities", QJsonObject{}}, {"userAgent", "fixture"}};
     while (true) {
@@ -69,6 +105,16 @@ int serveFixture(const QString& executable) {
         const auto method = request.value("method").toString();
         if (method == "initialize") {
             initializeId = id;
+            if (mode.startsWith("envelope-init-")) {
+                if (!send(envelope(id, mode.mid(14))))
+                    return 18;
+                continue;
+            }
+            if (mode.startsWith("envelope-call-")) {
+                if (!send({{"id", id}, {"result", initialized}}))
+                    return 19;
+                continue;
+            }
             QJsonObject response{{"id", alteredId(id, mode)}, {"result", initialized}};
             if (mode.startsWith("oversized-"))
                 response.insert("padding", QString(16 * 1024 * 1024 + 1, 'x'));
@@ -79,6 +125,17 @@ int serveFixture(const QString& executable) {
         } else if (id == QJsonValue("fixture-barrier") && method.isEmpty()) {
             if (!send({{"id", initializeId}, {"result", initialized}}))
                 return 14;
+        } else if (method == "fixture/hold") {
+            heldId = id;
+        } else if (method == "fixture/subject") {
+            if (!send(envelope(id, mode.mid(14))) ||
+                !send({{"id", id}, {"result", QJsonObject{{"duplicate", true}}}}) ||
+                (!heldId.isUndefined() &&
+                 !send({{"id", heldId}, {"result", QJsonObject{{"held", true}}}})) ||
+                !send({{"id", "envelope-barrier"},
+                       {"method", "fixture/barrier"},
+                       {"params", QJsonObject{}}}))
+                return 20;
         } else if (method == "fixture/echo") {
             if (!send({{"id", id}, {"result", QJsonObject{{"ok", true}}}}))
                 return 15;
@@ -90,6 +147,110 @@ int serveFixture(const QString& executable) {
 class ProviderResponseIdTest final : public QObject {
     Q_OBJECT
   private slots:
+    void responseEnvelopeAdmission_data() {
+        QTest::addColumn<QString>("provider");
+        QTest::addColumn<QString>("shape");
+        QTest::addColumn<bool>("initialize");
+        QTest::addColumn<bool>("malformed");
+        const QStringList invalid{"missing",       "both",         "both-null",    "result-string",
+                                  "result-number", "result-bool",  "result-array", "error-null",
+                                  "error-string",  "error-number", "error-bool",   "error-array"};
+        const QStringList valid{"result-object", "result-null", "error-message", "error-stringcode",
+                                "error-empty"};
+        for (const QString& provider : {"codex", "claude", "cursor"}) {
+            for (const QString& shape : invalid) {
+                QTest::newRow(qPrintable(provider + "-call-" + shape))
+                    << provider << shape << false << true;
+                QTest::newRow(qPrintable(provider + "-initialize-" + shape))
+                    << provider << shape << true << true;
+            }
+            for (const QString& shape : valid)
+                QTest::newRow(qPrintable(provider + "-call-" + shape))
+                    << provider << shape << false << false;
+        }
+    }
+    void responseEnvelopeAdmission() {
+#ifdef Q_OS_WIN
+        QSKIP("The local multi-provider fixture uses POSIX executable symlink launchers.");
+#else
+        QFETCH(QString, provider);
+        QFETCH(QString, shape);
+        QFETCH(bool, initialize);
+        QFETCH(bool, malformed);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString executable = directory.filePath("fake-" + provider);
+        QVERIFY(QFile::link(QCoreApplication::applicationFilePath(), executable));
+        QFile scenario(directory.filePath("scenario"));
+        QVERIFY(scenario.open(QIODevice::WriteOnly));
+        const QByteArray mode =
+            ((initialize ? "envelope-init-" : "envelope-call-") + shape).toUtf8();
+        QCOMPARE(scenario.write(mode), mode.size());
+        scenario.close();
+        std::unique_ptr<ProviderAdapter> adapter;
+        if (provider == "codex")
+            adapter = std::make_unique<CodexAdapter>(executable);
+        else if (provider == "claude")
+            adapter = std::make_unique<ClaudeAdapter>(executable);
+        else
+            adapter = std::make_unique<CursorAdapter>(executable);
+        int callbacks = 0;
+        QJsonObject result;
+        QString error;
+        QSignalSpy stops(adapter.get(), &ProviderAdapter::stopped);
+        QSignalSpy requests(adapter.get(), &ProviderAdapter::requestReceived);
+        int heldCallbacks = 0;
+        QString heldError;
+        QJsonObject heldResult;
+        if (!initialize)
+            adapter->call("fixture/hold", {},
+                          [&](const QJsonObject& value, const QString& failure) {
+                              ++heldCallbacks;
+                              heldError = failure;
+                              heldResult = value;
+                          });
+        adapter->call("fixture/subject", {}, [&](const QJsonObject& value, const QString& failure) {
+            ++callbacks;
+            result = value;
+            error = failure;
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(callbacks > 0 || !requests.isEmpty(), 10000);
+        if (initialize) {
+            QVERIFY(!adapter->isReady());
+            QVERIFY(!error.isEmpty());
+            QVERIFY(error.contains("Malformed provider response envelope"));
+            QTRY_VERIFY_WITH_TIMEOUT(!stops.isEmpty(), 10000);
+        } else {
+            QTRY_VERIFY_WITH_TIMEOUT(!requests.isEmpty(), 10000);
+            QCOMPARE(requests.first().at(1).toString(), QString("fixture/barrier"));
+            QVERIFY(adapter->isReady());
+            QVERIFY(stops.isEmpty());
+            QCOMPARE(heldCallbacks, 1);
+            QVERIFY(heldError.isEmpty());
+            QCOMPARE(heldResult.value("held"), QJsonValue(true));
+            const bool expectedError = malformed || shape.startsWith("error-");
+            QCOMPARE(!error.isEmpty(), expectedError);
+            if (malformed)
+                QCOMPARE(error, QString("Malformed provider response envelope."));
+            if (shape == "result-object")
+                QCOMPARE(result.value("ok"), QJsonValue(true));
+            else
+                QVERIFY(result.isEmpty());
+            int recovered = 0;
+            adapter->call("fixture/echo", {},
+                          [&](const QJsonObject& value, const QString& failure) {
+                              ++recovered;
+                              QCOMPARE(value.value("ok"), QJsonValue(true));
+                              QVERIFY(failure.isEmpty());
+                          });
+            QTRY_COMPARE_WITH_TIMEOUT(recovered, 1, 10000);
+        }
+        QCOMPARE(callbacks, 1);
+        QVERIFY(!error.contains("fixture-private-marker"));
+        adapter->stop();
+        QCOMPARE(callbacks, 1);
+#endif
+    }
     void numericIdentityKeepsIntegerBounds() {
         const qint64 maximum = std::numeric_limits<qint64>::max();
         QCOMPARE(providerResponseId(QJsonValue(qint64(1))), std::optional<quint64>(1));
