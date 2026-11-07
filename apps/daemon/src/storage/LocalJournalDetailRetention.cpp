@@ -161,7 +161,13 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
             "(json_extract(r.payload,'$.item.compacted.policy')='tool-result-text-v1' "
             "AND json_type(r.payload,'$.item.compacted.arguments') IS NULL "
             "AND json_type(r.payload,'$.item.arguments_excerpt') IS NULL "
-            "AND length(CAST(json_extract(r.payload,'$.item.arguments') AS BLOB))>5120))"));
+            "AND length(CAST(json_extract(r.payload,'$.item.arguments') AS BLOB))>5120) OR "
+            "(json_extract(r.payload,'$.item.compacted.policy') IN "
+            "('tool-result-text-v1','tool-arguments-v1') "
+            "AND json_type(r.payload,'$.item.compacted.structured_result') IS NULL "
+            "AND json_type(r.payload,'$.item.result.structuredContent_excerpt') IS NULL "
+            "AND length(CAST(json_extract(r.payload,'$.item.result.structuredContent') AS BLOB))"
+            ">5120))"));
     QSqlQuery startCandidate(database_);
     // The next retained row must be this item's same-turn completion. Keeping
     // interleaved starts preserves the first-seen ordering used by every reader.
