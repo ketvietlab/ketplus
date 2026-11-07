@@ -1,12 +1,23 @@
 # Conversation plan harness — concept mock
 
-The plan belongs to a conversation, not to a project-wide Planning screen. Open **Plan** in the conversation’s existing right content pane, beside Changes, Atlas and Terminal. The transcript and composer stay visible on the left; there is no Conversation / Plan switch above the transcript. Conversation 4821 and 4822 have independent in-memory plans; switching conversations preserves progress, evidence, timers and follow-up budgets separately. No global Planning navigation item exists.
+The plan belongs to a conversation, not to a project-wide Planning screen. Open **Plan** as a document in the conversation’s existing right content pane. The pane uses the editor’s KetTabBar and KetTabButton: one closable tab per file, diff, Atlas, terminal session or plan, rather than fixed content-type segments. The transcript and composer stay visible on the left; there is no Conversation / Plan switch above the transcript. Conversation 4821 and 4822 have independent in-memory plans; switching conversations preserves progress, evidence, timers and follow-up budgets separately. No global Planning navigation item exists.
 
 ## Compact presentation
 
 Each task is one row: completion icon, task title, owner and status. Expand a task to inspect its acceptance criterion and evidence. Activity entries are also one row; expand one for details. The conversation header and sidebar reflect the run state. An inline conversation action shows the verified count and reopens the right pane. The header checklist action opens the same pane. Closing the pane or changing its content does not stop or reset the plan.
 
 All text is English. The footer’s Preview selector and playback buttons are prototype controls, not proposed production controls. Concept labels and sample-evidence disclosures must remain when these captures are used in marketing.
+
+## Editor-style content tabs
+
+- Each open file has its own tab; the same path reselects its existing tab. A file and its diff are separate documents.
+- Each New terminal action creates a numbered session. Draft input and fixture output stay with that session when switching tabs. No shell command is executed.
+- Plan is one document per conversation. Closing its tab does not cancel the plan; the inline conversation action reopens it with existing progress.
+- The tab strip scrolls horizontally and reveals the selected tab. The dropdown lists all open documents; `+` opens sample files, a new terminal, the plan, changes or an Atlas.
+- Closing an active tab selects its neighbour; closing an inactive tab preserves the selection. The empty pane offers New terminal. Hiding the pane preserves open documents.
+- The fixture file viewer is read-only; these mocks do not read or write actual repository files. Terminal sessions and tabs are in-memory and are not persisted across launches.
+
+Preview `workspace/content-tabs` for two files, two terminals and Plan; `workspace/content-terminal` selects Terminal 2 with its independent draft; `workspace/content-file` selects NavigationRail.qml. Add `--open=content-tabs` to show the open-documents dropdown.
 
 ## Demonstration
 
@@ -28,6 +39,10 @@ Build the standalone mock using ../../README.md, then from the repository root:
 ```sh
 MOCK=build/mock/KetPlusMock.app/Contents/MacOS/KetPlusMock
 "$MOCK" --screen=workspace --state=plan-ready --dark
+"$MOCK" --screen=workspace --state=content-tabs --dark
+"$MOCK" --screen=workspace --state=content-terminal --light
+"$MOCK" --screen=workspace --state=content-file --light
+"$MOCK" --screen=workspace --state=content-tabs --open=content-tabs --dark
 "$MOCK" --screen=workspace --state=plan-planning --dark --screenshot=mockups/qt/marketing/plan-harness/planning-dark.png
 "$MOCK" --screen=workspace --state=plan-continuing --dark --screenshot=mockups/qt/marketing/plan-harness/continuing-dark.png
 "$MOCK" --screen=workspace --state=plan-complete --light --screenshot=mockups/qt/marketing/plan-harness/complete-light.png
@@ -42,9 +57,10 @@ Other direct states: `plan-running`, `plan-paused`, `plan-limit`. Direct state p
 ## Verification
 
 - Standalone mock build passed.
-- QML model suite: 13 passed, 0 failed. Covers automatic timer continuation, conversation isolation, explicit stop/resume, blocker retention and follow-up limits.
-- Pro smoke: 55 screens, 0 QML problems. Lite smoke: 11 screens, 0 QML problems.
+- QML model suite: 21 passed, 0 failed. Covers automatic continuation, stop/resume, blockers and limits, plus document identity, tab closure/selection, independent terminal drafts and output, and conversation isolation.
+- Pro smoke: 58 screens, 0 QML problems. Lite smoke: 11 screens, 0 QML problems.
 - Native captures cover planning, continuing and blocked in dark mode, and complete with collapsed and expanded evidence in light mode. The plan shares the existing half-width right pane; conversation content and the composer remain visible. All four tasks fit on single rows when collapsed.
+- Inspected the multi-document strip and open-tabs menu in dark mode, plus Terminal 2 and the file viewer in light mode. Fixed initial overflow positioning so the selected tab is visible.
 - Native click automation could not attach to the preview window (`cgWindowNotFound`). Button interactions were not verified by desktop automation; model transitions and the real QML timer were tested directly. No production daemon, package installation or external tracker was tested.
 
 ## Ownership contract for future implementation

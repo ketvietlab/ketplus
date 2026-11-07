@@ -13,7 +13,9 @@ Item {
 
     required property var window
     property bool detailsOpen: false
-    property string detailsTab: "changes"
+    property var contentSession: null
+    readonly property string detailsTab: contentSession && contentSession.current ? contentSession.current.kind : ""
+    ContentTabsStore { id: contentStore }
     readonly property var conversation: window.conversation
     readonly property string kind: conversation.transcript
     readonly property bool running: kind === "running"
@@ -32,6 +34,7 @@ Item {
     readonly property string planState: planRun ? planRun.status : ""
     ConversationPlanStore { id: planStore }
     function syncPlan() {
+        contentSession = contentStore.get(conversation.number)
         planRun = conversation && conversation.hasPlan ? planStore.get(conversation.number) : null
     }
     function openPlan(state) {
@@ -39,8 +42,25 @@ Item {
         if (!planRun) return
         if (state) planRun.load(state)
         planRun.presented = true
-        detailsTab = "plan"
+        detailsPane.openContent("plan")
         detailsOpen = true
+    }
+    function openContent(kind) {
+        if (kind === "plan") { openPlan(""); return }
+        detailsPane.openContent(kind)
+        detailsOpen = true
+    }
+    function openContentDemo(kind) {
+        contentSession.tabs = []; contentSession.currentId = ""; contentSession.terminalSerial = 0
+        detailsPane.openFile("NavigationRail.qml")
+        detailsPane.openFile("WorktreeItem.qml")
+        const first = contentSession.newTerminal()
+        contentSession.patch(first, { draft: "cmake --build build" })
+        const second = contentSession.newTerminal()
+        contentSession.patch(second, { draft: "ctest --test-dir build" })
+        openPlan("continuing")
+        if (kind === "terminal") contentSession.select(second)
+        if (kind === "file") detailsPane.openFile("NavigationRail.qml")
     }
     function planStatus(number, fallback) {
         const model = planStore.plans[number]
@@ -54,7 +74,8 @@ Item {
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
     function openComposerPanel(name) {
-        if (name === "reviewer")
+        if (name === "content-tabs") detailsPane.openTabMenu()
+        else if (name === "reviewer")
             conversationHeader.openReviewerMenu()
         else
             composerBar.openPanel(name)
@@ -76,19 +97,7 @@ Item {
                 conversation: screen.conversation
                 status: screen.planStatus(screen.conversation.number, screen.conversation.status)
                 detailsOpen: screen.detailsOpen
-                onToggleDetails: tab => {
-                    if (tab === "plan") {
-                        if (screen.detailsOpen && screen.detailsTab === "plan") screen.detailsOpen = false
-                        else screen.openPlan("")
-                        return
-                    }
-                    if (screen.detailsOpen && screen.detailsTab === tab)
-                        screen.detailsOpen = false
-                    else {
-                        screen.detailsTab = tab
-                        screen.detailsOpen = true
-                    }
-                }
+                onToggleDetails: tab => screen.openContent(tab)
             }
 
             Basic.ScrollView {
@@ -123,10 +132,7 @@ Item {
                         window: screen.window
                         kind: screen.kind
                         conversation: screen.conversation
-                        onOpenDetails: tab => {
-                            screen.detailsTab = tab
-                            screen.detailsOpen = true
-                        }
+                        onOpenDetails: tab => screen.openContent(tab)
                     }
                 }
             }
@@ -194,17 +200,15 @@ Item {
         }
 
         DetailsPane {
+            id: detailsPane
             visible: screen.detailsOpen
             Layout.fillHeight: true
             // Half of the workspace beside the rule: the pane matches the conversation's width.
             Layout.preferredWidth: Math.floor((screen.width - 1) / 2)
             window: screen.window
             planRun: screen.planRun
-            tab: screen.detailsTab
-            onTabChosen: tab => {
-                if (tab === "plan") screen.openPlan("")
-                else screen.detailsTab = tab
-            }
+            session: screen.contentSession
+            onPlanRequested: screen.openPlan("")
             onCloseRequested: screen.detailsOpen = false
         }
     }

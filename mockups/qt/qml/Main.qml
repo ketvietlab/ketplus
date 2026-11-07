@@ -14,6 +14,7 @@ Basic.ApplicationWindow {
     // Screens, in sidebar order. A state follows a slash: "workspace/welcome".
     readonly property var screenIds: [
         "workspace/plan-ready", "workspace/plan-planning", "workspace/plan-running", "workspace/plan-continuing", "workspace/plan-blocked", "workspace/plan-paused", "workspace/plan-limit", "workspace/plan-complete",
+        "workspace/content-tabs", "workspace/content-terminal", "workspace/content-file",
         "workspace", "workspace/welcome", "workspace/running", "workspace/question",
         "workspace/error", "workspace/atlas", "workspace/details", "workspace/claude",
         "workspace/codex", "workspace/cursor", "workspace/turn-report", "editor", "editor/terminal",
@@ -167,6 +168,13 @@ Basic.ApplicationWindow {
         const parts = String(id).split("/")
         const name = parts[0]
         const state = parts[1] || ""
+        if (name === "workspace" && ["content-tabs", "content-terminal", "content-file"].includes(state)) {
+            setCompact(false)
+            const repo = Fixtures.repositories[0]
+            openConversation(repo.name, repo.conversations.find(c => c.number === "4821"))
+            workspace.openContentDemo(state.slice(8))
+            return
+        }
         if (name === "workspace" && state.startsWith("plan-")) {
             setCompact(false)
             const repo = Fixtures.repositories[0]
@@ -207,6 +215,7 @@ Basic.ApplicationWindow {
                 }
             }
             workspace.detailsOpen = state === "details"
+            if (state === "details") workspace.openContent("changes")
         }
         if (name === "settings")
             settingsTab = state || "appearance"
