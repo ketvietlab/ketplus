@@ -302,6 +302,13 @@ QString itemSummary(const QJsonObject& item) {
     return type;
 }
 
+QString retainedTextSuffix(const QJsonObject& item) {
+    return item.value(QStringLiteral("compacted")).toObject().value(QStringLiteral("policy")) ==
+                   QStringLiteral("tool-result-text-v1")
+               ? QStringLiteral(" · Text trimmed")
+               : QString{};
+}
+
 // KetPlus browser API (apps/browser MCP facade, ADR 0008). Inline screenshots go to the
 // owner-only transcript media cache; rows keep only file URLs and a sanitized payload.
 QVariantMap ketplusBrowserMessage(const QJsonObject& item, const bool completed) {
@@ -326,7 +333,8 @@ QVariantMap ketplusBrowserMessage(const QJsonObject& item, const bool completed)
     const QString summary = mcp_media::argumentSummary(arguments);
     const QString title = QStringLiteral("%1 browser · %2")
                               .arg(completed ? QStringLiteral("Used") : QStringLiteral("Using"),
-                                   sanitizedText(label));
+                                   sanitizedText(label)) +
+                          retainedTextSuffix(item);
     const QJsonValue safePayload = sanitizedJson(item);
     auto entry = message(QStringLiteral("tool"), summary, QStringLiteral("Browser"), {},
                          item.value(QStringLiteral("id")).toString());
@@ -655,6 +663,7 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
             title =
                 completed ? QStringLiteral("Viewed an image") : QStringLiteral("Viewing an image");
         }
+        title += retainedTextSuffix(item);
         auto entry = message(QStringLiteral("tool"), url, QStringLiteral("Activity"), {}, id);
         entry.insert(QStringLiteral("subtype"), subtype);
         entry.insert(QStringLiteral("running"), !completed);

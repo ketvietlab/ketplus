@@ -33,6 +33,14 @@ class Database {
         qWarning() << query.lastError();
         return false;
     }
+    bool patchCompletedItems(const QJsonObject& fields) {
+        QSqlQuery query(db_);
+        query.prepare("UPDATE replay_events SET payload=json_patch(payload,?) WHERE "
+                      "event_type='item.completed'");
+        query.addBindValue(QString::fromUtf8(
+            QJsonDocument(QJsonObject{{"item", fields}}).toJson(QJsonDocument::Compact)));
+        return query.exec();
+    }
     QString queryPlan(const QString& statement) {
         QSqlQuery query(db_);
         if (!query.exec("EXPLAIN QUERY PLAN " + statement))
@@ -460,6 +468,65 @@ class JournalUsageRetentionTest final : public QObject {
         const auto before = withoutUsage(allReplay(journal));
         QCOMPARE(sweep(journal), 24); // only intermediate usage is changed
         QCOMPARE(withoutUsage(allReplay(journal)), before);
+    }
+
+    void toolAndReasoningRetentionUsesTurnGuards_data() {
+        QTest::addColumn<QString>("kind");
+        QTest::addColumn<QString>("guard");
+        for (const QString& kind :
+             {QString("mcpToolCall"), QString("dynamicToolCall"), QString("reasoning")})
+            for (const QString& guard : {QString("eligible"), QString("unacknowledged"),
+                                         QString("running"), QString("recent")})
+                QTest::newRow(qPrintable(kind + "-" + guard)) << kind << guard;
+    }
+    void toolAndReasoningRetentionUsesTurnGuards() {
+        QFETCH(QString, kind);
+        QFETCH(QString, guard);
+        QTemporaryDir directory;
+        const QString path = directory.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(seed(journal, path, guard != "unacknowledged"));
+        Database database(path);
+        QJsonObject fields{{"type", kind}};
+        if (kind == "reasoning") {
+            fields.insert("summary", QJsonArray{"summary stays"});
+            fields.insert("content", QJsonArray{QString(10000, 'x')});
+        } else {
+            fields.insert("status", "completed");
+            fields.insert("arguments", QJsonObject{{"keep", "arguments"}});
+            fields.insert(
+                "result",
+                QJsonObject{
+                    {"isError", false},
+                    {"content",
+                     QJsonArray{
+                         QJsonObject{{"type", "text"}, {"text", QString(10000, 'x')}},
+                         QJsonObject{{"type", "image"}, {"media_ref", "sha256:synthetic"}}}}});
+        }
+        QVERIFY(database.patchCompletedItems(fields));
+        if (guard == "running")
+            QVERIFY(database.exec("UPDATE sessions SET state='running'"));
+        if (guard == "recent")
+            QVERIFY(database.exec(
+                "UPDATE replay_events SET sent_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')"));
+        const auto before = allReplay(journal);
+        QElapsedTimer sweepTimer;
+        sweepTimer.start();
+        QCOMPARE(sweep(journal), guard == "eligible" ? 28 : 0);
+        if (guard == "eligible")
+            qInfo().noquote() << kind << "eight bounded replay passes:" << sweepTimer.elapsed()
+                              << "ms";
+        if (guard != "eligible") {
+            QCOMPARE(allReplay(journal), before);
+            return;
+        }
+        QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE "
+                                 "json_type(payload,'$.item.compacted')='object'"),
+                 4);
+        QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE turn_sequence>4 AND "
+                                 "json_type(payload,'$.item.compacted')='object'"),
+                 0);
+        QCOMPARE(sweep(journal), 0);
     }
 
     void invalidLimitsDoNotTouchHistory() {
