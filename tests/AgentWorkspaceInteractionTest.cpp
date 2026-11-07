@@ -449,19 +449,12 @@ void AgentWorkspaceViewTest::sidebarDividerRemainsResizable() {
     QVERIFY(root);
     auto* handle = root->findChild<QQuickItem*>("sidebarResizeHandle");
     auto* divider = root->findChild<QQuickItem*>("sidebarDivider");
-    auto* sidebar = root->findChild<QQuickItem*>("worktreeSidebar");
-    auto* addWorktree = root->findChild<QQuickItem*>("addWorktreeButton");
-    auto* addConversation = root->findChild<QQuickItem*>("addConversationButton");
+    auto* sidebar = root->findChild<QQuickItem*>("conversationSidebar");
     QVERIFY(handle);
     QVERIFY(divider);
     QVERIFY(sidebar);
-    QVERIFY(addWorktree);
-    QVERIFY(addConversation);
     QTRY_COMPARE(handle->width(), 6.0);
     QCOMPARE(divider->width(), 1.0);
-    QCOMPARE(addConversation->size(), addWorktree->size());
-    QCOMPARE(addConversation->mapToScene(QPointF(addConversation->width(), 0)).x(),
-             addWorktree->mapToScene(QPointF(addWorktree->width(), 0)).x());
     QTRY_VERIFY(handle->height() > 0);
     QCOMPARE(divider->height(), handle->height());
     const auto start = handle->mapToScene(QPointF(3, 100)).toPoint();
@@ -964,36 +957,42 @@ void AgentWorkspaceViewTest::loadsQmlAndMapsWorktrees() {
                 .contains(QStringLiteral("feature/agent-ui")));
 }
 
-void AgentWorkspaceViewTest::hidesWorktreesWithoutConversationsByDefault() {
-    QTemporaryDir repository;
-    QVERIFY(repository.isValid());
-    const QString otherPath = repository.filePath(QStringLiteral("detached-review"));
-    QVERIFY(QDir().mkpath(otherPath));
-
+void AgentWorkspaceViewTest::sidebarGroupsConversationsWithoutWorktreeRail() {
+    const auto previousAppearance = ket::Appearance::instance().mode();
+    ket::Appearance::instance().setMode(ket::Appearance::Mode::Dark);
+    const auto restoreAppearance = qScopeGuard(
+        [previousAppearance] { ket::Appearance::instance().setMode(previousAppearance); });
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());
-    const QVector<ketplus::GitWorktree> worktrees{
-        {.path = repository.path(), .head = QStringLiteral("11111111"), .branch = "develop"},
-        {.path = otherPath, .head = QStringLiteral("22222222")},
-    };
-    view.setWorktrees(worktrees, repository.path(), {}, {repository.path()});
-
+    view.setRepositoryName(QStringLiteral("sample-repository"));
+    view.setConversations({QVariantMap{
+        {"id", "thread-a"}, {"title", "Implement sidebar"}, {"active", true}, {"started", true}}});
+    view.resize(1000, 700);
+    view.show();
     auto* root = view.quickView()->rootObject();
     QVERIFY(root);
-    QCOMPARE(root->property("filteredWorktrees").toList().size(), 1);
-    QCOMPARE(
-        root->property("filteredWorktrees").toList().first().toMap().value("branch").toString(),
-        QStringLiteral("develop"));
-
-    root->setProperty("worktreeQuery", QStringLiteral("Detached"));
-    QTRY_COMPARE(root->property("filteredWorktrees").toList().size(), 1);
-    QCOMPARE(
-        root->property("filteredWorktrees").toList().first().toMap().value("branch").toString(),
-        QStringLiteral("Detached 22222222"));
-
-    root->setProperty("worktreeQuery", QString{});
-    root->setProperty("showAllWorktrees", true);
-    QTRY_COMPARE(root->property("filteredWorktrees").toList().size(), 2);
+    auto* group = root->findChild<QQuickItem*>("sidebarRepositoryGroup");
+    auto* list = root->findChild<QQuickItem*>("sidebarConversationList");
+    QVERIFY(group);
+    QVERIFY(list);
+    QCOMPARE(group->property("name").toString(), QStringLiteral("sample-repository"));
+    QTRY_COMPARE(list->property("count").toInt(), 1);
+    QVERIFY(!root->findChild<QQuickItem*>("worktreeList"));
+    QVERIFY(!root->findChild<QQuickItem*>("worktreeSearch"));
+    QVERIFY(!root->findChild<QQuickItem*>("addWorktreeButton"));
+    QVERIFY(!root->findChild<QQuickItem*>("allWorktreesButton"));
+    group->setProperty("expanded", false);
+    QTRY_VERIFY(!list->isVisible());
+    group->setProperty("expanded", true);
+    QTRY_VERIFY(list->isVisible());
+    QSignalSpy create(&view, &ketplus::AgentWorkspaceView::newSessionRequested);
+    QVERIFY(QMetaObject::invokeMethod(group, "actionTriggered"));
+    QCOMPARE(create.count(), 1);
+    const auto capture = qEnvironmentVariable("KETPLUS_SIDEBAR_CAPTURE");
+    if (!capture.isEmpty()) {
+        QTest::qWait(40);
+        QVERIFY(view.quickView()->grabWindow().save(capture));
+    }
 }
 
 void AgentWorkspaceViewTest::restoringDoesNotCoverChatPane() {
@@ -1031,7 +1030,7 @@ void AgentWorkspaceViewTest::restoringDoesNotCoverChatPane() {
     QVERIFY(!view.restoring());
 }
 
-void AgentWorkspaceViewTest::filtersLargeWorktreeSets() {
+void AgentWorkspaceViewTest::largeWorktreeCatalogDoesNotCreateSidebarRail() {
     QTemporaryDir repository;
     QVERIFY(repository.isValid());
 
@@ -1076,30 +1075,12 @@ void AgentWorkspaceViewTest::filtersLargeWorktreeSets() {
 
     auto* root = view.quickView()->rootObject();
     QVERIFY(root);
-    auto* worktreeList = root->findChild<QQuickItem*>(QStringLiteral("worktreeList"));
-    auto* worktreeSearch = root->findChild<QQuickItem*>(QStringLiteral("worktreeSearch"));
-    QVERIFY(worktreeList);
-    QVERIFY(worktreeSearch);
-    QCOMPARE(worktreeList->property("currentIndex").toInt(), 94);
-    QVERIFY2(
-        worktreeList->height() > 240.0,
-        qPrintable(QStringLiteral("Worktree list should use more than the old 174 px cap; got %1.")
-                       .arg(worktreeList->height())));
-
-    worktreeSearch->setProperty("text", QStringLiteral("worktree-119"));
-    QTest::qWait(100);
-    const QVariantList filtered = root->property("filteredWorktrees").toList();
-    QCOMPARE(filtered.size(), 1);
-    QCOMPARE(filtered.constFirst().toMap().value(QStringLiteral("branch")).toString(),
-             QStringLiteral("feature/worktree-119"));
-    QSignalSpy menuRequested(&view, &ketplus::AgentWorkspaceView::worktreeContextMenuRequested);
-    const auto activeBeforeClick = view.activePath();
-    const QPoint clickPoint = worktreeList->mapToScene(QPointF(30, 20)).toPoint();
-    QTest::mouseClick(view.quickView(), Qt::RightButton, Qt::NoModifier, clickPoint);
-    QTRY_COMPARE(menuRequested.count(), 1);
-    QCOMPARE(menuRequested.first().first().toString(),
-             QFileInfo(worktrees.at(119).path).canonicalFilePath());
-    QCOMPARE(view.activePath(), activeBeforeClick);
+    QVERIFY(!root->findChild<QQuickItem*>("worktreeList"));
+    QVERIFY(!root->findChild<QQuickItem*>("worktreeSearch"));
+    auto* list = root->findChild<QQuickItem*>("sidebarConversationList");
+    QVERIFY(list);
+    QTRY_VERIFY(list->height() > 250);
+    QCOMPARE(view.worktrees().size(), 120); // Catalog remains available to the execution picker.
 }
 
 void AgentWorkspaceViewTest::exposesUiInteractions() {

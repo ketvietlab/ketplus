@@ -18,7 +18,7 @@ Qt application shell
         -> QFileSystemModel (lazy directory loading, no content index)
     -> Agent Workspace (lazy)
         -> Qt Quick scene graph (Metal on macOS)
-        -> virtualized chat transcript and worktree rail
+        -> virtualized chat transcript and repository/conversation sidebar
         -> per-worktree conversation registry
             -> one long-lived Codex app-server JSONL process
             -> persistent Codex thread id per worktree
@@ -393,3 +393,8 @@ Answer IDs and pending/closed state still come from the transcript broker; the
 UI preserves drafts and guards repeated submission. Completed background task
 receipts can be hidden locally per conversation/task incarnation; this never
 deletes daemon task history or stops a running task.
+
+The standalone Agent Workspace sidebar also uses repository → conversation
+composition. It does not render a worktree rail; the execution picker and
+Worktrees page own checkout selection and management. The native shell retains
+its multi-repository grouping.

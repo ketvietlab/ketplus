@@ -113,10 +113,7 @@ Item {
         modelPopup.open()
         if (agentHost.models.length === 0) refreshModels()
     }
-    property string worktreeQuery: ""
-    property bool showAllWorktrees: false
     property bool applyingConversationConfiguration: false
-    readonly property var filteredWorktrees: filterWorktrees(worktreeQuery)
     readonly property var slashCommands: agentHost.compactMode ? [
         {id: "model", label: "/model", description: "Choose model and reasoning effort"},
         {id: "permissions", label: "/permissions", description: "Choose access for the next agent turn"},
@@ -224,7 +221,6 @@ Item {
                 Qt.callLater(root.restoreTranscriptPosition)
         }
         function onComposerScopeChanged() { root.saveAndRestoreDraft() }
-        function onWorktreesChanged() { Qt.callLater(root.revealSelectedWorktree) }
         function onRestoringChanged() {
             if (!agentHost.restoring) return
             modelPopup.close()
@@ -345,31 +341,6 @@ Item {
         prompt.text = text
         prompt.cursorPosition = prompt.length
         prompt.forceActiveFocus()
-    }
-
-    function filterWorktrees(query) {
-        const items = agentHost.worktrees || []
-        const needle = (query || "").trim().toLocaleLowerCase()
-        return items.filter(function(item) {
-            if (needle.length === 0)
-                return showAllWorktrees || item.relevant
-            const searchText = item.searchText || (item.branch + " " + item.displayPath + " " + item.path)
-            return searchText.toLocaleLowerCase().indexOf(needle) !== -1
-        })
-    }
-
-    function selectedWorktreeIndex() {
-        const items = filteredWorktrees || []
-        for (let index = 0; index < items.length; ++index)
-            if (items[index].selected)
-                return index
-        return -1
-    }
-
-    function revealSelectedWorktree() {
-        const index = selectedWorktreeIndex()
-        if (index >= 0)
-            sidebar.worktreeList.positionViewAtIndex(index, ListView.Contain)
     }
 
     // Capability names come from the daemon's provider.runtime_status (ADR 0015).
