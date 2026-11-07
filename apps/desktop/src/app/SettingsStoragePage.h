@@ -2,10 +2,9 @@
 #include <QJsonObject>
 #include <QWidget>
 #include <functional>
-class QCheckBox;
+class QAbstractButton;
 class QComboBox;
 class QLabel;
-class QPushButton;
 class QTimer;
 namespace ketplus {
 class SettingsStoragePage final : public QWidget {
@@ -24,10 +23,10 @@ class SettingsStoragePage final : public QWidget {
     Requester requester_;
     QTimer* timeout_{};
     QComboBox* days_{};
-    QCheckBox* automatic_{};
+    QAbstractButton* automatic_{};
     QLabel* status_{};
     QLabel* usage_{};
-    QPushButton* refresh_{};
+    QAbstractButton* refresh_{};
     qint64 revision_{-1};
     bool busy_{false};
     quint64 generation_{0};

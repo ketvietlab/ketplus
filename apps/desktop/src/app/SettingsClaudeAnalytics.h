@@ -13,9 +13,9 @@ class SettingsClaudeAnalytics final : public QWidget {
     SettingsClaudeCredentials::Requester requester_;
     QLineEdit* key_;
     QLabel* status_;
-    QPushButton* save_;
-    QPushButton* remove_;
-    QPushButton* refresh_;
+    QAbstractButton* save_;
+    QAbstractButton* remove_;
+    QAbstractButton* refresh_;
     bool busy_{false}, configured_{false}, supported_{false};
 };
 } // namespace ketplus

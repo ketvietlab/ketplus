@@ -2,12 +2,11 @@
 #include "app/SettingsDialog.h"
 #include "app/SettingsWorkspacePage.h"
 #include "ui/Theme.h"
+#include <QAbstractButton>
 #include <QAccessible>
-#include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QLabel>
-#include <QPushButton>
 #include <QTimer>
 #include <QtTest>
 using namespace ketplus;
@@ -36,12 +35,12 @@ QJsonObject lowDiskState() {
 QComboBox* days(SettingsStoragePage& page) {
     return page.findChild<QComboBox*>("storageDetailDays");
 }
-QCheckBox* automatic(SettingsStoragePage& page) {
-    return page.findChild<QCheckBox*>("storageAutomaticDetail");
+QAbstractButton* automatic(SettingsStoragePage& page) {
+    return page.findChild<QAbstractButton*>("storageAutomaticDetail");
 }
 QLabel* status(SettingsStoragePage& page) { return page.findChild<QLabel*>("storageStatus"); }
-QPushButton* reload(SettingsStoragePage& page) {
-    return page.findChild<QPushButton*>("storageReload");
+QAbstractButton* reload(SettingsStoragePage& page) {
+    return page.findChild<QAbstractButton*>("storageReload");
 }
 void choose(SettingsStoragePage& page, int value) {
     days(page)->setCurrentIndex(days(page)->findData(value));
@@ -306,7 +305,7 @@ class SettingsStoragePageTest final : public QObject {
         QTRY_VERIFY(page->isVisible());
         QTRY_VERIFY(days(*page)->isEnabled());
         QTRY_VERIFY(reload(*page)->isVisible());
-        QVERIFY(shell.findChild<QDialogButtonBox*>("settingsWorkspaceFooter")->isHidden());
+        QVERIFY(shell.findChild<QWidget*>("settingsWorkspaceFooter")->isHidden());
         QVERIFY(shell.rect().contains(
             reload(*page)->mapTo(&shell, reload(*page)->rect().bottomRight())));
         const QString capture = qEnvironmentVariable("KETPLUS_STORAGE_CAPTURE");

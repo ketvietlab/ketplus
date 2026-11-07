@@ -1,9 +1,10 @@
 #include "app/ArchivedSettingsPage.h"
+#include "KetButton.h"
 
+#include <QAbstractButton>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
-#include <QPushButton>
 #include <QVBoxLayout>
 
 #include <utility>
@@ -15,8 +16,8 @@ ArchivedSettingsPage::ArchivedSettingsPage(QVariantList conversations, RestoreCo
     : SettingsPage(QStringLiteral("archived"), QStringLiteral("Archived"), parent),
       conversations_(std::move(conversations)), restore_(std::move(restore)),
       stop_(std::move(stop)), emptyState_(new QLabel(this)), list_(new QListWidget(this)),
-      restoreButton_(new QPushButton(QStringLiteral("Restore"), this)),
-      stopButton_(new QPushButton(QStringLiteral("Stop turn"), this)) {
+      restoreButton_(new ket::Button(QStringLiteral("Restore"), ket::ButtonVariant::Primary, this)),
+      stopButton_(new ket::Button(QStringLiteral("Stop turn"), ket::ButtonVariant::Danger, this)) {
     restoreButton_->setObjectName(QStringLiteral("restoreArchivedItemButton"));
     stopButton_->setObjectName(QStringLiteral("stopArchivedTurnButton"));
     auto* layout = new QVBoxLayout(this);
@@ -50,7 +51,7 @@ ArchivedSettingsPage::ArchivedSettingsPage(QVariantList conversations, RestoreCo
         stopButton_->setEnabled(
             row >= 0 && conversations_.at(row).toMap().value(QStringLiteral("running")).toBool());
     });
-    connect(stopButton_, &QPushButton::clicked, this, [this] {
+    connect(stopButton_, &QAbstractButton::clicked, this, [this] {
         const int row = list_->currentRow();
         if (row < 0 || row >= conversations_.size()) {
             return;
@@ -65,7 +66,7 @@ ArchivedSettingsPage::ArchivedSettingsPage(QVariantList conversations, RestoreCo
             list_->setCurrentRow(row);
         }
     });
-    connect(restoreButton_, &QPushButton::clicked, this, [this] {
+    connect(restoreButton_, &QAbstractButton::clicked, this, [this] {
         const int row = list_->currentRow();
         if (row < 0 || row >= conversations_.size()) {
             return;

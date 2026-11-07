@@ -1,14 +1,17 @@
 #include "app/SettingsComputerPage.h"
+#include "KetButton.h"
+#include "KetSelect.h"
+#include "KetTextField.h"
+#include "KetToggle.h"
 
 #include "ComputerToolLaunch.h"
 
-#include <QCheckBox>
+#include <QAbstractButton>
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QDesktopServices>
 #include <QLabel>
 #include <QLineEdit>
-#include <QPushButton>
 #include <QSignalBlocker>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -57,7 +60,7 @@ SettingsComputerPage::SettingsComputerPage(QString settingsPath, QString applica
     status_ = textLabel({}, QStringLiteral("computerStatus"), this);
     layout->addWidget(status_);
     layout->addSpacing(10);
-    enabled_ = new QCheckBox(tr("Allow agents to use this computer"), this);
+    enabled_ = new ket::Checkbox(tr("Allow agents to use this computer"), this);
     enabled_->setObjectName(QStringLiteral("computerEnabled"));
     layout->addWidget(enabled_);
     layout->addSpacing(4);
@@ -70,7 +73,7 @@ SettingsComputerPage::SettingsComputerPage(QString settingsPath, QString applica
     layout->addWidget(
         textLabel(tr("Work display"), QStringLiteral("settingsWorkspaceSubheading"), this));
     layout->addSpacing(10);
-    display_ = new QComboBox(this);
+    display_ = new ket::Select(this);
     display_->setObjectName(QStringLiteral("computerWorkDisplay"));
     display_->setAccessibleName(tr("Work display"));
     display_->addItem(tr("Secondary display"), QStringLiteral("secondary"));
@@ -86,7 +89,7 @@ SettingsComputerPage::SettingsComputerPage(QString settingsPath, QString applica
     layout->addWidget(
         textLabel(tr("Blocked apps"), QStringLiteral("settingsWorkspaceSubheading"), this));
     layout->addSpacing(10);
-    deniedApps_ = new QLineEdit(this);
+    deniedApps_ = new ket::TextField(this);
     deniedApps_->setObjectName(QStringLiteral("computerDeniedApps"));
     deniedApps_->setPlaceholderText(QStringLiteral("com.example.Banking, com.example.Mail"));
     deniedApps_->setAccessibleName(tr("Blocked app bundle IDs"));
@@ -120,15 +123,16 @@ SettingsComputerPage::SettingsComputerPage(QString settingsPath, QString applica
            "needs them. Grant both to KetPlus Computer, not to KetPlus."),
         QStringLiteral("settingsWorkspaceHelp"), this));
     layout->addSpacing(8);
-    auto* privacy = new QPushButton(tr("Open Privacy & Security"), this);
+    auto* privacy =
+        new ket::Button(tr("Open Privacy & Security"), ket::ButtonVariant::Secondary, this);
     privacy->setObjectName(QStringLiteral("computerOpenPrivacy"));
     layout->addWidget(privacy, 0, Qt::AlignLeft);
     layout->addStretch(1);
 
-    connect(enabled_, &QCheckBox::toggled, this, &SettingsComputerPage::saveEnabled);
+    connect(enabled_, &QAbstractButton::toggled, this, &SettingsComputerPage::saveEnabled);
     connect(deniedApps_, &QLineEdit::editingFinished, this, &SettingsComputerPage::saveDeniedApps);
     connect(display_, &QComboBox::currentIndexChanged, this, &SettingsComputerPage::saveDisplay);
-    connect(privacy, &QPushButton::clicked, this, [] {
+    connect(privacy, &QAbstractButton::clicked, this, [] {
         QDesktopServices::openUrl(QUrl(QStringLiteral(
             "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")));
     });

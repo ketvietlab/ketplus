@@ -244,7 +244,9 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     storageLayout->addWidget(storageBanner_);
     auto* storageSettings =
         new ket::Button(tr("Storage settings"), ket::ButtonVariant::Ghost, storageNotice_);
-    connect(storageSettings, &QAbstractButton::clicked, this, &ActivityBar::settingsRequested);
+    storageSettings->setObjectName(QStringLiteral("sidebarStorageSettings"));
+    connect(storageSettings, &QAbstractButton::clicked, this,
+            [this] { emit settingsSectionRequested(QStringLiteral("storage")); });
     storageLayout->addWidget(storageSettings);
     storageNotice_->hide();
     layout->addWidget(storageNotice_);

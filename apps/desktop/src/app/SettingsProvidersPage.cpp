@@ -1,11 +1,12 @@
 #include "app/SettingsProvidersPage.h"
+#include "KetButton.h"
 #include "app/SettingsClaudeAnalytics.h"
 
+#include <QAbstractButton>
 #include <QGridLayout>
 #include <QJsonObject>
 #include <QLabel>
 #include <QPointer>
-#include <QPushButton>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -58,7 +59,7 @@ SettingsProvidersPage::SettingsProvidersPage(Fetcher fetcher, QWidget* parent,
     status_ = textLabel(tr("Checking provider versions…"), QStringLiteral("providersStatus"), this);
     layout->addWidget(status_);
     layout->addSpacing(8);
-    auto* recheck = new QPushButton(tr("Check again"), this);
+    auto* recheck = new ket::Button(tr("Check again"), ket::ButtonVariant::Secondary, this);
     recheck->setObjectName(QStringLiteral("providersRecheck"));
     layout->addWidget(recheck, 0, Qt::AlignLeft);
     layout->addSpacing(20);
@@ -72,7 +73,7 @@ SettingsProvidersPage::SettingsProvidersPage(Fetcher fetcher, QWidget* parent,
     layout->addWidget(new SettingsClaudeAnalytics(std::move(credentials), this));
     layout->addStretch(1);
 
-    connect(recheck, &QPushButton::clicked, this, &SettingsProvidersPage::refresh);
+    connect(recheck, &QAbstractButton::clicked, this, &SettingsProvidersPage::refresh);
     QTimer::singleShot(0, this, &SettingsProvidersPage::refresh);
 }
 

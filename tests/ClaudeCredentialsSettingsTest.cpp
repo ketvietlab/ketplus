@@ -3,12 +3,12 @@
 #include "app/SettingsDialog.h"
 #include "app/SettingsWorkspacePage.h"
 #include "ui/Theme.h"
+#include <QAbstractButton>
 #include <QComboBox>
 #include <QDir>
 #include <QDoubleSpinBox>
 #include <QLabel>
 #include <QLineEdit>
-#include <QPushButton>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QtTest>
@@ -46,7 +46,7 @@ class ClaudeCredentialsSettingsTest : public QObject {
             page.show();
             auto* key = page.findChild<QLineEdit*>("claudeApiKey");
             QTRY_VERIFY(key && key->isVisible());
-            QTRY_VERIFY(page.findChild<QPushButton*>("claudeCredentialsSave")->isEnabled());
+            QTRY_VERIFY(page.findChild<QAbstractButton*>("claudeCredentialsSave")->isEnabled());
             const auto* form = page.findChild<SettingsClaudeCredentials*>();
             for (auto* widget : form->findChildren<QWidget*>()) {
                 if (!widget->isVisible())
@@ -78,8 +78,8 @@ class ClaudeCredentialsSettingsTest : public QObject {
         page.show();
         QTRY_COMPARE(operation, "analytics.status");
         auto* key = page.findChild<QLineEdit*>("claudeAdminKey");
-        auto* save = page.findChild<QPushButton*>("claudeAdminSave");
-        auto* refresh = page.findChild<QPushButton*>("claudeAdminRefresh");
+        auto* save = page.findChild<QAbstractButton*>("claudeAdminSave");
+        auto* refresh = page.findChild<QAbstractButton*>("claudeAdminRefresh");
         QVERIFY(key && save && refresh);
         QCOMPARE(key->echoMode(), QLineEdit::Password);
         key->setText("sk-ant-admin01-test-only");
@@ -121,8 +121,8 @@ class ClaudeCredentialsSettingsTest : public QObject {
         auto* key = page.findChild<QLineEdit*>("claudeApiKey");
         auto* mode = page.findChild<QComboBox*>("claudeAuthenticationMode");
         auto* budget = page.findChild<QDoubleSpinBox*>("claudeQueryBudget");
-        auto* save = page.findChild<QPushButton*>("claudeCredentialsSave");
-        auto* check = page.findChild<QPushButton*>("claudeCredentialsCheck");
+        auto* save = page.findChild<QAbstractButton*>("claudeCredentialsSave");
+        auto* check = page.findChild<QAbstractButton*>("claudeCredentialsCheck");
         QVERIFY(key && mode && budget && save && check);
         QCOMPARE(key->echoMode(), QLineEdit::Password);
         QVERIFY(!check->isEnabled());
@@ -164,8 +164,8 @@ class ClaudeCredentialsSettingsTest : public QObject {
         page->show();
         QTRY_VERIFY(bool(pending));
         pending({}, "Connect to an updated local KetPlus daemon.");
-        QVERIFY(!page->findChild<QPushButton*>("claudeCredentialsSave")->isEnabled());
-        QVERIFY(page->findChild<QPushButton*>("claudeCredentialsRefresh")->isEnabled());
+        QVERIFY(!page->findChild<QAbstractButton*>("claudeCredentialsSave")->isEnabled());
+        QVERIFY(page->findChild<QAbstractButton*>("claudeCredentialsRefresh")->isEnabled());
         page->refresh();
         auto late = pending;
         delete page;

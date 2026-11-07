@@ -6,7 +6,7 @@
 
 #include <functional>
 
-class QCheckBox;
+class QAbstractButton;
 class QLabel;
 class QLineEdit;
 class QRadioButton;
@@ -61,7 +61,7 @@ class SettingsBrowserPage final : public QWidget {
     QString runtimeSource_;
     quint64 generation_{0};
     bool checking_{false};
-    QCheckBox* enabled_{nullptr};
+    QAbstractButton* enabled_{nullptr};
     QRadioButton* allOrigins_{nullptr};
     QRadioButton* onlyOrigins_{nullptr};
     QLineEdit* origins_{nullptr};
