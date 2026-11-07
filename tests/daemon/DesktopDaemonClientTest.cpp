@@ -124,8 +124,12 @@ QString useFakeDaemon(const QTemporaryDir& directory) {
     const QString socket = directory.filePath(QStringLiteral("fake.sock"));
     const QString token = directory.filePath(QStringLiteral("local.token"));
     QFile file(token);
-    if (file.open(QIODevice::WriteOnly))
-        file.write(QByteArray(40, 'k'));
+    if (!file.open(QIODevice::WriteOnly) ||
+        !file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner) ||
+        file.write(QByteArray(40, 'k')) != 40) {
+        QTest::qFail("Unable to prepare the owner-only fixture credential.", __FILE__, __LINE__);
+        return {};
+    }
     qputenv("KETPLUS_DAEMON_SOCKET", socket.toUtf8());
     qputenv("KETPLUS_DAEMON_TOKEN_FILE", token.toUtf8());
     qputenv("KETPLUS_DISABLE_DAEMON_AUTOSTART", "1");

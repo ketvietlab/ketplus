@@ -5,6 +5,9 @@ milestone changes state.
 
 ## Implemented
 
+- Local daemon/client credential reads share a 4-KiB raw-file bound (ADR 0078).
+  Unix admission checks the opened descriptor's ownership/type/permissions;
+  unsupported files remain intact and client reconnect can recover after repair.
 - Existing media blobs are validated before dedup returns a reference (ADR 0066):
   exact bounded bytes, regular nonsymlink files and owner-only permissions.
   Invalid entries remain intact for repair; reference durability remains open.
