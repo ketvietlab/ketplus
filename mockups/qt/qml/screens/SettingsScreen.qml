@@ -563,6 +563,9 @@ Item {
             }
 
             Body { text: "KetPlus keeps every conversation in a local journal so transcripts, remote devices and restarts can replay them. Choose how long it keeps full detail and how large it may grow." }
+            InfoRow { label: "SQLite files (including write-ahead log)"; value: "9.1 GB" }
+            InfoRow { label: "Disk space available"; value: "31.0 GB" }
+
 
             KetBanner {
                 width: parent.width

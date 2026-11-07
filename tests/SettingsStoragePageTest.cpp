@@ -21,6 +21,18 @@ QJsonObject state(qint64 revision = 0, int days = 30, bool automatic = true) {
                                   {"free_page_bytes", 1024},
                                   {"kept_page_bytes", 3072}}}};
 }
+QJsonObject lowDiskState() {
+    auto result = state();
+    result.insert("usage", QJsonObject{{"database_page_bytes", 3'000'000'000LL},
+                                       {"free_page_bytes", 500'000'000LL},
+                                       {"kept_page_bytes", 2'500'000'000LL}});
+    result.insert("disk_usage", QJsonObject{{"database_file_bytes", 3'000'000'000LL},
+                                            {"wal_file_bytes", 500'000'000LL},
+                                            {"shared_memory_file_bytes", 32768},
+                                            {"total_file_bytes", 3'500'032'768LL},
+                                            {"filesystem_available_bytes", 4'000'000'000LL}});
+    return result;
+}
 QComboBox* days(SettingsStoragePage& page) {
     return page.findChild<QComboBox*>("storageDetailDays");
 }
@@ -39,6 +51,48 @@ void choose(SettingsStoragePage& page, int value) {
 class SettingsStoragePageTest final : public QObject {
     Q_OBJECT
   private slots:
+    void diskMeasurementsAndLowSpaceWarnings_data() {
+        QTest::addColumn<QJsonValue>("available");
+        QTest::addColumn<bool>("known");
+        QTest::addColumn<bool>("low");
+        QTest::newRow("below") << QJsonValue(4'999'999'999LL) << true << true;
+        QTest::newRow("zero") << QJsonValue(0) << true << true;
+        QTest::newRow("boundary") << QJsonValue(5'000'000'000LL) << true << false;
+        QTest::newRow("above") << QJsonValue(6'000'000'000LL) << true << false;
+        QTest::newRow("missing") << QJsonValue() << false << false;
+        QTest::newRow("negative") << QJsonValue(-1) << false << false;
+        QTest::newRow("fraction") << QJsonValue(2.5) << false << false;
+        QTest::newRow("string") << QJsonValue("6000000000") << false << false;
+    }
+    void diskMeasurementsAndLowSpaceWarnings() {
+        QFETCH(QJsonValue, available);
+        QFETCH(bool, known);
+        QFETCH(bool, low);
+        auto replyValue = state();
+        replyValue.insert("disk_usage", QJsonObject{{"database_file_bytes", 3000},
+                                                    {"wal_file_bytes", 1000},
+                                                    {"shared_memory_file_bytes", 1000},
+                                                    {"total_file_bytes", 5000},
+                                                    {"filesystem_available_bytes", available}});
+        SettingsStoragePage page(
+            [&](const QString&, const QJsonObject&, auto reply) { reply(replyValue, {}); });
+        QTRY_VERIFY(days(page)->isEnabled());
+        auto* usage = page.findChild<QLabel*>("storageUsage");
+        QVERIFY(usage->text().contains("SQLite files:"));
+        QCOMPARE(usage->text().contains("Low disk space"), low);
+        QCOMPARE(usage->text().contains("available is unknown"), !known);
+        auto* accessible = QAccessible::queryAccessibleInterface(usage);
+        QVERIFY(accessible);
+        QCOMPARE(accessible->text(QAccessible::Name), usage->text());
+        auto disk = replyValue.value("disk_usage").toObject();
+        disk.insert("filesystem_available_bytes", 7'000'000'000LL);
+        disk.insert("total_file_bytes", 1); // inconsistent file metrics do not invalidate settings
+        replyValue.insert("disk_usage", disk);
+        reload(page)->click();
+        QVERIFY(days(page)->isEnabled());
+        QVERIFY(!usage->text().contains("Low disk space"));
+        QVERIFY(usage->text().contains("file sizes unavailable"));
+    }
     void accessibleStatusTracksSaveAndRecoveryMessages() {
         QList<SettingsStoragePage::Reply> replies;
         SettingsStoragePage page(
@@ -242,7 +296,7 @@ class SettingsStoragePageTest final : public QObject {
         auto* dialog = new SettingsDialog(AppearanceSettings{}, theme);
         SettingsWorkspacePage shell(
             dialog, {}, nullptr, {},
-            [](const QString&, const QJsonObject&, auto reply) { reply(state(), {}); });
+            [](const QString&, const QJsonObject&, auto reply) { reply(lowDiskState(), {}); });
         shell.applyPalette(theme.palette());
         shell.resize(1100, 760);
         shell.show();
@@ -267,10 +321,18 @@ class SettingsStoragePageTest final : public QObject {
     void layoutAndKeyboard() {
         QFETCH(int, width);
         SettingsStoragePage page(
-            [](const QString&, const QJsonObject&, auto reply) { reply(state(), {}); });
+            [](const QString&, const QJsonObject&, auto reply) { reply(lowDiskState(), {}); });
         page.resize(width, 650);
         page.show();
         QTRY_VERIFY(days(page)->isEnabled());
+        auto* usage = page.findChild<QLabel*>("storageUsage");
+        QVERIFY(usage->text().contains("Low disk space"));
+        QVERIFY(page.rect().contains(usage->geometry()));
+        QTRY_VERIFY2(usage->height() >= usage->heightForWidth(usage->width()),
+                     qPrintable(QString("actual=%1 required=%2 width=%3")
+                                    .arg(usage->height())
+                                    .arg(usage->heightForWidth(usage->width()))
+                                    .arg(usage->width())));
         QVERIFY(page.width() <= width);
         QVERIFY(page.rect().contains(days(page)->geometry()));
         QVERIFY(page.rect().contains(automatic(page)->geometry()));

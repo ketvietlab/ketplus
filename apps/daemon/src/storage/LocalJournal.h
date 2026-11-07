@@ -250,6 +250,9 @@ class LocalJournal final {
                                                                           int limit) const;
     // The journal's pages (#128); nullopt on a failed read, with errorString() set.
     [[nodiscard]] std::optional<journal_space::Usage> space() const;
+    // Advisory file lengths and filesystem availability, sampled without scanning content.
+    // Excludes media/backups; nullopt for unavailable/non-file journals.
+    [[nodiscard]] std::optional<QJsonObject> diskUsage() const;
     // Returns up to `maximumPages` free pages to the disk when the journal is on incremental
     // vacuum and holds at least minimumReclaimPages of them, then checkpoints the log so the
     // file shrinks (again at the next call when a reader held that back): how many it returned,
