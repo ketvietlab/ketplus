@@ -5,6 +5,10 @@ milestone changes state.
 
 ## Implemented
 
+- Existing media blobs are validated before dedup returns a reference (ADR 0066):
+  exact bounded bytes, regular nonsymlink files and owner-only permissions.
+  Invalid entries remain intact for repair; reference durability remains open.
+
 - SessionHost preserves failed stream prefixes and orders later provider events
   behind a bounded retry queue (ADR 0062). Count/byte caps, unsupported oversized
   payloads, rejected command acceptance and session deletion are covered. The

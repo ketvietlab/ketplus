@@ -480,6 +480,117 @@ class DaemonProtocolTest final : public QObject {
         QVERIFY(!QFileInfo::exists(store.directory()));
     }
 
+    void mediaDedupRequiresVerifiedStoredBytes_data() {
+        QTest::addColumn<QString>("fault");
+        QTest::addColumn<bool>("inlineItem");
+        for (const QString& fault :
+             {QStringLiteral("valid"), QStringLiteral("wide-permissions"),
+              QStringLiteral("corrupt"), QStringLiteral("short"), QStringLiteral("oversized"),
+              QStringLiteral("directory"), QStringLiteral("symlink"), QStringLiteral("dangling"),
+              QStringLiteral("unreadable"), QStringLiteral("root-symlink")}) {
+            for (const bool inlineItem : {false, true})
+                QTest::newRow(qPrintable(fault + (inlineItem ? "-item" : "-attachment")))
+                    << fault << inlineItem;
+        }
+    }
+
+    void mediaDedupRequiresVerifiedStoredBytes() {
+        QFETCH(QString, fault);
+        QFETCH(bool, inlineItem);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto png = fakePng(8, 6, 'd');
+        const auto hash = QCryptographicHash::hash(png, QCryptographicHash::Sha256).toHex();
+        const auto media = directory.filePath("media");
+        const auto outside = directory.filePath("outside");
+        QVERIFY(QDir().mkpath(outside));
+        const auto path = media + '/' + QString::fromLatin1(hash) + ".png";
+        const auto foreign = outside + '/' + QString::fromLatin1(hash) + ".png";
+        const auto originalBytes = fault == "corrupt" ? QByteArray(png.size(), 'x')
+                                   : fault == "short" ? png.left(10)
+                                   : fault == "oversized"
+                                       ? QByteArray(McpMediaStore::maximumImageBytes + 1, 'x')
+                                       : png;
+        const auto put = [](const QString& target, const QByteArray& bytes) {
+            QFile file(target);
+            return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
+        };
+        QVERIFY(put(foreign, png));
+        if (fault == "root-symlink")
+            QVERIFY(QFile::link(outside, media));
+        else
+            QVERIFY(QDir().mkpath(media));
+        if (fault == "directory") {
+            QVERIFY(QDir().mkpath(path));
+        } else if (fault == "symlink" || fault == "dangling") {
+            QVERIFY(QFile::link(fault == "symlink" ? foreign : outside + "/missing", path));
+        } else if (fault != "root-symlink") {
+            QVERIFY(put(path, originalBytes));
+            if (fault == "valid")
+                QVERIFY(
+                    QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+            if (fault == "unreadable")
+                QVERIFY(QFile::setPermissions(path, QFileDevice::WriteOwner));
+            if (fault == "wide-permissions")
+                QVERIFY(QFile::setPermissions(path,
+                                              QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                                                  QFileDevice::ReadGroup | QFileDevice::ReadOther));
+        }
+        const auto publish = [&]() {
+            McpMediaStore store(media);
+            if (!inlineItem)
+                return store.storeImage(png, "image/png", "session");
+            const QJsonObject item{
+                {"type", "mcpToolCall"},
+                {"result",
+                 QJsonObject{{"content", QJsonArray{QJsonObject{
+                                             {"type", "image"},
+                                             {"mimeType", "image/png"},
+                                             {"data", QString::fromLatin1(png.toBase64())}}}}}}};
+            return store.externalizeItem(item, "session")
+                .value("result")
+                .toObject()
+                .value("content")
+                .toArray()
+                .first()
+                .toObject();
+        };
+        const auto result = publish();
+        const bool valid = fault == "valid" || fault == "wide-permissions";
+        QCOMPARE(result.contains("media_ref"), valid);
+        if (!valid) {
+            if (inlineItem)
+                QCOMPARE(result.value("reason").toString(), "storage_unavailable");
+            QVERIFY(!QFileInfo::exists(media + "/refs"));
+            if (fault == "corrupt" || fault == "short" || fault == "oversized") {
+                QFile original(path);
+                QVERIFY(original.open(QIODevice::ReadOnly));
+                QCOMPARE(original.readAll(), originalBytes);
+            }
+            if (fault == "root-symlink") {
+                QVERIFY(QFile::remove(media));
+                QVERIFY(QDir().mkpath(media));
+            } else if (fault == "directory") {
+                QVERIFY(QDir().rmdir(path));
+            } else {
+                if (fault == "unreadable")
+                    QVERIFY(QFile::setPermissions(path, QFileDevice::ReadOwner |
+                                                            QFileDevice::WriteOwner));
+                QVERIFY(QFile::remove(path));
+            }
+            QCOMPARE(publish().value("media_ref").toString(),
+                     "sha256:" + QString::fromLatin1(hash));
+        }
+        QFile retained(path);
+        QVERIFY(retained.open(QIODevice::ReadOnly));
+        QCOMPARE(retained.readAll(), png);
+        QVERIFY(!(retained.permissions() & (QFileDevice::ReadGroup | QFileDevice::WriteGroup |
+                                            QFileDevice::ReadOther | QFileDevice::WriteOther)));
+        QFile preserved(foreign);
+        QVERIFY(preserved.open(QIODevice::ReadOnly));
+        QCOMPARE(preserved.readAll(), png);
+    }
+
     void mcpMediaIsStoredOwnerOnlyAndReferencedFromPayloads() {
         QTemporaryDir directory;
         const QString mediaDirectory = directory.filePath("state/media");

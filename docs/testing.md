@@ -173,6 +173,10 @@ the corresponding Atlas mock first.
 - Media cleanup changes: temporary reference catalogs exercise malformed data,
   file/directory symlinks, unsupported filenames, per-file/catalog limits, preserved
   shared bytes and metadata, repair/retry and absent/empty-catalog compatibility.
+
+- Media dedup changes: attachment/inline-item fixtures cover valid files, corrupt/
+  short/oversized bytes, directories, symlinks, unreadable files, owner-only
+  permissions and repair/retry without changing unsupported entries.
 - One Pro module: focused target plus its directly affected tests.
 - Shared header or desktop shell: full build and full Pro test suite.
 - `core/` change: the Lite suite (`ctest --preset lite-dev`), then the full Pro suite.
