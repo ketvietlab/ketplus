@@ -457,3 +457,12 @@ idempotent second migration. Logs record bytes and elapsed migration time. The
 normal suite skips this disk-intensive case. It never opens an installed journal.
 This verifies large-file free-page migration, not retention policy/size-pressure
 acceptance or the result on a real user's 9 GB journal.
+
+### Journal file and low-disk measurements (#128)
+
+The journal-space suite compares actual file/sidecar lengths and verifies unchanged
+files, a timestamp, path-free output and non-file-journal rejection. Retention API
+tests cover additive metrics with existing save/cache/privacy behavior. Storage-page
+tests cover the below/equal/above 5 GB boundary, missing/malformed metrics, accessible
+warning text, recovery after reload and narrow layouts. Run the full Pro build/suite
+for the shared journal header change; no real journal or provider is used.

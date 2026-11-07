@@ -7,6 +7,7 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonDocument>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -76,6 +77,33 @@ class JournalSpaceTest final : public QObject {
   private slots:
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
 
+    void diskMeasurementsIncludeSidecarsWithoutChangingTheJournal() {
+        QTemporaryDir directory;
+        const auto path = directory.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        const auto length = [](const QString& file) {
+            return QFileInfo::exists(file) ? QFileInfo(file).size() : qint64(0);
+        };
+        const qint64 mainBytes = length(path);
+        const qint64 walBytes = length(path + "-wal");
+        const qint64 shmBytes = length(path + "-shm");
+        const auto usage = journal.diskUsage();
+        QVERIFY(usage);
+        QCOMPARE(usage->value("database_file_bytes").toInteger(), mainBytes);
+        QCOMPARE(usage->value("wal_file_bytes").toInteger(), walBytes);
+        QCOMPARE(usage->value("shared_memory_file_bytes").toInteger(), shmBytes);
+        QCOMPARE(usage->value("total_file_bytes").toInteger(), mainBytes + walBytes + shmBytes);
+        QVERIFY(mainBytes > 0);
+        QCOMPARE(length(path), mainBytes);
+        QCOMPARE(length(path + "-wal"), walBytes);
+        QCOMPARE(length(path + "-shm"), shmBytes);
+        QVERIFY(QDateTime::fromString(usage->value("sampled_at").toString(), Qt::ISODateWithMs)
+                    .isValid());
+        QVERIFY(usage->value("filesystem_available_bytes").toInteger(-1) >= 0);
+        QVERIFY(!QJsonDocument(*usage).toJson().contains(directory.path().toUtf8()));
+        LocalJournal memory(":memory:");
+        QVERIFY(!memory.diskUsage());
+    }
     void migratesNineGiBAndChecksRetainedBytes() {
         if (qEnvironmentVariable("KETPLUS_JOURNAL_SCALE_9GIB") != "1")
             QSKIP("Opt in with benchmarks/run-journal-scale.sh; needs 24 GiB free disk.");

@@ -43,9 +43,11 @@ SettingsStoragePage::SettingsStoragePage(Requester requester, QWidget* parent)
     layout->addSpacing(8);
     usage_ = label(tr("Loading journal usage…"), "storageUsage", this);
     layout->addWidget(usage_);
-    layout->addWidget(label(tr("SQLite page allocation only; excludes temporary journal files and "
-                               "other application files."),
-                            "settingsWorkspaceIntro", this));
+    layout->addWidget(
+        label(tr("File sizes include the SQLite database, write-ahead log and shared "
+                 "memory file. Media, backups and other application files are excluded. "
+                 "Measurements refresh when you reload or save."),
+              "settingsWorkspaceIntro", this));
     layout->addSpacing(8);
     days_ = new QComboBox(this);
     days_->setObjectName("storageDetailDays");
@@ -171,6 +173,35 @@ void SettingsStoragePage::receive(const QJsonObject& result, const QString& erro
     } else {
         usage_->setText(tr("Journal usage unavailable. Your retention settings are available."));
     }
+    const auto disk = result.value("disk_usage").toObject();
+    const auto fileBytes = disk.value("total_file_bytes");
+    const auto databaseBytes = disk.value("database_file_bytes");
+    const auto walBytes = disk.value("wal_file_bytes");
+    const auto sharedBytes = disk.value("shared_memory_file_bytes");
+    const auto available = disk.value("filesystem_available_bytes");
+    const QLocale locale;
+    QString measurements;
+    if (integer(fileBytes) && integer(databaseBytes) && integer(walBytes) && integer(sharedBytes) &&
+        fileBytes.toInteger() ==
+            databaseBytes.toInteger() + walBytes.toInteger() + sharedBytes.toInteger()) {
+        measurements =
+            tr("SQLite files: %1 (write-ahead log: %2).")
+                .arg(locale.formattedDataSize(fileBytes.toInteger(), 2, QLocale::DataSizeSIFormat),
+                     locale.formattedDataSize(walBytes.toInteger(), 2, QLocale::DataSizeSIFormat));
+    } else {
+        measurements = tr("SQLite file sizes unavailable.");
+    }
+    if (integer(available)) {
+        measurements +=
+            tr(" Disk space available: %1.")
+                .arg(locale.formattedDataSize(available.toInteger(), 2, QLocale::DataSizeSIFormat));
+        if (available.toInteger() < 5'000'000'000LL)
+            measurements +=
+                tr(" Low disk space: less than 5 GB available. Journal writes may fail.");
+    } else {
+        measurements += tr(" Disk space available is unknown.");
+    }
+    usage_->setText(usage_->text() + "\n" + measurements);
     status_->setText(saving ? tr("Saved. Changes apply while KetPlus is idle.")
                             : tr("Settings are up to date."));
     setBusy(false);

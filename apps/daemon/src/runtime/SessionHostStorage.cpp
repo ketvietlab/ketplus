@@ -36,6 +36,11 @@ QJsonObject SessionHost::storageRetention(const QString& type, const QJsonObject
                                   {"kept_page_bytes", space->keptBytes()}});
     else
         result.insert("usage_error", journal_->errorString());
+    const auto disk = journal_->diskUsage();
+    if (disk)
+        result.insert("disk_usage", *disk);
+    else
+        result.insert("disk_usage_error", journal_->errorString());
     return result;
 }
 } // namespace ketplus::daemon

@@ -172,6 +172,8 @@ class JournalRetentionPolicyTest final : public QObject {
         QVERIFY(read.value("ok").toBool());
         QCOMPARE(read.value("revision").toInteger(), 0);
         QVERIFY(read.value("usage").toObject().value("database_page_bytes").toInteger() > 0);
+        QVERIFY(read.value("disk_usage").toObject().value("total_file_bytes").toInteger() > 0);
+        QVERIFY(!QJsonDocument(read).toJson().contains(directory.path().toUtf8()));
         const auto write = request(
             "storage.retention.apply",
             {{"expected_revision", 0}, {"policy", JournalRetentionPolicy{7, true, 0}.toJson()}});

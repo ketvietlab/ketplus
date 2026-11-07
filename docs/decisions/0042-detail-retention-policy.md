@@ -62,3 +62,6 @@ Size pressure, archive/media retention, detailed storage measurements and warnin
 presentation remain separate #128 work. The broader Qt mock remains a design
 preview and labels the implemented subset. No release or installed-journal
 acceptance follows from these APIs or this Settings page.
+
+ADR 0045 adds optional, separately labelled file lengths and filesystem availability
+to these responses without changing policy validation or mutation semantics.

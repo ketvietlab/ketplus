@@ -22,7 +22,9 @@ milestone changes state.
   the complete Storage page remain pending. The native Storage page now exposes the
   supported detail period and automatic-detail switch, revision-aware immediate saves,
   reload-on-conflict/error and advisory SQLite page usage; no size/image/archive
-  controls are presented as implemented.
+  controls are presented as implemented. Storage also shows advisory SQLite/WAL/SHM
+  file lengths and filesystem availability, with a below-5-GB notice on refresh
+  (ADR 0045); these are not total application storage or background monitoring.
 
 - Desktop discovers conversations created by a phone or another daemon client while
   it remains connected, without switching the selected conversation or reloading

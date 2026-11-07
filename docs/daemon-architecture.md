@@ -632,3 +632,11 @@ before opening the new context, even when its cwd and launch settings match.
 Superseded IDs remain in `provider_threads.<provider>.retired_thread_ids` solely
 for shared-reference checks and permanent-deletion cleanup, including after restart.
 Late notifications naming a retired native thread cannot replace the current one.
+
+### Advisory Storage measurements
+
+Local retention responses also include optional SQLite/WAL/SHM logical file lengths
+and filesystem available bytes, separately from SQLite page usage. They neither
+scan journal content nor checkpoint it, and failures do not invalidate committed
+policy saves. Media/backups are excluded; absent filesystem data is unknown. See
+[ADR 0045](decisions/0045-journal-file-measurements.md).
