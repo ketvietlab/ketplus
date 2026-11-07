@@ -591,11 +591,21 @@ class AgentMessagingTest final : public QObject {
                     return frame.value("payload").toObject();
             }
         };
-        QVERIFY(roundTrip(desktop, request("daemon.hello",
-                                           {{"token", QString::fromUtf8(tokenFile.readAll())},
-                                            {"client_id", "desktop"}}))
-                    .value("ok")
-                    .toBool());
+        const auto hello = roundTrip(
+            desktop, request("daemon.hello", {{"token", QString::fromUtf8(tokenFile.readAll())},
+                                              {"client_id", "desktop"}}));
+        QVERIFY(hello.value("ok").toBool());
+        QVERIFY(hello.value("capabilities").toArray().contains("storage.retention.read"));
+        QVERIFY(hello.value("capabilities").toArray().contains("storage.retention.apply"));
+        const auto retention = roundTrip(desktop, request("storage.retention.read"));
+        QVERIFY(retention.value("ok").toBool());
+        const auto savedRetention = roundTrip(
+            desktop, request("storage.retention.apply",
+                             {{"expected_revision", retention.value("revision")},
+                              {"policy", QJsonObject{{"full_detail_days", 90},
+                                                     {"automatic_detail_retention", true}}}}));
+        QVERIFY(savedRetention.value("ok").toBool());
+        QCOMPARE(savedRetention.value("policy").toObject().value("full_detail_days").toInt(), 90);
         const QJsonObject started =
             roundTrip(desktop, request("session.start_turn",
                                        {{"worktree_path", directory.path()},
@@ -632,6 +642,11 @@ class AgentMessagingTest final : public QObject {
                  "forbidden");
         QCOMPARE(roundTrip(agent, request("approval.resolve")).value("error_code").toString(),
                  "forbidden");
+        QCOMPARE(roundTrip(agent, request("storage.retention.read")).value("error_code").toString(),
+                 "forbidden");
+        QCOMPARE(
+            roundTrip(agent, request("storage.retention.apply")).value("error_code").toString(),
+            "forbidden");
         // Session events are broadcast to the desktop, never to agent connections.
         agent.readAll();
         QTRY_VERIFY_WITH_TIMEOUT(desktop.bytesAvailable() > 0 || desktop.waitForReadyRead(50),

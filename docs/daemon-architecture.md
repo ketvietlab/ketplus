@@ -126,7 +126,8 @@ projection.
 
 While idle, a maintenance pass also removes intermediate `usage.context`,
 `usage.limits` and `usage.session` replay samples from completed turns older than
-30 days, retaining the final sample of each type in each turn. It preserves the
+the configured full-detail period (default 30 days), retaining the final sample
+of each type in each turn. It preserves the
 latest 20 actual turns per conversation/generation, any turn with raw events
 still awaiting acknowledgment, any turn containing questions or approvals, and
 sessions outside an explicitly idle state. The same pass trims eligible inline completed
@@ -142,8 +143,10 @@ UTF-8 prefix in an explicit `diff_excerpt` field plus original line statistics, 
 a visible `Diff trimmed` label; partial patches never occupy the full `diff` field. See
 [ADR 0038](decisions/0038-command-output-retention.md) and
 [ADR 0039](decisions/0039-tool-text-and-reasoning-retention.md) and
-[ADR 0040](decisions/0040-file-diff-retention.md). The 30-day value is currently fixed;
-configurable retention and the remaining detail compaction are still tracked in #128.
+[ADR 0040](decisions/0040-file-diff-retention.md). The full-detail period is configurable locally (7/30/90 days or Forever),
+with a separate automatic-detail-retention switch and revisioned saves; see
+[ADR 0042](decisions/0042-detail-retention-policy.md). Size pressure, archive/media
+policies, complete Storage UI and remaining compaction are still tracked in #128.
 
 Each minute's idle pass examines at most 128 replay rows, resumes its scan on the
 next pass, and wraps at the end (restart begins a fresh scan). Deletion and the
