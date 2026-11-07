@@ -1,0 +1,50 @@
+{
+  "baseline": "a10488075bc3dd656c082b388bf5df30d289d009",
+  "fixture": {
+    "manifests": 160,
+    "chunks_per_manifest": 640,
+    "chunk_bytes": 512,
+    "total_chunks": 102400,
+    "total_bytes": 52428800
+  },
+  "operation": "LocalJournal::beginAttachment for another session; isolated temporary Qt journal",
+  "results": [
+    {
+      "expired": false,
+      "milliseconds": 105,
+      "remaining_chunks": 102400,
+      "remaining_bytes": 52428800
+    },
+    {
+      "expired": true,
+      "milliseconds": 554,
+      "remaining_chunks": 0,
+      "remaining_bytes": 0
+    }
+  ],
+  "limits": [
+    "Synthetic macOS Release Qt only",
+    "No live journal or provider call",
+    "Read-only/fresh scan and expired-delete paths measured; independent review pending"
+  ],
+  "bounded_regression": {
+    "baseline_removed_chunks": 102400,
+    "baseline_ms": 680,
+    "bounded_removed_chunks": 128,
+    "bounded_ms": 20,
+    "focused_passed": 20,
+    "focused_failed": 0
+  },
+  "mutations": [
+    {
+      "mutation": "byte-budget",
+      "exit": 1,
+      "caught": true
+    },
+    {
+      "mutation": "identity-fence",
+      "exit": 1,
+      "caught": true
+    }
+  ]
+}

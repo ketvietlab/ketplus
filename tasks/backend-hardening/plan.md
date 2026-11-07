@@ -323,3 +323,14 @@ gates must pass again at the revised head.
 **Next executable task:** finish metadata full-matrix/review/merge gates; while
 review runs, reproduce staged-attachment expiry work bounds. Then audit cloud-event
 and explicit deletion separately. Do not mark H1.1/H1 complete on these subsets.
+
+
+### H1.1 staged-attachment expiry reproduction
+
+A temporary Qt Release probe of `beginAttachment` with 160 staged files and
+102,400 chunks (50 MiB) took 105 ms when none had expired, and 554 ms while deleting
+the entire expired backlog. The operation starts an upload in another session;
+it should not perform backlog-sized global work. The regression package will
+bound both candidate scans and deleted bytes, preserve current drafts/generations,
+and prevent reuse of an attachment identity until all old chunks are gone.
+[Qt evidence](evidence/h1-attachment-expiry-qt.json). Implementation and gates pending.

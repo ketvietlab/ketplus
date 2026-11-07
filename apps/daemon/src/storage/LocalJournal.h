@@ -307,6 +307,8 @@ class LocalJournal final {
     bool pruneLargePayloadGarbage();
     // Physical raw delivery cleanup is eventual; ACK and its retry queue commit together.
     bool pruneAcknowledgedEvents();
+    // Expired staging identities remain reserved until bounded chunk cleanup finishes.
+    bool purgeExpiredAttachments();
     // The latest background task snapshot of each session that reported one.
     bool storeBackgroundTasks(const QString& sessionId, qint64 generation, const QJsonArray& tasks);
     [[nodiscard]] QHash<QString, QJsonArray> backgroundTaskSnapshots() const;
@@ -362,7 +364,6 @@ class LocalJournal final {
     bool migrateTranscriptSchema();
     bool backfillTurnSequences();
     bool backfillReplayProjection();
-    bool purgeExpiredAttachments();
     bool updateReplayProjection(const QString& sessionId, qint64 generation, qint64 cursor,
                                 qint64 turnSequence, const QString& type,
                                 const QString& encodedPayload, const QString& sentAt,

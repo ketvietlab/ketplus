@@ -5,6 +5,11 @@ milestone changes state.
 
 ## Implemented
 
+- Staged attachment expiry now uses bounded transactional manifest/chunk passes
+  and durable cursors (ADR 0051). An expiring identity stays reserved until every
+  old chunk is gone, preventing reuse from adopting stale bytes. Invalid begin
+  requests no longer trigger cleanup; idle maintenance continues unfinished work.
+
 - Command/audit/tombstone/orphan metadata cleanup now runs transactional row/byte
   bounded passes with durable cursors (ADR 0050). Command/audit caps use accepted
   write order to preserve newly stored results after wall-clock rollback; idle
