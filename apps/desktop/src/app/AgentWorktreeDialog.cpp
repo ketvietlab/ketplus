@@ -1,4 +1,8 @@
 #include "app/AgentWorktreeDialog.h"
+#include "KetAppearance.h"
+#include "KetRecipes.h"
+#include "KetSelect.h"
+#include "KetTextField.h"
 
 #include "app/AgentWorktreeCreator.h"
 
@@ -117,7 +121,7 @@ AgentWorktreeDialog::AgentWorktreeDialog(const QString& repositoryPath, QWidget*
     : QDialog(parent), purpose_(purpose),
       primaryWorktreePath_(primaryWorktreePath.isEmpty() ? repositoryPath
                                                          : std::move(primaryWorktreePath)),
-      branch_(new QLineEdit(this)), base_(new QComboBox(this)), error_(new QLabel(this)),
+      branch_(new ket::TextField(this)), base_(new ket::Select(this)), error_(new QLabel(this)),
       status_(new QLabel(this)) {
     const bool conversation = purpose_ == Purpose::Conversation;
     setObjectName(conversation ? QStringLiteral("agentConversationDialog")
@@ -127,7 +131,15 @@ AgentWorktreeDialog::AgentWorktreeDialog(const QString& repositoryPath, QWidget*
     branch_->setObjectName("worktreeBranchName");
     error_->setObjectName(QStringLiteral("worktreeDialogError"));
     error_->setWordWrap(true);
-    error_->setStyleSheet(QStringLiteral("color: #b3261e;"));
+    const auto applyErrorColor = [this] {
+        auto colors = error_->palette();
+        colors.setColor(
+            QPalette::WindowText,
+            ket::badgeRecipe(ket::BadgeTone::Danger, ket::Appearance::instance().theme()).text);
+        error_->setPalette(colors);
+    };
+    applyErrorColor();
+    connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, error_, applyErrorColor);
     error_->hide();
     status_->setWordWrap(true);
 
@@ -143,10 +155,10 @@ AgentWorktreeDialog::AgentWorktreeDialog(const QString& repositoryPath, QWidget*
         // wider of the two up front and never reflows under the pointer.
         auto* ok = buttons->button(QDialogButtonBox::Ok);
         const QFontMetrics metrics(ok->font());
-        ok->setMinimumWidth(std::max(ok->sizeHint().width(),
-                                     std::max(metrics.horizontalAdvance(tr("Create")),
-                                              metrics.horizontalAdvance(tr("Start"))) +
-                                         32));
+        ok->setMinimumWidth(
+            std::max(ok->sizeHint().width(), std::max(metrics.horizontalAdvance(tr("Create")),
+                                                      metrics.horizontalAdvance(tr("Start"))) +
+                                                 32));
     }
 
     if (conversation) {
@@ -201,7 +213,7 @@ AgentWorktreeDialog::AgentWorktreeDialog(const QString& repositoryPath, QWidget*
         newForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
         branch_->setPlaceholderText(tr("new branch name"));
         newForm->addRow(tr("New branch"), branch_);
-        newWorktreeBase_ = new QComboBox(this);
+        newWorktreeBase_ = new ket::Select(this);
         newWorktreeBase_->setObjectName(QStringLiteral("worktreeBaseBranch"));
         newWorktreeBase_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         newWorktreeBase_->setMinimumContentsLength(40);
@@ -217,8 +229,7 @@ AgentWorktreeDialog::AgentWorktreeDialog(const QString& repositoryPath, QWidget*
 
         layout->addWidget(error_);
         layout->addWidget(buttons);
-        connect(section, &QButtonGroup::buttonToggled, this,
-                [this] { updateSections(); });
+        connect(section, &QButtonGroup::buttonToggled, this, [this] { updateSections(); });
         connect(base_, &QComboBox::currentIndexChanged, this, [this] {
             error_->hide();
             // Branches are shared by every checkout, but the branch of the selected

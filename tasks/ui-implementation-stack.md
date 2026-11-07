@@ -42,7 +42,9 @@ Record technical verification separately from the later review/acceptance phase.
 - [x] Pro: activity #161 UI and provider step mapping (native acceptance deferred).
 - [x] Pro: notices #162 using available journal/runtime state (native acceptance deferred).
 - [ ] Pro: questions/details #163.
-- [ ] Pro: overlays #164, worktrees/connections #165, settings #166, Atlas #167.
+- [x] Pro: overlays #164, including the existing revisioned repository/worktree picker.
+- [x] Pro: worktrees/connections #165 available-runtime UI (Relay pairing; SSH setup limitation below).
+- [ ] Pro: settings #166 and Atlas #167.
 
 Behaviour dependencies (#120, #125, #126, #128, #130, #170) must be represented
 honestly: preserve real runtime state and actions, and record missing contracts
@@ -127,3 +129,15 @@ continues with #165. No review, release or native acceptance started.
 Overlays additional checks: native sidebar composition and closable file details
 pass. Narrow compact header hides scope/actions per mock and keeps its expand
 button in bounds. The final popup-specific search/editor checks pass.
+
+Overlays: draft PR #225 on #224. Workspaces layer migrates worktree actions,
+status badges and create/select inputs to kit components; the paginated execution
+picker paints kit tree recipes without replacing its model or acknowledgment
+checks. Connections actions/inputs use the kit; palette and mono font resolve
+shared tokens/profile. Mock page/hero typography replaces Markdown-heading roles.
+
+Validation: execution picker 2/2 substantive cases pass; worktree listing/creation
+2/2 pass; Connections 10 pass including setup/cleanup, with two opt-in Debug demo
+cases skipped. Final typography/width cases pass. The implemented Linux connection
+flow is authenticated outbound Relay; a new SSH setup/transport is not supplied by
+this UI layer. Native acceptance, review, packaging and deployment remain deferred.

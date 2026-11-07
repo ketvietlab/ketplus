@@ -645,7 +645,7 @@ class AgentWorkspaceShellTest final : public QObject {
                         nullptr &&
                     worktreesPage->isVisible());
         auto* pruneButton =
-            worktreesPage->findChild<QPushButton*>(QStringLiteral("worktreesPruneButton"));
+            worktreesPage->findChild<QAbstractButton*>(QStringLiteral("worktreesPruneButton"));
         auto* worktreeCreator = window.findChild<ketplus::AgentWorktreeCreator*>(
             QStringLiteral("agentWorktreeCreator"));
         QVERIFY(pruneButton && worktreeCreator);
@@ -654,8 +654,8 @@ class AgentWorkspaceShellTest final : public QObject {
         pruneButton->click();
         QTRY_COMPARE_WITH_TIMEOUT(pruned.count(), 1, 5000);
         QTRY_VERIFY(!pruneButton->isEnabled());
-        QToolButton* promotedButton = nullptr;
-        for (auto* button : worktreesPage->findChildren<QToolButton*>(
+        QAbstractButton* promotedButton = nullptr;
+        for (auto* button : worktreesPage->findChildren<QAbstractButton*>(
                  QStringLiteral("worktreesWorkspaceOpenButton"))) {
             if (button->toolTip() == QFileInfo(promoted).canonicalFilePath())
                 promotedButton = button;
@@ -665,7 +665,7 @@ class AgentWorkspaceShellTest final : public QObject {
         auto* promotedRow = promotedButton->parentWidget()->parentWidget();
         QVERIFY(promotedRow);
         QCOMPARE(promotedRow->objectName(), QStringLiteral("worktreesWorkspaceRow"));
-        QCOMPARE(promotedRow->height(), 76);
+        QCOMPARE(promotedRow->height(), 90);
         auto* name = promotedButton->findChild<QLabel*>(QStringLiteral("worktreesWorkspaceName"));
         auto* conversations =
             promotedButton->findChild<QLabel*>(QStringLiteral("worktreesWorkspaceMeta"));

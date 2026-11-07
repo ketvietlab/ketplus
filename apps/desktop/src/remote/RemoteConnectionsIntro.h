@@ -7,7 +7,7 @@ class QBoxLayout;
 class QFrame;
 class QGridLayout;
 class QLabel;
-class QPushButton;
+class QAbstractButton;
 
 namespace ketplus {
 
@@ -27,7 +27,7 @@ class RemoteConnectionsIntro final : public QWidget {
     };
 
     explicit RemoteConnectionsIntro(QWidget* parent = nullptr);
-    [[nodiscard]] QPushButton* signInButton() const { return signIn_; }
+    [[nodiscard]] QAbstractButton* signInButton() const { return signIn_; }
     // Reasons from the daemon, shown under the header.
     [[nodiscard]] QLabel* notice() const { return notice_; }
     void setExpired(bool expired);
@@ -46,7 +46,7 @@ class RemoteConnectionsIntro final : public QWidget {
 
     QFrame* expired_{nullptr};
     QLabel* notice_{nullptr};
-    QPushButton* signIn_{nullptr};
+    QAbstractButton* signIn_{nullptr};
     QBoxLayout* hero_{nullptr};
     QWidget* copy_{nullptr};
     QLabel* heroText_{nullptr};

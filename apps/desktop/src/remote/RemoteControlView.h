@@ -6,7 +6,7 @@
 
 class QLabel;
 class QLineEdit;
-class QPushButton;
+class QAbstractButton;
 class QStackedWidget;
 class QTimer;
 class QEvent;
@@ -16,7 +16,7 @@ namespace ketplus {
 class LinuxMachinesSection;
 class RemoteActivitySection;
 class RemoteConnectionsIntro;
-}
+} // namespace ketplus
 
 namespace ketplus::remote {
 class DaemonClient;
@@ -65,8 +65,8 @@ class RemoteControlView final : public QWidget {
     remote::DaemonClient* daemon_{nullptr};
     QTimer* refreshTimer_{nullptr};
     QStackedWidget* pages_{nullptr};
-    QPushButton* signInButton_{nullptr};
-    QPushButton* signInPromptButton_{nullptr};
+    QAbstractButton* signInButton_{nullptr};
+    QAbstractButton* signInPromptButton_{nullptr};
     QWidget* unlinkedContent_{nullptr};
     RemoteConnectionsIntro* intro_{nullptr};
     QWidget* linkedContent_{nullptr};
@@ -80,8 +80,8 @@ class RemoteControlView final : public QWidget {
     QLabel* devicesEmpty_{nullptr};
     QLabel* overviewDescription_{nullptr};
     QLabel* overviewStatus_{nullptr};
-    QPushButton* pairButton_{nullptr};
-    QPushButton* signOutButton_{nullptr};
+    QAbstractButton* pairButton_{nullptr};
+    QAbstractButton* signOutButton_{nullptr};
     QDialog* pairingDialog_{nullptr};
     QDialog* signInDialog_{nullptr};
     QWidget* pageHeader_{nullptr};
@@ -99,8 +99,8 @@ class RemoteControlView final : public QWidget {
     QLabel* pairingDemoNote_{nullptr};
     QWidget* pairingDemoNoteHost_{nullptr};
     QLabel* deviceClaim_{nullptr};
-    QPushButton* pairingCancelButton_{nullptr};
-    QPushButton* approveButton_{nullptr};
+    QAbstractButton* pairingCancelButton_{nullptr};
+    QAbstractButton* approveButton_{nullptr};
     QString ticketId_;
     // The claim digest whose code the dialog showed; approval is bound to it.
     QString shownClaimDigest_;
