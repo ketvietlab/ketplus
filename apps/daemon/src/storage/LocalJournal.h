@@ -292,7 +292,15 @@ class LocalJournal final {
     bool storeCloudEvent(const QString& sessionId, qint64 generation, qint64 cursor,
                          const QJsonObject& event,
                          int projectionPolicyVersion = currentCloudProjectionPolicyVersion);
-    bool removeCloudEventsThrough(const QString& sessionId, qint64 generation, qint64 cursor);
+    // Invalidation is exact and synchronous; ACK cache reclamation is eventual/bounded.
+    bool discardCloudEvent(const QString& sessionId, qint64 generation, qint64 cursor);
+    bool prepareCloudEventUpload(const QJsonArray& envelopes);
+    bool acknowledgeCloudEventUpload(const QString& scope, const QString& sessionId,
+                                     qint64 generation, const QJsonArray& envelopes,
+                                     qint64 acceptedThrough);
+    [[nodiscard]] qint64 cloudUploadCursor(const QString& scope, const QString& sessionId,
+                                           qint64 generation) const;
+    bool pruneAcknowledgedCloudEvents();
     bool acknowledgeCursor(const QString& clientId, const QString& sessionId, qint64 generation,
                            qint64 cursor);
     // Eventual age/cap cleanup for metadata and unreferenced payloads. Each metadata table

@@ -467,7 +467,8 @@ class JournalMetadataRetentionTest : public QObject {
         Fixture f;
         for (const auto& name : {QString("command_results"), QString("remote_command_audit"),
                                  QString("session_tombstones"), QString("client_cursors"),
-                                 QString("background_tasks"), QString("session_deletion_work")}) {
+                                 QString("background_tasks"), QString("session_deletion_work"),
+                                 QString("cloud_events"), QString("cloud_upload_progress")}) {
             QSqlQuery q(f.db);
             QVERIFY(q.prepare("EXPLAIN QUERY PLAN " + detail::metadataRetentionScanQuery(name)));
             q.addBindValue(0);
@@ -480,7 +481,8 @@ class JournalMetadataRetentionTest : public QObject {
             QVERIFY2(plan.contains("SEARCH t USING INTEGER PRIMARY KEY (rowid>? AND rowid<?)"),
                      qPrintable(plan));
             QVERIFY2(!plan.contains("TEMP B-TREE"), qPrintable(plan));
-            if (name == "client_cursors" || name == "background_tasks")
+            if (name == "client_cursors" || name == "background_tasks" ||
+                name == "cloud_upload_progress")
                 QVERIFY2(plan.contains("SEARCH s USING INDEX sqlite_autoindex_sessions_1 (id=?)"),
                          qPrintable(plan));
         }

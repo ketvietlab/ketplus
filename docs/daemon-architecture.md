@@ -306,6 +306,18 @@ result. Fixed 10,001-entry cutoff discovery avoids backlog sorting. Busy work
 defers; failed deletions/state writes roll back the lane. These are eventual
 physical caps, not a hard storage quota; see [ADR 0050](decisions/0050-bounded-journal-metadata-retention.md).
 
+Cloud envelope cache cleanup has its own 256-candidate/1-MiB maintenance lane.
+Only rows with receipts for their exact sent ciphertext are eligible. An additive
+receipt flag defaults to pending for legacy/new cache; pre-dispatch verification
+resets it for retries. Receipt and a versioned relay/workspace/machine/key-scoped
+recovery cursor commit together before credential mirroring and raw ACK; restart
+repairs these later steps without re-encrypting already accepted events.
+Old account callbacks and old raw cloud cursors cannot authorize a replacement
+cache row's deletion. Invalid envelope recovery removes one exact identity before
+retry, with a 1-MiB stored-column bound and checked transaction. Unsupported or
+legacy unmarked entries remain for separate recovery; see
+[ADR 0053](decisions/0053-bounded-cloud-event-cache-cleanup.md).
+
 Deleted rows return their space to the disk (#128). A new journal is created
 with `auto_vacuum = INCREMENTAL`. An older one moves to it once at daemon start,
 before the endpoint listens:

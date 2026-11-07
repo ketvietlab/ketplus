@@ -58,9 +58,16 @@ Table specification(const QString& name) {
             name,
             bytesFor({"session_id", "deletion", "provider_targets"}, {"generation", "cloud_acked"}),
             "t.cloud_acked=1 AND octet_length(t.provider_targets)=2 AND t.provider_targets='[]'"};
+    if (name == "cloud_events")
+        return {name,
+                bytesFor({"session_id", "event", "created_at"},
+                         {"generation", "cursor", "projection_policy_version", "upload_acked"}),
+                "t.upload_acked=1"};
     const QString orphan =
         "CASE WHEN octet_length(t.session_id)<=256 THEN NOT EXISTS (SELECT 1 FROM sessions s WHERE "
         "s.id=t.session_id AND s.generation=t.generation) ELSE 0 END";
+    if (name == "cloud_upload_progress")
+        return {name, bytesFor({"scope", "session_id"}, {"generation", "cursor"}), orphan};
     if (name == "client_cursors")
         return {name,
                 bytesFor({"client_id", "session_id", "acknowledged_at"}, {"generation", "cursor"}),
@@ -250,7 +257,8 @@ bool LocalJournal::pruneRetention() {
         return false;
     for (const auto& name : {QString("command_results"), QString("remote_command_audit"),
                              QString("session_tombstones"), QString("client_cursors"),
-                             QString("background_tasks"), QString("session_deletion_work")}) {
+                             QString("background_tasks"), QString("session_deletion_work"),
+                             QString("cloud_events"), QString("cloud_upload_progress")}) {
         QString error;
         if (collect(database_, specification(name), &error) == Outcome::Failed) {
             setError(error);
@@ -259,6 +267,15 @@ bool LocalJournal::pruneRetention() {
     }
     commandResultsSincePrune_ = 0;
     remoteCommandsSincePrune_ = 0;
+    return true;
+}
+
+bool LocalJournal::pruneAcknowledgedCloudEvents() {
+    QString error;
+    if (collect(database_, specification("cloud_events"), &error) == Outcome::Failed) {
+        setError(error);
+        return false;
+    }
     return true;
 }
 

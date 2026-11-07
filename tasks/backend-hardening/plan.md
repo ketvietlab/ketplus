@@ -99,8 +99,10 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
   - [x] Completed-deletion #235: final-head affected Release/headless 10/10 and
     independent exact-head review PASS; merged `f0d73d30d49d06dab8290edf01971e1a3a06fa18`.
     Generated build removed; source cleanup remains tracked separately.
-  - [ ] Cloud cache #237: exact invalidation, per-envelope receipt and scoped
-    recovery cursor implemented; final full suite and exact-head review pending.
+  - [x] Cloud cache #237: exact invalidation, per-envelope receipt and scoped
+    recovery cursor; final head `4e654c1a` full Pro 96/96 and independent PASS.
+    Merged `0f6f39e05a007d889064760ffc64b6f1673851ac`. Generated build removed;
+    source cleanup remains separately tracked.
   - [x] Reproduce explicit attachment cancellation bounds and preservation gaps;
     implement shared 1-MiB/128-candidate cancellation and retirement fencing.
   - [ ] Cancellation final affected matrix/review/merge and safe cleanup.
@@ -214,7 +216,7 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | Item | State | Evidence / remaining work | Next action / owner |
 | --- | --- | --- | --- |
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
-| H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 merged; cloud #237 and bounded cancellation gates pending | Finish cloud/cancellation gates; audit explicit session deletion / #2739 |
+| H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 and cloud #237 merged; bounded cancellation #240 gates pending | Finish cancellation gates; audit explicit session deletion / #2739 |
 | H1.2–H1.7 | Not started | No claim that #128 backend acceptance is complete | Follow H1.1, prioritize a confirmed safety finding / #2739 |
 | H2–H3 | Not started | Open daemon/provider review issues mapped | Execute after storage, or independent audit while waiting review / #2739 |
 | H4.1–H4.3 | Not started | Existing remote fixes are not a full #85 closure | Audit local transport/privacy with fixtures / #2739 |
@@ -342,8 +344,8 @@ full Pro 94/94 matrix and independent exact-head review (metadata 20/20,
 transcript 28/28 plus empty/nonempty-wrap probes). #228 merged at
 `eca3bad52d61c51f250df4d51594bad03f2b0226`; earlier pending gates are resolved.
 
-**Next executable task:** finish completed-deletion work matrix/review/merge gates;
-while review runs, audit cloud-event and explicit deletion separately. Do not
+**Next executable task:** finish cloud-cache full Pro/review/merge gates;
+while review runs, audit explicit cancellation/deletion separately. Do not
 mark H1.1/H1 complete on these subsets.
 
 
@@ -439,3 +441,57 @@ skipped by design. Independent review and merge are pending. See
 [ADR 0054](../../docs/decisions/0054-bounded-attachment-cancellation.md).
 Explicit session deletion, tombstone enumeration and large-record recovery remain
 open; neither cancellation nor prior expiry evidence completes H1.1/H1.2.
+
+
+Deletion-work final head `7ffc9709325c9ef740df3f47f39e6592c5c0cae5` passed independent
+10/10 affected targets with no source changes. #235 merged at
+`f0d73d30d49d06dab8290edf01971e1a3a06fa18`; earlier pending review/merge gates above
+are resolved. Linked-source/generated-build cleanup remains separately tracked.
+
+### H1.1 cloud cache
+
+The initial cache cleanup branch passed cache 18/18 and privacy 62/62, but a deeper
+audit reproduced an unsafe deferred-GC assumption: an old cloud cursor deleted a
+newly regenerated cache entry after workspace/account reset. That regression failed
+with actual remaining rows 0 instead of 1. The implementation now uses receipts
+for the exact captured ciphertext; pending upload clears its receipt, partial ACK
+marks only accepted matching envelopes, and old account callbacks cannot write
+progress or receipts. Legacy cache migrates to an unmarked state and is retained
+for a later verified receipt or separate recovery.
+
+ACK cleanup keeps 256-row/1-MiB lane bounds. Invalidation removes one exact entry
+and must succeed before upload/reconciliation proceeds. Initial backlog comparison
+was 100,000 rows/269 ms versus 256 rows/2 ms; exact invalidation took under 1 ms.
+The 1-MiB invalidation-budget mutation was caught. Final receipt regressions pass cache 26/26 and privacy 63/63 (2/2 targets, 8.72 s),
+including legacy migration. Removing ciphertext matching or the stale account
+callback guard makes its regression fail; restored sources pass. Full Pro and
+independent review remain pending. The shared header/CMake changes require
+full Pro. [Qt evidence](evidence/h1-cloud-cache-qt.json).
+
+Ordinary cache read/JSON size, malformed empty-object and legacy unmarked-cache
+recovery remain H1.2/H4.1 checks. Explicit deletion/current-upload cancellation,
+tombstone enumeration and mixed multi-GB acceptance remain open. No UI, live
+journal, release or installation scope is added.
+
+
+Cloud-cache review at `b007cb59` found P2: mirror/raw progress preceded receipt
+storage, so a failed receipt was skipped by all later uploads and remained forever.
+The first full build also exposed one protocol test calling the removed cleanup
+API. The revised package uses an atomic SQLite receipt + scoped recovery cursor,
+then mirrors credentials/raw ACK; registration recovers after a crash or later
+write failure. The protocol smoke now exercises that contract. Added the reviewer
+transport regression plus credential-failure/restart and atomic progress probes.
+All final matrix/review gates must run again at the revised head; the original
+focused result is not final acceptance. No merge or release has occurred.
+
+
+The cloud-cache recovery revision passes 4/4 affected targets (14.56 s): cache
+27/27, privacy 65/65, protocol 43/43, metadata 32/32. It includes the reviewer's
+ignored-receipt retry/reopen probe, identical ciphertext on retry, and credential
+failure followed by restart/cache reclamation without resending an accepted event.
+Scoped progress and receipts roll back together on ignored writes or failed commits.
+Upload-progress handling now has its own owning file; the sync file is below 500
+lines. Final head `4e654c1afe25774ba48ffa99643f2e8c65f593b7` passed full Pro
+96/96 (321.03 s) and independent exact-head review. #237 merged at
+`0f6f39e05a007d889064760ffc64b6f1673851ac`. Generated build removed; linked-source
+cleanup remains separately tracked.

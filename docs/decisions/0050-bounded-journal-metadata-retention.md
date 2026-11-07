@@ -52,3 +52,6 @@ fixtures do not constitute Windows, live-journal or mixed multi-GB acceptance.
 
 ADR 0052 adds completed deletion jobs as a sixth independent lane; its eligibility
 is durable completion, rather than age or a cap.
+
+ADR 0053 adds acknowledged cloud-envelope cache as another independent lane,
+using per-entry receipts for the exact sent ciphertext.
