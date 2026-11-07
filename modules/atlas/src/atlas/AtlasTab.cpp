@@ -1,4 +1,8 @@
 #include "atlas/AtlasTab.h"
+#include "KetAppearance.h"
+#include "KetButton.h"
+#include "KetTextField.h"
+#include "KetTokens.h"
 #include "ui/ChromeGeometry.h"
 #include "ui/SymbolIcon.h"
 
@@ -40,8 +44,6 @@ const QString ketAtlasPackage = QStringLiteral("ketatlas@0.6.1");
 
 // Két Symbol names for the Atlas library.
 constexpr auto networkIcon = "network";
-constexpr auto gridIcon = "layout-grid";
-constexpr auto listIcon = "list-filter";
 constexpr auto folderIcon = "folder";
 
 class SymbolLabel final : public QLabel {
@@ -63,58 +65,34 @@ class SymbolLabel final : public QLabel {
     QPalette::ColorRole role_;
 };
 
-class SymbolButton final : public QToolButton {
-  public:
-    explicit SymbolButton(QByteArray body, QWidget* parent)
-        : QToolButton(parent), body_(std::move(body)) {}
-
-  protected:
-    void paintEvent(QPaintEvent*) override {
-        QPainter painter(this);
-        QStyleOptionToolButton option;
-        initStyleOption(&option);
-        option.text.clear();
-        option.icon = {};
-        style()->drawComplexControl(QStyle::CC_ToolButton, &option, &painter, this);
-        const QColor color = palette().color(QPalette::ButtonText);
-        symbol_icon::paint(painter, body_, color,
-                           QRectF((width() - 17) / 2.0, (height() - 17) / 2.0, 17, 17));
-    }
-
-  private:
-    QByteArray body_;
-};
-
 QString atlasStyle(const QPalette& palette, const int basePixels) {
     const bool dark = palette.color(QPalette::Window).lightness() < 128;
-    const QString page = dark ? QStringLiteral("#1B1F24") : QStringLiteral("#F7F5F5");
-    const QString panel = dark ? QStringLiteral("#1D2228") : QStringLiteral("#FFFFFF");
-    const QString raised = dark ? QStringLiteral("#23282F") : QStringLiteral("#FBFAFA");
-    const QString text = dark ? QStringLiteral("#F2F4F7") : QStringLiteral("#24262A");
-    const QString secondary = dark ? QStringLiteral("#B4BAC4") : QStringLiteral("#5A5C5E");
-    const QString muted = dark ? QStringLiteral("#858D99") : QStringLiteral("#717373");
-    const QString border = dark ? QStringLiteral("#2B3037") : QStringLiteral("#E9E7E8");
-    const QString strong = dark ? QStringLiteral("#3B424C") : QStringLiteral("#CCCCCD");
-    const QString accent = QStringLiteral("#1746FF");
-    const QString accentText = dark ? QStringLiteral("#9EB5FF") : QStringLiteral("#1238DB");
-    const QString primary = QStringLiteral("#365FD6");
-    const QString primaryHover = QStringLiteral("#3151C6");
+    const auto theme = dark ? ket::Theme::Dark : ket::Theme::Light;
+    const auto color = [theme](QStringView name) {
+        return ket::Tokens::color(name, theme).name(QColor::HexArgb);
+    };
+    const QString page = color(u"page-bg");
+    const QString panel = color(u"panel-bg");
+    const QString raised = color(u"surface-raised");
+    const QString text = color(u"text-main");
+    const QString secondary = color(u"text-secondary");
+    const QString muted = color(u"text-muted");
+    const QString border = color(u"panel-border");
+    const QString strong = color(u"border-strong");
+    const QString accent = color(u"accent");
+    const QString accentText = color(u"accent-text");
+    const QString primary = color(u"primary");
+    const QString primaryHover = color(u"primary-hover");
     QString css = TypeScale::apply(QStringLiteral(R"QSS(
 QWidget#atlasTab, QWidget#atlasPicker, QStackedWidget#atlasPages { background:@page@; color:@text@; }
 QLabel#atlasEyebrow { color:@accentText@; font-size:{{caption}}px; font-weight:600; letter-spacing:1px; }
-QLabel#atlasLibraryTitle { color:@text@; font-size:{{display}}px; font-weight:620; }
+QLabel#atlasLibraryTitle { color:@text@; font-size:30px; font-weight:600; }
 QLabel#atlasLibrarySubtitle { color:@muted@; font-size:{{reading}}px; }
 QLabel#atlasScopeIcon { color:@muted@; }
 QLabel#atlasScope { color:@secondary@; font-size:{{body}}px; font-weight:600; }
 QLabel#atlasCount, QLabel#atlasLibraryFootnote { color:@muted@; font-size:{{body}}px; }
-QLineEdit#atlasSearch { min-height:34px; max-width:290px; padding:0 12px; border:1px solid @strong@; border-radius:6px; background:@panel@; color:@text@; }
-QLineEdit#atlasSearch:focus { border-color:@accent@; }
 QListWidget#atlasGrid { border:0; background:transparent; outline:0; }
 QListWidget#atlasGrid::item { border:0; background:transparent; }
-QPushButton#atlasCreateButton, QPushButton#atlasEmptyCreateButton { min-height:32px; padding:0 13px; border:1px solid @primary@; border-radius:6px; background:@primary@; color:white; font-weight:600; }
-QPushButton#atlasCreateButton:hover, QPushButton#atlasEmptyCreateButton:hover { border-color:@primaryHover@; background:@primaryHover@; }
-QToolButton[atlasViewToggle="true"] { min-width:30px; min-height:28px; border:0; border-radius:4px; background:transparent; color:@muted@; }
-QToolButton[atlasViewToggle="true"]:checked { background:@panel@; color:@text@; }
 QWidget#atlasViewSwitcher { padding:3px; border:1px solid @border@; border-radius:6px; background:@raised@; }
 QWidget#atlasEmptyPanel { background:transparent; }
 QLabel#atlasEmptyIcon { color:@accentText@; font-size:{{glyphLarge}}px; }
@@ -154,56 +132,66 @@ class AtlasCard final : public QStyledItemDelegate {
     void paint(QPainter* p, const QStyleOptionViewItem& option,
                const QModelIndex& index) const override {
         p->save();
-        const auto rect = option.rect.adjusted(8, 8, -8, -8);
+        const auto& appearance = ket::Appearance::instance();
+        const qreal zoom = appearance.zoom();
+        const auto color = [&appearance](QStringView name) {
+            return ket::Tokens::color(name, appearance.theme());
+        };
+        p->translate(option.rect.topLeft());
+        p->scale(zoom, zoom);
+        const QRect rect(8, 8, qRound(option.rect.width() / zoom) - 16,
+                         qRound(option.rect.height() / zoom) - 16);
         const bool selected = option.state.testFlag(QStyle::State_Selected);
-        const bool dark = QApplication::palette().color(QPalette::Window).lightness() < 128;
-        const QColor panel(dark ? QStringLiteral("#1D2228") : QStringLiteral("#FFFFFF"));
-        const QColor selectedPanel(dark ? QStringLiteral("#202C4B") : QStringLiteral("#EDF2FF"));
-        const QColor border(dark ? QStringLiteral("#2B3037") : QStringLiteral("#E9E7E8"));
-        const QColor selectedBorder(dark ? QStringLiteral("#415B9C") : QStringLiteral("#C2D1FF"));
-        const QColor text(dark ? QStringLiteral("#F2F4F7") : QStringLiteral("#24262A"));
-        const QColor muted(dark ? QStringLiteral("#858D99") : QStringLiteral("#717373"));
-        p->setPen(selected ? selectedBorder : border);
-        p->setBrush(selected ? selectedPanel : panel);
+        const bool list = option.widget && option.widget->property("atlasListMode").toBool();
+        p->setRenderHint(QPainter::Antialiasing);
+        p->setPen(color(selected ? u"accent-border" : u"panel-border"));
+        p->setBrush(color(selected ? u"accent-subtle" : u"panel-bg"));
         p->drawRoundedRect(rect, 8, 8);
-        const QRect previewRect(rect.x() + 1, rect.y() + 1, rect.width() - 2, 179);
+        const QRect previewRect = list ? QRect(rect.x() + 8, rect.y() + 8, 88, rect.height() - 16)
+                                       : QRect(rect.x() + 1, rect.y() + 1, rect.width() - 2, 179);
         const QPixmap thumbnail = index.data(Qt::DecorationRole).value<QPixmap>();
-        if (!thumbnail.isNull()) {
-            p->setClipRect(previewRect);
+        p->save();
+        p->setClipRect(previewRect);
+        if (!thumbnail.isNull())
             p->drawPixmap(previewRect, thumbnail, thumbnail.rect());
-            p->setClipping(false);
-        } else {
-            p->fillRect(previewRect, option.palette.color(QPalette::AlternateBase));
-        }
-        p->setPen(text);
+        else
+            p->fillRect(previewRect, color(u"surface-raised"));
+        p->restore();
+        const int left = list ? rect.x() + 110 : rect.x() + 17;
+        const int top = list ? rect.y() + 11 : rect.y() + 196;
+        const int textWidth = rect.right() - left - 17;
         auto font = option.font;
-        font.setBold(true);
+        font.setPixelSize(14);
+        font.setWeight(QFont::DemiBold);
         p->setFont(font);
-        p->drawText(rect.adjusted(17, 196, -17, -70), Qt::TextWordWrap,
-                    index.data(Qt::DisplayRole).toString());
-        font.setBold(false);
+        p->setPen(color(u"text-main"));
+        p->drawText(
+            QRect(left, top, textWidth, 22), Qt::AlignVCenter,
+            QFontMetrics(font).elidedText(index.data().toString(), Qt::ElideRight, textWidth));
+        font.setPixelSize(13);
+        font.setWeight(QFont::Normal);
         p->setFont(font);
-        p->setPen(muted);
-        const int width = rect.width() - 24;
-        p->drawText(rect.adjusted(17, 225, -17, -45), Qt::AlignVCenter,
-                    QFontMetrics(font).elidedText(index.data(Qt::UserRole + 3).toString(),
-                                                  Qt::ElideRight, width));
-        p->drawText(rect.adjusted(17, 257, -17, -15), Qt::AlignVCenter,
-                    QFontMetrics(font).elidedText(index.data(Qt::UserRole + 2).toString(),
-                                                  Qt::ElideRight, width));
+        p->setPen(color(u"text-muted"));
+        for (int line = 0; line < 2; ++line)
+            p->drawText(QRect(left, top + 26 + line * 24, textWidth, 22), Qt::AlignVCenter,
+                        QFontMetrics(font).elidedText(
+                            index.data(Qt::UserRole + (line == 0 ? 3 : 2)).toString(),
+                            Qt::ElideRight, textWidth));
         p->restore();
     }
 };
 } // namespace
 
 AtlasTab::AtlasTab(AtlasIndex* index, QWidget* parent)
-    : QWidget(parent), index_(index), process_(this), search_(new QLineEdit(this)),
+    : QWidget(parent), index_(index), process_(this), search_(new ket::TextField(this)),
       grid_(new QListWidget(this)), count_(new QLabel(this)), scope_(new QLabel(this)),
       empty_(new QLabel(this)), status_(new QLabel(this)), installCommand_(new QLabel(this)),
-      lastValidNotice_(new QLabel(this)), retry_(new QPushButton(tr("Retry"), this)),
-      locate_(new QPushButton(tr("Locate KetAtlas CLI"), this)),
-      install_(new QPushButton(tr("Install KetAtlas"), this)),
-      chooseAnother_(new QPushButton(tr("Choose another Atlas"), this)),
+      lastValidNotice_(new QLabel(this)),
+      retry_(new ket::Button(tr("Retry"), ket::ButtonVariant::Secondary, this)),
+      locate_(new ket::Button(tr("Locate KetAtlas CLI"), ket::ButtonVariant::Secondary, this)),
+      install_(new ket::Button(tr("Install KetAtlas"), ket::ButtonVariant::Secondary, this)),
+      chooseAnother_(
+          new ket::Button(tr("Choose another Atlas"), ket::ButtonVariant::Secondary, this)),
       pages_(new QStackedWidget(this)), picker_(new QWidget(this)), messagePage_(new QWidget(this)),
       thumbnails_(this) {
     setObjectName("atlasTab");
@@ -249,7 +237,7 @@ AtlasTab::AtlasTab(AtlasIndex* index, QWidget* parent)
     scopeRow->addStretch(1);
     headingCopy->addLayout(scopeRow);
     pageHeader->addLayout(headingCopy, 1);
-    auto* create = new QPushButton(tr("Create Atlas"), picker_);
+    auto* create = new ket::Button(tr("Create Atlas"), ket::ButtonVariant::Primary, picker_);
     create->setObjectName(QStringLiteral("atlasCreateButton"));
     create->setIcon(ket::Icons::icon(ket::Icons::codeForLucide(u"plus")));
     pageHeader->addWidget(create);
@@ -269,14 +257,16 @@ AtlasTab::AtlasTab(AtlasIndex* index, QWidget* parent)
     auto* switcherLayout = new QHBoxLayout(switcher);
     chrome_geometry::margins(switcherLayout, 3, 3, 3, 3);
     chrome_geometry::spacing(switcherLayout, 3);
-    auto* gridMode = new SymbolButton(gridIcon, switcher);
+    auto* gridMode = new ket::IconButton(
+        ket::Icons::icon(ket::Icons::codeForLucide(u"layout-grid")), tr("Grid view"), switcher);
     gridMode->setObjectName(QStringLiteral("atlasGridModeButton"));
     gridMode->setToolTip(tr("Grid view"));
     gridMode->setAccessibleName(tr("Grid view"));
     gridMode->setCheckable(true);
     gridMode->setChecked(true);
     gridMode->setProperty("atlasViewToggle", true);
-    auto* listMode = new SymbolButton(listIcon, switcher);
+    auto* listMode = new ket::IconButton(
+        ket::Icons::icon(ket::Icons::codeForLucide(u"list-filter")), tr("List view"), switcher);
     listMode->setObjectName(QStringLiteral("atlasListModeButton"));
     listMode->setToolTip(tr("List view"));
     listMode->setAccessibleName(tr("List view"));
@@ -317,9 +307,10 @@ AtlasTab::AtlasTab(AtlasIndex* index, QWidget* parent)
     empty_->setWordWrap(true);
     chrome_geometry::maximumWidth(empty_, 390);
     emptyLayout->addWidget(empty_);
-    auto* emptyCreate = new QPushButton(tr("Create your first Atlas"), emptyPanel);
+    auto* emptyCreate =
+        new ket::Button(tr("Create your first Atlas"), ket::ButtonVariant::Primary, emptyPanel);
     emptyCreate->setObjectName(QStringLiteral("atlasEmptyCreateButton"));
-    connect(emptyCreate, &QPushButton::clicked, this, &AtlasTab::creationRequested);
+    connect(emptyCreate, &QAbstractButton::clicked, this, &AtlasTab::creationRequested);
     emptyLayout->addWidget(emptyCreate, 0, Qt::AlignHCenter);
     pickerLayout->addWidget(emptyPanel, 1);
     auto* footnote = new QLabel(
@@ -351,11 +342,11 @@ AtlasTab::AtlasTab(AtlasIndex* index, QWidget* parent)
     messageLayout->addStretch();
     pages_->addWidget(picker_);
     pages_->addWidget(messagePage_);
-    connect(retry_, &QPushButton::clicked, this, &AtlasTab::launch);
-    connect(install_, &QPushButton::clicked, this, &AtlasTab::installKetAtlas);
-    connect(chooseAnother_, &QPushButton::clicked, this, &AtlasTab::returnToLibrary);
-    connect(create, &QPushButton::clicked, this, &AtlasTab::creationRequested);
-    connect(locate_, &QPushButton::clicked, this, [this] {
+    connect(retry_, &QAbstractButton::clicked, this, &AtlasTab::launch);
+    connect(install_, &QAbstractButton::clicked, this, &AtlasTab::installKetAtlas);
+    connect(chooseAnother_, &QAbstractButton::clicked, this, &AtlasTab::returnToLibrary);
+    connect(create, &QAbstractButton::clicked, this, &AtlasTab::creationRequested);
+    connect(locate_, &QAbstractButton::clicked, this, [this] {
         const auto file = QFileDialog::getOpenFileName(this, tr("KetAtlas executable"));
         if (!file.isEmpty()) {
             QSettings().setValue("atlas/cliPath", file);
@@ -364,14 +355,14 @@ AtlasTab::AtlasTab(AtlasIndex* index, QWidget* parent)
     });
     connect(index_, &AtlasIndex::changed, this, &AtlasTab::handleIndexChanged);
     connect(search_, &QLineEdit::textChanged, this, &AtlasTab::populate);
-    connect(gridMode, &QToolButton::clicked, this, [this, gridMode, listMode] {
+    connect(gridMode, &QAbstractButton::clicked, this, [this, gridMode, listMode] {
         gridMode->setChecked(true);
         listMode->setChecked(false);
         grid_->setViewMode(QListView::IconMode);
         grid_->setProperty("atlasListMode", false);
         resizeEvent(nullptr);
     });
-    connect(listMode, &QToolButton::clicked, this, [this, gridMode, listMode] {
+    connect(listMode, &QAbstractButton::clicked, this, [this, gridMode, listMode] {
         listMode->setChecked(true);
         gridMode->setChecked(false);
         grid_->setViewMode(QListView::IconMode);
@@ -610,13 +601,13 @@ void AtlasTab::returnToLibrary() {
 void AtlasTab::resizeEvent(QResizeEvent* event) {
     if (event)
         QWidget::resizeEvent(event);
-    const int available = qMax(180, grid_->viewport()->width() - 8);
-    // The KétAtlas library uses a compact three-card rhythm at the ordinary
-    // desktop workspace width. Fall back progressively without forcing a
-    // horizontal scrollbar in smaller windows.
-    const int columns = available >= 570 ? 3 : available >= 380 ? 2 : 1;
+    const qreal zoom = ket::Appearance::instance().zoom();
+    const auto px = [zoom](int value) { return qRound(value * zoom); };
+    const int available = qMax(px(180), grid_->viewport()->width() - px(8));
+    const int columns = available >= px(570) ? 3 : available >= px(380) ? 2 : 1;
     const bool listMode = grid_->property("atlasListMode").toBool();
-    const auto size = listMode ? QSize(available, 300) : QSize(qMax(180, available / columns), 300);
+    const auto size =
+        listMode ? QSize(available, px(112)) : QSize(qMax(px(180), available / columns), px(300));
     grid_->setGridSize(size);
     for (int row = 0; row < grid_->count(); ++row)
         grid_->item(row)->setSizeHint(size);
@@ -630,6 +621,7 @@ void AtlasTab::applyPalette(const QPalette& palette, const int interfaceFontSize
     setStyleSheet(atlasStyle(palette, interfaceFontSizePixels));
     chrome_geometry::apply(this, interfaceFontSizePixels);
     grid_->viewport()->update();
+    resizeEvent(nullptr);
     applyingStyle_ = false;
 }
 
