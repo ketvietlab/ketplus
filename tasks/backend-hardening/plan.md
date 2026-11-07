@@ -314,6 +314,12 @@ Full matrix and exact
 head review remain gates before merge. Evidence is synthetic; no live journal,
 Windows, deployment or installation acceptance is implied.
 
+The first full Pro run passed 93/94 targets. Its existing transcript-window expiry
+case exposed an empty-tail pass that only reset the cursor, delaying the reopen
+recheck. The fix wraps an empty tail once in the same pass without increasing the
+candidate budget; the original expiry assertion remains intact. Focused and full
+gates must pass again at the revised head.
+
 **Next executable task:** finish metadata full-matrix/review/merge gates; while
 review runs, reproduce staged-attachment expiry work bounds. Then audit cloud-event
 and explicit deletion separately. Do not mark H1.1/H1 complete on these subsets.

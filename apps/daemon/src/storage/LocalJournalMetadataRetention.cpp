@@ -148,17 +148,24 @@ Outcome collect(QSqlDatabase db, const Table& table, QString* error) {
     const auto scan = [&](qint64& after, qint64 upper, bool cap) -> Outcome {
         QSqlQuery rows(db);
         rows.prepare(scanQuery(table));
-        rows.addBindValue(after);
-        rows.addBindValue(upper);
-        rows.addBindValue(candidateLimit);
-        if (!rows.exec())
-            return fail(rows.lastError());
         QList<QVariantList> candidates;
-        while (rows.next())
-            candidates.append({rows.value(0), rows.value(1), rows.value(2)});
-        if (rows.lastError().isValid())
-            return fail(rows.lastError());
-        rows.finish();
+        // An empty tail costs no candidates. Wrap once in this pass so a small
+        // table is rechecked at reopen without spending an otherwise idle pass.
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            rows.bindValue(0, after);
+            rows.bindValue(1, upper);
+            rows.bindValue(2, candidateLimit);
+            if (!rows.exec())
+                return fail(rows.lastError());
+            while (rows.next())
+                candidates.append({rows.value(0), rows.value(1), rows.value(2)});
+            if (rows.lastError().isValid())
+                return fail(rows.lastError());
+            rows.finish();
+            if (!candidates.isEmpty() || after == 0)
+                break;
+            after = 0;
+        }
         if (candidates.isEmpty()) {
             after = 0;
             return Outcome::Applied;

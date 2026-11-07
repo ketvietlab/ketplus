@@ -27,7 +27,9 @@ The existing 7/90-day wall-clock age policies and audit listing order are unchan
 Rows, cursor advancement and cursor creation/update commit together per table.
 An ignored/aborted DELETE, failed state write or commit failure rolls back that
 lane. Earlier independent lanes may already have committed. A busy writer defers
-immediately and restores the prior busy timeout. Empty scans wrap their cursor.
+immediately and restores the prior busy timeout. An empty tail scan wraps once in
+the same pass, still visiting at most the original candidate limit. This lets
+reopen recheck earlier rows that have expired since the preceding small-table pass.
 An eligible row that does not fit the remaining byte budget is retried next pass.
 Unsupported storage types or individually oversized rows are retained and skipped
 so other metadata can progress. This differs from raw delivery cleanup's required

@@ -288,10 +288,6 @@ class JournalMetadataRetentionTest : public QObject {
         QVERIFY(f.journal.pruneRetention());
         QCOMPARE(f.scalar("SELECT count(*) FROM command_results"), 300);
         QVERIFY(f.journal.pruneRetention());
-        QCOMPARE(
-            f.scalar("SELECT age_row FROM journal_metadata_gc WHERE table_name='command_results'"),
-            0);
-        QVERIFY(f.journal.pruneRetention());
         QCOMPARE(f.scalar("SELECT count(*) FROM command_results"), 299);
         QCOMPARE(f.scalar("SELECT count(*) FROM command_results WHERE rowid=1"), 0);
     }
