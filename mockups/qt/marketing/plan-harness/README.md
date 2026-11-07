@@ -4,7 +4,9 @@ The plan belongs to a conversation, not to a project-wide Planning screen. Open 
 
 ## Compact presentation
 
-Each task is one row: completion icon, task title, owner and status. Expand a task to inspect its acceptance criterion and evidence. Activity entries are also one row; expand one for details. The conversation header and sidebar reflect the run state. An inline conversation action shows the verified count and reopens the right pane. The header checklist action opens the same pane. Closing the pane or changing its content does not stop or reset the plan.
+Each task is one row: completion icon, task title, owner and status. Expand a task to inspect its acceptance criterion and evidence. Activity entries inside the Plan document are also one row; expand one for details. The conversation header and sidebar reflect the run state. A single checklist icon with a progress ring in the conversation toolbar opens the Plan document. Its accessible name and tooltip include the verified count and state. The ring follows live progress and uses success colour at completion. Closing the pane or changing its content does not stop or reset the plan.
+
+The transcript has no inline Plan button or duplicated Agent/Daemon activity feed. Its compact end-of-turn report states the plan status and verified count, lists one row per task with evidence or pending work, and names the next action and owner. This report is a snapshot of the finished turn; it does not silently change as the next turn progresses. A later finished turn produces a new report. Before a plan exists, there is no completion report.
 
 All text is English. The footer’s Preview selector and playback buttons are prototype controls, not proposed production controls. Concept labels and sample-evidence disclosures must remain when these captures are used in marketing.
 
@@ -12,7 +14,7 @@ All text is English. The footer’s Preview selector and playback buttons are pr
 
 - Each open file has its own tab; the same path reselects its existing tab. A file and its diff are separate documents.
 - Each New terminal action creates a numbered session. Draft input and fixture output stay with that session when switching tabs. No shell command is executed.
-- Plan is one document per conversation. Closing its tab does not cancel the plan; the inline conversation action reopens it with existing progress.
+- Plan is one document per conversation. Closing its tab does not cancel the plan; the toolbar progress icon reopens it with existing progress.
 - The tab strip scrolls horizontally and reveals the selected tab. The dropdown lists all open documents; `+` opens sample files, a new terminal, the plan, changes or an Atlas.
 - Closing an active tab selects its neighbour; closing an inactive tab preserves the selection. The empty pane offers New terminal. Hiding the pane preserves open documents.
 - The fixture file viewer is read-only; these mocks do not read or write actual repository files. Terminal sessions and tabs are in-memory and are not persisted across launches.
@@ -57,10 +59,11 @@ Other direct states: `plan-running`, `plan-paused`, `plan-limit`. Direct state p
 ## Verification
 
 - Standalone mock build passed.
-- QML model suite: 21 passed, 0 failed. Covers automatic continuation, stop/resume, blockers and limits, plus document identity, tab closure/selection, independent terminal drafts and output, and conversation isolation.
+- QML model suite: 23 passed, 0 failed. Covers automatic continuation, stop/resume, blockers and limits, plus document identity, tab closure/selection, independent terminal drafts and output, conversation isolation, and report snapshots that retain a finished turn’s progress while the next turn runs.
 - Pro smoke: 58 screens, 0 QML problems. Lite smoke: 11 screens, 0 QML problems.
 - Native captures cover planning, continuing and blocked in dark mode, and complete with collapsed and expanded evidence in light mode. The plan shares the existing half-width right pane; conversation content and the composer remain visible. All four tasks fit on single rows when collapsed.
 - Inspected the multi-document strip and open-tabs menu in dark mode, plus Terminal 2 and the file viewer in light mode. Fixed initial overflow positioning so the selected tab is visible.
+- Toolbar/report revision: refreshed all captures. Verified the partial progress ring and compact report in dark mode, the full success ring and completed report in light mode, and the empty planning ring and blocked report states. Every report task remains a single row at the captured size.
 - Native click automation could not attach to the preview window (`cgWindowNotFound`). Button interactions were not verified by desktop automation; model transitions and the real QML timer were tested directly. No production daemon, package installation or external tracker was tested.
 
 ## Ownership contract for future implementation

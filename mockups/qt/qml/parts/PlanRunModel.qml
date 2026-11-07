@@ -27,6 +27,8 @@ QtObject {
         onTriggered: run.advance()
     }
     property var events: []
+    // A finished turn keeps its own snapshot while the toolbar follows live progress.
+    property var lastReport: null
     readonly property bool active: status === "planning" || status === "running" || status === "continuing"
     readonly property var tasks: [
         { title: "Fix the validation failure", owner: "Coding agent", criterion: "Issue #241 reproduction passes after the patch.", source: "GitHub #241", evidence: "Commit 9f31c2a · 3 files changed" },
@@ -37,10 +39,17 @@ QtObject {
     function record(actor, title, detail) {
         events = events.concat([{ actor: actor, title: title, detail: detail }])
     }
+    function statusLabel(state) {
+        return ({ ready: "Not created", planning: "Planning", running: "Working", continuing: "Continuing",
+            blocked: "Blocked", paused: "Stopped by you", limit: "Limit reached", complete: "Complete" })[state]
+    }
+    function finishReport() {
+        if (planCreated) lastReport = { completed: completed, status: status }
+    }
     function load(state) {
         autoplay = false
         status = "ready"; completed = 0; followUps = 0; followUpLimit = 3; events = []
-        contextRead = false; planCreated = false; resumeState = "running"
+        contextRead = false; planCreated = false; resumeState = "running"; lastReport = null
         if (state === "ready") return
         record("You", "Request received", prompt)
         record("Agent", "Multi-step work detected", "Inspect repo memory and relevant open issues, then create a plan for this conversation.")
@@ -65,6 +74,7 @@ QtObject {
             for (let i = 1; i < 4; ++i) record("Agent", "Task " + (i + 1) + " verified", tasks[i].evidence)
             record("Daemon", "Plan complete", "All four acceptance criteria have evidence. No further follow-up is scheduled.")
         }
+        if (state !== "running") finishReport()
     }
     function submitPrompt() {
         if (status !== "ready") return
@@ -92,6 +102,7 @@ QtObject {
         status = "continuing"
         record("Agent", "Turn ended early", completed + "/4 tasks verified. The remaining tasks are still open.")
         record("Daemon", "Continuation queued", "Resume @agent/" + conversationId + " at task " + (completed + 1) + " against Plan v1. Do not repeat completed work.")
+        finishReport()
     }
     function advance() {
         if (!active) return
@@ -104,6 +115,7 @@ QtObject {
             if (followUps >= followUpLimit) {
                 status = "limit"; autoplay = false
                 record("Daemon", "Follow-up limit reached", "Work remains. Review the cause before extending the limit.")
+                finishReport()
                 return
             }
             ++followUps; status = "running"
@@ -117,6 +129,7 @@ QtObject {
         } else if (completed === 4) {
             status = "complete"; autoplay = false
             record("Daemon", "Plan complete", "4/4 acceptance criteria verified. No automatic follow-up remains.")
+            finishReport()
         }
     }
     function stop() {
@@ -124,6 +137,7 @@ QtObject {
         resumeState = status === "planning" ? "planning" : "running"
         status = "paused"; autoplay = false
         record("You", "Run stopped", "Queued continuation cancelled. Completed tasks and evidence are preserved.")
+        finishReport()
     }
     function resume() {
         if (status !== "paused") return

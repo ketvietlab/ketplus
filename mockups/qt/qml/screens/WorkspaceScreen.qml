@@ -95,6 +95,7 @@ Item {
                 Layout.fillWidth: true
                 window: screen.window
                 conversation: screen.conversation
+                planRun: screen.planRun
                 status: screen.planStatus(screen.conversation.number, screen.conversation.status)
                 detailsOpen: screen.detailsOpen
                 onToggleDetails: tab => screen.openContent(tab)
@@ -123,7 +124,6 @@ Item {
                         sourceComponent: ConversationPlanTranscript {
                             window: screen.window
                             run: screen.planRun
-                            onOpenPlan: screen.openPlan("")
                         }
                     }
                     Transcript {

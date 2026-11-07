@@ -63,6 +63,37 @@ TestCase {
         run.resume(); run.advance()
         compare(run.completed, 2)
     }
+    function test_report_preserves_finished_turn_while_next_turn_progresses() {
+        run.start(); run.advance()
+        const firstReport = run.lastReport
+        compare(firstReport.completed, 1)
+        compare(firstReport.status, "continuing")
+        run.advance(); run.advance()
+        compare(run.completed, 2)
+        compare(run.lastReport, firstReport)
+        compare(firstReport.completed, 1)
+        run.advance(); run.advance()
+        compare(run.lastReport.completed, 4)
+        compare(run.lastReport.status, "complete")
+        compare(firstReport.completed, 1)
+    }
+    function test_report_requires_a_plan_and_records_interrupted_work() {
+        run.submitPrompt(); run.stop()
+        compare(run.lastReport, null)
+        run.load("blocked")
+        compare(run.lastReport.status, "blocked")
+        compare(run.lastReport.completed, 1)
+        run.retryBlocker()
+        compare(run.lastReport.completed, 1)
+        run.load("running"); run.stop()
+        compare(run.lastReport.status, "paused")
+        run.resume()
+        compare(run.lastReport.status, "paused")
+        run.load("limit")
+        compare(run.lastReport.status, "limit")
+        run.load("ready")
+        compare(run.lastReport, null)
+    }
     function test_blocker_cannot_be_marked_done_by_retry() {
         run.load("blocked")
         run.advance(); run.resume(); run.retryBlocker()

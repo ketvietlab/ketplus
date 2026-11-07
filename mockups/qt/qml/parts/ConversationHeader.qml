@@ -12,6 +12,7 @@ Rectangle {
     required property var window
     required property var conversation
     property bool detailsOpen: false
+    property var planRun: null
     property int status: conversation.status
 
     // The agent that reviews each finished turn and replies here, by conversation number.
@@ -212,10 +213,9 @@ Rectangle {
             checked: header.detailsOpen
             onClicked: header.toggleDetails("atlas")
         }
-        KetIconButton {
+        PlanProgressButton {
             visible: !!header.conversation.hasPlan
-            iconName: "check-all"
-            text: "Conversation plan"
+            run: header.planRun
             onClicked: header.toggleDetails("plan")
         }
         KetIconButton {
