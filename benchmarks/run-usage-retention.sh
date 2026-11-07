@@ -23,6 +23,7 @@ for run in 1 2 3; do
         toolAndReasoningRetentionUsesTurnGuards:fileChange-eligible \
         supersededStartsKeepGuardsAndIncompleteSnapshots:eligible \
         argumentRetentionUpgradesTextMarkersWithTurnGuards:eligible-fresh \
-        argumentRetentionUpgradesTextMarkersWithTurnGuards:eligible-previous
+        argumentRetentionUpgradesTextMarkersWithTurnGuards:eligible-previous \
+        structuredRetentionUsesTurnGuards
     "$build_dir/ketplus_daemon_detail_compactor_tests" argumentSanitizerHeavyInput
 done

@@ -918,6 +918,11 @@ void AgentWorkspaceViewTest::retainedToolTextNoticeRemainsVisible_data() {
     QTest::addColumn<QString>("type");
     QTest::addColumn<QString>("server");
     QTest::addColumn<bool>("arguments");
+    QTest::newRow("structured") << QString("mcpToolCall") << QString("structured") << false;
+    QTest::newRow("structured-browser")
+        << QString("mcpToolCall") << QString("ketplus_browser") << false;
+    QTest::newRow("structured-arguments")
+        << QString("dynamicToolCall") << QString("synthetic") << true;
     QTest::newRow("mcp") << QString("mcpToolCall") << QString("synthetic") << false;
     QTest::newRow("browser") << QString("mcpToolCall") << QString("ketplus_browser") << false;
     QTest::newRow("dynamic") << QString("dynamicToolCall") << QString("synthetic") << false;
@@ -935,7 +940,13 @@ void AgentWorkspaceViewTest::retainedToolTextNoticeRemainsVisible() {
     QJsonObject marker{{"policy", "tool-result-text-v1"}, {"original_bytes", 9000}};
     if (arguments)
         marker.insert("arguments", QJsonObject{{"policy", "tool-arguments-v1"}});
-    const QString notice = arguments ? "Text and arguments trimmed" : "Text trimmed";
+    const bool structured = QByteArray(QTest::currentDataTag()).startsWith("structured");
+    if (structured)
+        marker.insert("structured_result", QJsonObject{{"policy", "tool-structured-result-v1"}});
+    const QString notice =
+        structured  ? (arguments ? "Result and arguments trimmed" : "Result details trimmed")
+        : arguments ? "Text and arguments trimmed"
+                    : "Text trimmed";
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());
     view.resize(900, 700);

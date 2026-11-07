@@ -290,9 +290,16 @@ QString itemSummary(const QJsonObject& item) {
 QString retainedTextSuffix(const QJsonObject& item) {
     const auto info = item.value(QStringLiteral("compacted")).toObject();
     const bool text = info.value(QStringLiteral("policy")) == QStringLiteral("tool-result-text-v1");
+    const bool structured =
+        info.value(QStringLiteral("structured_result"))
+            .toObject()
+            .value(QStringLiteral("policy")) == QStringLiteral("tool-structured-result-v1");
     const bool arguments =
         info.value(QStringLiteral("arguments")).toObject().value(QStringLiteral("policy")) ==
         QStringLiteral("tool-arguments-v1");
+    if (structured)
+        return arguments ? QStringLiteral(" · Result and arguments trimmed")
+                         : QStringLiteral(" · Result details trimmed");
     if (arguments)
         return text ? QStringLiteral(" · Text and arguments trimmed")
                     : QStringLiteral(" · Arguments trimmed");

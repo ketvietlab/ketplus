@@ -145,7 +145,10 @@ a visible `Diff trimmed` label; partial patches never occupy the full `diff` fie
 [ADR 0039](decisions/0039-tool-text-and-reasoning-retention.md) and
 [ADR 0040](decisions/0040-file-diff-retention.md). Large completed tool arguments use explicit
 UTF-8 excerpts rather than partial argument objects; known text markers can be
-upgraded once ([ADR 0043](decisions/0043-tool-argument-retention.md)). The full-detail period is configurable locally (7/30/90 days or Forever),
+upgraded once ([ADR 0043](decisions/0043-tool-argument-retention.md)). Successful plain
+structured tool results also support sanitized display-only excerpts sharing the
+text allowance; error/resource-bearing results stay intact
+([ADR 0044](decisions/0044-structured-result-retention.md)). The full-detail period is configurable locally (7/30/90 days or Forever),
 with a separate automatic-detail-retention switch and revisioned saves; see
 [ADR 0042](decisions/0042-detail-retention-policy.md). Size pressure, archive/media
 policies, complete Storage UI and remaining compaction are still tracked in #128.

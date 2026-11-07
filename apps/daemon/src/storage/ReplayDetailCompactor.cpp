@@ -180,8 +180,8 @@ static std::optional<QJsonObject> compactContent(const QJsonObject& original,
     return item;
 }
 
-std::optional<QJsonObject> compactCompletedReplayItem(const QJsonObject& original,
-                                                      const QDateTime& cutoff) {
+static std::optional<QJsonObject> compactArguments(const QJsonObject& original,
+                                                   const QDateTime& cutoff) {
     const auto content = compactContent(original, cutoff);
     auto item = content.value_or(original);
     const auto type = item.value("type").toString();
@@ -234,6 +234,82 @@ std::optional<QJsonObject> compactCompletedReplayItem(const QJsonObject& origina
                 QStringLiteral("[Arguments trimmed · original size %1 bytes · history retention]\n")
                         .arg(bytes.size()) +
                     QString::fromUtf8(excerpt));
+    item.insert("compacted", info);
+    return item;
+}
+namespace {
+// Structured results may embed resource ownership. Keep those records until the
+// separate media-retention policy can preserve their references and previews.
+bool plainData(const QJsonValue& value, int depth = 0) {
+    if (depth > 64)
+        return false;
+    if (value.isObject()) {
+        const auto object = value.toObject();
+        for (auto it = object.begin(); it != object.end(); ++it) {
+            const auto key = it.key().toLower();
+            if (key == "type" || key == "uri" || key == "url" || key == "path" ||
+                key == "mimetype" || key == "blob" || key == "data" || key.contains("media") ||
+                key.contains("resource") || key.contains("ref"))
+                return false;
+            if (!plainData(it.value(), depth + 1))
+                return false;
+        }
+    } else if (value.isArray()) {
+        for (const auto& part : value.toArray())
+            if (!plainData(part, depth + 1))
+                return false;
+    } else if (value.isString()) {
+        const auto text = value.toString();
+        if (text.contains("data:", Qt::CaseInsensitive) ||
+            text.contains("file:", Qt::CaseInsensitive))
+            return false;
+    }
+    return true;
+}
+} // namespace
+
+std::optional<QJsonObject> compactCompletedReplayItem(const QJsonObject& original,
+                                                      const QDateTime& cutoff) {
+    const auto earlier = compactArguments(original, cutoff);
+    auto item = earlier.value_or(original);
+    auto info = item.value("compacted").toObject();
+    const auto policy = info.value("policy").toString();
+    auto result = item.value("result").toObject();
+    const auto structured = result.value("structuredContent");
+    if (!cutoff.isValid() || cutoff > QDateTime::currentDateTimeUtc() ||
+        (item.value("type") != "mcpToolCall" && item.value("type") != "dynamicToolCall") ||
+        item.value("status") != "completed" ||
+        (!item.value("error").isUndefined() && !item.value("error").isNull()) ||
+        (result.contains("isError") && result.value("isError") != QJsonValue(false)) ||
+        result.contains("structuredContent_excerpt") || info.contains("structured_result") ||
+        (item.contains("compacted") && policy != "tool-result-text-v1" &&
+         policy != "tool-arguments-v1") ||
+        (!structured.isObject() && !structured.isArray()) || !plainData(structured))
+        return earlier;
+    const auto serialize = [](const QJsonValue& value) {
+        return value.isArray() ? QJsonDocument(value.toArray()).toJson(QJsonDocument::Compact)
+                               : QJsonDocument(value.toObject()).toJson(QJsonDocument::Compact);
+    };
+    const auto bytes = serialize(structured);
+    if (bytes.size() <= 5 * 1024)
+        return earlier;
+    // Share the result preview allowance with retained text; arguments have their
+    // own separate input allowance. Existing notices conservatively consume space.
+    const qint64 visibleText = textBytes(result.value("content").toArray()) +
+                               textBytes(item.value("contentItems").toArray());
+    const auto budget = std::max<qint64>(0, 4 * 1024 - visibleText);
+    const auto excerpt = prefix(serialize(TranscriptSanitizer::json(structured)), budget);
+    auto details = marker(cutoff, "tool-structured-result-v1", bytes.size(), excerpt.size());
+    details.insert("excerpt_only", true);
+    details.insert("redacted_before_excerpt", true);
+    if (info.isEmpty())
+        info = details;
+    info.insert("structured_result", details);
+    result.remove("structuredContent");
+    result.insert("structuredContent_excerpt",
+                  QStringLiteral("[Structured result trimmed · history retention]\n") +
+                      QString::fromUtf8(excerpt));
+    item.insert("result", result);
     item.insert("compacted", info);
     return item;
 }

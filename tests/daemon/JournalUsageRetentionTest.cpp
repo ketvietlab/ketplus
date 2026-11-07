@@ -483,6 +483,64 @@ class JournalUsageRetentionTest final : public QObject {
         QCOMPARE(withoutUsage(allReplay(journal)), before);
     }
 
+    void structuredRetentionUsesTurnGuards_data() {
+        QTest::addColumn<QString>("previous");
+        QTest::addColumn<QString>("guard");
+        for (const QString previous :
+             {QString(), QString("tool-result-text-v1"), QString("tool-arguments-v1")})
+            for (const QString guard : {QString("eligible"), QString("unacknowledged"),
+                                        QString("running"), QString("recent"), QString("question"),
+                                        QString("approval"), QString("generation")})
+                QTest::newRow(qPrintable(guard + ("-" + previous))) << previous << guard;
+    }
+    void structuredRetentionUsesTurnGuards() {
+        QFETCH(QString, previous);
+        QFETCH(QString, guard);
+        QTemporaryDir directory;
+        const QString path = directory.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(seed(journal, path, guard != "unacknowledged"));
+        Database database(path);
+        QJsonObject fields{{"type", "mcpToolCall"},
+                           {"status", "completed"},
+                           {"arguments", QJsonObject{{"query", "keep"}}},
+                           {"result", QJsonObject{{"structuredContent",
+                                                   QJsonObject{{"rows", QString(16000, 'x')}}}}}};
+        if (!previous.isEmpty())
+            fields.insert("compacted", QJsonObject{{"policy", previous}});
+        QVERIFY(database.patchItems(fields));
+        if (guard == "running")
+            QVERIFY(database.exec("UPDATE sessions SET state='running'"));
+        if (guard == "recent")
+            QVERIFY(database.exec(
+                "UPDATE replay_events SET sent_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')"));
+        if (guard == "question" || guard == "approval")
+            QVERIFY(database.exec(QString("UPDATE replay_events SET event_type='%1.requested' "
+                                          "WHERE event_type='item.started'")
+                                      .arg(guard)));
+        if (guard == "generation")
+            QVERIFY(database.exec("UPDATE sessions SET generation=2"));
+        const auto before = allReplay(journal);
+        QElapsedTimer timer;
+        timer.start();
+        QCOMPARE(sweep(journal), guard == "eligible" ? 28 : 0);
+        if (guard == "eligible")
+            qInfo() << "Structured retention eight passes; previous=" << previous << timer.elapsed()
+                    << "ms";
+        if (guard != "eligible") {
+            QCOMPARE(allReplay(journal), before);
+            return;
+        }
+        QCOMPARE(
+            database.scalar("SELECT count(*) FROM replay_events WHERE "
+                            "json_type(payload,'$.item.result.structuredContent_excerpt')='text'"),
+            4);
+        QCOMPARE(
+            database.scalar("SELECT count(*) FROM replay_events WHERE turn_sequence>4 AND "
+                            "json_type(payload,'$.item.result.structuredContent_excerpt')='text'"),
+            0);
+        QCOMPARE(sweep(journal), 0);
+    }
     void argumentRetentionUpgradesTextMarkersWithTurnGuards_data() {
         QTest::addColumn<bool>("previous");
         QTest::addColumn<QString>("guard");
