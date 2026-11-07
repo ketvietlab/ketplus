@@ -1,4 +1,5 @@
 #include "app/MainWindow.h"
+#include "KetChrome.h"
 
 #include "editor/DiskChangePrompt.h"
 #include "editor/DocumentFormatControls.h"
@@ -16,6 +17,7 @@
 #include "ui/Theme.h"
 #include "workspace/ExplorerPanel.h"
 
+#include "ui/MessageDialog.h"
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
@@ -29,7 +31,6 @@
 #include <QList>
 #include <QMenu>
 #include <QMenuBar>
-#include "ui/MessageDialog.h"
 #include <QSettings>
 #include <QShortcut>
 #include <QSignalBlocker>
@@ -47,6 +48,34 @@
 
 namespace ketplus {
 namespace {
+// Keep QMainWindow/QStatusBar message and visibility APIs while the kit owns
+// the painted bar. Temporary messages update the left item; permanent actions
+// never disappear behind the QStatusBar message overlay.
+class StatusBarHost final : public QStatusBar {
+  public:
+    explicit StatusBarHost(QWidget* parent)
+        : QStatusBar(parent), content(new ket::StatusBar(this)) {
+        setSizeGripEnabled(false);
+        setObjectName(QStringLiteral("kitStatusBarHost"));
+        setStyleSheet(
+            QStringLiteral("QStatusBar#kitStatusBarHost { min-height:0; border:0; padding:0; }"));
+        auto* message = content->addItem(tr("Ready"));
+        connect(this, &QStatusBar::messageChanged, message, [message](const QString& text) {
+            message->setText(text.isEmpty() ? tr("Ready") : text);
+        });
+    }
+    QSize sizeHint() const override { return content->sizeHint(); }
+    QSize minimumSizeHint() const override { return content->minimumSizeHint(); }
+    ket::StatusBar* content;
+
+  protected:
+    void paintEvent(QPaintEvent*) override {}
+    void resizeEvent(QResizeEvent* event) override {
+        QStatusBar::resizeEvent(event);
+        content->setGeometry(rect());
+    }
+};
+
 QString normalizedPath(const QString& path) {
     if (path.isEmpty()) {
         return {};
@@ -63,8 +92,8 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
       workspaceSplit_(new QSplitter(Qt::Horizontal, mainSplit_)),
       editorSplit_(new QSplitter(Qt::Horizontal, workspaceSplit_)), tabs_(new QTabWidget),
       findBar_(new FindReplaceBar),
-      cursorPositionLabel_(new QLabel(QStringLiteral("Ln 1, Col 1"), this)),
-      documentStateLabel_(new QLabel(QStringLiteral("New"), this)),
+      cursorPositionLabel_(new ket::StatusItem(QStringLiteral("Ln 1, Col 1"), {}, this)),
+      documentStateLabel_(new ket::StatusItem(QStringLiteral("New"), {}, this)),
       gitButton_(new QToolButton(this)) {
     theme_.setInterfaceFontSizePixels(appearanceSettings_.interfaceFontSizePixels);
     setWindowTitle(QStringLiteral("KétPlus"));
@@ -101,7 +130,9 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     git_ = new GitService(this);
     createActions();
     createChrome();
-    statusBar()->setSizeGripEnabled(false);
+    auto* statusHost = new StatusBarHost(this);
+    setStatusBar(statusHost);
+    auto* status = statusHost->content;
     statusBar()->showMessage(QStringLiteral("Ready"));
     gitButton_->setProperty("kvRole", QStringLiteral("statusGit"));
     gitButton_->setPopupMode(QToolButton::InstantPopup);
@@ -125,19 +156,17 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     gitButton_->setToolTip(QStringLiteral("Git repository"));
     gitButton_->setAccessibleName(QStringLiteral("Git repository"));
     gitButton_->hide();
-    statusBar()->addPermanentWidget(gitButton_);
-    for (QLabel* label : {documentStateLabel_, cursorPositionLabel_}) {
-        label->setProperty("kvRole", QStringLiteral("status"));
-        statusBar()->addPermanentWidget(label);
-    }
-    const auto addStatusButton = [this](QMenu* menu, const QString& accessibleName) {
+    status->addWidget(gitButton_);
+    for (auto* item : {documentStateLabel_, cursorPositionLabel_})
+        status->addWidget(item);
+    const auto addStatusButton = [this, status](QMenu* menu, const QString& accessibleName) {
         auto* button = new QToolButton(this);
         button->setProperty("kvRole", QStringLiteral("statusButton"));
         button->setPopupMode(QToolButton::InstantPopup);
         button->setMenu(menu);
         button->setToolTip(accessibleName);
         button->setAccessibleName(accessibleName);
-        statusBar()->addPermanentWidget(button);
+        status->addWidget(button);
         return button;
     };
     format_->addStatusButtons(addStatusButton);
@@ -288,7 +317,7 @@ void MainWindow::openFolder(const QString& folderPath) {
     const QFileInfo folder(folderPath);
     if (!folder.isDir()) {
         message_dialog::critical(this, QStringLiteral("Unable to open folder"),
-                              QStringLiteral("The selected path is not a folder."));
+                                 QStringLiteral("The selected path is not a folder."));
         return;
     }
 

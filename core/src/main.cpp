@@ -1,6 +1,9 @@
 #include "app/MainWindow.h"
 #include "ui/KetFonts.h"
 #include "ui/Theme.h"
+#include <QSettings>
+#include <QTemporaryDir>
+#include <memory>
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -26,6 +29,18 @@ int main(int argc, char* argv[]) {
     QCoreApplication::setApplicationVersion(QStringLiteral(KETPLUS_CM_VERSION));
     QCoreApplication::setOrganizationName(QStringLiteral("Ketsuite"));
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/brand/ketplus-app-icon.png")));
+
+    // Capture/benchmark runs use a clean temporary preference store and cannot
+    // overwrite the installed application's session, theme or window state.
+    std::unique_ptr<QTemporaryDir> captureSettings;
+    if (qEnvironmentVariableIsSet("KETPLUS_CAPTURE") ||
+        qEnvironmentVariableIsSet("KETPLUS_BENCHMARK_STARTUP")) {
+        captureSettings = std::make_unique<QTemporaryDir>();
+        if (!captureSettings->isValid())
+            return 1;
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, captureSettings->path());
+    }
 
     ketplus::registerKetFonts();
     ketplus::ThemeManager theme(app);

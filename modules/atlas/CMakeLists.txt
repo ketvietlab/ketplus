@@ -23,20 +23,3 @@ target_include_directories(ketplus_atlas PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
 )
 ketplus_enable_warnings(ketplus_atlas)
-
-set_source_files_properties(src/atlas/icons/external-link.svg
-    PROPERTIES QT_RESOURCE_ALIAS "icons/external-link.svg"
-)
-foreach(icon plus rotate-ccw x)
-    set_source_files_properties("${PROJECT_SOURCE_DIR}/assets/icons/lucide/${icon}.svg"
-        PROPERTIES QT_RESOURCE_ALIAS "icons/${icon}.svg"
-    )
-endforeach()
-qt_add_resources(ketplus_atlas "ketplus_atlas_resources"
-    PREFIX "/atlas"
-    FILES
-        src/atlas/icons/external-link.svg
-        "${PROJECT_SOURCE_DIR}/assets/icons/lucide/plus.svg"
-        "${PROJECT_SOURCE_DIR}/assets/icons/lucide/x.svg"
-        "${PROJECT_SOURCE_DIR}/assets/icons/lucide/rotate-ccw.svg"
-)

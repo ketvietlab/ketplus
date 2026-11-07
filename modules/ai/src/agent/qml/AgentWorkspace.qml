@@ -86,7 +86,7 @@ Item {
     }
     readonly property bool permissionElevated: currentPermission.elevated === true
     readonly property color permissionAccent: permissionElevated
-                                              ? (root.t.warning || "#d9a441")
+                                              ? (root.t.warning)
                                               : root.t.textSecondary
     function permissionIconSource(profileId) {
         if (profileId === "read-only")
@@ -97,7 +97,7 @@ Item {
     }
     function permissionLabelColor(profile) {
         if (profile && profile.elevated === true)
-            return root.t.warning || "#d9a441"
+            return root.t.warning
         return root.t.textMain
     }
     property bool modelsLoading: false
@@ -1182,7 +1182,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: root.t.pageBackground || "#1b1f24"
+        color: root.t.pageBackground
     }
 
     Basic.SplitView {
@@ -1222,7 +1222,7 @@ Item {
             objectName: "chatPane"
             SplitView.fillWidth: true
             SplitView.minimumWidth: 260
-            color: root.t.pageBackground || "#1b1f24"
+            color: root.t.pageBackground
 
             ColumnLayout {
                 anchors.top: parent.top

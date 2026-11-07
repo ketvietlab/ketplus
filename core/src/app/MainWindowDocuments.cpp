@@ -1,3 +1,4 @@
+#include "KetChrome.h"
 #include "app/MainWindow.h"
 
 #include "editor/DiskChangePrompt.h"

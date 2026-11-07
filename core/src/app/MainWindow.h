@@ -33,6 +33,10 @@ class QTimer;
 class QToolButton;
 class QVariant;
 
+namespace ket {
+class StatusItem;
+}
+
 namespace ketplus {
 
 class DocumentFormatControls;
@@ -210,8 +214,8 @@ class MainWindow final : public QMainWindow {
     QSplitter* editorSplit_{nullptr};
     QTabWidget* tabs_{nullptr};
     FindReplaceBar* findBar_{nullptr};
-    QLabel* cursorPositionLabel_{nullptr};
-    QLabel* documentStateLabel_{nullptr};
+    ket::StatusItem* cursorPositionLabel_{nullptr};
+    ket::StatusItem* documentStateLabel_{nullptr};
     DocumentFormatControls* format_{nullptr};
     SearchPanel* searchPanel_{nullptr};
     QAction* searchPanelAction_{nullptr};

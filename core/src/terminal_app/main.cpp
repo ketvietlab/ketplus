@@ -53,7 +53,6 @@ int main(int argc, char* argv[]) {
     // The kit draws the window: the KÉT fonts (its font-sans and the profile's monospace), the
     // KétPlus metrics, the saved appearance, then the style. Inter stays as font-sans' fallback.
     ketplus::registerKetFonts();
-    QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/InterVariable.ttf"));
     ket::Profile::setCurrent(ket::Profile::ketPlus());
     ketplus::restoreTerminalAppearance();
     ket::Style::install(app);

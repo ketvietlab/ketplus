@@ -28,14 +28,14 @@ Check a row only when its implementation is committed and pushed with a PR.
 Record technical verification separately from the later review/acceptance phase.
 
 - [x] Reconcile the current repository layout and merged baseline.
-- [ ] Foundation: fonts/defaults #141; profile, tokens and zoom #142.
+- [x] Foundation: fonts/defaults #141; profile, tokens and zoom #142 (implementation; native acceptance deferred).
 - [ ] Foundation: symbol icons #143.
 - [ ] Terminal: remaining implementation gaps #144–#147.
-- [ ] Lite: shell #149, using the merged #148 mock.
+- [x] Lite: shell #149, using the merged #148 mock (including kit status bar).
 - [x] Lite: Explorer/Search #150 and editor #151 (implementation; acceptance deferred).
 - [x] Lite: Git/diff #152 and Markdown/preview #153 (implementation; acceptance deferred).
 - [x] Lite: embedded terminal #154, settings #155, common controls #156 (implementation; acceptance deferred).
-- [ ] Pro: kit/QML foundation #157.
+- [x] Pro: kit/QML foundation #157 (offline module/shared clock; idle-CPU acceptance deferred).
 - [x] Pro: sidebar #158 UI composition (metadata/acceptance limits below).
 - [x] Pro: header/composer #159 existing-runtime UI; #120 reviewer dependency remains separate.
 - [x] Pro: messages #160 (implementation; native acceptance deferred).
@@ -164,3 +164,16 @@ Remaining #163 contract gaps: a transcript Atlas-result receipt tied to its
 producing conversation, and held-message release UI (#130), have no supplied
 runtime projection/action in this baseline. Existing Atlas catalog/detail actions
 are real; the stack does not fabricate validated-result or release-success rows.
+
+Foundation cleanup layer on #229 removes Inter fetch/resources and unused product
+Lucide SVGs/provider/motion wrapper, centralizes remaining semantic colors, and
+finishes Lite's kit status bar. Legacy icon names remain lookup adapters only.
+The global QWidget font rule is gone; application/QSS updates precede kit
+observers so theme/zoom cannot reset recipe title fonts. A regression exercises
+light/dark, preview/cancel and 14→21→14 zoom. Capture/benchmark mode uses temporary
+preferences. Focused builds/tests and the corrected Lite capture are recorded in
+the PR; native acceptance and installed-bundle checks remain deferred.
+
+Foundation cleanup verification: Lite 16/16 test targets and five focused Pro
+targets pass (Atlas workspace, desktop zoom, font contract, symbols, Settings
+integration). The native WebView test stays opt-in/skipped.

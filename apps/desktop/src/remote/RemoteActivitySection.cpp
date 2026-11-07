@@ -106,7 +106,7 @@ QString device(const QJsonObject& entry, const QHash<QString, QString>& names) {
 
 namespace {
 
-// Lucide ISC path data for the kinds of request.
+// Semantic symbol names for the kinds of request.
 constexpr auto sendIcon = "send";
 constexpr auto stopIcon = "square";
 constexpr auto branchIcon = "git-branch";
@@ -140,7 +140,7 @@ QLabel* label(const QString& text, const char* role, QWidget* parent = nullptr) 
     return value;
 }
 
-// Draws a Lucide glyph in the label's style-sheet colour.
+// Draws a Két Symbol in the label's style-sheet colour.
 class GlyphLabel final : public QLabel {
   public:
     GlyphLabel(QByteArray body, QWidget* parent = nullptr)

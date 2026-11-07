@@ -32,9 +32,9 @@ Popup {
                                                / Number(contextUsage.limitTokens))) : 0
     readonly property color panelColor: look.background
     readonly property color trackColor: contextLook.track
-    readonly property color primaryColor: workspace.t.accent || "#5da2ff"
-    readonly property color mutedColor: workspace.t.textMuted || "#9aa1aa"
-    readonly property color mainColor: workspace.t.textMain || "#f1f3f5"
+    readonly property color primaryColor: workspace.t.accent
+    readonly property color mutedColor: workspace.t.textMuted
+    readonly property color mainColor: workspace.t.textMain
 
     width: Metrics.px(430, workspace.t)
     padding: 0

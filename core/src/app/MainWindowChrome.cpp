@@ -68,11 +68,13 @@ void MainWindow::createChrome() {
     appearance();
     row->addWidget(rail);
     chromePages_ = new QStackedWidget(shell);
+    chromePages_->setObjectName(QStringLiteral("liteWorkspacePages"));
     chromePages_->addWidget(mainSplit_);
     auto* welcome = new ket::EmptyState(
         ket::Icons::codeForLucide(u"folder"), tr("Welcome to KétPlus"),
         tr("Open a folder to start working, or create a new file."), chromePages_);
     welcome->setObjectName(QStringLiteral("liteWelcome"));
+    welcome->setAttribute(Qt::WA_StyledBackground);
     connect(welcome->setAction(tr("Open Folder")), &QAbstractButton::clicked, this,
             &MainWindow::chooseFolder);
     chromePages_->addWidget(welcome);

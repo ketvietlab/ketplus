@@ -55,7 +55,8 @@ Status text or an icon must accompany colour.
 
 ## Fonts and zoom
 
-Both editions use bundled KÉT Sans, then Inter and the platform UI fallback.
+Both editions use bundled KÉT Sans, then the platform UI fallback. The Inter
+download, Qt resources and product license entry have been removed.
 New editor/diff settings use KÉT Sans Mono Medium at 14 px; saved font and size
 choices are preserved. Empty terminal family settings use the profile's mono
 family. The product and mock share the profile overrides for code, conversation
@@ -185,3 +186,27 @@ counts. Builder chat is a docked right pane: hiding it expands the existing Atla
 WebView; showing it reserves space rather than covering the map. The compact chat
 keeps its conversation and draft, and Back navigates to that conversation. The
 Atlas WebView's flows, map and preview implementation remain unchanged.
+
+Legacy symbol strings in transcript delegates are migration names resolved by
+`KetTheme.iconForLucide`; they do not refer to bundled SVG files. Product Lucide
+assets and the unused image provider have been removed. `ChromeMetrics.js` is a
+compatibility forwarding call to `KetTheme.px`, not a second metric table. The
+unused local motion-clock wrapper has been removed; running indicators hold the
+kit's gated shared clock directly.
+
+Lite's status bar composes `ket::StatusBar` and `StatusItem` inside a small
+QStatusBar host. Existing message timeouts, format menus and visibility APIs stay
+intact while the kit paints/scales the bar. Settings list delegates are transparent
+beneath their kit NavItems, preventing duplicate labels in unselected rows.
+
+Application font and palette defaults are set on QApplication, not a global
+QWidget stylesheet rule: such a rule overrides fonts/colors set by kit labels.
+ThemeManager scales the remaining compatibility QSS text once before expanding
+tokens; InterfaceUiFont no longer rewrites or rescales that stylesheet. Product
+composition titles use `{{px:N}}` inside TypeScale::apply for explicit design
+sizes that still follow the shared zoom.
+
+ThemeManager completes application-font/QSS propagation before notifying kit
+zoom observers, and resolves theme QSS before component theme observers. It
+avoids repolishing an unchanged stylesheet. This preserves EmptyState recipe
+font size/weight through preview/cancel, light/dark changes and numeric zoom.
