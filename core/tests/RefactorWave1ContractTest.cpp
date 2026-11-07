@@ -106,6 +106,7 @@ class RefactorWave1ContractTest final : public QObject {
     void currentNativePaletteBaseline();
     void themeFollowsKetAppearance();
     void themeInstallsTheKetStyle();
+    void interfaceSizeUpdatesKitZoom();
     void parserReadsObservedWorktreeFlags();
 };
 
@@ -272,12 +273,33 @@ void RefactorWave1ContractTest::themeFollowsKetAppearance() {
     QVERIFY(theme.palette().dark);
 }
 
+void RefactorWave1ContractTest::interfaceSizeUpdatesKitZoom() {
+    ketplus::ThemeManager theme(*qApp);
+    auto& appearance = ket::Appearance::instance();
+    QSignalSpy changes(&appearance, &ket::Appearance::zoomChanged);
+    // Include Lite's numeric sizes as well as the Pro shell's named steps. Repeat to
+    // catch compounded scaling, and preserve the current zoom across theme changes.
+    for (int pixels : {12, 16, 18, 14, 12, 16, 14}) {
+        theme.setInterfaceFontSizePixels(pixels);
+        QCOMPARE(appearance.zoom(), qreal(pixels) / 14);
+        QCOMPARE(changes.size(), 1);
+        QCOMPARE(QToolTip::font().pixelSize(), qRound(13.0 * pixels / 14));
+        theme.setMode(ketplus::ThemeManager::Mode::Dark);
+        QCOMPARE(appearance.zoom(), qreal(pixels) / 14);
+        theme.setMode(ketplus::ThemeManager::Mode::Light);
+        QCOMPARE(appearance.zoom(), qreal(pixels) / 14);
+        theme.setInterfaceFontSizePixels(pixels);
+        QCOMPARE(changes.size(), 1);
+        changes.clear();
+    }
+}
+
 void RefactorWave1ContractTest::themeInstallsTheKetStyle() {
     // KétPlus metrics (code at 14 px) and the kit's style: it keeps the application and
     // tooltip palettes on ket::Appearance, and draws menus, tooltips and tab bars, which the
     // stylesheet leaves to it.
     ketplus::ThemeManager theme(*qApp);
-    QCOMPARE(ket::Profile::current().codePixels, ket::Profile::ketPlus().codePixels);
+    QCOMPARE(ket::Profile::current().codePixels, 14.0);
     for (const auto mode :
          {ketplus::ThemeManager::Mode::Dark, ketplus::ThemeManager::Mode::Light}) {
         theme.setMode(mode);

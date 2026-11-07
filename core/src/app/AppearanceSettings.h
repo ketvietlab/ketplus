@@ -28,8 +28,8 @@ struct AppearanceSettings final {
 
     int interfaceFontSizePixels{14};
     EditorSettings editor{EditorSettings::defaults()};
-    TextTypographySettings terminal{13, 20};
-    // The terminal's font family; empty uses the platform's fixed-pitch font.
+    TextTypographySettings terminal{14, 22};
+    // Empty uses the KétPlus profile's bundled monospace family.
     QString terminalFontFamily;
     TextTypographySettings preview{14, 22};
 

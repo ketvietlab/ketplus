@@ -270,6 +270,9 @@ done
 if [ -z "$config" ] || ! grep -q '"stateLabelColor":"#f2f4f7"' "$config"; then
   exit 12
 fi
+if grep -q '{{' "$config"; then
+  exit 15
+fi
 if ! grep -q '"primaryColor":"#202c4b"' "$config"; then
   exit 14
 fi

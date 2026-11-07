@@ -1,4 +1,5 @@
 #include "ui/Theme.h"
+#include "ui/InterfaceZoom.h"
 
 #include "KetAppearance.h"
 #include "KetProfile.h"
@@ -107,6 +108,12 @@ ThemeManager::Mode modeFromName(const QString& name) {
 }
 
 } // namespace
+
+QString themeTokenColor(const QString& name, bool dark) {
+    return tokenColor(name, dark ? ket::Theme::Dark : ket::Theme::Light);
+}
+
+ThemePalette currentThemePalette() { return paletteFor(ket::Appearance::instance().theme()); }
 
 // The tooltip size of the kit's recipe. The base QWidget rule would otherwise set tooltip
 // labels to the interface size: a stylesheet font wins over QToolTip::setFont.
@@ -865,9 +872,20 @@ ThemeManager::ThemeManager(QApplication& application, QObject* parent)
     // The kit's style draws menus, tooltips, tab bars, select popups, progress bars and
     // sliders from Két DS recipes, and keeps the application palette on ket::Appearance;
     // the stylesheet below styles the rest. The profile goes first: the style reads it.
-    ket::Profile::setCurrent(ket::Profile::ketPlus());
+    auto profile = ket::Profile::ketPlus();
+    profile.codePixels = 14;
+    profile.conversationNumberPixels = 14;
+    profile.usageRingSize = 15;
+    profile.usageRingStroke = 2;
+    profile.conversationTitleWeight = 500;
+    profile.conversationSelectedTitleWeight = 500;
+    profile.conversationMetaWeight = 500;
+    profile.navItemActiveWeight = 500;
+    ket::Profile::setCurrent(profile);
+    ket::Appearance::instance().setZoom(qreal(interfaceFontSizePixels_) /
+                                        InterfaceZoomMetrics::designedAtPixels);
     ket::Style::install(application_);
-    loadInterFont();
+    loadInterfaceFont();
 
     QSettings settings;
     mode_ = modeFromName(
@@ -922,6 +940,9 @@ void ThemeManager::setInterfaceFontSizePixels(const int fontSizePixels) {
         return;
     }
     interfaceFontSizePixels_ = normalized;
+    // The Pro shell snaps its named sizes; Lite retains its existing numeric setting.
+    // Both publish the same ratio to kit Widgets and KetTheme.zoom before repainting.
+    ket::Appearance::instance().setZoom(qreal(normalized) / InterfaceZoomMetrics::designedAtPixels);
     QFont font = application_.font();
     font.setPixelSize(interfaceFontSizePixels_);
     setApplicationFont(font);
@@ -951,7 +972,7 @@ ThemeManager::Mode ThemeManager::effectiveMode() const noexcept {
     return previewMode_.value_or(mode_);
 }
 
-void ThemeManager::loadInterFont() {
+void ThemeManager::loadInterfaceFont() {
     uiFontFamily_ = QStringLiteral("Inter");
     const int fontId =
         QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/InterVariable.ttf"));
@@ -959,6 +980,9 @@ void ThemeManager::loadInterFont() {
     if (!families.isEmpty()) {
         uiFontFamily_ = families.constFirst();
     }
+
+    if (QFontDatabase::hasFamily(QStringLiteral("KET Sans")))
+        uiFontFamily_ = QStringLiteral("KET Sans");
 
     QFont font(uiFontFamily_);
     font.setPixelSize(interfaceFontSizePixels_);

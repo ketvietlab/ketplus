@@ -124,6 +124,7 @@ class DesktopZoomTest final : public QObject {
             bar->applyPalette(theme.palette(), pixels);
             agent->applyTheme(theme.palette(), pixels);
             QTest::qWait(80);
+            QCOMPARE(ket::Appearance::instance().zoom(), InterfaceZoomMetrics::factor(pixels));
             const auto px = [pixels](int n) { return InterfaceZoomMetrics::geometry(n, pixels); };
             QCOMPARE(inherited.font().pixelSize(), pixels);
             QCOMPARE(nav->height(), px(32));

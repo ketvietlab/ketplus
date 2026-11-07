@@ -5,10 +5,8 @@ class QString;
 
 namespace ketplus {
 
-// Private chrome stack: embedded KET Sans, SF Pro (named, or macOS system UI
-// face), bundled Inter, then the platform UI font. CM still embeds Inter; this overlay
-// rewrites the live application font and QWidget family after ThemeManager
-// applies.
+// KÉT Sans, bundled Inter, then the platform UI font. Both editions use the
+// same primary face; this adapter resolves the family for existing Pro consumers.
 struct InterfaceUiFont final {
     [[nodiscard]] static QString resolvedFamily();
     [[nodiscard]] static QString styleSheetFamilyList();
