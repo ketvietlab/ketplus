@@ -101,7 +101,13 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
     Source/build cleanup remains separately tracked.
   - [x] Reproduce cloud-cache prefix cleanup and separate bounded ACK reclamation
     from exact synchronous invalidation (ADR 0053); initial focused 2/2 targets.
-  - [ ] Cloud-cache final full Pro/review/merge and safe cleanup.
+  - [x] Cloud cache #237: final head `4e654c1a`, full Pro 96/96 and independent
+    exact-head PASS; merged `0f6f39e05a007d889064760ffc64b6f1673851ac`.
+    Generated build removed; linked-source cleanup remains separately tracked.
+  - [ ] Bounded explicit attachment cancellation #240: final head `4e1ff5dd`,
+    affected Release/headless 11/11 (68.55 s); independent review/merge pending.
+  - [ ] Explicit session deletion: atomic-failure regressions reproduced and fixed;
+    affected matrix/review/merge pending; work bounds remain open.
   - [ ] Audit cloud-event cleanup and explicit deletion paths.
   - [ ] Close H1.1 only when those remaining work bounds have evidence.
 - [ ] H1.2 Verify migration/reopen safety: old schema, repeat open, partial failure,
@@ -212,7 +218,7 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | Item | State | Evidence / remaining work | Next action / owner |
 | --- | --- | --- | --- |
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
-| H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion-work #235 merged with exact-head gates; cloud cache recovery revision focused 4/4; P2 awaiting final review | Finish cloud-cache gates; audit explicit cancellation/deletion / #2739 |
+| H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230, deletion work #235 and cloud #237 merged; cancellation #240 and deletion atomicity gates pending | Finish exact-head gates; bound explicit session deletion and tombstone enumeration / #2739 |
 | H1.2–H1.7 | Not started | No claim that #128 backend acceptance is complete | Follow H1.1, prioritize a confirmed safety finding / #2739 |
 | H2–H3 | Not started | Open daemon/provider review issues mapped | Execute after storage, or independent audit while waiting review / #2739 |
 | H4.1–H4.3 | Not started | Existing remote fixes are not a full #85 closure | Audit local transport/privacy with fixtures / #2739 |
@@ -467,3 +473,20 @@ failure followed by restart/cache reclamation without resending an accepted even
 Scoped progress and receipts roll back together on ignored writes or failed commits.
 Upload-progress handling now has its own owning file; the sync file is below 500
 lines. Full Pro and independent exact-head review are still required.
+
+### H1.3 session deletion failure recovery (prioritized safety finding)
+
+Four synthetic Qt regressions fail on the prior source: failed COMMIT leaves a
+transaction open, ignored tombstone/work inserts report deletion success, and an
+ignored raw-history DELETE commits incomplete cleanup. The transaction now has
+one rollback guard; mandatory inserts require one affected row and each existing
+history-table DELETE must leave no row for that identity/generation.
+Focused provider deletion passes 10/10, including retry/reopen and unrelated-session
+preservation. The 12-target Release/headless matrix passes (75.49 s), with one
+live lifecycle case skipped deliberately. Independent review and merge remain pending. See [ADR 0055](../../docs/decisions/0055-session-delete-transaction-recovery.md).
+This does not finish bulk-delete work bounds or previously committed-state recovery.
+
+Next safety audit: provider cleanup reads `sessions()` to protect shared threads,
+but that method also returns an empty list after a read error. Reproduce this with
+fake providers before changing the ownership check; it is a candidate, not yet a
+confirmed live data-loss event. No user data or provider quota is involved.
