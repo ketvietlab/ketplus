@@ -7,8 +7,11 @@ namespace ketplus::daemon {
 std::optional<JournalSizePolicy> LocalJournal::sizePolicy() const {
     setError({});
     QSqlQuery query(database_);
-    if (!query.exec("SELECT revision,policy,typeof(revision) FROM journal_size_settings WHERE "
-                    "singleton=1")) {
+    // Inspect the stored byte length before Qt/JSON can materialize legacy or corrupt data.
+    // A rejected row must remain present, so it cannot be mistaken for default revision zero.
+    if (!query.exec("SELECT revision,CASE WHEN typeof(policy) IN ('text','blob') "
+                    "AND octet_length(policy)<=4096 THEN policy ELSE NULL END,typeof(revision) "
+                    "FROM journal_size_settings WHERE singleton=1")) {
         setError(query.lastError().text());
         return std::nullopt;
     }
