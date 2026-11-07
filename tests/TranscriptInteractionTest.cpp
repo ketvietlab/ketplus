@@ -913,3 +913,52 @@ void AgentWorkspaceViewTest::retainedCommandNoticeRemainsVisible() {
     QTRY_VERIFY(noticeIsRendered());
     QVERIFY(rendered->width() > 0 && rendered->height() > 0);
 }
+
+void AgentWorkspaceViewTest::retainedToolTextNoticeRemainsVisible_data() {
+    QTest::addColumn<QString>("type");
+    QTest::addColumn<QString>("server");
+    QTest::newRow("mcp") << QString("mcpToolCall") << QString("synthetic");
+    QTest::newRow("browser") << QString("mcpToolCall") << QString("ketplus_browser");
+    QTest::newRow("dynamic") << QString("dynamicToolCall") << QString("synthetic");
+}
+
+void AgentWorkspaceViewTest::retainedToolTextNoticeRemainsVisible() {
+    QFETCH(QString, type);
+    QFETCH(QString, server);
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 700);
+    view.show();
+    auto tool = ketplus::agent_message::activityMessage(
+        QJsonObject{
+            {"id", "retained-tool"},
+            {"type", type},
+            {"server", server},
+            {"tool", "browser_open"},
+            {"status", "completed"},
+            {"arguments", QJsonObject{}},
+            {"result",
+             QJsonObject{{"content",
+                          QJsonArray{QJsonObject{
+                              {"type", "text"},
+                              {"text", "[Tool result trimmed · history retention]\npreview"}}}}}},
+            {"compacted",
+             QJsonObject{{"policy", "tool-result-text-v1"}, {"original_bytes", 9000}}}},
+        true);
+    tool.insert("messageKey", "retained-tool");
+    view.resetMessages(
+        {QVariantMap{{"messageKey", "user"}, {"kind", "user"}, {"body", "History"}}, tool},
+        "retained-tool");
+    QTRY_COMPARE(view.messageModel()->count(), 2);
+    auto* root = view.quickView()->rootObject();
+    QVERIFY(root);
+    QQuickItem* title = nullptr;
+    QTRY_VERIFY((title = findVisualItem(root, "transcriptActivityTitle")) && title->isVisible());
+    QVERIFY(title->property("text").toString().contains("Text trimmed"));
+    QVERIFY(title->width() > 0 && title->height() > 0);
+    auto* row = findVisualItem(root, "transcriptActivityRow");
+    QVERIFY(row);
+    auto* accessible = QAccessible::queryAccessibleInterface(row);
+    QVERIFY(accessible);
+    QVERIFY(accessible->text(QAccessible::Name).contains("Text trimmed"));
+}

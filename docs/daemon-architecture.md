@@ -132,7 +132,11 @@ still awaiting acknowledgment, any turn containing questions or approvals, and
 sessions outside an explicitly idle state. The same pass trims eligible inline completed
 command output to its first 4 KiB and last 16 KiB on UTF-8 boundaries, with an explicit
 notice and `item.compacted` metadata. Messages, images and `item.started` rows are
-unchanged. See [ADR 0038](decisions/0038-command-output-retention.md). The 30-day value is currently fixed;
+unchanged. Known tool result text is also capped to a shared 4 KiB prefix, preserving
+media/resource blocks, arguments, errors and structured result fields. Reasoning raw
+content is removed only when a nonempty summary remains. See
+[ADR 0038](decisions/0038-command-output-retention.md) and
+[ADR 0039](decisions/0039-tool-text-and-reasoning-retention.md). The 30-day value is currently fixed;
 configurable retention and the remaining detail compaction are still tracked in #128.
 
 Each minute's idle pass examines at most 128 replay rows, resumes its scan on the

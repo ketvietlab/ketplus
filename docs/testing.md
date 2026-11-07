@@ -396,3 +396,15 @@ real replay byte limit rather than assuming one page contains the entire journal
 `benchmarks/run-usage-retention.sh` also reports a warm command-retention pass on
 230,000-byte outputs after a forced rollback, with fixture creation excluded.
 This is a bounded-batch measurement, not a latency guarantee for arbitrary journals.
+
+`ketplus_daemon_detail_compactor_tests` exercises the command/tool/reasoning
+payload policy: aggregate UTF-8 text limits, media/resource/error/argument and
+structured-field preservation, nonterminal/unknown/small shapes, reasoning summary
+preservation, missing summaries and idempotence. The journal retention suite also
+checks MCP/dynamic/reasoning against actual old/new, active and unacknowledged turns.
+
+The retention benchmark script also prints elapsed time for eight bounded replay
+passes on synthetic eligible MCP, dynamic-tool and reasoning fixtures (fixture setup
+excluded). Qt transcript tests check the visible and accessible `Text trimmed` title
+on ordinary MCP, browser and dynamic-tool rows. This does not replace native VoiceOver
+or installed-device verification.

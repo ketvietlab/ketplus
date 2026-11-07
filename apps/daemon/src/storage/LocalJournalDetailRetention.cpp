@@ -1,4 +1,5 @@
 #include "storage/LocalJournal.h"
+#include "storage/ReplayDetailCompactor.h"
 
 #include <QJsonDocument>
 #include <QSqlError>
@@ -116,8 +117,8 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
     candidate.prepare(
         QStringLiteral("SELECT r.payload FROM replay_events AS r WHERE ") + eligible +
         QStringLiteral("AND length(CAST(r.payload AS BLOB)) <= 1048576 "
-                       "AND json_extract(r.payload,'$.item.type') = 'commandExecution' "
-                       "AND json_extract(r.payload,'$.item.status') IN ('completed','failed') "
+                       "AND json_extract(r.payload,'$.item.type') IN "
+                       "('commandExecution','mcpToolCall','dynamicToolCall','reasoning') "
                        "AND json_type(r.payload,'$.item.compacted') IS NULL"));
     QSqlQuery update(database_);
     update.prepare(QStringLiteral("UPDATE replay_events SET payload = ? WHERE rowid = ?"));
@@ -144,36 +145,11 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
                 break; // leave this candidate for the next batch
             parsedBytes += bytes.size();
             auto payload = QJsonDocument::fromJson(bytes).object();
-            auto item = payload.value(QStringLiteral("item")).toObject();
-            const QByteArray output =
-                item.value(QStringLiteral("aggregatedOutput")).toString().toUtf8();
-            if (output.size() <= 21 * 1024)
+            const auto item = compactCompletedReplayItem(
+                payload.value(QStringLiteral("item")).toObject(), olderThan);
+            if (!item)
                 continue;
-            // Never split a UTF-8 codepoint at either retained boundary.
-            qsizetype head = 4 * 1024;
-            while (head > 0 && (static_cast<unsigned char>(output.at(head)) & 0xc0) == 0x80)
-                --head;
-            qsizetype tail = output.size() - 16 * 1024;
-            while (tail < output.size() &&
-                   (static_cast<unsigned char>(output.at(tail)) & 0xc0) == 0x80)
-                ++tail;
-            const QString notice =
-                QStringLiteral("[Output trimmed · original size %1 bytes · history retention]\n")
-                    .arg(output.size());
-            item.insert(QStringLiteral("aggregatedOutput"),
-                        notice + QString::fromUtf8(output.first(head)) +
-                            QStringLiteral("\n[Middle output removed]\n") +
-                            QString::fromUtf8(output.sliced(tail)));
-            item.insert(
-                QStringLiteral("compacted"),
-                QJsonObject{
-                    {QStringLiteral("at"),
-                     QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
-                    {QStringLiteral("cutoff"), olderThan.toUTC().toString(Qt::ISODateWithMs)},
-                    {QStringLiteral("original_bytes"), output.size()},
-                    {QStringLiteral("retained_bytes"), head + output.size() - tail},
-                    {QStringLiteral("policy"), QStringLiteral("command-output-v1")}});
-            payload.insert(QStringLiteral("item"), item);
+            payload.insert(QStringLiteral("item"), *item);
             update.bindValue(
                 0, QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Compact)));
             update.bindValue(1, row.rowid);
