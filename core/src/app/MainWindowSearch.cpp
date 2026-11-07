@@ -7,11 +7,11 @@
 #include "workspace/ExplorerPanel.h"
 #include "workspace/SearchPanel.h"
 
+#include "ui/MessageDialog.h"
 #include <QAction>
 #include <QDir>
 #include <QFileInfo>
 #include <QHash>
-#include <QMessageBox>
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QStatusBar>
@@ -301,7 +301,7 @@ void MainWindow::replaceInWorkspace() {
     }
 
     const QString replacement = panel->replacement();
-    const auto answer = QMessageBox::question(
+    const auto answer = message_dialog::question(
         this, QStringLiteral("Replace in files"),
         QStringLiteral("Replace %L1 matches in %L2 files with “%3”?\n\n"
                        "Open files change in the editor and can be undone. Other files are "
@@ -355,9 +355,9 @@ void MainWindow::replaceInWorkspace() {
                                  .arg(changedFiles),
                              4000);
     if (!failures.isEmpty()) {
-        QMessageBox::warning(this, QStringLiteral("Some files were not changed"),
-                             QStringLiteral("These files could not be updated:\n%1")
-                                 .arg(failures.join(QLatin1Char('\n'))));
+        message_dialog::warning(this, QStringLiteral("Some files were not changed"),
+                                QStringLiteral("These files could not be updated:\n%1")
+                                    .arg(failures.join(QLatin1Char('\n'))));
     }
     git_->scheduleRefresh();
     startWorkspaceSearch();

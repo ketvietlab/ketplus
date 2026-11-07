@@ -5,10 +5,10 @@
 
 #include <ScintillaMessages.h>
 
+#include <QAbstractButton>
 #include <QDir>
 #include <QFile>
 #include <QProcess>
-#include <QPushButton>
 #include <QStringEncoder>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -60,7 +60,8 @@ void SearchViewTest::buildsSearchExpressions() {
     QVERIFY(!expression.match(QStringLiteral("a Cat")).hasMatch());
     QVERIFY(!expression.match(QStringLiteral("scatter")).hasMatch());
 
-    expression = ketplus::buildSearchExpression({.query = QStringLiteral("("), .regex = true}, &error);
+    expression =
+        ketplus::buildSearchExpression({.query = QStringLiteral("("), .regex = true}, &error);
     QVERIFY(!error.isEmpty());
     ketplus::buildSearchExpression({}, &error);
     QVERIFY(!error.isEmpty());
@@ -68,7 +69,8 @@ void SearchViewTest::buildsSearchExpressions() {
 
 void SearchViewTest::searchesTextLineByLine() {
     QString error;
-    const auto expression = ketplus::buildSearchExpression({.query = QStringLiteral("one")}, &error);
+    const auto expression =
+        ketplus::buildSearchExpression({.query = QStringLiteral("one")}, &error);
     const auto matches =
         ketplus::searchText(QStringLiteral("one two\r\nthree One\n"), expression, 100);
 
@@ -123,7 +125,8 @@ void SearchViewTest::filtersIncludePatterns() {
     QVERIFY(!ketplus::matchesIncludePatterns(QStringLiteral("src/a.h"), QStringLiteral("*.cpp")));
     QVERIFY(ketplus::matchesIncludePatterns(QStringLiteral("src/x/y.h"), QStringLiteral("src/**")));
     QVERIFY(ketplus::matchesIncludePatterns(QStringLiteral("src/x/y.h"), QStringLiteral("src/")));
-    QVERIFY(!ketplus::matchesIncludePatterns(QStringLiteral("lib/src.h"), QStringLiteral("src/**")));
+    QVERIFY(
+        !ketplus::matchesIncludePatterns(QStringLiteral("lib/src.h"), QStringLiteral("src/**")));
     QVERIFY(ketplus::matchesIncludePatterns(QStringLiteral("docs/a.md"),
                                             QStringLiteral("*.cpp, *.md")));
 }
@@ -206,11 +209,11 @@ void SearchViewTest::skipsAssetsByFileSuffix() {
     const ketplus::WorkspaceSearchOptions options{.query = QStringLiteral("alpha")};
     const auto expression = ketplus::buildSearchExpression(options, &error);
     QStringList found;
-    const auto summary = ketplus::searchWorkspace(
-        root.absolutePath(), options, expression, {}, nullptr,
-        [&found](const ketplus::WorkspaceSearchFileResult& file) {
-            found.append(file.relativePath);
-        });
+    const auto summary =
+        ketplus::searchWorkspace(root.absolutePath(), options, expression, {}, nullptr,
+                                 [&found](const ketplus::WorkspaceSearchFileResult& file) {
+                                     found.append(file.relativePath);
+                                 });
     QCOMPARE(found, QStringList{QStringLiteral("page.html")});
     QCOMPARE(summary.fileCount, 1);
 
@@ -240,9 +243,11 @@ void SearchViewTest::searchesWorkspaceWithOpenBuffers() {
          QStringLiteral("bye")}};
 
     QStringList found;
-    const auto summary = ketplus::searchWorkspace(
-        root.absolutePath(), options, expression, buffers, nullptr,
-        [&found](const ketplus::WorkspaceSearchFileResult& file) { found.append(file.relativePath); });
+    const auto summary =
+        ketplus::searchWorkspace(root.absolutePath(), options, expression, buffers, nullptr,
+                                 [&found](const ketplus::WorkspaceSearchFileResult& file) {
+                                     found.append(file.relativePath);
+                                 });
     QCOMPARE(found, QStringList{QStringLiteral("a.txt")});
     QCOMPARE(summary.fileCount, 1);
     QCOMPARE(summary.matchCount, 1);
@@ -261,15 +266,18 @@ void SearchViewTest::searchesWorkspaceWithOpenBuffers() {
 
 void SearchViewTest::collectsSearchPanelResults() {
     ketplus::SearchPanel panel;
-    panel.addFileResult({QStringLiteral("/tmp/a.txt"), QStringLiteral("a.txt"),
-                         {{1, 0, 5, QStringLiteral("hello")}, {3, 2, 5, QStringLiteral("  hello")}}});
     panel.addFileResult(
-        {QStringLiteral("/tmp/b.txt"), QStringLiteral("b.txt"), {{2, 0, 5, QStringLiteral("hello")}}});
+        {QStringLiteral("/tmp/a.txt"),
+         QStringLiteral("a.txt"),
+         {{1, 0, 5, QStringLiteral("hello")}, {3, 2, 5, QStringLiteral("  hello")}}});
+    panel.addFileResult({QStringLiteral("/tmp/b.txt"),
+                         QStringLiteral("b.txt"),
+                         {{2, 0, 5, QStringLiteral("hello")}}});
 
     QCOMPARE(panel.resultPaths(),
              QStringList({QStringLiteral("/tmp/a.txt"), QStringLiteral("/tmp/b.txt")}));
     QCOMPARE(panel.resultMatchCount(), 3);
-    auto* replaceAll = panel.findChild<QPushButton*>(QStringLiteral("searchReplaceAllButton"));
+    auto* replaceAll = panel.findChild<QAbstractButton*>(QStringLiteral("searchReplaceAllButton"));
     QVERIFY(replaceAll != nullptr);
     QVERIFY(replaceAll->isEnabled());
     // Past the match limit the list is not every match, so Replace All waits for a narrower search.
@@ -346,8 +354,7 @@ void SearchViewTest::listsSyntaxChoices() {
     QVERIFY(choices.size() >= 28);
     for (std::size_t index = 1; index < choices.size(); ++index) {
         QVERIFY(QLatin1String(choices[index - 1].displayName)
-                    .compare(QLatin1String(choices[index].displayName), Qt::CaseInsensitive) <=
-                0);
+                    .compare(QLatin1String(choices[index].displayName), Qt::CaseInsensitive) <= 0);
     }
     QVERIFY(ketplus::syntaxDefinitionByName(QStringLiteral("rust")) != nullptr);
     QVERIFY(ketplus::syntaxDefinitionByName(QStringLiteral("nope")) == nullptr);

@@ -54,6 +54,8 @@ function(ketplus_cm_add_font_resources target)
 endfunction()
 
 add_library(ketplus_ui STATIC
+    src/ui/MessageDialog.cpp
+    src/ui/MessageDialog.h
     src/ui/FindReplaceBar.cpp
     src/ui/FindReplaceBar.h
     src/ui/Theme.cpp
@@ -110,7 +112,7 @@ add_library(ketplus_workspace STATIC
     src/workspace/WorkspaceSearch.cpp
     src/workspace/WorkspaceSearch.h
 )
-target_link_libraries(ketplus_workspace PUBLIC Qt6::Widgets ketplus_core)
+target_link_libraries(ketplus_workspace PUBLIC Qt6::Widgets ketplus_core ketplus_ui)
 target_include_directories(ketplus_workspace PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
 )

@@ -1,5 +1,7 @@
 # Project status
 
+The UI stack now composes shared pane headers, find controls, Quick Open, Markdown mode switching, Settings controls and core confirmation dialogs from ket-qt. Quick Open retains fuzzy ranking and keyboard paging; Settings retains drafts, live theme preview/cancel and extension pages. Core synchronous document commands use a kit Dialog adapter that returns the existing explicit choices; dismissing it returns Cancel. The broader UI migration and later native acceptance remain open.
+
 This file distinguishes current code from target architecture. Update it when a
 milestone changes state.
 

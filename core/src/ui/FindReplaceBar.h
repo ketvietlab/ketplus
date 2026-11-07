@@ -2,7 +2,7 @@
 
 #include <QWidget>
 
-class QCheckBox;
+class QAbstractButton;
 class QLabel;
 class QLineEdit;
 class QWidget;
@@ -43,10 +43,10 @@ class FindReplaceBar final : public QWidget {
 
     QLineEdit* findEdit_{nullptr};
     QLineEdit* replaceEdit_{nullptr};
-    QCheckBox* matchCaseCheck_{nullptr};
-    QCheckBox* wholeWordCheck_{nullptr};
-    QCheckBox* regexCheck_{nullptr};
-    QCheckBox* inSelectionCheck_{nullptr};
+    QAbstractButton* matchCaseCheck_{nullptr};
+    QAbstractButton* wholeWordCheck_{nullptr};
+    QAbstractButton* regexCheck_{nullptr};
+    QAbstractButton* inSelectionCheck_{nullptr};
     QLabel* resultLabel_{nullptr};
     QWidget* replaceRow_{nullptr};
 };

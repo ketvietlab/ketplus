@@ -5,7 +5,9 @@
 #include <functional>
 
 class QWidget;
-class QToolButton;
+namespace ket {
+class SegmentedControl;
+}
 class QPlainTextEdit;
 class QTimer;
 namespace ketplus {
@@ -39,7 +41,7 @@ class MarkdownModeController final : public QObject {
     MarkdownPreviewPane* preview_{nullptr};
     QPlainTextEdit* sourceView_{nullptr};
     QTimer* refreshTimer_;
-    QList<QToolButton*> buttons_;
+    ket::SegmentedControl* segments_;
     Source source_;
     ThemePalette palette_;
     QString path_;

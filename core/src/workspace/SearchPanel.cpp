@@ -1,13 +1,18 @@
 #include "workspace/SearchPanel.h"
 
+#include "KetAppearance.h"
+#include "KetButton.h"
+#include "KetChrome.h"
+#include "KetIcons.h"
+#include "KetTextField.h"
+#include "KetToggle.h"
 #include <QAbstractTextDocumentLayout>
 #include <QApplication>
-#include <QCheckBox>
 #include <QHBoxLayout>
-#include <QPainter>
 #include <QLabel>
 #include <QLineEdit>
-#include <QPushButton>
+#include <QPainter>
+
 #include <QSignalBlocker>
 #include <QStyledItemDelegate>
 #include <QTextDocument>
@@ -81,27 +86,22 @@ QString colored(const QString& text, const QString& color, const bool bold = fal
 } // namespace
 
 SearchPanel::SearchPanel(QWidget* parent)
-    : QWidget(parent), queryEdit_(new QLineEdit(this)), replaceEdit_(new QLineEdit(this)),
-      includeEdit_(new QLineEdit(this)),
-      matchCaseCheck_(new QCheckBox(QStringLiteral("Match case"), this)),
-      wholeWordCheck_(new QCheckBox(QStringLiteral("Whole word"), this)),
-      regexCheck_(new QCheckBox(QStringLiteral("Regex"), this)),
-      searchButton_(new QPushButton(QStringLiteral("Search"), this)),
-      replaceAllButton_(new QPushButton(QStringLiteral("Replace All"), this)),
+    : QWidget(parent), queryEdit_(new ket::TextField(this)), replaceEdit_(new ket::TextField(this)),
+      includeEdit_(new ket::TextField(this)),
+      matchCaseCheck_(new ket::Checkbox(QStringLiteral("Match case"), this)),
+      wholeWordCheck_(new ket::Checkbox(QStringLiteral("Whole word"), this)),
+      regexCheck_(new ket::Checkbox(QStringLiteral("Regex"), this)),
+      searchButton_(new ket::Button(QStringLiteral("Search"), ket::ButtonVariant::Secondary, this)),
+      replaceAllButton_(
+          new ket::Button(QStringLiteral("Replace All"), ket::ButtonVariant::Secondary, this)),
       statusLabel_(new QLabel(this)), results_(new QTreeWidget(this)) {
     setProperty("kvRole", QStringLiteral("explorer"));
     setAttribute(Qt::WA_StyledBackground, true);
 
-    auto* title = new QLabel(QStringLiteral("Search"), this);
-    title->setProperty("kvRole", QStringLiteral("fieldLabel"));
-    auto* closeButton = new QToolButton(this);
-    closeButton->setText(QString::fromUtf8("×"));
-    closeButton->setAutoRaise(true);
-    closeButton->setToolTip(QStringLiteral("Hide search"));
-    closeButton->setAccessibleName(QStringLiteral("Hide search"));
-    auto* header = new QHBoxLayout;
-    header->addWidget(title, 1);
-    header->addWidget(closeButton);
+    auto* header = new ket::PaneHeader(tr("Search"), ket::Icons::codeForLucide(u"search"), this);
+    auto* closeButton = new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"x")),
+                                            tr("Hide search"), header);
+    header->actions()->addWidget(closeButton);
 
     queryEdit_->setPlaceholderText(QStringLiteral("Search in files"));
     queryEdit_->setClearButtonEnabled(true);
@@ -138,7 +138,7 @@ SearchPanel::SearchPanel(QWidget* parent)
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(10, 8, 10, 8);
     layout->setSpacing(6);
-    layout->addLayout(header);
+    layout->addWidget(header);
     layout->addWidget(queryEdit_);
     layout->addWidget(replaceEdit_);
     layout->addWidget(includeEdit_);
@@ -149,15 +149,15 @@ SearchPanel::SearchPanel(QWidget* parent)
 
     connect(queryEdit_, &QLineEdit::returnPressed, this, &SearchPanel::searchRequested);
     connect(includeEdit_, &QLineEdit::returnPressed, this, &SearchPanel::searchRequested);
-    connect(searchButton_, &QPushButton::clicked, this, [this] {
+    connect(searchButton_, &QAbstractButton::clicked, this, [this] {
         if (searching_) {
             emit cancelRequested();
         } else {
             emit searchRequested();
         }
     });
-    connect(replaceAllButton_, &QPushButton::clicked, this, &SearchPanel::replaceAllRequested);
-    connect(closeButton, &QToolButton::clicked, this, &SearchPanel::hideRequested);
+    connect(replaceAllButton_, &QAbstractButton::clicked, this, &SearchPanel::replaceAllRequested);
+    connect(closeButton, &QAbstractButton::clicked, this, &SearchPanel::hideRequested);
     connect(results_, &QTreeWidget::itemActivated, this,
             [this](QTreeWidgetItem* item) { activateItem(item); });
     connect(results_, &QTreeWidget::itemClicked, this,
@@ -219,22 +219,20 @@ void SearchPanel::clearResults() {
 void SearchPanel::addFileResult(const WorkspaceSearchFileResult& result) {
     auto* fileItem = new QTreeWidgetItem(results_);
     const qsizetype separator = result.relativePath.lastIndexOf(QLatin1Char('/'));
-    const QString folder =
-        separator < 0 ? QString() : result.relativePath.left(separator + 1);
+    const QString folder = separator < 0 ? QString() : result.relativePath.left(separator + 1);
     const QString fileName = result.relativePath.mid(separator + 1);
-    fileItem->setText(0, QStringLiteral("%1  (%2)")
-                             .arg(result.relativePath)
-                             .arg(result.matches.size()));
-    fileItem->setData(0, markupRole,
-                      colored(folder, colors_.folder) +
-                          colored(fileName, colors_.fileName, true) +
-                          colored(QStringLiteral("  ·  %1").arg(result.matches.size()),
-                                  colors_.lineNumber));
+    fileItem->setText(
+        0, QStringLiteral("%1  (%2)").arg(result.relativePath).arg(result.matches.size()));
+    fileItem->setData(
+        0, markupRole,
+        colored(folder, colors_.folder) + colored(fileName, colors_.fileName, true) +
+            colored(QStringLiteral("  ·  %1").arg(result.matches.size()), colors_.lineNumber));
     fileItem->setToolTip(0, result.path);
     fileItem->setData(0, pathRole, result.path);
     for (const auto& match : result.matches) {
         auto* matchItem = new QTreeWidgetItem(fileItem);
-        matchItem->setText(0, QStringLiteral("%1: %2").arg(match.line).arg(match.preview.trimmed()));
+        matchItem->setText(0,
+                           QStringLiteral("%1: %2").arg(match.line).arg(match.preview.trimmed()));
         matchItem->setData(0, markupRole, matchMarkup(match));
         matchItem->setToolTip(0, match.preview);
         matchItem->setData(0, pathRole, result.path);
@@ -273,8 +271,7 @@ QString SearchPanel::matchMarkup(const WorkspaceSearchMatch& match) const {
     while (indent < line.size() && line.at(indent).isSpace()) {
         ++indent;
     }
-    const qsizetype start =
-        qMax(indent, qMin(static_cast<qsizetype>(match.column), line.size()));
+    const qsizetype start = qMax(indent, qMin(static_cast<qsizetype>(match.column), line.size()));
     const qsizetype length =
         qMax<qsizetype>(0, qMin(static_cast<qsizetype>(match.length), line.size() - start));
 
@@ -292,8 +289,8 @@ void SearchPanel::activateItem(QTreeWidgetItem* item) {
     if (line <= 0) {
         return;
     }
-    emit matchActivated(item->data(0, pathRole).toString(), line,
-                        item->data(0, columnRole).toInt(), item->data(0, lengthRole).toInt());
+    emit matchActivated(item->data(0, pathRole).toString(), line, item->data(0, columnRole).toInt(),
+                        item->data(0, lengthRole).toInt());
 }
 
 } // namespace ketplus

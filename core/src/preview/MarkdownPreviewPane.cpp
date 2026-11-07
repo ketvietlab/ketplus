@@ -3,6 +3,9 @@
 #include "preview/MermaidDiagramDialog.h"
 #include "preview/MermaidRenderer.h"
 
+#include "KetButton.h"
+#include "KetChrome.h"
+#include "KetIcons.h"
 #include <QAbstractTextDocumentLayout>
 #include <QDesktopServices>
 #include <QDir>
@@ -28,7 +31,6 @@
 #include <QTextTableCell>
 #include <QTextTableFormat>
 #include <QTimer>
-#include <QToolButton>
 #include <QVBoxLayout>
 
 #include <utility>
@@ -203,22 +205,11 @@ MarkdownPreviewPane::MarkdownPreviewPane(QWidget* parent)
     setProperty("kvRole", QStringLiteral("markdownPreview"));
     setMinimumWidth(280);
 
-    auto* header = new QWidget(this);
+    auto* header = new ket::PaneHeader(tr("Preview"), ket::Icons::codeForLucide(u"eye"), this);
     header_ = header;
-    header->setProperty("kvRole", QStringLiteral("previewHeader"));
-    auto* headerLayout = new QHBoxLayout(header);
-    headerLayout->setContentsMargins(14, 0, 6, 0);
-    headerLayout->setSpacing(6);
-    auto* title = new QLabel(QStringLiteral("PREVIEW"), header);
-    title->setProperty("kvRole", QStringLiteral("previewHeading"));
-    auto* closeButton = new QToolButton(header);
-    closeButton->setText(QString::fromUtf8("×"));
-    closeButton->setToolTip(QStringLiteral("Close Markdown preview"));
-    closeButton->setAccessibleName(QStringLiteral("Close Markdown preview"));
-    closeButton->setProperty("kvRole", QStringLiteral("previewClose"));
-    headerLayout->addWidget(title);
-    headerLayout->addStretch(1);
-    headerLayout->addWidget(closeButton);
+    auto* closeButton = new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"x")),
+                                            tr("Close Markdown preview"), header);
+    header->actions()->addWidget(closeButton);
 
     notice_->setObjectName(QStringLiteral("markdownPreviewNotice"));
     notice_->setProperty("kvRole", QStringLiteral("previewNotice"));
@@ -243,7 +234,7 @@ MarkdownPreviewPane::MarkdownPreviewPane(QWidget* parent)
     renderTimer_->setSingleShot(true);
     renderTimer_->setInterval(previewDebounceMilliseconds);
     connect(renderTimer_, &QTimer::timeout, this, &MarkdownPreviewPane::renderNow);
-    connect(closeButton, &QToolButton::clicked, this, &MarkdownPreviewPane::closeRequested);
+    connect(closeButton, &QAbstractButton::clicked, this, &MarkdownPreviewPane::closeRequested);
     connect(mermaidRenderer_, &MermaidRenderer::diagramReady, this,
             [this] { renderTimer_->start(0); });
     connect(mermaidRenderer_, &MermaidRenderer::diagramFailed, this,

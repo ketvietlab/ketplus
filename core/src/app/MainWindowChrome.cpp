@@ -4,7 +4,9 @@
 #include "KetButton.h"
 #include "KetEmptyState.h"
 #include "KetIcons.h"
+#include "KetToast.h"
 #include "KetTokens.h"
+#include <QStatusBar>
 
 #include <QAction>
 #include <QHBoxLayout>
@@ -77,6 +79,10 @@ void MainWindow::createChrome() {
     chromePages_->setCurrentWidget(welcome);
     row->addWidget(chromePages_, 1);
     setCentralWidget(shell);
+    connect(statusBar(), &QStatusBar::messageChanged, this, [this](const QString& message) {
+        if (!message.isEmpty())
+            ket::Toast::showMessage(this, message);
+    });
 }
 
 void MainWindow::showEditorSurface() {

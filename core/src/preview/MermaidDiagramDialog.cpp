@@ -1,5 +1,7 @@
 #include "preview/MermaidDiagramDialog.h"
 
+#include "KetButton.h"
+#include "KetIcons.h"
 #include <QGraphicsPixmapItem>
 #include <QGraphicsScene>
 #include <QGraphicsSvgItem>
@@ -9,14 +11,13 @@
 #include <QLabel>
 #include <QNativeGestureEvent>
 #include <QPainter>
-#include <QPushButton>
 #include <QScrollBar>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWheelEvent>
 
-#include <cmath>
 #include <algorithm>
+#include <cmath>
 
 namespace ketplus {
 namespace {
@@ -118,15 +119,19 @@ MermaidDiagramDialog::MermaidDiagramDialog(const QString& svgPath, const ThemePa
 
     auto* hint = new QLabel(QStringLiteral("Pinch or scroll to zoom • Drag to pan"), this);
     hint->setProperty("kvRole", QStringLiteral("previewHint"));
-    auto* zoomOutButton = new QPushButton(QString::fromUtf8("−"), this);
+    auto* zoomOutButton = new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"minus")),
+                                              tr("Zoom out"), this);
     zoomOutButton->setObjectName(QStringLiteral("mermaidZoomOut"));
     zoomOutButton->setToolTip(QStringLiteral("Zoom out"));
-    auto* zoomInButton = new QPushButton(QStringLiteral("+"), this);
+    auto* zoomInButton = new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"plus")),
+                                             tr("Zoom in"), this);
     zoomInButton->setObjectName(QStringLiteral("mermaidZoomIn"));
     zoomInButton->setToolTip(QStringLiteral("Zoom in"));
-    auto* fitButton = new QPushButton(QStringLiteral("Fit"), this);
-    auto* actualSizeButton = new QPushButton(QStringLiteral("100%"), this);
-    auto* closeButton = new QPushButton(QStringLiteral("Close"), this);
+    auto* fitButton = new ket::Button(QStringLiteral("Fit"), ket::ButtonVariant::Secondary, this);
+    auto* actualSizeButton =
+        new ket::Button(QStringLiteral("100%"), ket::ButtonVariant::Secondary, this);
+    auto* closeButton =
+        new ket::Button(QStringLiteral("Close"), ket::ButtonVariant::Secondary, this);
     auto* view = new MermaidDiagramView(svgPath, palette, this);
 
     auto* toolbar = new QHBoxLayout;
@@ -146,11 +151,11 @@ MermaidDiagramDialog::MermaidDiagramDialog(const QString& svgPath, const ThemePa
     layout->addLayout(toolbar);
     layout->addWidget(view, 1);
 
-    connect(zoomOutButton, &QPushButton::clicked, view, &MermaidDiagramView::zoomOut);
-    connect(zoomInButton, &QPushButton::clicked, view, &MermaidDiagramView::zoomIn);
-    connect(fitButton, &QPushButton::clicked, view, &MermaidDiagramView::fitDiagram);
-    connect(actualSizeButton, &QPushButton::clicked, view, &MermaidDiagramView::actualSize);
-    connect(closeButton, &QPushButton::clicked, this, &QDialog::close);
+    connect(zoomOutButton, &QAbstractButton::clicked, view, &MermaidDiagramView::zoomOut);
+    connect(zoomInButton, &QAbstractButton::clicked, view, &MermaidDiagramView::zoomIn);
+    connect(fitButton, &QAbstractButton::clicked, view, &MermaidDiagramView::fitDiagram);
+    connect(actualSizeButton, &QAbstractButton::clicked, view, &MermaidDiagramView::actualSize);
+    connect(closeButton, &QAbstractButton::clicked, this, &QDialog::close);
     QTimer::singleShot(0, view, [view] { view->fitDiagram(); });
 }
 

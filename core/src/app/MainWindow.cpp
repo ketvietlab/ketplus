@@ -29,7 +29,7 @@
 #include <QList>
 #include <QMenu>
 #include <QMenuBar>
-#include <QMessageBox>
+#include "ui/MessageDialog.h"
 #include <QSettings>
 #include <QShortcut>
 #include <QSignalBlocker>
@@ -263,7 +263,7 @@ void MainWindow::openFile(const QString& filePath) {
     auto* editor = createEditor();
     const auto result = editor->loadFile(absolutePath);
     if (!result.ok) {
-        QMessageBox::critical(this, QStringLiteral("Unable to open file"), result.error);
+        message_dialog::critical(this, QStringLiteral("Unable to open file"), result.error);
         editor->deleteLater();
         return;
     }
@@ -287,7 +287,7 @@ void MainWindow::openFile(const QString& filePath) {
 void MainWindow::openFolder(const QString& folderPath) {
     const QFileInfo folder(folderPath);
     if (!folder.isDir()) {
-        QMessageBox::critical(this, QStringLiteral("Unable to open folder"),
+        message_dialog::critical(this, QStringLiteral("Unable to open folder"),
                               QStringLiteral("The selected path is not a folder."));
         return;
     }

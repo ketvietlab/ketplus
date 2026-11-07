@@ -8,7 +8,7 @@
 
 class QLabel;
 class QTableView;
-class QToolButton;
+class QAbstractButton;
 
 namespace ketplus {
 
@@ -51,8 +51,8 @@ class GitDiffView final : public QWidget {
     QLabel* pathLabel_{nullptr};
     QLabel* scopeLabel_{nullptr};
     QLabel* statsLabel_{nullptr};
-    QToolButton* openButton_{nullptr};
-    QToolButton* contextButton_{nullptr};
+    QAbstractButton* openButton_{nullptr};
+    QAbstractButton* contextButton_{nullptr};
     QString filePath_;
     QString rawDiff_;
     ThemePalette palette_;

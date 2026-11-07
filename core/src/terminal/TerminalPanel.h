@@ -3,7 +3,7 @@
 #include <QWidget>
 
 class QLabel;
-class QToolButton;
+class QAbstractButton;
 
 namespace ketplus {
 
@@ -32,10 +32,10 @@ class TerminalPanel final : public QWidget {
     TerminalView* terminal_{nullptr};
     QLabel* titleLabel_{nullptr};
     QLabel* pathLabel_{nullptr};
-    QToolButton* findButton_{nullptr};
-    QToolButton* clearButton_{nullptr};
-    QToolButton* restartButton_{nullptr};
-    QToolButton* closeButton_{nullptr};
+    QAbstractButton* findButton_{nullptr};
+    QAbstractButton* clearButton_{nullptr};
+    QAbstractButton* restartButton_{nullptr};
+    QAbstractButton* closeButton_{nullptr};
     QString workingDirectory_;
 };
 

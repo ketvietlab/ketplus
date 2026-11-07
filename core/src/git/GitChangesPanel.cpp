@@ -1,5 +1,10 @@
 #include "git/GitChangesPanel.h"
 
+#include "KetAppearance.h"
+#include "KetButton.h"
+#include "KetChrome.h"
+#include "KetIcons.h"
+#include "ui/Theme.h"
 #include <QAbstractItemView>
 #include <QAction>
 #include <QApplication>
@@ -16,7 +21,6 @@
 #include <QScrollBar>
 #include <QStackedWidget>
 #include <QStyledItemDelegate>
-#include <QToolButton>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
@@ -30,8 +34,8 @@ constexpr int countRole = Qt::UserRole + 3;
 
 // Két Design System accent-text: Két Blue that stays readable on the dark theme.
 QColor selectedAccentText(const QPalette& palette) {
-    return QColor(palette.color(QPalette::Window).lightness() < 128 ? QStringLiteral("#9EB5FF")
-                                                                    : QStringLiteral("#1238DB"));
+    return themeTokenColor(QStringLiteral("accent-text"),
+                           palette.color(QPalette::Window).lightness() < 128);
 }
 
 class RepositoryIcon final : public QWidget {
@@ -107,15 +111,14 @@ class SourceControlDelegate final : public QStyledItemDelegate {
             font.setWeight(QFont::DemiBold);
             painter->setFont(font);
             painter->setPen(option.palette.color(QPalette::ButtonText));
-            painter->drawText(option.rect.adjusted(29, 0, -42, 0),
-                              Qt::AlignLeft | Qt::AlignVCenter, index.data().toString());
+            painter->drawText(option.rect.adjusted(29, 0, -42, 0), Qt::AlignLeft | Qt::AlignVCenter,
+                              index.data().toString());
 
             const QString count = index.data(countRole).toString();
             const int badgeWidth = QFontMetrics(font).horizontalAdvance(count) + 10;
             const QRect badge(option.rect.right() - badgeWidth - 12, centerY - 10, badgeWidth, 20);
             painter->setPen(Qt::NoPen);
-            painter->setBrush(QColor(dark ? QStringLiteral("#292F37")
-                                          : QStringLiteral("#F1EFF0")));
+            painter->setBrush(themeTokenColor(QStringLiteral("bg-subtle"), dark));
             painter->drawRoundedRect(badge, 4, 4);
             painter->setPen(option.palette.color(QPalette::ButtonText));
             painter->drawText(badge, Qt::AlignCenter, count);
@@ -156,32 +159,26 @@ class SourceControlDelegate final : public QStyledItemDelegate {
             painter->setFont(title);
             painter->setPen(selected ? selectedAccentText(option.palette)
                                      : option.palette.color(QPalette::Text));
-            painter->drawText(textRect.adjusted(0, 0, 0, -18),
-                              Qt::AlignLeft | Qt::AlignVCenter,
+            painter->drawText(textRect.adjusted(0, 0, 0, -18), Qt::AlignLeft | Qt::AlignVCenter,
                               QFontMetrics(title).elidedText(index.data().toString(),
                                                              Qt::ElideMiddle, textRect.width()));
             QFont subtitle = option.font;
             subtitle.setPixelSize(11);
             painter->setFont(subtitle);
             painter->setPen(option.palette.color(QPalette::PlaceholderText));
-            painter->drawText(textRect.adjusted(0, 18, 0, 0),
-                              Qt::AlignLeft | Qt::AlignVCenter,
-                              QFontMetrics(subtitle).elidedText(
-                                  index.data(subtitleRole).toString(), Qt::ElideMiddle,
-                                  textRect.width()));
+            painter->drawText(textRect.adjusted(0, 18, 0, 0), Qt::AlignLeft | Qt::AlignVCenter,
+                              QFontMetrics(subtitle).elidedText(index.data(subtitleRole).toString(),
+                                                                Qt::ElideMiddle, textRect.width()));
         } else {
             QFont status = option.font;
             status.setPixelSize(12);
             status.setWeight(QFont::Medium);
             painter->setFont(status);
-            const auto mode = static_cast<GitDiffMode>(index.siblingAtColumn(0)
-                                                           .data(diffModeRole)
-                                                           .toInt());
+            const auto mode =
+                static_cast<GitDiffMode>(index.siblingAtColumn(0).data(diffModeRole).toInt());
             painter->setPen(mode == GitDiffMode::Staged
-                                ? QColor(dark ? QStringLiteral("#40C97B")
-                                              : QStringLiteral("#1D5D3B"))
-                                : QColor(dark ? QStringLiteral("#EF665C")
-                                              : QStringLiteral("#B42318")));
+                                ? themeTokenColor(QStringLiteral("positive"), dark)
+                                : themeTokenColor(QStringLiteral("danger"), dark));
             painter->drawText(option.rect, Qt::AlignCenter, index.data().toString());
         }
         painter->restore();
@@ -217,30 +214,19 @@ GitChangesPanel::GitChangesPanel(QWidget* parent)
     setAttribute(Qt::WA_StyledBackground, true);
     setMinimumWidth(210);
 
-    auto* heading = new QLabel(QStringLiteral("SOURCE CONTROL"), this);
-    heading->setObjectName(QStringLiteral("sourceControlHeading"));
-    heading->setProperty("kvRole", QStringLiteral("sourceControlHeading"));
     repositoryLabel_->setObjectName(QStringLiteral("sourceControlRepositoryName"));
     repositoryLabel_->setProperty("kvRole", QStringLiteral("gitRepositoryName"));
     branchLabel_->setObjectName(QStringLiteral("sourceControlBranch"));
     branchLabel_->setProperty("kvRole", QStringLiteral("gitRepositoryBranch"));
     branchLabel_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 
-    auto* refreshButton = new QToolButton(this);
-    refreshButton->setText(QString::fromUtf8("↻"));
-    refreshButton->setProperty("kvRole", QStringLiteral("sidebarAction"));
-    refreshButton->setToolTip(QStringLiteral("Refresh Git status"));
-    refreshButton->setAccessibleName(QStringLiteral("Refresh Git status"));
-
-    auto* header = new QWidget(this);
+    auto* header =
+        new ket::PaneHeader(tr("Source Control"), ket::Icons::codeForLucide(u"git-branch"), this);
     header->setObjectName(QStringLiteral("sourceControlHeader"));
-    header->setFixedHeight(44);
-    auto* headerLayout = new QHBoxLayout(header);
-    headerLayout->setContentsMargins(12, 0, 8, 0);
-    headerLayout->setSpacing(4);
-    headerLayout->addWidget(heading);
-    headerLayout->addStretch();
-    headerLayout->addWidget(refreshButton);
+    auto* refreshButton =
+        new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"refresh-cw")),
+                            tr("Refresh Git status"), header);
+    header->actions()->addWidget(refreshButton);
 
     auto* repositoryLayout = new QHBoxLayout(repositorySummary_);
     repositoryLayout->setContentsMargins(14, 10, 14, 19);
@@ -283,7 +269,7 @@ GitChangesPanel::GitChangesPanel(QWidget* parent)
     layout->addWidget(repositorySummary_);
     layout->addWidget(pages_, 1);
 
-    connect(refreshButton, &QToolButton::clicked, this, &GitChangesPanel::refreshRequested);
+    connect(refreshButton, &QAbstractButton::clicked, this, &GitChangesPanel::refreshRequested);
     connect(tree_, &QTreeWidget::itemClicked, this, [this](QTreeWidgetItem* item) {
         if (item != nullptr && item->parent() == nullptr) {
             item->setExpanded(!item->isExpanded());
@@ -341,8 +327,7 @@ void GitChangesPanel::setSnapshot(const GitSnapshot& snapshot) {
         return;
     }
 
-    addGroup(QStringLiteral("Changes"), unstaged, GitDiffMode::Unstaged,
-             snapshot.repositoryRoot);
+    addGroup(QStringLiteral("Changes"), unstaged, GitDiffMode::Unstaged, snapshot.repositoryRoot);
     addGroup(QStringLiteral("Staged Changes"), staged, GitDiffMode::Staged,
              snapshot.repositoryRoot);
     tree_->expandAll();
@@ -373,8 +358,7 @@ void GitChangesPanel::focusChanges() {
     }
 }
 
-void GitChangesPanel::addGroup(const QString& title,
-                               const QVector<const GitFileStatus*>& files,
+void GitChangesPanel::addGroup(const QString& title, const QVector<const GitFileStatus*>& files,
                                const GitDiffMode mode, const QString& repositoryRoot) {
     if (files.isEmpty()) {
         return;
@@ -399,9 +383,8 @@ void GitChangesPanel::addGroup(const QString& title,
         item->setData(0, pathRole, absolutePath);
         item->setData(0, diffModeRole, static_cast<int>(mode));
         item->setToolTip(0, absolutePath);
-        item->setToolTip(1, mode == GitDiffMode::Staged
-                                ? QStringLiteral("Staged change")
-                                : QStringLiteral("Working tree change"));
+        item->setToolTip(1, mode == GitDiffMode::Staged ? QStringLiteral("Staged change")
+                                                        : QStringLiteral("Working tree change"));
         item->setSizeHint(0, QSize(0, 52));
     }
 }

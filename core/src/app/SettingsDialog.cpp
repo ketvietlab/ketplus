@@ -2,15 +2,21 @@
 
 #include "ui/Theme.h"
 
-#include <QCheckBox>
-#include <QDialogButtonBox>
+#include "KetAppearance.h"
+#include "KetButton.h"
+#include "KetIcons.h"
+#include "KetNavItem.h"
+#include "KetThemeCard.h"
+#include <QAbstractButton>
 #include <QComboBox>
+#include <QDialogButtonBox>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QListWidget>
-#include <QPushButton>
 #include <QRegularExpression>
+#include <QShortcut>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStackedWidget>
@@ -113,13 +119,27 @@ void SettingsDialog::initialize(const AppearanceSettings& settings) {
     bodyLayout->addWidget(navigation_);
     bodyLayout->addWidget(pages_, 1);
 
-    buttons_ = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
-    resetButton_ =
-        buttons_->addButton(QStringLiteral("Reset defaults"), QDialogButtonBox::ResetRole);
+    buttons_ = new QWidget(this);
+    buttons_->setObjectName(QStringLiteral("settingsButtons"));
+    auto* actions = new QHBoxLayout(buttons_);
+    actions->setContentsMargins(0, 0, 0, 0);
+    resetButton_ = new ket::Button(tr("Reset defaults"), ket::ButtonVariant::Ghost, buttons_);
     resetButton_->setProperty("kvRole", QStringLiteral("settingsReset"));
-    saveButton_ = buttons_->addButton(QStringLiteral("Save changes"), QDialogButtonBox::AcceptRole);
+    resetButton_->setObjectName(QStringLiteral("settingsResetButton"));
+    auto* cancel = new ket::Button(tr("Cancel"), ket::ButtonVariant::Secondary, buttons_);
+    cancel->setProperty("standardButton", int(QDialogButtonBox::Cancel));
+    cancel->setObjectName(QStringLiteral("settingsCancelButton"));
+    saveButton_ = new ket::Button(tr("Save changes"), ket::ButtonVariant::Primary, buttons_);
     saveButton_->setProperty("kvRole", QStringLiteral("primaryAction"));
-    saveButton_->setDefault(true);
+    saveButton_->setProperty("standardButton", int(QDialogButtonBox::Save));
+    saveButton_->setObjectName(QStringLiteral("settingsSaveButton"));
+    actions->addWidget(resetButton_);
+    actions->addStretch();
+    actions->addWidget(cancel);
+    actions->addWidget(saveButton_);
+    connect(cancel, &QAbstractButton::clicked, this, &SettingsDialog::reject);
+    auto* saveShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Return), this);
+    connect(saveShortcut, &QShortcut::activated, saveButton_, &QAbstractButton::click);
 
     auto* footer = new QWidget(this);
     footer->setProperty("kvRole", QStringLiteral("settingsFooter"));
@@ -135,8 +155,7 @@ void SettingsDialog::initialize(const AppearanceSettings& settings) {
     layout->addWidget(footer);
 
     connect(navigation_, &QListWidget::currentRowChanged, pages_, &QStackedWidget::setCurrentIndex);
-    connect(buttons_, &QDialogButtonBox::rejected, this, &SettingsDialog::reject);
-    connect(resetButton_, &QPushButton::clicked, this, [this] {
+    connect(resetButton_, &QAbstractButton::clicked, this, [this] {
         setAppearanceSettings(AppearanceSettings::defaults());
         selectThemeMode(static_cast<int>(ThemeManager::Mode::System));
         for (SettingsPage* page : std::as_const(extensionPages_)) {
@@ -144,7 +163,7 @@ void SettingsDialog::initialize(const AppearanceSettings& settings) {
         }
         updateDirtyState();
     });
-    connect(saveButton_, &QPushButton::clicked, this, [this] {
+    connect(saveButton_, &QAbstractButton::clicked, this, [this] {
         const auto appearance = appearanceSettings();
         for (SettingsPage* page : std::as_const(extensionPages_)) {
             page->apply();
@@ -185,6 +204,18 @@ QWidget* SettingsDialog::createGeneralPage() {
 void SettingsDialog::addNavigationPage(const QString& id, const QString& title, QWidget* page) {
     auto* item = new QListWidgetItem(title, navigation_);
     item->setData(Qt::UserRole, id);
+    auto* row = new ket::NavItem(
+        title,
+        ket::Icons::codeForLucide(id == QStringLiteral("appearance") ? u"palette" : u"settings"),
+        navigation_);
+    item->setSizeHint(row->sizeHint());
+    navigation_->setItemWidget(item, row);
+    connect(row, &QAbstractButton::clicked, navigation_,
+            [this, item] { navigation_->setCurrentItem(item); });
+    connect(navigation_, &QListWidget::currentItemChanged, row,
+            [row, item](QListWidgetItem* current) { row->setChecked(current == item); });
+    connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, row,
+            [row, item] { item->setSizeHint(row->sizeHint()); });
     pages_->addWidget(page);
 }
 
@@ -358,10 +389,12 @@ void SettingsDialog::updateThemePreview() {
     themeList_->setEnabled(!followsSystem && theme_ != nullptr);
     for (int index = 0; index < themeList_->count(); ++index) {
         auto* item = themeList_->item(index);
-        if (item->data(Qt::UserRole).toInt() == selectedThemeMode_) {
+        const bool selected = item->data(Qt::UserRole).toInt() == selectedThemeMode_;
+        if (auto* card = qobject_cast<ket::ThemeCard*>(themeList_->itemWidget(item)))
+            card->setChecked(selected);
+        if (selected) {
             const QSignalBlocker blocker(themeList_);
             themeList_->setCurrentItem(item);
-            break;
         }
     }
     if (theme_ != nullptr) {
@@ -383,6 +416,19 @@ void SettingsDialog::reject() {
         theme_->cancelPreview();
     }
     QDialog::reject();
+}
+
+void SettingsDialog::keyPressEvent(QKeyEvent* event) {
+    if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
+        auto* button = qobject_cast<QAbstractButton*>(focusWidget());
+        if (!button)
+            button = saveButton_;
+        if (button && button->isEnabled())
+            button->click();
+        event->accept();
+        return;
+    }
+    QDialog::keyPressEvent(event);
 }
 
 } // namespace ketplus
