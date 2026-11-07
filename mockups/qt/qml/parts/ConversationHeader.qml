@@ -142,7 +142,8 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             controlSize: KetTheme.ControlSize.Small
             iconName: "branch"
-            text: header.conversation.worktree + "  ▾"
+            text: header.width < header.px(720) ? "" : header.conversation.worktree + "  ▾"
+            KetToolTip { visible: worktreeButton.hovered; text: header.conversation.worktree }
             onClicked: header.window.picker.open()
         }
 
@@ -210,6 +211,12 @@ Rectangle {
             checkable: true
             checked: header.detailsOpen
             onClicked: header.toggleDetails("atlas")
+        }
+        KetIconButton {
+            visible: !!header.conversation.hasPlan
+            iconName: "check-all"
+            text: "Conversation plan"
+            onClicked: header.toggleDetails("plan")
         }
         KetIconButton {
             iconName: "compare"

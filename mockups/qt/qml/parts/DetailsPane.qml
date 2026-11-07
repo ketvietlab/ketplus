@@ -12,7 +12,8 @@ Rectangle {
 
     required property var window
     property string tab: "changes"
-    readonly property var tabs: ["changes", "atlas", "terminal"]
+    property var planRun: null
+    readonly property var tabs: planRun ? ["changes", "atlas", "terminal", "plan"] : ["changes", "atlas", "terminal"]
 
     signal tabChosen(string tab)
     signal closeRequested()
@@ -32,7 +33,7 @@ Rectangle {
             KetSegmentedControl {
                 x: pane.px(12)
                 anchors.verticalCenter: parent.verticalCenter
-                options: ["Changes", "Atlas", "Terminal"]
+                options: pane.planRun ? ["Changes", "Atlas", "Terminal", "Plan"] : ["Changes", "Atlas", "Terminal"]
                 currentIndex: pane.tabs.indexOf(pane.tab)
                 onActivated: index => pane.tabChosen(pane.tabs[index])
             }
@@ -53,7 +54,7 @@ Rectangle {
             Layout.fillHeight: true
             clip: true
             contentWidth: availableWidth
-            visible: pane.tab !== "terminal"
+            visible: pane.tab === "changes" || pane.tab === "atlas"
 
             Column {
                 x: pane.px(16)
@@ -111,6 +112,14 @@ Rectangle {
                     }
                 }
             }
+        }
+
+        Loader {
+            active: !!pane.planRun
+            visible: active && pane.tab === "plan"
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            sourceComponent: ConversationPlan { window: pane.window; run: pane.planRun }
         }
 
         // A terminal in the conversation's worktree.

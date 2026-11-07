@@ -1,10 +1,10 @@
 # Conversation plan harness — concept mock
 
-The plan belongs to a conversation, not to a project-wide Planning screen. Open the **Plan** tab inside Agent Workspace. Conversation 4821 and 4822 have independent in-memory plans; switching conversations preserves progress, evidence, timers and follow-up budgets separately. No global Planning navigation item exists.
+The plan belongs to a conversation, not to a project-wide Planning screen. Open **Plan** in the conversation’s existing right content pane, beside Changes, Atlas and Terminal. The transcript and composer stay visible on the left; there is no Conversation / Plan switch above the transcript. Conversation 4821 and 4822 have independent in-memory plans; switching conversations preserves progress, evidence, timers and follow-up budgets separately. No global Planning navigation item exists.
 
 ## Compact presentation
 
-Each task is one row: completion icon, task title, owner and status. Expand a task to inspect its acceptance criterion and evidence. Activity entries are also one row; expand one for details. The conversation header and sidebar reflect the run state. The Plan tab shows the verified count.
+Each task is one row: completion icon, task title, owner and status. Expand a task to inspect its acceptance criterion and evidence. Activity entries are also one row; expand one for details. The conversation header and sidebar reflect the run state. An inline conversation action shows the verified count and reopens the right pane. The header checklist action opens the same pane. Closing the pane or changing its content does not stop or reset the plan.
 
 All text is English. The footer’s Preview selector and playback buttons are prototype controls, not proposed production controls. Concept labels and sample-evidence disclosures must remain when these captures are used in marketing.
 
@@ -44,7 +44,7 @@ Other direct states: `plan-running`, `plan-paused`, `plan-limit`. Direct state p
 - Standalone mock build passed.
 - QML model suite: 13 passed, 0 failed. Covers automatic timer continuation, conversation isolation, explicit stop/resume, blocker retention and follow-up limits.
 - Pro smoke: 55 screens, 0 QML problems. Lite smoke: 11 screens, 0 QML problems.
-- Inspected native captures for continuing and blocked in dark mode, and complete with collapsed and expanded evidence in light mode. All four tasks fit on single rows when collapsed.
+- Native captures cover planning, continuing and blocked in dark mode, and complete with collapsed and expanded evidence in light mode. The plan shares the existing half-width right pane; conversation content and the composer remain visible. All four tasks fit on single rows when collapsed.
 - Native click automation could not attach to the preview window (`cgWindowNotFound`). Button interactions were not verified by desktop automation; model transitions and the real QML timer were tested directly. No production daemon, package installation or external tracker was tested.
 
 ## Ownership contract for future implementation

@@ -28,7 +28,6 @@ Item {
     readonly property var providerSetup: Fixtures.providerSetup[window.providerIssues[providerId] || ""] || null
     property bool showTasks: running
 
-    property bool planVisible: false
     property var planRun: null
     readonly property string planState: planRun ? planRun.status : ""
     ConversationPlanStore { id: planStore }
@@ -39,8 +38,9 @@ Item {
         syncPlan()
         if (!planRun) return
         if (state) planRun.load(state)
-        planVisible = true
-        detailsOpen = false
+        planRun.presented = true
+        detailsTab = "plan"
+        detailsOpen = true
     }
     function planStatus(number, fallback) {
         const model = planStore.plans[number]
@@ -50,7 +50,7 @@ Item {
         if (model.status === "paused") return KetTheme.ConversationStatus.Stopped
         return KetTheme.ConversationStatus.NeedsInput
     }
-    onConversationChanged: { planVisible = false; syncPlan() }
+    onConversationChanged: { detailsOpen = false; syncPlan() }
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
     function openComposerPanel(name) {
@@ -77,7 +77,11 @@ Item {
                 status: screen.planStatus(screen.conversation.number, screen.conversation.status)
                 detailsOpen: screen.detailsOpen
                 onToggleDetails: tab => {
-                    screen.planVisible = false
+                    if (tab === "plan") {
+                        if (screen.detailsOpen && screen.detailsTab === "plan") screen.detailsOpen = false
+                        else screen.openPlan("")
+                        return
+                    }
                     if (screen.detailsOpen && screen.detailsTab === tab)
                         screen.detailsOpen = false
                     else {
@@ -87,44 +91,8 @@ Item {
                 }
             }
 
-            RowLayout {
-                visible: !!screen.planRun
-                Layout.fillWidth: true
-                Layout.leftMargin: screen.px(20)
-                Layout.rightMargin: screen.px(20)
-                Layout.topMargin: screen.px(8)
-                Layout.bottomMargin: screen.px(8)
-                spacing: screen.px(8)
-                KetButton {
-                    text: "Conversation"
-                    variant: screen.planVisible ? KetTheme.ButtonVariant.Ghost : KetTheme.ButtonVariant.Secondary
-                    onClicked: screen.planVisible = false
-                }
-                KetButton {
-                    text: screen.planRun && screen.planRun.planCreated ? "Plan · " + screen.planRun.completed + "/4" : "Plan"
-                    iconName: "check-all"
-                    variant: screen.planVisible ? KetTheme.ButtonVariant.Secondary : KetTheme.ButtonVariant.Ghost
-                    onClicked: screen.openPlan("")
-                }
-                Item { Layout.fillWidth: true }
-                Text {
-                    text: "Conversation plan · Concept preview"
-                    color: KetTheme.t.textMuted
-                    font.family: KetTheme.fontFamily
-                    font.pixelSize: screen.px(12)
-                }
-            }
-            Loader {
-                active: !!screen.planRun
-                visible: screen.planVisible && active
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                sourceComponent: ConversationPlan { window: screen.window; run: screen.planRun }
-            }
-
             Basic.ScrollView {
                 id: scroll
-                visible: !screen.planVisible
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
@@ -137,21 +105,34 @@ Item {
                                  * Math.max(0, scroll.contentItem.contentHeight - scroll.height)
                 }
 
-                Transcript {
+                Column {
                     width: scroll.availableWidth
-                    window: screen.window
-                    kind: screen.kind
-                    conversation: screen.conversation
-                    onOpenDetails: tab => {
-                        screen.detailsTab = tab
-                        screen.detailsOpen = true
+                    Loader {
+                        active: !!screen.planRun && screen.planRun.presented
+                        visible: active
+                        width: parent.width
+                        sourceComponent: ConversationPlanTranscript {
+                            window: screen.window
+                            run: screen.planRun
+                            onOpenPlan: screen.openPlan("")
+                        }
+                    }
+                    Transcript {
+                        visible: !screen.planRun || !screen.planRun.presented
+                        width: parent.width
+                        window: screen.window
+                        kind: screen.kind
+                        conversation: screen.conversation
+                        onOpenDetails: tab => {
+                            screen.detailsTab = tab
+                            screen.detailsOpen = true
+                        }
                     }
                 }
             }
 
             // The composer column matches the transcript's reading width.
             Column {
-                visible: !screen.planVisible
                 Layout.fillWidth: true
                 Layout.bottomMargin: screen.px(12)
                 spacing: screen.px(8)
@@ -190,7 +171,8 @@ Item {
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: Math.min(parent.width - screen.px(48), screen.px(760))
                     window: screen.window
-                    busy: screen.running
+                    busy: screen.running || (!!screen.planRun && screen.planRun.presented && screen.planRun.active)
+                    onStopRequested: { if (screen.planRun && screen.planRun.presented) screen.planRun.stop() }
                     // The conversation's provider and model, when its fixture names them.
                     provider: screen.providerId
                     blocked: screen.setupId !== ""
@@ -217,8 +199,12 @@ Item {
             // Half of the workspace beside the rule: the pane matches the conversation's width.
             Layout.preferredWidth: Math.floor((screen.width - 1) / 2)
             window: screen.window
+            planRun: screen.planRun
             tab: screen.detailsTab
-            onTabChosen: tab => screen.detailsTab = tab
+            onTabChosen: tab => {
+                if (tab === "plan") screen.openPlan("")
+                else screen.detailsTab = tab
+            }
             onCloseRequested: screen.detailsOpen = false
         }
     }

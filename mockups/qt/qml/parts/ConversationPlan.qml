@@ -34,20 +34,13 @@ Item {
             Layout.fillWidth: true
             Label { text: run.planCreated ? "Plan v1" : "Automatic planning"; font.weight: Font.DemiBold }
             KetBadge { visible: run.planCreated; text: run.completed + "/4 verified"; tone: run.completed === 4 ? KetTheme.BadgeTone.Success : KetTheme.BadgeTone.Neutral }
-            KetBadge { text: screen.stateLabel; tone: run.active ? KetTheme.BadgeTone.Info : KetTheme.BadgeTone.Neutral }
             Label { visible: run.planCreated; text: "Follow-ups " + run.followUps + "/" + run.followUpLimit; color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
             Item { Layout.fillWidth: true }
             KetButton { visible: run.status === "ready"; text: "Send sample prompt"; iconName: "arrow-right"; onClicked: run.submitPrompt() }
             KetButton { visible: run.active; text: "Stop run"; iconName: "stop-circle"; variant: KetTheme.ButtonVariant.Ghost; onClicked: run.stop() }
             KetButton { visible: run.status === "paused"; text: "Resume plan"; onClicked: run.resume() }
             KetButton { visible: run.status === "blocked"; text: "Retry check"; onClicked: run.retryBlocker() }
-            KetButton { visible: run.status === "limit"; text: "Allow one more follow-up"; onClicked: run.extendLimit() }
-        }
-        Label {
-            Layout.fillWidth: true
-            text: "Request · " + run.prompt
-            font.pixelSize: screen.px(12)
-            color: KetTheme.t.textSecondary
+            KetButton { visible: run.status === "limit"; text: "Allow +1 follow-up"; onClicked: run.extendLimit() }
         }
         KetBanner {
             Layout.fillWidth: true
@@ -186,18 +179,18 @@ Item {
             Layout.fillWidth: true
             Label { text: "Preview"; color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
             KetSelect {
-                Layout.preferredWidth: screen.px(170)
+                Layout.preferredWidth: screen.px(145)
                 model: ["Before prompt", "Planning", "Working", "Early finish", "Blocked", "Stopped", "Limit reached", "Complete"]
                 currentIndex: ["ready", "planning", "running", "continuing", "blocked", "paused", "limit", "complete"].indexOf(run.status)
                 onActivated: index => run.load(["ready", "planning", "running", "continuing", "blocked", "paused", "limit", "complete"][index])
             }
             KetButton {
                 visible: (run.status === "continuing" || run.status === "planning") && !run.autoplay
-                text: run.status === "planning" ? "Play planning" : "Play continuation"; variant: KetTheme.ButtonVariant.Ghost
+                text: "Play"; variant: KetTheme.ButtonVariant.Ghost
                 onClicked: run.autoplay = true
             }
             Item { Layout.fillWidth: true }
-            Label { text: "Concept · sample evidence"; color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
+            Label { text: "Concept · sample data"; color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
         }
     }
 }

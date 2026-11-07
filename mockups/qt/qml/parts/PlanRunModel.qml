@@ -5,6 +5,7 @@ import QtQuick
 QtObject {
     id: run
     property string conversationId: ""
+    property bool presented: false
     property string status: "ready"
     property int completed: 0
     property int followUps: 0
