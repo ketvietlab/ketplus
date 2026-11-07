@@ -1,0 +1,26 @@
+{
+  "scope": "H6 test fixture portability only; no production/UI change",
+  "baseline": {
+    "run": "https://github.com/ketvietlab/ketplus/actions/runs/42393055458",
+    "head": "5fa91c0dde3e19edc00ecbe2f764390aa47c77c7",
+    "windows_job": 128464564932,
+    "failures": [
+      "GitParserTest::diffsSymlinksAsLinks",
+      "GitParserTest::diffsFilesBeforeTheFirstCommit",
+      "NavigationTest::listsRepositoryFilesByIgnoreRules"
+    ],
+    "cause": "QFile::link uses Windows shortcuts, not filesystem symbolic links",
+    "qt_documentation": "https://doc.qt.io/qt-6/qfile.html#link"
+  },
+  "fix": "Native file/directory symbolic links with verified type; repository-local core.symlinks=true",
+  "validation_pending": [
+    "macOS Lite/full Pro",
+    "Windows native symlink fixture tests",
+    "independent review"
+  ],
+  "outside_scope": [
+    "Windows RefactorWave1ContractTest::themeInstallsTheKetStyle tooltip assertion",
+    "real application UI changes",
+    "packaging/deployment/installation"
+  ]
+}

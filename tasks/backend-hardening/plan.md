@@ -927,3 +927,18 @@ not a runtime-guard bypass. The unchanged guard correctly refused stale sources.
 The whitespace-tolerant assertion passes all three source-digest checks under both
 short and platform-native temporary paths; rerun the hosted workflow at the
 corrected head before claiming runner acceptance. No application/UI code changed.
+
+
+### H6 hosted Windows filesystem fixture portability
+
+- [x] Hosted Windows Lite at `5fa91c0d` reproduces two Git symlink assertions
+  and the workspace directory-link fixture failure. Qt shortcuts were used
+  instead of filesystem symbolic links.
+- [x] Use native C++ filesystem file/directory symlinks and assert their actual
+  type; configure Git symlink handling only inside each temporary repository.
+  Keep original boundary/diff assertions and fail fixture setup on missing
+  symlink privileges. No production or UI code changes.
+- [ ] Local Lite/full Pro and hosted Windows checks at the corrected head.
+- [ ] Independent review, merge and safe worktree cleanup.
+- [ ] Separate Windows tooltip/theme assertion remains outside this no-UI scope;
+  do not suppress it or claim the complete Windows job passes.
