@@ -86,8 +86,13 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
   - [x] Reproduce command/audit backlog DELETE and clock-rollback result loss.
   - [x] Implement bounded command/tombstone/audit/cursor/task lanes with rollback,
     actual-query, byte-budget, reopen and orphan-generation regressions (ADR 0050).
-  - [ ] Final-head metadata full Pro/review/merge gates and safe cleanup.
-  - [ ] Audit staged attachments, cloud-event cleanup and explicit deletion paths.
+  - [x] Metadata #228: final-head full Pro 94/94 and independent wrap-delta review
+    PASS; merged `eca3bad52d61c51f250df4d51594bad03f2b0226`. Source/build cleanup
+    remains separately tracked until verified.
+  - [x] Reproduce staged-attachment expiry backlog and invalid-input maintenance;
+    implement bounded retirement/chunk cleanup with identity-reuse and fault tests.
+  - [ ] Staged-attachment final-head full Pro/review/merge gates and safe cleanup.
+  - [ ] Audit cloud-event cleanup and explicit deletion paths.
   - [ ] Close H1.1 only when those remaining work bounds have evidence.
 - [ ] H1.2 Verify migration/reopen safety: old schema, repeat open, partial failure,
   unknown/newer formats, one-time index creation and low-space conditions. Add
@@ -197,7 +202,7 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | Item | State | Evidence / remaining work | Next action / owner |
 | --- | --- | --- | --- |
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
-| H1.1 | In progress | Global GC #220 and ACK #223 merged with exact-head review/matrix; metadata lanes implemented, gates pending; other paths unchecked | Finish metadata gates, audit staged attachments/cloud/deletion / #2739 |
+| H1.1 | In progress | Global GC #220, ACK #223 and metadata #228 merged with exact-head gates; staged expiry 32/32 focused, cancel P2 fix awaiting final gates | Finish staged expiry gates; audit cloud/deletion / #2739 |
 | H1.2–H1.7 | Not started | No claim that #128 backend acceptance is complete | Follow H1.1, prioritize a confirmed safety finding / #2739 |
 | H2–H3 | Not started | Open daemon/provider review issues mapped | Execute after storage, or independent audit while waiting review / #2739 |
 | H4.1–H4.3 | Not started | Existing remote fixes are not a full #85 closure | Audit local transport/privacy with fixtures / #2739 |
@@ -320,6 +325,56 @@ recheck. The fix wraps an empty tail once in the same pass without increasing th
 candidate budget; the original expiry assertion remains intact. Focused and full
 gates must pass again at the revised head.
 
-**Next executable task:** finish metadata full-matrix/review/merge gates; while
-review runs, reproduce staged-attachment expiry work bounds. Then audit cloud-event
-and explicit deletion separately. Do not mark H1.1/H1 complete on these subsets.
+The revised metadata head `6b489251957e744c6864b7b0d9335071a2cba993` passed the
+full Pro 94/94 matrix and independent exact-head review (metadata 20/20,
+transcript 28/28 plus empty/nonempty-wrap probes). #228 merged at
+`eca3bad52d61c51f250df4d51594bad03f2b0226`; earlier pending gates are resolved.
+
+**Next executable task:** finish staged-attachment full-matrix/review/merge gates;
+while review runs, audit cloud-event and explicit deletion separately. Do not
+mark H1.1/H1 complete on these subsets.
+
+
+### H1.1 staged-attachment expiry reproduction
+
+A temporary Qt Release probe of `beginAttachment` with 160 staged files and
+102,400 chunks (50 MiB) took 105 ms when none had expired, and 554 ms while deleting
+the entire expired backlog. The operation starts an upload in another session;
+it should not perform backlog-sized global work. The regression package will
+bound both candidate scans and deleted bytes, preserve current drafts/generations,
+and prevent reuse of an attachment identity until all old chunks are gone.
+[Qt evidence](evidence/h1-attachment-expiry-qt.json). Implementation now passes
+20/20 focused cases, including actual prepared plans, generation/revision and
+unknown-parent guards, reopen/ID reuse, unsupported rows, abort/ignored mutations,
+commit rollback, busy deferral and capability absence. The committed baseline
+regressions fail both the work bound (102,400 chunks deleted, 680 ms) and the
+invalid-input side-effect check. The bounded pass deletes 128 chunks in 20 ms.
+Byte-budget and missing-identity-fence mutations are caught; restored tests pass.
+Full Pro and independent exact-head review remain pending; ADR 0051 records the
+contract and limits. The former LocalJournal attachment implementation moved to
+its owning module without changing explicit cancel/delete semantics.
+
+
+The first staged-expiry head `b35a7caba8f892f161cdc776598e83d06e86337b` passed full
+Pro 95/95. A subsequent boundary audit reproduced four missing logical-expiry
+checks (begin/read/commit/chunk) for an expired identity beyond the 32-manifest
+window, plus an expired-draft quota obstruction. Those regressions fail on the
+prior implementation; current drafts still trigger the unchanged quota. Direct
+eligibility checks and usable-only quota counting now pass focused 4/4 targets:
+staging 26/26, protocol 43/43, cloud privacy 60/60, lifecycle 28 pass/1 live skip.
+The final full suite and independent review must run at the revised head; the
+older 95/95 is not carried forward as final-head evidence.
+
+
+Independent review of staged expiry found a P2: cancellation could remove a
+retirement marker while other chunk revisions remained, then a new begin reused
+that identity and encountered stale chunks. Five regressions reproduced the
+retiring/current mixed-revision cases, stale cancellation, ignored manifest
+removal and a failed commit that left the transaction open. Cancellation now
+preserves retiring identities, checks the current revision, retains a marker
+when other chunks remain and rolls back failed finalization/commit. Staging
+32/32 passes (including ignored marker update); affected production matrix 4/4
+passes. Both preceding staging heads passed full Pro 95/95, but the cancellation
+fix requires its own final full/review gates. Explicit current-upload cancellation
+work bounds and downgrade of mixed-revision retirement remain separate H1.1/H1.2
+acceptance; no release/rollback claim is inferred.
