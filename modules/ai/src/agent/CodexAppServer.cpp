@@ -53,6 +53,10 @@ void CodexAppServer::call(const QString& method, const QJsonObject& params,
         callback({}, QStringLiteral("Codex CLI was not found. Install it or add it to PATH."));
         return;
     }
+    if (method.startsWith(QStringLiteral("daemon/storageRetention/"))) {
+        callback({}, QStringLiteral("Storage settings require an updated local KetPlus daemon."));
+        return;
+    }
     if (method.startsWith(QStringLiteral("provider/claudeCredentials/"))) {
         callback({}, QStringLiteral("Claude API key settings require a local KetPlus daemon."));
         return;

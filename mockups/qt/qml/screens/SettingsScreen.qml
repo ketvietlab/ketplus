@@ -607,7 +607,7 @@ Item {
             SubHeading { text: "Retention" }
             SettingRow {
                 label: "Keep full detail for"
-                help: "Older turns keep their messages, diffs and the end of each command output; large tool results and images become a short summary in the transcript."
+                help: "While idle, trim supported older tool details. Messages, running turns and the latest 20 turns stay protected. Changes save immediately."
                 KetSelect { width: parent.width; model: ["7 days", "30 days", "90 days", "Forever"]; currentIndex: 1 }
             }
             SettingRow {
@@ -626,7 +626,8 @@ Item {
                 KetSelect { width: parent.width; model: ["30 days", "90 days", "1 year", "Never"]; currentIndex: 1 }
             }
             KetCheckbox { text: "Warn me when the journal passes " + storagePage.info.warnPercent + "% of its limit"; checked: true }
-            KetCheckbox { text: "Compact automatically while KetPlus is idle"; checked: true }
+            KetCheckbox { text: "Trim older detail automatically while idle"; checked: true }
+            Help { text: "The native Storage page currently supports the detail period and automatic detail trimming. Size limits, images, archive expiry and the remaining controls here are a design preview." }
 
             Divider {}
             SubHeading { text: "Largest conversations" }

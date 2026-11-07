@@ -917,14 +917,25 @@ void AgentWorkspaceViewTest::retainedCommandNoticeRemainsVisible() {
 void AgentWorkspaceViewTest::retainedToolTextNoticeRemainsVisible_data() {
     QTest::addColumn<QString>("type");
     QTest::addColumn<QString>("server");
-    QTest::newRow("mcp") << QString("mcpToolCall") << QString("synthetic");
-    QTest::newRow("browser") << QString("mcpToolCall") << QString("ketplus_browser");
-    QTest::newRow("dynamic") << QString("dynamicToolCall") << QString("synthetic");
+    QTest::addColumn<bool>("arguments");
+    QTest::newRow("mcp") << QString("mcpToolCall") << QString("synthetic") << false;
+    QTest::newRow("browser") << QString("mcpToolCall") << QString("ketplus_browser") << false;
+    QTest::newRow("dynamic") << QString("dynamicToolCall") << QString("synthetic") << false;
+    QTest::newRow("arguments-mcp") << QString("mcpToolCall") << QString("synthetic") << true;
+    QTest::newRow("arguments-browser")
+        << QString("mcpToolCall") << QString("ketplus_browser") << true;
+    QTest::newRow("arguments-dynamic")
+        << QString("dynamicToolCall") << QString("synthetic") << true;
 }
 
 void AgentWorkspaceViewTest::retainedToolTextNoticeRemainsVisible() {
     QFETCH(QString, type);
     QFETCH(QString, server);
+    QFETCH(bool, arguments);
+    QJsonObject marker{{"policy", "tool-result-text-v1"}, {"original_bytes", 9000}};
+    if (arguments)
+        marker.insert("arguments", QJsonObject{{"policy", "tool-arguments-v1"}});
+    const QString notice = arguments ? "Text and arguments trimmed" : "Text trimmed";
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());
     view.resize(900, 700);
@@ -942,8 +953,7 @@ void AgentWorkspaceViewTest::retainedToolTextNoticeRemainsVisible() {
                           QJsonArray{QJsonObject{
                               {"type", "text"},
                               {"text", "[Tool result trimmed · history retention]\npreview"}}}}}},
-            {"compacted",
-             QJsonObject{{"policy", "tool-result-text-v1"}, {"original_bytes", 9000}}}},
+            {"compacted", marker}},
         true);
     tool.insert("messageKey", "retained-tool");
     view.resetMessages(
@@ -954,13 +964,13 @@ void AgentWorkspaceViewTest::retainedToolTextNoticeRemainsVisible() {
     QVERIFY(root);
     QQuickItem* title = nullptr;
     QTRY_VERIFY((title = findVisualItem(root, "transcriptActivityTitle")) && title->isVisible());
-    QVERIFY(title->property("text").toString().contains("Text trimmed"));
+    QVERIFY(title->property("text").toString().contains(notice));
     QVERIFY(title->width() > 0 && title->height() > 0);
     auto* row = findVisualItem(root, "transcriptActivityRow");
     QVERIFY(row);
     auto* accessible = QAccessible::queryAccessibleInterface(row);
     QVERIFY(accessible);
-    QVERIFY(accessible->text(QAccessible::Name).contains("Text trimmed"));
+    QVERIFY(accessible->text(QAccessible::Name).contains(notice));
 }
 
 void AgentWorkspaceViewTest::retainedFileDiffNoticeRemainsVisible() {

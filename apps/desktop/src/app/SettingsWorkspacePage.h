@@ -1,6 +1,7 @@
 #pragma once
 
 #include "app/SettingsProvidersPage.h"
+#include "app/SettingsStoragePage.h"
 #include "ui/Theme.h"
 
 #include <QWidget>
@@ -18,7 +19,8 @@ class SettingsWorkspacePage final : public QWidget {
     explicit SettingsWorkspacePage(SettingsDialog* dialog,
                                    SettingsProvidersPage::Fetcher providers = {},
                                    QWidget* parent = nullptr,
-                                   SettingsClaudeCredentials::Requester credentials = {});
+                                   SettingsClaudeCredentials::Requester credentials = {},
+                                   SettingsStoragePage::Requester storage = {});
 
     [[nodiscard]] SettingsDialog* dialog() const noexcept;
     void applyPalette(const ThemePalette& palette, int interfaceFontSizePixels = 14);

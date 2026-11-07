@@ -1,5 +1,6 @@
 #include "storage/ReplayDetailCompactor.h"
 #include "agent/FileChangeStatistics.h"
+#include "agent/TranscriptSanitizer.h"
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QtTest>
@@ -25,6 +26,160 @@ QJsonObject tool(const QString& type = "mcpToolCall") {
 class ReplayDetailCompactorTest final : public QObject {
     Q_OBJECT
   private slots:
+    void argumentExcerptsAreBoundedExplicitAndIdempotent_data() {
+        QTest::addColumn<QString>("shape");
+        QTest::addColumn<bool>("previous");
+        for (const QString shape : {QString("object"), QString("array"), QString("string")})
+            for (bool previous : {false, true})
+                QTest::newRow(qPrintable(shape + (previous ? "-previous-text" : "-fresh")))
+                    << shape << previous;
+    }
+    void argumentExcerptsAreBoundedExplicitAndIdempotent() {
+        QFETCH(QString, shape);
+        QFETCH(bool, previous);
+        auto original = tool(shape == "string" ? "dynamicToolCall" : "mcpToolCall");
+        const QString longText(6000, QChar(0x754c));
+        original.insert("arguments", shape == "object"
+                                         ? QJsonValue(QJsonObject{{"query", longText}})
+                                     : shape == "array" ? QJsonValue(QJsonArray{longText})
+                                                        : QJsonValue(longText));
+        if (previous) {
+            original.insert("result", "[Tool result trimmed] retained text");
+            original.insert("compacted", QJsonObject{{"policy", "tool-result-text-v1"},
+                                                     {"original_bytes", 50000},
+                                                     {"retained_bytes", 100}});
+        }
+        const auto changed = compactCompletedReplayItem(original, cutoff());
+        QVERIFY(changed);
+        QVERIFY(!changed->contains("arguments"));
+        const auto excerpt = changed->value("arguments_excerpt").toString();
+        QVERIFY(excerpt.startsWith("[Arguments trimmed"));
+        QVERIFY(!excerpt.contains(QChar::ReplacementCharacter));
+        const auto retained = excerpt.mid(excerpt.indexOf('\n') + 1).toUtf8();
+        QVERIFY(retained.size() <= 4096);
+        const auto originalValue = original.value("arguments");
+        const auto originalBytes =
+            originalValue.isString() ? originalValue.toString().toUtf8()
+            : originalValue.isArray()
+                ? QJsonDocument(originalValue.toArray()).toJson(QJsonDocument::Compact)
+                : QJsonDocument(originalValue.toObject()).toJson(QJsonDocument::Compact);
+        QVERIFY(originalBytes.startsWith(retained));
+        const auto info = changed->value("compacted").toObject();
+        QCOMPARE(info.value("policy"), QJsonValue("tool-result-text-v1"));
+        const auto args = info.value("arguments").toObject();
+        QCOMPARE(args.value("retained_bytes").toInteger(), retained.size());
+        QVERIFY(args.value("excerpt_only").toBool());
+        QCOMPARE(changed->value("error"), original.value("error"));
+        QCOMPARE(changed->value("tool"), original.value("tool"));
+        if (previous) {
+            QCOMPARE(changed->value("result"), original.value("result"));
+            QCOMPARE(info.value("original_bytes").toInteger(), 50000);
+        }
+        QVERIFY(!compactCompletedReplayItem(*changed, cutoff()));
+    }
+    void argumentOnlyCapPreservesResultAndUnknownMarkers() {
+        auto original = tool();
+        original.insert("arguments", QJsonObject{{"query", QString(6000, 'x')}});
+        original.insert("result", QJsonObject{{"structuredContent", "keep"}, {"isError", true}});
+        auto changed = compactCompletedReplayItem(original, cutoff());
+        QVERIFY(changed);
+        QCOMPARE(changed->value("result"), original.value("result"));
+        QCOMPARE(changed->value("compacted").toObject().value("policy"),
+                 QJsonValue("tool-arguments-v1"));
+        for (const QJsonValue value : {QJsonValue(QJsonObject{}), QJsonValue("unknown"),
+                                       QJsonValue(QJsonObject{{"policy", "future"}})}) {
+            original.insert("compacted", value);
+            QVERIFY(!compactCompletedReplayItem(original, cutoff()));
+        }
+        original.remove("compacted");
+        original.insert("status", "inProgress");
+        QVERIFY(!compactCompletedReplayItem(original, cutoff()));
+        original.insert("status", "completed");
+        original.insert("arguments_excerpt", "existing unknown excerpt");
+        QVERIFY(!compactCompletedReplayItem(original, cutoff()));
+    }
+    void argumentCapRejectsOtherKindsAndInvalidTime() {
+        auto original = tool();
+        original.insert("arguments", QString(7000, 'x'));
+        original.insert("result", "small");
+        QVERIFY(!compactCompletedReplayItem(original, {}));
+        QVERIFY(!compactCompletedReplayItem(original, QDateTime::currentDateTimeUtc().addDays(1)));
+        for (const QString kind :
+             {QString("userMessage"), QString("agentMessage"), QString("reasoning"),
+              QString("question"), QString("commandExecution")}) {
+            original.insert("type", kind);
+            QVERIFY(!compactCompletedReplayItem(original, cutoff()));
+        }
+    }
+    void argumentExcerptsRedactBeforeFlatteningAndTruncating_data() {
+        QTest::addColumn<bool>("encoded");
+        QTest::newRow("object") << false;
+        QTest::newRow("encoded-json") << true;
+    }
+    void argumentExcerptsRedactBeforeFlatteningAndTruncating() {
+        QFETCH(bool, encoded);
+        const QJsonObject args{
+            {"password", "synthetic-password-value"},
+            {"nested",
+             QJsonObject{
+                 {"access_token", "synthetic-token-value"},
+                 {"url", "https://user:pass@example.invalid/?api_key=synthetic-query-value"}}},
+            {"media", QJsonObject{{"type", "image"}, {"data", "synthetic-image-bytes"}}},
+            {"z_padding", QString(7000, 'x')}};
+        auto original = tool();
+        original.insert("result", "keep result");
+        original.insert("arguments", encoded
+                                         ? QJsonValue(QString::fromUtf8(
+                                               QJsonDocument(args).toJson(QJsonDocument::Compact)))
+                                         : QJsonValue(args));
+        const auto changed = compactCompletedReplayItem(original, cutoff());
+        QVERIFY(changed);
+        const auto excerpt = changed->value("arguments_excerpt").toString();
+        for (const QString secret :
+             {QString("synthetic-password-value"), QString("synthetic-token-value"),
+              QString("synthetic-query-value"), QString("user:pass"),
+              QString("synthetic-image-bytes")})
+            QVERIFY2(!excerpt.contains(secret), qPrintable(secret));
+        QVERIFY(excerpt.contains("[redacted]"));
+        QVERIFY(changed->value("compacted")
+                    .toObject()
+                    .value("arguments")
+                    .toObject()
+                    .value("redacted_before_excerpt")
+                    .toBool());
+    }
+    void sharedSanitizerKeepsTextAndMultipleUrlBoundaries() {
+        const QString input = "before https://user:pass@example.invalid/?token=secret between "
+                              "https://example.invalid/path?q=ok after";
+        QCOMPARE(ketplus::TranscriptSanitizer::text(input),
+                 QString("before https://redacted:redacted@example.invalid/?token=[redacted] "
+                         "between https://example.invalid/path?q=ok after"));
+        const QString plain = QString(7000, 'x') + " no URLs or secrets";
+        QCOMPARE(ketplus::TranscriptSanitizer::text(plain), plain);
+        const QString markdown = "[link](https://example.invalid/a?token=secret) and "
+                                 "\"https://example.invalid/b?key=secret\".";
+        const auto safe = ketplus::TranscriptSanitizer::text(markdown);
+        QVERIFY(!safe.contains("secret"));
+        QVERIFY(safe.startsWith("[link]("));
+        QVERIFY(safe.contains(" and "));
+    }
+    void argumentSanitizerHeavyInput() {
+        auto original = tool();
+        original.insert("result", "keep result");
+        original.insert(
+            "arguments",
+            QString("https://user:synthetic-pass@example.invalid/?token=synthetic-token ")
+                .repeated(8000));
+        QElapsedTimer timer;
+        timer.start();
+        const auto changed = compactCompletedReplayItem(original, cutoff());
+        qInfo() << "Argument sanitizer, 8000 credential-bearing URLs:" << timer.elapsed() << "ms";
+        QVERIFY(changed);
+        const auto excerpt = changed->value("arguments_excerpt").toString();
+        QVERIFY(!excerpt.contains("synthetic-pass"));
+        QVERIFY(!excerpt.contains("synthetic-token"));
+        QVERIFY(!changed->contains("arguments"));
+    }
     void retainsMediaErrorsArgumentsAndStructuredResult() {
         auto original = tool();
         const QJsonObject media{{"type", "image"},

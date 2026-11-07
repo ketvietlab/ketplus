@@ -66,7 +66,12 @@ DaemonClient::DaemonClient(QObject* parent)
         expectedSize_ = 0;
         QList<QueuedCall> interrupted;
         for (QueuedCall& call : std::exchange(pending_, {})) {
-            if (call.type.startsWith(QStringLiteral("provider.claude.credentials."))) {
+            if (call.type.startsWith(QStringLiteral("storage.retention."))) {
+                if (call.callback)
+                    call.callback(
+                        {}, QStringLiteral(
+                                "Daemon disconnected. Reload storage settings before retrying."));
+            } else if (call.type.startsWith(QStringLiteral("provider.claude.credentials."))) {
                 if (call.callback)
                     call.callback(
                         {}, QStringLiteral("Daemon disconnected. Check the saved credential state "
@@ -85,6 +90,13 @@ DaemonClient::DaemonClient(QObject* parent)
             enqueue(std::move(call));
         }
         for (QueuedCall call : waiting) {
+            if (call.type.startsWith(QStringLiteral("storage.retention."))) {
+                if (call.callback)
+                    call.callback(
+                        {}, QStringLiteral(
+                                "Daemon disconnected. Reload storage settings before retrying."));
+                continue;
+            }
             if (call.type.startsWith(QStringLiteral("provider.claude.credentials."))) {
                 if (call.callback)
                     call.callback(
@@ -257,6 +269,10 @@ void DaemonClient::authenticate() {
             stableTimer_.start();
             protocolMinor_ = std::min(supportedProtocolMinor,
                                       result.value(QStringLiteral("protocol_minor")).toInt(0));
+            capabilities_.clear();
+            for (const QJsonValue& value : result.value(QStringLiteral("capabilities")).toArray())
+                if (value.isString())
+                    capabilities_.append(value.toString());
             features_.clear();
             for (const QJsonValue& value : result.value(QStringLiteral("features")).toArray())
                 features_.append(value.toString());
@@ -385,6 +401,8 @@ void DaemonClient::consumeFrame(const QByteArray& frame) {
 }
 
 void DaemonClient::setReady(const bool ready) {
+    if (!ready)
+        capabilities_.clear();
     if (ready_ == ready) {
         return;
     }

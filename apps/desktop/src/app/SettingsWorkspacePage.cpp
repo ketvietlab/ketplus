@@ -111,6 +111,9 @@ QByteArray navigationIconBody(const QString& id) {
     if (id == QStringLiteral("computer")) // Lucide mouse-pointer-click
         return QByteArrayLiteral(
             R"(<path d="M14 4.1 12 6"/><path d="m5.1 8-2.9-.8"/><path d="m6 12-1.9 2"/><path d="M7.2 2.2 8 5.1"/><path d="M9.037 9.69a.498.498 0 0 1 .653-.653l11 4.5a.5.5 0 0 1-.074.949l-4.349 1.041a1 1 0 0 0-.74.739l-1.04 4.35a.5.5 0 0 1-.95.074z"/>)");
+    if (id == QStringLiteral("storage")) // Lucide database
+        return QByteArrayLiteral(
+            R"(<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/>)");
     if (id == QStringLiteral("updates"))
         return QByteArrayLiteral(
             R"(<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>)");
@@ -209,7 +212,8 @@ void addField(QGridLayout* grid, const int row, const QString& title, QWidget* c
 SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
                                              SettingsProvidersPage::Fetcher providers,
                                              QWidget* parent,
-                                             SettingsClaudeCredentials::Requester credentials)
+                                             SettingsClaudeCredentials::Requester credentials,
+                                             SettingsStoragePage::Requester storageRequester)
     : QWidget(parent), dialog_(dialog) {
     setObjectName(QStringLiteral("settingsWorkspacePage"));
     setAttribute(Qt::WA_StyledBackground, true);
@@ -565,6 +569,9 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
             break;
         }
     }
+    auto* storage = scrollPage(new SettingsStoragePage(std::move(storageRequester), pages), pages);
+    addNavigation(tr("Storage"), QStringLiteral("storage"));
+    pages->addWidget(storage);
     auto* updates = scrollPage(new SettingsUpdatesPage(AppUpdater::instance(), pages), pages);
     addNavigation(tr("Updates"), QStringLiteral("updates"));
     pages->addWidget(updates);
@@ -576,7 +583,8 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     bodyLayout->addWidget(pages, 1);
     contentLayout->addWidget(body, 1);
 
-    if (auto* buttons = dialog_->findChild<QDialogButtonBox*>()) {
+    auto* settingsFooter = dialog_->findChild<QDialogButtonBox*>();
+    if (auto* buttons = settingsFooter) {
         if (auto* cancel = buttons->button(QDialogButtonBox::Cancel))
             cancel->hide();
         buttons->setParent(content);
@@ -618,7 +626,7 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     syncThemeCards();
 
     connect(navigation, &QListWidget::currentRowChanged, this,
-            [this, navigation, pages, updates, computer](const int row) {
+            [this, navigation, pages, updates, computer, storage, settingsFooter](const int row) {
                 for (int index = 0; index < navigation->count(); ++index) {
                     const bool dark =
                         navigation->palette().color(QPalette::Window).lightness() < 128;
@@ -632,6 +640,9 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
                 }
                 const QString id =
                     row < 0 ? QString() : navigation->item(row)->data(Qt::UserRole).toString();
+                // Storage changes save immediately; global appearance reset/save do not apply.
+                if (settingsFooter)
+                    settingsFooter->setVisible(id != QStringLiteral("storage"));
                 if (id == QStringLiteral("appearance")) {
                     pages->setCurrentIndex(0);
                 } else if (id == QStringLiteral("typography")) {
@@ -648,6 +659,8 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
                     pages->setCurrentIndex(3);
                 } else if (id == QStringLiteral("archived")) {
                     pages->setCurrentIndex(4);
+                } else if (id == QStringLiteral("storage")) {
+                    pages->setCurrentWidget(storage);
                 } else if (id == QStringLiteral("updates")) {
                     pages->setCurrentWidget(updates);
                 }
@@ -717,7 +730,8 @@ QLabel#settingsPreviewTabs { min-height:32px; padding:0 12px; border-bottom:2px 
 QLabel#settingsPreviewCode { padding:14px 17px; color:%3; font-family:monospace; font-size:{{body}}px; }
 QLabel#settingsPreviewMessage { min-height:34px; padding:0 17px; border-top:1px solid %5;
  color:%2; background:%7; font-size:{{body}}px; }
-QCheckBox#followSystemTheme, QLabel#settingsWorkspaceFieldLabel,
+QCheckBox#followSystemTheme, QCheckBox#storageAutomaticDetail, QLabel#storageUsage,
+QLabel#storageStatus, QComboBox#storageDetailDays, QLabel#settingsWorkspaceFieldLabel,
 QComboBox#settingsInterfaceFont, QComboBox#editorFontFamily, QComboBox#computerWorkDisplay,
 QSpinBox#interfaceFontSize, QSpinBox#editorFontSize, QSpinBox#terminalFontSize,
 QSpinBox#previewFontSize { color:%2; font-size:{{reading}}px; }

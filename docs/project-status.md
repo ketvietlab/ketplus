@@ -5,6 +5,11 @@ milestone changes state.
 
 ## Implemented
 
+- Completed MCP/dynamic tool arguments above 5 KiB can retain a 4 KiB display-only
+  excerpt with a visible trim label (ADR 0043), including a one-time upgrade of
+  text-only compaction markers. Structured results and large-payload/media retention
+  remain separate work; existing turn/ACK/idle guards are unchanged.
+
 - Journal replay-detail retention now also stores explicit file-diff excerpts with
   original line statistics (ADR 0040), following command output (ADR 0038) and tool
   text/reasoning (ADR 0039). The existing age/acknowledgment/latest-turn guards and
@@ -14,7 +19,10 @@ milestone changes state.
   order or dropping start-only fields; interleaved and incomplete cases remain
   protected (ADR 0041). Local detail-retention preferences now persist with revision
   checks and explicit IPC capabilities (ADR 0042); size/archive/media policy and
-  the Storage page are not implemented by this foundation.
+  the complete Storage page remain pending. The native Storage page now exposes the
+  supported detail period and automatic-detail switch, revision-aware immediate saves,
+  reload-on-conflict/error and advisory SQLite page usage; no size/image/archive
+  controls are presented as implemented.
 
 - Desktop discovers conversations created by a phone or another daemon client while
   it remains connected, without switching the selected conversation or reloading

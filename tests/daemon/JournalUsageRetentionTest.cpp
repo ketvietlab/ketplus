@@ -483,6 +483,61 @@ class JournalUsageRetentionTest final : public QObject {
         QCOMPARE(withoutUsage(allReplay(journal)), before);
     }
 
+    void argumentRetentionUpgradesTextMarkersWithTurnGuards_data() {
+        QTest::addColumn<bool>("previous");
+        QTest::addColumn<QString>("guard");
+        for (bool previous : {false, true})
+            for (const QString guard : {QString("eligible"), QString("unacknowledged"),
+                                        QString("running"), QString("recent"), QString("question"),
+                                        QString("approval"), QString("generation")})
+                QTest::newRow(qPrintable(guard + (previous ? "-previous" : "-fresh")))
+                    << previous << guard;
+    }
+    void argumentRetentionUpgradesTextMarkersWithTurnGuards() {
+        QFETCH(bool, previous);
+        QFETCH(QString, guard);
+        QTemporaryDir directory;
+        const QString path = directory.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(seed(journal, path, guard != "unacknowledged"));
+        Database database(path);
+        QJsonObject fields{{"type", "mcpToolCall"},
+                           {"status", "completed"},
+                           {"arguments", QJsonObject{{"query", QString(16000, 'x')}}},
+                           {"result", "keep result"}};
+        if (previous)
+            fields.insert("compacted", QJsonObject{{"policy", "tool-result-text-v1"}});
+        QVERIFY(database.patchItems(fields));
+        if (guard == "running")
+            QVERIFY(database.exec("UPDATE sessions SET state='running'"));
+        if (guard == "recent")
+            QVERIFY(database.exec(
+                "UPDATE replay_events SET sent_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')"));
+        if (guard == "question" || guard == "approval")
+            QVERIFY(database.exec(QString("UPDATE replay_events SET event_type='%1.requested' "
+                                          "WHERE event_type='item.started'")
+                                      .arg(guard)));
+        if (guard == "generation")
+            QVERIFY(database.exec("UPDATE sessions SET generation=2"));
+        const auto before = allReplay(journal);
+        QElapsedTimer timer;
+        timer.start();
+        QCOMPARE(sweep(journal), guard == "eligible" ? 28 : 0);
+        if (guard == "eligible")
+            qInfo() << "Argument retention eight passes; previous=" << previous << timer.elapsed()
+                    << "ms";
+        if (guard != "eligible") {
+            QCOMPARE(allReplay(journal), before);
+            return;
+        }
+        QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE "
+                                 "json_type(payload,'$.item.arguments_excerpt')='text'"),
+                 4);
+        QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE turn_sequence>4 AND "
+                                 "json_type(payload,'$.item.arguments_excerpt')='text'"),
+                 0);
+        QCOMPARE(sweep(journal), 0);
+    }
     void toolAndReasoningRetentionUsesTurnGuards_data() {
         QTest::addColumn<QString>("kind");
         QTest::addColumn<QString>("guard");
@@ -630,7 +685,49 @@ class JournalUsageRetentionTest final : public QObject {
                 continue;
             expected.append(value);
         }
-        QCOMPARE(withoutUsage(allReplay(journal)), expected);
+        auto actual = withoutUsage(allReplay(journal));
+        QCOMPARE(actual.size(), expected.size());
+        for (qsizetype index = 0; index < actual.size(); ++index) {
+            auto event = actual.at(index).toObject();
+            auto payload = event.value("payload").toObject();
+            auto item = payload.value("item").toObject();
+            if (!item.contains("arguments_excerpt"))
+                continue;
+            // Completion detail trimming is independent of whether its start can be removed.
+            QVERIFY(eligible || guard == "unknown-start-field" || guard == "oversized" ||
+                    guard == "wrong-id");
+            QCOMPARE(event.value("event_type"), QJsonValue("item.completed"));
+            QVERIFY(event.value("turn_sequence").toInteger() <= 4);
+            const auto originalArguments = expected.at(index)
+                                               .toObject()
+                                               .value("payload")
+                                               .toObject()
+                                               .value("item")
+                                               .toObject()
+                                               .value("arguments");
+            const auto bytes =
+                QJsonDocument(originalArguments.toObject()).toJson(QJsonDocument::Compact);
+            const auto excerpt = item.value("arguments_excerpt").toString();
+            QVERIFY(excerpt.startsWith("[Arguments trimmed"));
+            const auto retained = excerpt.mid(excerpt.indexOf('\n') + 1).toUtf8();
+            QVERIFY(!retained.isEmpty() && retained.size() <= 4096);
+            QVERIFY(bytes.startsWith(retained));
+            QCOMPARE(item.value("compacted")
+                         .toObject()
+                         .value("arguments")
+                         .toObject()
+                         .value("original_bytes")
+                         .toInteger(),
+                     bytes.size());
+            QVERIFY(!item.contains("arguments"));
+            item.remove("arguments_excerpt");
+            item.remove("compacted");
+            item.insert("arguments", originalArguments);
+            payload.insert("item", item);
+            event.insert("payload", payload);
+            actual.replace(index, event);
+        }
+        QCOMPARE(actual, expected); // all other fields, cursor order and protected rows are exact
         QCOMPARE(sweep(journal), 0);
     }
 
