@@ -5,6 +5,15 @@ milestone changes state.
 
 ## Implemented
 
+- Matched provider responses require one valid result/error envelope (ADR 0075).
+  Malformed replies fail their callback once, without successful initialization,
+  unrelated-call failure or echoing malformed payloads. Null void results and
+  Claude message-only errors stay compatible; method schemas remain separate.
+
+- Provider responses preserve numeric call identity (ADR 0074): strings, booleans
+  and fractional ids cannot consume pending calls in Codex, Claude or Cursor,
+  including Codex oversized responses. Valid replies still complete exactly once.
+
 - Existing media blobs are validated before dedup returns a reference (ADR 0066):
   exact bounded bytes, regular nonsymlink files and owner-only permissions.
   Invalid entries remain intact for repair; reference durability remains open.

@@ -3,6 +3,8 @@
 #include "BrowserToolLaunch.h"
 #include "ComputerAgentInstructions.h"
 #include "providers/CursorToolItem.h"
+#include "providers/ProviderResponseEnvelope.h"
+#include "providers/ProviderResponseId.h"
 #include "providers/compat/ProviderVersionProbe.h"
 #include "runtime/ResponseGuidance.h"
 
@@ -1580,12 +1582,17 @@ void CursorAdapter::consumeLine(const QByteArray& line) {
     }
     if (!object.contains(QStringLiteral("id")))
         return;
-    const quint64 id = object.value(QStringLiteral("id")).toVariant().toULongLong();
+    const auto responseId = providerResponseId(object.value(QStringLiteral("id")));
+    if (!responseId)
+        return;
+    const quint64 id = *responseId;
     const auto callback = pending_.take(id);
     const QString requestMethod = pendingMethods_.take(id);
     if (!callback)
         return;
-    if (object.contains(QStringLiteral("error"))) {
+    if (!validProviderResponseEnvelope(object)) {
+        callback({}, QStringLiteral("Malformed provider response envelope."));
+    } else if (object.contains(QStringLiteral("error"))) {
         const QJsonObject error = object.value(QStringLiteral("error")).toObject();
         if (error.value(QStringLiteral("code")).toInt() == -32601)
             (void)narrowing_.methodNotFound(requestMethod);
