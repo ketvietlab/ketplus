@@ -1,4 +1,7 @@
 #include "remote/RemoteActivitySection.h"
+#include "KetButton.h"
+#include "KetIcons.h"
+#include "KetTextField.h"
 
 #include "DaemonClient.h"
 #include "ui/ChromeGeometry.h"
@@ -349,11 +352,11 @@ RemoteActivitySection::RemoteActivitySection(remote::DaemonClient* daemon, QWidg
                        "trustNote");
     note->setWordWrap(true);
     footer->addWidget(note, 1);
-    showAll_ = new QPushButton(QStringLiteral("Show all"), this);
+    showAll_ = new ket::Button(QStringLiteral("Show all"), ket::ButtonVariant::Ghost, this);
     showAll_->setObjectName(QStringLiteral("remoteActivityShowAll"));
     showAll_->setProperty("remoteTertiary", true);
     showAll_->hide();
-    connect(showAll_, &QPushButton::clicked, this, &RemoteActivitySection::showAll);
+    connect(showAll_, &QAbstractButton::clicked, this, &RemoteActivitySection::showAll);
     footer->addWidget(showAll_);
     layout->addLayout(footer);
     render({});
@@ -477,13 +480,13 @@ void RemoteActivitySection::runDialog(const QString& title, const QString& devic
     auto* headerLayout = new QHBoxLayout(header);
     chrome_geometry::margins(headerLayout, 22, 14, 14, 14);
     headerLayout->addWidget(label(title, "modalTitle"), 1);
-    auto* close = new QPushButton(header);
+    auto* close = new ket::IconButton(ket::Icons::icon(u"x"), QStringLiteral("Close"), header);
     close->setProperty("remoteTertiary", true);
     close->setAccessibleName(QStringLiteral("Close"));
     close->setIcon(QIcon(
         symbol_icon::pixmap(closeIcon, palette().color(QPalette::WindowText), QSize(16, 16))));
     chrome_geometry::fixedSize(close, 30, 30);
-    connect(close, &QPushButton::clicked, &dialog, &QDialog::reject);
+    connect(close, &QAbstractButton::clicked, &dialog, &QDialog::reject);
     headerLayout->addWidget(close);
     root->addWidget(header);
 
@@ -524,19 +527,20 @@ void RemoteActivitySection::runDialog(const QString& title, const QString& devic
     actions->addStretch();
     bool revoking = false;
     if (revoke) {
-        auto* revokeButton = new QPushButton(QStringLiteral("Revoke access"), footer);
+        auto* revokeButton =
+            new ket::Button(QStringLiteral("Revoke access"), ket::ButtonVariant::Danger, footer);
         revokeButton->setObjectName(QStringLiteral("remoteActivityRevoke"));
         revokeButton->setProperty("remoteDanger", true);
-        connect(revokeButton, &QPushButton::clicked, &dialog, [&dialog, &revoking] {
+        connect(revokeButton, &QAbstractButton::clicked, &dialog, [&dialog, &revoking] {
             revoking = true;
             dialog.accept();
         });
         actions->addWidget(revokeButton);
     }
-    auto* done = new QPushButton(QStringLiteral("Close"), footer);
+    auto* done = new ket::Button(QStringLiteral("Close"), ket::ButtonVariant::Primary, footer);
     done->setObjectName(QStringLiteral("remoteActivityClose"));
     done->setProperty("remotePrimary", true);
-    connect(done, &QPushButton::clicked, &dialog, &QDialog::accept);
+    connect(done, &QAbstractButton::clicked, &dialog, &QDialog::accept);
     actions->addWidget(done);
     root->addWidget(footer);
 

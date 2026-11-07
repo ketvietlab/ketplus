@@ -1,11 +1,13 @@
 #include "remote/RemoteControlView.h"
 #include "remote/RemoteActivitySection.h"
 #include "remote/RemoteConnectionsIntro.h"
+#include "ui/InterfaceZoom.h"
 
 #include <QAccessible>
 #include <QJsonArray>
 #include <QTimeZone>
 
+#include <QAbstractButton>
 #include <QApplication>
 #include <QDateTime>
 #include <QDialog>
@@ -15,7 +17,6 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QPixmap>
-#include <QPushButton>
 #include <QTest>
 #include <QTimer>
 
@@ -113,7 +114,7 @@ void RemoteControlViewTest::activityRowsAreReadableFromTheKeyboardAndScreenReade
         }
         return found;
     };
-    auto* showAll = section.findChild<QPushButton*>(QStringLiteral("remoteActivityShowAll"));
+    auto* showAll = section.findChild<QAbstractButton*>(QStringLiteral("remoteActivityShowAll"));
     QVERIFY(showAll);
 
     section.render({});
@@ -307,14 +308,15 @@ void RemoteControlViewTest::opensOnSignInPrompt() {
     view.show();
     QTest::qWait(1);
 
-    auto* signInPrompt = view.findChild<QPushButton*>(QStringLiteral("remoteSignInPromptButton"));
+    auto* signInPrompt =
+        view.findChild<QAbstractButton*>(QStringLiteral("remoteSignInPromptButton"));
     QVERIFY(signInPrompt);
     QVERIFY(signInPrompt->isVisible());
-    const auto buttons = view.findChildren<QPushButton*>();
+    const auto buttons = view.findChildren<QAbstractButton*>();
     QVERIFY(std::count_if(buttons.cbegin(), buttons.cend(),
-                          [](const QPushButton* button) { return button->isVisible(); }) >= 2);
+                          [](const QAbstractButton* button) { return button->isVisible(); }) >= 2);
     QVERIFY(view.findChild<QWidget*>(QStringLiteral("linuxMachinesSection")));
-    auto* pair = view.findChild<QPushButton*>(QStringLiteral("remotePairButton"));
+    auto* pair = view.findChild<QAbstractButton*>(QStringLiteral("remotePairButton"));
     QVERIFY(pair);
     QVERIFY(!pair->isVisible());
     QVERIFY(!pair->isEnabled());
@@ -325,7 +327,9 @@ void RemoteControlViewTest::opensOnSignInPrompt() {
     QVERIFY(text->text().startsWith(QStringLiteral("Continue a conversation from your phone")));
     auto* headline = view.findChild<QLabel*>(QStringLiteral("remoteWelcomeHeadline"));
     QVERIFY(headline);
-    QVERIFY(headline->font().pixelSize() >= 28);
+    const int basePixels = qApp->font().pixelSize() > 0 ? qApp->font().pixelSize()
+                                                        : InterfaceZoomMetrics::mediumPixels;
+    QCOMPARE(headline->font().pixelSize(), InterfaceZoomMetrics::geometry(40, basePixels));
     QCOMPARE(signInPrompt->text(), QStringLiteral("Sign in"));
     QVERIFY(!view.findChild<QWidget*>(QStringLiteral("remotePageTitle"))->isVisible());
 }
@@ -397,9 +401,10 @@ void RemoteControlViewTest::signInFormIsAnExplicitSecondaryFlow() {
     view.show();
     QTest::qWait(1);
 
-    auto* signInPrompt = view.findChild<QPushButton*>(QStringLiteral("remoteSignInPromptButton"));
-    auto* signIn = view.findChild<QPushButton*>(QStringLiteral("remoteSignInButton"));
-    auto* back = view.findChild<QPushButton*>(QStringLiteral("remoteSignInBackButton"));
+    auto* signInPrompt =
+        view.findChild<QAbstractButton*>(QStringLiteral("remoteSignInPromptButton"));
+    auto* signIn = view.findChild<QAbstractButton*>(QStringLiteral("remoteSignInButton"));
+    auto* back = view.findChild<QAbstractButton*>(QStringLiteral("remoteSignInBackButton"));
     auto* dialog = view.findChild<QDialog*>(QStringLiteral("remoteSignInDialog"));
     QVERIFY(signInPrompt);
     QVERIFY(signIn);
@@ -428,20 +433,21 @@ void RemoteControlViewTest::demoSignInOpensAddDeviceQr() {
     view.show();
     QTest::qWait(1);
 
-    auto* prompt = view.findChild<QPushButton*>(QStringLiteral("remoteSignInPromptButton"));
-    auto* signIn = view.findChild<QPushButton*>(QStringLiteral("remoteSignInButton"));
-    auto* add = view.findChild<QPushButton*>(QStringLiteral("remotePairButton"));
+    auto* prompt = view.findChild<QAbstractButton*>(QStringLiteral("remoteSignInPromptButton"));
+    auto* signIn = view.findChild<QAbstractButton*>(QStringLiteral("remoteSignInButton"));
+    auto* add = view.findChild<QAbstractButton*>(QStringLiteral("remotePairButton"));
     auto* dialog = view.findChild<QDialog*>(QStringLiteral("remotePairingDialog"));
     auto* qr = view.findChild<QLabel*>(QStringLiteral("remotePairingQr"));
-    auto* close = view.findChild<QPushButton*>(QStringLiteral("remotePairingCloseButton"));
+    auto* close = view.findChild<QAbstractButton*>(QStringLiteral("remotePairingCloseButton"));
     auto* pairTitle = view.findChild<QLabel*>(QStringLiteral("remotePairingState"));
     auto* pairDialogTitle = view.findChild<QLabel*>(QStringLiteral("remotePairingDialogTitle"));
     auto* pairHelp = view.findChild<QLabel*>(QStringLiteral("remotePairingHelp"));
     auto* pairTimer = view.findChild<QLabel*>(QStringLiteral("remotePairingTimer"));
     auto* pairSteps = view.findChild<QLabel*>(QStringLiteral("remotePairingSteps"));
     auto* pairCode = view.findChild<QLabel*>(QStringLiteral("remotePairingConfirmationCode"));
-    auto* pairAction = view.findChild<QPushButton*>(QStringLiteral("remoteApproveButton"));
-    auto* pairCancel = view.findChild<QPushButton*>(QStringLiteral("remotePairingCancelButton"));
+    auto* pairAction = view.findChild<QAbstractButton*>(QStringLiteral("remoteApproveButton"));
+    auto* pairCancel =
+        view.findChild<QAbstractButton*>(QStringLiteral("remotePairingCancelButton"));
     QVERIFY(prompt && signIn && add && dialog && qr && close && pairTitle && pairDialogTitle &&
             pairHelp && pairTimer && pairSteps && pairCode && pairAction && pairCancel);
     QCOMPARE(add->text(), QStringLiteral("Add"));
@@ -520,9 +526,9 @@ void RemoteControlViewTest::demoSignOutReturnsToSingleAction() {
     RemoteControlView view;
     view.resize(840, 720);
     view.show();
-    auto* prompt = view.findChild<QPushButton*>(QStringLiteral("remoteSignInPromptButton"));
-    auto* signIn = view.findChild<QPushButton*>(QStringLiteral("remoteSignInButton"));
-    auto* signOut = view.findChild<QPushButton*>(QStringLiteral("remoteSignOutButton"));
+    auto* prompt = view.findChild<QAbstractButton*>(QStringLiteral("remoteSignInPromptButton"));
+    auto* signIn = view.findChild<QAbstractButton*>(QStringLiteral("remoteSignInButton"));
+    auto* signOut = view.findChild<QAbstractButton*>(QStringLiteral("remoteSignOutButton"));
     QVERIFY(prompt && signIn && signOut);
     QTest::mouseClick(prompt, Qt::LeftButton);
     QTest::mouseClick(signIn, Qt::LeftButton);

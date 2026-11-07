@@ -1,4 +1,9 @@
 #include "app/ExecutionWorktreeDialog.h"
+#include "KetAppearance.h"
+#include "KetButton.h"
+#include "KetControlRecipes.h"
+#include "KetIcons.h"
+#include "KetTextField.h"
 #include "app/ConversationRepository.h"
 #include <QDialogButtonBox>
 #include <QDir>
@@ -9,14 +14,78 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QPainter>
 #include <QPointer>
 #include <QPushButton>
 #include <QScrollBar>
+#include <QStyledItemDelegate>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <memory>
 
 namespace ketplus {
+namespace {
+// The paginated catalog stays in QListWidget; kit recipes draw only visible rows.
+class PickerDelegate final : public QStyledItemDelegate {
+  public:
+    PickerDelegate(bool repository, QObject* parent)
+        : QStyledItemDelegate(parent), repository_(repository) {}
+    QSize sizeHint(const QStyleOptionViewItem&, const QModelIndex&) const override {
+        return {0, qRound(ket::Appearance::scale(52, ket::Appearance::instance().zoom()))};
+    }
+    void paint(QPainter* painter, const QStyleOptionViewItem& option,
+               const QModelIndex& index) const override {
+        const auto& appearance = ket::Appearance::instance();
+        const auto px = [&](qreal value) {
+            return ket::Appearance::scale(value, appearance.zoom());
+        };
+        const auto recipe = ket::treeItemRecipe(option.state.testFlag(QStyle::State_Selected),
+                                                {option.state.testFlag(QStyle::State_MouseOver),
+                                                 false, bool(index.flags() & Qt::ItemIsEnabled),
+                                                 option.state.testFlag(QStyle::State_HasFocus)},
+                                                appearance.theme());
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing);
+        painter->setOpacity(recipe.opacity);
+        const QRectF area = QRectF(option.rect).adjusted(2, 2, -2, -2);
+        painter->setPen(recipe.focusRing.alpha() ? QPen(recipe.focusRing, 2) : QPen(Qt::NoPen));
+        painter->setBrush(recipe.background);
+        painter->drawRoundedRect(area, px(recipe.radius), px(recipe.radius));
+        const qreal icon = px(recipe.iconSize);
+        const qreal left = area.left() + px(recipe.paddingInline);
+        painter->drawPixmap(QPointF(left, area.top() + px(recipe.paddingBlock)),
+                            ket::Icons::pixmap(repository_ ? u"folder" : u"branch", icon,
+                                               painter->device()->devicePixelRatioF(),
+                                               recipe.icon));
+        const auto lines = index.data().toString().split('\n');
+        const qreal textLeft = left + icon + px(recipe.spacing);
+        const qreal width = qMax(0.0, area.right() - textLeft - px(recipe.paddingInline));
+        QFont font = option.font;
+        font.setPixelSize(qRound(px(recipe.titlePixels)));
+        font.setWeight(QFont::Weight(recipe.titleWeight));
+        painter->setFont(font);
+        painter->setPen(recipe.title);
+        const qreal top = area.top() + px(recipe.paddingBlock);
+        const qreal titleHeight = QFontMetricsF(font).height();
+        painter->drawText(
+            QRectF(textLeft, top, width, titleHeight), Qt::AlignVCenter,
+            QFontMetrics(font).elidedText(lines.value(0), Qt::ElideRight, qRound(width)));
+        font.setPixelSize(qRound(px(recipe.detailPixels)));
+        font.setWeight(QFont::Normal);
+        painter->setFont(font);
+        painter->setPen(recipe.detail);
+        painter->drawText(
+            QRectF(textLeft, top + titleHeight + px(2), width, QFontMetricsF(font).height()),
+            Qt::AlignVCenter,
+            QFontMetrics(font).elidedText(lines.value(1), Qt::ElideMiddle, qRound(width)));
+        painter->restore();
+    }
+
+  private:
+    bool repository_;
+};
+} // namespace
+
 void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest request,
                                  std::function<void(const QString&)> selected,
                                  const QString& fileContextPath, const QStringList& repositories,
@@ -45,7 +114,8 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
     columns->addLayout(treeColumn, 3);
     layout->addLayout(columns, 1);
     repoColumn->addWidget(new QLabel("Repository", dialog));
-    auto* repoSearch = new QLineEdit(dialog);
+    auto* repoSearch = new ket::TextField(dialog);
+    repoSearch->setLeadingIcon(QStringLiteral("search"));
     repoSearch->setPlaceholderText("Search repositories");
     repoSearch->setAccessibleName("Search repositories");
     repoSearch->setObjectName("repositorySearch");
@@ -53,10 +123,12 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
     auto* repos = new QListWidget(dialog);
     repos->setObjectName("executionRepositoryList");
     repos->setAccessibleName("Conversation repositories");
+    repos->setItemDelegate(new PickerDelegate(true, repos));
     repoColumn->addWidget(repos, 1);
     auto* count = new QLabel("Worktree", dialog);
     treeColumn->addWidget(count);
-    auto* search = new QLineEdit(dialog);
+    auto* search = new ket::TextField(dialog);
+    search->setLeadingIcon(QStringLiteral("search"));
     search->setPlaceholderText("Search branch or folder");
     search->setAccessibleName("Search worktrees");
     search->setObjectName("worktreeSearch");
@@ -66,7 +138,7 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
     list->setAccessibleName("Execution worktrees");
     list->setUniformItemSizes(true);
     list->setSpacing(4);
-    list->setStyleSheet("QListWidget::item { padding: 8px 12px; }");
+    list->setItemDelegate(new PickerDelegate(false, list));
     treeColumn->addWidget(list, 1);
     auto* status = new QLabel(dialog);
     status->setObjectName("worktreeStatus");
@@ -76,9 +148,13 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
         "History and drafts stay here. Earlier file links keep their source worktree.", dialog);
     source->setWordWrap(true);
     layout->addWidget(source);
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, dialog);
-    auto* refresh = buttons->addButton("Refresh", QDialogButtonBox::ActionRole);
-    auto* retry = buttons->addButton("Retry", QDialogButtonBox::ActionRole);
+    auto* buttons = new QDialogButtonBox(dialog);
+    auto* close = new ket::Button("Close", ket::ButtonVariant::Secondary, dialog);
+    auto* refresh = new ket::Button("Refresh", ket::ButtonVariant::Ghost, dialog);
+    auto* retry = new ket::Button("Retry", ket::ButtonVariant::Primary, dialog);
+    buttons->addButton(close, QDialogButtonBox::RejectRole);
+    buttons->addButton(refresh, QDialogButtonBox::ActionRole);
+    buttons->addButton(retry, QDialogButtonBox::ActionRole);
     retry->hide();
     layout->addWidget(buttons);
     QObject::connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::close);
@@ -111,7 +187,7 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
                                             repos);
             row->setData(Qt::UserRole, root);
             row->setToolTip(root);
-            row->setSizeHint(QSize(0, 48));
+
             if (root == state->repository)
                 repos->setCurrentItem(row);
         }
@@ -169,7 +245,6 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
                             list);
                         row->setData(Qt::UserRole, path);
                         row->setToolTip(path);
-                        row->setSizeHint(QSize(0, 58));
                     }
                     state->total = result.value("total").toInt();
                     state->offset += result.value("worktrees").toArray().size();
@@ -264,13 +339,13 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
         if (value >= list->verticalScrollBar()->maximum() - 100 && state->offset < state->total)
             load();
     });
-    QObject::connect(refresh, &QPushButton::clicked, dialog, [=] {
+    QObject::connect(refresh, &QAbstractButton::clicked, dialog, [=] {
         ++state->epoch;
         state->loading = false;
         state->offset = state->total = 0;
         load();
     });
-    QObject::connect(retry, &QPushButton::clicked, dialog,
+    QObject::connect(retry, &QAbstractButton::clicked, dialog,
                      [=] { change(state->retryPath, state->retryRepository); });
     const auto select = [=](QListWidgetItem* row) {
         change(row->data(Qt::UserRole).toString(), state->repository);

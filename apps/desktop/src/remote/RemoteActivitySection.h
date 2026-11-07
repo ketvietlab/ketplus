@@ -10,7 +10,7 @@
 #include <functional>
 
 class QLabel;
-class QPushButton;
+class QAbstractButton;
 class QVBoxLayout;
 
 namespace ketplus::remote {
@@ -74,7 +74,7 @@ class RemoteActivitySection final : public QWidget {
     QJsonArray entries_;
     QVBoxLayout* rows_{nullptr};
     QLabel* empty_{nullptr};
-    QPushButton* showAll_{nullptr};
+    QAbstractButton* showAll_{nullptr};
     bool requestInFlight_{false};
     // Bumped by each request and by clear(), so a reply from before sign-out is dropped.
     quint64 generation_{0};

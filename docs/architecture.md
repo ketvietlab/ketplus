@@ -410,3 +410,9 @@ presentation only: the same view, conversation and composer draft remain mounted
 It hides sidebar/details, restores prior geometry on exit and expands when opening
 a file detail. This is distinct from the provider context-token compactWindow in
 ADR 0021 and from Atlas Builder's restricted compactMode.
+
+Worktree and Connections presentation consumes kit buttons, inputs/selects,
+status badges and palette/profile values. The execution picker retains its
+paginated QListWidget model and paints visible rows from treeItemRecipe; search,
+revision fencing and acknowledgment-driven context changes retain their existing
+ownership. Pairing confirmation and changed-claim rejection remain daemon-backed.

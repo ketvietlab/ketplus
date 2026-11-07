@@ -1,4 +1,9 @@
 #include "remote/RemoteControlView.h"
+#include "KetButton.h"
+#include "KetIcons.h"
+#include "KetProfile.h"
+#include "KetTextField.h"
+#include "KetTokens.h"
 #include "ui/ChromeGeometry.h"
 #include "ui/SymbolIcon.h"
 
@@ -70,27 +75,6 @@ class SymbolIconLabel final : public QLabel {
     QByteArray body_;
 };
 
-class SymbolIconButton final : public QPushButton {
-  public:
-    SymbolIconButton(QByteArray body, QWidget* parent = nullptr)
-        : QPushButton(parent), body_(std::move(body)) {}
-
-  protected:
-    void paintEvent(QPaintEvent*) override {
-        QPainter painter(this);
-        QStyleOptionButton option;
-        initStyleOption(&option);
-        option.text.clear();
-        option.icon = {};
-        style()->drawControl(QStyle::CE_PushButton, &option, &painter, this);
-        symbol_icon::paint(painter, body_, palette().color(QPalette::ButtonText),
-                           QRectF((width() - 17) / 2.0, (height() - 17) / 2.0, 17, 17));
-    }
-
-  private:
-    QByteArray body_;
-};
-
 QLabel* label(const QString& text, const char* role, QWidget* parent = nullptr) {
     auto* value = new QLabel(text, parent);
     value->setProperty("remoteRole", role);
@@ -128,11 +112,11 @@ DialogChoice runDecisionDialog(QWidget* parent, const QString& objectName, const
     chrome_geometry::margins(headerLayout, 22, 14, 14, 14);
     chrome_geometry::spacing(headerLayout, 12);
     headerLayout->addWidget(label(title, "modalTitle"), 1);
-    auto* close = new SymbolIconButton(closeIcon, header);
+    auto* close = new ket::IconButton(ket::Icons::icon(u"x"), QStringLiteral("Close"), header);
     close->setProperty("remoteTertiary", true);
     close->setAccessibleName(QStringLiteral("Close"));
     chrome_geometry::fixedSize(close, 30, 30);
-    QObject::connect(close, &QPushButton::clicked, &dialog, &QDialog::reject);
+    QObject::connect(close, &QAbstractButton::clicked, &dialog, &QDialog::reject);
     headerLayout->addWidget(close);
     root->addWidget(header);
 
@@ -152,11 +136,12 @@ DialogChoice runDecisionDialog(QWidget* parent, const QString& objectName, const
     chrome_geometry::margins(actions, 22, 13, 22, 13);
     chrome_geometry::spacing(actions, 8);
     actions->addStretch();
-    auto* cancel = new QPushButton(cancelText, footer);
+    auto* cancel = new ket::Button(cancelText, ket::ButtonVariant::Secondary, footer);
     cancel->setObjectName(objectName + QStringLiteral("Cancel"));
-    QObject::connect(cancel, &QPushButton::clicked, &dialog, &QDialog::reject);
+    QObject::connect(cancel, &QAbstractButton::clicked, &dialog, &QDialog::reject);
     actions->addWidget(cancel);
-    auto* confirm = new QPushButton(confirmText, footer);
+    auto* confirm = new ket::Button(
+        confirmText, danger ? ket::ButtonVariant::Danger : ket::ButtonVariant::Primary, footer);
     confirm->setObjectName(objectName + QStringLiteral("Confirm"));
     confirm->setProperty(danger ? "remoteDanger" : "remotePrimary", true);
     if (!confirmIcon.isEmpty()) {
@@ -164,7 +149,7 @@ DialogChoice runDecisionDialog(QWidget* parent, const QString& objectName, const
             symbolIcon(confirmIcon, danger ? QColor(QStringLiteral("#B42318")) : Qt::white, 14));
         chrome_geometry::iconSize(confirm, QSize(14, 14));
     }
-    QObject::connect(confirm, &QPushButton::clicked, &dialog, &QDialog::accept);
+    QObject::connect(confirm, &QAbstractButton::clicked, &dialog, &QDialog::accept);
     actions->addWidget(confirm);
     root->addWidget(footer);
     return dialog.exec() == QDialog::Accepted ? DialogChoice::Confirm : DialogChoice::Cancel;
@@ -182,16 +167,39 @@ struct KdsPalette final {
 };
 
 KdsPalette kdsPalette(const bool dark) {
-    if (dark)
-        return {"#1B1F24", "#1D2228", "#23282F", "#292F37", "#F2F4F7", "#B4BAC4",
-                "#858D99", "#505862", "#2B3037", "#3B424C", "#20252C", "#1746FF",
-                "#1238DB", "#102EB3", "#202C4B", "#415B9C", "#9EB5FF", "#365FD6",
-                "#3151C6", "#2B46B7", "#40C97B", "#1D3028", "#315C45", "#E5A93C",
-                "#352D1F", "#604E29", "#EF665C", "#382526", "#653C3B"};
-    return {"#F7F5F5", "#FFFFFF", "#FBFAFA", "#F1EFF0", "#24262A", "#5A5C5E", "#717373", "#9A9EA2",
-            "#E9E7E8", "#CCCCCD", "#FFFFFF", "#1746FF", "#1238DB", "#102EB3", "#EDF2FF", "#C2D1FF",
-            "#1238DB", "#365FD6", "#3151C6", "#2B46B7", "#1D5D3B", "#ECF5EF", "#C9E7D4", "#8B5C12",
-            "#FBF3E6", "#EED6AD", "#B42318", "#FEF3F2", "#FECDCA"};
+    const auto theme = dark ? ket::Theme::Dark : ket::Theme::Light;
+    const auto color = [theme](QStringView name) {
+        return ket::Tokens::color(name, theme).name(QColor::HexArgb);
+    };
+    return {color(u"page-bg"),
+            color(u"panel-bg"),
+            color(u"surface-raised"),
+            color(u"surface-hover"),
+            color(u"text-main"),
+            color(u"text-secondary"),
+            color(u"text-muted"),
+            color(u"text-disabled"),
+            color(u"panel-border"),
+            color(u"border-strong"),
+            color(u"input-bg"),
+            color(u"accent"),
+            color(u"accent-hover"),
+            color(u"accent-active"),
+            color(u"accent-subtle"),
+            color(u"accent-border"),
+            color(u"accent-text"),
+            color(u"action-primary-bg"),
+            color(u"action-primary-hover"),
+            color(u"action-primary-active"),
+            color(u"positive"),
+            color(u"positive-bg"),
+            color(u"positive-border"),
+            color(u"warning"),
+            color(u"warning-bg"),
+            color(u"warning-border"),
+            color(u"danger"),
+            color(u"danger-bg"),
+            color(u"danger-border")};
 }
 
 QString remoteStyle(const KdsPalette& p, const int basePixels) {
@@ -203,23 +211,23 @@ QFrame[remoteRole="contextBar"] { min-height:34px; max-height:34px; border:0; bo
 QLabel[remoteRole="context"] { color:@muted@; font-size:{{caption}}px; font-weight:600; }
 QFrame[remoteRole="pageHeader"] { border:0; background:@page@; }
 QLabel[remoteRole="title"] { color:@text@; font-size:{{heading}}px; font-weight:600; }
-QLabel[remoteRole="connectionsTitle"] { color:@text@; font-size:{{display}}px; font-weight:620; }
+QLabel[remoteRole="connectionsTitle"] { color:@text@; font-size:30px; font-weight:600; }
 QLabel[remoteRole="eyebrow"] { color:@accentText@; font-size:{{micro}}px; font-weight:600; letter-spacing:1px; }
-QLabel[remoteRole="heroTitle"] { color:@text@; font-size:{{display}}px; font-weight:600; }
-QLabel[remoteRole="heroCopy"] { color:@muted@; font-size:{{reading}}px; }
+QLabel[remoteRole="heroTitle"] { color:@text@; font-size:40px; font-weight:600; }
+QLabel[remoteRole="heroCopy"] { color:@muted@; font-size:14px; }
 QLabel[remoteRole="description"] { color:@muted@; font-size:{{body}}px; }
 QLabel[remoteRole="surfaceTitle"] { color:@text@; font-size:{{title}}px; font-weight:600; }
 QLabel[remoteRole="dialogTitle"] { color:@text@; font-size:{{heading}}px; font-weight:600; }
 QLabel[remoteRole="pairTitle"] { color:@text@; font-size:{{title}}px; font-weight:600; }
 QLabel[remoteRole="welcomeTitle"] { color:@text@; font-size:{{display}}px; font-weight:620; }
 QLabel[remoteRole="welcomeText"] { color:@text@; font-size:{{reading}}px; }
-QLabel[remoteRole="introTitle"] { color:@text@; font-size:{{heading}}px; font-weight:600; }
+QLabel[remoteRole="introTitle"] { color:@text@; font-size:22px; font-weight:500; }
 QLabel[remoteRole="introState"] { color:@muted@; font-size:{{body}}px; }
 QLabel[remoteRole="introNote"] { color:@secondary@; font-size:{{body}}px; }
 QLabel[remoteRole="introIcon"] { color:@muted@; }
 QLabel[remoteRole="introSection"] { color:@text@; font-size:{{title}}px; font-weight:600; }
 QLabel[remoteRole="introStepTitle"] { color:@text@; font-size:{{body}}px; font-weight:600; }
-QLabel[remoteRole="introStepNumber"] { color:@muted@; font-family:"SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size:{{body}}px; }
+QLabel[remoteRole="introStepNumber"] { color:@muted@; font-family:"@mono@"; font-size:{{body}}px; }
 QFrame[remoteRole="introStepBar"] { border:0; background:@accent@; }
 QLabel[remoteRole="overviewTitle"] { color:@text@; font-size:{{heading}}px; font-weight:600; }
 QLabel#linuxMachinesTitle { color:@text@; font-size:{{title}}px; font-weight:600; }
@@ -337,6 +345,7 @@ QLabel[remoteRole="qr"] { background:white; border:10px solid white; border-radi
                                                          {"@dangerBorder@", p.dangerBorder}};
     for (const auto& replacement : replacements)
         css.replace(replacement.first, replacement.second);
+    css.replace(QStringLiteral("@mono@"), ket::Profile::current().monoFamily());
     return css;
 }
 
@@ -415,12 +424,12 @@ QWidget* RemoteControlView::createSignInPage() {
     chrome_geometry::margins(headerLayout, 22, 14, 14, 14);
     chrome_geometry::spacing(headerLayout, 12);
     headerLayout->addWidget(label(QStringLiteral("Sign in"), "modalTitle"), 1);
-    auto* back = new SymbolIconButton(closeIcon, header);
+    auto* back = new ket::IconButton(ket::Icons::icon(u"x"), QStringLiteral("Close"), header);
     back->setObjectName(QStringLiteral("remoteSignInBackButton"));
     back->setProperty("remoteTertiary", true);
     back->setAccessibleName(QStringLiteral("Close"));
     chrome_geometry::fixedSize(back, 30, 30);
-    connect(back, &QPushButton::clicked, this, [this] { signInDialog_->reject(); });
+    connect(back, &QAbstractButton::clicked, this, [this] { signInDialog_->reject(); });
     headerLayout->addWidget(back);
     root->addWidget(header);
 
@@ -441,13 +450,13 @@ QWidget* RemoteControlView::createSignInPage() {
     signInNotice_->hide();
     form->addWidget(signInNotice_);
     chrome_geometry::addSpacing(form, 9);
-    signInButton_ = new QPushButton;
+    signInButton_ = new ket::Button({}, ket::ButtonVariant::Primary);
     signInButton_->setObjectName(QStringLiteral("remoteSignInButton"));
     signInButton_->setProperty("remotePrimary", true);
     signInButton_->setIcon(symbolIcon(logInIcon, Qt::white));
     chrome_geometry::iconSize(signInButton_, QSize(15, 15));
     resetSignInButton();
-    connect(signInButton_, &QPushButton::clicked, this, &RemoteControlView::signIn);
+    connect(signInButton_, &QAbstractButton::clicked, this, &RemoteControlView::signIn);
     form->addWidget(signInButton_);
     bodyLayout->addLayout(form);
     root->addWidget(body);
@@ -490,13 +499,13 @@ QWidget* RemoteControlView::createControlPage() {
     pageSubtitle->setObjectName(QStringLiteral("remotePageSubtitle"));
     heading->addWidget(pageSubtitle);
     header->addLayout(heading, 1);
-    pairButton_ = new QPushButton(QStringLiteral("Add"));
+    pairButton_ = new ket::Button(QStringLiteral("Add"), ket::ButtonVariant::Primary);
     pairButton_->setObjectName(QStringLiteral("remotePairButton"));
     pairButton_->setProperty("remotePrimary", true);
     pairButton_->setIcon(symbolIcon(plusIcon, Qt::white));
     chrome_geometry::iconSize(pairButton_, QSize(15, 15));
     pairButton_->setEnabled(false);
-    connect(pairButton_, &QPushButton::clicked, this, [this] {
+    connect(pairButton_, &QAbstractButton::clicked, this, [this] {
         QMenu menu(pairButton_);
         auto* phone = menu.addAction(tr("Connect phone or tablet"));
         auto* linux = menu.addAction(tr("Connect Linux machine"));
@@ -507,13 +516,13 @@ QWidget* RemoteControlView::createControlPage() {
             linuxMachines_->beginPairing();
     });
     header->addWidget(pairButton_, 0, Qt::AlignTop);
-    signOutButton_ = new QPushButton(QStringLiteral("Sign out"));
+    signOutButton_ = new ket::Button(QStringLiteral("Sign out"), ket::ButtonVariant::Ghost);
     signOutButton_->setObjectName(QStringLiteral("remoteSignOutButton"));
     signOutButton_->setProperty("remoteTertiary", true);
     signOutButton_->setIcon(symbolIcon(logOutIcon, QColor(QStringLiteral("#717373")), 14));
     chrome_geometry::iconSize(signOutButton_, QSize(14, 14));
     signOutButton_->hide();
-    connect(signOutButton_, &QPushButton::clicked, this, &RemoteControlView::signOut);
+    connect(signOutButton_, &QAbstractButton::clicked, this, &RemoteControlView::signOut);
     chrome_geometry::maximumWidth(pageHeader_, 1000);
     pageHeader_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     pageHeader_->hide();
@@ -640,7 +649,8 @@ QWidget* RemoteControlView::createControlPage() {
     auto* historyLayout = new QVBoxLayout(history);
     chrome_geometry::margins(historyLayout, 0, 0, 0, 0);
     chrome_geometry::spacing(historyLayout, 7);
-    auto* historyButton = new QPushButton(QStringLiteral("About your history"), history);
+    auto* historyButton =
+        new ket::Button(QStringLiteral("About your history"), ket::ButtonVariant::Ghost, history);
     historyButton->setObjectName(QStringLiteral("remoteHistoryButton"));
     historyButton->setProperty("remoteTertiary", true);
     historyButton->setIcon(symbolIcon(shieldIcon, QColor(QStringLiteral("#717373")), 14));
@@ -657,7 +667,7 @@ QWidget* RemoteControlView::createControlPage() {
     chrome_geometry::maximumWidth(historyCopy, 620);
     historyCopy->hide();
     historyLayout->addWidget(historyCopy);
-    connect(historyButton, &QPushButton::clicked, historyCopy,
+    connect(historyButton, &QAbstractButton::clicked, historyCopy,
             [historyCopy] { historyCopy->setVisible(!historyCopy->isVisible()); });
     linkedLayout->addWidget(history);
 
@@ -676,13 +686,13 @@ QWidget* RemoteControlView::createControlPage() {
     pairingDialogTitle_->setObjectName(QStringLiteral("remotePairingDialogTitle"));
     pairingHeading->addWidget(pairingDialogTitle_);
     pairingHeading->addStretch();
-    auto* closePairing = new SymbolIconButton(closeIcon, pairingHeader);
+    auto* closePairing = new ket::IconButton(ket::Icons::icon(u"x"), tr("Close"), pairingHeader);
     closePairing->setObjectName(QStringLiteral("remotePairingCloseButton"));
     closePairing->setProperty("remoteTertiary", true);
     closePairing->setToolTip(QStringLiteral("Close"));
     closePairing->setAccessibleName(QStringLiteral("Close QR code"));
     chrome_geometry::fixedSize(closePairing, 30, 30);
-    connect(closePairing, &QPushButton::clicked, this, [this] { pairingDialog_->reject(); });
+    connect(closePairing, &QAbstractButton::clicked, this, [this] { pairingDialog_->reject(); });
     pairingHeading->addWidget(closePairing);
     pairingHeader->setLayout(pairingHeading);
     pairing->addWidget(pairingHeader);
@@ -733,7 +743,7 @@ QWidget* RemoteControlView::createControlPage() {
     pairingConfirmationCode_->setAlignment(Qt::AlignCenter);
     pairingConfirmationCode_->hide();
     pairingBodyLayout->addWidget(pairingConfirmationCode_);
-    pairingCode_ = new QLineEdit;
+    pairingCode_ = new ket::TextField;
     pairingCode_->setReadOnly(true);
     pairingCode_->setObjectName(QStringLiteral("remotePairingCode"));
     pairingCode_->hide();
@@ -766,9 +776,10 @@ QWidget* RemoteControlView::createControlPage() {
     chrome_geometry::margins(pairingActions, 22, 13, 22, 13);
     chrome_geometry::spacing(pairingActions, 8);
     pairingActions->addStretch();
-    pairingCancelButton_ = new QPushButton(QStringLiteral("Close"), pairingFooter);
+    pairingCancelButton_ =
+        new ket::Button(QStringLiteral("Close"), ket::ButtonVariant::Secondary, pairingFooter);
     pairingCancelButton_->setObjectName(QStringLiteral("remotePairingCancelButton"));
-    connect(pairingCancelButton_, &QPushButton::clicked, this, [this] {
+    connect(pairingCancelButton_, &QAbstractButton::clicked, this, [this] {
         if (pairingCancelButton_->property("pairAction").toString() == QStringLiteral("expire")) {
             showPairing({{QStringLiteral("status"), QStringLiteral("expired")}});
             return;
@@ -776,11 +787,12 @@ QWidget* RemoteControlView::createControlPage() {
         pairingDialog_->reject();
     });
     pairingActions->addWidget(pairingCancelButton_);
-    approveButton_ = new QPushButton(QStringLiteral("Allow this device"));
+    approveButton_ =
+        new ket::Button(QStringLiteral("Allow this device"), ket::ButtonVariant::Primary);
     approveButton_->setObjectName(QStringLiteral("remoteApproveButton"));
     approveButton_->setProperty("remotePrimary", true);
     approveButton_->setEnabled(false);
-    connect(approveButton_, &QPushButton::clicked, this, [this] {
+    connect(approveButton_, &QAbstractButton::clicked, this, [this] {
         const QString action = approveButton_->property("pairAction").toString();
         if (action == QStringLiteral("retry")) {
             pairingDialog_->reject();
@@ -1090,18 +1102,20 @@ void RemoteControlView::renderDevices(const QJsonArray& devices) {
                                   : QStringLiteral("KetPlus App · Paired · %1").arg(platform),
                               "deviceMeta"));
         rowLayout->addLayout(copy, 1);
-        auto* details = new QPushButton(QStringLiteral("Details"));
+        auto* details = new ket::Button(QStringLiteral("Details"), ket::ButtonVariant::Ghost);
         details->setProperty("remoteTertiary", true);
         const QString deviceId = device.value(QStringLiteral("id")).toString();
-        connect(details, &QPushButton::clicked, this,
+        connect(details, &QAbstractButton::clicked, this,
                 [this, deviceId, name] { showDeviceDetails(deviceId, name); });
         rowLayout->addWidget(details);
-        auto* revoke = new QPushButton(QStringLiteral("Revoke access"));
+        auto* revoke =
+            new ket::Button(QStringLiteral("Revoke access"), ket::ButtonVariant::GhostDanger);
         revoke->setProperty("remoteDanger", true);
         revoke->setIcon(symbolIcon(unplugIcon, QColor(QStringLiteral("#B42318")), 14));
         chrome_geometry::iconSize(revoke, QSize(14, 14));
         revoke->setEnabled(!deviceId.isEmpty());
-        connect(revoke, &QPushButton::clicked, this, [this, deviceId] { revokeDevice(deviceId); });
+        connect(revoke, &QAbstractButton::clicked, this,
+                [this, deviceId] { revokeDevice(deviceId); });
         rowLayout->addWidget(revoke);
         devicesLayout_->addWidget(row);
     }
