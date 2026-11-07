@@ -341,6 +341,8 @@ pagination. Journal append commits mandatory delivery/replay/activity/blob write
 and the session cursor as one unit; ignored single-row writes fail the transaction
 (ADR 0058). Append validates stored integer counters and the complete cursor range
 before mutation; unsupported/exhausted state is preserved (ADR 0059).
+Fork checks complete history copy counts and a still-unused destination in its
+transaction, so a delayed provider response cannot replace another session (ADR 0060).
 Desktop's existing presentation model is retained behind a protocol
 translation facade; raw Codex JSON-RPC is not exposed over IPC.
 

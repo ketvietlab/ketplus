@@ -517,3 +517,10 @@ ADR 0059 `DaemonProtocolTest::appendPreservesUnsupportedCounters` covers integer
 storage/type guards, overflow refusal for normal/chunked appends, positive boundary
 controls, unchanged history/counters after refusal, transaction release and
 repair/retry/reopen. Use temporary journals and the affected backend matrix.
+
+ADR 0060 `SessionForkTest` injects ignored copies/timestamp and commit failures,
+verifies rollback of source/destination/context/catalog state, then retry/reopen
+and exact copied values. Empty history and existing/self/deleted destinations have
+separate controls. A gated fake Codex fork response exercises a destination claimed
+by another start command while the provider call is pending. Run the fork target
+and affected protocol/activity/transcript/lifecycle/worktree/retention targets.
