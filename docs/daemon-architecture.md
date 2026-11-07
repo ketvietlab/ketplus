@@ -653,3 +653,9 @@ then may compact eligible recent detail without bypassing retention guards.
 Forever/off still preserve remaining detail. Unsupported/protected data may leave
 the target unmet. File/WAL and total-application usage are not this page target;
 see [ADR 0046](decisions/0046-journal-size-pressure.md) for scope and remaining work.
+
+Bounded large-tool retention (ADR 0047) applies the existing detail transformers
+to version-1 fragmented payloads within the shared 1 MiB pass budget. It requires
+a fully acknowledged session generation, verifies identity and SHA-256, and
+atomically replaces the replay manifest, cleans unreferenced chunks and advances
+projection revision. Images, legacy blobs and larger payloads remain retained.

@@ -5,6 +5,12 @@ milestone changes state.
 
 ## Implemented
 
+- Bounded large-tool manifests now use existing detail transformers when the
+  hydrated JSON plus manifest fits the shared 1 MiB pass budget. Digest/identity
+  validation and transactional replay/blob cleanup preserve corrupt, shared,
+  unacknowledged and unsupported payloads (ADR 0047). Images, legacy monolithic
+  blobs and larger payloads remain outside this lane.
+
 - The owner-only size-policy backend supports revisioned 1/2/5/10 GB SQLite-page
   targets and warning status (ADR 0046). Recent-detail pressure is opt-in via an
   explicit policy save. Desktop now exposes a separate Save database target action,
@@ -17,7 +23,7 @@ milestone changes state.
   excerpt with a visible trim label (ADR 0043), including a one-time upgrade of
   text-only compaction markers. Successful plain structured results now support
   sanitized display-only excerpts sharing the result text budget (ADR 0044).
-  Resource-bearing shapes and large-payload/media retention remain separate work; existing turn/ACK/idle guards are unchanged.
+  Resource-bearing shapes, payloads above the bounded lane and media retention remain separate work; existing turn/ACK/idle guards are unchanged.
 
 - Journal replay-detail retention now also stores explicit file-diff excerpts with
   original line statistics (ADR 0040), following command output (ADR 0038) and tool

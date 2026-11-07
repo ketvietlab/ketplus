@@ -66,7 +66,7 @@ class Database {
 QDateTime cutoff() { return QDateTime::currentDateTimeUtc().addDays(-30); }
 
 bool seed(LocalJournal& journal, const QString& path, bool acknowledge = true, int turns = 24,
-          const QString& output = {}) {
+          const QString& output = {}, bool largeTool = false) {
     StoredSession session;
     session.id = "session";
     session.worktreePath = "synthetic";
@@ -100,6 +100,15 @@ bool seed(LocalJournal& journal, const QString& path, bool acknowledge = true, i
                     {"durationMs", 123},
                     {"status", "completed"},
                     {"aggregatedOutput", output}};
+        }
+        if (largeTool) {
+            const QJsonArray content{QJsonObject{{"type", "text"}, {"text", output}}};
+            item = {{"id", QString("item-%1").arg(turn)},
+                    {"type", "mcpToolCall"},
+                    {"status", "completed"},
+                    {"server", "synthetic"},
+                    {"tool", "large-result"},
+                    {"result", QJsonObject{{"content", content}}}};
         }
         if (!append("item.started", {{"item", item}}) ||
             !append("item.completed", {{"item", item}}) || !append("turn.completed", {}))
@@ -150,6 +159,169 @@ QJsonArray withoutUsage(const QJsonArray& events) {
 class JournalUsageRetentionTest final : public QObject {
     Q_OBJECT
   private slots:
+    void boundedLargePayloadsCompactAtomically_data() {
+        QTest::addColumn<bool>("revisionFailure");
+        QTest::newRow("blob-delete") << false;
+        QTest::newRow("projection-revision") << true;
+    }
+    void boundedLargePayloadsCompactAtomically() {
+        QFETCH(bool, revisionFailure);
+        QTemporaryDir directory;
+        const auto path = directory.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(seed(journal, path, true, 24, QString(300000, 'x'), true));
+        Database database(path);
+        const auto before = allReplay(journal);
+        const auto window = journal.transcriptWindow("session", 1);
+        const auto payloads = database.scalar("SELECT count(*) FROM large_event_payloads");
+        const auto chunks = database.scalar("SELECT count(*) FROM large_event_payload_chunks");
+        QVERIFY(payloads >= 24);
+        QString transfer;
+        for (const auto& value : before) {
+            const auto event = value.toObject();
+            if (event.value("event_type") == "item.completed" &&
+                event.value("turn_sequence").toInteger() == 1)
+                transfer = event.value("payload")
+                               .toObject()
+                               .value("large_event")
+                               .toObject()
+                               .value("transfer_id")
+                               .toString();
+        }
+        QVERIFY(!transfer.isEmpty());
+        QVERIFY(journal.largeEventFragment("session", 1, transfer, 0).errorCode.isEmpty());
+        QVERIFY(database.exec(
+            revisionFailure
+                ? "CREATE TRIGGER fail_large_delete BEFORE UPDATE OF revision ON "
+                  "replay_projection_state BEGIN SELECT RAISE(ABORT,'rollback'); END"
+                : "CREATE TRIGGER fail_large_delete BEFORE DELETE ON large_event_payloads WHEN "
+                  "OLD.event_type='item.completed' BEGIN SELECT RAISE(ABORT,'rollback'); END"));
+        QVERIFY(!journal.pruneReplayDetails(cutoff()));
+        QCOMPARE(allReplay(journal), before);
+        QCOMPARE(database.scalar("SELECT count(*) FROM large_event_payloads"), payloads);
+        QCOMPARE(database.scalar("SELECT count(*) FROM large_event_payload_chunks"), chunks);
+        QVERIFY(database.exec("DROP TRIGGER fail_large_delete"));
+        QElapsedTimer timer;
+        timer.start();
+        const auto firstPass = journal.pruneReplayDetails(cutoff(), 256);
+        QVERIFY(firstPass.has_value());
+        const auto firstCount =
+            payloads - database.scalar("SELECT count(*) FROM large_event_payloads");
+        QVERIFY(firstCount > 0 && firstCount <= 3);
+        QVERIFY(sweep(journal) > 0);
+        qInfo() << "Bounded large-payload sweep ms:" << timer.elapsed();
+        QCOMPARE(database.scalar("SELECT count(*) FROM large_event_payloads"), payloads - 4);
+        QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE "
+                                 "json_type(payload,'$.item.compacted')='object'"),
+                 4);
+        QCOMPARE(journal.largeEventFragment("session", 1, transfer, 0).errorCode,
+                 QString("large_event_not_found"));
+        QCOMPARE(journal
+                     .transcriptWindow("session", 1, window.beforeCursor, window.snapshotCursor,
+                                       window.projectionRevision)
+                     .errorCode,
+                 QString("snapshot_changed"));
+        const auto after = allReplay(journal);
+        for (const auto& value : before) {
+            const auto event = value.toObject();
+            if (event.value("turn_sequence").toInteger() > 4)
+                QVERIFY(after.contains(value)); // latest twenty, including manifests, are untouched
+        }
+        QCOMPARE(sweep(journal), 0);
+    }
+    void largePayloadGuards_data() {
+        QTest::addColumn<QString>("guard");
+        for (const auto& guard :
+             {"unacked", "running", "recent", "other-turn-raw", "oversize", "digest", "revision",
+              "missing-chunk", "corrupt-bytes", "oversize-chunk", "image", "question", "open-turn",
+              "old-generation", "unknown-manifest"})
+            QTest::newRow(guard) << QString(guard);
+    }
+    void largePayloadGuards() {
+        QFETCH(QString, guard);
+        QTemporaryDir directory;
+        const auto path = directory.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(seed(journal, path, guard != "unacked", 21,
+                     QString(guard == "oversize" ? 1100000 : 300000, 'x'), true));
+        Database database(path);
+        if (guard == "running")
+            QVERIFY(database.exec("UPDATE sessions SET state='running'"));
+        if (guard == "recent")
+            QVERIFY(database.exec("UPDATE replay_events SET sent_at=datetime('now')"));
+        if (guard == "other-turn-raw")
+            QVERIFY(database.exec(
+                "INSERT INTO "
+                "events(session_id,generation,cursor,event_type,payload,sent_at,turn_sequence) "
+                "SELECT session_id,generation,cursor,event_type,payload,sent_at,turn_sequence FROM "
+                "replay_events WHERE turn_sequence=21 LIMIT 1"));
+        if (guard == "digest")
+            QVERIFY(database.exec("UPDATE large_event_payloads SET digest_sha256='bad'"));
+        if (guard == "revision")
+            QVERIFY(database.exec("UPDATE large_event_payloads SET revision=revision+1"));
+        if (guard == "missing-chunk")
+            QVERIFY(database.exec("DELETE FROM large_event_payload_chunks WHERE chunk_offset=0"));
+        if (guard == "corrupt-bytes")
+            QVERIFY(database.exec("UPDATE large_event_payload_chunks SET "
+                                  "payload=CAST(replace(CAST(payload AS TEXT),'xxx','yyy') AS "
+                                  "BLOB) WHERE chunk_offset=0"));
+        if (guard == "oversize-chunk")
+            QVERIFY(database.exec("UPDATE large_event_payload_chunks SET payload=zeroblob(131073) "
+                                  "WHERE chunk_offset=0"));
+        if (guard == "image")
+            QVERIFY(database.exec("UPDATE replay_events SET "
+                                  "payload=json_set(payload,'$.item_type','imageGeneration') WHERE "
+                                  "event_type='item.completed'"));
+        if (guard == "question")
+            QVERIFY(database.exec("UPDATE replay_events SET event_type='question.opened' WHERE "
+                                  "event_type='usage.context'"));
+        if (guard == "open-turn")
+            QVERIFY(database.exec("UPDATE replay_events SET event_type='turn.started' WHERE "
+                                  "event_type='turn.completed'"));
+        if (guard == "old-generation")
+            QVERIFY(database.exec("UPDATE sessions SET generation=2"));
+        if (guard == "unknown-manifest")
+            QVERIFY(database.exec(
+                "UPDATE replay_events SET payload=json_set(payload,'$.future_field','keep') WHERE "
+                "event_type='item.completed'"));
+        const auto payloads = database.scalar("SELECT count(*) FROM large_event_payloads");
+        const auto chunks = database.scalar("SELECT count(*) FROM large_event_payload_chunks");
+        QVERIFY(sweep(journal) >= 0);
+        QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE "
+                                 "json_type(payload,'$.item.compacted')='object'"),
+                 0);
+        QCOMPARE(database.scalar("SELECT count(*) FROM large_event_payloads"), payloads);
+        QCOMPARE(database.scalar("SELECT count(*) FROM large_event_payload_chunks"), chunks);
+    }
+    void sharedLargePayloadRemainsReadable() {
+        QTemporaryDir directory;
+        const auto path = directory.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(seed(journal, path, true, 21, QString(300000, 'x'), true));
+        QString transfer;
+        for (const auto& value : allReplay(journal)) {
+            const auto event = value.toObject();
+            if (event.value("event_type") == "item.completed" &&
+                event.value("turn_sequence").toInteger() == 1)
+                transfer = event.value("payload")
+                               .toObject()
+                               .value("large_event")
+                               .toObject()
+                               .value("transfer_id")
+                               .toString();
+        }
+        QVERIFY(!transfer.isEmpty());
+        Database database(path);
+        QVERIFY(
+            database.exec("UPDATE replay_events SET item_id='item-1', payload=(SELECT payload FROM "
+                          "replay_events WHERE event_type='item.completed' AND turn_sequence=1) "
+                          "WHERE event_type='item.completed' AND turn_sequence=21"));
+        QVERIFY(sweep(journal) > 0);
+        QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE "
+                                 "json_type(payload,'$.item.compacted')='object'"),
+                 1);
+        QVERIFY(journal.largeEventFragment("session", 1, transfer, 0).errorCode.isEmpty());
+    }
     void retainsLastSamplesMessagesOrderingAndFencesContinuations() {
         QTemporaryDir directory;
         const QString path = directory.filePath("journal.sqlite");

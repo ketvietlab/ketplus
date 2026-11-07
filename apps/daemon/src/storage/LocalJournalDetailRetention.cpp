@@ -1,5 +1,7 @@
+#include "protocol/DaemonProtocol.h"
 #include "storage/LocalJournal.h"
 #include "storage/ReplayDetailCompactor.h"
+#include <QCryptographicHash>
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -71,6 +73,75 @@ bool supersededStart(const QJsonObject& start, const QJsonObject& completed) {
     return true;
 }
 
+// The caller holds the retention transaction. Never hydrate legacy/oversize blobs or
+// allocate an unbounded corrupt chunk; the existing pass budget includes these bytes.
+std::optional<QByteArray> boundedLargePayload(const QSqlDatabase& database, const QString& session,
+                                              qint64 generation, const QJsonObject& manifest,
+                                              qint64 total, QString* error) {
+    const auto ref = manifest.value("large_event").toObject();
+    if (manifest.size() != 3 || ref.size() != 10 || ref.value("version") != QJsonValue(1) ||
+        ref.value("encoding") != "json-utf8" || ref.value("event_type") != "item.completed" ||
+        ref.value("total_bytes") != QJsonValue(total) ||
+        ref.value("chunk_bytes") != QJsonValue(96 * 1024) ||
+        ref.value("chunk_count") != QJsonValue((total + 96 * 1024 - 1) / (96 * 1024)))
+        return std::nullopt;
+    QSqlQuery metadata(database);
+    metadata.prepare(
+        "SELECT item_id,revision,digest_sha256 FROM large_event_payloads WHERE "
+        "session_id=? AND generation=? AND transfer_id=? AND event_type='item.completed' "
+        "AND total_bytes=?");
+    metadata.addBindValue(session);
+    metadata.addBindValue(generation);
+    metadata.addBindValue(ref.value("transfer_id").toString());
+    metadata.addBindValue(total);
+    if (!metadata.exec()) {
+        *error = metadata.lastError().text();
+        return std::nullopt;
+    }
+    if (!metadata.next())
+        return std::nullopt;
+    const auto itemId = metadata.value(0).toString();
+    const auto digest = metadata.value(2).toString();
+    if (itemId.isEmpty() || manifest.value("item_id") != itemId || ref.value("item_id") != itemId ||
+        ref.value("revision") != QJsonValue(metadata.value(1).toLongLong()) ||
+        ref.value("digest_sha256") != digest)
+        return std::nullopt;
+    metadata.finish();
+    QSqlQuery chunks(database);
+    chunks.prepare(
+        "SELECT chunk_offset,CASE WHEN length(CAST(payload AS BLOB))<=131072 "
+        "THEN CAST(payload AS BLOB) ELSE NULL END FROM large_event_payload_chunks "
+        "WHERE session_id=? AND generation=? AND transfer_id=? ORDER BY chunk_offset LIMIT 9");
+    chunks.addBindValue(session);
+    chunks.addBindValue(generation);
+    chunks.addBindValue(ref.value("transfer_id").toString());
+    if (!chunks.exec()) {
+        *error = chunks.lastError().text();
+        return std::nullopt;
+    }
+    QByteArray bytes;
+    while (chunks.next()) {
+        const auto chunk = chunks.value(1).toByteArray();
+        if (chunks.value(0).toLongLong() != bytes.size() || chunk.isEmpty() ||
+            chunk.size() > total - bytes.size())
+            return std::nullopt;
+        bytes += chunk;
+    }
+    if (chunks.lastError().isValid()) {
+        *error = chunks.lastError().text();
+        return std::nullopt;
+    }
+    if (bytes.size() != total ||
+        QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex() != digest.toLatin1())
+        return std::nullopt;
+    const auto payload = QJsonDocument::fromJson(bytes).object();
+    const auto item = payload.value("item").toObject();
+    if (payload.contains("large_event") || item.value("id") != itemId ||
+        item.value("type") != manifest.value("item_type"))
+        return std::nullopt;
+    return bytes;
+}
+
 struct Row {
     qint64 rowid;
     QString session;
@@ -116,10 +187,8 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
         return fail(scan.lastError().text());
     scan.finish();
 
-    const QString eligible = QStringLiteral(
+    const QString turnEligible = QStringLiteral(
         "r.rowid = ? AND r.turn_sequence > 0 "
-        // Large manifests retain their payload ownership; this pass never edits blobs.
-        "AND json_type(r.payload, '$.large_event') IS NULL "
         "AND EXISTS (SELECT 1 FROM sessions s WHERE s.id = r.session_id "
         "AND s.generation = r.generation AND s.state IN ('ready','failed','interrupted','exited')) "
         // Count actual newer turns, not sequence arithmetic (forks can leave gaps).
@@ -141,6 +210,20 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
         "AND NOT EXISTS (SELECT 1 FROM replay_events t WHERE t.session_id = r.session_id "
         "AND t.generation = r.generation AND t.turn_sequence = r.turn_sequence "
         "AND (t.event_type LIKE 'approval.%' OR t.event_type LIKE 'question.%')) ");
+    const QString eligible = turnEligible + "AND json_type(r.payload, '$.large_event') IS NULL ";
+    QSqlQuery largeCandidate(database_);
+    largeCandidate.prepare(
+        "SELECT r.payload,p.total_bytes FROM replay_events r JOIN large_event_payloads p ON "
+        "p.session_id=r.session_id AND p.generation=r.generation AND p.item_id=r.item_id AND "
+        "p.transfer_id=json_extract(r.payload,'$.large_event.transfer_id') WHERE " +
+        turnEligible +
+        "AND p.total_bytes>0 AND p.total_bytes<=1048576 AND length(CAST(r.payload AS BLOB))<=16384 "
+        // Requiring the whole session to be acknowledged keeps orphan cleanup bounded even
+        // when another turn has a huge raw backlog. This lane deliberately defers that session.
+        "AND NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id=r.session_id AND "
+        "e.generation=r.generation) "
+        "AND json_extract(r.payload,'$.item_type') IN "
+        "('commandExecution','mcpToolCall','dynamicToolCall','reasoning','fileChange')");
     QSqlQuery remove(database_);
     remove.prepare(
         QStringLiteral("DELETE FROM replay_events AS r WHERE ") + eligible +
@@ -149,8 +232,7 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
             "AND newer.generation = r.generation AND newer.turn_sequence = r.turn_sequence "
             "AND newer.event_type = r.event_type AND newer.cursor > r.cursor)"));
     QSqlQuery candidate(database_);
-    // Bound parsing independently of row count. Larger payloads and manifests need
-    // the separate blob-retention path; never materialize them in this idle pass.
+    // Ordinary payloads and the bounded manifest lane share the same parsing budget.
     candidate.prepare(
         QStringLiteral("SELECT r.payload FROM replay_events AS r WHERE ") + eligible +
         QStringLiteral(
@@ -231,14 +313,47 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
             candidate.bindValue(1, olderThan.toUTC().toString(Qt::ISODateWithMs));
             if (!candidate.exec())
                 return fail(candidate.lastError().text());
-            if (!candidate.next()) {
+            QByteArray bytes;
+            QString transfer;
+            if (candidate.next()) {
+                bytes = candidate.value(0).toByteArray();
+                candidate.finish();
+            } else {
                 if (candidate.lastError().isValid())
                     return fail(candidate.lastError().text());
                 candidate.finish();
-                continue;
+                largeCandidate.bindValue(0, row.rowid);
+                largeCandidate.bindValue(1, olderThan.toUTC().toString(Qt::ISODateWithMs));
+                if (!largeCandidate.exec())
+                    return fail(largeCandidate.lastError().text());
+                if (!largeCandidate.next()) {
+                    if (largeCandidate.lastError().isValid())
+                        return fail(largeCandidate.lastError().text());
+                    largeCandidate.finish();
+                    continue;
+                }
+                const auto manifestBytes = largeCandidate.value(0).toByteArray();
+                const auto total = largeCandidate.value(1).toLongLong();
+                largeCandidate.finish();
+                const auto cost = manifestBytes.size() + total;
+                if (cost > 1024 * 1024)
+                    continue; // never stall on an individually oversized item
+                if (parsedBytes + cost > 1024 * 1024)
+                    break;
+                parsedBytes += manifestBytes.size();
+                const auto manifest = QJsonDocument::fromJson(manifestBytes).object();
+                QString readError;
+                const auto hydrated = boundedLargePayload(database_, row.session, row.generation,
+                                                          manifest, total, &readError);
+                if (!readError.isEmpty())
+                    return fail(readError);
+                if (!hydrated) {
+                    parsedBytes += total;
+                    continue;
+                }
+                bytes = *hydrated;
+                transfer = manifest.value("large_event").toObject().value("transfer_id").toString();
             }
-            const QByteArray bytes = candidate.value(0).toByteArray();
-            candidate.finish();
             if (parsedBytes + bytes.size() > 1024 * 1024)
                 break; // leave this candidate for the next batch
             parsedBytes += bytes.size();
@@ -248,14 +363,21 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
             if (!item)
                 continue;
             payload.insert(QStringLiteral("item"), *item);
-            update.bindValue(
-                0, QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Compact)));
+            const auto compacted = QJsonDocument(payload).toJson(QJsonDocument::Compact);
+            // Unknown/duplicated top-level detail must not be discarded to make the output fit.
+            if (!transfer.isEmpty() && (compacted.size() > protocol::maximumEventPayloadBytes ||
+                                        compacted.size() >= bytes.size()))
+                continue;
+            update.bindValue(0, QString::fromUtf8(compacted));
             update.bindValue(1, row.rowid);
             if (!update.exec())
                 return fail(update.lastError().text());
             if (update.numRowsAffected() != 1)
                 return fail(QStringLiteral("Missing replay item during detail retention."));
             update.finish();
+            if (!transfer.isEmpty() &&
+                !pruneUnreferencedLargePayloads(row.session, row.generation, {transfer}))
+                return fail(error_);
             ++removed;
             changed.insert({row.session, row.generation});
             continue;
