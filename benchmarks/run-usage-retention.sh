@@ -16,5 +16,5 @@ if [[ "$(uname -s)" == Darwin ]]; then
 fi
 for run in 1 2 3; do
     printf '\nRUN=%s\n' "$run"
-    "$build_dir/ketplus_daemon_usage_retention_tests" rawBacklogUsesTurnLookup
+    "$build_dir/ketplus_daemon_usage_retention_tests" rawBacklogUsesTurnLookup commandBudgetResumesAndRollbackRestoresPayloads
 done
