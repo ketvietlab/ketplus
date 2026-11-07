@@ -38,7 +38,7 @@ contiguous-prefix rule (ADR 0049); these tables have no raw replay cursor contra
 Reopen and every 256 command results run one pass of each lane; every 256 new
 audit records also run an audit pass. The existing idle maintenance timer now
 continues all metadata lanes along with global payload GC. Budgets are **per
-table**, not shared across the five metadata tables or with raw/blob cleanup.
+table**, not shared across the metadata tables or with raw/blob cleanup.
 The daemon does not promise a hard row/disk quota or drain during continuous
 active turns. Missing `octet_length` defers metadata cleanup and warns once rather
 than falling back to loading unbounded values. Unsupported-data recovery,
@@ -49,3 +49,6 @@ clock rollback, byte-limited reopen, age/cap shared budget, unsupported-row
 fairness, orphan generation isolation, failure/commit rollback, busy deferral,
 capability absence and the actual prepared candidate/parent query plans. Synthetic
 fixtures do not constitute Windows, live-journal or mixed multi-GB acceptance.
+
+ADR 0052 adds completed deletion jobs as a sixth independent lane; its eligibility
+is durable completion, rather than age or a cap.

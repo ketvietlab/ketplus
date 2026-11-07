@@ -147,6 +147,10 @@ bool LocalJournal::initialize() {
             "session_id TEXT NOT NULL, generation INTEGER NOT NULL, "
             "deletion TEXT NOT NULL, provider_targets TEXT NOT NULL DEFAULT '[]', "
             "cloud_acked INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(session_id, generation))"),
+        QStringLiteral("CREATE INDEX IF NOT EXISTS session_deletion_pending ON "
+                       "session_deletion_work((provider_targets != '[]' OR cloud_acked=0))"),
+        QStringLiteral("CREATE INDEX IF NOT EXISTS session_deletion_cloud_pending ON "
+                       "session_deletion_work(cloud_acked)"),
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS cloud_events ("
             "session_id TEXT NOT NULL, generation INTEGER NOT NULL, cursor INTEGER NOT NULL, "

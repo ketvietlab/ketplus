@@ -91,7 +91,12 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
     remains separately tracked until verified.
   - [x] Reproduce staged-attachment expiry backlog and invalid-input maintenance;
     implement bounded retirement/chunk cleanup with identity-reuse and fault tests.
-  - [ ] Staged-attachment final-head full Pro/review/merge gates and safe cleanup.
+  - [x] Staged attachment #230: final head `ceb5476a` passed full Pro 95/95 and
+    independent exact-head 4/4 targets; merged `8f0858bc67b0eba99b9b5529bf5d123f2b179678`.
+    Source/build cleanup remains separately tracked.
+  - [x] Reproduce global deletion-completion sweeps and implement bounded completed
+    work GC plus indexed pending pages; malformed/ignored completion regressions.
+  - [ ] Completed-deletion work final affected matrix/review/merge and safe cleanup.
   - [ ] Audit cloud-event cleanup and explicit deletion paths.
   - [ ] Close H1.1 only when those remaining work bounds have evidence.
 - [ ] H1.2 Verify migration/reopen safety: old schema, repeat open, partial failure,
@@ -202,7 +207,7 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | Item | State | Evidence / remaining work | Next action / owner |
 | --- | --- | --- | --- |
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
-| H1.1 | In progress | Global GC #220, ACK #223 and metadata #228 merged with exact-head gates; staged expiry 32/32 focused, cancel P2 fix awaiting final gates | Finish staged expiry gates; audit cloud/deletion / #2739 |
+| H1.1 | In progress | Global GC #220, ACK #223, metadata #228 and staged expiry #230 merged with exact-head gates; deletion-work cleanup focused 32/32 | Finish deletion-work gates; audit cloud/cache and explicit deletion / #2739 |
 | H1.2–H1.7 | Not started | No claim that #128 backend acceptance is complete | Follow H1.1, prioritize a confirmed safety finding / #2739 |
 | H2–H3 | Not started | Open daemon/provider review issues mapped | Execute after storage, or independent audit while waiting review / #2739 |
 | H4.1–H4.3 | Not started | Existing remote fixes are not a full #85 closure | Audit local transport/privacy with fixtures / #2739 |
@@ -330,7 +335,7 @@ full Pro 94/94 matrix and independent exact-head review (metadata 20/20,
 transcript 28/28 plus empty/nonempty-wrap probes). #228 merged at
 `eca3bad52d61c51f250df4d51594bad03f2b0226`; earlier pending gates are resolved.
 
-**Next executable task:** finish staged-attachment full-matrix/review/merge gates;
+**Next executable task:** finish completed-deletion work matrix/review/merge gates;
 while review runs, audit cloud-event and explicit deletion separately. Do not
 mark H1.1/H1 complete on these subsets.
 
@@ -378,3 +383,31 @@ passes. Both preceding staging heads passed full Pro 95/95, but the cancellation
 fix requires its own final full/review gates. Explicit current-upload cancellation
 work bounds and downgrade of mixed-revision retirement remain separate H1.1/H1.2
 acceptance; no release/rollback claim is inferred.
+
+
+Final staged-expiry head `ceb5476add8844cc53de3e3fa4e4521e31610e47` passed full
+Pro 95/95 (263.98 s). Independent exact-head review passed all four affected
+targets and the original cancellation probe. #230 merged at
+`8f0858bc67b0eba99b9b5529bf5d123f2b179678`. Earlier pending full/review gates above
+are resolved; generated build and linked-source cleanup is tracked separately.
+
+### H1.1 completed deletion work
+
+A synthetic Qt completion over 100,000 already completed jobs took 413 ms and
+removed 100,001 rows. Completion now writes only its own durable receipt/target
+list, and a sixth bounded metadata lane removes completed rows. Pending pages
+seek state plus rowid with a shared suffix/prefix limit; an accumulated completed
+backlog cannot force a global scan/sort. Baseline regressions also exposed ignored
+updates reporting success and malformed provider-target JSON becoming completed.
+The focused suite passes 32/32, and all 10 affected Release/headless targets pass
+(63.25 s). Replacing the pending-state index with a session-ID index makes the
+actual prepared-plan regression fail; restored sources pass. No shared interface,
+CMake/core or app composition changed, so the documented affected matrix applies.
+Independent review and merge remain pending.
+See [ADR 0052](../../docs/decisions/0052-bounded-completed-deletion-work.md) and
+[Qt evidence](evidence/h1-deletion-work-qt.json). Per-record JSON size, index startup,
+explicit session deletion and tombstone enumeration remain open.
+
+The independent cloud-cache probe removed 100,000 cached 1-KiB rows in 269 ms.
+The same API serves both successful upload ACK and policy/key invalidation;
+async cleanup must preserve invalidation semantics before changing that path.
