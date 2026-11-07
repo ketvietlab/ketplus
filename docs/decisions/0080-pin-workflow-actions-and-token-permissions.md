@@ -1,7 +1,7 @@
 # ADR 0080: Pin workflow actions and limit checkout credentials
 
 Status: accepted for direct workflow action references and GITHUB_TOKEN defaults;
-hosted execution and transitive dependency audits remain open.
+hosted acceptance is partial; transitive dependency and enforcement audits remain open.
 
 The build, promotion and WebRTC workflows used movable action references. Build
 and WebRTC also inherited repository token permissions, while checkout left its
@@ -40,3 +40,17 @@ transitive build dependency, nor prove hosted runner compatibility. Cache trust,
 fork isolation and full release provenance remain H6 work. Actual GitHub jobs
 are verified on the existing promotion/release lanes; do not enable CI on
 integration or claim local checks exercised hosted actions.
+
+Hosted execution at `5fa91c0d` passed browser, Lite macOS/Ubuntu, Pro macOS
+(96/96), and Linux daemon (48/48 plus install staging, TGZ and clean-container
+runtime). Windows failed Git/navigation fixture targets and the tooltip/theme
+target. PR #268 fixes the filesystem fixtures independently; UI acceptance
+remains outside this backend-only workstream. These jobs cover the integration
+base plus this workflow change, not the other pending hardening branches.
+
+The read-only GitHub audit on 2026-11-07 returned no repository rulesets and
+`develop.protected=false`; classic protection returned `Branch not protected`.
+Promotion currently executes its policy script and tests from the PR head. A
+passing local script does not establish an immutable mandatory promotion gate.
+Repository administrators must decide and verify enforcement; this change does
+not silently change repository settings or adopt privileged workflow triggers.

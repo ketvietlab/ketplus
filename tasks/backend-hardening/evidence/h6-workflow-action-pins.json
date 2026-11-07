@@ -61,13 +61,14 @@
   "validation": [
     "PyYAML parses all workflows; exact structural comparison permits only pins, explicit permission defaults and checkout credential persistence",
     "existing check-develop-promotion.test.sh passes all cases",
-    "git diff --check"
+    "git diff --check",
+    "Hosted workflow at 5fa91c0dde3e19edc00ecbe2f764390aa47c77c7: five of six jobs PASS; Windows Lite fails three targets"
   ],
   "not_verified": [
-    "hosted action/runner execution",
-    "transitive action downloads and all build dependencies",
-    "cache trust and complete fork isolation",
-    "signing, packaging, publication, install or deploy"
+    "complete Windows Lite acceptance (filesystem fixtures fixed separately in PR #268; UI tooltip remains)",
+    "transitive action downloads and all dependency/license inventory",
+    "complete cache/fork isolation and mandatory promotion enforcement",
+    "real signing/notarization, publication, install or deploy"
   ],
   "hosted_initial_browser": {
     "run": "https://github.com/ketvietlab/ketplus/actions/runs/42392428619",
@@ -81,5 +82,33 @@
     "fixed_short_tmp": "3/3 PASS",
     "fixed_native_tmp": "3/3 PASS",
     "production_guard": "unchanged; nonzero rejection and explicit allow-stale/restage controls retained"
+  },
+  "hosted_corrected": {
+    "run": "https://github.com/ketvietlab/ketplus/actions/runs/42393055458",
+    "head": "5fa91c0dde3e19edc00ecbe2f764390aa47c77c7",
+    "browser": "PASS",
+    "Lite_macos": "PASS",
+    "Lite_ubuntu": "PASS",
+    "Pro_macos": "96/96 PASS, 657.18s",
+    "linux_daemon": "48/48 PASS, 114.57s; install staging, TGZ and clean Ubuntu container PASS",
+    "Windows_Lite": "12/15 targets PASS; GitParser, Navigation and tooltip/theme target fail",
+    "filesystem_followup": "PR #268 at 7834290d: Git 11/11 and navigation 12/12 PASS; Windows overall 14/15 targets, UI tooltip still fails",
+    "artifact": {
+      "digest": "sha256:3772b77c14cdd3be60a3cd411b2ccf5eed6573d72cf74cd5557a1d8fa98086da",
+      "expired": false,
+      "id": 13582476608,
+      "name": "linux-daemon-x86_64",
+      "size_in_bytes": 146204728
+    }
+  },
+  "repository_enforcement_audit": {
+    "checked_utc_date": "2026-11-07",
+    "rulesets_returned": 0,
+    "develop_protected": false,
+    "classic_protection_response": "404 Branch not protected",
+    "workflow_policy_source": "promotion workflow checks out and executes policy/test from pull-request head",
+    "conclusion": "local policy tests and a named workflow are not mandatory trusted promotion enforcement",
+    "owner": "repository administrator; enforcement/configuration decision remains open",
+    "changes": "read-only audit; no repository settings or trigger changes"
   }
 }

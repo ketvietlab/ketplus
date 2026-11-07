@@ -927,3 +927,16 @@ not a runtime-guard bypass. The unchanged guard correctly refused stale sources.
 The whitespace-tolerant assertion passes all three source-digest checks under both
 short and platform-native temporary paths; rerun the hosted workflow at the
 corrected head before claiming runner acceptance. No application/UI code changed.
+
+
+H6 hosted acceptance at `5fa91c0d`: browser/Lite macOS/Lite Ubuntu/Pro macOS
+96/96 and Linux daemon 48/48 plus staging/TGZ/container runtime PASS. Windows
+Lite is not accepted: the filesystem fixtures are fixed in #268, while the
+tooltip/theme target remains outside no-UI scope. Other draft backend changes
+are not included in this hosted head. No release/install/deploy occurred.
+
+H6.4 enforcement audit: repository rulesets list is empty; develop is unprotected
+and classic protection returns 404. Promotion runs its policy from the PR head.
+Required immutable policy enforcement needs repository-admin disposition and
+verification; local promotion tests alone do not close this criterion. No
+settings or privileged event triggers were changed.
