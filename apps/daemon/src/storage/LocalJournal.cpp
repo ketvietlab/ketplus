@@ -856,11 +856,11 @@ bool LocalJournal::pruneRetention() {
     return true;
 }
 
-namespace {
+namespace detail {
 // Whether nothing retained names the large payload `p` any longer: no raw event still waiting for
 // a client (manifest or chunk), and no compacted replay manifest. Replay rows are found through
-// the item index, since a manifest carries its payload's item_id; only the few rows of that item
-// are parsed. Raw events are only those no client has acknowledged yet.
+// the exact transfer expression index. Unary + removes the TEXT affinity of p.transfer_id
+// so SQLite can use the fourth expression key. Raw events await client acknowledgement.
 QString largePayloadUnreferenced() {
     return QStringLiteral(
         "NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id = p.session_id AND e.generation = "
@@ -869,9 +869,9 @@ QString largePayloadUnreferenced() {
         "= "
         "p.transfer_id)) AND NOT EXISTS (SELECT 1 FROM replay_events r WHERE r.session_id = "
         "p.session_id AND r.generation = p.generation AND r.item_id = p.item_id AND "
-        "json_extract(r.payload, '$.large_event.transfer_id') = p.transfer_id)");
+        "json_extract(r.payload, '$.large_event.transfer_id') = +p.transfer_id)");
 }
-} // namespace
+} // namespace detail
 
 bool LocalJournal::pruneUnreferencedLargePayloads(const QString& sessionId, const qint64 generation,
                                                   const QStringList& transferIds) {
@@ -880,7 +880,7 @@ bool LocalJournal::pruneUnreferencedLargePayloads(const QString& sessionId, cons
         unreferenced.prepare(QStringLiteral("SELECT 1 FROM large_event_payloads p WHERE "
                                             "p.session_id = ? AND p.generation = ? AND "
                                             "p.transfer_id = ? AND %1")
-                                 .arg(largePayloadUnreferenced()));
+                                 .arg(detail::largePayloadUnreferenced()));
         unreferenced.addBindValue(sessionId);
         unreferenced.addBindValue(generation);
         unreferenced.addBindValue(transferId);
@@ -914,7 +914,7 @@ bool LocalJournal::pruneOrphanLargePayloads() {
     QSqlQuery query(database_);
     const QString orphans = QStringLiteral("SELECT p.session_id, p.generation, p.transfer_id FROM "
                                            "large_event_payloads p WHERE %1")
-                                .arg(largePayloadUnreferenced());
+                                .arg(detail::largePayloadUnreferenced());
     for (const QString& table :
          {QStringLiteral("large_event_payload_chunks"), QStringLiteral("large_event_payloads")}) {
         if (!query.exec(QStringLiteral("DELETE FROM %1 WHERE (session_id, generation, transfer_id) "

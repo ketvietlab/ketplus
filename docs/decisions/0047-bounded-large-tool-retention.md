@@ -45,3 +45,10 @@ JSON-parsing every retained update for the item. Building that index is a one-ti
 startup cost proportional to retained history; multi-GB startup is not yet
 validated. The regression reopens an old-format journal with 300,000 same-item
 replay rows, checks the expression query plan and preserves those protected rows.
+
+The correlated GC comparison deliberately uses `= +p.transfer_id`. Unary plus
+removes the column's TEXT affinity so SQLite can seek the expression index's
+fourth key. Tests EXPLAIN the production predicate with bound parameters; a
+literal-only approximation does not exercise this affinity behavior.
+
+See SQLite [expression affinity](https://www.sqlite.org/datatype3.html#affinity_of_expressions) for the unary-plus rule.

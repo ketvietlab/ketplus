@@ -496,5 +496,6 @@ retention of payloads above 1 MiB (ADR 0047).
 
 The large-payload GC regression also reopens a journal missing the transfer
 expression index with 300,000 retained same-item updates. It verifies index
-creation, exact-expression query-plan selection and retained-row preservation;
+creation, correlated production-predicate query-plan selection with bound parameters,
+25 exact GC lookups and retained-row preservation;
 timings separate startup index construction from the idle pass.

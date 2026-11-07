@@ -10,6 +10,11 @@
 #include <QtTest>
 #include <thread>
 
+// Internal link seam: test the production GC predicate, not a copied SQL approximation.
+namespace ketplus::daemon::detail {
+QString largePayloadUnreferenced();
+}
+
 using namespace ketplus::daemon;
 
 namespace {
@@ -42,14 +47,29 @@ class Database {
         query.addBindValue(eventType);
         return query.exec();
     }
-    QString queryPlan(const QString& statement) {
+    QString queryPlan(const QString& statement, const QVariantList& values = {}) {
         QSqlQuery query(db_);
-        if (!query.exec("EXPLAIN QUERY PLAN " + statement))
+        query.prepare("EXPLAIN QUERY PLAN " + statement);
+        for (const auto& value : values)
+            query.addBindValue(value);
+        if (!query.exec())
             return query.lastError().text();
         QStringList details;
         while (query.next())
             details.append(query.value(3).toString());
         return details.join('\n');
+    }
+    int rows(const QString& statement, const QVariantList& values) {
+        QSqlQuery query(db_);
+        query.prepare(statement);
+        for (const auto& value : values)
+            query.addBindValue(value);
+        if (!query.exec())
+            return -1;
+        int count = 0;
+        while (query.next())
+            ++count;
+        return query.lastError().isValid() ? -1 : count;
     }
     qint64 scalar(const QString& statement) {
         QSqlQuery query(db_);
@@ -162,9 +182,22 @@ class JournalUsageRetentionTest final : public QObject {
     void largePayloadGcUsesIndexedReplayReferencesOnReopen() {
         QTemporaryDir directory;
         const auto path = directory.filePath("journal.sqlite");
+        QString transfer;
         {
             LocalJournal journal(path);
             QVERIFY(seed(journal, path, true, 21, QString(300000, 'x'), true));
+            for (const auto& value : allReplay(journal)) {
+                const auto event = value.toObject();
+                if (event.value("event_type") == "item.completed" &&
+                    event.value("turn_sequence").toInteger() == 1)
+                    transfer = event.value("payload")
+                                   .toObject()
+                                   .value("large_event")
+                                   .toObject()
+                                   .value("transfer_id")
+                                   .toString();
+            }
+            QVERIFY(!transfer.isEmpty());
         }
         Database database(path);
         // Emulate a journal predating the index, with a same-item retained backlog.
@@ -186,12 +219,17 @@ class JournalUsageRetentionTest final : public QObject {
         QCOMPARE(database.scalar(
                      "SELECT count(*) FROM sqlite_master WHERE name='replay_events_item_transfer'"),
                  1);
-        const auto plan = database.queryPlan(
-            "SELECT 1 FROM replay_events r WHERE r.session_id='session' AND r.generation=1 "
-            "AND r.item_id='item-1' AND "
-            "json_extract(r.payload,'$.large_event.transfer_id')='missing-transfer'");
+        const auto gcQuery = "SELECT 1 FROM large_event_payloads p WHERE "
+                             "p.session_id = ? AND p.generation = ? AND p.transfer_id = ? AND " +
+                             detail::largePayloadUnreferenced();
+        const QVariantList bindings{QString("session"), 1, transfer};
+        const auto plan = database.queryPlan(gcQuery, bindings);
         QVERIFY2(plan.contains("replay_events_item_transfer"), qPrintable(plan));
         QVERIFY2(plan.contains("<expr>=?"), qPrintable(plan));
+        timer.restart();
+        for (int iteration = 0; iteration < 25; ++iteration)
+            QCOMPARE(database.rows(gcQuery, bindings), 0);
+        qInfo() << "25 production GC lookups ms:" << timer.elapsed();
         timer.restart();
         const auto changed = journal.pruneReplayDetails(cutoff(), 16);
         const auto elapsed = timer.elapsed();
