@@ -643,3 +643,13 @@ and filesystem available bytes, separately from SQLite page usage. They neither
 scan journal content nor checkpoint it, and failures do not invalidate committed
 policy saves. Media/backups are excluded; absent filesystem data is unknown. See
 [ADR 0045](decisions/0045-journal-file-measurements.md).
+
+### SQLite-page size pressure
+
+The separate owner-only size policy defaults to a soft 5 decimal GB SQLite-page
+target. Recent-detail pressure is opt-in through an explicit owner size-policy save
+until size controls/rollout are complete. Bounded idle work reclaims free pages, completes an expired-detail sweep,
+then may compact eligible recent detail without bypassing retention guards.
+Forever/off still preserve remaining detail. Unsupported/protected data may leave
+the target unmet. File/WAL and total-application usage are not this page target;
+see [ADR 0046](decisions/0046-journal-size-pressure.md) for scope and remaining work.

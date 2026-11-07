@@ -597,6 +597,17 @@ class AgentMessagingTest final : public QObject {
         QVERIFY(hello.value("ok").toBool());
         QVERIFY(hello.value("capabilities").toArray().contains("storage.retention.read"));
         QVERIFY(hello.value("capabilities").toArray().contains("storage.retention.apply"));
+        QVERIFY(hello.value("capabilities").toArray().contains("storage.size.read"));
+        QVERIFY(hello.value("capabilities").toArray().contains("storage.size.apply"));
+        const auto size = roundTrip(desktop, request("storage.size.read"));
+        QVERIFY(size.value("ok").toBool());
+        const auto savedSize = roundTrip(
+            desktop,
+            request("storage.size.apply",
+                    {{"expected_revision", size.value("revision")},
+                     {"policy", QJsonObject{{"limit_bytes", 0}, {"warning_percent", 80}}}}));
+        QVERIFY(savedSize.value("ok").toBool());
+        QCOMPARE(savedSize.value("policy").toObject().value("limit_bytes").toInteger(), 0);
         const auto retention = roundTrip(desktop, request("storage.retention.read"));
         QVERIFY(retention.value("ok").toBool());
         const auto savedRetention = roundTrip(
@@ -647,6 +658,10 @@ class AgentMessagingTest final : public QObject {
         QCOMPARE(
             roundTrip(agent, request("storage.retention.apply")).value("error_code").toString(),
             "forbidden");
+        QCOMPARE(roundTrip(agent, request("storage.size.read")).value("error_code").toString(),
+                 "forbidden");
+        QCOMPARE(roundTrip(agent, request("storage.size.apply")).value("error_code").toString(),
+                 "forbidden");
         // Session events are broadcast to the desktop, never to agent connections.
         agent.readAll();
         QTRY_VERIFY_WITH_TIMEOUT(desktop.bytesAvailable() > 0 || desktop.waitForReadyRead(50),

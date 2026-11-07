@@ -66,7 +66,7 @@ DaemonClient::DaemonClient(QObject* parent)
         expectedSize_ = 0;
         QList<QueuedCall> interrupted;
         for (QueuedCall& call : std::exchange(pending_, {})) {
-            if (call.type.startsWith(QStringLiteral("storage.retention."))) {
+            if (call.type.startsWith(QStringLiteral("storage."))) {
                 if (call.callback)
                     call.callback(
                         {}, QStringLiteral(
@@ -90,7 +90,7 @@ DaemonClient::DaemonClient(QObject* parent)
             enqueue(std::move(call));
         }
         for (QueuedCall call : waiting) {
-            if (call.type.startsWith(QStringLiteral("storage.retention."))) {
+            if (call.type.startsWith(QStringLiteral("storage."))) {
                 if (call.callback)
                     call.callback(
                         {}, QStringLiteral(

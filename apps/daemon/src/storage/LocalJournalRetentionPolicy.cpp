@@ -69,6 +69,8 @@ bool LocalJournal::setRetentionPolicy(const JournalRetentionPolicy& policy,
     query.finish();
     if (!database_.commit())
         return fail(database_.lastError().text());
+    sizePressureRecent_ = false;
+    sizePressureActive_ = false;
     detailRetentionScanRow_ = 0; // new settings apply to a fresh bounded sweep
     return true;
 }
@@ -81,6 +83,30 @@ std::optional<qint64> LocalJournal::pruneConfiguredReplayDetails(const QDateTime
     if (!policy)
         return std::nullopt;
     const auto boundary = policy->cutoff(now);
-    return boundary ? pruneReplayDetails(*boundary) : std::optional<qint64>(0);
+    if (!boundary) {
+        // Forever/off remain a preservation promise even above the size target.
+        sizePressureRecent_ = false;
+        sizePressureActive_ = false;
+        return 0;
+    }
+    const auto size = sizePolicy();
+    const auto usage = space();
+    if (!size || !usage)
+        return std::nullopt;
+    const bool pressure =
+        size->pressureConfigured() && usage->pageSize * usage->pageCount > size->limitBytes;
+    if (pressure != sizePressureActive_) {
+        sizePressureActive_ = pressure;
+        sizePressureRecent_ = false;
+        detailRetentionScanRow_ = 0;
+    }
+    // The idle service reclaims a bounded batch first. Do not delete more detail
+    // while already-free pages can still bring the database closer to its target.
+    if (pressure && usage->freePages >= minimumReclaimPages)
+        return 0;
+    const auto changed = pruneReplayDetails(sizePressureRecent_ ? now : *boundary);
+    if (changed && pressure && detailRetentionScanRow_ == 0)
+        sizePressureRecent_ = !sizePressureRecent_; // complete expired sweep before recent detail
+    return changed;
 }
 } // namespace ketplus::daemon

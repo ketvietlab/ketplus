@@ -5,6 +5,13 @@ milestone changes state.
 
 ## Implemented
 
+- The owner-only size-policy backend supports revisioned 1/2/5/10 GB SQLite-page
+  targets and warning status (ADR 0046). Recent-detail pressure is opt-in via an
+  explicit policy save until Desktop size controls/rollout are complete. It reclaims
+  free pages first and completes bounded expired sweeps before recent detail,
+  preserving Forever/off and all existing turn/ACK guards. It is not a hard
+  filesystem quota or complete #128 media/archive/storage enforcement.
+
 - Completed MCP/dynamic tool arguments above 5 KiB can retain a 4 KiB display-only
   excerpt with a visible trim label (ADR 0043), including a one-time upgrade of
   text-only compaction markers. Successful plain structured results now support
