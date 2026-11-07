@@ -3,15 +3,14 @@
 ## Execution agreement — 2026-11-07
 
 Implement phases 1–5 of the manual UI plan as stacked **draft** pull requests.
-Finish the stack before requesting review. Do not merge or begin the review
-phase. The current native Qt mock is the approved design reference; no additional
+Finish the stack before requesting review. The user subsequently authorized
+self-review and fixes, preserving every existing PR and forbidding merges. The current native Qt mock is the approved design reference; no additional
 mock-approval checkpoint is required. Check a delivery row only after its code
 is committed, pushed and attached to a PR. A checked row means scoped code
 implementation, not final acceptance or release.
 
 Excluded by the user: phase 6 (conversation Plan / daemon continuation, #198),
-phase 7 (overall acceptance, review, release packaging, deployment and device
-installation), and Repo Memory implementation. The Plan mock remains in #197.
+phase 7 release packaging, deployment and device installation, and Repo Memory implementation. The Plan mock remains in #197.
 
 Baseline: public `ketplus/integration`, commit `698f0510`, the two-edition source
 layout from ADR 0029. `core/` builds independently of Pro. Shared components are
@@ -40,8 +39,8 @@ The native references are `mockups/qt` and `mockups/terminal` (ADR 0033–34).
 - [x] Phase 5: #164 overlays; #165 Worktrees/Connections available-runtime UI;
   #166 Settings available-runtime controls; #167 Atlas chrome/composition.
 - [ ] Phase 6: conversation Plan/harness — explicitly excluded, not started.
-- [ ] Phase 7: aggregate acceptance/review/release/deployment — explicitly
-  excluded, not started. Focused patch tests below are not this phase.
+- [ ] Phase 7: release packaging, deployment and device acceptance remain excluded.
+  Self-review was subsequently authorized; see [review record](ui-self-review.md).
 
 ## Draft stack
 
@@ -116,7 +115,8 @@ the explicitly deferred acceptance/packaging phase.
 ## Handoff and worktree cleanup
 
 Use the last draft PR's head to examine the complete stack; individual PRs have
-focused descriptions and validation. Review/merge has not started. After the last
+focused descriptions and validation. Self-review and fixes are tracked in
+[the review record](ui-self-review.md); merging is explicitly forbidden. After the last
 branch is pushed, remove the implementation worktree only if it is clean, has no
 unpushed commits and no other conversation/process uses it. Never remove the
 repository's main checkout. Any new changes after cleanup use a new worktree.

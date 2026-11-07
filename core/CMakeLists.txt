@@ -240,6 +240,9 @@ add_library(ketplus_settings_ui STATIC
     src/app/AppearanceSettings.h
     src/app/SettingsDialog.cpp
     src/app/SettingsDialogAppearance.cpp
+    src/app/SettingsDialogTypography.cpp
+    src/app/PixelSelect.cpp
+    src/app/PixelSelect.h
     src/app/SettingsDialog.h
 )
 target_link_libraries(ketplus_settings_ui PUBLIC Qt6::Widgets ketplus_editor ketplus_ui)
@@ -504,6 +507,7 @@ if(KETPLUS_CM_BUILD_TESTS)
     target_link_libraries(ketplus_settings_tests
         PRIVATE Qt6::Test KetPlusCM::settings_ui
     )
+    ketplus_cm_add_ket_fonts(ketplus_settings_tests ketplus_ket_fonts)
     ketplus_enable_warnings(ketplus_settings_tests)
 
     ketplus_cm_add_test(ketplus_settings_tests ketplus_settings_tests)

@@ -28,6 +28,7 @@
 #include <QJsonObject>
 #include <QThread>
 
+#include "app/PixelSelect.h"
 #include <QAbstractButton>
 #include <QFrame>
 #include <QLabel>
@@ -35,7 +36,6 @@
 #include <QListWidget>
 #include <QRadioButton>
 #include <QSettings>
-#include <QSpinBox>
 #include <QStatusBar>
 #include <QTemporaryDir>
 #include <QTextBrowser>
@@ -427,21 +427,14 @@ void MainWindowSettingsTest::appliesSavedAppearanceToPublicAndPrivateSurfaces() 
         }
         window.findChild<ket::SegmentedControl*>(QStringLiteral("interfaceZoom"))
             ->setCurrentIndex(2);
-        window.findChild<QSpinBox*>(QStringLiteral("editorFontSize"))->setValue(17);
-        window.findChild<QSpinBox*>(QStringLiteral("editorLineHeight"))->setValue(29);
-        window.findChild<QSpinBox*>(QStringLiteral("terminalFontSize"))->setValue(18);
-        window.findChild<QSpinBox*>(QStringLiteral("terminalLineHeight"))->setValue(30);
-        window.findChild<QSpinBox*>(QStringLiteral("previewFontSize"))->setValue(19);
-        window.findChild<QSpinBox*>(QStringLiteral("previewLineHeight"))->setValue(31);
+        window.findChild<ketplus::PixelSelect*>(QStringLiteral("editorFontSize"))->setValue(17);
+        window.findChild<ketplus::PixelSelect*>(QStringLiteral("editorLineHeight"))->setValue(29);
+        window.findChild<ketplus::PixelSelect*>(QStringLiteral("terminalFontSize"))->setValue(18);
+        window.findChild<ketplus::PixelSelect*>(QStringLiteral("terminalLineHeight"))->setValue(30);
+        window.findChild<ketplus::PixelSelect*>(QStringLiteral("previewFontSize"))->setValue(19);
+        window.findChild<ketplus::PixelSelect*>(QStringLiteral("previewLineHeight"))->setValue(31);
         window.findChild<QAbstractButton*>(QStringLiteral("followSystemTheme"))->setChecked(false);
-        auto* themes = dialog->findChild<QListWidget*>(QStringLiteral("installedThemeList"));
-        for (int index = 0; index < themes->count(); ++index) {
-            if (themes->item(index)->data(Qt::UserRole).toInt() ==
-                static_cast<int>(ketplus::ThemeManager::Mode::Dark)) {
-                themes->setCurrentRow(index);
-                break;
-            }
-        }
+        window.findChild<QAbstractButton*>(QStringLiteral("darkThemeCard"))->click();
         for (auto* button : window.findChildren<QAbstractButton*>()) {
             if (button->property("kvRole") == QStringLiteral("primaryAction")) {
                 saved = true;
@@ -557,10 +550,8 @@ void MainWindowSettingsTest::settingsAndWorktreesUseWorkspacePages() {
     QTRY_VERIFY(!providersPage->isVisible());
     QCOMPARE(settingsNavigation->currentItem()->data(Qt::UserRole).toString(),
              QStringLiteral("appearance"));
-    auto* lightTheme =
-        settingsPage->findChild<ket::ThemeCard*>(QStringLiteral("settingsLightThemeCard"));
-    auto* darkTheme =
-        settingsPage->findChild<ket::ThemeCard*>(QStringLiteral("settingsDarkThemeCard"));
+    auto* lightTheme = settingsPage->findChild<ket::ThemeCard*>(QStringLiteral("lightThemeCard"));
+    auto* darkTheme = settingsPage->findChild<ket::ThemeCard*>(QStringLiteral("darkThemeCard"));
     auto* settingsTitle =
         settingsPage->findChild<QLabel*>(QStringLiteral("settingsWorkspaceTitle"));
     auto* sectionTitle =
@@ -573,7 +564,7 @@ void MainWindowSettingsTest::settingsAndWorktreesUseWorkspacePages() {
     QCOMPARE(sectionTitle->font().pixelSize(), 22);
     QVERIFY(settingsPage->findChild<QFrame*>(QStringLiteral("settingsWorkspacePreview")) !=
             nullptr);
-    QVERIFY(!window.findChild<QLineEdit*>(QStringLiteral("themeSearch"))->isVisible());
+    QVERIFY(darkTheme->isVisible());
     darkTheme->click();
     QTRY_VERIFY(theme.palette().dark);
     lightTheme->click();
@@ -585,16 +576,39 @@ void MainWindowSettingsTest::settingsAndWorktreesUseWorkspacePages() {
     QCOMPARE(zoom->options(), QStringList({"Small", "Medium", "Large"}));
     QCOMPARE(zoom->currentIndex(), 1);
     // Opening a saved non-preset size must not silently change it.
-    auto* numericZoom = window.findChild<QSpinBox*>(QStringLiteral("interfaceFontSize"));
+    auto* numericZoom =
+        window.findChild<ketplus::PixelSelect*>(QStringLiteral("interfaceFontSize"));
     numericZoom->setValue(15);
     QCOMPARE(zoom->currentIndex(), 3);
     QCOMPARE(zoom->options().last(), QStringLiteral("Custom (15)"));
     QCOMPARE(numericZoom->value(), 15);
     zoom->setCurrentIndex(1);
     QCOMPARE(numericZoom->value(), 14);
-    QVERIFY(window.findChild<QSpinBox*>(QStringLiteral("interfaceFontSize"))->isHidden());
+    QVERIFY(
+        window.findChild<ketplus::PixelSelect*>(QStringLiteral("interfaceFontSize"))->isHidden());
     QVERIFY(settingsPage->findChild<QComboBox*>(QStringLiteral("settingsInterfaceFont")) !=
             nullptr);
+    auto* preview = settingsPage->findChild<QWidget*>(QStringLiteral("typographyPreview"));
+    QVERIFY(preview && preview->isVisible());
+    auto* editorSize =
+        settingsPage->findChild<ketplus::PixelSelect*>(QStringLiteral("editorFontSize"));
+    const int previewHeight = preview->minimumHeight();
+    editorSize->setValue(32);
+    QVERIFY(preview->minimumHeight() > previewHeight);
+    window.findChild<QAbstractButton*>(QStringLiteral("settingsResetButton"))->click();
+    QCOMPARE(editorSize->value(), 14);
+    QCOMPARE(preview->minimumHeight(), previewHeight);
+    QCoreApplication::processEvents();
+    QCOMPARE(settingsNavigation->currentItem()->data(Qt::UserRole).toString(),
+             QStringLiteral("typography"));
+    if (const auto capture = qEnvironmentVariable("KETPLUS_SETTINGS_REVIEW_CAPTURE");
+        !capture.isEmpty()) {
+        QCoreApplication::processEvents();
+        QVERIFY(window.grab().save(capture + ".light.png"));
+        darkTheme->click();
+        QCoreApplication::processEvents();
+        QVERIFY(window.grab().save(capture + ".dark.png"));
+    }
 }
 
 void MainWindowSettingsTest::conversationWidthFollowsOnlyTheAgentWorkspace() {

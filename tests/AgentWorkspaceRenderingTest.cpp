@@ -417,6 +417,10 @@ void AgentWorkspaceViewTest::worktreeHeaderKeepsLabelVisible() {
 }
 
 void AgentWorkspaceViewTest::composerPreview() {
+    auto& appearance = ket::Appearance::instance();
+    const auto previousMode = appearance.mode();
+    const auto restoreAppearance = qScopeGuard([&] { appearance.setMode(previousMode); });
+    appearance.setMode(ket::Appearance::Mode::Dark);
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());
     view.setAgentAvailable(true);

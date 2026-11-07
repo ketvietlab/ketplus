@@ -2,16 +2,19 @@
 #include "KetAppearance.h"
 #include "KetEmptyState.h"
 #include "KetRecipes.h"
+#include "KetSelect.h"
+#include "ui/KetFonts.h"
 #include "ui/Theme.h"
 #include <QLabel>
+#include <QRawFont>
 
+#include "app/PixelSelect.h"
 #include <QAbstractButton>
 #include <QApplication>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QListWidget>
 #include <QSettings>
-#include <QSpinBox>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -45,6 +48,8 @@ class SettingsDialogTest final : public QObject {
 
   private slots:
     void editsAndResetsTypography();
+    void pixelSelectPreservesRangeAndKeyboardSelection();
+    void defaultFontResolvesWithoutPlatformFallback();
     void kitLabelsKeepRecipeFontsAcrossThemeChanges();
     void persistsAndNormalizesAppearance();
     void previewsAndCancelsThemeSelection();
@@ -81,6 +86,45 @@ void SettingsDialogTest::kitLabelsKeepRecipeFontsAcrossThemeChanges() {
     }
 }
 
+void SettingsDialogTest::pixelSelectPreservesRangeAndKeyboardSelection() {
+    ketplus::ThemeManager theme(*qApp);
+    ketplus::PixelSelect field;
+    field.setRange(8, 32);
+    field.setValue(17);
+    field.show();
+    auto* select = field.findChild<ket::Select*>();
+    QVERIFY(select);
+    QCOMPARE(select->currentText(), QStringLiteral("17 px"));
+    QSignalSpy changes(&field, &ketplus::PixelSelect::valueChanged);
+    select->setFocus();
+    QTest::keyClick(select, Qt::Key_Down);
+    QCOMPARE(field.value(), 18);
+    QCOMPARE(changes.count(), 1);
+    field.setMinimum(20);
+    QCOMPARE(field.value(), 20);
+    QCOMPARE(changes.count(), 2);
+    field.setMinimum(8);
+    QCOMPARE(field.value(), 20);
+    QCOMPARE(changes.count(), 2);
+    field.setValue(19);
+    QCOMPARE(select->currentText(), QStringLiteral("19 px"));
+    field.setValue(100);
+    QCOMPARE(field.value(), 32);
+}
+
+void SettingsDialogTest::defaultFontResolvesWithoutPlatformFallback() {
+    ketplus::registerKetFonts();
+    ketplus::ThemeManager theme(*qApp);
+    auto settings = ketplus::EditorSettings::defaults();
+    QCOMPARE(QRawFont::fromFont(settings.font()).familyName(), QStringLiteral("KET Sans Mono"));
+    QCOMPARE(QRawFont::fromFont(settings.font()).styleName(), QStringLiteral("Medium"));
+    settings.fontFamily = QStringLiteral("KÉT Sans Mono");
+    QCOMPARE(settings.normalized().fontFamily, QStringLiteral("KET Sans Mono"));
+    QCOMPARE(QRawFont::fromFont(settings.font()).familyName(), QStringLiteral("KET Sans Mono"));
+    settings.fontFamily = QStringLiteral("Custom mono family");
+    QCOMPARE(settings.normalized().fontFamily, settings.fontFamily);
+}
+
 void SettingsDialogTest::editsAndResetsTypography() {
     auto initial = ketplus::EditorSettings::defaults();
     initial.fontSizePixels = 15;
@@ -88,13 +132,19 @@ void SettingsDialogTest::editsAndResetsTypography() {
     ketplus::SettingsDialog dialog(initial);
 
     auto* fontBox = dialog.findChild<QComboBox*>(QStringLiteral("editorFontFamily"));
-    auto* fontSizeBox = dialog.findChild<QSpinBox*>(QStringLiteral("editorFontSize"));
-    auto* lineHeightBox = dialog.findChild<QSpinBox*>(QStringLiteral("editorLineHeight"));
-    auto* interfaceSizeBox = dialog.findChild<QSpinBox*>(QStringLiteral("interfaceFontSize"));
-    auto* terminalSizeBox = dialog.findChild<QSpinBox*>(QStringLiteral("terminalFontSize"));
-    auto* terminalLineBox = dialog.findChild<QSpinBox*>(QStringLiteral("terminalLineHeight"));
-    auto* previewSizeBox = dialog.findChild<QSpinBox*>(QStringLiteral("previewFontSize"));
-    auto* previewLineBox = dialog.findChild<QSpinBox*>(QStringLiteral("previewLineHeight"));
+    auto* fontSizeBox = dialog.findChild<ketplus::PixelSelect*>(QStringLiteral("editorFontSize"));
+    auto* lineHeightBox =
+        dialog.findChild<ketplus::PixelSelect*>(QStringLiteral("editorLineHeight"));
+    auto* interfaceSizeBox =
+        dialog.findChild<ketplus::PixelSelect*>(QStringLiteral("interfaceFontSize"));
+    auto* terminalSizeBox =
+        dialog.findChild<ketplus::PixelSelect*>(QStringLiteral("terminalFontSize"));
+    auto* terminalLineBox =
+        dialog.findChild<ketplus::PixelSelect*>(QStringLiteral("terminalLineHeight"));
+    auto* previewSizeBox =
+        dialog.findChild<ketplus::PixelSelect*>(QStringLiteral("previewFontSize"));
+    auto* previewLineBox =
+        dialog.findChild<ketplus::PixelSelect*>(QStringLiteral("previewLineHeight"));
     QVERIFY(fontBox != nullptr);
     QVERIFY(fontSizeBox != nullptr);
     QVERIFY(lineHeightBox != nullptr);
@@ -150,7 +200,7 @@ void SettingsDialogTest::persistsAndNormalizesAppearance() {
     QVERIFY(directory.isValid());
     QSettings storage(directory.filePath(QStringLiteral("settings.ini")), QSettings::IniFormat);
     auto settings = ketplus::AppearanceSettings::defaults();
-    QCOMPARE(settings.editor.fontFamily, QStringLiteral("KÉT Sans Mono"));
+    QCOMPARE(settings.editor.fontFamily, QStringLiteral("KET Sans Mono"));
     QCOMPARE(settings.editor.fontSizePixels, 14);
     settings.interfaceFontSizePixels = 99;
     settings.editor.fontSizePixels = 18;
@@ -183,18 +233,9 @@ void SettingsDialogTest::previewsAndCancelsThemeSelection() {
     theme.setMode(ketplus::ThemeManager::Mode::Light);
     ketplus::SettingsDialog dialog(ketplus::AppearanceSettings::defaults(), theme);
 
-    auto* themes = dialog.findChild<QListWidget*>(QStringLiteral("installedThemeList"));
-    QVERIFY(themes != nullptr);
-    QListWidgetItem* darkTheme = nullptr;
-    for (int index = 0; index < themes->count(); ++index) {
-        if (themes->item(index)->data(Qt::UserRole).toInt() ==
-            static_cast<int>(ketplus::ThemeManager::Mode::Dark)) {
-            darkTheme = themes->item(index);
-            break;
-        }
-    }
+    auto* darkTheme = dialog.findChild<QAbstractButton*>(QStringLiteral("darkThemeCard"));
     QVERIFY(darkTheme != nullptr);
-    themes->setCurrentItem(darkTheme);
+    darkTheme->click();
     QVERIFY(theme.palette().dark);
     QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Light);
 
@@ -307,7 +348,7 @@ void SettingsDialogTest::removesDestroyedPageAndFallsBackToGeneral() {
              ketplus::SettingsRegistrationResult::Registered);
     QVERIFY(dialog.selectPage(page->id()));
     delete page;
-    QCOMPARE(dialog.selectedPageId(), QStringLiteral("general"));
+    QCOMPARE(dialog.selectedPageId(), QStringLiteral("appearance"));
     QVERIFY(!dialog.selectPage(QStringLiteral("private/archive")));
 }
 
