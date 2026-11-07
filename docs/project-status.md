@@ -5,6 +5,12 @@ milestone changes state.
 
 ## Implemented
 
+- Command/audit/tombstone/orphan metadata cleanup now runs transactional row/byte
+  bounded passes with durable cursors (ADR 0050). Command/audit caps use accepted
+  write order to preserve newly stored results after wall-clock rollback; idle
+  maintenance resumes unfinished work. Physical caps are eventual, and unsupported
+  oversized rows remain retained for the separate recovery workstream.
+
 - ACK acceptance now commits the client cursor and a durable raw-cleanup queue;
   physical delivery-event deletion runs in bounded, transactional passes at ACK,
   reopen and idle maintenance (ADR 0049). Slowest-client/generation fences remain

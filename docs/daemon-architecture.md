@@ -296,6 +296,16 @@ backlog scan; retained replay references protect shared payloads. Unreachable ch
 may wait for later passes. Oversized legacy blobs and malformed rows remain retained;
 see [ADR 0048](decisions/0048-bounded-global-payload-gc.md).
 
+Command results, remote audit, deletion tombstones, orphan client cursors and
+orphan background tasks each have a transactional metadata-retention lane. Per
+table, one pass visits at most 256 age/orphan plus 256 cap candidates and deletes
+at most 256 rows/1 MiB across both scans. Durable rowid cursors resume at reopen or
+idle maintenance. Command/audit caps retain the latest 10,000 accepted writes by
+rowid rather than timestamp, so clock rollback cannot immediately evict a new
+result. Fixed 10,001-entry cutoff discovery avoids backlog sorting. Busy work
+defers; failed deletions/state writes roll back the lane. These are eventual
+physical caps, not a hard storage quota; see [ADR 0050](decisions/0050-bounded-journal-metadata-retention.md).
+
 Deleted rows return their space to the disk (#128). A new journal is created
 with `auto_vacuum = INCREMENTAL`. An older one moves to it once at daemon start,
 before the endpoint listens:
