@@ -5,6 +5,11 @@ milestone changes state.
 
 ## Implemented
 
+- Fork prepares validated media ownership before committing copied history
+  (ADR 0068). Failed preparation rolls back the journal; conflicting destination
+  metadata is preserved. Matching prepared ownership permits retry after a
+  database commit failure; reopen cleanup preserves source-owned images.
+
 - Image publication requires a checked atomic ownership-file update (ADR 0067).
   Invalid metadata is preserved, repeated hashes are deduplicated and failed
   writes cannot publish successful new references. Fork-copy and orphan bounds

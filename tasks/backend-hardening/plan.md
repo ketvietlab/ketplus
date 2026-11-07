@@ -223,7 +223,7 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
 | H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 and cloud #237 merged; transaction recovery #241 merged; cancellation #240 merged; explicit session-delete bounds still open | Audit explicit session deletion and tombstone enumeration / #2739 |
 | H1.2 | In progress | Startup commit failure #250 merged; other migration/read/crash cases remain | Continue remaining failure-path audit / #2739 |
-| H1.4 | In progress | Cleanup #251 and dedup #252 merged; ownership publication under verification | Finish publication gate, then fork-copy coordination / #2739 |
+| H1.4 | In progress | Cleanup #251 and dedup #252 merged; publication #253 full-suite PASS awaiting review; fork ownership under verification | Finish both gates, then remaining media bounds / #2739 |
 | H1.5–H1.7 | Not started | No claim that #128 backend acceptance is complete | Continue storage acceptance / #2739 |
 | H1.3 | In progress | Delete/ownership #241–243, append #244–245 and fork #246–247 merged; stream recovery #248 merged; replay/activity #249 merged; startup #250 merged | Continue caller atomicity/read failures / #2739 |
 | H2–H3 | Partially started | H2.3 volatile retry subset #248 merged; full lifecycle and provider audits remain | Continue remaining daemon/provider checks / #2739 |
@@ -715,7 +715,22 @@ remain explicitly open.
 - [x] Checked atomic reference publication preserves unsupported metadata and
   withholds references on failure; repeated hashes are deduplicated (ADR 0067).
   Focused media set 91/91, including POSIX partial-write rollback/repair.
-- [ ] Focused tests plus full Pro build/suite for the shared private-header change;
-  independent exact-head review, integration, merge and cleanup.
+- [x] #253 head `98ad1946`: full Release Pro build and 96/96 suite (324.78 s).
+- [ ] Independent exact-head review, merge and cleanup.
 - [ ] Fork-copy/journal coordination, crash durability, write-admission/blob cleanup
   after failure and broader path/decode/enumeration bounds remain separate work.
+
+
+### H1.3/H1.4 coordinate fork ownership and journal commit
+
+- [x] Original source fails nine of twelve fake-provider fork cases; existing
+  commit-failure, matching destination and empty-source controls already pass.
+- [x] Prepare checked atomic media ownership before SQLite commit; rollback failed
+  preparation and preserve conflicting target metadata. Matching sets permit retry.
+- [x] Split reference ownership from image/blob handling and share bounded parsing
+  and atomic writes (ADR 0068). Initial protocol/fork 2/2 (199/44 checks); extended
+  fork set 14/14 verifies reopen/orphan-reference cleanup without source blob loss.
+- [ ] Integrate #253, full Pro build/suite, independent exact-head review, merge
+  and cleanup. The shared LocalJournal/McpMediaStore headers require the full gate.
+- [ ] Whole-history fork bounds, lost-reference recovery, process interruption,
+  ancestor races and provider-thread compensation remain separate audit work.

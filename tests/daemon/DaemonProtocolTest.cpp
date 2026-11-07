@@ -453,7 +453,7 @@ class DaemonProtocolTest final : public QObject {
             const auto projected = projectEventPayloadForCloud("item.completed", {{"item", item}});
             QCOMPARE(projected.value("item").toObject().value("result"), item.value("result"));
         }
-        store.copySessionReferences("session", "fork");
+        QVERIFY(store.copySessionReferences("session", "fork"));
         store.releaseSession("session");
         QCOMPARE(QDir(store.directory()).entryList({"*.png"}, QDir::Files).size(), 1);
         store.releaseSession("fork");

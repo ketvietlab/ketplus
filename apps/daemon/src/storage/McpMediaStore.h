@@ -40,7 +40,10 @@ class McpMediaStore final {
                                               const QString& worktree = {});
 
     // A forked session references the same media as its source, so each keeps it alive.
-    void copySessionReferences(const QString& fromSessionId, const QString& toSessionId);
+    // Missing source metadata is an empty reference set. Unknown source or
+    // conflicting destination metadata is preserved and reported as failure.
+    [[nodiscard]] bool copySessionReferences(const QString& fromSessionId,
+                                             const QString& toSessionId, QString* error = nullptr);
     // Stores an image attached to a message (from the phone or the desktop composer) so the
     // transcript can show it after the provider's temporary copy is gone. Returns the same
     // reference block as externalizeItem, or an empty object for anything but a PNG or JPEG
@@ -63,6 +66,7 @@ class McpMediaStore final {
     void enforceCapacity();
 
   private:
+    static bool ensureOwnerDirectory(const QString& path);
     [[nodiscard]] QString refsPath(const QString& sessionId) const;
     // Writes (or refreshes) the content-addressed file; empty on failure.
     [[nodiscard]] QJsonObject write(const QByteArray& bytes, const QString& extension) const;

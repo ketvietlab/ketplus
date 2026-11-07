@@ -129,6 +129,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/LocalJournalTranscriptWindow.cpp
     src/storage/LocalJournal.h
     src/storage/McpMediaPreview.cpp
+    src/storage/McpMediaReferences.cpp
     src/storage/McpMediaStore.cpp
     src/storage/McpMediaStore.h
 )

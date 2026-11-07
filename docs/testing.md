@@ -181,6 +181,9 @@ the corresponding Atlas mock first.
   verify unsupported ownership preservation, no false publication, dedup and
   shared repair/retry. An isolated POSIX child with a file-size limit checks real
   partial-write rollback; other platforms explicitly skip that one fixture.
+- Fork media changes: fake-provider tests cover invalid/unsupported source and
+  target metadata, retained conflicts, rollback, matching retry, missing-source
+  compatibility and reopen cleanup following a deferred journal commit failure.
 - One Pro module: focused target plus its directly affected tests.
 - Shared header or desktop shell: full build and full Pro test suite.
 - `core/` change: the Lite suite (`ctest --preset lite-dev`), then the full Pro suite.

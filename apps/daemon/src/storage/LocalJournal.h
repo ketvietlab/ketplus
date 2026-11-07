@@ -168,9 +168,12 @@ class LocalJournal final {
     bool acknowledgeCloudDeletion(const QString& sessionId, qint64 generation,
                                   const QString& operationId);
     // Stores `fork` as a new session holding a copy of the source generation's transcript, in
-    // one transaction. Fills the fork's cursor counters from the source.
+    // one transaction. Fills the fork's cursor counters from the source. The
+    // optional synchronous preparation must succeed before committing history;
+    // its external effects may remain if the subsequent database commit fails.
     bool forkSession(const QString& sourceId, qint64 sourceGeneration, StoredSession& fork,
-                     QString* error = nullptr);
+                     QString* error = nullptr,
+                     const std::function<bool(QString*)>& beforeCommit = {});
     [[nodiscard]] SessionTombstone sessionTombstone(const QString& sessionId,
                                                     qint64 generation) const;
     // Ownership-sensitive work must distinguish an empty catalog from any read
