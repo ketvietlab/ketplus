@@ -144,6 +144,7 @@ class MainWindow final : public QMainWindow {
     AtlasTab* createAtlasTab();
     void openAtlasBuilder(AtlasTab* picker);
     void connectAtlasBuilder(AtlasBuilderTab* builder);
+    void connectAtlasResults(AgentWorkspaceView* chat);
     void createNewDocument();
     void openDocument();
     void chooseFolder();

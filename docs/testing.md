@@ -487,3 +487,13 @@ Forever/off, running/unacknowledged/question/latest-twenty guards, complete expi
 sweeps before recent detail, and existing free-page priority. Agent-token denial
 and disconnected-request tests include both storage API families. Shared headers
 require full Pro build/CTest. No installed journal or live provider is used.
+
+## Atlas result receipts
+
+The Agent Workspace target covers explicit Markdown link extraction (including
+code/raw-HTML exclusions), completed-only receipts, long-message chunk placement,
+actual QML actions and conversation/worktree/deletion fences. `AtlasTest` checks
+manifest limits, metadata and canonical-root/symlink isolation. `AtlasWorkspaceTest`
+checks real manifest metadata and the existing builder action without invoking a
+provider. Browser launch remains the managed viewer's existing integration path;
+these tests do not start a browser or validate the Atlas screens themselves.
