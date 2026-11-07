@@ -223,7 +223,7 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
 | H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 and cloud #237 merged; transaction recovery #241 merged; cancellation #240 merged; explicit session-delete bounds still open | Audit explicit session deletion and tombstone enumeration / #2739 |
 | H1.2/H1.4–H1.7 | Not started | No claim that #128 backend acceptance is complete | Follow H1.1; prioritize a confirmed safety finding / #2739 |
-| H1.3 | In progress | Delete/ownership #241–243, append #244–245 and fork #246–247 merged; caller stream recovery under test | Finish bounded retry/full Pro/review, then multirow failure audit / #2739 |
+| H1.3 | In progress | Delete/ownership #241–243, append #244–245 and fork #246–247 merged; stream recovery #248 merged; replay/activity #249 awaiting rebased gate | Finish replay/activity review, then startup failure and caller atomicity / #2739 |
 | H2–H3 | Not started | Open daemon/provider review issues mapped | Execute after storage, or independent audit while waiting review / #2739 |
 | H4.1–H4.3 | Not started | Existing remote fixes are not a full #85 closure | Audit local transport/privacy with fixtures / #2739 |
 | H4.4 | Waiting, external | Relay code merged; no deployment/readiness evidence supplied | Relay release operator, unassigned; #2739 tracks gate |
@@ -630,6 +630,26 @@ remain explicitly open.
 - [x] Full Pro caught a constructor regression: interrupted-session completion
   ran before runtime registration. Register the session before the append;
   rerun the existing restart regression and full Pro before accepting the fix.
-- [ ] Full Pro matrix at final head and independent review; merge and cleanup.
+- [x] #248 final head `b3d5c7ba`: full Pro 96/96 (322.22 s), restart 3/3;
+  independent protocol 97 pass, lifecycle 42 pass/1 skip and startup-failure
+  recovery probe passed. Merged `b7f965679ae13e6fb3f2ec85b8c4d0f9081d73a4`.
+  Generated builds removed; linked source cleanup remains tracked separately.
 - [ ] Continue multirow replay/activity mutation and caller command atomicity
   audits. Volatile recovery does not finish crash/startup/backfill acceptance.
+
+### H1.3 complete multirow replay/activity mutations
+
+- [x] Reproduce 14 ignored-write failures: superseded assistant/command deltas,
+  ordinary/chunked items, activity items/summaries and completion/error settlement.
+- [x] Verify exact postconditions inside append; rollback preserves all snapshots,
+  raw/replay history and counters, then repair/retry/reopen succeeds.
+- [x] Add running-turn partial indexes to both activity tables. Qt query plans
+  avoid settled history; the 100,000-row fixture preserves running earlier turns
+  and recreates missing indexes on reopen. 25 production settlements: 8 ms.
+- [x] Focused append 47/47 and activity 10/10 pass (ADR 0063).
+- [x] #249 initial head `85e5d619`: affected 13/13 (123.00 s), independent
+  4/4 (65.22 s; protocol 111, activity 10, transcript 28, retention 124).
+- [ ] Rebase onto merged #248, rerun affected matrix and exact-head delta review;
+  merge and cleanup remain separate gates.
+- [ ] H1.1/H1.2 still cover very large running turns and index construction;
+  H1.3 retains higher-level command atomicity and crash recovery work.

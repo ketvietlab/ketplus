@@ -339,7 +339,9 @@ tested with client disconnect/reconnect. `modules/remote` implements the Desktop
 client, daemon discovery/startup, reconnect, idempotent request retry, and replay
 pagination. Journal append commits mandatory delivery/replay/activity/blob writes
 and the session cursor as one unit; ignored single-row writes fail the transaction
-(ADR 0058). Append validates stored integer counters and the complete cursor range
+(ADR 0058). Superseded replay deltas and running activity must also satisfy their
+postconditions before commit; running-turn partial indexes avoid settled-history
+scans (ADR 0063). Append validates stored integer counters and the complete cursor range
 before mutation; unsupported/exhausted state is preserved (ADR 0059).
 Fork checks complete history copy counts and a still-unused destination in its
 transaction, so a delayed provider response cannot replace another session (ADR 0060).

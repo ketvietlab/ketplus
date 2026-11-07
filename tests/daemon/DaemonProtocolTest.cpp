@@ -1136,6 +1136,17 @@ class DaemonProtocolTest final : public QObject {
         QTest::newRow("large-fragment-late") << "fragment-late" << true;
         QTest::newRow("large-raw-late") << "raw-late" << true;
         QTest::newRow("large-state-chunk") << "state-chunk" << true;
+        for (const auto& mode : {QString("all"), QString("one")}) {
+            for (bool large : {false, true})
+                QTest::newRow(qPrintable(QString("replay-remove-%1-%2").arg(mode).arg(large)))
+                    << "replay-remove-" + mode << large;
+            QTest::newRow(qPrintable("command-remove-" + mode))
+                << "command-remove-" + mode << false;
+            for (const auto& target : {QString("item"), QString("summary")})
+                for (const auto& event : {QString("complete"), QString("error")})
+                    QTest::newRow(qPrintable("settle-" + target + "-" + mode + "-" + event))
+                        << "settle-" + target + "-" + mode + "-" + event << false;
+        }
     }
     void appendRequiresEveryDurableWrite() {
         QFETCH(QString, fault);
@@ -1155,6 +1166,25 @@ class DaemonProtocolTest final : public QObject {
                                          {"item", QJsonObject{{"id", "probe"},
                                                               {"type", "mcpToolCall"},
                                                               {"tool", "read_file"}}}}) > 1);
+        const bool remove =
+            fault.startsWith("replay-remove-") || fault.startsWith("command-remove-");
+        const bool settle = fault.startsWith("settle-");
+        if (remove)
+            for (int n = 0; n < 2; ++n)
+                QVERIFY(journal.appendEvent("s", 1,
+                                            fault.startsWith("command-") ? "command.output_delta"
+                                                                         : "assistant.delta",
+                                            {{"item_id", "probe"}, {"delta", "old"}}) > 1);
+        if (settle)
+            for (int n = 1; n <= 3; ++n)
+                QVERIFY(journal.appendEvent(
+                            "s", 1, "item.started",
+                            {{"item_id", QString("probe-%1").arg(n)},
+                             {"item_type", "mcpToolCall"},
+                             {"item",
+                              QJsonObject{{"id", QString("probe-%1").arg(n)},
+                                          {"type", "mcpToolCall"},
+                                          {"tool", n == 3 ? "search_files" : "read_file"}}}}) > 1);
         const auto rawBefore = journal.eventsAfter("s", 1, 0);
         const auto replayBefore = journal.compactedEventsAfter("s", 1, 0, 500).events;
         QSqlDatabase db;
@@ -1232,14 +1262,29 @@ class DaemonProtocolTest final : public QObject {
                 condition = "WHEN NEW.cursor > 2";
             if (fault == "state-chunk")
                 condition = "WHEN NEW.last_cursor = 3";
+            if (remove) {
+                table = "replay_events";
+                action = "DELETE";
+                if (fault.endsWith("one"))
+                    condition = "WHEN OLD.cursor=3";
+            }
+            if (settle) {
+                table = fault.startsWith("settle-item-") ? "activity_items" : "activity_summaries";
+                action = "UPDATE";
+                if (fault.contains("-one-"))
+                    condition = table == "activity_items" ? "WHEN OLD.item_id='probe-2'"
+                                                          : "WHEN OLD.family='search'";
+            }
             QVERIFY(q.exec(QString("CREATE TRIGGER fail_append BEFORE %1 ON %2 %3 "
                                    "BEGIN SELECT RAISE(IGNORE); END")
                                .arg(action, table, condition)));
         }
-        const bool item = large || fault == "revision" || fault.startsWith("activity-");
-        const QString type = item ? "item.completed" : "assistant.delta";
+        const bool item = large || remove || fault == "revision" || fault.startsWith("activity-");
+        const QString type = settle ? (fault.endsWith("error") ? "runtime.error" : "turn.completed")
+                             : item ? "item.completed"
+                                    : "assistant.delta";
         const QString itemType = fault.startsWith("activity-") ? "mcpToolCall" : "agentMessage";
-        const QJsonObject payload =
+        QJsonObject payload =
             item ? QJsonObject{{"item_id", "probe"},
                                {"item_type", itemType},
                                {"item",
@@ -1251,6 +1296,14 @@ class DaemonProtocolTest final : public QObject {
                                      QString(large ? 2 * protocol::maximumEventPayloadBytes : 32,
                                              'x')}}}}
                  : QJsonObject{{"item_id", "probe"}, {"delta", "after"}};
+        if (fault.startsWith("command-remove-"))
+            payload = {{"item_id", "probe"},
+                       {"item_type", "commandExecution"},
+                       {"item", QJsonObject{{"id", "probe"},
+                                            {"type", "commandExecution"},
+                                            {"aggregatedOutput", "done"}}}};
+        if (settle)
+            payload = {{"status", "completed"}};
         QString error;
         QCOMPARE(journal.appendEvent("s", 1, type, payload, &error), -1);
         QVERIFY(!error.isEmpty());
