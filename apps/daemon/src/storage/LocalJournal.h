@@ -2,6 +2,7 @@
 
 #include "storage/AgentMessageRecord.h"
 #include "storage/JournalRetentionPolicy.h"
+#include "storage/JournalSizePolicy.h"
 #include "storage/JournalSpace.h"
 
 #include <QDateTime>
@@ -261,6 +262,8 @@ class LocalJournal final {
     std::optional<qint64> reclaimFreePages(qint64 maximumPages);
     // Missing settings use defaults; invalid stored settings disable automatic detail pruning.
     [[nodiscard]] std::optional<JournalRetentionPolicy> retentionPolicy() const;
+    [[nodiscard]] std::optional<JournalSizePolicy> sizePolicy() const;
+    bool setSizePolicy(const JournalSizePolicy& policy, qint64 expectedRevision);
     bool setRetentionPolicy(const JournalRetentionPolicy& policy, qint64 expectedRevision);
     std::optional<qint64> pruneConfiguredReplayDetails(const QDateTime& now);
     // Scan at most maximumRows replay rows per idle pass, retaining the last usage sample
@@ -382,6 +385,8 @@ class LocalJournal final {
     // A reclaim whose checkpoint a reader held back: the file has not shrunk yet.
     bool reclaimCheckpointPending_{false};
     qint64 detailRetentionScanRow_{0};
+    bool sizePressureRecent_{false};
+    bool sizePressureActive_{false};
 };
 
 } // namespace ketplus::daemon

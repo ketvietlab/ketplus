@@ -43,4 +43,61 @@ QJsonObject SessionHost::storageRetention(const QString& type, const QJsonObject
         result.insert("disk_usage_error", journal_->errorString());
     return result;
 }
+QJsonObject SessionHost::storageSize(const QString& type, const QJsonObject& payload) {
+    const auto fail = [](const QString& code, const QString& text) {
+        return QJsonObject{{"ok", false}, {"error_code", code}, {"error_message", text}};
+    };
+    auto current = journal_->sizePolicy();
+    if (!current)
+        return fail("invalid_stored_policy", journal_->errorString());
+    if (type == "storage.size.apply") {
+        const auto proposed = JournalSizePolicy::fromJson(payload.value("policy").toObject());
+        const auto expected = payload.value("expected_revision");
+        if (payload.size() != 2 || !proposed || !expected.isDouble() || expected.toDouble(-1) < 0 ||
+            expected.toDouble() >= 9007199254740991.0 ||
+            expected.toDouble() != expected.toInteger(-1))
+            return fail("invalid_policy", "Supply a valid policy and its expected revision.");
+        if (expected.toInteger() != current->revision)
+            return fail("policy_conflict", "Journal-size policy changed; reload before saving.");
+        if (!journal_->setSizePolicy(*proposed, current->revision))
+            return fail("journal_error", journal_->errorString());
+        current = *proposed;
+        current->revision = expected.toInteger() + 1;
+    } else if (type != "storage.size.read" || !payload.isEmpty()) {
+        return fail("invalid_request", "Unsupported retention operation or parameters.");
+    }
+    QJsonObject result{
+        {"ok", true}, {"revision", current->revision}, {"policy", current->toJson()}};
+    const auto space = journal_->space();
+    // Statistics are advisory; a failed metrics read must not report a committed save as failed.
+    if (space)
+        result.insert("usage",
+                      QJsonObject{{"database_page_bytes", space->pageSize * space->pageCount},
+                                  {"free_page_bytes", space->freeBytes()},
+                                  {"kept_page_bytes", space->keptBytes()}});
+    else
+        result.insert("usage_error", journal_->errorString());
+    if (space) {
+        const auto bytes = space->pageSize * space->pageCount;
+        const auto retention = journal_->retentionPolicy();
+        result.insert(
+            "status",
+            QJsonObject{
+                {"target_scope", "sqlite_pages"},
+                {"over_limit", current->limitBytes > 0 && bytes > current->limitBytes},
+                {"warning", current->limitBytes > 0 &&
+                                bytes >= current->limitBytes * current->warningPercent / 100},
+                {"pressure_enabled", current->pressureConfigured() && retention &&
+                                         retention->automaticDetailRetention &&
+                                         retention->fullDetailDays > 0}});
+        if (!retention)
+            result.insert("retention_policy_error", journal_->errorString());
+    }
+    const auto disk = journal_->diskUsage();
+    if (disk)
+        result.insert("disk_usage", *disk);
+    else
+        result.insert("disk_usage_error", journal_->errorString());
+    return result;
+}
 } // namespace ketplus::daemon

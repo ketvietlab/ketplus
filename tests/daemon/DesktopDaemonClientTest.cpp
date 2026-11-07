@@ -562,25 +562,31 @@ class DesktopDaemonClientTest final : public QObject {
         QVERIFY(!status->supports(QStringLiteral("codex"), QStringLiteral("threadCompact")));
     }
 
+    void storageCapabilitiesAndDisconnectedCallsAreNotReplayed_data() {
+        QTest::addColumn<QString>("prefix");
+        QTest::newRow("retention") << QString("storage.retention.");
+        QTest::newRow("size") << QString("storage.size.");
+    }
     void storageCapabilitiesAndDisconnectedCallsAreNotReplayed() {
+        QFETCH(QString, prefix);
         QTemporaryDir directory;
         FakeDaemon daemon(useFakeDaemon(directory));
         const auto restore = qScopeGuard(stopUsingFakeDaemon);
         QVERIFY(daemon.listening);
-        daemon.capabilities = {"storage.retention.read", "storage.retention.apply"};
+        daemon.capabilities = {prefix + "read", prefix + "apply"};
         remote::DaemonClient client;
-        QVERIFY(!client.hasCapability("storage.retention.read"));
+        QVERIFY(!client.hasCapability(prefix + "read"));
         QTRY_VERIFY(client.isReady());
-        QVERIFY(client.hasCapability("storage.retention.apply"));
+        QVERIFY(client.hasCapability(prefix + "apply"));
         int failures = 0;
         const auto failed = [&](const QJsonObject&, const QString& error) {
             QVERIFY(error.contains("disconnected"));
             ++failures;
         };
-        client.call("storage.retention.apply", {}, {}, -1, failed);
+        client.call(prefix + "apply", {}, {}, -1, failed);
         for (int i = 0; i < 15; ++i)
             client.call("session.attach", {{"index", i}}, "s", 1, {});
-        client.call("storage.retention.read", {}, {}, -1, failed);
+        client.call(prefix + "read", {}, {}, -1, failed);
         QTRY_COMPARE(daemon.requests.size(), 16);
         daemon.requests.clear();
         daemon.capabilities = {};
@@ -588,7 +594,7 @@ class DesktopDaemonClientTest final : public QObject {
         QTRY_COMPARE(failures, 2);
         QTRY_COMPARE(daemon.requests.size(), 15);
         QTRY_VERIFY(client.isReady());
-        QVERIFY(!client.hasCapability("storage.retention.read"));
+        QVERIFY(!client.hasCapability(prefix + "read"));
         for (const auto& request : daemon.requests)
             QCOMPARE(request.value("message_type").toString(), "session.attach");
     }

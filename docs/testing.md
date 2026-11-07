@@ -475,3 +475,14 @@ tests cover additive metrics with existing save/cache/privacy behavior. Storage-
 tests cover the below/equal/above 5 GB boundary, missing/malformed metrics, accessible
 warning text, recovery after reload and narrow layouts. Run the full Pro build/suite
 for the shared journal header change; no real journal or provider is used.
+
+### Size-pressure backend (#128)
+
+`ketplus_daemon_size_policy_tests` covers strict policy/CAS/reopen/failure handling,
+local API privacy/cache boundaries and pressure ordering. Its isolated 1.02 GB
+zero-payload database lives under the test binary directory, requires 4 GiB free
+and is removed by QTemporaryDir; insufficient space skips that one case. It checks
+Forever/off, running/unacknowledged/question/latest-twenty guards, complete expired
+sweeps before recent detail, and existing free-page priority. Agent-token denial
+and disconnected-request tests include both storage API families. Shared headers
+require full Pro build/CTest. No installed journal or live provider is used.

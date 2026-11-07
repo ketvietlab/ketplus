@@ -170,8 +170,10 @@ void DaemonService::compactJournal() {
 void DaemonService::reclaimJournalSpace() {
     if (!journal_ || (host_ && host_->hasActiveSessions()))
         return;
-    journal_->pruneConfiguredReplayDetails(QDateTime::currentDateTimeUtc());
     journal_->reclaimFreePages(reclaimBatchPages);
+    const auto changed = journal_->pruneConfiguredReplayDetails(QDateTime::currentDateTimeUtc());
+    if (changed && *changed > 0)
+        journal_->reclaimFreePages(reclaimBatchPages);
 }
 
 QString DaemonService::errorString() const { return error_; }

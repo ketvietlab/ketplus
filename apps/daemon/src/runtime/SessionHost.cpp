@@ -459,8 +459,8 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& request, const QString
     const QString type = request.value(QStringLiteral("message_type")).toString();
     const QString messageId = request.value(QStringLiteral("message_id")).toString();
     // Local administration only, checked before the command-result cache.
-    if (type.startsWith("storage.retention.") && clientId == "cloud-control-v2")
-        return error("forbidden", "Retention settings require local administration.");
+    if (type.startsWith("storage.") && clientId == "cloud-control-v2")
+        return error("forbidden", "Storage settings require local administration.");
     if (isMutating(type)) {
         const QJsonObject cached = journal_->commandResult(messageId);
         if (!cached.isEmpty()) {
@@ -506,6 +506,8 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& request, const QString
             return error("unknown_operation",
                          "Workspace enrollment requires local administration.");
         result = workspaceCatalog(type, request.value("payload").toObject());
+    } else if (type.startsWith("storage.size.")) {
+        result = storageSize(type, request.value("payload").toObject());
     } else if (type.startsWith("storage.retention.")) {
         result = storageRetention(type, request.value("payload").toObject());
     } else if (type == QStringLiteral("session.list")) {
@@ -2446,7 +2448,8 @@ SessionHost::Session* SessionHost::sessionForThread(const QString& threadId) {
 }
 
 bool SessionHost::isMutating(const QString& messageType) {
-    return messageType == QStringLiteral("storage.retention.apply") ||
+    return messageType == QStringLiteral("storage.size.apply") ||
+           messageType == QStringLiteral("storage.retention.apply") ||
            messageType == QStringLiteral("session.worktree.switch") ||
            messageType == QStringLiteral("session.start_turn") ||
            messageType == QStringLiteral("session.rename") ||

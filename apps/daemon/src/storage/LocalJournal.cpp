@@ -87,6 +87,11 @@ bool LocalJournal::initialize() {
             "singleton INTEGER PRIMARY KEY CHECK(singleton=1), "
             "revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND "
             "revision>0), policy TEXT NOT NULL CHECK(length(CAST(policy AS BLOB))<=4096))"),
+        QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS journal_size_settings ("
+            "singleton INTEGER PRIMARY KEY CHECK(singleton=1), "
+            "revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision>0), "
+            "policy TEXT NOT NULL CHECK(length(CAST(policy AS BLOB))<=4096))"),
         QStringLiteral("CREATE TABLE IF NOT EXISTS sessions ("
                        "id TEXT PRIMARY KEY, worktree_path TEXT NOT NULL, adapter TEXT NOT NULL, "
                        "thread_id TEXT NOT NULL, turn_id TEXT NOT NULL, state TEXT NOT NULL, "

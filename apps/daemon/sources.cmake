@@ -111,6 +111,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/LocalJournalRemoteAudit.cpp
     src/storage/LocalJournalDetailRetention.cpp
     src/storage/ReplayDetailCompactor.cpp
+    src/storage/JournalSizePolicy.cpp
+    src/storage/LocalJournalSizePolicy.cpp
     src/storage/JournalRetentionPolicy.cpp
     src/storage/JournalRetentionPolicy.h
     src/storage/LocalJournalRetentionPolicy.cpp
