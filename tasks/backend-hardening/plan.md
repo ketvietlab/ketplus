@@ -111,7 +111,7 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
   - [x] Session deletion transaction recovery #241: final head `71607352`,
     affected Release/headless 12/12 (55.64 s), independent exact-head PASS;
     merged `187566a6bad4626f1d5380cd51ab1e24795291b6`. Cleanup remains tracked separately.
-  - [ ] Audit cloud-event cleanup and explicit deletion paths.
+  - [ ] Finish explicit deletion work bounds; cloud-event cleanup #237 is merged.
   - [ ] Close H1.1 only when those remaining work bounds have evidence.
 - [ ] H1.2 Verify migration/reopen safety: old schema, repeat open, partial failure,
   unknown/newer formats, one-time index creation and low-space conditions. Add
@@ -223,7 +223,7 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
 | H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 and cloud #237 merged; transaction recovery #241 merged; cancellation #240 merged; explicit session-delete bounds still open | Audit explicit session deletion and tombstone enumeration / #2739 |
 | H1.2/H1.4–H1.7 | Not started | No claim that #128 backend acceptance is complete | Follow H1.1; prioritize a confirmed safety finding / #2739 |
-| H1.3 | In progress | Session-delete transaction recovery #241 merged; other operations and ownership read errors still under audit | Reproduce provider cleanup read failures / #2739 |
+| H1.3 | In progress | Delete recovery #241 and ownership guards #242/#243 merged; append write checks under test | Finish append review, then multirow/counter failure cases / #2739 |
 | H2–H3 | Not started | Open daemon/provider review issues mapped | Execute after storage, or independent audit while waiting review / #2739 |
 | H4.1–H4.3 | Not started | Existing remote fixes are not a full #85 closure | Audit local transport/privacy with fixtures / #2739 |
 | H4.4 | Waiting, external | Relay code merged; no deployment/readiness evidence supplied | Relay release operator, unassigned; #2739 tracks gate |
@@ -556,3 +556,19 @@ suite passes 37/37. Affected Release/headless matrix passes 7/7 (31.07 s); revie
 [ADR 0057](../../docs/decisions/0057-preserve-unsupported-provider-ownership.md).
 Catalog/per-record bounds, unsupported SQL column types and handoff normalization
 remain explicitly open.
+
+### H1.3 ownership guards accepted; append failure recovery
+
+- [x] #242 merged `b74fa25eba040012db76a232c78f75f435d5b67c`; full Pro 96/96
+  (298.15 s), focused 13/13 and independent review passed. Earlier pending gates resolved.
+- [x] #243 merged `857c5590c4c7c6d843123245cbebdc4cfaeea31e`; exact head
+  `def33b43` affected 7/7 (27.34 s), provider deletion 37/37 and independent
+  5/5 (40.39 s) passed. Earlier pending gates resolved. Generated builds removed;
+  linked source cleanup remains in the final cleanup ledger.
+- [x] Reproduce ignored mandatory writes in ordinary/chunked append: original
+  production fails 30 scenarios; fixed focused fixture 33/33, including setup/cleanup.
+- [x] Append affected Release/headless matrix 13/13 (84.57 s), protocol 74/74,
+  retention 124/124; live-provider and opt-in 9 GiB cases skipped as intended.
+- [ ] Finish exact-head append gate, independent review and merge (ADR 0058).
+- [ ] Audit ignored multirow replay/activity mutations, integer counter bounds,
+  unsupported stored types and crash/interruption recovery. Do not close H1.3 yet.

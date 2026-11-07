@@ -520,9 +520,11 @@ bool LocalJournal::updateReplayProjection(const QString& sessionId, const qint64
         state.addBindValue(generation);
         state.addBindValue(cursor);
         state.addBindValue(cursor);
-        if (!state.exec()) {
+        if (!state.exec() || state.numRowsAffected() != 1) {
             if (error != nullptr) {
-                *error = state.lastError().text();
+                *error = state.lastError().isValid()
+                             ? state.lastError().text()
+                             : QStringLiteral("Replay cursor state was not stored.");
             }
             return false;
         }
@@ -556,9 +558,11 @@ bool LocalJournal::updateReplayProjection(const QString& sessionId, const qint64
                                "revision + 1 WHERE session_id = ? AND generation = ?"));
             revision.addBindValue(sessionId);
             revision.addBindValue(generation);
-            if (!revision.exec()) {
+            if (!revision.exec() || revision.numRowsAffected() != 1) {
                 if (error != nullptr) {
-                    *error = revision.lastError().text();
+                    *error = revision.lastError().isValid()
+                                 ? revision.lastError().text()
+                                 : QStringLiteral("Replay revision was not stored.");
                 }
                 return false;
             }
@@ -577,9 +581,11 @@ bool LocalJournal::updateReplayProjection(const QString& sessionId, const qint64
         insert.addBindValue(encodedPayload);
         insert.addBindValue(sentAt);
         insert.addBindValue(turnSequence);
-        if (!insert.exec()) {
+        if (!insert.exec() || insert.numRowsAffected() != 1) {
             if (error != nullptr) {
-                *error = insert.lastError().text();
+                *error = insert.lastError().isValid()
+                             ? insert.lastError().text()
+                             : QStringLiteral("Replay event was not stored.");
             }
             return false;
         }
@@ -594,9 +600,11 @@ bool LocalJournal::updateReplayProjection(const QString& sessionId, const qint64
     state.addBindValue(generation);
     state.addBindValue(cursor);
     state.addBindValue(cursor);
-    if (!state.exec()) {
+    if (!state.exec() || state.numRowsAffected() != 1) {
         if (error != nullptr) {
-            *error = state.lastError().text();
+            *error = state.lastError().isValid()
+                         ? state.lastError().text()
+                         : QStringLiteral("Replay cursor state was not stored.");
         }
         return false;
     }
@@ -1092,10 +1100,11 @@ qint64 LocalJournal::appendEventWithMutation(const QString& sessionId, const qin
     const QString sentAt = protocol::timestamp();
     insert.addBindValue(sentAt);
     insert.addBindValue(turnSequence);
-    if (!insert.exec()) {
+    if (!insert.exec() || insert.numRowsAffected() != 1) {
         database_.rollback();
         if (error != nullptr) {
-            *error = insert.lastError().text();
+            *error = insert.lastError().isValid() ? insert.lastError().text()
+                                                  : QStringLiteral("Journal event was not stored.");
         }
         return -1;
     }
@@ -1132,11 +1141,20 @@ qint64 LocalJournal::appendEventWithMutation(const QString& sessionId, const qin
     update.addBindValue(sentAt);
     update.addBindValue(sessionId);
     update.addBindValue(generation);
-    if (!update.exec() || !database_.commit()) {
+    if (!update.exec() || update.numRowsAffected() != 1) {
         database_.rollback();
         if (error != nullptr) {
-            *error = update.lastError().text();
+            *error = update.lastError().isValid()
+                         ? update.lastError().text()
+                         : QStringLiteral("Session cursor was not stored.");
         }
+        return -1;
+    }
+    if (!database_.commit()) {
+        const QString commitError = database_.lastError().text();
+        database_.rollback();
+        if (error != nullptr)
+            *error = commitError;
         return -1;
     }
     return cursor;

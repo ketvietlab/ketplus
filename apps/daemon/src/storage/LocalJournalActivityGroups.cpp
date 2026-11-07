@@ -119,11 +119,13 @@ bool LocalJournal::initializeActivityGroups() {
 bool LocalJournal::updateActivityGroups(const QString& session, qint64 generation, qint64 cursor,
                                         qint64 turn, const QString& type,
                                         const QJsonObject& payload, QString* error) {
-    const auto exec = [&](QSqlQuery& query) {
-        if (query.exec())
+    const auto exec = [&](QSqlQuery& query, bool oneRow = false) {
+        if (query.exec() && (!oneRow || query.numRowsAffected() == 1))
             return true;
         if (error)
-            *error = query.lastError().text();
+            *error = query.lastError().isValid()
+                         ? query.lastError().text()
+                         : QStringLiteral("Activity projection row was not stored.");
         return false;
     };
     qint64 head = 0;
@@ -178,7 +180,7 @@ bool LocalJournal::updateActivityGroups(const QString& session, qint64 generatio
                  QVariantList{session, generation, turn, id, cursor, cursor, group,
                               kind.isNull() ? QStringLiteral("") : kind, running, failed})
                 upsert.addBindValue(value);
-            if (!exec(upsert))
+            if (!exec(upsert, true))
                 return false;
         } else if (known) {
             QSqlQuery update(database_);
@@ -186,7 +188,7 @@ bool LocalJournal::updateActivityGroups(const QString& session, qint64 generatio
                            "generation=? AND turn_sequence=? AND item_id=?");
             for (const QVariant& value : QVariantList{cursor, session, generation, turn, id})
                 update.addBindValue(value);
-            if (!exec(update))
+            if (!exec(update, true))
                 return false;
         }
         if (group > 0) {
@@ -200,7 +202,7 @@ bool LocalJournal::updateActivityGroups(const QString& session, qint64 generatio
                  QVariantList{session, generation, group, kind, known ? 0 : 1, running - wasRunning,
                               failed - wasFailed, cursor, turn})
                 aggregate.addBindValue(value);
-            if (!exec(aggregate))
+            if (!exec(aggregate, true))
                 return false;
         }
     } else if (type == "user.message" || type == "turn.steered" || type == "approval.requested" ||
@@ -229,7 +231,7 @@ bool LocalJournal::updateActivityGroups(const QString& session, qint64 generatio
                    "indexed_cursor=excluded.indexed_cursor");
     for (const QVariant& value : QVariantList{session, generation, turn, head, cursor})
         update.addBindValue(value);
-    return exec(update);
+    return exec(update, true);
 }
 
 QJsonObject LocalJournal::activitySummaryEvent(const QJsonObject& event) const {
