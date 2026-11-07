@@ -950,3 +950,9 @@ corrected head before claiming runner acceptance. No application/UI code changed
 - [ ] Independent review, merge and safe worktree cleanup.
 - [ ] Separate Windows tooltip/theme assertion remains outside this no-UI scope;
   do not suppress it or claim the complete Windows job passes.
+
+H6 fixture follow-up at code head `d55390c5` is complete: hosted browser, Lite
+Ubuntu, Linux daemon build/test/staging/container, and Pro macOS 96/96 PASS.
+Overall 4/6 jobs: macOS Lite and Windows Lite retain the separate UI failures
+listed above. Final local Lite 16/16 and Pro 96/96 pass. No hosted full-green,
+combined hardening integration, deployment or installation claim follows.

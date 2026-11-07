@@ -14,8 +14,7 @@
   },
   "fix": "Native file/directory symbolic links with verified type; repository-local core.symlinks=true",
   "validation_pending": [
-    "final hosted Linux daemon/Pro macOS jobs",
-    "independent review"
+    "independent exact-head review and merge"
   ],
   "outside_scope": [
     "Windows RefactorWave1ContractTest::themeInstallsTheKetStyle tooltip assertion",
@@ -52,7 +51,8 @@
       "Windows_Navigation": "12/12 PASS; no QTemporaryDir cleanup warning",
       "Windows_Lite": "14/15 targets PASS; tooltip/theme fails",
       "macOS_Lite": "15/16 targets PASS; TerminalView synchronized-output paint assertion fails (1 paint vs 0)",
-      "other_jobs": "browser and Lite Ubuntu PASS; Linux daemon and Pro macOS pending"
+      "other_jobs": "browser, Lite Ubuntu, Linux daemon staging/runtime PASS; Pro macOS 96/96 PASS, 707.59s",
+      "overall": "4/6 jobs PASS; macOS Lite and Windows Lite fail their separate UI assertions"
     }
   }
 }
