@@ -1,10 +1,12 @@
 #include "app/SettingsClaudeAnalytics.h"
+#include "KetButton.h"
+#include "KetTextField.h"
+#include <QAbstractButton>
 #include <QGridLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPointer>
-#include <QPushButton>
 #include <QTimer>
 namespace ketplus {
 SettingsClaudeAnalytics::SettingsClaudeAnalytics(SettingsClaudeCredentials::Requester requester,
@@ -32,7 +34,7 @@ SettingsClaudeAnalytics::SettingsClaudeAnalytics(SettingsClaudeCredentials::Requ
                              "organization products and keys."),
                           "settingsWorkspaceHelp"),
                     1, 0, 1, 2);
-    key_ = new QLineEdit(this);
+    key_ = new ket::TextField(this);
     key_->setObjectName("claudeAdminKey");
     key_->setEchoMode(QLineEdit::Password);
     key_->setMaxLength(512);
@@ -45,11 +47,12 @@ SettingsClaudeAnalytics::SettingsClaudeAnalytics(SettingsClaudeCredentials::Requ
     auto* actions = new QWidget(this);
     auto* buttons = new QGridLayout(actions);
     buttons->setContentsMargins(0, 0, 0, 0);
-    save_ = new QPushButton(tr("Save Admin key"), this);
+    save_ = new ket::Button(tr("Save Admin key"), ket::ButtonVariant::Primary, this);
     save_->setObjectName("claudeAdminSave");
-    remove_ = new QPushButton(tr("Remove Admin key…"), this);
+    remove_ = new ket::Button(tr("Remove Admin key…"), ket::ButtonVariant::GhostDanger, this);
     remove_->setObjectName("claudeAdminRemove");
-    refresh_ = new QPushButton(tr("Refresh organization usage"), this);
+    refresh_ =
+        new ket::Button(tr("Refresh organization usage"), ket::ButtonVariant::Secondary, this);
     refresh_->setObjectName("claudeAdminRefresh");
     buttons->addWidget(save_, 0, 0);
     buttons->addWidget(remove_, 0, 1);
@@ -63,13 +66,13 @@ SettingsClaudeAnalytics::SettingsClaudeAnalytics(SettingsClaudeCredentials::Requ
                  "Billing balance and account spending limits remain in Anthropic Console."),
               "settingsWorkspaceHelp"),
         5, 0, 1, 2);
-    connect(save_, &QPushButton::clicked, this, [this] {
+    connect(save_, &QAbstractButton::clicked, this, [this] {
         const QJsonObject payload{{"key", key_->text()}};
         key_->clear();
         request("save", payload);
     });
-    connect(refresh_, &QPushButton::clicked, this, [this] { request("refresh"); });
-    connect(remove_, &QPushButton::clicked, this, [this] {
+    connect(refresh_, &QAbstractButton::clicked, this, [this] { request("refresh"); });
+    connect(remove_, &QAbstractButton::clicked, this, [this] {
         if (QMessageBox::question(this, tr("Remove Admin API key?"),
                                   tr("Organization reports will be disconnected. Your inference "
                                      "API key is unchanged."),

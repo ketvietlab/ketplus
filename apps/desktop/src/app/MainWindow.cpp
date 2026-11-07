@@ -1,4 +1,5 @@
 #include "app/MainWindow.h"
+#include "app/SettingsWorkspacePage.h"
 
 #include "app/RepositoryRouter.h"
 #include "app/SettingsWorkspacePage.h"
@@ -195,6 +196,12 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
                     Qt::QueuedConnection);
             });
     connect(activityBar_, &ActivityBar::settingsRequested, this, &MainWindow::showSettings);
+    connect(activityBar_, &ActivityBar::settingsSectionRequested, this, [this](const QString& id) {
+        if (!settingsWorkspaceMode_ || !settingsWorkspace_)
+            showSettings();
+        if (settingsWorkspace_)
+            settingsWorkspace_->showSection(id);
+    });
     connect(activityBar_, &ActivityBar::updatesRequested, this, &MainWindow::checkForUpdates);
     connect(&AppUpdater::instance(), &AppUpdater::pendingVersionChanged, activityBar_,
             &ActivityBar::setPendingUpdate);

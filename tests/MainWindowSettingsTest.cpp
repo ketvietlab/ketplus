@@ -1,3 +1,5 @@
+#include "KetSegmentedControl.h"
+#include "KetThemeCard.h"
 #include "agent/AgentWorkspaceView.h"
 #include "app/AgentConversationWidth.h"
 #include "app/AppearanceSettings.h"
@@ -17,7 +19,6 @@
 
 #include <QAction>
 #include <QApplication>
-#include <QCheckBox>
 #include <QComboBox>
 #include <QDir>
 #include <QElapsedTimer>
@@ -32,7 +33,6 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
-#include <QPushButton>
 #include <QRadioButton>
 #include <QSettings>
 #include <QSpinBox>
@@ -163,7 +163,7 @@ void MainWindowSettingsTest::providersPageShowsRuntimeStatus() {
     QCOMPARE(page.findChild<QLabel*>(QStringLiteral("providersStatus"))->text(),
              QStringLiteral("1 provider(s) need attention."));
 
-    page.findChild<QPushButton*>(QStringLiteral("providersRecheck"))->click();
+    page.findChild<QAbstractButton*>(QStringLiteral("providersRecheck"))->click();
     QTRY_COMPARE(refreshed.count(), 2);
     QCOMPARE(fetches, 2);
     // A refresh rebuilds the rows instead of appending to them.
@@ -200,7 +200,7 @@ void MainWindowSettingsTest::browserPageDefaultsOnAndPersistsChoices() {
     probes.chromiumInstalled = [](const QString&, const QString&) { return chromium.load(); };
 
     ketplus::SettingsBrowserPage page(settingsPath, root.path(), probes);
-    auto* enabled = page.findChild<QCheckBox*>(QStringLiteral("browserToolsEnabled"));
+    auto* enabled = page.findChild<QAbstractButton*>(QStringLiteral("browserToolsEnabled"));
     auto* all = page.findChild<QRadioButton*>(QStringLiteral("browserToolsAllOrigins"));
     auto* only = page.findChild<QRadioButton*>(QStringLiteral("browserToolsOnlyOrigins"));
     auto* origins = page.findChild<QLineEdit*>(QStringLiteral("browserToolsOrigins"));
@@ -298,7 +298,8 @@ void MainWindowSettingsTest::browserPageDefaultsOnAndPersistsChoices() {
     enabled->setChecked(false);
     QVERIFY(!ketplus::browser_tools::loadSettings(settingsPath).enabled);
     ketplus::SettingsBrowserPage reopened(settingsPath, root.path(), probes);
-    QVERIFY(!reopened.findChild<QCheckBox*>(QStringLiteral("browserToolsEnabled"))->isChecked());
+    QVERIFY(
+        !reopened.findChild<QAbstractButton*>(QStringLiteral("browserToolsEnabled"))->isChecked());
     enabled->setChecked(true);
     QVERIFY(ketplus::browser_tools::loadSettings(settingsPath).enabled);
 
@@ -321,7 +322,8 @@ void MainWindowSettingsTest::browserPageDefaultsOnAndPersistsChoices() {
         damaged.write(garbage);
     }
     ketplus::SettingsBrowserPage damagedPage(damagedPath, root.path(), probes);
-    QVERIFY(!damagedPage.findChild<QCheckBox*>(QStringLiteral("browserToolsEnabled"))->isChecked());
+    QVERIFY(!damagedPage.findChild<QAbstractButton*>(QStringLiteral("browserToolsEnabled"))
+                 ->isChecked());
     auto* damagedStatus = damagedPage.findChild<QLabel*>(QStringLiteral("browserToolsStatus"));
     QVERIFY2(damagedStatus->text().contains(QStringLiteral("could not be read")),
              qPrintable(damagedStatus->text()));
@@ -359,8 +361,8 @@ void MainWindowSettingsTest::archivedPageStopsRunningTurnAndRestoresInPlace() {
             return true;
         });
     auto* list = page.findChild<QListWidget*>(QStringLiteral("archivedConversationList"));
-    auto* stop = page.findChild<QPushButton*>(QStringLiteral("stopArchivedTurnButton"));
-    auto* restore = page.findChild<QPushButton*>(QStringLiteral("restoreArchivedItemButton"));
+    auto* stop = page.findChild<QAbstractButton*>(QStringLiteral("stopArchivedTurnButton"));
+    auto* restore = page.findChild<QAbstractButton*>(QStringLiteral("restoreArchivedItemButton"));
     QVERIFY(list != nullptr);
     QVERIFY(stop != nullptr);
     QVERIFY(restore != nullptr);
@@ -423,14 +425,15 @@ void MainWindowSettingsTest::appliesSavedAppearanceToPublicAndPrivateSurfaces() 
         if (dialog == nullptr) {
             return;
         }
-        window.findChild<QToolButton*>(QStringLiteral("interfaceZoomLarge"))->click();
+        window.findChild<ket::SegmentedControl*>(QStringLiteral("interfaceZoom"))
+            ->setCurrentIndex(2);
         window.findChild<QSpinBox*>(QStringLiteral("editorFontSize"))->setValue(17);
         window.findChild<QSpinBox*>(QStringLiteral("editorLineHeight"))->setValue(29);
         window.findChild<QSpinBox*>(QStringLiteral("terminalFontSize"))->setValue(18);
         window.findChild<QSpinBox*>(QStringLiteral("terminalLineHeight"))->setValue(30);
         window.findChild<QSpinBox*>(QStringLiteral("previewFontSize"))->setValue(19);
         window.findChild<QSpinBox*>(QStringLiteral("previewLineHeight"))->setValue(31);
-        window.findChild<QCheckBox*>(QStringLiteral("followSystemTheme"))->setChecked(false);
+        window.findChild<QAbstractButton*>(QStringLiteral("followSystemTheme"))->setChecked(false);
         auto* themes = dialog->findChild<QListWidget*>(QStringLiteral("installedThemeList"));
         for (int index = 0; index < themes->count(); ++index) {
             if (themes->item(index)->data(Qt::UserRole).toInt() ==
@@ -439,7 +442,7 @@ void MainWindowSettingsTest::appliesSavedAppearanceToPublicAndPrivateSurfaces() 
                 break;
             }
         }
-        for (auto* button : window.findChildren<QPushButton*>()) {
+        for (auto* button : window.findChildren<QAbstractButton*>()) {
             if (button->property("kvRole") == QStringLiteral("primaryAction")) {
                 saved = true;
                 button->click();
@@ -525,7 +528,10 @@ void MainWindowSettingsTest::settingsAndWorktreesUseWorkspacePages() {
     QVERIFY(settingsNavigation != nullptr);
     QCOMPARE(settingsNavigation->count(), 10);
     QCOMPARE(settingsNavigation->item(8)->data(Qt::UserRole).toString(), QStringLiteral("storage"));
-    settingsPage->showSection(QStringLiteral("storage"));
+    auto* storageShortcut =
+        activity->findChild<QAbstractButton*>(QStringLiteral("sidebarStorageSettings"));
+    QVERIFY(storageShortcut != nullptr);
+    storageShortcut->click();
     QTRY_VERIFY(
         settingsPage->findChild<QWidget*>(QStringLiteral("settingsWorkspaceStorage"))->isVisible());
     QCOMPARE(settingsNavigation->item(9)->data(Qt::UserRole).toString(), QStringLiteral("updates"));
@@ -552,9 +558,9 @@ void MainWindowSettingsTest::settingsAndWorktreesUseWorkspacePages() {
     QCOMPARE(settingsNavigation->currentItem()->data(Qt::UserRole).toString(),
              QStringLiteral("appearance"));
     auto* lightTheme =
-        settingsPage->findChild<QToolButton*>(QStringLiteral("settingsLightThemeCard"));
+        settingsPage->findChild<ket::ThemeCard*>(QStringLiteral("settingsLightThemeCard"));
     auto* darkTheme =
-        settingsPage->findChild<QToolButton*>(QStringLiteral("settingsDarkThemeCard"));
+        settingsPage->findChild<ket::ThemeCard*>(QStringLiteral("settingsDarkThemeCard"));
     auto* settingsTitle =
         settingsPage->findChild<QLabel*>(QStringLiteral("settingsWorkspaceTitle"));
     auto* sectionTitle =
@@ -563,7 +569,7 @@ void MainWindowSettingsTest::settingsAndWorktreesUseWorkspacePages() {
     QVERIFY(darkTheme != nullptr);
     QVERIFY(settingsTitle != nullptr);
     QVERIFY(sectionTitle != nullptr);
-    QCOMPARE(settingsTitle->font().pixelSize(), 29);
+    QCOMPARE(settingsTitle->font().pixelSize(), 30);
     QCOMPARE(sectionTitle->font().pixelSize(), 22);
     QVERIFY(settingsPage->findChild<QFrame*>(QStringLiteral("settingsWorkspacePreview")) !=
             nullptr);
@@ -573,10 +579,19 @@ void MainWindowSettingsTest::settingsAndWorktreesUseWorkspacePages() {
     lightTheme->click();
     QTRY_VERIFY(!theme.palette().dark);
     settingsNavigation->setCurrentRow(1);
-    QTRY_VERIFY(window.findChild<QToolButton*>(QStringLiteral("interfaceZoomMedium"))->isVisible());
-    QVERIFY(window.findChild<QToolButton*>(QStringLiteral("interfaceZoomSmall")) != nullptr);
-    QVERIFY(window.findChild<QToolButton*>(QStringLiteral("interfaceZoomLarge")) != nullptr);
-    QVERIFY(window.findChild<QToolButton*>(QStringLiteral("interfaceZoomMedium"))->isChecked());
+    auto* zoom = window.findChild<ket::SegmentedControl*>(QStringLiteral("interfaceZoom"));
+    QVERIFY(zoom != nullptr);
+    QTRY_VERIFY(zoom->isVisible());
+    QCOMPARE(zoom->options(), QStringList({"Small", "Medium", "Large"}));
+    QCOMPARE(zoom->currentIndex(), 1);
+    // Opening a saved non-preset size must not silently change it.
+    auto* numericZoom = window.findChild<QSpinBox*>(QStringLiteral("interfaceFontSize"));
+    numericZoom->setValue(15);
+    QCOMPARE(zoom->currentIndex(), 3);
+    QCOMPARE(zoom->options().last(), QStringLiteral("Custom (15)"));
+    QCOMPARE(numericZoom->value(), 15);
+    zoom->setCurrentIndex(1);
+    QCOMPARE(numericZoom->value(), 14);
     QVERIFY(window.findChild<QSpinBox*>(QStringLiteral("interfaceFontSize"))->isHidden());
     QVERIFY(settingsPage->findChild<QComboBox*>(QStringLiteral("settingsInterfaceFont")) !=
             nullptr);
@@ -613,12 +628,24 @@ void MainWindowSettingsTest::conversationWidthFollowsOnlyTheAgentWorkspace() {
         settingsPage->findChild<QListWidget*>(QStringLiteral("settingsWorkspaceNavigation"))
             ->setCurrentRow(1);
     };
-    const auto widthButton = [&settingsPage](const int pixels) {
-        return settingsPage->findChild<QToolButton*>(
-            QStringLiteral("agentConversationWidth%1").arg(pixels));
+    const auto widthControl = [&settingsPage] {
+        return settingsPage->findChild<ket::SegmentedControl*>(
+            QStringLiteral("agentConversationWidth"));
     };
-    const auto saveButton = [&settingsPage]() -> QPushButton* {
-        for (auto* button : settingsPage->findChildren<QPushButton*>()) {
+    const auto widthIndex = [](int pixels) {
+        const auto choices = ketplus::AgentConversationWidth::choices();
+        for (int i = 0; i < choices.size(); ++i)
+            if (choices[i].pixels == pixels)
+                return i;
+        return -1;
+    };
+    const auto selectWidth = [&](int pixels) {
+        auto* control = widthControl();
+        QTest::mouseClick(control, Qt::LeftButton, Qt::NoModifier,
+                          control->segmentRect(widthIndex(pixels)).center());
+    };
+    const auto saveButton = [&settingsPage]() -> QAbstractButton* {
+        for (auto* button : settingsPage->findChildren<QAbstractButton*>()) {
             if (button->property("kvRole") == QStringLiteral("primaryAction"))
                 return button;
         }
@@ -634,56 +661,45 @@ void MainWindowSettingsTest::conversationWidthFollowsOnlyTheAgentWorkspace() {
     };
     constexpr int widePixels = 864;
     openTypography();
-    auto* defaultWidth = widthButton(ketplus::AgentWorkspaceView::defaultConversationWidth);
-    QVERIFY(defaultWidth != nullptr && widthButton(widePixels) != nullptr &&
-            widthButton(0) != nullptr && widthButton(1200) != nullptr);
-    QTRY_VERIFY(widthButton(widePixels)->isVisible());
-    QVERIFY(defaultWidth->isChecked());
+    const int defaultIndex = widthIndex(ketplus::AgentWorkspaceView::defaultConversationWidth);
+    QVERIFY(widthControl() != nullptr);
+    QCOMPARE(widthControl()->options().size(), ketplus::AgentConversationWidth::choices().size());
+    QTRY_VERIFY(widthControl()->isVisible());
+    QCOMPARE(widthControl()->currentIndex(), defaultIndex);
     QVERIFY(saveButton() != nullptr);
     QVERIFY(!saveButton()->isEnabled());
-
-    // Every button sits inside its group's border: none overlaps a neighbour to
-    // share an edge, which left one side of the group undrawn.
-    auto* group = settingsPage->findChild<QWidget*>(QStringLiteral("agentConversationWidth"));
-    QVERIFY(group != nullptr);
-    QCOMPARE(group->property("kvRole").toString(), QStringLiteral("segmentedGroup"));
-    int previousRight = 0;
-    for (auto* button : group->findChildren<QToolButton*>()) {
-        QVERIFY(button->geometry().left() > previousRight);
-        QVERIFY(button->geometry().right() < group->width() - 1);
-        previousRight = button->geometry().right();
-    }
+    QVERIFY(saveButton()->isVisible());
 
     // A width alone is a change to save, and choosing the saved one again is not.
-    QTest::mouseClick(widthButton(widePixels), Qt::LeftButton);
-    QVERIFY(widthButton(widePixels)->isChecked());
-    QVERIFY(!defaultWidth->isChecked());
+    selectWidth(widePixels);
+    QCOMPARE(widthControl()->currentIndex(), widthIndex(widePixels));
+    QVERIFY(widthControl()->currentIndex() != defaultIndex);
     QVERIFY(saveButton()->isEnabled());
     QVERIFY(!QSettings().contains(QStringLiteral("agent/conversationWidth")));
     QCOMPARE(agent->conversationWidth(), ketplus::AgentWorkspaceView::defaultConversationWidth);
-    QTest::mouseClick(defaultWidth, Qt::LeftButton);
+    selectWidth(ketplus::AgentWorkspaceView::defaultConversationWidth);
     QVERIFY(!saveButton()->isEnabled());
 
-    QTest::mouseClick(widthButton(widePixels), Qt::LeftButton);
+    selectWidth(widePixels);
     save();
     QCOMPARE(QSettings().value(QStringLiteral("agent/conversationWidth")).toInt(), widePixels);
     QCOMPARE(agent->conversationWidth(), widePixels);
     QCOMPARE(atlasChat.conversationWidth(), ketplus::AgentWorkspaceView::defaultConversationWidth);
-    QVERIFY(widthButton(widePixels)->isChecked());
+    QCOMPARE(widthControl()->currentIndex(), widthIndex(widePixels));
     QVERIFY(!saveButton()->isEnabled());
 
-    QTest::mouseClick(widthButton(0), Qt::LeftButton);
+    selectWidth(0);
     save();
     QCOMPARE(ketplus::AgentConversationWidth::load(), 0);
     QCOMPARE(agent->conversationWidth(), 0);
 
     // Reset defaults covers the width too; going back to the default leaves
     // nothing behind in the settings file.
-    for (auto* button : settingsPage->findChildren<QPushButton*>()) {
+    for (auto* button : settingsPage->findChildren<QAbstractButton*>()) {
         if (button->property("kvRole") == QStringLiteral("settingsReset"))
             button->click();
     }
-    QVERIFY(widthButton(ketplus::AgentWorkspaceView::defaultConversationWidth)->isChecked());
+    QCOMPARE(widthControl()->currentIndex(), defaultIndex);
     save();
     QVERIFY(!QSettings().contains(QStringLiteral("agent/conversationWidth")));
     QCOMPARE(agent->conversationWidth(), ketplus::AgentWorkspaceView::defaultConversationWidth);
@@ -733,7 +749,7 @@ void MainWindowSettingsTest::updatesPageAndReminderDriveTheUpdater() {
     QVERIFY(reminder->isHidden());
     updater.remind(QStringLiteral("0.1.18"));
     QVERIFY(!reminder->isHidden());
-    QVERIFY(reminder->text().contains(QStringLiteral("KétPlus Pro 0.1.18")));
+    QVERIFY(reminder->accessibleDescription().contains(QStringLiteral("KétPlus Pro 0.1.18")));
     reminder->click();
     QCOMPARE(updater.checks_, 3);
     updater.remind({});
@@ -750,10 +766,11 @@ void MainWindowSettingsTest::updatesPageAndReminderDriveTheUpdater() {
                     nullptr &&
                 page->isVisible());
     auto* status = page->findChild<QLabel*>(QStringLiteral("updatesStatus"));
-    auto* checkNow = page->findChild<QPushButton*>(QStringLiteral("updatesCheckNow"));
-    auto* automaticChecks = page->findChild<QCheckBox*>(QStringLiteral("updatesAutomaticChecks"));
+    auto* checkNow = page->findChild<QAbstractButton*>(QStringLiteral("updatesCheckNow"));
+    auto* automaticChecks =
+        page->findChild<QAbstractButton*>(QStringLiteral("updatesAutomaticChecks"));
     auto* automaticDownloads =
-        page->findChild<QCheckBox*>(QStringLiteral("updatesAutomaticDownloads"));
+        page->findChild<QAbstractButton*>(QStringLiteral("updatesAutomaticDownloads"));
     QVERIFY(status != nullptr);
     QVERIFY(checkNow != nullptr);
     QVERIFY(automaticChecks != nullptr);
@@ -811,9 +828,11 @@ void MainWindowSettingsTest::unconfiguredBuildExplainsUpdatesInsteadOfChecking()
     QVERIFY(page->findChild<QLabel*>(QStringLiteral("updatesStatus"))
                 ->text()
                 .startsWith(QStringLiteral("Updates are not configured for this build.")));
-    QVERIFY(!page->findChild<QPushButton*>(QStringLiteral("updatesCheckNow"))->isEnabled());
-    QVERIFY(!page->findChild<QCheckBox*>(QStringLiteral("updatesAutomaticChecks"))->isEnabled());
-    QVERIFY(!page->findChild<QCheckBox*>(QStringLiteral("updatesAutomaticDownloads"))->isEnabled());
+    QVERIFY(!page->findChild<QAbstractButton*>(QStringLiteral("updatesCheckNow"))->isEnabled());
+    QVERIFY(
+        !page->findChild<QAbstractButton*>(QStringLiteral("updatesAutomaticChecks"))->isEnabled());
+    QVERIFY(!page->findChild<QAbstractButton*>(QStringLiteral("updatesAutomaticDownloads"))
+                 ->isEnabled());
     // Opening Settings again must keep the requested section rather than reset to Appearance.
     auto* navigation =
         window.findChild<QListWidget*>(QStringLiteral("settingsWorkspaceNavigation"));

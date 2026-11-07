@@ -1,7 +1,7 @@
 #include "app/SettingsComputerPage.h"
 #include "ComputerToolLaunch.h"
 
-#include <QCheckBox>
+#include <QAbstractButton>
 #include <QComboBox>
 #include <QDir>
 #include <QFile>
@@ -21,7 +21,7 @@ class SettingsComputerPageTest final : public QObject {
         QTemporaryDir root;
         const QString config = root.filePath(QStringLiteral("computer-tools.json"));
         SettingsComputerPage page(config, root.filePath(QStringLiteral("Helpers")));
-        auto* enabled = page.findChild<QCheckBox*>(QStringLiteral("computerEnabled"));
+        auto* enabled = page.findChild<QAbstractButton*>(QStringLiteral("computerEnabled"));
         QVERIFY(enabled);
         QVERIFY(!enabled->isChecked());
         QVERIFY(!enabled->isEnabled());
@@ -43,7 +43,7 @@ class SettingsComputerPageTest final : public QObject {
         const QString config = root.filePath(QStringLiteral("computer-tools.json"));
 
         SettingsComputerPage page(config, helpers);
-        auto* enabled = page.findChild<QCheckBox*>(QStringLiteral("computerEnabled"));
+        auto* enabled = page.findChild<QAbstractButton*>(QStringLiteral("computerEnabled"));
         auto* denied = page.findChild<QLineEdit*>(QStringLiteral("computerDeniedApps"));
         QVERIFY(enabled->isEnabled());
         enabled->setChecked(true);
@@ -63,7 +63,8 @@ class SettingsComputerPageTest final : public QObject {
         QCOMPARE(computer::loadSettings(config).display, QStringLiteral("main"));
 
         SettingsComputerPage reopened(config, helpers);
-        QVERIFY(reopened.findChild<QCheckBox*>(QStringLiteral("computerEnabled"))->isChecked());
+        QVERIFY(
+            reopened.findChild<QAbstractButton*>(QStringLiteral("computerEnabled"))->isChecked());
         QCOMPARE(reopened.findChild<QComboBox*>(QStringLiteral("computerWorkDisplay"))
                      ->currentData()
                      .toString(),
@@ -88,7 +89,7 @@ class SettingsComputerPageTest final : public QObject {
         QVERIFY(QDir().mkpath(config));
 
         SettingsComputerPage page(config, helpers);
-        auto* enabled = page.findChild<QCheckBox*>(QStringLiteral("computerEnabled"));
+        auto* enabled = page.findChild<QAbstractButton*>(QStringLiteral("computerEnabled"));
         enabled->setChecked(true);
         QVERIFY(!enabled->isChecked());
         auto* error = page.findChild<QLabel*>(QStringLiteral("computerSettingsError"));

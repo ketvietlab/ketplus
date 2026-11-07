@@ -2,9 +2,8 @@
 
 #include <QWidget>
 
-class QCheckBox;
+class QAbstractButton;
 class QLabel;
-class QPushButton;
 
 namespace ketplus {
 
@@ -24,9 +23,9 @@ class SettingsUpdatesPage final : public QWidget {
 
     AppUpdater& updater_;
     QLabel* status_{nullptr};
-    QPushButton* check_{nullptr};
-    QCheckBox* automaticChecks_{nullptr};
-    QCheckBox* automaticDownloads_{nullptr};
+    QAbstractButton* check_{nullptr};
+    QAbstractButton* automaticChecks_{nullptr};
+    QAbstractButton* automaticDownloads_{nullptr};
 };
 
 } // namespace ketplus
