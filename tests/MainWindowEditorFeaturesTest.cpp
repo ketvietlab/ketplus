@@ -1,3 +1,4 @@
+#include "KetCommandPalette.h"
 #include "agent/AgentWorkspaceView.h"
 #include "app/MainWindow.h"
 #include "app/SpotlightDialog.h"
@@ -185,14 +186,14 @@ void MainWindowEditorFeaturesTest::findsFilesInSpotlightAndNavigatesBack() {
     auto* dialog = window.findChild<ketplus::SpotlightDialog*>(QStringLiteral("spotlightDialog"));
     QVERIFY(dialog);
     auto* query = dialog->findChild<QLineEdit*>(QStringLiteral("spotlightQuery"));
-    auto* results = dialog->findChild<QListWidget*>(QStringLiteral("spotlightResults"));
+    auto* results = dialog->commandPalette();
     QVERIFY(query && results);
 
     // The path index is collected off the UI thread and fills Spotlight when ready.
     query->setText(QStringLiteral("MainWindow"));
-    QTRY_COMPARE(results->count(), 1);
-    QCOMPARE(results->currentItem()->data(Qt::UserRole).toString(),
-             QStringLiteral("file:") + source);
+    QTRY_COMPARE(results->groups().size(), 1);
+    QTRY_COMPARE(results->groups().first().items.size(), 1);
+    QCOMPARE(results->groups().first().items.first().id, QStringLiteral("file:") + source);
     QTest::keyClick(query, Qt::Key_Return);
     QTRY_COMPARE(visibleFilePath(window), source);
 

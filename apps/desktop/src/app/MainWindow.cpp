@@ -511,6 +511,8 @@ void MainWindow::openFolder(const QString& folderPath) {
 }
 
 void MainWindow::setShellMode(const ActivityBar::Mode mode) {
+    if (compactConversationWindow_ && mode != ActivityBar::Mode::AgentWorkspace)
+        setCompactConversationWindow(false);
     if (mode != ActivityBar::Mode::Search)
         hideSearchPanel();
     if (mode == ActivityBar::Mode::Settings) {

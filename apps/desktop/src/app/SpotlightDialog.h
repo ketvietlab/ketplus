@@ -1,11 +1,12 @@
 #pragma once
 
-#include <QDialog>
 #include <QVector>
+#include <QWidget>
 
 class QLineEdit;
-class QListWidget;
-class QLabel;
+namespace ket {
+class CommandPalette;
+}
 
 namespace ketplus {
 
@@ -19,25 +20,27 @@ struct SpotlightEntry {
     QString searchText{};
 };
 
-class SpotlightDialog final : public QDialog {
+class SpotlightDialog final : public QWidget {
     Q_OBJECT
   public:
     explicit SpotlightDialog(QWidget* parent = nullptr);
     void setEntries(const QVector<SpotlightEntry>& entries);
     void setQuery(const QString& query);
-    void setAvailableHeight(int height);
+    [[nodiscard]] ket::CommandPalette* commandPalette() const { return palette_; }
   signals:
     void entryActivated(const QString& id);
+
   protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
+    void showEvent(QShowEvent* event) override;
+    void closeEvent(QCloseEvent* event) override;
+
   private:
     void filter();
-    void activateCurrent();
+    void reposition();
     QVector<SpotlightEntry> entries_;
     QLineEdit* query_;
-    QListWidget* results_;
-    QLabel* empty_;
-    int availableHeight_{680};
+    ket::CommandPalette* palette_;
 };
 
 } // namespace ketplus

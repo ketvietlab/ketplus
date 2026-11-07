@@ -200,6 +200,7 @@ class MainWindow final : public QMainWindow {
     void focusOtherView();
     void setFullScreen(bool fullScreen);
     void setDistractionFree(bool enabled);
+    void setCompactConversationWindow(bool enabled);
     SearchPanel* ensureSearchPanel();
     void setSearchPanelVisible(bool visible);
     void hideSearchPanel();
@@ -258,6 +259,8 @@ class MainWindow final : public QMainWindow {
     void showAgentWorktreeContextMenu(const QString& path);
     void showAgentConversationContextMenu(const QString& worktreePath,
                                           const QString& conversationId);
+    void changeAgentConversationWorktree(const QString& worktreePath,
+                                         const QString& conversationId);
     void renameAgentConversation(const QString& worktreePath, const QString& conversationId);
     void archiveAgentConversation(const QString& worktreePath, const QString& conversationId);
     void forkAgentConversation(const QString& worktreePath, const QString& conversationId);
@@ -434,6 +437,14 @@ class MainWindow final : public QMainWindow {
     std::uint64_t tabAccessSequence_{0};
     int agentTerminalSerial_{0};
     bool agentWorkspaceMode_{false};
+    bool compactConversationWindow_{false};
+    QByteArray normalConversationGeometry_;
+    QSize normalConversationMinimum_;
+    QSize normalConversationSize_;
+    bool compactSidebarVisible_{true};
+    bool compactStatusVisible_{false};
+    bool compactDetailsVisible_{false};
+    QAction* compactConversationAction_{nullptr};
     // Diffs requested while the agent workspace is shown. Its status bar is hidden, so a
     // file with no uncommitted changes opens instead of reporting that nowhere visible.
     QSet<QString> agentDiffRequests_;

@@ -128,8 +128,8 @@ TerminalPanel* MainWindow::ensureTerminal() {
 }
 
 void MainWindow::placeFindBar() {
-    QWidget* host = agentWorkspaceMode_ && agentDetailPane_ != nullptr ? agentDetailPane_
-                                                                        : editorPane_;
+    QWidget* host =
+        agentWorkspaceMode_ && agentDetailPane_ != nullptr ? agentDetailPane_ : editorPane_;
     if (findBar_->parentWidget() == host)
         return;
     const bool visible = findBar_->isVisibleTo(findBar_->parentWidget());
@@ -286,7 +286,7 @@ void MainWindow::updateAgentDetailTabs() {
     if (agentDetailTabs_ == nullptr) {
         return;
     }
-    const bool hasTabs = agentDetailTabs_->count() > 0;
+    const bool hasTabs = agentDetailTabs_->count() > 0 && !compactConversationWindow_;
     agentDetailPane_->setVisible(agentWorkspaceMode_ && hasTabs);
     if (agentWorkspaceMode_ && agentWorkspace_ != nullptr) {
         QList<int> sizes(workspaceSplit_->count(), 0);
@@ -316,6 +316,8 @@ bool MainWindow::showAgentFile(const QString& filePath) {
         return false;
     }
 
+    if (compactConversationWindow_)
+        setCompactConversationWindow(false);
     auto* detailTabs = ensureAgentDetailTabs();
     const QString absolutePath = normalizedPath(filePath);
     for (int index = 0; index < detailTabs->count(); ++index) {
