@@ -942,7 +942,11 @@ corrected head before claiming runner acceptance. No application/UI code changed
   at `7834290d`; all three original filesystem failures are resolved.
 - [x] Explicit directory-link cleanup before its temporary target disappears;
   focused macOS cleanup 3/3 PASS.
-- [ ] Final local Lite/full Pro and hosted Windows cleanup follow-up.
+- [x] Final local Release Lite 16/16 and Pro 96/96 PASS. Hosted Windows
+  filesystem cases pass at `d55390c5`, with no fixture cleanup warning.
+- [ ] Hosted UI gates remain unaccepted: Windows tooltip/theme and macOS
+  TerminalView synchronized-output painting (one paint versus zero). No UI
+  implementation or assertions were changed.
 - [ ] Independent review, merge and safe worktree cleanup.
 - [ ] Separate Windows tooltip/theme assertion remains outside this no-UI scope;
   do not suppress it or claim the complete Windows job passes.
