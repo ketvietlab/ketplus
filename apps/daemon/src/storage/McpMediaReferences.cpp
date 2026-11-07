@@ -1,5 +1,6 @@
 #include "storage/McpMediaStore.h"
 
+#include <QBuffer>
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
@@ -286,6 +287,48 @@ void McpMediaStore::enforceCapacity() {
                 total -= file.size();
         }
     }
+}
+
+QJsonObject McpMediaStore::preview(const QString& sessionId, const QString& reference,
+                                   int maximumSide) const {
+    const auto unavailable = [] {
+        return QJsonObject{{"ok", false}, {"error_code", "media_unavailable"}};
+    };
+    if (!reference.startsWith(QStringLiteral("sha256:")) || reference.size() != 71)
+        return unavailable();
+    const auto hash = reference.mid(7).toLatin1();
+    if (!isDigest(hash))
+        return unavailable();
+    const QFileInfo root(directory_);
+    if (!root.isDir() || root.isSymLink() ||
+        referenceDirectoryState(QDir(directory_).filePath(QStringLiteral("refs"))) !=
+            ReferenceDirectoryState::Ready)
+        return unavailable();
+    const auto owned = readReferenceFile(refsPath(sessionId), false);
+    if (!owned || !owned->hashes.contains(QString::fromLatin1(hash)))
+        return unavailable();
+    for (const QString& suffix : {QStringLiteral(".png"), QStringLiteral(".jpg")}) {
+        QFile file(QDir(directory_).filePath(QString::fromLatin1(hash) + suffix));
+        const QFileInfo info(file);
+        if (!info.isFile() || info.isSymLink() || info.size() > maximumImageBytes)
+            continue;
+        if (!file.open(QIODevice::ReadOnly))
+            return unavailable();
+        QByteArray bytes = file.read(maximumImageBytes + 1);
+        if (file.error() != QFileDevice::NoError || bytes.size() > maximumImageBytes ||
+            QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex() != hash)
+            return unavailable();
+        // Decode the same bounded bytes that passed the identity check, rather
+        // than reading a mutable file again through the image plugin.
+        QBuffer source(&bytes);
+        if (!source.open(QIODevice::ReadOnly))
+            return unavailable();
+        auto result = encodePreview(&source, maximumSide);
+        if (result.value("ok").toBool())
+            result.insert("media_ref", reference);
+        return result;
+    }
+    return unavailable();
 }
 
 } // namespace ketplus::daemon

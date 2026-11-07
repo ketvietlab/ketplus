@@ -5,6 +5,10 @@ milestone changes state.
 
 ## Implemented
 
+- Reference-based previews use bounded validated ownership and verify blob
+  SHA-256 before decoding the same byte snapshot (ADR 0069). Unknown metadata,
+  linked roots and mismatched bytes remain intact and return unavailable.
+
 - Fork prepares validated media ownership before committing copied history
   (ADR 0068). Failed preparation rolls back the journal; conflicting destination
   metadata is preserved. Matching prepared ownership permits retry after a

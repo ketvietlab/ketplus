@@ -184,6 +184,9 @@ the corresponding Atlas mock first.
 - Fork media changes: fake-provider tests cover invalid/unsupported source and
   target metadata, retained conflicts, rollback, matching retry, missing-source
   compatibility and reopen cleanup following a deferred journal commit failure.
+- Reference-preview changes: `ketplus_daemon_media_preview_tests` exercises
+  canonical references, ownership bounds/types/links, blob identity, byte limits,
+  unchanged invalid data and repaired JPEG output; no UI or live media is used.
 - One Pro module: focused target plus its directly affected tests.
 - Shared header or desktop shell: full build and full Pro test suite.
 - `core/` change: the Lite suite (`ctest --preset lite-dev`), then the full Pro suite.

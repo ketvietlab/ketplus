@@ -371,6 +371,11 @@ capacity can remain above its limit pending recovery. Valid ownership retains th
 existing eviction order. This guard does not establish reference-write durability
 or a cross-file transaction; see ADR 0065.
 
+Reference-based previews share the bounded ownership parser and require canonical
+references and nonsymlink roots (ADR 0069). The daemon verifies the bounded image
+bytes against their SHA-256 and decodes that snapshot through QBuffer; unknown
+ownership or mismatched bytes returns media_unavailable without modifying files.
+
 SessionHost prepares fork media ownership inside the journal before-commit
 phase (ADR 0068). Unknown source metadata or conflicting destination ownership
 rolls back copied history. Matching ownership supports retry after commit failure;
