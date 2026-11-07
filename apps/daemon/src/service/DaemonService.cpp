@@ -170,6 +170,9 @@ void DaemonService::compactJournal() {
 void DaemonService::reclaimJournalSpace() {
     if (!journal_ || (host_ && host_->hasActiveSessions()))
         return;
+    if (!journal_->pruneAcknowledgedEvents())
+        qWarning("journal: acknowledged delivery GC failed: %s",
+                 qPrintable(journal_->errorString()));
     if (!journal_->pruneLargePayloadGarbage())
         qWarning("journal: orphan GC failed: %s", qPrintable(journal_->errorString()));
     journal_->reclaimFreePages(reclaimBatchPages);

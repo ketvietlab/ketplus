@@ -97,6 +97,10 @@ bool LocalJournal::initialize() {
                        "payload_row INTEGER NOT NULL DEFAULT 0 CHECK(payload_row>=0), "
                        "chunk_row INTEGER NOT NULL DEFAULT 0 CHECK(chunk_row>=0))"),
         QStringLiteral("INSERT OR IGNORE INTO journal_gc_state(singleton) VALUES(1)"),
+        QStringLiteral("CREATE TABLE IF NOT EXISTS journal_ack_gc ("
+                       "queue_id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, "
+                       "generation INTEGER NOT NULL, "
+                       "UNIQUE(session_id,generation))"),
         QStringLiteral("CREATE TABLE IF NOT EXISTS sessions ("
                        "id TEXT PRIMARY KEY, worktree_path TEXT NOT NULL, adapter TEXT NOT NULL, "
                        "thread_id TEXT NOT NULL, turn_id TEXT NOT NULL, state TEXT NOT NULL, "
@@ -145,6 +149,8 @@ bool LocalJournal::initialize() {
             "client_id TEXT NOT NULL, session_id TEXT NOT NULL, generation INTEGER NOT NULL, "
             "cursor INTEGER NOT NULL, acknowledged_at TEXT NOT NULL, "
             "PRIMARY KEY(client_id, session_id, generation))"),
+        QStringLiteral("CREATE INDEX IF NOT EXISTS client_cursors_generation ON "
+                       "client_cursors(session_id,generation,cursor)"),
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS replay_events ("
             "session_id TEXT NOT NULL, generation INTEGER NOT NULL, cursor INTEGER NOT NULL, "
@@ -193,7 +199,8 @@ bool LocalJournal::initialize() {
         }
     }
     return migrateTranscriptSchema() && purgeExpiredAttachments() && backfillTurnSequences() &&
-           backfillReplayProjection() && initializeRemoteAudit() && pruneRetention();
+           backfillReplayProjection() && initializeRemoteAudit() && pruneAcknowledgedEvents() &&
+           pruneRetention();
 }
 
 bool LocalJournal::purgeExpiredAttachments() {
@@ -1718,85 +1725,6 @@ bool LocalJournal::removeCloudEventsThrough(const QString& sessionId, const qint
     query.addBindValue(cursor);
     if (!query.exec()) {
         setError(query.lastError().text());
-        return false;
-    }
-    return true;
-}
-
-bool LocalJournal::acknowledgeCursor(const QString& clientId, const QString& sessionId,
-                                     const qint64 generation, const qint64 cursor) {
-    // A cursor never moves back, so an acknowledgement at or behind the stored one changes
-    // nothing and needs no write, no synchronous commit and no prune.
-    QSqlQuery current(database_);
-    current.prepare(QStringLiteral("SELECT cursor FROM client_cursors WHERE client_id = ? AND "
-                                   "session_id = ? AND generation = ?"));
-    current.addBindValue(clientId);
-    current.addBindValue(sessionId);
-    current.addBindValue(generation);
-    if (!current.exec()) {
-        setError(current.lastError().text());
-        return false;
-    }
-    if (current.next() && current.value(0).toLongLong() >= cursor)
-        return true;
-    if (!database_.transaction()) {
-        setError(database_.lastError().text());
-        return false;
-    }
-    QSqlQuery query(database_);
-    query.prepare(QStringLiteral(
-        "INSERT INTO client_cursors(client_id, session_id, generation, cursor, acknowledged_at) "
-        "VALUES(?, ?, ?, ?, ?) ON CONFLICT(client_id, session_id, generation) DO UPDATE SET "
-        "cursor=MAX(cursor, excluded.cursor), acknowledged_at=excluded.acknowledged_at"));
-    query.addBindValue(clientId);
-    query.addBindValue(sessionId);
-    query.addBindValue(generation);
-    query.addBindValue(cursor);
-    query.addBindValue(protocol::timestamp());
-    if (!query.exec()) {
-        database_.rollback();
-        setError(query.lastError().text());
-        return false;
-    }
-    QSqlQuery minimum(database_);
-    minimum.prepare(QStringLiteral(
-        "SELECT MIN(cursor) FROM client_cursors WHERE session_id = ? AND generation = ?"));
-    minimum.addBindValue(sessionId);
-    minimum.addBindValue(generation);
-    if (!minimum.exec() || !minimum.next() || minimum.value(0).isNull()) {
-        database_.rollback();
-        setError(minimum.lastError().text());
-        return false;
-    }
-    // Only a removed raw event can leave a large payload unreferenced, so only the transfers the
-    // removed events name are checked, never the whole session. Most sessions have none.
-    QStringList transferIds;
-    QSqlQuery named(database_);
-    named.prepare(QStringLiteral(
-        "SELECT p.transfer_id FROM large_event_payloads p WHERE p.session_id = ? AND "
-        "p.generation = ? AND EXISTS (SELECT 1 FROM events e WHERE e.session_id = p.session_id AND "
-        "e.generation = p.generation AND e.cursor <= ? AND instr(e.payload, p.transfer_id) > 0)"));
-    named.addBindValue(sessionId);
-    named.addBindValue(generation);
-    named.addBindValue(minimum.value(0));
-    if (!named.exec()) {
-        database_.rollback();
-        setError(named.lastError().text());
-        return false;
-    }
-    while (named.next())
-        transferIds.append(named.value(0).toString());
-    QSqlQuery prune(database_);
-    prune.prepare(QStringLiteral(
-        "DELETE FROM events WHERE session_id = ? AND generation = ? AND cursor <= ?"));
-    prune.addBindValue(sessionId);
-    prune.addBindValue(generation);
-    prune.addBindValue(minimum.value(0));
-    if (!prune.exec() || !pruneUnreferencedLargePayloads(sessionId, generation, transferIds) ||
-        !database_.commit()) {
-        database_.rollback();
-        if (!prune.lastError().text().isEmpty())
-            setError(prune.lastError().text());
         return false;
     }
     return true;

@@ -5,6 +5,13 @@ milestone changes state.
 
 ## Implemented
 
+- ACK acceptance now commits the client cursor and a durable raw-cleanup queue;
+  physical delivery-event deletion runs in bounded, transactional passes at ACK,
+  reopen and idle maintenance (ADR 0049). Slowest-client/generation fences remain
+  intact. Cleanup preserves a contiguous raw tail: an oversized/unsupported row
+  defers the rest of that generation, and SQLite builds without the required
+  byte-length capability retain queued data for later handling.
+
 - Global large-payload orphan GC now runs bounded transactional passes with durable
   cursors, generation-wide pending-raw protection and exact replay-transfer lookups
   (ADR 0048). Idle maintenance continues chunk cleanup across passes. Unsupported

@@ -305,6 +305,8 @@ class LocalJournal final {
     bool pruneRetention();
     // Opportunistic bounded orphan maintenance; busy transactions defer without advancing.
     bool pruneLargePayloadGarbage();
+    // Physical raw delivery cleanup is eventual; ACK and its retry queue commit together.
+    bool pruneAcknowledgedEvents();
     // The latest background task snapshot of each session that reported one.
     bool storeBackgroundTasks(const QString& sessionId, qint64 generation, const QJsonArray& tasks);
     [[nodiscard]] QHash<QString, QJsonArray> backgroundTaskSnapshots() const;

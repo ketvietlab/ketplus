@@ -74,7 +74,13 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
   retain shared references and ACK/generation fences. **Current item.**
   - [x] Reproduce global-GC blocking in actual Qt reopen and command-result paths.
   - [x] Implement bounded transactional global metadata/chunk GC and focused regressions.
-  - [ ] Final-head full Pro matrix, independent review, merge and cleanup for GC.
+  - [x] Global GC #220: full Pro build; 90/92 first parallel run plus 2/2 sequential
+    adapter-timeout retries without source changes. Exact-head #6212 PASS; merged
+    `35ab06f7bccf01c3dfd7dc347d991bd8020f7bee`. Generated build removed; source cleanup
+    is tracked separately until verified.
+  - [x] Reproduce the separate Qt ACK backlog path (7,183 ms) and implement bounded
+    durable queued raw cleanup; focused ACK/protocol/transcript regressions pass.
+  - [ ] Final-head full Pro matrix, independent review, merge and cleanup for ACK.
   - [ ] Audit remaining command/tombstone/audit/cursor/task sweeps and targeted ACK cleanup.
   - [ ] Close H1.1 only when those remaining work bounds have evidence.
 - [ ] H1.2 Verify migration/reopen safety: old schema, repeat open, partial failure,
@@ -185,7 +191,7 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | Item | State | Evidence / remaining work | Next action / owner |
 | --- | --- | --- | --- |
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
-| H1.1 | In progress | Qt red regression and bounded GC implemented; focused 21/21 PASS; final gate pending, other sweeps still unchecked | Finish GC matrix/review, then audit other sweeps / #2739 |
+| H1.1 | In progress | Global GC #220 merged with exact-head review/matrix; bounded ACK cleanup implemented, gate pending; other sweeps unchecked | Finish ACK matrix/review, then command/tombstone/audit sweeps / #2739 |
 | H1.2–H1.7 | Not started | No claim that #128 backend acceptance is complete | Follow H1.1, prioritize a confirmed safety finding / #2739 |
 | H2–H3 | Not started | Open daemon/provider review issues mapped | Execute after storage, or independent audit while waiting review / #2739 |
 | H4.1–H4.3 | Not started | Existing remote fixes are not a full #85 closure | Audit local transport/privacy with fixtures / #2739 |
@@ -240,6 +246,49 @@ versus zero removals for 10,000 rows. This is SQL-only evidence, not Qt acceptan
 records plans and measurements. Reproduce the actual journal paths before fixing
 these in the next package; the GC change does not bound them.
 
-**Next executable task:** finish the final-head full Pro matrix and independent
-review of global GC, merge and clean its worktree, then audit the remaining H1.1
-retention sweeps. Do not mark the full H1.1 or H1 domain complete on this subset.
+### H1.1 ACK cleanup
+
+An independent temporary Qt harness reproduced 7,183 ms for ACK of 100,000 raw
+rows with 32 large-payload metadata candidates after the global-GC fix. The queued
+implementation reduces the same public ACK path to 1 ms, deleting only 128 raw
+rows on its first pass. Cursor/queue acceptance is atomic; raw deletion is eventual
+and fenced by the current slowest client. Focused ACK 20/20, protocol 43/43 and
+transcript window 28/28 have passing evidence. The latest ACK run includes actual
+prepared query plans and capability/NUL fixtures; the final full matrix remains
+an explicit gate. See ADR 0049 and the evidence JSON.
+
+### Next H1.1 command-cap reproduction
+
+The temporary Qt probe at the ACK branch head confirms that the 256th command
+write removes 90,256 rows from a 100,256-row fixture in one pass (341/337 ms).
+The fixture deliberately uses future timestamps to isolate the cap from age GC;
+it additionally shows that after wall-clock rollback the newly accepted command
+can be absent immediately after the timestamp-ordered cap. Preserve that command's
+idempotency result in the next package; do not infer ordinary steady-state timing
+from this clock-skew fixture. Evidence:
+[evidence/h1-command-cap-qt.json](evidence/h1-command-cap-qt.json).
+
+The full ACK matrix exposed a handoff fixture's immediate-raw-deletion assumption.
+Its regression now compares the complete retained handoff history before and after
+explicitly draining bounded cleanup; all six handoff cases pass. This is an
+intentional physical-cleanup contract update, not a skipped handoff assertion.
+The retention fixture likewise drains acknowledged raw rows explicitly. Its new
+regression verifies that large detail remains untrimmed while raw cleanup is queued,
+then becomes eligible after drain. Retention 124/124 passes with the original
+reference/fault/budget assertions intact. Final full Pro rerun is still required.
+
+The independent review found a P2 in skipping unsupported raw rows: deleting
+later cursors made an interior gap invisible to `session.events_after`'s retained
+prefix check. Four new SessionHost head/middle × oversized/binary cases reproduce
+it on the old implementation. The fix removes only a contiguous acknowledged
+prefix and rotates blocked generations for fairness; it preserves the entire
+unsupported tail. Author verification: 4/4 targets PASS (ACK 24/24, usage retention
+124/124, handoff 6/6, transcript window 28/28); mutation reintroducing the skipped
+row/suffix gap is caught. The full run on the earlier head was cancelled after
+this P2 was confirmed. Exact-head full/review gates must be rerun before the P2 is
+considered independently resolved.
+
+**Next executable task:** finish ACK prefix-fix/mutation/full-matrix/review gates, merge and
+clean both completed worktrees, then reproduce and bound the remaining H1.1
+command/tombstone/audit/cursor/task sweeps. Also audit cloud-event and explicit
+session deletion separately. Do not mark H1.1/H1 complete on these subsets.
