@@ -29,9 +29,12 @@ selection seeks the primary session/generation/cursor index. No raw JSON is pars
 and there is no candidate-by-backlog transfer search. Blob cleanup has its own
 separate 1 MiB budget and keeps raw/replay references protected.
 
-The queue stores a per-generation scan cursor. Empty scans wrap it; an empty scan
-from zero finishes the queue entry. Unfinished entries rotate to the end using an
-AUTOINCREMENT queue ID, so large or unsupported generations cannot starve others.
+Each generation is read from its earliest remaining raw cursor. Cleanup removes
+only a contiguous acknowledged prefix: hitting the byte budget or an unsupported
+row preserves that row and its entire following tail. This keeps the raw replay
+API's minimum-retained-cursor expiry contract valid; no new interior gaps are made.
+An empty eligible scan finishes the queue entry. Unfinished entries rotate to the
+end using an AUTOINCREMENT queue ID, so a blocked generation cannot starve others.
 Raw deletions and queue rotation are one transaction. Abort/ignored writes/commit
 failure roll back both. Busy writers defer immediately and the previous SQLite
 busy timeout is restored.
@@ -39,8 +42,8 @@ busy timeout is restored.
 `octet_length(payload)` measures stored TEXT bytes from SQLite record metadata,
 including embedded NULs, without loading the payload. This follows SQLite's
 [documented column optimization](https://www.sqlite.org/lang_corefunc.html#octet_length).
-Non-TEXT and individually oversized raw rows remain retained and are skipped on
-each sweep. Their recovery remains H1.2/H1.5 work. If an externally supplied older
+Non-TEXT and individually oversized raw rows block cleanup of their generation's
+remaining tail. Their recovery remains H1.2/H1.5 work. If an externally supplied older
 SQLite lacks `octet_length`, ACKs and their queues remain durable, physical raw
 cleanup is deferred, and the daemon logs the capability limitation once. The
 bundled/tested plugin supports it; no unbounded length-function fallback is used.
@@ -52,6 +55,7 @@ cloud-event deletion and explicit session deletion remain separate audit work.
 `ketplus_daemon_ack_retention_tests` covers real backlog ACK, row/byte bounds,
 actual prepared query plans, slower/new clients, generation isolation, queue
 rotation/reopen, embedded NULs, unsupported values/capability absence and busy/fault
-retry. Protocol and transcript-window fixtures preserve existing small-ACK behavior.
+retry. Actual SessionHost `session.events_after` regressions preserve the suffix
+behind an unsupported head/middle row and verify prefix-expiry recovery. Protocol and transcript-window fixtures preserve existing small-ACK behavior.
 No provider calls, live journals, UI implementation, installation or deployment are
 part of this change; the plan records final-head testing and independent review.

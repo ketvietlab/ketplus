@@ -17,7 +17,7 @@ QString acknowledgedEventFenceQuery() {
 QString acknowledgedEventCandidatesQuery() {
     return QStringLiteral(
         "SELECT cursor,CASE WHEN typeof(payload)='text' THEN octet_length(payload) ELSE -1 END "
-        "FROM events WHERE session_id=? AND generation=? AND cursor>? AND cursor<=? ORDER BY "
+        "FROM events WHERE session_id=? AND generation=? AND cursor<=? ORDER BY "
         "cursor LIMIT ?");
 }
 } // namespace detail
@@ -138,12 +138,12 @@ bool LocalJournal::pruneAcknowledgedEvents() {
         return fail(database_.lastError());
     transaction = true;
     QSqlQuery query(database_);
-    if (!query.exec("SELECT queue_id,session_id,generation,after_cursor FROM journal_ack_gc ORDER "
+    if (!query.exec("SELECT queue_id,session_id,generation FROM journal_ack_gc ORDER "
                     "BY queue_id LIMIT 8"))
         return fail(query.lastError());
     QList<QVariantList> queue;
     while (query.next())
-        queue.append({query.value(0), query.value(1), query.value(2), query.value(3)});
+        queue.append({query.value(0), query.value(1), query.value(2)});
     if (query.lastError().isValid())
         return fail(query.lastError());
     query.finish();
@@ -161,13 +161,11 @@ bool LocalJournal::pruneAcknowledgedEvents() {
             return fail(query.lastError());
         const auto minimum = query.value(0);
         query.finish();
-        qint64 after = entry[3].toLongLong();
         QList<QVariantList> rows;
         if (!minimum.isNull()) {
             query.prepare(detail::acknowledgedEventCandidatesQuery());
             query.addBindValue(entry[1]);
             query.addBindValue(entry[2]);
-            query.addBindValue(after);
             query.addBindValue(minimum);
             query.addBindValue(rowBudget - examined);
             if (!query.exec())
@@ -178,17 +176,14 @@ bool LocalJournal::pruneAcknowledgedEvents() {
                 return fail(query.lastError());
             query.finish();
         }
-        const bool finished = minimum.isNull() || (rows.isEmpty() && after == 0);
-        if (rows.isEmpty())
-            after = 0; // revisit earlier protected/oversized rows after wrap
+        const bool finished = rows.isEmpty();
         examined += rows.size();
         for (const auto& row : rows) {
             const qint64 bytes = row[1].toLongLong();
-            if (bytes >= 0 && bytes <= byteBudget && deletedBytes + bytes > byteBudget)
+            // Raw replay represents expiration as a pruned prefix. Never leave a
+            // retained unsupported row below newly deleted cursors in this generation.
+            if (bytes < 0 || bytes > byteBudget || deletedBytes + bytes > byteBudget)
                 break;
-            after = row[0].toLongLong();
-            if (bytes < 0 || bytes > byteBudget)
-                continue;
             query.prepare("DELETE FROM events WHERE session_id=? AND generation=? AND cursor=?");
             query.addBindValue(entry[1]);
             query.addBindValue(entry[2]);
@@ -213,11 +208,9 @@ bool LocalJournal::pruneAcknowledgedEvents() {
         query.finish();
         if (!finished) {
             // AUTOINCREMENT rotation lets other generations progress on the next pass.
-            query.prepare(
-                "INSERT INTO journal_ack_gc(session_id,generation,after_cursor) VALUES(?,?,?)");
+            query.prepare("INSERT INTO journal_ack_gc(session_id,generation) VALUES(?,?)");
             query.addBindValue(entry[1]);
             query.addBindValue(entry[2]);
-            query.addBindValue(after);
             if (!query.exec())
                 return fail(query.lastError());
             if (query.numRowsAffected() != 1) {

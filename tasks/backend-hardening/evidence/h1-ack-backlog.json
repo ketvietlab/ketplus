@@ -11,7 +11,7 @@
   "rows_deleted_first_pass": 128,
   "queue_persisted": true,
   "focused_cases": {
-    "ack": 20,
+    "ack": 24,
     "protocol": 43,
     "transcript_window": 28,
     "handoff": 6,
@@ -26,8 +26,17 @@
   ],
   "mutations_caught": [
     "row budget 128 changed to 1024",
-    "slowest-client min changed to max"
+    "slowest-client min changed to max",
+    "skip unsupported raw row and delete its suffix"
   ],
   "handoff_change": "Compare handoff history both while raw cleanup is pending and after bounded drain; production unchanged",
-  "retention_fixture_change": "Acknowledged seed explicitly drains raw queue; new case proves large-detail compaction defers until raw cleanup finishes"
+  "retention_fixture_change": "Acknowledged seed explicitly drains raw queue; new case proves large-detail compaction defers until raw cleanup finishes",
+  "raw_prefix_regression": {
+    "red_cases_failed": 4,
+    "green_cases_passed": 4,
+    "path": "SessionHost::handleCommand(session.events_after)",
+    "cases": "head/middle x oversized/binary",
+    "fix": "Preserve unsupported row and complete raw tail; only remove contiguous acknowledged prefix",
+    "review": "Independent re-review pending"
+  }
 }

@@ -277,7 +277,18 @@ regression verifies that large detail remains untrimmed while raw cleanup is que
 then becomes eligible after drain. Retention 124/124 passes with the original
 reference/fault/budget assertions intact. Final full Pro rerun is still required.
 
-**Next executable task:** finish ACK mutation/full-matrix/review gates, merge and
+The independent review found a P2 in skipping unsupported raw rows: deleting
+later cursors made an interior gap invisible to `session.events_after`'s retained
+prefix check. Four new SessionHost head/middle × oversized/binary cases reproduce
+it on the old implementation. The fix removes only a contiguous acknowledged
+prefix and rotates blocked generations for fairness; it preserves the entire
+unsupported tail. Author verification: 4/4 targets PASS (ACK 24/24, usage retention
+124/124, handoff 6/6, transcript window 28/28); mutation reintroducing the skipped
+row/suffix gap is caught. The full run on the earlier head was cancelled after
+this P2 was confirmed. Exact-head full/review gates must be rerun before the P2 is
+considered independently resolved.
+
+**Next executable task:** finish ACK prefix-fix/mutation/full-matrix/review gates, merge and
 clean both completed worktrees, then reproduce and bound the remaining H1.1
 command/tombstone/audit/cursor/task sweeps. Also audit cloud-event and explicit
 session deletion separately. Do not mark H1.1/H1 complete on these subsets.

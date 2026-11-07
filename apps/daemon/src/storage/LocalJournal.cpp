@@ -99,7 +99,7 @@ bool LocalJournal::initialize() {
         QStringLiteral("INSERT OR IGNORE INTO journal_gc_state(singleton) VALUES(1)"),
         QStringLiteral("CREATE TABLE IF NOT EXISTS journal_ack_gc ("
                        "queue_id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, "
-                       "generation INTEGER NOT NULL, after_cursor INTEGER NOT NULL DEFAULT 0, "
+                       "generation INTEGER NOT NULL, "
                        "UNIQUE(session_id,generation))"),
         QStringLiteral("CREATE TABLE IF NOT EXISTS sessions ("
                        "id TEXT PRIMARY KEY, worktree_path TEXT NOT NULL, adapter TEXT NOT NULL, "

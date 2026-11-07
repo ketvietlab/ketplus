@@ -1,3 +1,5 @@
+#include "providers/CodexAdapter.h"
+#include "runtime/SessionHost.h"
 #include "storage/LocalJournal.h"
 #include <QElapsedTimer>
 #include <QSqlError>
@@ -73,6 +75,54 @@ class Fixture {
 class JournalAcknowledgementRetentionTest : public QObject {
     Q_OBJECT
   private slots:
+    void unsupportedRowKeepsRawReplayTail_data() {
+        QTest::addColumn<bool>("binary");
+        QTest::addColumn<int>("cursor");
+        QTest::newRow("oversize-head") << false << 1;
+        QTest::newRow("oversize-middle") << false << 2;
+        QTest::newRow("binary-head") << true << 1;
+        QTest::newRow("binary-middle") << true << 2;
+    }
+    void unsupportedRowKeepsRawReplayTail() {
+        QFETCH(bool, binary);
+        QFETCH(int, cursor);
+        Fixture f;
+        StoredSession session;
+        session.id = "s";
+        session.worktreePath = f.dir.path();
+        session.adapter = "codex";
+        session.state = "ready";
+        session.lastCursor = 5;
+        QVERIFY(f.journal->upsertSession(session));
+        QVERIFY(f.rows(5));
+        QVERIFY(f.exec(QString("UPDATE events SET payload=%1 WHERE cursor=%2")
+                           .arg(binary ? "X'0001'" : "json_object('text',printf('%2000000s','x'))")
+                           .arg(cursor)));
+        QVERIFY(f.journal->acknowledgeCursor("reader", "s", 1, 5));
+        CodexAdapter adapter("/nonexistent/synthetic-provider");
+        SessionHost host(f.journal.get(), &adapter);
+        const auto read = [&](int after) {
+            return host.handleCommand({{"protocol_version", 0},
+                                       {"message_id", QString("read-%1").arg(after)},
+                                       {"message_type", "session.events_after"},
+                                       {"session_id", "s"},
+                                       {"session_generation", 1},
+                                       {"payload", QJsonObject{{"after_cursor", after}}}},
+                                      "new-reader");
+        };
+        const auto reply = read(cursor);
+        QVERIFY(reply.value("ok").toBool());
+        QCOMPARE(reply.value("events").toArray().size(), 5 - cursor);
+        QCOMPARE(reply.value("next_event_cursor").toInteger(), 5);
+        QCOMPARE(f.scalar("SELECT min(cursor) FROM events"), cursor);
+        QCOMPARE(f.scalar("SELECT count(*) FROM events"), 6 - cursor);
+        if (cursor == 2)
+            QCOMPARE(read(0).value("error_code").toString(), QString("cursor_expired"));
+        for (int n = 0; n < 3; ++n)
+            QVERIFY(f.journal->pruneAcknowledgedEvents());
+        QCOMPARE(f.scalar("SELECT count(*) FROM events"), 6 - cursor);
+        QCOMPARE(read(cursor).value("events").toArray(), reply.value("events").toArray());
+    }
     void productionQueryPlansUseGenerationAndCursorIndexes() {
         Fixture f;
         const auto plan = [&](const QString& sql, const QVariantList& bindings) {
@@ -92,9 +142,8 @@ class JournalAcknowledgementRetentionTest : public QObject {
                      fence.contains("session_id=? AND generation=?"),
                  qPrintable(fence));
         const auto rows =
-            plan(detail::acknowledgedEventCandidatesQuery(), {QString("s"), 1, 0, 100000, 128});
-        QVERIFY2(rows.contains("session_id=? AND generation=? AND cursor>? AND cursor<?"),
-                 qPrintable(rows));
+            plan(detail::acknowledgedEventCandidatesQuery(), {QString("s"), 1, 100000, 128});
+        QVERIFY2(rows.contains("session_id=? AND generation=? AND cursor<?"), qPrintable(rows));
         QVERIFY2(!rows.contains("SCAN") && !rows.contains("TEMP B-TREE"), qPrintable(rows));
     }
     void backlogAcknowledgementIsBounded() {
@@ -149,7 +198,7 @@ class JournalAcknowledgementRetentionTest : public QObject {
         QVERIFY(f.rows(4, 500000));
         QVERIFY(f.journal->acknowledgeCursor("reader", "s", 1, 4));
         QCOMPARE(f.scalar("SELECT count(*) FROM events"), 2);
-        QCOMPARE(f.scalar("SELECT after_cursor FROM journal_ack_gc"), 2);
+        QCOMPARE(f.scalar("SELECT min(cursor) FROM events"), 3);
         f.journal.reset();
         f.journal = std::make_unique<LocalJournal>(f.path);
         QVERIFY(f.journal->isOpen());
@@ -158,7 +207,7 @@ class JournalAcknowledgementRetentionTest : public QObject {
             QVERIFY(f.journal->pruneAcknowledgedEvents());
         QCOMPARE(f.scalar("SELECT count(*) FROM journal_ack_gc"), 0);
     }
-    void oversizedAndBinaryRowsDoNotStarveOtherGenerations() {
+    void unsupportedPrefixKeepsTailWithoutStarvingOtherGenerations() {
         Fixture f;
         QVERIFY(f.rows(3));
         QVERIFY(f.exec("UPDATE events SET payload=printf('%8000000s','x') WHERE cursor=1"));
@@ -167,11 +216,11 @@ class JournalAcknowledgementRetentionTest : public QObject {
         QVERIFY(f.rows(2, 20, "other"));
         QVERIFY(f.queued(2, "other"));
         QVERIFY(f.journal->pruneAcknowledgedEvents());
-        QCOMPARE(f.scalar("SELECT count(*) FROM events WHERE session_id='s'"), 2);
+        QCOMPARE(f.scalar("SELECT count(*) FROM events WHERE session_id='s'"), 3);
         QCOMPARE(f.scalar("SELECT count(*) FROM events WHERE session_id='other'"), 0);
         QVERIFY(f.journal->pruneAcknowledgedEvents());
         QVERIFY(f.journal->pruneAcknowledgedEvents());
-        QCOMPARE(f.scalar("SELECT count(*) FROM events"), 2);
+        QCOMPARE(f.scalar("SELECT count(*) FROM events"), 3);
     }
     void queueRotationIsFair() {
         Fixture f;
@@ -214,7 +263,7 @@ class JournalAcknowledgementRetentionTest : public QObject {
         QVERIFY(!f.journal->pruneAcknowledgedEvents());
         QCOMPARE(f.scalar("SELECT count(*) FROM events"), 3);
         QCOMPARE(f.scalar("SELECT queue_id FROM journal_ack_gc"), 1);
-        QCOMPARE(f.scalar("SELECT after_cursor FROM journal_ack_gc"), 0);
+        QCOMPARE(f.scalar("SELECT count(*) FROM journal_ack_gc"), 1);
         QVERIFY(f.exec("DROP TRIGGER fault"));
         QVERIFY(f.journal->pruneAcknowledgedEvents());
         QCOMPARE(f.scalar("SELECT count(*) FROM events"), 0);

@@ -285,8 +285,9 @@ journal once per sign-in, not on every upload, and an acknowledgement at or
 behind the stored cursor writes nothing. Advancing ACKs commit a monotonic cursor
 and durable cleanup queue together. Physical raw deletion is eventual: each pass
 visits at most eight queued generations and 128 raw candidates, deletes at most
-1 MiB, and rechecks the slowest client's fence. Reopen/idle maintenance resumes
-queued work; see [ADR 0049](decisions/0049-bounded-acknowledged-delivery-cleanup.md).
+1 MiB, and rechecks the slowest client's fence. It only removes a contiguous raw
+prefix; unsupported rows hold the rest of their generation's tail so raw replay
+expiry remains explicit. Reopen/idle maintenance resumes queued work; see [ADR 0049](decisions/0049-bounded-acknowledged-delivery-cleanup.md).
 Global orphan GC runs after advancing ACK cleanup, at open, after a session delete,
 every 256 command results and on idle maintenance. Each transactional pass scans up
 to 32 metadata and 128 chunk candidates, deletes at most 1 MiB, and persists cursors
