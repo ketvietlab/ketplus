@@ -137,6 +137,16 @@ int main(int argc, char* argv[]) {
     if (engine.rootObjects().isEmpty())
         return 1;
     auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().constFirst());
+    // Fail reproducible captures if a child initialization resets the requested plan state.
+    if (controller.edition != QLatin1String("lite") &&
+        controller.initialScreen == QLatin1String("workspace") &&
+        controller.initialState.startsWith(QLatin1String("plan-"))) {
+        const QString expected = controller.initialState.mid(5);
+        if (window->property("planningState").toString() != expected) {
+            std::fprintf(stderr, "Planning startup state does not match --state\n");
+            return 1;
+        }
+    }
     if (parser.isSet(display)) {
         const QList<QScreen*> screens = QGuiApplication::screens();
         QScreen* target = nullptr;

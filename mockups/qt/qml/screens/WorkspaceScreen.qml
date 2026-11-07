@@ -28,6 +28,30 @@ Item {
     readonly property var providerSetup: Fixtures.providerSetup[window.providerIssues[providerId] || ""] || null
     property bool showTasks: running
 
+    property bool planVisible: false
+    property var planRun: null
+    readonly property string planState: planRun ? planRun.status : ""
+    ConversationPlanStore { id: planStore }
+    function syncPlan() {
+        planRun = conversation && conversation.hasPlan ? planStore.get(conversation.number) : null
+    }
+    function openPlan(state) {
+        syncPlan()
+        if (!planRun) return
+        if (state) planRun.load(state)
+        planVisible = true
+        detailsOpen = false
+    }
+    function planStatus(number, fallback) {
+        const model = planStore.plans[number]
+        if (!model) return fallback
+        if (model.active) return KetTheme.ConversationStatus.Working
+        if (model.status === "complete") return KetTheme.ConversationStatus.Completed
+        if (model.status === "paused") return KetTheme.ConversationStatus.Stopped
+        return KetTheme.ConversationStatus.NeedsInput
+    }
+    onConversationChanged: { planVisible = false; syncPlan() }
+
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
     function openComposerPanel(name) {
         if (name === "reviewer")
@@ -50,8 +74,10 @@ Item {
                 Layout.fillWidth: true
                 window: screen.window
                 conversation: screen.conversation
+                status: screen.planStatus(screen.conversation.number, screen.conversation.status)
                 detailsOpen: screen.detailsOpen
                 onToggleDetails: tab => {
+                    screen.planVisible = false
                     if (screen.detailsOpen && screen.detailsTab === tab)
                         screen.detailsOpen = false
                     else {
@@ -61,8 +87,44 @@ Item {
                 }
             }
 
+            RowLayout {
+                visible: !!screen.planRun
+                Layout.fillWidth: true
+                Layout.leftMargin: screen.px(20)
+                Layout.rightMargin: screen.px(20)
+                Layout.topMargin: screen.px(8)
+                Layout.bottomMargin: screen.px(8)
+                spacing: screen.px(8)
+                KetButton {
+                    text: "Conversation"
+                    variant: screen.planVisible ? KetTheme.ButtonVariant.Ghost : KetTheme.ButtonVariant.Secondary
+                    onClicked: screen.planVisible = false
+                }
+                KetButton {
+                    text: "Plan · " + (screen.planRun ? screen.planRun.completed : 0) + "/4"
+                    iconName: "check-all"
+                    variant: screen.planVisible ? KetTheme.ButtonVariant.Secondary : KetTheme.ButtonVariant.Ghost
+                    onClicked: screen.openPlan("")
+                }
+                Item { Layout.fillWidth: true }
+                Text {
+                    text: "Conversation plan · Concept preview"
+                    color: KetTheme.t.textMuted
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: screen.px(12)
+                }
+            }
+            Loader {
+                active: !!screen.planRun
+                visible: screen.planVisible && active
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                sourceComponent: ConversationPlan { window: screen.window; run: screen.planRun }
+            }
+
             Basic.ScrollView {
                 id: scroll
+                visible: !screen.planVisible
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
@@ -89,6 +151,7 @@ Item {
 
             // The composer column matches the transcript's reading width.
             Column {
+                visible: !screen.planVisible
                 Layout.fillWidth: true
                 Layout.bottomMargin: screen.px(12)
                 spacing: screen.px(8)

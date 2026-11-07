@@ -12,7 +12,7 @@ Rectangle {
     required property var window
     required property var conversation
     property bool detailsOpen: false
-    readonly property int status: conversation.status
+    property int status: conversation.status
 
     // The agent that reviews each finished turn and replies here, by conversation number.
     // A reviewer never merges. The running conversation starts with one, for the mock.
