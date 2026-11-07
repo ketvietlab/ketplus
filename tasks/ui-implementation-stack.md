@@ -35,8 +35,8 @@ The native references are `mockups/qt` and `mockups/terminal` (ADR 0033–34).
   existing runtime and preserving real IDs, drafts and actions.
 - [x] Phase 5: #163 / #130 held-message release — local authenticated operation,
   durable batch authorization/claim recovery and the explicit transcript action.
-- [ ] Phase 5: #163 explicit Atlas-result transcript receipts — implemented and
-  focused-tested in this layer; publication is recorded by the next stack entry.
+- [x] Phase 5: #163 explicit Atlas-result transcript receipts — #238 reads real
+  manifest metadata, reuses Edit/Open actions and fences unavailable sources.
 - [x] Phase 5: #164 overlays; #165 Worktrees/Connections available-runtime UI;
   #166 Settings available-runtime controls; #167 Atlas chrome/composition.
 - [ ] Phase 6: conversation Plan/harness — explicitly excluded, not started.
@@ -46,7 +46,7 @@ The native references are `mockups/qt` and `mockups/terminal` (ADR 0033–34).
 ## Draft stack
 
 Every PR targets the branch immediately before it. No reviewer was requested.
-The base/head/draft chain below was checked against GitHub after #232 was pushed.
+The base/head/draft chain is checked against GitHub at final publication.
 
 | PR | Layer | Head | Base |
 | --- | --- | --- | --- |
@@ -72,6 +72,8 @@ The base/head/draft chain below was checked against GitHub after #232 was pushed
 | [232](https://github.com/ketvietlab/ketplus/pull/232) | Application icons | `feat/ui-stack-brand-assets` | `feat/ui-stack-foundation-cleanup` |
 | [233](https://github.com/ketvietlab/ketplus/pull/233) | Provider operation aliases / checklist | `feat/ui-stack-completion-ledger` | `feat/ui-stack-brand-assets` |
 | [236](https://github.com/ketvietlab/ketplus/pull/236) | Explicit held-message release | `feat/ui-stack-held-messages` | `feat/ui-stack-completion-ledger` |
+| [238](https://github.com/ketvietlab/ketplus/pull/238) | Atlas result receipts | `feat/ui-stack-atlas-receipts` | `feat/ui-stack-held-messages` |
+| This layer | UI / history regression fixtures | `feat/ui-stack-regression-fixtures` | `feat/ui-stack-atlas-receipts` |
 
 The activity-alias layer renders `ScheduleWakeup` as a scheduled wake-up and
 `EnterPlanMode` as entering plan mode, with running/completed labels. This is
@@ -101,7 +103,6 @@ browser session or paid-provider test was used. `git diff --check` passes.
 
 | Remaining item | Evidence / constraint | Next work and owner |
 | --- | --- | --- |
-| #163 Atlas result receipt | This layer derives a receipt from the completed assistant’s explicit Markdown link and reads real manifest metadata. This is link attribution, not proof of authorship or preview validation. | Publish this tested UI layer and record its PR. |
 | #159 / #120 reviewer assignment | Existing composer/actions are preserved; an assignment/orchestration service is not supplied by this layer. | #120 implementation owns assignment/state; follow-up UI consumes it. |
 | #158 metadata / #170 | Tags and attention consume supplied metadata; automatic classification is not claimed. | Behavior issue supplies authoritative classification updates. |
 | #165 SSH setup | Existing Linux flow is authenticated outbound Relay. | A separate transport/setup implementation must precede SSH-specific UI behavior. |
@@ -128,3 +129,24 @@ sides of the journaled input. Provider transcript suite passes. Focused Desktop
 live-notice/capability/bridge and three QML action/layout cases pass. Pro desktop
 and daemon targets build; an offscreen action capture is inspected. Agent-token
 IPC and cloud-control cannot grant the release. No installed daemon was updated.
+
+Atlas receipt verification: completed-only Markdown links are extracted outside
+code/raw HTML, capped at eight links / 128 K characters, and placed once at the
+end of a chunked answer. Manifest reads are capped at 4 MiB. Tests cover metadata,
+canonical roots/symlinks, real builder routing, missing CLI feedback, actual QML
+actions and deletion/conversation/worktree changes. The dark card render was
+inspected. This attributes an explicit link, not creation or preview validation.
+
+The final regression-fixture layer updates toolkit-neutral button lookup, the
+actual Markdown segmented control, landscape image reservation, streaming
+typography invariance and changed-file hit targets. History paging now counts
+user + assistant + turn receipt, checks receipt ordering/unique keys and selects
+the latest assistant response independently of the trailing completion notice.
+No production behavior is changed by this fixture layer.
+
+Final regression result: the complete Pro build passes. All 91 Pro CTest targets
+are verified across the full run (87 passed) and reruns of the four corrected
+fixture targets (all passed); the history-window target reports 31 cases passed.
+The latest Lite run remains 16/16 after the final core/icon changes. Live-provider
+flags were explicitly removed for the Pro run. Native WebView/live-provider and
+other opt-in cases remain skipped; this is not phase-7 platform acceptance.

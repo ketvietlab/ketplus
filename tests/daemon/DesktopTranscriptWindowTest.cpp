@@ -5,6 +5,14 @@
 
 class DesktopTranscriptWindowTest final : public QObject {
     Q_OBJECT
+    static QString latestAssistantBody(const QVariantList& rows) {
+        for (auto it = rows.crbegin(); it != rows.crend(); ++it) {
+            const auto row = it->toMap();
+            if (row.value("kind") == "assistant")
+                return row.value("body").toString();
+        }
+        return {};
+    }
   private slots:
     // DaemonService reads the machine's cloud credentials from the user's data directory, not
     // from the temporary state it is given. Without test paths, a run from a shell that set
@@ -57,7 +65,7 @@ class DesktopTranscriptWindowTest final : public QObject {
         const QString path = env.directory.path();
         desktop.activate(path);
         // The newest turn is published first, then two older turns are added.
-        QTRY_COMPARE(desktop.messages(path).size(), 6);
+        QTRY_COMPARE(desktop.messages(path).size(), 9);
         QTRY_VERIFY(!desktop.historyState(path).value("loading").toBool());
         // Selecting the conversation clears the view first; the history itself
         // arrives in one reset.
@@ -74,23 +82,23 @@ class DesktopTranscriptWindowTest final : public QObject {
         desktop.loadOlderMessages(path);
         QTest::qWait(1000);
         QVERIFY(desktop.historyState(path).value("loading").toBool());
-        QCOMPARE(desktop.messages(path).size(), 6);
+        QCOMPARE(desktop.messages(path).size(), 9);
         QCOMPARE(prepended.size(), 0);
         desktop.setTranscriptInputActive(false);
         QTRY_VERIFY(!desktop.historyState(path).value("loading").toBool());
-        QCOMPARE(desktop.messages(path).size(), 12);
+        QCOMPARE(desktop.messages(path).size(), 18);
         QCOMPARE(prepended.size(), 1);
         while (desktop.historyState(path).value("hasOlder").toBool()) {
             desktop.loadOlderMessages(path);
             QTRY_VERIFY(!desktop.historyState(path).value("loading").toBool());
         }
-        QCOMPARE(desktop.messages(path).size(), turns * 2);
+        QCOMPARE(desktop.messages(path).size(), turns * 3);
         QCOMPARE(desktop.messages(path).first().toMap().value("body"), "prompt-0");
         QVERIFY(!desktop.historyState(path).value("hasOlder").toBool());
         QSet<QString> keys;
         for (const auto& value : desktop.messages(path))
             keys.insert(value.toMap().value("messageKey").toString());
-        QCOMPARE(keys.size(), turns * 2);
+        QCOMPARE(keys.size(), turns * 3);
     }
 
     void restoresCommentaryAndRetainsCommandLifecycle() {
@@ -538,16 +546,15 @@ class DesktopTranscriptWindowTest final : public QObject {
         QSignalSpy copied(&desktop, &AgentSessionManager::conversationCopyReady);
         desktop.activate(env.directory.path());
         QTRY_COMPARE(desktop.conversations(env.directory.path()).size(), conversations);
-        QTRY_COMPARE(desktop.messages(env.directory.path()).size(), 6);
+        QTRY_COMPARE(desktop.messages(env.directory.path()).size(), 9);
         QVERIFY(server.hasDaemonTranscriptWindow());
         QCOMPARE(replay.size(), 0); // No all-session replay queue.
-        QCOMPARE(desktop.messages(env.directory.path()).last().toMap().value("body"),
-                 "answer-0-39");
+        QCOMPARE(latestAssistantBody(desktop.messages(env.directory.path())), "answer-0-39");
         QVERIFY(desktop.historyState(env.directory.path()).value("hasOlder").toBool());
         desktop.copyConversation(env.directory.path());
         QTRY_COMPARE(copied.size(), 1);
         QVERIFY(copied.first().at(2).toString().contains("answer-0-0\n"));
-        QCOMPARE(desktop.messages(env.directory.path()).size(), 6); // Export does not hydrate UI.
+        QCOMPARE(desktop.messages(env.directory.path()).size(), 9); // Export does not hydrate UI.
         QSignalSpy restoreState(&desktop, &AgentSessionManager::restoreStateChanged);
         for (int page = 0; desktop.historyState(env.directory.path()).value("hasOlder").toBool();
              ++page) {
@@ -559,28 +566,27 @@ class DesktopTranscriptWindowTest final : public QObject {
                 qPrintable(desktop.historyState(env.directory.path()).value("error").toString()));
         }
         QCOMPARE(restoreState.size(), 0); // History paging must not close scoped previews.
-        QCOMPARE(desktop.messages(env.directory.path()).size(), turns * 2);
+        QCOMPARE(desktop.messages(env.directory.path()).size(), turns * 3);
         QSet<QString> keys;
         for (const auto& value : desktop.messages(env.directory.path()))
             keys.insert(value.toMap().value("messageKey").toString());
-        QCOMPARE(keys.size(), turns * 2);
+        QCOMPARE(keys.size(), turns * 3);
         // A -> B while A's older request is in flight must never publish A into B.
         for (int session = 1; session < conversations; ++session) {
             desktop.selectConversation(env.directory.path(), QString("session-%1").arg(session));
             QTRY_VERIFY(!desktop.historyState(env.directory.path()).value("loading").toBool());
-            QCOMPARE(desktop.messages(env.directory.path()).size(), 6);
-            QCOMPARE(desktop.messages(env.directory.path()).last().toMap().value("body"),
+            QCOMPARE(desktop.messages(env.directory.path()).size(), 9);
+            QCOMPARE(latestAssistantBody(desktop.messages(env.directory.path())),
                      QString("answer-%1-39").arg(session));
         }
         desktop.selectConversation(env.directory.path(), "session-0");
         QTRY_VERIFY(!desktop.historyState(env.directory.path()).value("loading").toBool());
         QCOMPARE(desktop.messages(env.directory.path()).size(),
-                 6); // Evicted, reconstructed from newest window.
+                 9); // Evicted, reconstructed from newest window.
         desktop.loadOlderMessages(env.directory.path());
         desktop.selectConversation(env.directory.path(), "session-11");
         QTest::qWait(100);
-        QCOMPARE(desktop.messages(env.directory.path()).last().toMap().value("body"),
-                 "answer-11-39");
+        QCOMPARE(latestAssistantBody(desktop.messages(env.directory.path())), "answer-11-39");
     }
 
     void leavingDuringOlderPageKeepsLoadedWindow() {
@@ -624,13 +630,13 @@ class DesktopTranscriptWindowTest final : public QObject {
         const auto path = env.directory.path();
         desktop.activate(path);
         QTRY_COMPARE(desktop.conversations(path).size(), 2);
-        QTRY_COMPARE(desktop.messages(path).size(), 6);
+        QTRY_COMPARE(desktop.messages(path).size(), 9);
         for (int page = 0; page < 3; ++page) {
             desktop.loadOlderMessages(path);
             QTRY_VERIFY(!desktop.historyState(path).value("loading").toBool());
         }
         const auto loaded = desktop.messages(path);
-        QVERIFY(loaded.size() > 6);
+        QVERIFY(loaded.size() > 9);
 
         // A pending older page is dropped on switch, but the window already
         // loaded is intact and nothing happened while away. Returning shows it
@@ -732,7 +738,7 @@ class DesktopTranscriptWindowTest final : public QObject {
         CodexAppServer server;
         AgentSessionManager desktop(&server);
         desktop.activate(env.directory.path());
-        QTRY_COMPARE(desktop.messages(env.directory.path()).size(), 6);
+        QTRY_COMPARE(desktop.messages(env.directory.path()).size(), 9);
 
         int pages = 0;
         while (!desktop.historyState(env.directory.path()).value("hasNewer").toBool()) {
@@ -742,16 +748,15 @@ class DesktopTranscriptWindowTest final : public QObject {
                 !desktop.historyState(env.directory.path()).value("loading").toBool(), 5000);
         }
         QVERIFY(desktop.messages(env.directory.path()).size() <= 300);
-        const QString historicalTail =
-            desktop.messages(env.directory.path()).last().toMap().value("body").toString();
+        const QString historicalTail = latestAssistantBody(desktop.messages(env.directory.path()));
         QVERIFY(historicalTail != QStringLiteral("answer-179"));
         QVERIFY(desktop.historyState(env.directory.path()).value("hasOlder").toBool());
 
         desktop.loadLatestMessages(env.directory.path());
         QTRY_VERIFY_WITH_TIMEOUT(
             !desktop.historyState(env.directory.path()).value("loading").toBool(), 5000);
-        QCOMPARE(desktop.messages(env.directory.path()).size(), 6);
-        QCOMPARE(desktop.messages(env.directory.path()).last().toMap().value("body").toString(),
+        QCOMPARE(desktop.messages(env.directory.path()).size(), 9);
+        QCOMPARE(latestAssistantBody(desktop.messages(env.directory.path())),
                  QStringLiteral("answer-179"));
         QVERIFY(!desktop.historyState(env.directory.path()).value("hasNewer").toBool());
         QVERIFY(desktop.historyState(env.directory.path()).value("hasOlder").toBool());
@@ -787,7 +792,7 @@ class DesktopTranscriptWindowTest final : public QObject {
         AgentSessionManager desktop(&server);
         const QString path = env.directory.path();
         desktop.activate(path);
-        QTRY_COMPARE(desktop.messages(path).size(), 6);
+        QTRY_COMPARE(desktop.messages(path).size(), 9);
         QVERIFY(server.hasDaemonTranscriptAfterCursor());
         QCOMPARE(server.daemonTranscriptWindowMaxTurns(), 20);
         const auto state = [&] { return desktop.historyState(path); };
@@ -806,8 +811,13 @@ class DesktopTranscriptWindowTest final : public QObject {
                 if (keys.contains(row.value("messageKey").toString()))
                     return false;
                 keys.insert(row.value("messageKey").toString());
+                if (index % 3 == 2) {
+                    if (row.value("subtype") != "turnEnd" || row.value("status") != "completed")
+                        return false;
+                    continue;
+                }
                 const QString body = row.value("body").toString();
-                const bool user = index % 2 == 0;
+                const bool user = index % 3 == 0;
                 const int number = body.section('-', 1).toInt() *
                                    (body.startsWith(user ? "prompt-" : "answer-") ? 1 : -100000);
                 if (number < 0 || (expected >= 0 && number != expected + (user ? 1 : 0)))
@@ -817,15 +827,15 @@ class DesktopTranscriptWindowTest final : public QObject {
                     *first = number;
             }
             *last = expected;
-            return rows.size() % 2 == 0;
+            return rows.size() % 3 == 0;
         };
         int first = 0;
         int last = 0;
 
-        // Adaptive page size: a 700 px viewport of 100 px rows asks for 11 turns.
+        // Three viewports at 100 px per row and three rows per turn ask for 7 turns.
         desktop.loadOlderMessages(path, 700, 100);
         settle();
-        QCOMPARE(desktop.messages(path).size(), 6 + 11 * 2);
+        QCOMPARE(desktop.messages(path).size(), 9 + 7 * 3);
         int pages = 0;
         while (!state().value("hasNewer").toBool()) {
             QVERIFY(++pages < 40);
@@ -905,9 +915,7 @@ class DesktopTranscriptWindowTest final : public QObject {
         desktop.activate(path);
         QTRY_VERIFY_WITH_TIMEOUT(!desktop.messages(path).isEmpty(), 5000);
         const auto state = [&] { return desktop.historyState(path); };
-        const auto newestBody = [&] {
-            return desktop.messages(path).constLast().toMap().value("body").toString();
-        };
+        const auto newestBody = [&] { return latestAssistantBody(desktop.messages(path)); };
         const QString newest = newestBody();
         QVERIFY(newest.startsWith(QString("answer-%1 ").arg(turns - 1)));
 
@@ -962,7 +970,7 @@ class DesktopTranscriptWindowTest final : public QObject {
         QSignalSpy windows(&desktop, &AgentSessionManager::messagesWindowReset);
         const QString path = env.directory.path();
         desktop.activate(path);
-        QTRY_COMPARE(desktop.messages(path).size(), 6);
+        QTRY_COMPARE(desktop.messages(path).size(), 9);
         const auto state = [&] { return desktop.historyState(path); };
         const auto settle = [&] {
             QTRY_VERIFY_WITH_TIMEOUT(!state().value("loading").toBool(), 5000);
@@ -973,11 +981,17 @@ class DesktopTranscriptWindowTest final : public QObject {
             const auto rows = desktop.messages(path);
             int expected = -1;
             for (int index = 0; index < rows.size(); ++index) {
-                const QString body = rows.at(index).toMap().value("body").toString();
+                const auto row = rows.at(index).toMap();
+                if (index % 3 == 2) {
+                    if (row.value("subtype") != "turnEnd" || row.value("status") != "completed")
+                        return false;
+                    continue;
+                }
+                const QString body = row.value("body").toString();
                 const int number = body.section('-', 1).toInt();
-                if (!body.startsWith(index % 2 == 0 ? "prompt-" : "answer-"))
+                if (!body.startsWith(index % 3 == 0 ? "prompt-" : "answer-"))
                     return false;
-                if (expected >= 0 && number != expected + (index % 2 == 0 ? 1 : 0))
+                if (expected >= 0 && number != expected + (index % 3 == 0 ? 1 : 0))
                     return false;
                 expected = number;
             }
@@ -1038,8 +1052,7 @@ class DesktopTranscriptWindowTest final : public QObject {
             settle();
             QVERIFY2(contiguous(), "newer page after an idle trim left a gap");
         }
-        QCOMPARE(desktop.messages(path).last().toMap().value("body").toString(),
-                 QStringLiteral("answer-239"));
+        QCOMPARE(latestAssistantBody(desktop.messages(path)), QStringLiteral("answer-239"));
     }
 
     void newerPagingFallsBackWithoutAfterCursorCapability() {
