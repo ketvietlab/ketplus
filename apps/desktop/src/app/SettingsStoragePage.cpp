@@ -73,7 +73,6 @@ SettingsStoragePage::SettingsStoragePage(Requester requester, QWidget* parent)
                  "still be reclaimed."),
               "settingsWorkspaceIntro", this));
     status_ = label(tr("Loading storage settings…"), "storageStatus", this);
-    status_->setAccessibleName(tr("Storage settings status"));
     layout->addWidget(status_);
     refresh_ = new QPushButton(tr("Reload settings"), this);
     refresh_->setObjectName("storageReload");

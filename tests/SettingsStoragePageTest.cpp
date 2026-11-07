@@ -39,6 +39,42 @@ void choose(SettingsStoragePage& page, int value) {
 class SettingsStoragePageTest final : public QObject {
     Q_OBJECT
   private slots:
+    void accessibleStatusTracksSaveAndRecoveryMessages() {
+        QList<SettingsStoragePage::Reply> replies;
+        SettingsStoragePage page(
+            [&](const QString&, const QJsonObject&, auto reply) { replies.append(reply); });
+        const auto accessibleText = [&] {
+            auto* accessible = QAccessible::queryAccessibleInterface(status(page));
+            return accessible ? accessible->text(QAccessible::Name) : QString{};
+        };
+        QTRY_COMPARE(replies.size(), 1);
+        QCOMPARE(accessibleText(), status(page)->text());
+        QVERIFY(accessibleText().contains("Loading"));
+        replies[0](state(), {});
+        QCOMPARE(accessibleText(), status(page)->text());
+        choose(page, 7);
+        QCOMPARE(accessibleText(), QString("Saving…"));
+        replies[1](state(1, 7), {});
+        QCOMPARE(accessibleText(), status(page)->text());
+        QVERIFY(accessibleText().startsWith("Saved"));
+        choose(page, 90);
+        replies[2]({}, "disk full");
+        QCOMPARE(accessibleText(), status(page)->text());
+        QVERIFY(accessibleText().contains("disk full"));
+        QVERIFY(accessibleText().contains("Reload"));
+        reload(page)->click();
+        QCOMPARE(accessibleText(), status(page)->text());
+        replies[3](state(2, 90), {});
+        choose(page, 30);
+        replies[4]({{"ok", false}, {"error_code", "policy_conflict"}}, {});
+        QCOMPARE(accessibleText(), status(page)->text());
+        QVERIFY(accessibleText().contains("another window"));
+        reload(page)->click();
+        auto* timer = page.findChild<QTimer*>("storageRequestTimeout");
+        QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+        QCOMPARE(accessibleText(), status(page)->text());
+        QVERIFY(accessibleText().contains("did not respond"));
+    }
     void loadsAndSavesWithRevisionWithoutMutatingOnRead() {
         QList<QString> operations;
         QJsonObject payload;
