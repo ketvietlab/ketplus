@@ -1,5 +1,6 @@
 #include "AgentWorkspaceViewTest.h"
 #include "CodexBrowserTools.h"
+#include "KetAppearance.h"
 #include "agent/AgentMessageModel.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
@@ -9,6 +10,7 @@
 #include "agent/ProviderRuntimeStatus.h"
 #include "agent/TranscriptFileLinks.h"
 #include "ui/Theme.h"
+#include <QQmlComponent>
 #include <QScopeGuard>
 
 #include <QAbstractItemModelTester>
@@ -258,6 +260,10 @@ for line in sys.stdin:
 }
 
 void AgentWorkspaceViewTest::answersAgentQuestionsSequentially() {
+    const auto previousMode = ket::Appearance::instance().mode();
+    const auto restoreTheme =
+        qScopeGuard([previousMode] { ket::Appearance::instance().setMode(previousMode); });
+    ket::Appearance::instance().setMode(ket::Appearance::Mode::Dark);
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
     const auto serverPath = directory.filePath("fake-codex-question");
@@ -857,6 +863,19 @@ void AgentWorkspaceViewTest::backgroundTaskBar() {
     view.setBackgroundTasks({agent});
     QVERIFY(view.backgroundTaskOutput().isEmpty());
     QTRY_VERIFY(!pane->isVisible());
+
+    // Dismiss hides a finished receipt locally, without deleting daemon task history.
+    auto finished = shell;
+    finished.insert("status", "completed");
+    finished.insert("ended_at", QDateTime::currentMSecsSinceEpoch());
+    view.setBackgroundTasks({finished});
+    QQuickItem* taskCard = nullptr;
+    QTRY_VERIFY((taskCard = findVisualItem(bar, "backgroundTaskCard_build")));
+    QVERIFY(QMetaObject::invokeMethod(taskCard, "dismissRequested"));
+    QTRY_VERIFY(!bar->isVisible());
+    QCOMPARE(view.backgroundTasks().size(), 1);
+    view.setBackgroundTasks({shell});
+    QTRY_VERIFY(bar->isVisible()); // A running incarnation is never hidden.
 
     // Another worktree never shows this conversation's tasks.
     view.setActivePath(QDir::homePath());
@@ -1511,4 +1530,52 @@ void AgentWorkspaceViewTest::claudeUsageBudget() {
     QTRY_VERIFY(findVisualItem(content, "claudeQueryBudget"));
     QTRY_COMPARE(findVisualItem(content, "claudeQueryBudget")->property("text").toString(),
                  "Not reported");
+}
+
+void AgentWorkspaceViewTest::questionCardSingleClickAndFreeText() {
+    ketplus::AgentWorkspaceView view;
+    view.resize(900, 700);
+    view.show();
+    QQmlComponent component(view.quickView()->engine(), QUrl("qrc:/agent/AgentQuestionCard.qml"));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    const QVariantList options{QVariantMap{{"id", "yes-original"}, {"label", "Yes"}},
+                               QVariantMap{{"id", "no-original"}, {"label", "No"}}};
+    auto makeCard = [&](const QVariantList& choices, bool secret) {
+        return qobject_cast<QQuickItem*>(component.createWithInitialProperties(
+            {{"width", 640},
+             {"questions", QVariantList{QVariantMap{{"id", "choice"},
+                                                    {"question", "Continue?"},
+                                                    {"selection", "single"},
+                                                    {"isOther", true},
+                                                    {"isSecret", secret},
+                                                    {"options", choices}}}},
+             {"pending", true},
+             {"answerData", QVariantMap{}},
+             {"messageKey", "single-click"},
+             {"tokens", view.tokens()}}));
+    };
+    QScopedPointer<QQuickItem> card(makeCard(options, false));
+    QVERIFY(card);
+    card->setParentItem(view.quickView()->rootObject());
+    QSignalSpy sent(card.data(), SIGNAL(answersSubmitted(QVariant)));
+    QVERIFY(sent.isValid());
+    QVERIFY(card->property("confirmation").toBool());
+    auto* button = findVisualItem(card.data(), "questionConfirmOption");
+    QVERIFY(button);
+    QVERIFY(QMetaObject::invokeMethod(button, "clicked"));
+    QCOMPARE(sent.size(), 1);
+    const auto answer = sent.first().first().toMap().value("choice").toMap();
+    QCOMPARE(answer.value("option_ids").toList().first().toString(), "yes-original");
+    QVERIFY(QMetaObject::invokeMethod(button, "clicked"));
+    QCOMPARE(sent.size(), 1); // Programmatic second activation is fenced too.
+    card.reset(makeCard({}, true));
+    QVERIFY(card);
+    card->setParentItem(view.quickView()->rootObject());
+    QVERIFY(!card->property("confirmation").toBool());
+    QVERIFY(!findVisualItem(card.data(), "questionOtherOption")->isVisible());
+    auto* input = findVisualItem(card.data(), "questionOtherInput");
+    QVERIFY(input && input->isVisible());
+    QCOMPARE(input->property("echoMode").toInt(), 2); // QQuickTextInput::Password
+    input->setProperty("text", "custom answer");
+    QTRY_VERIFY(findVisualItem(card.data(), "questionContinueButton")->isEnabled());
 }

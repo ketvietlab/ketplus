@@ -102,3 +102,10 @@ notices do not fail a turn, and existing trimmed-detail receipts remain visible.
 Queued state uses the actual session status; no unsupported queue mutation controls
 are fabricated. UI checks (14 cases), provider projection and daemon replay pass;
 two old last-row assertions now check both preserved final text and one receipt.
+
+Cards layer on #221: kit question/approval cards preserve multi-step answers,
+free text, secret input, one-click confirmation and drafts. Scope errors use the
+kit banner; background task rows retain real stop/output actions and locally
+dismiss completed receipts without deleting daemon history. Focused runtime
+checks pass, including dismissal followed by a new running task. Atlas results
+and the right details pane remain part of the Atlas layer; #163 is not complete.
