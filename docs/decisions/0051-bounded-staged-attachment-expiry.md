@@ -8,6 +8,15 @@ expired backlog in one transaction. A synthetic Qt fixture with 160 files and
 all expired rows. Invalid manifests also ran this global maintenance before their
 input was rejected. The regression reproduces both paths without user data.
 
+Begin, read, commit and chunk append also check the manifest's 24-hour eligibility
+directly by identity. An expired upload cannot remain usable merely because it is
+beyond the current sweep window. Its stored identity remains reserved while the
+bounded physical cleanup catches up. These checks use the existing SQLite date
+function and do not depend on the optional byte-length cleanup capability.
+The five-file/40-MiB draft quota likewise counts only usable manifests. Expired
+rows awaiting physical cleanup cannot block a different new upload; the retiring
+identity itself remains reserved and current drafts still enforce both limits.
+
 `purgeExpiredAttachments` now scans at most 32 manifest and 128 chunk candidates
 per call, using durable rowid cursors. One empty-tail wrap may occur without
 increasing the candidate limit. Marking and deleting rows share a 1-MiB budget
@@ -44,7 +53,7 @@ identity reserved. Recovery of such data remains a separate hardening item.
 
 Attachment operations move from the oversized LocalJournal translation unit to
 their owning file; maintenance is a separate file. This does not change explicit
-cancel/delete, media decoding/materialization, session quotas or provider cleanup.
+cancel/delete, media decoding/materialization, quota limits or provider cleanup.
 Those paths remain separate audits. No UI implementation, provider calls, live
 journal mutation, installation or deployment is part of this change.
 

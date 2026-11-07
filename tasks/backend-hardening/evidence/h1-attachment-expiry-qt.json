@@ -46,5 +46,24 @@
       "exit": 1,
       "caught": true
     }
-  ]
+  ],
+  "logical_expiry": {
+    "before_failed_cases": [
+      "begin",
+      "read",
+      "commit",
+      "chunk"
+    ],
+    "quota_before": {
+      "expired_draft_case": "failed",
+      "current_draft_control": "passed"
+    },
+    "final_focused": {
+      "staging": 26,
+      "protocol": 43,
+      "cloud_privacy": 60,
+      "lifecycle_pass": 28,
+      "lifecycle_live_skip": 1
+    }
+  }
 }

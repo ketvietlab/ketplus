@@ -1,4 +1,5 @@
 #include "storage/LocalJournal.h"
+#include <QCryptographicHash>
 #include <QElapsedTimer>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -140,6 +141,48 @@ class StagedAttachmentRetentionTest : public QObject {
                                           QString(64, '0'), &error));
         QVERIFY(f.journal.attachment("s-1", 1, "a").bytes.isEmpty());
     }
+    void expiryIsEnforcedBeforeTheSweepReachesAnIdentity_data() {
+        QTest::addColumn<QString>("operation");
+        for (const auto& operation :
+             {QString("begin"), QString("read"), QString("commit"), QString("chunk")})
+            QTest::newRow(qPrintable(operation)) << operation;
+    }
+    void expiryIsEnforcedBeforeTheSweepReachesAnIdentity() {
+        QFETCH(QString, operation);
+        Fixture f;
+        QVERIFY(f.seed(41, 1, 16));
+        QVERIFY(f.exec("UPDATE staged_attachments SET digest_sha256=printf('%064d',0)"));
+        QVERIFY(f.exec("UPDATE staged_attachments SET status='ready' WHERE session_id='s-40'"));
+        QVERIFY(f.exec("DELETE FROM staged_attachment_chunks WHERE session_id='s-41'"));
+        QString error;
+        bool began = false;
+        if (operation == "begin")
+            began = f.journal.beginAttachment("s-40", 1, "a", 0, "file", "text/plain", 16, 1,
+                                              QString(64, '0'), &error);
+        else
+            QVERIFY(f.journal.purgeExpiredAttachments());
+        // Only 32 manifests were visited. The target has no retirement marker yet.
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachments WHERE session_id='s-40' AND "
+                          "status='ready'"),
+                 1);
+        if (operation == "begin") {
+            QVERIFY(!began);
+            QCOMPARE(error, QString("attachment_conflict"));
+        } else if (operation == "read") {
+            QVERIFY(f.journal.attachment("s-40", 1, "a").id.isEmpty());
+        } else if (operation == "commit") {
+            QVERIFY(!f.journal.commitAttachment("s-40", 1, "a", 1, &error));
+            QCOMPARE(error, QString("attachment_not_found"));
+        } else {
+            const QByteArray bytes(16, '\0');
+            const auto digest = QString::fromLatin1(
+                QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
+            QVERIFY(!f.journal.appendAttachmentChunk("s-41", 1, "a", 1, 0, bytes, digest, &error));
+            QCOMPARE(
+                f.scalar("SELECT count(*) FROM staged_attachment_chunks WHERE session_id='s-41'"),
+                0);
+        }
+    }
     void currentAndUnknownParentsProtectEveryRevision() {
         Fixture f;
         QVERIFY(f.seed(1, 2, 16));
@@ -164,6 +207,30 @@ class StagedAttachmentRetentionTest : public QObject {
             f.scalar("SELECT count(*) FROM staged_attachment_chunks WHERE session_id='unknown'"),
             2);
         QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachments"), 2);
+    }
+    void quotaCountsUsableDraftsWhileExpiryCatchesUp_data() {
+        QTest::addColumn<bool>("expired");
+        QTest::newRow("expired-does-not-block") << true;
+        QTest::newRow("current-still-blocks") << false;
+    }
+    void quotaCountsUsableDraftsWhileExpiryCatchesUp() {
+        QFETCH(bool, expired);
+        Fixture f;
+        QVERIFY(f.seed(40, 1, 16, false));
+        QVERIFY(f.exec(
+            QString("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<5) "
+                    "INSERT INTO staged_attachments SELECT "
+                    "'target',1,'old-'||x,1,'file','text/plain',16,1,"
+                    "'digest','uploading','%1' FROM n")
+                .arg(expired ? "2000-01-01" : "2099-01-01")));
+        QString error;
+        const bool accepted = f.journal.beginAttachment(
+            "target", 1, "fresh", 0, "file", "text/plain", 1, 1, QString(64, '0'), &error);
+        QCOMPARE(accepted, expired);
+        if (!expired)
+            QCOMPARE(error, QString("attachment_draft_limit"));
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachments WHERE session_id='target'"),
+                 expired ? 6 : 5);
     }
     void unsupportedChunksKeepIdentityButAllowOtherCleanup() {
         Fixture f;

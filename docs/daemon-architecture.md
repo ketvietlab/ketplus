@@ -442,7 +442,10 @@ The 24-hour local staging expiry runs bounded passes at reopen, valid upload beg
 and idle maintenance: at most 32 manifests and 128 chunks share a 1-MiB mutation
 budget. An `expiring` manifest reserves its session/generation/attachment identity
 until every old chunk is removed; reads/commit/new begin cannot adopt that retired
-upload. Current and unknown-format parents protect their chunks. Deletions,
+upload. Begin/read/commit/chunk operations check the 24-hour eligibility directly,
+so an expired ID beyond the sweep window cannot remain usable. Draft quotas count
+only usable manifests, while expired identities remain reserved until cleanup.
+Current and unknown-format parents protect their chunks. Deletions,
 retirement markers and durable rowid cursors commit together; busy work defers.
 See [ADR 0051](decisions/0051-bounded-staged-attachment-expiry.md) for limits and retry behavior.
 

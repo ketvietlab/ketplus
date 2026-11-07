@@ -6,6 +6,15 @@
 #include <QVariant>
 
 namespace ketplus::daemon {
+namespace {
+QString usableAttachment() {
+    // Logical expiry must not depend on when a bounded sweep reaches this ID.
+    // The retained manifest still reserves the identity until its chunks are gone.
+    return QStringLiteral(" AND status IN ('uploading','ready') AND "
+                          "datetime(created_at)>=datetime('now','-1 day')");
+}
+} // namespace
+
 bool LocalJournal::beginAttachment(const QString& sessionId, const qint64 generation,
                                    const QString& attachmentId, const qint64 expectedRevision,
                                    const QString& name, const QString& mediaType,
@@ -25,9 +34,10 @@ bool LocalJournal::beginAttachment(const QString& sessionId, const qint64 genera
         return false;
     }
     QSqlQuery quota(database_);
-    quota.prepare(QStringLiteral(
-        "SELECT COUNT(*),COALESCE(SUM(total_bytes),0) FROM staged_attachments WHERE session_id=? "
-        "AND generation=? AND attachment_id<>?"));
+    quota.prepare(QStringLiteral("SELECT COUNT(*),COALESCE(SUM(total_bytes),0) FROM "
+                                 "staged_attachments WHERE session_id=? "
+                                 "AND generation=? AND attachment_id<>?") +
+                  usableAttachment());
     quota.addBindValue(sessionId);
     quota.addBindValue(generation);
     quota.addBindValue(attachmentId);
@@ -58,9 +68,11 @@ bool LocalJournal::beginAttachment(const QString& sessionId, const qint64 genera
         return false;
     }
     QSqlQuery verify(database_);
-    verify.prepare(QStringLiteral(
-        "SELECT revision,name,media_type,total_bytes,chunk_count,digest_sha256,status FROM "
-        "staged_attachments WHERE session_id=? AND generation=? AND attachment_id=?"));
+    verify.prepare(
+        QStringLiteral(
+            "SELECT revision,name,media_type,total_bytes,chunk_count,digest_sha256,status FROM "
+            "staged_attachments WHERE session_id=? AND generation=? AND attachment_id=?") +
+        usableAttachment());
     verify.addBindValue(sessionId);
     verify.addBindValue(generation);
     verify.addBindValue(attachmentId);
@@ -80,9 +92,11 @@ bool LocalJournal::appendAttachmentChunk(const QString& sessionId, const qint64 
                                          const int chunkIndex, const QByteArray& bytes,
                                          const QString& digestSha256, QString* error) {
     QSqlQuery manifest(database_);
-    manifest.prepare(QStringLiteral(
-        "SELECT revision,chunk_count,status FROM staged_attachments WHERE session_id=? AND "
-        "generation=? AND attachment_id=?"));
+    manifest.prepare(
+        QStringLiteral(
+            "SELECT revision,chunk_count,status FROM staged_attachments WHERE session_id=? AND "
+            "generation=? AND attachment_id=?") +
+        usableAttachment());
     manifest.addBindValue(sessionId);
     manifest.addBindValue(generation);
     manifest.addBindValue(attachmentId);
@@ -132,9 +146,11 @@ bool LocalJournal::commitAttachment(const QString& sessionId, const qint64 gener
                                     const QString& attachmentId, const qint64 expectedRevision,
                                     QString* error) {
     QSqlQuery manifest(database_);
-    manifest.prepare(QStringLiteral(
-        "SELECT total_bytes,chunk_count,digest_sha256,status FROM staged_attachments WHERE "
-        "session_id=? AND generation=? AND attachment_id=? AND revision=?"));
+    manifest.prepare(
+        QStringLiteral(
+            "SELECT total_bytes,chunk_count,digest_sha256,status FROM staged_attachments WHERE "
+            "session_id=? AND generation=? AND attachment_id=? AND revision=?") +
+        usableAttachment());
     manifest.addBindValue(sessionId);
     manifest.addBindValue(generation);
     manifest.addBindValue(attachmentId);
@@ -218,10 +234,12 @@ StagedAttachment LocalJournal::attachment(const QString& sessionId, const qint64
                                           const QString& attachmentId) const {
     StagedAttachment result;
     QSqlQuery manifest(database_);
-    manifest.prepare(QStringLiteral(
-        "SELECT name,media_type,revision,total_bytes,chunk_count,digest_sha256,status "
-        "FROM staged_attachments WHERE session_id=? AND "
-        "generation=? AND attachment_id=?"));
+    manifest.prepare(
+        QStringLiteral(
+            "SELECT name,media_type,revision,total_bytes,chunk_count,digest_sha256,status "
+            "FROM staged_attachments WHERE session_id=? AND "
+            "generation=? AND attachment_id=?") +
+        usableAttachment());
     manifest.addBindValue(sessionId);
     manifest.addBindValue(generation);
     manifest.addBindValue(attachmentId);

@@ -353,3 +353,14 @@ Byte-budget and missing-identity-fence mutations are caught; restored tests pass
 Full Pro and independent exact-head review remain pending; ADR 0051 records the
 contract and limits. The former LocalJournal attachment implementation moved to
 its owning module without changing explicit cancel/delete semantics.
+
+
+The first staged-expiry head `b35a7caba8f892f161cdc776598e83d06e86337b` passed full
+Pro 95/95. A subsequent boundary audit reproduced four missing logical-expiry
+checks (begin/read/commit/chunk) for an expired identity beyond the 32-manifest
+window, plus an expired-draft quota obstruction. Those regressions fail on the
+prior implementation; current drafts still trigger the unchanged quota. Direct
+eligibility checks and usable-only quota counting now pass focused 4/4 targets:
+staging 26/26, protocol 43/43, cloud privacy 60/60, lifecycle 28 pass/1 live skip.
+The final full suite and independent review must run at the revised head; the
+older 95/95 is not carried forward as final-head evidence.
