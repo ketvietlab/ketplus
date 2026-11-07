@@ -68,5 +68,18 @@
     "transitive action downloads and all build dependencies",
     "cache trust and complete fork isolation",
     "signing, packaging, publication, install or deploy"
-  ]
+  ],
+  "hosted_initial_browser": {
+    "run": "https://github.com/ketvietlab/ketplus/actions/runs/42392428619",
+    "head": "98804950",
+    "passed": 53,
+    "failed": 1,
+    "cause": "CMake wrapped the expected stale-runtime diagnostic across lines; the runtime guard correctly returned a failure status"
+  },
+  "diagnostic_regression": {
+    "baseline_short_tmp": "2 pass / 1 fail",
+    "fixed_short_tmp": "3/3 PASS",
+    "fixed_native_tmp": "3/3 PASS",
+    "production_guard": "unchanged; nonzero rejection and explicit allow-stale/restage controls retained"
+  }
 }

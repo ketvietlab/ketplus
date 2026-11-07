@@ -25,7 +25,15 @@ Validation parses all three YAML documents and compares their complete structure
 against the previous versions with only the intended pin/permission/checkout
 changes. All twenty action occurrences are full SHAs verified in their upstream
 repository; all six checkouts disable persistence. The existing promotion-policy
-regression suite passes. No app code, dependencies or UI implementation changes.
+regression suite passes. No application implementation, dependency versions or UI behavior changes.
+
+A hosted browser run exposed an existing assertion that assumed CMake diagnostics
+never wrap. The stale-runtime guard correctly failed, but the diagnostic split
+`from` and `sources` across lines. Match whitespace between the same required
+words; preserve the failure-status, allow-stale and restaging checks. The original
+probe fails with a short temporary path; the complete source-digest suite now
+passes 3/3 with both short and platform-native temporary paths. Hosted acceptance
+requires a fresh run of the corrected head.
 
 This does not pin runner images, OS packages, action-internal downloads or every
 transitive build dependency, nor prove hosted runner compatibility. Cache trust,

@@ -921,3 +921,9 @@ remain explicitly open.
 - [ ] Independent exact-head review, merge and cleanup; reviewer dispatch is held.
 - [ ] Hosted runner acceptance, cache/fork trust, transitive dependencies, licenses
   and release/runtime gates remain open. No publication, installation or UI edits.
+
+H6 hosted follow-up: initial browser job 53/54 exposed a wrapped CMake diagnostic,
+not a runtime-guard bypass. The unchanged guard correctly refused stale sources.
+The whitespace-tolerant assertion passes all three source-digest checks under both
+short and platform-native temporary paths; rerun the hosted workflow at the
+corrected head before claiming runner acceptance. No application/UI code changed.
