@@ -282,9 +282,12 @@ signed content. `itemKey` is a public linkage value: it hides the item id
 from casual reading, but the relay knows session and generation and can
 confirm a guessed provider item id. Each session's cloud cursor is registered with the
 journal once per sign-in, not on every upload, and an acknowledgement at or
-behind the stored cursor writes nothing. An acknowledgement checks only the
-large payloads its removed raw events name, finding replay manifests through
-the transfer expression index. Global orphan GC runs at open, after a session delete,
+behind the stored cursor writes nothing. Advancing ACKs commit a monotonic cursor
+and durable cleanup queue together. Physical raw deletion is eventual: each pass
+visits at most eight queued generations and 128 raw candidates, deletes at most
+1 MiB, and rechecks the slowest client's fence. Reopen/idle maintenance resumes
+queued work; see [ADR 0049](decisions/0049-bounded-acknowledged-delivery-cleanup.md).
+Global orphan GC runs after advancing ACK cleanup, at open, after a session delete,
 every 256 command results and on idle maintenance. Each transactional pass scans up
 to 32 metadata and 128 chunk candidates, deletes at most 1 MiB, and persists cursors
 for restart/wrap. A generation with pending raw delivery is deferred without a JSON

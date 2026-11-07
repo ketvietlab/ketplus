@@ -1,0 +1,29 @@
+{
+  "scope": "Synthetic Qt ACK path, no live journal or provider account",
+  "baseline_head": "d4325b2f8e76d6c3a2fc6280b1869cb4dd00e19c",
+  "baseline_ms": 7183,
+  "fixture": {
+    "raw_events": 100000,
+    "raw_payload_approx_bytes": 1000,
+    "large_payload_metadata": 32
+  },
+  "bounded_ms": 1,
+  "rows_deleted_first_pass": 128,
+  "queue_persisted": true,
+  "focused_cases": {
+    "ack": 20,
+    "protocol": 43,
+    "transcript_window": 28
+  },
+  "full_matrix": "Pending implementation PR gate",
+  "limits": [
+    "Other retention sweeps remain unchecked",
+    "Unsupported raw values retained",
+    "Older SQLite without octet_length defers raw cleanup",
+    "No Windows/mixed multi-GB/live journal/crash-process/installation/deployment acceptance"
+  ],
+  "mutations_caught": [
+    "row budget 128 changed to 1024",
+    "slowest-client min changed to max"
+  ]
+}
