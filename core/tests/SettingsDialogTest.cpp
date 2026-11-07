@@ -1,11 +1,11 @@
 #include "app/SettingsDialog.h"
 #include "ui/Theme.h"
 
+#include <QAbstractButton>
 #include <QApplication>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QListWidget>
-#include <QPushButton>
 #include <QSettings>
 #include <QSpinBox>
 #include <QTemporaryDir>
@@ -94,8 +94,8 @@ void SettingsDialogTest::editsAndResetsTypography() {
     QVERIFY(fontBox->count() >= 1);
     fontBox->hidePopup();
 
-    QPushButton* resetButton = nullptr;
-    for (auto* button : dialog.findChildren<QPushButton*>()) {
+    QAbstractButton* resetButton = nullptr;
+    for (auto* button : dialog.findChildren<QAbstractButton*>()) {
         if (button->property("kvRole") == QStringLiteral("settingsReset")) {
             resetButton = button;
             break;
@@ -166,9 +166,9 @@ void SettingsDialogTest::previewsAndCancelsThemeSelection() {
     QVERIFY(theme.palette().dark);
     QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Light);
 
-    auto* buttons = dialog.findChild<QDialogButtonBox*>();
+    auto* buttons = dialog.findChild<QWidget*>(QStringLiteral("settingsButtons"));
     QVERIFY(buttons != nullptr);
-    buttons->button(QDialogButtonBox::Cancel)->click();
+    buttons->findChild<QAbstractButton*>(QStringLiteral("settingsCancelButton"))->click();
     QVERIFY(!theme.palette().dark);
     QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Light);
 }
@@ -178,11 +178,11 @@ void SettingsDialogTest::extensionPagesDriveDirtyState() {
     auto* page = new TestSettingsPage;
     dialog.addPage(page);
 
-    auto* buttons = dialog.findChild<QDialogButtonBox*>();
+    auto* buttons = dialog.findChild<QWidget*>(QStringLiteral("settingsButtons"));
     QVERIFY(buttons != nullptr);
-    auto* save = buttons->button(QDialogButtonBox::Save);
+    auto* save = buttons->findChild<QAbstractButton*>(QStringLiteral("settingsSaveButton"));
     if (save == nullptr) {
-        for (auto* button : buttons->findChildren<QPushButton*>()) {
+        for (auto* button : buttons->findChildren<QAbstractButton*>()) {
             if (button->property("kvRole") == QStringLiteral("primaryAction")) {
                 save = button;
                 break;

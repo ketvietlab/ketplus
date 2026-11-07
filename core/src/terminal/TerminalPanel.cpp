@@ -3,6 +3,9 @@
 #include "terminal/TerminalSession.h"
 #include "terminal/TerminalView.h"
 
+#include "KetButton.h"
+#include "KetChrome.h"
+#include "KetIcons.h"
 #include <QDir>
 #include <QFileInfo>
 #include <QHBoxLayout>
@@ -10,7 +13,6 @@
 #include <QPointer>
 #include <QStyle>
 #include <QTimer>
-#include <QToolButton>
 #include <QVBoxLayout>
 
 namespace ketplus {
@@ -19,47 +21,42 @@ TerminalPanel::TerminalPanel(QWidget* parent)
     : QWidget(parent), session_(new TerminalSession(this)),
       terminal_(new TerminalView(*session_, this)),
       titleLabel_(new QLabel(QStringLiteral("TERMINAL"), this)), pathLabel_(new QLabel(this)),
-      findButton_(new QToolButton(this)), clearButton_(new QToolButton(this)),
-      restartButton_(new QToolButton(this)), closeButton_(new QToolButton(this)) {
+      findButton_(new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"search")),
+                                      tr("Find in terminal"), this)),
+      clearButton_(new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"eraser")),
+                                       tr("Clear terminal scrollback"), this)),
+      restartButton_(new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"refresh-cw")),
+                                         tr("Restart terminal session"), this)),
+      closeButton_(new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"x")),
+                                       tr("Hide terminal"), this)) {
     setProperty("kvRole", QStringLiteral("terminalPanel"));
     setMinimumHeight(120);
     setFocusPolicy(Qt::StrongFocus);
     setFocusProxy(terminal_);
 
-    auto* header = new QWidget(this);
-    header->setProperty("kvRole", QStringLiteral("terminalHeader"));
-    auto* headerLayout = new QHBoxLayout(header);
-    headerLayout->setContentsMargins(11, 0, 6, 0);
-    headerLayout->setSpacing(9);
-    titleLabel_->setProperty("kvRole", QStringLiteral("terminalHeading"));
+    auto* header =
+        new ket::PaneHeader(tr("Terminal"), ket::Icons::codeForLucide(u"terminal"), this);
+    auto* headerLayout = header->actions();
+    titleLabel_->hide();
     pathLabel_->setProperty("kvRole", QStringLiteral("terminalPath"));
     pathLabel_->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    headerLayout->addWidget(titleLabel_);
     headerLayout->addWidget(pathLabel_, 1);
 
-    findButton_->setText(QString::fromUtf8("⌕"));
-    findButton_->setAutoRaise(true);
     findButton_->setToolTip(QStringLiteral("Find in terminal"));
     findButton_->setAccessibleName(QStringLiteral("Find in terminal"));
     findButton_->setProperty("kvRole", QStringLiteral("terminalAction"));
     headerLayout->addWidget(findButton_);
 
-    clearButton_->setText(QString::fromUtf8("⌫"));
-    clearButton_->setAutoRaise(true);
     clearButton_->setToolTip(QStringLiteral("Clear terminal scrollback"));
     clearButton_->setAccessibleName(QStringLiteral("Clear terminal scrollback"));
     clearButton_->setProperty("kvRole", QStringLiteral("terminalAction"));
     headerLayout->addWidget(clearButton_);
 
-    restartButton_->setText(QString::fromUtf8("↻"));
-    restartButton_->setAutoRaise(true);
     restartButton_->setToolTip(QStringLiteral("Restart terminal session"));
     restartButton_->setAccessibleName(QStringLiteral("Restart terminal session"));
     restartButton_->setProperty("kvRole", QStringLiteral("terminalAction"));
     headerLayout->addWidget(restartButton_);
 
-    closeButton_->setText(QString::fromUtf8("×"));
-    closeButton_->setAutoRaise(true);
     closeButton_->setToolTip(QStringLiteral("Hide terminal"));
     closeButton_->setAccessibleName(QStringLiteral("Hide terminal"));
     closeButton_->setProperty("kvRole", QStringLiteral("terminalAction"));
@@ -71,10 +68,10 @@ TerminalPanel::TerminalPanel(QWidget* parent)
     layout->addWidget(header);
     layout->addWidget(terminal_, 1);
 
-    connect(closeButton_, &QToolButton::clicked, this, &TerminalPanel::closeRequested);
-    connect(findButton_, &QToolButton::clicked, terminal_, &TerminalView::openSearch);
-    connect(clearButton_, &QToolButton::clicked, terminal_, &TerminalView::clearScrollback);
-    connect(restartButton_, &QToolButton::clicked, this, [this] {
+    connect(closeButton_, &QAbstractButton::clicked, this, &TerminalPanel::closeRequested);
+    connect(findButton_, &QAbstractButton::clicked, terminal_, &TerminalView::openSearch);
+    connect(clearButton_, &QAbstractButton::clicked, terminal_, &TerminalView::clearScrollback);
+    connect(restartButton_, &QAbstractButton::clicked, this, [this] {
         if (!terminal_->restart()) {
             emit statusMessageRequested(QStringLiteral("Unable to restart terminal session."));
         }

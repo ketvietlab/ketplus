@@ -1,5 +1,10 @@
 #include "workspace/ExplorerPanel.h"
 
+#include "KetButton.h"
+#include "KetChrome.h"
+#include "KetEmptyState.h"
+#include "KetIcons.h"
+#include "ui/MessageDialog.h"
 #include <QAbstractItemModel>
 #include <QAbstractItemView>
 #include <QAction>
@@ -16,8 +21,6 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
-#include <QMessageBox>
-#include <QPushButton>
 #include <QSignalBlocker>
 #include <QStackedWidget>
 #include <QTimer>
@@ -80,49 +83,27 @@ ExplorerPanel::ExplorerPanel(QWidget* parent)
         tree_->hideColumn(column);
     }
 
-    auto* heading = new QLabel(QStringLiteral("EXPLORER"), this);
-    heading->setProperty("kvRole", QStringLiteral("sidebarHeading"));
+    auto* header = new ket::PaneHeader(tr("Explorer"), ket::Icons::codeForLucide(u"folder"), this);
     folderLabel_->setProperty("kvRole", QStringLiteral("sidebarFolder"));
     folderLabel_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-
-    auto* collapseButton = new QToolButton(this);
-    collapseButton->setText(QString::fromUtf8("⌃"));
-    collapseButton->setProperty("kvRole", QStringLiteral("sidebarAction"));
-    collapseButton->setToolTip(QStringLiteral("Collapse folders"));
-    collapseButton->setAccessibleName(QStringLiteral("Collapse folders"));
-
-    auto* refreshButton = new QToolButton(this);
-    refreshButton->setText(QString::fromUtf8("↻"));
-    refreshButton->setProperty("kvRole", QStringLiteral("sidebarAction"));
-    refreshButton->setToolTip(QStringLiteral("Refresh Explorer"));
-    refreshButton->setAccessibleName(QStringLiteral("Refresh Explorer"));
-
-    auto* closeButton = new QToolButton(this);
-    closeButton->setText(QString::fromUtf8("×"));
-    closeButton->setProperty("kvRole", QStringLiteral("sidebarAction"));
-    closeButton->setToolTip(QStringLiteral("Hide Explorer"));
-    closeButton->setAccessibleName(QStringLiteral("Hide Explorer"));
-
-    auto* headerLayout = new QHBoxLayout;
-    headerLayout->setContentsMargins(10, 6, 6, 6);
-    headerLayout->setSpacing(4);
-    headerLayout->addWidget(heading);
-    headerLayout->addWidget(folderLabel_, 1);
-    headerLayout->addWidget(collapseButton);
-    headerLayout->addWidget(refreshButton);
-    headerLayout->addWidget(closeButton);
-
-    auto* emptyLabel = new QLabel(QStringLiteral("No folder open"), emptyPage_);
-    emptyLabel->setAlignment(Qt::AlignCenter);
-    emptyLabel->setProperty("kvRole", QStringLiteral("emptyTitle"));
-    auto* openButton = new QPushButton(QStringLiteral("Open Folder"), emptyPage_);
+    folderLabel_->setContentsMargins(12, 4, 12, 4);
+    auto* collapseButton =
+        new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"chevrons-up")),
+                            tr("Collapse folders"), header);
+    auto* refreshButton = new ket::IconButton(
+        ket::Icons::icon(ket::Icons::codeForLucide(u"refresh-cw")), tr("Refresh Explorer"), header);
+    auto* closeButton = new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"x")),
+                                            tr("Hide Explorer"), header);
+    header->actions()->addWidget(collapseButton);
+    header->actions()->addWidget(refreshButton);
+    header->actions()->addWidget(closeButton);
+    auto* emptyState =
+        new ket::EmptyState(ket::Icons::codeForLucide(u"folder"), tr("No folder open"),
+                            tr("Open a folder to browse files."), emptyPage_);
+    auto* openButton = emptyState->setAction(tr("Open Folder"));
     auto* emptyLayout = new QVBoxLayout(emptyPage_);
-    emptyLayout->setContentsMargins(24, 24, 24, 24);
-    emptyLayout->addStretch();
-    emptyLayout->addWidget(emptyLabel);
-    emptyLayout->addSpacing(8);
-    emptyLayout->addWidget(openButton, 0, Qt::AlignHCenter);
-    emptyLayout->addStretch();
+    emptyLayout->setContentsMargins(0, 0, 0, 0);
+    emptyLayout->addWidget(emptyState);
 
     pages_->addWidget(emptyPage_);
     pages_->addWidget(tree_);
@@ -131,15 +112,16 @@ ExplorerPanel::ExplorerPanel(QWidget* parent)
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
-    layout->addLayout(headerLayout);
+    layout->addWidget(header);
+    layout->addWidget(folderLabel_);
     layout->addWidget(pages_, 1);
 
     connect(tree_, &QTreeView::clicked, this, &ExplorerPanel::activateIndex);
     connect(tree_, &QTreeView::customContextMenuRequested, this, &ExplorerPanel::showContextMenu);
-    connect(openButton, &QPushButton::clicked, this, &ExplorerPanel::openFolderRequested);
-    connect(collapseButton, &QToolButton::clicked, tree_, &QTreeView::collapseAll);
-    connect(refreshButton, &QToolButton::clicked, this, &ExplorerPanel::refresh);
-    connect(closeButton, &QToolButton::clicked, this, &ExplorerPanel::hideRequested);
+    connect(openButton, &QAbstractButton::clicked, this, &ExplorerPanel::openFolderRequested);
+    connect(collapseButton, &QAbstractButton::clicked, tree_, &QTreeView::collapseAll);
+    connect(refreshButton, &QAbstractButton::clicked, this, &ExplorerPanel::refresh);
+    connect(closeButton, &QAbstractButton::clicked, this, &ExplorerPanel::hideRequested);
     connect(model_, &QFileSystemModel::directoryLoaded, this, [this](const QString&) {
         if (!pendingReveal_.isEmpty() && tryRevealPath(pendingReveal_)) {
             pendingReveal_.clear();
@@ -284,13 +266,14 @@ void ExplorerPanel::createEntry(const bool directory) {
         return;
     }
     if (!isValidEntryName(name)) {
-        QMessageBox::warning(this, title, QStringLiteral("Enter a valid name without slashes."));
+        message_dialog::warning(this, title, QStringLiteral("Enter a valid name without slashes."));
         return;
     }
 
     const QString path = QDir(parentPath).filePath(name);
     if (QFileInfo::exists(path)) {
-        QMessageBox::warning(this, title, QStringLiteral("An item with this name already exists."));
+        message_dialog::warning(this, title,
+                                QStringLiteral("An item with this name already exists."));
         return;
     }
 
@@ -302,7 +285,7 @@ void ExplorerPanel::createEntry(const bool directory) {
         created = file.open(QIODevice::WriteOnly | QIODevice::NewOnly);
     }
     if (!created) {
-        QMessageBox::critical(this, title, QStringLiteral("Unable to create %1.").arg(path));
+        message_dialog::critical(this, title, QStringLiteral("Unable to create %1.").arg(path));
         return;
     }
 
@@ -340,14 +323,14 @@ void ExplorerPanel::moveSelectedToTrash() {
                 .arg(unsaved == 1 ? QStringLiteral("It stays") : QStringLiteral("They stay"));
     }
     const auto answer =
-        QMessageBox::question(this, QStringLiteral("Move to Trash"), question,
-                              QMessageBox::Cancel | QMessageBox::Yes, QMessageBox::Cancel);
+        message_dialog::question(this, QStringLiteral("Move to Trash"), question,
+                                 QMessageBox::Cancel | QMessageBox::Yes, QMessageBox::Cancel);
     if (answer != QMessageBox::Yes) {
         return;
     }
     if (!QFile::moveToTrash(path)) {
-        QMessageBox::critical(this, QStringLiteral("Move to Trash"),
-                              QStringLiteral("Unable to move this item to Trash."));
+        message_dialog::critical(this, QStringLiteral("Move to Trash"),
+                                 QStringLiteral("Unable to move this item to Trash."));
         return;
     }
     emit pathTrashed(path);

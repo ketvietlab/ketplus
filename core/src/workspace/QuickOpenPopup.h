@@ -6,9 +6,10 @@
 #include <QVariant>
 
 class QEvent;
-class QLabel;
 class QLineEdit;
-class QListWidget;
+namespace ket {
+class CommandPalette;
+}
 
 namespace ketplus {
 
@@ -44,14 +45,12 @@ class QuickOpenPopup final : public QFrame {
 
   private:
     void refilter();
-    void activateCurrent();
-    void dismiss();
     void moveCurrentRow(int offset);
     void reposition();
 
     QLineEdit* queryEdit_{nullptr};
-    QLabel* statusLabel_{nullptr};
-    QListWidget* list_{nullptr};
+    ket::CommandPalette* palette_{nullptr};
+    QString statusText_;
     QList<QuickOpenItem> items_;
     QList<qsizetype> visibleIndexes_;
 };

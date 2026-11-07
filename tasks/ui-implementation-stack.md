@@ -62,3 +62,5 @@ Symbol layer: PR #208, based on #207. Terminal layer: `feat/ui-stack-terminal`, 
 Terminal implementation: kit find field/actions and 75–200% persisted interface zoom; text size stays independent. Lite build and both terminal test targets pass. Native comparison and #147 packaging/platform work are not claimed complete.
 
 Terminal layer: PR #209. Lite shell layer: `feat/ui-stack-lite-shell` on `feat/ui-stack-terminal`; activity rail, first-use welcome, optional editor breadcrumb above the viewport. Lite app and all 16 Lite test targets pass; offscreen startup succeeds. Native acceptance remains deferred.
+
+Lite shell: PR #210 on #209. The next layer replaces pane/find controls, Quick Open with CommandPalette, Markdown mode switching with SegmentedControl, Settings navigation/theme cards/zoom/field rows/footer and core message dialogs with kit composition. It keeps real search, selection, draft/reset and document operations. Further Lite work: model-backed row recipes/Git decorations and mutations, Markdown recipe typography, remaining zoom geometry.
