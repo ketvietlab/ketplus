@@ -1,0 +1,72 @@
+{
+  "scope": "H6.1/H6.4 direct workflow action pins and checkout credential defaults",
+  "base": "886fbe201ad88e2bbd466c8e0689f3fc7a423223",
+  "upstream_verification": "GitHub REST refs and commit endpoints in each owning repository",
+  "actions": {
+    "actions/checkout@v4": {
+      "sha": "11d5960a326750d5838078e36cf38b85af677262",
+      "url": "https://github.com/actions/checkout/commit/11d5960a326750d5838078e36cf38b85af677262",
+      "date": "2026-07-16T19:43:47Z",
+      "source_ref": "tags/v4"
+    },
+    "actions/setup-node@v4": {
+      "sha": "49933ea5288caeca8642d1e84afbd3f7d6820020",
+      "url": "https://github.com/actions/setup-node/commit/49933ea5288caeca8642d1e84afbd3f7d6820020",
+      "date": "2025-04-02T19:20:51Z",
+      "source_ref": "tags/v4"
+    },
+    "jurplel/install-qt-action@v4": {
+      "date": "2026-10-25T22:58:22Z",
+      "sha": "b344308e4483fc892e0d27b3cd1b173ebdd95f06",
+      "url": "https://github.com/jurplel/install-qt-action/commit/b344308e4483fc892e0d27b3cd1b173ebdd95f06",
+      "source_ref": "heads/v4"
+    },
+    "actions/upload-artifact@v4": {
+      "sha": "ea165f8d65b6e75b540449e92b4886f43607fa02",
+      "url": "https://github.com/actions/upload-artifact/commit/ea165f8d65b6e75b540449e92b4886f43607fa02",
+      "date": "2025-03-19T17:34:59Z",
+      "source_ref": "tags/v4"
+    },
+    "ilammy/msvc-dev-cmd@v1": {
+      "sha": "0b201ec74fa43914dc39ae48a89fd1d8cb592756",
+      "url": "https://github.com/ilammy/msvc-dev-cmd/commit/0b201ec74fa43914dc39ae48a89fd1d8cb592756",
+      "date": "2024-01-01T04:23:26Z",
+      "source_ref": "tags/v1"
+    },
+    "seanmiddleditch/gha-setup-ninja@v5": {
+      "sha": "96bed6edff20d1dd61ecff9b75cc519d516e6401",
+      "url": "https://github.com/seanmiddleditch/gha-setup-ninja/commit/96bed6edff20d1dd61ecff9b75cc519d516e6401",
+      "date": "2024-06-16T17:34:30Z",
+      "source_ref": "tags/v5"
+    },
+    "actions/cache@v5": {
+      "sha": "caa296126883cff596d87d8935842f9db880ef25",
+      "url": "https://github.com/actions/cache/commit/caa296126883cff596d87d8935842f9db880ef25",
+      "date": "2026-06-26T19:14:19Z",
+      "source_ref": "tags/v5"
+    },
+    "mozilla-actions/sccache-action@v0.0.11": {
+      "sha": "fc920bf0ec8de6ee65d409111f7ec508035751ba",
+      "url": "https://github.com/Mozilla-Actions/sccache-action/commit/fc920bf0ec8de6ee65d409111f7ec508035751ba",
+      "date": "2026-07-29T11:15:43Z",
+      "source_ref": "tags/v0.0.11"
+    }
+  },
+  "workflows": 3,
+  "pinned_occurrences": 20,
+  "credential_persistence_disabled_checkouts": 6,
+  "workflow_permissions": {
+    "contents": "read"
+  },
+  "validation": [
+    "PyYAML parses all workflows; exact structural comparison permits only pins, explicit permission defaults and checkout credential persistence",
+    "existing check-develop-promotion.test.sh passes all cases",
+    "git diff --check"
+  ],
+  "not_verified": [
+    "hosted action/runner execution",
+    "transitive action downloads and all build dependencies",
+    "cache trust and complete fork isolation",
+    "signing, packaging, publication, install or deploy"
+  ]
+}
