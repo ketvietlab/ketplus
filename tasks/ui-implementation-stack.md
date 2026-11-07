@@ -2,186 +2,118 @@
 
 ## Execution agreement — 2026-11-07
 
-Implement phases 1–5 of the conversation's manual UI plan as stacked pull
-requests. Finish the complete stack before requesting review. Do not merge or
-start the review phase during implementation. The user authorized proceeding
-with the current Qt mock; no additional mock-approval checkpoint is required.
+Implement phases 1–5 of the manual UI plan as stacked **draft** pull requests.
+Finish the stack before requesting review. Do not merge or begin the review
+phase. The current native Qt mock is the approved design reference; no additional
+mock-approval checkpoint is required. Check a delivery row only after its code
+is committed, pushed and attached to a PR. A checked row means scoped code
+implementation, not final acceptance or release.
 
-Excluded from this stack: phase 6 (conversation Plan / daemon continuation,
-issue #198), phase 7 (overall acceptance, release packaging, deployment and
-device installation), and Repo Memory implementation. Keep technical checks
-for each patch explicit; they do not imply final acceptance or deployment.
+Excluded by the user: phase 6 (conversation Plan / daemon continuation, #198),
+phase 7 (overall acceptance, review, release packaging, deployment and device
+installation), and Repo Memory implementation. The Plan mock remains in #197.
 
-## Source and ownership
+Baseline: public `ketplus/integration`, commit `698f0510`, the two-edition source
+layout from ADR 0029. `core/` builds independently of Pro. Shared components are
+consumed from ket-qt, pinned to `d47638214f80695524cd2724996674da7afdbb6a`.
+The native references are `mockups/qt` and `mockups/terminal` (ADR 0033–34).
 
-The baseline is `ketplus/integration`, the public two-edition source tree
-(ADR 0029). `core/` remains independent of Pro. Shared components belong to
-`ket-qt`; product composition consumes its public APIs. Do not copy source
-from the old private Desktop checkout or from mobile/hosted-service repos.
+## Manual delivery checklist
 
-The native design reference is `mockups/qt` and `mockups/terminal` (ADR 0033–34).
-The conversation Plan mock in PR #197 remains separate from this UI stack.
+- [x] Phase 1: reconcile repository ownership, baseline and existing merged work.
+- [x] Phase 2: #141 fonts/defaults; #142 shared profile/tokens/zoom; #143 symbol
+  rendering and approved app-icon formats. Remaining legacy palette/QSS objects
+  are projections of kit tokens, not independently defined palettes.
+- [x] Phase 3: Terminal #144–146 UI and #147 name/font/icon source assets.
+  Windows/Linux standalone Terminal packaging and installation are phase 7.
+- [x] Phase 4: Lite #149–156 shell/status bar, Explorer/Search, editor,
+  Git/diff, Markdown/preview, embedded terminals, settings and common controls.
+- [x] Phase 5: #157 Pro kit/QML foundation and shared clock; #158 sidebar.
+- [x] Phase 5: #159 header/composer with existing runtime; #160 messages;
+  #161 activity; #162 journal-derived notices.
+- [x] Phase 5: #163 question/approval/task/scope/running/error cards using the
+  existing runtime and preserving real IDs, drafts and actions.
+- [ ] Phase 5: #163 Atlas-result transcript receipt and held-message release
+  action remain incomplete. Required runtime contracts are listed below.
+- [x] Phase 5: #164 overlays; #165 Worktrees/Connections available-runtime UI;
+  #166 Settings available-runtime controls; #167 Atlas chrome/composition.
+- [ ] Phase 6: conversation Plan/harness — explicitly excluded, not started.
+- [ ] Phase 7: aggregate acceptance/review/release/deployment — explicitly
+  excluded, not started. Focused patch tests below are not this phase.
 
-## Checklist
+## Draft stack
 
-Check a row only when its implementation is committed and pushed with a PR.
-Record technical verification separately from the later review/acceptance phase.
+Every PR targets the branch immediately before it. No reviewer was requested.
+The base/head/draft chain below was checked against GitHub after #232 was pushed.
 
-- [x] Reconcile the current repository layout and merged baseline.
-- [x] Foundation: fonts/defaults #141; profile, tokens and zoom #142 (implementation; native acceptance deferred).
-- [x] Foundation: symbol icons #143, including approved app-icon source/export formats (OS installation acceptance deferred).
-- [x] Terminal: UI #144–#146 and #147 name/font/icon source assets; packaging/platform qualification remains phase 7.
-- [x] Lite: shell #149, using the merged #148 mock (including kit status bar).
-- [x] Lite: Explorer/Search #150 and editor #151 (implementation; acceptance deferred).
-- [x] Lite: Git/diff #152 and Markdown/preview #153 (implementation; acceptance deferred).
-- [x] Lite: embedded terminal #154, settings #155, common controls #156 (implementation; acceptance deferred).
-- [x] Pro: kit/QML foundation #157 (offline module/shared clock; idle-CPU acceptance deferred).
-- [x] Pro: sidebar #158 UI composition (metadata/acceptance limits below).
-- [x] Pro: header/composer #159 existing-runtime UI; #120 reviewer dependency remains separate.
-- [x] Pro: messages #160 (implementation; native acceptance deferred).
-- [x] Pro: activity #161 UI and provider step mapping (native acceptance deferred).
-- [x] Pro: notices #162 using available journal/runtime state (native acceptance deferred).
-- [ ] Pro: questions/details #163.
-- [x] Pro: overlays #164, including the existing revisioned repository/worktree picker.
-- [x] Pro: worktrees/connections #165 available-runtime UI (Relay pairing; SSH setup limitation below).
-- [x] Pro: settings #166 available-runtime controls (messaging behavior dependency remains separate).
-- [x] Pro: Atlas #167 chrome and existing WebView composition (native acceptance deferred).
+| PR | Layer | Head | Base |
+| --- | --- | --- | --- |
+| [207](https://github.com/ketvietlab/ketplus/pull/207) | Fonts / zoom | `feat/kit-zoom-foundation` | `integration` |
+| [208](https://github.com/ketvietlab/ketplus/pull/208) | Symbol renderer | `feat/ui-stack-symbols` | `feat/kit-zoom-foundation` |
+| [209](https://github.com/ketvietlab/ketplus/pull/209) | Terminal UI | `feat/ui-stack-terminal` | `feat/ui-stack-symbols` |
+| [210](https://github.com/ketvietlab/ketplus/pull/210) | Lite shell | `feat/ui-stack-lite-shell` | `feat/ui-stack-terminal` |
+| [211](https://github.com/ketvietlab/ketplus/pull/211) | Lite controls | `feat/ui-stack-lite-panes` | `feat/ui-stack-lite-shell` |
+| [213](https://github.com/ketvietlab/ketplus/pull/213) | Lite models / Git / preview | `feat/ui-stack-lite-models` | `feat/ui-stack-lite-panes` |
+| [214](https://github.com/ketvietlab/ketplus/pull/214) | Pro QML foundation | `feat/ui-stack-pro-foundation` | `feat/ui-stack-lite-models` |
+| [215](https://github.com/ketvietlab/ketplus/pull/215) | Pro sidebar | `feat/ui-stack-pro-sidebar` | `feat/ui-stack-pro-foundation` |
+| [216](https://github.com/ketvietlab/ketplus/pull/216) | Header / composer | `feat/ui-stack-pro-composer` | `feat/ui-stack-pro-sidebar` |
+| [218](https://github.com/ketvietlab/ketplus/pull/218) | Transcript | `feat/ui-stack-pro-transcript` | `feat/ui-stack-pro-composer` |
+| [219](https://github.com/ketvietlab/ketplus/pull/219) | Activity | `feat/ui-stack-pro-activity` | `feat/ui-stack-pro-transcript` |
+| [221](https://github.com/ketvietlab/ketplus/pull/221) | Runtime notices | `feat/ui-stack-pro-notices` | `feat/ui-stack-pro-activity` |
+| [222](https://github.com/ketvietlab/ketplus/pull/222) | Questions / approvals / tasks | `feat/ui-stack-pro-cards` | `feat/ui-stack-pro-notices` |
+| [224](https://github.com/ketvietlab/ketplus/pull/224) | Remove sidebar worktree rail | `feat/ui-stack-sidebar-cleanup` | `feat/ui-stack-pro-cards` |
+| [225](https://github.com/ketvietlab/ketplus/pull/225) | Overlays / compact window | `feat/ui-stack-pro-overlays` | `feat/ui-stack-sidebar-cleanup` |
+| [226](https://github.com/ketvietlab/ketplus/pull/226) | Worktrees / Connections | `feat/ui-stack-pro-workspaces` | `feat/ui-stack-pro-overlays` |
+| [227](https://github.com/ketvietlab/ketplus/pull/227) | Settings | `feat/ui-stack-pro-settings` | `feat/ui-stack-pro-workspaces` |
+| [229](https://github.com/ketvietlab/ketplus/pull/229) | Atlas workspace | `feat/ui-stack-pro-atlas` | `feat/ui-stack-pro-settings` |
+| [231](https://github.com/ketvietlab/ketplus/pull/231) | Shared font / theme cleanup | `feat/ui-stack-foundation-cleanup` | `feat/ui-stack-pro-atlas` |
+| [232](https://github.com/ketvietlab/ketplus/pull/232) | Application icons | `feat/ui-stack-brand-assets` | `feat/ui-stack-foundation-cleanup` |
+| This layer | Provider operation aliases / final checklist | `feat/ui-stack-completion-ledger` | `feat/ui-stack-brand-assets` |
 
-Behaviour dependencies (#120, #125, #126, #128, #130, #170) must be represented
-honestly: preserve real runtime state and actions, and record missing contracts
-instead of shipping mock success states. Do not redo already merged #128 work.
+The last layer renders `ScheduleWakeup` as a scheduled wake-up and
+`EnterPlanMode` as entering plan mode, with running/completed labels. This is
+provider-event presentation; it does not create or enforce conversation plans.
 
-## Stack and evidence
+## Technical evidence
 
-| Layer | Branch / base | PR | Implementation | Checks / limits |
-| --- | --- | --- | --- | --- |
-| Foundation | `feat/kit-zoom-foundation` → `integration` | #207 | Font defaults, kit zoom bridge, terminal/diagram tokens implemented; legacy per-surface adapters continue in later layers | Lite targets pass (14 in suite + 2 corrected expectations rechecked); Pro typography target builds; native/full Pro acceptance deferred |
+| Area | Verified evidence | Limits |
+| --- | --- | --- |
+| Foundation / Lite | All 16 Lite test targets pass after the final core changes and again after the icon exports. EmptyState regression covers title size/weight under light/dark, same-theme preview/cancel and 14→21→14 zoom. | No cross-platform native acceptance. |
+| Shared Pro theme | Five targets pass: Atlas workspace, desktop zoom, font contract, symbols, Settings integration. Actual shown-tooltip font is checked after zoom/theme changes. | Native WebView smoke remains opt-in/skipped. |
+| Lite models | Tests cover literal Git paths, unborn index, preservation of untracked files, creation/cancel and independent PTY sessions. Real grouped Source Control rendered offscreen. | No release/platform qualification. |
+| Sidebar | Focused checks cover 120 worktrees without sidebar rows, repository→conversation grouping, collapse/create, resizing, context actions and attention. Native and standalone QML use the same hierarchy. | Automatic tags and reviewer assignment need their behavior contracts. |
+| Composer / transcript | Focused tests cover IME/drafts, steering, model choice, streaming, links/copy, Markdown/code, images, journal dates and width/zoom. | No live provider quota used. |
+| Activity / notices / cards | Synthetic journal/runtime tests cover tool mapping, errors, live/replay receipts, multi-step/secret answers, duplicate-submit guards, task dismissal and a later running task. Final six selected Agent Workspace cases pass (eight including setup/cleanup). | A receipt is not fabricated when runtime evidence is missing. |
+| Overlays | Spotlight 17 pass with one helper-only skip; corrected popup and navigation checks pass. Compact-window geometry/draft and closable file details checks pass. | Desktop compact window is distinct from provider token compaction. |
+| Workspaces / Settings | Execution picker and worktree cases pass; Connections 10 pass with two opt-in Debug demo skips; four Settings targets and two usage cases pass across focused runs. | Relay pairing is implemented; this does not add SSH transport/setup. |
+| Atlas | Atlas suite and available workspace cases pass; library and QWidget chrome captures inspected. Back/hide/show keep the bound conversation/draft. | QWidget capture excludes embedded QQuick pixels; native WebView remains unverified. |
+| Application assets | Lite and Pro desktop builds pass. Approved SVGs match byte-for-byte; PNG inspected; six ICO dimensions and ICNS container lengths validated; exporter shell syntax passes. | No installed Dock/Finder/Windows/Linux verification. |
 
-Every subsequent PR targets the preceding stack branch and names its dependency.
-Do not request reviewers until all implementation layers are present. Preserve
-unfinished rows across turns. Clean linked worktrees only after their changes
-are pushed and after confirming no other conversation/process uses them.
+Offscreen capture mode uses a temporary preference store. Captures inspected
+include Lite welcome/status bar, Pro sidebar, Settings light/dark, and Atlas
+library/chrome. No installed application or daemon was replaced/restarted; no
+browser session or paid-provider test was used. `git diff --check` passes.
 
-Current layer: `feat/ui-stack-symbols` on `feat/kit-zoom-foundation`; replaces glyph rendering and migration-name adapters with Két Symbols. Symbol renderer checks: 4/4 pass; desktop-support and Atlas library targets compile. Old QML source URLs/resources are retained until the Pro kit cutover.
+## Open runtime dependencies — not completed by UI composition
 
-Symbol layer: PR #208, based on #207. Terminal layer: `feat/ui-stack-terminal`, based on `feat/ui-stack-symbols`; find controls and persistent interface zoom. Packaging/platform expansion stays deferred.
+| Remaining item | Evidence / constraint | Next work and owner |
+| --- | --- | --- |
+| #163 / #130 held-message release | The baseline only releases held messages with the next user turn. It has no authenticated, batch-scoped UI release operation with generation fencing/idempotency. The passive journal notice remains real. | Runtime implementation of #130 must supply the scoped action, then the UI layer binds/tests it. |
+| #163 Atlas result receipt | Catalog/detail actions consume real manifests, but there is no typed result receipt attributed to its producing conversation in the transcript projection. | Atlas/runtime implementation must publish the attributed result contract; UI then renders the receipt. |
+| #159 / #120 reviewer assignment | Existing composer/actions are preserved; an assignment/orchestration service is not supplied by this layer. | #120 implementation owns assignment/state; follow-up UI consumes it. |
+| #158 metadata / #170 | Tags and attention consume supplied metadata; automatic classification is not claimed. | Behavior issue supplies authoritative classification updates. |
+| #165 SSH setup | Existing Linux flow is authenticated outbound Relay. | A separate transport/setup implementation must precede SSH-specific UI behavior. |
 
-Terminal implementation: kit find field/actions and 75–200% persisted interface zoom; text size stays independent. Lite build and both terminal test targets pass. Native comparison and #147 packaging/platform work are not claimed complete.
+These rows keep the remaining scope visible; the entire UI epic is **not** marked
+complete and no issue is auto-closed. Existing merged #128 storage behavior was
+reused. Idle CPU qualification (#126), full native side-by-side comparisons,
+platform font checks, no-Homebrew bundle checks and installed icons belong to
+the explicitly deferred acceptance/packaging phase.
 
-Terminal layer: PR #209. Lite shell layer: `feat/ui-stack-lite-shell` on `feat/ui-stack-terminal`; activity rail, first-use welcome, optional editor breadcrumb above the viewport. Lite app and all 16 Lite test targets pass; offscreen startup succeeds. Native acceptance remains deferred.
+## Handoff and worktree cleanup
 
-Lite shell: PR #210 on #209. The next layer replaces pane/find controls, Quick Open with CommandPalette, Markdown mode switching with SegmentedControl, Settings navigation/theme cards/zoom/field rows/footer and core message dialogs with kit composition. It keeps real search, selection, draft/reset and document operations. Further Lite work: model-backed row recipes/Git decorations and mutations, Markdown recipe typography, remaining zoom geometry.
-
-Lite controls: PR #211. The model layer `feat/ui-stack-lite-models` adds virtualized recipe rows/Git decorations, inline creation with collision protection, serialized stage/unstage/commit-index commands, recipe Markdown/diff rendering and shared TerminalTab ownership for embedded multi-tab sessions. Tests cover literal paths, unborn index, untracked-file preservation, inline creation/cancel and independent PTY sessions. Native comparisons remain deferred.
-
-Model layer validation: all 16 Lite targets pass; Source Control rendered offscreen at 224 × 640 with real grouped snapshot data. No full native/theme/zoom acceptance or release work claimed.
-
-Lite models: PR #213 on #211. Pro foundation now links the offline Ket QML module, resolves profile typography without the old +2 bias, retains numeric zoom, draws QML symbols/tooltips with kit components and shares the gated animation clock. Runtime selected QML checks pass; font, zoom and Lite regression evidence is recorded in the PR.
-
-Pro foundation: PR #214 on #213. Pro sidebar layer migrates native and QML navigation/conversations, tag filtering, group collapse/create, update pills and authoritative journal-size warnings. It preserves context actions and blocking/async attention. Tags and awaiting-reply consume supplied metadata; automatic classification and reviewer orchestration remain separate behaviour dependencies. Review/native acceptance is still deferred.
-
-Sidebar validation: 16/16 Lite targets, Pro workspace/attention/zoom targets, three selected QML checks and four local-daemon storage cases pass. A 214 px offscreen capture verifies tag rows and warning layout. Integration exposed a Settings navigation callback holding a deleted QListWidgetItem; persistent model indices now fence that lifecycle, with a focused regression test. No native acceptance/review/release claimed.
-
-Sidebar: PR #215 on #214. Header/composer layer extracts the existing input and menus, uses kit recipes/buttons/search/ring/meters, aligns the placeholder with the caret and keeps one send/stop position. It retains draft, IME, attachment, steering and revisioned model configuration behavior; header tags filter the real sidebar. Thirteen selected Agent Workspace cases pass across the focused runs, plus the desktop zoom target; an offscreen light capture checked the header and empty composer. Reviewer assignment/orchestration (#120) is not claimed implemented. Full native acceptance/review remains deferred.
-
-Transcript layer on #216: recipe typography/bubbles/code, syntax highlighting,
-fixed gallery/large generated previews, kit close control and journal day dividers.
-Focused checks cover streaming, copy/link behavior, geometry, repeated formatting,
-numeric zoom, journal dates and Markdown/Mermaid. No provider quota or release work.
-
-Transcript: PR #218 on #216. Activity layer extracts header and changed-file
-composition so the main activity delegate is below 500 lines. Kit row/group/file
-recipes preserve on-demand detail loading, command copy/output, path actions,
-virtual group expansion and reader anchoring. Explicit tool names map to wait,
-monitor, wake, skill, tool search, stop, subagent, plan and web steps; private
-reasoning remains hidden under the existing contract. Focused interaction,
-light/dark detail, grouping and synthetic mapping checks pass.
-
-Activity: PR #219 on #218. Notices layer shares live/replay projection for provider,
-model, execution-context and fork/rename events, and adds one turn-end receipt.
-SDK cost is explicitly a cumulative session estimate, omitted when unavailable;
-unknown turn states never become success. Steers retain their label, reconnecting
-notices do not fail a turn, and existing trimmed-detail receipts remain visible.
-Queued state uses the actual session status; no unsupported queue mutation controls
-are fabricated. UI checks (14 cases), provider projection and daemon replay pass;
-two old last-row assertions now check both preserved final text and one receipt.
-
-Cards layer on #221: kit question/approval cards preserve multi-step answers,
-free text, secret input, one-click confirmation and drafts. Scope errors use the
-kit banner; background task rows retain real stop/output actions and locally
-dismiss completed receipts without deleting daemon history. Focused runtime
-checks pass, including dismissal followed by a new running task. Atlas results
-and the right details pane remain part of the Atlas layer; #163 is not complete.
-
-Cards: draft PR #222 on #221. Sidebar correction follows: standalone QML now
-uses repository → conversation, removing the inherited worktree rail and its
-filter/reveal logic. The native shell already groups conversations by repository.
-Six focused cases pass, including a 120-worktree catalog without sidebar rows,
-group collapse/create, resizing and context actions; the dark capture is inspected.
-
-Sidebar correction: draft PR #224 on #222. Overlays layer composes kit Quick
-search and QML context menus, adds the real Change worktree route and desktop
-compact-window presentation. The latter reuses the mounted conversation/draft;
-provider context-token compaction is a separate existing feature. Spotlight suite:
-17 pass, 1 helper-only skip; final popup-specific and editor navigation reruns pass.
-Four QML interaction cases and compact geometry/draft checks pass. Picker skinning
-continues with #165. No review, release or native acceptance started.
-
-Overlays additional checks: native sidebar composition and closable file details
-pass. Narrow compact header hides scope/actions per mock and keeps its expand
-button in bounds. The final popup-specific search/editor checks pass.
-
-Overlays: draft PR #225 on #224. Workspaces layer migrates worktree actions,
-status badges and create/select inputs to kit components; the paginated execution
-picker paints kit tree recipes without replacing its model or acknowledgment
-checks. Connections actions/inputs use the kit; palette and mono font resolve
-shared tokens/profile. Mock page/hero typography replaces Markdown-heading roles.
-
-Validation: execution picker 2/2 substantive cases pass; worktree listing/creation
-2/2 pass; Connections 10 pass including setup/cleanup, with two opt-in Debug demo
-cases skipped. Final typography/width cases pass. The implemented Linux connection
-flow is authenticated outbound Relay; a new SSH setup/transport is not supplied by
-this UI layer. Native acceptance, review, packaging and deployment remain deferred.
-
-Settings layer on #226 uses kit navigation/theme/accent/segmented/form controls,
-restores the shared staged Save/Reset footer and Follow system checkbox, preserves
-custom numeric zoom, and routes the sidebar storage warning to Storage without
-recreating an open draft. Browser/Computer/Providers/Archived/Updates and Claude
-credentials retain their behavior; usage popover buttons use the kit. The four
-Settings targets pass across focused runs; two Claude usage cases pass. Storage
-light/dark offscreen captures expose and then verify removal of duplicate list
-text beneath the kit navigation rows. No quota, native acceptance or review run.
-
-Settings: draft PR #227 on #226. Atlas layer replaces legacy library/panel actions,
-search and tab controls with kit controls, uses semantic colors/zoom for cards,
-shows actual manifest counts and docks AI Chat beside the unchanged WebView.
-Back routes to the bound conversation; hide/show preserves its state. Atlas suite
-passes; workspace cases pass across the initial run and corrected token-color
-assertions. Native WebView smoke remains explicitly skipped. Inspected library
-and QWidget chrome captures (the latter does not capture embedded QQuick pixels).
-
-Remaining #163 contract gaps: a transcript Atlas-result receipt tied to its
-producing conversation, and held-message release UI (#130), have no supplied
-runtime projection/action in this baseline. Existing Atlas catalog/detail actions
-are real; the stack does not fabricate validated-result or release-success rows.
-
-Foundation cleanup layer on #229 removes Inter fetch/resources and unused product
-Lucide SVGs/provider/motion wrapper, centralizes remaining semantic colors, and
-finishes Lite's kit status bar. Legacy icon names remain lookup adapters only.
-The global QWidget font rule is gone; application/QSS updates precede kit
-observers so theme/zoom cannot reset recipe title fonts. A regression exercises
-light/dark, preview/cancel and 14→21→14 zoom. Capture/benchmark mode uses temporary
-preferences. Focused builds/tests and the corrected Lite capture are recorded in
-the PR; native acceptance and installed-bundle checks remain deferred.
-
-Foundation cleanup verification: Lite 16/16 test targets and five focused Pro
-targets pass (Atlas workspace, desktop zoom, font contract, symbols, Settings
-integration). The native WebView test stays opt-in/skipped.
-
-Foundation cleanup: draft PR #231 on #229. The brand-assets layer copies the
-approved mock Két Symbol tile/bare marks, exports PNG/ICNS and six-size ICOs,
-removes the old mark PNGs, and selects the Pro vector mark by theme. Exact source
-hashes and reproducible export commands are in `assets/icons/README.md`.
-Lite 16/16 and two selected Agent Workspace cases pass; ICO PNG entries and ICNS
-container lengths are verified. Terminal remains macOS-only; Linux desktop
-entries and Windows Terminal packaging are still phase 7, not delivered here.
+Use the last draft PR's head to examine the complete stack; individual PRs have
+focused descriptions and validation. Review/merge has not started. After the last
+branch is pushed, remove the implementation worktree only if it is clean, has no
+unpushed commits and no other conversation/process uses it. Never remove the
+repository's main checkout. Any new changes after cleanup use a new worktree.
