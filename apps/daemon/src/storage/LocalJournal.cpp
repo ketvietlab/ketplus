@@ -152,10 +152,15 @@ bool LocalJournal::initialize() {
         QStringLiteral("CREATE INDEX IF NOT EXISTS session_deletion_cloud_pending ON "
                        "session_deletion_work(cloud_acked)"),
         QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS cloud_upload_progress ("
+            "scope TEXT NOT NULL, session_id TEXT NOT NULL, generation INTEGER NOT NULL, "
+            "cursor INTEGER NOT NULL, PRIMARY KEY(scope,session_id,generation))"),
+        QStringLiteral(
             "CREATE TABLE IF NOT EXISTS cloud_events ("
             "session_id TEXT NOT NULL, generation INTEGER NOT NULL, cursor INTEGER NOT NULL, "
             "event TEXT NOT NULL, created_at TEXT NOT NULL, "
             "projection_policy_version INTEGER NOT NULL DEFAULT 0, "
+            "upload_acked INTEGER NOT NULL DEFAULT 0, "
             "PRIMARY KEY(session_id, generation, cursor))"),
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS client_cursors ("
@@ -271,6 +276,8 @@ bool LocalJournal::migrateTranscriptSchema() {
         !ensureColumn(QStringLiteral("worktree_catalog"), QStringLiteral("repository_path"),
                       QStringLiteral("TEXT NOT NULL DEFAULT ''")) ||
         !ensureColumn(QStringLiteral("cloud_events"), QStringLiteral("projection_policy_version"),
+                      QStringLiteral("INTEGER NOT NULL DEFAULT 0")) ||
+        !ensureColumn(QStringLiteral("cloud_events"), QStringLiteral("upload_acked"),
                       QStringLiteral("INTEGER NOT NULL DEFAULT 0")) ||
         // -1 marks legacy rows whose bytes live only in payload (no chunk rows).
         !ensureColumn(QStringLiteral("large_event_payloads"), QStringLiteral("total_bytes"),
@@ -1366,78 +1373,6 @@ bool LocalJournal::writeCommandResult(const QString& messageId, const QJsonObjec
     }
     if (++commandResultsSincePrune_ >= 256 && !pruneRetention())
         qWarning("Journal retention pass failed: %s", qUtf8Printable(error_));
-    return true;
-}
-
-QJsonObject LocalJournal::cloudEvent(const QString& sessionId, const qint64 generation,
-                                     const qint64 cursor) const {
-    QSqlQuery query(database_);
-    query.prepare(QStringLiteral(
-        "SELECT event FROM cloud_events WHERE session_id = ? AND generation = ? AND cursor = ?"));
-    query.addBindValue(sessionId);
-    query.addBindValue(generation);
-    query.addBindValue(cursor);
-    if (!query.exec()) {
-        setError(query.lastError().text());
-        return {};
-    }
-    return query.next() ? parseObject(query.value(0).toString()) : QJsonObject{};
-}
-
-int LocalJournal::cloudEventProjectionPolicyVersion(const QString& sessionId,
-                                                    const qint64 generation,
-                                                    const qint64 cursor) const {
-    QSqlQuery query(database_);
-    query.prepare(QStringLiteral("SELECT projection_policy_version FROM cloud_events "
-                                 "WHERE session_id = ? AND generation = ? AND cursor = ?"));
-    query.addBindValue(sessionId);
-    query.addBindValue(generation);
-    query.addBindValue(cursor);
-    if (!query.exec()) {
-        setError(query.lastError().text());
-        return -1;
-    }
-    return query.next() ? query.value(0).toInt() : -1;
-}
-
-bool LocalJournal::storeCloudEvent(const QString& sessionId, const qint64 generation,
-                                   const qint64 cursor, const QJsonObject& event,
-                                   const int projectionPolicyVersion) {
-    QSqlQuery query(database_);
-    query.prepare(QStringLiteral(
-        "INSERT OR IGNORE INTO cloud_events(session_id, generation, cursor, event, created_at, "
-        "projection_policy_version) VALUES(?, ?, ?, ?, ?, ?)"));
-    query.addBindValue(sessionId);
-    query.addBindValue(generation);
-    query.addBindValue(cursor);
-    query.addBindValue(compact(event));
-    query.addBindValue(protocol::timestamp());
-    query.addBindValue(projectionPolicyVersion);
-    if (!query.exec()) {
-        setError(query.lastError().text());
-        return false;
-    }
-    const QJsonObject stored = cloudEvent(sessionId, generation, cursor);
-    if (stored != event || cloudEventProjectionPolicyVersion(sessionId, generation, cursor) !=
-                               projectionPolicyVersion) {
-        setError(QStringLiteral("Cloud event cache conflicts with the local journal."));
-        return false;
-    }
-    return true;
-}
-
-bool LocalJournal::removeCloudEventsThrough(const QString& sessionId, const qint64 generation,
-                                            const qint64 cursor) {
-    QSqlQuery query(database_);
-    query.prepare(QStringLiteral(
-        "DELETE FROM cloud_events WHERE session_id = ? AND generation = ? AND cursor <= ?"));
-    query.addBindValue(sessionId);
-    query.addBindValue(generation);
-    query.addBindValue(cursor);
-    if (!query.exec()) {
-        setError(query.lastError().text());
-        return false;
-    }
     return true;
 }
 
