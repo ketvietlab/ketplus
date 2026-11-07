@@ -734,7 +734,9 @@ void AgentSessionManager::submitPrompt(const QString& worktreePath, const QStrin
                 "bundle. Every manifest "
                 "must contain a non-empty title plus `screens` and `flows` arrays. Do not modify "
                 "an existing Atlas unless the user explicitly asks. Keep all writes inside the "
-                "active worktree, and verify the generated manifest before finishing. Do not ask "
+                "active worktree, and verify the generated manifest before finishing. Finish with "
+                "an explicit Markdown link to each resulting `<slug>.ketatlas/atlas.json`. Do not "
+                "ask "
                 "the user to choose filenames or implementation details when a safe, reasonable "
                 "choice can be inferred. When KetPlus lists the ket-atlas default skill, follow "
                 "it.%1\nUser request:\n%2")

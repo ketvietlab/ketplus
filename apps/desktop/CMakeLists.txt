@@ -103,6 +103,7 @@ add_library(ketplus_desktop_shell STATIC
     src/app/TranscriptFileType.cpp
     src/app/TranscriptFileType.h
     src/app/MainWindowAtlas.cpp
+    src/app/MainWindowAtlasResults.cpp
     src/app/MainWindowDefinition.cpp
     src/app/MainWindowDocuments.cpp
     src/app/MainWindowLayout.cpp

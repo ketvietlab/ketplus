@@ -250,6 +250,12 @@ class AgentWorkspaceView final : public QWidget {
     QVariantMap backgroundTaskOutput() const { return backgroundTaskOutput_; }
     Q_PROPERTY(QVariantMap heldMessageStates READ heldMessageStates NOTIFY heldMessageStatesChanged)
     QVariantMap heldMessageStates() const { return heldMessageStates_; }
+    using AtlasResultInspector = std::function<QVariantMap(const QString&, const QString&)>;
+    void setAtlasResultInspector(AtlasResultInspector inspector) {
+        atlasResultInspector_ = std::move(inspector);
+    }
+    Q_INVOKABLE QVariantMap inspectAtlasResult(const QString& link) const;
+    Q_INVOKABLE void openAtlasResult(const QString& link, bool inBrowser);
     Q_INVOKABLE void requestHeldMessageState(const QString& messageId);
     Q_INVOKABLE void releaseHeldMessage(const QString& messageId);
     void acceptHeldMessageState(const QString& messageId, const QVariantMap& value);
@@ -485,6 +491,8 @@ class AgentWorkspaceView final : public QWidget {
     void claudeAccountUsageChanged();
     void backgroundTasksChanged();
     void backgroundTaskOutputChanged();
+    void atlasResultsChanged();
+    void atlasResultOpenRequested(const QString& path, const QString& root, bool inBrowser);
     void heldMessageStatesChanged();
     void heldMessageActionRequested(const QString& messageId, bool release);
     void backgroundTaskStopRequested(const QString& taskId);
@@ -611,6 +619,7 @@ class AgentWorkspaceView final : public QWidget {
     QVariantMap claudeAccountUsage_;
     UsageRequester claudeUsageRequester_;
     QVariantList backgroundTasks_;
+    AtlasResultInspector atlasResultInspector_;
     QVariantMap heldMessageStates_;
     QString heldMessageScope_;
     QVariantMap backgroundTaskOutput_;

@@ -148,6 +148,18 @@ Qt application shell
   renderer only when the bundle has `atlas.renderer.json`, tracks running viewers
   across worktrees, and stops them on a browser close or KétPlus Stop command.
   Edit opens the existing in-app Atlas Builder in the current worktree.
+- Completed assistant messages can show compact Atlas result cards from explicit
+  local Markdown links to `*.ketatlas/atlas.json`. The original message remains
+  the receipt source for live and replay; code blocks, raw HTML, remote URLs and
+  filesystem discovery do not create receipts. Parsing is bounded to 128 K characters and
+  eight distinct links per message. This attributes a link to the conversation,
+  not proof that the conversation created or validated the bundle.
+  The desktop composition reads manifest metadata through `AtlasIndex` (4 MiB
+  maximum), fenced to the current canonical worktree, and routes explicit Edit /
+  Open actions to the existing builder / managed viewer. Both actions recheck
+  availability. Relative links after an execution-context change fail closed
+  until historical source roots are available; the Atlas list remains usable.
+  Missing or invalid manifests show an unavailable state, never a validated badge.
 - Atlas creation is composed by the proprietary desktop shell because it crosses
   the AI and Atlas module boundaries. Atlas tab add/close controls use theme-colored
   Lucide SVGs; the add button occupies reserved corner space, and close controls

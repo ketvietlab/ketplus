@@ -120,7 +120,10 @@ AtlasDescriptor parseManifest(const QFileInfo& info, const QString& root) {
     QFile file(info.absoluteFilePath());
     if (!file.open(QIODevice::ReadOnly))
         return {};
-    const auto object = QJsonDocument::fromJson(file.readAll()).object();
+    const auto bytes = file.read(AtlasIndex::maximumManifestBytes + 1);
+    if (bytes.size() > AtlasIndex::maximumManifestBytes)
+        return {};
+    const auto object = QJsonDocument::fromJson(bytes).object();
     if (object.value(QStringLiteral("version")).toInt() != 1 ||
         !object.value(QStringLiteral("title")).isString() ||
         !object.value(QStringLiteral("screens")).isArray() ||
@@ -162,6 +165,17 @@ AtlasDescriptor parseManifest(const QFileInfo& info, const QString& root) {
     return descriptor;
 }
 } // namespace
+
+AtlasDescriptor AtlasIndex::readManifest(const QString& path, const QString& root) {
+    const auto canonicalRoot = QFileInfo(root).canonicalFilePath();
+    const QFileInfo info(path);
+    const auto canonicalPath = info.canonicalFilePath();
+    if (canonicalRoot.isEmpty() || !info.isFile() || info.isSymLink() ||
+        !canonicalPath.startsWith(canonicalRoot + QDir::separator()) ||
+        !canonicalPath.endsWith(".ketatlas/atlas.json") || info.size() > maximumManifestBytes)
+        return {};
+    return parseManifest(QFileInfo(canonicalPath), canonicalRoot);
+}
 
 QVector<AtlasDescriptor> AtlasIndex::visibleAtlases(const QVector<AtlasDescriptor>& manifests) {
     QVector<AtlasDescriptor> result;
