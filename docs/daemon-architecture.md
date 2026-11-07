@@ -665,6 +665,12 @@ complete, fallible catalog read: query or row-fetch errors defer queued cleanup
 and reject new local deletion without removing history. A partially read catalog
 cannot prove that a thread is unreferenced. Work remains durable for a later pass
 or restart after repair; see [ADR 0056](decisions/0056-fail-closed-provider-ownership-reads.md).
+Cleanup additionally requires supported ownership metadata: an object keyed by
+nonempty provider IDs, with object entries containing only string `thread_id`
+and/or string-array `retired_thread_ids`. Malformed or unknown fields defer cleanup
+without normalizing or deleting their stored values. Both the local source and
+retained catalog are checked; see
+[ADR 0057](decisions/0057-preserve-unsupported-provider-ownership.md).
 Cursor has no supported
 thread-deletion API in this integration: an unshared Cursor thread currently rejects
 permanent deletion with `provider_cleanup_unsupported` and retains its conversation.

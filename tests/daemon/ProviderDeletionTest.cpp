@@ -12,6 +12,18 @@
 #include <QtTest>
 
 using namespace ketplus::daemon;
+namespace {
+QList<QPair<QString, QString>> unsupportedOwnershipMetadata() {
+    return {{"broken-json", "not-json"},
+            {"root-array", "[]"},
+            {"provider-string", R"({"codex":"unknown"})"},
+            {"thread-number", R"({"codex":{"thread_id":42}})"},
+            {"retired-string", R"({"codex":{"retired_thread_ids":"shared-thread"}})"},
+            {"retired-number", R"({"codex":{"retired_thread_ids":[42]}})"},
+            {"unknown-fields", R"({"codex":{"future_refs":["shared-thread"]}})"},
+            {"empty-provider", R"({"":{"thread_id":"shared-thread"}})"}};
+}
+} // namespace
 class ProviderDeletionTest final : public QObject {
     Q_OBJECT
   private slots:
@@ -280,12 +292,16 @@ class ProviderDeletionTest final : public QObject {
                     .isEmpty());
     }
     void queuedCleanupDefersWhenOwnershipCannotBeRead_data() {
-        QTest::addColumn<bool>("partial");
-        QTest::newRow("query-error") << false;
-        QTest::newRow("partial-row-error") << true;
+        QTest::addColumn<QString>("fault");
+        QTest::addColumn<QString>("malformed");
+        QTest::newRow("query-error") << "query" << QString{};
+        QTest::newRow("partial-row-error") << "partial" << QString{};
+        for (const auto& entry : unsupportedOwnershipMetadata())
+            QTest::newRow(qPrintable(entry.first)) << "metadata" << entry.second;
     }
     void queuedCleanupDefersWhenOwnershipCannotBeRead() {
-        QFETCH(bool, partial);
+        QFETCH(QString, fault);
+        QFETCH(QString, malformed);
         QTemporaryDir dir;
         const auto path = dir.filePath("journal.sqlite");
         const auto executable = dir.filePath("codex");
@@ -304,10 +320,14 @@ class ProviderDeletionTest final : public QObject {
         QVERIFY(journal.deleteSession(
             "deleted", 1, "op", 1, &error,
             {QJsonObject{{"provider", "codex"}, {"thread_id", "shared-thread"}}}));
+        const QString historical = R"({"codex":{"retired_thread_ids":["shared-thread"]}})";
         session.id = "z-retained";
+        session.threadId = "current-thread";
+        session.providerThreads = historical;
         QVERIFY(journal.upsertSession(session));
         session.id = "a-readable";
         session.threadId = "unrelated-thread";
+        session.providerThreads = "{}";
         QVERIFY(journal.upsertSession(session));
         CodexAdapter adapter(executable);
         bool warm = false;
@@ -325,7 +345,7 @@ class ProviderDeletionTest final : public QObject {
         QSqlQuery q(db);
         {
             SessionHost host(&journal, &adapter);
-            if (partial) {
+            if (fault == "partial") {
                 QVERIFY(q.exec("PRAGMA table_info(sessions)"));
                 QStringList columns;
                 while (q.next()) {
@@ -340,9 +360,13 @@ class ProviderDeletionTest final : public QObject {
                 QVERIFY(q.exec("ALTER TABLE sessions RENAME TO held_sessions"));
                 QVERIFY(q.exec("CREATE VIEW sessions AS SELECT " + columns.join(',') +
                                " FROM held_sessions"));
-            } else {
+            } else if (fault == "query") {
                 QVERIFY(q.exec(
                     "ALTER TABLE sessions RENAME COLUMN provider_threads TO hidden_threads"));
+            } else {
+                q.prepare("UPDATE sessions SET provider_threads=? WHERE id='z-retained'");
+                q.addBindValue(malformed);
+                QVERIFY(q.exec());
             }
             // Run the queued maintenance, then a provider barrier. Any earlier
             // thread/delete must finish before that barrier response arrives.
@@ -364,12 +388,16 @@ class ProviderDeletionTest final : public QObject {
                          .toArray()
                          .size(),
                      1);
-            if (partial) {
+            if (fault == "partial") {
                 QVERIFY(q.exec("DROP VIEW sessions"));
                 QVERIFY(q.exec("ALTER TABLE held_sessions RENAME TO sessions"));
-            } else {
+            } else if (fault == "query") {
                 QVERIFY(q.exec(
                     "ALTER TABLE sessions RENAME COLUMN hidden_threads TO provider_threads"));
+            } else {
+                q.prepare("UPDATE sessions SET provider_threads=? WHERE id='z-retained'");
+                q.addBindValue(historical);
+                QVERIFY(q.exec());
             }
         }
         SessionHost restarted(&journal, &adapter);
@@ -383,6 +411,47 @@ class ProviderDeletionTest final : public QObject {
         QVERIFY(calls.open(QIODevice::ReadOnly));
         QVERIFY(!calls.readAll().contains("delete:shared-thread"));
         QCOMPARE(journal.sessions().size(), 2);
+    }
+    void localDeletionPreservesUnsupportedOwnershipMetadata_data() {
+        QTest::addColumn<QString>("malformed");
+        QTest::addColumn<bool>("corruptSource");
+        for (const auto& entry : unsupportedOwnershipMetadata()) {
+            QTest::newRow(qPrintable("source-" + entry.first)) << entry.second << true;
+            QTest::newRow(qPrintable("retained-" + entry.first)) << entry.second << false;
+        }
+    }
+    void localDeletionPreservesUnsupportedOwnershipMetadata() {
+        QFETCH(QString, malformed);
+        QFETCH(bool, corruptSource);
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite"));
+        StoredSession session;
+        session.id = "first";
+        session.generation = 1;
+        session.adapter = "codex";
+        session.threadId = "shared-thread";
+        session.worktreePath = dir.path();
+        session.state = "ready";
+        session.providerThreads = corruptSource ? malformed : "{}";
+        QVERIFY(journal.upsertSession(session));
+        session.id = "second";
+        session.threadId = "unrelated-current-thread";
+        session.providerThreads = corruptSource ? "{}" : malformed;
+        QVERIFY(journal.upsertSession(session));
+        CodexAdapter adapter("/missing-provider");
+        SessionHost host(&journal, &adapter);
+        const auto result = host.handleCommand({{"protocol_version", 0},
+                                                {"message_id", "delete-with-unsupported-ownership"},
+                                                {"message_type", "session.delete"},
+                                                {"session_id", "first"},
+                                                {"session_generation", 1},
+                                                {"payload", QJsonObject{}}},
+                                               "desktop");
+        QVERIFY2(!result.value("ok").toBool(), QJsonDocument(result).toJson().constData());
+        QCOMPARE(journal.sessions().size(), 2);
+        QCOMPARE(journal.sessions().at(corruptSource ? 0 : 1).providerThreads, malformed);
+        QVERIFY(journal.sessionTombstone("first", 1).sessionId.isEmpty());
+        QVERIFY(journal.deletionWork().isEmpty());
     }
     void sharedThreadsRemainOwnedByTheOtherConversation() {
         QTemporaryDir directory;
