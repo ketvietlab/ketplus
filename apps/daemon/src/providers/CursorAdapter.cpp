@@ -3,6 +3,7 @@
 #include "BrowserToolLaunch.h"
 #include "ComputerAgentInstructions.h"
 #include "providers/CursorToolItem.h"
+#include "providers/ProviderResponseId.h"
 #include "providers/compat/ProviderVersionProbe.h"
 #include "runtime/ResponseGuidance.h"
 
@@ -1580,7 +1581,10 @@ void CursorAdapter::consumeLine(const QByteArray& line) {
     }
     if (!object.contains(QStringLiteral("id")))
         return;
-    const quint64 id = object.value(QStringLiteral("id")).toVariant().toULongLong();
+    const auto responseId = providerResponseId(object.value(QStringLiteral("id")));
+    if (!responseId)
+        return;
+    const quint64 id = *responseId;
     const auto callback = pending_.take(id);
     const QString requestMethod = pendingMethods_.take(id);
     if (!callback)

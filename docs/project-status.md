@@ -5,6 +5,10 @@ milestone changes state.
 
 ## Implemented
 
+- Provider responses preserve numeric call identity (ADR 0074): strings, booleans
+  and fractional ids cannot consume pending calls in Codex, Claude or Cursor,
+  including Codex oversized responses. Valid replies still complete exactly once.
+
 - Existing media blobs are validated before dedup returns a reference (ADR 0066):
   exact bounded bytes, regular nonsymlink files and owner-only permissions.
   Invalid entries remain intact for repair; reference durability remains open.
