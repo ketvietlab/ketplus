@@ -114,6 +114,13 @@ Streamed text reaches the journal coalesced: consecutive `assistant.delta` or
 item, and SessionHost teardown journal the held text first, so provider order
 is kept. One event per provider chunk (a word or less) had every reader, above
 all a phone paging the relay, read tens of thousands of events per conversation.
+If append fails, SessionHost retains the prefix and later provider events in a
+bounded FIFO, retries after one second, and yields between deferred entries.
+The queue caps are 128 events / 40 MiB per session and 512 / 80 MiB per host
+(encoded payload plus bookkeeping); rejected commands are not deferred. Deletion
+releases the queue. This is volatile recovery, not a durable crash spool, and
+excess/unsupported events are rejected; see ADR 0062 for the coalescer exception
+and exact limits.
 The journal transactionally maintains a durable compact replay projection. It
 omits command-output deltas that the transcript does not consume and removes
 assistant deltas once a completed item supersedes them; deltas for an incomplete

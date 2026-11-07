@@ -223,7 +223,7 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
 | H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 and cloud #237 merged; transaction recovery #241 merged; cancellation #240 merged; explicit session-delete bounds still open | Audit explicit session deletion and tombstone enumeration / #2739 |
 | H1.2/H1.4–H1.7 | Not started | No claim that #128 backend acceptance is complete | Follow H1.1; prioritize a confirmed safety finding / #2739 |
-| H1.3 | In progress | Delete recovery #241 and ownership guards #242/#243 merged; append write checks under test | Finish append review, then multirow/counter failure cases / #2739 |
+| H1.3 | In progress | Delete/ownership #241–243, append #244–245 and fork #246–247 merged; caller stream recovery under test | Finish bounded retry/full Pro/review, then multirow failure audit / #2739 |
 | H2–H3 | Not started | Open daemon/provider review issues mapped | Execute after storage, or independent audit while waiting review / #2739 |
 | H4.1–H4.3 | Not started | Existing remote fixes are not a full #85 closure | Audit local transport/privacy with fixtures / #2739 |
 | H4.4 | Waiting, external | Relay code merged; no deployment/readiness evidence supplied | Relay release operator, unassigned; #2739 tracks gate |
@@ -610,6 +610,26 @@ remain explicitly open.
 - [x] Eight negative/fractional/TEXT/BLOB counter probes fail original production.
   Integer-only source projection refuses them before assigning fork metadata.
 - [x] Combined fork suite passes 32/32 after integration of #246.
-- [ ] Finish final affected matrix, review and merge for ADR 0061.
+- [x] #247 final head `3d609825`: affected Release/headless 13/13 (84.11 s),
+  fork 32/32, protocol 97/97; independent 4/4 (20.90 s), 163 checks. Merged
+  `52b32485dc179d71d2dbe2300579b0da230e4bb2`. Build removed; source cleanup tracked separately.
 - [ ] Continue caller-level append/flush failure handling, broader source reads,
   startup/backfill compatibility and process interruption. H1.3 remains open.
+
+### H1.3/H2.3 ordered stream recovery after append failure
+
+- [x] Reproduce prefix loss/order failure at timer, item and lifecycle boundaries
+  on original production (three failing cases).
+- [x] Preserve order through bounded per-session/host queues, defer only provider
+  events and non-acceptance notifications; reject failed command acceptance.
+- [x] A new oversized-event regression exposed a permanently blocked retry head;
+  admission now matches journal representability before enqueuing.
+- [x] Focused Release/headless 17/17 (42.88 s): recovery, no ghost prompt,
+  per-session/global count and byte caps, deletion budget release, subscriber
+  deletion, shutdown, real busy writer and normal coalescing.
+- [x] Full Pro caught a constructor regression: interrupted-session completion
+  ran before runtime registration. Register the session before the append;
+  rerun the existing restart regression and full Pro before accepting the fix.
+- [ ] Full Pro matrix at final head and independent review; merge and cleanup.
+- [ ] Continue multirow replay/activity mutation and caller command atomicity
+  audits. Volatile recovery does not finish crash/startup/backfill acceptance.

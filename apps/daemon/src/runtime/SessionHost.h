@@ -6,9 +6,11 @@
 #include "storage/LocalJournal.h"
 #include "storage/McpMediaStore.h"
 
+#include <QDeadlineTimer>
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QList>
 #include <QObject>
 #include <QSet>
 #include <QString>
@@ -131,6 +133,16 @@ class SessionHost final : public QObject, private AgentHostPort {
         // another event, another item, the size cap or the flush timer journals it.
         QString pendingDeltaType;
         QJsonObject pendingDelta;
+        struct DeferredJournalEvent final {
+            QString type;
+            QJsonObject payload;
+            qsizetype bytes{0};
+        };
+        QList<DeferredJournalEvent> deferredJournal;
+        qsizetype deferredJournalBytes{0};
+        QDeadlineTimer journalRetryAt{0};
+        QString lastJournalError;
+        bool journalBufferFullReported{false};
     };
 
     [[nodiscard]] QJsonObject listSessions() const;
@@ -270,6 +282,10 @@ class SessionHost final : public QObject, private AgentHostPort {
                       QString* error = nullptr);
     bool flushDelta(Session& session, QString* error = nullptr);
     void flushDeltas();
+    bool deferJournalEvent(Session& session, const QString& type, const QJsonObject& payload,
+                           QString* error);
+    qsizetype deferredJournalBytes_{0};
+    qsizetype deferredJournalCount_{0};
     QTimer deltaFlush_;
     [[nodiscard]] Session* sessionForThread(const QString& threadId);
     void noteBrowserToolItem(Session& session, const QJsonObject& item);
