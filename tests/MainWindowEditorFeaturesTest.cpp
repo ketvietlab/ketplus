@@ -9,6 +9,7 @@
 
 #include <ScintillaMessages.h>
 
+#include <QAbstractButton>
 #include <QAction>
 #include <QApplication>
 #include <QDir>
@@ -231,8 +232,7 @@ void MainWindowEditorFeaturesTest::splitsViewsAndSharesTheDocument() {
     QVERIFY(tabEditor->document().isModified());
 
     closeSplit->trigger();
-    QTRY_VERIFY(window.findChild<ketplus::EditorWidget*>(QStringLiteral("splitEditor")) ==
-                nullptr);
+    QTRY_VERIFY(window.findChild<ketplus::EditorWidget*>(QStringLiteral("splitEditor")) == nullptr);
     QVERIFY(!closeSplit->isEnabled());
     QCOMPARE(tabEditor->text(), QByteArray("int a;\nx"));
 
@@ -241,12 +241,10 @@ void MainWindowEditorFeaturesTest::splitsViewsAndSharesTheDocument() {
     auto* splitTabs = window.findChild<QTabBar*>(QStringLiteral("splitTabBar"));
     QVERIFY(splitTabs && splitTabs->isVisible());
     QCOMPARE(splitTabs->count(), 1);
-    auto* closeButton =
-        qobject_cast<QToolButton*>(splitTabs->tabButton(0, QTabBar::RightSide));
+    auto* closeButton = qobject_cast<QToolButton*>(splitTabs->tabButton(0, QTabBar::RightSide));
     QVERIFY(closeButton);
     closeButton->click();
-    QTRY_VERIFY(window.findChild<ketplus::EditorWidget*>(QStringLiteral("splitEditor")) ==
-                nullptr);
+    QTRY_VERIFY(window.findChild<ketplus::EditorWidget*>(QStringLiteral("splitEditor")) == nullptr);
     QVERIFY(!closeSplit->isEnabled());
 }
 
@@ -322,7 +320,8 @@ void MainWindowEditorFeaturesTest::searchesAndReplacesAcrossFiles() {
     QTimer confirm;
     connect(&confirm, &QTimer::timeout, &window, [] {
         for (auto* widget : QApplication::topLevelWidgets()) {
-            if (auto* box = qobject_cast<QMessageBox*>(widget); box != nullptr && box->isVisible()) {
+            if (auto* box = qobject_cast<QMessageBox*>(widget);
+                box != nullptr && box->isVisible()) {
                 box->button(QMessageBox::Yes)->click();
             }
         }
@@ -345,7 +344,8 @@ void MainWindowEditorFeaturesTest::searchesAndReplacesAcrossFiles() {
     QCOMPARE(readFile(closedPath), QByteArray("omega beta\r\n"));
     QTRY_VERIFY(!panel->isSearching());
 
-    auto* explorerButton = window.findChild<QToolButton*>(QStringLiteral("explorerActivityButton"));
+    auto* explorerButton =
+        window.findChild<QAbstractButton*>(QStringLiteral("explorerActivityButton"));
     QVERIFY(explorerButton);
     explorerButton->click();
     QVERIFY(!panel->isVisible());

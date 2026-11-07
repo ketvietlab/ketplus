@@ -535,6 +535,14 @@ class DesktopDaemonClientTest final : public QObject {
                            });
         QTRY_VERIFY(storageState.value("ok").toBool());
         QCOMPARE(storageState.value("policy").toObject().value("full_detail_days").toInt(), 30);
+        QJsonObject sizeState;
+        storageBridge.call("daemon/storageSize/read", {},
+                           [&](const QJsonObject& result, const QString& error) {
+                               QVERIFY(error.isEmpty());
+                               sizeState = result;
+                           });
+        QTRY_VERIFY(sizeState.value("ok").toBool());
+        QVERIFY(sizeState.value("status").toObject().value("warning").isBool());
         const auto expected = storageState.value("revision");
         storageState = {};
         storageBridge.call("daemon/storageRetention/apply",

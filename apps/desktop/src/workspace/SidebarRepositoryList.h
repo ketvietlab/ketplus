@@ -6,7 +6,9 @@
 #include <QVector>
 #include <QWidget>
 
-class QToolButton;
+namespace ket {
+class ConversationRow;
+}
 class QVBoxLayout;
 
 namespace ketplus {
@@ -39,6 +41,7 @@ class SidebarRepositoryList final : public QWidget {
     explicit SidebarRepositoryList(QWidget* parent = nullptr);
 
     void applyZoom(int basePixels);
+    void setTagFilter(const QString& tag);
     void setRepositories(const QVector<SidebarRepository>& repositories);
 
   signals:
@@ -65,13 +68,14 @@ class SidebarRepositoryList final : public QWidget {
     QVBoxLayout* layout_{nullptr};
     QVector<SidebarRepository> repositories_;
     QStringList structure_;
-    QVector<QToolButton*> rows_;
+    QVector<ket::ConversationRow*> rows_;
     QVector<QWidget*> headers_;
     QVector<QWidget*> groups_;
     QSet<QString> collapsedPaths_;
     QSet<QString> showAllPaths_;
     // Completion is new until the user opens that conversation during this application session.
     QSet<QString> seenConversationIds_;
+    QString tagFilter_;
     bool built_{false};
 };
 

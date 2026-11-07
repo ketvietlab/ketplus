@@ -226,6 +226,7 @@ class MainWindow final : public QMainWindow {
     void openSearchMatch(const QString& path, int line, int column, int length);
     [[nodiscard]] EditorWidget* openEditorForPath(const QString& path) const;
     void showSettings();
+    void setupSidebarStorage();
     void showUpdateSettings();
     // Opens Sparkle's check (and any pending update); without a configured feed, Settings →
     // Updates.

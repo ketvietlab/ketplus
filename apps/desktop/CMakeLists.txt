@@ -21,6 +21,7 @@ add_library(ketplus_desktop_support STATIC
     src/app/SpotlightDialog.cpp
     src/app/SpotlightDialog.h
     src/workspace/ActivityBar.cpp
+    src/workspace/ActivityBarAppearance.cpp
     src/workspace/ActivityBar.h
     src/workspace/SymbolIcons.h
     src/workspace/SidebarRepositoryList.cpp
@@ -95,6 +96,7 @@ add_library(ketplus_desktop_shell STATIC
     src/app/MainWindow.cpp
     src/app/MainWindow.h
     src/app/MainWindowActions.cpp
+    src/app/MainWindowStorage.cpp
     src/app/MainWindowAgent.cpp
     src/app/MainWindowTranscriptLinks.cpp
     src/app/TranscriptFileType.cpp
