@@ -524,3 +524,8 @@ and exact copied values. Empty history and existing/self/deleted destinations ha
 separate controls. A gated fake Codex fork response exercises a destination claimed
 by another start command while the provider call is pending. Run the fork target
 and affected protocol/activity/transcript/lifecycle/worktree/retention targets.
+
+ADR 0061 `SessionForkTest::journalForkPreservesUnsupportedSourceCounters` covers
+negative, fractional, TEXT and BLOB cursor/turn values. It checks exact source
+preservation, no destination, released transaction, fixture repair, retry and
+reopen. Run the combined fork suite and its affected backend matrix.

@@ -343,6 +343,8 @@ and the session cursor as one unit; ignored single-row writes fail the transacti
 before mutation; unsupported/exhausted state is preserved (ADR 0059).
 Fork checks complete history copy counts and a still-unused destination in its
 transaction, so a delayed provider response cannot replace another session (ADR 0060).
+Fork also refuses unsupported source counter types/signs before copying metadata
+(ADR 0061).
 Desktop's existing presentation model is retained behind a protocol
 translation facade; raw Codex JSON-RPC is not exposed over IPC.
 

@@ -599,6 +599,17 @@ remain explicitly open.
   an incorrect successful fork. Initial noncanonical-path harness was corrected;
   that earlier passing mutation is not acceptance evidence.
 - [x] Final focused fork suite 24/24 after the canonical race fixture correction.
-- [ ] Finish final affected matrix, review and merge.
+- [x] #246 final head `3762051d`: affected Release/headless 13/13 (68.68 s),
+  fork 24/24, protocol 97/97; independent 5/5 (36.34 s). Merged
+  `4d56c73c26df706e805ecbd83b266bbc80495db4`; cleanup remains separately tracked.
 - [ ] Continue fork source counter/read validation, whole-history copy bounds,
   multirow replay/activity mutations and process interruption. H1.3 stays open.
+
+### H1.3 preserve unsupported fork-source counters
+
+- [x] Eight negative/fractional/TEXT/BLOB counter probes fail original production.
+  Integer-only source projection refuses them before assigning fork metadata.
+- [x] Combined fork suite passes 32/32 after integration of #246.
+- [ ] Finish final affected matrix, review and merge for ADR 0061.
+- [ ] Continue caller-level append/flush failure handling, broader source reads,
+  startup/backfill compatibility and process interruption. H1.3 remains open.
