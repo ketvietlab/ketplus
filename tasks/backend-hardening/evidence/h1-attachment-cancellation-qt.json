@@ -47,5 +47,16 @@
     "Column-byte budget does not bound SQLite page/WAL overhead",
     "Unsupported or oversized records require separate recovery",
     "Explicit session deletion remains open"
-  ]
+  ],
+  "review_recovery": {
+    "finding": "unsupported TEXT/BLOB revision materialized before type guard",
+    "red_returned_bytes_per_case": 67108864,
+    "cases": [
+      "32 rows, 2 MiB TEXT revision each",
+      "32 rows, 2 MiB BLOB revision each"
+    ],
+    "fix": "project integer revision or NULL; preserve candidate LIMIT before revision filtering",
+    "focused_passed": 43,
+    "full_affected_matrix": "pending final head"
+  }
 }

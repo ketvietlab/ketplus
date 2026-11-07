@@ -495,3 +495,10 @@ lines. Final head `4e654c1afe25774ba48ffa99643f2e8c65f593b7` passed full Pro
 96/96 (321.03 s) and independent exact-head review. #237 merged at
 `0f6f39e05a007d889064760ffc64b6f1673851ac`. Generated build removed; linked-source
 cleanup remains separately tracked.
+
+Independent review of #240 found a read-time bound gap: unsupported revision
+TEXT/BLOB values were projected verbatim before candidate filtering. Both new
+actual-query regressions reproduced 64 MiB of returned metadata (32 malformed
+rows) while deleting no chunks. Projection now emits only integer or NULL;
+revision filtering still follows LIMIT. Final affected matrix and exact-head
+re-review are required before merge.

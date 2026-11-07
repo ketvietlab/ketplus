@@ -172,6 +172,46 @@ class StagedAttachmentRetentionTest : public QObject {
         QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachment_chunks"), 0);
         QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachments"), 0);
     }
+    void cancellationDoesNotHydrateUnsupportedRevision_data() {
+        QTest::addColumn<QString>("value");
+        QTest::newRow("large-text") << "printf('%*s',2097152,'x')";
+        QTest::newRow("large-blob") << "zeroblob(2097152)";
+    }
+
+    void cancellationDoesNotHydrateUnsupportedRevision() {
+        QFETCH(QString, value);
+        Fixture f;
+        QVERIFY(f.seed(1, 32, 16, false));
+        QVERIFY(f.exec("UPDATE staged_attachment_chunks SET revision=" + value));
+        QSqlQuery query(f.db);
+        QVERIFY(query.prepare(detail::attachmentCancelChunksQuery()));
+        query.addBindValue("s-1");
+        query.addBindValue(1);
+        query.addBindValue("a");
+        QVERIFY(query.exec());
+        qint64 returnedBytes = 0;
+        int rows = 0;
+        while (query.next()) {
+            QCOMPARE(query.value(1).toLongLong(), qint64(-1));
+            QVERIFY(query.value(2).isNull());
+            returnedBytes += query.value(2).toByteArray().size();
+            ++rows;
+        }
+        query.finish();
+        QCOMPARE(rows, 32);
+        QString error;
+        QElapsedTimer timer;
+        timer.start();
+        QVERIFY2(f.journal.cancelAttachment("s-1", 1, "a", 1, &error), qPrintable(error));
+        qInfo() << "Unsupported revision result bytes" << returnedBytes << "production cancel ms"
+                << timer.elapsed();
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachment_chunks"), 32);
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachments WHERE status='expiring'"), 1);
+        QVERIFY2(
+            returnedBytes <= rows * 8,
+            "Unsupported revision is returned verbatim and accumulated before byte/type guards");
+    }
+
     void ignoredCancellationChunkRollsBack() {
         Fixture f;
         QVERIFY(f.seed(1, 2, 16, false));

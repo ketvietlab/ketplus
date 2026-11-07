@@ -35,7 +35,8 @@ QString attachmentCancelChunksQuery() {
            "AND typeof(attachment_id)='text' AND typeof(digest_sha256)='text' "
            "AND typeof(generation)='integer' AND typeof(revision)='integer' "
            "AND typeof(chunk_index)='integer' THEN length(payload)+octet_length(session_id)+"
-           "octet_length(attachment_id)+octet_length(digest_sha256)+24 ELSE -1 END,revision "
+           "octet_length(attachment_id)+octet_length(digest_sha256)+24 ELSE -1 END,"
+           "CASE WHEN typeof(revision)='integer' THEN revision ELSE NULL END "
            "FROM staged_attachment_chunks WHERE session_id=? AND generation=? AND attachment_id=? "
            "ORDER BY chunk_index LIMIT 128";
 }

@@ -19,7 +19,11 @@ ordered by chunk index. Revision is checked after this limit: revision is not a
 key of that index, and filtering it inside SQL could scan an arbitrarily large
 other-revision backlog before reaching 128 matching rows. Tests inspect the actual
 prepared production query and exercise 100,000 other-revision candidates.
-Chunk content is never hydrated to measure its length. Unsupported or individually
+Chunk content is never hydrated to measure its length. Revision is projected as
+an integer or NULL; unsupported TEXT/BLOB revisions are never materialized before
+the type guard. The non-STRICT SQLite column can contain such malformed values,
+so limiting rows alone would still allow large read-time memory amplification.
+Unsupported or individually
 oversized chunks are retained; supported requested-revision chunks are removed
 only within the remaining byte budget. The budget covers conservatively measured
 column bytes, not SQLite page/WAL overhead.
