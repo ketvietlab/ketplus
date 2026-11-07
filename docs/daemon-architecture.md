@@ -371,6 +371,11 @@ capacity can remain above its limit pending recovery. Valid ownership retains th
 existing eviction order. This guard does not establish reference-write durability
 or a cross-file transaction; see ADR 0065.
 
+Media deduplication checks the existing file type, size, bounded contents and
+owner-only permissions before publishing a blob reference (ADR 0066). Unsupported
+entries are preserved for repair. The store rejects symlinks at its requested
+directory and blob paths; ancestor races and reference durability remain separate.
+
 Codex `fileChange` items are journaled with a worktree-relative `worktreePath`
 on each change, or `outsideWorktree: true` when the file is not beneath the
 worktree, so a phone can open the changed file. Codex account rate limits

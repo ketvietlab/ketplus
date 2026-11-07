@@ -223,9 +223,9 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
 | H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 and cloud #237 merged; transaction recovery #241 merged; cancellation #240 merged; explicit session-delete bounds still open | Audit explicit session deletion and tombstone enumeration / #2739 |
 | H1.2 | In progress | Startup commit failure #250 merged; other migration/read/crash cases remain | Continue remaining failure-path audit / #2739 |
-| H1.4 | In progress | Media ownership cleanup audit underway; no whole-media acceptance claim | Complete confirmed reference-catalog findings / #2739 |
+| H1.4 | In progress | Cleanup #251 merged; dedup validation under verification; reference-write false success reproduced | Finish dedup gate, then reference persistence / #2739 |
 | H1.5–H1.7 | Not started | No claim that #128 backend acceptance is complete | Continue storage acceptance / #2739 |
-| H1.3 | In progress | Delete/ownership #241–243, append #244–245 and fork #246–247 merged; stream recovery #248 merged; replay/activity #249 merged; startup #250 under verification | Finish startup gate, then caller atomicity/read failures / #2739 |
+| H1.3 | In progress | Delete/ownership #241–243, append #244–245 and fork #246–247 merged; stream recovery #248 merged; replay/activity #249 merged; startup #250 merged | Continue caller atomicity/read failures / #2739 |
 | H2–H3 | Partially started | H2.3 volatile retry subset #248 merged; full lifecycle and provider audits remain | Continue remaining daemon/provider checks / #2739 |
 | H4.1–H4.3 | Not started | Existing remote fixes are not a full #85 closure | Audit local transport/privacy with fixtures / #2739 |
 | H4.4 | Waiting, external | Relay code merged; no deployment/readiness evidence supplied | Relay release operator, unassigned; #2739 tracks gate |
@@ -681,8 +681,24 @@ remain explicitly open.
   per file, 16 MiB total and 4,096 entries. Unknown ownership preserves data.
 - [x] Focused temporary-store set 41/41, including repaired shared references,
   existing cleanup controls and absent/empty-catalog compatibility (ADR 0065).
-- [ ] Integrate current journal fixes, run the affected matrix, exact-head review,
-  merge and cleanup.
+- [x] #251 head `8da7ffd1`: affected 14/14 (102.51 s), independent 3/3
+  (78.28 s; protocol 151, lifecycle 42 pass/1 skip, fork 32) and permission probes
+  8/8. Merged `b77df2c523c4c148b2aba779f8aa90e2c2ccddbc`; cleanup tracked separately.
 - [ ] Continue media write/copy durability, storage-path races and total media-file
   enumeration/decode bounds. Over-budget catalogs need a separate recovery path;
   this change does not stop new writes or complete H1.4/H1.5.
+
+
+### H1.4 validate content-addressed media reuse
+
+- [x] Original source fails 18 of 20 attachment/inline-item cases: unsupported
+  stored entries are reported as success, or broad file permissions survive reuse.
+  The two valid-file controls pass.
+- [x] Require regular nonsymlink blobs, matching bounded bytes and owner-only
+  permissions before returning a reference; reject linked/non-directory roots.
+  Preserve unsupported entries for repair (ADR 0066).
+- [x] Focused 26/26; initial head `51d1a49c` affected 14/14 (101.57 s).
+- [ ] Final integration matrix after #251, independent exact-head review, merge
+  and cleanup.
+- [ ] Continue reference writes/copies, ancestor/path races, decode and enumeration
+  bounds. This package does not complete H1.4 or change retention defaults.

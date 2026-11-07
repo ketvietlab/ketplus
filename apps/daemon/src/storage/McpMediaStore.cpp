@@ -78,9 +78,13 @@ QJsonObject omitted(const QString& type, const QString& reason) {
 }
 
 bool ensureOwnerDirectory(const QString& path) {
+    const QFileInfo existing(path);
+    if (existing.isSymLink() || (existing.exists() && !existing.isDir()))
+        return false;
     if (!QDir().mkpath(path))
         return false;
-    return QFile::setPermissions(path, ownerDirectory);
+    const QFileInfo created(path);
+    return created.isDir() && !created.isSymLink() && QFile::setPermissions(path, ownerDirectory);
 }
 
 constexpr qint64 maximumReferenceFileBytes = 4 * 1024 * 1024;
@@ -296,9 +300,18 @@ QJsonObject McpMediaStore::write(const QByteArray& bytes, const QString& extensi
         QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
     const QString path = QDir(directory_).filePath(hex + QLatin1Char('.') + extension);
     bool ok = ensureOwnerDirectory(directory_);
-    if (ok && QFileInfo::exists(path)) {
-        QFile existing(path); // dedupe hit: refresh the LRU timestamp
-        if (existing.open(QIODevice::ReadOnly))
+    const QFileInfo info(path);
+    if (info.isSymLink())
+        return {};
+    if (ok && info.exists()) {
+        // A content-addressed name alone does not prove that the stored bytes
+        // still match. Preserve unsupported entries for repair, never overwrite.
+        if (!info.isFile() || info.size() != bytes.size())
+            return {};
+        QFile existing(path);
+        ok = existing.open(QIODevice::ReadOnly) && existing.read(maximumImageBytes + 1) == bytes &&
+             existing.error() == QFileDevice::NoError && existing.setPermissions(ownerFile);
+        if (ok) // LRU refresh is best effort; content and privacy are mandatory.
             existing.setFileTime(QDateTime::currentDateTime(), QFileDevice::FileModificationTime);
     } else if (ok) {
         QSaveFile file(path);
