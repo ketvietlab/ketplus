@@ -222,9 +222,11 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | --- | --- | --- | --- |
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
 | H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 and cloud #237 merged; transaction recovery #241 merged; cancellation #240 merged; explicit session-delete bounds still open | Audit explicit session deletion and tombstone enumeration / #2739 |
-| H1.2/H1.4–H1.7 | Not started | No claim that #128 backend acceptance is complete | Follow H1.1; prioritize a confirmed safety finding / #2739 |
-| H1.3 | In progress | Delete/ownership #241–243, append #244–245 and fork #246–247 merged; stream recovery #248 merged; replay/activity #249 awaiting rebased gate | Finish replay/activity review, then startup failure and caller atomicity / #2739 |
-| H2–H3 | Not started | Open daemon/provider review issues mapped | Execute after storage, or independent audit while waiting review / #2739 |
+| H1.2 | In progress | Startup commit failure #250 under integration verification; other migration/read/crash cases remain | Finish startup gate, then remaining failure-path audit / #2739 |
+| H1.4 | In progress | Media ownership cleanup audit underway; no whole-media acceptance claim | Complete confirmed reference-catalog findings / #2739 |
+| H1.5–H1.7 | Not started | No claim that #128 backend acceptance is complete | Continue storage acceptance / #2739 |
+| H1.3 | In progress | Delete/ownership #241–243, append #244–245 and fork #246–247 merged; stream recovery #248 merged; replay/activity #249 merged; startup #250 under verification | Finish startup gate, then caller atomicity/read failures / #2739 |
+| H2–H3 | Partially started | H2.3 volatile retry subset #248 merged; full lifecycle and provider audits remain | Continue remaining daemon/provider checks / #2739 |
 | H4.1–H4.3 | Not started | Existing remote fixes are not a full #85 closure | Audit local transport/privacy with fixtures / #2739 |
 | H4.4 | Waiting, external | Relay code merged; no deployment/readiness evidence supplied | Relay release operator, unassigned; #2739 tracks gate |
 | H5–H6 | Not started | Nonvisual subsets explicitly scoped | Audit after earlier safety work / #2739 |
@@ -649,7 +651,20 @@ remain explicitly open.
 - [x] Focused append 47/47 and activity 10/10 pass (ADR 0063).
 - [x] #249 initial head `85e5d619`: affected 13/13 (123.00 s), independent
   4/4 (65.22 s; protocol 111, activity 10, transcript 28, retention 124).
-- [ ] Rebase onto merged #248, rerun affected matrix and exact-head delta review;
-  merge and cleanup remain separate gates.
+- [x] #249 final head `4525aa8c`: rebased affected 13/13 (90.35 s),
+  independent delta review PASS. Merged `1d5f2cbc1ae94a08da606faeed0809bd787df5de`;
+  cleanup remains separately tracked.
 - [ ] H1.1/H1.2 still cover very large running turns and index construction;
   H1.3 retains higher-level command atomicity and crash recovery work.
+
+### H1.2/H1.3 release a failed startup write transaction
+
+- [x] Deferred commit failure reproduces an activity backfill write lock retained
+  while the failed journal object remains alive; turn/replay controls already pass.
+- [x] Preserve the commit diagnostic and roll back activity initialization before
+  returning failure. Focused temporary-journal startup set passes 5/5 (ADR 0064).
+- [x] #250 initial head `874956a4`: affected 13/13 (107.99 s), independent
+  3/3 (14.65 s; protocol 100, activity 9, transcript 28).
+- [ ] Rebase onto #249, rerun the affected matrix, delta review, merge and cleanup.
+- [ ] Continue mid-fetch failures, unknown formats, low-space/process interruption
+  and large migration bounds. This package does not finish startup acceptance.

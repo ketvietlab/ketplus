@@ -114,7 +114,9 @@ bool LocalJournal::initializeActivityGroups() {
         }
     }
     if (!database_.commit()) {
-        setError(database_.lastError().text());
+        const QString commitError = database_.lastError().text();
+        database_.rollback();
+        setError(commitError);
         return false;
     }
     return true;
