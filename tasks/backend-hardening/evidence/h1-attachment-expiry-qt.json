@@ -65,5 +65,23 @@
       "lifecycle_pass": 28,
       "lifecycle_live_skip": 1
     }
+  },
+  "cancellation_review_fix": {
+    "before_failed_cases": 5,
+    "final_staging_passed": 32,
+    "regressions": [
+      "retiring mixed revisions",
+      "current mixed revisions",
+      "stale expected revision",
+      "ignored manifest delete",
+      "ignored retirement marker update",
+      "commit failure rollback and retry"
+    ],
+    "affected_production_targets_passed": 4,
+    "limits": [
+      "final full/review gates pending",
+      "explicit current-upload cancellation remains synchronous",
+      "downgrade compatibility remains a separate gate"
+    ]
   }
 }

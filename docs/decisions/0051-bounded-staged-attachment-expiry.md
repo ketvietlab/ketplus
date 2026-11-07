@@ -51,14 +51,27 @@ defers with a one-time warning. Unsupported/oversized rows remain retained and
 do not starve other candidate identities; a retained chunk keeps its retired
 identity reserved. Recovery of such data remains a separate hardening item.
 
+Cancellation also preserves the identity boundary. Cancelling an already retiring
+upload succeeds logically without removing its marker or doing another bulk chunk
+delete. A stale expected revision leaves the current parent and all its chunks
+untouched. For a current upload, cancellation removes the requested revision's
+chunks; if any other revision remains, it retires the manifest instead of removing
+it. Only an identity with no chunks can be released. Ignored manifest writes or a
+failed commit roll back, including releasing the failed transaction for retry.
+The 1-MiB maintenance budget does not cover synchronous explicit cancellation of
+a current upload; remaining explicit-delete bounds stay in the hardening plan.
+Older cancellation code does not enforce this mixed-revision fence, so partial
+retirement must be drained or recovered before a downgrade; rollback acceptance
+remains a migration/release gate, not a claim of this focused change.
+
 Attachment operations move from the oversized LocalJournal translation unit to
-their owning file; maintenance is a separate file. This does not change explicit
-cancel/delete, media decoding/materialization, quota limits or provider cleanup.
-Those paths remain separate audits. No UI implementation, provider calls, live
+their owning file; maintenance is a separate file. Media decoding/materialization,
+quota limits and provider cleanup remain separate audits. No UI implementation, provider calls, live
 journal mutation, installation or deployment is part of this change.
 
 The focused Qt suite covers backlog work, invalid-input side effects, current and
 unknown parents, revision/generation isolation, byte-limited retirement/reopen/ID
-reuse, unsupported chunks, actual prepared query plans, failure rollback, busy
+reuse, cancellation during retirement, stale cancellation, unsupported chunks,
+actual prepared query plans, failure rollback, busy
 deferral and capability absence. Mutations remove the identity fence or increase
 the byte budget; the retirement regression must fail for both.

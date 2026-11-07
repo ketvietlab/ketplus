@@ -445,7 +445,9 @@ until every old chunk is removed; reads/commit/new begin cannot adopt that retir
 upload. Begin/read/commit/chunk operations check the 24-hour eligibility directly,
 so an expired ID beyond the sweep window cannot remain usable. Draft quotas count
 only usable manifests, while expired identities remain reserved until cleanup.
-Current and unknown-format parents protect their chunks. Deletions,
+Current and unknown-format parents protect their chunks. Cancellation retains a
+retiring identity and cannot touch a newer manifest revision; remaining mixed
+revisions keep the retirement marker until bounded cleanup finishes. Deletions,
 retirement markers and durable rowid cursors commit together; busy work defers.
 See [ADR 0051](decisions/0051-bounded-staged-attachment-expiry.md) for limits and retry behavior.
 

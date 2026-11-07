@@ -1,6 +1,7 @@
 #include "protocol/DaemonProtocol.h"
 #include "storage/LocalJournal.h"
 #include <QCryptographicHash>
+#include <QScopeGuard>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QVariant>
@@ -208,26 +209,78 @@ bool LocalJournal::commitAttachment(const QString& sessionId, const qint64 gener
 bool LocalJournal::cancelAttachment(const QString& sessionId, const qint64 generation,
                                     const QString& attachmentId, const qint64 expectedRevision,
                                     QString* error) {
-    if (!database_.transaction())
+    const auto fail = [&](const QString& message) {
+        setError(message);
+        if (error)
+            *error = message;
         return false;
-    for (const QString& table :
-         {QStringLiteral("staged_attachment_chunks"), QStringLiteral("staged_attachments")}) {
-        QSqlQuery query(database_);
-        query.prepare(QStringLiteral("DELETE FROM %1 WHERE session_id=? AND generation=? AND "
-                                     "attachment_id=? AND revision=?")
-                          .arg(table));
-        query.addBindValue(sessionId);
-        query.addBindValue(generation);
-        query.addBindValue(attachmentId);
-        query.addBindValue(expectedRevision);
-        if (!query.exec()) {
+    };
+    if (!database_.transaction())
+        return fail(database_.lastError().text());
+    bool committed = false;
+    const auto rollback = qScopeGuard([&] {
+        if (!committed)
             database_.rollback();
-            if (error)
-                *error = query.lastError().text();
-            return false;
-        }
-    }
-    return database_.commit();
+    });
+    const auto commit = [&] {
+        if (!database_.commit())
+            return fail(database_.lastError().text());
+        committed = true;
+        return true;
+    };
+    QSqlQuery query(database_);
+    query.prepare("SELECT status FROM staged_attachments WHERE session_id=? AND generation=? "
+                  "AND attachment_id=? AND revision=?");
+    query.addBindValue(sessionId);
+    query.addBindValue(generation);
+    query.addBindValue(attachmentId);
+    query.addBindValue(expectedRevision);
+    if (!query.exec())
+        return fail(query.lastError().text());
+    const bool current = query.next();
+    if (query.lastError().isValid())
+        return fail(query.lastError().text());
+    const bool retiring = current && query.value(0).toString() == "expiring";
+    query.finish();
+    // A stale cancel cannot touch chunks protected by a newer parent. A retiring
+    // upload is already cancelled logically; leave its bounded GC and ID fence intact.
+    if (!current || retiring)
+        return commit();
+    query.prepare("DELETE FROM staged_attachment_chunks WHERE session_id=? AND generation=? "
+                  "AND attachment_id=? AND revision=?");
+    query.addBindValue(sessionId);
+    query.addBindValue(generation);
+    query.addBindValue(attachmentId);
+    query.addBindValue(expectedRevision);
+    if (!query.exec())
+        return fail(query.lastError().text());
+    query.finish();
+    query.prepare("SELECT 1 FROM staged_attachment_chunks WHERE session_id=? AND generation=? "
+                  "AND attachment_id=? LIMIT 1");
+    query.addBindValue(sessionId);
+    query.addBindValue(generation);
+    query.addBindValue(attachmentId);
+    if (!query.exec())
+        return fail(query.lastError().text());
+    const bool remaining = query.next();
+    if (query.lastError().isValid())
+        return fail(query.lastError().text());
+    query.finish();
+    // Mixed revisions (or a deferred chunk deletion) must not release the identity.
+    // The existing bounded sweeper will retire every remaining revision later.
+    query.prepare((remaining ? QString("UPDATE staged_attachments SET status='expiring' ")
+                             : QString("DELETE FROM staged_attachments ")) +
+                  "WHERE session_id=? AND generation=? AND attachment_id=? AND revision=?");
+    query.addBindValue(sessionId);
+    query.addBindValue(generation);
+    query.addBindValue(attachmentId);
+    query.addBindValue(expectedRevision);
+    if (!query.exec())
+        return fail(query.lastError().text());
+    if (query.numRowsAffected() != 1)
+        return fail("Attachment cancellation did not preserve or release its identity.");
+    query.finish();
+    return commit();
 }
 
 StagedAttachment LocalJournal::attachment(const QString& sessionId, const qint64 generation,

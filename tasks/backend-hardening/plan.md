@@ -202,7 +202,7 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | Item | State | Evidence / remaining work | Next action / owner |
 | --- | --- | --- | --- |
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
-| H1.1 | In progress | Global GC #220, ACK #223 and metadata #228 merged with exact-head gates; staged expiry 20/20 focused, full/review pending | Finish staged expiry gates; audit cloud/deletion / #2739 |
+| H1.1 | In progress | Global GC #220, ACK #223 and metadata #228 merged with exact-head gates; staged expiry 32/32 focused, cancel P2 fix awaiting final gates | Finish staged expiry gates; audit cloud/deletion / #2739 |
 | H1.2–H1.7 | Not started | No claim that #128 backend acceptance is complete | Follow H1.1, prioritize a confirmed safety finding / #2739 |
 | H2–H3 | Not started | Open daemon/provider review issues mapped | Execute after storage, or independent audit while waiting review / #2739 |
 | H4.1–H4.3 | Not started | Existing remote fixes are not a full #85 closure | Audit local transport/privacy with fixtures / #2739 |
@@ -364,3 +364,17 @@ eligibility checks and usable-only quota counting now pass focused 4/4 targets:
 staging 26/26, protocol 43/43, cloud privacy 60/60, lifecycle 28 pass/1 live skip.
 The final full suite and independent review must run at the revised head; the
 older 95/95 is not carried forward as final-head evidence.
+
+
+Independent review of staged expiry found a P2: cancellation could remove a
+retirement marker while other chunk revisions remained, then a new begin reused
+that identity and encountered stale chunks. Five regressions reproduced the
+retiring/current mixed-revision cases, stale cancellation, ignored manifest
+removal and a failed commit that left the transaction open. Cancellation now
+preserves retiring identities, checks the current revision, retains a marker
+when other chunks remain and rolls back failed finalization/commit. Staging
+32/32 passes (including ignored marker update); affected production matrix 4/4
+passes. Both preceding staging heads passed full Pro 95/95, but the cancellation
+fix requires its own final full/review gates. Explicit current-upload cancellation
+work bounds and downgrade of mixed-revision retirement remain separate H1.1/H1.2
+acceptance; no release/rollback claim is inferred.

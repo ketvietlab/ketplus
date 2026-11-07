@@ -141,6 +141,94 @@ class StagedAttachmentRetentionTest : public QObject {
                                           QString(64, '0'), &error));
         QVERIFY(f.journal.attachment("s-1", 1, "a").bytes.isEmpty());
     }
+    void cancellationKeepsMixedRevisionIdentityReserved_data() {
+        QTest::addColumn<bool>("expired");
+        QTest::newRow("already-retiring") << true;
+        QTest::newRow("current-with-other-revision") << false;
+    }
+    void cancellationKeepsMixedRevisionIdentityReserved() {
+        QFETCH(bool, expired);
+        Fixture f;
+        QVERIFY(f.seed(1, 64, 32768, expired));
+        QVERIFY(f.exec("UPDATE staged_attachment_chunks SET revision=99"));
+        if (expired)
+            QVERIFY(f.journal.purgeExpiredAttachments());
+        const auto before = f.scalar("SELECT count(*) FROM staged_attachment_chunks");
+        QString error;
+        QVERIFY(f.journal.cancelAttachment("s-1", 1, "a", 1, &error));
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachment_chunks"), before);
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachments WHERE status='expiring'"), 1);
+        const auto hash = [](const QByteArray& bytes) {
+            return QString::fromLatin1(
+                QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
+        };
+        QVERIFY(!f.journal.beginAttachment("s-1", 1, "a", 0, "new", "text/plain", 64, 64,
+                                           hash(QByteArray(64, 'N')), &error));
+        QCOMPARE(error, QString("attachment_conflict"));
+        QVERIFY(f.scalar("SELECT count(*) FROM staged_attachment_chunks") > 0);
+        for (int i = 0; i < 4; ++i)
+            QVERIFY(f.journal.purgeExpiredAttachments());
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachment_chunks"), 0);
+        QVERIFY(f.journal.beginAttachment("s-1", 1, "a", 0, "new", "text/plain", 64, 64,
+                                          hash(QByteArray(64, 'N')), &error));
+        QVERIFY(f.journal.appendAttachmentChunk("s-1", 1, "a", 1, 63, "N", hash("N"), &error));
+    }
+    void staleCancellationDoesNotTouchChunksUnderAnotherRevision() {
+        Fixture f;
+        QVERIFY(f.seed(1, 1, 16, false));
+        QVERIFY(f.exec("UPDATE staged_attachments SET revision=2"));
+        QString error;
+        QVERIFY(f.journal.cancelAttachment("s-1", 1, "a", 1, &error));
+        QCOMPARE(f.scalar("SELECT revision FROM staged_attachments"), 2);
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachment_chunks"), 1);
+    }
+    void ignoredCancellationManifestDeleteRollsBackChunks_data() {
+        QTest::addColumn<bool>("mixed");
+        QTest::newRow("manifest-delete") << false;
+        QTest::newRow("retirement-marker") << true;
+    }
+    void ignoredCancellationManifestDeleteRollsBackChunks() {
+        QFETCH(bool, mixed);
+        Fixture f;
+        QVERIFY(f.seed(1, 2, 16, false));
+        if (mixed)
+            QVERIFY(f.exec("UPDATE staged_attachment_chunks SET revision=99 WHERE chunk_index=1"));
+        QVERIFY(f.exec(QString("CREATE TRIGGER ignore_cancel BEFORE %1 ON staged_attachments BEGIN "
+                               "SELECT RAISE(IGNORE); END")
+                           .arg(mixed ? "UPDATE" : "DELETE")));
+        QString error;
+        QVERIFY(!f.journal.cancelAttachment("s-1", 1, "a", 1, &error));
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachments"), 1);
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachment_chunks"), 2);
+        QVERIFY(f.exec("DROP TRIGGER ignore_cancel"));
+        QVERIFY(f.journal.cancelAttachment("s-1", 1, "a", 1, &error));
+        if (mixed) {
+            QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachments WHERE status='expiring'"),
+                     1);
+            QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachment_chunks"), 1);
+            QVERIFY(f.journal.purgeExpiredAttachments());
+        }
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachments"), 0);
+    }
+    void cancellationCommitFailureRollsBackAndReleasesTransaction() {
+        Fixture f;
+        QVERIFY(f.seed(1, 2, 16, false));
+        QVERIFY(f.exec("CREATE TABLE cancel_parent(id INTEGER PRIMARY KEY)"));
+        QVERIFY(f.exec("CREATE TABLE cancel_child(id INTEGER REFERENCES cancel_parent(id) "
+                       "DEFERRABLE INITIALLY DEFERRED)"));
+        QVERIFY(f.exec("CREATE TRIGGER fail_cancel AFTER DELETE ON staged_attachments BEGIN INSERT "
+                       "INTO cancel_child VALUES(1); END"));
+        QString error;
+        QVERIFY(!f.journal.cancelAttachment("s-1", 1, "a", 1, &error));
+        QSqlQuery q(f.connection());
+        QVERIFY(q.exec("BEGIN"));
+        QVERIFY(q.exec("ROLLBACK"));
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachments"), 1);
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachment_chunks"), 2);
+        QCOMPARE(f.scalar("SELECT count(*) FROM cancel_child"), 0);
+        QVERIFY(f.exec("DROP TRIGGER fail_cancel"));
+        QVERIFY(f.journal.cancelAttachment("s-1", 1, "a", 1, &error));
+    }
     void expiryIsEnforcedBeforeTheSweepReachesAnIdentity_data() {
         QTest::addColumn<QString>("operation");
         for (const auto& operation :
