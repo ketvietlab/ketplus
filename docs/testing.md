@@ -486,3 +486,16 @@ Forever/off, running/unacknowledged/question/latest-twenty guards, complete expi
 sweeps before recent detail, and existing free-page priority. Agent-token denial
 and disconnected-request tests include both storage API families. Shared headers
 require full Pro build/CTest. No installed journal or live provider is used.
+
+The usage-retention suite also exercises bounded large-tool manifests: real
+fragment storage, the shared byte budget, latest-twenty and ACK/session guards,
+corrupt/oversize chunks, identity/digest mismatches, unknown manifests, shared
+references, stale snapshot fencing and rollback at blob deletion/projection
+revision. These synthetic fixtures do not validate image preview conversion or
+retention of payloads above 1 MiB (ADR 0047).
+
+The large-payload GC regression also reopens a journal missing the transfer
+expression index with 300,000 retained same-item updates. It verifies index
+creation, correlated production-predicate query-plan selection with bound parameters,
+25 exact GC lookups and retained-row preservation;
+timings separate startup index construction from the idle pass.
