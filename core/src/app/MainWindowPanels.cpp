@@ -95,6 +95,8 @@ TerminalPanel* MainWindow::ensureTerminal() {
 }
 
 void MainWindow::setTerminalVisible(const bool visible) {
+    if (visible)
+        showEditorSurface();
     if (visible) {
         auto* terminal = ensureTerminal();
         terminal->show();
@@ -165,6 +167,8 @@ ExplorerPanel* MainWindow::ensureExplorer() {
 }
 
 void MainWindow::setExplorerVisible(const bool visible) {
+    if (visible)
+        showEditorSurface();
     if (visible) {
         auto* explorer = ensureExplorer();
         if (gitChanges_ != nullptr) {
@@ -217,6 +221,8 @@ GitChangesPanel* MainWindow::ensureGitChanges() {
 }
 
 void MainWindow::setSourceControlVisible(const bool visible) {
+    if (visible)
+        showEditorSurface();
     if (visible) {
         auto* changes = ensureGitChanges();
         if (explorer_ != nullptr) {

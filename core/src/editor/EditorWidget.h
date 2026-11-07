@@ -19,6 +19,10 @@ class QEvent;
 class QMouseEvent;
 class QPoint;
 
+namespace ket {
+class Breadcrumb;
+}
+
 namespace ketplus {
 
 class MarkdownModeController;
@@ -77,6 +81,7 @@ class EditorWidget final : public ScintillaEditBase {
     void markActivated(std::uint64_t sequence) noexcept;
     void markSaved();
     void configureLexerForPath(const QString& filePath);
+    void setBreadcrumbPath(const QString& path);
     // Forces a language by syntax name; an empty name returns to detection by file name.
     void setSyntaxOverride(const QString& syntaxName);
     [[nodiscard]] QString syntaxOverride() const;
@@ -172,6 +177,7 @@ class EditorWidget final : public ScintillaEditBase {
     void contextMenuRequested(const QPoint& position);
 
   protected:
+    void resizeEvent(QResizeEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
     // Watches the viewport for pointer moves so the fold margin can follow the mouse.
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -242,6 +248,8 @@ class EditorWidget final : public ScintillaEditBase {
     bool internalMutation_{false};
     bool foldingEnabled_{false};
     bool searchScopeActive_{false};
+    void updateBreadcrumbGeometry();
+    ket::Breadcrumb* breadcrumb_{nullptr};
     bool selectionMatchesActive_{false};
     sptr_t linkStart_{-1};
     sptr_t linkEnd_{-1};
