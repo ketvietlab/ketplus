@@ -35,6 +35,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void transcriptAtlasLayout();
     void describedCommandsReadAboveTheirCommand();
     void readRowTitleOpensTheFileAtItsLine();
+    void retainedCommandNoticeRemainsVisible();
     void transcriptRendererInteractionMatrix();
     void transcriptRendererInteractionMatrix_data();
     void transcriptArtifactSafetyAndExport();

@@ -873,3 +873,43 @@ void AgentWorkspaceViewTest::readRowTitleOpensTheFileAtItsLine() {
     QTRY_VERIFY(row->property("expanded").toBool());
     QCOMPARE(opened.count(), 1);
 }
+
+void AgentWorkspaceViewTest::retainedCommandNoticeRemainsVisible() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 700);
+    view.show();
+    const QString output =
+        QStringLiteral("[Output trimmed · original size 60000 bytes · history retention]\n"
+                       "first lines\n[Middle output removed]\nlast lines");
+    auto command =
+        ketplus::agent_message::activityMessage(QJsonObject{{"id", "retained"},
+                                                            {"type", "commandExecution"},
+                                                            {"command", "synthetic-command"},
+                                                            {"status", "completed"},
+                                                            {"aggregatedOutput", output},
+                                                            {"exitCode", 0}},
+                                                true);
+    command.insert("messageKey", "retained");
+    view.resetMessages(
+        {QVariantMap{{"messageKey", "user"}, {"kind", "user"}, {"body", "History"}}, command},
+        "retained-command");
+    QTRY_COMPARE(view.messageModel()->count(), 2);
+    auto* root = view.quickView()->rootObject();
+    QVERIFY(root);
+    QQuickItem* row = nullptr;
+    QTRY_VERIFY((row = findVisualItem(root, "transcriptActivityRow")));
+    QVERIFY(QMetaObject::invokeMethod(row, "toggleDetails"));
+    QQuickItem* rendered = nullptr;
+    QTRY_VERIFY((rendered = findVisualItem(row, "transcriptCommandOutput")) &&
+                rendered->isVisible());
+    const auto noticeIsRendered = [&] {
+        for (auto* child : rendered->findChildren<QQuickItem*>())
+            if (child->property("text").toString() == output && child->isVisible() &&
+                child->width() > 0 && child->height() > 0)
+                return true;
+        return false;
+    };
+    QTRY_VERIFY(noticeIsRendered());
+    QVERIFY(rendered->width() > 0 && rendered->height() > 0);
+}

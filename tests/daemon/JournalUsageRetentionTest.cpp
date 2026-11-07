@@ -56,7 +56,8 @@ class Database {
 
 QDateTime cutoff() { return QDateTime::currentDateTimeUtc().addDays(-30); }
 
-bool seed(LocalJournal& journal, const QString& path, bool acknowledge = true, int turns = 24) {
+bool seed(LocalJournal& journal, const QString& path, bool acknowledge = true, int turns = 24,
+          const QString& output = {}) {
     StoredSession session;
     session.id = "session";
     session.worktreePath = "synthetic";
@@ -79,8 +80,18 @@ bool seed(LocalJournal& journal, const QString& path, bool acknowledge = true, i
                 if (!append(type, {{"sample", sample}, {"turn", turn}}))
                     return false;
         }
-        const QJsonObject item{
+        QJsonObject item{
             {"id", QString("item-%1").arg(turn)}, {"type", "agentMessage"}, {"text", "answer"}};
+        if (!output.isEmpty()) {
+            item = {{"id", QString("item-%1").arg(turn)},
+                    {"type", "commandExecution"},
+                    {"command", "synthetic-command"},
+                    {"cwd", "synthetic"},
+                    {"exitCode", 0},
+                    {"durationMs", 123},
+                    {"status", "completed"},
+                    {"aggregatedOutput", output}};
+        }
         if (!append("item.started", {{"item", item}}) ||
             !append("item.completed", {{"item", item}}) || !append("turn.completed", {}))
             return false;
@@ -94,12 +105,27 @@ qint64 sweep(LocalJournal& journal, int maximumRows = 128) {
     qint64 total = 0;
     // The fixture has at most 336 rows. A few complete sweeps also prove idempotency.
     for (int pass = 0; pass < 8; ++pass) {
-        const auto removed = journal.pruneUsageSamples(cutoff(), maximumRows);
+        const auto removed = journal.pruneReplayDetails(cutoff(), maximumRows);
         if (!removed)
             return -1;
         total += *removed;
     }
     return total;
+}
+
+QJsonArray allReplay(LocalJournal& journal) {
+    QJsonArray result;
+    qint64 cursor = 0;
+    for (;;) {
+        const auto page = journal.compactedEventsAfter("session", 1, cursor, 500);
+        if (page.events.isEmpty())
+            return result;
+        if (page.nextCursor <= cursor)
+            qFatal("Replay cursor made no progress");
+        for (const auto& event : page.events)
+            result.append(event);
+        cursor = page.nextCursor;
+    }
 }
 
 QJsonArray withoutUsage(const QJsonArray& events) {
@@ -156,18 +182,23 @@ class JournalUsageRetentionTest final : public QObject {
 
     void protectsTurns_data() {
         QTest::addColumn<QString>("guard");
+        QTest::addColumn<bool>("commands");
         for (const char* guard :
              {"running", "waiting_for_input", "starting", "stopping", "unacknowledged", "recent",
               "open", "approval", "question", "generation", "sequence-gap"})
-            QTest::newRow(guard) << QString(guard);
+            for (bool commands : {false, true})
+                QTest::newRow(qPrintable(QString(guard) + (commands ? "-commands" : "-usage")))
+                    << QString(guard) << commands;
     }
 
     void protectsTurns() {
         QFETCH(QString, guard);
+        QFETCH(bool, commands);
         QTemporaryDir directory;
         const QString path = directory.filePath("journal.sqlite");
         LocalJournal journal(path);
-        QVERIFY(seed(journal, path, guard != "unacknowledged"));
+        QVERIFY(seed(journal, path, guard != "unacknowledged", 24,
+                     commands ? QString(50000, QLatin1Char('x')) : QString()));
         Database database(path);
         if (guard == "unacknowledged") {
             QVERIFY(journal.acknowledgeCursor("slow", "session", 1, 0));
@@ -204,7 +235,7 @@ class JournalUsageRetentionTest final : public QObject {
             QCOMPARE(raw.size(), before.size());
             QVERIFY(journal.acknowledgeCursor("slow", "session", 1,
                                               raw.last().toObject().value("cursor").toInteger()));
-            QCOMPARE(sweep(journal), 24); // previously ineligible rows are revisited
+            QCOMPARE(sweep(journal), commands ? 28 : 24); // ineligible rows are revisited
         }
     }
 
@@ -214,12 +245,12 @@ class JournalUsageRetentionTest final : public QObject {
         LocalJournal journal(path);
         QVERIFY(seed(journal, path));
         // The first two rows are user.message and turn.started: no deletion yet.
-        QCOMPARE(journal.pruneUsageSamples(cutoff(), 1), std::optional<qint64>(0));
-        QCOMPARE(journal.pruneUsageSamples(cutoff(), 1), std::optional<qint64>(0));
-        QCOMPARE(journal.pruneUsageSamples(cutoff(), 1), std::optional<qint64>(1));
+        QCOMPARE(journal.pruneReplayDetails(cutoff(), 1), std::optional<qint64>(0));
+        QCOMPARE(journal.pruneReplayDetails(cutoff(), 1), std::optional<qint64>(0));
+        QCOMPARE(journal.pruneReplayDetails(cutoff(), 1), std::optional<qint64>(1));
         qint64 removed = 1;
         for (int pass = 0; pass < 700; ++pass) {
-            const auto result = journal.pruneUsageSamples(cutoff(), 1);
+            const auto result = journal.pruneReplayDetails(cutoff(), 1);
             QVERIFY(result.has_value());
             QVERIFY(*result <= 1);
             removed += *result;
@@ -238,12 +269,12 @@ class JournalUsageRetentionTest final : public QObject {
         QVERIFY(database.exec(
             "CREATE TRIGGER fail_retention BEFORE UPDATE OF revision ON replay_projection_state "
             "BEGIN SELECT RAISE(ABORT, 'synthetic revision failure'); END"));
-        QVERIFY(!journal.pruneUsageSamples(cutoff()).has_value());
+        QVERIFY(!journal.pruneReplayDetails(cutoff()).has_value());
         QVERIFY(journal.errorString().contains("synthetic revision failure"));
         QCOMPARE(journal.compactedEventsAfter("session", 1, 0, 500).events, before);
         QCOMPARE(journal.transcriptWindow("session", 1).projectionRevision, revision);
         QVERIFY(database.exec("DROP TRIGGER fail_retention"));
-        QCOMPARE(journal.pruneUsageSamples(cutoff()), std::optional<qint64>(24));
+        QCOMPARE(journal.pruneReplayDetails(cutoff()), std::optional<qint64>(24));
         QCOMPARE(sweep(journal), 0);
     }
 
@@ -266,7 +297,7 @@ class JournalUsageRetentionTest final : public QObject {
         locked.acquire();
         QElapsedTimer timer;
         timer.start();
-        const auto maintenance = journal.pruneUsageSamples(cutoff());
+        const auto maintenance = journal.pruneReplayDetails(cutoff());
         const auto elapsed = timer.elapsed();
         release.release();
         // The normal connection timeout must be restored: this ordinary write waits for
@@ -310,7 +341,7 @@ class JournalUsageRetentionTest final : public QObject {
             "SELECT 1 FROM events WHERE session_id='session' AND generation=1 AND turn_sequence=1");
         QElapsedTimer timer;
         timer.start();
-        const auto removed = journal.pruneUsageSamples(cutoff(), 128);
+        const auto removed = journal.pruneReplayDetails(cutoff(), 128);
         const auto elapsed = timer.elapsed();
         qInfo().noquote() << "300000 raw events, 128 replay rows:" << elapsed << "ms;" << plan;
         QCOMPARE(removed, std::optional<qint64>(24));
@@ -322,15 +353,125 @@ class JournalUsageRetentionTest final : public QObject {
         QVERIFY2(elapsed < 1000, "Idle retention stalled on unrelated raw backlog");
     }
 
+    void commandOutputRetainsMetadataUtf8AndExplicitNotice() {
+        QTemporaryDir directory;
+        const QString path = directory.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        const QString output = QStringLiteral("HEAD\n") + QString(20000, QChar(0x754c)) + "\n" +
+                               QStringLiteral("tail-line\n").repeated(100) + "TAIL";
+        QVERIFY(seed(journal, path, true, 24, output));
+        const auto before = allReplay(journal);
+        const auto window = journal.transcriptWindow("session", 1);
+        QCOMPARE(sweep(journal), 28);
+        const auto after = allReplay(journal);
+        auto expected = withoutUsage(before);
+        const auto actual = withoutUsage(after);
+        QCOMPARE(actual.size(), expected.size());
+        int trimmed = 0;
+        for (qsizetype i = 0; i < actual.size(); ++i) {
+            auto event = actual.at(i).toObject();
+            auto payload = event.value("payload").toObject();
+            // Replay envelopes store provider data under payload.
+            auto item = payload.value("item").toObject();
+            if (!item.contains("compacted")) {
+                QCOMPARE(event, expected.at(i).toObject());
+                continue;
+            }
+            ++trimmed;
+            const auto marker = item.value("compacted").toObject();
+            QCOMPARE(marker.value("original_bytes").toInteger(), output.toUtf8().size());
+            QVERIFY(marker.value("retained_bytes").toInteger() <= 20 * 1024);
+            const QString retained = item.value("aggregatedOutput").toString();
+            QVERIFY(retained.startsWith("[Output trimmed"));
+            QVERIFY(retained.contains("HEAD\n"));
+            QVERIFY(retained.endsWith("\nTAIL"));
+            QVERIFY(!retained.contains(QChar::ReplacementCharacter));
+            item.remove("compacted");
+            item.insert("aggregatedOutput", output);
+            payload.insert("item", item);
+            event.insert("payload", payload);
+            QCOMPARE(event, expected.at(i).toObject());
+        }
+        QCOMPARE(trimmed, 4);
+        QCOMPARE(after.last().toObject().value("cursor"), before.last().toObject().value("cursor"));
+        QCOMPARE(journal
+                     .transcriptWindow("session", 1, window.beforeCursor, window.snapshotCursor,
+                                       window.projectionRevision)
+                     .errorCode,
+                 QString("snapshot_changed"));
+        QCOMPARE(sweep(journal), 0);
+        const auto receipt = journal.commandOutput("session", 1, 1, "item-1");
+        QVERIFY(receipt.value("ok").toBool());
+        QVERIFY(receipt.value("truncated").toBool());
+        QVERIFY(receipt.value("text").toString().startsWith("[Output trimmed"));
+        QVERIFY(receipt.value("text").toString().split('\n').size() <= 40);
+        QCOMPARE(receipt.value("compacted").toObject().value("original_bytes").toInteger(),
+                 output.toUtf8().size());
+    }
+
+    void commandBudgetResumesAndRollbackRestoresPayloads() {
+        QTemporaryDir directory;
+        const QString path = directory.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(seed(journal, path, true, 30, QString(230000, QLatin1Char('x'))));
+        Database database(path);
+        const auto before = allReplay(journal);
+        QVERIFY(database.exec(
+            "CREATE TRIGGER fail_detail BEFORE UPDATE OF revision ON replay_projection_state "
+            "BEGIN SELECT RAISE(ABORT, 'synthetic detail failure'); END"));
+        QVERIFY(!journal.pruneReplayDetails(cutoff()).has_value());
+        QCOMPARE(allReplay(journal), before);
+        QVERIFY(database.exec("DROP TRIGGER fail_detail"));
+        QElapsedTimer passTimer;
+        passTimer.start();
+        QVERIFY(journal.pruneReplayDetails(cutoff()).has_value());
+        qInfo() << "Warm command retention pass, 230000-byte outputs:" << passTimer.elapsed()
+                << "ms";
+        const auto first = database.scalar("SELECT count(*) FROM replay_events WHERE "
+                                           "json_type(payload,'$.item.compacted')='object'");
+        QVERIFY(first > 0 && first <= 4);
+        QVERIFY(sweep(journal) > 0);
+        QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE "
+                                 "json_type(payload,'$.item.compacted')='object'"),
+                 10);
+        QCOMPARE(sweep(journal), 0);
+    }
+
+    void preservesUnsupportedCommandPayloads_data() {
+        QTest::addColumn<QString>("replacement");
+        QTest::newRow("small") << QString("json_set(payload,'$.item.aggregatedOutput','small')");
+        QTest::newRow("near-limit")
+            << QString("json_set(payload,'$.item.aggregatedOutput',printf('%.*c',21504,'x'))");
+        QTest::newRow("nonterminal") << QString("json_set(payload,'$.item.status','inProgress')");
+        QTest::newRow("marked") << QString("json_set(payload,'$.item.compacted',json('{}'))");
+        QTest::newRow("oversize") << QString(
+            "json_set(payload,'$.item.aggregatedOutput',printf('%.*c',1100000,'x'))");
+    }
+
+    void preservesUnsupportedCommandPayloads() {
+        QFETCH(QString, replacement);
+        QTemporaryDir directory;
+        const QString path = directory.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(seed(journal, path, true, 24, QString(50000, QLatin1Char('x'))));
+        Database database(path);
+        QVERIFY(database.exec("UPDATE replay_events SET payload=" + replacement +
+                              " WHERE event_type='item.completed'"));
+        const auto before = withoutUsage(allReplay(journal));
+        QCOMPARE(sweep(journal), 24); // only intermediate usage is changed
+        QCOMPARE(withoutUsage(allReplay(journal)), before);
+    }
+
     void invalidLimitsDoNotTouchHistory() {
         QTemporaryDir directory;
         const QString path = directory.filePath("journal.sqlite");
         LocalJournal journal(path);
         QVERIFY(seed(journal, path));
         for (int rows : {-1, 0, 257})
-            QVERIFY(!journal.pruneUsageSamples(cutoff(), rows).has_value());
-        QVERIFY(!journal.pruneUsageSamples({}).has_value());
-        QVERIFY(!journal.pruneUsageSamples(QDateTime::currentDateTimeUtc().addDays(1)).has_value());
+            QVERIFY(!journal.pruneReplayDetails(cutoff(), rows).has_value());
+        QVERIFY(!journal.pruneReplayDetails({}).has_value());
+        QVERIFY(
+            !journal.pruneReplayDetails(QDateTime::currentDateTimeUtc().addDays(1)).has_value());
         QCOMPARE(sweep(journal), 24);
     }
 };

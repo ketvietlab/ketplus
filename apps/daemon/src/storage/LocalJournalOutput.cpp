@@ -35,7 +35,8 @@ QJsonObject LocalJournal::commandOutput(const QString& sessionId, qint64 generat
         "length(CAST(COALESCE(json_extract(payload,'$.item.aggregatedOutput'),"
         "json_extract(payload,'$.aggregatedOutput'),json_extract(payload,'$.output'),"
         "json_extract(payload,'$.delta'),'') AS BLOB)),"
-        "json_extract(payload,'$.item.exitCode') FROM replay_events "
+        "json_extract(payload,'$.item.exitCode'), json_extract(payload,'$.item.compacted') FROM "
+        "replay_events "
         "WHERE session_id=? AND generation=? AND item_id=? AND turn_sequence=? "
         "AND (event_type='command.output_delta' OR "
         "json_extract(payload,'$.item.type')='commandExecution' OR "
@@ -50,6 +51,7 @@ QJsonObject LocalJournal::commandOutput(const QString& sessionId, qint64 generat
     bool found = false;
     bool truncated = false;
     QJsonValue exitCode;
+    QJsonObject compacted;
     int count = 0;
     while (query.next()) {
         found = true;
@@ -63,6 +65,8 @@ QJsonObject LocalJournal::commandOutput(const QString& sessionId, qint64 generat
         if (!query.value(3).isNull())
             exitCode = query.value(3).toInt();
         if (type != "command.output_delta" && !bytes.isEmpty()) {
+            compacted = QJsonDocument::fromJson(query.value(4).toByteArray()).object();
+            truncated |= !compacted.isEmpty();
             output = bytes;
             break; // Authoritative completed output supersedes streaming deltas.
         }
@@ -84,10 +88,20 @@ QJsonObject LocalJournal::commandOutput(const QString& sessionId, qint64 generat
         lines = lines.mid(lines.size() - 40);
         truncated = true;
     }
+    QString text = lines.join('\n');
+    if (!compacted.isEmpty() && !text.startsWith(QStringLiteral("[Output trimmed"))) {
+        // Reserve one of the advertised 40 lines for the retention notice.
+        if (lines.size() >= 40)
+            text = lines.mid(lines.size() - 39).join('\n');
+        text.prepend(
+            QStringLiteral("[Output trimmed · original size %1 bytes · history retention]\n")
+                .arg(compacted.value(QStringLiteral("original_bytes")).toInteger()));
+    }
     return {{"ok", true},
             {"item_id", itemId},
             {"turn_sequence", turnSequence},
-            {"text", lines.join('\n')},
+            {"text", text},
+            {"compacted", compacted},
             {"truncated", truncated},
             {"exit_code", exitCode},
             {"maximum_bytes", 64 * 1024},

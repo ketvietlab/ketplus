@@ -129,8 +129,10 @@ While idle, a maintenance pass also removes intermediate `usage.context`,
 30 days, retaining the final sample of each type in each turn. It preserves the
 latest 20 actual turns per conversation/generation, any turn with raw events
 still awaiting acknowledgment, any turn containing questions or approvals, and
-sessions outside an explicitly idle state. It does not trim messages, tool
-outputs, images or `item.started` rows. The 30-day value is currently fixed;
+sessions outside an explicitly idle state. The same pass trims eligible inline completed
+command output to its first 4 KiB and last 16 KiB on UTF-8 boundaries, with an explicit
+notice and `item.compacted` metadata. Messages, images and `item.started` rows are
+unchanged. See [ADR 0038](decisions/0038-command-output-retention.md). The 30-day value is currently fixed;
 configurable retention and the remaining detail compaction are still tracked in #128.
 
 Each minute's idle pass examines at most 128 replay rows, resumes its scan on the

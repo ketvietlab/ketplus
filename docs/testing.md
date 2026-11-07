@@ -385,3 +385,14 @@ benchmarks/run-usage-retention.sh > /tmp/usage-retention-results.txt
 
 The script records hardware and three runs. Timings exclude fixture creation and
 the one-time index build on journal open; they are not a multi-GB startup benchmark.
+
+Command-output retention shares `ketplus_daemon_usage_retention_tests`. It runs
+the eligibility matrix for both usage and command output, verifies UTF-8 head/tail
+boundaries, explicit receipt notices after the 40-line cap, unchanged item metadata
+and other replay rows, stale continuation fencing, idempotence, byte-budget resume
+and atomic rollback of payload updates. Synthetic payloads are paged through the
+real replay byte limit rather than assuming one page contains the entire journal.
+
+`benchmarks/run-usage-retention.sh` also reports a warm command-retention pass on
+230,000-byte outputs after a forced rollback, with fixture creation excluded.
+This is a bounded-batch measurement, not a latency guarantee for arbitrary journals.
