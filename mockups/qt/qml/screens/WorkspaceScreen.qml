@@ -13,7 +13,9 @@ Item {
 
     required property var window
     property bool detailsOpen: false
-    property string detailsTab: "changes"
+    property var contentSession: null
+    readonly property string detailsTab: contentSession && contentSession.current ? contentSession.current.kind : ""
+    ContentTabsStore { id: contentStore }
     readonly property var conversation: window.conversation
     readonly property string kind: conversation.transcript
     readonly property bool running: kind === "running"
@@ -28,9 +30,52 @@ Item {
     readonly property var providerSetup: Fixtures.providerSetup[window.providerIssues[providerId] || ""] || null
     property bool showTasks: running
 
+    property var planRun: null
+    readonly property string planState: planRun ? planRun.status : ""
+    ConversationPlanStore { id: planStore }
+    function syncPlan() {
+        contentSession = contentStore.get(conversation.number)
+        planRun = conversation && conversation.hasPlan ? planStore.get(conversation.number) : null
+    }
+    function openPlan(state) {
+        syncPlan()
+        if (!planRun) return
+        if (state) planRun.load(state)
+        planRun.presented = true
+        detailsPane.openContent("plan")
+        detailsOpen = true
+    }
+    function openContent(kind) {
+        if (kind === "plan") { openPlan(""); return }
+        detailsPane.openContent(kind)
+        detailsOpen = true
+    }
+    function openContentDemo(kind) {
+        contentSession.tabs = []; contentSession.currentId = ""; contentSession.terminalSerial = 0
+        detailsPane.openFile("NavigationRail.qml")
+        detailsPane.openFile("WorktreeItem.qml")
+        const first = contentSession.newTerminal()
+        contentSession.patch(first, { draft: "cmake --build build" })
+        const second = contentSession.newTerminal()
+        contentSession.patch(second, { draft: "ctest --test-dir build" })
+        openPlan("continuing")
+        if (kind === "terminal") contentSession.select(second)
+        if (kind === "file") detailsPane.openFile("NavigationRail.qml")
+    }
+    function planStatus(number, fallback) {
+        const model = planStore.plans[number]
+        if (!model) return fallback
+        if (model.active) return KetTheme.ConversationStatus.Working
+        if (model.status === "complete") return KetTheme.ConversationStatus.Completed
+        if (model.status === "paused") return KetTheme.ConversationStatus.Stopped
+        return KetTheme.ConversationStatus.NeedsInput
+    }
+    onConversationChanged: { detailsOpen = false; syncPlan() }
+
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
     function openComposerPanel(name) {
-        if (name === "reviewer")
+        if (name === "content-tabs") detailsPane.openTabMenu()
+        else if (name === "reviewer")
             conversationHeader.openReviewerMenu()
         else
             composerBar.openPanel(name)
@@ -50,15 +95,10 @@ Item {
                 Layout.fillWidth: true
                 window: screen.window
                 conversation: screen.conversation
+                planRun: screen.planRun
+                status: screen.planStatus(screen.conversation.number, screen.conversation.status)
                 detailsOpen: screen.detailsOpen
-                onToggleDetails: tab => {
-                    if (screen.detailsOpen && screen.detailsTab === tab)
-                        screen.detailsOpen = false
-                    else {
-                        screen.detailsTab = tab
-                        screen.detailsOpen = true
-                    }
-                }
+                onToggleDetails: tab => screen.openContent(tab)
             }
 
             Basic.ScrollView {
@@ -75,14 +115,24 @@ Item {
                                  * Math.max(0, scroll.contentItem.contentHeight - scroll.height)
                 }
 
-                Transcript {
+                Column {
                     width: scroll.availableWidth
-                    window: screen.window
-                    kind: screen.kind
-                    conversation: screen.conversation
-                    onOpenDetails: tab => {
-                        screen.detailsTab = tab
-                        screen.detailsOpen = true
+                    Loader {
+                        active: !!screen.planRun && screen.planRun.presented
+                        visible: active
+                        width: parent.width
+                        sourceComponent: ConversationPlanTranscript {
+                            window: screen.window
+                            run: screen.planRun
+                        }
+                    }
+                    Transcript {
+                        visible: !screen.planRun || !screen.planRun.presented
+                        width: parent.width
+                        window: screen.window
+                        kind: screen.kind
+                        conversation: screen.conversation
+                        onOpenDetails: tab => screen.openContent(tab)
                     }
                 }
             }
@@ -127,7 +177,8 @@ Item {
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: Math.min(parent.width - screen.px(48), screen.px(760))
                     window: screen.window
-                    busy: screen.running
+                    busy: screen.running || (!!screen.planRun && screen.planRun.presented && screen.planRun.active)
+                    onStopRequested: { if (screen.planRun && screen.planRun.presented) screen.planRun.stop() }
                     // The conversation's provider and model, when its fixture names them.
                     provider: screen.providerId
                     blocked: screen.setupId !== ""
@@ -149,13 +200,15 @@ Item {
         }
 
         DetailsPane {
+            id: detailsPane
             visible: screen.detailsOpen
             Layout.fillHeight: true
             // Half of the workspace beside the rule: the pane matches the conversation's width.
             Layout.preferredWidth: Math.floor((screen.width - 1) / 2)
             window: screen.window
-            tab: screen.detailsTab
-            onTabChosen: tab => screen.detailsTab = tab
+            planRun: screen.planRun
+            session: screen.contentSession
+            onPlanRequested: screen.openPlan("")
             onCloseRequested: screen.detailsOpen = false
         }
     }

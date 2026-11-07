@@ -12,7 +12,8 @@ Rectangle {
     required property var window
     required property var conversation
     property bool detailsOpen: false
-    readonly property int status: conversation.status
+    property var planRun: null
+    property int status: conversation.status
 
     // The agent that reviews each finished turn and replies here, by conversation number.
     // A reviewer never merges. The running conversation starts with one, for the mock.
@@ -142,7 +143,8 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             controlSize: KetTheme.ControlSize.Small
             iconName: "branch"
-            text: header.conversation.worktree + "  ▾"
+            text: header.width < header.px(720) ? "" : header.conversation.worktree + "  ▾"
+            KetToolTip { visible: worktreeButton.hovered; text: header.conversation.worktree }
             onClicked: header.window.picker.open()
         }
 
@@ -210,6 +212,11 @@ Rectangle {
             checkable: true
             checked: header.detailsOpen
             onClicked: header.toggleDetails("atlas")
+        }
+        PlanProgressButton {
+            visible: !!header.conversation.hasPlan
+            run: header.planRun
+            onClicked: header.toggleDetails("plan")
         }
         KetIconButton {
             iconName: "compare"
