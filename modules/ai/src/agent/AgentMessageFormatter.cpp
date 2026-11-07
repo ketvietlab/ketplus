@@ -75,17 +75,22 @@ QString toolTitle(const QJsonObject& item, const bool completed) {
                                        subject);
 }
 
+QString normalizedToolName(const QJsonObject& item) {
+    return item.value(QStringLiteral("tool"))
+        .toString()
+        .toLower()
+        .section(QStringLiteral("__"), -1)
+        .section(QLatin1Char('.'), -1);
+}
+
 QString semanticToolSubtype(const QJsonObject& item) {
-    const QString operation = item.value(QStringLiteral("tool"))
-                                  .toString()
-                                  .toLower()
-                                  .section(QStringLiteral("__"), -1)
-                                  .section(QLatin1Char('.'), -1);
+    const QString operation = normalizedToolName(item);
     static const QHash<QString, QString> stepTypes{{"wait", "wait"},
                                                    {"sleep", "wait"},
                                                    {"monitor", "monitor"},
                                                    {"wake", "wake"},
                                                    {"resume_agent", "wake"},
+                                                   {"schedulewakeup", "wake"},
                                                    {"skill", "skill"},
                                                    {"load_skill", "skill"},
                                                    {"toolsearch", "toolsLoaded"},
@@ -96,6 +101,7 @@ QString semanticToolSubtype(const QJsonObject& item) {
                                                    {"task", "subAgent"},
                                                    {"spawn_agent", "subAgent"},
                                                    {"update_plan", "plan"},
+                                                   {"enterplanmode", "plan"},
                                                    {"webfetch", "webFetch"},
                                                    {"fetch_url", "webFetch"},
                                                    {"websearch", "webSearch"},
@@ -648,6 +654,13 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
             {"webOpen", {"Opened page", "Opening page"}}};
         if (const auto labels = stepLabels.constFind(subtype); labels != stepLabels.cend()) {
             title = labels->at(completed ? 0 : 1);
+            const auto operation = normalizedToolName(item);
+            if (operation == QStringLiteral("schedulewakeup"))
+                title = completed ? QStringLiteral("Scheduled wake-up")
+                                  : QStringLiteral("Scheduling wake-up");
+            else if (operation == QStringLiteral("enterplanmode"))
+                title = completed ? QStringLiteral("Entered plan mode")
+                                  : QStringLiteral("Entering plan mode");
             eventType = QStringLiteral("activity.") + subtype;
         }
         if (subtype.startsWith(QStringLiteral("browser"))) {
