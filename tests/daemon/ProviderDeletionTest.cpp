@@ -59,7 +59,8 @@ class ProviderDeletionTest final : public QObject {
                            "BEGIN SELECT RAISE(IGNORE); END"));
         } else {
             QVERIFY(q.exec(QString("CREATE TRIGGER fail_delete BEFORE INSERT ON %1 "
-                                   "BEGIN SELECT RAISE(IGNORE); END").arg(fault)));
+                                   "BEGIN SELECT RAISE(IGNORE); END")
+                               .arg(fault)));
         }
         QString error;
         const QJsonArray targets{QJsonObject{{"provider", "codex"}, {"thread_id", "owned"}}};

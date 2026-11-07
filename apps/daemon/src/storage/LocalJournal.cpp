@@ -805,7 +805,8 @@ bool LocalJournal::deleteSession(const QString& sessionId, const qint64 generati
         // A successful statement can still ignore rows (for example a trigger).
         // Never commit a tombstone while this generation's history remains.
         query.prepare(QStringLiteral("SELECT 1 FROM %1 WHERE session_id=? AND generation=? "
-                                     "LIMIT 1").arg(table));
+                                     "LIMIT 1")
+                          .arg(table));
         query.addBindValue(sessionId);
         query.addBindValue(generation);
         if (!query.exec() || query.next() || query.lastError().isValid()) {
