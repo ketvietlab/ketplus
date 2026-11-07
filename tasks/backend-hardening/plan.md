@@ -569,6 +569,17 @@ remain explicitly open.
   production fails 30 scenarios; fixed focused fixture 33/33, including setup/cleanup.
 - [x] Append affected Release/headless matrix 13/13 (84.57 s), protocol 74/74,
   retention 124/124; live-provider and opt-in 9 GiB cases skipped as intended.
-- [ ] Finish exact-head append gate, independent review and merge (ADR 0058).
+- [x] #244 final head `11df3b89`: exact-head 13/13 (65.59 s), independent
+  protocol 74/74, retention 124/124, transcript 28/28, lifecycle 28 pass/1 skip,
+  activity 9/9. Merged `2438e3fe97a16ea313145ed86ce851bbef6dfa71`.
+  Source/build cleanup is tracked separately (ADR 0058).
 - [ ] Audit ignored multirow replay/activity mutations, integer counter bounds,
   unsupported stored types and crash/interruption recovery. Do not close H1.3 yet.
+
+### H1.3 append counter validation
+
+- [x] Reproduce unsupported/overflow counter handling: original production fails
+  14 scenarios; focused fix 25/25 including four positive boundary controls.
+- [ ] Finish affected matrix, exact-head review and merge for ADR 0059.
+- [ ] Continue migration/backfill/fork counter and process-interruption audits;
+  append guards alone do not finish H1.2/H1.3.

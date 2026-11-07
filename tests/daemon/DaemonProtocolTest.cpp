@@ -28,6 +28,7 @@
 #include <QTemporaryDir>
 #include <QUuid>
 #include <QtTest>
+#include <limits>
 
 using namespace ketplus::daemon;
 
@@ -1268,6 +1269,120 @@ class DaemonProtocolTest final : public QObject {
         QCOMPARE(reopened.eventsAfter("s", 1, 0), journal.eventsAfter("s", 1, 0));
         QCOMPARE(reopened.compactedEventsAfter("s", 1, 0, 500).events,
                  journal.compactedEventsAfter("s", 1, 0, 500).events);
+    }
+
+    void appendPreservesUnsupportedCounters_data() {
+        QTest::addColumn<QString>("cursorSql");
+        QTest::addColumn<QString>("turnSql");
+        QTest::addColumn<bool>("large");
+        QTest::addColumn<bool>("userMessage");
+        QTest::addColumn<bool>("accepted");
+        for (bool large : {false, true}) {
+            for (const auto& value :
+                 {QString("-1"), QString("1.5"), QString("'unknown'"), QString("X'01'")}) {
+                QTest::newRow(qPrintable(QString("cursor-%1-%2").arg(large).arg(value)))
+                    << value << QString("1") << large << false << false;
+                QTest::newRow(qPrintable(QString("turn-%1-%2").arg(large).arg(value)))
+                    << QString("1") << value << large << false << false;
+            }
+        }
+        const auto maximum = QString::number(std::numeric_limits<qint64>::max());
+        QTest::newRow("cursor-exhausted") << maximum << QString("1") << false << false << false;
+        QTest::newRow("turn-exhausted") << QString("1") << maximum << false << true << false;
+        QTest::newRow("large-cursor-overflow")
+            << QString::number(std::numeric_limits<qint64>::max() - 2) << QString("1") << true
+            << false << false;
+        QTest::newRow("cursor-last-slot") << QString::number(std::numeric_limits<qint64>::max() - 1)
+                                          << QString("1") << false << false << true;
+        QTest::newRow("turn-last-slot")
+            << QString("1") << QString::number(std::numeric_limits<qint64>::max() - 1) << false
+            << true << true;
+        QTest::newRow("maximum-turn-no-increment")
+            << QString("1") << maximum << false << false << true;
+        QTest::newRow("large-last-slots")
+            << QString("large-fit") << QString("1") << true << false << true;
+    }
+    void appendPreservesUnsupportedCounters() {
+        QFETCH(QString, cursorSql);
+        QFETCH(QString, turnSql);
+        QFETCH(bool, large);
+        QFETCH(bool, userMessage);
+        QFETCH(bool, accepted);
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(journal.upsertSession({"s", dir.path(), "codex", {}, {}, "ready", 1, 0, 0, {}}));
+        QCOMPARE(journal.appendEvent("s", 1, "user.message", {{"text", "seed"}}), 1);
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == path)
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        const QJsonObject payload =
+            large
+                ? QJsonObject{{"item_id", "probe"},
+                              {"item_type", "agentMessage"},
+                              {"item",
+                               QJsonObject{
+                                   {"id", "probe"},
+                                   {"type", "agentMessage"},
+                                   {"text", QString(2 * protocol::maximumEventPayloadBytes, 'x')}}}}
+                : QJsonObject{{"text", "new"}, {"delta", "new"}};
+        const qint64 chunks =
+            (QJsonDocument(payload).toJson(QJsonDocument::Compact).size() + 96 * 1024 - 1) /
+            (96 * 1024);
+        if (cursorSql == "large-fit")
+            cursorSql = QString::number(std::numeric_limits<qint64>::max() - chunks - 1);
+        QSqlQuery q(db);
+        QVERIFY(q.exec(
+            QString("UPDATE sessions SET last_cursor=%1,current_turn_sequence=%2 WHERE id='s'")
+                .arg(cursorSql, turnSql)));
+        const auto snapshot = [&] {
+            QStringList values;
+            QSqlQuery query(db);
+            for (const auto& table : {"events", "replay_events", "large_event_payloads",
+                                      "large_event_payload_chunks", "activity_items"}) {
+                if (!query.exec(QString("SELECT count(*) FROM %1").arg(table)) || !query.next())
+                    return QStringList{};
+                values.append(query.value(0).toString());
+            }
+            if (!query.exec("SELECT quote(last_cursor),quote(current_turn_sequence) FROM sessions "
+                            "WHERE id='s'") ||
+                !query.next())
+                return QStringList{};
+            values.append(query.value(0).toString());
+            values.append(query.value(1).toString());
+            return values;
+        };
+        const auto before = snapshot();
+        QCOMPARE(before.size(), 7);
+        QString error;
+        const auto result = journal.appendEvent("s", 1,
+                                                large         ? "item.completed"
+                                                : userMessage ? "user.message"
+                                                              : "assistant.delta",
+                                                payload, &error);
+        if (!accepted) {
+            QCOMPARE(result, qint64(-1));
+            QVERIFY(!error.isEmpty());
+            QCOMPARE(snapshot(), before);
+        } else {
+            QCOMPARE(result, cursorSql.toLongLong() + (large ? chunks + 1 : 1));
+            QVERIFY(q.exec("SELECT current_turn_sequence FROM sessions WHERE id='s'"));
+            QVERIFY(q.next());
+            QCOMPARE(q.value(0).toLongLong(), turnSql.toLongLong() + (userMessage ? 1 : 0));
+        }
+        QVERIFY2(q.exec("BEGIN"), qPrintable(q.lastError().text()));
+        QVERIFY(q.exec("ROLLBACK"));
+        // Repair this temporary fixture; retry must not inherit an open transaction.
+        QVERIFY(
+            q.exec("UPDATE sessions SET last_cursor=1000,current_turn_sequence=1 WHERE id='s'"));
+        QCOMPARE(journal.appendEvent("s", 1, "assistant.delta", {{"delta", "retry"}}, &error),
+                 qint64(1001));
+        LocalJournal reopened(path);
+        QVERIFY2(reopened.isOpen(), qPrintable(reopened.errorString()));
+        QCOMPARE(reopened.sessionHead("s").cursor, qint64(1001));
     }
 
     void journalRejectsOversizedPayloadBeforePersistence() {

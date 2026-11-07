@@ -7,6 +7,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QUuid>
+#include <limits>
 
 namespace ketplus::daemon {
 namespace {
@@ -84,6 +85,12 @@ qint64 LocalJournal::appendLargeEvent(const QString& sessionId, const qint64 gen
         QCryptographicHash::hash(encodedPayload, QCryptographicHash::Sha256).toHex());
     const qint64 totalBytes = encodedPayload.size();
     const qint64 chunkCount = (totalBytes + cloudChunkBytes - 1) / cloudChunkBytes;
+    if (firstCursor < 1 || firstCursor > std::numeric_limits<qint64>::max() - chunkCount) {
+        database_.rollback();
+        if (error != nullptr)
+            *error = QStringLiteral("Journal cursor cannot hold the complete large-item transfer.");
+        return -1;
+    }
     const qint64 revision = firstCursor + chunkCount;
     const QString sentAt = protocol::timestamp();
 

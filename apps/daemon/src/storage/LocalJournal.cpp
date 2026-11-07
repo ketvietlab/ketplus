@@ -11,6 +11,7 @@
 #include <QSqlQuery>
 #include <QUuid>
 #include <QVariant>
+#include <limits>
 
 namespace ketplus::daemon {
 namespace {
@@ -1069,8 +1070,11 @@ qint64 LocalJournal::appendEventWithMutation(const QString& sessionId, const qin
         return -1;
     }
     QSqlQuery read(database_);
-    read.prepare(QStringLiteral("SELECT last_cursor, current_turn_sequence FROM sessions "
-                                "WHERE id = ? AND generation = ?"));
+    read.prepare(QStringLiteral(
+        "SELECT CASE WHEN typeof(last_cursor)='integer' THEN last_cursor END, "
+        "CASE WHEN typeof(current_turn_sequence)='integer' THEN current_turn_sequence END, "
+        "typeof(last_cursor), typeof(current_turn_sequence) FROM sessions "
+        "WHERE id = ? AND generation = ?"));
     read.addBindValue(sessionId);
     read.addBindValue(generation);
     if (!read.exec() || !read.next()) {
@@ -1081,9 +1085,23 @@ qint64 LocalJournal::appendEventWithMutation(const QString& sessionId, const qin
         }
         return -1;
     }
-    const qint64 cursor = read.value(0).toLongLong() + 1;
-    const qint64 turnSequence =
-        read.value(1).toLongLong() + (type == QStringLiteral("user.message") ? 1 : 0);
+    const auto invalidCounters = [&] {
+        database_.rollback();
+        if (error != nullptr)
+            *error = QStringLiteral("Journal counters are unsupported or exhausted.");
+        return qint64(-1);
+    };
+    if (read.value(2).toString() != QStringLiteral("integer") ||
+        read.value(3).toString() != QStringLiteral("integer"))
+        return invalidCounters();
+    const qint64 lastCursor = read.value(0).toLongLong();
+    const qint64 previousTurn = read.value(1).toLongLong();
+    const bool newTurn = type == QStringLiteral("user.message");
+    if (lastCursor < 0 || lastCursor == std::numeric_limits<qint64>::max() || previousTurn < 0 ||
+        (newTurn && previousTurn == std::numeric_limits<qint64>::max()))
+        return invalidCounters();
+    const qint64 cursor = lastCursor + 1;
+    const qint64 turnSequence = previousTurn + (newTurn ? 1 : 0);
     if (encoded.size() > protocol::maximumEventPayloadBytes) {
         return appendLargeEvent(sessionId, generation, cursor, turnSequence, type, payload, encoded,
                                 error);

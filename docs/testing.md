@@ -512,3 +512,8 @@ and chunked appends. It verifies unchanged delivery/replay/projection state,
 transaction release, repair/retry and reopen. Run the protocol target plus affected
 activity, retention, compaction, lifecycle, worktree/fork and cloud privacy targets.
 It does not exercise a live journal or spend provider quota.
+
+ADR 0059 `DaemonProtocolTest::appendPreservesUnsupportedCounters` covers integer
+storage/type guards, overflow refusal for normal/chunked appends, positive boundary
+controls, unchanged history/counters after refusal, transaction release and
+repair/retry/reopen. Use temporary journals and the affected backend matrix.
