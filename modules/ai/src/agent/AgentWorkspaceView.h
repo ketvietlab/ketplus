@@ -248,6 +248,11 @@ class AgentWorkspaceView final : public QWidget {
             closeBackgroundTaskOutput();
     }
     QVariantMap backgroundTaskOutput() const { return backgroundTaskOutput_; }
+    Q_PROPERTY(QVariantMap heldMessageStates READ heldMessageStates NOTIFY heldMessageStatesChanged)
+    QVariantMap heldMessageStates() const { return heldMessageStates_; }
+    Q_INVOKABLE void requestHeldMessageState(const QString& messageId);
+    Q_INVOKABLE void releaseHeldMessage(const QString& messageId);
+    void acceptHeldMessageState(const QString& messageId, const QVariantMap& value);
     Q_INVOKABLE void stopBackgroundTask(const QString& taskId) {
         emit backgroundTaskStopRequested(taskId);
     }
@@ -480,6 +485,8 @@ class AgentWorkspaceView final : public QWidget {
     void claudeAccountUsageChanged();
     void backgroundTasksChanged();
     void backgroundTaskOutputChanged();
+    void heldMessageStatesChanged();
+    void heldMessageActionRequested(const QString& messageId, bool release);
     void backgroundTaskStopRequested(const QString& taskId);
     void backgroundTaskOutputRequested(const QString& taskId);
     void backgroundTaskFailed(const QString& message);
@@ -604,6 +611,8 @@ class AgentWorkspaceView final : public QWidget {
     QVariantMap claudeAccountUsage_;
     UsageRequester claudeUsageRequester_;
     QVariantList backgroundTasks_;
+    QVariantMap heldMessageStates_;
+    QString heldMessageScope_;
     QVariantMap backgroundTaskOutput_;
     QVariantList skills_;
     QSet<QString> enabledSkillPaths_;

@@ -22,6 +22,8 @@ class AgentWorkspaceViewTest final : public QObject {
     void claudeUsageBudget();
     void usageLimitsFollowConversationProvider();
     void backgroundTaskBar();
+    void heldMessageRequiresExplicitClickAndFencesDuplicates();
+    void heldMessageNoticeRendersInTranscript();
     void webSearchLabelsAndAnimation();
     void activityGalleryLoadsInBatches();
     void browserEvidenceStaysVisible_data();

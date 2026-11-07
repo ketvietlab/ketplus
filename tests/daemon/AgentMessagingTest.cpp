@@ -351,6 +351,183 @@ class AgentMessagingTest final : public QObject {
         QCOMPARE(fixture.count(receiver, "user.message"), 1);
     }
 
+    void heldReleaseWaitsForBusyReceiverAndValidatesTheWholeBatch() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const auto sender = fixture.start("claude", "sender");
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(sender, "turn.completed"), 1, 5000);
+        const auto receiver = fixture.start("claude", "slow-start");
+        AgentMessageRecord held;
+        held.id = "busy-held";
+        held.chainId = "chain";
+        held.hop = 7;
+        held.fromSession = sender;
+        held.fromGeneration = 1;
+        held.fromNumber = fixture.number(sender);
+        held.toSession = receiver;
+        held.toGeneration = 1;
+        held.toNumber = fixture.number(receiver);
+        held.kind = "notice";
+        held.body = "Release after this turn";
+        held.state = "held";
+        held.urgent = true; // explicit release never steers/interferes with the active turn
+        held.createdAt = protocol::timestamp();
+        QVERIFY(fixture.journal->insertAgentMessage(held));
+        auto expired = held;
+        expired.id = "expired-held";
+        expired.expiresAt =
+            QDateTime::currentDateTimeUtc().addSecs(-10).toString(Qt::ISODateWithMs);
+        QVERIFY(fixture.journal->insertAgentMessage(expired));
+        auto release = [&](QJsonArray ids) {
+            return fixture.host->handleCommand(
+                request("session.agent_messages.release", {{"message_ids", ids}}, receiver, 1),
+                "desktop");
+        };
+        QVERIFY(!release({held.id, expired.id}).value("ok").toBool());
+        QCOMPARE(fixture.journal->agentMessage(held.id)->state, "held");
+        QVERIFY(!release({held.id, held.id}).value("ok").toBool());
+        QVERIFY(!release({held.id, "missing"}).value("ok").toBool());
+        const auto accepted = release({held.id});
+        QVERIFY2(accepted.value("ok").toBool(), qPrintable(text(accepted)));
+        QCOMPARE(fixture.journal->agentMessage(held.id)->state, "queued");
+        QCOMPARE(fixture.count(receiver, "user.message"), 1);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.completed"), 2, 5000);
+        QCOMPARE(fixture.journal->agentMessage(held.id)->state, "delivered");
+        QVERIFY(fixture.journal->agentMessage(held.id)->delivery.startsWith("user_authorized:"));
+        QVERIFY(!logText(fixture.claudeLog).contains("steer:" + receiver.toUtf8()));
+        QVERIFY(fixture.host->handleCommand(request("session.delete", {}, receiver, 1), "desktop")
+                    .value("ok")
+                    .toBool());
+        QVERIFY(!release({expired.id}).value("ok").toBool());
+    }
+
+    void userReleasesOnlyTheSelectedHeldBatch_data() {
+        QTest::addColumn<QString>("reason");
+        for (const auto* reason : {"hop_limit", "chain_limit", "hourly_limit"})
+            QTest::newRow(reason) << QString::fromLatin1(reason);
+    }
+
+    void userReleasesOnlyTheSelectedHeldBatch() {
+        QFETCH(QString, reason);
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const auto sender = fixture.start("claude", "sender");
+        const auto receiver = fixture.start("claude", "receiver");
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.completed"), 1, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(sender, "turn.completed"), 1, 5000);
+        AgentMessageRecord message;
+        message.id = "selected";
+        message.chainId = "held-chain";
+        message.hop = AgentBroker::maximumAutomaticHop + 1;
+        message.fromSession = sender;
+        message.fromGeneration = 1;
+        message.fromNumber = fixture.number(sender);
+        message.fromTitle = "sender";
+        message.toSession = receiver;
+        message.toGeneration = 1;
+        message.toNumber = fixture.number(receiver);
+        message.kind = "notice";
+        message.body = "Review findings";
+        message.state = "held";
+        message.error = reason;
+        message.createdAt = protocol::timestamp();
+        QVERIFY(fixture.journal->insertAgentMessage(message));
+        message.id = "not-selected";
+        QVERIFY(fixture.journal->insertAgentMessage(message));
+        const auto command = request("session.agent_messages.release",
+                                     {{"message_ids", QJsonArray{"selected"}}}, receiver, 1);
+        QVERIFY(!fixture.host->handleCommand(command, "cloud-control-v2").value("ok").toBool());
+        QVERIFY(!fixture
+                     .agents(sender, "session.agent_messages.release",
+                             {{"message_ids", QJsonArray{"selected"}}})
+                     .value("ok")
+                     .toBool());
+        const auto first = fixture.host->handleCommand(command, "desktop-test");
+        QVERIFY2(first.value("ok").toBool(), qPrintable(text(first)));
+        QCOMPARE(fixture.host->handleCommand(command, "desktop-test"), first);
+        auto stale = command;
+        stale.insert("session_generation", 2);
+        QVERIFY(!fixture.host->handleCommand(stale, "desktop-test").value("ok").toBool());
+        fixture.restart(); // authorization survived before the delivery timer ran
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.completed"), 2, 5000);
+        QCOMPARE(fixture.journal->agentMessage("selected")->state, "delivered");
+        QCOMPARE(fixture.journal->agentMessage("not-selected")->state, "held");
+        const auto origin = fixture.payloads(receiver, "user.message").last();
+        QCOMPARE(origin.value("user_release_id"), command.value("message_id"));
+        QCOMPARE(origin.value("agent_messages").toArray().size(), 1);
+        QVERIFY(
+            !fixture.host
+                 ->handleCommand(request("session.agent_messages.release",
+                                         {{"message_ids", QJsonArray{"selected"}}}, receiver, 1),
+                                 "desktop-test")
+                 .value("ok")
+                 .toBool());
+        fixture.restart();
+        QTest::qWait(30);
+        QCOMPARE(fixture.count(receiver, "user.message"), 2);
+        // An unrelated later message still goes through the ordinary loop guard.
+        message.id = "future";
+        message.state = "queued";
+        message.error.clear();
+        QVERIFY(fixture.journal->insertAgentMessage(message));
+        fixture.restart();
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.journal->agentMessage("future")->state, QString("held"),
+                                  5000);
+    }
+
+    void interruptedReleaseHasNoDuplicateTurnAndRemainsRetryable_data() {
+        QTest::addColumn<bool>("journaled");
+        QTest::newRow("before-input") << false;
+        QTest::newRow("after-input") << true;
+    }
+
+    void interruptedReleaseHasNoDuplicateTurnAndRemainsRetryable() {
+        QFETCH(bool, journaled);
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const auto sender = fixture.start("claude", "sender");
+        const auto receiver = fixture.start("claude", "receiver");
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.completed"), 1, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(sender, "turn.completed"), 1, 5000);
+        AgentMessageRecord message;
+        message.id = "recover";
+        message.chainId = "chain";
+        message.hop = 7;
+        message.fromSession = sender;
+        message.fromGeneration = 1;
+        message.fromNumber = fixture.number(sender);
+        message.toSession = receiver;
+        message.toGeneration = 1;
+        message.toNumber = fixture.number(receiver);
+        message.kind = "notice";
+        message.body = "Results";
+        message.state = "held";
+        message.createdAt = protocol::timestamp();
+        QVERIFY(fixture.journal->insertAgentMessage(message));
+        QVERIFY(fixture.journal->authorizeAgentMessages(receiver, 1, {"recover"}, "release-crash"));
+        message = *fixture.journal->agentMessage("recover");
+        QVERIFY(fixture.journal->claimAgentRelease({message}, 2));
+        if (journaled)
+            QVERIFY(fixture.journal->appendEvent(
+                        receiver, 1, "user.message",
+                        {{"origin", "agent"},
+                         {"user_release_id", "release-crash"},
+                         {"agent_messages", QJsonArray{QJsonObject{{"message_id", "recover"}}}}}) >
+                    0);
+        fixture.restart();
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.journal->agentMessage("recover")->state,
+                                  journaled ? QString("delivered") : QString("failed"), 5000);
+        QCOMPARE(fixture.count(receiver, "user.message"), journaled ? 2 : 1);
+        if (!journaled) {
+            const auto result = fixture.host->handleCommand(
+                request("session.agent_messages.release", {{"message_ids", QJsonArray{"recover"}}},
+                        receiver, 1),
+                "desktop-test");
+            QVERIFY2(result.value("ok").toBool(), qPrintable(text(result)));
+            QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.completed"), 2, 5000);
+        }
+    }
+
     void loopGuardHoldsMessagesForTheUsersNextTurn() {
         Fixture fixture;
         QVERIFY(fixture.open());
@@ -653,6 +830,13 @@ class AgentMessagingTest final : public QObject {
                  "forbidden");
         QCOMPARE(roundTrip(agent, request("approval.resolve")).value("error_code").toString(),
                  "forbidden");
+        QCOMPARE(roundTrip(agent, request("session.agent_messages.release"))
+                     .value("error_code")
+                     .toString(),
+                 "forbidden");
+        QCOMPARE(
+            roundTrip(agent, request("session.agent_messages.read")).value("error_code").toString(),
+            "forbidden");
         QCOMPARE(roundTrip(agent, request("storage.retention.read")).value("error_code").toString(),
                  "forbidden");
         QCOMPARE(

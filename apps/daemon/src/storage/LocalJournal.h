@@ -320,6 +320,13 @@ class LocalJournal final {
     // ADR 0027: agent-to-agent messages.
     bool insertAgentMessage(const AgentMessageRecord& message, QString* error = nullptr);
     bool updateAgentMessage(const AgentMessageRecord& message, QString* error = nullptr);
+    // Local UI authorization of exactly these held messages. All-or-nothing, generation fenced.
+    bool authorizeAgentMessages(const QString& sessionId, qint64 generation, const QStringList& ids,
+                                const QString& authorizationId, QString* error = nullptr);
+    bool claimAgentRelease(const QList<AgentMessageRecord>& messages, qint64 turnSequence,
+                           QString* error = nullptr);
+    [[nodiscard]] std::optional<bool>
+    agentReleaseJournaled(const AgentMessageRecord& message) const;
     [[nodiscard]] std::optional<AgentMessageRecord> agentMessage(const QString& id) const;
     // Messages addressed to a conversation in the given states, oldest first.
     [[nodiscard]] QList<AgentMessageRecord>

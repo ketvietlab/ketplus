@@ -255,6 +255,16 @@ void MainWindow::ensureAgentWorkspace() {
                 statusBar()->showMessage(tr("Unable to stop the background task: %1").arg(message),
                                          7000);
             });
+    connect(agentWorkspace_, &AgentWorkspaceView::heldMessageActionRequested, this,
+            [this](const QString& messageId, bool release) {
+                agentManager_->heldMessageAction(agentWorkspace_->activePath(), messageId, release);
+            });
+    connect(agentManager_, &AgentSessionManager::heldMessageResult, this,
+            [this](const QString& path, const QString&, const QString& messageId,
+                   const QVariantMap& result) {
+                if (normalizedPath(path) == normalizedPath(agentWorkspace_->activePath()))
+                    agentWorkspace_->acceptHeldMessageState(messageId, result);
+            });
     connect(agentWorkspace_, &AgentWorkspaceView::backgroundTaskStopRequested, this,
             [this](const QString& taskId) {
                 agentManager_->stopBackgroundTask(agentWorkspace_->activePath(), taskId);

@@ -90,9 +90,18 @@ class ProviderTranscriptTest : public QObject {
         QCOMPARE(message.value("meta").toString(), "Message from #1093 · Parser · Claude");
         QCOMPARE(message.value("body").toString(), "Please review");
         const auto notice = rows.last().toMap();
-        QCOMPARE(notice.value("subtype").toString(), "notice");
+        QCOMPARE(notice.value("subtype").toString(), "heldAgentMessage");
+        QCOMPARE(notice.value("sanitizedPayload").toMap().value("messageId").toString(), "m2");
         QCOMPARE(notice.value("title").toString(), agentMessageNoticeTitle());
         QVERIFY(notice.value("body").toString().contains("#1093"));
+        auto outgoingHeld = held;
+        outgoingHeld.insert("direction", "outgoing");
+        const auto outgoingRows = daemonWindowMessages(
+            {{"events", QJsonArray{QJsonObject{{"event_type", "agent_message.state"},
+                                               {"cursor", 5},
+                                               {"payload", outgoingHeld}}}}});
+        QCOMPARE(outgoingRows.size(), 1);
+        QCOMPARE(outgoingRows.first().toMap().value("subtype").toString(), "notice");
         // A reply is labelled as one; an ordinary user message keeps "You".
         QVariantMap reply = message;
         markAgentOrigin(reply, QJsonArray{QJsonObject{{"kind", "reply"}, {"from_number", "2044"}}});

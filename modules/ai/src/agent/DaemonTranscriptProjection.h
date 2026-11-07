@@ -33,6 +33,7 @@ void markAgentOrigin(QVariantMap& entry, const QJsonArray& agentMessages);
 // Note and title for an `agent_message.state` event (held, failed or expired message).
 QString agentMessageStateText(const QJsonObject& data);
 QString agentMessageNoticeTitle();
+QVariantMap agentMessageNotice(const QJsonObject& data, const QString& itemId);
 
 // Pure presentation projection. Historical events must never change runtime
 // lifecycle or submit/resolve approvals.

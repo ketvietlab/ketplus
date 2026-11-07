@@ -787,6 +787,84 @@ void AgentWorkspaceViewTest::usageLimitsPopover() {
     QCOMPARE(submitted.constFirst().at(0).toString(), QStringLiteral("/compact"));
 }
 
+void AgentWorkspaceViewTest::heldMessageNoticeRendersInTranscript() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.setAgentAvailable(true);
+    view.setActivePath(QDir::tempPath());
+    view.resize(900, 680);
+    view.show();
+    QSignalSpy actions(&view, &ketplus::AgentWorkspaceView::heldMessageActionRequested);
+    view.resetMessages(
+        {QVariantMap{
+            {"id", "held-notice"},
+            {"itemId", "held-notice"},
+            {"kind", "system"},
+            {"category", "system"},
+            {"subtype", "heldAgentMessage"},
+            {"title", "Agent message"},
+            {"body", "A message from #1093 is held because automatic exchanges reached the limit."},
+            {"sanitizedPayload", QVariantMap{{"messageId", "actual-held"}}}}},
+        "receiver");
+    auto* root = view.quickView()->rootObject();
+    QTRY_VERIFY(findVisualItem(root, "heldMessageAction"));
+    QTRY_VERIFY(!actions.isEmpty());
+    QCOMPARE(actions.first().at(0).toString(), QString("actual-held"));
+    QCOMPARE(actions.first().at(1).toBool(), false);
+    view.acceptHeldMessageState("actual-held", {{"state", "held"}, {"can_release", true}});
+    QTRY_VERIFY(findVisualItem(root, "receiveHeldMessageButton"));
+    QVERIFY(findVisualItem(root, "receiveHeldMessageButton")->isVisible());
+}
+
+void AgentWorkspaceViewTest::heldMessageRequiresExplicitClickAndFencesDuplicates() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 680);
+    view.show();
+    QSignalSpy actions(&view, &ketplus::AgentWorkspaceView::heldMessageActionRequested);
+    QQmlComponent component(view.quickView()->engine(), QUrl("qrc:/agent/HeldMessageAction.qml"));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QScopedPointer<QQuickItem> card(qobject_cast<QQuickItem*>(component.createWithInitialProperties(
+        {{"width", 600}, {"tokens", view.tokens()}, {"messageId", "held-1"}})));
+    QVERIFY(card);
+    card->setParentItem(view.quickView()->rootObject());
+    QCOMPARE(actions.size(), 1);
+    QCOMPARE(actions.first().at(0).toString(), QString("held-1"));
+    QCOMPARE(actions.first().at(1).toBool(), false); // observing is a read, never authorization
+    view.acceptHeldMessageState("held-1", {{"state", "held"}, {"can_release", true}});
+    auto* button = findVisualItem(card.data(), "receiveHeldMessageButton");
+    QVERIFY(button);
+    QTRY_VERIFY(button->isVisible() && button->isEnabled());
+    QVERIFY(button->width() <= card->width());
+    if (const auto capture = qEnvironmentVariable("KETPLUS_HELD_NOTICE_CAPTURE");
+        !capture.isEmpty()) {
+        for (auto* child : view.quickView()->rootObject()->childItems())
+            if (child != card.data())
+                child->setVisible(false);
+        card->setPosition({24, 24});
+        view.resize(660, 140);
+        QTest::qWait(80);
+        QVERIFY(view.quickView()->grabWindow().save(capture));
+    }
+    QVERIFY(QMetaObject::invokeMethod(button, "clicked"));
+    QCOMPARE(actions.size(), 2);
+    QCOMPARE(actions.last().at(1).toBool(), true);
+    QVERIFY(!button->isEnabled());
+    view.releaseHeldMessage("held-1");
+    QCOMPARE(actions.size(), 2);
+    view.acceptHeldMessageState("held-1", {{"state", "delivered"}, {"can_release", false}});
+    QTRY_VERIFY(!button->isVisible());
+    view.releaseHeldMessage("held-1");
+    QCOMPARE(actions.size(), 2);
+    view.acceptHeldMessageState(
+        "held-1", {{"state", "failed"}, {"can_release", true}, {"reason", "Provider unavailable"}});
+    QTRY_COMPARE(button->property("text").toString(), QString("Retry receiving"));
+    QVERIFY(QMetaObject::invokeMethod(button, "clicked"));
+    QCOMPARE(actions.size(), 3);
+    view.resetMessages({}, "different-conversation");
+    QVERIFY(view.heldMessageStates().isEmpty());
+}
+
 void AgentWorkspaceViewTest::backgroundTaskBar() {
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());
