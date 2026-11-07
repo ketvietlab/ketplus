@@ -1,5 +1,6 @@
 #include "storage/ReplayDetailCompactor.h"
 #include "agent/FileChangeStatistics.h"
+#include "agent/TranscriptSanitizer.h"
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <algorithm>
@@ -69,8 +70,8 @@ bool hasSummary(const QJsonValue& value) {
 }
 } // namespace
 
-std::optional<QJsonObject> compactCompletedReplayItem(const QJsonObject& original,
-                                                      const QDateTime& cutoff) {
+static std::optional<QJsonObject> compactContent(const QJsonObject& original,
+                                                 const QDateTime& cutoff) {
     if (!cutoff.isValid() || cutoff > QDateTime::currentDateTimeUtc() ||
         original.contains("compacted"))
         return std::nullopt;
@@ -176,6 +177,64 @@ std::optional<QJsonObject> compactCompletedReplayItem(const QJsonObject& origina
     if (!contentItems.isEmpty())
         item.insert("contentItems", trimText(contentItems, budget, retained));
     item.insert("compacted", marker(cutoff, "tool-result-text-v1", originalBytes, retained));
+    return item;
+}
+
+std::optional<QJsonObject> compactCompletedReplayItem(const QJsonObject& original,
+                                                      const QDateTime& cutoff) {
+    const auto content = compactContent(original, cutoff);
+    auto item = content.value_or(original);
+    const auto type = item.value("type").toString();
+    const auto status = item.value("status").toString();
+    auto info = item.value("compacted").toObject();
+    // Only extend our known text-only marker. Unknown/future policies remain immutable.
+    if (!cutoff.isValid() || cutoff > QDateTime::currentDateTimeUtc() ||
+        (type != "mcpToolCall" && type != "dynamicToolCall") ||
+        (status != "completed" && status != "failed") || item.contains("arguments_excerpt") ||
+        (item.contains("compacted") &&
+         (info.value("policy") != "tool-result-text-v1" || info.contains("arguments"))))
+        return content;
+    const auto arguments = item.value("arguments");
+    QByteArray bytes;
+    if (arguments.isString())
+        bytes = arguments.toString().toUtf8();
+    else if (arguments.isObject())
+        bytes = QJsonDocument(arguments.toObject()).toJson(QJsonDocument::Compact);
+    else if (arguments.isArray())
+        bytes = QJsonDocument(arguments.toArray()).toJson(QJsonDocument::Compact);
+    // Leave room for the explicit notice and marker instead of growing small records.
+    if (bytes.size() <= 5 * 1024)
+        return content;
+    const qint64 originalBytes = bytes.size();
+    auto safeArguments = TranscriptSanitizer::json(arguments);
+    // Dynamic tools may encode their argument object as a JSON string.
+    if (arguments.isString()) {
+        const auto parsed = QJsonDocument::fromJson(bytes);
+        if (parsed.isObject())
+            safeArguments = TranscriptSanitizer::json(parsed.object());
+        else if (parsed.isArray())
+            safeArguments = TranscriptSanitizer::json(parsed.array());
+    }
+    const auto safeBytes =
+        safeArguments.isString() ? safeArguments.toString().toUtf8()
+        : safeArguments.isArray()
+            ? QJsonDocument(safeArguments.toArray()).toJson(QJsonDocument::Compact)
+            : QJsonDocument(safeArguments.toObject()).toJson(QJsonDocument::Compact);
+    const auto excerpt = prefix(safeBytes, 4 * 1024);
+    auto argumentInfo = marker(cutoff, "tool-arguments-v1", originalBytes, excerpt.size());
+    argumentInfo.insert("excerpt_only", true);
+    argumentInfo.insert("redacted_before_excerpt", true);
+    argumentInfo.insert("format", arguments.isString() ? "text" : "json");
+    if (info.isEmpty())
+        info = marker(cutoff, "tool-arguments-v1", originalBytes, excerpt.size());
+    info.insert("arguments", argumentInfo);
+    // A JSON prefix is not a valid argument object. Never expose it as the original call input.
+    item.remove("arguments");
+    item.insert("arguments_excerpt",
+                QStringLiteral("[Arguments trimmed · original size %1 bytes · history retention]\n")
+                        .arg(bytes.size()) +
+                    QString::fromUtf8(excerpt));
+    item.insert("compacted", info);
     return item;
 }
 } // namespace ketplus::daemon

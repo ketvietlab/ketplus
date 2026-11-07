@@ -1,6 +1,7 @@
 #pragma once
 
 #include "agent/TranscriptEvent.h"
+#include "agent/TranscriptSanitizer.h"
 
 #include <QJsonArray>
 #include <QJsonValue>
@@ -10,14 +11,6 @@
 #include <optional>
 
 namespace ketplus {
-
-class TranscriptSanitizer final {
-  public:
-    [[nodiscard]] static bool isSensitiveKey(const QString& key);
-    [[nodiscard]] static QString text(QString value);
-    [[nodiscard]] static QString url(const QString& value);
-    [[nodiscard]] static QJsonValue json(const QJsonValue& value, const QString& key = {});
-};
 
 class ActivityNormalizer final {
   public:

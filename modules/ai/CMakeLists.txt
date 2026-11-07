@@ -17,6 +17,7 @@ add_library(ketplus_ai STATIC
     src/agent/TranscriptFileLocation.h
     src/agent/TranscriptNormalizer.cpp
     src/agent/TranscriptNormalizer.h
+    src/agent/TranscriptSanitizer.h
     src/agent/TranscriptPresentationGrouper.cpp
     src/agent/TranscriptPresentationGrouper.h
     src/agent/AgentSessionHistory.cpp
