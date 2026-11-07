@@ -165,6 +165,10 @@ the corresponding Atlas mock first.
 - Multirow journal append changes: the daemon protocol fault fixture verifies
   complete/partial ignored writes, rollback, repair and reopen; activity tests
   also exercise running-turn lookup plans over 100,000 historical rows.
+
+- Journal startup changes: deferred commit-failure fixtures cover turn/replay/
+  activity backfills, unchanged stored rows, diagnostic preservation, write-lock
+  release while the failed object remains alive, repair and reopen.
 - One Pro module: focused target plus its directly affected tests.
 - Shared header or desktop shell: full build and full Pro test suite.
 - `core/` change: the Lite suite (`ctest --preset lite-dev`), then the full Pro suite.

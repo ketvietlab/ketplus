@@ -1596,6 +1596,99 @@ class DaemonProtocolTest final : public QObject {
         QCOMPARE(journal.sessions().constFirst().lastCursor, 0);
     }
 
+    void startupCommitFailurePreservesErrorAndReleasesTransaction_data() {
+        QTest::addColumn<QString>("phase");
+        for (const auto& phase : {"turn", "replay", "activity"})
+            QTest::newRow(phase) << QString(phase);
+    }
+    void startupCommitFailurePreservesErrorAndReleasesTransaction() {
+        QFETCH(QString, phase);
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        const auto snapshot = [](QSqlDatabase db) {
+            QVariantMap result;
+            for (const auto& table :
+                 {"sessions", "events", "replay_events", "replay_projection_state",
+                  "activity_heads", "activity_items", "activity_summaries", "startup_child"}) {
+                QSqlQuery q(db);
+                if (!q.exec(QString("SELECT * FROM %1 ORDER BY 1,2,3").arg(table))) {
+                    QTest::qFail(qPrintable(q.lastError().text()), __FILE__, __LINE__);
+                    return QVariantMap{};
+                }
+                QVariantList values;
+                while (q.next())
+                    for (int n = 0; n < q.record().count(); ++n)
+                        values.append(q.value(n));
+                result.insert(table, values);
+            }
+            return result;
+        };
+        QVariantMap before;
+        {
+            LocalJournal seed(path);
+            QVERIFY(seed.isOpen());
+            QVERIFY(seed.upsertSession({"s", dir.path(), "codex", {}, {}, "ready"}));
+            QCOMPARE(seed.appendEvent("s", 1, "user.message", {{"text", "seed"}}), qint64(1));
+            QCOMPARE(seed.appendEvent("s", 1, "item.started",
+                                      {{"item", QJsonObject{{"id", "probe"},
+                                                            {"type", "mcpToolCall"},
+                                                            {"tool", "read_file"}}}}),
+                     qint64(2));
+            QSqlDatabase db;
+            for (const auto& name : QSqlDatabase::connectionNames())
+                if (name.startsWith("ketplus-daemon-") &&
+                    QSqlDatabase::database(name).databaseName() == path)
+                    db = QSqlDatabase::database(name);
+            QVERIFY(db.isOpen());
+            QSqlQuery q(db);
+            QVERIFY(q.exec("CREATE TABLE startup_parent(id INTEGER PRIMARY KEY)"));
+            QVERIFY(q.exec("CREATE TABLE startup_child(id INTEGER REFERENCES startup_parent(id) "
+                           "DEFERRABLE INITIALLY DEFERRED, marker INTEGER, value INTEGER)"));
+            QVERIFY(q.exec("UPDATE sessions SET title='fixture'"));
+            QString mutation;
+            if (phase == "turn") {
+                QVERIFY(q.exec("UPDATE sessions SET current_turn_sequence=0"));
+                QVERIFY(q.exec("UPDATE events SET turn_sequence=0"));
+                mutation = "AFTER UPDATE ON sessions WHEN "
+                           "NEW.current_turn_sequence>OLD.current_turn_sequence";
+            } else if (phase == "replay") {
+                QVERIFY(q.exec("DELETE FROM replay_events"));
+                QVERIFY(q.exec("DELETE FROM replay_projection_state"));
+                mutation = "AFTER INSERT ON replay_projection_state";
+            } else {
+                QVERIFY(q.exec("DELETE FROM activity_heads"));
+                QVERIFY(q.exec("DELETE FROM activity_items"));
+                QVERIFY(q.exec("DELETE FROM activity_summaries"));
+                mutation = "AFTER INSERT ON activity_heads";
+            }
+            QVERIFY(q.exec(QString("CREATE TRIGGER fail_startup %1 BEGIN INSERT INTO startup_child "
+                                   "VALUES(1,0,0); END")
+                               .arg(mutation)));
+            before = snapshot(db);
+        }
+        LocalJournal failed(path);
+        QVERIFY2(!failed.isOpen(), "Failed startup must never advertise an initialized journal.");
+        QVERIFY2(failed.errorString().contains("FOREIGN KEY", Qt::CaseInsensitive),
+                 qPrintable(failed.errorString()));
+        const auto connection = QString("startup-repair-%1").arg(phase);
+        const auto remove = qScopeGuard([&] { QSqlDatabase::removeDatabase(connection); });
+        auto repair = QSqlDatabase::addDatabase("QSQLITE", connection);
+        repair.setConnectOptions("QSQLITE_BUSY_TIMEOUT=30");
+        repair.setDatabaseName(path);
+        QVERIFY(repair.open());
+        QSqlQuery q(repair);
+        // Keep the failed object alive: startup must release its write transaction itself.
+        QVERIFY2(q.exec("BEGIN IMMEDIATE"), qPrintable(q.lastError().text()));
+        QVERIFY(q.exec("ROLLBACK"));
+        QCOMPARE(snapshot(repair), before);
+        QVERIFY(q.exec("DROP TRIGGER fail_startup"));
+        LocalJournal reopened(path);
+        QVERIFY2(reopened.isOpen(), qPrintable(reopened.errorString()));
+        QCOMPARE(reopened.sessionHead("s").cursor, qint64(2));
+        QCOMPARE(reopened.eventsAfter("s", 1, 0).size(), 2);
+        QCOMPARE(reopened.compactedEventsAfter("s", 1, 0, 10).events.size(), 2);
+    }
+
     void backfillNeverRenumbersPrunedSessions() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());

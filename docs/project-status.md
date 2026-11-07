@@ -15,6 +15,10 @@ milestone changes state.
   partial indexes restrict settlement checks to running rows in the target turn.
   Large running turns and initial index construction remain separate bounds work.
 
+- Failed activity-backfill commits now preserve their diagnostic and release the
+  write transaction (ADR 0064). A separate connection can repair and reopen while
+  the failed journal object remains alive; broader startup recovery remains open.
+
 - Fork preserves unsupported source cursor/turn values rather than coercing them
   into copied metadata (ADR 0061). Integer-only projection and nonnegative checks
   reject the copy before destination writes; repair/retry/reopen are covered.
