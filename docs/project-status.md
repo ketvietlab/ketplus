@@ -7,7 +7,8 @@ milestone changes state.
 
 - The owner-only size-policy backend supports revisioned 1/2/5/10 GB SQLite-page
   targets and warning status (ADR 0046). Recent-detail pressure is opt-in via an
-  explicit policy save until Desktop size controls/rollout are complete. It reclaims
+  explicit policy save. Desktop now exposes a separate Save database target action,
+  allowed targets and warning percentage, compatible with older detail-only daemons. It reclaims
   free pages first and completes bounded expired sweeps before recent detail,
   preserving Forever/off and all existing turn/ACK guards. It is not a hard
   filesystem quota or complete #128 media/archive/storage enforcement.
@@ -26,11 +27,11 @@ milestone changes state.
   Adjacent redundant tool starts can also be removed without changing transcript
   order or dropping start-only fields; interleaved and incomplete cases remain
   protected (ADR 0041). Local detail-retention preferences now persist with revision
-  checks and explicit IPC capabilities (ADR 0042); size/archive/media policy and
+  checks and explicit IPC capabilities (ADR 0042); archive/media policy and
   the complete Storage page remain pending. The native Storage page now exposes the
   supported detail period and automatic-detail switch, revision-aware immediate saves,
-  reload-on-conflict/error and advisory SQLite page usage; no size/image/archive
-  controls are presented as implemented. Storage also shows advisory SQLite/WAL/SHM
+  reload-on-conflict/error and advisory SQLite page usage; image/archive
+  controls remain pending. Storage also shows advisory SQLite/WAL/SHM
   file lengths and filesystem availability, with a below-5-GB notice on refresh
   (ADR 0045); these are not total application storage or background monitoring.
 
