@@ -295,8 +295,8 @@ class LocalJournal final {
     bool removeCloudEventsThrough(const QString& sessionId, qint64 generation, qint64 cursor);
     bool acknowledgeCursor(const QString& clientId, const QString& sessionId, qint64 generation,
                            qint64 cursor);
-    // Bounded retention for tables without a session lifecycle: idempotency results, deletion
-    // tombstones and large payloads no longer referenced by any retained event.
+    // Eventual age/cap cleanup for metadata and unreferenced payloads. Each metadata table
+    // has an independent transactional 256-row/1-MiB deletion budget per pass (ADR 0050).
     static constexpr int commandResultRetentionDays = 7;
     static constexpr int maximumCommandResults = 10000;
     static constexpr int tombstoneRetentionDays = 90;
@@ -341,8 +341,8 @@ class LocalJournal final {
   private:
     bool initializeAgents();
     bool initializeRemoteAudit();
-    // The audit's 90-day, 10,000-row bound. Run from pruneRetention and every 256 audit rows,
-    // because commands refused before they ran store no command result to trigger it.
+    // The audit's eventual 90-day, 10,000-row cap. Run from pruneRetention and every 256 audit
+    // rows, because commands refused before they ran store no command result to trigger it.
     bool pruneRemoteAudit();
     bool checkpointReclaimedPages();
     // Inside deleteSession's transaction: releases the number and ends undelivered messages.

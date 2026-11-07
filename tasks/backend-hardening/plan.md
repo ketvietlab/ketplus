@@ -80,8 +80,14 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
     is tracked separately until verified.
   - [x] Reproduce the separate Qt ACK backlog path (7,183 ms) and implement bounded
     durable queued raw cleanup; focused ACK/protocol/transcript regressions pass.
-  - [ ] Final-head full Pro matrix, independent review, merge and cleanup for ACK.
-  - [ ] Audit remaining command/tombstone/audit/cursor/task sweeps and targeted ACK cleanup.
+  - [x] ACK #223: final-head full Pro 93/93 and independent 9/9 affected targets;
+    merged `1bdaee5b608da4ef0a958b5888e83859dd920dee`. Source/build cleanup is
+    tracked separately until verified.
+  - [x] Reproduce command/audit backlog DELETE and clock-rollback result loss.
+  - [x] Implement bounded command/tombstone/audit/cursor/task lanes with rollback,
+    actual-query, byte-budget, reopen and orphan-generation regressions (ADR 0050).
+  - [ ] Final-head metadata full Pro/review/merge gates and safe cleanup.
+  - [ ] Audit staged attachments, cloud-event cleanup and explicit deletion paths.
   - [ ] Close H1.1 only when those remaining work bounds have evidence.
 - [ ] H1.2 Verify migration/reopen safety: old schema, repeat open, partial failure,
   unknown/newer formats, one-time index creation and low-space conditions. Add
@@ -191,7 +197,7 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | Item | State | Evidence / remaining work | Next action / owner |
 | --- | --- | --- | --- |
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
-| H1.1 | In progress | Global GC #220 merged with exact-head review/matrix; bounded ACK cleanup implemented, gate pending; other sweeps unchecked | Finish ACK matrix/review, then command/tombstone/audit sweeps / #2739 |
+| H1.1 | In progress | Global GC #220 and ACK #223 merged with exact-head review/matrix; metadata lanes implemented, gates pending; other paths unchecked | Finish metadata gates, audit staged attachments/cloud/deletion / #2739 |
 | H1.2–H1.7 | Not started | No claim that #128 backend acceptance is complete | Follow H1.1, prioritize a confirmed safety finding / #2739 |
 | H2–H3 | Not started | Open daemon/provider review issues mapped | Execute after storage, or independent audit while waiting review / #2739 |
 | H4.1–H4.3 | Not started | Existing remote fixes are not a full #85 closure | Audit local transport/privacy with fixtures / #2739 |
@@ -288,7 +294,32 @@ row/suffix gap is caught. The full run on the earlier head was cancelled after
 this P2 was confirmed. Exact-head full/review gates must be rerun before the P2 is
 considered independently resolved.
 
-**Next executable task:** finish ACK prefix-fix/mutation/full-matrix/review gates, merge and
-clean both completed worktrees, then reproduce and bound the remaining H1.1
-command/tombstone/audit/cursor/task sweeps. Also audit cloud-event and explicit
-session deletion separately. Do not mark H1.1/H1 complete on these subsets.
+The final ACK head `658325f1b63dde44668841827191d08b7b183bb8` passed full Pro
+93/93 and independent 9/9 affected targets, including ACK 24/24 and retention
+124/124. Review resolved the prefix P2; #223 merged at
+`1bdaee5b608da4ef0a958b5888e83859dd920dee`. Earlier pending-gate notes above are
+historical; source/build cleanup remains separately tracked.
+
+### H1.1 metadata retention
+
+The committed Qt regression on the #223 baseline removes 90,256 rows on the
+256th command/audit write (359/159 ms) and loses the newly accepted result after
+clock rollback. Bounded lanes remove at most 256 rows and 1 MiB per table, use
+accepted-write rowid order for caps, and persist age/cap progress transactionally.
+Focused regressions cover reopen, shared age/cap byte budget, unsupported values,
+orphan generation isolation, busy/WAL readers, cursor wrap and failure rollback.
+Focused suite: 20/20. Mutation checks catch doubled row and 16-MiB byte budgets;
+[Qt evidence](evidence/h1-metadata-retention-qt.json) records the before/after fixture.
+Full matrix and exact
+head review remain gates before merge. Evidence is synthetic; no live journal,
+Windows, deployment or installation acceptance is implied.
+
+The first full Pro run passed 93/94 targets. Its existing transcript-window expiry
+case exposed an empty-tail pass that only reset the cursor, delaying the reopen
+recheck. The fix wraps an empty tail once in the same pass without increasing the
+candidate budget; the original expiry assertion remains intact. Focused and full
+gates must pass again at the revised head.
+
+**Next executable task:** finish metadata full-matrix/review/merge gates; while
+review runs, reproduce staged-attachment expiry work bounds. Then audit cloud-event
+and explicit deletion separately. Do not mark H1.1/H1 complete on these subsets.

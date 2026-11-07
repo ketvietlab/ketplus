@@ -101,6 +101,10 @@ bool LocalJournal::initialize() {
                        "queue_id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, "
                        "generation INTEGER NOT NULL, "
                        "UNIQUE(session_id,generation))"),
+        QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS journal_metadata_gc ("
+            "table_name TEXT PRIMARY KEY, age_row INTEGER NOT NULL DEFAULT 0 CHECK(age_row>=0), "
+            "cap_row INTEGER NOT NULL DEFAULT 0 CHECK(cap_row>=0))"),
         QStringLiteral("CREATE TABLE IF NOT EXISTS sessions ("
                        "id TEXT PRIMARY KEY, worktree_path TEXT NOT NULL, adapter TEXT NOT NULL, "
                        "thread_id TEXT NOT NULL, turn_id TEXT NOT NULL, state TEXT NOT NULL, "
@@ -827,39 +831,6 @@ bool LocalJournal::deleteSession(const QString& sessionId, const qint64 generati
     // Retention failure must not turn a committed delete into a reported failure.
     if (!pruneRetention())
         qWarning("Journal retention pass failed: %s", qUtf8Printable(error_));
-    return true;
-}
-
-bool LocalJournal::pruneRetention() {
-    QSqlQuery query(database_);
-    const QStringList statements{
-        QStringLiteral("DELETE FROM command_results WHERE datetime(completed_at) < "
-                       "datetime('now', '-%1 days')")
-            .arg(commandResultRetentionDays),
-        QStringLiteral("DELETE FROM command_results WHERE rowid NOT IN (SELECT rowid FROM "
-                       "command_results ORDER BY completed_at DESC LIMIT %1)")
-            .arg(maximumCommandResults),
-        // A tombstone fences replayed deletes and stale upserts of a deleted generation; cloud
-        // command replay windows are far shorter than this bound.
-        QStringLiteral("DELETE FROM session_tombstones WHERE datetime(deleted_at) < "
-                       "datetime('now', '-%1 days')")
-            .arg(tombstoneRetentionDays),
-        QStringLiteral("DELETE FROM client_cursors WHERE NOT EXISTS (SELECT 1 FROM sessions s "
-                       "WHERE s.id = client_cursors.session_id AND s.generation = "
-                       "client_cursors.generation)"),
-        QStringLiteral("DELETE FROM background_tasks WHERE NOT EXISTS (SELECT 1 FROM sessions s "
-                       "WHERE s.id = background_tasks.session_id AND s.generation = "
-                       "background_tasks.generation)"),
-    };
-    if (!pruneLargePayloadGarbage() || !pruneRemoteAudit())
-        return false;
-    for (const QString& statement : statements) {
-        if (!query.exec(statement)) {
-            setError(query.lastError().text());
-            return false;
-        }
-    }
-    commandResultsSincePrune_ = 0;
     return true;
 }
 

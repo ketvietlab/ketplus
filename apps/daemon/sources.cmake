@@ -107,6 +107,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/LocalJournal.cpp
     src/storage/LocalJournalAcknowledgements.cpp
     src/storage/LocalJournalGarbageCollection.cpp
+    src/storage/LocalJournalMetadataRetention.cpp
     src/storage/LocalJournalFork.cpp
     src/storage/LocalJournalLargeEvents.cpp
     src/storage/LocalJournalOutput.cpp
