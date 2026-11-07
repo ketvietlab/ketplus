@@ -19,6 +19,11 @@ milestone changes state.
   write transaction (ADR 0064). A separate connection can repair and reopen while
   the failed journal object remains alive; broader startup recovery remains open.
 
+- Media cleanup requires a complete bounded reference catalog before deleting
+  metadata or image bytes (ADR 0065). Unknown shapes, symlinks and read failures
+  preserve shared data; valid/empty catalogs retain existing cleanup behavior.
+  Reference write/copy durability and broader media bounds remain under audit.
+
 - Fork preserves unsupported source cursor/turn values rather than coercing them
   into copied metadata (ADR 0061). Integer-only projection and nonnegative checks
   reject the copy before destination writes; repair/retry/reopen are covered.

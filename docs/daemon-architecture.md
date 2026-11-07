@@ -364,6 +364,13 @@ relay. The same `session.media.read` with a worktree-relative `path` instead of
 are refused). Previews are decoded off the daemon's main thread, scaled to at
 most 1280 px and flattened onto white.
 
+Media cleanup first validates a complete reference catalog: canonical digest
+files, regular nonsymlink entries, at most 4 MiB per file, 16 MiB total and 4,096
+directory entries. Unknown, unreadable or over-budget ownership defers deletion;
+capacity can remain above its limit pending recovery. Valid ownership retains the
+existing eviction order. This guard does not establish reference-write durability
+or a cross-file transaction; see ADR 0065.
+
 Codex `fileChange` items are journaled with a worktree-relative `worktreePath`
 on each change, or `outsideWorktree: true` when the file is not beneath the
 worktree, so a phone can open the changed file. Codex account rate limits
