@@ -309,7 +309,9 @@ physical caps, not a hard storage quota; see [ADR 0050](decisions/0050-bounded-j
 Cloud envelope cache cleanup has its own 256-candidate/1-MiB maintenance lane.
 Only rows with receipts for their exact sent ciphertext are eligible. An additive
 receipt flag defaults to pending for legacy/new cache; pre-dispatch verification
-resets it for retries, and a successful scoped upload records it transactionally.
+resets it for retries. Receipt and a versioned relay/workspace/machine/key-scoped
+recovery cursor commit together before credential mirroring and raw ACK; restart
+repairs these later steps without re-encrypting already accepted events.
 Old account callbacks and old raw cloud cursors cannot authorize a replacement
 cache row's deletion. Invalid envelope recovery removes one exact identity before
 retry, with a 1-MiB stored-column bound and checked transaction. Unsupported or

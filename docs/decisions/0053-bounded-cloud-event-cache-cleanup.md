@@ -14,14 +14,33 @@ legacy rows. Before dispatch, the journal verifies the batch against the exact
 cached session/generation/cursor and encrypted content, then atomically clears
 these rows' receipt flags. This preserves cached ciphertext across failed uploads
 and retries, even if the same envelope was accepted in a previous workspace.
-After an upload is accepted and local progress is stored, only the captured sent
-envelopes through the accepted cursor can gain a receipt. A missing or regenerated
+After an upload is accepted, only the captured sent envelopes through its accepted
+cursor can gain a receipt. A missing or regenerated
 cache row cannot inherit an older ciphertext's receipt. Stale account-epoch,
 workspace or machine callbacks release their in-flight slot without writing
 progress/receipts/backoff or restarting upload.
 
-Each receipt/pending transaction checks at most 100 rows and 1 MiB of stored
-column bytes using metadata before loading JSON. Ignored/aborted writes, cache
+Receipts and a scoped recovery cursor commit in the **same SQLite transaction**.
+The versioned scope tuple includes relay URL, workspace, machine and signing-key
+version. Credential-file upload progress is then mirrored and the raw journal
+cursor acknowledged. If receipt/progress persistence fails, neither advances;
+normal retry retains the same ciphertext. If the later credential/raw-ACK step
+fails or the process stops, the journal cursor survives cache reclamation and
+prevents re-encrypting an already accepted event. Registration repairs the mirror
+and raw ACK; reads take the maximum of the legacy mirror and the exact scoped
+journal cursor, and fail closed on unsupported journal progress. Old-scope rows
+cannot advance a different account/workspace/relay. Orphaned progress uses its
+own bounded metadata lane; progress for retained sessions remains recoverable.
+
+This resolves the independent P2 reproduction where the old callback advanced the
+mirror/raw cursor before receipt storage, permanently stranding unmarked cache.
+Simply moving receipts earlier without durable recovery would create another
+crash window: after cache reclamation, retry could send different ciphertext for
+an event already accepted by the relay.
+
+Each receipt/pending transaction checks at most 100 cache rows; a receipt also
+writes one scoped-progress row. All share a 1-MiB stored-column budget, using
+metadata before loading cache JSON. Ignored/aborted writes, cache
 mismatch before dispatch, oversized/unsupported rows and failed commits return
 failure and roll back the whole batch. A changed cache after dispatch is skipped
 when recording the older receipt, preserving the replacement. Busy work returns
@@ -51,7 +70,8 @@ Tests cover backlog/byte/reopen bounds, stale cursors and regenerated ciphertext
 legacy migration, pending/receipt transitions and partial ACKs, exact invalidation,
 row/byte receipt limits, ignored mutations/commit rollback, busy restoration and
 production prepared query plans. Transport fixtures check failed policy/turn
-invalidation and an old upload callback delivered after sign-out.
+invalidation an old upload callback delivered after sign-out, ignored receipt storage through
+retry/reopen, atomic progress failure and credential failure followed by restart.
 
 Per-entry ordinary cache read/JSON limits, malformed empty-object recovery,
 legacy unmarked-cache recovery, explicit session deletion, low-space migration

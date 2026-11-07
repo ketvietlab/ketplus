@@ -901,7 +901,11 @@ class DaemonProtocolTest final : public QObject {
         QCOMPARE(suffix.size(), 1);
         QCOMPARE(suffix.first().toObject().value("cursor").toInteger(), 2);
         QCOMPARE(suffix.first().toObject().value("event_type").toString(), "second");
-        QVERIFY(reopened.removeCloudEventsThrough("session-1", 3, 1));
+        const QJsonArray sent{reopened.cloudEvent("session-1", 3, 1)};
+        QVERIFY(reopened.prepareCloudEventUpload(sent));
+        QVERIFY(reopened.acknowledgeCloudEventUpload("fixture-scope", "session-1", 3, sent, 1));
+        QCOMPARE(reopened.cloudUploadCursor("fixture-scope", "session-1", 3), 1);
+        QVERIFY(reopened.pruneAcknowledgedCloudEvents());
         QVERIFY(reopened.cloudEvent("session-1", 3, 1).isEmpty());
         QVERIFY(reopened.acknowledgeCursor("cloud-control-v2", "session-1", 3, 0));
         QVERIFY(reopened.acknowledgeCursor("desktop", "session-1", 3, 2));

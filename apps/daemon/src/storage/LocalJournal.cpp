@@ -152,6 +152,10 @@ bool LocalJournal::initialize() {
         QStringLiteral("CREATE INDEX IF NOT EXISTS session_deletion_cloud_pending ON "
                        "session_deletion_work(cloud_acked)"),
         QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS cloud_upload_progress ("
+            "scope TEXT NOT NULL, session_id TEXT NOT NULL, generation INTEGER NOT NULL, "
+            "cursor INTEGER NOT NULL, PRIMARY KEY(scope,session_id,generation))"),
+        QStringLiteral(
             "CREATE TABLE IF NOT EXISTS cloud_events ("
             "session_id TEXT NOT NULL, generation INTEGER NOT NULL, cursor INTEGER NOT NULL, "
             "event TEXT NOT NULL, created_at TEXT NOT NULL, "

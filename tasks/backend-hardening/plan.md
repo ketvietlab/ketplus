@@ -212,7 +212,7 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | Item | State | Evidence / remaining work | Next action / owner |
 | --- | --- | --- | --- |
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
-| H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion-work #235 merged with exact-head gates; cloud cache focused 2/2 | Finish cloud-cache gates; audit explicit cancellation/deletion / #2739 |
+| H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion-work #235 merged with exact-head gates; cloud cache recovery revision focused 4/4; P2 awaiting final review | Finish cloud-cache gates; audit explicit cancellation/deletion / #2739 |
 | H1.2–H1.7 | Not started | No claim that #128 backend acceptance is complete | Follow H1.1, prioritize a confirmed safety finding / #2739 |
 | H2–H3 | Not started | Open daemon/provider review issues mapped | Execute after storage, or independent audit while waiting review / #2739 |
 | H4.1–H4.3 | Not started | Existing remote fixes are not a full #85 closure | Audit local transport/privacy with fixtures / #2739 |
@@ -447,3 +447,23 @@ Ordinary cache read/JSON size, malformed empty-object and legacy unmarked-cache
 recovery remain H1.2/H4.1 checks. Explicit deletion/current-upload cancellation,
 tombstone enumeration and mixed multi-GB acceptance remain open. No UI, live
 journal, release or installation scope is added.
+
+
+Cloud-cache review at `b007cb59` found P2: mirror/raw progress preceded receipt
+storage, so a failed receipt was skipped by all later uploads and remained forever.
+The first full build also exposed one protocol test calling the removed cleanup
+API. The revised package uses an atomic SQLite receipt + scoped recovery cursor,
+then mirrors credentials/raw ACK; registration recovers after a crash or later
+write failure. The protocol smoke now exercises that contract. Added the reviewer
+transport regression plus credential-failure/restart and atomic progress probes.
+All final matrix/review gates must run again at the revised head; the original
+focused result is not final acceptance. No merge or release has occurred.
+
+
+The cloud-cache recovery revision passes 4/4 affected targets (14.56 s): cache
+27/27, privacy 65/65, protocol 43/43, metadata 32/32. It includes the reviewer's
+ignored-receipt retry/reopen probe, identical ciphertext on retry, and credential
+failure followed by restart/cache reclamation without resending an accepted event.
+Scoped progress and receipts roll back together on ignored writes or failed commits.
+Upload-progress handling now has its own owning file; the sync file is below 500
+lines. Full Pro and independent exact-head review are still required.

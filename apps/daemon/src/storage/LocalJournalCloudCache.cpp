@@ -19,13 +19,32 @@ QString compact(const QJsonObject& value) {
 // cannot authorize deletion of regenerated ciphertext. One transaction touches
 // at most 100 cached rows and 1 MiB of their stored column bytes.
 bool markUpload(QSqlDatabase db, const QJsonArray& envelopes, bool acknowledged,
-                qint64 acceptedThrough, QString* error) {
+                qint64 acceptedThrough, QString* error, const QString& scope = {},
+                const QString& sessionId = {}, qint64 generationId = 0) {
     const auto fail = [&](const QString& detail) {
         *error = detail;
         return false;
     };
     if (envelopes.size() > 100 || acceptedThrough < 0)
         return fail("Invalid cloud upload receipt bounds.");
+    qint64 progressBytes = 0;
+    if (acknowledged) {
+        if (scope.isEmpty() || scope.size() > 4096 || sessionId.isEmpty() ||
+            sessionId.size() > 256 || generationId < 1 || acceptedThrough < 1 ||
+            envelopes.isEmpty())
+            return fail("Invalid scoped cloud upload progress.");
+        progressBytes = scope.toUtf8().size() + sessionId.toUtf8().size() + 16;
+        qint64 highest = 0;
+        for (const auto& value : envelopes) {
+            const auto sent = value.toObject();
+            if (sent.value("sessionId").toString() != sessionId ||
+                sent.value("sessionGeneration").toInteger(-1) != generationId)
+                return fail("Cloud upload receipt scope does not match its batch.");
+            highest = qMax(highest, sent.value("cursor").toInteger(-1));
+        }
+        if (acceptedThrough > highest)
+            return fail("Cloud upload receipt exceeds its batch.");
+    }
     QSqlQuery timeout(db);
     if (!timeout.exec("PRAGMA busy_timeout") || !timeout.next())
         return fail(timeout.lastError().text());
@@ -44,7 +63,7 @@ bool markUpload(QSqlDatabase db, const QJsonArray& envelopes, bool acknowledged,
     if (!db.transaction())
         return fail(db.lastError().text());
     transaction = true;
-    qint64 totalBytes = 0;
+    qint64 totalBytes = progressBytes;
     for (const auto& value : envelopes) {
         const auto sent = value.toObject();
         const auto session = sent.value("sessionId").toString();
@@ -105,6 +124,21 @@ bool markUpload(QSqlDatabase db, const QJsonArray& envelopes, bool acknowledged,
             return fail(q.lastError().text());
         if (q.numRowsAffected() != 1)
             return fail("Cloud upload cache receipt was not stored.");
+    }
+    if (acknowledged) {
+        QSqlQuery progress(db);
+        progress.prepare(
+            "INSERT INTO cloud_upload_progress(scope,session_id,generation,cursor) "
+            "VALUES(?,?,?,?) ON CONFLICT(scope,session_id,generation) DO UPDATE SET "
+            "cursor=MAX(cursor,excluded.cursor) WHERE typeof(cursor)='integer' AND cursor>=0");
+        progress.addBindValue(scope);
+        progress.addBindValue(sessionId);
+        progress.addBindValue(generationId);
+        progress.addBindValue(acceptedThrough);
+        if (!progress.exec())
+            return fail(progress.lastError().text());
+        if (progress.numRowsAffected() != 1)
+            return fail("Scoped cloud upload progress was not stored.");
     }
     if (!db.commit())
         return fail(db.lastError().text());
@@ -189,14 +223,41 @@ bool LocalJournal::prepareCloudEventUpload(const QJsonArray& envelopes) {
     return true;
 }
 
-bool LocalJournal::acknowledgeCloudEventUpload(const QJsonArray& envelopes,
+bool LocalJournal::acknowledgeCloudEventUpload(const QString& scope, const QString& sessionId,
+                                               qint64 generation, const QJsonArray& envelopes,
                                                qint64 acceptedThrough) {
     QString error;
-    if (!markUpload(database_, envelopes, true, acceptedThrough, &error)) {
+    if (!markUpload(database_, envelopes, true, acceptedThrough, &error, scope, sessionId,
+                    generation)) {
         setError(error);
         return false;
     }
     return true;
+}
+
+qint64 LocalJournal::cloudUploadCursor(const QString& scope, const QString& sessionId,
+                                       qint64 generation) const {
+    QSqlQuery query(database_);
+    query.prepare("SELECT CASE WHEN typeof(cursor)='integer' AND cursor>=0 THEN cursor ELSE -1 END "
+                  "FROM cloud_upload_progress WHERE scope=? AND session_id=? AND generation=?");
+    query.addBindValue(scope);
+    query.addBindValue(sessionId);
+    query.addBindValue(generation);
+    if (!query.exec()) {
+        setError(query.lastError().text());
+        return -1;
+    }
+    if (!query.next()) {
+        if (query.lastError().isValid()) {
+            setError(query.lastError().text());
+            return -1;
+        }
+        return 0;
+    }
+    const auto cursor = query.value(0).toLongLong();
+    if (cursor < 0)
+        setError("Scoped cloud upload progress requires recovery.");
+    return cursor;
 }
 
 bool LocalJournal::discardCloudEvent(const QString& sessionId, qint64 generation, qint64 cursor) {

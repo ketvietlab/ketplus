@@ -7,8 +7,9 @@ milestone changes state.
 
 - Cloud envelope ACK cleanup uses bounded transactional metadata maintenance;
   invalidation instead removes one exact cache identity before retry (ADR 0053).
-  Pending envelopes and regenerated ciphertext cannot inherit an old cursor or
-  receipt; stale account upload callbacks cannot restore progress. Oversized cache
+  Receipts commit with a scoped recovery cursor before credential mirroring/raw
+  ACK, preserving retry after storage failure or restart. Regenerated cache cannot
+  inherit an old cursor or receipt; stale account upload callbacks cannot restore progress. Oversized cache
   invalidation fails closed; legacy unmarked cache and decoding need separate recovery.
 
 - Provider/cloud deletion completion updates only the identified durable work row;

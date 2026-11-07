@@ -188,54 +188,15 @@ QByteArray CloudControlClient::eventAssociatedData(const QJsonObject& event,
          content.value(QStringLiteral("senderKeyVersion"))});
 }
 
-void CloudControlClient::uploadEvents() {
-    if (machineId_.isEmpty() || daemonToken_.isEmpty())
-        return;
-    const QList<StoredSession> sessions = journal_->sessions();
-    // Every upload used to re-register every session's cursor, one journal transaction each, on
-    // the daemon's only thread. Only a session this process has not registered yet needs one.
-    for (const StoredSession& session : sessions) {
-        if (!registeredCloudCursors_.contains(
-                QStringLiteral("%1:%2").arg(session.id).arg(session.generation)) &&
-            !registerCloudCursor(session))
-            return;
-    }
-    for (const StoredSession& session : sessions) {
-        if (refusedSessions_.contains(session.id))
-            continue;
-        const QString account =
-            QStringLiteral("uploaded-cursor-%1-%2").arg(session.id).arg(session.generation);
-        const qint64 cursor = storedString(account).toLongLong();
-        if (cursor < session.lastCursor)
-            uploadSessionEvents(session.id, session.generation, cursor);
-    }
-}
-
-bool CloudControlClient::registerCloudCursors() {
-    registeredCloudCursors_.clear();
-    for (const StoredSession& session : journal_->sessions()) {
-        if (!registerCloudCursor(session))
-            return false;
-    }
-    return true;
-}
-
-bool CloudControlClient::registerCloudCursor(const StoredSession& session) {
-    const qint64 cursor =
-        storedString(
-            QStringLiteral("uploaded-cursor-%1-%2").arg(session.id).arg(session.generation))
-            .toLongLong();
-    if (!journal_->acknowledgeCursor(QStringLiteral("cloud-control-v2"), session.id,
-                                     session.generation, cursor)) {
-        lastError_ = journal_->errorString();
-        return false;
-    }
-    registeredCloudCursors_.insert(QStringLiteral("%1:%2").arg(session.id).arg(session.generation));
-    return true;
-}
-
 void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qint64 generation,
-                                             const qint64 afterCursor) {
+                                             qint64 afterCursor) {
+    const QString scope = uploadScope();
+    const qint64 durable = journal_->cloudUploadCursor(scope, sessionId, generation);
+    if (durable < 0) {
+        lastError_ = journal_->errorString();
+        return;
+    }
+    afterCursor = qMax(afterCursor, durable);
     const QString uploadKey = QStringLiteral("%1:%2").arg(sessionId).arg(generation);
     if (eventUploadsInFlight_.contains(uploadKey))
         return;
@@ -353,21 +314,18 @@ void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qin
         return;
     }
     const quint64 requestEpoch = accountEpoch_;
-    const QString requestWorkspace = workspaceId_;
-    const QString requestMachine = machineId_;
     eventUploadsInFlight_.insert(uploadKey);
     request(
         "POST", QStringLiteral("/v2/events:append"),
         QJsonObject{{QStringLiteral("machineId"), machineId_}, {QStringLiteral("events"), cloud}},
         daemonToken_, {},
-        [this, sessionId, generation, afterCursor, uploadKey, highestSent, cloud, requestEpoch,
-         requestWorkspace, requestMachine, sent = int(cloud.size())](
+        [this, sessionId, generation, afterCursor, uploadKey, highestSent, cloud, scope,
+         requestEpoch, sent = int(cloud.size())](
             const int status, const QJsonValue& value, const QString& transportError) {
             eventUploadsInFlight_.remove(uploadKey);
             // This request owns the slot until its callback; stale account replies
             // release that slot but must not mutate progress, receipts or backoff.
-            if (requestEpoch != accountEpoch_ || requestWorkspace != workspaceId_ ||
-                requestMachine != machineId_)
+            if (requestEpoch != accountEpoch_ || scope != uploadScope())
                 return;
             // The batch was too large for the relay, or for a proxy or tunnel in front of it that
             // answers in HTML: send half as many events rather than the same refused batch again.
@@ -423,13 +381,15 @@ void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qin
             }
             if (accepted > 0) {
                 QString storageError;
-                if (!storeString(
+                if (!journal_->acknowledgeCloudEventUpload(scope, sessionId, generation, cloud,
+                                                           accepted) ||
+                    !storeString(
                         QStringLiteral("uploaded-cursor-%1-%2").arg(sessionId).arg(generation),
                         QString::number(accepted), &storageError) ||
                     !journal_->acknowledgeCursor(QStringLiteral("cloud-control-v2"), sessionId,
                                                  generation, accepted) ||
-                    !journal_->acknowledgeCloudEventUpload(cloud, accepted) ||
                     !journal_->pruneAcknowledgedCloudEvents()) {
+                    registeredCloudCursors_.remove(uploadKey);
                     lastError_ = storageError.isEmpty() ? journal_->errorString() : storageError;
                     return;
                 }

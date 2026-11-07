@@ -44,5 +44,24 @@
       "change": "remove stale account callback guard",
       "caught": true
     }
-  ]
+  ],
+  "recovery_revision": {
+    "review_finding": "P2: mirror/raw progress advanced before receipt; failed receipt permanently stranded cache",
+    "fix": "atomic receipt + versioned scope recovery cursor before mirror/raw ACK; registration repairs later steps",
+    "focused": {
+      "cache": 27,
+      "privacy": 65,
+      "protocol": 43,
+      "metadata": 32,
+      "targets_passed": 4,
+      "seconds": 14.56
+    },
+    "coverage": [
+      "reviewer ignored-receipt transport probe passes through identical-ciphertext retry and reopen",
+      "credential-write failure recovers after restart even after cache reclamation, with no resend",
+      "progress write failure and commit failure roll back receipt/progress together",
+      "unrelated scope/generation cannot inherit progress; unsupported progress fails closed"
+    ],
+    "full_and_review": "pending new head; initial full build failed on removed API in protocol smoke, now updated"
+  }
 }

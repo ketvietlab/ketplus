@@ -68,6 +68,10 @@ class Fixture {
                         .arg(generation)
                         .arg(cursor));
     }
+    bool receipt(const QJsonArray& envelopes, qint64 acceptedThrough) {
+        return journal.acknowledgeCloudEventUpload("fixture-scope", "cache-s", 1, envelopes,
+                                                   acceptedThrough);
+    }
     qint64 count() { return scalar("SELECT count(*) FROM cloud_events"); }
 };
 QJsonObject envelope(qint64 cursor, const QString& content = "original") {
@@ -184,13 +188,13 @@ class JournalCloudCacheRetentionTest : public QObject {
         const auto e = envelope(1);
         const QJsonArray batch{e};
         QVERIFY(f.journal.storeCloudEvent("cache-s", 1, 1, e));
-        QVERIFY(f.journal.acknowledgeCloudEventUpload(batch, 1));
+        QVERIFY(f.receipt(batch, 1));
         QCOMPARE(f.scalar("SELECT upload_acked FROM cloud_events"), 1);
         QVERIFY(f.journal.prepareCloudEventUpload(batch));
         QVERIFY(f.journal.pruneAcknowledgedCloudEvents());
         QCOMPARE(f.count(), 1);
         QCOMPARE(f.journal.cloudEvent("cache-s", 1, 1), e);
-        QVERIFY(f.journal.acknowledgeCloudEventUpload(batch, 1));
+        QVERIFY(f.receipt(batch, 1));
         QVERIFY(f.journal.pruneAcknowledgedCloudEvents());
         QCOMPARE(f.count(), 0);
     }
@@ -202,7 +206,7 @@ class JournalCloudCacheRetentionTest : public QObject {
         QVERIFY(f.journal.prepareCloudEventUpload({old}));
         QVERIFY(f.journal.discardCloudEvent("cache-s", 1, 1));
         QVERIFY(f.journal.storeCloudEvent("cache-s", 1, 1, fresh));
-        QVERIFY(f.journal.acknowledgeCloudEventUpload({old}, 1));
+        QVERIFY(f.receipt({old}, 1));
         QVERIFY(f.journal.pruneAcknowledgedCloudEvents());
         QCOMPARE(f.count(), 1);
         QCOMPARE(f.journal.cloudEvent("cache-s", 1, 1), fresh);
@@ -217,10 +221,10 @@ class JournalCloudCacheRetentionTest : public QObject {
         QVERIFY(f.journal.storeCloudEvent("cache-s", 1, 2, two));
         auto wrong = one;
         wrong.insert("sessionGeneration", 2);
-        QVERIFY(f.journal.acknowledgeCloudEventUpload({wrong}, 2));
+        QVERIFY(!f.receipt({wrong}, 2));
         QVERIFY(f.journal.pruneAcknowledgedCloudEvents());
         QCOMPARE(f.count(), 2);
-        QVERIFY(f.journal.acknowledgeCloudEventUpload({one, two}, 1));
+        QVERIFY(f.receipt({one, two}, 1));
         QVERIFY(f.journal.pruneAcknowledgedCloudEvents());
         QCOMPARE(f.count(), 1);
         QCOMPARE(f.journal.cloudEvent("cache-s", 1, 2), two);
@@ -235,10 +239,10 @@ class JournalCloudCacheRetentionTest : public QObject {
         QVERIFY(
             f.exec("CREATE TRIGGER ignore_receipt BEFORE UPDATE ON cloud_events WHEN OLD.cursor=2 "
                    "BEGIN SELECT RAISE(IGNORE); END"));
-        QVERIFY(!f.journal.acknowledgeCloudEventUpload(batch, 2));
+        QVERIFY(!f.receipt(batch, 2));
         QCOMPARE(f.scalar("SELECT sum(upload_acked) FROM cloud_events"), 0);
         QVERIFY(f.exec("DROP TRIGGER ignore_receipt"));
-        QVERIFY(f.journal.acknowledgeCloudEventUpload(batch, 2));
+        QVERIFY(f.receipt(batch, 2));
         QVERIFY(
             f.exec("CREATE TRIGGER ignore_pending BEFORE UPDATE ON cloud_events WHEN OLD.cursor=2 "
                    "BEGIN SELECT RAISE(IGNORE); END"));
@@ -254,11 +258,34 @@ class JournalCloudCacheRetentionTest : public QObject {
                        "DEFERRABLE INITIALLY DEFERRED)"));
         QVERIFY(f.exec("CREATE TRIGGER fail_receipt AFTER UPDATE ON cloud_events "
                        "BEGIN INSERT INTO receipt_child VALUES(1); END"));
-        QVERIFY(!f.journal.acknowledgeCloudEventUpload({e}, 1));
+        QVERIFY(!f.receipt({e}, 1));
         QCOMPARE(f.scalar("SELECT upload_acked FROM cloud_events"), 0);
         QCOMPARE(f.scalar("SELECT count(*) FROM receipt_child"), 0);
+        QCOMPARE(f.journal.cloudUploadCursor("fixture-scope", "cache-s", 1), 0);
         QVERIFY(f.exec("DROP TRIGGER fail_receipt"));
-        QVERIFY(f.journal.acknowledgeCloudEventUpload({e}, 1));
+        QVERIFY(f.receipt({e}, 1));
+    }
+    void receiptAndScopedProgressCommitTogether() {
+        Fixture f;
+        const auto e = envelope(1);
+        QVERIFY(f.journal.storeCloudEvent("cache-s", 1, 1, e));
+        QVERIFY(f.exec("CREATE TRIGGER ignore_progress BEFORE INSERT ON cloud_upload_progress "
+                       "BEGIN SELECT RAISE(IGNORE); END"));
+        QVERIFY(!f.receipt({e}, 1));
+        QCOMPARE(f.scalar("SELECT upload_acked FROM cloud_events"), 0);
+        QCOMPARE(f.journal.cloudUploadCursor("fixture-scope", "cache-s", 1), 0);
+        QVERIFY(f.exec("DROP TRIGGER ignore_progress"));
+        QVERIFY(f.receipt({e}, 1));
+        QVERIFY(f.journal.pruneAcknowledgedCloudEvents());
+        QCOMPARE(f.count(), 0);
+        LocalJournal reopened(f.path);
+        QVERIFY(reopened.isOpen());
+        QCOMPARE(reopened.cloudUploadCursor("fixture-scope", "cache-s", 1), 1);
+        QCOMPARE(reopened.cloudUploadCursor("other-workspace", "cache-s", 1), 0);
+        QCOMPARE(reopened.cloudUploadCursor("fixture-scope", "cache-s", 2), 0);
+        QVERIFY(f.exec("UPDATE cloud_upload_progress SET cursor='unsupported'"));
+        QCOMPARE(reopened.cloudUploadCursor("fixture-scope", "cache-s", 1), -1);
+        QVERIFY(!reopened.acknowledgeCloudEventUpload("fixture-scope", "cache-s", 1, {e}, 1));
     }
     void receiptRowsAndBytesAreBounded() {
         Fixture f;
@@ -266,14 +293,14 @@ class JournalCloudCacheRetentionTest : public QObject {
         for (int i = 0; i < 101; ++i)
             tooMany.append(envelope(i + 1));
         QVERIFY(!f.journal.prepareCloudEventUpload(tooMany));
-        QVERIFY(!f.journal.acknowledgeCloudEventUpload(tooMany, 101));
+        QVERIFY(!f.receipt(tooMany, 101));
         QJsonArray large;
         for (int i = 1; i <= 3; ++i) {
             const auto e = envelope(i, QString(400000, 'x'));
             QVERIFY(f.journal.storeCloudEvent("cache-s", 1, i, e));
             large.append(e);
         }
-        QVERIFY(!f.journal.acknowledgeCloudEventUpload(large, 3));
+        QVERIFY(!f.receipt(large, 3));
         QCOMPARE(f.scalar("SELECT sum(upload_acked) FROM cloud_events"), 0);
     }
     void missingAndInvalidIdentity() {
