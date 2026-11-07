@@ -45,6 +45,7 @@ struct TranscriptEvent final {
     QString kind;
     QString body;
     QString meta;
+    QString timestamp;
     QString title;
     QString summary;
     QString target;

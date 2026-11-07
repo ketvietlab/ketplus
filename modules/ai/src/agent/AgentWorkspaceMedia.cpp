@@ -1,9 +1,12 @@
+#include "KetAppearance.h"
 #include "KetProfile.h"
+#include "KetRichRecipes.h"
 #include "agent/AgentMessageFormatter.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/ChatMarkdown.h"
 #include "agent/MermaidLabelContrast.h"
 #include "agent/TranscriptFileLinks.h"
+#include "agent/TranscriptSyntax.h"
 #include "preview/MermaidDiagramDialog.h"
 #include "preview/MermaidRenderer.h"
 #include <QProcess>
@@ -53,36 +56,14 @@ namespace ketplus {
 namespace {
 
 constexpr int codeStyledProperty = QTextFormat::UserProperty + 1;
-constexpr qreal codePadding = 12;
-constexpr qreal codeVerticalPadding = 8;
-// A diagram sits in the same kind of frame as source, under a strip that holds the Source/Mermaid
-// switch, so switching does not change where the frame starts.
-constexpr qreal mermaidHeaderHeight = 34;
 constexpr int mermaidStyledProperty = QTextFormat::UserProperty + 2;
-// The left inset a diagram block was given: the frame padding plus whatever centers the diagram.
 constexpr int mermaidInsetProperty = QTextFormat::UserProperty + 3;
-// Inline code chips extend this far past their glyphs, into the spaces around them.
 constexpr qreal inlineCodePaddingX = 4;
 constexpr qreal inlineCodePaddingY = 2;
-// Mobile design-system body leading (contracts/mobile-design-system-v1.json).
-constexpr qreal messageLineHeightFactor = 1.45;
-constexpr qreal messageParagraphSpacing = 10;
-constexpr qreal messageHeadingTopSpacing = 14;
-constexpr qreal messageHeadingBottomSpacing = 8;
-constexpr qreal messageListItemSpacing = 4;
-constexpr qreal messageHeadingLineHeightFactor = 1.3;
-constexpr qreal messageInlineCodeScale = 0.875;
-// Bold and headings both render one step lighter than Qt's Markdown default:
-// at reading sizes 700 reads as heavy against the regular body text.
-constexpr int messageStrongWeight = QFont::DemiBold;
 
-// Qt's Markdown importer sizes headings at 2x, 1.5x and 1.2x the body. That
-// suits a document page, not a reply read beside other replies, where an H1
-// towered over the text it introduced. Headings now stay close to the body and
-// are set apart by weight and spacing instead.
-qreal headingPixelSize(const int level, const qreal bodyPixelSize) {
-    const qreal scale = level == 1 ? 1.25 : level == 2 ? 1.125 : 1.0;
-    return std::round(bodyPixelSize * scale);
+// The document and its overlay frames use the same scaled recipe dimensions.
+qreal recipePixels(qreal value, const QVariantMap& tokens) {
+    return ket::Appearance::scale(value, tokens.value("zoomFactor", 1.0).toReal());
 }
 
 bool isCodeBlock(const QTextBlock& block) {
@@ -182,9 +163,10 @@ void linkFileReferences(const QTextBlock& block, TranscriptFileLinks& links,
 }
 
 void styleMessageCharacters(const QTextBlock& block, const qreal textPixelSize, const bool heading,
-                            const QString& monoFamily) {
+                            const QString& monoFamily, const ket::MarkdownRecipe& recipe,
+                            qreal zoom) {
     const int pixelSize = qRound(textPixelSize);
-    const int codePixelSize = qMax(10, qRound(textPixelSize * messageInlineCodeScale) - 1);
+    const int codePixelSize = qMax(8, qRound(ket::Appearance::scale(recipe.codePixels, zoom)));
     // Qt sets inline code in the platform fixed font at full size, which made
     // it the loudest thing in a sentence and a different face from the code
     // blocks. It now uses the code-block family a step smaller in the body
@@ -209,9 +191,10 @@ void styleMessageCharacters(const QTextBlock& block, const qreal textPixelSize, 
             wanted.setProperty(QTextFormat::FontPixelSize, wantedSize);
         if (heading && current.intProperty(QTextFormat::FontSizeAdjustment) != 0)
             wanted.setProperty(QTextFormat::FontSizeAdjustment, 0);
-        if ((heading || current.fontWeight() > messageStrongWeight) &&
-            current.fontWeight() != messageStrongWeight)
-            wanted.setFontWeight(messageStrongWeight);
+        if ((heading ||
+             current.fontWeight() > (heading ? recipe.headingWeight : recipe.strongWeight)) &&
+            current.fontWeight() != (heading ? recipe.headingWeight : recipe.strongWeight))
+            wanted.setFontWeight((heading ? recipe.headingWeight : recipe.strongWeight));
         if (code && current.fontFamilies().toStringList() != QStringList{monoFamily})
             wanted.setFontFamilies({monoFamily});
         if (!wanted.properties().isEmpty())
@@ -569,18 +552,30 @@ void AgentWorkspaceView::formatMessageDocument(QObject* document, qreal fontPixe
     QTextDocument* textDocument = quickDocument->textDocument();
     QTextCursor edit(textDocument);
     edit.beginEditBlock();
-    const QBrush tableBorder{QColor(tokens_.value(QStringLiteral("border")).toString())};
+    const auto theme = tokens_.value("dark").toBool() ? ket::Theme::Dark : ket::Theme::Light;
+    const auto recipe = ket::markdownRecipe(theme);
+    const auto codeRecipe = ket::codeBlockRecipe(theme);
+    const qreal zoom = tokens_.value("zoomFactor", 1.0).toReal();
+    const auto px = [zoom](qreal value) { return ket::Appearance::scale(value, zoom); };
+    const qreal codePadding = px(codeRecipe.padding);
+    const qreal codeVerticalPadding = codePadding;
+    const qreal mermaidHeaderHeight = px(34);
+    const QBrush tableBorder{recipe.tableBorder};
     const QString monoFamily = tokens_.value(QStringLiteral("monoFont")).toString();
-    const QColor linkColor(tokens_.value(QStringLiteral("accent")).toString());
+    const QColor linkColor = recipe.link;
+    applyTranscriptSyntax(textDocument, theme);
+    textDocument->setIndentWidth(px(recipe.listIndent));
     fileLinks_.setRoot(activePath_.isEmpty() ? QString{} : executionPath());
     for (QTextFrame* frame : textDocument->rootFrame()->childFrames()) {
         auto* table = qobject_cast<QTextTable*>(frame);
         if (!table)
             continue;
         auto tableFormat = table->format();
-        if (tableFormat.borderBrush() == tableBorder)
+        if (tableFormat.borderBrush() == tableBorder &&
+            qFuzzyCompare(tableFormat.cellPadding(), px(recipe.tableCellPadding)))
             continue;
         tableFormat.setBorderBrush(tableBorder);
+        tableFormat.setCellPadding(px(recipe.tableCellPadding));
         table->setFormat(tableFormat);
     }
     for (auto block = textDocument->begin(); block.isValid(); block = block.next()) {
@@ -679,13 +674,12 @@ void AgentWorkspaceView::formatMessageDocument(QObject* document, qreal fontPixe
         }
         auto format = block.blockFormat();
         if (isCodeBlock(block)) {
-            const int codeFontSize = qMax(10, qRound(fontPixelSize) - 2);
-            const qreal lineHeight = std::ceil(codeFontSize * 1.45);
-            if (!format.boolProperty(codeStyledProperty)) {
-                format.setLeftMargin(format.leftMargin() + codePadding);
-                format.setRightMargin(format.rightMargin() + codePadding);
-                format.setProperty(codeStyledProperty, true);
-            }
+            const int codeFontSize = qMax(8, qRound(px(codeRecipe.fontPixels)));
+            const qreal lineHeight = std::floor(codeFontSize * codeRecipe.lineHeight);
+            const qreal paddingDelta = codePadding - format.doubleProperty(codeStyledProperty);
+            format.setLeftMargin(format.leftMargin() + paddingDelta);
+            format.setRightMargin(format.rightMargin() + paddingDelta);
+            format.setProperty(codeStyledProperty, codePadding);
             format.setNonBreakableLines(false);
             format.setLineHeight(lineHeight, QTextBlockFormat::FixedHeight);
             format.setTopMargin(sameCodeBlock(block.previous(), block) ? 0 : codeVerticalPadding);
@@ -708,25 +702,28 @@ void AgentWorkspaceView::formatMessageDocument(QObject* document, qreal fontPixe
         }
         const int headingLevel = format.intProperty(QTextFormat::HeadingLevel);
         const bool heading = headingLevel > 0;
-        const qreal textPixelSize =
-            heading ? headingPixelSize(headingLevel, fontPixelSize) : fontPixelSize;
-        styleMessageCharacters(block, textPixelSize, heading, monoFamily);
+        const qreal textPixelSize = heading ? px(headingLevel == 1   ? recipe.heading1Pixels
+                                                 : headingLevel == 2 ? recipe.heading2Pixels
+                                                                     : recipe.heading3Pixels)
+                                            : fontPixelSize;
+        styleMessageCharacters(block, textPixelSize, heading, monoFamily, recipe, zoom);
         linkFileReferences(block, fileLinks_, linkColor);
         const auto heightType =
             containsImage ? QTextBlockFormat::MinimumHeight : QTextBlockFormat::FixedHeight;
         // A heading keeps the body's line height otherwise, which clipped the
         // taller glyphs against the paragraph below.
-        const qreal lineHeight = heading ? std::ceil(textPixelSize * messageHeadingLineHeightFactor)
-                                         : fontPixelSize * messageLineHeightFactor;
+        const qreal lineHeight = heading ? std::ceil(textPixelSize * recipe.headingLineHeight)
+                                         : fontPixelSize * recipe.lineHeight;
         const bool continuesList = block.textList() != nullptr && block.next().isValid() &&
                                    block.next().textList() == block.textList();
-        const qreal topMargin = mermaidView                             ? mermaidHeaderHeight
-                                : heading && block.previous().isValid() ? messageHeadingTopSpacing
-                                                                        : 0;
+        const qreal topMargin = mermaidView ? mermaidHeaderHeight
+                                : heading && block.previous().isValid()
+                                    ? px(recipe.paragraphSpacing)
+                                    : 0;
         const qreal bottomMargin = mermaidView     ? codeVerticalPadding
-                                   : heading       ? messageHeadingBottomSpacing
-                                   : continuesList ? messageListItemSpacing
-                                                   : messageParagraphSpacing;
+                                   : heading       ? px(recipe.headingSpacingAfter)
+                                   : continuesList ? px(recipe.listItemGap)
+                                                   : px(recipe.paragraphSpacing);
         // A diagram narrower than its frame sits in the middle of it. The block's own text
         // alignment does not center an inline image, so the left inset does it.
         // The frame is the block's width less the padding on both sides; the diagram is centered
@@ -736,26 +733,25 @@ void AgentWorkspaceView::formatMessageDocument(QObject* document, qreal fontPixe
                 ? qMax(codePadding, (availableWidth - 2 * codePadding - mermaidImageWidth) / 2)
                 : 0.0;
         const qreal appliedInset = format.doubleProperty(mermaidInsetProperty);
-        const bool insetChanged = mermaidView && std::abs(wantedInset - appliedInset) > 0.01;
-        if (!insetChanged && format.lineHeightType() == heightType &&
-            qFuzzyCompare(format.lineHeight(), lineHeight) &&
-            qFuzzyCompare(format.topMargin(), topMargin) &&
-            qFuzzyCompare(format.bottomMargin(), bottomMargin))
-            continue;
         format.setLineHeight(lineHeight, heightType);
         format.setTopMargin(topMargin);
         format.setBottomMargin(bottomMargin);
         if (mermaidView) {
             // The frame padding on both sides, like a code block, plus the centering on the left.
-            if (!format.boolProperty(mermaidStyledProperty)) {
-                format.setRightMargin(format.rightMargin() + codePadding);
-                format.setProperty(mermaidStyledProperty, true);
-            }
+            const qreal paddingDelta = codePadding - format.doubleProperty(mermaidStyledProperty);
+            format.setRightMargin(format.rightMargin() + paddingDelta);
+            format.setProperty(mermaidStyledProperty, codePadding);
             format.setLeftMargin(format.leftMargin() - appliedInset + wantedInset);
             format.setProperty(mermaidInsetProperty, wantedInset);
         }
-        QTextCursor cursor(block);
-        cursor.setBlockFormat(format);
+        if (format.intProperty(QTextFormat::BlockQuoteLevel) > 0) {
+            format.setBackground(recipe.quoteBackground);
+            format.setLeftMargin(px(recipe.quotePadding));
+        }
+        if (format != block.blockFormat()) {
+            QTextCursor cursor(block);
+            cursor.setBlockFormat(format);
+        }
     }
     edit.endEditBlock();
 }
@@ -767,6 +763,7 @@ QVariantList AgentWorkspaceView::messageCodeBlocks(QObject* document) const {
     auto* textDocument = quickDocument->textDocument();
     auto* layout = textDocument->documentLayout();
     QVariantList frames;
+    const qreal codeVerticalPadding = recipePixels(ket::Profile::current().codePadding, tokens_);
     QRectF bounds;
     bool startsDocument = false;
     for (auto block = textDocument->begin(); block.isValid(); block = block.next()) {
@@ -805,6 +802,9 @@ QVariantMap AgentWorkspaceView::mermaidLayout(QObject* document, const QString& 
     auto* textDocument = quickDocument->textDocument();
     auto* documentLayout = textDocument->documentLayout();
     const auto frames = messageCodeBlocks(document);
+    const qreal codePadding = recipePixels(ket::Profile::current().codePadding, tokens_);
+    const qreal codeVerticalPadding = codePadding;
+    const qreal mermaidHeaderHeight = recipePixels(34, tokens_);
     QList<QRectF> views;
     for (auto block = textDocument->begin(); block.isValid(); block = block.next()) {
         for (auto it = block.begin(); !it.atEnd(); ++it) {

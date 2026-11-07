@@ -630,6 +630,20 @@ Flickable {
     visible: false
     enabled: false
     opacity: shell.settlingTranscript && shell.transcript === transcript ? 0 : 1
+    // Use only journal timestamps. Older records without dates never invent a day.
+    function dayLabel(index, timestamp, count) {
+        const date = new Date(timestamp);
+        if (!timestamp || isNaN(date.getTime())) return "";
+        for (let previous = index - 1; previous >= 0; --previous) {
+            const entry = messageModel.get(previous);
+            if (!entry.timestamp) continue;
+            const before = new Date(entry.timestamp);
+            if (isNaN(before.getTime())) continue;
+            if (before.toDateString() === date.toDateString()) return "";
+            break;
+        }
+        return Qt.formatDateTime(date, "ddd, MMM d, yyyy");
+    }
     property string cacheScope: ""
     property var messageModel: null
     property alias wheelController: transcriptWheel
