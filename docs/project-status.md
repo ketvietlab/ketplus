@@ -5,6 +5,11 @@ milestone changes state.
 
 ## Implemented
 
+- Fork checks complete per-table copy counts and its required timestamp in the
+  transaction (ADR 0060). It also refuses a destination claimed during the provider
+  round-trip, preserving existing/self/deleted targets and allowing empty history.
+  Whole-history fork work bounds and source counter validation remain separate.
+
 - Journal append requires each mandatory delivery/replay/activity/blob row and
   session cursor to be stored before reporting success (ADR 0058). Ignored writes
   roll back partial changes; commit diagnostics survive rollback. Multirow

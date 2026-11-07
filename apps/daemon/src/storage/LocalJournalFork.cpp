@@ -47,6 +47,17 @@ bool LocalJournal::forkSession(const QString& sourceId, const qint64 sourceGener
             *error = error_;
         return false;
     }
+    // Provider forking is asynchronous: the destination may have appeared since
+    // the caller first checked it. Never let the upsert replace another session.
+    QSqlQuery destination(database_);
+    destination.prepare(QStringLiteral("SELECT 1 FROM sessions WHERE id = ?"));
+    destination.addBindValue(fork.id);
+    if (!destination.exec())
+        return fail(destination.lastError().text());
+    if (destination.next())
+        return fail(QStringLiteral("The fork destination already exists."));
+    if (destination.lastError().isValid())
+        return fail(destination.lastError().text());
     QSqlQuery source(database_);
     source.prepare(QStringLiteral("SELECT last_cursor, current_turn_sequence FROM sessions "
                                   "WHERE id = ? AND generation = ?"));
@@ -69,14 +80,27 @@ bool LocalJournal::forkSession(const QString& sourceId, const qint64 sourceGener
     started.addBindValue(fork.lastTurnStartedAt);
     started.addBindValue(fork.id);
     started.addBindValue(fork.generation);
-    if (!started.exec())
-        return fail(started.lastError().text());
+    if (!started.exec() || started.numRowsAffected() != 1)
+        return fail(started.lastError().isValid()
+                        ? started.lastError().text()
+                        : QStringLiteral("The fork timestamp was not stored."));
 
     // Cursors are kept as they are, so the copy replays exactly like its source.
     for (const QString& table : historyTables()) {
         const QStringList columns = columnsOf(database_, table);
         if (columns.isEmpty())
             return fail(QStringLiteral("Unable to read the %1 table.").arg(table));
+        QSqlQuery count(database_);
+        count.prepare(
+            QStringLiteral("SELECT COUNT(*) FROM %1 WHERE session_id = ? AND generation = ?")
+                .arg(table));
+        count.addBindValue(sourceId);
+        count.addBindValue(sourceGeneration);
+        if (!count.exec() || !count.next())
+            return fail(count.lastError().isValid()
+                            ? count.lastError().text()
+                            : QStringLiteral("Unable to count the %1 source rows.").arg(table));
+        const qint64 expectedRows = count.value(0).toLongLong();
         QStringList selected;
         for (const QString& column : columns)
             selected.append(column == QStringLiteral("session_id")   ? QStringLiteral("?")
@@ -95,8 +119,10 @@ bool LocalJournal::forkSession(const QString& sourceId, const qint64 sourceGener
         }
         copy.addBindValue(sourceId);
         copy.addBindValue(sourceGeneration);
-        if (!copy.exec())
-            return fail(copy.lastError().text());
+        if (!copy.exec() || copy.numRowsAffected() != expectedRows)
+            return fail(copy.lastError().isValid()
+                            ? copy.lastError().text()
+                            : QStringLiteral("The %1 fork copy is incomplete.").arg(table));
     }
     if (!database_.commit())
         return fail(database_.lastError().text());

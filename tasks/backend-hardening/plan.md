@@ -580,6 +580,25 @@ remain explicitly open.
 
 - [x] Reproduce unsupported/overflow counter handling: original production fails
   14 scenarios; focused fix 25/25 including four positive boundary controls.
-- [ ] Finish affected matrix, exact-head review and merge for ADR 0059.
+- [x] #245 head `278432ee`: final exact-head Release/headless 13/13 (67.00 s),
+  protocol 97/97; independent 4/4 (51.63 s). Merged
+  `67ce6a84906027df64a191017cff9df2f8468e38`. Generated build removed;
+  linked source cleanup remains tracked separately (ADR 0059).
 - [ ] Continue migration/backfill/fork counter and process-interruption audits;
   append guards alone do not finish H1.2/H1.3.
+
+### H1.3 fork copy integrity and destination ownership
+
+- [x] Reproduce incomplete copy success in 11 ignored-write cases; preserve the
+  already-correct commit rollback and allow empty histories.
+- [x] Reproduce existing/self destination replacement in two storage cases;
+  the deleted-destination tombstone control already passes.
+- [x] Exercise an actual delayed fake-provider response racing another start at
+  the destination ID; guarded fork preserves the new owner (ADR 0060).
+- [x] Removing the destination guard makes the delayed-provider probe fail with
+  an incorrect successful fork. Initial noncanonical-path harness was corrected;
+  that earlier passing mutation is not acceptance evidence.
+- [x] Final focused fork suite 24/24 after the canonical race fixture correction.
+- [ ] Finish final affected matrix, review and merge.
+- [ ] Continue fork source counter/read validation, whole-history copy bounds,
+  multirow replay/activity mutations and process interruption. H1.3 stays open.
