@@ -1,5 +1,6 @@
 import "ChromeMetrics.js" as Metrics
 import QtQuick
+import Ket 1.0 as Kit
 import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
 import "TranscriptRenderers.js" as Renderers
@@ -7,6 +8,7 @@ import "TranscriptRenderers.js" as Renderers
 Column {
     id: root
 
+    readonly property var filesRecipe: Kit.KetTheme.changedFilesRecipe(tokens.dark, tokens.zoomFactor)
     required property var tokens
     required property var host
     required property string messageKey
@@ -139,131 +141,7 @@ Column {
     width: parent ? parent.width : implicitWidth
     spacing: Metrics.px(7, tokens)
 
-    Item {
-        id: activityHeader
-        objectName: "transcriptActivityHeader"
-        width: parent.width
-        height: Math.max(Metrics.px(root.describedCommand ? 22 : 32, tokens), activityTitle.implicitHeight)
-        // Height of one title line; the icon and chevron centre on the first line.
-        FontMetrics {
-            id: titleMetrics
-            font: activityTitle.font
-        }
-        readonly property real titleTop: root.expanded ? 0 : Math.max(0, (height - activityTitle.implicitHeight) / 2)
-        readonly property real firstLineCenter: titleTop + titleMetrics.height / 2
-        Rectangle {
-            anchors.fill: parent
-            color: "transparent"
-            border.color: root.activeFocus ? root.tokens.focus : "transparent"
-            radius: Metrics.px(4, tokens)
-        }
-
-        TintedIcon {
-            id: activityIcon
-            visible: !root.compact && root.subtype !== "command"
-            width: root.compact || root.subtype === "command" ? 0 : Metrics.px(16, tokens)
-            height: Metrics.px(16, tokens)
-            anchors.left: parent.left
-            y: Math.round(activityHeader.firstLineCenter - height / 2)
-            source: root.iconSource()
-            color: root.running ? root.tokens.accentText : root.tokens.textMuted
-        }
-
-        Text {
-            id: activityTitle
-            objectName: "transcriptActivityTitle"
-            anchors.left: activityIcon.right
-            anchors.leftMargin: root.compact || root.subtype === "command" ? 0 : Metrics.px(9, tokens)
-            anchors.right: browserOpen.left
-            anchors.rightMargin: Metrics.px(8, tokens)
-            y: activityHeader.titleTop
-            // Middle elision only applies to a single line, so a collapsed
-            // multi-line command folds onto one; a command is never markup.
-            text: root.expanded && root.subtype === "command" && !root.describedCommand
-                  ? (root.running ? "Running command" : "Ran command") + (root.status === "failed" ? " · Failed" : root.status === "interrupted" ? " · Interrupted" : "")
-                  : root.expanded ? root.displayTitle : root.displayTitle.replace(/\s*\n\s*/g, " ")
-            textFormat: Text.PlainText
-            color: root.status === "failed" ? root.tokens.danger : titleHover.hovered && root.opensFile ? root.tokens.accentText : root.tokens.textSecondary
-            font.underline: titleHover.hovered && root.opensFile
-            font.family: root.subtype === "command" && !root.describedCommand ? root.tokens.monoFont : root.tokens.uiFont
-            font.pixelSize: root.tokens.body
-            font.weight: Font.Medium
-            wrapMode: root.expanded ? Text.WrapAnywhere : Text.NoWrap
-            elide: root.expanded ? Text.ElideNone : Text.ElideMiddle
-            maximumLineCount: root.expanded ? 100000 : 1
-            HoverHandler {
-                id: titleHover
-                cursorShape: root.opensFile ? Qt.PointingHandCursor : Qt.ArrowCursor
-            }
-        }
-
-        Text {
-            id: detailChevron
-            objectName: "transcriptActivityChevron"
-            anchors.right: parent.right
-            y: Math.round(activityHeader.firstLineCenter - height / 2)
-            width: root.hasDetails ? Metrics.px(18, tokens) : 0
-            visible: root.hasDetails
-            text: root.expanded ? "⌄" : "›"
-            color: root.tokens.textMuted
-            font.family: root.tokens.uiFont
-            font.pixelSize: root.tokens.title
-            horizontalAlignment: Text.AlignHCenter
-        }
-
-        Basic.Button {
-            id: browserOpen
-            objectName: "transcriptBrowserOpen"
-            visible: root.browserOpenAction
-            anchors.right: detailChevron.left
-            anchors.rightMargin: visible ? Metrics.px(8, tokens) : 0
-            y: Math.round(activityHeader.firstLineCenter - height / 2)
-            width: visible ? Metrics.px(46, tokens) : 0
-            height: Metrics.px(26, tokens)
-            text: "Open"
-            background: Item {}
-            contentItem: Text {
-                text: browserOpen.text
-                color: root.tokens.accentText
-                font.family: root.tokens.uiFont
-                font.pixelSize: root.tokens.caption
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-            }
-            Accessible.name: "Open " + root.target
-            onClicked: root.host.openRelativeFile(root.target)
-            HoverHandler { cursorShape: Qt.PointingHandCursor }
-        }
-
-        Rectangle {
-            id: runningShine
-            objectName: "toolActivityShine"
-            visible: root.running && !root.compact
-            anchors.verticalCenter: activityIcon.verticalCenter
-            width: Metrics.px(4, tokens)
-            height: Metrics.px(4, tokens)
-            radius: Metrics.px(2, tokens)
-            color: root.tokens.accent
-        }
-
-        TapHandler {
-            enabled: root.visible && root.enabled && (root.hasDetails || root.opensFile)
-            // Clicking toggles without taking focus, so no focus outline appears;
-            // keyboard focus still shows it. A read row's title opens its file
-            // instead, and the chevron still toggles.
-            onTapped: function (point) {
-                if (root.browserOpenAction && point.position.x >= browserOpen.x)
-                    return
-                if (root.opensFile && (!root.hasDetails || point.position.x < detailChevron.x - Metrics.px(4, root.tokens)))
-                    root.openFile()
-                else
-                    root.toggleDetails()
-            }
-        }
-        HoverHandler {
-            cursorShape: root.hasDetails ? Qt.PointingHandCursor : Qt.ArrowCursor
-        }
-    }
+    TranscriptActivityHeader { activity: root; width: parent.width }
 
     Row {
         objectName: "transcriptActivityTarget"
@@ -503,124 +381,18 @@ Column {
             }
         }
 
-        Repeater {
-            model: root.subtype === "fileChange" ? root.files : []
-            delegate: Item {
-                id: fileRow
-                required property var modelData
-                objectName: "changedFileRow"
-                width: parent.width
-                height: Metrics.px(24, tokens)
-                // A rename acts on where the file went; the source path is gone by design.
-                readonly property string targetPath: modelData.destination || modelData.path || ""
-                // Deleted or moved since the change: drawn in the danger colour and inert.
-                readonly property bool missing: {
-                    root.host.pathStateRevision;
-                    return root.host.pathMissing(targetPath);
-                }
-                activeFocusOnTab: root.expanded && !missing
-                Accessible.role: Accessible.Link
-                Accessible.name: (modelData.path || "Changed file") + (missing ? ", no longer exists" : "")
-                Accessible.onPressAction: if (!missing) root.host.requestFileDiff(targetPath)
-                Keys.onReturnPressed: if (!missing) root.host.requestFileDiff(targetPath)
-                Text {
-                    id: fileLabel
-                    objectName: "changedFileLabel"
-                    anchors.left: parent.left
-                    anchors.right: fileCounts.left
-                    anchors.rightMargin: Metrics.px(8, tokens)
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: (fileRow.modelData.operation ? fileRow.modelData.operation + " " : "") + root.host.displayFilePath(fileRow.modelData.path || "") + (fileRow.modelData.destination ? " → " + root.host.displayFilePath(fileRow.modelData.destination) : "")
-                    color: fileRow.missing ? root.tokens.danger : root.tokens.textSecondary
-                    font.family: root.tokens.uiFont
-                    font.pixelSize: root.tokens.body
-                    elide: Text.ElideMiddle
-                }
-                Row {
-                    id: fileCounts
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: Metrics.px(7, tokens)
-                    visible: fileRow.modelData.known === true
-                    Text {
-                        objectName: "fileAdditions"
-                        text: "+" + (fileRow.modelData.added || 0)
-                        color: root.tokens.positive
-                        font.family: root.tokens.monoFont
-                        font.pixelSize: root.tokens.body
-                    }
-                    Text {
-                        objectName: "fileDeletions"
-                        text: "-" + (fileRow.modelData.removed || 0)
-                        color: root.tokens.danger
-                        font.family: root.tokens.monoFont
-                        font.pixelSize: root.tokens.body
-                    }
-                }
-
-                MouseArea {
-                    id: fileMouse
-                    objectName: "changedFileMouseArea"
-                    anchors.fill: parent
-                    enabled: root.visible && root.enabled
-                    hoverEnabled: true
-                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                    cursorShape: fileRow.missing ? Qt.ArrowCursor : Qt.PointingHandCursor
-                    onClicked: function (mouse) {
-                        if (mouse.button === Qt.RightButton)
-                            fileContextMenu.popup();
-                        else if (!fileRow.missing)
-                            root.host.requestFileDiff(fileRow.targetPath);
-                    }
-                }
-
-                Basic.Menu {
-                    id: fileContextMenu
-                    objectName: "changedFileContextMenu"
-                    padding: Metrics.px(5, tokens)
-                    margins: 8
-                    font.family: root.tokens.uiFont
-                    font.pixelSize: root.tokens.body
-                    background: Rectangle {
-                        implicitWidth: Metrics.px(190, tokens)
-                        implicitHeight: Metrics.px(112, tokens)
-                        color: root.tokens.panelBackground || root.tokens.surfaceRaised
-                        border.color: root.tokens.borderStrong || root.tokens.border
-                        border.width: 1
-                        radius: Metrics.px(7, tokens)
-                    }
-                    Basic.MenuItem {
-                        objectName: "copyChangedFilePathAction"
-                        text: "Copy Path"
-                        onTriggered: root.host.copyText(root.host.absoluteFilePath(fileRow.targetPath))
-                    }
-                    Basic.MenuItem {
-                        objectName: "revealChangedFileAction"
-                        text: root.host.revealFileActionText()
-                        enabled: !fileRow.missing
-                        onTriggered: root.host.revealFile(fileRow.targetPath)
-                    }
-                    Basic.MenuItem {
-                        objectName: "openChangedFileAction"
-                        text: "Open File"
-                        enabled: !fileRow.missing
-                        onTriggered: root.host.openRelativeFile(fileRow.targetPath)
-                    }
-                }
-                KetToolTip {
-                    tokens: root.tokens
-                    visible: fileHover.hovered
-                    text: root.host.displayFilePath(fileRow.modelData.path || "") + (fileRow.missing ? " — no longer exists" : "")
-                }
-                HoverHandler {
-                    id: fileHover
-                }
-            }
+        TranscriptChangedFiles {
+            activity: root
+            width: parent.width
+            visible: root.subtype === "fileChange" && root.files.length > 0
+            height: visible ? implicitHeight : 0
         }
 
-        Basic.Button {
+        Kit.KetButton {
             id: copyDetailsButton
             objectName: "copyActivityDetails"
+            variant: Kit.KetTheme.ButtonVariant.Ghost
+            controlSize: Kit.KetTheme.ControlSize.Small
             visible: root.subtype !== "fileChange" && (root.command.length > 0 || root.detailText().length > 0)
             text: root.subtype === "command" ? "Copy command" : "Copy details"
             Accessible.name: text

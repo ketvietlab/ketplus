@@ -154,3 +154,9 @@ before decoding. The lightbox opens the original image. Day dividers use the
 journal's `sent_at` carried as presentation `timestamp` on user messages, including
 live echoes. Missing or invalid timestamps do not create invented dates. Labels
 use the viewer's local date and remain part of the row's measured height.
+
+Activity headers use KetActivityRow with product content for file-link versus
+expansion hit targets and multiline command summaries. Group headers consume
+ActivityGroupRecipe while the message model retains virtualized child ownership.
+ChangedFilesRecipe composes path/rename/removed-file context actions; the generic
+card cannot replace those identities. Detail bodies remain loaded on expansion.
