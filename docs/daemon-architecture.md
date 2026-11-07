@@ -582,6 +582,12 @@ and `sign_in_error` when it failed; `remote.sign_in.cancel` and sign-out stop it
 
 ## Lifecycle
 
+Claude/Cursor stdout is read in 64-KiB chunks and checks each raw line, including
+an unfinished suffix, against the existing 16-MiB limit before parse (ADR 0071).
+An over-limit generation is closed/drained before pending callbacks fail and the
+process is killed; later output from it cannot publish another request. Normal
+lines and a fresh process retain their existing behavior.
+
 The intended state flow is `registered -> connecting -> online -> draining ->
 stopped`, with a recoverable `offline` state. Session state is separate from
 connection state so a temporary network outage does not kill a local process.
