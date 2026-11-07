@@ -702,3 +702,18 @@ remain explicitly open.
   and cleanup.
 - [ ] Continue reference writes/copies, ancestor/path races, decode and enumeration
   bounds. This package does not complete H1.4 or change retention defaults.
+
+
+### H6.2 update archive input/output preflight
+
+- [x] Reproduce notes failures leaving an archive, existing notes overwritten and
+  dangling output symlinks writing outside the output directory. Reject empty or
+  unsafe bundle versions before filesystem mutation.
+- [x] Validate readable regular notes and archive/notes collisions before creating
+  artifacts; preserve existing releases and allow repaired-input same-version retry.
+- [x] Synthetic CLI 12/12 PASS; baseline 12 failure entries across eight methods.
+  Existing signing CLI 8/8 PASS; shell syntax and diff checks pass (ADR 0082).
+- [ ] Independent exact-head review and merge; dispatch remains held.
+- [ ] Transactional artifact generation, concurrent/ancestor/appcast path races,
+  key canonicalization, actual signatures/channel/downgrade and real packaging
+  remain open. No publication, deployment, installation or UI edits.

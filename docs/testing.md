@@ -128,6 +128,10 @@ never use a real key, Keychain item or inference quota.
 
 ## Minimum verification
 
+Update-preparation changes run `python3 tests/packaging/test_update_archive_cli.py`
+for invalid notes/version, output collisions and repair/retry using synthetic
+Apple/archive/appcast tools. No signing key or network is used.
+
 Changes to macOS signing also run `python3 tests/packaging/test_signing_cli.py`.
 These fixtures stub signing/Apple tools and never use a private key or notarization
 account. A replacement artifact additionally needs real Developer ID authority,

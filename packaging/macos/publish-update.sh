@@ -56,6 +56,8 @@ fail() {
 
 plist="$app/Contents/Info.plist"
 version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")"
+[[ "$version" =~ ^[0-9][A-Za-z0-9.+_-]*$ ]] ||
+    fail "CFBundleShortVersionString must be a nonempty filename-safe version starting with a digit"
 feed="$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$plist" 2>/dev/null)" ||
     fail "$app was built without KETPLUS_UPDATE_FEED_URL; it could never install updates"
 [[ -d "$app/Contents/Frameworks/Sparkle.framework" ]] || fail "$app does not embed Sparkle"
@@ -74,16 +76,27 @@ if ! /usr/bin/codesign -dv "$app" 2>&1 | grep -q '^Authority=Developer ID Applic
         "for users. Use this archive for testing only." >&2
 fi
 
-mkdir -p "$updates_dir"
 archive="$updates_dir/KetPlus-$version.zip"
-[[ ! -e "$archive" ]] || fail "$archive already exists; every release needs a new version"
-/usr/bin/ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
+[[ ! -e "$archive" && ! -L "$archive" ]] ||
+    fail "$archive already exists; every release needs a new version"
+notes_destination=""
 if [[ -n "$release_notes" ]]; then
+    [[ -f "$release_notes" && -r "$release_notes" ]] ||
+        fail "release notes must be a readable file: $release_notes"
     case "$release_notes" in
-    *.html) cp "$release_notes" "$updates_dir/KetPlus-$version.html" ;;
-    *.md) cp "$release_notes" "$updates_dir/KetPlus-$version.md" ;;
+    *.html) notes_destination="$updates_dir/KetPlus-$version.html" ;;
+    *.md) notes_destination="$updates_dir/KetPlus-$version.md" ;;
     *) fail "release notes must be .html or .md" ;;
     esac
+    [[ ! -e "$notes_destination" && ! -L "$notes_destination" ]] ||
+        fail "$notes_destination already exists; refusing to overwrite release notes"
+fi
+
+# Validate notes and destination collisions before creating any release artifact.
+mkdir -p "$updates_dir"
+/usr/bin/ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
+if [[ -n "$notes_destination" ]]; then
+    cp "$release_notes" "$notes_destination"
 fi
 
 key_arguments=()

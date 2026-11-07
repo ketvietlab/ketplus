@@ -80,6 +80,11 @@ A production desktop release additionally requires:
 - an About surface that identifies the source revision;
 - no tokens, transcripts, or signing material in the repository or packages.
 
+Update preparation validates a filename-safe bundle version and readable HTML/Markdown
+notes before creating an archive. Existing archive or notes destinations, including
+dangling symlinks, are refused rather than overwritten (ADR 0082). This preflight
+does not make artifact generation transactional or safe for concurrent writers.
+
 Packaging is not complete yet. Passing CI is necessary but does not by itself
 authorize distribution of an official binary.
 
