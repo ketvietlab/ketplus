@@ -739,6 +739,15 @@ scan journal content nor checkpoint it, and failures do not invalidate committed
 policy saves. Media/backups are excluded; absent filesystem data is unknown. See
 [ADR 0045](decisions/0045-journal-file-measurements.md).
 
+### Failed journal initialization
+
+A failed base/activity/agent initialization closes the journal connection before
+construction returns. Later operations on that object cannot turn a cleared
+operation error into a usable journal. Repair the cause separately and open a
+fresh journal; the failed object remains closed. The service's immediate startup
+check and existing rollback behavior remain in place. See
+[ADR 0086](decisions/0086-quarantine-failed-journal-initialization.md) for scope.
+
 ### SQLite-page size pressure
 
 The separate owner-only size policy defaults to a soft 5 decimal GB SQLite-page
