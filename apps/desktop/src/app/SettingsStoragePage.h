@@ -7,6 +7,7 @@ class QComboBox;
 class QLabel;
 class QPushButton;
 class QTimer;
+class QSpinBox;
 namespace ketplus {
 class SettingsStoragePage final : public QWidget {
     Q_OBJECT
@@ -21,6 +22,10 @@ class SettingsStoragePage final : public QWidget {
     void request(const QString& operation, const QJsonObject& payload);
     void receive(const QJsonObject& result, const QString& error, bool saving);
     void setBusy(bool busy);
+    void saveSize();
+    void receiveSize(const QJsonObject& result, const QString& error, bool saving);
+    void showUsage(const QJsonObject& result);
+    void fail(const QString& message);
     Requester requester_;
     QTimer* timeout_{};
     QComboBox* days_{};
@@ -28,6 +33,12 @@ class SettingsStoragePage final : public QWidget {
     QLabel* status_{};
     QLabel* usage_{};
     QPushButton* refresh_{};
+    QWidget* sizeGroup_{};
+    QComboBox* limit_{};
+    QSpinBox* warning_{};
+    QPushButton* saveSize_{};
+    QLabel* sizeStatus_{};
+    qint64 sizeRevision_{-1};
     qint64 revision_{-1};
     bool busy_{false};
     quint64 generation_{0};

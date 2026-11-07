@@ -8,6 +8,8 @@
 #include <QDialogButtonBox>
 #include <QLabel>
 #include <QPushButton>
+#include <QScrollArea>
+#include <QSpinBox>
 #include <QTimer>
 #include <QtTest>
 using namespace ketplus;
@@ -20,6 +22,21 @@ QJsonObject state(qint64 revision = 0, int days = 30, bool automatic = true) {
             {"usage", QJsonObject{{"database_page_bytes", 4096},
                                   {"free_page_bytes", 1024},
                                   {"kept_page_bytes", 3072}}}};
+}
+QJsonObject sizeState(qint64 revision = 0, qint64 limit = 5'000'000'000LL, int warning = 80) {
+    auto result = state();
+    result.insert("revision", revision);
+    result.insert("policy", QJsonObject{{"limit_bytes", limit}, {"warning_percent", warning}});
+    result.insert("status", QJsonObject{{"target_scope", "sqlite_pages"},
+                                        {"over_limit", false},
+                                        {"warning", true},
+                                        {"pressure_enabled", revision > 0}});
+    return result;
+}
+QJsonObject supportedState() {
+    auto result = state();
+    result.insert("size_policy_supported", true);
+    return result;
 }
 QJsonObject lowDiskState() {
     auto result = state();
@@ -51,6 +68,143 @@ void choose(SettingsStoragePage& page, int value) {
 class SettingsStoragePageTest final : public QObject {
     Q_OBJECT
   private slots:
+    void sizeRequiresExplicitSaveAndKeepsIndependentRevision() {
+        QStringList calls;
+        QJsonObject submitted;
+        SettingsStoragePage::Reply saveReply;
+        SettingsStoragePage page([&](const QString& op, const QJsonObject& payload, auto reply) {
+            calls << op;
+            if (op == "read")
+                reply(supportedState(), {});
+            else if (op == "size.read")
+                reply(sizeState(), {});
+            else {
+                submitted = payload;
+                saveReply = reply;
+            }
+        });
+        auto* button = page.findChild<QPushButton*>("storageSizeSave");
+        auto* limit = page.findChild<QComboBox*>("storageSizeLimit");
+        auto* warning = page.findChild<QSpinBox*>("storageWarningPercent");
+        QTRY_VERIFY(button->isEnabled());
+        QCOMPARE(calls, QStringList({"read", "size.read"}));
+        auto* info = page.findChild<QLabel*>("storageSizeStatus");
+        QVERIFY(info->text().contains("not been enabled"));
+        limit->setCurrentIndex(limit->findData(qint64(2'000'000'000LL)));
+        warning->setValue(90);
+        QCOMPARE(calls.size(), 2); // Editing and opening never opt in.
+        button->click();
+        QCOMPARE(calls.last(), "size.apply");
+        QCOMPARE(submitted.value("expected_revision").toInteger(), 0);
+        QCOMPARE(submitted.value("policy").toObject(),
+                 sizeState(1, 2'000'000'000LL, 90).value("policy").toObject());
+        QVERIFY(!days(page)->isEnabled());
+        QVERIFY(!button->isEnabled());
+        saveReply(sizeState(1, 2'000'000'000LL, 90), {});
+        QVERIFY(button->isEnabled());
+        QVERIFY(status(page)->text().contains("saved"));
+        QCOMPARE(QAccessible::queryAccessibleInterface(info)->text(QAccessible::Name),
+                 info->text());
+        choose(page, 90);
+        QCOMPARE(submitted.value("expected_revision").toInteger(), 0); // Different policy revision.
+    }
+    void sizeFailuresRequireReload_data() {
+        QTest::addColumn<QString>("failure");
+        for (auto value : {"conflict", "revision", "policy", "timeout", "disconnect"})
+            QTest::newRow(value) << QString(value);
+    }
+    void sizeFailuresRequireReload() {
+        QFETCH(QString, failure);
+        SettingsStoragePage::Reply pending;
+        SettingsStoragePage page([&](const QString& op, const QJsonObject&, auto reply) {
+            if (op == "read")
+                reply(supportedState(), {});
+            else if (op == "size.read")
+                reply(sizeState(), {});
+            else
+                pending = reply;
+        });
+        auto* button = page.findChild<QPushButton*>("storageSizeSave");
+        QTRY_VERIFY(button->isEnabled());
+        button->click();
+        QVERIFY(bool(pending));
+        if (failure == "timeout")
+            QVERIFY(QMetaObject::invokeMethod(page.findChild<QTimer*>("storageRequestTimeout"),
+                                              "timeout", Qt::DirectConnection));
+        else if (failure == "disconnect")
+            pending({}, "Disconnected");
+        else if (failure == "conflict")
+            pending({{"ok", false}, {"error_code", "policy_conflict"}}, {});
+        else if (failure == "revision")
+            pending(sizeState(0), {});
+        else
+            pending(sizeState(1, 2'000'000'000LL), {});
+        QVERIFY(!button->isEnabled());
+        QVERIFY(!days(page)->isEnabled());
+        QVERIFY(reload(page)->isEnabled());
+        reload(page)->click();
+        QVERIFY(button->isEnabled());
+        pending(sizeState(1), {}); // stale callback after reload cannot overwrite it
+        QVERIFY(page.findChild<QLabel*>("storageSizeStatus")->text().contains("not been enabled"));
+    }
+    void invalidSizePolicy_data() {
+        QTest::addColumn<QString>("field");
+        QTest::addColumn<QJsonValue>("value");
+        QTest::newRow("fraction") << QString("warning_percent") << QJsonValue(20.5);
+        QTest::newRow("zero") << QString("warning_percent") << QJsonValue(0);
+        QTest::newRow("above-100") << QString("warning_percent") << QJsonValue(101);
+        QTest::newRow("string") << QString("limit_bytes") << QJsonValue("5000000000");
+        QTest::newRow("unsupported") << QString("limit_bytes") << QJsonValue(3'000'000'000LL);
+        QTest::newRow("unknown") << QString("extra") << QJsonValue(true);
+    }
+    void invalidSizePolicy() {
+        QFETCH(QString, field);
+        QFETCH(QJsonValue, value);
+        auto malformed = sizeState();
+        auto policy = malformed.value("policy").toObject();
+        policy.insert(field, value);
+        malformed.insert("policy", policy);
+        SettingsStoragePage page([&](const QString& op, const QJsonObject&, auto reply) {
+            reply(op == "read" ? supportedState() : malformed, {});
+        });
+        QTRY_VERIFY(reload(page)->isEnabled());
+        QVERIFY(!page.findChild<QPushButton*>("storageSizeSave")->isEnabled());
+        QVERIFY(!days(page)->isEnabled());
+    }
+    void sizeReplyAfterDestruction() {
+        SettingsStoragePage::Reply pending;
+        auto* page =
+            new SettingsStoragePage([&](const QString& op, const QJsonObject&, auto reply) {
+                if (op == "read")
+                    reply(supportedState(), {});
+                else
+                    pending = reply;
+            });
+        QTRY_VERIFY(bool(pending));
+        delete page;
+        pending(sizeState(), {});
+    }
+    void sizeUnavailableStatusAndOldDaemon() {
+        bool modern = true;
+        SettingsStoragePage page([&](const QString& op, const QJsonObject&, auto reply) {
+            if (op == "read")
+                reply(modern ? supportedState() : state(), {});
+            else {
+                auto value = sizeState(1);
+                value.remove("status");
+                value.remove("usage");
+                reply(value, {});
+            }
+        });
+        auto* button = page.findChild<QPushButton*>("storageSizeSave");
+        QTRY_VERIFY(button->isEnabled());
+        QVERIFY(page.findChild<QLabel*>("storageSizeStatus")->text().contains("unknown"));
+        modern = false;
+        reload(page)->click();
+        QVERIFY(page.findChild<QWidget*>("storageSizeGroup")->isHidden());
+        QVERIFY(!button->isEnabled());
+        QVERIFY(days(page)->isEnabled());
+    }
     void diskMeasurementsAndLowSpaceWarnings_data() {
         QTest::addColumn<QJsonValue>("available");
         QTest::addColumn<bool>("known");
@@ -284,19 +438,72 @@ class SettingsStoragePageTest final : public QObject {
         delete page;
         pending(state(), {});
     }
+    void sizeNativeLayout_data() {
+        QTest::addColumn<bool>("dark");
+        QTest::addColumn<int>("width");
+        QTest::newRow("light-narrow") << false << 440;
+        QTest::newRow("dark-wide") << true << 800;
+    }
+    void sizeNativeLayout() {
+        QFETCH(bool, dark);
+        QFETCH(int, width);
+        ThemeManager theme(*qApp);
+        theme.setMode(dark ? ThemeManager::Mode::Dark : ThemeManager::Mode::Light);
+        QScrollArea scroll;
+        auto* page = new SettingsStoragePage([](const QString& op, const QJsonObject&, auto reply) {
+            reply(op == "read" ? supportedState() : sizeState(), {});
+        });
+        scroll.setWidget(page);
+        scroll.setWidgetResizable(true);
+        scroll.resize(width, 700);
+        scroll.show();
+        auto* save = page->findChild<QPushButton*>("storageSizeSave");
+        auto* limit = page->findChild<QComboBox*>("storageSizeLimit");
+        auto* warning = page->findChild<QSpinBox*>("storageWarningPercent");
+        QTRY_VERIFY(save->isEnabled());
+        QTRY_VERIFY(save->isVisible());
+        scroll.ensureWidgetVisible(save);
+        QTRY_VERIFY(scroll.viewport()->rect().contains(
+            save->mapTo(scroll.viewport(), save->rect().bottomRight())));
+        QVERIFY(page->width() <= width);
+        for (auto* text : page->findChildren<QLabel*>()) {
+            if (text->isVisible() && text->wordWrap())
+                QTRY_VERIFY(text->height() >= text->heightForWidth(text->width()));
+        }
+        limit->setFocus();
+        QTest::keyClick(limit, Qt::Key_Tab);
+        QVERIFY(warning->hasFocus());
+        QTest::keyClick(warning, Qt::Key_Tab);
+        QVERIFY(save->hasFocus());
+        const auto capture = qEnvironmentVariable("KETPLUS_SIZE_UI_CAPTURE");
+        if (!capture.isEmpty())
+            QVERIFY(scroll.grab().save(capture + (dark ? "dark" : "light") + ".png"));
+    }
     void nativeSettingsShell_data() {
         QTest::addColumn<bool>("dark");
-        QTest::newRow("light") << false;
-        QTest::newRow("dark") << true;
+        QTest::addColumn<bool>("modern");
+        QTest::newRow("light") << false << false;
+        QTest::newRow("dark") << true << false;
+        QTest::newRow("size-light") << false << true;
+        QTest::newRow("size-dark") << true << true;
     }
     void nativeSettingsShell() {
         QFETCH(bool, dark);
+        QFETCH(bool, modern);
         ThemeManager theme(*qApp);
         theme.setMode(dark ? ThemeManager::Mode::Dark : ThemeManager::Mode::Light);
         auto* dialog = new SettingsDialog(AppearanceSettings{}, theme);
-        SettingsWorkspacePage shell(
-            dialog, {}, nullptr, {},
-            [](const QString&, const QJsonObject&, auto reply) { reply(lowDiskState(), {}); });
+        SettingsWorkspacePage shell(dialog, {}, nullptr, {},
+                                    [modern](const QString& op, const QJsonObject&, auto reply) {
+                                        if (modern && op == "size.read") {
+                                            reply(sizeState(), {});
+                                            return;
+                                        }
+                                        auto value = lowDiskState();
+                                        if (modern)
+                                            value.insert("size_policy_supported", true);
+                                        reply(value, {});
+                                    });
         shell.applyPalette(theme.palette());
         shell.resize(1100, 760);
         shell.show();
@@ -307,11 +514,17 @@ class SettingsStoragePageTest final : public QObject {
         QTRY_VERIFY(days(*page)->isEnabled());
         QTRY_VERIFY(reload(*page)->isVisible());
         QVERIFY(shell.findChild<QDialogButtonBox*>("settingsWorkspaceFooter")->isHidden());
-        QVERIFY(shell.rect().contains(
+        if (modern) {
+            auto* scroll = qobject_cast<QScrollArea*>(page->parentWidget()->parentWidget());
+            QVERIFY(scroll);
+            scroll->ensureWidgetVisible(reload(*page));
+        }
+        QTRY_VERIFY(shell.rect().contains(
             reload(*page)->mapTo(&shell, reload(*page)->rect().bottomRight())));
         const QString capture = qEnvironmentVariable("KETPLUS_STORAGE_CAPTURE");
         if (!capture.isEmpty())
-            QVERIFY(shell.grab().save(capture + (dark ? "dark" : "light") + ".png"));
+            QVERIFY(shell.grab().save(capture + (modern ? "size-" : "") +
+                                      (dark ? "dark" : "light") + ".png"));
     }
     void layoutAndKeyboard_data() {
         QTest::addColumn<int>("width");
