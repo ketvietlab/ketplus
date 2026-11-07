@@ -11,7 +11,7 @@
 class QFrame;
 class QLabel;
 class QPalette;
-class QToolButton;
+class QAbstractButton;
 
 namespace ketplus {
 
@@ -39,6 +39,7 @@ class AtlasBuilderTab final : public QWidget {
 
   signals:
     void titleChanged(const QString& title);
+    void conversationRequested(const QString& workspaceRoot, const QString& conversationId);
     void atlasBuilt(const AtlasDescriptor& atlas);
 
   protected:
@@ -68,11 +69,12 @@ class AtlasBuilderTab final : public QWidget {
     QLabel* flowContext_{nullptr};
     QFrame* chatFrame_{nullptr};
     AgentWorkspaceView* chat_{nullptr};
-    QToolButton* collapse_{nullptr};
+    QAbstractButton* collapse_{nullptr};
     QWidget* toolbar_{nullptr};
-    QToolButton* aiButton_{nullptr};
+    QAbstractButton* aiButton_{nullptr};
     QTimer activityPulse_;
     bool pulseBright_{true};
+    int interfaceFontSizePixels_{14};
     QMetaObject::Connection messageChanged_;
     QMetaObject::Connection messageCountChanged_;
     QSet<QString> initialAtlasPaths_;

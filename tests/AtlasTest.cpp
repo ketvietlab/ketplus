@@ -1,6 +1,8 @@
 #include "atlas/AtlasTab.h"
 #include "atlas/AtlasThumbnailCache.h"
+#include "ui/Theme.h"
 #include "workspace/AtlasIndex.h"
+#include <QAbstractButton>
 #include <QApplication>
 #include <QDir>
 #include <QElapsedTimer>
@@ -12,13 +14,11 @@
 #include <QListWidget>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
-#include <QPushButton>
 #include <QScreen>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QThread>
-#include <QToolButton>
 #include <QWebView>
 #include <QtTest>
 #include <QtWebView/QtWebView>
@@ -216,6 +216,8 @@ class AtlasTest final : public QObject {
     }
 
     void gridSearchAndDeferKeepsTab() {
+        ketplus::ThemeManager theme(*qApp);
+        theme.setMode(ketplus::ThemeManager::Mode::Light);
         QTemporaryDir root;
         const auto atlas = fixture(root.path());
         ketplus::AtlasIndex index;
@@ -226,12 +228,13 @@ class AtlasTest final : public QObject {
         tab.show();
         auto* grid = tab.findChild<QListWidget*>("atlasGrid");
         auto* search = tab.findChild<QLineEdit*>("atlasSearch");
-        auto* gridMode = tab.findChild<QToolButton*>("atlasGridModeButton");
-        auto* listMode = tab.findChild<QToolButton*>("atlasListModeButton");
+        auto* gridMode = tab.findChild<QAbstractButton*>("atlasGridModeButton");
+        auto* listMode = tab.findChild<QAbstractButton*>("atlasListModeButton");
         QVERIFY(gridMode && listMode);
         QVERIFY(gridMode->isChecked());
         QCOMPARE(grid->gridSize().height(), 300);
-        QVERIFY(tab.findChildren<QToolButton*>(QString{}, Qt::FindDirectChildrenOnly).isEmpty());
+        QVERIFY(
+            tab.findChildren<QAbstractButton*>(QString{}, Qt::FindDirectChildrenOnly).isEmpty());
         QCOMPARE(grid->count(), 1);
         QTRY_VERIFY(!grid->item(0)->data(Qt::DecorationRole).value<QPixmap>().isNull());
         search->setText("missing");
@@ -240,6 +243,7 @@ class AtlasTest final : public QObject {
         QCOMPARE(grid->count(), 1);
         listMode->click();
         QVERIFY(listMode->isChecked());
+        QCOMPARE(grid->gridSize().height(), 112);
         QVERIFY(grid->gridSize().width() >= grid->viewport()->width() - 12);
         gridMode->click();
         QVERIFY(gridMode->isChecked());
@@ -293,7 +297,7 @@ class AtlasTest final : public QObject {
         tab.show();
         tab.openAtlas(atlas);
         auto* status = tab.findChild<QLabel*>("atlasStatus");
-        auto* choose = tab.findChild<QPushButton*>("atlasChooseAnotherButton");
+        auto* choose = tab.findChild<QAbstractButton*>("atlasChooseAnotherButton");
         auto* notice = tab.findChild<QLabel*>("atlasLastValidNotice");
         QVERIFY(status && choose && notice);
         write(atlas.path, "{\"version\":1");
@@ -342,8 +346,8 @@ class AtlasTest final : public QObject {
 
         auto* status = tab.findChild<QLabel*>("atlasStatus");
         auto* command = tab.findChild<QLabel*>("atlasInstallCommand");
-        auto* install = tab.findChild<QPushButton*>("atlasInstallButton");
-        auto* locate = tab.findChild<QPushButton*>("atlasLocateCliButton");
+        auto* install = tab.findChild<QAbstractButton*>("atlasInstallButton");
+        auto* locate = tab.findChild<QAbstractButton*>("atlasLocateCliButton");
         QVERIFY(status && command && install && locate);
         QVERIFY(status->text().contains("required to preview"));
         QCOMPARE(command->text(), QStringLiteral("npm install -g ketatlas@0.6.1"));

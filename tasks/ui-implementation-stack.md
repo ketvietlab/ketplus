@@ -45,7 +45,7 @@ Record technical verification separately from the later review/acceptance phase.
 - [x] Pro: overlays #164, including the existing revisioned repository/worktree picker.
 - [x] Pro: worktrees/connections #165 available-runtime UI (Relay pairing; SSH setup limitation below).
 - [x] Pro: settings #166 available-runtime controls (messaging behavior dependency remains separate).
-- [ ] Pro: Atlas #167.
+- [x] Pro: Atlas #167 chrome and existing WebView composition (native acceptance deferred).
 
 Behaviour dependencies (#120, #125, #126, #128, #130, #170) must be represented
 honestly: preserve real runtime state and actions, and record missing contracts
@@ -151,3 +151,16 @@ credentials retain their behavior; usage popover buttons use the kit. The four
 Settings targets pass across focused runs; two Claude usage cases pass. Storage
 light/dark offscreen captures expose and then verify removal of duplicate list
 text beneath the kit navigation rows. No quota, native acceptance or review run.
+
+Settings: draft PR #227 on #226. Atlas layer replaces legacy library/panel actions,
+search and tab controls with kit controls, uses semantic colors/zoom for cards,
+shows actual manifest counts and docks AI Chat beside the unchanged WebView.
+Back routes to the bound conversation; hide/show preserves its state. Atlas suite
+passes; workspace cases pass across the initial run and corrected token-color
+assertions. Native WebView smoke remains explicitly skipped. Inspected library
+and QWidget chrome captures (the latter does not capture embedded QQuick pixels).
+
+Remaining #163 contract gaps: a transcript Atlas-result receipt tied to its
+producing conversation, and held-message release UI (#130), have no supplied
+runtime projection/action in this baseline. Existing Atlas catalog/detail actions
+are real; the stack does not fabricate validated-result or release-success rows.
