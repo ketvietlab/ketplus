@@ -22,6 +22,8 @@ class TerminalTab final : public QWidget {
     [[nodiscard]] TerminalView* view() const noexcept;
 
     void start();
+    void setDirectoryBeforeStart(const QString& path);
+    [[nodiscard]] bool isRunning() const { return session_.isRunning(); }
     bool restart();
     void stop();
     void applyTheme(const ThemePalette& palette);

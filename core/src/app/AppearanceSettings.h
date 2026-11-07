@@ -31,7 +31,7 @@ struct AppearanceSettings final {
     TextTypographySettings terminal{14, 22};
     // Empty uses the KétPlus profile's bundled monospace family.
     QString terminalFontFamily;
-    TextTypographySettings preview{14, 22};
+    TextTypographySettings preview{15, 26};
 
     [[nodiscard]] static AppearanceSettings defaults();
     [[nodiscard]] static AppearanceSettings load();

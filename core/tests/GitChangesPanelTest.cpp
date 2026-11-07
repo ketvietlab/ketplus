@@ -1,6 +1,9 @@
 #include "git/GitChangesPanel.h"
 #include "ui/Theme.h"
 
+#include "KetAppearance.h"
+#include "KetControlRecipes.h"
+#include "KetSurfaceRecipes.h"
 #include <QLabel>
 #include <QScrollBar>
 #include <QSignalSpy>
@@ -22,11 +25,17 @@ void GitChangesPanelTest::rendersRepositoryAndGroupedFiles() {
     snapshot.repositoryRoot = QStringLiteral("/tmp/ketplus-desktop");
     snapshot.branch = QStringLiteral("develop");
     snapshot.files = {
-        {QStringLiteral("modules/ai/src/agent/qml/NavigationRail.qml"), {}, QLatin1Char('.'),
+        {QStringLiteral("modules/ai/src/agent/qml/NavigationRail.qml"),
+         {},
+         QLatin1Char('.'),
          QLatin1Char('M')},
-        {QStringLiteral("modules/ai/src/agent/qml/WorktreeItem.qml"), {}, QLatin1Char('.'),
+        {QStringLiteral("modules/ai/src/agent/qml/WorktreeItem.qml"),
+         {},
+         QLatin1Char('.'),
          QLatin1Char('M')},
-        {QStringLiteral("apps/desktop/src/ui/ThemeManager.cpp"), {}, QLatin1Char('M'),
+        {QStringLiteral("apps/desktop/src/ui/ThemeManager.cpp"),
+         {},
+         QLatin1Char('M'),
          QLatin1Char('.')},
     };
 
@@ -59,10 +68,12 @@ void GitChangesPanelTest::rendersRepositoryAndGroupedFiles() {
     QCOMPARE(changes->child(0)->text(1), QStringLiteral("M"));
     QCOMPARE(staged->child(0)->text(1), QStringLiteral("M"));
     QCOMPARE(tree->columnWidth(1), 32);
-    QCOMPARE(tree->itemDelegate()->sizeHint({}, tree->model()->index(0, 0)).height(), 40);
-    QCOMPARE(tree->itemDelegate()->sizeHint({}, tree->model()->index(0, 0, tree->model()->index(0, 0)))
+    QCOMPARE(tree->itemDelegate()->sizeHint({}, tree->model()->index(0, 0)).height(),
+             qRound(ket::groupHeaderRecipe(false, {}, ket::Theme::Light).height));
+    QCOMPARE(tree->itemDelegate()
+                 ->sizeHint({}, tree->model()->index(0, 0, tree->model()->index(0, 0)))
                  .height(),
-             52);
+             qRound(ket::fileRowRecipe(false, {}, ket::Theme::Light).height));
 
     panel.focusChanges();
     QCOMPARE(tree->currentItem(), changes->child(0));

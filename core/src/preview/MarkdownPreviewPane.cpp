@@ -6,6 +6,8 @@
 #include "KetButton.h"
 #include "KetChrome.h"
 #include "KetIcons.h"
+#include "KetProfile.h"
+#include "KetRichRecipes.h"
 #include <QAbstractTextDocumentLayout>
 #include <QDesktopServices>
 #include <QDir>
@@ -442,7 +444,9 @@ void MarkdownPreviewPane::applyDocumentStyle() {
     bodyFont.setPixelSize(fontSizePixels_);
     browser_->document()->setDefaultFont(bodyFont);
 
-    const QString codeFont = QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
+    const auto recipe = ket::markdownRecipe(palette_.dark ? ket::Theme::Dark : ket::Theme::Light);
+    const qreal textScale = fontSizePixels_ / recipe.bodyPixels;
+    const QString codeFont = ket::Profile::current().monoFamily();
     QString documentStyle = QStringLiteral(R"(
         body {
             color: %1;
@@ -511,14 +515,14 @@ void MarkdownPreviewPane::applyDocumentStyle() {
         documentStyle.arg(palette_.textMain, palette_.panelBackground, palette_.border,
                           palette_.accentText, palette_.panelSubtle, palette_.accentMuted,
                           palette_.textSecondary, codeFont, bodyFont.family());
-    const int codeFontSize = qMax(8, fontSizePixels_ - 1);
+    const int codeFontSize = qMax(8, qRound(recipe.codePixels * textScale));
     const std::pair<const char*, int> typographyTokens[] = {
         {"{{bodyFontSize}}", fontSizePixels_},
         {"{{bodyLineHeight}}", lineHeightPixels_},
-        {"{{headingOneSize}}", fontSizePixels_ + 12},
-        {"{{headingTwoSize}}", fontSizePixels_ + 6},
-        {"{{headingThreeSize}}", fontSizePixels_ + 2},
-        {"{{smallFontSize}}", qMax(8, fontSizePixels_ - 1)},
+        {"{{headingOneSize}}", qRound(recipe.heading1Pixels * textScale)},
+        {"{{headingTwoSize}}", qRound(recipe.heading2Pixels * textScale)},
+        {"{{headingThreeSize}}", qRound(recipe.heading3Pixels * textScale)},
+        {"{{smallFontSize}}", qMax(8, qRound(recipe.codePixels * textScale))},
         {"{{codeFontSize}}", codeFontSize},
         {"{{codeLineHeight}}", qMax(codeFontSize, lineHeightPixels_ - 1)},
     };
@@ -547,7 +551,10 @@ void MarkdownPreviewPane::updateDocumentMargin() {
 }
 
 void MarkdownPreviewPane::applyBlockTypography() {
-    const QFont codeFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    const auto recipe = ket::markdownRecipe(palette_.dark ? ket::Theme::Dark : ket::Theme::Light);
+    const qreal textScale = fontSizePixels_ / recipe.bodyPixels;
+    QFont codeFont(ket::Profile::current().monoFamily());
+    codeFont.setWeight(QFont::Medium);
     QList<QTextTable*> tables;
 
     for (QTextBlock block = browser_->document()->begin(); block.isValid(); block = block.next()) {
@@ -571,23 +578,29 @@ void MarkdownPreviewPane::applyBlockTypography() {
             tables.append(table);
         }
 
-        const int codeFontSize = qMax(8, fontSizePixels_ - 1);
+        const int codeFontSize = qMax(8, qRound(recipe.codePixels * textScale));
         if (containsImage) {
             format.setLineHeight(24.0, QTextBlockFormat::MinimumHeight);
         } else if (isCodeBlock) {
             format.setLineHeight(qMax(codeFontSize, lineHeightPixels_ - 1),
                                  QTextBlockFormat::FixedHeight);
         } else {
-            format.setLineHeight(headingLevel > 0 ? lineHeightPixels_ + 2 : lineHeightPixels_,
-                                 QTextBlockFormat::FixedHeight);
+            const qreal headingPixels = headingLevel == 1   ? recipe.heading1Pixels
+                                        : headingLevel == 2 ? recipe.heading2Pixels
+                                                            : recipe.heading3Pixels;
+            format.setLineHeight(
+                headingLevel > 0
+                    ? qMax(qreal(lineHeightPixels_),
+                           qRound(headingPixels * textScale * recipe.headingLineHeight) * 1.0)
+                    : lineHeightPixels_,
+                QTextBlockFormat::FixedHeight);
         }
 
         if (headingLevel > 0) {
             static constexpr qreal headingTopMargins[] = {0.0, 28.0, 26.0, 22.0, 18.0, 18.0, 18.0};
-            static constexpr qreal headingBottomMargins[] = {0.0, 14.0, 12.0, 9.0, 8.0, 8.0, 8.0};
             const int marginIndex = qBound(1, headingLevel, 6);
             format.setTopMargin(block.position() == 0 ? 0.0 : headingTopMargins[marginIndex]);
-            format.setBottomMargin(headingBottomMargins[marginIndex]);
+            format.setBottomMargin(recipe.headingSpacingAfter * textScale);
         } else if (table != nullptr) {
             format.setTopMargin(0.0);
             format.setBottomMargin(0.0);
@@ -605,40 +618,40 @@ void MarkdownPreviewPane::applyBlockTypography() {
                                    next.blockFormat().hasProperty(QTextFormat::BlockCodeFence));
             format.setTopMargin(previousIsCode ? 0.0 : 20.0);
             format.setBottomMargin(nextIsCode ? 0.0 : 20.0);
-            format.setLeftMargin(18.0);
+            format.setLeftMargin(recipe.quotePadding * textScale);
             format.setRightMargin(18.0);
             format.clearBackground();
         } else if (isQuote) {
             format.setTopMargin(8.0);
             format.setBottomMargin(16.0);
-            format.setLeftMargin(18.0);
+            format.setLeftMargin(recipe.quotePadding * textScale);
             format.setRightMargin(12.0);
             format.setBackground(QColor(palette_.panelSubtle));
         } else if (isListItem) {
             format.setTopMargin(2.0);
-            format.setBottomMargin(3.0);
+            format.setBottomMargin(recipe.listItemGap * textScale);
         } else if (block.text().isEmpty()) {
             format.setTopMargin(0.0);
             format.setBottomMargin(0.0);
             format.setLineHeight(60.0, QTextBlockFormat::ProportionalHeight);
         } else {
             format.setTopMargin(0.0);
-            format.setBottomMargin(14.0);
+            format.setBottomMargin(recipe.paragraphSpacing * textScale);
         }
 
         blockCursor.setBlockFormat(format);
 
         if (headingLevel > 0) {
             const int headingSizes[] = {fontSizePixels_,
-                                        fontSizePixels_ + 12,
-                                        fontSizePixels_ + 6,
-                                        fontSizePixels_ + 2,
+                                        qRound(recipe.heading1Pixels * textScale),
+                                        qRound(recipe.heading2Pixels * textScale),
+                                        qRound(recipe.heading3Pixels * textScale),
                                         fontSizePixels_,
-                                        qMax(8, fontSizePixels_ - 1),
-                                        qMax(8, fontSizePixels_ - 1)};
+                                        qMax(8, qRound(recipe.codePixels * textScale)),
+                                        qMax(8, qRound(recipe.codePixels * textScale))};
             QFont headingFont = browser_->document()->defaultFont();
             headingFont.setPixelSize(headingSizes[qBound(1, headingLevel, 6)]);
-            headingFont.setWeight(QFont::DemiBold);
+            headingFont.setWeight(QFont::Weight(recipe.headingWeight));
             QTextCharFormat headingFormat;
             headingFormat.setFont(headingFont, QTextCharFormat::FontPropertiesSpecifiedOnly);
             headingFormat.setForeground(QColor(palette_.textMain));
@@ -685,7 +698,7 @@ void MarkdownPreviewPane::applyBlockTypography() {
         tableFormat.setBorder(1.0);
         tableFormat.setBorderBrush(QColor(palette_.border));
         tableFormat.setBorderStyle(QTextFrameFormat::BorderStyle_Solid);
-        tableFormat.setCellPadding(9.0);
+        tableFormat.setCellPadding(recipe.tableCellPadding * textScale);
         tableFormat.setCellSpacing(0.0);
         tableFormat.setTopMargin(8.0);
         tableFormat.setBottomMargin(18.0);
