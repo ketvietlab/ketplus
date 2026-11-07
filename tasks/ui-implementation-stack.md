@@ -39,7 +39,8 @@ Record technical verification separately from the later review/acceptance phase.
 - [x] Pro: sidebar #158 UI composition (metadata/acceptance limits below).
 - [x] Pro: header/composer #159 existing-runtime UI; #120 reviewer dependency remains separate.
 - [x] Pro: messages #160 (implementation; native acceptance deferred).
-- [ ] Pro: activity #161, notices #162, questions/details #163.
+- [x] Pro: activity #161 UI and provider step mapping (native acceptance deferred).
+- [ ] Pro: notices #162, questions/details #163.
 - [ ] Pro: overlays #164, worktrees/connections #165, settings #166, Atlas #167.
 
 Behaviour dependencies (#120, #125, #126, #128, #130, #170) must be represented
@@ -83,3 +84,11 @@ Transcript layer on #216: recipe typography/bubbles/code, syntax highlighting,
 fixed gallery/large generated previews, kit close control and journal day dividers.
 Focused checks cover streaming, copy/link behavior, geometry, repeated formatting,
 numeric zoom, journal dates and Markdown/Mermaid. No provider quota or release work.
+
+Transcript: PR #218 on #216. Activity layer extracts header and changed-file
+composition so the main activity delegate is below 500 lines. Kit row/group/file
+recipes preserve on-demand detail loading, command copy/output, path actions,
+virtual group expansion and reader anchoring. Explicit tool names map to wait,
+monitor, wake, skill, tool search, stop, subagent, plan and web steps; private
+reasoning remains hidden under the existing contract. Focused interaction,
+light/dark detail, grouping and synthetic mapping checks pass.

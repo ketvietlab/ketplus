@@ -7,6 +7,7 @@ import QtQuick.Layouts
 Item {
     id: messageDelegate
     readonly property var userRecipe: Kit.KetTheme.userMessageRecipe(shell.t.dark, shell.t.zoomFactor)
+    readonly property var groupRecipe: Kit.KetTheme.activityGroupRecipe(shell.t.dark, shell.t.zoomFactor, false, false, true, false)
     readonly property var codeRecipe: Kit.KetTheme.codeBlockRecipe(shell.t.dark, shell.t.zoomFactor)
     required property var shell
     required property var host
@@ -44,7 +45,7 @@ Item {
     // An activity row inside an expanded group is drawn compact, with tighter vertical padding,
     // and hangs under a rail indented by groupRailInset.
     readonly property bool groupNested: activityRow && groupRole.length > 0 && groupExpanded
-    readonly property real groupRailInset: Metrics.px(22, shell.t)
+    readonly property real groupRailInset: groupRecipe.childrenIndent + groupRecipe.childrenPadding + 1
     readonly property int surfaceInset: activityRow ? 0 : Metrics.px(4, shell.t)
     onYChanged: {
         if (!view.followTail && shell.transcriptWheel.direction !== 0)
@@ -246,11 +247,19 @@ Item {
                 active: messageDelegate.groupLeader
                 visible: active
                 width: parent.width
-                height: active ? Metrics.px(32, shell.t) : 0
+                height: active ? groupRecipe.height : 0
                 // One muted summary line followed by its chevron, as the mobile transcript
                 // reads; the rows open under a rail below it.
-                sourceComponent: Item {
+                sourceComponent: Basic.AbstractButton {
                     id: groupHeader
+                    activeFocusOnTab: false
+                    hoverEnabled: true
+                    contentItem: Item {}
+                    onClicked: view.toggleGroup(messageDelegate.groupKey)
+                    background: Rectangle {
+                        radius: messageDelegate.groupRecipe.radius
+                        color: Kit.KetTheme.activityGroupRecipe(shell.t.dark, shell.t.zoomFactor, parent.hovered, parent.down, true, parent.visualFocus).background
+                    }
                     objectName: "transcriptGroupHeader"
                     Text {
                         id: groupSummaryText
@@ -259,10 +268,10 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         width: Math.min(implicitWidth, parent.width - groupChevron.width - Metrics.px(36, shell.t))
                         text: messageDelegate.groupSummary + (messageDelegate.groupRunning ? " · Running" : "")
-                        color: messageDelegate.groupFailed > 0 ? shell.t.danger : shell.t.textMuted
+                        color: messageDelegate.groupFailed > 0 ? shell.t.danger : messageDelegate.groupRecipe.text
                         font.family: shell.t.uiFont
-                        font.pixelSize: shell.t.body
-                        font.weight: Font.Medium
+                        font.pixelSize: messageDelegate.groupRecipe.fontPixels
+                        font.weight: Font.Normal
                         elide: Text.ElideRight
                     }
                     TintedIcon {
@@ -276,9 +285,6 @@ Item {
                         source: "qrc:/agent/icons/chevron-right.svg"
                         color: shell.t.textMuted
                         rotation: messageDelegate.groupExpanded ? 90 : 0
-                    }
-                    TapHandler {
-                        onTapped: view.toggleGroup(messageDelegate.groupKey)
                     }
                     HoverHandler {
                         cursorShape: Qt.PointingHandCursor
