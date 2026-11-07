@@ -10,6 +10,11 @@ milestone changes state.
   payloads, rejected command acceptance and session deletion are covered. The
   queue is volatile; crash durability and whole-command atomicity remain open.
 
+- Append verifies complete superseded-delta removal and running-activity
+  settlement before committing (ADR 0063). Partial ignored writes roll back;
+  partial indexes restrict settlement checks to running rows in the target turn.
+  Large running turns and initial index construction remain separate bounds work.
+
 - Fork preserves unsupported source cursor/turn values rather than coercing them
   into copied metadata (ADR 0061). Integer-only projection and nonnegative checks
   reject the copy before destination writes; repair/retry/reopen are covered.

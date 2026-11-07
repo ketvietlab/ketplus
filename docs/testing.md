@@ -162,6 +162,9 @@ enable live-provider flags when running this lane. UI changes require updating
 the corresponding Atlas mock first.
 
 - Documentation-only: `git diff --check`; validate any edited YAML/JSON.
+- Multirow journal append changes: the daemon protocol fault fixture verifies
+  complete/partial ignored writes, rollback, repair and reopen; activity tests
+  also exercise running-turn lookup plans over 100,000 historical rows.
 - One Pro module: focused target plus its directly affected tests.
 - Shared header or desktop shell: full build and full Pro test suite.
 - `core/` change: the Lite suite (`ctest --preset lite-dev`), then the full Pro suite.

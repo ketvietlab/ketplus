@@ -59,6 +59,10 @@ bool LocalJournal::initializeActivityGroups() {
           "NOT NULL, running INTEGER NOT NULL, failed INTEGER NOT NULL, last_cursor INTEGER NOT "
           "NULL, turn_sequence INTEGER NOT NULL, PRIMARY "
           "KEY(session_id,generation,group_cursor,family))",
+          "CREATE INDEX IF NOT EXISTS activity_items_running_turn ON "
+          "activity_items(session_id,generation,turn_sequence) WHERE running>0",
+          "CREATE INDEX IF NOT EXISTS activity_summaries_running_turn ON "
+          "activity_summaries(session_id,generation,turn_sequence) WHERE running>0",
           "CREATE TABLE IF NOT EXISTS activity_heads (session_id TEXT NOT NULL, generation INTEGER "
           "NOT NULL, turn_sequence INTEGER NOT NULL, group_cursor INTEGER NOT NULL, indexed_cursor "
           "INTEGER NOT NULL, PRIMARY KEY(session_id,generation))"}) {
@@ -222,6 +226,21 @@ bool LocalJournal::updateActivityGroups(const QString& session, qint64 generatio
                 settle.addBindValue(value);
             if (!exec(settle))
                 return false;
+            QSqlQuery remaining(database_);
+            remaining.prepare(QStringLiteral("SELECT EXISTS(SELECT 1 FROM %1 WHERE session_id=? "
+                                             "AND generation=? AND turn_sequence=? AND running>0)")
+                                  .arg(table));
+            for (const QVariant& value : QVariantList{session, generation, turn})
+                remaining.addBindValue(value);
+            if (!exec(remaining))
+                return false;
+            if (!remaining.next() || remaining.value(0).toBool()) {
+                if (error)
+                    *error = remaining.lastError().isValid()
+                                 ? remaining.lastError().text()
+                                 : QStringLiteral("Activity settlement was not complete.");
+                return false;
+            }
         }
     }
     QSqlQuery update(database_);

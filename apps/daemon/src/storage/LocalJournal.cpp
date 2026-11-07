@@ -539,9 +539,10 @@ bool LocalJournal::updateReplayProjection(const QString& sessionId, const qint64
          (payload.value("item").toObject().value("type") == "commandExecution" &&
           payload.value("item").toObject().value("aggregatedOutput").isString()))) {
         QSqlQuery removeDeltas(database_);
-        removeDeltas.prepare(QStringLiteral(
-            "DELETE FROM replay_events WHERE session_id = ? AND generation = ? AND item_id = ? "
-            "AND turn_sequence = ? AND event_type IN ('assistant.delta', 'command.output_delta')"));
+        const QString deltaPredicate = QStringLiteral(
+            "session_id = ? AND generation = ? AND item_id = ? AND turn_sequence = ? "
+            "AND event_type IN ('assistant.delta', 'command.output_delta')");
+        removeDeltas.prepare(QStringLiteral("DELETE FROM replay_events WHERE ") + deltaPredicate);
         removeDeltas.addBindValue(sessionId);
         removeDeltas.addBindValue(generation);
         removeDeltas.addBindValue(itemId);
@@ -550,6 +551,19 @@ bool LocalJournal::updateReplayProjection(const QString& sessionId, const qint64
             if (error != nullptr) {
                 *error = removeDeltas.lastError().text();
             }
+            return false;
+        }
+        QSqlQuery remaining(database_);
+        remaining.prepare(QStringLiteral("SELECT EXISTS(SELECT 1 FROM replay_events WHERE ") +
+                          deltaPredicate + ')');
+        for (const auto& value : removeDeltas.boundValues())
+            remaining.addBindValue(value);
+        if (!remaining.exec() || !remaining.next() || remaining.value(0).toBool()) {
+            if (error)
+                *error =
+                    remaining.lastError().isValid()
+                        ? remaining.lastError().text()
+                        : QStringLiteral("Superseded replay deltas were not completely removed.");
             return false;
         }
         if (removeDeltas.numRowsAffected() > 0) {
