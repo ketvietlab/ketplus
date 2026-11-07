@@ -768,9 +768,55 @@ remain explicitly open.
   coverage plus the scalar-depth fix passes 46/46; fixed growth 147,456 bytes.
 - [x] Keep at most 64 routing frames and resume shallow routing after skipped
   containers (ADR 0070). No UI or live provider changes.
-- [ ] Required shared-header full Pro matrix, independent exact-head review,
-  merge and cleanup. This package branches from merged integration and does not
-  depend on the waiting media packages.
+- [x] #256 head `413514af`: full Release Pro build and 97/97 targets PASS
+  (309.16 s). Generated build removed after evidence preservation.
+- [ ] Independent exact-head review, merge and source cleanup; review dispatch
+  is held by the existing chain limit. Independent of pending media packages.
 - [ ] Continue Claude/Cursor newline-boundary checks, aggregate read buffering,
   malformed/UTF-8 input, stderr handling and version-probe acceptance. No whole
   H3.1 completion claim follows from the scanner fix alone.
+
+
+### H3.1 Claude/Cursor per-line admission
+
+- [x] Original adapters fail eight real-QProcess coalesced-output cases; six
+  valid/refusal controls pass. Newline presence bypasses the original byte guard.
+- [x] Read bounded chunks, check each complete/partial raw line before parse, and
+  close/drain rejected stdout before callbacks. Focused 16/16 includes request
+  suppression after failure, repeat notifications and a fresh process generation.
+- [x] #257 head `927d6f0d`: Release headless build and affected 15/15 targets
+  PASS (87.33 s). Generated build removed after preserving evidence.
+- [ ] Independent exact-head review, merge and source cleanup. No shared header
+  or UI implementation change; dispatch remains held by the chain limit.
+- [ ] Continue version-probe output bounds: it currently truncates only after
+  process exit, leaving accumulation during the probe unbounded. Stderr, UTF-8,
+  parser memory and event-loop budgets remain separate acceptance work.
+
+
+### H3.1 version-probe result admission
+
+- [x] Original source reproduces five output/exit/identity failures; a separate
+  same-path replacement probe also fails. Existing valid/cache/timeout controls
+  continue to pass.
+- [x] Bound merged output while reading, require successful exit, retain Unknown
+  retry behavior, and only join matching executable generations (ADR 0072).
+  Focused fixture 13/13 passes, including early flood termination and repair.
+- [x] #258 head `d3b1cee9`: Release headless build and affected 15/15 targets
+  PASS (89.23 s). Generated build removed after preserving evidence.
+- [ ] Independent exact-head review, merge and source cleanup. No UI or shared
+  header changes; dispatch remains held by the chain limit.
+- [ ] Continue stderr/encoding, process I/O/event-loop and waiter-admission bounds;
+  H3.1 is not complete solely from these three provider packages.
+
+
+### H3.1/H3.4 oversized routing string semantics
+
+- [x] Original scanner fails 24 encoding/path cases; 14 valid/refusal checks pass.
+  The first test-harness run did not register the new slots and is not evidence.
+- [x] Preserve bounded raw tokens, validate/decode JSON strings, refuse dotted-key
+  aliases and withhold all routing when captured metadata is invalid (ADR 0073).
+  Expanded focused suite 91/91 includes depth/memory and next-line recovery.
+- [ ] Full Pro shared-header matrix, integrate parent #256, independent exact-head
+  review, merge and cleanup. No UI implementation change.
+- [ ] Duplicate keys/outer structure, RPC request-id typing, timeout/recovery and
+  broader stderr/normal-frame encoding remain open; this is selective extraction.

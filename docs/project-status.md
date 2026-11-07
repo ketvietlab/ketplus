@@ -5,6 +5,10 @@ milestone changes state.
 
 ## Implemented
 
+- Oversized provider routing uses bounded JSON string decoding and structural
+  path segments (ADR 0073). Invalid captured metadata withholds all routing fields
+  for the line; valid escapes/Unicode and subsequent messages remain usable.
+
 - Oversized Codex line scanning retains at most 64 routing frames, tracking deeper
   containers with a scalar depth (ADR 0070). Shallow fields after the nested value
   still route correctly; broader provider framing remains under audit.

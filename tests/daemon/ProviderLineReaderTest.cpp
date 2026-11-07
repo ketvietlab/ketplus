@@ -1,6 +1,7 @@
 #include "providers/ProviderLineReader.h"
 
 #include <QCoreApplication>
+#include <QJsonObject>
 #include <QProcess>
 #include <QtTest>
 
@@ -94,6 +95,8 @@ class ProviderLineReaderTest final : public QObject {
         QVERIFY2(child.exitCode() == 0, output.constData());
 #endif
     }
+    void routingStringsUseJsonEncoding_data();
+    void routingStringsUseJsonEncoding();
     void clearDuringDiscardDropsOldDepthAndRouting() {
         ProviderLineReader reader(16, {"method"});
         QList<QByteArray> lines;
@@ -107,6 +110,75 @@ class ProviderLineReaderTest final : public QObject {
         QVERIFY(skipped.isEmpty());
     }
 };
+
+#ifndef Q_MOC_RUN
+void ProviderLineReaderTest::routingStringsUseJsonEncoding_data() {
+    QTest::addColumn<QByteArray>("fields");
+    QTest::addColumn<QJsonObject>("expected");
+    QTest::addColumn<int>("chunk");
+    const auto add = [](const char* name, const QByteArray& fields, const QJsonObject& expected) {
+        for (const int chunk : {1, 7, 1024})
+            QTest::newRow(qPrintable(QString("%1-chunk-%2").arg(name).arg(chunk)))
+                << fields << expected << chunk;
+    };
+    const QJsonObject normal{{"method", "turn/completed"}, {"params.threadId", "thread-1"}};
+    add("plain", R"("method":"turn/completed","params":{"threadId":"thread-1"})", normal);
+    add("escaped-values", R"("method":"turn\/completed","params":{"threadId":"\u0074hread-1"})",
+        normal);
+    add("escaped-keys",
+        R"("\u006dethod":"turn/completed","pa\u0072ams":{"thre\u0061dId":"thread-1"})", normal);
+    add("escaped-characters",
+        R"("method":"turn/completed","params":{"threadId":"tab\tquote\"slash\\"})",
+        {{"method", "turn/completed"}, {"params.threadId", "tab\tquote\"slash\\"}});
+    add("unicode-pair", R"("params":{"threadId":"\ud83d\ude00"})",
+        {{"params.threadId", QString::fromUtf8("😀")}});
+    add("utf8",
+        QByteArray("\"params\":{\"threadId\":\"") + QString::fromUtf8("luồng-😀").toUtf8() + "\"}",
+        {{"params.threadId", QString::fromUtf8("luồng-😀")}});
+    add("invalid-escape", R"("method":"bad\q","params":{"threadId":"thread-1"})", {});
+    add("invalid-utf8",
+        QByteArray("\"method\":\"turn/completed\",\"params\":{\"threadId\":\"bad") + char(0xff) +
+            "\"}",
+        {});
+    add("unescaped-control",
+        QByteArray("\"method\":\"bad") + char(1) + "\",\"params\":{\"threadId\":\"thread-1\"}", {});
+    add("literal-dot-key",
+        R"("params.threadId":"spoof","params":{"threadId":"thread-1","turn.id":"spoof-turn","turn":{"id":"turn-1"}})",
+        {{"params.threadId", "thread-1"}, {"params.turn.id", "turn-1"}});
+    add("numeric-id", R"("id":7)", {{"id", 7}});
+    add("invalid-method-with-id", R"("id":7,"method":"bad\q")", {});
+    add("invalid-method-before-id", R"("method":"bad\q","id":7)", {});
+    add("field-limit", QByteArray("\"params\":{\"threadId\":\"") + QByteArray(1024, 'x') + "\"}",
+        {{"params.threadId", QString(1024, 'x')}});
+    add("field-over-limit",
+        QByteArray("\"params\":{\"threadId\":\"") + QByteArray(1025, 'x') + "\"}", {});
+}
+void ProviderLineReaderTest::routingStringsUseJsonEncoding() {
+    QFETCH(QByteArray, fields);
+    QFETCH(QJsonObject, expected);
+    QFETCH(int, chunk);
+    ProviderLineReader reader(64, {"id", "method", "params.threadId", "params.turn.id"});
+    QList<OversizedProviderLine> skipped;
+    QList<QByteArray> lines;
+    const QByteArray next =
+        QByteArray("{\"padding\":\"") + QByteArray(200, 'x') + "\",\"method\":\"after\"}\n";
+    const QByteArray input = QByteArray("{\"padding\":\"") + QByteArray(200, 'x') + "\"," + fields +
+                             "}\n" + next + "{}\n";
+    for (qsizetype offset = 0; offset < input.size(); offset += chunk)
+        reader.append(
+            input.mid(offset, chunk), [&](const QByteArray& line) { lines.append(line); },
+            [&](const OversizedProviderLine& line) { skipped.append(line); });
+    QCOMPARE(skipped.size(), 2);
+    QJsonObject actual;
+    for (auto it = skipped.first().fields.cbegin(); it != skipped.first().fields.cend(); ++it)
+        actual.insert(it.key(), it.value());
+    QCOMPARE(actual, expected);
+    QCOMPARE(skipped.first().bytes, input.indexOf('\n'));
+    QCOMPARE(skipped.at(1).fields.value("method").toString(), QString("after"));
+    QCOMPARE(skipped.at(1).bytes, next.size() - 1);
+    QCOMPARE(lines, QList<QByteArray>{"{}"});
+}
+#endif
 
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
