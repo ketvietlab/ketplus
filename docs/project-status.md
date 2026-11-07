@@ -5,6 +5,12 @@ milestone changes state.
 
 ## Implemented
 
+- Daemon Atlas readiness requires a complete line for the owned viewer port and
+  ignores partial/embedded/truncated-prefix or post-stop output (ADR 0083). Start
+  results are delivered once even if the process exits immediately after ready.
+  Synthetic CLI cases and the full Pro suite pass; executable/port trust and
+  wider tunnel/renderer lifetime acceptance remain separate.
+
 - Existing media blobs are validated before dedup returns a reference (ADR 0066):
   exact bounded bytes, regular nonsymlink files and owner-only permissions.
   Invalid entries remain intact for repair; reference durability remains open.

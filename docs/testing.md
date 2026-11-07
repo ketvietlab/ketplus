@@ -126,6 +126,14 @@ budget/session total/account total and captures `/tmp/ketplus-claude-usage.png`.
 Live organization reporting requires the user's separately configured Admin key; tests
 never use a real key, Keychain item or inference quota.
 
+Daemon Atlas readiness (`ketplus_atlas_live_runtime_tests`, ADR 0083) includes a
+Unix synthetic Python CLI: wrong/longer port, embedded/partial/truncated banners,
+LF/CRLF/slash/split compatibility, stop-time output and a one-shot start callback
+when the process exits immediately after readiness. Invalid-output repair starts
+a fresh owned runtime. These cases do not opt into a real CLI, renderer or
+provider. Header changes require the full Pro matrix; keep the existing real
+KetAtlas lane opt-in and report its skip separately.
+
 ## Minimum verification
 
 Changes to macOS signing also run `python3 tests/packaging/test_signing_cli.py`.

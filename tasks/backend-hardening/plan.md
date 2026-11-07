@@ -702,3 +702,20 @@ remain explicitly open.
   and cleanup.
 - [ ] Continue reference writes/copies, ancestor/path races, decode and enumeration
   bounds. This package does not complete H1.4 or change retention defaults.
+
+
+### H5.2 daemon Atlas readiness and one-shot start result
+
+- [x] Audit the independent daemon `AtlasLiveRuntime` path; reproduce four false
+  readiness cases and duplicate callback on immediate process exit.
+- [x] Require a complete line for the owned viewer port, preserve truncated-line
+  context and ignore stop-time output. Consume the callback before invoking it;
+  internal setup/cleanup precedes callbacks. No UI implementation changes.
+- [x] Synthetic focused Qt 15/15 PASS; expanded original 9 pass/5 fail. Three
+  individual mutations (boundary/stop/callback) fail their targeted regressions;
+  restored source passes the complete focused matrix (ADR 0083).
+- [x] Final Release Pro build and full 96/96 suite PASS (307.17s); runtime
+  target has 15 pass / 1 real CLI opt-in skip.
+- [ ] Independent exact-head review and merge; dispatch remains held.
+- [ ] Wider executable/port trust, initial read allocation, renderer/descendant
+  teardown, tunnel/grant/lease acceptance and real CLI compatibility remain open.
