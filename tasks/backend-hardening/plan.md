@@ -702,3 +702,17 @@ remain explicitly open.
   and cleanup.
 - [ ] Continue reference writes/copies, ancestor/path races, decode and enumeration
   bounds. This package does not complete H1.4 or change retention defaults.
+
+
+### H5.3 Atlas stream completion after batched credits
+
+- [x] Reproduce a complete response without EOF when the peer replenishes whole
+  64-KiB windows and sends no further credit after the body.
+- [x] Emit one end when any drain empties a disconnected TCP socket, including
+  WebSocket write-triggered drains. Existing stream/frame/credit caps unchanged.
+- [x] Focused 7/7 PASS; original 6 pass/1 fail. Tightened red probe confirms all
+  body bytes arrive before the EOF assertion fails. Four affected targets PASS
+  (9.59s), with the real CLI opt-in skipped (ADR 0084).
+- [ ] Independent exact-head review and merge; dispatch remains held.
+- [ ] Wider tunnel/grant/lease, origin/path confinement, peer authentication,
+  fairness and descendant-lifetime audits remain open. No UI/deploy/install.

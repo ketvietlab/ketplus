@@ -126,6 +126,12 @@ budget/session total/account total and captures `/tmp/ketplus-claude-usage.png`.
 Live organization reporting requires the user's separately configured Admin key; tests
 never use a real key, Keychain item or inference quota.
 
+Atlas tunnel completion (`ketplus_atlas_live_tunnel_tests`, ADR 0084) exercises
+per-frame, half-window and delayed full-window credits against a synthetic
+loopback origin. It requires complete binary response bytes and exactly one EOF
+without a final credit grant. Run the runtime, cloud-privacy and remote-control
+client targets alongside it; no real CLI/provider or relay is required.
+
 ## Minimum verification
 
 Changes to macOS signing also run `python3 tests/packaging/test_signing_cli.py`.

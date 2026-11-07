@@ -1,0 +1,38 @@
+{
+  "scope": "H5.3 Atlas stream EOF after final drain; no UI changes",
+  "base": "886fbe201ad88e2bbd466c8e0689f3fc7a423223",
+  "baseline": {
+    "focused": "6 pass / 1 fail including setup/cleanup",
+    "confirmed_case": "full 160000-byte body plus HTTP headers received; EOF missing; targeted 2 pass / 1 fail"
+  },
+  "fixed": {
+    "focused": "7/7 PASS, 1015ms",
+    "affected": "4/4 PASS, 9.59s",
+    "targets": [
+      "ketplus_atlas_live_tunnel_tests",
+      "ketplus_atlas_live_runtime_tests",
+      "ketplus_daemon_cloud_privacy_tests",
+      "ketplus_remote_control_client_tests"
+    ],
+    "real_CLI": "opt-in skipped"
+  },
+  "assertions": [
+    "full binary response bytes",
+    "one stream end without final extra credit",
+    "per-frame/half-window/full-window credits and initial-window response",
+    "existing AEAD replay/direction/tampering and unknown-origin refusal"
+  ],
+  "unchanged": [
+    "16-KiB body frame limit",
+    "64-KiB credit and TCP read window",
+    "32 active streams",
+    "WebSocket output queue limits"
+  ],
+  "pending": [
+    "independent review and merge",
+    "combined integration with other draft hardening",
+    "wider tunnel/grant/lease, origin/path, authentication/fairness/descendant audit",
+    "Linux/Windows/current real relay acceptance",
+    "deploy/install"
+  ]
+}
