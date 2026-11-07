@@ -582,6 +582,16 @@ and `sign_in_error` when it failed; `remote.sign_in.cancel` and sign-out stop it
 
 ## Lifecycle
 
+Oversized Codex metadata decodes bounded JSON strings and refuses literal dotted
+keys as nested paths (ADR 0073). Invalid captured metadata clears routing for that
+line; subsequent lines reset normally. This does not validate the entire discarded
+JSON payload or resolve missing terminal events and pending-request timeouts.
+
+Codex oversized-line scanning keeps at most 64 routing frames and a scalar count
+of deeper containers (ADR 0070). It still extracts shallow fields after the deep
+value and resumes on the next line; clear/reset discards all prior scan state.
+This bounds scanner nesting storage, not aggregate process I/O or event-loop time.
+
 The intended state flow is `registered -> connecting -> online -> draining ->
 stopped`, with a recoverable `offline` state. Session state is separate from
 connection state so a temporary network outage does not kill a local process.
