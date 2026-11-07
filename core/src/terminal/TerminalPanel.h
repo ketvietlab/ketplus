@@ -1,13 +1,14 @@
 #pragma once
 
+#include "ui/Theme.h"
 #include <QWidget>
 
-class QLabel;
+class QTabWidget;
 class QAbstractButton;
 
 namespace ketplus {
 
-class TerminalSession;
+class TerminalTab;
 class TerminalView;
 struct ThemePalette;
 
@@ -28,14 +29,13 @@ class TerminalPanel final : public QWidget {
     void statusMessageRequested(const QString& message);
 
   private:
-    TerminalSession* session_{nullptr};
-    TerminalView* terminal_{nullptr};
-    QLabel* titleLabel_{nullptr};
-    QLabel* pathLabel_{nullptr};
-    QAbstractButton* findButton_{nullptr};
-    QAbstractButton* clearButton_{nullptr};
-    QAbstractButton* restartButton_{nullptr};
-    QAbstractButton* closeButton_{nullptr};
+    TerminalTab* currentTab() const;
+    void addTab(bool start);
+    QTabWidget* tabs_{nullptr};
+    ThemePalette palette_;
+    int fontSizePixels_{14};
+    int lineHeightPixels_{22};
+    QString fontFamily_;
     QString workingDirectory_;
 };
 

@@ -119,8 +119,8 @@ MermaidDiagramDialog::MermaidDiagramDialog(const QString& svgPath, const ThemePa
 
     auto* hint = new QLabel(QStringLiteral("Pinch or scroll to zoom • Drag to pan"), this);
     hint->setProperty("kvRole", QStringLiteral("previewHint"));
-    auto* zoomOutButton = new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"minus")),
-                                              tr("Zoom out"), this);
+    auto* zoomOutButton = new ket::IconButton(
+        ket::Icons::icon(ket::Icons::codeForLucide(u"zoom-out")), tr("Zoom out"), this);
     zoomOutButton->setObjectName(QStringLiteral("mermaidZoomOut"));
     zoomOutButton->setToolTip(QStringLiteral("Zoom out"));
     auto* zoomInButton = new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"plus")),

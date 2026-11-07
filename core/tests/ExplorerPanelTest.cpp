@@ -3,6 +3,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileSystemModel>
+#include <QLineEdit>
 #include <QMetaObject>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -18,7 +19,41 @@ class ExplorerPanelTest final : public QObject {
     void togglesFoldersFromTheTree();
     void revealsAnOpenFile();
     void reportsInlineRenames();
+    void createsInlineWithoutOverwritingExistingFiles();
 };
+
+void ExplorerPanelTest::createsInlineWithoutOverwritingExistingFiles() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ketplus::ExplorerPanel panel;
+    panel.resize(360, 600);
+    panel.setRootPath(directory.path());
+    panel.show();
+    panel.createEntry(false);
+    auto* field = panel.findChild<QLineEdit*>(QStringLiteral("explorerNewEntryName"));
+    QVERIFY(field);
+    field->setText(QStringLiteral("../outside.txt"));
+    QTest::keyClick(field, Qt::Key_Return);
+    QVERIFY(field->isVisible());
+    QSignalSpy opened(&panel, &ketplus::ExplorerPanel::fileOpenRequested);
+    field->setText(QStringLiteral("notes.md"));
+    QTest::keyClick(field, Qt::Key_Return);
+    QCOMPARE(opened.count(), 1);
+    QVERIFY(QFile::exists(directory.filePath("notes.md")));
+    QVERIFY(!field->isVisible());
+    QFile file(directory.filePath("notes.md"));
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write("keep me");
+    file.close();
+    panel.createEntry(false);
+    field->setText(QStringLiteral("notes.md"));
+    QTest::keyClick(field, Qt::Key_Return);
+    QVERIFY(field->isVisible());
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), QByteArray("keep me"));
+    QTest::keyClick(field, Qt::Key_Escape);
+    QTRY_VERIFY(!field->isVisible());
+}
 
 void ExplorerPanelTest::reportsInlineRenames() {
     QTemporaryDir directory;

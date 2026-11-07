@@ -3,9 +3,12 @@
 #include "KetAppearance.h"
 #include "KetButton.h"
 #include "KetChrome.h"
+#include "KetControlRecipes.h"
 #include "KetIcons.h"
+#include "KetSurfaceRecipes.h"
 #include "KetTextField.h"
 #include "KetToggle.h"
+#include "ui/Theme.h"
 #include <QAbstractTextDocumentLayout>
 #include <QApplication>
 #include <QHBoxLayout>
@@ -29,11 +32,20 @@ constexpr int lineRole = Qt::UserRole + 2;
 constexpr int columnRole = Qt::UserRole + 3;
 constexpr int lengthRole = Qt::UserRole + 4;
 constexpr int markupRole = Qt::UserRole + 5;
+constexpr int relativePathRole = Qt::UserRole + 6;
 
 // Draws the row from the markup the panel built, so one row can carry several colors.
 class ResultDelegate final : public QStyledItemDelegate {
   public:
     using QStyledItemDelegate::QStyledItemDelegate;
+    QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override {
+        auto size = QStyledItemDelegate::sizeHint(option, index);
+        auto& a = ket::Appearance::instance();
+        size.setHeight(qRound(a.scaled(index.parent().isValid()
+                                           ? ket::fileRowRecipe(false, {}, a.theme()).height
+                                           : ket::groupHeaderRecipe(false, {}, a.theme()).height)));
+        return size;
+    }
 
     void paint(QPainter* painter, const QStyleOptionViewItem& option,
                const QModelIndex& index) const override {
@@ -46,6 +58,10 @@ class ResultDelegate final : public QStyledItemDelegate {
         QStyleOptionViewItem view(option);
         initStyleOption(&view, index);
         view.text.clear();
+        auto& a = ket::Appearance::instance();
+        view.font.setPixelSize(qRound(a.scaled(
+            index.parent().isValid() ? ket::fileRowRecipe(false, {}, a.theme()).fontPixels
+                                     : ket::groupHeaderRecipe(false, {}, a.theme()).fontPixels)));
         const QWidget* widget = view.widget;
         QStyle* style = widget != nullptr ? widget->style() : QApplication::style();
         style->drawControl(QStyle::CE_ItemViewItem, &view, painter, widget);
@@ -130,10 +146,15 @@ SearchPanel::SearchPanel(QWidget* parent)
     statusLabel_->setWordWrap(true);
     results_->setHeaderHidden(true);
     results_->setColumnCount(1);
-    results_->setUniformRowHeights(true);
+    results_->setUniformRowHeights(false);
     results_->setTextElideMode(Qt::ElideRight);
     results_->setAccessibleName(QStringLiteral("Search results"));
     results_->setItemDelegate(new ResultDelegate(results_));
+    connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, results_,
+            [this] { results_->doItemsLayout(); });
+    const auto palette = currentThemePalette();
+    setResultColors(palette.textSecondary, palette.textMain, palette.textMuted, palette.textMain,
+                    palette.accentText);
 
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(10, 8, 10, 8);
@@ -229,6 +250,7 @@ void SearchPanel::addFileResult(const WorkspaceSearchFileResult& result) {
             colored(QStringLiteral("  ·  %1").arg(result.matches.size()), colors_.lineNumber));
     fileItem->setToolTip(0, result.path);
     fileItem->setData(0, pathRole, result.path);
+    fileItem->setData(0, relativePathRole, result.relativePath);
     for (const auto& match : result.matches) {
         auto* matchItem = new QTreeWidgetItem(fileItem);
         matchItem->setText(0,
@@ -262,6 +284,25 @@ void SearchPanel::setResultColors(const QString& folder, const QString& fileName
                                   const QString& lineNumber, const QString& text,
                                   const QString& match) {
     colors_ = {folder, fileName, lineNumber, text, match};
+    for (int group = 0; group < results_->topLevelItemCount(); ++group) {
+        auto* item = results_->topLevelItem(group);
+        const QString path = item->data(0, relativePathRole).toString();
+        const auto separator = path.lastIndexOf('/');
+        item->setData(
+            0, markupRole,
+            colored(path.left(separator + 1), colors_.folder) +
+                colored(path.mid(separator + 1), colors_.fileName, true) +
+                colored(QStringLiteral("  ·  %1").arg(item->childCount()), colors_.lineNumber));
+        for (int row = 0; row < item->childCount(); ++row) {
+            auto* child = item->child(row);
+            WorkspaceSearchMatch value;
+            value.line = child->data(0, lineRole).toInt();
+            value.column = child->data(0, columnRole).toInt();
+            value.length = child->data(0, lengthRole).toInt();
+            value.preview = child->toolTip(0);
+            child->setData(0, markupRole, matchMarkup(value));
+        }
+    }
 }
 
 QString SearchPanel::matchMarkup(const WorkspaceSearchMatch& match) const {

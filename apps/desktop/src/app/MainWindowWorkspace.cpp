@@ -187,6 +187,13 @@ GitChangesPanel* MainWindow::ensureGitChanges() {
             [this](const QString& path, const GitDiffMode mode) { requestFileDiff(path, mode); });
     connect(gitChanges_, &GitChangesPanel::fileOpenRequested, this, &MainWindow::openFile);
     connect(gitChanges_, &GitChangesPanel::refreshRequested, git_, &GitService::refresh);
+    connect(gitChanges_, &GitChangesPanel::stageRequested, git_, &GitService::stageFile);
+    connect(gitChanges_, &GitChangesPanel::unstageRequested, git_, &GitService::unstageFile);
+    connect(gitChanges_, &GitChangesPanel::commitRequested, git_, &GitService::commitStaged);
+    connect(git_, &GitService::mutationRunningChanged, gitChanges_,
+            &GitChangesPanel::setMutationRunning);
+    connect(git_, &GitService::mutationFinished, gitChanges_, &GitChangesPanel::mutationFinished);
+    gitChanges_->setMutationRunning(git_->mutationRunning());
     connect(gitChanges_, &GitChangesPanel::hideRequested, this,
             [this] { setSourceControlVisible(false); });
     gitChanges_->setSnapshot(gitSnapshot_);
@@ -324,6 +331,15 @@ void MainWindow::showDiff(const QString& filePath, const GitDiffMode mode, const
 
 void MainWindow::updateGitSnapshot(const GitSnapshot& snapshot) {
     gitSnapshot_ = snapshot;
+    if (explorer_) {
+        QHash<QString, QString> statuses;
+        for (const auto& file : snapshot.files)
+            statuses.insert(QDir(snapshot.repositoryRoot).filePath(file.path),
+                            file.untracked ? QStringLiteral("U")
+                                           : QString(file.hasUnstagedChange() ? file.worktreeCode
+                                                                              : file.indexCode));
+        explorer_->setFileStatuses(statuses);
+    }
     if (!pendingTranscriptDiff_.isEmpty() && snapshot.isRepository() &&
         normalizedPath(snapshot.repositoryRoot) == pendingTranscriptDiffRoot_ &&
         normalizedPath(snapshot.repositoryRoot) ==

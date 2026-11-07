@@ -64,8 +64,8 @@ class MarkdownPreviewPane final : public QWidget {
     ThemePalette palette_;
     QHash<QString, QString> diagramFiles_;
     bool hasSource_{false};
-    int fontSizePixels_{14};
-    int lineHeightPixels_{22};
+    int fontSizePixels_{15};
+    int lineHeightPixels_{26};
 };
 
 } // namespace ketplus

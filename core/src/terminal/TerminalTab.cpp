@@ -1,4 +1,4 @@
-#include "terminal_app/TerminalTab.h"
+#include "terminal/TerminalTab.h"
 
 #include "terminal/TerminalView.h"
 #include "ui/Theme.h"
@@ -59,6 +59,13 @@ QString TerminalTab::workingDirectory() const { return workingDirectory_; }
 QString TerminalTab::title() const { return title_; }
 
 TerminalView* TerminalTab::view() const noexcept { return terminal_; }
+
+void TerminalTab::setDirectoryBeforeStart(const QString& path) {
+    if (started_)
+        return;
+    workingDirectory_ = QDir::cleanPath(path.isEmpty() ? QDir::homePath() : path);
+    setTitle({});
+}
 
 void TerminalTab::start() {
     if (started_) {

@@ -107,6 +107,15 @@ void MainWindow::showDiff(const QString& filePath, const GitDiffMode mode, const
 
 void MainWindow::updateGitSnapshot(const GitSnapshot& snapshot) {
     gitSnapshot_ = snapshot;
+    if (explorer_) {
+        QHash<QString, QString> statuses;
+        for (const auto& file : snapshot.files)
+            statuses.insert(QDir(snapshot.repositoryRoot).filePath(file.path),
+                            file.untracked ? QStringLiteral("U")
+                                           : QString(file.hasUnstagedChange() ? file.worktreeCode
+                                                                              : file.indexCode));
+        explorer_->setFileStatuses(statuses);
+    }
     if (gitChanges_ != nullptr) {
         gitChanges_->setSnapshot(snapshot);
     }

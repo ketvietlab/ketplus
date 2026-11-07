@@ -65,11 +65,11 @@ class SearchPanel final : public QWidget {
     QLabel* statusLabel_{nullptr};
     QTreeWidget* results_{nullptr};
     struct ResultColors final {
-        QString folder{QStringLiteral("#8B93A1")};
-        QString fileName{QStringLiteral("#E6EDF3")};
-        QString lineNumber{QStringLiteral("#6E7681")};
-        QString text{QStringLiteral("#ADBAC7")};
-        QString match{QStringLiteral("#E5A93C")};
+        QString folder;
+        QString fileName;
+        QString lineNumber;
+        QString text;
+        QString match;
     } colors_;
     int matchCount_{0};
     bool searching_{false};

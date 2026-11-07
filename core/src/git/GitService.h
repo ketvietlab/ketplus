@@ -25,6 +25,10 @@ class GitService final : public QObject {
     void setWorkspacePath(const QString& path);
     void refresh();
     void scheduleRefresh(int delayMilliseconds = 400);
+    void stageFile(const QString& filePath);
+    void unstageFile(const QString& filePath);
+    void commitStaged(const QString& message);
+    [[nodiscard]] bool mutationRunning() const { return mutationRunning_; }
     void requestDiff(const QString& filePath, GitDiffMode mode = GitDiffMode::Combined);
 
   signals:
@@ -32,17 +36,22 @@ class GitService final : public QObject {
     void worktreesChanged(const QVector<ketplus::GitWorktree>& worktrees);
     void diffReady(const QString& filePath, ketplus::GitDiffMode mode, const QString& diff,
                    const QString& error);
+    void mutationRunningChanged(bool running);
+    void mutationFinished(const QString& operation, bool ok, const QString& error);
     void errorOccurred(const QString& message);
 
   private:
-    using CommandCallback =
-        std::function<void(int exitCode, const QByteArray& output, const QByteArray& error,
-                           bool completedNormally)>;
+    using CommandCallback = std::function<void(int exitCode, const QByteArray& output,
+                                               const QByteArray& error, bool completedNormally)>;
 
     void runGit(const QStringList& arguments, const QString& workingDirectory,
                 CommandCallback callback, int timeoutMilliseconds = 10000);
     [[nodiscard]] bool isUntracked(const QString& relativePath) const;
     void watchGitState();
+    static QString canonicalEntryPath(const QString& path);
+    void mutateFile(const QString& filePath, bool stage);
+    void runMutation(const QString& operation, const QStringList& arguments);
+    bool mutationRunning_{false};
 
     QString gitExecutable_;
     QString workspacePath_;

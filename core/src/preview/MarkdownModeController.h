@@ -51,7 +51,7 @@ class MarkdownModeController final : public QObject {
     bool enabled_{false};
     bool available_{true};
     bool dirty_{true};
-    int fontSize_{14};
-    int lineHeight_{22};
+    int fontSize_{15};
+    int lineHeight_{26};
 };
 } // namespace ketplus
