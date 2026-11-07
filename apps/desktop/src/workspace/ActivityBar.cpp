@@ -1,10 +1,10 @@
 #include "workspace/ActivityBar.h"
 #include "ui/ChromeGeometry.h"
-#include "ui/LucideIcon.h"
+#include "ui/SymbolIcon.h"
 
 #include "ui/Theme.h"
 #include "ui/TypeScale.h"
-#include "workspace/LucideIcons.h"
+#include "workspace/SymbolIcons.h"
 
 #include <QAction>
 #include <QButtonGroup>
@@ -67,9 +67,9 @@ class SidebarResizeHandle final : public QWidget {
 };
 
 // Icons render at the size they are shown so the stroke keeps its on-screen width.
-QIcon lucideIcon(const QByteArray& body, const QSize& size,
+QIcon symbolIcon(const QByteArray& body, const QSize& size,
                  const QColor& color = QColor(QStringLiteral("#6b7280"))) {
-    return QIcon(lucide_icon::pixmap(body, color, size));
+    return QIcon(symbol_icon::pixmap(body, color, size));
 }
 
 } // namespace
@@ -106,9 +106,9 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     quickSearchButton_->setObjectName(QStringLiteral("quickSearchButton"));
     quickSearchButton_->setProperty("kvRole", QStringLiteral("productSearch"));
     quickSearchButton_->setText(tr("Quick search"));
-    quickSearchButton_->setProperty("lucideBody", QByteArray(lucide::search));
+    quickSearchButton_->setProperty("symbolName", QByteArray(symbols::search));
     chrome_geometry::iconSize(quickSearchButton_, QSize(14, 14));
-    quickSearchButton_->setIcon(lucideIcon(lucide::search, quickSearchButton_->iconSize()));
+    quickSearchButton_->setIcon(symbolIcon(symbols::search, quickSearchButton_->iconSize()));
     quickSearchButton_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     quickSearchButton_->setAccessibleName(tr("Quick search"));
     chrome_geometry::fixedHeight(quickSearchButton_, kRowHeight);
@@ -128,11 +128,11 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     chrome_geometry::addSpacing(layout, 12);
 
     agentButton_ =
-        addModeButton(lucide::messagesSquare, tr("Agent Workspace"), Mode::AgentWorkspace);
-    explorerButton_ = addModeButton(lucide::folder, tr("Files & Editor"), Mode::Explorer);
+        addModeButton(symbols::messagesSquare, tr("Agent Workspace"), Mode::AgentWorkspace);
+    explorerButton_ = addModeButton(symbols::folder, tr("Files & Editor"), Mode::Explorer);
     sourceControlButton_ =
-        addModeButton(lucide::gitBranch, tr("Source Control"), Mode::SourceControl);
-    remoteButton_ = addModeButton(lucide::unplug, tr("Connections"), Mode::Remote);
+        addModeButton(symbols::gitBranch, tr("Source Control"), Mode::SourceControl);
+    remoteButton_ = addModeButton(symbols::unplug, tr("Connections"), Mode::Remote);
     explorerButton_->setObjectName(QStringLiteral("explorerActivityButton"));
     sourceControlButton_->setObjectName(QStringLiteral("sourceControlActivityButton"));
     sourceControlCount_ = new QLabel(sourceControlButton_);
@@ -210,7 +210,7 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     machineLayout->addWidget(machineSelect_, 1);
     repositoryAction_ = new QToolButton(machineRow);
     repositoryAction_->setProperty("kvRole", QStringLiteral("productSectionAction"));
-    repositoryAction_->setProperty("lucideBody", QByteArray(lucide::plus));
+    repositoryAction_->setProperty("symbolName", QByteArray(symbols::plus));
     repositoryAction_->setAccessibleName(tr("Add repository"));
     repositoryAction_->setToolTip(tr("Add repository"));
     chrome_geometry::fixedSize(repositoryAction_, 22, 22);
@@ -267,7 +267,7 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     identityAvatar->setAttribute(Qt::WA_TransparentForMouseEvents);
     auto* identityChevron = new QLabel(identityButton_);
     identityChevron->setObjectName(QStringLiteral("productIdentityChevron"));
-    identityChevron->setProperty("lucideBody", QByteArray(lucide::chevronDown));
+    identityChevron->setProperty("symbolName", QByteArray(symbols::chevronDown));
     chrome_geometry::fixedSize(identityChevron, 14, 14);
     identityChevron->setAttribute(Qt::WA_TransparentForMouseEvents);
     auto* identityRow = new QHBoxLayout(identityButton_);
@@ -282,15 +282,15 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
         tr("Settings") + QLatin1Char('\t') +
         QKeySequence(QKeySequence::Preferences).toString(QKeySequence::NativeText));
     settingsAction->setObjectName(QStringLiteral("productSettingsAction"));
-    settingsAction->setIcon(lucideIcon(lucide::settings, QSize(16, 16)));
+    settingsAction->setIcon(symbolIcon(symbols::settings, QSize(16, 16)));
     connect(settingsAction, &QAction::triggered, this, &ActivityBar::settingsRequested);
     auto* accountAction = userMenu_->addAction(tr("Account & devices"));
     accountAction->setObjectName(QStringLiteral("productAccountAction"));
-    accountAction->setIcon(lucideIcon(lucide::unplug, QSize(16, 16)));
+    accountAction->setIcon(symbolIcon(symbols::unplug, QSize(16, 16)));
     connect(accountAction, &QAction::triggered, this, &ActivityBar::identityRequested);
     auto* updatesAction = userMenu_->addAction(tr("Check for Updates…"));
     updatesAction->setObjectName(QStringLiteral("productCheckForUpdatesAction"));
-    updatesAction->setIcon(lucideIcon(lucide::refreshCw, QSize(16, 16)));
+    updatesAction->setIcon(symbolIcon(symbols::refreshCw, QSize(16, 16)));
     connect(updatesAction, &QAction::triggered, this, &ActivityBar::updatesRequested);
     connect(identityButton_, &QToolButton::clicked, this, [this] {
         const QSize size = userMenu_->sizeHint();
@@ -479,18 +479,18 @@ void ActivityBar::applyPalette(const ThemePalette& palette, const int interfaceF
 
 void ActivityBar::refreshIcons() {
     for (auto* button : findChildren<QToolButton*>()) {
-        const auto body = button->property("lucideBody").toByteArray();
+        const auto body = button->property("symbolName").toByteArray();
         if (body.isEmpty())
             continue;
         QString color = iconMutedColor_;
-        if (button->property("lucideColorRole").toString() == QStringLiteral("main"))
+        if (button->property("symbolColorRole").toString() == QStringLiteral("main"))
             color = iconMainColor_;
         if (group_->buttons().contains(button) && button->isChecked())
             color = iconAccentColor_;
-        button->setIcon(lucideIcon(body, button->iconSize(), QColor(color)));
+        button->setIcon(symbolIcon(body, button->iconSize(), QColor(color)));
     }
     for (auto* label : findChildren<QLabel*>()) {
-        const auto body = label->property("lucideBody").toByteArray();
+        const auto body = label->property("symbolName").toByteArray();
         if (label->property("kvRole").toString() == QStringLiteral("productNavLabel")) {
             auto* button = qobject_cast<QToolButton*>(label->parentWidget());
             label->setProperty("activeNavigation", button != nullptr && button->isChecked());
@@ -500,7 +500,7 @@ void ActivityBar::refreshIcons() {
         }
         if (body.isEmpty())
             continue;
-        const QString role = label->property("lucideColorRole").toString();
+        const QString role = label->property("symbolColorRole").toString();
         QString color = iconMutedColor_;
         auto* navigationButton = qobject_cast<QToolButton*>(label->parentWidget());
         if (label->objectName() == QStringLiteral("productNavIcon") && navigationButton != nullptr)
@@ -517,7 +517,7 @@ void ActivityBar::refreshIcons() {
             color = iconWarningColor_;
         else if (role == QStringLiteral("danger"))
             color = iconDangerColor_;
-        label->setPixmap(lucide_icon::pixmap(body, QColor(color), label->size()));
+        label->setPixmap(symbol_icon::pixmap(body, QColor(color), label->size()));
     }
 }
 
@@ -539,7 +539,7 @@ QToolButton* ActivityBar::addModeButton(const QByteArray& svgBody, const QString
     chrome_geometry::spacing(row, 8);
     auto* icon = new QLabel(button);
     icon->setObjectName(QStringLiteral("productNavIcon"));
-    icon->setProperty("lucideBody", svgBody);
+    icon->setProperty("symbolName", svgBody);
     chrome_geometry::fixedSize(icon, 15, 15);
     icon->setAttribute(Qt::WA_TransparentForMouseEvents);
     auto* text = new QLabel(label, button);

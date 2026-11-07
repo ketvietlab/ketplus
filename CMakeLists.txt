@@ -119,8 +119,8 @@ if(KETPLUS_BUILD_DESKTOP)
         apps/desktop/src/ui/ChromeGeometry.h
         apps/desktop/src/ui/InterfaceFont.cpp
         apps/desktop/src/ui/InterfaceFont.h
-        apps/desktop/src/ui/LucideIcon.cpp
-        apps/desktop/src/ui/LucideIcon.h
+        apps/desktop/src/ui/SymbolIcon.cpp
+        apps/desktop/src/ui/SymbolIcon.h
     )
     target_link_libraries(ketplus_typography PUBLIC Qt6::Gui Qt6::Svg Qt6::Widgets)
     # Public typography headers consume CM's shared zoom mapping and Két scaling API.

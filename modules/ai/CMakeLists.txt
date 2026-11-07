@@ -61,8 +61,8 @@ add_library(ketplus_ai STATIC
     src/agent/AgentWorkspaceStreaming.cpp
     src/agent/AgentWorkspaceUsage.cpp
     src/agent/AgentWorkspaceView.cpp
-    src/agent/LucideImageProvider.cpp
-    src/agent/LucideImageProvider.h
+    src/agent/SymbolImageProvider.cpp
+    src/agent/SymbolImageProvider.h
     src/agent/AgentWorkspaceView.h
     src/agent/CodexAppServer.cpp
     src/agent/CodexAppServer.h

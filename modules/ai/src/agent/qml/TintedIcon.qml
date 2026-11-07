@@ -6,16 +6,15 @@ Item {
     property url source
     property color color: "white"
 
-    // Lucide icons load through the lucide image provider, which fits the stroke to the size the
-    // icon is shown at. Other sources load unchanged.
-    readonly property string lucidePrefix: "qrc:/agent/icons/"
+    // Legacy source URLs resolve semantic names through the Két Symbol kit.
+    readonly property string symbolPrefix: "qrc:/agent/icons/"
     readonly property url resolvedSource: {
         const text = root.source.toString()
-        if (!text.startsWith(root.lucidePrefix) || !text.endsWith(".svg"))
+        if (!text.startsWith(root.symbolPrefix) || !text.endsWith(".svg"))
             return root.source
         if (root.width <= 0)
             return ""
-        return "image://lucide/" + text.slice(root.lucidePrefix.length, -4) + "/"
+        return "image://symbols/" + text.slice(root.symbolPrefix.length, -4) + "/"
             + Math.round(root.width * 2) / 2
     }
 

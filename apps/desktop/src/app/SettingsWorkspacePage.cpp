@@ -9,7 +9,7 @@
 #include "app/SettingsUpdatesPage.h"
 #include "ui/InterfaceFont.h"
 #include "ui/InterfaceZoom.h"
-#include "ui/LucideIcon.h"
+#include "ui/SymbolIcon.h"
 #include "ui/Theme.h"
 #include "ui/TypeScale.h"
 #include "update/AppUpdater.h"
@@ -92,36 +92,22 @@ QPixmap themePreview(const bool dark) {
 }
 
 QIcon navigationIcon(const QByteArray& body, const QColor& color, const QSize& size) {
-    return QIcon(lucide_icon::pixmap(body, color, size));
+    return QIcon(symbol_icon::pixmap(body, color, size));
 }
 
 QByteArray navigationIconBody(const QString& id) {
-    if (id == QStringLiteral("appearance"))
-        return QByteArrayLiteral(
-            R"(<circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 22a10 10 0 1 0 0-20 7 7 0 0 0-7 7c0 1.66 1.34 3 3 3h1a2 2 0 0 1 2 2v1a2 2 0 0 0 2 2h1a2 2 0 0 1 2 2c0 1.66-1.34 3-3 3z"/>)");
-    if (id == QStringLiteral("typography"))
-        return QByteArrayLiteral(
-            R"(<polyline points="4 7 4 4 20 4 20 7"/><line x1="9" x2="15" y1="20" y2="20"/><line x1="12" x2="12" y1="4" y2="20"/>)");
-    if (id == QStringLiteral("account-devices"))
-        return QByteArrayLiteral(
-            R"(<rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>)");
-    if (id == QStringLiteral("providers"))
-        return QByteArrayLiteral(
-            R"(<path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>)");
-    if (id == QStringLiteral("computer")) // Lucide mouse-pointer-click
-        return QByteArrayLiteral(
-            R"(<path d="M14 4.1 12 6"/><path d="m5.1 8-2.9-.8"/><path d="m6 12-1.9 2"/><path d="M7.2 2.2 8 5.1"/><path d="M9.037 9.69a.498.498 0 0 1 .653-.653l11 4.5a.5.5 0 0 1-.074.949l-4.349 1.041a1 1 0 0 0-.74.739l-1.04 4.35a.5.5 0 0 1-.95.074z"/>)");
-    if (id == QStringLiteral("storage")) // Lucide database
-        return QByteArrayLiteral(
-            R"(<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/>)");
-    if (id == QStringLiteral("updates"))
-        return QByteArrayLiteral(
-            R"(<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>)");
-    if (id == QStringLiteral("agent-models"))
-        return QByteArrayLiteral(
-            R"(<line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/>)");
-    return QByteArrayLiteral(
-        R"(<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="m8 6 1-3h6l1 3"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>)");
+    static const QHash<QString, QByteArray> names{
+        {QStringLiteral("appearance"), "palette"},
+        {QStringLiteral("typography"), "type"},
+        {QStringLiteral("account-devices"), "monitor"},
+        {QStringLiteral("providers"), "package"},
+        {QStringLiteral("computer"), "monitor"},
+        {QStringLiteral("browser"), "globe"},
+        {QStringLiteral("storage"), "layers"},
+        {QStringLiteral("updates"), "download"},
+        {QStringLiteral("agent-models"), "sliders-horizontal"},
+    };
+    return names.value(id, "archive");
 }
 
 QToolButton* themeCard(const QString& title, const bool dark, QWidget* parent) {

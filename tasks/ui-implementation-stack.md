@@ -48,9 +48,11 @@ instead of shipping mock success states. Do not redo already merged #128 work.
 
 | Layer | Branch / base | PR | Implementation | Checks / limits |
 | --- | --- | --- | --- | --- |
-| Foundation | `feat/kit-zoom-foundation` → `integration` | Pending publication | Font defaults, kit zoom bridge, terminal/diagram tokens implemented; legacy per-surface adapters continue in later layers | Lite targets pass (14 in suite + 2 corrected expectations rechecked); Pro typography target builds; native/full Pro acceptance deferred |
+| Foundation | `feat/kit-zoom-foundation` → `integration` | #207 | Font defaults, kit zoom bridge, terminal/diagram tokens implemented; legacy per-surface adapters continue in later layers | Lite targets pass (14 in suite + 2 corrected expectations rechecked); Pro typography target builds; native/full Pro acceptance deferred |
 
 Every subsequent PR targets the preceding stack branch and names its dependency.
 Do not request reviewers until all implementation layers are present. Preserve
 unfinished rows across turns. Clean linked worktrees only after their changes
 are pushed and after confirming no other conversation/process uses them.
+
+Current layer: `feat/ui-stack-symbols` on `feat/kit-zoom-foundation`; replaces glyph rendering and migration-name adapters with Két Symbols. Symbol renderer checks: 4/4 pass; desktop-support and Atlas library targets compile. Old QML source URLs/resources are retained until the Pro kit cutover.

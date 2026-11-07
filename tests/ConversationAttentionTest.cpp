@@ -2,7 +2,7 @@
 #include "agent/CodexAppServer.h"
 #include "ui/Theme.h"
 #include "workspace/ActivityBar.h"
-#include "workspace/LucideIcons.h"
+#include "workspace/SymbolIcons.h"
 
 #include <QApplication>
 #include <QFile>
@@ -90,7 +90,7 @@ for line in sys.stdin:
                       {"options", QJsonArray{QJsonObject{{"id", "yes"}, {"label", "Yes"}}}}}}}});
         };
         const auto paused = [&] {
-            return icon->property("lucideBody").toByteArray() == QByteArray(lucide::pauseCircle) &&
+            return icon->property("symbolName").toByteArray() == QByteArray(symbols::pauseCircle) &&
                    !icon->property("spinning").toBool();
         };
         changes.clear();
@@ -133,7 +133,7 @@ for line in sys.stdin:
             {{"threadId", "attention-thread"},
              {"turn", QJsonObject{{"id", "attention-turn"}, {"status", "completed"}}}});
         QVERIFY(!icon->property("spinning").toBool());
-        QCOMPARE(icon->property("lucideBody").toByteArray(), QByteArray(lucide::circleCheck));
+        QCOMPARE(icon->property("symbolName").toByteArray(), QByteArray(symbols::circleCheck));
     }
 
     void nativeStatusMarks() {
