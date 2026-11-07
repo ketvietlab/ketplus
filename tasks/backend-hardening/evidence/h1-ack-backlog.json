@@ -13,7 +13,8 @@
   "focused_cases": {
     "ack": 20,
     "protocol": 43,
-    "transcript_window": 28
+    "transcript_window": 28,
+    "handoff": 6
   },
   "full_matrix": "Pending implementation PR gate",
   "limits": [
@@ -25,5 +26,6 @@
   "mutations_caught": [
     "row budget 128 changed to 1024",
     "slowest-client min changed to max"
-  ]
+  ],
+  "handoff_change": "Compare handoff history both while raw cleanup is pending and after bounded drain; production unchanged"
 }

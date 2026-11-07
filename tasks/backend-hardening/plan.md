@@ -257,6 +257,22 @@ transcript window 28/28 have passing evidence. The latest ACK run includes actua
 prepared query plans and capability/NUL fixtures; the final full matrix remains
 an explicit gate. See ADR 0049 and the evidence JSON.
 
+### Next H1.1 command-cap reproduction
+
+The temporary Qt probe at the ACK branch head confirms that the 256th command
+write removes 90,256 rows from a 100,256-row fixture in one pass (341/337 ms).
+The fixture deliberately uses future timestamps to isolate the cap from age GC;
+it additionally shows that after wall-clock rollback the newly accepted command
+can be absent immediately after the timestamp-ordered cap. Preserve that command's
+idempotency result in the next package; do not infer ordinary steady-state timing
+from this clock-skew fixture. Evidence:
+[evidence/h1-command-cap-qt.json](evidence/h1-command-cap-qt.json).
+
+The full ACK matrix exposed a handoff fixture's immediate-raw-deletion assumption.
+Its regression now compares the complete retained handoff history before and after
+explicitly draining bounded cleanup; all six handoff cases pass. This is an
+intentional physical-cleanup contract update, not a skipped handoff assertion.
+
 **Next executable task:** finish ACK mutation/full-matrix/review gates, merge and
 clean both completed worktrees, then reproduce and bound the remaining H1.1
 command/tombstone/audit/cursor/task sweeps. Also audit cloud-event and explicit
