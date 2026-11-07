@@ -59,14 +59,23 @@ bool LocalJournal::forkSession(const QString& sourceId, const qint64 sourceGener
     if (destination.lastError().isValid())
         return fail(destination.lastError().text());
     QSqlQuery source(database_);
-    source.prepare(QStringLiteral("SELECT last_cursor, current_turn_sequence FROM sessions "
-                                  "WHERE id = ? AND generation = ?"));
+    source.prepare(QStringLiteral(
+        "SELECT CASE WHEN typeof(last_cursor)='integer' THEN last_cursor END, "
+        "CASE WHEN typeof(current_turn_sequence)='integer' THEN current_turn_sequence END, "
+        "typeof(last_cursor), typeof(current_turn_sequence) FROM sessions "
+        "WHERE id = ? AND generation = ?"));
     source.addBindValue(sourceId);
     source.addBindValue(sourceGeneration);
     if (!source.exec())
         return fail(source.lastError().text());
     if (!source.next())
-        return fail(QStringLiteral("The source session no longer exists."));
+        return fail(source.lastError().isValid()
+                        ? source.lastError().text()
+                        : QStringLiteral("The source session no longer exists."));
+    if (source.value(2).toString() != QStringLiteral("integer") ||
+        source.value(3).toString() != QStringLiteral("integer") ||
+        source.value(0).toLongLong() < 0 || source.value(1).toLongLong() < 0)
+        return fail(QStringLiteral("The source session has unsupported journal counters."));
     fork.lastCursor = source.value(0).toLongLong();
     fork.currentTurnSequence = source.value(1).toLongLong();
     fork.lastSeenCursor = fork.lastCursor;

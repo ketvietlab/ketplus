@@ -360,6 +360,67 @@ class SessionForkTest final : public QObject {
         QCOMPARE(reopened.sessionHead("other").cursor, qint64(1));
     }
 
+    void journalForkPreservesUnsupportedSourceCounters_data() {
+        QTest::addColumn<QString>("column");
+        QTest::addColumn<QString>("value");
+        for (const auto& column : {QString("last_cursor"), QString("current_turn_sequence")})
+            for (const auto& value :
+                 {QString("-1"), QString("1.5"), QString("'unknown'"), QString("X'01'")})
+                QTest::newRow(qPrintable(column + "-" + value)) << column << value;
+    }
+    void journalForkPreservesUnsupportedSourceCounters() {
+        QFETCH(QString, column);
+        QFETCH(QString, value);
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        StoredSession source{"source", dir.path(), "codex", {}, {}, "ready", 1, 0, 0, {}};
+        QVERIFY(journal.upsertSession(source));
+        QCOMPARE(journal.appendEvent("source", 1, "user.message", {{"text", "preserved"}}),
+                 qint64(1));
+        const auto history = journal.eventsAfter("source", 1, 0);
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == path)
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        QSqlQuery q(db);
+        QVERIFY(q.exec(QString("UPDATE sessions SET %1=%2 WHERE id='source'").arg(column, value)));
+        const auto counters = [&] {
+            QSqlQuery read(db);
+            if (!read.exec("SELECT quote(last_cursor),quote(current_turn_sequence) FROM sessions "
+                           "WHERE id='source'") ||
+                !read.next())
+                return QStringList{};
+            return QStringList{read.value(0).toString(), read.value(1).toString()};
+        };
+        const auto before = counters();
+        QCOMPARE(before.size(), 2);
+        StoredSession copy = source;
+        copy.id = "fork";
+        QString error;
+        QVERIFY(!journal.forkSession("source", 1, copy, &error));
+        QVERIFY(!error.isEmpty());
+        QCOMPARE(counters(), before);
+        QCOMPARE(journal.eventsAfter("source", 1, 0), history);
+        QVERIFY(q.exec("SELECT count(*) FROM sessions WHERE id='fork'"));
+        QVERIFY(q.next());
+        QCOMPARE(q.value(0).toInt(), 0);
+        QVERIFY2(q.exec("BEGIN"), qPrintable(q.lastError().text()));
+        QVERIFY(q.exec("ROLLBACK"));
+        QVERIFY(
+            q.exec("UPDATE sessions SET last_cursor=1,current_turn_sequence=1 WHERE id='source'"));
+        QVERIFY2(journal.forkSession("source", 1, copy, &error), qPrintable(error));
+        QCOMPARE(copy.lastCursor, qint64(1));
+        QCOMPARE(copy.currentTurnSequence, qint64(1));
+        LocalJournal reopened(path);
+        QVERIFY2(reopened.isOpen(), qPrintable(reopened.errorString()));
+        QCOMPARE(reopened.sessionHead("source").cursor, qint64(1));
+        QCOMPARE(reopened.sessionHead("fork").cursor, qint64(1));
+        QCOMPARE(reopened.eventsAfter("source", 1, 0), history);
+    }
+
     void onlyCodexAndClaudeCanFork() {
         QCOMPARE(compat::capabilityForMethod(u"thread/fork"), QStringLiteral("threadFork"));
         QVERIFY(compat::policy(QStringLiteral("codex"))

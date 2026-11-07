@@ -5,10 +5,14 @@ milestone changes state.
 
 ## Implemented
 
+- Fork preserves unsupported source cursor/turn values rather than coercing them
+  into copied metadata (ADR 0061). Integer-only projection and nonnegative checks
+  reject the copy before destination writes; repair/retry/reopen are covered.
+
 - Fork checks complete per-table copy counts and its required timestamp in the
   transaction (ADR 0060). It also refuses a destination claimed during the provider
   round-trip, preserving existing/self/deleted targets and allowing empty history.
-  Whole-history fork work bounds and source counter validation remain separate.
+  Whole-history fork work bounds and broader source validation remain separate.
 
 - Journal append requires each mandatory delivery/replay/activity/blob row and
   session cursor to be stored before reporting success (ADR 0058). Ignored writes
