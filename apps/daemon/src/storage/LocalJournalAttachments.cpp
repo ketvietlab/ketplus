@@ -16,6 +16,31 @@ QString usableAttachment() {
 }
 } // namespace
 
+namespace detail {
+QString attachmentCancelManifestQuery() {
+    return "SELECT CASE WHEN typeof(status)='text' AND octet_length(status)<=16 THEN status "
+           "ELSE NULL END,CASE WHEN typeof(session_id)='text' AND typeof(attachment_id)='text' "
+           "AND typeof(name)='text' AND typeof(media_type)='text' AND typeof(digest_sha256)='text' "
+           "AND typeof(status)='text' AND typeof(created_at)='text' AND "
+           "typeof(generation)='integer' "
+           "AND typeof(revision)='integer' AND typeof(total_bytes)='integer' AND "
+           "typeof(chunk_count)='integer' "
+           "THEN octet_length(session_id)+octet_length(attachment_id)+octet_length(name)+"
+           "octet_length(media_type)+octet_length(digest_sha256)+octet_length(status)+"
+           "octet_length(created_at)+40 ELSE -1 END FROM staged_attachments "
+           "WHERE session_id=? AND generation=? AND attachment_id=? AND revision=?";
+}
+QString attachmentCancelChunksQuery() {
+    return "SELECT rowid,CASE WHEN typeof(payload)='blob' AND typeof(session_id)='text' "
+           "AND typeof(attachment_id)='text' AND typeof(digest_sha256)='text' "
+           "AND typeof(generation)='integer' AND typeof(revision)='integer' "
+           "AND typeof(chunk_index)='integer' THEN length(payload)+octet_length(session_id)+"
+           "octet_length(attachment_id)+octet_length(digest_sha256)+24 ELSE -1 END,revision "
+           "FROM staged_attachment_chunks WHERE session_id=? AND generation=? AND attachment_id=? "
+           "ORDER BY chunk_index LIMIT 128";
+}
+} // namespace detail
+
 bool LocalJournal::beginAttachment(const QString& sessionId, const qint64 generation,
                                    const QString& attachmentId, const qint64 expectedRevision,
                                    const QString& name, const QString& mediaType,
@@ -215,22 +240,32 @@ bool LocalJournal::cancelAttachment(const QString& sessionId, const qint64 gener
             *error = message;
         return false;
     };
+    QSqlQuery timeout(database_);
+    if (!timeout.exec("PRAGMA busy_timeout") || !timeout.next())
+        return fail(timeout.lastError().text());
+    const int oldTimeout = timeout.value(0).toInt();
+    timeout.finish();
+    if (!timeout.exec("PRAGMA busy_timeout=0"))
+        return fail(timeout.lastError().text());
+    timeout.finish();
+    bool transaction = false;
+    const auto restore = qScopeGuard([&] {
+        if (transaction)
+            database_.rollback();
+        QSqlQuery q(database_);
+        q.exec(QString("PRAGMA busy_timeout=%1").arg(oldTimeout));
+    });
     if (!database_.transaction())
         return fail(database_.lastError().text());
-    bool committed = false;
-    const auto rollback = qScopeGuard([&] {
-        if (!committed)
-            database_.rollback();
-    });
+    transaction = true;
     const auto commit = [&] {
         if (!database_.commit())
             return fail(database_.lastError().text());
-        committed = true;
+        transaction = false;
         return true;
     };
     QSqlQuery query(database_);
-    query.prepare("SELECT status FROM staged_attachments WHERE session_id=? AND generation=? "
-                  "AND attachment_id=? AND revision=?");
+    query.prepare(detail::attachmentCancelManifestQuery());
     query.addBindValue(sessionId);
     query.addBindValue(generation);
     query.addBindValue(attachmentId);
@@ -240,21 +275,49 @@ bool LocalJournal::cancelAttachment(const QString& sessionId, const qint64 gener
     const bool current = query.next();
     if (query.lastError().isValid())
         return fail(query.lastError().text());
-    const bool retiring = current && query.value(0).toString() == "expiring";
+    const QString status = current ? query.value(0).toString() : QString();
+    qint64 spent = current ? query.value(1).toLongLong() : 0;
     query.finish();
-    // A stale cancel cannot touch chunks protected by a newer parent. A retiring
-    // upload is already cancelled logically; leave its bounded GC and ID fence intact.
-    if (!current || retiring)
+    if (!current || status == "expiring")
         return commit();
-    query.prepare("DELETE FROM staged_attachment_chunks WHERE session_id=? AND generation=? "
-                  "AND attachment_id=? AND revision=?");
+    constexpr qint64 byteBudget = 1024 * 1024;
+    // Reserve the entire manifest, including possible status growth, before
+    // deleting any chunks. Unknown formats remain recoverable and unchanged.
+    if ((status != "uploading" && status != "ready") || spent < 0 || spent > byteBudget)
+        return fail("Attachment cancellation requires bounded manifest recovery.");
+    query.prepare(detail::attachmentCancelChunksQuery());
     query.addBindValue(sessionId);
     query.addBindValue(generation);
     query.addBindValue(attachmentId);
-    query.addBindValue(expectedRevision);
     if (!query.exec())
         return fail(query.lastError().text());
+    QList<QVariantList> chunks;
+    while (query.next())
+        chunks.append({query.value(0), query.value(1), query.value(2)});
+    if (query.lastError().isValid())
+        return fail(query.lastError().text());
     query.finish();
+    QSqlQuery remove(database_);
+    remove.prepare("DELETE FROM staged_attachment_chunks WHERE rowid=?");
+    for (const auto& row : chunks) {
+        // Revision is deliberately checked after the bounded index range read.
+        // The primary key has chunk_index, not revision; SQL filtering would scan
+        // an arbitrarily large backlog belonging to another revision first.
+        if (row[2].toLongLong() != expectedRevision)
+            continue;
+        const auto bytes = row[1].toLongLong();
+        if (bytes < 0 || bytes > byteBudget)
+            continue;
+        if (bytes > byteBudget - spent)
+            break;
+        remove.bindValue(0, row[0]);
+        if (!remove.exec())
+            return fail(remove.lastError().text());
+        if (remove.numRowsAffected() != 1)
+            return fail("Attachment cancellation chunk was not removed.");
+        remove.finish();
+        spent += bytes;
+    }
     query.prepare("SELECT 1 FROM staged_attachment_chunks WHERE session_id=? AND generation=? "
                   "AND attachment_id=? LIMIT 1");
     query.addBindValue(sessionId);
@@ -266,8 +329,8 @@ bool LocalJournal::cancelAttachment(const QString& sessionId, const qint64 gener
     if (query.lastError().isValid())
         return fail(query.lastError().text());
     query.finish();
-    // Mixed revisions (or a deferred chunk deletion) must not release the identity.
-    // The existing bounded sweeper will retire every remaining revision later.
+    // Logical cancellation can finish before physical cleanup. Every revision
+    // remains fenced until the existing durable bounded sweeper drains it.
     query.prepare((remaining ? QString("UPDATE staged_attachments SET status='expiring' ")
                              : QString("DELETE FROM staged_attachments ")) +
                   "WHERE session_id=? AND generation=? AND attachment_id=? AND revision=?");

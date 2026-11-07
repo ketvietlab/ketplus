@@ -1,0 +1,51 @@
+{
+  "scope": "H1.1 explicit staged attachment cancellation",
+  "environment": {
+    "configuration": "Release Pro headless",
+    "qt": "6.11.2",
+    "platform": "macOS arm64 offscreen",
+    "data": "synthetic only"
+  },
+  "baseline": {
+    "fixture": "640 chunks of 32 KiB",
+    "removed_chunks": 640,
+    "elapsed_ms": 12,
+    "preservation_regressions": [
+      "unknown parent state deleted",
+      "oversized manifest deleted"
+    ]
+  },
+  "final": {
+    "focused_passed": 41,
+    "affected_targets_passed": 10,
+    "matrix_seconds": 76.98,
+    "live_lifecycle_cases_skipped": 1,
+    "row_bound": {
+      "removed": 128,
+      "bytes_per_chunk": 16,
+      "elapsed_ms": 0
+    },
+    "byte_bound": {
+      "removed": 31,
+      "bytes_per_chunk": 32768,
+      "elapsed_ms": 7
+    },
+    "other_revision_backlog": {
+      "rows": 100000,
+      "removed": 0,
+      "elapsed_ms": 1
+    }
+  },
+  "mutations_caught": [
+    "row LIMIT 128 -> 1024",
+    "byte budget 1 MiB -> 16 MiB",
+    "revision predicate inside candidate SQL"
+  ],
+  "limits": [
+    "No Windows or live journal",
+    "No release, packaging, install or deployment",
+    "Column-byte budget does not bound SQLite page/WAL overhead",
+    "Unsupported or oversized records require separate recovery",
+    "Explicit session deletion remains open"
+  ]
+}

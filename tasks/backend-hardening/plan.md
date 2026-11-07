@@ -96,7 +96,14 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
     Source/build cleanup remains separately tracked.
   - [x] Reproduce global deletion-completion sweeps and implement bounded completed
     work GC plus indexed pending pages; malformed/ignored completion regressions.
-  - [ ] Completed-deletion work final affected matrix/review/merge and safe cleanup.
+  - [x] Completed-deletion #235: final-head affected Release/headless 10/10 and
+    independent exact-head review PASS; merged `f0d73d30d49d06dab8290edf01971e1a3a06fa18`.
+    Generated build removed; source cleanup remains tracked separately.
+  - [ ] Cloud cache #237: exact invalidation, per-envelope receipt and scoped
+    recovery cursor implemented; final full suite and exact-head review pending.
+  - [x] Reproduce explicit attachment cancellation bounds and preservation gaps;
+    implement shared 1-MiB/128-candidate cancellation and retirement fencing.
+  - [ ] Cancellation final affected matrix/review/merge and safe cleanup.
   - [ ] Audit cloud-event cleanup and explicit deletion paths.
   - [ ] Close H1.1 only when those remaining work bounds have evidence.
 - [ ] H1.2 Verify migration/reopen safety: old schema, repeat open, partial failure,
@@ -207,7 +214,7 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | Item | State | Evidence / remaining work | Next action / owner |
 | --- | --- | --- | --- |
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
-| H1.1 | In progress | Global GC #220, ACK #223, metadata #228 and staged expiry #230 merged with exact-head gates; deletion-work cleanup focused 32/32 | Finish deletion-work gates; audit cloud/cache and explicit deletion / #2739 |
+| H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 merged; cloud #237 and bounded cancellation gates pending | Finish cloud/cancellation gates; audit explicit session deletion / #2739 |
 | H1.2–H1.7 | Not started | No claim that #128 backend acceptance is complete | Follow H1.1, prioritize a confirmed safety finding / #2739 |
 | H2–H3 | Not started | Open daemon/provider review issues mapped | Execute after storage, or independent audit while waiting review / #2739 |
 | H4.1–H4.3 | Not started | Existing remote fixes are not a full #85 closure | Audit local transport/privacy with fixtures / #2739 |
@@ -403,7 +410,9 @@ The focused suite passes 32/32, and all 10 affected Release/headless targets pas
 (63.25 s). Replacing the pending-state index with a session-ID index makes the
 actual prepared-plan regression fail; restored sources pass. No shared interface,
 CMake/core or app composition changed, so the documented affected matrix applies.
-Independent review and merge remain pending.
+Independent exact-head review passed; #235 merged at
+`f0d73d30d49d06dab8290edf01971e1a3a06fa18`. Generated build removed; linked-source
+cleanup remains separately tracked.
 See [ADR 0052](../../docs/decisions/0052-bounded-completed-deletion-work.md) and
 [Qt evidence](evidence/h1-deletion-work-qt.json). Per-record JSON size, index startup,
 explicit session deletion and tombstone enumeration remain open.
@@ -411,3 +420,22 @@ explicit session deletion and tombstone enumeration remain open.
 The independent cloud-cache probe removed 100,000 cached 1-KiB rows in 269 ms.
 The same API serves both successful upload ACK and policy/key invalidation;
 async cleanup must preserve invalidation semantics before changing that path.
+
+### H1.1 explicit attachment cancellation
+
+A current synthetic 640-chunk upload removed all 20 MiB in one synchronous
+cancellation. Unknown parent state and an oversized manifest were also discarded.
+Cancellation now reads at most 128 candidates across all revisions, reserves
+manifest cost in a shared 1-MiB mutation budget and commits a retirement marker
+when chunks remain. The identity stays unavailable until bounded maintenance
+finishes; unsupported data remains recoverable.
+
+Focused Release/offscreen tests pass 41/41. Mutations increasing the row or byte
+budget, or moving revision filtering into the SQL range, each fail regression.
+The actual production query uses the identity primary index without a sort; a
+100k other-revision backlog does not expand the candidate read. The affected
+10-target Release/headless matrix passes (76.98 s), with the live lifecycle case
+skipped by design. Independent review and merge are pending. See
+[ADR 0054](../../docs/decisions/0054-bounded-attachment-cancellation.md).
+Explicit session deletion, tombstone enumeration and large-record recovery remain
+open; neither cancellation nor prior expiry evidence completes H1.1/H1.2.

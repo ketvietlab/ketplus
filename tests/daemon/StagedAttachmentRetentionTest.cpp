@@ -11,6 +11,8 @@ namespace ketplus::daemon::detail {
 QString stagedManifestGcQuery();
 QString stagedChunkGcQuery();
 QString stagedRemainingChunksQuery();
+QString attachmentCancelManifestQuery();
+QString attachmentCancelChunksQuery();
 } // namespace ketplus::daemon::detail
 namespace {
 class Fixture {
@@ -140,6 +142,132 @@ class StagedAttachmentRetentionTest : public QObject {
         QVERIFY(f.journal.beginAttachment("s-1", 1, "a", 0, "new", "text/plain", 1, 1,
                                           QString(64, '0'), &error));
         QVERIFY(f.journal.attachment("s-1", 1, "a").bytes.isEmpty());
+    }
+    void currentCancellationHasRowAndByteBounds_data() {
+        QTest::addColumn<int>("bytes");
+        QTest::newRow("row-bound") << 16;
+        QTest::newRow("byte-bound") << 32768;
+    }
+    void currentCancellationHasRowAndByteBounds() {
+        QFETCH(int, bytes);
+        Fixture f;
+        QVERIFY(f.seed(1, 640, bytes, false));
+        QString error;
+        QElapsedTimer timer;
+        timer.start();
+        QVERIFY2(f.journal.cancelAttachment("s-1", 1, "a", 1, &error), qPrintable(error));
+        const auto elapsed = timer.elapsed();
+        const auto removed = 640 - f.scalar("SELECT count(*) FROM staged_attachment_chunks");
+        qInfo() << "Current cancellation removed" << removed << "chunks of" << bytes << "bytes in"
+                << elapsed << "ms";
+        QVERIFY(removed >= 0 && removed <= 128);
+        QVERIFY(removed * bytes < 1024 * 1024);
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachments WHERE status='expiring'"), 1);
+        QVERIFY(f.journal.attachment("s-1", 1, "a").id.isEmpty());
+        QVERIFY(!f.journal.beginAttachment("s-1", 1, "a", 0, "new", "text/plain", 1, 1,
+                                           QString(64, '0'), &error));
+        QCOMPARE(error, QString("attachment_conflict"));
+        for (int i = 0; i < 30; ++i)
+            QVERIFY(f.journal.purgeExpiredAttachments());
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachment_chunks"), 0);
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachments"), 0);
+    }
+    void ignoredCancellationChunkRollsBack() {
+        Fixture f;
+        QVERIFY(f.seed(1, 2, 16, false));
+        QVERIFY(f.exec("CREATE TRIGGER ignore_chunk BEFORE DELETE ON staged_attachment_chunks "
+                       "WHEN OLD.chunk_index=1 BEGIN SELECT RAISE(IGNORE); END"));
+        QString error;
+        QVERIFY(!f.journal.cancelAttachment("s-1", 1, "a", 1, &error));
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachment_chunks"), 2);
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachments WHERE status='uploading'"), 1);
+        QVERIFY(f.exec("DROP TRIGGER ignore_chunk"));
+        QVERIFY(f.journal.cancelAttachment("s-1", 1, "a", 1, &error));
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachment_chunks"), 0);
+    }
+    void cancellationLeavesOversizedChunkForRecovery() {
+        Fixture f;
+        QVERIFY(f.seed(1, 1, 2 * 1024 * 1024, false));
+        QString error;
+        QVERIFY(f.journal.cancelAttachment("s-1", 1, "a", 1, &error));
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachment_chunks"), 1);
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachments WHERE status='expiring'"), 1);
+        QVERIFY(f.journal.purgeExpiredAttachments());
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachment_chunks"), 1);
+        QVERIFY(f.journal.attachment("s-1", 1, "a").id.isEmpty());
+    }
+    void busyCancellationRestoresTimeout() {
+        Fixture f;
+        QVERIFY(f.seed(1, 2, 16, false));
+        QSqlQuery q(f.connection());
+        QVERIFY(q.exec("PRAGMA busy_timeout=4321"));
+        QVERIFY(f.exec("BEGIN IMMEDIATE"));
+        QElapsedTimer timer;
+        timer.start();
+        QString error;
+        QVERIFY(!f.journal.cancelAttachment("s-1", 1, "a", 1, &error));
+        QVERIFY(timer.elapsed() < 500);
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachment_chunks"), 2);
+        QVERIFY(q.exec("PRAGMA busy_timeout"));
+        QVERIFY(q.next());
+        QCOMPARE(q.value(0).toInt(), 4321);
+        q.finish();
+        QVERIFY(f.exec("COMMIT"));
+        QVERIFY(f.journal.cancelAttachment("s-1", 1, "a", 1, &error));
+    }
+    void cancellationBoundsCandidatesAcrossOtherRevisions() {
+        Fixture f;
+        QVERIFY(f.seed(1, 100000, 16, false));
+        QVERIFY(f.exec("UPDATE staged_attachment_chunks SET revision=99 WHERE chunk_index<99999"));
+        QString error;
+        QElapsedTimer timer;
+        timer.start();
+        QVERIFY(f.journal.cancelAttachment("s-1", 1, "a", 1, &error));
+        qInfo() << "Cancellation with 100000 mixed-revision chunks:" << timer.elapsed() << "ms";
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachment_chunks"), 100000);
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachments WHERE status='expiring'"), 1);
+    }
+    void cancellationQueriesSeekExactIdentity() {
+        Fixture f;
+        for (bool chunks : {false, true}) {
+            QSqlQuery q(f.db);
+            QVERIFY(q.prepare("EXPLAIN QUERY PLAN " +
+                              (chunks ? detail::attachmentCancelChunksQuery()
+                                      : detail::attachmentCancelManifestQuery())));
+            q.addBindValue("s-1");
+            q.addBindValue(1);
+            q.addBindValue("a");
+            if (!chunks)
+                q.addBindValue(1);
+            QVERIFY(q.exec());
+            QString plan;
+            while (q.next())
+                plan += q.value(3).toString() + '\n';
+            QVERIFY2(
+                plan.contains(chunks ? "sqlite_autoindex_staged_attachment_chunks_1 (session_id=? "
+                                       "AND generation=? AND attachment_id=?)"
+                                     : "sqlite_autoindex_staged_attachments_1 (session_id=? AND "
+                                       "generation=? AND attachment_id=?)"),
+                qPrintable(plan));
+            QVERIFY2(!plan.contains("TEMP B-TREE"), qPrintable(plan));
+        }
+    }
+    void cancellationPreservesUnsupportedParent_data() {
+        QTest::addColumn<bool>("oversized");
+        QTest::newRow("unknown-state") << false;
+        QTest::newRow("oversized-manifest") << true;
+    }
+    void cancellationPreservesUnsupportedParent() {
+        QFETCH(bool, oversized);
+        Fixture f;
+        QVERIFY(f.seed(1, 2, 16, false));
+        QVERIFY(f.exec(oversized ? "UPDATE staged_attachments SET name=printf('%*s',2097152,'x')"
+                                 : "UPDATE staged_attachments SET status='future-state'"));
+        QString error;
+        QVERIFY(!f.journal.cancelAttachment("s-1", 1, "a", 1, &error));
+        QVERIFY(!error.isEmpty());
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachments"), 1);
+        QCOMPARE(f.scalar("SELECT count(*) FROM staged_attachment_chunks"), 2);
     }
     void cancellationKeepsMixedRevisionIdentityReserved_data() {
         QTest::addColumn<bool>("expired");
