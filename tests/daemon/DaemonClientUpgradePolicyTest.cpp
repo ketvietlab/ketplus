@@ -125,6 +125,7 @@ class DaemonClientUpgradePolicyTest final : public QObject {
         const QString tokenPath = directory.filePath(QStringLiteral("token"));
         QFile token(tokenPath);
         QVERIFY(token.open(QIODevice::WriteOnly));
+        QVERIFY(token.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner));
         QCOMPARE(token.write(QByteArray(40, 'k')), 40);
         token.close();
         const QString socketPath = directory.filePath(QStringLiteral("daemon.sock"));
