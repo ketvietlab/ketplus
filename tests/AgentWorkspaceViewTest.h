@@ -82,6 +82,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void streamingTableKeepsReadingParagraph_data();
     void compactionLifecycleAndCommand();
     void answersAgentQuestionsSequentially();
+    void questionCardSingleClickAndFreeText();
     void directModeAutoApprovesOnlyInjectedBrowserTools();
     void preservesQuestionDraftsAcrossScope();
     void presentsStateAxesIndependently();

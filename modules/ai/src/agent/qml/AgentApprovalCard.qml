@@ -1,8 +1,9 @@
 import "ChromeMetrics.js" as Metrics
 import QtQuick
+import Ket 1.0 as Kit
 import QtQuick.Controls.Basic as Basic
 
-Rectangle {
+Kit.KetQuestionCard {
     id: root
     objectName: "agentApprovalCard"
 
@@ -25,135 +26,75 @@ Rectangle {
     function optionId(label) {
         for (const option of decisionQuestion.options || []) {
             if (option.label === label)
-                return option.id
+                return option.id;
         }
-        return ""
+        return "";
     }
 
     function submit(label) {
-        if (!pending || answered) return
-        const id = optionId(label)
-        if (id.length === 0) return
-        decisionSubmitted({ decision: { option_ids: [id], custom_answer: "" } })
+        if (!pending || answered)
+            return;
+        const id = optionId(label);
+        if (id.length === 0)
+            return;
+        decisionSubmitted({
+            decision: {
+                option_ids: [id],
+                custom_answer: ""
+            }
+        });
     }
 
-    implicitHeight: content.implicitHeight + Metrics.px(28, tokens)
-    radius: Metrics.px(9, tokens)
-    color: tokens.surfaceRaised
-    border.width: 1
-    border.color: answered ? stateColor : tokens.borderStrong
-
     required property var tokens
-
+    label: declined ? "Approval declined" : answered ? "Approval granted" : "Approval required"
+    question: prompt
     Column {
-        id: content
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: parent.top
-        anchors.margins: Metrics.px(14, tokens)
-        spacing: Metrics.px(10, tokens)
-
-        // Title and status share one line; the status is pinned to the right
-        // edge and the title gives way, whatever the font or window width.
-        Item {
-            width: parent.width
-            height: Metrics.px(22, tokens)
-            Rectangle {
-                id: approvalIcon
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                width: Metrics.px(22, tokens); height: Metrics.px(22, tokens); radius: Metrics.px(6, tokens)
-                color: root.stateColor
-                opacity: 0.22
-            }
-            Text {
-                anchors.centerIn: approvalIcon
-                text: root.declined ? "✕" : root.answered ? "✓" : "!"
-                color: root.stateColor
-                font.pixelSize: root.tokens.reading; font.weight: Font.Bold
-            }
-            Text {
-                anchors.left: approvalIcon.right
-                anchors.leftMargin: Metrics.px(8, tokens)
-                anchors.right: approvalStatus.left
-                anchors.rightMargin: Metrics.px(8, tokens)
-                anchors.verticalCenter: parent.verticalCenter
-                text: root.declined ? "Approval declined" : root.answered ? "Approval granted" : "Approval required"
-                color: root.tokens.textMain
-                font.family: root.tokens.uiFont
-                font.pixelSize: root.tokens.body; font.weight: Font.DemiBold
-                elide: Text.ElideRight
-            }
-            Text {
-                id: approvalStatus
-                objectName: "approvalStatus"
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                text: root.declined ? "Declined" : root.answered ? "Allowed once" : root.pending ? "Agent is waiting" : "Closed"
-                color: root.tokens.textMuted
-                font.family: root.tokens.uiFont
-                font.pixelSize: root.tokens.micro
-            }
-        }
-
+        width: parent.width
+        spacing: root.recipe.controlGap
         Text {
+            objectName: "approvalStatus"
             width: parent.width
-            visible: text.length > 0
-            text: root.prompt.length > 0 ? root.prompt : "Allow this agent action?"
-            color: root.tokens.textMain
+            horizontalAlignment: Text.AlignRight
+            text: root.declined ? "Declined" : root.answered ? "Allowed once" : root.pending ? "Agent is waiting" : "Closed"
+            color: root.recipe.step
             font.family: root.tokens.uiFont
-            font.pixelSize: root.tokens.reading
-            font.weight: Font.DemiBold
-            wrapMode: Text.Wrap
+            font.pixelSize: root.recipe.labelPixels
         }
-
-        Basic.Button {
-            id: detailsButton
-            visible: root.command.length > 0 && !root.answered
+        Kit.KetButton {
+            visible: root.command.length > 0
             text: root.detailsVisible ? "Hide command" : "View command"
-            padding: 0
-            height: Metrics.px(24, tokens)
+            variant: Kit.KetTheme.ButtonVariant.Ghost
+            controlSize: Kit.KetTheme.ControlSize.Small
             onClicked: root.detailsVisible = !root.detailsVisible
-            contentItem: Text {
-                text: detailsButton.text
-                color: root.tokens.textMuted
-                font.family: root.tokens.uiFont
-                font.pixelSize: root.tokens.caption
-                verticalAlignment: Text.AlignVCenter
-            }
-            background: Item {}
         }
-
-        Text {
+        TextEdit {
             visible: root.detailsVisible && root.command.length > 0
             width: parent.width
             text: root.command
+            textFormat: TextEdit.PlainText
+            readOnly: true
+            selectByMouse: true
+            wrapMode: TextEdit.WrapAnywhere
             color: root.tokens.textSecondary
-            font.family: "Menlo"
-            font.pixelSize: root.tokens.caption
-            wrapMode: Text.WrapAnywhere
-            maximumLineCount: 12
-            elide: Text.ElideRight
-        }
-
-        Row {
-            visible: root.pending && !root.answered
-            width: parent.width
-            spacing: Metrics.px(7, tokens)
-            Basic.Button {
-                objectName: "approvalDeclineButton"
-                width: Metrics.px(88, tokens); height: Metrics.px(34, tokens); text: "Decline"
-                onClicked: root.submit("Decline")
-                contentItem: Text { text: parent.text; color: root.tokens.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: root.tokens.caption }
-                background: Rectangle { radius: Metrics.px(6, tokens); color: parent.hovered ? root.tokens.surfaceHover : root.tokens.interactiveBackground; border.color: root.tokens.border }
-            }
-            Basic.Button {
-                objectName: "approvalAcceptButton"
-                width: Metrics.px(96, tokens); height: Metrics.px(34, tokens); text: "Allow once"
-                onClicked: root.submit("Accept")
-                contentItem: Text { text: parent.text; color: "#ffffff"; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: root.tokens.caption; font.weight: Font.DemiBold }
-                background: Rectangle { radius: Metrics.px(6, tokens); color: parent.pressed ? root.tokens.actionPrimaryActive : parent.hovered ? root.tokens.actionPrimaryHover : root.tokens.actionPrimary }
-            }
+            font.family: root.tokens.monoFont
+            font.pixelSize: root.tokens.body
         }
     }
+    footer: [
+        Kit.KetButton {
+            objectName: "approvalDeclineButton"
+            visible: root.pending && !root.answered
+            text: "Decline"
+            controlSize: Kit.KetTheme.ControlSize.Small
+            onClicked: root.submit("Decline")
+        },
+        Kit.KetButton {
+            objectName: "approvalAcceptButton"
+            visible: root.pending && !root.answered
+            text: "Allow once"
+            variant: Kit.KetTheme.ButtonVariant.Primary
+            controlSize: Kit.KetTheme.ControlSize.Small
+            onClicked: root.submit("Accept")
+        }
+    ]
 }

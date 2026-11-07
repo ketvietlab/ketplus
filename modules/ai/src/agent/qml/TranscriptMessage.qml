@@ -206,11 +206,7 @@ Item {
         readonly property real userMaximumWidth: Math.max(Metrics.px(160, shell.t), Math.min(messageDelegate.contentColumnWidth * userRecipe.maxWidth, messageDelegate.contentColumnWidth - Metrics.px(63, shell.t)))
         x: kind === "user" ? messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - Metrics.px(20, shell.t) : messageDelegate.contentColumnX + Metrics.px(20, shell.t)
         y: messageDelegate.surfaceInset + dayDivider.height
-        width: kind === "user"
-                   ? Math.min(userMaximumWidth, Math.max(Math.ceil(bodyMetrics.advanceWidth) + Metrics.px(10, shell.t),
-                              agentMessage ? Math.ceil(agentOriginMetrics.advanceWidth) + Metrics.px(4, shell.t) : 0,
-                              imageGallery.bubblePreferredWidth) + horizontalPadding * 2)
-                   : messageDelegate.contentColumnWidth - Metrics.px(40, shell.t)
+        width: kind === "user" ? Math.min(userMaximumWidth, Math.max(Math.ceil(bodyMetrics.advanceWidth) + Metrics.px(10, shell.t), agentMessage ? Math.ceil(agentOriginMetrics.advanceWidth) + Metrics.px(4, shell.t) : 0, imageGallery.bubblePreferredWidth) + horizontalPadding * 2) : messageDelegate.contentColumnWidth - Metrics.px(40, shell.t)
         height: messageColumn.implicitHeight + (messageDelegate.activityRow ? 0 : kind === "user" ? 2 * userRecipe.paddingBlock : Metrics.px(16, shell.t))
         radius: kind === "user" ? userRecipe.radius : kind === "file" ? Metrics.px(7, shell.t) : 0
         color: agentMessage ? shell.t.surfaceRaised : kind === "user" ? userRecipe.background : kind === "file" ? shell.t.surfaceRaised : "transparent"
@@ -412,23 +408,24 @@ Item {
             Component {
                 id: questionCardComponent
                 AgentQuestionCard {
-                objectName: "messageQuestionCard"
-                questions: messageDelegate.messageQuestions
-                answerData: messageDelegate.messageQuestionAnswers
-                pending: messageDelegate.running
-                messageKey: messageDelegate.messageKey
-                tokens: shell.t
-                initialDraftAnswers: shell.questionDraftFor(messageKey).answers || ({})
-                initialOtherQuestions: shell.questionDraftFor(messageKey).otherAnswers || ({})
-                initialQuestionIndex: shell.questionDraftFor(messageKey).questionIndex || 0
-                onDraftChanged: function (answers, questionIndex, otherAnswers) {
-                    shell.saveQuestionDraft(messageKey, answers, questionIndex, otherAnswers);
-                }
-                onAnswersSubmitted: function (answers) {
-                    shell.clearQuestionDraft(messageKey);
-                    host.answerQuestion(messageKey, answers);
-                }
-                onDraftDiscarded: shell.clearQuestionDraft(messageKey)
+                    lifecycleStatus: messageDelegate.status
+                    objectName: "messageQuestionCard"
+                    questions: messageDelegate.messageQuestions
+                    answerData: messageDelegate.messageQuestionAnswers
+                    pending: messageDelegate.running
+                    messageKey: messageDelegate.messageKey
+                    tokens: shell.t
+                    initialDraftAnswers: shell.questionDraftFor(messageKey).answers || ({})
+                    initialOtherQuestions: shell.questionDraftFor(messageKey).otherAnswers || ({})
+                    initialQuestionIndex: shell.questionDraftFor(messageKey).questionIndex || 0
+                    onDraftChanged: function (answers, questionIndex, otherAnswers) {
+                        shell.saveQuestionDraft(messageKey, answers, questionIndex, otherAnswers);
+                    }
+                    onAnswersSubmitted: function (answers) {
+                        shell.clearQuestionDraft(messageKey);
+                        host.answerQuestion(messageKey, answers);
+                    }
+                    onDraftDiscarded: shell.clearQuestionDraft(messageKey)
                 }
             }
 
@@ -443,7 +440,7 @@ Item {
                     questions: messageDelegate.messageQuestions
                     tokens: shell.t
                     onDecisionSubmitted: function (answers) {
-                        host.answerQuestion(messageKey, answers)
+                        host.answerQuestion(messageKey, answers);
                     }
                 }
             }
@@ -490,9 +487,7 @@ Item {
                 // the viewport; existing anchor repair absorbs that correction.
                 readonly property real userCollapsedHeight: font.pixelSize * 1.75 * 20
                 readonly property bool userOverlong: kind === "user" && implicitHeight > userCollapsedHeight + 1
-                height: userOverlong && !messageDelegate.userExpanded
-                    ? Math.min(implicitHeight, userCollapsedHeight)
-                    : sourceInitialized ? Math.max(implicitHeight, font.pixelSize * 1.4) : estimatedUnrenderedHeight
+                height: userOverlong && !messageDelegate.userExpanded ? Math.min(implicitHeight, userCollapsedHeight) : sourceInitialized ? Math.max(implicitHeight, font.pixelSize * 1.4) : estimatedUnrenderedHeight
                 clip: userOverlong && !messageDelegate.userExpanded
                 topPadding: codeBlocks.length > 0 && codeBlocks[0].startsDocument ? codeRecipe.padding : 0
                 bottomPadding: codeBlocks.length > 0 && codeBlocks[codeBlocks.length - 1].endsDocument ? codeRecipe.padding : 0
@@ -517,10 +512,12 @@ Item {
                     // materializes the newest authoritative model source.
                     // Never pin an empty document — that freezes a blank body
                     // for the rest of the turn.
-                    if (readingAnchorOwnsBody && host.sessionRunning
-                            && sourceInitialized && renderedSource.length > 0 && !readerSourcePinned) {
+                    if (readingAnchorOwnsBody && host.sessionRunning && sourceInitialized && renderedSource.length > 0 && !readerSourcePinned) {
                         readerSourcePinned = true;
-                        shell.traceTranscript("reader-pin", {key: messageKey, pinned: true});
+                        shell.traceTranscript("reader-pin", {
+                            key: messageKey,
+                            pinned: true
+                        });
                     }
                 }
                 onReadingAnchorOwnsBodyChanged: {
@@ -528,7 +525,10 @@ Item {
                         pinReaderIfStreaming();
                     } else {
                         if (readerSourcePinned)
-                            shell.traceTranscript("reader-pin", {key: messageKey, pinned: false});
+                            shell.traceTranscript("reader-pin", {
+                                key: messageKey,
+                                pinned: false
+                            });
                         readerSourcePinned = false;
                         refreshRenderedSource();
                     }
@@ -606,9 +606,7 @@ Item {
                         return;
                     // A diagram finishing under a pinned reader redraws the text they are
                     // reading; the newest source waits for them as before.
-                    if (sourceInitialized && sameMessage && readerSourcePinned && selectionStart === selectionEnd
-                            && !prefixChanged && !force && renderedMermaidRevision !== host.mermaidRevision
-                            && renderedSource.toLowerCase().indexOf("mermaid") >= 0) {
+                    if (sourceInitialized && sameMessage && readerSourcePinned && selectionStart === selectionEnd && !prefixChanged && !force && renderedMermaidRevision !== host.mermaidRevision && renderedSource.toLowerCase().indexOf("mermaid") >= 0) {
                         rerenderHeldSource();
                         return;
                     }
@@ -618,15 +616,13 @@ Item {
                     // the pin. Explicit older-prefix loads are exempt.
                     // An empty pinned document must still accept the first real
                     // body; otherwise "Codex · streaming" shows with no text.
-                    if (sourceInitialized && sameMessage && readerSourcePinned
-                            && renderedSource.length > 0 && !prefixChanged && !force)
+                    if (sourceInitialized && sameMessage && readerSourcePinned && renderedSource.length > 0 && !prefixChanged && !force)
                         return;
                     // Replacing the document drops the reader's selection, so a
                     // streaming answer could not be selected and copied. Hold what
                     // is rendered while text is selected; clearing the selection
                     // applies the newest source.
-                    if (sourceInitialized && sameMessage && selectionStart !== selectionEnd
-                            && !prefixChanged && !force) {
+                    if (sourceInitialized && sameMessage && selectionStart !== selectionEnd && !prefixChanged && !force) {
                         selectionHeld = true;
                         return;
                     }
@@ -1056,10 +1052,7 @@ Item {
                     anchors.fill: parent
                     acceptedButtons: Qt.NoButton
                     hoverEnabled: true
-                    readonly property string link: containsMouse && bodyText.sourceInitialized
-                        ? host.messageLinkAt(bodyText.textDocument,
-                                             bodyText.positionAt(mouseX, mouseY))
-                        : ""
+                    readonly property string link: containsMouse && bodyText.sourceInitialized ? host.messageLinkAt(bodyText.textDocument, bodyText.positionAt(mouseX, mouseY)) : ""
                     cursorShape: link.length > 0 ? Qt.PointingHandCursor : Qt.IBeamCursor
                 }
                 font.family: kind === "tool" && subtype !== "compaction" ? shell.t.monoFont : shell.t.uiFont
@@ -1088,7 +1081,9 @@ Item {
                 }
                 onClicked: {
                     messageDelegate.userExpanded = !messageDelegate.userExpanded;
-                    view.rememberActivityState(messageDelegate.userExpansionKey, {expanded: messageDelegate.userExpanded});
+                    view.rememberActivityState(messageDelegate.userExpansionKey, {
+                        expanded: messageDelegate.userExpanded
+                    });
                 }
             }
 
@@ -1102,7 +1097,9 @@ Item {
                 }
                 onExpansionKeyChanged: restoreImages()
                 Component.onCompleted: restoreImages()
-                onExpanded: view.rememberActivityState(expansionKey, {imageLimit: maximumVisible})
+                onExpanded: view.rememberActivityState(expansionKey, {
+                    imageLimit: maximumVisible
+                })
                 width: Math.min(parent.width, preferredWidth)
                 sources: messageDelegate.messageImages
                 tokens: shell.t
