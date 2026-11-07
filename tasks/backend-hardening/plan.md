@@ -222,7 +222,7 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | --- | --- | --- | --- |
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
 | H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 and cloud #237 merged; transaction recovery #241 merged; cancellation #240 merged; explicit session-delete bounds still open | Audit explicit session deletion and tombstone enumeration / #2739 |
-| H1.2 | In progress | Startup commit failure #250 under integration verification; other migration/read/crash cases remain | Finish startup gate, then remaining failure-path audit / #2739 |
+| H1.2 | In progress | Startup commit failure #250 merged; other migration/read/crash cases remain | Continue remaining failure-path audit / #2739 |
 | H1.4 | In progress | Media ownership cleanup audit underway; no whole-media acceptance claim | Complete confirmed reference-catalog findings / #2739 |
 | H1.5–H1.7 | Not started | No claim that #128 backend acceptance is complete | Continue storage acceptance / #2739 |
 | H1.3 | In progress | Delete/ownership #241–243, append #244–245 and fork #246–247 merged; stream recovery #248 merged; replay/activity #249 merged; startup #250 under verification | Finish startup gate, then caller atomicity/read failures / #2739 |
@@ -665,6 +665,24 @@ remain explicitly open.
   returning failure. Focused temporary-journal startup set passes 5/5 (ADR 0064).
 - [x] #250 initial head `874956a4`: affected 13/13 (107.99 s), independent
   3/3 (14.65 s; protocol 100, activity 9, transcript 28).
-- [ ] Rebase onto #249, rerun the affected matrix, delta review, merge and cleanup.
+- [x] #250 final head `fef67e69`: rebased affected 13/13 (89.96 s), independent
+  delta review PASS. Merged `731c40bab07674083828dabc9ba4eda2fb5a1190`;
+  cleanup remains separately tracked.
 - [ ] Continue mid-fetch failures, unknown formats, low-space/process interruption
   and large migration bounds. This package does not finish startup acceptance.
+
+### H1.4 media cleanup ownership preflight
+
+- [x] Original source fails 22/24 initial fault cases and 9/9 catalog-budget/root
+  cases; two initial directory controls already preserve data. A new filename
+  regression also caught an overly permissive first guard.
+- [x] Cleanup now requires a complete validated catalog before any unlink: regular
+  nonsymlink canonical digest files, checked reads/enumeration, bounded by 4 MiB
+  per file, 16 MiB total and 4,096 entries. Unknown ownership preserves data.
+- [x] Focused temporary-store set 41/41, including repaired shared references,
+  existing cleanup controls and absent/empty-catalog compatibility (ADR 0065).
+- [ ] Integrate current journal fixes, run the affected matrix, exact-head review,
+  merge and cleanup.
+- [ ] Continue media write/copy durability, storage-path races and total media-file
+  enumeration/decode bounds. Over-budget catalogs need a separate recovery path;
+  this change does not stop new writes or complete H1.4/H1.5.

@@ -169,6 +169,10 @@ the corresponding Atlas mock first.
 - Journal startup changes: deferred commit-failure fixtures cover turn/replay/
   activity backfills, unchanged stored rows, diagnostic preservation, write-lock
   release while the failed object remains alive, repair and reopen.
+
+- Media cleanup changes: temporary reference catalogs exercise malformed data,
+  file/directory symlinks, unsupported filenames, per-file/catalog limits, preserved
+  shared bytes and metadata, repair/retry and absent/empty-catalog compatibility.
 - One Pro module: focused target plus its directly affected tests.
 - Shared header or desktop shell: full build and full Pro test suite.
 - `core/` change: the Lite suite (`ctest --preset lite-dev`), then the full Pro suite.

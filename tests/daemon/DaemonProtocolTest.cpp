@@ -565,6 +565,139 @@ class DaemonProtocolTest final : public QObject {
                  QDir(directory.filePath("state")).absoluteFilePath("media"));
     }
 
+    void mediaCapacityReclaimsFilesWithAnEmptyCatalog() {
+        for (bool present : {false, true}) {
+            QTemporaryDir dir;
+            const auto media = dir.filePath("media");
+            QVERIFY(QDir().mkpath(media));
+            const auto png = fakePng(8, 8, 'a');
+            const auto path = QDir(media).filePath(
+                QString::fromLatin1(
+                    QCryptographicHash::hash(png, QCryptographicHash::Sha256).toHex()) +
+                ".png");
+            QFile image(path);
+            QVERIFY(image.open(QIODevice::WriteOnly));
+            QCOMPARE(image.write(png), png.size());
+            image.close();
+            if (present)
+                QVERIFY(QDir().mkpath(QDir(media).filePath("refs")));
+            McpMediaStore store(media, 0);
+            store.enforceCapacity();
+            QVERIFY(!QFileInfo::exists(path));
+        }
+    }
+
+    void mediaCleanupPreservesUnknownReferences_data() {
+        QTest::addColumn<QString>("operation");
+        QTest::addColumn<QString>("fault");
+        QTest::addColumn<QString>("owner");
+        for (const auto& operation : {QString("release"), QString("retain"), QString("capacity")})
+            for (const auto& fault :
+                 {QString("malformed"), QString("oversized"), QString("directory"),
+                  QString("symlink"), QString("catalog-count"), QString("catalog-bytes"),
+                  QString("root-symlink"), QString("filename")})
+                for (const auto& owner : {QString("a"), QString("b")})
+                    if ((!fault.startsWith("catalog-") && fault != "root-symlink" &&
+                         fault != "filename") ||
+                        owner == "a")
+                        QTest::newRow(qPrintable(operation + "-" + fault + "-" + owner))
+                            << operation << fault << owner;
+    }
+    void mediaCleanupPreservesUnknownReferences() {
+        QFETCH(QString, operation);
+        QFETCH(QString, fault);
+        QFETCH(QString, owner);
+        QTemporaryDir dir;
+        const auto media = dir.filePath("media");
+        McpMediaStore store(media);
+        const auto png = fakePng(8, 8, 'a');
+        const auto first = store.storeImage(png, "image/png", "a");
+        QCOMPARE(store.storeImage(png, "image/png", "b"), first);
+        QVERIFY(!first.isEmpty());
+        const auto hash = first.value("media_ref").toString().mid(7);
+        const auto image = QDir(media).filePath(hash + ".png");
+        const auto refPath = [&](const QString& id) {
+            return QDir(media).filePath(
+                "refs/" +
+                QString::fromLatin1(
+                    QCryptographicHash::hash(id.toUtf8(), QCryptographicHash::Sha256).toHex()) +
+                ".refs");
+        };
+        const auto broken = refPath(owner);
+        const auto original = hash.toLatin1() + '\n';
+        QVERIFY(QFile::remove(broken));
+        const auto write = [](const QString& path, const QByteArray& contents) {
+            QFile f(path);
+            return f.open(QIODevice::WriteOnly) && f.write(contents) == contents.size();
+        };
+        QStringList extraFiles;
+        const auto refsDirectory = QDir(media).filePath("refs");
+        const auto outside = dir.filePath("outside-refs");
+        if (fault == "filename") {
+            QVERIFY(write(broken, original));
+            const auto unknown = refPath("unknown").chopped(5) + ".future.refs";
+            QVERIFY(write(unknown, original));
+            extraFiles.append(unknown);
+        } else if (fault == "root-symlink") {
+            QVERIFY(write(broken, original));
+            QVERIFY(QDir().rename(refsDirectory, outside));
+            QVERIFY(QFile::link(outside, refsDirectory));
+            if (!QFileInfo(refsDirectory).isSymLink())
+                QSKIP("Fixture requires a native directory symlink.");
+        } else if (fault.startsWith("catalog-")) {
+            QVERIFY(write(broken, original));
+            const int count = fault == "catalog-count" ? 4096 : 5;
+            const auto bytes = fault == "catalog-count"
+                                   ? QByteArray{}
+                                   : original.repeated(4 * 1024 * 1024 / original.size());
+            for (int n = 0; n < count; ++n) {
+                const auto path = refPath(QString("extra-%1").arg(n));
+                QVERIFY(write(path, bytes));
+                extraFiles.append(path);
+            }
+        } else if (fault == "directory")
+            QVERIFY(QDir().mkdir(broken));
+        else if (fault == "symlink") {
+            const auto target = dir.filePath("outside.refs");
+            QVERIFY(write(target, original));
+            QVERIFY(QFile::link(target, broken));
+            if (!QFileInfo(broken).isSymLink())
+                QSKIP("Fixture requires a native filesystem symlink.");
+        } else {
+            const auto damaged = fault == "oversized"
+                                     ? original.repeated(4 * 1024 * 1024 / original.size() + 1)
+                                     : QByteArray("unknown-reference-format\n");
+            QVERIFY(write(broken, damaged));
+        }
+        if (operation == "release")
+            store.releaseSession("a");
+        else if (operation == "retain")
+            store.retainSessions({"b"});
+        else {
+            McpMediaStore tiny(media, 0);
+            tiny.enforceCapacity();
+        }
+        QVERIFY2(QFileInfo::exists(image),
+                 "Unknown ownership must not authorize deleting shared bytes.");
+        QVERIFY2(QFileInfo::exists(refPath("a")),
+                 "Failed preflight must preserve retired references for retry.");
+        QVERIFY(QFileInfo::exists(refPath("b")));
+        if (fault == "root-symlink") {
+            QVERIFY(QFile::remove(refsDirectory));
+            QVERIFY(QDir().rename(outside, refsDirectory));
+        } else if (fault == "directory")
+            QVERIFY(QDir().rmdir(broken));
+        else
+            QVERIFY(QFile::remove(broken));
+        QVERIFY(write(broken, original));
+        for (const auto& path : extraFiles)
+            QVERIFY(QFile::remove(path));
+        store.releaseSession("a");
+        QVERIFY(QFileInfo::exists(image));
+        store.releaseSession("b");
+        QVERIFY(!QFileInfo::exists(image));
+    }
+
     void mcpMediaStoreHandlesResourceBlobsReferencedEvictionAndOrphanRefs() {
         QTemporaryDir directory;
         const QByteArray png = fakePng(4, 3, 'r');
