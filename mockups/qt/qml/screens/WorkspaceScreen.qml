@@ -101,7 +101,7 @@ Item {
                     onClicked: screen.planVisible = false
                 }
                 KetButton {
-                    text: "Plan · " + (screen.planRun ? screen.planRun.completed : 0) + "/4"
+                    text: screen.planRun && screen.planRun.planCreated ? "Plan · " + screen.planRun.completed + "/4" : "Plan"
                     iconName: "check-all"
                     variant: screen.planVisible ? KetTheme.ButtonVariant.Secondary : KetTheme.ButtonVariant.Ghost
                     onClicked: screen.openPlan("")

@@ -8,6 +8,33 @@ TestCase {
     PlanRunModel { id: run; conversationId: "4821" }
     Component { id: storeFactory; ConversationPlanStore {} }
     function init() { run.clock.interval = 2200; run.load("ready") }
+    function test_prompt_reads_repo_context_before_creating_plan() {
+        run.submitPrompt()
+        compare(run.status, "planning")
+        verify(!run.contextRead)
+        verify(!run.planCreated)
+        run.advance()
+        verify(run.contextRead)
+        verify(!run.planCreated)
+        compare(run.completed, 0)
+        run.advance()
+        verify(run.planCreated)
+        compare(run.status, "running")
+        compare(run.completed, 0)
+        verify(run.tasks.every(t => t.source.length > 0))
+    }
+    function test_stop_during_context_read_does_not_skip_planning() {
+        run.submitPrompt(); run.stop()
+        run.advance()
+        verify(!run.contextRead)
+        verify(!run.planCreated)
+        run.resume()
+        compare(run.status, "planning")
+        run.advance(); run.advance()
+        verify(run.planCreated)
+        compare(run.status, "running")
+        compare(run.completed, 0)
+    }
     function test_early_finish_keeps_open_tasks_and_resumes() {
         run.start(); run.advance()
         compare(run.status, "continuing")
@@ -89,7 +116,7 @@ TestCase {
     }
     function test_timer_finishes_without_another_user_prompt() {
         run.clock.interval = 5
-        run.start()
+        run.submitPrompt()
         tryCompare(run, "status", "complete", 2000)
         compare(run.completed, 4)
         compare(run.followUps, 1)
@@ -104,7 +131,7 @@ TestCase {
         compare(run.followUps, 0)
     }
     function test_direct_scenes_do_not_autoplay() {
-        for (const state of ["ready", "running", "continuing", "blocked", "paused", "limit", "complete"]) {
+        for (const state of ["ready", "planning", "running", "continuing", "blocked", "paused", "limit", "complete"]) {
             run.load(state)
             compare(run.status, state)
             verify(!run.autoplay)

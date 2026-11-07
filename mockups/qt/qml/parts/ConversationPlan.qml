@@ -12,7 +12,7 @@ Item {
     required property var window
     function px(n) { return KetTheme.px(n, KetTheme.zoom) }
     required property var run
-    readonly property string stateLabel: ({ ready: "Ready", running: "Working", continuing: "Continuing",
+    readonly property string stateLabel: ({ ready: "Ready", planning: "Planning", running: "Working", continuing: "Continuing",
         blocked: "Blocked", paused: "Stopped by you", limit: "Limit reached", complete: "Complete" })[run.status]
     component Label: Text {
         color: KetTheme.t.textMain
@@ -32,16 +32,22 @@ Item {
         spacing: screen.px(12)
         RowLayout {
             Layout.fillWidth: true
-            Label { text: "Plan v1"; font.weight: Font.DemiBold }
-            KetBadge { text: run.completed + "/4 verified"; tone: run.completed === 4 ? KetTheme.BadgeTone.Success : KetTheme.BadgeTone.Neutral }
+            Label { text: run.planCreated ? "Plan v1" : "Automatic planning"; font.weight: Font.DemiBold }
+            KetBadge { visible: run.planCreated; text: run.completed + "/4 verified"; tone: run.completed === 4 ? KetTheme.BadgeTone.Success : KetTheme.BadgeTone.Neutral }
             KetBadge { text: screen.stateLabel; tone: run.active ? KetTheme.BadgeTone.Info : KetTheme.BadgeTone.Neutral }
-            Label { text: "Follow-ups " + run.followUps + "/" + run.followUpLimit; color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
+            Label { visible: run.planCreated; text: "Follow-ups " + run.followUps + "/" + run.followUpLimit; color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
             Item { Layout.fillWidth: true }
-            KetButton { visible: run.status === "ready"; text: "Run plan"; iconName: "arrow-right"; onClicked: run.start() }
+            KetButton { visible: run.status === "ready"; text: "Send sample prompt"; iconName: "arrow-right"; onClicked: run.submitPrompt() }
             KetButton { visible: run.active; text: "Stop run"; iconName: "stop-circle"; variant: KetTheme.ButtonVariant.Ghost; onClicked: run.stop() }
             KetButton { visible: run.status === "paused"; text: "Resume plan"; onClicked: run.resume() }
             KetButton { visible: run.status === "blocked"; text: "Retry check"; onClicked: run.retryBlocker() }
             KetButton { visible: run.status === "limit"; text: "Allow one more follow-up"; onClicked: run.extendLimit() }
+        }
+        Label {
+            Layout.fillWidth: true
+            text: "Request · " + run.prompt
+            font.pixelSize: screen.px(12)
+            color: KetTheme.t.textSecondary
         }
         KetBanner {
             Layout.fillWidth: true
@@ -51,7 +57,8 @@ Item {
                 : run.status === "paused" ? "Stopped by you. No automatic follow-up will start."
                 : run.status === "complete" ? "4/4 verified · plan complete. Deployment was not in scope."
                 : run.status === "running" ? "Working on task " + (run.completed + 1) + ". Progress stays with this conversation."
-                : "Run the plan. The daemon resumes unfinished work after an early finish."
+                : run.status === "planning" ? (run.contextRead ? "Repo context read. Creating a plan for this request." : "Multi-step work detected. Reading repo memory and relevant open issues.")
+                : "Send a request. The agent creates a plan when the work needs one."
             tone: ["blocked", "limit"].includes(run.status) ? KetTheme.BannerTone.Warning : KetTheme.BannerTone.Info
         }
         Basic.ScrollView {
@@ -63,7 +70,30 @@ Item {
             Column {
                 width: scroll.availableWidth
                 spacing: screen.px(16)
+                Column {
+                    width: parent.width
+                    KetActivityRow {
+                        id: contextToggle
+                        width: parent.width
+                        text: run.contextRead ? "Repo context · AGENTS.md · docs/release.md · GitHub #241" : "Repo context · memory and open issues · " + (run.status === "ready" ? "not read yet" : "reading")
+                        iconName: "chevron-right"
+                        expandable: true
+                    }
+                    Repeater {
+                        model: contextToggle.checked ? run.sources : []
+                        Label {
+                            required property var modelData
+                            x: screen.px(24)
+                            width: parent.width - x
+                            text: modelData.title + " — " + (run.contextRead ? modelData.detail : "Pending read")
+                            font.pixelSize: screen.px(12)
+                            color: KetTheme.t.textSecondary
+                            bottomPadding: screen.px(6)
+                        }
+                    }
+                }
                 Surface {
+                    visible: run.planCreated
                     width: parent.width
                     height: tasksColumn.implicitHeight + screen.px(16)
                     Column {
@@ -114,6 +144,7 @@ Item {
                                     bottomPadding: screen.px(12)
                                     spacing: screen.px(4)
                                     Label { width: parent.width; text: "Accept: " + task.modelData.criterion; color: KetTheme.t.textSecondary }
+                                    Label { width: parent.width; text: "Source: " + task.modelData.source; color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
                                     Label { width: parent.width; text: task.done ? "Evidence: " + task.modelData.evidence : "Evidence pending"; color: task.done ? KetTheme.t.success : KetTheme.t.textMuted }
                                 }
                                 Rectangle { visible: task.index < 3; width: parent.width; height: 1; color: KetTheme.t.panelBorder }
@@ -124,7 +155,7 @@ Item {
                 Column {
                     width: parent.width
                     spacing: screen.px(4)
-                    Label { text: "Run activity"; font.weight: Font.DemiBold }
+                    Label { visible: run.events.length > 0; text: "Run activity"; font.weight: Font.DemiBold }
                     Repeater {
                         model: run.events
                         Column {
@@ -156,13 +187,13 @@ Item {
             Label { text: "Preview"; color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
             KetSelect {
                 Layout.preferredWidth: screen.px(170)
-                model: ["Ready", "Working", "Early finish", "Blocked", "Stopped", "Limit reached", "Complete"]
-                currentIndex: ["ready", "running", "continuing", "blocked", "paused", "limit", "complete"].indexOf(run.status)
-                onActivated: index => run.load(["ready", "running", "continuing", "blocked", "paused", "limit", "complete"][index])
+                model: ["Before prompt", "Planning", "Working", "Early finish", "Blocked", "Stopped", "Limit reached", "Complete"]
+                currentIndex: ["ready", "planning", "running", "continuing", "blocked", "paused", "limit", "complete"].indexOf(run.status)
+                onActivated: index => run.load(["ready", "planning", "running", "continuing", "blocked", "paused", "limit", "complete"][index])
             }
             KetButton {
-                visible: run.status === "continuing" && !run.autoplay
-                text: "Play continuation"; variant: KetTheme.ButtonVariant.Ghost
+                visible: (run.status === "continuing" || run.status === "planning") && !run.autoplay
+                text: run.status === "planning" ? "Play planning" : "Play continuation"; variant: KetTheme.ButtonVariant.Ghost
                 onClicked: run.autoplay = true
             }
             Item { Layout.fillWidth: true }
