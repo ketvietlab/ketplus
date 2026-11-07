@@ -24,6 +24,7 @@ class QLabel;
 class QMenu;
 class QPoint;
 class QSplitter;
+class QStackedWidget;
 class QString;
 class QTabWidget;
 class QShortcut;
@@ -68,6 +69,8 @@ class MainWindow final : public QMainWindow {
 
   private:
     void createActions();
+    void createChrome();
+    void showEditorSurface();
     void createNewDocument();
     void openDocument();
     void chooseFolder();
@@ -201,6 +204,7 @@ class MainWindow final : public QMainWindow {
     ThemeManager& theme_;
     AppearanceSettings appearanceSettings_;
     EditorViewOptions viewOptions_;
+    QStackedWidget* chromePages_{nullptr};
     QSplitter* mainSplit_{nullptr};
     QSplitter* workspaceSplit_{nullptr};
     QSplitter* editorSplit_{nullptr};

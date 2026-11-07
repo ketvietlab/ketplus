@@ -1,4 +1,6 @@
 #include "editor/EditorWidget.h"
+#include "KetAppearance.h"
+#include "KetChrome.h"
 #include "editor/EditorSplitPane.h"
 #include "ui/Theme.h"
 
@@ -35,6 +37,7 @@ class EditorWidgetTest final : public QObject {
     void findsForwardBackwardAndWraps();
     void replacesMatchesAsOneUndoStep();
     void matchesEditorTypography();
+    void breadcrumbReservesSpaceWithoutChangingTheDocument();
     void appliesCustomTypography();
     void persistsEditorSettings();
     void emitsContextMenuRequest();
@@ -135,6 +138,27 @@ void EditorWidgetTest::replacesMatchesAsOneUndoStep() {
     QVERIFY(editor.findText(QStringLiteral("cat"), false, true, true).found);
     QVERIFY(editor.replaceSelection(QStringLiteral("cat"), QStringLiteral("fox"), true, true));
     QCOMPARE(editor.text(), QByteArray("cat scatter fox CAT"));
+}
+
+void EditorWidgetTest::breadcrumbReservesSpaceWithoutChangingTheDocument() {
+    ketplus::EditorWidget editor;
+    editor.resize(640, 400);
+    editor.setText("const value = 1;\n");
+    const auto before = editor.text();
+    editor.setBreadcrumbPath(QStringLiteral("src/app.cpp"));
+    editor.show();
+    auto* breadcrumb = editor.findChild<ket::Breadcrumb*>(QStringLiteral("editorBreadcrumb"));
+    QVERIFY(breadcrumb);
+    QCOMPARE(breadcrumb->path(), QStringList({"src", "app.cpp"}));
+    for (qreal zoom : {1.0, 1.25, 1.0}) {
+        ket::Appearance::instance().setZoom(zoom);
+        QCoreApplication::processEvents();
+        QVERIFY(editor.viewport()->geometry().top() >= breadcrumb->height());
+        QCOMPARE(editor.text(), before);
+    }
+    editor.setBreadcrumbPath({});
+    QVERIFY(breadcrumb->isHidden());
+    QVERIFY(editor.viewport()->geometry().top() < 4);
 }
 
 void EditorWidgetTest::matchesEditorTypography() {

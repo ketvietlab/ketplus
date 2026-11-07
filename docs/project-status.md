@@ -5,6 +5,11 @@ milestone changes state.
 
 ## Implemented
 
+- Lite shell implementation now connects the Qt mock activity rail to Explorer,
+  Search, Source Control and Settings. First use opens a folder welcome surface;
+  file tabs show a kit breadcrumb outside the Scintilla document viewport.
+  Native visual acceptance remains in the later UI review phase.
+
 - Két UI stack: Lite and Pro use KÉT Sans as the primary interface face, with
   Inter/platform fallback; fresh editor settings use KÉT Sans Mono Medium at
   14 px without rewriting saved choices. Interface zoom is published to the

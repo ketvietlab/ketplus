@@ -188,6 +188,7 @@ add_library(ketplus_editor STATIC
     src/editor/EditorSplitPane.h
     src/editor/EditorViewOptions.cpp
     src/editor/EditorViewOptions.h
+    src/editor/EditorWidgetChrome.cpp
     src/editor/EditorWidget.cpp
     src/editor/EditorFileRefresh.cpp
     src/editor/EditorMarkdown.cpp
@@ -272,6 +273,7 @@ if(KETPLUS_CM_BUILD_APP)
     endif()
 
     qt_add_executable(ketplus_cm WIN32 MACOSX_BUNDLE
+        src/app/MainWindowChrome.cpp
         src/app/MainWindow.cpp
         src/app/MainWindowActions.cpp
         src/app/MainWindowDocuments.cpp

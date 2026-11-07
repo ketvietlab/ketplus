@@ -3,8 +3,8 @@
 #include "editor/EditorWidget.h"
 #include "git/GitChangesPanel.h"
 #include "git/GitService.h"
-#include "workspace/ExplorerPanel.h"
 #include "ui/Theme.h"
+#include "workspace/ExplorerPanel.h"
 #include "workspace/SearchPanel.h"
 
 #include <QAction>
@@ -47,8 +47,7 @@ SearchPanel* MainWindow::ensureSearchPanel() {
         searchPanel_->setSearching(false);
         searchPanel_->setStatusText(QStringLiteral("Search cancelled"));
     });
-    connect(searchPanel_, &SearchPanel::replaceAllRequested, this,
-            &MainWindow::replaceInWorkspace);
+    connect(searchPanel_, &SearchPanel::replaceAllRequested, this, &MainWindow::replaceInWorkspace);
     connect(searchPanel_, &SearchPanel::matchActivated, this, &MainWindow::openSearchMatch);
     connect(searchPanel_, &SearchPanel::hideRequested, this,
             [this] { setSearchPanelVisible(false); });
@@ -68,14 +67,16 @@ void MainWindow::applySearchPanelColors() {
 }
 
 void MainWindow::setSearchPanelVisible(const bool visible) {
+    if (visible)
+        showEditorSurface();
     if (visible) {
         auto* panel = ensureSearchPanel();
         if (!panel->isVisible()) {
             // Closing the search panel returns to whichever panel it replaced.
-            panelBeforeSearch_ = explorer_ != nullptr && explorer_->isVisible() ? SidePanel::Explorer
-                                 : gitChanges_ != nullptr && gitChanges_->isVisible()
-                                     ? SidePanel::SourceControl
-                                     : SidePanel::None;
+            panelBeforeSearch_ =
+                explorer_ != nullptr && explorer_->isVisible()       ? SidePanel::Explorer
+                : gitChanges_ != nullptr && gitChanges_->isVisible() ? SidePanel::SourceControl
+                                                                     : SidePanel::None;
         }
         if (explorer_ != nullptr) {
             explorer_->hide();
@@ -283,8 +284,7 @@ void MainWindow::replaceInWorkspace() {
     // Replace with exactly what produced the listed results, never a query edited since.
     const WorkspaceSearchOptions options = lastSearchOptions_;
     if (panel->options() != options) {
-        panel->setStatusText(
-            QStringLiteral("The search changed. Search again before replacing."));
+        panel->setStatusText(QStringLiteral("The search changed. Search again before replacing."));
         return;
     }
     if (panel->resultsTruncated()) {

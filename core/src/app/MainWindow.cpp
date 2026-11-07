@@ -6,10 +6,10 @@
 #include "app/SettingsDialog.h"
 #include "editor/EditorSplitPane.h"
 #include "editor/EditorWidget.h"
-#include "index/SymbolIndex.h"
 #include "git/GitChangesPanel.h"
 #include "git/GitDiffView.h"
 #include "git/GitService.h"
+#include "index/SymbolIndex.h"
 #include "preview/MarkdownPreviewPane.h"
 #include "terminal/TerminalPanel.h"
 #include "ui/FindReplaceBar.h"
@@ -32,7 +32,6 @@
 #include <QMessageBox>
 #include <QSettings>
 #include <QShortcut>
-#include <QWindowStateChangeEvent>
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QStatusBar>
@@ -42,6 +41,7 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <QWindowStateChangeEvent>
 
 #include <algorithm>
 
@@ -59,8 +59,7 @@ QString normalizedPath(const QString& path) {
 
 MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     : QMainWindow(parent), theme_(theme), appearanceSettings_(AppearanceSettings::load()),
-      viewOptions_(EditorViewOptions::load()),
-      mainSplit_(new QSplitter(Qt::Vertical, this)),
+      viewOptions_(EditorViewOptions::load()), mainSplit_(new QSplitter(Qt::Vertical, this)),
       workspaceSplit_(new QSplitter(Qt::Horizontal, mainSplit_)),
       editorSplit_(new QSplitter(Qt::Horizontal, workspaceSplit_)), tabs_(new QTabWidget),
       findBar_(new FindReplaceBar),
@@ -98,10 +97,10 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     mainSplit_->setHandleWidth(1);
     mainSplit_->addWidget(workspaceSplit_);
     mainSplit_->setStretchFactor(0, 1);
-    setCentralWidget(mainSplit_);
 
     git_ = new GitService(this);
     createActions();
+    createChrome();
     statusBar()->setSizeGripEnabled(false);
     statusBar()->showMessage(QStringLiteral("Ready"));
     gitButton_->setProperty("kvRole", QStringLiteral("statusGit"));
@@ -175,8 +174,7 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     highlightTimer_->setSingleShot(true);
     highlightTimer_->setInterval(200);
     connect(highlightTimer_, &QTimer::timeout, this, [this] { refreshMatchHighlights(); });
-    connect(findBar_, &FindReplaceBar::queryChanged, highlightTimer_,
-            qOverload<>(&QTimer::start));
+    connect(findBar_, &FindReplaceBar::queryChanged, highlightTimer_, qOverload<>(&QTimer::start));
     connect(findBar_, &FindReplaceBar::searchOptionsChanged, this, [this] {
         if (auto* editor = activeEditor()) {
             if (findBar_->inSelection()) {
@@ -235,7 +233,6 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
                 }
             });
 
-    createNewDocument();
     updateEditorActions();
 }
 
@@ -295,6 +292,7 @@ void MainWindow::openFolder(const QString& folderPath) {
         return;
     }
 
+    showEditorSurface();
     rememberActiveFileForWorktree();
     workspaceRoot_ = normalizedPath(folder.absoluteFilePath());
     rememberRecentFolder(workspaceRoot_);
@@ -308,6 +306,8 @@ void MainWindow::openFolder(const QString& folderPath) {
     // Listing the tree now means the first lookup does not wait for it, and a folder too
     // large for the default limit asks about a full scan while the user is still here.
     refreshWorkspaceFileIndex(true);
+    if (tabs_->count() == 0)
+        createNewDocument();
 }
 
 void MainWindow::changeEvent(QEvent* event) {
