@@ -582,6 +582,11 @@ and `sign_in_error` when it failed; `remote.sign_in.cancel` and sign-out stop it
 
 ## Lifecycle
 
+Outgoing provider calls use positive integer JSON ids. Response lookup preserves
+that type and numeric value across all three adapters, including Codex oversized
+responses (ADR 0074). Invalid/unrelated ids leave pending calls untouched; incoming
+provider request ids and pending-call timeout policy remain separate.
+
 The intended state flow is `registered -> connecting -> online -> draining ->
 stopped`, with a recoverable `offline` state. Session state is separate from
 connection state so a temporary network outage does not kill a local process.
