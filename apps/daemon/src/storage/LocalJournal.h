@@ -173,6 +173,9 @@ class LocalJournal final {
                      QString* error = nullptr);
     [[nodiscard]] SessionTombstone sessionTombstone(const QString& sessionId,
                                                     qint64 generation) const;
+    // Ownership-sensitive work must distinguish an empty catalog from any read
+    // failure, including errors after some rows have already been fetched.
+    [[nodiscard]] std::optional<QList<StoredSession>> readSessions() const;
     [[nodiscard]] QList<StoredSession> sessions() const;
     // The id of every session, or nullopt when they could not all be read. sessions() returns
     // an empty list on a failed read, which must not pass for every session being deleted.

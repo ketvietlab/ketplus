@@ -5,6 +5,11 @@ milestone changes state.
 
 ## Implemented
 
+- Provider cleanup requires a complete successful ownership-catalog read before
+  deleting a provider thread or accepting a new local deletion (ADR 0056).
+  Query and mid-fetch failures keep queued work pending and local history intact;
+  retries after repair still protect shared threads.
+
 - Current staged-attachment cancellation now bounds candidates and mutation bytes
   (ADR 0054). Logical cancellation retires the identity until all revisions drain
   through existing maintenance. Unknown/oversized manifests remain unchanged for

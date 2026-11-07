@@ -660,7 +660,12 @@ The same transaction captures current and historical provider thread IDs, includ
 handoffs. A bounded background queue calls Codex `thread/delete` or Claude SDK
 `deleteSession`, including Claude transcript copies in previous project directories
 and subagent transcripts. Cleanup failures remain durable for retry. A thread still
-referenced by another retained conversation is preserved. Cursor has no supported
+referenced by another retained conversation is preserved. Ownership checks use a
+complete, fallible catalog read: query or row-fetch errors defer queued cleanup
+and reject new local deletion without removing history. A partially read catalog
+cannot prove that a thread is unreferenced. Work remains durable for a later pass
+or restart after repair; see [ADR 0056](decisions/0056-fail-closed-provider-ownership-reads.md).
+Cursor has no supported
 thread-deletion API in this integration: an unshared Cursor thread currently rejects
 permanent deletion with `provider_cleanup_unsupported` and retains its conversation.
 This change does not scan or delete already orphaned historical provider sessions.

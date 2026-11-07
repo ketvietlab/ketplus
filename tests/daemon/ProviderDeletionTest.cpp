@@ -226,6 +226,164 @@ class ProviderDeletionTest final : public QObject {
         QCOMPARE(journal.sessions().size(), 1);
         QVERIFY(journal.deletionWork().isEmpty());
     }
+    void newDeletionDefersWhenOwnershipCannotBeRead() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        StoredSession session;
+        session.id = "first";
+        session.generation = 1;
+        session.adapter = "codex";
+        session.threadId = "shared-thread";
+        session.worktreePath = dir.path();
+        session.state = "ready";
+        QVERIFY(journal.upsertSession(session));
+        session.id = "second";
+        QVERIFY(journal.upsertSession(session));
+        CodexAdapter adapter("/missing-provider");
+        SessionHost host(&journal, &adapter);
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == path)
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        QSqlQuery q(db);
+        QVERIFY(q.exec("ALTER TABLE sessions RENAME COLUMN provider_threads TO hidden_threads"));
+        const auto result = host.handleCommand({{"protocol_version", 0},
+                                                {"message_id", "delete-with-unreadable-ownership"},
+                                                {"message_type", "session.delete"},
+                                                {"session_id", "first"},
+                                                {"session_generation", 1},
+                                                {"payload", QJsonObject{}}},
+                                               "desktop");
+        QVERIFY(q.exec("ALTER TABLE sessions RENAME COLUMN hidden_threads TO provider_threads"));
+        QVERIFY2(!result.value("ok").toBool(), QJsonDocument(result).toJson().constData());
+        QCOMPARE(journal.sessions().size(), 2);
+        QVERIFY(journal.sessionTombstone("first", 1).sessionId.isEmpty());
+        QVERIFY(journal.deletionWork().isEmpty());
+        const auto retry = host.handleCommand({{"protocol_version", 0},
+                                               {"message_id", "delete-after-repair"},
+                                               {"message_type", "session.delete"},
+                                               {"session_id", "first"},
+                                               {"session_generation", 1},
+                                               {"payload", QJsonObject{}}},
+                                              "desktop");
+        QVERIFY(retry.value("ok").toBool());
+        QCOMPARE(journal.sessions().size(), 1);
+        QCOMPARE(journal.sessions().first().id, QString("second"));
+        QVERIFY(journal.deletionWork()
+                    .first()
+                    .toObject()
+                    .value("provider_targets")
+                    .toArray()
+                    .isEmpty());
+    }
+    void queuedCleanupDefersWhenOwnershipCannotBeRead_data() {
+        QTest::addColumn<bool>("partial");
+        QTest::newRow("query-error") << false;
+        QTest::newRow("partial-row-error") << true;
+    }
+    void queuedCleanupDefersWhenOwnershipCannotBeRead() {
+        QFETCH(bool, partial);
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        const auto executable = dir.filePath("codex");
+        const auto log = dir.filePath("codex.log");
+        QVERIFY(writeFakeCodex(executable, log));
+        LocalJournal journal(path);
+        StoredSession session;
+        session.id = "deleted";
+        session.generation = 1;
+        session.adapter = "codex";
+        session.threadId = "shared-thread";
+        session.worktreePath = dir.path();
+        session.state = "ready";
+        QVERIFY(journal.upsertSession(session));
+        QString error;
+        QVERIFY(journal.deleteSession(
+            "deleted", 1, "op", 1, &error,
+            {QJsonObject{{"provider", "codex"}, {"thread_id", "shared-thread"}}}));
+        session.id = "z-retained";
+        QVERIFY(journal.upsertSession(session));
+        session.id = "a-readable";
+        session.threadId = "unrelated-thread";
+        QVERIFY(journal.upsertSession(session));
+        CodexAdapter adapter(executable);
+        bool warm = false;
+        adapter.call("model/list", {}, [&](const QJsonObject&, const QString& e) {
+            QVERIFY2(e.isEmpty(), qPrintable(e));
+            warm = true;
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(warm, 5000);
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == path)
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        QSqlQuery q(db);
+        {
+            SessionHost host(&journal, &adapter);
+            if (partial) {
+                QVERIFY(q.exec("PRAGMA table_info(sessions)"));
+                QStringList columns;
+                while (q.next()) {
+                    const auto column = q.value(1).toString();
+                    columns.append(
+                        column == "provider_threads"
+                            ? "CASE WHEN id='z-retained' THEN json_extract('invalid','$') "
+                              "ELSE provider_threads END AS provider_threads"
+                            : '"' + column + '"');
+                }
+                q.finish();
+                QVERIFY(q.exec("ALTER TABLE sessions RENAME TO held_sessions"));
+                QVERIFY(q.exec("CREATE VIEW sessions AS SELECT " + columns.join(',') +
+                               " FROM held_sessions"));
+            } else {
+                QVERIFY(q.exec(
+                    "ALTER TABLE sessions RENAME COLUMN provider_threads TO hidden_threads"));
+            }
+            // Run the queued maintenance, then a provider barrier. Any earlier
+            // thread/delete must finish before that barrier response arrives.
+            QCoreApplication::sendPostedEvents();
+            bool barrier = false;
+            adapter.call("model/list", {}, [&](const QJsonObject&, const QString& e) {
+                QVERIFY2(e.isEmpty(), qPrintable(e));
+                barrier = true;
+            });
+            QTRY_VERIFY_WITH_TIMEOUT(barrier, 5000);
+            QFile calls(log);
+            QVERIFY(calls.open(QIODevice::ReadOnly));
+            const auto recorded = calls.readAll();
+            QVERIFY2(!recorded.contains("delete:shared-thread"), recorded.constData());
+            QCOMPARE(journal.deletionWork()
+                         .first()
+                         .toObject()
+                         .value("provider_targets")
+                         .toArray()
+                         .size(),
+                     1);
+            if (partial) {
+                QVERIFY(q.exec("DROP VIEW sessions"));
+                QVERIFY(q.exec("ALTER TABLE held_sessions RENAME TO sessions"));
+            } else {
+                QVERIFY(q.exec(
+                    "ALTER TABLE sessions RENAME COLUMN hidden_threads TO provider_threads"));
+            }
+        }
+        SessionHost restarted(&journal, &adapter);
+        QTRY_VERIFY(journal.deletionWork()
+                        .first()
+                        .toObject()
+                        .value("provider_targets")
+                        .toArray()
+                        .isEmpty());
+        QFile calls(log);
+        QVERIFY(calls.open(QIODevice::ReadOnly));
+        QVERIFY(!calls.readAll().contains("delete:shared-thread"));
+        QCOMPARE(journal.sessions().size(), 2);
+    }
     void sharedThreadsRemainOwnedByTheOtherConversation() {
         QTemporaryDir directory;
         LocalJournal journal(directory.filePath("journal.sqlite"));
