@@ -333,6 +333,8 @@ void MainWindow::ensureAgentWorkspace() {
         }
         openAgentTerminalTab();
     });
+    connect(agentWorkspace_, &AgentWorkspaceView::tagFilterRequested, activityBar_,
+            &ActivityBar::setTagFilter);
     connect(agentWorkspace_, &AgentWorkspaceView::settingsRequested, this,
             &MainWindow::showSettings);
     connect(agentWorkspace_, &AgentWorkspaceView::productNavigationRequested, this,

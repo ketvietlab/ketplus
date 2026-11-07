@@ -1,5 +1,6 @@
 import "ChromeMetrics.js" as Metrics
 import QtQuick
+import Ket as Kit
 import QtQuick.Controls
 import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
@@ -7,6 +8,8 @@ import QtQuick.Layouts
 Popup {
     id: root
     objectName: "usageLimitsPopover"
+    readonly property var look: Kit.KetTheme.menuRecipe(Kit.KetTheme.dark, Kit.KetTheme.zoom)
+    readonly property var contextLook: Kit.KetTheme.meterRecipe(Kit.KetTheme.dark, Kit.KetTheme.zoom, false, contextPercent / 100)
     property var workspace
     // Context is supplied only when a provider reports an exact active-window value.
     property var contextUsage: ({})
@@ -27,8 +30,8 @@ Popup {
                                            ? Math.max(0, Math.min(100,
                                                Number(contextUsage.usedTokens) * 100
                                                / Number(contextUsage.limitTokens))) : 0
-    readonly property color panelColor: workspace.t.interactiveBackground || "#20252b"
-    readonly property color trackColor: workspace.t.border || "#40464d"
+    readonly property color panelColor: look.background
+    readonly property color trackColor: contextLook.track
     readonly property color primaryColor: workspace.t.accent || "#5da2ff"
     readonly property color mutedColor: workspace.t.textMuted || "#9aa1aa"
     readonly property color mainColor: workspace.t.textMain || "#f1f3f5"
@@ -74,16 +77,14 @@ Popup {
                                    : "Resets " + Qt.formatDateTime(date, "ddd, dd MMM  h:mm AP")
     }
     function progressColor(percent) {
-        if (percent >= 90) return workspace.t.warning || "#e45b5b"
-        if (percent >= 75) return "#d59a2a"
-        return primaryColor
+        return Kit.KetTheme.meterRecipe(Kit.KetTheme.dark, Kit.KetTheme.zoom, false, clamp(percent) / 100).fill
     }
 
     background: Rectangle {
         color: root.panelColor
-        radius: Metrics.px(10, workspace.t)
+        radius: root.look.radius
         border.width: 1
-        border.color: root.trackColor
+        border.color: root.look.border
     }
 
     contentItem: Flickable {
@@ -135,7 +136,7 @@ Popup {
                     Rectangle {
                         visible: root.contextAvailable
                         Layout.fillWidth: true
-                        Layout.preferredHeight: Metrics.px(5, workspace.t)
+                        Layout.preferredHeight: root.contextLook.trackHeight
                         radius: height / 2
                         color: root.trackColor
                         Rectangle {
@@ -264,7 +265,7 @@ Popup {
                         }
                         Rectangle {
                             Layout.fillWidth: true
-                            Layout.preferredHeight: Metrics.px(5, workspace.t)
+                            Layout.preferredHeight: root.contextLook.trackHeight
                             radius: height / 2
                             color: root.trackColor
                             Rectangle {

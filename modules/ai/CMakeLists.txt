@@ -115,7 +115,7 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS "AgentProductNavigation.qml"
 )
 foreach(component AgentWorkspaceHeader AgentRunStatus AgentScopeNotice AgentEmptyState
-        BackgroundTaskBar MotionClock)
+        BackgroundTaskBar MotionClock AgentComposer AgentComposerAction AgentPermissionMenu AgentSkillsMenu AgentAttachmentChip)
     set_source_files_properties(src/agent/qml/${component}.qml
         PROPERTIES QT_RESOURCE_ALIAS "${component}.qml"
     )
@@ -253,6 +253,11 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
         src/agent/qml/AgentEmptyState.qml
         src/agent/qml/BackgroundTaskBar.qml
         src/agent/qml/MotionClock.qml
+        src/agent/qml/AgentComposer.qml
+        src/agent/qml/AgentComposerAction.qml
+        src/agent/qml/AgentAttachmentChip.qml
+        src/agent/qml/AgentPermissionMenu.qml
+        src/agent/qml/AgentSkillsMenu.qml
         src/agent/qml/UsageLimitsPopover.qml
         src/agent/qml/ClaudeUsageSection.qml
         src/agent/qml/UsageRingButton.qml

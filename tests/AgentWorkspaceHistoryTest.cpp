@@ -1,4 +1,5 @@
 #include "AgentWorkspaceViewTest.h"
+#include "KetProfile.h"
 #include "agent/AgentMessageFormatter.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentTranscriptWindowBudget.h"
@@ -1713,7 +1714,8 @@ void AgentWorkspaceViewTest::keepsSteeringDrafts() {
     }
     auto* attachGlyph = root->findChild<QQuickItem*>("attachGlyph");
     QVERIFY(attachGlyph);
-    QCOMPARE(attachGlyph->size(), QSizeF(14, 14));
+    QCOMPARE(attachGlyph->size(), QSizeF(ket::Profile::current().composerAttachIconSize,
+                                         ket::Profile::current().composerAttachIconSize));
     QSignalSpy configuration(&view,
                              &ketplus::AgentWorkspaceView::conversationConfigurationRequested);
     view.updateConversationConfiguration("next-model", "high", "read-only");
@@ -1731,6 +1733,8 @@ void AgentWorkspaceViewTest::keepsSteeringDrafts() {
     QCOMPARE(stopRequested.count(), 1);
     QSignalSpy submitted(&view, &ketplus::AgentWorkspaceView::steeringPromptSubmitted);
     prompt->setProperty("text", "Focus on tests");
+    QVERIFY(send->isVisible());
+    QVERIFY(!stop->isVisible());
     QVERIFY(QMetaObject::invokeMethod(root, "submitCurrentPrompt"));
     QVERIFY(view.steeringPending());
     QVERIFY(!send->isEnabled());
@@ -1756,7 +1760,8 @@ void AgentWorkspaceViewTest::keepsSteeringDrafts() {
     QVERIFY(QMetaObject::invokeMethod(root, "submitCurrentPrompt"));
     view.finishSteering(path, "first", "Final input", true);
     QCOMPARE(prompt->property("text").toString(), QString());
-    QVERIFY(send->isVisible());
+    QVERIFY(!send->isVisible());
+    QVERIFY(stop->isVisible());
     QVERIFY(!send->isEnabled());
     view.addAttachments({attachmentPath});
     QVERIFY(send->isEnabled());
