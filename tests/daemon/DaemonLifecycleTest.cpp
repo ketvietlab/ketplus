@@ -7,6 +7,7 @@
 
 #include "storage/LocalJournal.h"
 #include <QScopeGuard>
+#include <QSignalBlocker>
 
 #include "FakeCodex.h"
 
@@ -1856,6 +1857,73 @@ class DaemonLifecycleTest final : public QObject {
         const QByteArray providerResults = log.readAll();
         QVERIFY(providerResults.contains("approval:accept"));
         QVERIFY(providerResults.contains("Current workspace"));
+    }
+
+    void boundsUnreadSocketBytesBeforeFrameDispatch_data() {
+        QTest::addColumn<bool>("authenticated");
+        QTest::newRow("before-hello") << false;
+        QTest::newRow("after-hello") << true;
+    }
+    void boundsUnreadSocketBytesBeforeFrameDispatch() {
+        QFETCH(bool, authenticated);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        LocalJournal journal(directory.filePath("journal.sqlite3"));
+        CodexAdapter adapter("/nonexistent/ketplus-codex");
+        SessionHost host(&journal, &adapter);
+        const QString endpoint = directory.filePath("read-bound.sock");
+        const QByteArray token("local-test-token-with-at-least-32-bytes");
+        LocalIpcServer server(&host, endpoint, token);
+        QVERIFY(server.listen());
+        TestClient client;
+        client.connectTo(endpoint);
+        QTRY_COMPARE_WITH_TIMEOUT(server.connectionCount(), 1, 1000);
+        const auto sockets = server.findChildren<QLocalSocket*>();
+        QCOMPARE(sockets.size(), 1);
+        auto* incoming = sockets.first();
+        if (authenticated) {
+            client.send(request("daemon.hello", "hello", {{"token", QString::fromUtf8(token)}}));
+            QTRY_VERIFY_WITH_TIMEOUT(client.hasResponse("hello"), 1000);
+            QVERIFY(client.takeResponse("hello").value("payload").toObject().value("ok").toBool());
+        }
+        // Hold application dispatch, not the transport event loop. This exposes
+        // Qt's own unread buffer independently of the bounded frame assembler.
+        QSignalBlocker held(incoming);
+        for (int index = 0; index < 3; ++index) {
+            const bool hello = !authenticated && index == 0;
+            auto value =
+                request(hello ? "daemon.hello" : "session.list", QString("bulk-%1").arg(index),
+                        {{"token", QString::fromUtf8(token)}, {"padding", ""}});
+            auto payload = value.value("payload").toObject();
+            const qsizetype overhead = QJsonDocument(value).toJson(QJsonDocument::Compact).size();
+            payload.insert("padding", QString(protocol::maximumFrameBytes - overhead, 'x'));
+            value.insert("payload", payload);
+            const auto frame = protocol::encodeFrame(value);
+            QCOMPARE(frame.size(), protocol::maximumFrameBytes + 4);
+            QCOMPARE(client.socket.write(frame), frame.size());
+        }
+        client.socket.flush();
+        QTRY_VERIFY_WITH_TIMEOUT(incoming->bytesAvailable() >= protocol::maximumFrameBytes, 2000);
+        // Let the remaining loopback flood reach Qt; a full bounded buffer instead
+        // applies socket backpressure while the dispatch callback stays paused.
+        QTest::qWait(100);
+        const auto unread = incoming->bytesAvailable();
+        qInfo() << "Unread transport bytes while dispatch held:" << unread;
+        QVERIFY2(unread <= protocol::maximumFrameBytes + 4,
+                 "Qt's unread transport buffer exceeded one maximum frame plus header.");
+        held.unblock();
+        QVERIFY(QMetaObject::invokeMethod(incoming, "readyRead", Qt::DirectConnection));
+        QTRY_VERIFY_WITH_TIMEOUT(client.hasResponse("bulk-2"), 3000);
+        for (int index = 0; index < 3; ++index) {
+            const auto response = client.takeResponse(QString("bulk-%1").arg(index));
+            QVERIFY(!response.isEmpty());
+            QVERIFY(response.value("payload").toObject().value("ok").toBool());
+        }
+        QCOMPARE(client.socket.state(), QLocalSocket::ConnectedState);
+        client.send(request("session.list", "after-bound"));
+        QTRY_VERIFY_WITH_TIMEOUT(client.hasResponse("after-bound"), 1000);
+        QVERIFY(
+            client.takeResponse("after-bound").value("payload").toObject().value("ok").toBool());
     }
 
     void rejectsFrameSizeBeforeReadingPayload() {

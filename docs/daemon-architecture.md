@@ -108,6 +108,11 @@ discovery are tracked by generation/cursor and journal replay fills any gap afte
 the catalog snapshot. Discovery responses from an old connection are discarded.
 The reconciliation lives in `CodexDaemonDiscovery.cpp`; the existing large
 `CodexAppServer.cpp` retains only transport lifecycle and event-dispatch hooks.
+Accepted local IPC sockets cap Qt's unread receive buffer at one maximum frame
+plus the four-byte header (ADR 0077), separately from frame assembly and outbound
+queues. Pausing request dispatch applies transport backpressure without dropping
+valid pipelined requests. This does not bound all per-request or process memory.
+
 Streamed text reaches the journal coalesced: consecutive `assistant.delta` or
 `command.output_delta` notifications for one item are held for at most 150 ms
 (or 16 KiB) and journaled as one event. Any other event, a delta of another

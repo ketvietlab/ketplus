@@ -5,6 +5,10 @@ milestone changes state.
 
 ## Implemented
 
+- Accepted local IPC sockets bound Qt's unread receive buffer to one maximum
+  frame plus header (ADR 0077). Pipelined exact-limit requests resume without
+  loss after dispatch pauses, both before and after authentication.
+
 - Existing media blobs are validated before dedup returns a reference (ADR 0066):
   exact bounded bytes, regular nonsymlink files and owner-only permissions.
   Invalid entries remain intact for repair; reference durability remains open.
