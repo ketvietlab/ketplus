@@ -179,6 +179,9 @@ the corresponding Atlas mock first.
   permissions and repair/retry without changing unsupported entries.
 - One Pro module: focused target plus its directly affected tests.
 - Shared header or desktop shell: full build and full Pro test suite.
+- Client transport-buffer changes: `ketplus_daemon_client_upgrade_policy_tests`
+  observes unread bytes with dispatch paused before/after hello, then verifies
+  exact-limit pipelined frames and subsequent delivery without reconnect.
 - `core/` change: the Lite suite (`ctest --preset lite-dev`), then the full Pro suite.
 - QML layout or native rendering: offscreen tests plus the relevant native
   screenshot/pixel check documented in `agent-workspace.md`.
