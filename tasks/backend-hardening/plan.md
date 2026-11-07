@@ -272,6 +272,10 @@ The full ACK matrix exposed a handoff fixture's immediate-raw-deletion assumptio
 Its regression now compares the complete retained handoff history before and after
 explicitly draining bounded cleanup; all six handoff cases pass. This is an
 intentional physical-cleanup contract update, not a skipped handoff assertion.
+The retention fixture likewise drains acknowledged raw rows explicitly. Its new
+regression verifies that large detail remains untrimmed while raw cleanup is queued,
+then becomes eligible after drain. Retention 124/124 passes with the original
+reference/fault/budget assertions intact. Final full Pro rerun is still required.
 
 **Next executable task:** finish ACK mutation/full-matrix/review gates, merge and
 clean both completed worktrees, then reproduce and bound the remaining H1.1

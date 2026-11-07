@@ -85,6 +85,13 @@ class Database {
 
 QDateTime cutoff() { return QDateTime::currentDateTimeUtc().addDays(-30); }
 
+bool drainAcknowledged(LocalJournal& journal, Database& database) {
+    for (int pass = 0; pass < 256 && database.scalar("SELECT count(*) FROM events") > 0; ++pass)
+        if (!journal.pruneAcknowledgedEvents())
+            return false;
+    return database.scalar("SELECT count(*) FROM events") == 0;
+}
+
 bool seed(LocalJournal& journal, const QString& path, bool acknowledge = true, int turns = 24,
           const QString& output = {}, bool largeTool = false) {
     StoredSession session;
@@ -136,7 +143,8 @@ bool seed(LocalJournal& journal, const QString& path, bool acknowledge = true, i
     }
     Database database(path);
     return database.exec("UPDATE replay_events SET sent_at='2020-01-01T00:00:00.000Z'") &&
-           (!acknowledge || journal.acknowledgeCursor("client", "session", 1, cursor));
+           (!acknowledge || (journal.acknowledgeCursor("client", "session", 1, cursor) &&
+                             drainAcknowledged(journal, database)));
 }
 
 qint64 sweep(LocalJournal& journal, int maximumRows = 128) {
@@ -179,6 +187,25 @@ QJsonArray withoutUsage(const QJsonArray& events) {
 class JournalUsageRetentionTest final : public QObject {
     Q_OBJECT
   private slots:
+    void largeDetailWaitsForQueuedRawCleanup() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(seed(journal, path, false, 21, QString(300000, 'x'), true));
+        Database database(path);
+        QVERIFY(journal.acknowledgeCursor("client", "session", 1,
+                                          journal.sessions().first().lastCursor));
+        QVERIFY(database.scalar("SELECT count(*) FROM events") > 0);
+        QVERIFY(sweep(journal) >= 0);
+        QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE "
+                                 "json_type(payload,'$.item.compacted')='object'"),
+                 0);
+        QVERIFY(drainAcknowledged(journal, database));
+        QVERIFY(sweep(journal) > 0);
+        QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE "
+                                 "json_type(payload,'$.item.compacted')='object'"),
+                 1);
+    }
     void largePayloadGcUsesIndexedReplayReferencesOnReopen() {
         QTemporaryDir directory;
         const auto path = directory.filePath("journal.sqlite");

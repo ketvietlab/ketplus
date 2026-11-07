@@ -14,7 +14,8 @@
     "ack": 20,
     "protocol": 43,
     "transcript_window": 28,
-    "handoff": 6
+    "handoff": 6,
+    "usage_retention": 124
   },
   "full_matrix": "Pending implementation PR gate",
   "limits": [
@@ -27,5 +28,6 @@
     "row budget 128 changed to 1024",
     "slowest-client min changed to max"
   ],
-  "handoff_change": "Compare handoff history both while raw cleanup is pending and after bounded drain; production unchanged"
+  "handoff_change": "Compare handoff history both while raw cleanup is pending and after bounded drain; production unchanged",
+  "retention_fixture_change": "Acknowledged seed explicitly drains raw queue; new case proves large-detail compaction defers until raw cleanup finishes"
 }
