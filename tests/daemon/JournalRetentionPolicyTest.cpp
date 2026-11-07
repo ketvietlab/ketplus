@@ -163,6 +163,24 @@ class JournalRetentionPolicyTest final : public QObject {
         QVERIFY(!journal.pruneConfiguredReplayDetails(QDateTime::currentDateTimeUtc()));
         QCOMPARE(journal.compactedEventsAfter("s", 1, 0, 500).events, before);
     }
+    void unavailableDiskMetricsDoNotInvalidateCommittedPolicy() {
+        LocalJournal journal(":memory:");
+        CodexAdapter adapter("/nonexistent/synthetic-codex");
+        SessionHost host(&journal, &adapter);
+        const auto saved =
+            host.handleCommand(request("storage.retention.apply",
+                                       {{"expected_revision", 0},
+                                        {"policy", JournalRetentionPolicy{7, true, 0}.toJson()}}),
+                               "local");
+        QVERIFY(saved.value("ok").toBool());
+        QCOMPARE(saved.value("revision").toInteger(), 1);
+        QVERIFY(!saved.contains("disk_usage"));
+        QVERIFY(!saved.value("disk_usage_error").toString().isEmpty());
+        const auto stored = journal.retentionPolicy();
+        QVERIFY(stored);
+        QCOMPARE(stored->fullDetailDays, 7);
+        QCOMPARE(stored->revision, 1);
+    }
     void localApiUsesRevisionAndRejectsRemoteBeforeCache() {
         QTemporaryDir directory;
         LocalJournal journal(directory.filePath("journal.sqlite"));
