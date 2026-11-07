@@ -423,3 +423,9 @@ Adjacent-start retention (ADR 0041) extends the journal guard matrix and adds
 projection content/order, activity group identity, replay/page agreement and stale
 continuation rejection for adjacent versus interleaved tool lifecycles. It uses
 synthetic temporary journals and no provider processes.
+
+`ketplus_daemon_retention_policy_tests` verifies strict policy parsing, defaults,
+revision-fenced persistence/reopen/rollback, actual configured retention, malformed
+policy fail-closed behavior and local-only API/cache boundaries. The agent-token
+IPC test also rejects both retention operations. Changes to the shared journal or
+host headers require the full Pro build and suite. No provider quota is consumed.

@@ -12,7 +12,9 @@ milestone changes state.
   settings remain tracked in #128; these changes do not imply a deployed daemon.
   Adjacent redundant tool starts can also be removed without changing transcript
   order or dropping start-only fields; interleaved and incomplete cases remain
-  protected (ADR 0041).
+  protected (ADR 0041). Local detail-retention preferences now persist with revision
+  checks and explicit IPC capabilities (ADR 0042); size/archive/media policy and
+  the Storage page are not implemented by this foundation.
 
 - Desktop discovers conversations created by a phone or another daemon client while
   it remains connected, without switching the selected conversation or reloading

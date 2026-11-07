@@ -134,6 +134,7 @@ class SessionHost final : public QObject, private AgentHostPort {
     };
 
     [[nodiscard]] QJsonObject listSessions() const;
+    [[nodiscard]] QJsonObject storageRetention(const QString& type, const QJsonObject& payload);
     QJsonObject workspaceCatalog(const QString& type, const QJsonObject& payload);
     [[nodiscard]] QJsonObject eventsAfter(const QJsonObject& request) const;
     [[nodiscard]] QJsonObject transcriptPage(const QJsonObject& request) const;

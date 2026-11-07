@@ -1,6 +1,7 @@
 #pragma once
 
 #include "storage/AgentMessageRecord.h"
+#include "storage/JournalRetentionPolicy.h"
 #include "storage/JournalSpace.h"
 
 #include <QDateTime>
@@ -255,6 +256,10 @@ class LocalJournal final {
     // nullopt on a failed write. A batch is one short write, so it can run between turns.
     static constexpr qint64 minimumReclaimPages = 256;
     std::optional<qint64> reclaimFreePages(qint64 maximumPages);
+    // Missing settings use defaults; invalid stored settings disable automatic detail pruning.
+    [[nodiscard]] std::optional<JournalRetentionPolicy> retentionPolicy() const;
+    bool setRetentionPolicy(const JournalRetentionPolicy& policy, qint64 expectedRevision);
+    std::optional<qint64> pruneConfiguredReplayDetails(const QDateTime& now);
     // Scan at most maximumRows replay rows per idle pass, retaining the last usage sample
     // of each type in old, acknowledged completed turns outside the newest 20 turns.
     // Also trim eligible completed command output to UTF-8 head/tail with an explicit marker.
