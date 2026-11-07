@@ -14,13 +14,30 @@
   },
   "fix": "Native file/directory symbolic links with verified type; repository-local core.symlinks=true",
   "validation_pending": [
-    "macOS Lite/full Pro",
-    "Windows native symlink fixture tests",
+    "final local Lite/full Pro",
+    "hosted Windows directory-link cleanup followup",
     "independent review"
   ],
   "outside_scope": [
     "Windows RefactorWave1ContractTest::themeInstallsTheKetStyle tooltip assertion",
     "real application UI changes",
     "packaging/deployment/installation"
-  ]
+  ],
+  "validation": {
+    "local_lite_first": "16/16 PASS, 14.96s",
+    "hosted_fixed": {
+      "run": "https://github.com/ketvietlab/ketplus/actions/runs/42393872638",
+      "head": "7834290d",
+      "windows_job": 128466993904,
+      "GitParserTest": "11/11 PASS",
+      "NavigationTest": "12/12 PASS",
+      "Windows_Lite": "14/15 targets PASS; only tooltip/theme target fails",
+      "other_completed": [
+        "browser PASS",
+        "Lite macOS PASS",
+        "Lite Ubuntu PASS"
+      ]
+    },
+    "cleanup_followup": "Remove directory symlink before its temporary target disappears; focused macOS regression 3/3 PASS, target preserved"
+  }
 }

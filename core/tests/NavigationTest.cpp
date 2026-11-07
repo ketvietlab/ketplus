@@ -249,6 +249,13 @@ void NavigationTest::listsRepositoryFilesByIgnoreRules() {
     QVERIFY2(!linked.relativePaths.contains(QStringLiteral("src/out/gen.c")),
              qPrintable(linked.relativePaths.join(u',')));
     QVERIFY(linked.relativePaths.contains(QStringLiteral("vendor/lib.c")));
+    // Remove the directory link before its target's QTemporaryDir is destroyed.
+    // Qt's recursive cleanup cannot remove a dangling Windows directory link.
+    std::error_code unlinkError;
+    QVERIFY(std::filesystem::remove(
+        QFile(root.filePath(QStringLiteral("src"))).filesystemFileName(), unlinkError));
+    QVERIFY2(!unlinkError, unlinkError.message().c_str());
+    QVERIFY(QFileInfo(outsideFile.fileName()).isFile());
 }
 
 void NavigationTest::extractsCppSymbols() {
