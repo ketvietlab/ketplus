@@ -41,6 +41,24 @@ ketplusctl call storage.retention.read
 ketplusctl call storage.retention.apply '{"expected_revision":0,"policy":{"full_detail_days":90,"automatic_detail_retention":true}}'
 ```
 
-Use the actual revision returned by read. Settings UI, size pressure, archive/media
-retention, detailed storage measurements and warning presentation remain separate
-#128 work. No release or installed-journal acceptance follows from these APIs.
+Use the actual revision returned by read.
+
+The native Desktop Settings → Storage page exposes these two supported fields and
+advisory page usage. It uses the existing Settings shell and Qt controls (the native
+Két design-system adapter), not a web shell. Choices save immediately, with controls
+disabled until the response; opening or reloading never writes defaults. Failed,
+conflicting or malformed responses disable edits until an explicit reload. A saved
+policy remains saved even if usage metrics are unavailable. Late replies after the
+page closes or after a 20-second timeout are ignored. The page hides the global
+appearance save/reset footer because these local choices save immediately. Detail loss already applied cannot be reversed by Forever.
+
+The Desktop bridge discovers owner IPC capabilities before calling either operation;
+it refuses older/disconnected daemons and never forwards storage methods to a
+provider. Storage requests interrupted by disconnect, including queued requests,
+fail instead of being replayed after reconnect. The user reloads to resolve an
+uncertain save; the daemon may have committed before the connection was lost.
+
+Size pressure, archive/media retention, detailed storage measurements and warning
+presentation remain separate #128 work. The broader Qt mock remains a design
+preview and labels the implemented subset. No release or installed-journal
+acceptance follows from these APIs or this Settings page.

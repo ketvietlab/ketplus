@@ -522,8 +522,12 @@ void MainWindowSettingsTest::settingsAndWorktreesUseWorkspacePages() {
     auto* settingsNavigation =
         settingsPage->findChild<QListWidget*>(QStringLiteral("settingsWorkspaceNavigation"));
     QVERIFY(settingsNavigation != nullptr);
-    QCOMPARE(settingsNavigation->count(), 9);
-    QCOMPARE(settingsNavigation->item(8)->data(Qt::UserRole).toString(), QStringLiteral("updates"));
+    QCOMPARE(settingsNavigation->count(), 10);
+    QCOMPARE(settingsNavigation->item(8)->data(Qt::UserRole).toString(), QStringLiteral("storage"));
+    settingsPage->showSection(QStringLiteral("storage"));
+    QTRY_VERIFY(
+        settingsPage->findChild<QWidget*>(QStringLiteral("settingsWorkspaceStorage"))->isVisible());
+    QCOMPARE(settingsNavigation->item(9)->data(Qt::UserRole).toString(), QStringLiteral("updates"));
     QCOMPARE(settingsNavigation->item(4)->data(Qt::UserRole).toString(), QStringLiteral("browser"));
     QCOMPARE(settingsNavigation->item(4)->text(), QStringLiteral("Browser"));
     QCOMPARE(settingsNavigation->item(5)->data(Qt::UserRole).toString(),

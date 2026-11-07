@@ -37,6 +37,7 @@ obsolete run. See `docs/release-process.md`.
 | Editor features | `ketplus_editor_features_tests` | CM 0.2.0 commands in the Pro shell: recent and closed tabs, Save All, command palette, Spotlight files and back navigation, split view, search and replace in files, file format controls |
 | CM document modes | `ketplus_desktop_document_modes_tests` | Markdown defaults to Preview, floating mode control/menu synchronization, CM terminal search/clear/restart controls |
 | Claude API key | `ketplus_claude_credentials_tests`, `ketplus_claude_credentials_settings_tests`, `ketplus_claude_sidecar_tests`, `ketplus_desktop_daemon_client_tests` | local IPC authentication, memory-backed secret store, fixed endpoint and network failures, SDK credential scope, background rotation, disconnect without credential replay, native form states; no live API or real Keychain |
+| Storage preferences | `ketplus_settings_storage_page_tests`, `ketplus_desktop_daemon_client_tests` | Immediate revisioned saves, read-only loading, conflict/error reload, malformed policy, advisory usage failure, late replies, keyboard/accessibility, narrow/wide native layout; capability negotiation and no reconnect replay; real local-daemon bridge read/apply |
 | Settings composition | `ketplus_settings_integration_tests` | Shared appearance persistence across Pro shell surfaces; Providers page |
 | Atlas process/WebView | `ketplus_atlas_tests` | Atlas process and tab behavior |
 | Atlas shell integration | `ketplus_atlas_workspace_tests` | Desktop and Atlas composition |

@@ -938,6 +938,15 @@ void MainWindow::setSettingsWorkspaceVisible(const bool visible) {
             }
             agents->appServer()->call(QStringLiteral("provider/claudeCredentials/") + operation,
                                       payload, std::move(reply));
+        },
+        [agents](const QString& operation, const QJsonObject& payload,
+                 SettingsStoragePage::Reply reply) {
+            if (!agents || !agents->appServer()) {
+                reply({}, SettingsStoragePage::tr("Agents are not available."));
+                return;
+            }
+            agents->appServer()->call(QStringLiteral("daemon/storageRetention/") + operation,
+                                      payload, std::move(reply));
         });
     workspaceSplit_->addWidget(settingsWorkspace_);
     workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(settingsWorkspace_), 1);

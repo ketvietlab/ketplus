@@ -1,5 +1,5 @@
-#include "agent/CodexAppServer.h"
 #include "BrowserAgentInstructions.h"
+#include "agent/CodexAppServer.h"
 
 #include "agent/DaemonTranscriptProjection.h"
 #include <algorithm>
@@ -113,6 +113,20 @@ void CodexAppServer::daemonCall(const QString& method, const QJsonObject& params
                                 ResponseCallback callback) {
     if (!isAvailable()) {
         callback({}, QStringLiteral("KetPlus Daemon executable was not found."));
+        return;
+    }
+    if (method.startsWith(QStringLiteral("daemon/storageRetention/"))) {
+        const QString operation = method.mid(QStringLiteral("daemon/storageRetention/").size());
+        const QString capability = QStringLiteral("storage.retention.") + operation;
+        if ((operation != QStringLiteral("read") && operation != QStringLiteral("apply")) ||
+            !daemon_->isReady() || !daemon_->hasCapability(capability)) {
+            callback(
+                {},
+                QStringLiteral(
+                    "Connect to an updated local KetPlus daemon, then reload storage settings."));
+            return;
+        }
+        daemon_->call(capability, params, {}, -1, std::move(callback));
         return;
     }
     if (method == QStringLiteral("model/list")) {

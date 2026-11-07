@@ -118,6 +118,8 @@ add_library(ketplus_desktop_shell STATIC
     src/app/SettingsClaudeCredentials.h
     src/app/SettingsComputerPage.cpp
     src/app/SettingsComputerPage.h
+    src/app/SettingsStoragePage.cpp
+    src/app/SettingsStoragePage.h
     src/app/SettingsProvidersPage.cpp
     src/app/SettingsProvidersPage.h
     src/app/SettingsUpdatesPage.cpp

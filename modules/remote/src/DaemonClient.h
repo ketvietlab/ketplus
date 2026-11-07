@@ -27,6 +27,9 @@ class DaemonClient final : public QObject {
     [[nodiscard]] bool hasFeature(const QString& feature) const {
         return features_.contains(feature);
     }
+    [[nodiscard]] bool hasCapability(const QString& capability) const {
+        return ready_ && capabilities_.contains(capability);
+    }
     // Set before connecting; only transcript-aware Desktop opts into summary-only events.
     void setActivityGroupsEnabled(bool enabled) { activityGroupsEnabled_ = enabled; }
     void call(const QString& type, const QJsonObject& payload, const QString& sessionId,
@@ -92,6 +95,7 @@ class DaemonClient final : public QObject {
     QString statePath_;
     QString clientId_;
     QStringList features_;
+    QStringList capabilities_;
     bool activityGroupsEnabled_{false};
     int protocolMinor_{0};
     bool ready_{false};
