@@ -1527,6 +1527,8 @@ QJsonObject SessionHost::deleteSession(const QJsonObject& request) {
     if (!threadId.isEmpty())
         sessionsByThread_.remove(threadId);
     QDir(handoffDirectory(sessionId)).removeRecursively();
+    deferredJournalBytes_ -= session->deferredJournalBytes;
+    deferredJournalCount_ -= session->deferredJournal.size();
     sessions_.remove(sessionId);
     agents_->forget(sessionId);
     mediaStore_.releaseSession(sessionId);
@@ -2417,12 +2419,19 @@ bool SessionHost::journalEvent(Session& session, const QString& type, const QJso
     if (cursor < 0) {
         if (appendError.isEmpty())
             appendError = QStringLiteral("The local journal rejected the event.");
-        qWarning("Unable to journal %s for session %s: %s", qUtf8Printable(type),
-                 qUtf8Printable(session.stored.id), qUtf8Printable(appendError));
+        if (session.lastJournalError != appendError) {
+            qWarning("Unable to journal %s for session %s: %s", qUtf8Printable(type),
+                     qUtf8Printable(session.stored.id), qUtf8Printable(appendError));
+            session.lastJournalError = appendError;
+        }
         if (error != nullptr)
             *error = appendError;
         return false;
     }
+    session.lastJournalError.clear();
+    const QString sessionId = session.stored.id;
+    const qint64 generation = session.stored.generation;
+    const QPointer<SessionHost> alive(this);
     session.stored.lastCursor = cursor;
     if (type == QStringLiteral("user.message")) {
         ++session.stored.currentTurnSequence;
@@ -2436,12 +2445,17 @@ bool SessionHost::journalEvent(Session& session, const QString& type, const QJso
             session.stored.lastTurnStartedAt = event.value(QStringLiteral("sent_at")).toString();
         emit eventReady(event);
     }
+    if (alive.isNull())
+        return true;
+    const auto current = sessions_.constFind(sessionId);
+    if (current == sessions_.cend() || current->stored.generation != generation)
+        return true;
     // Turn-scoped async questions must not survive completion, process failure or a new turn.
     // This emits the existing question.expired event, so live and replayed clients agree.
     if (type == "turn.completed" || type == "runtime.stopped" || type == "user.message")
-        approvals_->expireAssistantQuestions(session.stored.id, session.stored.generation);
-    if (agents_ != nullptr)
-        agents_->noteEvent(session.stored.id, session.stored.generation, type, contextualPayload);
+        approvals_->expireAssistantQuestions(sessionId, generation);
+    if (!alive.isNull() && agents_ != nullptr)
+        agents_->noteEvent(sessionId, generation, type, contextualPayload);
     return true;
 }
 

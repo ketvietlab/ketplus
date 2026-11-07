@@ -5,6 +5,11 @@ milestone changes state.
 
 ## Implemented
 
+- SessionHost preserves failed stream prefixes and orders later provider events
+  behind a bounded retry queue (ADR 0062). Count/byte caps, unsupported oversized
+  payloads, rejected command acceptance and session deletion are covered. The
+  queue is volatile; crash durability and whole-command atomicity remain open.
+
 - Fork preserves unsupported source cursor/turn values rather than coercing them
   into copied metadata (ADR 0061). Integer-only projection and nonnegative checks
   reject the copy before destination writes; repair/retry/reopen are covered.
