@@ -5,6 +5,9 @@ milestone changes state.
 
 ## Implemented
 
+- Atlas process readiness requires a complete banner for the current attempt's
+  selected loopback port, including truncation/restart and stop-time guards
+  (ADR 0081). Executable/listener identity and broader lifecycle remain open.
 - Existing media blobs are validated before dedup returns a reference (ADR 0066):
   exact bounded bytes, regular nonsymlink files and owner-only permissions.
   Invalid entries remain intact for repair; reference durability remains open.
