@@ -183,7 +183,8 @@ qt_add_resources(ketplus "ketplus_brand"
     BASE "${PROJECT_SOURCE_DIR}/assets/brand"
     FILES
         "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-app-icon.png"
-        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark.png"
+        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark-light.svg"
+        "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark-dark.svg"
 )
 
 qt_add_resources(ketplus "ketplus_wordmarks"
