@@ -450,6 +450,7 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
             handleItem(session,
                        {{QStringLiteral("id"), itemId},
                         {QStringLiteral("type"), QStringLiteral("daemonUserMessage")},
+                        {QStringLiteral("timestamp"), params.value("timestamp")},
                         {QStringLiteral("text"), text},
                         {QStringLiteral("images"), params.value("images")},
                         {QStringLiteral("agentMessages"), params.value("agentMessages")}},
@@ -458,6 +459,7 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
         }
         auto& entry = session->messages[match];
         entry.insert("itemId", itemId);
+        entry.insert("timestamp", params.value("timestamp").toString());
         // The daemon's copy outlives the composer's attachment files.
         const auto images = mcp_media::messageImages(params.value("images").toArray());
         if (!images.isEmpty())

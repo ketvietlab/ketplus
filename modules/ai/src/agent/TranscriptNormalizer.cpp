@@ -39,6 +39,8 @@ TranscriptEvent ActivityNormalizer::normalize(const QJsonObject& item,
         presentation.insert(QStringLiteral("category"), QStringLiteral("user"));
         presentation.insert(QStringLiteral("eventType"), QStringLiteral("user.message"));
         presentation.insert(QStringLiteral("title"), QStringLiteral("You"));
+        presentation.insert(QStringLiteral("timestamp"),
+                            item.value(QStringLiteral("timestamp")).toString());
         presentation.insert(QStringLiteral("images"), images);
         agent_message::markAgentOrigin(presentation,
                                        item.value(QStringLiteral("agentMessages")).toArray());

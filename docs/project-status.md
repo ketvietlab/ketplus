@@ -1,3 +1,9 @@
+The unreviewed transcript UI layer consumes kit bubble, Markdown and code recipes,
+syntax colours and gallery geometry. Journal-dated user messages show day dividers;
+legacy undated messages do not. Streaming, original-source copy, local links,
+image viewing and Mermaid remain on the existing document/virtualization path.
+This is implementation evidence, not native acceptance or release completion.
+
 # Project status
 
 The Lite model layer adds recipe-based Explorer/Git rows, Git decorations, inline file/folder creation, stage/unstage and commit-staged actions, and independent embedded terminal tabs. Markdown headings/code use the kit recipe and bundled mono preference; new preview defaults are 15/26 px while saved overrides remain intact. Git action failures stay visible and preserve the commit message. These changes are part of the unreviewed UI stack, not a released acceptance claim.

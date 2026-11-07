@@ -1,5 +1,6 @@
 import "ChromeMetrics.js" as Metrics
 import QtQuick
+import Ket 1.0 as Kit
 import QtQuick.Controls
 import QtQuick.Controls.Basic as Basic
 import QtQuick.Effects
@@ -586,21 +587,13 @@ Item {
             fillMode: Image.PreserveAspectFit
             autoTransform: true
         }
-        Basic.ToolButton {
+        Kit.KetIconButton {
             id: closeImageButton
             anchors.top: parent.top
             anchors.right: parent.right
-            width: Metrics.px(32, root.t)
-            height: Metrics.px(32, root.t)
-            padding: Metrics.px(8, root.t)
-            contentItem: TintedIcon { source: "qrc:/agent/icons/plus.svg"; color: root.t.textMain; rotation: 45 }
+            iconName: Kit.KetTheme.iconForLucide("x")
+            text: "Close image"
             onClicked: imagePreview.close()
-            Accessible.name: "Close image"
-            KetToolTip {
-                tokens: root.t
-                visible: closeImageButton.hovered
-                text: "Close image"
-            }
         }
     }
 

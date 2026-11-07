@@ -16,8 +16,10 @@ Grid {
     readonly property int remainingCount: imageCount - visibleCount
     readonly property int tileCount: visibleCount + (remainingCount > 0 ? 1 : 0)
     signal expanded()
-    readonly property real thumbnailSide: 88
-    readonly property real gap: 6
+    property bool largePreview: false
+    readonly property real thumbnailSide: Metrics.px(largePreview ? 360 : 120, tokens)
+    readonly property real thumbnailHeight: Metrics.px(largePreview ? 225 : 78, tokens)
+    readonly property real gap: Metrics.px(8, tokens)
     readonly property real preferredWidth: tileCount * thumbnailSide + Math.max(0, tileCount - 1) * gap
     readonly property real bubblePreferredWidth: preferredWidth
 
@@ -31,7 +33,8 @@ Grid {
     // Fixed cells reserve space before decoding and while delegates are recreated.
     // Source aspect ratio never changes transcript geometry; the viewer uses the original.
     readonly property real cellSide: Math.min(thumbnailSide, Math.max(0, width))
-    height: tileCount > 0 ? Math.ceil(tileCount / columns) * (cellSide + gap) - gap : 0
+    readonly property real cellHeight: cellSide * thumbnailHeight / thumbnailSide
+    height: tileCount > 0 ? Math.ceil(tileCount / columns) * (cellHeight + gap) - gap : 0
 
     Repeater {
         model: root.sources ? root.sources.slice(0, root.maximumVisible) : []
@@ -52,8 +55,8 @@ Grid {
                      || attachmentImage.status === Image.Ready
                      || root.showUnavailable
             width: root.cellSide
-            height: width
-            radius: 9
+            height: root.cellHeight
+            radius: Metrics.px(8, root.tokens)
             color: root.tokens.interactiveBackground
             border.width: 1
             border.color: imageHover.hovered || activeFocus ? root.tokens.focus : root.tokens.border
@@ -70,8 +73,8 @@ Grid {
                 autoTransform: true
                 asynchronous: true
                 cache: false
-                sourceSize.width: 176
-                sourceSize.height: 176
+                sourceSize.width: Math.ceil(root.cellSide * 2)
+                sourceSize.height: Math.ceil(root.cellHeight * 2)
             }
 
             Text {
@@ -104,7 +107,7 @@ Grid {
         objectName: "expandMessageImages"
         visible: root.remainingCount > 0
         width: root.cellSide
-        height: width
+        height: root.cellHeight
         text: "+" + root.remainingCount
         Accessible.name: "Show " + root.remainingCount + " more images"
         onClicked: {
@@ -120,7 +123,7 @@ Grid {
             verticalAlignment: Text.AlignVCenter
         }
         background: Rectangle {
-            radius: 9
+            radius: Metrics.px(8, root.tokens)
             color: moreButton.hovered ? root.tokens.interactiveHover : root.tokens.interactiveBackground
             border.width: 1
             border.color: moreButton.activeFocus ? root.tokens.focus : root.tokens.border

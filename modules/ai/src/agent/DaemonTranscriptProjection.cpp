@@ -435,6 +435,8 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
             }
         } else
             continue; // Includes command output and non-transcript lifecycle events.
+        if (type == "user.message")
+            entry.insert("timestamp", event.value("sent_at").toString());
         entry.insert("itemId", itemId);
         entry.insert("turnId", daemonTurnId(sequence));
         entry.insert("messageKey", key);

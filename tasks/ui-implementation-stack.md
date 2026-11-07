@@ -38,7 +38,7 @@ Record technical verification separately from the later review/acceptance phase.
 - [ ] Pro: kit/QML foundation #157.
 - [x] Pro: sidebar #158 UI composition (metadata/acceptance limits below).
 - [x] Pro: header/composer #159 existing-runtime UI; #120 reviewer dependency remains separate.
-- [ ] Pro: messages #160.
+- [x] Pro: messages #160 (implementation; native acceptance deferred).
 - [ ] Pro: activity #161, notices #162, questions/details #163.
 - [ ] Pro: overlays #164, worktrees/connections #165, settings #166, Atlas #167.
 
@@ -78,3 +78,8 @@ Pro foundation: PR #214 on #213. Pro sidebar layer migrates native and QML navig
 Sidebar validation: 16/16 Lite targets, Pro workspace/attention/zoom targets, three selected QML checks and four local-daemon storage cases pass. A 214 px offscreen capture verifies tag rows and warning layout. Integration exposed a Settings navigation callback holding a deleted QListWidgetItem; persistent model indices now fence that lifecycle, with a focused regression test. No native acceptance/review/release claimed.
 
 Sidebar: PR #215 on #214. Header/composer layer extracts the existing input and menus, uses kit recipes/buttons/search/ring/meters, aligns the placeholder with the caret and keeps one send/stop position. It retains draft, IME, attachment, steering and revisioned model configuration behavior; header tags filter the real sidebar. Thirteen selected Agent Workspace cases pass across the focused runs, plus the desktop zoom target; an offscreen light capture checked the header and empty composer. Reviewer assignment/orchestration (#120) is not claimed implemented. Full native acceptance/review remains deferred.
+
+Transcript layer on #216: recipe typography/bubbles/code, syntax highlighting,
+fixed gallery/large generated previews, kit close control and journal day dividers.
+Focused checks cover streaming, copy/link behavior, geometry, repeated formatting,
+numeric zoom, journal dates and Markdown/Mermaid. No provider quota or release work.

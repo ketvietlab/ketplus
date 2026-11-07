@@ -1,4 +1,5 @@
 #include "agent/AgentWorkspaceView.h"
+#include "KetRichRecipes.h"
 #include "agent/AgentMessageFormatter.h"
 #include "preview/MermaidDiagramDialog.h"
 #include "preview/MermaidRenderer.h"
@@ -67,16 +68,6 @@ QString inlineCodeBackground(const QString& text) {
     QColor wash(text);
     wash.setAlphaF(0.11);
     return wash.name(QColor::HexArgb);
-}
-
-// Code blocks sit a clear step below the page (darker in both themes) so they read as a
-// separate surface; the raised-surface colour they used was barely distinct from the page.
-QString codeBlockBackground(const bool dark) {
-    return dark ? QStringLiteral("#121519") : QStringLiteral("#EDEBEC");
-}
-
-QString codeBlockBorder(const bool dark) {
-    return dark ? QStringLiteral("#2B3037") : QStringLiteral("#DDDBDC");
 }
 
 QString composerDraftKey(const QString& scope) {
@@ -318,8 +309,12 @@ void AgentWorkspaceView::applyTheme(const ThemePalette& palette,
         // Inline code chips are a translucent wash of the text colour, so they read
         // on the page and on any surface a message sits on, as Codex draws them.
         {QStringLiteral("inlineCodeBackground"), inlineCodeBackground(palette.textMain)},
-        {QStringLiteral("codeBlockBackground"), codeBlockBackground(palette.dark)},
-        {QStringLiteral("codeBlockBorder"), codeBlockBorder(palette.dark)},
+        {QStringLiteral("codeBlockBackground"),
+         ket::codeBlockRecipe(palette.dark ? ket::Theme::Dark : ket::Theme::Light)
+             .background.name(QColor::HexArgb)},
+        {QStringLiteral("codeBlockBorder"),
+         ket::codeBlockRecipe(palette.dark ? ket::Theme::Dark : ket::Theme::Light)
+             .border.name(QColor::HexArgb)},
         {QStringLiteral("positive"), palette.positive},
         {QStringLiteral("warning"), palette.warning},
         {QStringLiteral("danger"), palette.danger},

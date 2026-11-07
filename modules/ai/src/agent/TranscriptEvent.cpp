@@ -96,6 +96,7 @@ QVariantMap TranscriptEvent::toVariantMap() const {
             {QStringLiteral("kind"), kind},
             {QStringLiteral("body"), body},
             {QStringLiteral("meta"), meta},
+            {QStringLiteral("timestamp"), timestamp},
             {QStringLiteral("filePath"), filePath},
             {QStringLiteral("subtype"), subtype},
             {QStringLiteral("command"), command},
@@ -133,6 +134,7 @@ TranscriptEvent TranscriptEvent::fromVariantMap(const QVariantMap& presentation,
     event.kind = presentation.value(QStringLiteral("kind")).toString();
     event.body = presentation.value(QStringLiteral("body")).toString();
     event.meta = presentation.value(QStringLiteral("meta")).toString();
+    event.timestamp = presentation.value(QStringLiteral("timestamp")).toString();
     event.title = presentation.value(QStringLiteral("title")).toString();
     event.summary = presentation.value(QStringLiteral("summary")).toString();
     event.target = presentation.value(QStringLiteral("target")).toString();

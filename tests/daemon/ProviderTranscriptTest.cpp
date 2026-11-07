@@ -31,6 +31,7 @@ class ProviderTranscriptTest : public QObject {
         const auto rows = daemonWindowMessages(
             {{"events", QJsonArray{QJsonObject{{"event_type", "user.message"},
                                                {"cursor", 3},
+                                               {"sent_at", "2026-11-01T12:00:00Z"},
                                                {"turn_sequence", 1},
                                                {"payload", origin}},
                                    QJsonObject{{"event_type", "agent_message.state"},
@@ -40,6 +41,7 @@ class ProviderTranscriptTest : public QObject {
         QCOMPARE(rows.size(), 2);
         const auto message = rows.first().toMap();
         QCOMPARE(message.value("kind").toString(), "user");
+        QCOMPARE(message.value("timestamp").toString(), "2026-11-01T12:00:00Z");
         QCOMPARE(message.value("subtype").toString(), "agentMessage");
         QCOMPARE(message.value("meta").toString(), "Message from #1093 · Parser · Claude");
         QCOMPARE(message.value("body").toString(), "Please review");
