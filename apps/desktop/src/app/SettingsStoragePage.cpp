@@ -171,7 +171,8 @@ void SettingsStoragePage::receive(const QJsonObject& result, const QString& erro
                                  locale.formattedDataSize(kept.toInteger()),
                                  locale.formattedDataSize(free.toInteger())));
     } else {
-        usage_->setText(tr("Journal usage unavailable. Your retention settings are available."));
+        usage_->setText(
+            tr("SQLite page usage unavailable. Your retention settings are available."));
     }
     const auto disk = result.value("disk_usage").toObject();
     const auto fileBytes = disk.value("total_file_bytes");
