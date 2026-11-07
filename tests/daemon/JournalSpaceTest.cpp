@@ -2,12 +2,16 @@
 #include "service/DaemonService.h"
 #include "storage/LocalJournal.h"
 
+#include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QSqlDatabase>
+#include <QSqlError>
 #include <QSqlQuery>
 #include <QStandardPaths>
+#include <QStorageInfo>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QUuid>
@@ -71,6 +75,81 @@ class JournalSpaceTest final : public QObject {
 
   private slots:
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
+
+    void migratesNineGiBAndChecksRetainedBytes() {
+        if (qEnvironmentVariable("KETPLUS_JOURNAL_SCALE_9GIB") != "1")
+            QSKIP("Opt in with benchmarks/run-journal-scale.sh; needs 24 GiB free disk.");
+        constexpr qint64 gib = 1024LL * 1024 * 1024;
+        const QString root = QCoreApplication::applicationDirPath();
+        QVERIFY2(QStorageInfo(root).bytesAvailable() >= 24 * gib,
+                 "The isolated 9 GiB fixture requires at least 24 GiB free before starting.");
+        QTemporaryDir directory(root + "/journal-scale-XXXXXX");
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath("journal.sqlite3");
+        const auto fingerprint = [](Database& database) {
+            QCryptographicHash hash(QCryptographicHash::Sha256);
+            QSqlQuery query(database.database());
+            query.setForwardOnly(true);
+            if (!query.exec("SELECT id,body FROM blobs ORDER BY id"))
+                return QByteArray{};
+            while (query.next()) {
+                hash.addData(QByteArray::number(query.value(0).toLongLong()));
+                hash.addData(QByteArray(1, '\0'));
+                hash.addData(query.value(1).toByteArray());
+            }
+            return query.lastError().isValid() ? QByteArray{} : hash.result();
+        };
+        QByteArray beforeHash;
+        QElapsedTimer timer;
+        timer.start();
+        {
+            Database database(path);
+            QVERIFY(database.exec("PRAGMA journal_mode=DELETE"));
+            QVERIFY(
+                database.exec("PRAGMA synchronous=OFF")); // disposable fixture construction only
+            QVERIFY(database.exec("CREATE TABLE blobs(id INTEGER PRIMARY KEY,body BLOB)"));
+            QVERIFY(database.exec("BEGIN"));
+            for (int batch = 0; batch < 9; ++batch) {
+                QVERIFY2(QStorageInfo(root).bytesAvailable() >= 8 * gib,
+                         "Stopped fixture creation to preserve disk headroom.");
+                QVERIFY(database.exec(
+                    QString("WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE "
+                            "i<1024) INSERT INTO blobs SELECT i+%1,randomblob(1048576) FROM n")
+                        .arg(batch * 1024)));
+                qInfo() << "Seeded" << batch + 1 << "GiB of isolated random payloads";
+            }
+            QVERIFY(database.exec("DELETE FROM blobs WHERE id>3584"));
+            QVERIFY(database.exec("COMMIT"));
+            QCOMPARE(database.value("PRAGMA auto_vacuum").toInt(), 0);
+            beforeHash = fingerprint(database);
+            QVERIFY(!beforeHash.isEmpty());
+            QCOMPARE(database.value("SELECT count(*) FROM blobs").toInt(), 3584);
+        }
+        const qint64 before = QFileInfo(path).size();
+        QVERIFY(before >= 9'000'000'000LL);
+        qInfo() << "Fixture bytes:" << before << "construction/hash ms:" << timer.elapsed();
+        timer.restart();
+        const auto result = journal_space::migrateToIncrementalVacuum(path);
+        const auto migrationMs = timer.elapsed();
+        QVERIFY2(result.outcome == journal_space::Migration::Migrated, qPrintable(result.error));
+        QCOMPARE(result.after.autoVacuum, 2);
+        QCOMPARE(result.after.freePages, 0);
+        const qint64 after = QFileInfo(path).size();
+        QVERIFY(after < 4'000'000'000LL);
+        {
+            Database database(path);
+            QCOMPARE(database.value("SELECT count(*) FROM blobs").toInt(), 3584);
+            QCOMPARE(fingerprint(database), beforeHash);
+            QCOMPARE(database.value("PRAGMA integrity_check").toString(), QString("ok"));
+        }
+        QVERIFY(!QFileInfo::exists(path + ".compact"));
+        QCOMPARE(journal_space::migrateToIncrementalVacuum(path).outcome,
+                 journal_space::Migration::NotNeeded);
+        qInfo() << "Migrated bytes:" << before << "->" << after << "migration ms:" << migrationMs
+                << "retained SHA-256:" << beforeHash.toHex();
+        QVERIFY(directory.remove());
+        QVERIFY(!QFileInfo::exists(path));
+    }
 
     void migratesAJournalWithFreePagesAndKeepsEveryRow() {
         QTemporaryDir directory;

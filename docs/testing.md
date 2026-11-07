@@ -449,3 +449,20 @@ excerpts, shared text budget, error/resource/depth preservation, idempotence, bo
 known-marker upgrades, the existing turn-guard matrix and rendered trim notices.
 Use `structuredRetentionUsesTurnGuards` in the Release journal test for timing.
 No installed journal or live provider is used.
+
+### Opt-in multi-GB vacuum acceptance (#128)
+
+After a Release build of `ketplus_daemon_journal_space_tests`, run
+`benchmarks/run-journal-scale.sh <build-directory>`. This explicitly allocates an
+isolated 9 GiB random-payload SQLite fixture under the build directory, deletes
+5.5 GiB of payloads without vacuuming, then exercises the production migration.
+It requires at least 24 GiB free at start and preserves 8 GiB while seeding.
+The temporary directory is removed on exit and explicitly checked after success.
+
+The gate requires a source file above 9 GB and a migrated file below 4 GB, identical
+SHA-256 over every retained row ID and payload byte, all 3,584 rows, an `ok`
+integrity check, incremental-vacuum mode, no free pages or leftover copy, and an
+idempotent second migration. Logs record bytes and elapsed migration time. The
+normal suite skips this disk-intensive case. It never opens an installed journal.
+This verifies large-file free-page migration, not retention policy/size-pressure
+acceptance or the result on a real user's 9 GB journal.
