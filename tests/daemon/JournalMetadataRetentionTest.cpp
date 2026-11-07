@@ -10,6 +10,7 @@ using namespace ketplus::daemon;
 namespace ketplus::daemon::detail {
 QString metadataRetentionScanQuery(const QString& table);
 QString metadataRetentionCutoffQuery(const QString& table);
+QString deletionWorkQuery(bool pendingCloudOnly, bool wrap);
 } // namespace ketplus::daemon::detail
 namespace {
 class Fixture {
@@ -54,6 +55,26 @@ class Fixture {
                         .arg(count)
                         .arg(bytes));
     }
+    bool deletionJobs(int count, int bytes = 1000) {
+        return exec(
+            QString(
+                "WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<%1) "
+                "INSERT INTO session_deletion_work SELECT 'done-'||x,1,"
+                "json_object('operationId','done-'||x,'pad',printf('%*s',%2,'x')),'[]',1 FROM n")
+                .arg(count)
+                .arg(bytes));
+    }
+    bool pendingDeletion(bool provider) {
+        return exec(
+            QString("INSERT INTO session_deletion_work "
+                    "VALUES('target',1,'{\"operationId\":\"op\"}',%1,%2)")
+                .arg(provider ? "'[{\"provider\":\"codex\",\"thread_id\":\"thread\"}]'" : "'[]'")
+                .arg(provider ? 1 : 0));
+    }
+    bool completeDeletion(bool provider) {
+        return provider ? journal.completeProviderCleanup("target", 1, "codex", "thread")
+                        : journal.acknowledgeCloudDeletion("target", 1, "op");
+    }
     bool seed(bool audit, int count) {
         const auto prefix =
             QString("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<%1) ")
@@ -79,6 +100,144 @@ class JournalMetadataRetentionTest : public QObject {
         QTest::addColumn<bool>("audit");
         QTest::newRow("command") << false;
         QTest::newRow("audit") << true;
+    }
+    void completionDoesNotSweepUnrelatedDeletionJobs_data() {
+        QTest::addColumn<bool>("provider");
+        QTest::newRow("cloud-ack") << false;
+        QTest::newRow("provider-done") << true;
+    }
+    void completionDoesNotSweepUnrelatedDeletionJobs() {
+        QFETCH(bool, provider);
+        Fixture f;
+        QVERIFY(f.deletionJobs(100000));
+        QVERIFY(f.pendingDeletion(provider));
+        QVERIFY(f.exec("INSERT INTO session_deletion_work "
+                       "VALUES('waiting',1,'{\"operationId\":\"wait\"}','[]',0)"));
+        QElapsedTimer timer;
+        timer.start();
+        QVERIFY(f.completeDeletion(provider));
+        qInfo() << "Deletion completion provider=" << provider << "ms=" << timer.elapsed();
+        QCOMPARE(f.scalar("SELECT count(*) FROM session_deletion_work"), 100002);
+        QCOMPARE(f.scalar("SELECT count(*) FROM session_deletion_work WHERE session_id='target' "
+                          "AND cloud_acked=1 AND provider_targets='[]'"),
+                 1);
+        const auto pending = f.journal.deletionWork();
+        QCOMPARE(pending.size(), 1);
+        QCOMPARE(
+            pending.first().toObject().value("deletion").toObject().value("operationId").toString(),
+            QString("wait"));
+        QVERIFY(f.journal.pruneRetention());
+        QCOMPARE(f.scalar("SELECT count(*) FROM session_deletion_work"), 100002 - 256);
+        QCOMPARE(
+            f.scalar("SELECT cloud_acked FROM session_deletion_work WHERE session_id='waiting'"),
+            0);
+    }
+    void completedDeletionCleanupHonorsByteBudget() {
+        Fixture f;
+        QVERIFY(f.deletionJobs(3, 400000));
+        QVERIFY(f.journal.pruneRetention());
+        QCOMPARE(f.scalar("SELECT count(*) FROM session_deletion_work"), 1);
+        QVERIFY(f.journal.pruneRetention());
+        QCOMPARE(f.scalar("SELECT count(*) FROM session_deletion_work"), 0);
+    }
+    void ignoredCompletionCannotReportSuccess_data() {
+        completionDoesNotSweepUnrelatedDeletionJobs_data();
+    }
+    void ignoredCompletionCannotReportSuccess() {
+        QFETCH(bool, provider);
+        Fixture f;
+        QVERIFY(f.pendingDeletion(provider));
+        QVERIFY(f.exec("CREATE TRIGGER ignore_completion BEFORE UPDATE ON session_deletion_work "
+                       "BEGIN SELECT RAISE(IGNORE); END"));
+        QVERIFY(!f.completeDeletion(provider));
+        QCOMPARE(f.journal.deletionWork().size(), 1);
+        QVERIFY(f.exec("DROP TRIGGER ignore_completion"));
+        QVERIFY(f.completeDeletion(provider));
+        QVERIFY(f.journal.deletionWork().isEmpty());
+    }
+    void malformedProviderTargetsCannotBeCompleted_data() {
+        QTest::addColumn<QString>("targets");
+        QTest::newRow("invalid-json") << QString("broken");
+        QTest::newRow("object") << QString("{}");
+        QTest::newRow("null") << QString("null");
+    }
+    void malformedProviderTargetsCannotBeCompleted() {
+        QFETCH(QString, targets);
+        Fixture f;
+        QVERIFY(f.pendingDeletion(true));
+        QVERIFY(f.exec("UPDATE session_deletion_work SET provider_targets='" + targets + "'"));
+        QVERIFY(!f.completeDeletion(true));
+        QCOMPARE(f.scalar("SELECT count(*) FROM session_deletion_work"), 1);
+        QVERIFY(f.journal.pruneRetention());
+        QCOMPARE(f.scalar("SELECT count(*) FROM session_deletion_work"), 1);
+    }
+    void deletionCleanupPreservesEitherPendingGate() {
+        Fixture f;
+        QVERIFY(f.deletionJobs(3));
+        QVERIFY(f.pendingDeletion(true));
+        QVERIFY(f.exec("INSERT INTO session_deletion_work "
+                       "VALUES('cloud-wait',1,'{\"operationId\":\"wait\"}','[]',0)"));
+        QVERIFY(f.journal.pruneRetention());
+        QCOMPARE(f.scalar("SELECT count(*) FROM session_deletion_work"), 2);
+        QCOMPARE(f.journal.deletionWork().size(), 2);
+        QCOMPARE(f.journal.deletionWork(64, true).size(), 1);
+    }
+    void emptyCompletionIdentityCannotFinalizeWork() {
+        Fixture f;
+        QVERIFY(f.pendingDeletion(true));
+        QVERIFY(!f.journal.completeProviderCleanup("target", 1, "", ""));
+        QVERIFY(f.exec(
+            "UPDATE session_deletion_work SET deletion='{\"operationId\":\"\"}',cloud_acked=0"));
+        QVERIFY(!f.journal.acknowledgeCloudDeletion("target", 1, ""));
+        QCOMPARE(f.scalar("SELECT cloud_acked FROM session_deletion_work"), 0);
+        QCOMPARE(f.journal.deletionWork().size(), 1);
+    }
+    void indexedDeletionPagesWrapWithoutDuplicates() {
+        Fixture f;
+        QVERIFY(f.deletionJobs(100000));
+        QVERIFY(f.exec(
+            "WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<6) "
+            "INSERT INTO session_deletion_work SELECT "
+            "'pending-'||x,1,json_object('operationId','op-'||x),"
+            "CASE WHEN x%2=0 THEN '[]' ELSE '[{\"provider\":\"codex\",\"thread_id\":\"t\"}]' END,"
+            "CASE WHEN x%2=0 THEN 0 ELSE 1 END FROM n"));
+        const auto ids = [](const QJsonArray& rows) {
+            QList<qint64> result;
+            for (const auto& value : rows)
+                result.append(value.toObject().value("work_id").toInteger());
+            return result;
+        };
+        QCOMPARE(ids(f.journal.deletionWork(4, false, 100004)),
+                 (QList<qint64>{100005, 100006, 100001, 100002}));
+        QCOMPARE(ids(f.journal.deletionWork(3, true, 100004)),
+                 (QList<qint64>{100006, 100002, 100004}));
+        QCOMPARE(ids(f.journal.deletionWork(256, false, 100003)),
+                 (QList<qint64>{100004, 100005, 100006, 100001, 100002, 100003}));
+        QElapsedTimer timer;
+        timer.start();
+        for (int i = 0; i < 25; ++i)
+            QCOMPARE(f.journal.deletionWork(64, false, 100003).size(), 6);
+        qInfo() << "25 deletion pages over 100000 completed jobs:" << timer.elapsed() << "ms";
+    }
+    void actualDeletionPagePlansUseStateAndRowidSeeks() {
+        Fixture f;
+        for (bool cloud : {false, true}) {
+            for (bool wrap : {false, true}) {
+                QSqlQuery q(f.db);
+                QVERIFY(q.prepare("EXPLAIN QUERY PLAN " + detail::deletionWorkQuery(cloud, wrap)));
+                q.addBindValue(100000);
+                q.addBindValue(64);
+                QVERIFY(q.exec());
+                QString plan;
+                while (q.next())
+                    plan += q.value(3).toString() + '\n';
+                const QString prefix =
+                    cloud ? "session_deletion_cloud_pending (cloud_acked=? AND rowid"
+                          : "session_deletion_pending (<expr>=? AND rowid";
+                QVERIFY2(plan.contains(prefix + (wrap ? "<?)" : ">?)")), qPrintable(plan));
+                QVERIFY2(!plan.contains("TEMP B-TREE"), qPrintable(plan));
+            }
+        }
     }
     void clockRollbackKeepsTheNewWrite() {
         QFETCH(bool, audit);
@@ -308,7 +467,7 @@ class JournalMetadataRetentionTest : public QObject {
         Fixture f;
         for (const auto& name : {QString("command_results"), QString("remote_command_audit"),
                                  QString("session_tombstones"), QString("client_cursors"),
-                                 QString("background_tasks")}) {
+                                 QString("background_tasks"), QString("session_deletion_work")}) {
             QSqlQuery q(f.db);
             QVERIFY(q.prepare("EXPLAIN QUERY PLAN " + detail::metadataRetentionScanQuery(name)));
             q.addBindValue(0);

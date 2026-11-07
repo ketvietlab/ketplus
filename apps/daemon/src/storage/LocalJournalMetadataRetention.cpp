@@ -53,6 +53,11 @@ Table specification(const QString& name) {
                 bytesFor({"session_id", "operation_id", "deleted_at"},
                          {"generation", "lifecycle_revision"}),
                 expired("deleted_at", LocalJournal::tombstoneRetentionDays)};
+    if (name == "session_deletion_work")
+        return {
+            name,
+            bytesFor({"session_id", "deletion", "provider_targets"}, {"generation", "cloud_acked"}),
+            "t.cloud_acked=1 AND octet_length(t.provider_targets)=2 AND t.provider_targets='[]'"};
     const QString orphan =
         "CASE WHEN octet_length(t.session_id)<=256 THEN NOT EXISTS (SELECT 1 FROM sessions s WHERE "
         "s.id=t.session_id AND s.generation=t.generation) ELSE 0 END";
@@ -243,9 +248,9 @@ QString metadataRetentionCutoffQuery(const QString& table) {
 bool LocalJournal::pruneRetention() {
     if (!pruneLargePayloadGarbage())
         return false;
-    for (const auto& name :
-         {QString("command_results"), QString("remote_command_audit"),
-          QString("session_tombstones"), QString("client_cursors"), QString("background_tasks")}) {
+    for (const auto& name : {QString("command_results"), QString("remote_command_audit"),
+                             QString("session_tombstones"), QString("client_cursors"),
+                             QString("background_tasks"), QString("session_deletion_work")}) {
         QString error;
         if (collect(database_, specification(name), &error) == Outcome::Failed) {
             setError(error);

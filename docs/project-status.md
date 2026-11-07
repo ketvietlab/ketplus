@@ -5,6 +5,12 @@ milestone changes state.
 
 ## Implemented
 
+- Provider/cloud deletion completion updates only the identified durable work row;
+  completed jobs are reclaimed by bounded metadata maintenance (ADR 0052).
+  Indexed pending pages preserve round-robin order without scanning completed
+  backlog. Ignored updates and malformed provider-target JSON cannot report
+  completion. Per-record JSON limits and explicit deletion remain separate audits.
+
 - Staged attachment expiry now uses bounded transactional manifest/chunk passes
   and durable cursors (ADR 0051). An expiring identity stays reserved until every
   old chunk is gone, preventing reuse from adopting stale bytes. Invalid begin

@@ -623,6 +623,14 @@ work. Missing receipts and transport failures retry after restart; absence from 
 session catalog alone never proves deletion. Relay consumers must deploy the
 additive control-v2 contract before relying on Mac-to-phone deletion propagation.
 
+Completion changes only the identified durable work row. Fully completed jobs are
+logically excluded immediately and reclaimed by a separate metadata lane (up to
+256 rows/1 MiB per pass). Pending reads use indexed state/rowid suffix and prefix
+ranges sharing one page limit, so retained completed jobs do not force a backlog
+scan or round-robin sort. Invalid provider-target JSON remains pending; ignored
+completion updates fail. See [ADR 0052](decisions/0052-bounded-completed-deletion-work.md)
+for the contract and the remaining per-record/startup limits.
+
 The same transaction captures current and historical provider thread IDs, including
 handoffs. A bounded background queue calls Codex `thread/delete` or Claude SDK
 `deleteSession`, including Claude transcript copies in previous project directories
