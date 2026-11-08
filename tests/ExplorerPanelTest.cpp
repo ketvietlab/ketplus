@@ -247,6 +247,21 @@ void ExplorerPanelTest::switchesActivityModes() {
     bar.setSidebarWidth(10);
     QCOMPARE(bar.width(), ketplus::ActivityBar::kMinWidth);
     QCOMPARE(widthChanged.count(), 2);
+
+    // Interface zoom scales the shown width and keeps the unscaled choice.
+    ketplus::ThemeManager theme(*qApp);
+    bar.setSidebarWidth(ketplus::ActivityBar::kWidth);
+    widthChanged.clear();
+    const int large = 18;
+    bar.applyPalette(theme.palette(), large);
+    const int scaled = ketplus::InterfaceZoomMetrics::geometry(ketplus::ActivityBar::kWidth, large);
+    QVERIFY(scaled > ketplus::ActivityBar::kWidth);
+    QCOMPARE(bar.width(), scaled);
+    QCOMPARE(bar.sidebarWidth(), ketplus::ActivityBar::kWidth);
+    QCOMPARE(widthChanged.count(), 1);
+    QCOMPARE(widthChanged.last().first().toInt(), scaled);
+    bar.applyPalette(theme.palette(), ketplus::InterfaceZoomMetrics::mediumPixels);
+    QCOMPARE(bar.width(), ketplus::ActivityBar::kWidth);
 }
 
 void ExplorerPanelTest::collapsesAndPreviewsRepositoryConversations() {

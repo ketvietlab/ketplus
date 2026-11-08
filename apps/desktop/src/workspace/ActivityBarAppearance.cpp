@@ -82,6 +82,8 @@ void ActivityBar::applyPalette(const ThemePalette& palette, const int interfaceF
         palette.textMuted, palette.textSecondary, palette.surfaceHover, palette.accentSubtle,
         navSelectedText, palette.textDisabled, controlBorder, sidebarAccent, palette.borderStrong));
     chrome_geometry::apply(this, interfaceFontSizePixels);
+    // Interface zoom rescales the bound width without a drag.
+    syncShownWidth();
     repositoryList_->applyZoom(interfaceFontSizePixels);
     iconMainColor_ = palette.textMain;
     iconMutedColor_ = palette.textMuted;
