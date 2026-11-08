@@ -6,7 +6,7 @@ Grid {
     id: root
 
     required property var sources
-    required property var tokens
+
     property var host: null
     property int maximumVisible: 3
     property bool showUnavailable: true
@@ -57,9 +57,9 @@ Grid {
             width: root.cellSide
             height: root.cellHeight
             radius: KetTheme.px(8, KetTheme.zoom)
-            color: root.tokens.interactiveBackground
+            color: KetTheme.t.interactiveBg
             border.width: 1
-            border.color: imageHover.hovered || activeFocus ? root.tokens.focus : root.tokens.border
+            border.color: imageHover.hovered || activeFocus ? KetTheme.t.colorFocus : KetTheme.t.panelBorder
             clip: true
 
             Image {
@@ -83,9 +83,9 @@ Grid {
                 visible: root.showUnavailable && attachmentImage.status === Image.Error
                 objectName: "messageAttachmentUnavailable"
                 text: root.unavailableText
-                color: root.tokens.textMuted
-                font.family: root.tokens.uiFont
-                font.pixelSize: root.tokens.body
+                color: KetTheme.t.textMuted
+                font.family: KetTheme.fontFamily
+                font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                 wrapMode: Text.Wrap
                 horizontalAlignment: Text.AlignHCenter
             }
@@ -116,17 +116,17 @@ Grid {
         }
         contentItem: Text {
             text: moreButton.text
-            color: root.tokens.textSecondary
-            font.family: root.tokens.uiFont
-            font.pixelSize: root.tokens.body
+            color: KetTheme.t.textSecondary
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
         }
         background: Rectangle {
             radius: KetTheme.px(8, KetTheme.zoom)
-            color: moreButton.hovered ? root.tokens.interactiveHover : root.tokens.interactiveBackground
+            color: moreButton.hovered ? KetTheme.t.interactiveHover : KetTheme.t.interactiveBg
             border.width: 1
-            border.color: moreButton.activeFocus ? root.tokens.focus : root.tokens.border
+            border.color: moreButton.activeFocus ? KetTheme.t.colorFocus : KetTheme.t.panelBorder
         }
     }
 

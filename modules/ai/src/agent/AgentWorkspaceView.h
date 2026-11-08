@@ -48,7 +48,7 @@ class AgentWorkspaceView final : public QWidget {
     Q_PROPERTY(QString repositoryName READ repositoryName WRITE setRepositoryName NOTIFY
                    repositoryNameChanged)
     Q_PROPERTY(QUrl messageBaseUrl READ messageBaseUrl NOTIFY activePathChanged)
-    Q_PROPERTY(QVariantMap tokens READ tokens NOTIFY tokensChanged)
+    Q_PROPERTY(QString monoFontFamily READ monoFontFamily NOTIFY monoFontFamilyChanged)
     Q_PROPERTY(QString sessionTitle READ sessionTitle NOTIFY sessionChanged)
     Q_PROPERTY(QString sessionStatus READ sessionStatus NOTIFY sessionChanged)
     Q_PROPERTY(bool sessionRunning READ sessionRunning NOTIFY sessionChanged)
@@ -307,6 +307,8 @@ class AgentWorkspaceView final : public QWidget {
         repositoryName_ = name;
         emit repositoryNameChanged();
     }
+    // Refresh renderer colours and editor mono preferences. Interface zoom is owned
+    // by ket::Appearance; the legacy size argument is retained for shell callers.
     void applyTheme(const ThemePalette& palette, int interfaceFontSizePixels = 14);
     void focusPrompt();
     void openModelPicker();
@@ -328,7 +330,7 @@ class AgentWorkspaceView final : public QWidget {
     [[nodiscard]] QVariantList worktrees() const;
     [[nodiscard]] QVariantList conversations() const;
     [[nodiscard]] QString activePath() const;
-    [[nodiscard]] QVariantMap tokens() const;
+    [[nodiscard]] QString monoFontFamily() const;
     [[nodiscard]] QString sessionTitle() const;
     [[nodiscard]] QString sessionStatus() const;
     [[nodiscard]] bool sessionRunning() const noexcept;
@@ -507,7 +509,8 @@ class AgentWorkspaceView final : public QWidget {
     void activePathChanged();
     void repositoryNameChanged();
     void repositoryPickerRequested();
-    void tokensChanged();
+    void monoFontFamilyChanged();
+    void documentStyleChanged();
     void sessionChanged();
     void agentAvailableChanged();
     void restoringChanged();
@@ -649,8 +652,8 @@ class AgentWorkspaceView final : public QWidget {
     QSet<QString> conversationPaths_;
     QVariantList worktrees_;
     QVariantList conversations_;
-    QVariantMap tokens_;
-    // The constructor's default tokens are not a theme: the first apply always runs.
+    QString monoFontFamily_;
+    // Bootstrap the HTML/Mermaid renderer even when the first palette is unchanged.
     bool themeApplied_{false};
     QString activePath_;
     QString repositoryName_;

@@ -1,6 +1,6 @@
 import Ket
 import QtQuick
-import Ket 1.0 as Kit
+import Ket as Kit
 import QtQuick.Layouts
 
 Kit.KetBanner {

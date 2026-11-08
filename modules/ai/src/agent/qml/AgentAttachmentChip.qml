@@ -18,7 +18,7 @@ Rectangle {
     radius: recipe.radius
     color: recipe.background
     border.width: modelData.image && attachmentChipHover.hovered ? 1 : 0
-    border.color: root.t.focus
+    border.color: KetTheme.t.colorFocus
     Accessible.role: modelData.image ? Accessible.Button : Accessible.StaticText
     Accessible.name: modelData.image ? "Preview " + (modelData.name || "image") : (modelData.name || "Attachment")
     Accessible.onPressAction: attachmentChip.previewAttachment()

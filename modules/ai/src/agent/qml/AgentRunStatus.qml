@@ -25,17 +25,17 @@ Item {
             objectName: "workingAnimationIcon"
             Layout.preferredWidth: KetTheme.px(16, KetTheme.zoom)
             Layout.preferredHeight: KetTheme.px(16, KetTheme.zoom)
-            color: workspace.t.accentHover
+            color: KetTheme.t.accentHover
             running: status.animationAllowed
         }
         Text {
             objectName: "workingStatusLabel"
             Layout.fillWidth: true
             text: agentHost.sessionStatus || "Agent is working…"
-            color: workspace.t.textSecondary
+            color: KetTheme.t.textSecondary
             elide: Text.ElideRight
-            font.family: workspace.t.uiFont
-            font.pixelSize: KetTheme.activityRowRecipe(workspace.t.dark, workspace.t.zoomFactor, false, true, false).fontPixels
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.activityRowRecipe(KetTheme.dark, KetTheme.zoom, false, true, false).fontPixels
         }
     }
 }

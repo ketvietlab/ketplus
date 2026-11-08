@@ -18,9 +18,9 @@ Basic.Popup {
     height: Math.min(root.height - KetTheme.px(32, KetTheme.zoom), skillsContent.implicitHeight + KetTheme.px(16, KetTheme.zoom))
     padding: KetTheme.px(8, KetTheme.zoom)
     background: Rectangle {
-        color: root.t.surfaceRaised
+        color: KetTheme.t.surfaceRaised
         radius: KetTheme.px(12, KetTheme.zoom)
-        border.color: root.t.borderStrong
+        border.color: KetTheme.t.borderStrong
     }
     ColumnLayout {
         id: skillsContent
@@ -31,25 +31,25 @@ Basic.Popup {
             Text {
                 Layout.fillWidth: true
                 text: "Skills"
-                color: root.t.textMain
-                font.family: root.t.uiFont
-                font.pixelSize: root.t.reading
+                color: KetTheme.t.textMain
+                font.family: KetTheme.fontFamily
+                font.pixelSize: KetTheme.markdownRecipe(KetTheme.dark, KetTheme.zoom).bodyPixels
                 font.weight: Font.DemiBold
             }
             Text {
                 text: root.enabledSkillCount() + " enabled"
-                color: root.t.textMuted
-                font.family: root.t.uiFont
-                font.pixelSize: root.t.caption
+                color: KetTheme.t.textMuted
+                font.family: KetTheme.fontFamily
+                font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
             }
         }
         Text {
             Layout.fillWidth: true
             visible: agentHost.skills.length === 0
             text: "No SKILL.md files found in this project or user skills."
-            color: root.t.textSecondary
-            font.family: root.t.uiFont
-            font.pixelSize: root.t.body
+            color: KetTheme.t.textSecondary
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
             wrapMode: Text.Wrap
         }
         ListView {
@@ -69,14 +69,14 @@ Basic.Popup {
                         Layout.preferredWidth: KetTheme.px(18, KetTheme.zoom)
                         Layout.preferredHeight: KetTheme.px(18, KetTheme.zoom)
                         radius: KetTheme.px(5, KetTheme.zoom)
-                        color: modelData.enabled ? root.t.accent : "transparent"
+                        color: modelData.enabled ? KetTheme.t.accent : "transparent"
                         border.width: 1
-                        border.color: modelData.enabled ? root.t.accentHover : root.t.borderStrong
+                        border.color: modelData.enabled ? KetTheme.t.accentHover : KetTheme.t.borderStrong
                         Text {
                             anchors.centerIn: parent
                             text: modelData.enabled ? "✓" : ""
-                            color: Kit.KetTheme.t.actionPrimaryInk
-                            font.pixelSize: root.t.body
+                            color: KetTheme.t.actionPrimaryInk
+                            font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                         }
                     }
                     Column {
@@ -85,33 +85,33 @@ Basic.Popup {
                         Text {
                             width: parent.width
                             text: modelData.name + " · " + modelData.source
-                            color: root.t.textMain
-                            font.family: root.t.uiFont
-                            font.pixelSize: root.t.reading
+                            color: KetTheme.t.textMain
+                            font.family: KetTheme.fontFamily
+                            font.pixelSize: KetTheme.markdownRecipe(KetTheme.dark, KetTheme.zoom).bodyPixels
                             font.weight: modelData.enabled ? Font.DemiBold : Font.Medium
                             elide: Text.ElideRight
                         }
                         Text {
                             width: parent.width
                             text: modelData.description || modelData.displayPath
-                            color: root.t.textMuted
-                            font.family: root.t.uiFont
-                            font.pixelSize: root.t.caption
+                            color: KetTheme.t.textMuted
+                            font.family: KetTheme.fontFamily
+                            font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                             elide: Text.ElideRight
                         }
                         Text {
                             width: parent.width
                             text: modelData.displayPath
-                            color: root.t.textDisabled
-                            font.family: root.t.uiFont
-                            font.pixelSize: root.t.micro
+                            color: KetTheme.t.textDisabled
+                            font.family: KetTheme.fontFamily
+                            font.pixelSize: KetTheme.dayDividerRecipe(KetTheme.dark, KetTheme.zoom).fontPixels
                             elide: Text.ElideMiddle
                         }
                     }
                 }
                 background: Rectangle {
                     radius: KetTheme.px(8, KetTheme.zoom)
-                    color: modelData.enabled ? root.t.interactiveActive : parent.hovered ? root.t.surfaceHover : "transparent"
+                    color: modelData.enabled ? KetTheme.t.interactiveActive : parent.hovered ? KetTheme.t.surfaceHover : "transparent"
                 }
                 onClicked: agentHost.toggleSkill(modelData.path, !modelData.enabled)
                 KetToolTip {

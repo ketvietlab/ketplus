@@ -75,7 +75,7 @@ Qt application shell
   Search decodes files as the editor does. Replace All is off when results reached
   the match limit.
 - `modules/ai/src` owns the GPU-rendered Agent Workspace shell. QML consumes semantic
-  KetJS-derived tokens from `ThemeManager`; it does not own file persistence,
+  `KetTheme.t` tokens and kit recipes under the shared `ket::Appearance`; it does not own file persistence,
   terminal processes, or editor state. `AgentSessionManager` owns the transcript
   and per-worktree lifecycle. Its `CodexAppServer` compatibility facade maps the
   existing UI lifecycle to the authenticated `DaemonClient`; only the daemon
@@ -97,25 +97,18 @@ Qt application shell
   public appearance persistence. The Pro desktop recomposes its live theme
   and typography controls inside the non-modal, full-page Két settings
   workspace, while the hidden public host continues to own preview, validation,
-  reset, and save behavior. Private chrome type embeds KÉT Sans 1.1 (the hinted
-  static TTF Light/Regular/Medium/Bold faces), then falls back to the bundled Inter face and the platform UI font; the Pro shell rewrites the live QWidget
-  family after ThemeManager applies, and Agent Workspace reads the same
-  `InterfaceUiFont` resolver for `uiFont`. The product sidebar (`ActivityBar`)
-  and Agent Workspace transcript text add a +2px bias on TypeScale sizes at
-  every Interface zoom step (glyph steps stay unbiased). Transcript mono type uses the
-  Settings editor font family (refreshed on appearance updates; KÉT Sans Mono when empty). Agent
-  Workspace QML sizes come from `TypeScale` named steps (7 text + 2 glyph)
-  merged into the theme map and scale with `appearance/interfaceFontSizePixels`
-  (Medium = 14). Private QWidget chrome QSS sizes also flow through
-  `TypeScale` token expansion (`{{micro}}` … `{{display}}`, `{{glyphSmall}}`,
-  `{{glyphLarge}}`); temporary `px*` aliases were collapsed onto those steps.
-  The CM Theme sheet is scaled via `TypeScale::scaleLiteralFontSizes` until a
-  public token migration, preserving the already-resolved base QWidget size.
-  Product geometry uses explicit Medium-based `chrome_geometry` bindings and QML
-  `ChromeMetrics.px` under the same zoom factor. Saved snapshots publish to all
-  live MainWindow instances before theme signals and propagate to the additional editor,
-  diff, preview, and Agent Workspace terminal surfaces without duplicating
-  persistence code.
+  reset, and save behavior. Both editions embed KÉT Sans and fall back to the
+  platform UI face. Agent Workspace uses `KetTheme.fontFamily`, `KetTheme.t` and
+  component recipe typography directly; it does not receive a host palette/type
+  map. The host exposes only the configured editor mono family for transcript
+  code and conversation numbers, and retains the HTML/Mermaid renderer palette.
+  Shared Appearance theme/zoom changes reformat mounted documents and update QML
+  without a per-view theme call. `TypeScale` remains a QWidget compatibility
+  adapter to kit profile roles. Product geometry uses the same shared interface
+  zoom through `chrome_geometry` in Widgets and `KetTheme.px` in QML. Saved
+  snapshots publish to all live MainWindow instances before theme signals and
+  propagate to editor, diff, preview and Agent Workspace terminal surfaces
+  without duplicating persistence code.
   The private Archived page owns conversation/worktree visibility restoration;
   it stays open after restoring and can stop a still-running archived turn.
 - The desktop shell owns the full Worktrees workspace. It combines linked Git

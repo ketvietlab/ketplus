@@ -1,5 +1,6 @@
 #include "agent/AgentWorkspaceView.h"
-#include "KetRichRecipes.h"
+#include "KetAppearance.h"
+#include "KetTokens.h"
 #include "agent/AgentMessageFormatter.h"
 #include "preview/MermaidDiagramDialog.h"
 #include "preview/MermaidRenderer.h"
@@ -12,9 +13,7 @@
 #include "agent/TranscriptTrace.h"
 #include "app/AppearanceSettings.h"
 #include "ui/InterfaceFont.h"
-#include "ui/InterfaceZoom.h"
 #include "ui/Theme.h"
-#include "ui/TypeScale.h"
 
 #include <QAbstractTextDocumentLayout>
 #include <QApplication>
@@ -64,12 +63,6 @@ Q_IMPORT_QML_PLUGIN(KetPlugin)
 
 namespace ketplus {
 namespace {
-QString inlineCodeBackground(const QString& text) {
-    QColor wash(text);
-    wash.setAlphaF(0.11);
-    return wash.name(QColor::HexArgb);
-}
-
 QString composerDraftKey(const QString& scope) {
     return QStringLiteral("agent/composerDrafts/%1")
         .arg(QString::fromLatin1(
@@ -107,17 +100,11 @@ QString normalizedPath(const QString& path) {
     return QDir::cleanPath(canonical.isEmpty() ? info.absoluteFilePath() : canonical);
 }
 
-QString monoFontFamily() {
+QString configuredMonoFontFamily() {
     const QString configured = AppearanceSettings::load().editor.fontFamily.trimmed();
     if (!configured.isEmpty())
         return configured;
     return EditorSettings::defaults().fontFamily;
-}
-
-void mergeTypeScaleTokens(QVariantMap& tokens, const int basePixels) {
-    const QVariantMap scale = TypeScale::tokens(basePixels);
-    for (auto it = scale.cbegin(); it != scale.cend(); ++it)
-        tokens.insert(it.key(), it.value());
 }
 
 } // namespace
@@ -164,9 +151,16 @@ AgentWorkspaceView::AgentWorkspaceView(QWidget* parent)
     view_->setResizeMode(QQuickView::SizeRootObjectToView);
     view_->setPersistentGraphics(true);
     view_->setPersistentSceneGraph(true);
+    connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this,
+            [this] { applyTheme(currentThemePalette()); });
+    connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, this,
+            &AgentWorkspaceView::documentStyleChanged);
     // Bootstrap from the same semantic palette as Widgets; no second hard-coded theme.
     applyTheme(currentThemePalette(), AppearanceSettings::load().interfaceFontSizePixels);
     view_->rootContext()->setContextProperty(QStringLiteral("agentHost"), this);
+    // KetTheme's font families are CONSTANT QML properties. Register the bundled
+    // faces before the first component reads them, including standalone/Atlas hosts.
+    static_cast<void>(InterfaceUiFont::resolvedFamily());
     view_->setSource(QUrl(QStringLiteral("qrc:/agent/AgentWorkspace.qml")));
     if (view_->rootObject())
         transcriptPolish_ = new TranscriptPolish(view_->rootObject());
@@ -275,64 +269,22 @@ void AgentWorkspaceView::setActivePath(const QString& path) {
 }
 
 void AgentWorkspaceView::applyTheme(const ThemePalette& palette,
-                                    const int interfaceFontSizePixels) {
-    const int basePixels = InterfaceZoomMetrics::snap(interfaceFontSizePixels);
-    QVariantMap tokens{
-        {QStringLiteral("dark"), palette.dark},
-        {QStringLiteral("appBackground"), palette.appBackground},
-        {QStringLiteral("pageBackground"), palette.pageBackground},
-        {QStringLiteral("sidebarBackground"), palette.sidebarBackground},
-        {QStringLiteral("panelBackground"), palette.panelBackground},
-        {QStringLiteral("panelSubtle"), palette.panelSubtle},
-        {QStringLiteral("surfaceRaised"), palette.surfaceRaised},
-        {QStringLiteral("surfaceHover"), palette.surfaceHover},
-        {QStringLiteral("textMain"), palette.textMain},
-        {QStringLiteral("textSecondary"), palette.textSecondary},
-        {QStringLiteral("textMuted"), palette.textMuted},
-        {QStringLiteral("textDisabled"), palette.textDisabled},
-        {QStringLiteral("border"), palette.border},
-        {QStringLiteral("borderStrong"), palette.borderStrong},
-        {QStringLiteral("interactiveBackground"), palette.interactiveBackground},
-        {QStringLiteral("interactiveHover"), palette.interactiveHover},
-        {QStringLiteral("interactiveActive"), palette.interactiveActive},
-        {QStringLiteral("accent"), palette.accent},
-        {QStringLiteral("accentHover"), palette.accentHover},
-        {QStringLiteral("accentActive"), palette.accentActive},
-        {QStringLiteral("accentSubtle"), palette.accentSubtle},
-        {QStringLiteral("accentMuted"), palette.accentMuted},
-        {QStringLiteral("focus"), palette.focus},
-        {QStringLiteral("tabActiveText"), palette.tabActiveText},
-        {QStringLiteral("accentText"), palette.accentText},
-        {QStringLiteral("actionPrimary"), palette.actionPrimary},
-        {QStringLiteral("actionPrimaryHover"), palette.actionPrimaryHover},
-        {QStringLiteral("actionPrimaryActive"), palette.actionPrimaryActive},
-        // Inline code chips are a translucent wash of the text colour, so they read
-        // on the page and on any surface a message sits on, as Codex draws them.
-        {QStringLiteral("inlineCodeBackground"), inlineCodeBackground(palette.textMain)},
-        {QStringLiteral("codeBlockBackground"),
-         ket::codeBlockRecipe(palette.dark ? ket::Theme::Dark : ket::Theme::Light)
-             .background.name(QColor::HexArgb)},
-        {QStringLiteral("codeBlockBorder"),
-         ket::codeBlockRecipe(palette.dark ? ket::Theme::Dark : ket::Theme::Light)
-             .border.name(QColor::HexArgb)},
-        {QStringLiteral("positive"), palette.positive},
-        {QStringLiteral("warning"), palette.warning},
-        {QStringLiteral("danger"), palette.danger},
-        {QStringLiteral("uiFont"), InterfaceUiFont::resolvedFamily()},
-        {QStringLiteral("monoFont"), monoFontFamily()},
-    };
-    mergeTypeScaleTokens(tokens, basePixels);
-    // One Settings save re-themes every surface several times. Rebinding every
-    // token and redrawing each diagram is costly, so an unchanged theme is a no-op.
-    if (themeApplied_ && tokens == tokens_)
+                                    const int /*interfaceFontSizePixels*/) {
+    // Appearance owns theme/zoom for both Widgets and Quick. The host retains only
+    // user font preferences and the palette needed by the HTML/Mermaid renderer.
+    const QString family = configuredMonoFontFamily();
+    if (themeApplied_ && palette == mermaidPalette_ && family == monoFontFamily_)
         return;
     themeApplied_ = true;
-    tokens_ = std::move(tokens);
+    const bool fontChanged = family != monoFontFamily_;
+    monoFontFamily_ = family;
     mermaidPalette_ = palette;
     ++mermaidRevision_;
     emit mermaidChanged();
-    view_->setColor(QColor(palette.pageBackground));
-    emit tokensChanged();
+    view_->setColor(ket::Tokens::color(u"page-bg", ket::Appearance::instance().theme()));
+    if (fontChanged)
+        emit monoFontFamilyChanged();
+    emit documentStyleChanged();
 }
 
 void AgentWorkspaceView::focusPrompt() {
@@ -614,7 +566,7 @@ QVariantList AgentWorkspaceView::conversations() const { return conversations_; 
 
 QString AgentWorkspaceView::activePath() const { return activePath_; }
 
-QVariantMap AgentWorkspaceView::tokens() const { return tokens_; }
+QString AgentWorkspaceView::monoFontFamily() const { return monoFontFamily_; }
 
 QString AgentWorkspaceView::sessionTitle() const { return sessionTitle_; }
 

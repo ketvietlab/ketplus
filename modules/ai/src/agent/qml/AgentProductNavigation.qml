@@ -20,12 +20,14 @@ ColumnLayout {
         Layout.preferredHeight: navigation.compactHeight ? KetTheme.px(54, KetTheme.zoom) : KetTheme.px(67, KetTheme.zoom)
 
         Image {
+            objectName: "productBrandImage"
             anchors.left: parent.left
             anchors.leftMargin: KetTheme.px(13, KetTheme.zoom)
             anchors.verticalCenter: parent.verticalCenter
-            width: KetTheme.px(176, KetTheme.zoom)
+            width: Math.min(KetTheme.px(176, KetTheme.zoom),
+                            Math.max(0, parent.width - 2 * anchors.leftMargin))
             height: KetTheme.px(44, KetTheme.zoom)
-            source: navigation.workspace.t.dark
+            source: KetTheme.dark
                     ? "qrc:/agent/brand/ketplus-logo-dark.png"
                     : "qrc:/agent/brand/ketplus-logo-light.png"
             fillMode: Image.PreserveAspectFit
@@ -86,6 +88,6 @@ ColumnLayout {
         Layout.rightMargin: KetTheme.px(11, KetTheme.zoom)
         Layout.topMargin: navigation.compactHeight ? KetTheme.px(10, KetTheme.zoom) : KetTheme.px(18, KetTheme.zoom)
         Layout.bottomMargin: navigation.compactHeight ? KetTheme.px(10, KetTheme.zoom) : KetTheme.px(14, KetTheme.zoom)
-        color: navigation.workspace.t.border
+        color: KetTheme.t.panelBorder
     }
 }

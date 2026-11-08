@@ -1,6 +1,6 @@
 import Ket
 import QtQuick
-import Ket 1.0 as Kit
+import Ket as Kit
 import QtQuick.Controls
 import QtQuick.Controls.Basic as Basic
 import QtQuick.Effects
@@ -21,7 +21,6 @@ Item {
     property alias limitsPopover: usageLimitsPopover
     function scheduleDraftSave() { composerDraftSaveTimer.restart() }
 
-    readonly property var t: agentHost.tokens
     // The reading column the transcript and composer share. The host sets its
     // width; 0 lets the conversation fill the pane.
     readonly property real conversationColumnWidth: agentHost.conversationWidth > 0
@@ -86,8 +85,8 @@ Item {
     }
     readonly property bool permissionElevated: currentPermission.elevated === true
     readonly property color permissionAccent: permissionElevated
-                                              ? (root.t.warning)
-                                              : root.t.textSecondary
+                                              ? (KetTheme.t.warning)
+                                              : KetTheme.t.textSecondary
     function permissionIconSource(profileId) {
         if (profileId === "read-only")
             return "qrc:/agent/icons/lock.svg"
@@ -97,8 +96,8 @@ Item {
     }
     function permissionLabelColor(profile) {
         if (profile && profile.elevated === true)
-            return root.t.warning
-        return root.t.textMain
+            return KetTheme.t.warning
+        return KetTheme.t.textMain
     }
     property bool modelsLoading: false
     function refreshModels() {
@@ -474,7 +473,6 @@ Item {
 
     ModelPicker {
         id: modelPopup
-        tokens: root.t
         viewport: root
         anchorItem: modelButton
         models: agentHost.models
@@ -548,7 +546,7 @@ Item {
         focus: true
         padding: KetTheme.px(16, KetTheme.zoom)
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        background: Rectangle { color: root.t.surfaceRaised; radius: KetTheme.px(8, KetTheme.zoom) }
+        background: Rectangle { color: KetTheme.t.surfaceRaised; radius: KetTheme.px(8, KetTheme.zoom) }
         property url imageSource
         Image {
             objectName: "imagePreviewContent"
@@ -1182,7 +1180,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: root.t.pageBackground
+        color: KetTheme.t.pageBg
     }
 
     Basic.SplitView {
@@ -1192,8 +1190,8 @@ Item {
         handle: Item {
             objectName: "sidebarResizeHandle"
             implicitWidth: agentHost.productSidebarVisible && !agentHost.compactMode ? KetTheme.px(6, KetTheme.zoom) : 0
-            readonly property color dividerColor: SplitHandle.pressed ? root.t.accent
-                                                 : SplitHandle.hovered ? root.t.borderStrong : root.t.border
+            readonly property color dividerColor: SplitHandle.pressed ? KetTheme.t.accent
+                                                 : SplitHandle.hovered ? KetTheme.t.borderStrong : KetTheme.t.panelBorder
             Rectangle {
                 objectName: "sidebarDivider"
                 visible: parent.implicitWidth > 0
@@ -1222,7 +1220,7 @@ Item {
             objectName: "chatPane"
             SplitView.fillWidth: true
             SplitView.minimumWidth: 260
-            color: root.t.pageBackground
+            color: KetTheme.t.pageBg
 
             ColumnLayout {
                 anchors.top: parent.top
@@ -1269,8 +1267,8 @@ Item {
                         width: Math.min(parent.width - KetTheme.px(32, KetTheme.zoom), KetTheme.px(380, KetTheme.zoom))
                         height: findRow.height + (findStatusText.visible ? findStatusText.height + KetTheme.px(4, KetTheme.zoom) : 0) + KetTheme.px(8, KetTheme.zoom)
                         radius: KetTheme.px(7, KetTheme.zoom)
-                        color: root.t.surfaceRaised
-                        border.color: root.t.borderStrong
+                        color: KetTheme.t.surfaceRaised
+                        border.color: KetTheme.t.borderStrong
                         Accessible.role: Accessible.ToolBar
                         Accessible.name: "Find in conversation"
                         Connections {
@@ -1294,10 +1292,10 @@ Item {
                                 width: parent.width - findCount.width - 3 * KetTheme.px(28, KetTheme.zoom) - 3 * parent.spacing
                                 height: KetTheme.px(30, KetTheme.zoom)
                                 placeholderText: "Find in conversation"
-                                color: root.t.textMain
-                                placeholderTextColor: root.t.textMuted
-                                font.family: root.t.uiFont
-                                font.pixelSize: root.t.body
+                                color: KetTheme.t.textMain
+                                placeholderTextColor: KetTheme.t.textMuted
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                                 background: Rectangle {
                                     color: "transparent"
                                 }
@@ -1312,9 +1310,9 @@ Item {
                                 objectName: "transcriptFindCount"
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: transcriptFindBar.view ? transcriptFindBar.view.findCountText : ""
-                                color: root.t.textMuted
-                                font.family: root.t.uiFont
-                                font.pixelSize: root.t.caption
+                                color: KetTheme.t.textMuted
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                                 Accessible.name: text
                             }
                             Basic.ToolButton {
@@ -1328,10 +1326,10 @@ Item {
                                     KetIcon {
                                         anchors.centerIn: parent
                                         box: Math.min(parent.width, parent.height)
-                                        name: KetTheme.iconForLucide("arrow-up"); color: root.t.textMain
+                                        name: KetTheme.iconForLucide("arrow-up"); color: KetTheme.t.textMain
                                     }
                                 }
-                                background: Rectangle { color: parent.hovered ? root.t.surfaceHover : "transparent"; radius: KetTheme.px(4, KetTheme.zoom) }
+                                background: Rectangle { color: parent.hovered ? KetTheme.t.surfaceHover : "transparent"; radius: KetTheme.px(4, KetTheme.zoom) }
                                 onClicked: transcriptFindBar.view.findPrevious()
                                 Accessible.name: "Previous match"
                             }
@@ -1346,10 +1344,10 @@ Item {
                                     KetIcon {
                                         anchors.centerIn: parent
                                         box: Math.min(parent.width, parent.height)
-                                        name: KetTheme.iconForLucide("arrow-up"); color: root.t.textMain; rotation: 180
+                                        name: KetTheme.iconForLucide("arrow-up"); color: KetTheme.t.textMain; rotation: 180
                                     }
                                 }
-                                background: Rectangle { color: parent.hovered ? root.t.surfaceHover : "transparent"; radius: KetTheme.px(4, KetTheme.zoom) }
+                                background: Rectangle { color: parent.hovered ? KetTheme.t.surfaceHover : "transparent"; radius: KetTheme.px(4, KetTheme.zoom) }
                                 onClicked: transcriptFindBar.view.findNext()
                                 Accessible.name: "Next match"
                             }
@@ -1364,10 +1362,10 @@ Item {
                                     KetIcon {
                                         anchors.centerIn: parent
                                         box: Math.min(parent.width, parent.height)
-                                        name: KetTheme.iconForLucide("plus"); color: root.t.textMain; rotation: 45
+                                        name: KetTheme.iconForLucide("plus"); color: KetTheme.t.textMain; rotation: 45
                                     }
                                 }
-                                background: Rectangle { color: parent.hovered ? root.t.surfaceHover : "transparent"; radius: KetTheme.px(4, KetTheme.zoom) }
+                                background: Rectangle { color: parent.hovered ? KetTheme.t.surfaceHover : "transparent"; radius: KetTheme.px(4, KetTheme.zoom) }
                                 onClicked: transcriptFindBar.view.closeFind()
                                 Accessible.name: "Close find"
                             }
@@ -1380,9 +1378,9 @@ Item {
                             width: parent.width - KetTheme.px(24, KetTheme.zoom)
                             visible: text.length > 0
                             text: transcriptFindBar.view ? transcriptFindBar.view.findStatus : ""
-                            color: root.t.textMuted
-                            font.family: root.t.uiFont
-                            font.pixelSize: root.t.caption
+                            color: KetTheme.t.textMuted
+                            font.family: KetTheme.fontFamily
+                            font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                             elide: Text.ElideRight
                         }
                     }

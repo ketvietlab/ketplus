@@ -18,7 +18,7 @@ Item {
     }
     readonly property var tags: (selectedConversation.tags || []).map(tag => typeof tag === "string" ? {
             label: tag,
-            color: Kit.KetTheme.t.accent
+            color: KetTheme.t.accent
         } : tag)
     readonly property var selectedWorktree: {
         for (let candidate of agentHost.worktrees) {
@@ -58,9 +58,9 @@ Item {
             }
             visible: number.length > 0
             text: "#" + number
-            color: workspace.t.textMuted
-            font.family: workspace.t.monoFont
-            font.pixelSize: workspace.t.body
+            color: KetTheme.t.textMuted
+            font.family: agentHost.monoFontFamily
+            font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
             font.weight: Font.Medium
             Accessible.name: "Conversation number " + number
         }
@@ -70,10 +70,10 @@ Item {
             // Long handoff titles must not push the status badge and scope chip away.
             Layout.maximumWidth: Math.max(0, Math.min(header.maximumTitleWidth, titleRow.width - conversationStatusBadge.width - (scopeChip.visible ? Math.min(scopeChip.implicitWidth, 80) : 0) - (conversationNumber.visible ? conversationNumber.implicitWidth + titleRow.spacing : 0) - (conversationTags.visible ? conversationTags.implicitWidth + titleRow.spacing : 0) - titleRow.spacing * 2))
             text: agentHost.sessionTitle
-            color: workspace.t.textMain
+            color: KetTheme.t.textMain
             elide: Text.ElideRight
-            font.family: workspace.t.uiFont
-            font.pixelSize: workspace.t.reading
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.markdownRecipe(KetTheme.dark, KetTheme.zoom).bodyPixels
             font.weight: Font.Medium
             Accessible.role: Accessible.Heading
             Accessible.name: text
@@ -85,16 +85,16 @@ Item {
             Layout.preferredWidth: statusText.implicitWidth + KetTheme.px(12, KetTheme.zoom)
             Layout.maximumWidth: KetTheme.px(120, KetTheme.zoom)
             radius: KetTheme.px(4, KetTheme.zoom)
-            color: agentHost.sessionRunning ? workspace.t.accentSubtle : "transparent"
-            border.color: agentHost.sessionRunning ? workspace.t.accent : workspace.t.border
+            color: agentHost.sessionRunning ? KetTheme.t.accentSubtle : "transparent"
+            border.color: agentHost.sessionRunning ? KetTheme.t.accent : KetTheme.t.panelBorder
             Text {
                 id: statusText
                 anchors.centerIn: parent
                 width: Math.min(implicitWidth, parent.width - KetTheme.px(12, KetTheme.zoom))
                 text: agentHost.sessionRunning ? "Working" : agentHost.sessionStatus
-                color: agentHost.sessionRunning ? workspace.t.accentHover : workspace.t.textMuted
-                font.family: workspace.t.uiFont
-                font.pixelSize: workspace.t.micro
+                color: agentHost.sessionRunning ? KetTheme.t.accentHover : KetTheme.t.textMuted
+                font.family: KetTheme.fontFamily
+                font.pixelSize: KetTheme.dayDividerRecipe(KetTheme.dark, KetTheme.zoom).fontPixels
                 font.weight: Font.Medium
                 elide: Text.ElideRight
             }
@@ -113,8 +113,8 @@ Item {
             Layout.maximumWidth: implicitWidth
             Layout.minimumWidth: 0
             radius: KetTheme.px(5, KetTheme.zoom)
-            color: workspace.t.interactiveBackground
-            border.color: workspace.t.border
+            color: KetTheme.t.interactiveBg
+            border.color: KetTheme.t.panelBorder
             clip: true
             Row {
                 id: scopeRow
@@ -127,7 +127,7 @@ Item {
                     width: KetTheme.px(14, KetTheme.zoom)
                     height: KetTheme.px(14, KetTheme.zoom)
                     name: KetTheme.iconForLucide("git-branch")
-                    color: workspace.t.textMuted
+                    color: KetTheme.t.textMuted
                     box: KetTheme.px(14, KetTheme.zoom)
                 }
                 Text {
@@ -136,10 +136,10 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     width: Math.min(implicitWidth, Math.max(0, scopeChip.width - KetTheme.px(30, KetTheme.zoom)))
                     text: header.scopeLabel
-                    color: workspace.t.textSecondary
+                    color: KetTheme.t.textSecondary
                     elide: Text.ElideMiddle
-                    font.family: workspace.t.uiFont
-                    font.pixelSize: workspace.t.caption
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                 }
             }
             MouseArea {
@@ -168,7 +168,7 @@ Item {
                     required property var modelData
                     objectName: "conversationTag_" + modelData.label
                     text: modelData.label
-                    tagColor: modelData.color || Kit.KetTheme.t.accent
+                    tagColor: modelData.color || KetTheme.t.accent
                     maxWidth: KetTheme.px(100, KetTheme.zoom)
                     filterable: true
                     onClicked: agentHost.requestTagFilter(text)
@@ -209,8 +209,8 @@ Item {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 text: agentHost.atlasRunningCount
-                color: Kit.KetTheme.t.accent
-                font.pixelSize: workspace.t.micro
+                color: KetTheme.t.accent
+                font.pixelSize: KetTheme.dayDividerRecipe(KetTheme.dark, KetTheme.zoom).fontPixels
             }
         }
         Kit.KetIconButton {
@@ -235,6 +235,6 @@ Item {
         anchors.bottom: parent.bottom
         width: parent.width
         height: 1
-        color: workspace.t.border
+        color: KetTheme.t.panelBorder
     }
 }

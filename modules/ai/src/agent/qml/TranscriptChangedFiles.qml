@@ -1,13 +1,13 @@
 import Ket
 import QtQuick
 import QtQuick.Controls.Basic as Basic
-import Ket 1.0 as Kit
+import Ket as Kit
 
 // Product file identities and recovery actions over the kit ChangedFiles recipe.
 Rectangle {
     id: card
     required property var activity
-    readonly property var tokens: activity.tokens
+
     readonly property var recipe: activity.filesRecipe
     implicitHeight: list.implicitHeight + 2 * recipe.paddingBlock
     color: recipe.background
@@ -25,7 +25,7 @@ Rectangle {
             width: parent.width
             text: activity.files.length === 1 ? "1 file changed" : activity.files.length + " files changed"
             color: card.recipe.heading
-            font.family: card.tokens.uiFont
+            font.family: KetTheme.fontFamily
             font.pixelSize: card.recipe.titlePixels
             font.weight: card.recipe.titleWeight
             bottomPadding: card.recipe.paddingBlock
@@ -64,9 +64,9 @@ Rectangle {
                     anchors.rightMargin: KetTheme.px(8, KetTheme.zoom)
                     anchors.verticalCenter: parent.verticalCenter
                     text: (fileRow.modelData.operation ? fileRow.modelData.operation + " " : "") + activity.host.displayFilePath(fileRow.modelData.path || "") + (fileRow.modelData.destination ? " → " + activity.host.displayFilePath(fileRow.modelData.destination) : "")
-                    color: fileRow.missing ? activity.tokens.danger : activity.filesRecipe.name
-                    font.family: activity.tokens.uiFont
-                    font.pixelSize: activity.tokens.body
+                    color: fileRow.missing ? KetTheme.t.danger : activity.filesRecipe.name
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                     elide: Text.ElideMiddle
                 }
                 Row {
@@ -79,15 +79,15 @@ Rectangle {
                         objectName: "fileAdditions"
                         text: "+" + (fileRow.modelData.added || 0)
                         color: activity.filesRecipe.added
-                        font.family: activity.tokens.uiFont
-                        font.pixelSize: activity.tokens.body
+                        font.family: KetTheme.fontFamily
+                        font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                     }
                     Text {
                         objectName: "fileDeletions"
                         text: "-" + (fileRow.modelData.removed || 0)
                         color: activity.filesRecipe.removed
-                        font.family: activity.tokens.uiFont
-                        font.pixelSize: activity.tokens.body
+                        font.family: KetTheme.fontFamily
+                        font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                     }
                 }
 
@@ -112,13 +112,13 @@ Rectangle {
                     objectName: "changedFileContextMenu"
                     padding: KetTheme.px(5, KetTheme.zoom)
                     margins: 8
-                    font.family: activity.tokens.uiFont
-                    font.pixelSize: activity.tokens.body
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                     background: Rectangle {
                         implicitWidth: KetTheme.px(190, KetTheme.zoom)
                         implicitHeight: KetTheme.px(112, KetTheme.zoom)
-                        color: activity.tokens.panelBackground || activity.tokens.surfaceRaised
-                        border.color: activity.tokens.borderStrong || activity.tokens.border
+                        color: KetTheme.t.panelBg || KetTheme.t.surfaceRaised
+                        border.color: KetTheme.t.borderStrong || KetTheme.t.panelBorder
                         border.width: 1
                         radius: KetTheme.px(7, KetTheme.zoom)
                     }

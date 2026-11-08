@@ -8,13 +8,13 @@ import QtQuick.Layouts
 Rectangle {
     id: bar
     required property var workspace
-    readonly property var t: workspace.t
+
     property var dismissedTasks: []
     function taskKey(task) {
         return workspace.transcriptScope + ":" + String(task.task_id) + ":" + String(task.started_at || "") + ":" + String(task.ended_at || "");
     }
     readonly property var tasks: (agentHost.backgroundTasks || []).filter(task => live(task) || dismissedTasks.indexOf(taskKey(task)) < 0)
-    readonly property var barRecipe: KetTheme.taskBarRecipe(t.dark, t.zoomFactor, false, false, true, false)
+    readonly property var barRecipe: KetTheme.taskBarRecipe(KetTheme.dark, KetTheme.zoom, false, false, true, false)
     readonly property var pane: agentHost.backgroundTaskOutput || ({})
     readonly property bool offline: agentHost.presentationState.connection === "unavailable"
     readonly property int liveCount: tasks.filter(task => bar.live(task)).length
@@ -55,14 +55,14 @@ Rectangle {
     }
     function statusColor(task) {
         if (bar.offline && live(task))
-            return t.textMuted;
+            return KetTheme.t.textMuted;
         return ({
-                running: t.accent,
-                stopping: t.warning,
-                completed: t.positive,
-                failed: t.danger,
-                stopped: t.textMuted
-            })[task.status] || t.textMuted;
+                running: KetTheme.t.accent,
+                stopping: KetTheme.t.warning,
+                completed: KetTheme.t.positive,
+                failed: KetTheme.t.danger,
+                stopped: KetTheme.t.textMuted
+            })[task.status] || KetTheme.t.textMuted;
     }
     function openTask(task) {
         if (pane.taskId === task.task_id)
@@ -77,9 +77,9 @@ Rectangle {
     visible: tasks.length > 0
     implicitHeight: visible ? column.implicitHeight + KetTheme.px(12, KetTheme.zoom) : 0
     radius: KetTheme.px(12, KetTheme.zoom)
-    color: t.surfaceRaised
+    color: KetTheme.t.surfaceRaised
     border.width: 1
-    border.color: t.border
+    border.color: KetTheme.t.panelBorder
     Accessible.role: Accessible.Grouping
     Accessible.name: "Background tasks"
 
@@ -120,14 +120,14 @@ Rectangle {
                     Layout.preferredWidth: KetTheme.px(14, KetTheme.zoom)
                     Layout.preferredHeight: KetTheme.px(14, KetTheme.zoom)
                     name: KetTheme.iconForLucide(bar.collapsed ? "chevron-right" : "chevron-down")
-                    color: bar.t.textMuted
+                    color: KetTheme.t.textMuted
                     box: KetTheme.px(14, KetTheme.zoom)
                 }
                 Text {
                     Layout.fillWidth: true
                     text: bar.headline
-                    color: bar.t.textSecondary
-                    font.family: bar.t.uiFont
+                    color: KetTheme.t.textSecondary
+                    font.family: KetTheme.fontFamily
                     font.pixelSize: bar.barRecipe.fontPixels
                     font.weight: Font.Normal
                     elide: Text.ElideRight
@@ -135,7 +135,7 @@ Rectangle {
             }
             background: Rectangle {
                 radius: KetTheme.px(7, KetTheme.zoom)
-                color: parent.hovered ? bar.t.surfaceHover : "transparent"
+                color: parent.hovered ? KetTheme.t.surfaceHover : "transparent"
             }
         }
 
@@ -188,9 +188,9 @@ Rectangle {
                     visible: row.confirming
                     Layout.fillWidth: true
                     text: "Stop “" + row.modelData.title + "”? " + (row.modelData.kind === "agent" ? "The subagent stops after its current step." : "The command is terminated. Output so far stays readable.")
-                    color: bar.t.textSecondary
-                    font.family: bar.t.uiFont
-                    font.pixelSize: bar.t.caption
+                    color: KetTheme.t.textSecondary
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                     wrapMode: Text.Wrap
                 }
                 RowLayout {
@@ -224,9 +224,9 @@ Rectangle {
             Layout.topMargin: KetTheme.px(4, KetTheme.zoom)
             Layout.preferredHeight: visible ? paneColumn.implicitHeight + KetTheme.px(16, KetTheme.zoom) : 0
             radius: KetTheme.px(8, KetTheme.zoom)
-            color: bar.t.codeBlockBackground
+            color: KetTheme.codeBlockRecipe(KetTheme.dark, KetTheme.zoom).background
             border.width: 1
-            border.color: bar.t.codeBlockBorder
+            border.color: KetTheme.codeBlockRecipe(KetTheme.dark, KetTheme.zoom).border
 
             ColumnLayout {
                 id: paneColumn
@@ -240,9 +240,9 @@ Rectangle {
                     Layout.fillWidth: true
                     visible: text.length > 0
                     text: !outputPane.task ? "" : outputPane.task.kind === "agent" ? [outputPane.task.summary, outputPane.task.last_tool ? "Last tool: " + outputPane.task.last_tool : "", outputPane.task.result || outputPane.task.error || ""].filter(line => line).join("\n") : (outputPane.task.command || "")
-                    color: bar.t.textSecondary
-                    font.family: outputPane.task && outputPane.task.kind === "agent" ? bar.t.uiFont : bar.t.monoFont
-                    font.pixelSize: bar.t.caption
+                    color: KetTheme.t.textSecondary
+                    font.family: outputPane.task && outputPane.task.kind === "agent" ? KetTheme.fontFamily : agentHost.monoFontFamily
+                    font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                     wrapMode: Text.Wrap
                     maximumLineCount: 6
                     elide: Text.ElideRight
@@ -260,9 +260,9 @@ Rectangle {
                         selectByMouse: true
                         wrapMode: TextEdit.WrapAnywhere
                         text: bar.pane.error ? bar.pane.error : bar.pane.output !== undefined ? (bar.pane.output || "No output yet.") : "Loading output…"
-                        color: bar.pane.error ? bar.t.danger : bar.t.textMain
-                        font.family: bar.t.monoFont
-                        font.pixelSize: bar.t.caption
+                        color: bar.pane.error ? KetTheme.t.danger : KetTheme.t.textMain
+                        font.family: agentHost.monoFontFamily
+                        font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                         // New output lands at the bottom; keep it in view as it refreshes.
                         onTextChanged: Qt.callLater(() => {
                             const flick = outputScroll.contentItem;
@@ -276,15 +276,15 @@ Rectangle {
                     Text {
                         Layout.fillWidth: true
                         text: (bar.pane.truncated ? "Last 8 KiB of " + Math.round((bar.pane.totalBytes || 0) / 1024) + " KiB" : "Full output") + (outputPane.task && bar.live(outputPane.task) && !bar.offline ? " · refreshes every 2 s" : "")
-                        color: bar.t.textMuted
-                        font.family: bar.t.uiFont
-                        font.pixelSize: bar.t.caption
+                        color: KetTheme.t.textMuted
+                        font.family: KetTheme.fontFamily
+                        font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                         elide: Text.ElideRight
                     }
                     KetButton {
                         variant: KetTheme.ButtonVariant.Ghost
                         text: "Copy output"
-                        font.pixelSize: bar.t.caption
+                        font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                         onClicked: agentHost.copyText(bar.pane.output || "")
                     }
                 }
@@ -296,9 +296,9 @@ Rectangle {
             Layout.fillWidth: true
             Layout.margins: KetTheme.px(4, KetTheme.zoom)
             text: "The daemon is unreachable. These tasks may have ended; Stop and live output return when it reconnects."
-            color: bar.t.textMuted
-            font.family: bar.t.uiFont
-            font.pixelSize: bar.t.caption
+            color: KetTheme.t.textMuted
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
             wrapMode: Text.Wrap
         }
     }

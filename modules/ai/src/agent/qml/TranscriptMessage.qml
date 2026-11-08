@@ -1,15 +1,14 @@
 import Ket
 import Ket as Kit
 import QtQuick
-import Ket 1.0 as Kit
 import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
 
 Item {
     id: messageDelegate
-    readonly property var userRecipe: Kit.KetTheme.userMessageRecipe(shell.t.dark, shell.t.zoomFactor)
-    readonly property var groupRecipe: Kit.KetTheme.activityGroupRecipe(shell.t.dark, shell.t.zoomFactor, false, false, true, false)
-    readonly property var codeRecipe: Kit.KetTheme.codeBlockRecipe(shell.t.dark, shell.t.zoomFactor)
+    readonly property var userRecipe: Kit.KetTheme.userMessageRecipe(KetTheme.dark, KetTheme.zoom)
+    readonly property var groupRecipe: Kit.KetTheme.activityGroupRecipe(KetTheme.dark, KetTheme.zoom, false, false, true, false)
+    readonly property var codeRecipe: Kit.KetTheme.codeBlockRecipe(KetTheme.dark, KetTheme.zoom)
     required property var shell
     required property var host
     required property var preview
@@ -109,10 +108,10 @@ Item {
         y: kind === "user" ? messageSurface.y + 2 : messageSurface.y + messageSurface.height + KetTheme.px(8, KetTheme.zoom)
         sourceComponent: TranscriptCopyButton {
             objectName: "copyMessageButton"
-            tokens: shell.t
+
             label: kind === "user" ? "Copy message" : "Copy response"
             padding: KetTheme.px(7, KetTheme.zoom)
-            idleColor: shell.t.pageBackground
+            idleColor: KetTheme.t.pageBg
             cornerRadius: KetTheme.px(5, KetTheme.zoom)
             focusBorder: true
             onActiveFocusChanged: messageDelegate.chromeFocusHold = activeFocus
@@ -143,7 +142,7 @@ Item {
             height: messageSurface.height + KetTheme.px(6, KetTheme.zoom)
             radius: KetTheme.px(6, KetTheme.zoom)
             color: "transparent"
-            border.color: shell.t.focus
+            border.color: KetTheme.t.colorFocus
             border.width: 2
         }
     }
@@ -158,7 +157,7 @@ Item {
             height: messageSurface.height + KetTheme.px(4, KetTheme.zoom)
             radius: KetTheme.px(6, KetTheme.zoom)
             color: "transparent"
-            border.color: shell.t.accent
+            border.color: KetTheme.t.accent
             border.width: 1
         }
     }
@@ -187,7 +186,7 @@ Item {
         y: messageDelegate.groupLeader ? messageSurface.y + messageColumn.y + transcriptActivityLoader.y : 0
         width: Math.max(1, KetTheme.px(2, KetTheme.zoom))
         height: Math.max(0, parent.height - y)
-        color: shell.t.border
+        color: KetTheme.t.panelBorder
     }
     Kit.KetDayDivider {
         id: dayDivider
@@ -211,8 +210,8 @@ Item {
         width: kind === "user" ? Math.min(userMaximumWidth, Math.max(Math.ceil(bodyMetrics.advanceWidth) + KetTheme.px(10, KetTheme.zoom), agentMessage ? Math.ceil(agentOriginMetrics.advanceWidth) + KetTheme.px(4, KetTheme.zoom) : 0, imageGallery.bubblePreferredWidth) + horizontalPadding * 2) : messageDelegate.contentColumnWidth - KetTheme.px(40, KetTheme.zoom)
         height: messageColumn.implicitHeight + (messageDelegate.activityRow ? 0 : kind === "user" ? 2 * userRecipe.paddingBlock : KetTheme.px(16, KetTheme.zoom))
         radius: kind === "user" ? userRecipe.radius : kind === "file" ? KetTheme.px(7, KetTheme.zoom) : 0
-        color: agentMessage ? shell.t.surfaceRaised : kind === "user" ? userRecipe.background : kind === "file" ? shell.t.surfaceRaised : "transparent"
-        border.color: agentMessage ? shell.t.accent : kind === "file" ? shell.t.border : "transparent"
+        color: agentMessage ? KetTheme.t.surfaceRaised : kind === "user" ? userRecipe.background : kind === "file" ? KetTheme.t.surfaceRaised : "transparent"
+        border.color: agentMessage ? KetTheme.t.accent : kind === "file" ? KetTheme.t.panelBorder : "transparent"
 
         Column {
             id: messageColumn
@@ -229,9 +228,9 @@ Item {
                 visible: messageSurface.agentMessage
                 width: parent.width
                 text: visible ? meta : ""
-                color: shell.t.accentText
-                font.family: shell.t.uiFont
-                font.pixelSize: shell.t.caption
+                color: KetTheme.t.accentText
+                font.family: KetTheme.fontFamily
+                font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                 font.weight: Font.Medium
                 elide: Text.ElideRight
                 Accessible.name: text
@@ -247,7 +246,7 @@ Item {
                 width: parent.width
                 visible: messageDelegate.noticeRow
                 height: visible ? implicitHeight : 0
-                tokens: shell.t
+
                 title: messageDelegate.title || (kind === "error" ? "Agent error" : meta || "Conversation update")
                 message: messageDelegate.displayBody
                 status: kind === "error" ? "failed" : messageDelegate.status
@@ -259,7 +258,7 @@ Item {
                 width: parent.width
                 height: active && item ? item.implicitHeight : 0
                 sourceComponent: HeldMessageAction {
-                    tokens: shell.t
+
                     messageId: {
                         try { return JSON.parse(messageDelegate.payloadData).messageId || ""; }
                         catch (e) { return ""; }
@@ -271,9 +270,9 @@ Item {
                 visible: eventType === "turn.steered"
                 width: parent.width
                 text: "Sent while the agent was working · joined the running turn"
-                color: shell.t.textMuted
-                font.family: shell.t.uiFont
-                font.pixelSize: shell.t.caption
+                color: KetTheme.t.textMuted
+                font.family: KetTheme.fontFamily
+                font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                 wrapMode: Text.Wrap
             }
             Loader {
@@ -291,7 +290,7 @@ Item {
                     onClicked: view.toggleGroup(messageDelegate.groupKey)
                     background: Rectangle {
                         radius: messageDelegate.groupRecipe.radius
-                        color: Kit.KetTheme.activityGroupRecipe(shell.t.dark, shell.t.zoomFactor, parent.hovered, parent.down, true, parent.visualFocus).background
+                        color: Kit.KetTheme.activityGroupRecipe(KetTheme.dark, KetTheme.zoom, parent.hovered, parent.down, true, parent.visualFocus).background
                     }
                     objectName: "transcriptGroupHeader"
                     Text {
@@ -301,8 +300,8 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         width: Math.min(implicitWidth, parent.width - groupChevron.width - KetTheme.px(36, KetTheme.zoom))
                         text: messageDelegate.groupSummary + (messageDelegate.groupRunning ? " · Running" : "")
-                        color: messageDelegate.groupFailed > 0 ? shell.t.danger : messageDelegate.groupRecipe.text
-                        font.family: shell.t.uiFont
+                        color: messageDelegate.groupFailed > 0 ? KetTheme.t.danger : messageDelegate.groupRecipe.text
+                        font.family: KetTheme.fontFamily
                         font.pixelSize: messageDelegate.groupRecipe.fontPixels
                         font.weight: Font.Normal
                         elide: Text.ElideRight
@@ -316,7 +315,7 @@ Item {
                         width: KetTheme.px(14, KetTheme.zoom)
                         height: width
                         name: KetTheme.iconForLucide("chevron-right")
-                        color: shell.t.textMuted
+                        color: KetTheme.t.textMuted
                         rotation: messageDelegate.groupExpanded ? 90 : 0
                         box: KetTheme.px(14, KetTheme.zoom)
                     }
@@ -338,7 +337,7 @@ Item {
                     id: remoteGroupComponent
                     TranscriptRemoteGroup {
                         width: transcriptActivityLoader.width
-                        tokens: shell.t
+
                         host: messageDelegate.host
                         view: messageDelegate.view
                         groupKey: messageDelegate.groupKey
@@ -351,7 +350,7 @@ Item {
                     TranscriptActivityRow {
                         objectName: "transcriptActivityRow"
                         width: transcriptActivityLoader.width
-                        tokens: shell.t
+
                         host: messageDelegate.host
                         stateStore: messageDelegate.view
                         stateKey: JSON.stringify([messageDelegate.view.cacheScope, messageDelegate.messageKey])
@@ -401,15 +400,15 @@ Item {
                     width: KetTheme.px(15, KetTheme.zoom)
                     height: KetTheme.px(15, KetTheme.zoom)
                     name: KetTheme.iconForLucide(subtype === "compaction" ? "bot" : subtype === "webSearch" ? "search" : kind === "tool" ? "square-terminal" : kind === "file" ? "file-code" : "sparkles")
-                    color: subtype === "compaction" ? shell.t.textMuted : subtype === "webSearch" ? shell.t.textMuted : kind === "tool" ? shell.t.warning : kind === "file" ? shell.t.tabActiveText : shell.t.accentText
+                    color: subtype === "compaction" ? KetTheme.t.textMuted : subtype === "webSearch" ? KetTheme.t.textMuted : kind === "tool" ? KetTheme.t.warning : kind === "file" ? KetTheme.t.tabActiveText : KetTheme.t.accentText
                     box: KetTheme.px(15, KetTheme.zoom)
                 }
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
                     text: meta
-                    color: shell.t.textMuted
-                    font.family: shell.t.uiFont
-                    font.pixelSize: shell.t.caption
+                    color: KetTheme.t.textMuted
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                     font.weight: Font.DemiBold
                 }
             }
@@ -431,7 +430,7 @@ Item {
                     answerData: messageDelegate.messageQuestionAnswers
                     pending: messageDelegate.running
                     messageKey: messageDelegate.messageKey
-                    tokens: shell.t
+
                     initialDraftAnswers: shell.questionDraftFor(messageKey).answers || ({})
                     initialOtherQuestions: shell.questionDraftFor(messageKey).otherAnswers || ({})
                     initialQuestionIndex: shell.questionDraftFor(messageKey).questionIndex || 0
@@ -455,7 +454,7 @@ Item {
                     pending: messageDelegate.running
                     answerData: messageDelegate.messageQuestionAnswers
                     questions: messageDelegate.messageQuestions
-                    tokens: shell.t
+
                     onDecisionSubmitted: function (answers) {
                         host.answerQuestion(messageKey, answers);
                     }
@@ -716,9 +715,9 @@ Item {
                 readOnly: true
                 selectByMouse: true
                 persistentSelection: true
-                selectionColor: shell.t.accent
-                selectedTextColor: Kit.KetTheme.t.actionPrimaryInk
-                color: messageSurface.agentMessage ? shell.t.textMain : kind === "user" ? userRecipe.text : kind === "file" ? shell.t.tabActiveText : shell.t.textMain
+                selectionColor: KetTheme.t.accent
+                selectedTextColor: KetTheme.t.actionPrimaryInk
+                color: messageSurface.agentMessage ? KetTheme.t.textMain : kind === "user" ? userRecipe.text : kind === "file" ? KetTheme.t.tabActiveText : KetTheme.t.textMain
                 wrapMode: TextEdit.Wrap
                 textFormat: kind === "assistant" && !renderedPartialBody ? TextEdit.MarkdownText : TextEdit.PlainText
                 baseUrl: host.messageBaseUrl
@@ -783,8 +782,10 @@ Item {
                 }
                 Connections {
                     target: host
-                    function onTokensChanged() {
-                        bodyText.updateParagraphFormat();
+                    function onDocumentStyleChanged() {
+                        // Appearance also updates the QML font/width bindings. Format
+                        // after they settle so text and overlay geometry use one layout.
+                        Qt.callLater(bodyText.updateParagraphFormat);
                     }
                     function onFileLinksChanged() {
                         bodyText.updateParagraphFormat();
@@ -848,7 +849,7 @@ Item {
                         id: mermaidSwitch
                         objectName: "mermaidSwitch"
                         required property var modelData
-                        tokens: shell.t
+
                         rendered: modelData.rendered
                         // Beside the copy button of a source block, in the corner of a diagram.
                         x: modelData.x + modelData.width - width - KetTheme.px(4, KetTheme.zoom) - (rendered ? 0 : KetTheme.px(30, KetTheme.zoom))
@@ -875,7 +876,8 @@ Item {
                         height: modelData.height
                         z: -1
                         radius: KetTheme.px(4, KetTheme.zoom)
-                        color: shell.t.inlineCodeBackground
+                        readonly property color ink: KetTheme.t.textMain
+                        color: Qt.rgba(ink.r, ink.g, ink.b, 0.11)
                     }
                 }
                 Loader {
@@ -896,7 +898,7 @@ Item {
                         width: range ? range.width : 0
                         height: range ? range.height : 0
                         radius: KetTheme.px(2, KetTheme.zoom)
-                        color: shell.t.accentMuted
+                        color: KetTheme.t.accentMuted
                     }
                 }
                 Repeater {
@@ -913,10 +915,10 @@ Item {
                         z: 2
                         width: KetTheme.px(26, KetTheme.zoom)
                         height: KetTheme.px(26, KetTheme.zoom)
-                        tokens: shell.t
+
                         label: "Copy code"
                         padding: KetTheme.px(6, KetTheme.zoom)
-                        idleColor: shell.t.codeBlockBackground
+                        idleColor: KetTheme.codeBlockRecipe(KetTheme.dark, KetTheme.zoom).background
                         onActiveFocusChanged: messageDelegate.chromeFocusHold = activeFocus
                         onClicked: host.copyText(host.codeBlockSources(messageDelegate.body)[bodyText.codeFencesIdentity ? index : bodyText.codeFences[index]] || "")
                     }
@@ -966,17 +968,17 @@ Item {
                         // The box the document reserved for the image, from the same place.
                         width: modelData.width
                         height: modelData.height
-                        color: shell.t.panelSubtle
-                        border.color: shell.t.border
+                        color: KetTheme.t.panelBgSubtle
+                        border.color: KetTheme.t.panelBorder
                         radius: KetTheme.px(6, KetTheme.zoom)
                         Text {
                             objectName: "mermaidPendingLabel"
                             anchors.centerIn: parent
                             visible: parent.pending
                             text: "Loading..."
-                            color: shell.t.textSecondary
-                            font.family: shell.t.uiFont
-                            font.pixelSize: shell.t.body
+                            color: KetTheme.t.textSecondary
+                            font.family: KetTheme.fontFamily
+                            font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                         }
                         Column {
                             anchors.centerIn: parent
@@ -985,9 +987,9 @@ Item {
                             visible: !parent.pending
                             Text {
                                 text: host.mermaidInstalling ? "Installing Mermaid..." : "Mermaid"
-                                color: shell.t.textSecondary
-                                font.family: shell.t.uiFont
-                                font.pixelSize: shell.t.body
+                                color: KetTheme.t.textSecondary
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                             }
                             Row {
                                 width: parent.width
@@ -1011,9 +1013,9 @@ Item {
                                     readOnly: true
                                     selectByMouse: true
                                     wrapMode: TextEdit.Wrap
-                                    color: shell.t.textMain
-                                    font.family: shell.t.monoFont
-                                    font.pixelSize: shell.t.body
+                                    color: KetTheme.t.textMain
+                                    font.family: agentHost.monoFontFamily
+                                    font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                                 }
                                 Basic.ToolButton {
                                     id: mermaidInstallButton
@@ -1029,11 +1031,11 @@ Item {
                                             anchors.centerIn: parent
                                             box: Math.min(parent.width, parent.height)
                                             name: KetTheme.iconForLucide("play")
-                                            color: parent.enabled ? shell.t.textMain : shell.t.textDisabled
+                                            color: parent.enabled ? KetTheme.t.textMain : KetTheme.t.textDisabled
                                         }
                                     }
                                     background: Rectangle {
-                                        color: parent.hovered ? shell.t.surfaceHover : "transparent"
+                                        color: parent.hovered ? KetTheme.t.surfaceHover : "transparent"
                                         radius: KetTheme.px(4, KetTheme.zoom)
                                     }
                                     onClicked: host.installMermaid()
@@ -1049,9 +1051,9 @@ Item {
                                 width: parent.width
                                 visible: host.mermaidInstallError.length > 0 && !host.mermaidInstalling
                                 text: host.mermaidInstallError
-                                color: shell.t.warning
-                                font.family: shell.t.uiFont
-                                font.pixelSize: shell.t.caption
+                                color: KetTheme.t.warning
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                                 elide: Text.ElideRight
                                 maximumLineCount: 1
                                 KetToolTip {
@@ -1078,8 +1080,8 @@ Item {
                     readonly property string link: containsMouse && bodyText.sourceInitialized ? host.messageLinkAt(bodyText.textDocument, bodyText.positionAt(mouseX, mouseY)) : ""
                     cursorShape: link.length > 0 ? Qt.PointingHandCursor : Qt.IBeamCursor
                 }
-                font.family: kind === "tool" && subtype !== "compaction" ? shell.t.monoFont : shell.t.uiFont
-                font.pixelSize: kind === "tool" ? shell.t.body : shell.t.reading
+                font.family: kind === "tool" && subtype !== "compaction" ? agentHost.monoFontFamily : KetTheme.fontFamily
+                font.pixelSize: kind === "tool" ? KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels : KetTheme.markdownRecipe(KetTheme.dark, KetTheme.zoom).bodyPixels
             }
 
             Basic.Button {
@@ -1097,8 +1099,8 @@ Item {
                 contentItem: Text {
                     text: userMessageMore.text
                     color: userRecipe.text
-                    font.family: shell.t.uiFont
-                    font.pixelSize: shell.t.body
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                     font.underline: userMessageMore.hovered || userMessageMore.activeFocus
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -1117,7 +1119,7 @@ Item {
                     width: messageColumn.width
                     link: modelData
                     host: messageDelegate.host
-                    tokens: shell.t
+
                 }
             }
 
@@ -1136,7 +1138,7 @@ Item {
                 })
                 width: Math.min(parent.width, preferredWidth)
                 sources: messageDelegate.messageImages
-                tokens: shell.t
+
                 host: messageDelegate.host
                 visible: !messageDelegate.activityRow && imageCount > 0
                 // Thumbnail rows have fixed geometry; adding/removing attachments

@@ -203,12 +203,10 @@ current-window value.
   resumes following regardless of scroll direction; farther away preserves the
   historical reading position.
   The run-status footer shares the rows' visual anchor compensation.
-  Animation trial 1 enables only the Working icon's opacity pulse, using an
-  Animator-only sequence on the scene graph render thread. Text and scale stay
-  fixed; the existing TintedIcon/MultiEffect is unchanged to isolate this trial.
-  Restore motion and conversation shimmer remain disabled. The pulse stops when
-  idle, restoring, hidden, minimized, or the Quick window is inactive. Set
-  `KETPLUS_REDUCED_MOTION=1` before launch for the static control. CPU savings
+  The Working indicator uses the kit's shared stepped animation clock. Restore
+  motion and conversation shimmer remain disabled. Indicators stop while idle,
+  restoring, hidden or minimized; the shared clock slows when the app is inactive.
+  Set `KETPLUS_REDUCED_MOTION=1` before launch for the static control. CPU savings
   remain unverified until measured on the same visible transcript and hardware.
 - Assistant bodies above 16 Ki characters become independently virtualized
   Markdown block rows. Pathological snapshots are segmented away from the UI
@@ -363,13 +361,17 @@ current-window value.
   tag outside code before Qt imports the Markdown, because an unclosed tag such
   as a `<title>` placeholder hid the rest of the answer except its code spans.
   The row measurer applies the same escaping. Code keeps the body colour. Inline code
-  sits on a rounded chip, the `inlineCodeBackground` token (the text colour at 11%
-  alpha), drawn behind the text by `messageInlineCode()` with one chip per wrapped
-  line; the character before the run and the run's last character are tracked by
-  4 px so the chip does not cover the neighbouring text. Code blocks keep their
-  frames and get no chips. The frames use the `codeBlockBackground` and
-  `codeBlockBorder` tokens, a step darker than the page in both themes (`#121519`
-  on dark, `#EDEBEC` on light). The transcript and
+  sits on a rounded chip (the kit's main text colour at 11% alpha), drawn behind
+  the text by `messageInlineCode()` with one chip per wrapped line; the character
+  before the run and the run's last character are tracked by 4 px so the chip does
+  not cover neighbouring text. Code blocks keep their frames and get no chips.
+  Their fill and border come directly from `KetTheme.codeBlockRecipe`, using the
+  kit's panel-subtle surface in each theme. Appearance-driven rich-text formatting
+  waits until QML font and width bindings settle before measuring overlay frames.
+  `TranscriptTableStyle` removes Qt 6.11's extra empty paragraph in a populated
+  table cell after a code fence, preserving intentionally empty cells and header
+  emphasis. Table padding owns cell spacing; code frames retain separation from
+  the following table. The transcript and
   composer share one reading column, 760 px by default. Settings > Typography >
   Conversation width offers Wide (864 px, close to Claude's wide reading column),
   Extra wide (1200 px) and Full width; a Wide saved as 960 px before it was narrowed

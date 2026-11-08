@@ -24,9 +24,9 @@ ColumnLayout {
     Text {
         Layout.fillWidth: true
         text: "Conversation · " + (root.session.mode === "api_key" ? "API key" : root.session.mode === "runtime" ? "Runtime authentication" : "Awaiting usage")
-        color: workspace.t.textMain
-        font.family: workspace.t.uiFont
-        font.pixelSize: workspace.t.reading
+        color: KetTheme.t.textMain
+        font.family: KetTheme.fontFamily
+        font.pixelSize: KetTheme.markdownRecipe(KetTheme.dark, KetTheme.zoom).bodyPixels
         wrapMode: Text.WordWrap
     }
     Repeater {
@@ -58,25 +58,25 @@ ColumnLayout {
             Text {
                 Layout.fillWidth: true
                 text: modelData.name
-                color: workspace.t.textMuted
-                font.family: workspace.t.uiFont
-                font.pixelSize: workspace.t.body
+                color: KetTheme.t.textMuted
+                font.family: KetTheme.fontFamily
+                font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
             }
             Text {
                 objectName: modelData.id
                 text: modelData.value
-                color: workspace.t.textMain
-                font.family: workspace.t.uiFont
-                font.pixelSize: workspace.t.body
+                color: KetTheme.t.textMain
+                font.family: KetTheme.fontFamily
+                font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
             }
         }
     }
     Text {
         Layout.fillWidth: true
         text: "Session totals include restored history and subagents. The query budget counts only the current query's spend, so these values are not a budget progress ratio. SDK cost is an estimate."
-        color: workspace.t.textMuted
-        font.family: workspace.t.uiFont
-        font.pixelSize: workspace.t.caption
+        color: KetTheme.t.textMuted
+        font.family: KetTheme.fontFamily
+        font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
         wrapMode: Text.WordWrap
     }
     Rectangle {
@@ -84,38 +84,38 @@ ColumnLayout {
         Layout.topMargin: KetTheme.px(4, KetTheme.zoom)
         Layout.bottomMargin: KetTheme.px(4, KetTheme.zoom)
         Layout.preferredHeight: 1
-        color: workspace.t.border
+        color: KetTheme.t.panelBorder
     }
     Text {
         text: "Organization · month to date (UTC)"
-        color: workspace.t.textMain
-        font.family: workspace.t.uiFont
-        font.pixelSize: workspace.t.reading
+        color: KetTheme.t.textMain
+        font.family: KetTheme.fontFamily
+        font.pixelSize: KetTheme.markdownRecipe(KetTheme.dark, KetTheme.zoom).bodyPixels
     }
     Text {
         objectName: "claudeAccountSummary"
         Layout.fillWidth: true
         text: root.account.loading ? "Loading organization usage…" : root.account.error || (!root.account.configured ? "Add a separate Admin API key in Settings → Providers." : typeof root.report.costUsd !== "number" ? "No organization report yet. Refresh to load it." : root.dollars(root.report.costUsd) + " · " + root.tokens(root.report.totalTokens) + " tokens")
-        color: root.account.error ? workspace.t.warning : workspace.t.textMain
-        font.family: workspace.t.uiFont
-        font.pixelSize: workspace.t.body
+        color: root.account.error ? KetTheme.t.warning : KetTheme.t.textMain
+        font.family: KetTheme.fontFamily
+        font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
         wrapMode: Text.WordWrap
     }
     Text {
         Layout.fillWidth: true
         visible: typeof root.report.costUsd === "number"
         text: "Period: " + (root.report.startingAt || "").slice(0, 10) + " → " + (root.report.endingAt || "").slice(0, 10) + " UTC · Data updated " + root.timestamp(root.report.dataRefreshedAt) + (root.account.stale ? " · Stale; refresh needed" : "")
-        color: workspace.t.textMuted
-        font.family: workspace.t.uiFont
-        font.pixelSize: workspace.t.caption
+        color: KetTheme.t.textMuted
+        font.family: KetTheme.fontFamily
+        font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
         wrapMode: Text.WordWrap
     }
     Text {
         Layout.fillWidth: true
         text: "All products and keys in the Admin key's organization, which may differ from the inference key's account. Cost is after discounts, before credits; balance and spending limits are available in Console."
-        color: workspace.t.textMuted
-        font.family: workspace.t.uiFont
-        font.pixelSize: workspace.t.caption
+        color: KetTheme.t.textMuted
+        font.family: KetTheme.fontFamily
+        font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
         wrapMode: Text.WordWrap
     }
     RowLayout {

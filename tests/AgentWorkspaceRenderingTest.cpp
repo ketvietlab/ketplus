@@ -8,6 +8,7 @@
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/CodexAppServer.h"
+#include "agent/TranscriptTableStyle.h"
 #include "ui/Theme.h"
 #include <QScopeGuard>
 
@@ -242,21 +243,8 @@ void AgentWorkspaceViewTest::selectsModelsInUnifiedPicker() {
     QVERIFY(tabs->implicitWidth() < popup->property("width").toDouble());
     QVERIFY(capture(".narrow"));
     view.resize(1000, 740);
-    ketplus::ThemePalette light = testPalette();
-    light.dark = false;
-    light.pageBackground = "#ffffff";
-    light.sidebarBackground = "#f4f5f7";
-    light.surfaceRaised = "#ffffff";
-    light.surfaceHover = "#edf0f4";
-    light.textMain = "#20242b";
-    light.textSecondary = "#424955";
-    light.textMuted = "#657080";
-    light.interactiveActive = "#e8ebf0";
-    light.interactiveBackground = "#f5f6f8";
-    light.accentSubtle = "#edf0ff";
-    light.accentMuted = "#c5ceff";
-    light.border = "#e0e3e9";
-    light.borderStrong = "#bcc3cf";
+    ket::Appearance::instance().setMode(ket::Appearance::Mode::Light);
+    const auto light = ketplus::currentThemePalette();
     view.applyTheme(light);
     QTest::qWait(100);
     QCOMPARE(view.conversationModel(), QStringLiteral("astra"));
@@ -1209,9 +1197,8 @@ void AgentWorkspaceViewTest::formatsStreamingText() {
     };
     QTRY_COMPARE(tableBorderColor(), ket::markdownRecipe(ket::Theme::Dark).tableBorder);
 
-    auto lightPalette = testPalette();
-    lightPalette.dark = false;
-    lightPalette.border = QStringLiteral("#e0e3e9");
+    ket::Appearance::instance().setMode(ket::Appearance::Mode::Light);
+    const auto lightPalette = ketplus::currentThemePalette();
     view.applyTheme(lightPalette);
     QTRY_COMPARE(tableBorderColor(), ket::markdownRecipe(ket::Theme::Light).tableBorder);
 
@@ -1439,7 +1426,7 @@ void AgentWorkspaceViewTest::conversationColumnFollowsConfiguredWidth() {
         auto* body = findVisualItem(root, "messageBody");
         return body ? body->width() : -1.0;
     };
-    const qreal zoom = view.tokens().value("zoomFactor", 1.0).toReal();
+    const qreal zoom = ket::Appearance::instance().zoom();
     const qreal defaultWidth = bodyWidth();
     QVERIFY(defaultWidth > 0);
     QVERIFY(defaultWidth < ketplus::AgentWorkspaceView::defaultConversationWidth * zoom);
@@ -1627,11 +1614,8 @@ void AgentWorkspaceViewTest::compactCodeBlocks() {
     ketplus::AgentWorkspaceView view;
     auto palette = testPalette();
     if (!dark) {
-        palette.dark = false;
-        palette.pageBackground = "#ffffff";
-        palette.surfaceRaised = "#eef1f4";
-        palette.borderStrong = "#a1a8b0";
-        palette.textMain = "#20252b";
+        ket::Appearance::instance().setMode(ket::Appearance::Mode::Light);
+        palette = ketplus::currentThemePalette();
     }
     view.applyTheme(palette);
     view.resize(width, 900);
@@ -1708,7 +1692,7 @@ void AgentWorkspaceViewTest::compactCodeBlocks() {
                     first.value("y").toDouble() + first.value("height").toDouble() / 2));
         const auto scale = image.devicePixelRatio();
         QCOMPARE(image.pixelColor(qRound(origin.x() * scale), qRound(origin.y() * scale)),
-                 QColor(view.tokens().value("codeBlockBackground").toString()));
+                 ket::codeBlockRecipe(ket::Appearance::instance().theme()).background);
     }
     message["body"] = "```sh\nfirst line\n";
     view.updateMessage(0, message);
@@ -1716,10 +1700,9 @@ void AgentWorkspaceViewTest::compactCodeBlocks() {
     QTest::qWait(50);
     auto* standaloneFrame = findVisualItem(body, "messageCodeBlockFrame");
     QVERIFY(standaloneFrame);
-    // Code blocks sit darker than the page in both themes, not on the raised surface.
+    // Both themes use the kit recipe, including its panel-subtle fill.
     const QColor frameColor = standaloneFrame->property("color").value<QColor>();
-    QCOMPARE(frameColor, QColor(view.tokens().value("codeBlockBackground").toString()));
-    QVERIFY(frameColor.lightnessF() < QColor(palette.pageBackground).lightnessF());
+    QCOMPARE(frameColor, ket::codeBlockRecipe(ket::Appearance::instance().theme()).background);
     QVERIFY(standaloneFrame->y() >= 0);
     QVERIFY(standaloneFrame->y() + standaloneFrame->height() <= body->height() + 1);
     message["body"] = "```sh\nfirst line\nsecond line\n```\n\nDone.";
@@ -2072,6 +2055,7 @@ void AgentWorkspaceViewTest::transcriptDayDividersUseJournalDates() {
                        "zoomed-code");
     QQuickItem* body = nullptr;
     QTRY_VERIFY((body = findVisualItem(root, "messageBody")));
+    ket::Appearance::instance().setZoom(18.0 / 14);
     view.applyTheme(testPalette(), 18);
     QTest::qWait(50);
     auto* doc = qvariant_cast<QQuickTextDocument*>(body->property("textDocument"));
@@ -2135,5 +2119,40 @@ void AgentWorkspaceViewTest::transcriptNoticesUseRuntimeState() {
     if (!capture.isEmpty()) {
         QTest::qWait(80);
         QVERIFY(view.quickView()->grabWindow().save(capture));
+    }
+}
+
+void AgentWorkspaceViewTest::markdownTableAfterCodeKeepsHeaderCells() {
+    for (const auto& header : {QString("Surface"), QString{}}) {
+        QTextDocument document;
+        document.setMarkdown("```cpp\nreturn 42;\n```\n\n| " + header +
+                             " | State |\n| --- | --- |\n| Conversation | Ready |");
+        QTextTable* table = nullptr;
+        for (auto* frame : document.rootFrame()->childFrames())
+            if (auto* candidate = qobject_cast<QTextTable*>(frame))
+                table = candidate;
+        QVERIFY(table);
+        const auto recipe = ket::markdownRecipe(ket::Theme::Dark);
+        ketplus::styleTranscriptTables(&document, recipe, 1, ket::Profile::current().codePadding);
+        const auto normalized = document.toPlainText();
+        QCOMPARE(table->rows(), 2);
+        QCOMPARE(table->columns(), 2);
+        QCOMPARE(table->cellAt(0, 0).firstCursorPosition().block().text(), header);
+        if (!header.isEmpty())
+            QCOMPARE(table->cellAt(0, 0)
+                         .firstCursorPosition()
+                         .block()
+                         .begin()
+                         .fragment()
+                         .charFormat()
+                         .fontWeight(),
+                     recipe.strongWeight);
+        QCOMPARE(table->cellAt(0, 1).firstCursorPosition().block().text(), QString("State"));
+        QCOMPARE(table->cellAt(1, 0).firstCursorPosition().block().text(), QString("Conversation"));
+        ketplus::styleTranscriptTables(
+            &document, recipe, 1.25,
+            ket::Appearance::scale(ket::Profile::current().codePadding, 1.25));
+        QCOMPARE(document.toPlainText(), normalized);
+        QCOMPARE(table->cellAt(0, 0).firstCursorPosition().block().text(), header);
     }
 }

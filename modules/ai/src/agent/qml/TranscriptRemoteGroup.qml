@@ -1,12 +1,12 @@
 import Ket
 import QtQuick
-import Ket 1.0 as Kit
+import Ket as Kit
 import QtQuick.Controls.Basic as Basic
 
 Column {
     id: root
     objectName: "transcriptRemoteGroup"
-    required property var tokens
+
     required property var host
     required property var view
     required property string groupKey
@@ -23,7 +23,7 @@ Column {
         delegate: TranscriptActivityRow {
             required property var modelData
             width: root.width
-            tokens: root.tokens
+
             host: root.host
             stateStore: root.view
             stateKey: JSON.stringify([root.view.cacheScope, modelData.messageKey])
@@ -55,9 +55,9 @@ Column {
         width: root.width
         visible: !!root.details.loading || !!root.details.error
         text: root.details.error || "Loading activity details…"
-        color: root.details.error ? root.tokens.danger : root.tokens.textMuted
-        font.family: root.tokens.uiFont
-        font.pixelSize: root.tokens.caption
+        color: root.details.error ? KetTheme.t.danger : KetTheme.t.textMuted
+        font.family: KetTheme.fontFamily
+        font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
         wrapMode: Text.Wrap
         Accessible.role: Accessible.StaticText
         Accessible.name: text

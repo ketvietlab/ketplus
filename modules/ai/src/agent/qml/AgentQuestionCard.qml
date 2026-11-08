@@ -1,6 +1,6 @@
 import Ket
 import QtQuick
-import Ket 1.0 as Kit
+import Ket as Kit
 import QtQuick.Layouts
 import QtQuick.Controls.Basic as Basic
 
@@ -12,7 +12,7 @@ Kit.KetQuestionCard {
     required property var answerData
     required property bool pending
     required property string messageKey
-    required property var tokens
+
 
     property int currentIndex: 0
     property var draftAnswers: ({})
@@ -213,7 +213,7 @@ Kit.KetQuestionCard {
                 Text {
                     width: parent.width
                     text: modelData.header || "Answer"
-                    font.family: root.tokens.uiFont
+                    font.family: KetTheme.fontFamily
                     font.pixelSize: root.recipe.labelPixels
                     color: root.recipe.step
                 }
@@ -222,7 +222,7 @@ Kit.KetQuestionCard {
                     text: root.answerData[modelData.id] || ""
                     textFormat: Text.PlainText
                     wrapMode: Text.Wrap
-                    font.family: root.tokens.uiFont
+                    font.family: KetTheme.fontFamily
                     font.pixelSize: root.recipe.headingPixels
                     color: root.recipe.heading
                 }

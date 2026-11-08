@@ -4,7 +4,6 @@ import Ket as Kit
 Kit.KetUsageRing {
     id: ring
     objectName: "usageLimitsButton"
-    property var tokens: ({})
     property real progress: 0
     // Compatibility inputs for callers; the shared recipe owns their presentation.
     property color trackColor: "transparent"

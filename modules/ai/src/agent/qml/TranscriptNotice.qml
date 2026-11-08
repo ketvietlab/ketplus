@@ -1,17 +1,18 @@
+import Ket
 import QtQuick
 import QtQuick.Layouts
-import Ket 1.0 as Kit
+import Ket as Kit
 
 Rectangle {
     id: notice
-    required property var tokens
+
     property string title
     property string message
     property string status
     property string subtype
     readonly property bool failed: status === "failed"
     readonly property bool lineOnly: subtype === "event" || subtype === "turnEnd"
-    readonly property var recipe: Kit.KetTheme.bannerRecipe(tokens.dark, tokens.zoomFactor, failed ? Kit.KetTheme.BannerTone.Danger : Kit.KetTheme.BannerTone.Info)
+    readonly property var recipe: Kit.KetTheme.bannerRecipe(KetTheme.dark, KetTheme.zoom, failed ? Kit.KetTheme.BannerTone.Danger : Kit.KetTheme.BannerTone.Info)
     implicitHeight: content.implicitHeight + 2 * recipe.paddingBlock
     radius: lineOnly ? 0 : recipe.radius
     color: lineOnly ? "transparent" : recipe.background
@@ -28,7 +29,7 @@ Rectangle {
             Layout.alignment: Qt.AlignTop
             name: Kit.KetTheme.iconForLucide(notice.failed ? "alert-circle" : notice.subtype === "turnEnd" ? (notice.status === "completed" ? "circle-check" : "circle-stop") : notice.subtype === "reconnecting" ? "refresh-cw" : notice.subtype === "compaction" ? "archive" : "info")
             box: notice.recipe.iconSize
-            color: notice.failed ? notice.tokens.danger : notice.tokens.textMuted
+            color: notice.failed ? KetTheme.t.danger : KetTheme.t.textMuted
         }
         ColumnLayout {
             Layout.fillWidth: true
@@ -38,8 +39,8 @@ Rectangle {
                 Layout.fillWidth: true
                 text: notice.title
                 textFormat: Text.PlainText
-                color: notice.failed ? notice.tokens.danger : notice.tokens.textSecondary
-                font.family: notice.tokens.uiFont
+                color: notice.failed ? KetTheme.t.danger : KetTheme.t.textSecondary
+                font.family: KetTheme.fontFamily
                 font.pixelSize: notice.recipe.titlePixels
                 font.weight: notice.recipe.titleWeight
                 wrapMode: Text.Wrap
@@ -53,11 +54,11 @@ Rectangle {
                 readOnly: true
                 selectByMouse: true
                 wrapMode: TextEdit.WrapAnywhere
-                color: notice.tokens.textMuted
-                font.family: notice.tokens.uiFont
+                color: KetTheme.t.textMuted
+                font.family: KetTheme.fontFamily
                 font.pixelSize: notice.recipe.messagePixels
-                selectionColor: notice.tokens.accentSubtle
-                selectedTextColor: notice.tokens.accentText
+                selectionColor: KetTheme.t.accentSubtle
+                selectedTextColor: KetTheme.t.accentText
             }
         }
     }

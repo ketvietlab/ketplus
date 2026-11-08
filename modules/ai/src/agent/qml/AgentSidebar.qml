@@ -13,7 +13,7 @@ Rectangle {
     SplitView.preferredWidth: 216
     SplitView.minimumWidth: 188
     SplitView.maximumWidth: Math.max(188, workspace.width - 326)
-    color: workspace.t.sidebarBackground
+    color: KetTheme.t.sidebarBg
 
     ColumnLayout {
         anchors.fill: parent
@@ -164,9 +164,9 @@ Rectangle {
                 spacing: KetTheme.px(4, KetTheme.zoom)
                 Text {
                     text: "Usage"
-                    color: workspace.t.textSecondary
-                    font.family: workspace.t.uiFont
-                    font.pixelSize: workspace.t.caption
+                    color: KetTheme.t.textSecondary
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                 }
                 Item {
                     Layout.fillWidth: true
@@ -174,9 +174,9 @@ Rectangle {
                 Text {
                     objectName: "weeklyLimitValue"
                     text: weeklyFooter.quota.available ? Math.round(weeklyFooter.quota.usedPercent) + "% used" : weeklyFooter.quota.loading ? "Loading..." : "--"
-                    color: workspace.t.textMuted
-                    font.family: workspace.t.uiFont
-                    font.pixelSize: workspace.t.caption
+                    color: KetTheme.t.textMuted
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                 }
                 Basic.ToolButton {
                     id: refreshWeeklyLimitButton
@@ -191,11 +191,11 @@ Rectangle {
                             anchors.centerIn: parent
                             box: Math.min(parent.width, parent.height)
                             name: KetTheme.iconForLucide("rotate-ccw")
-                            color: workspace.t.textMuted
+                            color: KetTheme.t.textMuted
                         }
                     }
                     background: Rectangle {
-                        color: parent.hovered ? workspace.t.surfaceHover : "transparent"
+                        color: parent.hovered ? KetTheme.t.surfaceHover : "transparent"
                         radius: KetTheme.px(4, KetTheme.zoom)
                     }
                     onClicked: agentHost.requestWeeklyLimit()
@@ -214,12 +214,12 @@ Rectangle {
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: KetTheme.px(12, KetTheme.zoom)
                 height: KetTheme.px(3, KetTheme.zoom)
-                color: workspace.t.border
+                color: KetTheme.t.panelBorder
                 Rectangle {
                     objectName: "weeklyLimitProgress"
                     height: parent.height
                     width: parent.width * (weeklyFooter.quota.available ? Math.min(1, Math.max(0, weeklyFooter.quota.usedPercent / KetTheme.px(100, KetTheme.zoom))) : 0)
-                    color: weeklyFooter.quota.usedPercent >= 90 ? workspace.t.warning : workspace.t.accent
+                    color: weeklyFooter.quota.usedPercent >= 90 ? KetTheme.t.warning : KetTheme.t.accent
                 }
                 MouseArea {
                     id: weeklyLimitMouse
@@ -237,7 +237,7 @@ Rectangle {
                 anchors.top: parent.top
                 width: parent.width
                 height: 1
-                color: workspace.t.border
+                color: KetTheme.t.panelBorder
             }
         }
 
@@ -260,27 +260,27 @@ Rectangle {
                     Layout.preferredWidth: KetTheme.px(16, KetTheme.zoom)
                     Layout.preferredHeight: KetTheme.px(16, KetTheme.zoom)
                     name: KetTheme.iconForLucide("settings")
-                    color: workspace.t.textMuted
+                    color: KetTheme.t.textMuted
                     box: KetTheme.px(16, KetTheme.zoom)
                 }
                 Text {
                     Layout.fillWidth: true
                     text: "Settings"
-                    color: workspace.t.textSecondary
-                    font.family: workspace.t.uiFont
-                    font.pixelSize: workspace.t.body
+                    color: KetTheme.t.textSecondary
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                 }
                 Text {
                     text: "⌘ ,"
-                    color: workspace.t.textMuted
-                    font.family: workspace.t.uiFont
-                    font.pixelSize: workspace.t.micro
+                    color: KetTheme.t.textMuted
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.dayDividerRecipe(KetTheme.dark, KetTheme.zoom).fontPixels
                 }
             }
             background: Rectangle {
                 radius: KetTheme.px(6, KetTheme.zoom)
-                color: settingsNavigationButton.hovered ? workspace.t.surfaceHover : "transparent"
-                border.color: settingsNavigationButton.visualFocus ? workspace.t.focus : "transparent"
+                color: settingsNavigationButton.hovered ? KetTheme.t.surfaceHover : "transparent"
+                border.color: settingsNavigationButton.visualFocus ? KetTheme.t.colorFocus : "transparent"
             }
             Accessible.name: "Settings"
         }
@@ -296,7 +296,7 @@ Rectangle {
                 anchors.fill: parent
                 anchors.margins: KetTheme.px(2, KetTheme.zoom)
                 radius: KetTheme.px(6, KetTheme.zoom)
-                color: identityMouse.containsMouse ? workspace.t.surfaceHover : "transparent"
+                color: identityMouse.containsMouse ? KetTheme.t.surfaceHover : "transparent"
             }
             Rectangle {
                 anchors.left: parent.left
@@ -305,13 +305,13 @@ Rectangle {
                 width: KetTheme.px(25, KetTheme.zoom)
                 height: KetTheme.px(25, KetTheme.zoom)
                 radius: KetTheme.px(13, KetTheme.zoom)
-                color: workspace.t.accentMuted
+                color: KetTheme.t.accentMuted
                 Text {
                     anchors.centerIn: parent
                     text: "KP"
-                    color: workspace.t.tabActiveText
-                    font.family: workspace.t.uiFont
-                    font.pixelSize: workspace.t.micro
+                    color: KetTheme.t.tabActiveText
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.dayDividerRecipe(KetTheme.dark, KetTheme.zoom).fontPixels
                     font.weight: Font.Bold
                 }
             }
@@ -325,19 +325,19 @@ Rectangle {
                 Text {
                     width: parent.width
                     text: "KetPlus"
-                    color: workspace.t.textMain
+                    color: KetTheme.t.textMain
                     elide: Text.ElideRight
-                    font.family: workspace.t.uiFont
-                    font.pixelSize: workspace.t.caption
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                     font.weight: Font.DemiBold
                 }
                 Text {
                     width: parent.width
                     text: "Personal workspace"
-                    color: workspace.t.textMuted
+                    color: KetTheme.t.textMuted
                     elide: Text.ElideRight
-                    font.family: workspace.t.uiFont
-                    font.pixelSize: workspace.t.micro
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.dayDividerRecipe(KetTheme.dark, KetTheme.zoom).fontPixels
                 }
             }
             KetIcon {
@@ -348,7 +348,7 @@ Rectangle {
                 width: KetTheme.px(14, KetTheme.zoom)
                 height: KetTheme.px(14, KetTheme.zoom)
                 name: KetTheme.iconForLucide("chevron-down")
-                color: workspace.t.textMuted
+                color: KetTheme.t.textMuted
                 box: KetTheme.px(14, KetTheme.zoom)
             }
             MouseArea {

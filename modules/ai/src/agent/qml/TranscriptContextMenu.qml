@@ -6,7 +6,7 @@ Kit.KetMenu {
     id: menu
     objectName: "transcriptContextMenu"
     required property var host
-    required property var tokens
+
     // The text item holding the reader's selection when the menu opened, if any.
     property var selectionItem: null
     property string fileTarget: ""
