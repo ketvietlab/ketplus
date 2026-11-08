@@ -1,4 +1,6 @@
 add_library(ketplus_remote STATIC
+    src/DaemonCredentialFile.cpp
+    src/DaemonCredentialFile.h
     src/DaemonPaths.cpp
     src/DaemonPaths.h
     src/DaemonClient.cpp

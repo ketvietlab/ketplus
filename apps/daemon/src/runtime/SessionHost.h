@@ -278,6 +278,8 @@ class SessionHost final : public QObject, private AgentHostPort {
     // the session's held delta so the journal keeps provider order.
     bool appendEvent(Session& session, const QString& type, const QJsonObject& payload,
                      QString* error = nullptr);
+    bool journalTurnStart(Session& session, const QJsonObject& prompt,
+                          const QJsonObject& configuration, QString* error);
     bool journalEvent(Session& session, const QString& type, const QJsonObject& payload,
                       QString* error = nullptr);
     bool flushDelta(Session& session, QString* error = nullptr);

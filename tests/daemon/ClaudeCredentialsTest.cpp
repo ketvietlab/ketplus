@@ -102,6 +102,7 @@ class ClaudeCredentialsTest : public QObject {
         const QByteArray token(32, 'x');
         QFile tokenFile(tokenPath);
         QVERIFY(tokenFile.open(QIODevice::WriteOnly));
+        QVERIFY(tokenFile.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner));
         QCOMPARE(tokenFile.write(token), token.size());
         tokenFile.close();
         const auto oldSocket = qgetenv("KETPLUS_DAEMON_SOCKET");
