@@ -381,10 +381,15 @@ void AgentWorkspaceViewTest::worktreeHeaderKeepsLabelVisible() {
     view.applyTheme(testPalette());
     view.setSessionState("CRM Refactor", "Working", true);
     view.setExecutionBranch("feat/customer-care-routine-workflow");
+    view.setConversations({QVariantMap{{"id", "crm"}, {"number", "4821"}, {"active", true}}});
     view.resize(1200, 700);
     view.show();
     auto* root = view.quickView()->rootObject();
     QVERIFY(root);
+    // Agent references read @agent/NNNN, as in the mock and the sidebar.
+    auto* number = root->findChild<QQuickItem*>("conversationNumber");
+    QVERIFY(number);
+    QTRY_COMPARE(number->property("text").toString(), QStringLiteral("@agent/4821"));
     auto* label = root->findChild<QQuickItem*>("workspaceScopeLabel");
     auto* chip = root->findChild<QQuickItem*>("workspaceScopeChip");
     QVERIFY(label && chip);

@@ -28,11 +28,8 @@ Item {
         return ({});
     }
     readonly property real maximumTitleWidth: Math.max(KetTheme.px(160, KetTheme.zoom), Math.min(KetTheme.px(420, KetTheme.zoom), width * 0.45))
-    readonly property string scopeLabel: {
-        const branch = agentHost.executionBranch || selectedWorktree.branch || "workspace";
-        const repository = agentHost.repositoryName || "Repository";
-        return repository + " · " + branch;
-    }
+    readonly property string scopeBranch: agentHost.executionBranch || selectedWorktree.branch || "workspace"
+    readonly property string scopeLabel: (agentHost.repositoryName || "Repository") + " · " + scopeBranch
 
     // One compact row: title, status and a muted scope chip on the left, icon actions right.
     RowLayout {
@@ -47,7 +44,7 @@ Item {
         Text {
             id: conversationNumber
             objectName: "conversationNumber"
-            // ADR 0027: the number other conversations and `#` references use.
+            // ADR 0027: the number other conversations use to address this one.
             readonly property string number: {
                 const conversations = agentHost.conversations || [];
                 for (let index = 0; index < conversations.length; ++index) {
@@ -57,18 +54,19 @@ Item {
                 return "";
             }
             visible: number.length > 0
-            text: "#" + number
+            // Jay's choice for agent references, as in the mock's header and the sidebar.
+            text: "@agent/" + number
             color: KetTheme.t.textMuted
             font.family: agentHost.monoFontFamily
-            font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
-            font.weight: Font.Medium
+            font.pixelSize: KetTheme.px(14, KetTheme.zoom)
             Accessible.name: "Conversation number " + number
         }
         Text {
             id: conversationTitle
             objectName: "conversationTitle"
             // Long handoff titles must not push the status badge and scope chip away.
-            Layout.maximumWidth: Math.max(0, Math.min(header.maximumTitleWidth, titleRow.width - conversationStatusBadge.width - (scopeChip.visible ? Math.min(scopeChip.implicitWidth, 80) : 0) - (reviewerButton.visible ? reviewerButton.implicitWidth + titleRow.spacing : 0) - (conversationNumber.visible ? conversationNumber.implicitWidth + titleRow.spacing : 0) - (conversationTags.visible ? conversationTags.implicitWidth + titleRow.spacing : 0) - titleRow.spacing * 2))
+            // Everything else at its narrowest, each with its spacing; the trailing filler adds one more.
+            Layout.maximumWidth: Math.max(0, Math.min(header.maximumTitleWidth, titleRow.width - Math.min(conversationStatusBadge.Layout.preferredWidth, conversationStatusBadge.Layout.maximumWidth) - titleRow.spacing - (scopeChip.visible ? scopeChip.Layout.minimumWidth + titleRow.spacing : 0) - (reviewerButton.visible ? reviewerButton.implicitWidth + titleRow.spacing : 0) - (conversationNumber.visible ? conversationNumber.implicitWidth + titleRow.spacing : 0) - (conversationTags.visible ? conversationTags.implicitWidth + titleRow.spacing : 0) - titleRow.spacing))
             text: agentHost.sessionTitle
             color: KetTheme.t.textMain
             elide: Text.ElideRight
@@ -81,66 +79,83 @@ Item {
         Rectangle {
             id: conversationStatusBadge
             objectName: "conversationStatusBadge"
-            Layout.preferredHeight: KetTheme.px(18, KetTheme.zoom)
-            Layout.preferredWidth: statusText.implicitWidth + KetTheme.px(12, KetTheme.zoom)
+            // ket::badgeRecipe, as KetBadge draws the mock's status; long statuses still elide.
+            readonly property var recipe: KetTheme.badgeRecipe(KetTheme.dark, KetTheme.zoom, agentHost.sessionRunning ? KetTheme.BadgeTone.Accent : KetTheme.BadgeTone.Neutral)
+            Layout.preferredHeight: recipe.height
+            Layout.preferredWidth: statusText.implicitWidth + 2 * recipe.paddingInline
             Layout.maximumWidth: KetTheme.px(120, KetTheme.zoom)
-            radius: KetTheme.px(4, KetTheme.zoom)
-            color: agentHost.sessionRunning ? KetTheme.t.accentSubtle : "transparent"
-            border.color: agentHost.sessionRunning ? KetTheme.t.accent : KetTheme.t.panelBorder
+            radius: recipe.radius
+            color: recipe.background
+            border.width: 1
+            border.color: recipe.border
             Text {
                 id: statusText
                 anchors.centerIn: parent
-                width: Math.min(implicitWidth, parent.width - KetTheme.px(12, KetTheme.zoom))
+                width: Math.min(implicitWidth, parent.width - 2 * conversationStatusBadge.recipe.paddingInline)
                 text: agentHost.sessionRunning ? "Working" : agentHost.sessionStatus
-                color: agentHost.sessionRunning ? KetTheme.t.accentHover : KetTheme.t.textMuted
+                color: conversationStatusBadge.recipe.text
                 font.family: KetTheme.fontFamily
-                font.pixelSize: KetTheme.dayDividerRecipe(KetTheme.dark, KetTheme.zoom).fontPixels
-                font.weight: Font.Medium
+                font.pixelSize: conversationStatusBadge.recipe.fontPixels
+                font.weight: conversationStatusBadge.recipe.fontWeight
                 elide: Text.ElideRight
             }
             Accessible.role: Accessible.StaticText
             Accessible.name: statusText.text
         }
+        // The mock's worktree KetButton (Secondary, Small): the branch, with the repository in its tooltip.
         Rectangle {
             id: scopeChip
             objectName: "workspaceScopeChip"
+            readonly property var recipe: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Small, scopeMouse.containsMouse, scopeMouse.pressed, true, activeFocus)
+            readonly property real chrome: 2 * recipe.paddingInline + recipe.iconSize + 2 * recipe.spacing + scopeChevron.implicitWidth
             visible: !agentHost.compactWindow
             // Measure the unelided text independently of the allocated chip width.
-            implicitWidth: scopeText.implicitWidth + KetTheme.px(30, KetTheme.zoom)
-            Layout.preferredHeight: KetTheme.px(20, KetTheme.zoom)
+            implicitWidth: scopeText.implicitWidth + chrome
+            Layout.preferredHeight: recipe.height
             Layout.preferredWidth: implicitWidth
             // Shrinks (its label elides) before the title and Reviewer button run out of room.
             Layout.fillWidth: true
             Layout.maximumWidth: implicitWidth
             Layout.minimumWidth: Math.min(implicitWidth, KetTheme.px(80, KetTheme.zoom))
-            radius: KetTheme.px(5, KetTheme.zoom)
-            color: KetTheme.t.interactiveBg
-            border.color: KetTheme.t.panelBorder
+            radius: recipe.radius
+            color: recipe.background
+            border.width: 1
+            border.color: recipe.focusRing.a > 0 ? recipe.focusRing : recipe.border
+            opacity: recipe.opacity
             clip: true
             Row {
                 id: scopeRow
                 anchors.left: parent.left
-                anchors.leftMargin: KetTheme.px(6, KetTheme.zoom)
+                anchors.leftMargin: scopeChip.recipe.paddingInline
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: KetTheme.px(4, KetTheme.zoom)
+                spacing: scopeChip.recipe.spacing
                 KetIcon {
                     anchors.verticalCenter: parent.verticalCenter
-                    width: KetTheme.px(14, KetTheme.zoom)
-                    height: KetTheme.px(14, KetTheme.zoom)
-                    name: KetTheme.iconForLucide("git-branch")
-                    color: KetTheme.t.textMuted
-                    box: KetTheme.px(14, KetTheme.zoom)
+                    width: scopeChip.recipe.iconSize
+                    height: scopeChip.recipe.iconSize
+                    name: "branch"
+                    color: scopeChip.recipe.text
+                    box: scopeChip.recipe.iconSize
                 }
                 Text {
                     id: scopeText
                     objectName: "workspaceScopeLabel"
                     anchors.verticalCenter: parent.verticalCenter
-                    width: Math.min(implicitWidth, Math.max(0, scopeChip.width - KetTheme.px(30, KetTheme.zoom)))
-                    text: header.scopeLabel
-                    color: KetTheme.t.textSecondary
+                    width: Math.min(implicitWidth, Math.max(0, scopeChip.width - scopeChip.chrome))
+                    text: header.scopeBranch
+                    color: scopeChip.recipe.text
                     elide: Text.ElideMiddle
                     font.family: KetTheme.fontFamily
-                    font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+                    font.pixelSize: scopeChip.recipe.fontPixels
+                    font.weight: scopeChip.recipe.fontWeight
+                }
+                Text {
+                    id: scopeChevron
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "\u25BE"
+                    color: scopeChip.recipe.text
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: scopeChip.recipe.fontPixels
                 }
             }
             MouseArea {
@@ -157,6 +172,7 @@ Item {
             }
             Accessible.role: Accessible.Button
             Accessible.name: "Choose Files and Source Control worktree"
+            Accessible.description: header.scopeLabel
             Accessible.onPressAction: agentHost.requestExecutionWorktree()
         }
         Kit.KetButton {
