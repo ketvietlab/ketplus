@@ -178,3 +178,10 @@ preferences retain their existing immediate-save contracts. The sidebar Storage
 action selects that section without rebuilding an already open settings draft.
 Provider status and Claude usage remain authoritative runtime data; unavailable
 limits or credentials are never rendered as configured mock state.
+
+Atlas library and conversation-detail actions use kit buttons, fields and badges.
+Card colors resolve semantic tokens and the real manifest supplies screen/flow
+counts. Builder chat is a docked right pane: hiding it expands the existing Atlas
+WebView; showing it reserves space rather than covering the map. The compact chat
+keeps its conversation and draft, and Back navigates to that conversation. The
+Atlas WebView's flows, map and preview implementation remain unchanged.
