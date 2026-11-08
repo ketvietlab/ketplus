@@ -17,6 +17,10 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLocalSocket>
+#include <QRegularExpression>
+#include <QSqlDatabase>
+#include <QSqlError>
+#include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QThread>
 #include <QtTest>
@@ -470,6 +474,359 @@ class DaemonLifecycleTest final : public QObject {
         // SessionHost does not own the adapter. Drain queued provider callbacks
         // while the host is still alive, matching DaemonService teardown order.
         adapter.stop();
+    }
+
+    void preservesStreamAcrossJournalFailure_data() {
+        QTest::addColumn<QString>("boundary");
+        for (const auto& value : {"timer", "item", "event", "command", "cap", "delete",
+                                  "subscriber-delete", "shutdown", "oversized"})
+            QTest::newRow(value) << QString(value);
+    }
+    void preservesStreamAcrossJournalFailure() {
+        QFETCH(QString, boundary);
+        QTemporaryDir dir;
+        const auto executable = dir.filePath("fake-codex");
+        QVERIFY(writeFakeCodex(executable, dir.filePath("provider.log")));
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        CodexAdapter adapter(executable);
+        auto owner = std::make_unique<SessionHost>(&journal, &adapter);
+        auto& host = *owner;
+        const auto stopProvider = qScopeGuard([&] { adapter.stop(); });
+        const auto started =
+            host.handleCommand(request("session.start_turn", "fault-stream",
+                                       {{"worktree_path", dir.path()}, {"prompt", "seed"}}),
+                               "desktop-test");
+        QVERIFY(started.value("ok").toBool());
+        const auto id = started.value("session_id").toString();
+        const auto completed = [&] {
+            for (const auto& value : journal.eventsAfter(id, 1, 0))
+                if (value.toObject().value("event_type") == "turn.completed")
+                    return true;
+            return false;
+        };
+        QTRY_VERIFY(completed());
+        const auto baseline = journal.sessionHead(id).cursor;
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == path)
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        QSqlQuery q(db);
+        QVERIFY(q.exec("CREATE TRIGGER fail_stream BEFORE INSERT ON events WHEN "
+                       "NEW.event_type='assistant.delta' BEGIN SELECT "
+                       "RAISE(ABORT,'synthetic_stream_failure'); END"));
+        const auto clearFault = qScopeGuard([&] {
+            QSqlQuery clean(db);
+            clean.exec("DROP TRIGGER IF EXISTS fail_stream");
+        });
+        const auto delta = [&](const QString& item, const QString& text) {
+            emit adapter.notificationReceived(
+                "item/agentMessage/delta",
+                {{"threadId", "thread-1"}, {"itemId", item}, {"delta", text}});
+        };
+        delta("fault-answer", "prefix-");
+        QTest::ignoreMessage(
+            QtWarningMsg,
+            QRegularExpression("Unable to journal assistant\\.delta.*synthetic_stream_failure.*"));
+        if (boundary == "timer" || boundary == "command" || boundary == "cap" ||
+            boundary == "delete")
+            QTest::qWait(250);
+        else if (boundary == "item")
+            delta("fault-second", "tail");
+        else
+            emit adapter.notificationReceived(
+                "item/started",
+                {{"threadId", "thread-1"},
+                 {"item",
+                  QJsonObject{{"id", "marker"}, {"type", "mcpToolCall"}, {"tool", "read_file"}}}});
+        if (boundary == "oversized") {
+            QTest::ignoreMessage(
+                QtWarningMsg,
+                QRegularExpression("Unable to retain journal event .*recovery limit reached"));
+            emit adapter.notificationReceived(
+                "item/completed",
+                {{"threadId", "thread-1"},
+                 {"item", QJsonObject{{"id", "too-large-command"},
+                                      {"type", "commandExecution"},
+                                      {"aggregatedOutput", QString(300 * 1024, 'x')}}}});
+            emit adapter.notificationReceived("item/started",
+                                              {{"threadId", "thread-1"},
+                                               {"item", QJsonObject{{"id", "after-rejection"},
+                                                                    {"type", "mcpToolCall"},
+                                                                    {"tool", "read_file"}}}});
+        }
+        if (boundary == "command") {
+            const auto rejected = host.handleCommand(
+                request("session.start_turn", "must-not-send",
+                        {{"worktree_path", dir.path()}, {"prompt", "must-not-send"}}, id, 1),
+                "desktop-test");
+            QVERIFY(!rejected.value("ok").toBool());
+            QCOMPARE(rejected.value("error_code").toString(), QString("journal_error"));
+        }
+        if (boundary == "cap") {
+            QTest::ignoreMessage(
+                QtWarningMsg,
+                QRegularExpression("Unable to retain journal event .*recovery limit reached"));
+            for (int n = 1; n <= 129; ++n)
+                delta(QString("queued-%1").arg(n), "tail");
+        }
+        bool deleted = false;
+        if (boundary == "subscriber-delete") {
+            connect(&host, &SessionHost::eventReady, &host, [&](const QJsonObject& event) {
+                if (event.value("session_id").toString() == id &&
+                    event.value("event_type") == "assistant.delta" &&
+                    event.value("payload").toObject().value("item_id") == "fault-answer") {
+                    const auto result = host.handleCommand(
+                        request("session.delete", "delete-on-retry", {}, id, 1), "desktop-test");
+                    deleted = result.value("ok").toBool();
+                }
+            });
+        }
+        // A later event must not overtake the failed prefix.
+        QCOMPARE(journal.eventsAfter(id, 1, baseline).size(), 0);
+        if (boundary == "delete") {
+            const auto result = host.handleCommand(
+                request("session.delete", "delete-backlog", {}, id, 1), "desktop-test");
+            QVERIFY(result.value("ok").toBool());
+        }
+        QVERIFY(q.exec("DROP TRIGGER fail_stream"));
+        if (boundary == "delete" || boundary == "subscriber-delete") {
+            if (boundary == "subscriber-delete")
+                QTRY_VERIFY_WITH_TIMEOUT(deleted, 3000);
+            QTest::qWait(1200);
+            QCOMPARE(journal.sessionHead(id).generation, qint64(0));
+            QVERIFY(journal.eventsAfter(id, 1, 0).isEmpty());
+            const auto fresh =
+                host.handleCommand(request("session.start_turn", "after-delete",
+                                           {{"worktree_path", dir.path()}, {"prompt", "fresh"}}),
+                                   "desktop-test");
+            QVERIFY(fresh.value("ok").toBool());
+            return;
+        }
+        if (boundary == "shutdown")
+            owner.reset();
+        if (boundary == "timer")
+            delta("fault-answer", "tail");
+        const int expected = boundary == "oversized"                          ? 3
+                             : boundary == "cap"                              ? 128
+                             : (boundary == "timer" || boundary == "command") ? 1
+                                                                              : 2;
+        QTRY_COMPARE_WITH_TIMEOUT(journal.eventsAfter(id, 1, baseline).size(), expected, 10000);
+        const auto events = journal.eventsAfter(id, 1, baseline);
+        QCOMPARE(events.at(0).toObject().value("event_type").toString(),
+                 QString("assistant.delta"));
+        const auto first = events.at(0).toObject().value("payload").toObject();
+        QCOMPARE(first.value("item_id").toString(), QString("fault-answer"));
+        QCOMPARE(first.value("delta").toString(),
+                 boundary == "timer" ? QString("prefix-tail") : QString("prefix-"));
+        if (boundary == "item")
+            QCOMPARE(events.at(1).toObject().value("payload").toObject().value("delta").toString(),
+                     QString("tail"));
+        if (boundary == "event" || boundary == "shutdown")
+            QCOMPARE(events.at(1).toObject().value("event_type").toString(),
+                     QString("item.started"));
+        if (boundary == "cap")
+            QCOMPARE(
+                events.last().toObject().value("payload").toObject().value("item_id").toString(),
+                QString("queued-127"));
+        if (boundary == "command")
+            for (const auto& event : events)
+                QVERIFY(!QJsonDocument(event.toObject())
+                             .toJson(QJsonDocument::Compact)
+                             .contains("must-not-send"));
+        LocalJournal reopened(path);
+        QVERIFY(reopened.isOpen());
+        QCOMPARE(reopened.eventsAfter(id, 1, baseline), events);
+    }
+
+    void boundsJournalRecoveryAcrossSessions_data() {
+        QTest::addColumn<QString>("budget");
+        for (const auto& value :
+             {"global-events", "delete-releases", "session-bytes", "global-bytes"})
+            QTest::newRow(value) << QString(value);
+    }
+    void boundsJournalRecoveryAcrossSessions() {
+        QFETCH(QString, budget);
+        QTemporaryDir dir;
+        const auto executable = dir.filePath("fake-codex");
+        QVERIFY(writeFakeCodex(executable, dir.filePath("provider.log")));
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        CodexAdapter adapter(executable);
+        SessionHost host(&journal, &adapter);
+        const auto stopProvider = qScopeGuard([&] { adapter.stop(); });
+        const bool bytes = budget.endsWith("bytes");
+        const int count = budget == "session-bytes" ? 1 : bytes ? 3 : 5;
+        QStringList ids;
+        QList<qint64> baselines;
+        for (int n = 0; n < count; ++n) {
+            const auto started =
+                host.handleCommand(request("session.start_turn", QString("seed-%1").arg(n),
+                                           {{"worktree_path", dir.path()}, {"prompt", "seed"}}),
+                                   "desktop-test");
+            QVERIFY(started.value("ok").toBool());
+            const auto id = started.value("session_id").toString();
+            const auto completed = [&] {
+                for (const auto& value : journal.eventsAfter(id, 1, 0))
+                    if (value.toObject().value("event_type") == "turn.completed")
+                        return true;
+                return false;
+            };
+            QTRY_VERIFY(completed());
+            ids.append(id);
+            baselines.append(journal.sessionHead(id).cursor);
+        }
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == path)
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        QSqlQuery q(db);
+        QVERIFY(q.exec("CREATE TRIGGER fail_stream BEFORE INSERT ON events WHEN "
+                       "NEW.event_type='assistant.delta' BEGIN SELECT "
+                       "RAISE(ABORT,'synthetic_stream_failure'); END"));
+        const auto clearFault = qScopeGuard([&] {
+            QSqlQuery clean(db);
+            clean.exec("DROP TRIGGER IF EXISTS fail_stream");
+        });
+        const QString large = bytes ? QString(19 * 1024 * 1024 / 2, 'x') : QString();
+        for (int n = 0; n < count; ++n) {
+            if (budget == "delete-releases" && n == 4) {
+                const auto deleted = host.handleCommand(
+                    request("session.delete", "free-budget", {}, ids[0], 1), "desktop-test");
+                QVERIFY(deleted.value("ok").toBool());
+            }
+            const auto thread = QString("thread-%1").arg(n + 1);
+            const auto delta = [&](int item) {
+                emit adapter.notificationReceived("item/agentMessage/delta",
+                                                  {{"threadId", thread},
+                                                   {"itemId", QString("buffer-%1").arg(item)},
+                                                   {"delta", "prefix"}});
+            };
+            QTest::ignoreMessage(
+                QtWarningMsg,
+                QRegularExpression(
+                    "Unable to journal assistant\\.delta.*synthetic_stream_failure.*"));
+            const bool full = budget == "session-bytes" || (budget == "global-bytes" && n == 2) ||
+                              (budget == "global-events" && n == 4);
+            if (full)
+                QTest::ignoreMessage(
+                    QtWarningMsg,
+                    QRegularExpression("Unable to retain journal event .*recovery limit reached"));
+            delta(0);
+            if (bytes) {
+                const int largeCount = budget == "session-bytes" ? 3 : 2;
+                for (int item = 0; item < largeCount; ++item)
+                    emit adapter.notificationReceived(
+                        "item/completed",
+                        {{"threadId", thread},
+                         {"item", QJsonObject{{"id", QString("large-%1").arg(item)},
+                                              {"type", "agentMessage"},
+                                              {"text", large}}}});
+            } else {
+                for (int item = 1; item < 128; ++item)
+                    delta(item);
+            }
+        }
+        QVERIFY(q.exec("DROP TRIGGER fail_stream"));
+        const auto rowCount = [&](const QString& sql, const QString& id) -> qint64 {
+            QSqlQuery read(db);
+            if (!read.prepare(sql))
+                return -1;
+            read.addBindValue(id);
+            if (!read.exec() || !read.next())
+                return -1;
+            return read.value(0).toLongLong();
+        };
+        for (int n = 0; n < count; ++n) {
+            if (budget == "delete-releases" && n == 0) {
+                QCOMPARE(journal.sessionHead(ids[n]).generation, qint64(0));
+                continue;
+            }
+            if (bytes) {
+                // Count metadata only; do not repeatedly hydrate the 19 MiB bodies.
+                const int expected = budget == "global-bytes" && n == 2 ? 0 : 2;
+                QTRY_COMPARE_WITH_TIMEOUT(
+                    rowCount("SELECT count(*) FROM large_event_payloads WHERE session_id=?",
+                             ids[n]),
+                    expected, 15000);
+                QTRY_VERIFY_WITH_TIMEOUT(journal.sessionHead(ids[n]).cursor > baselines[n], 15000);
+                QCOMPARE(
+                    rowCount("SELECT count(*) FROM events WHERE event_type='assistant.delta' AND "
+                             "json_extract(payload,'$.item_id')='buffer-0' AND session_id=?",
+                             ids[n]),
+                    qint64(1));
+            } else {
+                const int expected = budget == "global-events" && n == 4 ? 1 : 128;
+                QTRY_COMPARE_WITH_TIMEOUT(journal.eventsAfter(ids[n], 1, baselines[n]).size(),
+                                          expected, 10000);
+            }
+        }
+        QTest::qWait(1200);
+        if (budget == "delete-releases")
+            QVERIFY(journal.eventsAfter(ids[0], 1, 0).isEmpty());
+        if (bytes)
+            QCOMPARE(rowCount("SELECT count(*) FROM large_event_payloads WHERE session_id=?",
+                              ids.last()),
+                     budget == "global-bytes" ? qint64(0) : qint64(2));
+    }
+
+    void retriesStreamAfterBusyWriter() {
+        QTemporaryDir dir;
+        const auto executable = dir.filePath("fake-codex");
+        QVERIFY(writeFakeCodex(executable, dir.filePath("provider.log")));
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        CodexAdapter adapter(executable);
+        SessionHost host(&journal, &adapter);
+        const auto stopProvider = qScopeGuard([&] { adapter.stop(); });
+        const auto started =
+            host.handleCommand(request("session.start_turn", "busy-seed",
+                                       {{"worktree_path", dir.path()}, {"prompt", "seed"}}),
+                               "desktop-test");
+        QVERIFY(started.value("ok").toBool());
+        const auto id = started.value("session_id").toString();
+        const auto completed = [&] {
+            for (const auto& value : journal.eventsAfter(id, 1, 0))
+                if (value.toObject().value("event_type") == "turn.completed")
+                    return true;
+            return false;
+        };
+        QTRY_VERIFY(completed());
+        const auto baseline = journal.sessionHead(id).cursor;
+        const auto connection = QString("busy-stream-%1").arg(id);
+        const auto removeConnection =
+            qScopeGuard([&] { QSqlDatabase::removeDatabase(connection); });
+        auto writer = QSqlDatabase::addDatabase("QSQLITE", connection);
+        writer.setDatabaseName(path);
+        QVERIFY(writer.open());
+        QSqlQuery lock(writer);
+        QVERIFY(lock.exec("BEGIN IMMEDIATE"));
+        const auto unlock = qScopeGuard([&] { writer.rollback(); });
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression("Unable to journal assistant\\.delta.*locked.*"));
+        QElapsedTimer elapsed;
+        elapsed.start();
+        for (const auto& item : {"before-lock", "after-lock"})
+            emit adapter.notificationReceived(
+                "item/agentMessage/delta",
+                {{"threadId", "thread-1"}, {"itemId", item}, {"delta", "kept"}});
+        QVERIFY2(elapsed.elapsed() < 500,
+                 "A busy writer must not block the daemon for the SQLite timeout.");
+        QCOMPARE(journal.eventsAfter(id, 1, baseline).size(), 0);
+        QVERIFY(writer.rollback());
+        QTRY_COMPARE_WITH_TIMEOUT(journal.eventsAfter(id, 1, baseline).size(), 2, 4000);
+        QCOMPARE(journal.eventsAfter(id, 1, baseline)
+                     .first()
+                     .toObject()
+                     .value("payload")
+                     .toObject()
+                     .value("item_id")
+                     .toString(),
+                 QString("before-lock"));
     }
 
     void coalescesStreamedDeltasPerItem() {

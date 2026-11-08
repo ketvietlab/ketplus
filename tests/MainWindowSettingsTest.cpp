@@ -17,6 +17,7 @@
 #include "update/AppUpdater.h"
 #include "workspace/ActivityBar.h"
 
+#include <QAbstractButton>
 #include <QAction>
 #include <QApplication>
 #include <QComboBox>

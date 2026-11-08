@@ -36,6 +36,11 @@ class SymbolIconTest final : public QObject {
         }
         QVERIFY(!QFile::exists(QStringLiteral(":/agent/icons/plus.svg")));
         QVERIFY(!QFile::exists(QStringLiteral(":/atlas/icons/plus.svg")));
+        // The agent resources are linked, so the removals above are real; the empty state's
+        // theme-aware brand marks replace the old PNG.
+        QVERIFY(QFile::exists(QStringLiteral(":/agent/icons/ketplus-mark-light.svg")));
+        QVERIFY(QFile::exists(QStringLiteral(":/agent/icons/ketplus-mark-dark.svg")));
+        QVERIFY(!QFile::exists(QStringLiteral(":/agent/icons/ketplus-mark.png")));
     }
 };
 QTEST_MAIN(SymbolIconTest)

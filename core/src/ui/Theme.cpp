@@ -941,6 +941,8 @@ void ThemeManager::setInterfaceFontSizePixels(const int fontSizePixels) {
     setApplicationFont(font);
     apply(false);
     ket::Appearance::instance().setZoom(qreal(normalized) / InterfaceZoomMetrics::designedAtPixels);
+    // apply() sized the tooltip font from the previous zoom.
+    restoreTooltipFont();
     emit themeChanged();
 }
 

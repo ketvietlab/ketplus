@@ -50,10 +50,10 @@ void GitDiffViewTest::rendersStructuredInlineDiff() {
 
     auto* table = view.findChild<QTableView*>();
     QVERIFY(table != nullptr);
-    QCOMPARE(table->font().family(), QStringLiteral("KÉT Sans Mono"));
+    QCOMPARE(table->font().family(), QStringLiteral("KET Sans Mono"));
     QCOMPARE(table->font().pixelSize(), 14);
     const QFont renderedCodeFont = table->model()->index(1, 3).data(Qt::FontRole).value<QFont>();
-    QCOMPARE(renderedCodeFont.family(), QStringLiteral("KÉT Sans Mono"));
+    QCOMPARE(renderedCodeFont.family(), QStringLiteral("KET Sans Mono"));
     QCOMPARE(renderedCodeFont.pixelSize(), 14);
     QVERIFY(renderedCodeFont.family() != QStringLiteral("Helvetica"));
     QCOMPARE(table->verticalHeader()->defaultSectionSize(), 24);
