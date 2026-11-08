@@ -4,6 +4,7 @@
 #include "ComputerAgentInstructions.h"
 #include "ComputerToolLaunch.h"
 #include "providers/ClaudeCredentials.h"
+#include "providers/ProviderFrameValidation.h"
 #include "runtime/ResponseGuidance.h"
 #include <QRegularExpression>
 
@@ -150,6 +151,15 @@ ClaudeAdapter::ClaudeAdapter(const QString& executable, QObject* parent)
                     return;
                 }
                 noteUnexpectedStop();
+                if (malformedOutput_) {
+                    const QString reason =
+                        QStringLiteral("The Claude sidecar emitted a malformed protocol message.");
+                    failPending(reason);
+                    // Initialization already publishes its own failure; do not emit it twice.
+                    if (!stopping_)
+                        emit stopped(reason);
+                    return;
+                }
                 const QString reason = QStringLiteral("The Claude sidecar exited unexpectedly.");
                 failPending(reason);
                 emit stopped(reason);
@@ -311,6 +321,7 @@ void ClaudeAdapter::ensureStarted() {
             restartTimer_->start(std::max<qint64>(1, restartNotBefore_.remainingTime()));
         return;
     }
+    malformedOutput_ = false;
     stopping_ = false;
     starting_ = true;
     stdoutBuffer_.clear();
@@ -407,6 +418,13 @@ void ClaudeAdapter::sendObject(const QJsonObject& object) {
 }
 
 void ClaudeAdapter::consumeStdout() {
+    if (malformedOutput_) {
+        process_->setReadChannel(QProcess::StandardOutput);
+        while (process_->bytesAvailable() > 0)
+            if (process_->read(64 * 1024).isEmpty())
+                break;
+        return;
+    }
     constexpr qint64 readChunkBytes = 64 * 1024;
     process_->setReadChannel(QProcess::StandardOutput);
     while (process_->bytesAvailable() > 0) {
@@ -438,6 +456,8 @@ void ClaudeAdapter::consumeStdout() {
             stdoutBuffer_.remove(0, newline + 1);
             if (!line.isEmpty())
                 consumeLine(line);
+            if (malformedOutput_)
+                return;
         }
     }
 }
@@ -445,7 +465,15 @@ void ClaudeAdapter::consumeStdout() {
 void ClaudeAdapter::consumeLine(const QByteArray& line) {
     QJsonParseError parseError;
     const QJsonDocument document = QJsonDocument::fromJson(line, &parseError);
-    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+    if (!providerFrameHasValidControlBytes(line) || parseError.error != QJsonParseError::NoError ||
+        !document.isObject()) {
+        // No reliable call identity survives a broken frame. Quarantine the whole
+        // generation; finished settles pending calls through the existing lifecycle.
+        malformedOutput_ = true;
+        setReady(false);
+        stdoutBuffer_.clear();
+        process_->closeReadChannel(QProcess::StandardOutput);
+        process_->kill();
         return;
     }
     const QJsonObject object = document.object();

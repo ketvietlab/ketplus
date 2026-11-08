@@ -3,6 +3,7 @@
 #include "BrowserToolLaunch.h"
 #include "ComputerAgentInstructions.h"
 #include "providers/CursorToolItem.h"
+#include "providers/ProviderFrameValidation.h"
 #include "providers/compat/ProviderVersionProbe.h"
 #include "runtime/ResponseGuidance.h"
 
@@ -433,6 +434,15 @@ CursorAdapter::CursorAdapter(const QString& executable, QObject* parent)
                 return;
             }
             noteUnexpectedStop();
+            if (malformedOutput_) {
+                const QString reason =
+                    QStringLiteral("The Cursor ACP process emitted a malformed protocol message.");
+                failPending(reason);
+                // Initialization already publishes its own failure; do not emit it twice.
+                if (!stopping_)
+                    emit stopped(reason);
+                return;
+            }
             const QString reason =
                 QStringLiteral("The Cursor ACP process exited unexpectedly.%1").arg(stderrTail());
             failPending(reason);
@@ -991,6 +1001,7 @@ void CursorAdapter::ensureStarted() {
         return;
     }
     versionCleared_ = false;
+    malformedOutput_ = false;
     stopping_ = false;
     starting_ = true;
     stdoutBuffer_.clear();
@@ -1518,6 +1529,13 @@ void CursorAdapter::sendObject(const QJsonObject& object) {
 }
 
 void CursorAdapter::consumeStdout() {
+    if (malformedOutput_) {
+        process_->setReadChannel(QProcess::StandardOutput);
+        while (process_->bytesAvailable() > 0)
+            if (process_->read(64 * 1024).isEmpty())
+                break;
+        return;
+    }
     constexpr qint64 readChunkBytes = 64 * 1024;
     process_->setReadChannel(QProcess::StandardOutput);
     while (process_->bytesAvailable() > 0) {
@@ -1549,6 +1567,8 @@ void CursorAdapter::consumeStdout() {
             stdoutBuffer_.remove(0, newline + 1);
             if (!line.isEmpty())
                 consumeLine(line);
+            if (malformedOutput_)
+                return;
         }
     }
 }
@@ -1556,8 +1576,17 @@ void CursorAdapter::consumeStdout() {
 void CursorAdapter::consumeLine(const QByteArray& line) {
     QJsonParseError parseError;
     const QJsonDocument document = QJsonDocument::fromJson(line, &parseError);
-    if (parseError.error != QJsonParseError::NoError || !document.isObject())
+    if (!providerFrameHasValidControlBytes(line) || parseError.error != QJsonParseError::NoError ||
+        !document.isObject()) {
+        // No reliable call identity survives a broken frame. Quarantine the whole
+        // generation; finished settles pending calls through the existing lifecycle.
+        malformedOutput_ = true;
+        setReady(false);
+        stdoutBuffer_.clear();
+        process_->closeReadChannel(QProcess::StandardOutput);
+        process_->kill();
         return;
+    }
     const QJsonObject object = document.object();
     const QString method = object.value(QStringLiteral("method")).toString();
     if (method == QStringLiteral("session/update")) {

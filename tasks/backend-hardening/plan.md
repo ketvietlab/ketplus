@@ -852,8 +852,9 @@ remain explicitly open.
 - [x] Catalog code commit `3f7892b1`: Release headless build and the affected
   **17/17 targets PASS**, 261.33 s, serial/offscreen. The following evidence-only
   commit preserves the tested production/test hashes; no full Desktop claim.
-- [ ] Finish catalog exact-head independent review by #7705, then merge and
-  clean its worktree. This is the sole new unreviewed package for the issue.
+- [x] #7705 passed catalog `2bbd4661`: independent 14/14 focused and 52/52
+  headless targets. #275 merged at `4cd20d4f`; its worktree/build were safely
+  removed after pushing.
 - [ ] Finish #71 acceptance: normal malformed/binary/invalid-UTF8 frame behavior,
   capability-to-adapter coverage, and disposition of remaining probe/waiter limits.
   Existing #260/#261 own response id/envelope work overlapping #74; do not duplicate
@@ -861,3 +862,23 @@ remain explicitly open.
 
 Owner #2739 continues this issue; no new domain audit or UI implementation starts.
 The relay rollout gate remains external and does not block this provider work.
+
+
+## 2026-11-08 — #71 malformed normal frames
+
+- [x] Original production fails 42 final fake-provider cases, with 5 control/setup
+  checks passing. All three adapters can ignore a corrupt frame and dispatch its
+  valid-looking suffix. Qt also accepts raw control bytes inside JSON strings.
+- [x] Implement generation rejection, buffered-suffix quarantine and static
+  lifecycle failure (ADR 0089), preserving valid whitespace/escapes and fresh
+  process recovery. This is the sole new package following catalog #275.
+- [ ] Full Release Pro build and full offscreen suite at the final code head;
+  preserve the exact head, focused totals, full-run failures and any justified rerun.
+- [ ] Independent #7705 review, merge and safe worktree/build cleanup.
+- #260/#261 combined head `d4737f95` includes catalog #275 and is under #7705
+  review. Author Release Pro: 100/101 first pass (421.97 s), response 126/126;
+  unchanged serial Cursor rerun 24/24 (12.23 s) after a 3 s timeout needed 3.1 s.
+  Do not call that a clean first-pass 101/101. Both response fixes remain unmerged.
+- [ ] Finish capability-to-adapter acceptance and disposition of concrete #71
+  findings before closing the issue. Do not begin another domain audit. No UI,
+  provider quota, live journal, install or deploy work is authorized here.

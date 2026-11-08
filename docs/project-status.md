@@ -5,6 +5,11 @@ milestone changes state.
 
 ## Implemented
 
+- Malformed normal-sized provider frames reject their process generation (ADR 0089).
+  Syntax/UTF-8/non-object frames and raw control bytes cannot be followed by a
+  dispatched suffix. Pending calls receive a static error and a fresh process can
+  recover; method schemas and absent-response deadlines remain separate.
+
 - Cursor model-catalog subprocesses drain both channels while running and enforce
   a shared 1-MiB output budget (ADR 0088). Excess output and unsuccessful exits use
   the existing fallback catalog; successful exact-budget output remains usable.

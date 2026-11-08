@@ -582,6 +582,12 @@ and `sign_in_error` when it failed; `remote.sign_in.cancel` and sign-out stop it
 
 ## Lifecycle
 
+Malformed normal-sized stdout frames quarantine the provider generation before it
+is killed (ADR 0089). Buffered suffixes are discarded; the finished path settles
+pending calls with a static diagnostic and uses existing restart backoff. JSON
+control bytes must be escaped inside strings; outside JSON whitespace remains
+allowed. Valid-object RPC schemas and absent-response deadlines remain separate.
+
 Cursor model discovery reads both channels incrementally with a shared 1-MiB
 budget (ADR 0088). It retains stdout only, kills excess output, and parses only
 successful normal exits. The existing fallback catalog settles failed/timed-out
