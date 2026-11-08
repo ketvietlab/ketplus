@@ -226,6 +226,11 @@ the corresponding Atlas mock first.
   observes unread bytes with dispatch paused before/after hello, then verifies
   exact-limit pipelined frames and subsequent delivery without reconnect.
 - `core/` change: the Lite suite (`ctest --preset lite-dev`), then the full Pro suite.
+- Git/workspace symlink fixtures use native filesystem symbolic links, including
+  directory and dangling links. `QFile::link()` creates Windows shortcuts and
+  must not substitute for these fixtures. Git fixtures set repository-local
+  `core.symlinks=true`; inability to create a real link fails setup rather than
+  silently skipping the boundary assertion.
 - QML layout or native rendering: offscreen tests plus the relevant native
   screenshot/pixel check documented in `agent-workspace.md`.
 - Performance-sensitive behavior: Release build and the matching script under
