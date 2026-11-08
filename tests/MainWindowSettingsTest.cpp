@@ -12,6 +12,7 @@
 #include "preview/MarkdownPreviewPane.h"
 #include "terminal/TerminalView.h"
 #include "ui/Theme.h"
+#include "ui/TypeScale.h"
 #include "update/AppUpdater.h"
 #include "workspace/ActivityBar.h"
 
@@ -563,8 +564,13 @@ void MainWindowSettingsTest::settingsAndWorktreesUseWorkspacePages() {
     QVERIFY(darkTheme != nullptr);
     QVERIFY(settingsTitle != nullptr);
     QVERIFY(sectionTitle != nullptr);
-    QCOMPARE(settingsTitle->font().pixelSize(), 29);
-    QCOMPARE(sectionTitle->font().pixelSize(), 22);
+    // Titles follow the Két profile roles behind TypeScale's Display/Heading steps.
+    QCOMPARE(settingsTitle->font().pixelSize(),
+             ketplus::TypeScale::pixels(ketplus::TypeStep::Display,
+                                        ketplus::InterfaceZoomMetrics::mediumPixels));
+    QCOMPARE(sectionTitle->font().pixelSize(),
+             ketplus::TypeScale::pixels(ketplus::TypeStep::Heading,
+                                        ketplus::InterfaceZoomMetrics::mediumPixels));
     QVERIFY(settingsPage->findChild<QFrame*>(QStringLiteral("settingsWorkspacePreview")) !=
             nullptr);
     QVERIFY(!window.findChild<QLineEdit*>(QStringLiteral("themeSearch"))->isVisible());
