@@ -113,6 +113,13 @@ plus the four-byte header (ADR 0077), separately from frame assembly and outboun
 queues. Pausing request dispatch applies transport backpressure without dropping
 valid pipelined requests. This does not bound all per-request or process memory.
 
+Local turn acceptance commits the starting session/configuration, pinned context,
+`user.message`, `turn.queued` and optional `session.configuration_changed` in one
+transaction. Its bounded receipt is read before commit and published afterward;
+failed acceptance cannot retain a rejected prompt (ADR 0076). Existing stream
+recovery is drained first; command-result persistence and provider-side effects
+remain separate transaction boundaries.
+
 Streamed text reaches the journal coalesced: consecutive `assistant.delta` or
 `command.output_delta` notifications for one item are held for at most 150 ms
 (or 16 KiB) and journaled as one event. Any other event, a delta of another

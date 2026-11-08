@@ -32,6 +32,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <utility>
 
@@ -1265,16 +1266,8 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
                                    provider_handoff::handoffNote(std::exchange(it->handoffFrom, {}),
                                                                  transcriptPath, 0)}});
     }
-    const QString previousState = it->stored.state;
+    const StoredSession previous = it->stored;
     it->stored.state = QStringLiteral("starting");
-    if (!journal_->upsertSession(it->stored)) {
-        it->stored.state = previousState;
-        for (const QString& path : std::exchange(it->materializedAttachments, {}))
-            QFile::remove(path);
-        for (const QString& id : std::exchange(it->stagedAttachmentIds, {}))
-            (void)journal_->cancelAttachment(sessionId, it->stored.generation, id, 1);
-        return error(QStringLiteral("journal_error"), journal_->errorString());
-    }
     QJsonObject userMessage{{QStringLiteral("text"), displayText},
                             {QStringLiteral("command_id"), request.value("message_id")}};
     if (!messageImages.isEmpty())
@@ -1286,43 +1279,54 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
     const QString clientMessageId = payload.value(QStringLiteral("client_message_id")).toString();
     if (!clientMessageId.isEmpty() && clientMessageId.size() <= 128)
         userMessage.insert(QStringLiteral("client_message_id"), clientMessageId);
-    // The turn is only started once its prompt is durable; otherwise a restored transcript would
-    // show provider output with no user message and the client would believe the send succeeded.
-    QString appendError;
-    if (!appendEvent(*it, QStringLiteral("user.message"), userMessage, &appendError) ||
-        !appendEvent(*it, QStringLiteral("turn.queued"), {}, &appendError)) {
-        it->stored.state = previousState;
-        releaseTurnAttachments(*it);
-        (void)journal_->upsertSession(it->stored);
-        return error(QStringLiteral("journal_error"), appendError);
-    }
-    it->startingTurn = true;
-    const auto previousModel = it->stored.model;
-    const auto previousEffort = it->stored.effort;
-    const auto previousPolicy = it->stored.executionPolicy;
-    const auto previousCompactWindow = it->stored.compactWindow;
     if (localClient && options.contains("permission")) {
         const auto permission = options.value("permission").toString();
         it->stored.executionPolicy = permission == "danger-full-access" ? "full"
                                      : permission == "read-only"        ? "read-only"
                                                                         : "ask";
     }
-    if (!options.value(QStringLiteral("model")).toString().isEmpty())
-        it->stored.model = options.value(QStringLiteral("model")).toString();
-    if (!options.value(QStringLiteral("effort")).toString().isEmpty())
-        it->stored.effort = options.value(QStringLiteral("effort")).toString();
+    if (!options.value("model").toString().isEmpty())
+        it->stored.model = options.value("model").toString();
+    if (!options.value("effort").toString().isEmpty())
+        it->stored.effort = options.value("effort").toString();
     it->stored.compactWindow = compactWindow;
-    if (previousModel != it->stored.model || previousEffort != it->stored.effort ||
-        previousPolicy != it->stored.executionPolicy ||
-        previousCompactWindow != it->stored.compactWindow) {
-        ++it->stored.configurationRevision;
-        if (!journal_->upsertSession(it->stored))
-            return error("journal_error", journal_->errorString());
-        appendEvent(*it, "session.configuration_changed",
-                    {{"revision", it->stored.configurationRevision},
-                     {"effective", configurationOf(it->stored, {}).value("effective")},
-                     {"adapter", it->stored.adapter}});
+    QJsonObject configuration;
+    QString appendError;
+    const bool changed = previous.model != it->stored.model ||
+                         previous.effort != it->stored.effort ||
+                         previous.executionPolicy != it->stored.executionPolicy ||
+                         previous.compactWindow != it->stored.compactWindow;
+    if (changed) {
+        if (it->stored.configurationRevision == std::numeric_limits<qint64>::max()) {
+            appendError = "Session configuration revision is exhausted.";
+        } else {
+            ++it->stored.configurationRevision;
+            configuration = {{"revision", it->stored.configurationRevision},
+                             {"effective", configurationOf(it->stored, {}).value("effective")},
+                             {"adapter", it->stored.adapter}};
+        }
     }
+    const QPointer<SessionHost> acceptingHost(this);
+    const bool accepted =
+        appendError.isEmpty() && journalTurnStart(*it, userMessage, configuration, &appendError);
+    if (acceptingHost.isNull())
+        return error("session_unavailable", "The session host closed during turn acceptance.");
+    it = sessions_.find(sessionId);
+    if (it == sessions_.end() || it->stored.generation != previous.generation)
+        return error("session_unavailable", "The session changed during turn acceptance.");
+    if (!accepted) {
+        // Prior stream flushes can advance counters; restore only the draft
+        // configuration/state, leaving those already accepted stream events intact.
+        it->stored.state = previous.state;
+        it->stored.model = previous.model;
+        it->stored.effort = previous.effort;
+        it->stored.executionPolicy = previous.executionPolicy;
+        it->stored.compactWindow = previous.compactWindow;
+        it->stored.configurationRevision = previous.configurationRevision;
+        releaseTurnAttachments(*it);
+        return error("journal_error", appendError);
+    }
+    it->startingTurn = true;
     QJsonObject turnOptions = options;
     turnOptions.insert(QStringLiteral("provider"), it->stored.adapter);
     turnOptions.insert(QStringLiteral("model"), it->stored.model);
