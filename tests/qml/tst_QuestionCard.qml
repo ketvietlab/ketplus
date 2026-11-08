@@ -43,7 +43,7 @@ TestCase {
         verify(!card.confirmation)
         compare(findChild(card, "questionOtherOption").visible, false)
         verify(findChild(card, "questionOtherInput").visible)
-        compare(findChild(card, "questionStatus").text, "")
+        compare(card.step, "")
     }
     function test_choices_not_confirmation() {
         const card = createTemporaryObject(factory, this, {questions: question([{id:"a", label:"Workspace"}, {id:"b", label:"Full access"}])})

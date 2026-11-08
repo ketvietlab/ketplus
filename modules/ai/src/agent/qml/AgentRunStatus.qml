@@ -36,7 +36,7 @@ Item {
             color: workspace.t.textSecondary
             elide: Text.ElideRight
             font.family: workspace.t.uiFont
-            font.pixelSize: workspace.t.reading
+            font.pixelSize: KetTheme.activityRowRecipe(workspace.t.dark, workspace.t.zoomFactor, false, true, false).fontPixels
         }
     }
 }
