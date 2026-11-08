@@ -3,7 +3,9 @@
 #include <QJsonDocument>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QStringDecoder>
 #include <QVariant>
+#include <algorithm>
 
 namespace ketplus::daemon {
 
@@ -13,6 +15,15 @@ QString deletionWorkQuery(bool pendingCloudOnly, bool wrap) {
            QString(pendingCloudOnly ? "cloud_acked=0"
                                     : "(provider_targets != '[]' OR cloud_acked=0)=1") +
            (wrap ? " AND rowid<=?" : " AND rowid>?") + " ORDER BY rowid LIMIT ?";
+}
+QString sessionTombstonesQuery(const bool continuation) {
+    // Guard storage types and bytes before Qt materializes a corrupted identity.
+    // Keep validation out of WHERE so malformed rows cannot disappear from a page.
+    return "SELECT CASE WHEN typeof(session_id)='text' AND octet_length(session_id) BETWEEN 1 "
+           "AND 1024 THEN CAST(session_id AS BLOB) END, CASE WHEN typeof(generation)='integer' AND "
+           "generation>0 THEN generation END FROM session_tombstones " +
+           QString(continuation ? "WHERE (session_id,generation)>(?,?) " : "") +
+           "ORDER BY session_id,generation LIMIT ?";
 }
 } // namespace detail
 
@@ -48,13 +59,78 @@ QJsonArray LocalJournal::deletionWork(const int limit, const bool pendingCloudOn
     return result;
 }
 
-QJsonArray LocalJournal::sessionTombstones() const {
+std::optional<QString> LocalJournal::sessionTombstoneSnapshot() const {
     QSqlQuery query(database_);
-    QJsonArray result;
-    if (query.exec("SELECT session_id,generation FROM session_tombstones"))
-        while (query.next())
-            result.append(QJsonObject{{"session_id", query.value(0).toString()},
-                                      {"session_generation", query.value(1).toLongLong()}});
+    if (!query.exec("SELECT CASE WHEN typeof(revision)='text' AND octet_length(revision)=32 "
+                    "THEN revision END FROM session_tombstone_catalog WHERE id=1") ||
+        !query.next()) {
+        setError("Cannot read the tombstone catalog revision.");
+        return std::nullopt;
+    }
+    const auto revision = query.value(0).toString();
+    if (revision.size() != 32 || std::any_of(revision.cbegin(), revision.cend(), [](QChar c) {
+            return !((c >= u'0' && c <= u'9') || (c >= u'a' && c <= u'f'));
+        })) {
+        setError("Invalid tombstone catalog revision.");
+        return std::nullopt;
+    }
+    // A new journal instance invalidates outstanding cursors even without a mutation.
+    return connectionName_ + ':' + revision;
+}
+
+std::optional<SessionTombstonePage> LocalJournal::sessionTombstones(const QJsonObject& after,
+                                                                    const bool legacy) const {
+    const auto id = after.value("session_id").toString();
+    const auto generation = after.value("session_generation").toInteger(-1);
+    if (!after.isEmpty() &&
+        (after.size() != 2 || id.isEmpty() || id.toUtf8().size() > 1024 || generation < 1)) {
+        setError("Invalid session tombstone cursor.");
+        return std::nullopt;
+    }
+    constexpr int pageRows = 128;
+    const int rows = legacy ? 32768 : pageRows;
+    const qsizetype bytes = legacy ? 1024 * 1024 : 64 * 1024;
+    QSqlQuery query(database_);
+    query.setForwardOnly(true);
+    query.prepare(detail::sessionTombstonesQuery(!after.isEmpty()));
+    if (!after.isEmpty()) {
+        query.addBindValue(id);
+        query.addBindValue(generation);
+    }
+    query.addBindValue(rows + 1);
+    if (!query.exec()) {
+        setError(query.lastError().text());
+        return std::nullopt;
+    }
+    SessionTombstonePage result;
+    qsizetype used = 2;
+    while (query.next()) {
+        if (query.value(0).isNull() || query.value(1).isNull()) {
+            setError("Malformed session tombstone remains in the journal.");
+            return std::nullopt;
+        }
+        QStringDecoder decoder(QStringDecoder::Utf8, QStringConverter::Flag::Stateless |
+                                                         QStringConverter::Flag::ConvertInitialBom);
+        const auto identity = query.value(0).toByteArray();
+        const QString sessionId = decoder(identity);
+        if (decoder.hasError() || sessionId.toUtf8() != identity) {
+            setError("Malformed UTF-8 session tombstone remains in the journal.");
+            return std::nullopt;
+        }
+        const QJsonObject row{{"session_id", sessionId},
+                              {"session_generation", query.value(1).toLongLong()}};
+        const auto size = QJsonDocument(row).toJson(QJsonDocument::Compact).size() + 1;
+        if (result.tombstones.size() == rows || used + size > bytes) {
+            result.next = result.tombstones.last().toObject();
+            break;
+        }
+        result.tombstones.append(row);
+        used += size;
+    }
+    if (query.lastError().isValid()) {
+        setError(query.lastError().text());
+        return std::nullopt;
+    }
     return result;
 }
 

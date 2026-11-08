@@ -1,6 +1,6 @@
 # Backend hardening execution plan
 
-Updated: 2026-11-07. Owner: conversation #2739. Independent reviewer: #6212.
+Updated: 2026-11-08. Owner: conversation #2739. Independent reviewer: #7705 (reassigned by the user on 2026-11-08).
 Baseline: integration `90388ea772bf75267e66233ee66566bc0e2e18e8` (PR #212).
 
 This is the durable execution queue for finishing the existing non-UI domain
@@ -35,10 +35,15 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
    regression; run the required matrix; record the final commit and evidence.
 3. A review finding loops back to the same item. A PASS only unlocks the merge
    gate; it does not complete merge, cleanup, packaging or deployment.
-4. Send one complete exact-head request to #6212. While an item awaits review,
-   continue an independent ready audit. Do not poll the peer or stop with an
-   invitation to continue. If all remaining items depend on an external gate,
-   record its owner and exact missing evidence instead of claiming completion.
+4. Send one complete exact-head request to #7705. Do not poll the peer or bypass
+   a held dispatch. The 2026-11-08 closure audit supersedes the previous rule to
+   start another independent audit while waiting: freeze new audit branches,
+   drain the existing review queue by issue. Issue #71 is now closed; the
+   current issue is #68 (journal and media). Integrate/review its existing media,
+   policy and migration packages before opening another domain. Do not wait for
+   all drafts to merge before preparing closure. Allow at most one new unreviewed package
+   needed for the current issue. Resolve its findings before advancing.
+   Record external gates separately from unperformed work owned by #2739.
 5. After exact-head tests and review pass, merge using the existing authorization.
    Address all P0/P1/P2 findings; do not self-accept a risk to empty the checklist.
    Lower-severity findings are either fixed or explicitly accepted by the user.
@@ -152,8 +157,10 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 
 ## H3 — Provider adapters and credentials (#71–75)
 
-- [ ] H3.1 Common framing: huge/no-newline/binary/invalid-UTF8 input, stderr drain,
-  bounded buffering, version-probe timeout/cache and honest capability flags.
+- [x] H3.1 Common framing: huge/no-newline/binary/invalid-UTF8 input, stderr drain,
+  bounded line/output retention, version-probe timeout/cache and honest capability
+  flags. #71 closed after #277; request/waiter and transient process-memory bounds
+  remain separate H3.4 work.
 - [ ] H3.2 Claude sidecar framing/crash/resume/worktree identity, bounded background
   tasks, pinned packaging and absence of runtime network installs.
 - [ ] H3.3 Credential/keychain failure handling, sign-out clearing, request
@@ -222,15 +229,16 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | --- | --- | --- | --- |
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
 | H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 and cloud #237 merged; transaction recovery #241 merged; cancellation #240 merged; explicit session-delete bounds still open | Audit explicit session deletion and tombstone enumeration / #2739 |
-| H1.2 | In progress | Startup commit failure #250 merged; other migration/read/crash cases remain | Continue remaining failure-path audit / #2739 |
-| H1.4 | In progress | Cleanup #251 merged; dedup validation under verification; reference-write false success reproduced | Finish dedup gate, then reference persistence / #2739 |
+| H1.2 | In progress | #272/#273 integrated into #274 with #255; combined Pro 104/104 at 5a8bca1c | #274 reviewed and merged c3490da5; broader migration/crash gates remain / #2739 |
+| H1.4 | In progress | #253–255 merged via 691d18c4; author Pro104/104 and independent daemon56/56 | Remaining write-admission, filesystem races and bounds / #2739 |
 | H1.5–H1.7 | Not started | No claim that #128 backend acceptance is complete | Continue storage acceptance / #2739 |
 | H1.3 | In progress | Delete/ownership #241–243, append #244–245 and fork #246–247 merged; stream recovery #248 merged; replay/activity #249 merged; startup #250 merged | Continue caller atomicity/read failures / #2739 |
-| H2–H3 | Partially started | H2.3 volatile retry subset #248 merged; full lifecycle and provider audits remain | Continue remaining daemon/provider checks / #2739 |
+| H2; H3.2–H3.5 | Partially started | H2.3 volatile retry subset #248 merged; broader lifecycle/provider work remains | Drain current #68 queue first / #2739 |
+| H3.1 / #71 | Complete | #277 merged b3af8ed5; author Pro103/103 and independent daemon55/55; all five criteria accepted | None |
 | H4.1–H4.3 | Not started | Existing remote fixes are not a full #85 closure | Audit local transport/privacy with fixtures / #2739 |
 | H4.4 | Waiting, external | Relay code merged; no deployment/readiness evidence supplied | Relay release operator, unassigned; #2739 tracks gate |
 | H5–H6 | Not started | Nonvisual subsets explicitly scoped | Audit after earlier safety work / #2739 |
-| H7 | Pending | Requires all applicable packages and evidence | Integrate and close only verified criteria / #2739, review #6212 |
+| H7 | Pending | Requires all applicable packages and evidence | Integrate and close only verified criteria / #2739, review #7705 |
 
 ### Initial H1.1 audit (baseline commit above)
 
@@ -698,24 +706,456 @@ remain explicitly open.
   permissions before returning a reference; reject linked/non-directory roots.
   Preserve unsupported entries for repair (ADR 0066).
 - [x] Focused 26/26; initial head `51d1a49c` affected 14/14 (101.57 s).
-- [ ] Final integration matrix after #251, independent exact-head review, merge
-  and cleanup.
+- [x] #252 final head `e16fb511`: integrated #251; affected 14/14 (92.20 s).
+- [x] #252 independent exact-head 3/3 (73.75 s; protocol 171, lifecycle
+  42 pass/1 skip, fork 32). Merged `886fbe201ad88e2bbd466c8e0689f3fc7a423223`;
+  cleanup tracked separately.
 - [ ] Continue reference writes/copies, ancestor/path races, decode and enumeration
   bounds. This package does not complete H1.4 or change retention defaults.
 
 
-### H5.2 daemon Atlas readiness and one-shot start result
+### H1.4 require ownership persistence before media publication
 
-- [x] Audit the independent daemon `AtlasLiveRuntime` path; reproduce four false
-  readiness cases and duplicate callback on immediate process exit.
-- [x] Require a complete line for the owned viewer port, preserve truncated-line
-  context and ignore stop-time output. Consume the callback before invoking it;
-  internal setup/cleanup precedes callbacks. No UI implementation changes.
-- [x] Synthetic focused Qt 15/15 PASS; expanded original 9 pass/5 fail. Three
-  individual mutations (boundary/stop/callback) fail their targeted regressions;
-  restored source passes the complete focused matrix (ADR 0083).
-- [x] Final Release Pro build and full 96/96 suite PASS (307.17s); runtime
-  target has 15 pass / 1 real CLI opt-in skip.
-- [ ] Independent exact-head review and merge; dispatch remains held.
-- [ ] Wider executable/port trust, initial read allocation, renderer/descendant
-  teardown, tunnel/grant/lease acceptance and real CLI compatibility remain open.
+- [x] Actual-source standalone probe confirms attachment and inline publication
+  return a media reference when the session reference path is a directory.
+- [x] Original source fails all 27 cases: 24 ownership failures plus three
+  repeated-hash growth cases. The actual partial-write probe also fails.
+- [x] Checked atomic reference publication preserves unsupported metadata and
+  withholds references on failure; repeated hashes are deduplicated (ADR 0067).
+  Focused media set 91/91, including POSIX partial-write rollback/repair.
+- [x] #253 head `98ad1946`: full Release Pro build and 96/96 suite (324.78 s).
+- [x] Independent #7705 PASS on combined #255 `dae6a297`; merged `691d18c4`.
+  GitHub confirms #253/#254 are also MERGED. Safe worktree cleanup is separate.
+  The old #6212 dispatch hold no longer describes the active queue.
+- [ ] Fork-copy/journal coordination, crash durability, write-admission/blob cleanup
+  after failure and broader path/decode/enumeration bounds remain separate work.
+
+
+### H1.3/H1.4 coordinate fork ownership and journal commit
+
+- [x] Original source fails nine of twelve fake-provider fork cases; existing
+  commit-failure, matching destination and empty-source controls already pass.
+- [x] Prepare checked atomic media ownership before SQLite commit; rollback failed
+  preparation and preserve conflicting target metadata. Matching sets permit retry.
+- [x] Split reference ownership from image/blob handling and share bounded parsing
+  and atomic writes (ADR 0068). Initial protocol/fork 2/2 (199/44 checks); extended
+  fork set 14/14 verifies reopen/orphan-reference cleanup without source blob loss.
+- [x] #254 head `7397165c`: full Release Pro build and 96/96 suite (312.14 s).
+- [x] Integrate #253 through #255; full Pro104/104, independent #7705 PASS and
+  merge `691d18c4`. Worktree cleanup is tracked separately below.
+- [ ] Whole-history fork bounds, lost-reference recovery, process interruption,
+  ancestor races and provider-thread compensation remain separate audit work.
+
+
+### H1.4 bound and verify reference-based previews
+
+- [x] Actual-source probe accepts five invalid metadata/blob cases. The broader
+  fixture reproduces seven failures including media-root links and trailing
+  newlines; six valid/refusal controls already pass.
+- [x] Reuse bounded ownership validation, require canonical references and reject
+  linked roots. Read bounded image bytes, verify their hash and decode that same
+  snapshot. Preserve unsupported data for repair (ADR 0069).
+- [x] Focused preview fixture 15/15, including repair and decoded JPEG bounds.
+- [x] #255 head `20156fc7`: Release headless build and affected 15/15 targets
+  PASS (107.00 s). Generated build removed after preserving evidence.
+- [x] Integrate the #253/#254 ancestry with current integration in #255.
+- [x] Independent #7705 PASS at `dae6a297`; #255 merged `691d18c4`.
+- [ ] Verify source/build cleanup; drain the remaining journal package next.
+- [ ] Ancestor races, decode/concurrency acceptance, total blob enumeration,
+  write-admission/orphan recovery and the approved media/archive policy remain.
+
+
+### H3.1 bounded oversized-provider scan
+
+- [x] Source audit identifies unbounded frame allocation below the nominal scan
+  depth: each nested container still appends a frame while discarding a large
+  Codex line. A scalar overflow depth can preserve shallow routing without that
+  allocation.
+- [x] Original source fails the fresh-child memory assertion: 201,637,888 bytes
+  of peak growth; its other 24 checks pass. Expanded array/object and boundary
+  coverage plus the scalar-depth fix passes 46/46; fixed growth 147,456 bytes.
+- [x] Keep at most 64 routing frames and resume shallow routing after skipped
+  containers (ADR 0070). No UI or live provider changes.
+- [x] #256 head `413514af`: full Release Pro build and 97/97 targets PASS
+  (309.16 s). Generated build removed after evidence preservation.
+- [ ] Independent exact-head review, merge and source cleanup; review dispatch
+  is held by the existing chain limit. Independent of pending media packages.
+- [ ] Continue Claude/Cursor newline-boundary checks, aggregate read buffering,
+  malformed/UTF-8 input, stderr handling and version-probe acceptance. No whole
+  H3.1 completion claim follows from the scanner fix alone.
+
+
+### H3.1 Claude/Cursor per-line admission
+
+- [x] Original adapters fail eight real-QProcess coalesced-output cases; six
+  valid/refusal controls pass. Newline presence bypasses the original byte guard.
+- [x] Read bounded chunks, check each complete/partial raw line before parse, and
+  close/drain rejected stdout before callbacks. Focused 16/16 includes request
+  suppression after failure, repeat notifications and a fresh process generation.
+- [x] #257 head `927d6f0d`: Release headless build and affected 15/15 targets
+  PASS (87.33 s). Generated build removed after preserving evidence.
+- [ ] Independent exact-head review, merge and source cleanup. No shared header
+  or UI implementation change; dispatch remains held by the chain limit.
+- [ ] Continue version-probe output bounds: it currently truncates only after
+  process exit, leaving accumulation during the probe unbounded. Stderr, UTF-8,
+  parser memory and event-loop budgets remain separate acceptance work.
+
+
+### H3.1 version-probe result admission
+
+- [x] Original source reproduces five output/exit/identity failures; a separate
+  same-path replacement probe also fails. Existing valid/cache/timeout controls
+  continue to pass.
+- [x] Bound merged output while reading, require successful exit, retain Unknown
+  retry behavior, and only join matching executable generations (ADR 0072).
+  Focused fixture 13/13 passes, including early flood termination and repair.
+- [x] #258 head `d3b1cee9`: Release headless build and affected 15/15 targets
+  PASS (89.23 s). Generated build removed after preserving evidence.
+- [ ] Independent exact-head review, merge and source cleanup. No UI or shared
+  header changes; dispatch remains held by the chain limit.
+- [ ] Continue stderr/encoding, process I/O/event-loop and waiter-admission bounds;
+  H3.1 is not complete solely from these three provider packages.
+
+
+### H3.1/H3.4 oversized routing string semantics
+
+- [x] Original scanner fails 24 encoding/path cases; 14 valid/refusal checks pass.
+  The first test-harness run did not register the new slots and is not evidence.
+- [x] Preserve bounded raw tokens, validate/decode JSON strings, refuse dotted-key
+  aliases and withhold all routing when captured metadata is invalid (ADR 0073).
+  Expanded focused suite 91/91 includes depth/memory and next-line recovery.
+- [x] Full Pro build and 97/97 tests pass at `6fd79e51` (308.05 seconds).
+  Draft #259 is pushed; generated builds are removed. No UI implementation change.
+- [x] #256 and #259 integrated and reviewed by #7705; merged at `7ceebc34`
+  and `b93394bb`. Task worktrees and builds were removed after safe checks.
+- [ ] Duplicate keys/outer structure, RPC request-id typing, timeout/recovery and
+  broader stderr/normal-frame encoding remain open; this is selective extraction.
+
+
+### H3.4 preserve response call identity
+
+- [x] Fake-provider handshake reproduces 15 wrong-id failures across Codex, Claude,
+  Cursor and Codex oversized responses; 23 controls already pass.
+- [x] Use a shared typed positive-integer lookup guard. Focused 39/39 passes;
+  invalid ids preserve pending initialize, followed by exactly one valid completion
+  (ADR 0074). Numeric boundary controls also pass.
+- [x] Full Pro build and 97/97 tests pass at `d835d334` (316.56 seconds).
+  Draft #260 is pushed; generated build is removed. It branches from merged
+  integration, independently of the waiting metadata/string packages.
+- [ ] Independent exact-head review by #7705, merge and source cleanup; the
+  user reassignment supersedes the historical dispatch hold.
+- [ ] Continue result/error-envelope validation, incoming ids, duplicate fields,
+  counter exhaustion and pending-call admission/timeout/cancellation checks.
+
+### H3.4 validate matched response envelopes
+
+- [x] Reproduce 72 malformed-envelope failures on the original three adapters;
+  17 control/setup checks pass. Missing/scalar results can falsely complete
+  initialize; ambiguous/error-shape failures also lack a protocol diagnostic.
+- [x] Share a bounded envelope guard (ADR 0075): one object/null result or object
+  error, static failure, exactly-once callback. Combined focused 126/126 PASS,
+  including outstanding-call isolation, duplicate replies and valid recovery.
+- [ ] Full Pro shared-header gate, integrate parent #260, independent exact-head
+  review, merge and cleanup. No UI implementation changes.
+- [ ] Continue pending-call/counter/lifecycle and method-schema audit; broader H3
+  remains open. Current closure-first priority is #71; do not start a new domain.
+
+
+### 2026-11-08 — integrate the existing #260/#261 response package
+
+- #256/#259/#257/#258/#275 are merged; integration is `4cd20d4f`.
+  Catalog review PASS at `2bbd4661`: independent 14/14 and daemon 52/52.
+  Its worktree/build were safely removed after the PR was pushed.
+- #261 already contains #260; combine their integration/review rather than
+  rebuilding the same shared headers twice. No new production fix is added here.
+  #7705 must review both original changes and the combined final head.
+- [ ] Run full Release Pro build and offscreen suite on the integrated response
+  head; verify the combined 126-case fixture and preserve failure evidence.
+- [ ] Review and merge the combined package; verify #260 is included before
+  closing or marking its work complete. Keep #71 open for malformed frame
+  settlement, capability coverage and remaining concrete bounds findings.
+
+## 2026-11-08 — #71 closure-first integration and catalog output
+
+- [x] #256 merged at `7ceebc34`; #259 merged at `b93394bb` after the
+  doc-only count clarification passed review at `16d8ee70`.
+- [x] #257 integration head `6981197f` passed independent delta review and merged
+  at `d76d0a89`. Author Release headless matrix: 48/50 first pass; two timing
+  failures passed unchanged in a serial 2/2 rerun. This is not a clean first-pass
+  50/50 result. Production/regression code matched the previously reviewed head.
+- [x] #258 integration head `216b2043`: Release headless build and serial
+  **51/51 PASS**, 372.28 s. Production and regression match its previously
+  reviewed head. #7705 passed the exact-head delta; merged at `9825970f`.
+- [x] Reproduce Cursor catalog accumulation and unsuccessful-exit acceptance;
+  implement the owning-path fix in ADR 0088. Final self-hosted CLI fixture:
+  original production **7 pass / 7 fail**; fixed **14/14 PASS**, including
+  interrupting stdout and stderr 64-MiB floods before their completion marker.
+  Evidence: `evidence/h3-cursor-catalog-bounds-qt.json`.
+- [x] Catalog code commit `3f7892b1`: Release headless build and the affected
+  **17/17 targets PASS**, 261.33 s, serial/offscreen. The following evidence-only
+  commit preserves the tested production/test hashes; no full Desktop claim.
+- [x] #7705 passed catalog head `2bbd4661` with independent Debug headless
+  14/14 focused and 52/52 daemon targets. #275 merged at `4cd20d4f`; the
+  task worktree/build had already been safely removed after pushing.
+- [x] Integrate #275 into the combined #260/#261 branch before the full Pro
+  test run. Production merges cleanly; preserve both docs additions.
+- [x] Completed #71 package: malformed normal-frame settlement/recovery
+  across all three adapters. This follows the catalog merge; no new domain audit.
+- [x] Finished #71 acceptance: normal malformed/binary/invalid-UTF8 frame behavior,
+  capability-to-adapter coverage, and disposition of remaining probe/waiter limits.
+  Existing #260/#261 own response id/envelope work overlapping #74; do not duplicate
+  them. Do not close #71 solely because the first four PRs passed.
+
+Owner #2739 now drains the existing #68 queue after the closure recorded below;
+no UI implementation starts.
+The relay rollout gate remains external and does not block this provider work.
+
+
+## 2026-11-08 — #71 malformed normal frames
+
+- [x] Original production fails 42 final fake-provider cases, with 5 control/setup
+  checks passing. All three adapters can ignore a corrupt frame and dispatch its
+  valid-looking suffix. Qt also accepts raw control bytes inside JSON strings.
+- [x] Implement generation rejection, buffered-suffix quarantine and static
+  lifecycle failure (ADR 0089), preserving valid whitespace/escapes and fresh
+  process recovery. This is the sole new package following catalog #275.
+- [ ] Full Release Pro build and full offscreen suite at the final code head;
+  preserve the exact head, focused totals, full-run failures and any justified rerun.
+- [ ] Independent #7705 review, merge and safe worktree/build cleanup.
+- [x] #260/#261 combined head `d4737f95` passed #7705 review (126/126 response,
+  53/53 daemon independently) and merged via #261 at `a6967590`. Author Release Pro: 100/101 first pass (421.97 s), response 126/126;
+  unchanged serial Cursor rerun 24/24 (12.23 s) after a 3 s timeout needed 3.1 s.
+  Do not call that a clean first-pass 101/101. #260 is included by exact ancestry.
+- [ ] Finish capability-to-adapter acceptance and disposition of concrete #71
+  findings before closing the issue. Do not begin another domain audit. No UI,
+  provider quota, live journal, install or deploy work is authorized here.
+
+- PR #276 integrates that response tree before final testing. Remaining capability
+  acceptance found a concrete P2: omitted ACP v1 loadSession/image flags stay
+  enabled. Fix and regress this in the same #71 completion package before the
+  final full matrix and independent review; no second new unreviewed package.
+
+
+### #276 final contract/compatibility integration
+
+- [x] Integrate reviewed #260/#261 (`a6967590`) into the frame package. Source
+  conflicts were include insertions only; preserve frame rejection and response
+  admission together. GitHub also marks #260 merged through this inclusion.
+- [x] Reproduce ACP v1 omitted/wrong-type capability defaults: compatibility
+  20 pass/12 fail; Cursor 24 pass/3 fail, including actual forbidden session/load.
+- [x] Require explicit true for loadSession/image and correct the fake provider's
+  advertised feature set (ADR 0090). This stays in #276, the single new package.
+- [x] Run full Release Pro/offscreen verification at code commit `ed2ec861`:
+  build passed; first run **99/102 targets** in 548.67 s with parallelism 2.
+  Agent, agent-shell and chat-Mermaid UI targets failed; a single unchanged serial
+  rerun passed **3/3** in 140.33 s. No source, UI or timeout was changed between
+  runs. These results are not a clean first-pass 102/102 or proof of root cause.
+  Focused cases: malformed frames **47/47**, capabilities **32/32**, Cursor
+  **27/27**, response admission **126/126**, catalog **14/14**.
+  See `evidence/h3-provider-contract-qt.json` for source/log hashes and limits.
+- [x] Obtain independent #7705 review of final head `c33730ff` and merge #276 at
+  `00b2f003`. Reviewer daemon suite passed 54/54; the stderr regression gap below
+  remains before #71 closure.
+- [x] Remove the pushed response/frame worktrees and builds after verifying clean
+  state, remote heads and absence of other users/processes.
+  Request/waiter admission and absent-response deadlines remain H3.4; no universal
+  QProcess memory, live-provider, other-platform, installation or deployment claim.
+
+### #71 final stderr regression gate
+
+- [x] Merge #276 at `00b2f003` after final-head review PASS and author verification.
+  Independent reviewer confirmed line bounds, version behavior and capability
+  mappings; the remaining closure gap is long-lived adapter stderr regression.
+- [x] Add a fake-process fixture for two 32-MiB stderr floods per adapter, with
+  mandatory stdout round trips between bursts and successful calls afterward.
+  Test-only friendship observes the existing adapter tail without a runtime API.
+- [x] Focused fixture passes 5/5. Mutations removing the drain or tail cap each
+  fail all three adapter cases (2 setup/cleanup pass, 3 fail); restored code passes
+  5/5 again. The failures identify unread QProcess stderr and an over-limit tail.
+- [x] Full Release Pro build and 103/103 offscreen targets pass at `a8d45029`
+  (368.10 s, parallelism 2, no rerun). Runtime drain implementations are unchanged.
+  Evidence and source/log hashes: `evidence/h3-provider-stderr-flood-qt.json`.
+- [x] #7705 passed final #277 head `5880b17d`, independently reproducing both
+  mutations and passing focused 5/5 plus daemon 55/55. #277 merged `b3af8ed5`.
+- [x] Close [#71](https://github.com/ketvietlab/ketplus/issues/71) with all five
+  criteria and the [closure evidence](https://github.com/ketvietlab/ketplus/issues/71#issuecomment-6717547995).
+  Request/waiter admission and absent-response deadlines stay H3.4/#74; no broader
+  platform, live-provider, installation or deployment claim.
+- [x] Remove the pushed stderr worktree/build after ownership and clean-state checks.
+
+### #68 existing media stack integration
+
+- [x] Verify #253 `98ad1946` is an ancestor of #254 `7397165c`, which is an ancestor
+  of #255 `20156fc7`; use #255 as the combined ownership/fork/preview review head.
+- [x] Merge integration `b3af8ed5`; code merges cleanly. Resolve only project-status
+  and plan conflicts, retaining both histories. Media production/test files remain
+  byte-identical to `20156fc7`; the integrated code head is `74804ad8`.
+- [x] Full Release Pro build and 104/104 offscreen targets pass on `74804ad8`
+  (456.04 s, two-way parallelism, first run/no retries). Evidence and hashes:
+  `evidence/h1-media-integration-qt.json`.
+- [x] Independent #7705 PASS at `dae6a297`: protocol199/199, fork44/44,
+  preview15/15 and daemon56/56; original-source preview/fork controls fail.
+  #255 merged `691d18c4`; GitHub also confirms #253/#254 MERGED.
+- [x] Removed the pushed media worktree/build after clean/pushed/usage checks.
+- [x] Integrated #272/#273/#274 at `c3490da5`; their author worktree/build and
+  merged branch were removed. Continue the seven original #68 criteria.
+  Whole-history bounds, filesystem races, crash recovery and #128 archive policy
+  are not closed by this media package.
+
+## 2026-11-08 — Private migration copy and closure discipline
+
+- [x] Reproduce the in-progress copy mode gap under umask 0022; umask 0077
+  control passes. Protect the copy and sidecars with private staging, check final
+  permissions, and preserve unsupported artifacts. See ADR 0087 and
+  `evidence/h1-private-migration-copy-qt.json`.
+- [x] Release Pro build and final-source matrix executed: journal-space 19 pass /
+  1 optional scale skip. Full Pro first run 93/96 (636.55 s); the three timeout
+  targets pass on a single isolated sequential retry, 3/3 (26.85 s), with no
+  source changes. No clean-first-run, Windows ACL, mixed-GB or crash claim.
+- [x] Reconcile original acceptance and current state for 21 scoped issues.
+  GitHub confirms 35 merged PRs but zero issue closures on 2026-11-07 local time;
+  `evidence/closure-audit-2026-11-08.json` records the snapshot.
+- [ ] Independent review/merge of the combined #272/#273/#274 journal package.
+- [ ] Safe source-worktree cleanup is verified and reported separately after
+  pushing; do not infer cleanup merely from a passing test or opened PR.
+
+The closure ledger overrides the old parallel-audit dispatch order. New audit
+branches are frozen; #71 is closed and the existing #68 packages are the current
+queue. #85 retains its original rollout gate.
+
+### H1.6 stored policy JSON admission
+
+- [x] Reproduce eight unsupported-row failures in the actual Qt readers: both
+  policy types accept valid JSON padded beyond 4 KiB in TEXT and BLOB columns.
+  Eight valid boundary controls pass; normal writes remain schema-bounded.
+- [x] Gate policy projection with metadata byte lengths before Qt/JSON parsing;
+  preserve rejected rows instead of returning default revision zero (ADR 0085).
+- [x] Focused 18/18; Release headless affected 4/4 targets (37.67 s): policy 31/31,
+  size policy 5/5, retention 124/124, journal space 10 pass / 1 scale opt-in skip.
+  Reopen, unchanged bytes/revision/history, repair/save and normal retention pass.
+- [ ] Independent exact-head review and merge through combined #274 by #7705;
+  the user reassignment supersedes the historical dispatch hold.
+- [ ] H1.6 remains open. ADR 0046 specifies append-row order within each age phase,
+  not global timestamp order; do not claim the plan's oldest-turn wording has
+  been globally verified or silently change that contract. The existing size
+  fixture covers expired-before-recent, free pages first, Forever/off/no-limit,
+  revision changes and guarded turns; representative integrated scale/crash
+  acceptance remains H1.7. No UI, deployment or installed journal was changed.
+
+Evidence: [h1-stored-policy-read-qt.json](evidence/h1-stored-policy-read-qt.json).
+
+### H1.2 quarantine a failed journal object
+
+- [x] Reproduce ten unsafe-reuse failures: policy/session operations continue after
+  turn/replay/activity commit failures, and a policy read succeeds after incompatible
+  agent-schema initialization. Three existing no-operation controls pass.
+- [x] Close the connection if any constructor stage fails; repair requires a fresh
+  initialized object (ADR 0086). Keep service startup checks and rollback behavior.
+- [x] Focused 15/15 (444 ms); Release headless affected 6/6 (19.95 s): protocol
+  181/181, activity groups 10/10, agent messaging 15/15, retention policy 15/15,
+  headless daemon 6/6 and journal space 10 pass / 1 scale opt-in skip.
+  Initial diagnostics, writer release, preserved rows and repair/reopen pass.
+- [ ] Independent exact-head review/merge through the combined #274 head by #7705.
+  The historical dispatch hold is superseded by the user-assigned reviewer.
+- [ ] Continue H1.2 unsupported schemas, mid-fetch failure, low disk, interruption
+  and large-index startup. No claim of whole-startup atomicity or live-journal,
+  full Pro/Windows, packaging, installation or deployment acceptance.
+
+Evidence: [h1-failed-journal-reuse-qt.json](evidence/h1-failed-journal-reuse-qt.json).
+
+### #68 existing journal stack integration
+
+- [x] Merge integration `b3af8ed5` and existing #272/#273 into #274; the
+  integrated code head is `6347493f`. Resolve plan additions by retaining each
+  history. Production/test files match their original package heads byte-for-byte.
+- [x] Include final #255 head `dae6a297` before the combined Pro matrix; media
+  passed Pro104/104 and independent #7705 review, then merged `691d18c4`.
+  Merging that integration into #274 at `b999fc3b` leaves the entire tree
+  identical to previously pushed `164d5da8`; the final update is documentation only.
+- [x] Full Release Pro build and 104/104 offscreen targets pass at combined
+  journal/media code `5a8bca1c` (427.64 s, two-way parallelism, first run/no retries).
+  Source/log hashes: `evidence/h1-journal-integration-qt.json`.
+- [ ] Independent #7705 final-head review and merge. This package does not complete
+  H1.2/H1.6 or #68; the seven original criteria remain in `issue-68-acceptance.md`.
+- [ ] Safe cleanup of the pushed linked worktree/build after all checks.
+
+### 2026-11-08 — #274 merged; bounded tombstone catalog
+
+- [x] Independent #7705 PASS #274 at `c30fc59e`; daemon56/56 and old-production
+  controls confirm all three fixes. Merged `c3490da5`; GitHub confirms #272/#273
+  MERGED as well. Prior linked journal/media worktrees and owned builds are removed.
+- [x] Measure real SessionHost deletion and catalog paths on temporary journals.
+  300k raw + 300k replay + 256-MiB chunks take 1,192 ms synchronously, with correct
+  physical deletion, idempotency, unrelated-session preservation and reopen.
+  100k/300k tombstones exceed the IPC frame at 5,389,329/16,389,329 encoded bytes.
+- [x] Implement versioned 128-row/64-KiB tombstone pages with indexed keyset seeks,
+  bounded SQL projections and fail-closed legacy overflow; consume sequentially
+  in the transport bridge with reconnect and cursor checks. No UI changes.
+- [x] Complete focused/full Pro gates and independent #7705 review, then merge and
+  safe worktree cleanup. The initial deletion44/44 and bridge28+1 live skip
+  evidence is superseded by the reviewed concurrent-catalog follow-up below.
+  Original bridge control: 3 pass/2 fail; restored source rebuilt.
+- [ ] Resume explicit session-delete work bounds while preserving ADR 0055; do
+  not label the measured 1.2-second atomic operation bounded or close #68 on this
+  pagination fix. Whole-history fork/schema/crash/media gates remain in the dossier.
+
+- Final type/encoding probe at `8b42da44` exposed SQLite TEXT with invalid UTF-8
+  being silently replaced by Qt (2 controls pass / 1 failure). The projection now
+  returns bounded bytes and rejects decoding errors without changing the row.
+  The earlier Pro104/104 result belongs to `8b42da44`; run final gates again for
+  this production delta before review. No acceptance is inferred from the old run.
+
+- [x] Final Release Pro build and full offscreen104/104 pass at `221eb2f8`
+  (362.39 s, first run at this head). Final opt-in deletion44/44 and Desktop
+  bridge28 pass/1 live-provider skip pass on the same commit (22.24 s, 2 targets).
+  Source/log hashes, raw scale measurements and both controls are recorded in
+  `evidence/h1-tombstone-pagination-qt.json`. Independent review/merge remains
+  pending; the final evidence commit changes documentation only.
+
+## 2026-11-08 — #280 concurrent catalog and caller follow-up
+
+- [x] Verify #274 already merged at `c3490da5`; the delayed OPEN report does not
+  reopen its review. #68 remains the active closure-first issue.
+- [x] Add a transactional mutation token for tombstone INSERT/UPDATE/DELETE and
+  an open-journal epoch. Continuations and final live reads share the token;
+  mutation or reopen requires restart, capped at three retries.
+- [x] Use one streamed reader for Desktop refresh, discovery and CLI. Preserve
+  CLI single-object JSON through a private temporary spool reset on retry.
+- [x] Advertise the additive feature; measure complete serialized response bytes
+  rather than reject a legacy catalog at an arbitrary 960-KiB threshold.
+- [x] Focused initial build and 3/3 targets pass: deletion42+4 scale skips,
+  bridge30+1 live skip, headless6. Concurrent behind-cursor, rollback/reopen,
+  discovery, retry-cap, legacy wire boundary and CLI30k regressions pass.
+- [x] Negative controls fail as expected: removing the token comparison prevents
+  successful restart/reconciliation; restoring discovery/CLI callers breaks the new regressions.
+  Restore source and rebuild successfully.
+- [x] Restored code `96038758`: full Release Pro104/104 (383.56 s, first run),
+  scale/bridge/CLI3/3 (21.85 s): deletion46/46, bridge30+1 live skip, headless6/6.
+  300k tombstones: 2,344 pages / 1,182 ms; atomic deletion still 1,166 ms.
+  Source/log hashes and controls: `evidence/h1-tombstone-snapshot-callers-qt.json`.
+- [x] #7705 independently PASSed `8ec98aee`: full Pro104/104, deletion46/46,
+  bridge30+1 live skip, discovery6/6 and headless6/6. Additional 20k/100k actual
+  discovery probes pass. Review: PR #280 review 5817064002.
+- [x] Merge #280 at `fdec1645`; author/reviewer linked worktrees and builds removed.
+- [ ] Continue the separate atomic whole-session deletion gate and remaining #68
+  criteria. Per-page bounds do not establish a bounded total history refresh;
+  delta/since synchronization remains an explicit follow-up.
+
+
+## 2026-11-08 — #68 live-only incremental discovery
+
+- [x] Integrate reviewed #280 before starting the next change; #68 remains active.
+- [x] Separate one-request live discovery from complete deletion reconciliation,
+  without touching UI. Keep legacy/paged peers, reconnect fencing and event-gap replay.
+- [x] Add regression cases for 20k/100k retained tombstones, zero repeated deletion
+  signals, older peers, missing tombstone tables and full-envelope size errors.
+- [x] Initial Release affected5/5 pass. Previous production fails new server
+  tests (3 pass/2 fail) and discovery tests (3 pass/8 fail); actual discovery
+  repeats exactly 20k/100k deletion signals. Restore source and rebuild.
+- [x] Release affected5/5 at `38ebde39` (56.44 s): deletion45+4 optional scale
+  skips, bridge30+1 live skip, discovery11, lifecycle42+1 live skip, CLI6.
+  Real 20k/100k discovery emits no additional deletion signals. Source/log hashes
+  and previous-code controls: `evidence/h1-live-session-discovery-qt.json`.
+- [ ] Independent #7705 review, merge and safe linked-worktree/build cleanup.
+- [ ] Continue atomic whole-session deletion and remaining dossier gates. Full
+  reconnect walks and per-row revision triggers remain explicit separate limits.

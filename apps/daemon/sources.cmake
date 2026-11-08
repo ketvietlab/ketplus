@@ -48,6 +48,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/protocol/DaemonProtocol.cpp
     src/protocol/DaemonProtocol.h
     src/providers/ProviderAdapter.h
+    src/providers/ProviderResponseEnvelope.h
+    src/providers/ProviderResponseId.h
     src/providers/ClaudeAdapter.cpp
     src/providers/ClaudeAdapter.h
     src/providers/CursorAdapter.cpp
@@ -57,6 +59,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/providers/CodexAdapter.h
     src/providers/ProviderLineReader.cpp
     src/providers/ProviderLineReader.h
+    src/providers/ProviderFrameValidation.h
     src/providers/compat/ProviderCapabilities.cpp
     src/providers/compat/ProviderCapabilities.h
     src/providers/compat/ProviderCompatibility.cpp
@@ -82,6 +85,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/agents/AgentToolLaunch.cpp
     src/agents/AgentToolLaunch.h
     src/runtime/SessionHost.cpp
+    src/runtime/SessionHostCatalog.cpp
     src/runtime/SessionHostAgents.cpp
     src/storage/AgentMessageRecord.h
     src/storage/LocalJournalAgents.cpp
@@ -129,6 +133,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/LocalJournalTranscriptWindow.cpp
     src/storage/LocalJournal.h
     src/storage/McpMediaPreview.cpp
+    src/storage/McpMediaReferences.cpp
     src/storage/McpMediaStore.cpp
     src/storage/McpMediaStore.h
 )
