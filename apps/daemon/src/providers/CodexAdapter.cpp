@@ -1,5 +1,7 @@
 #include "providers/CodexAdapter.h"
 #include "BrowserAgentInstructions.h"
+#include "providers/ProviderResponseEnvelope.h"
+#include "providers/ProviderResponseId.h"
 
 #include "CodexBrowserTools.h"
 #include "CodexLaunchReloader.h"
@@ -405,9 +407,11 @@ void CodexAdapter::skipOversized(const OversizedProviderLine& line) {
              qUtf8Printable(method.isEmpty() ? QStringLiteral("a response") : method));
     if (method.isEmpty()) {
         // A response: only the call waiting for it fails.
-        const quint64 callId = id.toVariant().toULongLong();
-        pendingMethods_.remove(callId);
-        if (const auto callback = pending_.take(callId))
+        const auto callId = providerResponseId(id);
+        if (!callId)
+            return;
+        pendingMethods_.remove(*callId);
+        if (const auto callback = pending_.take(*callId))
             callback({}, reason);
         reloader_->idleChanged();
         return;
@@ -461,13 +465,18 @@ void CodexAdapter::consumeLine(const QByteArray& line) {
     if (!object.contains(QStringLiteral("id"))) {
         return;
     }
-    const quint64 id = object.value(QStringLiteral("id")).toVariant().toULongLong();
+    const auto responseId = providerResponseId(object.value(QStringLiteral("id")));
+    if (!responseId)
+        return;
+    const quint64 id = *responseId;
     const auto callback = pending_.take(id);
     const QString method = pendingMethods_.take(id);
     if (!callback) {
         return;
     }
-    if (object.contains(QStringLiteral("error"))) {
+    if (!validProviderResponseEnvelope(object)) {
+        callback({}, QStringLiteral("Malformed provider response envelope."));
+    } else if (object.contains(QStringLiteral("error"))) {
         const QJsonObject error = object.value(QStringLiteral("error")).toObject();
         if (error.value(QStringLiteral("code")).toInt() == -32601)
             (void)narrowing_.methodNotFound(method);

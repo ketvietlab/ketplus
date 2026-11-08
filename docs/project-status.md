@@ -5,6 +5,15 @@ milestone changes state.
 
 ## Implemented
 
+- Matched provider responses require one valid result/error envelope (ADR 0075).
+  Malformed replies fail their callback once, without successful initialization,
+  unrelated-call failure or echoing malformed payloads. Null void results and
+  Claude message-only errors stay compatible; method schemas remain separate.
+
+- Provider responses preserve numeric call identity (ADR 0074): strings, booleans
+  and fractional ids cannot consume pending calls in Codex, Claude or Cursor,
+  including Codex oversized responses. Valid replies still complete exactly once.
+
 - Cursor model-catalog subprocesses drain both channels while running and enforce
   a shared 1-MiB output budget (ADR 0088). Excess output and unsuccessful exits use
   the existing fallback catalog; successful exact-budget output remains usable.

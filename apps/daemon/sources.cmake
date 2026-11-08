@@ -48,6 +48,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/protocol/DaemonProtocol.cpp
     src/protocol/DaemonProtocol.h
     src/providers/ProviderAdapter.h
+    src/providers/ProviderResponseEnvelope.h
+    src/providers/ProviderResponseId.h
     src/providers/ClaudeAdapter.cpp
     src/providers/ClaudeAdapter.h
     src/providers/CursorAdapter.cpp
