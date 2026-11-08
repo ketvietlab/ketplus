@@ -426,12 +426,15 @@ class LocalJournal final {
     // and records the current format once every migration has succeeded (ADR 0095).
     bool acceptsFormat();
     bool markFormat();
-    // Indexes replay rows below `beforeCursor`, at most `rowLimit`, inside the caller's
-    // transaction; `done` when the session needs no further backfill.
-    bool catchUpActivity(const QString& session, qint64 generation, qint64 beforeCursor,
-                         int rowLimit, bool* done, QSqlError* error);
-    bool catchUpActivityBeforeEvent(const QString& session, qint64 generation, qint64 cursor,
-                                    QString* error);
+    // Indexes one bounded page of a marked session's replay rows inside the caller's
+    // transaction, and removes the marker once its history is indexed (ADR 0097).
+    bool catchUpActivity(const QString& session, qint64 generation, bool* indexed,
+                         QSqlError* error);
+    bool activityBackfillPending(const QString& session, qint64 generation, bool* pending,
+                                 QString* error) const;
+    // `deferred` when the session is still marked; its event is then indexed by the backfill.
+    bool deferActivityToBackfill(const QString& session, qint64 generation, bool* deferred,
+                                 QString* error);
     // At open: turns interrupted fork copies into purge work, or keeps them staged.
     bool recoverForkStaging();
     // Removes a staged fork's rows now (synchronous forkSession) or leaves purge work.

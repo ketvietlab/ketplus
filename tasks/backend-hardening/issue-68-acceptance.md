@@ -160,7 +160,10 @@ whose values stay empty. Both now run only below format 1; later opens take
 16 ms. A behavioural test fails when the gate is removed.
 
 The activity backfill now runs after open (ADR 0097): open records markers and
-the daemon indexes 2,048 rows per pass. The same fixture opens in 30 ms the first
-time; the slowest pass is 9 ms. Drained rows match live indexing, and removing
-the append-time catch-up fails the ordering test. Remaining: low space and
-interruption.
+the daemon indexes at most 2,048 rows or 1 MiB of payload per pass. Events for a
+marked session wait for its backfill, and its groups stay unpublished until it is
+indexed. The same fixture opens in 31 ms the first time; the slowest pass is
+10 ms. With 300k rows in one session an append takes under 1 ms and the slowest
+pass 34 ms. Drained rows match live indexing. Negative controls for event
+deferral, the group-page gate, the byte budget, `BEGIN IMMEDIATE` and the marker
+row check each fail their test. Remaining: low space and interruption.
