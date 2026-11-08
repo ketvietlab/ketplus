@@ -29,10 +29,9 @@ placing proprietary implementation in CM files.
 | Component | Pinned version | Integration | License |
 | --- | --- | --- | --- |
 | Qt | 6.8 or later | Dynamic frameworks/libraries | LGPL 3.0, GPL alternatives, or commercial |
-| Scintilla | `a1c86144eed9e3d2187e3a8b391d11ca909f00d2` (`rel-5-5-2`) | Compiled statically | Scintilla permissive license |
+| Scintilla | `a1c86144eed9e3d2187e3a8b391d11ca909f00d2` (`rel-5-5-2`) | Compiled statically; `PlatQt.cpp` compiled from a copy with the client-origin fix in `core/cmake/Dependencies.cmake` | Scintilla permissive license |
 | Lexilla | `3e6f317eed854bc312b4c4453206189d381c7ae7` (`rel-5-5-2`) | Compiled statically | Scintilla permissive license |
 | libvterm | `9d6d2112335080312ef8c36667fa717ded4f7daf` (`v0.3.3`) | Compiled statically | MIT |
-| Inter | 4.1 | Font embedded in Qt resources | SIL OFL 1.1 |
 | KÉT Sans | 1.1 official ZIP pinned by SHA-256 | Four faces embedded in Qt resources | SIL OFL 1.1, Reserved Font Names "KÉT" and "KET" |
 | KÉT Sans Mono | 0.10.4 Medium, `assets/fonts` | Embedded in Qt resources | SIL OFL 1.1, Reserved Font Names "KÉT" and "KET" |
 | Két Design System | 0.1.44 | Mermaid configuration snapshots in Qt resources | MIT |

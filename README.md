@@ -28,7 +28,7 @@ the platform WebView (WebKit on macOS).
 - CMake
 
 The shared editor lives in `core/`. Its build fetches the pinned Scintilla,
-Lexilla, libvterm, and Inter revisions.
+Lexilla, libvterm, KetQt and KÉT Sans revisions.
 
 ## Prerequisites
 
