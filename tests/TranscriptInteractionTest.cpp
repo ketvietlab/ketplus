@@ -555,12 +555,11 @@ void AgentWorkspaceViewTest::transcriptRendererInteractionMatrix() {
 
 void AgentWorkspaceViewTest::activityOperationSemantics() {
     const QMap<QString, QString> controlTypes{
-        {"functions.wait", "wait"},    {"monitor", "monitor"},
-        {"resume_agent", "wake"},      {"Skill", "skill"},
-        {"ToolSearch", "toolsLoaded"}, {"TaskStop", "taskStopped"},
-        {"Agent", "subAgent"},         {"functions.update_plan", "plan"},
-        {"WebFetch", "webFetch"},      {"WebSearch", "webSearch"},
-        {"open_page", "webOpen"},      {"find_in_page", "webFind"}};
+        {"functions.wait", "wait"},        {"monitor", "monitor"},      {"resume_agent", "wake"},
+        {"ScheduleWakeup", "wake"},        {"EnterPlanMode", "plan"},   {"Skill", "skill"},
+        {"ToolSearch", "toolsLoaded"},     {"TaskStop", "taskStopped"}, {"Agent", "subAgent"},
+        {"functions.update_plan", "plan"}, {"WebFetch", "webFetch"},    {"WebSearch", "webSearch"},
+        {"open_page", "webOpen"},          {"find_in_page", "webFind"}};
     for (auto it = controlTypes.cbegin(); it != controlTypes.cend(); ++it) {
         for (const auto& type : {"mcpToolCall", "dynamicToolCall"}) {
             const QJsonObject item{{"type", type},
@@ -573,6 +572,13 @@ void AgentWorkspaceViewTest::activityOperationSemantics() {
             QCOMPARE(started.value("status").toString(), QString("running"));
             QCOMPARE(completed.value("status").toString(), QString("completed"));
             QVERIFY(started.value("title") != completed.value("title"));
+            if (it.key() == "ScheduleWakeup") {
+                QCOMPARE(started.value("title").toString(), QString("Scheduling wake-up"));
+                QCOMPARE(completed.value("title").toString(), QString("Scheduled wake-up"));
+            } else if (it.key() == "EnterPlanMode") {
+                QCOMPARE(started.value("title").toString(), QString("Entering plan mode"));
+                QCOMPARE(completed.value("title").toString(), QString("Entered plan mode"));
+            }
             QVERIFY(!completed.value("sanitizedPayload").toMap().isEmpty());
         }
     }
