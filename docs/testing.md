@@ -59,10 +59,17 @@ obsolete run. See `docs/release-process.md`.
 | Provider limits | `ketplus_rate_limits_tests` | Codex rate-limit parsing and state |
 | Chat Markdown | `ketplus_chat_markdown_tests` | raw HTML escaping, bare HTTP(S) autolinks without changing code/existing links, whole answer visible, URL hover/open and source copy in light/dark transcript delegates |
 | Chat Mermaid | `ketplus_chat_mermaid_tests` | Markdown and Mermaid integration |
+| Long-lived provider stderr | `ketplus_provider_stderr_flood_tests` | Codex/Claude/Cursor fake processes each emit two 32-MiB floods with eight mandatory stdout round trips per flood; drain and 1-MiB newest-tail bounds are observed directly, then a normal call succeeds on the same process |
 | Workspace boundary | `ketplus_workspace_tests` | Pro shell with CM explorer behavior |
 | Async question lifetime | `ketplus_async_question_lifetime_tests` | turn expiry, session/generation isolation, late items and stale answers |
 | Local turn acceptance | `ketplus_turn_acceptance_tests` | Raw/projection/state/configuration abort and ignored writes, deferred-FK commit failure, no rejected prompt publication, independent-reader visibility, repair/retry/reopen, duplicate result replay, counter/revision exhaustion, bounded oversized-payload refusal (ADR 0076) |
 | Session/provider deletion | `ketplus_provider_deletion_tests` | Failed commit releases the transaction; ignored tombstone/work/history mutations roll back; retry/reopen preserves history, conversation number, cleanup work and unrelated sessions; shared provider threads and unsupported providers remain protected; query/mid-fetch ownership failures prevent fake-provider deletion, preserve pending work/history and recover after repair/restart; malformed/unknown ownership JSON blocks queued and local deletion for both source and retained sessions |
+| Provider response identity/envelopes | `ketplus_provider_response_id_tests` | Fake-provider handshake barriers, typed id isolation, valid-response recovery, exactly-once callbacks and Codex oversized responses; numeric limits; malformed result/error shape, initialization refusal, outstanding-call isolation, duplicate replies and subsequent recovery; POSIX launcher cases skip on Windows |
+| Provider version probing | `ketplus_provider_version_probe_tests` | Incremental stdout/stderr cap, excessive-output termination, exit status, timeout/EOF, retry/cache, distinct concurrent executables and same-path replacement; local helper only |
+| Claude/Cursor framing | `ketplus_provider_framing_tests` | Coalesced real QProcess output, 16-MiB per-line boundary, aggregate valid frames, oversized complete/partial suffixes, failure drain and fresh-generation recovery; fixture process only |
+| Malformed provider frames | `ketplus_provider_malformed_frame_tests` | Fake Codex/Claude/Cursor processes: initialize and pending calls, UTF-8/binary/control/JSON failures, suffix quarantine, once-only error callbacks, payload-free diagnostics and fresh-generation recovery; POSIX process fixtures skip on Windows |
+| ACP capability defaults | `ketplus_provider_compatibility_tests`, `ketplus_daemon_cursor_adapter_tests` | Missing/null/wrong-type capability fields, boolean controls/reset and actual session/load suppression; fake Cursor explicitly advertises implemented features |
+| Provider line scanning | `ketplus_provider_line_reader_tests` | Deep array/object streams, chunk/depth bounds, JSON escapes/Unicode, invalid metadata, dotted-key isolation, next-line/reset recovery and a fresh-child POSIX peak-memory bound; no live provider |
 | Daemon protocol/storage | `ketplus_daemon_protocol_tests` | framing, journal, deduplication, approval expiry |
 | Daemon challenge v2 (#85) | `ketplus_daemon_machine_challenge_tests` | relay conformance bytes/signature, strict schema and machine/key binding, no legacy retry or credential request on rejection, and real HTTP serialization/signing with an in-memory credential store |
 | Journal usage retention (#128) | `ketplus_daemon_usage_retention_tests` | final usage samples, unchanged content/order, replay/page agreement, revision fencing, latest 20 actual turns including sequence gaps, raw-event acknowledgment, active/open/recent/question/approval/generation guards, bounded scan progress, transactional rollback and nonblocking writer contention with timeout restoration |
@@ -78,8 +85,9 @@ obsolete run. See `docs/release-process.md`.
 | Provider handoff history | `ketplus_provider_handoff_tests` | history after delivery acknowledgment, compacted cursor gaps, event/byte-limited paging, session/generation isolation |
 | Agent messaging (ADR 0027) | `ketplus_agent_messaging_tests` | number allocation, uniqueness, restart stability and legacy-journal backfill; idle delivery and automatic reply from the final answer; busy receivers batched at turn end; `urgent` steering of a running turn; hop, chain and hourly holds released with the next user turn, and the 24-hour request expiry; `#NNNN` references; token, number, size and reply validation; deletion quarantine and token revocation; per-provider `ketplus_agents` injection (Claude `mcpServers`, Codex dotted per-thread config, Cursor ACP); agent-token IPC scope without broadcasts; MCP tool mapping; `sent` and `replied` notices and the running automatic turn's sender in `session.list`; the number and that sender sealed into the phone's session metadata (`ketplus_daemon_cloud_privacy_tests`); Desktop notice text (`ketplus_provider_transcript_tests`) and the sidebar "from #N" label (`ketplus_workspace_tests`). Fake providers only; the one authorized live run is recorded in ADR 0027 |
 | Conversation fork | `ketplus_daemon_session_fork_tests` | `threadFork` gating, Codex/Claude native fork, transcript copy at the same cursors, idempotent retry, active source isolation and unknown refusal, next turn resumes the forked thread |
-| Daemon Cursor adapter | `ketplus_daemon_cursor_adapter_tests` | ACP turns, login/install errors, approvals, `loadSession: false` skips `session/load`, `agent models` fixtures |
+| Daemon Cursor adapter | `ketplus_daemon_cursor_adapter_tests` | ACP turns, login/install errors, approvals, missing/false/mistyped `loadSession` skips `session/load`, `agent models` fixtures |
 | Provider CLI compatibility | `ketplus_provider_compatibility_tests` | version parsing and statuses, manifest, Homebrew update command, version probe cache, outdated CLI blocked, untested CLI journaled once, `provider.runtime_status`, dialects and capabilities, `-32601` narrowing and steer gate, unknown Codex input (ignored notifications counted, protocol errors, declined requests, unknown item types) |
+| Cursor catalog output | `ketplus_cursor_catalog_bounds_tests` | stdout/stderr draining before exit, shared 1-MiB boundary/excess, unsuccessful exit, coalesced callers/cache, timeout after output and failed launch; self-hosted CLI fixture only |
 | Codex protocol contract | `ketplus_codex_contract_tests` (Node) | declared Codex usage exists in every tested schema snapshot; daemon code names only declared methods |
 | Relay browser sign-in | `ketplus_daemon_browser_sign_in_tests` | relay paths appended to a base path, loopback redirect, PKCE S256 challenge, wrong state/path refused, one-time callback |
 | Daemon lifecycle/IPC | `ketplus_daemon_lifecycle_tests` | authentication, protocol minor and features, reconnect replay, isolation, fencing; failed stream ordering, bounded recovery queues, deletion/shutdown and SQLite writer-lock retry |
@@ -171,6 +179,12 @@ the corresponding Atlas mock first.
   activity backfills, unchanged stored rows, diagnostic preservation, write-lock
   release while the failed object remains alive, repair and reopen.
 
+- Journal migration copy protection (ADR 0087): the journal-space target observes
+  a synthetic 64-MiB copy while SQLite writes under umasks 0022 and 0077. It checks
+  private staging, final POSIX permissions, retained hashes, integrity, bounded
+  stale-artifact cleanup, preservation of unknown entries and repair/retry.
+  POSIX-specific cases skip Windows; this is not Windows ACL or multi-GB evidence.
+
 - Media cleanup changes: temporary reference catalogs exercise malformed data,
   file/directory symlinks, unsupported filenames, per-file/catalog limits, preserved
   shared bytes and metadata, repair/retry and absent/empty-catalog compatibility.
@@ -178,6 +192,27 @@ the corresponding Atlas mock first.
 - Media dedup changes: attachment/inline-item fixtures cover valid files, corrupt/
   short/oversized bytes, directories, symlinks, unreadable files, owner-only
   permissions and repair/retry without changing unsupported entries.
+- Media publication changes: attachment/inline-resource/local-image fixtures
+  verify unsupported ownership preservation, no false publication, dedup and
+  shared repair/retry. An isolated POSIX child with a file-size limit checks real
+  partial-write rollback; other platforms explicitly skip that one fixture.
+- Fork media changes: fake-provider tests cover invalid/unsupported source and
+  target metadata, retained conflicts, rollback, matching retry, missing-source
+  compatibility and reopen cleanup following a deferred journal commit failure.
+- Reference-preview changes: `ketplus_daemon_media_preview_tests` exercises
+  canonical references, ownership bounds/types/links, blob identity, byte limits,
+  unchanged invalid data and repaired JPEG output; no UI or live media is used.
+- Tombstone catalog pagination: `ketplus_provider_deletion_tests` covers actual
+  keyset plans, row/byte limits, removed cursor rows and malformed storage;
+  `ketplus_desktop_daemon_client_tests` covers real local IPC with 30,000
+  tombstones, legacy fallback, malformed pages, fresh live-catalog ordering and
+  stale reconnect callbacks. Opt in to 100k/300k synthetic deletion/catalog
+  probes with `KETPLUS_RUN_DELETE_BACKLOG_TESTS=1`; they use temporary journals.
+- Live-only discovery (ADR 0092): run provider deletion, Desktop daemon client,
+  Desktop session discovery, lifecycle and headless CLI targets. Real temporary
+  daemons with fake providers cover 20k/100k retained tombstones and zero repeated
+  deletion signals; scripted peers cover legacy/paged fallback and replay gaps.
+  Server tests prove tombstone tables are not read and retain the wire limit.
 - One Pro module: focused target plus its directly affected tests.
 - Shared header or desktop shell: full build and full Pro test suite.
 - `core/` change: the Lite suite (`ctest --preset lite-dev`), then the full Pro suite.
@@ -449,7 +484,12 @@ synthetic temporary journals and no provider processes.
 
 `ketplus_daemon_retention_policy_tests` verifies strict policy parsing, defaults,
 revision-fenced persistence/reopen/rollback, actual configured retention, malformed
-policy fail-closed behavior and local-only API/cache boundaries. The agent-token
+policy fail-closed behavior and local-only API/cache boundaries. ADR 0085 adds
+TEXT/BLOB stored JSON boundary cases for both policies (4095/4096 accepted,
+4097/1 MiB rejected), preserving row bytes/revision/history across reopen and
+repair/retry. Run this target plus `ketplus_daemon_size_policy_tests`,
+`ketplus_daemon_usage_retention_tests` and `ketplus_daemon_journal_space_tests`
+in Release for stored-policy reader changes. The agent-token
 IPC test also rejects both retention operations. Changes to the shared journal or
 host headers require the full Pro build and suite. No provider quota is consumed.
 
@@ -545,3 +585,23 @@ ADR 0061 `SessionForkTest::journalForkPreservesUnsupportedSourceCounters` covers
 negative, fractional, TEXT and BLOB cursor/turn values. It checks exact source
 preservation, no destination, released transaction, fixture repair, retry and
 reopen. Run the combined fork suite and its affected backend matrix.
+
+
+### Failed journal reuse (ADR 0086)
+
+`DaemonProtocolTest::startupCommitFailurePreservesErrorAndReleasesTransaction`
+covers policy-read, policy-write and session-write attempts after turn/replay/
+activity commit failures, plus the original no-operation controls. The failed
+object stays closed, a separate writer can repair, and a fresh journal reopens
+without retained-row changes. `failedAgentSchemaCannotBeUsedUntilReopened`
+covers the final agent-schema stage and conversation-number ownership recovery.
+Run the protocol, activity-groups, agent-messaging, retention-policy, journal-space
+and headless-daemon targets in Release. This does not establish full startup
+atomicity, disk-full/crash or multi-GB/platform acceptance. Synthetic journals only.
+
+The ADR 0091 catalog regressions also cover deletion inserted behind the cursor,
+revision rollback, retention/update invalidation, reopen with an old token,
+malformed revision admission, three-retry exhaustion, discovery paging and
+`ketplusctl sessions` emitting a complete 30k-tombstone JSON object. The latter
+uses a fixture daemon, not an installed service or provider. A legacy catalog
+above 960 KiB verifies the actual serialized IPC envelope still fits 1 MiB.

@@ -20,6 +20,7 @@ class ClaudeCredentials;
 
 class ClaudeAdapter final : public ProviderAdapter {
     Q_OBJECT
+    friend class ProviderStderrFloodTest;
 
   public:
     explicit ClaudeAdapter(const QString& executable = {}, QObject* parent = nullptr);
@@ -79,6 +80,7 @@ class ClaudeAdapter final : public ProviderAdapter {
     bool starting_{false};
     bool ready_{false};
     bool stopping_{false};
+    bool malformedOutput_{false};
     QTimer* restartTimer_{nullptr};
     QDeadlineTimer restartNotBefore_;
     QElapsedTimer readySince_;
