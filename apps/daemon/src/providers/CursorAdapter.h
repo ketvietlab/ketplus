@@ -177,6 +177,7 @@ class CursorAdapter final : public ProviderAdapter {
     bool starting_{false};
     bool ready_{false};
     bool stopping_{false};
+    bool malformedOutput_{false};
     QTimer* restartTimer_{nullptr};
     QDeadlineTimer restartNotBefore_;
     int restartDelayMs_{0};

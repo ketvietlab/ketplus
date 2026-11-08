@@ -905,3 +905,53 @@ remain explicitly open.
 
 Owner #2739 continues this issue; no new domain audit or UI implementation starts.
 The relay rollout gate remains external and does not block this provider work.
+
+
+## 2026-11-08 — #71 malformed normal frames
+
+- [x] Original production fails 42 final fake-provider cases, with 5 control/setup
+  checks passing. All three adapters can ignore a corrupt frame and dispatch its
+  valid-looking suffix. Qt also accepts raw control bytes inside JSON strings.
+- [x] Implement generation rejection, buffered-suffix quarantine and static
+  lifecycle failure (ADR 0089), preserving valid whitespace/escapes and fresh
+  process recovery. This is the sole new package following catalog #275.
+- [ ] Full Release Pro build and full offscreen suite at the final code head;
+  preserve the exact head, focused totals, full-run failures and any justified rerun.
+- [ ] Independent #7705 review, merge and safe worktree/build cleanup.
+- [x] #260/#261 combined head `d4737f95` passed #7705 review (126/126 response,
+  53/53 daemon independently) and merged via #261 at `a6967590`. Author Release Pro: 100/101 first pass (421.97 s), response 126/126;
+  unchanged serial Cursor rerun 24/24 (12.23 s) after a 3 s timeout needed 3.1 s.
+  Do not call that a clean first-pass 101/101. #260 is included by exact ancestry.
+- [ ] Finish capability-to-adapter acceptance and disposition of concrete #71
+  findings before closing the issue. Do not begin another domain audit. No UI,
+  provider quota, live journal, install or deploy work is authorized here.
+
+- PR #276 integrates that response tree before final testing. Remaining capability
+  acceptance found a concrete P2: omitted ACP v1 loadSession/image flags stay
+  enabled. Fix and regress this in the same #71 completion package before the
+  final full matrix and independent review; no second new unreviewed package.
+
+
+### #276 final contract/compatibility integration
+
+- [x] Integrate reviewed #260/#261 (`a6967590`) into the frame package. Source
+  conflicts were include insertions only; preserve frame rejection and response
+  admission together. GitHub also marks #260 merged through this inclusion.
+- [x] Reproduce ACP v1 omitted/wrong-type capability defaults: compatibility
+  20 pass/12 fail; Cursor 24 pass/3 fail, including actual forbidden session/load.
+- [x] Require explicit true for loadSession/image and correct the fake provider's
+  advertised feature set (ADR 0090). This stays in #276, the single new package.
+- [x] Run full Release Pro/offscreen verification at code commit `ed2ec861`:
+  build passed; first run **99/102 targets** in 548.67 s with parallelism 2.
+  Agent, agent-shell and chat-Mermaid UI targets failed; a single unchanged serial
+  rerun passed **3/3** in 140.33 s. No source, UI or timeout was changed between
+  runs. These results are not a clean first-pass 102/102 or proof of root cause.
+  Focused cases: malformed frames **47/47**, capabilities **32/32**, Cursor
+  **27/27**, response admission **126/126**, catalog **14/14**.
+  See `evidence/h3-provider-contract-qt.json` for source/log hashes and limits.
+- [ ] Obtain independent #7705 review of the final head and #71 acceptance,
+  merge, then close #71 only when its concrete criteria are satisfied.
+- [ ] Remove the pushed linked worktrees/builds after verifying clean state,
+  remote heads and absence of other users/processes.
+  Request/waiter admission and absent-response deadlines remain H3.4; no universal
+  QProcess memory, live-provider, other-platform, installation or deployment claim.

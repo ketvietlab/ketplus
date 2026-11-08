@@ -5,6 +5,15 @@ milestone changes state.
 
 ## Implemented
 
+- ACP v1 capability negotiation requires explicit boolean support (ADR 0090).
+  Missing/mistyped loadSession and image flags no longer retain baseline support;
+  Cursor does not issue session/load when it was not advertised.
+
+- Malformed normal-sized provider frames reject their process generation (ADR 0089).
+  Syntax/UTF-8/non-object frames and raw control bytes cannot be followed by a
+  dispatched suffix. Pending calls receive a static error and a fresh process can
+  recover; method schemas and absent-response deadlines remain separate.
+
 - Matched provider responses require one valid result/error envelope (ADR 0075).
   Malformed replies fail their callback once, without successful initialization,
   unrelated-call failure or echoing malformed payloads. Null void results and

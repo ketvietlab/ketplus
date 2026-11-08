@@ -59,6 +59,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/providers/CodexAdapter.h
     src/providers/ProviderLineReader.cpp
     src/providers/ProviderLineReader.h
+    src/providers/ProviderFrameValidation.h
     src/providers/compat/ProviderCapabilities.cpp
     src/providers/compat/ProviderCapabilities.h
     src/providers/compat/ProviderCompatibility.cpp
