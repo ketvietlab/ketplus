@@ -11,8 +11,9 @@ struct HistoryTable {
     const char* name;
     int rows;
 };
-// Bulky per-generation history. Row limits keep one pass to a few MiB of freed pages:
-// payload manifests hold up to 32 MiB, chunks are fragment-sized and text rows are small.
+// Bulky per-generation history. These are row-count limits, not a byte budget: payload
+// manifests hold up to 32 MiB and chunks are fragment-sized, but text rows can be hundreds
+// of KiB each, so a pass over large rows can free hundreds of MiB.
 constexpr HistoryTable historyTables[] = {
     {"large_event_payloads", 1},      {"large_event_payload_chunks", 32},
     {"staged_attachment_chunks", 32}, {"events", 2048},
@@ -145,6 +146,11 @@ LocalJournal::HistoryPurge LocalJournal::purgeDeletedSessionHistory() {
         done.addBindValue(row);
         if (!done.exec())
             return fail(done.lastError());
+        // An ignored delete would report progress forever and starve later markers.
+        if (done.numRowsAffected() != 1)
+            return fail(QSqlError(QString(),
+                                  QStringLiteral("The history cleanup marker was not removed."),
+                                  QSqlError::StatementError));
     }
     if (!database_.commit())
         return fail(database_.lastError());

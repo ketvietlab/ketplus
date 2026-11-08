@@ -16,6 +16,7 @@
 #include <QProcess>
 #include <QScopeGuard>
 #include <QSqlDatabase>
+#include <QSqlError>
 #include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QUrlQuery>
@@ -222,6 +223,74 @@ QJsonObject restorePage(Context& c, const QString& requestId, QByteArray* serial
 class CloudPrivacyTest final : public QObject {
     Q_OBJECT
   private slots:
+    void deletedGenerationStopsInFlightCloudUpload_data() {
+        QTest::addColumn<int>("status");
+        QTest::newRow("413 retry") << 413;
+        QTest::newRow("late 202") << 202;
+    }
+    void deletedGenerationStopsInFlightCloudUpload() {
+        // ADR 0093: residual history awaiting purge must never be read, sealed or acknowledged.
+        QFETCH(int, status);
+        QTemporaryDir dir;
+        const auto path = dir.filePath("deleted-upload.sqlite");
+        Context c(path);
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == path)
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        QSqlQuery q(db);
+        QVERIFY2(q.exec("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE "
+                        "i<3000) INSERT INTO events(session_id,generation,cursor,event_type,"
+                        "payload,sent_at,turn_sequence) SELECT 'session-synthetic',1,i,"
+                        "'assistant.delta','{\"text\":\"private\"}',datetime('now'),1 FROM n"),
+                 qPrintable(q.lastError().text()));
+        q.finish();
+        c.start();
+        c.transport.status = status;
+        c.transport.response = R"({"acceptedThrough":[{"sessionId":"session-synthetic",)"
+                               R"("sessionGeneration":1,"cursor":1}]})";
+        Access::upload(*c.client);
+        QCOMPARE(c.transport.bodies.size(), 1);
+        QVERIFY(c.journal.deleteSession("session-synthetic", 1));
+        QVERIFY(c.journal.sessions().isEmpty());
+        QVERIFY(c.journal.hasPendingHistoryPurge());
+        QTRY_VERIFY(Access::idle(*c.client));
+        QCoreApplication::processEvents();
+        QCOMPARE(c.transport.bodies.size(), 1);
+        QVERIFY(q.exec("SELECT count(*) FROM cloud_upload_progress"));
+        QVERIFY(q.next());
+        QCOMPARE(q.value(0).toInt(), 0);
+        q.finish();
+        Access::upload(*c.client);
+        QCOMPARE(c.transport.bodies.size(), 1);
+    }
+    void deletedGenerationResidualIsNeverUploaded() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("residual-upload.sqlite");
+        Context c(path);
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == path)
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        QSqlQuery q(db);
+        QVERIFY2(q.exec("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE "
+                        "i<3000) INSERT INTO events(session_id,generation,cursor,event_type,"
+                        "payload,sent_at,turn_sequence) SELECT 'session-synthetic',1,i,"
+                        "'assistant.delta','{\"text\":\"private\"}',datetime('now'),1 FROM n"),
+                 qPrintable(q.lastError().text()));
+        q.finish();
+        c.start();
+        c.transport.status = 202;
+        QVERIFY(c.journal.deleteSession("session-synthetic", 1));
+        QVERIFY(c.journal.hasPendingHistoryPurge());
+        QVERIFY(!c.journal.eventsAfter("session-synthetic", 1, 0).isEmpty());
+        Access::upload(*c.client);
+        QVERIFY(c.transport.bodies.isEmpty());
+    }
     void mobileForkReachesProviderInsteadOfGenericUnknownOperation() {
         QTemporaryDir dir;
         Context c(dir.filePath("fork.sqlite"));

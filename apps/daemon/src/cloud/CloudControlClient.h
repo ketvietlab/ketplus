@@ -117,6 +117,8 @@ class CloudControlClient final : public QObject {
                               const QString& workspaceId);
     void uploadEvents();
     void uploadSessionEvents(const QString& sessionId, qint64 generation, qint64 afterCursor);
+    // A deleted generation's history awaits purge but must never leave the machine (ADR 0093).
+    [[nodiscard]] bool isLiveGeneration(const QString& sessionId, qint64 generation) const;
     void distributeKeys();
     void pollCommands();
     // A wake-up that lands while a poll is in flight polls again once it returns: that poll

@@ -124,3 +124,9 @@ The previous synchronous delete took 1,192 ms for the 300k case. Daemon suite
 56/56 passes. Ignored purge markers, stalled passes, retention while pending,
 event-loop draining and reopen are regressions. Whole-history fork bounds and the
 remaining gates above stay open.
+
+#2739's single review found two P2s, both fixed with regressions and negative
+controls: cloud event upload re-read residual history on a 413 retry (now fenced
+by live generation at entry and in the reply callback; cached restore pages are
+also fenced), and an ignored marker delete reported progress (now fails). Batch
+limits are documented as row counts, not a byte budget. Daemon suite 57/57.

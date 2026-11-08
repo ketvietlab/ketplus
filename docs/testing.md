@@ -235,8 +235,10 @@ the corresponding Atlas mock first.
   probes with `KETPLUS_RUN_DELETE_BACKLOG_TESTS=1`; they use temporary journals.
 - Bounded history purge (ADR 0093): `ketplus_provider_deletion_tests` covers an
   ignored purge marker, tombstone retention while purge is pending, a stalled
-  pass, event-loop draining and reopen. The opt-in backlog probe asserts the
-  delete command stays under 500 ms and each purge pass under 250 ms.
+  pass, an ignored marker delete, event-loop draining and reopen. The opt-in
+  backlog probe asserts the delete command stays under 500 ms and each purge
+  pass under 250 ms. `ketplus_daemon_cloud_privacy_tests` covers 413 retry, late
+  202 and a fresh upload of a deleted generation's residual history.
 - Live-only discovery (ADR 0092): run provider deletion, Desktop daemon client,
   Desktop session discovery, lifecycle and headless CLI targets. Real temporary
   daemons with fake providers cover 20k/100k retained tombstones and zero repeated

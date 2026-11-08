@@ -600,6 +600,30 @@ class ProviderDeletionTest final : public QObject {
         QVERIFY(reopened.isOpen());
         QVERIFY(reopened.sessionTombstone("deleted", 1).sessionId.isEmpty());
     }
+    void ignoredPurgeMarkerDeleteFails() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(journal.isOpen());
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == path)
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        QSqlQuery q(db);
+        QVERIFY(q.exec("INSERT INTO session_history_purge VALUES('deleted',1)"));
+        QVERIFY(q.exec("CREATE TRIGGER ignore_marker BEFORE DELETE ON session_history_purge "
+                       "BEGIN SELECT RAISE(IGNORE); END"));
+        // Reporting progress here would reschedule a 0 ms pass forever.
+        QCOMPARE(journal.purgeDeletedSessionHistory(), LocalJournal::HistoryPurge::Failed);
+        QCOMPARE(journal.errorString(), QString("The history cleanup marker was not removed."));
+        QVERIFY(journal.hasPendingHistoryPurge());
+        QVERIFY(q.exec("DROP TRIGGER ignore_marker"));
+        QCOMPARE(journal.purgeDeletedSessionHistory(), LocalJournal::HistoryPurge::Progress);
+        QVERIFY(!journal.hasPendingHistoryPurge());
+        QCOMPARE(journal.purgeDeletedSessionHistory(), LocalJournal::HistoryPurge::Idle);
+    }
     void failedSessionDeletionRollsBackAndCanRetry_data() {
         QTest::addColumn<QString>("fault");
         QTest::newRow("commit") << "commit";
