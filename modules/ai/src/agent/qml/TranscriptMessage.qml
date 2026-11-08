@@ -85,7 +85,8 @@ Item {
         userExpanded = view.activityState(userExpansionKey)?.expanded === true;
     }
     onUserExpansionKeyChanged: restoreUserExpansion()
-    readonly property real contentColumnWidth: Math.min(width, shell.conversationColumnWidth)
+    // The reading column plus the 20 px inset each side that rows keep from the pane's edges.
+    readonly property real contentColumnWidth: Math.min(width, shell.conversationColumnWidth + KetTheme.px(40, KetTheme.zoom))
     readonly property real contentColumnX: (width - contentColumnWidth) / 2
     // Like Claude: an agent turn has one copy action, under its last answer, for the text the
     // agent wrote (not its commands or files); a request keeps its own copy.

@@ -660,7 +660,7 @@ void AgentWorkspaceViewTest::composerPreview() {
     QCOMPARE(productNavigation.constFirst().constFirst().toString(), QStringLiteral("search"));
     view.resize(1200, 900);
     QTRY_COMPARE(brand->height(), 67.0);
-    QTRY_COMPARE(composer->width(), 720.0);
+    QTRY_COMPARE(composer->width(), 760.0);
     QTRY_VERIFY(identity->mapToItem(sidebar, QPointF(0, identity->height())).y() <=
                 sidebar->height() + 1.0);
     auto* suggestion = findVisualItem(root, QStringLiteral("workspaceSuggestion"));
@@ -1636,14 +1636,33 @@ void AgentWorkspaceViewTest::conversationColumnFollowsConfiguredWidth() {
     const qreal zoom = ket::Appearance::instance().zoom();
     const qreal defaultWidth = bodyWidth();
     QVERIFY(defaultWidth > 0);
-    QVERIFY(defaultWidth < ketplus::AgentWorkspaceView::defaultConversationWidth * zoom);
-    QCOMPARE(composer->width(),
-             std::round(ketplus::AgentWorkspaceView::defaultConversationWidth * zoom) -
-                 std::round(40 * zoom));
+    // As in the mock, the answer and the composer share the whole reading column.
+    const qreal column = ketplus::AgentWorkspaceView::defaultConversationWidth * zoom;
+    QVERIFY2(qAbs(defaultWidth - column) <= 1.0,
+             qPrintable(QStringLiteral("answer %1, column %2").arg(defaultWidth).arg(column)));
+    QCOMPARE(composer->width(), std::round(column));
+    auto* body = findVisualItem(root, "messageBody");
+    QVERIFY(qAbs(body->mapToItem(root, QPointF()).x() - composer->mapToItem(root, QPointF()).x()) <=
+            1.0);
 
+    view.resetMessages({QVariantMap{{"kind", "assistant"},
+                                    {"meta", "Claude"},
+                                    {"body", QString("Some text. ").repeated(20) +
+                                                 "\n\n```qml\nrotation: 360\n```\n"}}},
+                       "conversation-width-code");
+    QQuickItem* frame = nullptr;
+    QTRY_VERIFY((frame = findVisualItem(root, "messageCodeBlockFrame")));
+    QTest::qWait(100);
+    auto* codeBody = findVisualItem(root, "messageBody");
+    // Code frames span the reading column, as the mock's code blocks do.
+    QVERIFY2(qAbs(frame->x()) <= 0.5 && qAbs(frame->width() - codeBody->width()) <= 1.0,
+             qPrintable(QStringLiteral("code frame %1 + %2, body %3")
+                            .arg(frame->x())
+                            .arg(frame->width())
+                            .arg(codeBody->width())));
     view.setConversationWidth(1200);
     QTRY_VERIFY(bodyWidth() > defaultWidth + 400 * zoom);
-    QCOMPARE(composer->width(), std::round(1200 * zoom) - std::round(40 * zoom));
+    QCOMPARE(composer->width(), std::round(1200 * zoom));
 
     // Zero fills the pane: wider than any fixed column on this 1500px view.
     view.setConversationWidth(0);

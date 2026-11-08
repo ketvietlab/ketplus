@@ -372,7 +372,9 @@ current-window value.
   table cell after a code fence, preserving intentionally empty cells and header
   emphasis. Table padding owns cell spacing; code frames retain separation from
   the following table. The transcript and
-  composer share one reading column, 760 px by default. Settings > Typography >
+  composer share one reading column, 760 px by default: as in the mock, answer
+  text, code frames and the composer span the whole column, and rows keep a
+  20 px inset from the pane's edges only when the pane is narrower. Settings > Typography >
   Conversation width offers Wide (864 px, close to Claude's wide reading column),
   Extra wide (1200 px) and Full width; a Wide saved as 960 px before it was narrowed
   still reads as Wide. Like the other Typography fields, the choice is staged until

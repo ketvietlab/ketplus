@@ -29,7 +29,7 @@ Item {
         readonly property bool compactControls: width < 520
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
-        width: Math.min(parent.width - KetTheme.px(40, KetTheme.zoom), root.conversationColumnWidth - KetTheme.px(40, KetTheme.zoom))
+        width: Math.min(parent.width - KetTheme.px(40, KetTheme.zoom), root.conversationColumnWidth)
         height: composerColumn.implicitHeight + 2 * (recipe.padding + recipe.ringWidth + 1)
         radius: recipe.radius
         color: recipe.background

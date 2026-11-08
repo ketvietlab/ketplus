@@ -18,10 +18,13 @@ target_link_libraries(ketplus_agent_benchmark PRIVATE
 )
 ketplus_enable_warnings(ketplus_agent_benchmark)
 
-qt_add_executable(ketplus_agent_idle_benchmark AgentIdleBenchmark.cpp)
+qt_add_executable(ketplus_agent_idle_benchmark AgentIdleBenchmark.cpp AgentTranscriptFixture.cpp)
 target_link_libraries(ketplus_agent_idle_benchmark PRIVATE
     Qt6::Quick Qt6::Widgets ketplus_ai KetPlusCM::ui
 )
+# The mock's screenshots, for --transcript captures.
+target_compile_definitions(ketplus_agent_idle_benchmark PRIVATE
+    KETPLUS_MOCK_ASSETS="${PROJECT_SOURCE_DIR}/mockups/qt/assets")
 ketplus_enable_warnings(ketplus_agent_idle_benchmark)
 if(APPLE)
     set_target_properties(ketplus_agent_idle_benchmark PROPERTIES

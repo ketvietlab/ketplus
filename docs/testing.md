@@ -227,7 +227,10 @@ held clock. For captures, the fixture binary also accepts `--open=mode`, `model`
 for an empty conversation like the mock's `workspace/welcome`. With `--open`, the
 active conversation is the mock's Claude Opus 5.5 conversation with its fixed catalog and
 usage (context, session cost and tokens, and three plan limits); runs without `--open`
-keep the default CPU workload.
+keep the default CPU workload. `--transcript=claude`, `codex` or `cursor` replaces the
+messages with the message rows of the mock's `workspace/<provider>` transcript, projected
+from synthetic journal events through `daemonWindowMessages`, and `--scroll=0` to `1`
+positions the transcript like the mock's `--scroll`.
 
 Use an Apple Silicon Mac with a 2× display. The macOS app bundle lets computer use
 identify the fixture separately from the installed app. After `ready`, focus the
