@@ -218,7 +218,12 @@ python3 benchmarks/run-agent-idle.py build/release /tmp/idle-running-active --ca
 python3 benchmarks/run-agent-idle.py build/release /tmp/idle-running-background --visibility inactive
 python3 benchmarks/run-agent-idle.py build/release /tmp/idle-no-work --work idle
 python3 benchmarks/run-agent-idle.py build/release /tmp/idle-hidden --visibility hidden
+python3 benchmarks/run-agent-idle.py build/release /tmp/idle-minimized --visibility minimized
 ```
+
+`--visibility minimized` minimizes the window a second after `ready` and expects no
+held clock. For captures, the fixture binary also accepts `--open=mode`, `model` or
+`limits` to open that composer panel first, like the mock's `--open`.
 
 Use an Apple Silicon Mac with a 2× display. The macOS app bundle lets computer use
 identify the fixture separately from the installed app. After `ready`, focus the
@@ -248,7 +253,14 @@ The #126 targets are ≤7% foreground, ≤2% background and approximately zero
 with no running work. They were relaxed from 5%/1% on 2026-11-08 after the
 native measurement: each tick of the kit's shared clock (20 Hz active, 4 Hz
 inactive) redraws the whole 2× window, measured at 6.3% and 1.6%. The clock
-rate stays unchanged. Also run `--work idle --visibility inactive` and
+rate stays unchanged. On 2026-11-09, `feat/new-ui` 3a9117b8 with kit d476382 measured:
+- running in front 2.1–5.3% over three runs;
+- running behind another app 0.5–1.0%;
+- no work 0.2%;
+- hidden or minimized 0.04%.
+
+All samples were valid, on an M1 Pro built-in display at 2×. Foreground samples
+vary between runs, so record at least three. Also run `--work idle --visibility inactive` and
 `KETPLUS_REDUCED_MOTION=1` when checking stop conditions. The sample must show no
 new frames when its activity and measurement timers have stopped. Record invalid
 attempts and unmeasured states; this fixture alone does not qualify Atlas Widgets

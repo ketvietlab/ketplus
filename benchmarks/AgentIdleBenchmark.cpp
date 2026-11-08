@@ -92,7 +92,7 @@ int main(int argc, char** argv) {
     QCommandLineParser parser;
     parser.addHelpOption();
     parser.addOptions({{"work", "running or idle", "state", "running"},
-                       {"visibility", "active, inactive or hidden", "state", "active"},
+                       {"visibility", "active, inactive, hidden or minimized", "state", "active"},
                        {"seconds", "Measured interval (10–60 seconds)", "seconds", "12"},
                        {"capture", "Optional native PNG before measurement", "path"},
                        {"theme", "system, light or dark", "theme", "system"},
@@ -104,7 +104,8 @@ int main(int argc, char** argv) {
     bool validSeconds = false;
     const int seconds = parser.value("seconds").toInt(&validSeconds);
     if ((work != "running" && work != "idle") ||
-        (visibility != "active" && visibility != "inactive" && visibility != "hidden") ||
+        (visibility != "active" && visibility != "inactive" && visibility != "hidden" &&
+         visibility != "minimized") ||
         !validSeconds || seconds < 10 || seconds > 60) {
         report({{"event", "error"}, {"reason", "Invalid workload, visibility or duration"}});
         return 2;
@@ -161,12 +162,16 @@ int main(int argc, char** argv) {
     view.activateWindow();
     view.quickView()->requestActivate();
     const auto expected = [&] {
-        return visibility == "hidden"
-                   ? !view.isVisible()
-                   : view.isVisible() && !view.isMinimized() && stateName() == visibility;
+        if (visibility == "hidden")
+            return !view.isVisible();
+        if (visibility == "minimized")
+            return view.isMinimized();
+        return view.isVisible() && !view.isMinimized() && stateName() == visibility;
     };
     if (visibility == "hidden")
         QTimer::singleShot(1000, &view, &QWidget::hide);
+    if (visibility == "minimized")
+        QTimer::singleShot(1000, &view, &QWidget::showMinimized);
     if (!panel.isEmpty())
         QTimer::singleShot(1000, &view, [&] {
             auto* button = findItem(view.quickView()->rootObject(), panelButtons.value(panel));
@@ -234,7 +239,7 @@ int main(int argc, char** argv) {
                            qFuzzyCompare(view.quickView()->devicePixelRatio(), 2.0) &&
                            view.size() == QSize(1440, 900) && visibleRows == 3 && !timerRunning &&
                            clockHeld == (work == "running" && visibility != "hidden" &&
-                                         view.workingMotionEnabled());
+                                         visibility != "minimized" && view.workingMotionEnabled());
         return QJsonObject{{"fixtureValid", valid},
                            {"platform", app.platformName()},
                            {"renderer", metal ? "metal" : "other"},
