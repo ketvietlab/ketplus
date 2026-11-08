@@ -36,9 +36,10 @@ struct MigrationResult final {
 [[nodiscard]] qint64 migrationMargin(const Usage& usage);
 
 // Moves an existing journal to auto_vacuum = INCREMENTAL, so deleted rows can be returned to the
-// disk from then on. That takes one full VACUUM: the journal is written compacted to a sibling
-// file with VACUUM INTO, checked, synced and renamed over the original. Interrupted at any step,
-// the original stays whole and the sibling is removed at the next start.
+// disk from then on. That takes one full VACUUM: the copy is written inside a private sibling
+// directory, checked, protected, synced and renamed over the original. Interrupted copies are
+// cleaned at the next start only when the staging directory and all entries are recognized;
+// unsupported artifacts remain intact for repair, and the original is not replaced.
 //
 // The caller holds the journal's lock and has no connection open to it: the daemon calls this at
 // start, before LocalJournal opens the file.
