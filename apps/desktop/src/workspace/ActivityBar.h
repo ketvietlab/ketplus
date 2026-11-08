@@ -32,7 +32,8 @@ class ActivityBar final : public QWidget {
     enum class Mode { Explorer, Search, SourceControl, AgentWorkspace, Atlas, Remote, Settings };
     Q_ENUM(Mode)
 
-    static constexpr int kWidth = 214;
+    // Medium logical pixels; the shown width follows interface zoom, as in the mock.
+    static constexpr int kWidth = 240;
     static constexpr int kMinWidth = 180;
     static constexpr int kMaxWidth = 360;
 
@@ -40,6 +41,7 @@ class ActivityBar final : public QWidget {
 
     void setMode(Mode mode);
     void setSidebarWidth(int width);
+    // Unscaled (Medium) width, persisted as `sidebar/width`.
     [[nodiscard]] int sidebarWidth() const noexcept { return sidebarWidth_; }
     void setSourceControlAvailable(bool available);
     void setSourceControlCount(int count);
@@ -69,12 +71,14 @@ class ActivityBar final : public QWidget {
     void settingsSectionRequested(const QString& id);
     void identityRequested();
     void updatesRequested();
+    // The shown width, after a drag or an interface zoom change.
     void sidebarWidthChanged(int width);
 
   protected:
     void resizeEvent(QResizeEvent* event) override;
 
   private:
+    void syncShownWidth();
     ket::NavItem* addModeButton(const QByteArray& svgBody, const QString& label, Mode mode);
     void refreshIcons();
 
@@ -97,6 +101,7 @@ class ActivityBar final : public QWidget {
     QMenu* userMenu_{nullptr};
     QWidget* resizeHandle_{nullptr};
     int sidebarWidth_{kWidth};
+    int shownWidth_{0};
     QString iconMainColor_;
     QString iconMutedColor_;
     QString iconDisabledColor_;

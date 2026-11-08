@@ -1,5 +1,6 @@
 #include "workspace/ActivityBar.h"
 #include "ui/ChromeGeometry.h"
+#include "ui/InterfaceZoom.h"
 #include "ui/SymbolIcon.h"
 #include <QApplication>
 
@@ -56,7 +57,9 @@ class SidebarResizeHandle final : public QWidget {
     }
     void mouseMoveEvent(QMouseEvent* event) override {
         if (event->buttons().testFlag(Qt::LeftButton))
-            bar_->setSidebarWidth(startWidth_ + qRound(event->globalPosition().x() - startX_));
+            bar_->setSidebarWidth(startWidth_ + qRound((event->globalPosition().x() - startX_) /
+                                                       InterfaceZoomMetrics::factor(
+                                                           chrome_geometry::basePixels(bar_))));
     }
     void mouseReleaseEvent(QMouseEvent*) override {
         QSettings().setValue(kWidthSetting, bar_->sidebarWidth());
@@ -85,7 +88,8 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     setProperty("kvRole", QStringLiteral("productSidebar"));
     setAttribute(Qt::WA_StyledBackground, true);
     sidebarWidth_ = qBound(kMinWidth, QSettings().value(kWidthSetting, kWidth).toInt(), kMaxWidth);
-    setFixedWidth(sidebarWidth_);
+    chrome_geometry::fixedWidth(this, sidebarWidth_);
+    shownWidth_ = width();
 
     group_->setExclusive(true);
     auto* layout = new QVBoxLayout(this);
@@ -330,17 +334,25 @@ void ActivityBar::setPendingUpdate(const QString& version) {
     updateReadyButton_->setVisible(!version.isEmpty());
 }
 
-void ActivityBar::setSidebarWidth(const int width) {
-    const int bounded = qBound(kMinWidth, width, kMaxWidth);
+void ActivityBar::setSidebarWidth(const int unscaledWidth) {
+    const int bounded = qBound(kMinWidth, unscaledWidth, kMaxWidth);
     if (bounded == sidebarWidth_)
         return;
     sidebarWidth_ = bounded;
-    setFixedWidth(bounded);
-    emit sidebarWidthChanged(bounded);
+    chrome_geometry::fixedWidth(this, bounded);
+    syncShownWidth();
+}
+
+void ActivityBar::syncShownWidth() {
+    if (width() == shownWidth_)
+        return;
+    shownWidth_ = width();
+    emit sidebarWidthChanged(shownWidth_);
 }
 
 void ActivityBar::resizeEvent(QResizeEvent* event) {
     QWidget::resizeEvent(event);
+    syncShownWidth();
     resizeHandle_->setGeometry(width() - kResizeHandleWidth, 0, kResizeHandleWidth, height());
     resizeHandle_->raise();
 }

@@ -234,7 +234,7 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
         }
     });
     statusBar()->setSizeGripEnabled(false);
-    statusBar()->setContentsMargins(activityBar_->sidebarWidth(), 0, 0, 0);
+    statusBar()->setContentsMargins(activityBar_->width(), 0, 0, 0);
     connect(activityBar_, &ActivityBar::sidebarWidthChanged, this,
             [this](const int width) { statusBar()->setContentsMargins(width, 0, 0, 0); });
     statusBar()->showMessage(QStringLiteral("Ready"));
@@ -536,7 +536,7 @@ void MainWindow::setShellMode(const ActivityBar::Mode mode) {
         mode == ActivityBar::Mode::Explorer || mode == ActivityBar::Mode::Search;
     statusBar()->setVisible(explorerStatus);
     if (explorerStatus)
-        statusBar()->setContentsMargins(activityBar_->sidebarWidth(), 0, 0, 0);
+        statusBar()->setContentsMargins(activityBar_->width(), 0, 0, 0);
 }
 
 bool MainWindow::restoreLastWorkspace() {
