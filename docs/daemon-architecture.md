@@ -334,13 +334,17 @@ before the endpoint listens:
   connection has the journal open, including a daemon from before the lock, so
   the move waits for the next start and the file is not touched. The lock is
   held until after the rename;
-- it runs `VACUUM INTO <journal>.compact`;
+- it creates an owner-only `<journal>.compact-private` directory and runs
+  `VACUUM INTO` its `journal.sqlite` child (ADR 0087);
 - it checks the copy (`quick_check`, the same schema, incremental vacuum);
-- it syncs the copy and renames it over the original, then syncs the directory.
+- it requires owner-only permissions on the completed copy on POSIX, syncs it
+  and renames it over the original, then syncs the directory.
 
 The move runs only when the free disk exceeds the kept data plus the larger of
 256 MB and 10%. Otherwise it waits for the next start. If a move is interrupted,
-the original stays whole and the copy is removed at the next start. The move
+the original stays whole and recognized staging files are removed at the next
+start. Unsupported entries or permissions are preserved for repair and reported
+as migration failure; cleanup never recursively removes a staging directory. The move
 takes as long as one read of the kept data.
 
 After that, once a minute while no session is active, up to 4,096 free pages
@@ -803,6 +807,15 @@ scan journal content nor checkpoint it, and failures do not invalidate committed
 policy saves. Media/backups are excluded; absent filesystem data is unknown. See
 [ADR 0045](decisions/0045-journal-file-measurements.md).
 
+### Failed journal initialization
+
+A failed base/activity/agent initialization closes the journal connection before
+construction returns. Later operations on that object cannot turn a cleared
+operation error into a usable journal. Repair the cause separately and open a
+fresh journal; the failed object remains closed. The service's immediate startup
+check and existing rollback behavior remain in place. See
+[ADR 0086](decisions/0086-quarantine-failed-journal-initialization.md) for scope.
+
 ### SQLite-page size pressure
 
 The separate owner-only size policy defaults to a soft 5 decimal GB SQLite-page
@@ -812,6 +825,10 @@ then may compact eligible recent detail without bypassing retention guards.
 Forever/off still preserve remaining detail. Unsupported/protected data may leave
 the target unmet. File/WAL and total-application usage are not this page target;
 see [ADR 0046](decisions/0046-journal-size-pressure.md) for scope and remaining work.
+Both stored policy JSON values are admitted through a 4 KiB SQL projection before
+Qt parses them. Unsupported oversized rows remain intact and disable policy saves
+and configured detail trimming until repaired; see
+[ADR 0085](decisions/0085-bounded-stored-policy-json.md).
 
 Bounded large-tool retention (ADR 0047) applies the existing detail transformers
 to version-1 fragmented payloads within the shared 1 MiB pass budget. It requires

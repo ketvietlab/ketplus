@@ -75,9 +75,11 @@ milestone changes state.
   partial indexes restrict settlement checks to running rows in the target turn.
   Large running turns and initial index construction remain separate bounds work.
 
-- Failed activity-backfill commits now preserve their diagnostic and release the
-  write transaction (ADR 0064). A separate connection can repair and reopen while
-  the failed journal object remains alive; broader startup recovery remains open.
+- Failed activity-backfill commits preserve their diagnostic and release the
+  write transaction (ADR 0064). Any failed constructor stage also closes the
+  journal connection (ADR 0086): subsequent operations cannot revive or mutate
+  that object. A separate connection can repair and a fresh object reopen while
+  the failed object remains alive; broader startup recovery remains open.
 
 - Media cleanup requires a complete bounded reference catalog before deleting
   metadata or image bytes (ADR 0065). Unknown shapes, symlinks and read failures

@@ -178,6 +178,12 @@ the corresponding Atlas mock first.
   activity backfills, unchanged stored rows, diagnostic preservation, write-lock
   release while the failed object remains alive, repair and reopen.
 
+- Journal migration copy protection (ADR 0087): the journal-space target observes
+  a synthetic 64-MiB copy while SQLite writes under umasks 0022 and 0077. It checks
+  private staging, final POSIX permissions, retained hashes, integrity, bounded
+  stale-artifact cleanup, preservation of unknown entries and repair/retry.
+  POSIX-specific cases skip Windows; this is not Windows ACL or multi-GB evidence.
+
 - Media cleanup changes: temporary reference catalogs exercise malformed data,
   file/directory symlinks, unsupported filenames, per-file/catalog limits, preserved
   shared bytes and metadata, repair/retry and absent/empty-catalog compatibility.
@@ -466,7 +472,12 @@ synthetic temporary journals and no provider processes.
 
 `ketplus_daemon_retention_policy_tests` verifies strict policy parsing, defaults,
 revision-fenced persistence/reopen/rollback, actual configured retention, malformed
-policy fail-closed behavior and local-only API/cache boundaries. The agent-token
+policy fail-closed behavior and local-only API/cache boundaries. ADR 0085 adds
+TEXT/BLOB stored JSON boundary cases for both policies (4095/4096 accepted,
+4097/1 MiB rejected), preserving row bytes/revision/history across reopen and
+repair/retry. Run this target plus `ketplus_daemon_size_policy_tests`,
+`ketplus_daemon_usage_retention_tests` and `ketplus_daemon_journal_space_tests`
+in Release for stored-policy reader changes. The agent-token
 IPC test also rejects both retention operations. Changes to the shared journal or
 host headers require the full Pro build and suite. No provider quota is consumed.
 
@@ -562,3 +573,16 @@ ADR 0061 `SessionForkTest::journalForkPreservesUnsupportedSourceCounters` covers
 negative, fractional, TEXT and BLOB cursor/turn values. It checks exact source
 preservation, no destination, released transaction, fixture repair, retry and
 reopen. Run the combined fork suite and its affected backend matrix.
+
+
+### Failed journal reuse (ADR 0086)
+
+`DaemonProtocolTest::startupCommitFailurePreservesErrorAndReleasesTransaction`
+covers policy-read, policy-write and session-write attempts after turn/replay/
+activity commit failures, plus the original no-operation controls. The failed
+object stays closed, a separate writer can repair, and a fresh journal reopens
+without retained-row changes. `failedAgentSchemaCannotBeUsedUntilReopened`
+covers the final agent-schema stage and conversation-number ownership recovery.
+Run the protocol, activity-groups, agent-messaging, retention-policy, journal-space
+and headless-daemon targets in Release. This does not establish full startup
+atomicity, disk-full/crash or multi-GB/platform acceptance. Synthetic journals only.

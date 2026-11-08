@@ -1,0 +1,90 @@
+{
+  "scope": "H1.2 private in-progress journal migration copy; not complete issue #68/#128 acceptance",
+  "base": "886fbe201ad88e2bbd466c8e0689f3fc7a423223",
+  "environment": "macOS arm64, Qt 6.11.2, platform SQLite 3.51.0, Release, offscreen; synthetic journals only",
+  "source_sha256": {
+    "apps/daemon/src/storage/JournalSpace.cpp": "c7e01d8f172dc4d1ad7be15b2152e2f6162bc4965ff09a996177f9339c08333e",
+    "apps/daemon/src/storage/JournalSpace.h": "1ca28fd24a74ec5327b195e53e6c402ef6eeca11f01b0b8b0259d332d9bc25ce",
+    "tests/daemon/JournalSpaceTest.cpp": "9d4c43e362bd0fb44b7993cc78387f6c6c651805401736d881fbb19b387f1319"
+  },
+  "original_probe": {
+    "passed": 3,
+    "failed": 1,
+    "elapsed_ms": 2051,
+    "observation": "nonempty legacy copy mode 0644 under umask 0022; umask 0077 control passes; no user-data disclosure claimed"
+  },
+  "fixed_focused": {
+    "passed": 11,
+    "failed": 0,
+    "elapsed_ms": 2863,
+    "copy_samples_by_umask": [
+      68,
+      66
+    ]
+  },
+  "headless_affected": {
+    "targets_passed": 4,
+    "targets_failed": 0,
+    "seconds": 11.1,
+    "note": "before final absolute-path and iterator-lifetime refinements; final source is covered by Pro matrix"
+  },
+  "mutation": {
+    "change": "remove final owner-only chmod",
+    "passed": 2,
+    "failed": 1,
+    "elapsed_ms": 746,
+    "caught_by": "final promoted-file permissions; staging remains private"
+  },
+  "full_pro": {
+    "status": "completed_with_isolated_retries",
+    "build": "PASS",
+    "first_run": {
+      "passed": 93,
+      "failed": 3,
+      "total": 96,
+      "seconds": 636.55,
+      "failed_targets": [
+        "ketplus_agent_shell_tests",
+        "ketplus_daemon_cursor_adapter_tests",
+        "ketplus_daemon_session_fork_tests"
+      ],
+      "failure_kind": "timeouts; not a clean first run"
+    },
+    "isolated_retry": {
+      "passed": 3,
+      "failed": 0,
+      "seconds": 26.85,
+      "parallelism": 1,
+      "qtest_function_timeout_ms": 60000,
+      "source_changed": false
+    },
+    "journal_space": {
+      "passed": 19,
+      "failed": 0,
+      "skipped": 1,
+      "elapsed_ms": 11404,
+      "copy_samples_by_umask": [
+        132,
+        128
+      ],
+      "skip": "opt-in 9-GiB fixture"
+    },
+    "note": "Final source hashes match throughout; no test or production change to obtain retry passes. Independent review and integrated-branch verification remain separate."
+  },
+  "verified": [
+    "observer sees nonempty copy with protected staging",
+    "retained SHA-256 hashes and quick_check",
+    "final promoted file permissions",
+    "recognized stale-file cleanup",
+    "unknown/symlink/public/file roots preserved",
+    "legacy blocker preserved, repair then successful retry"
+  ],
+  "not_verified": [
+    "Windows ACL",
+    "ancestor or same-user replacement races",
+    "power-loss/fsync failure at every stage",
+    "mixed multi-GB fixture",
+    "live journal",
+    "release/package/install/deploy"
+  ]
+}

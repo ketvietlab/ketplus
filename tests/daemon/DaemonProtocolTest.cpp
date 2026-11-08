@@ -2006,18 +2006,24 @@ class DaemonProtocolTest final : public QObject {
 
     void startupCommitFailurePreservesErrorAndReleasesTransaction_data() {
         QTest::addColumn<QString>("phase");
+        QTest::addColumn<QString>("operation");
         for (const auto& phase : {"turn", "replay", "activity"})
-            QTest::newRow(phase) << QString(phase);
+            for (const auto& operation : {"none", "read-policy", "write-policy", "write-session"}) {
+                const auto name = QString("%1-%2").arg(phase, operation).toLatin1();
+                QTest::newRow(name.constData()) << QString(phase) << QString(operation);
+            }
     }
     void startupCommitFailurePreservesErrorAndReleasesTransaction() {
         QFETCH(QString, phase);
+        QFETCH(QString, operation);
         QTemporaryDir dir;
         const auto path = dir.filePath("journal.sqlite");
         const auto snapshot = [](QSqlDatabase db) {
             QVariantMap result;
             for (const auto& table :
                  {"sessions", "events", "replay_events", "replay_projection_state",
-                  "activity_heads", "activity_items", "activity_summaries", "startup_child"}) {
+                  "activity_heads", "activity_items", "activity_summaries", "startup_child",
+                  "journal_retention_settings", "journal_size_settings"}) {
                 QSqlQuery q(db);
                 if (!q.exec(QString("SELECT * FROM %1 ORDER BY 1,2,3").arg(table))) {
                     QTest::qFail(qPrintable(q.lastError().text()), __FILE__, __LINE__);
@@ -2078,6 +2084,14 @@ class DaemonProtocolTest final : public QObject {
         QVERIFY2(!failed.isOpen(), "Failed startup must never advertise an initialized journal.");
         QVERIFY2(failed.errorString().contains("FOREIGN KEY", Qt::CaseInsensitive),
                  qPrintable(failed.errorString()));
+        // No public operation may revive or write through an incompletely initialized object.
+        if (operation == "read-policy")
+            QVERIFY(!failed.retentionPolicy());
+        else if (operation == "write-policy")
+            QVERIFY(!failed.setRetentionPolicy({7, true, 0}, 0));
+        else if (operation == "write-session")
+            QVERIFY(!failed.upsertSession({"unexpected", dir.path(), "codex", {}, {}, "ready"}));
+        QVERIFY(!failed.isOpen());
         const auto connection = QString("startup-repair-%1").arg(phase);
         const auto remove = qScopeGuard([&] { QSqlDatabase::removeDatabase(connection); });
         auto repair = QSqlDatabase::addDatabase("QSQLITE", connection);
@@ -2095,6 +2109,51 @@ class DaemonProtocolTest final : public QObject {
         QCOMPARE(reopened.sessionHead("s").cursor, qint64(2));
         QCOMPARE(reopened.eventsAfter("s", 1, 0).size(), 2);
         QCOMPARE(reopened.compactedEventsAfter("s", 1, 0, 10).events.size(), 2);
+    }
+
+    void failedAgentSchemaCannotBeUsedUntilReopened() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto path = dir.filePath("journal.sqlite");
+        {
+            LocalJournal seed(path);
+            QVERIFY(seed.isOpen());
+            QVERIFY(seed.upsertSession({"s", dir.path(), "codex", {}, {}, "ready"}));
+            QCOMPARE(seed.appendEvent("s", 1, "user.message", {{"text", "seed"}}), qint64(1));
+        }
+        const auto connection = QUuid::createUuid().toString();
+        const auto remove = qScopeGuard([&] { QSqlDatabase::removeDatabase(connection); });
+        auto db = QSqlDatabase::addDatabase("QSQLITE", connection);
+        db.setDatabaseName(path);
+        QVERIFY(db.open());
+        QSqlQuery q(db);
+        QVERIFY(q.exec("INSERT INTO conversation_numbers VALUES ('1234','s',1,'synthetic','')"));
+        QVERIFY(q.exec("DROP INDEX conversation_numbers_session"));
+        QVERIFY(q.exec("ALTER TABLE conversation_numbers RENAME COLUMN generation "
+                       "TO unsupported_generation"));
+        LocalJournal failed(path);
+        QVERIFY(!failed.isOpen());
+        QVERIFY2(failed.errorString().contains("generation"), qPrintable(failed.errorString()));
+        QVERIFY(!failed.retentionPolicy());
+        QVERIFY(!failed.setRetentionPolicy({7, true, 0}, 0));
+        QVERIFY(!failed.upsertSession({"unexpected", dir.path(), "codex", {}, {}, "ready"}));
+        QVERIFY(!failed.isOpen());
+        QVERIFY(q.exec("SELECT COUNT(*) FROM sessions"));
+        QVERIFY(q.next());
+        QCOMPARE(q.value(0).toInt(), 1);
+        q.finish();
+        QVERIFY(q.exec("SELECT COUNT(*) FROM journal_retention_settings"));
+        QVERIFY(q.next());
+        QCOMPARE(q.value(0).toInt(), 0);
+        q.finish();
+        QVERIFY(q.exec("ALTER TABLE conversation_numbers RENAME COLUMN unsupported_generation "
+                       "TO generation"));
+        QVERIFY(!failed.isOpen());
+        LocalJournal reopened(path);
+        QVERIFY2(reopened.isOpen(), qPrintable(reopened.errorString()));
+        QCOMPARE(reopened.eventsAfter("s", 1, 0).size(), 1);
+        QCOMPARE(reopened.conversationNumber("s", 1), QString("1234"));
+        QVERIFY(reopened.setRetentionPolicy({7, true, 0}, 0));
     }
 
     void backfillNeverRenumbersPrunedSessions() {

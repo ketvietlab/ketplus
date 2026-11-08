@@ -4,10 +4,12 @@
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
+#include <QScopeGuard>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -18,10 +20,14 @@
 #include <QUuid>
 #include <QVariant>
 
+#include <chrono>
+#include <future>
 #include <memory>
+#include <thread>
 
 #if !defined(Q_OS_WIN)
 #include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 namespace ketplus::daemon {
@@ -177,6 +183,194 @@ class JournalSpaceTest final : public QObject {
                 << "retained SHA-256:" << beforeHash.toHex();
         QVERIFY(directory.remove());
         QVERIFY(!QFileInfo::exists(path));
+    }
+
+    void migrationCopyIsPrivateWhileBeingWritten_data() {
+        QTest::addColumn<quint32>("mask");
+        QTest::newRow("usual-umask") << quint32(0022);
+        QTest::newRow("private-umask-control") << quint32(0077);
+    }
+    void migrationCopyIsPrivateWhileBeingWritten() {
+#if defined(Q_OS_WIN)
+        QSKIP("POSIX mode-bit observation; Windows ACL validation is separate.");
+#else
+        QFETCH(quint32, mask);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("journal.sqlite");
+        const auto checksum = [&](Database& database) {
+            QCryptographicHash hash(QCryptographicHash::Sha256);
+            QSqlQuery query(database.database());
+            if (!query.exec("SELECT id,body FROM blobs ORDER BY id"))
+                return QByteArray{};
+            while (query.next()) {
+                hash.addData(QByteArray::number(query.value(0).toLongLong()));
+                hash.addData(query.value(1).toByteArray());
+            }
+            return query.lastError().isValid() ? QByteArray{} : hash.result();
+        };
+        QByteArray before;
+        {
+            Database database(path);
+            QVERIFY(database.exec("CREATE TABLE blobs(id INTEGER PRIMARY KEY, body BLOB)"));
+            // Keep the copy observable while SQLite writes it, without a user journal or GB
+            // fixture.
+            QVERIFY(
+                database.exec("WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n "
+                              "WHERE i<64) INSERT INTO blobs SELECT i,randomblob(1048576) FROM n"));
+            before = checksum(database);
+            QCOMPARE(before.size(), 32);
+        }
+        QVERIFY(QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+        const mode_t previousMask = ::umask(mode_t(mask));
+        const auto restoreMask = qScopeGuard([&] { ::umask(previousMask); });
+        auto migration = std::async(
+            std::launch::async, [&] { return journal_space::migrateToIncrementalVacuum(path); });
+        int mainSamples = 0;
+        QString exposed;
+        do {
+            for (const auto& base : {path + ".compact", path + ".compact-private/journal.sqlite"}) {
+                for (const auto* suffix : {"", "-journal", "-wal", "-shm"}) {
+                    struct stat info{};
+                    if (::stat(QFile::encodeName(base + suffix).constData(), &info) != 0 ||
+                        info.st_size == 0)
+                        continue;
+                    if (QString::fromLatin1(suffix).isEmpty())
+                        ++mainSamples;
+                    bool protectedContainer = false;
+                    if (base.endsWith(".compact-private/journal.sqlite")) {
+                        struct stat parent{};
+                        protectedContainer =
+                            ::lstat(QFile::encodeName(path + ".compact-private").constData(),
+                                    &parent) == 0 &&
+                            S_ISDIR(parent.st_mode) && (parent.st_mode & 0077) == 0 &&
+                            parent.st_uid == ::geteuid();
+                    }
+                    if ((info.st_mode & 0077) != 0 && !protectedContainer)
+                        exposed = QString("copy mode %1 without private staging")
+                                      .arg(info.st_mode & 0777, 3, 8, QLatin1Char('0'));
+                }
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        } while (migration.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready);
+        const auto result = migration.get();
+        QVERIFY2(result.outcome == journal_space::Migration::Migrated, qPrintable(result.error));
+        QVERIFY2(mainSamples > 0, "The observer must see a nonempty in-progress copy.");
+        qInfo() << "Nonempty in-progress copy observations:" << mainSamples
+                << "exposure:" << exposed;
+        QVERIFY2(exposed.isEmpty(), qPrintable(exposed));
+        QCOMPARE(QFile::permissions(path) &
+                     (QFileDevice::ReadGroup | QFileDevice::WriteGroup | QFileDevice::ExeGroup |
+                      QFileDevice::ReadOther | QFileDevice::WriteOther | QFileDevice::ExeOther),
+                 QFileDevice::Permissions());
+        Database migrated(path);
+        QCOMPARE(checksum(migrated), before);
+        QCOMPARE(migrated.value("PRAGMA quick_check").toString(), QString("ok"));
+        QCOMPARE(migrated.value("PRAGMA auto_vacuum").toInt(), 2);
+        QVERIFY(!QFileInfo::exists(path + ".compact"));
+        QVERIFY(!QFileInfo::exists(path + ".compact-private"));
+#endif
+    }
+
+    void stalePrivateStagingIsBoundedAndPreservesUnsupportedEntries_data() {
+        QTest::addColumn<QString>("kind");
+        for (const auto* kind : {"known", "unknown-entry", "symlink-entry", "symlink-root",
+                                 "public-root", "file-root"})
+            QTest::newRow(kind) << QString(kind);
+    }
+    void stalePrivateStagingIsBoundedAndPreservesUnsupportedEntries() {
+#if defined(Q_OS_WIN)
+        QSKIP("POSIX symlink/mode fixtures; Windows ACL checks remain separate.");
+#else
+        QFETCH(QString, kind);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("journal.sqlite");
+        writeJournalWithFreePages(path);
+        const auto stage = path + ".compact-private";
+        const auto target = directory.filePath("preserved");
+        QFile outside(target);
+        QVERIFY(outside.open(QIODevice::WriteOnly));
+        QCOMPARE(outside.write("keep"), qint64(4));
+        outside.close();
+        if (kind == "symlink-root") {
+            const auto folder = directory.filePath("outside");
+            QVERIFY(QDir().mkdir(folder));
+            QVERIFY(QFile::link(folder, stage));
+        } else if (kind == "file-root") {
+            QVERIFY(QFile::copy(target, stage));
+        } else {
+            QVERIFY(QDir().mkdir(stage, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                                            QFileDevice::ExeOwner));
+            QVERIFY(QFile::copy(target, stage + "/journal.sqlite"));
+            if (kind == "unknown-entry")
+                QVERIFY(QFile::copy(target, stage + "/unknown"));
+            else if (kind == "symlink-entry")
+                QVERIFY(QFile::link(target, stage + "/journal.sqlite-wal"));
+            else if (kind == "public-root")
+                QVERIFY(QFile::setPermissions(stage, QFile::permissions(stage) |
+                                                         QFileDevice::ReadOther |
+                                                         QFileDevice::ExeOther));
+        }
+        const auto result = journal_space::migrateToIncrementalVacuum(path);
+        if (kind == "known") {
+            QVERIFY2(result.outcome == journal_space::Migration::Migrated,
+                     qPrintable(result.error));
+            QVERIFY(!QFileInfo::exists(stage));
+        } else {
+            QCOMPARE(result.outcome, journal_space::Migration::Failed);
+            QVERIFY(!result.error.isEmpty());
+            QVERIFY(QFileInfo::exists(stage) || QFileInfo(stage).isSymLink());
+            if (kind != "symlink-root" && kind != "file-root") {
+                QFile preserved(stage + "/journal.sqlite");
+                QVERIFY(preserved.open(QIODevice::ReadOnly));
+                QCOMPARE(preserved.readAll(), QByteArray("keep"));
+            }
+        }
+        QVERIFY(outside.open(QIODevice::ReadOnly));
+        QCOMPARE(outside.readAll(), QByteArray("keep"));
+        Database original(path);
+        QCOMPARE(original.value("SELECT count(*) FROM blobs").toInt(), 500);
+        QCOMPARE(original.value("PRAGMA quick_check").toString(), QString("ok"));
+        QCOMPARE(original.value("PRAGMA auto_vacuum").toInt(), kind == "known" ? 2 : 0);
+#endif
+    }
+
+    void unavailableCopyDestinationPreservesJournalAndCanRetry() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("journal.sqlite");
+        writeJournalWithFreePages(path);
+        qlonglong before = 0;
+        {
+            Database database(path);
+            before = database.value("SELECT sum(id)+sum(length(body)) FROM blobs").toLongLong();
+        }
+        const auto occupied = path + ".compact";
+        QVERIFY(QDir().mkdir(occupied));
+        QFile sentinel(occupied + "/keep");
+        QVERIFY(sentinel.open(QIODevice::WriteOnly));
+        QCOMPARE(sentinel.write("keep"), qint64(4));
+        sentinel.close();
+        const auto result = journal_space::migrateToIncrementalVacuum(path);
+        QCOMPARE(result.outcome, journal_space::Migration::Failed);
+        QVERIFY(!result.error.isEmpty());
+        QVERIFY(sentinel.open(QIODevice::ReadOnly));
+        QCOMPARE(sentinel.readAll(), QByteArray("keep"));
+        sentinel.close();
+        {
+            Database database(path);
+            QCOMPARE(database.value("SELECT sum(id)+sum(length(body)) FROM blobs").toLongLong(),
+                     before);
+            QCOMPARE(database.value("PRAGMA auto_vacuum").toInt(), 0);
+        }
+        QVERIFY(sentinel.remove());
+        QVERIFY(QDir().rmdir(occupied));
+        const auto retry = journal_space::migrateToIncrementalVacuum(path);
+        QVERIFY2(retry.outcome == journal_space::Migration::Migrated, qPrintable(retry.error));
+        Database migrated(path);
+        QCOMPARE(migrated.value("SELECT sum(id)+sum(length(body)) FROM blobs").toLongLong(),
+                 before);
     }
 
     void migratesAJournalWithFreePagesAndKeepsEveryRow() {
