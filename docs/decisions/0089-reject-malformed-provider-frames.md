@@ -22,6 +22,12 @@ backoff. Existing model-catalog error-to-fallback behavior remains in place. It 
 published its failure. A fresh launch resets rejection and can serve calls again.
 Codex's line-reader generation fence also stops parsing the current coalesced chunk.
 
+Codex shares one app-server across turns, so rejecting its generation ends every
+active turn on that process. A future CLI that prints a non-JSON banner to stdout
+would repeatedly fail and restart with backoff; protocol output belongs on stdout
+and diagnostics belong on stderr. This intentionally favors a visible process
+failure over silently retaining calls whose responses may have been corrupted.
+
 The fixture uses its own binary as a fake provider. It covers all three adapters,
 initialize and ordinary outstanding calls, malformed UTF-8, NUL/control bytes,
 raw tabs/CR inside strings, arrays and malformed syntax. A valid-looking suffix

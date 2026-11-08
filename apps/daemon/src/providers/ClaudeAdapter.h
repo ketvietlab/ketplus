@@ -20,6 +20,7 @@ class ClaudeCredentials;
 
 class ClaudeAdapter final : public ProviderAdapter {
     Q_OBJECT
+    friend class ProviderStderrFloodTest;
 
   public:
     explicit ClaudeAdapter(const QString& executable = {}, QObject* parent = nullptr);

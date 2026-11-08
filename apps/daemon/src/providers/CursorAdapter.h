@@ -31,6 +31,7 @@ class ProviderVersionProbe;
 // never bundled. Auth stays with the CLI (`agent login` or CURSOR_API_KEY).
 class CursorAdapter final : public ProviderAdapter {
     Q_OBJECT
+    friend class ProviderStderrFloodTest;
 
   public:
     explicit CursorAdapter(const QString& executable = {}, QObject* parent = nullptr);
