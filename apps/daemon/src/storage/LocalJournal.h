@@ -418,6 +418,8 @@ class LocalJournal final {
                            QSqlError* error);
     // Inside deleteSession's transaction: the first batch, then a purge marker if any remains.
     bool startHistoryPurge(const QString& sessionId, qint64 generation, QString* error);
+    // At open: turns interrupted fork copies into purge work, or keeps them staged.
+    bool recoverForkStaging();
     // Removes a staged fork's rows now (synchronous forkSession) or leaves purge work.
     bool discardForkStaging(ForkCopy& copy, bool immediately, QString* error);
     // Inside deleteSession's transaction: releases the number and ends undelivered messages.

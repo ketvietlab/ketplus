@@ -569,6 +569,75 @@ class SessionForkTest final : public QObject {
         QVERIFY2(reopened.forkSession("source", 1, copy, &error), qPrintable(error));
         QCOMPARE(reopened.sessionHead("fork").cursor, qint64(3000));
     }
+    void abandonedForkKeepsOwnershipWhenCleanupIsIgnored_data() {
+        QTest::addColumn<QString>("trigger");
+        QTest::newRow("ignored-purge-insert")
+            << "CREATE TRIGGER deny BEFORE INSERT ON session_history_purge "
+               "BEGIN SELECT RAISE(IGNORE); END";
+        QTest::newRow("ignored-staging-delete")
+            << "CREATE TRIGGER deny BEFORE DELETE ON session_fork_staging "
+               "BEGIN SELECT RAISE(IGNORE); END";
+    }
+    void abandonedForkKeepsOwnershipWhenCleanupIsIgnored() {
+        QFETCH(QString, trigger);
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        StoredSession source{"source", dir.path(), "codex", {}, {}, "ready", 1, 0, 0, {}};
+        QVERIFY(journal.upsertSession(source));
+        QVERIFY(seedEvents(journalConnection(path), "source", 1, 3000));
+        StoredSession copy = source;
+        copy.id = "fork";
+        QString error;
+        auto staged = journal.beginFork("source", 1, copy, &error);
+        QVERIFY2(staged, qPrintable(error));
+        QCOMPARE(journal.continueFork(*staged, &error), LocalJournal::ForkStep::Progress);
+        QSqlQuery q(journalConnection(path));
+        QVERIFY2(q.exec(trigger), qPrintable(q.lastError().text()));
+        // Neither a lost marker nor a lost release may hand the partial copy to a new session.
+        QVERIFY(!journal.abandonFork(*staged, &error));
+        QVERIFY(!journal.upsertSession(copy));
+        QCOMPARE(journal.sessions().size(), 1);
+        QVERIFY(!journal.hasPendingHistoryPurge());
+        QVERIFY(q.exec("DROP TRIGGER deny"));
+        QVERIFY2(journal.abandonFork(*staged, &error), qPrintable(error));
+        QVERIFY(journal.hasPendingHistoryPurge());
+        QVERIFY(!journal.upsertSession(copy));
+    }
+    void interruptedForkStaysStagedWhenRecoveryIsIgnored() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        StoredSession source{"source", dir.path(), "codex", {}, {}, "ready", 1, 0, 0, {}};
+        StoredSession copy = source;
+        copy.id = "fork";
+        {
+            LocalJournal journal(path);
+            QVERIFY(journal.upsertSession(source));
+            QVERIFY(seedEvents(journalConnection(path), "source", 1, 3000));
+            QString error;
+            auto staged = journal.beginFork("source", 1, copy, &error);
+            QVERIFY2(staged, qPrintable(error));
+            QCOMPARE(journal.continueFork(*staged, &error), LocalJournal::ForkStep::Progress);
+            QSqlQuery q(journalConnection(path));
+            QVERIFY(q.exec("CREATE TRIGGER deny BEFORE INSERT ON session_history_purge "
+                           "BEGIN SELECT RAISE(IGNORE); END"));
+        }
+        {
+            LocalJournal reopened(path);
+            QVERIFY2(reopened.isOpen(), qPrintable(reopened.errorString()));
+            QVERIFY(!reopened.hasPendingHistoryPurge());
+            QVERIFY(!reopened.upsertSession(copy));
+            QSqlQuery q(journalConnection(path));
+            QVERIFY(q.exec("SELECT count(*) FROM session_fork_staging"));
+            QVERIFY(q.next());
+            QCOMPARE(q.value(0).toInt(), 1);
+            QVERIFY(q.exec("DROP TRIGGER deny"));
+        }
+        LocalJournal repaired(path);
+        QVERIFY2(repaired.isOpen(), qPrintable(repaired.errorString()));
+        QVERIFY(repaired.hasPendingHistoryPurge());
+        QVERIFY(!repaired.upsertSession(copy));
+    }
     void journalForkCopiesEmptyHistory() {
         QTemporaryDir dir;
         LocalJournal journal(dir.filePath("journal.sqlite"));

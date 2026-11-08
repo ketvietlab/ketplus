@@ -26,7 +26,10 @@ then the copied rows have no `sessions` row and are never served; a new session
 cannot adopt an identity that is staged or awaiting purge. A failed, refused or
 abandoned copy turns its staging row into an ADR 0093 purge marker in one
 transaction. Opening the journal does the same for every staging row, because
-only the daemon owns the journal and no copy survives a restart.
+only the daemon owns the journal (`DaemonService` holds its lock before opening
+it) and no copy survives a restart. Both paths check the result rather than the
+write count: the purge marker must exist and the staging row must be gone, or
+the transaction rolls back and the staging row keeps owning the copy.
 
 `SessionHost` runs one pass per event-loop turn and defers 250 ms when another
 writer is busy. It rejects a second request for a destination being copied and

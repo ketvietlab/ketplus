@@ -425,8 +425,10 @@ bool LocalJournal::discardForkStaging(ForkCopy& copy, const bool immediately, QS
         QStringLiteral("DELETE FROM session_fork_staging WHERE session_id = ? AND generation = ?"));
     staging.addBindValue(copy.forkId);
     staging.addBindValue(copy.forkGeneration);
-    if (!staging.exec())
-        return fail(staging.lastError().text());
+    if (!staging.exec() || staging.numRowsAffected() != 1)
+        return fail(staging.lastError().isValid()
+                        ? staging.lastError().text()
+                        : QStringLiteral("The fork staging was not released."));
     QSqlQuery purge(database_);
     purge.prepare(QStringLiteral(
         "INSERT OR IGNORE INTO session_history_purge(session_id, generation) VALUES(?, ?)"));
@@ -434,6 +436,23 @@ bool LocalJournal::discardForkStaging(ForkCopy& copy, const bool immediately, QS
     purge.addBindValue(copy.forkGeneration);
     if (!purge.exec())
         return fail(purge.lastError().text());
+    purge.finish();
+    // An existing marker is fine, an ignored insert is not: check the result, not the count.
+    // Without both, the staging row keeps owning the copy and the transaction rolls back.
+    QSqlQuery owned(database_);
+    owned.prepare(
+        QStringLiteral("SELECT EXISTS(SELECT 1 FROM session_history_purge WHERE session_id = ? AND "
+                       "generation = ?) AND NOT EXISTS(SELECT 1 FROM session_fork_staging WHERE "
+                       "session_id = ? AND generation = ?)"));
+    owned.addBindValue(copy.forkId);
+    owned.addBindValue(copy.forkGeneration);
+    owned.addBindValue(copy.forkId);
+    owned.addBindValue(copy.forkGeneration);
+    if (!owned.exec() || !owned.next() || !owned.value(0).toBool())
+        return fail(owned.lastError().isValid()
+                        ? owned.lastError().text()
+                        : QStringLiteral("The fork history cleanup work was not stored."));
+    owned.finish();
     if (!database_.commit())
         return fail(database_.lastError().text());
     copy.settled = true;
@@ -463,6 +482,54 @@ bool LocalJournal::discardForkStaging(ForkCopy& copy, const bool immediately, QS
         if (!remaining)
             return true;
     }
+}
+
+bool LocalJournal::recoverForkStaging() {
+    // No copy survives a restart: hand every staged identity to the history purge. If the
+    // markers cannot all be stored, the staging rows stay and keep owning their rows.
+    if (!database_.transaction()) {
+        setError(database_.lastError().text());
+        return false;
+    }
+    auto rollback = qScopeGuard([this] { database_.rollback(); });
+    QSqlQuery query(database_);
+    if (!query.exec(
+            QStringLiteral("INSERT OR IGNORE INTO session_history_purge(session_id, generation) "
+                           "SELECT session_id, generation FROM session_fork_staging"))) {
+        setError(query.lastError().text());
+        return false;
+    }
+    if (!query.exec(QStringLiteral(
+            "SELECT EXISTS(SELECT 1 FROM session_fork_staging s WHERE NOT EXISTS (SELECT 1 FROM "
+            "session_history_purge p WHERE p.session_id = s.session_id AND "
+            "p.generation = s.generation))")) ||
+        !query.next()) {
+        setError(query.lastError().text());
+        return false;
+    }
+    if (query.value(0).toBool()) {
+        qWarning("journal: interrupted fork copies kept staged; their cleanup work was not "
+                 "stored");
+        return true;
+    }
+    query.finish();
+    if (!query.exec(QStringLiteral("DELETE FROM session_fork_staging")) ||
+        !query.exec(QStringLiteral("SELECT EXISTS(SELECT 1 FROM session_fork_staging)")) ||
+        !query.next()) {
+        setError(query.lastError().text());
+        return false;
+    }
+    if (query.value(0).toBool()) {
+        qWarning("journal: interrupted fork copies kept staged; staging was not released");
+        return true;
+    }
+    query.finish();
+    if (!database_.commit()) {
+        setError(database_.lastError().text());
+        return false;
+    }
+    rollback.dismiss();
+    return true;
 }
 
 bool LocalJournal::forkSession(const QString& sourceId, const qint64 sourceGeneration,

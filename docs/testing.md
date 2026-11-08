@@ -235,7 +235,8 @@ the corresponding Atlas mock first.
   probes with `KETPLUS_RUN_DELETE_BACKLOG_TESTS=1`; they use temporary journals.
 - Staged fork copy (ADR 0094): `ketplus_daemon_session_fork_tests` covers one
   read snapshot while the source changes, byte-exact malformed TEXT, interrupted
-  copies recovered as purge work at open, duplicate destinations and source
+  copies recovered as purge work at open, ignored purge/staging writes on abandon
+  and at open, duplicate destinations and source
   deletion during a host fork. Opt in to 100k/300k timing with
   `KETPLUS_RUN_FORK_BACKLOG_TESTS=1`; begin, each pass and finish must stay
   under 250 ms.

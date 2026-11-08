@@ -174,13 +174,10 @@ bool LocalJournal::initialize() {
                        "session_id TEXT NOT NULL, generation INTEGER NOT NULL, "
                        "PRIMARY KEY(session_id, generation))"),
         // Forks still copying history (ADR 0094). Only the daemon owns the journal, so a row
-        // left at open is an interrupted copy: its rows become purge work.
+        // left at open is an interrupted copy: recoverForkStaging makes it purge work.
         QStringLiteral("CREATE TABLE IF NOT EXISTS session_fork_staging ("
                        "session_id TEXT NOT NULL, generation INTEGER NOT NULL, "
                        "PRIMARY KEY(session_id, generation))"),
-        QStringLiteral("INSERT OR IGNORE INTO session_history_purge(session_id, generation) "
-                       "SELECT session_id, generation FROM session_fork_staging"),
-        QStringLiteral("DELETE FROM session_fork_staging"),
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS cloud_upload_progress ("
             "scope TEXT NOT NULL, session_id TEXT NOT NULL, generation INTEGER NOT NULL, "
@@ -247,8 +244,8 @@ bool LocalJournal::initialize() {
         }
     }
     return migrateTranscriptSchema() && purgeExpiredAttachments() && backfillTurnSequences() &&
-           backfillReplayProjection() && initializeRemoteAudit() && pruneAcknowledgedEvents() &&
-           pruneRetention();
+           backfillReplayProjection() && initializeRemoteAudit() && recoverForkStaging() &&
+           pruneAcknowledgedEvents() && pruneRetention();
 }
 
 bool LocalJournal::migrateTranscriptSchema() {
