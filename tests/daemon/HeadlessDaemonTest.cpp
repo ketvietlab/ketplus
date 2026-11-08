@@ -1,3 +1,4 @@
+#include "DaemonClient.h"
 #include "DaemonPaths.h"
 #include "protocol/DaemonProtocol.h"
 #include "providers/CodexAdapter.h"
@@ -8,12 +9,21 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QLocalServer>
+#include <QLocalSocket>
+#include <QMap>
 #include <QProcess>
 #include <QScopeGuard>
 #include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QUuid>
 #include <QtTest>
+
+#include <memory>
+
+#ifdef Q_OS_UNIX
+#include <sys/stat.h>
+#endif
 
 using namespace ketplus::daemon;
 namespace {
@@ -26,11 +36,177 @@ QJsonObject command(const QString& type, const QString& path = {}) {
 bool initializeGit(const QString& path) {
     return QProcess::execute("git", {"-C", path, "init", "-q"}) == 0;
 }
+
+void credentialCases() {
+    QTest::addColumn<QString>("kind");
+    QTest::addColumn<bool>("valid");
+    for (const auto& kind : {"generated", "legacy32", "limit", "padded-limit"})
+        QTest::newRow(kind) << QString(kind) << true;
+    for (const auto& kind : {"oversized", "oversized-trimmed", "short", "empty", "directory"})
+        QTest::newRow(kind) << QString(kind) << false;
+#ifdef Q_OS_UNIX
+    for (const auto& kind : {"group-readable", "symlink", "dangling-symlink", "fifo"})
+        QTest::newRow(kind) << QString(kind) << false;
+#endif
+}
+QByteArray credentialBytes(const QString& kind) {
+    if (kind == "legacy32")
+        return QByteArray(32, 't');
+    if (kind == "limit")
+        return QByteArray(4096, 't');
+    if (kind == "padded-limit")
+        return QByteArray(4051, ' ') + QByteArray(43, 't') + "\r\n";
+    if (kind == "oversized")
+        return QByteArray(4097, 't');
+    if (kind == "oversized-trimmed")
+        return QByteArray(4052, ' ') + QByteArray(43, 't') + "\r\n";
+    if (kind == "short")
+        return QByteArray(31, 't');
+    if (kind == "empty")
+        return QByteArray(4096, ' ');
+    return QByteArray(43, 't');
+}
+bool writeCredential(const QString& path, const QByteArray& bytes) {
+    QFile file(path);
+    return file.open(QIODevice::WriteOnly) &&
+           file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner) &&
+           file.write(bytes) == bytes.size();
+}
+bool prepareCredential(const QString& path, const QString& kind) {
+#ifdef Q_OS_UNIX
+    if (kind == "fifo")
+        return ::mkfifo(QFile::encodeName(path).constData(), 0600) == 0;
+#endif
+    if (kind == "directory")
+        return QDir().mkdir(path);
+    if (kind == "symlink" || kind == "dangling-symlink") {
+        const auto target = path + ".target";
+        if (kind == "symlink" && !writeCredential(target, credentialBytes(kind)))
+            return false;
+        return QFile::link(target, path);
+    }
+    if (!writeCredential(path, credentialBytes(kind)))
+        return false;
+    return kind != "group-readable" ||
+           QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                                           QFileDevice::ReadGroup);
+}
 } // namespace
 class HeadlessDaemonTest final : public QObject {
     Q_OBJECT
   private slots:
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
+    void serviceCredentialAdmission_data() { credentialCases(); }
+    void serviceCredentialAdmission() {
+        QFETCH(QString, kind);
+        QFETCH(bool, valid);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("local.token");
+        QVERIFY(prepareCredential(path, kind));
+        const QFileInfo before(path);
+        const bool wasLink = before.isSymLink(), wasDirectory = before.isDir();
+        const qint64 sizeBefore = before.size();
+        const auto targetBefore = wasLink ? before.symLinkTarget() : QString{};
+        const auto permissionsBefore = before.permissions();
+        const DaemonConfiguration config{directory.filePath("journal.sqlite3"),
+                                         path,
+                                         directory.filePath("daemon.sock"),
+                                         "/nonexistent/codex",
+                                         "/nonexistent/claude",
+                                         "/nonexistent/cursor"};
+        {
+            DaemonService service(config);
+            QCOMPARE(service.start(), valid);
+            if (!valid) {
+                QVERIFY(!service.errorString().isEmpty());
+                QVERIFY(!QFileInfo::exists(config.statePath));
+                const QFileInfo after(path);
+                QCOMPARE(after.isSymLink(), wasLink);
+                QCOMPARE(after.isDir(), wasDirectory);
+                QCOMPARE(after.size(), sizeBefore);
+                QCOMPARE(after.permissions(), permissionsBefore);
+                if (wasLink)
+                    QCOMPARE(after.symLinkTarget(), targetBefore);
+            }
+        }
+        if (!valid) {
+            if (kind == "directory")
+                QVERIFY(QDir().rmdir(path));
+            else
+                QVERIFY(QFile::remove(path));
+            QVERIFY(writeCredential(path, QByteArray(43, 'r')));
+            DaemonService repaired(config);
+            QVERIFY2(repaired.start(), qPrintable(repaired.errorString()));
+        }
+    }
+
+    void clientCredentialAdmission_data() { credentialCases(); }
+    void clientCredentialAdmission() {
+        QFETCH(QString, kind);
+        QFETCH(bool, valid);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("local.token");
+        QVERIFY(prepareCredential(path, kind));
+        const auto endpoint = directory.filePath("fake.sock");
+        QMap<QByteArray, QByteArray> saved;
+        for (const auto& key : {"KETPLUS_DAEMON_TOKEN_FILE", "KETPLUS_DAEMON_SOCKET",
+                                "KETPLUS_DISABLE_DAEMON_AUTOSTART"})
+            saved.insert(key, qgetenv(key));
+        const auto restore = qScopeGuard([&] {
+            for (auto it = saved.cbegin(); it != saved.cend(); ++it)
+                it.value().isNull() ? qunsetenv(it.key().constData())
+                                    : qputenv(it.key().constData(), it.value());
+        });
+        qputenv("KETPLUS_DAEMON_TOKEN_FILE", path.toUtf8());
+        qputenv("KETPLUS_DAEMON_SOCKET", endpoint.toUtf8());
+        qputenv("KETPLUS_DISABLE_DAEMON_AUTOSTART", "1");
+        QList<QJsonObject> received;
+        int closed = 0;
+        QLocalServer server;
+        QVERIFY(server.listen(endpoint));
+        connect(&server, &QLocalServer::newConnection, &server, [&] {
+            while (auto* socket = server.nextPendingConnection()) {
+                const auto buffer = std::make_shared<QByteArray>();
+                connect(socket, &QLocalSocket::disconnected, &server, [&, socket] {
+                    ++closed;
+                    socket->deleteLater();
+                });
+                connect(socket, &QLocalSocket::readyRead, &server, [&, socket, buffer] {
+                    buffer->append(socket->readAll());
+                    if (buffer->size() < 4)
+                        return;
+                    quint32 size = 0;
+                    for (int i = 0; i < 4; ++i)
+                        size = (size << 8U) | static_cast<uchar>(buffer->at(i));
+                    if (buffer->size() < 4 + qsizetype(size))
+                        return;
+                    received.append(QJsonDocument::fromJson(buffer->mid(4, size)).object());
+                    buffer->remove(0, 4 + size);
+                });
+            }
+        });
+        ketplus::remote::DaemonClient client;
+        client.call("session.list", {}, {}, -1, [](const QJsonObject&, const QString&) {});
+        QTRY_VERIFY_WITH_TIMEOUT(closed > 0 || !received.isEmpty(), 3000);
+        if (!valid) {
+            QVERIFY(received.isEmpty());
+            QVERIFY(closed > 0);
+            if (kind == "directory")
+                QVERIFY(QDir().rmdir(path));
+            else
+                QVERIFY(QFile::remove(path));
+            QVERIFY(writeCredential(path, QByteArray(43, 'r')));
+            QTRY_VERIFY_WITH_TIMEOUT(!received.isEmpty(), 3000);
+        }
+        const auto hello = received.first();
+        QCOMPARE(hello.value("message_type").toString(), QString("daemon.hello"));
+        const auto expected = valid ? credentialBytes(kind).trimmed() : QByteArray(43, 'r');
+        // Do not put credential bytes into assertion diagnostics, even in fixtures.
+        QVERIFY(hello.value("payload").toObject().value("token").toString().toUtf8() == expected);
+    }
+
     void workspaceCatalogExistsBeforeAnyConversationAndSurvivesRestart() {
         QTemporaryDir directory;
         QVERIFY(initializeGit(directory.path()));

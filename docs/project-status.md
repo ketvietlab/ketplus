@@ -19,6 +19,19 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   limiting unread socket bytes to one maximum frame plus header while preserving
   valid pipelined events. Broader IPC work/queue/lifetime bounds remain open.
 
+- Local daemon/client credential reads share a 4-KiB raw-file bound (ADR 0078).
+  Unix admission checks the opened descriptor's ownership/type/permissions;
+  unsupported files remain intact and client reconnect can recover after repair.
+
+- Accepted local IPC sockets bound Qt's unread receive buffer to one maximum
+  frame plus header (ADR 0077). Pipelined exact-limit requests resume without
+  loss after dispatch pauses, both before and after authentication.
+
+- Local turn acceptance commits state/configuration and its two/three events
+  together before publication (ADR 0076). Failed queued/configuration/projection/
+  commit writes leave no accepted prompt; repair/retry and independent-reader
+  visibility are covered. Whole-command idempotency/crash recovery remains open.
+
 - Reference-based previews use bounded validated ownership and verify blob
   SHA-256 before decoding the same byte snapshot (ADR 0069). Unknown metadata,
   linked roots and mismatched bytes remain intact and return unavailable.
