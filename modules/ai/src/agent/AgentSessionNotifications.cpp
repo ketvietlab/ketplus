@@ -1,4 +1,5 @@
 #include "agent/AgentSessionManager.h"
+#include "agent/DaemonTranscriptNotices.h"
 
 #include "agent/CodexAppServer.h"
 #include "agent/CodexRateLimits.h"
@@ -416,7 +417,16 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
                 ? agent_message::providerNoticeMessage(params.value("text").toString(), itemId)
                 : agent_message::providerNoticeMessage(params.value("text").toString(), itemId,
                                                        title);
-        if (!session->turnId.isEmpty())
+        if (params.value("presentation").isObject()) {
+            entry = params.value("presentation").toObject().toVariantMap();
+            if (entry.value("subtype") == "turnEnd") {
+                const auto estimate = agent_message::sessionEstimateText(
+                    QJsonObject::fromVariantMap(session->sessionUsage));
+                entry.insert("body", estimate);
+                entry.insert("summary", estimate);
+            }
+        }
+        if (!entry.contains("turnId") && !session->turnId.isEmpty())
             entry.insert(QStringLiteral("turnId"), session->turnId);
         session->messageIndexByItem.insert(itemId, appendMessage(session, entry));
         return;
@@ -451,6 +461,7 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
                        {{QStringLiteral("id"), itemId},
                         {QStringLiteral("type"), QStringLiteral("daemonUserMessage")},
                         {QStringLiteral("timestamp"), params.value("timestamp")},
+                        {QStringLiteral("eventType"), params.value("eventType")},
                         {QStringLiteral("text"), text},
                         {QStringLiteral("images"), params.value("images")},
                         {QStringLiteral("agentMessages"), params.value("agentMessages")}},

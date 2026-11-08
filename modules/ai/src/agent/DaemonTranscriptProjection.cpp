@@ -1,5 +1,6 @@
 #include "agent/DaemonTranscriptProjection.h"
 #include "agent/AgentMessageFormatter.h"
+#include "agent/DaemonTranscriptNotices.h"
 #include "agent/McpToolResultMedia.h"
 #include "agent/TranscriptNormalizer.h"
 
@@ -10,6 +11,8 @@
 namespace ketplus::agent_message {
 
 DaemonDisplayState daemonDisplayState(const QString& state) {
+    if (state == "queued")
+        return {QStringLiteral("Queued"), true};
     if (state == "running" || state == "starting")
         return {QStringLiteral("Working…"), true};
     // Older daemons left in-flight turns as "recovering" with no provider to resume them.
@@ -280,12 +283,17 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
             settledQuestions.insert(id, type == "question.expired" ? QStringLiteral("expired")
                                                                    : QStringLiteral("resolved"));
     }
+    QJsonObject sessionUsage;
     for (const auto& value : page.value("events").toArray()) {
         const auto event = value.toObject();
         const auto type = event.value("event_type").toString();
         const auto data = event.value("payload").toObject();
         const auto sequence = event.value("turn_sequence").toInteger();
         QString itemId = data.value("item_id").toString();
+        if (type == "usage.session")
+            sessionUsage = data;
+        const auto notice = daemonEventNotice(
+            type, data, daemonNoticeItemId(event.value("cursor").toInteger()), sessionUsage);
         QJsonObject item = data.value("item").toObject();
         if (item.isEmpty()) {
             item = data;
@@ -293,9 +301,11 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
             item.insert("id", itemId);
         } else
             itemId = item.value("id").toString();
+        if (!notice.isEmpty())
+            itemId = notice.value("itemId").toString();
         if (type == "user.message")
             itemId = daemonUserItemId(event.value("cursor").toInteger());
-        if (type == "runtime.error")
+        if (type == "runtime.error" && notice.isEmpty())
             itemId = QStringLiteral("error:%1").arg(event.value("cursor").toInteger());
         if (type == "provider.request_declined" || type == "provider.runtime" ||
             type == "provider.protocol_error" || type == "agent_message.state")
@@ -333,7 +343,9 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
             }
         }
         QVariantMap entry;
-        if (type == "activity.group.summary") {
+        if (!notice.isEmpty()) {
+            entry = notice;
+        } else if (type == "activity.group.summary") {
             entry = daemonActivityGroupMessage(data, sequence);
         } else if (type == "approval.requested" || answerReceipt) {
             entry = message("tool", {}, "Codex · question ended", {}, itemId);
@@ -382,6 +394,8 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
             // A steer carries its images the way the turn's first message does.
             entry = message("user", data.value("text").toString(), "You", {}, itemId);
             entry.insert("images", mcp_media::messageImages(data.value("images").toArray()));
+            if (type == "turn.steered")
+                entry.insert("eventType", "turn.steered");
             if (data.value("origin").toString() == QStringLiteral("agent"))
                 markAgentOrigin(entry, data.value("agent_messages").toArray());
         } else if (type == "assistant.delta") {

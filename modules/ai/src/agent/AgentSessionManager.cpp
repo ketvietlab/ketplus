@@ -875,6 +875,7 @@ void AgentSessionManager::steerPrompt(const QString& worktreePath, const QString
             session->steeringPending = false;
             if (error.isEmpty()) {
                 auto steered = message(QStringLiteral("user"), shown, QStringLiteral("You"));
+                steered.insert("eventType", "turn.steered");
                 if (!imageSources.isEmpty())
                     steered.insert(QStringLiteral("images"), imageSources);
                 appendMessage(session, steered);

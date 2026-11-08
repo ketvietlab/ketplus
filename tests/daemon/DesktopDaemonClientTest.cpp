@@ -411,10 +411,18 @@ class DesktopDaemonClientTest final : public QObject {
                  QStringLiteral("user"));
         QCOMPARE(transcript.first().toMap().value(QStringLiteral("body")).toString(),
                  QStringLiteral("continue"));
-        QCOMPARE(transcript.last().toMap().value(QStringLiteral("kind")).toString(),
-                 QStringLiteral("assistant"));
-        QCOMPARE(transcript.last().toMap().value(QStringLiteral("body")).toString(),
-                 QStringLiteral("finished"));
+        const auto answer =
+            std::find_if(transcript.cbegin(), transcript.cend(), [](const QVariant& row) {
+                return row.toMap().value("kind") == "assistant";
+            });
+        QVERIFY(answer != transcript.cend());
+        QCOMPARE(answer->toMap().value("body").toString(), QStringLiteral("finished"));
+        QCOMPARE(std::count_if(transcript.cbegin(), transcript.cend(),
+                               [](const QVariant& row) {
+                                   return row.toMap().value("subtype") == "turnEnd" &&
+                                          row.toMap().value("status") == "completed";
+                               }),
+                 1);
         QCOMPARE(reopened.title(worktree), QStringLiteral("Renamed across daemon"));
 
         qunsetenv("KETPLUS_DAEMON_SOCKET");
@@ -945,10 +953,18 @@ class DesktopDaemonClientTest final : public QObject {
         QVERIFY(transcript.size() >= 2);
         QCOMPARE(transcript.first().toMap().value(QStringLiteral("kind")).toString(),
                  QStringLiteral("user"));
-        QCOMPARE(transcript.last().toMap().value(QStringLiteral("kind")).toString(),
-                 QStringLiteral("assistant"));
-        QCOMPARE(transcript.last().toMap().value(QStringLiteral("body")).toString(),
-                 QStringLiteral("finished"));
+        const auto answer =
+            std::find_if(transcript.cbegin(), transcript.cend(), [](const QVariant& row) {
+                return row.toMap().value("kind") == "assistant";
+            });
+        QVERIFY(answer != transcript.cend());
+        QCOMPARE(answer->toMap().value("body").toString(), QStringLiteral("finished"));
+        QCOMPARE(std::count_if(transcript.cbegin(), transcript.cend(),
+                               [](const QVariant& row) {
+                                   return row.toMap().value("subtype") == "turnEnd" &&
+                                          row.toMap().value("status") == "completed";
+                               }),
+                 1);
         QFile log(cursorLog);
         QVERIFY(log.open(QIODevice::ReadOnly));
         QVERIFY(log.readAll().contains("prompt:"));
