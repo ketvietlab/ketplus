@@ -27,7 +27,7 @@ next domain, rather than waiting for every unrelated draft to merge first.
 | #71 / H3.1 | CLOSED after #277 merged `b3af8ed5`; author Pro 103/103, independent daemon 55/55; all five criteria checked | [Closure evidence](https://github.com/ketvietlab/ketplus/issues/71#issuecomment-6717547995); H3.4 remains separate | None; current issue is #68 |
 | #65 / H2.1–2 | IPC/token fixes prepared in #263/#264/#266 | Review/merge; finish permissions, single instance, slow clients, reassembly, reconnect and compatibility criteria | #2739 after the current #68 queue; no claim these checks are complete |
 | #66–67 / H2.3–4 | Append/fork/recovery fixes through #250 merged; turn acceptance #262 and media fork #254 pending | Two-client/late-event/handoff, approval/question/task and destructive-lifecycle acceptance; integrated tests | #2739, queued after the current closure target |
-| #68 / H1.1–4 | Storage/GC/transaction fixes through #252 merged; #253–255/#272/#273 and migration-copy package pending | Remaining delete/fork bounds, schema/failure/crash and media race/ownership acceptance; exact-head review and integration | #2739; completing the migration-copy package does not close this issue |
+| #68 / H1.1–4 | Storage/GC/transaction fixes through #252 merged; #253–255 merged via #255 `691d18c4`; combined #272–274 pending independent review | Remaining delete/fork bounds, schema/failure/crash and media race/ownership acceptance; exact-head review and integration | #2739; completing the migration-copy package does not close this issue |
 | #69 / H2.5 | Existing agent messaging suite and earlier runtime work | Complete identity, reply, loop/flood, authentication, secret-isolation and delivery audit | #2739; not completed, not blocked solely by relay |
 | #72–75 / H3.2–5 | #257/#260/#261 cover limited parsing cases | Full per-provider lifetime, background-task, credentials, worktree and cancellation criteria | #2739; pending local work remains visible |
 | #85 / H4 | #116 and client #191 merged; relay ketviet#2211 merged; independent client/vector and relay reviews | Existing ADR 0036 rollout gate: database migration, every replica's deployed revision/legacy flag, v2 round-trip and cutoff/owner | Relay release operator still unassigned; #2739 tracks evidence. Keep open; do not move the gate merely to count a closure |
@@ -54,7 +54,8 @@ next domain, rather than waiting for every unrelated draft to merge first.
 - [ ] Verify and remove every unused clean/pushed linked worktree; keep the main
   checkout and any worktree owned by another process/conversation.
 - [x] Complete #71's original checklist and close it with evidence.
-- [ ] Drain existing #68 media #253–255 and journal #272–274 packages, then
+- [x] Merge #68 media #253–255 after Pro104/104 and independent daemon56/56.
+- [ ] Finish journal #272–274 review/merge after combined Pro104/104, then
   reconcile the original seven criteria; remaining bounds/crash/filesystem work
   stays visible and no #68 closure is inferred from package PASS.
 

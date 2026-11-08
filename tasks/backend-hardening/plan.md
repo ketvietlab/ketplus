@@ -230,7 +230,7 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
 | H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 and cloud #237 merged; transaction recovery #241 merged; cancellation #240 merged; explicit session-delete bounds still open | Audit explicit session deletion and tombstone enumeration / #2739 |
 | H1.2 | In progress | #272/#273 integrated into #274 with #255; combined Pro 104/104 at 5a8bca1c | Final-head #274 review / #7705, then merge / #2739; broader migration/crash gates remain |
-| H1.4 | In progress | #253/#254 are ancestors of #255; integrated production/test files match 20156fc7; full Pro 104/104 on 74804ad8 | Independent combined #255 review / #7705; integration / #2739 |
+| H1.4 | In progress | #253–255 merged via 691d18c4; author Pro104/104 and independent daemon56/56 | Remaining write-admission, filesystem races and bounds / #2739 |
 | H1.5–H1.7 | Not started | No claim that #128 backend acceptance is complete | Continue storage acceptance / #2739 |
 | H1.3 | In progress | Delete/ownership #241–243, append #244–245 and fork #246–247 merged; stream recovery #248 merged; replay/activity #249 merged; startup #250 merged | Continue caller atomicity/read failures / #2739 |
 | H2; H3.2–H3.5 | Partially started | H2.3 volatile retry subset #248 merged; broader lifecycle/provider work remains | Drain current #68 queue first / #2739 |
@@ -724,9 +724,9 @@ remain explicitly open.
   withholds references on failure; repeated hashes are deduplicated (ADR 0067).
   Focused media set 91/91, including POSIX partial-write rollback/repair.
 - [x] #253 head `98ad1946`: full Release Pro build and 96/96 suite (324.78 s).
-- [ ] Independent exact-head review, merge and cleanup through the combined #255
-  head. The user reassigned review to #7705; the old #6212 dispatch hold no longer
-  describes the active queue. No merge gate is waived.
+- [x] Independent #7705 PASS on combined #255 `dae6a297`; merged `691d18c4`.
+  GitHub confirms #253/#254 are also MERGED. Safe worktree cleanup is separate.
+  The old #6212 dispatch hold no longer describes the active queue.
 - [ ] Fork-copy/journal coordination, crash durability, write-admission/blob cleanup
   after failure and broader path/decode/enumeration bounds remain separate work.
 
@@ -741,8 +741,8 @@ remain explicitly open.
   and atomic writes (ADR 0068). Initial protocol/fork 2/2 (199/44 checks); extended
   fork set 14/14 verifies reopen/orphan-reference cleanup without source blob loss.
 - [x] #254 head `7397165c`: full Release Pro build and 96/96 suite (312.14 s).
-- [ ] Integrate #253, independent exact-head review, merge and cleanup. The
-  shared-header matrix will be reconciled against the final integrated head.
+- [x] Integrate #253 through #255; full Pro104/104, independent #7705 PASS and
+  merge `691d18c4`. Worktree cleanup is tracked separately below.
 - [ ] Whole-history fork bounds, lost-reference recovery, process interruption,
   ancestor races and provider-thread compensation remain separate audit work.
 
@@ -759,8 +759,8 @@ remain explicitly open.
 - [x] #255 head `20156fc7`: Release headless build and affected 15/15 targets
   PASS (107.00 s). Generated build removed after preserving evidence.
 - [x] Integrate the #253/#254 ancestry with current integration in #255.
-- [ ] Independent exact-head review by #7705, merge and source cleanup. Drain this
-  existing issue queue before starting another domain audit.
+- [x] Independent #7705 PASS at `dae6a297`; #255 merged `691d18c4`.
+- [ ] Verify source/build cleanup; drain the remaining journal package next.
 - [ ] Ancestor races, decode/concurrency acceptance, total blob enumeration,
   write-admission/orphan recovery and the approved media/archive policy remain.
 
@@ -993,8 +993,9 @@ The relay rollout gate remains external and does not block this provider work.
 - [x] Full Release Pro build and 104/104 offscreen targets pass on `74804ad8`
   (456.04 s, two-way parallelism, first run/no retries). Evidence and hashes:
   `evidence/h1-media-integration-qt.json`.
-- [ ] Independent final-head #255 review by #7705, then handle findings and merge
-  the verified stack. Parent PRs #253/#254 are included.
+- [x] Independent #7705 PASS at `dae6a297`: protocol199/199, fork44/44,
+  preview15/15 and daemon56/56; original-source preview/fork controls fail.
+  #255 merged `691d18c4`; GitHub also confirms #253/#254 MERGED.
 - [ ] Remove the pushed linked worktree/build after clean/pushed/usage checks.
 - [ ] Drain existing #272/#273/#274 journal policy/startup/migration fixes next,
   then reconcile all seven original #68 criteria before claiming issue completion.
@@ -1068,7 +1069,9 @@ Evidence: [h1-failed-journal-reuse-qt.json](evidence/h1-failed-journal-reuse-qt.
   integrated code head is `6347493f`. Resolve plan additions by retaining each
   history. Production/test files match their original package heads byte-for-byte.
 - [x] Include final #255 head `dae6a297` before the combined Pro matrix; media
-  has passed its own 104/104 gate and is under #7705 review.
+  passed Pro104/104 and independent #7705 review, then merged `691d18c4`.
+  Merging that integration into #274 at `b999fc3b` leaves the entire tree
+  identical to previously pushed `164d5da8`; the final update is documentation only.
 - [x] Full Release Pro build and 104/104 offscreen targets pass at combined
   journal/media code `5a8bca1c` (427.64 s, two-way parallelism, first run/no retries).
   Source/log hashes: `evidence/h1-journal-integration-qt.json`.
