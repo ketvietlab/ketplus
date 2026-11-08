@@ -141,6 +141,9 @@ class CodexAppServer final : public QObject {
     void setupDaemonTransport();
     void daemonCall(const QString& method, const QJsonObject& params, ResponseCallback callback);
     void refreshDaemonSessions();
+    void readDaemonSessionCatalogPage(quint64 epoch, QJsonObject after, ResponseCallback callback,
+                                      bool liveCatalog = false);
+    void applyDaemonTombstones(const QJsonArray& tombstones);
     void queueDaemonDiscovery(const QJsonObject& envelope);
     void discoverDaemonSessions();
     void reorderDaemonRestoreQueue();
@@ -176,6 +179,7 @@ class CodexAppServer final : public QObject {
     bool stopping_{false};
     bool restoring_{false};
     bool daemonSessionListInFlight_{false};
+    quint64 daemonSessionListEpoch_{0};
     bool daemonDiscoveryInFlight_{false};
     bool daemonDiscoveryScheduled_{false};
     quint64 daemonDiscoveryEpoch_{0};

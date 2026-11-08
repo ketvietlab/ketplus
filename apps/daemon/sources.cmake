@@ -85,6 +85,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/agents/AgentToolLaunch.cpp
     src/agents/AgentToolLaunch.h
     src/runtime/SessionHost.cpp
+    src/runtime/SessionHostCatalog.cpp
     src/runtime/SessionHostAgents.cpp
     src/storage/AgentMessageRecord.h
     src/storage/LocalJournalAgents.cpp

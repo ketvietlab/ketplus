@@ -229,7 +229,7 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | --- | --- | --- | --- |
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
 | H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 and cloud #237 merged; transaction recovery #241 merged; cancellation #240 merged; explicit session-delete bounds still open | Audit explicit session deletion and tombstone enumeration / #2739 |
-| H1.2 | In progress | #272/#273 integrated into #274 with #255; combined Pro 104/104 at 5a8bca1c | Final-head #274 review / #7705, then merge / #2739; broader migration/crash gates remain |
+| H1.2 | In progress | #272/#273 integrated into #274 with #255; combined Pro 104/104 at 5a8bca1c | #274 reviewed and merged c3490da5; broader migration/crash gates remain / #2739 |
 | H1.4 | In progress | #253–255 merged via 691d18c4; author Pro104/104 and independent daemon56/56 | Remaining write-admission, filesystem races and bounds / #2739 |
 | H1.5–H1.7 | Not started | No claim that #128 backend acceptance is complete | Continue storage acceptance / #2739 |
 | H1.3 | In progress | Delete/ownership #241–243, append #244–245 and fork #246–247 merged; stream recovery #248 merged; replay/activity #249 merged; startup #250 merged | Continue caller atomicity/read failures / #2739 |
@@ -1078,3 +1078,24 @@ Evidence: [h1-failed-journal-reuse-qt.json](evidence/h1-failed-journal-reuse-qt.
 - [ ] Independent #7705 final-head review and merge. This package does not complete
   H1.2/H1.6 or #68; the seven original criteria remain in `issue-68-acceptance.md`.
 - [ ] Safe cleanup of the pushed linked worktree/build after all checks.
+
+### 2026-11-08 — #274 merged; bounded tombstone catalog
+
+- [x] Independent #7705 PASS #274 at `c30fc59e`; daemon56/56 and old-production
+  controls confirm all three fixes. Merged `c3490da5`; GitHub confirms #272/#273
+  MERGED as well. Prior linked journal/media worktrees and owned builds are removed.
+- [x] Measure real SessionHost deletion and catalog paths on temporary journals.
+  300k raw + 300k replay + 256-MiB chunks take 1,192 ms synchronously, with correct
+  physical deletion, idempotency, unrelated-session preservation and reopen.
+  100k/300k tombstones exceed the IPC frame at 5,389,329/16,389,329 encoded bytes.
+- [x] Implement versioned 128-row/64-KiB tombstone pages with indexed keyset seeks,
+  bounded SQL projections and fail-closed legacy overflow; consume sequentially
+  in the transport bridge with reconnect and cursor checks. No UI changes.
+- [ ] Final focused/full Pro gates and independent #7705 review, then merge and
+  safe worktree cleanup. Focused Pro passes deletion44/44 and Desktop bridge
+  28 pass/1 live-provider skip, including real IPC with 30k tombstones and reconnect.
+  Original bridge control: 3 pass/2 fail on the selected new/legacy cases; restored
+  source rebuilt. Full matrix still requires its own fixed-commit run.
+- [ ] Resume explicit session-delete work bounds while preserving ADR 0055; do
+  not label the measured 1.2-second atomic operation bounded or close #68 on this
+  pagination fix. Whole-history fork/schema/crash/media gates remain in the dossier.

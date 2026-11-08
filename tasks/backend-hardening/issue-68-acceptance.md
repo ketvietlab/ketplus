@@ -9,11 +9,11 @@ counting as merged fixes. No UI, live journal, provider quota or deployment work
 
 | Original criterion | Available evidence | Remaining acceptance / owner |
 | --- | --- | --- |
-| Forward-only, idempotent migrations; newer-daemon journal safety | Startup transaction failures #250; pending #273 closes failed storage objects; pending #274 protects migration staging | Unknown/newer schema preservation, interruption/low-space and large-index startup / #2739 |
+| Forward-only, idempotent migrations; newer-daemon journal safety | Startup transaction failures #250; #273 closes failed storage objects; #274 protects migration staging (merged `c3490da5`) | Unknown/newer schema preservation, interruption/low-space and large-index startup / #2739 |
 | Transactions, crash consistency and surfaced errors | Append/delete/fork/replay fixes #241–250; #254 (merged through #255) prepares media ownership before journal commit | Cross-file interruption and broader read/commit failure coverage; do not infer power-loss atomicity from callback order / #2739 |
-| Bounded/indexed reads on large journals | GC #220, ACK #223, metadata #228, staging #230, deletion queue #235, cloud cache #237, cancellation #240; pending #272 bounds stored policy JSON | Explicit session-delete and whole-history fork work; actual query plans and representative payload mix / #2739 |
+| Bounded/indexed reads on large journals | GC #220, ACK #223, metadata #228, staging #230, deletion queue #235, cloud cache #237, cancellation #240; #272 bounds stored policy JSON (merged through #274) | Explicit session-delete and whole-history fork work; actual query plans and representative payload mix / #2739 |
 | Retention and deletion remove rows/media | Transactional cleanup and retention tests above; media cleanup/dedup #251–252 | Physical media/blob retirement, shared-reference preservation and steady-state acceptance; #128 archive behavior is not implied / #2739 |
-| Media paths, limits, permissions, orphan cleanup | #251–252 plus merged publication/fork/preview #253–255; pending private migration staging #274 | Ancestor/replacement races, decode/concurrency bounds, write-admission/orphan recovery and platform permissions / #2739 |
+| Media paths, limits, permissions, orphan cleanup | #251–252 plus merged publication/fork/preview #253–255; merged private migration staging #274 | Ancestor/replacement races, decode/concurrency bounds, write-admission/orphan recovery and platform permissions / #2739 |
 | Note natural splits for oversized LocalJournal.cpp | At combined journal code 6347493f it is 1,462 lines. Natural responsibilities listed below; current constructor fix is two net lines | Record this inventory in review; any actual extraction must preserve behavior and has its own validation / #2739 |
 | Tests for the above | Each merged fix links focused fault/regression evidence; current combined media and journal matrices are separate gates | Independent final-head reviews and missing acceptance scenarios above; no whole-issue PASS until reconciled / #2739, #7705 |
 
@@ -25,8 +25,8 @@ counting as merged fixes. No UI, live journal, provider quota or deployment work
 2. #274 contains #272 and #273. Integrated code `6347493f` preserves each original
    package's production/test content and includes the same integration baseline.
    Final #255 `dae6a297` is included at combined code `5a8bca1c`; full Release
-   Pro build and 104/104 targets pass first run in 427.64 s. Independent review
-   remains required. Integration merge `b999fc3b` has the same tree as the
+   Pro build and 104/104 targets pass first run in 427.64 s. Independent #7705 review PASS at `c30fc59e` (daemon56/56);
+   merged `c3490da5`, including #272/#273. Integration merge `b999fc3b` has the same tree as the
    pre-merge evidence head `164d5da8`; no code/test changed. Media alone passed
    104/104 at `74804ad8` in 456.04 s.
 3. Merge reviewed packages with exact-head author evidence; resolve their shared
@@ -44,17 +44,18 @@ boundaries. Existing fork, replay reads, policy, ACK cleanup, attachments and
 retention units already demonstrate the split pattern. Avoid an arbitrary line
 split or a broad refactor while checking a two-line constructor failure fix.
 
-## Next bounded-work characterization
+## Bounded-work characterization
 
 Source inspection at combined code `5a8bca1c` identifies the concrete next gate:
 `LocalJournal.cpp::deleteSession` deletes every row for a generation across its
 tables in one synchronous transaction, then checks that no history remains.
 `LocalJournalDeletion.cpp::sessionTombstones` materializes the complete tombstone
-query. These observations are not a measured latency/memory regression yet.
+query. These were initially source observations; the measured follow-up below now
+quantifies latency and the IPC-size failure.
 
-Use a temporary Qt fixture with large raw/replay/chunk and tombstone backlogs;
-measure the real SessionHost path and verify rollback, repair, duplicate deletion
-and wrong-session preservation. Preserve #241's no-false-success guarantee when
+The temporary Qt fixture now covers large raw/replay/chunk and tombstone
+backlogs, the real SessionHost path, duplicate deletion and wrong-session
+preservation. The existing injected rollback/repair cases remain in the same suite. Preserve #241's no-false-success guarantee when
 choosing a bounded implementation. Do not silently turn an atomic deletion into
 an acknowledged partial deletion merely to meet a row budget.
 
@@ -65,3 +66,17 @@ idempotence and reclamation. It does not prove mixed-payload steady-state bounds
 all crash points, a real user's journal or Windows permissions. Keep #68 open
 until all findings are fixed or explicitly accepted with evidence. #128's mixed
 UI/backend criteria and #85's operator rollout gate remain separate.
+
+## Measured follow-up after #274
+
+The temporary real SessionHost fixture measured 1,192 ms for atomic deletion of
+300k raw + 300k replay rows and 256 MiB chunks; unrelated history, duplicate
+operation/revision fencing and reopen remained correct. Tombstone catalogs at
+100k/300k rows encoded to 5,389,329/16,389,329 bytes, exceeding the 1-MiB IPC limit.
+The active fix adds versioned bounded pages and sequential bridge consumption
+(ADR 0091). Explicit atomic-delete latency is still open; no partial deletion is
+acknowledged as complete. Final Pro/review evidence is pending for the paging fix.
+
+The #274 review also noted that successful compaction with retained staging
+artifacts does not surface `result.error` in `compactJournal`; preserve this
+operator-diagnostics follow-up alongside broader migration/crash acceptance.

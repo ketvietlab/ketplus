@@ -51,6 +51,7 @@ void CodexAppServer::setupDaemonTransport() {
             refreshDaemonSessions();
         } else {
             daemonSessionListInFlight_ = false;
+            ++daemonSessionListEpoch_;
             ++daemonDiscoveryEpoch_;
             daemonDiscoveryInFlight_ = false;
             daemonDiscoveryCursors_.clear();
@@ -439,15 +440,94 @@ void CodexAppServer::markDaemonSessionSeen(const QString& sessionId, const qint6
                   std::move(callback));
 }
 
+void CodexAppServer::applyDaemonTombstones(const QJsonArray& tombstones) {
+    for (const auto& value : tombstones) {
+        const auto deleted = value.toObject();
+        const auto id = deleted.value("session_id").toString();
+        const auto generation = deleted.value("session_generation").toInteger();
+        const auto found = daemonSessions_.constFind(id);
+        if (found != daemonSessions_.cend() && found->generation == generation)
+            daemonSessions_.remove(id);
+        emit daemonSessionDeleted(id, generation);
+    }
+}
+
+void CodexAppServer::readDaemonSessionCatalogPage(const quint64 epoch, QJsonObject after,
+                                                  ResponseCallback callback,
+                                                  const bool liveCatalog) {
+    if (epoch != daemonSessionListEpoch_ || !daemon_->isReady())
+        return;
+    QJsonObject payload{{"deleted_sessions_page_version", 1},
+                        {"deleted_sessions_only", !liveCatalog}};
+    if (!after.isEmpty())
+        payload.insert("deleted_sessions_after", after);
+    daemon_->call(
+        "session.list", payload, {}, -1,
+        [this, epoch, after, liveCatalog,
+         callback = std::move(callback)](const QJsonObject& result, const QString& error) mutable {
+            if (epoch != daemonSessionListEpoch_)
+                return;
+            if (!error.isEmpty()) {
+                callback({}, error);
+                return;
+            }
+            if (after.isEmpty() && !liveCatalog &&
+                !result.contains("deleted_sessions_page_version")) {
+                callback(result, {}); // Existing daemons return the complete legacy response.
+                return;
+            }
+            const auto fail = [&] { callback({}, "Invalid daemon tombstone page."); };
+            const auto rows = result.value("deleted_sessions").toArray();
+            if (result.value("deleted_sessions_page_version").toInteger(-1) != 1 ||
+                !result.value("deleted_sessions").isArray() || rows.size() > 128 ||
+                QJsonDocument(rows).toJson(QJsonDocument::Compact).size() > 64 * 1024 ||
+                !result.value("deleted_sessions_next").isObject()) {
+                fail();
+                return;
+            }
+            auto previous = after;
+            for (const auto& value : rows) {
+                const auto row = value.toObject();
+                const auto id = row.value("session_id").toString().toUtf8();
+                const auto generation = row.value("session_generation").toInteger(-1);
+                const auto previousId = previous.value("session_id").toString().toUtf8();
+                if (row.size() != 2 || id.isEmpty() || id.size() > 1024 || generation < 1 ||
+                    (!previous.isEmpty() &&
+                     (id < previousId ||
+                      (id == previousId &&
+                       generation <= previous.value("session_generation").toInteger())))) {
+                    fail();
+                    return;
+                }
+                previous = row;
+            }
+            const auto next = result.value("deleted_sessions_next").toObject();
+            if (!next.isEmpty() && (rows.isEmpty() || next != previous)) {
+                fail();
+                return;
+            }
+            if (liveCatalog) {
+                // Read live sessions after the walk, so an intervening session.deleted
+                // event cannot be undone by replaying an older catalog snapshot.
+                callback(result, {});
+                return;
+            }
+            applyDaemonTombstones(rows);
+            QTimer::singleShot(
+                0, this, [this, epoch, next, callback = std::move(callback)]() mutable {
+                    readDaemonSessionCatalogPage(epoch, next, std::move(callback), next.isEmpty());
+                });
+        });
+}
+
 void CodexAppServer::refreshDaemonSessions() {
     daemonSessionListInFlight_ = true;
     restoringDaemonSessions_.clear();
     daemonRestoreQueue_.clear();
     activeDaemonRestoreSession_.clear();
     setRestoring(true);
-    daemon_->call(
-        QStringLiteral("session.list"), {}, {}, -1,
-        [this](const QJsonObject& result, const QString& error) {
+    readDaemonSessionCatalogPage(
+        ++daemonSessionListEpoch_, {}, [this](const QJsonObject& result, const QString& error) {
             daemonSessionListInFlight_ = false;
             QTimer::singleShot(0, this, &CodexAppServer::discoverDaemonSessions);
             if (!error.isEmpty()) {
@@ -463,15 +543,7 @@ void CodexAppServer::refreshDaemonSessions() {
                 std::clamp(result.value("transcript_window_max_turns").toInt(3), 1, 20);
             daemonHasLargeEvents_ = result.value("transcript_large_event_version").toInt() == 1;
             QStringList sessionIds;
-            for (const auto& value : result.value("deleted_sessions").toArray()) {
-                const auto deleted = value.toObject();
-                const auto id = deleted.value("session_id").toString();
-                const auto generation = deleted.value("session_generation").toInteger();
-                const auto found = daemonSessions_.constFind(id);
-                if (found != daemonSessions_.cend() && found->generation == generation)
-                    daemonSessions_.remove(id);
-                emit daemonSessionDeleted(id, generation);
-            }
+            applyDaemonTombstones(result.value("deleted_sessions").toArray());
             for (const QJsonValue& value : result.value(QStringLiteral("sessions")).toArray()) {
                 const QJsonObject stored = value.toObject();
                 const QString sessionId = stored.value(QStringLiteral("session_id")).toString();

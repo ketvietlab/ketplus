@@ -201,6 +201,12 @@ the corresponding Atlas mock first.
 - Reference-preview changes: `ketplus_daemon_media_preview_tests` exercises
   canonical references, ownership bounds/types/links, blob identity, byte limits,
   unchanged invalid data and repaired JPEG output; no UI or live media is used.
+- Tombstone catalog pagination: `ketplus_provider_deletion_tests` covers actual
+  keyset plans, row/byte limits, removed cursor rows and malformed storage;
+  `ketplus_desktop_daemon_client_tests` covers real local IPC with 30,000
+  tombstones, legacy fallback, malformed pages, fresh live-catalog ordering and
+  stale reconnect callbacks. Opt in to 100k/300k synthetic deletion/catalog
+  probes with `KETPLUS_RUN_DELETE_BACKLOG_TESTS=1`; they use temporary journals.
 - One Pro module: focused target plus its directly affected tests.
 - Shared header or desktop shell: full build and full Pro test suite.
 - `core/` change: the Lite suite (`ctest --preset lite-dev`), then the full Pro suite.
