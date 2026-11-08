@@ -204,6 +204,53 @@ the corresponding Atlas mock first.
 - Performance-sensitive behavior: Release build and the matching script under
   `benchmarks/`; record hardware and raw results.
 
+### Native idle CPU (#126)
+
+Run this manual check for native UI acceptance and before release. The dedicated
+fixture mounts the production Agent Workspace with three synthetic conversations
+and a short transcript. It uses temporary preferences and no provider or daemon.
+It measures the UI surface, not the complete desktop/daemon process topology.
+
+```sh
+cmake --preset release -DKETPLUS_BUILD_BENCHMARKS=ON
+cmake --build build/release --target ketplus_agent_idle_benchmark
+python3 benchmarks/run-agent-idle.py build/release /tmp/idle-running-active --capture
+python3 benchmarks/run-agent-idle.py build/release /tmp/idle-running-background --visibility inactive
+python3 benchmarks/run-agent-idle.py build/release /tmp/idle-no-work --work idle
+python3 benchmarks/run-agent-idle.py build/release /tmp/idle-hidden --visibility hidden
+```
+
+Use an Apple Silicon Mac with a 2× display. The macOS app bundle lets computer use
+identify the fixture separately from the installed app. After `ready`, focus the
+fixture for `active`, or another native app for `inactive`. Keep that state until
+the result; do not type, hover or scroll during measurement. The fixture waits for
+three stable seconds, stops its readiness polling, then samples for 12 seconds.
+Optional captures finish before a second warm-up period. Changing application
+state during a visible-window sample invalidates it. A readiness timeout is not a
+low-CPU result.
+
+The runner saves JSON events, environment metadata, stderr and the requested
+`top -l 5 -s 2 -pid <pid>` samples. Use a new, empty output directory for every
+attempt, including invalid ones; the runner refuses a directory that already has
+files. It stops the fixture and reports a collection failure when the run exceeds
+`--timeout` (150 seconds by default) or `top` did not record all five samples for
+the fixture process. The fixture also invalidates a sample when the window is
+resized, minimized, moved to another screen or changes device pixel ratio while
+it is measured, and checks the fixture conditions again at the end. Compare the four interval samples after top's
+initial sample, alongside the fixture's process-CPU and rendered-frame counts.
+Check `fixtureValid` and `valid`: Cocoa/Metal, 1440×900 at 2×, three realized rows,
+stopped transcript measurement, expected activity-clock ownership and stable
+window state are required. The current production policy keeps sidebar indicators
+static; only the running transcript holds the animation clock. This is recorded
+explicitly rather than claiming three animated sidebar spinners were measured.
+
+The #126 targets remain ≤5% foreground, ≤1% background and approximately zero
+with no running work. Also run `--work idle --visibility inactive` and
+`KETPLUS_REDUCED_MOTION=1` when checking stop conditions. The sample must show no
+new frames when its activity and measurement timers have stopped. Record invalid
+attempts and unmeasured states; this fixture alone does not qualify Atlas Widgets,
+daemon expiry/peer timers or every application state.
+
 Browser and SDK wiring changes also run:
 
 ```sh
