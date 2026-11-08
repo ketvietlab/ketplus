@@ -587,6 +587,12 @@ an unfinished suffix, against the existing 16-MiB limit before parse (ADR 0071).
 An over-limit generation is closed/drained before pending callbacks fail and the
 process is killed; later output from it cannot publish another request. Normal
 lines and a fresh process retain their existing behavior.
+
+Oversized Codex metadata decodes bounded JSON strings and refuses literal dotted
+keys as nested paths (ADR 0073). Invalid captured metadata clears routing for that
+line; subsequent lines reset normally. This does not validate the entire discarded
+JSON payload or resolve missing terminal events and pending-request timeouts.
+
 Codex oversized-line scanning keeps at most 64 routing frames and a scalar count
 of deeper containers (ADR 0070). It still extracts shallow fields after the deep
 value and resumes on the next line; clear/reset discards all prior scan state.
