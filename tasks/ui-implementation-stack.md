@@ -60,3 +60,5 @@ Current layer: `feat/ui-stack-symbols` on `feat/kit-zoom-foundation`; replaces g
 Symbol layer: PR #208, based on #207. Terminal layer: `feat/ui-stack-terminal`, based on `feat/ui-stack-symbols`; find controls and persistent interface zoom. Packaging/platform expansion stays deferred.
 
 Terminal implementation: kit find field/actions and 75–200% persisted interface zoom; text size stays independent. Lite build and both terminal test targets pass. Native comparison and #147 packaging/platform work are not claimed complete.
+
+Terminal layer: PR #209. Lite shell layer: `feat/ui-stack-lite-shell` on `feat/ui-stack-terminal`; activity rail, first-use welcome, optional editor breadcrumb above the viewport. Lite app and all 16 Lite test targets pass; offscreen startup succeeds. Native acceptance remains deferred.

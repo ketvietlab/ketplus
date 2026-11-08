@@ -72,6 +72,7 @@ void rememberRecentPath(const QString& key, const QString& path, const int maxim
 } // namespace
 
 void MainWindow::createNewDocument() {
+    showEditorSurface();
     auto* editor = createEditor();
     const int index = tabs_->addTab(editor, editor->document().displayName());
     configureTabCloseButton(index, editor);
@@ -403,6 +404,7 @@ void MainWindow::configureTabCloseButton(const int index, QWidget* tab,
 
 EditorWidget* MainWindow::createEditor() {
     auto* editor = new EditorWidget(this);
+    editor->setBreadcrumbPath(editor->document().displayName());
     editor->setPreviewTypography(appearanceSettings_.preview.fontSizePixels,
                                  appearanceSettings_.preview.lineHeightPixels);
     connect(editor, &EditorWidget::previewFileOpenRequested, this, &MainWindow::openFile);
@@ -451,6 +453,16 @@ EditorWidget* MainWindow::createEditor() {
 }
 
 void MainWindow::updateTabTitle(EditorWidget* editor) {
+    const QString path = editor->document().filePath();
+    // Files outside the open folder keep their full path rather than a chain of "..".
+    const QString relative =
+        workspaceRoot_.isEmpty() ? QString() : QDir(workspaceRoot_).relativeFilePath(path);
+    const bool inside = !relative.isEmpty() && !QDir::isAbsolutePath(relative) &&
+                        relative != QStringLiteral("..") &&
+                        !relative.startsWith(QStringLiteral("../"));
+    editor->setBreadcrumbPath(path.isEmpty() ? editor->document().displayName()
+                              : inside       ? relative
+                                             : path);
     if (splitPane_ != nullptr) {
         splitPane_->updateSourceTitle(editor);
     }
@@ -504,6 +516,8 @@ void MainWindow::updateDocumentState() {
 }
 
 void MainWindow::activateCurrentTab() {
+    if (tabs_->count() > 0)
+        showEditorSurface();
     auto* editor = currentEditor();
     if (editor == nullptr) {
         return;
