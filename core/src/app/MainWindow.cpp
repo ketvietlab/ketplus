@@ -305,6 +305,8 @@ void MainWindow::openFile(const QString& filePath) {
     editor->applyTheme(theme_.palette());
     const int index = tabs_->addTab(editor, editor->document().displayName());
     configureTabCloseButton(index, editor);
+    // The breadcrumb still names the untitled document createEditor() started with.
+    updateTabTitle(editor);
     tabs_->setCurrentIndex(index);
     rememberRecentFile(absolutePath);
     if (editor->isLargeFileMode()) {

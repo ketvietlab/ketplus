@@ -95,8 +95,8 @@ KÉT Sans Mono 0.10.4 Medium from `core/assets/fonts` (no public release yet). B
 SIL OFL 1.1. Configure downloads the archive once; offline builds can set
 `-DKETPLUS_KET_SANS_ARCHIVE=/path/to/KETSans-1.100.zip` (the same hash is required).
 The fonts are compiled into Qt resources and registered at startup; their licences
-ship with the application notices. The Lite editor keeps Inter as its interface
-default until #141 and #142 switch the defaults.
+ship with the application notices. KÉT Sans is the interface default and KÉT Sans
+Mono Medium the code default in every edition.
 
 The macOS package contains one `KetPlus.app`; its per-user daemon is embedded at
 `Contents/Helpers/ketplus_daemon`. Codex CLI and Cursor CLI remain external

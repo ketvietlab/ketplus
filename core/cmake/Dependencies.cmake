@@ -77,8 +77,33 @@ set_target_properties(ketplus_vterm PROPERTIES
 
 set(scintilla_qt_dir "${scintilla_SOURCE_DIR}/qt/ScintillaEditBase")
 
+# Scintilla's Qt port reports the viewport's position in its parent as the client rectangle,
+# while its painting and hit testing assume a client origin of 0 (as the Win32 port does). A
+# viewport moved down by setViewportMargins, as the editor breadcrumb does, then skips painting
+# the lines under the margin. Compile a copy whose client rectangle starts at the origin; the
+# pinned upstream file stays untouched in the shared dependency cache.
+file(READ "${scintilla_qt_dir}/PlatQt.cpp" scintilla_platqt)
+set(scintilla_client_upstream
+    "PRectangle Window::GetClientPosition() const\n{\n\t// The client position is the window position\n\treturn GetPosition();\n}")
+set(scintilla_client_origin
+    "PRectangle Window::GetClientPosition() const\n{\n\t// KetPlus: client coordinates start at the origin (core/cmake/Dependencies.cmake).\n\treturn wid ? PRectFromQRect(window(wid)->rect()) : PRectangle(0, 0, 1000, 1000);\n}")
+string(FIND "${scintilla_platqt}" "${scintilla_client_upstream}" scintilla_client_at)
+if(scintilla_client_at EQUAL -1)
+    message(FATAL_ERROR "Scintilla's Window::GetClientPosition changed; review the client-origin fix")
+endif()
+string(REPLACE "${scintilla_client_upstream}" "${scintilla_client_origin}" scintilla_platqt
+               "${scintilla_platqt}")
+set(scintilla_platqt_copy "${CMAKE_CURRENT_BINARY_DIR}/scintilla/PlatQt.cpp")
+if(EXISTS "${scintilla_platqt_copy}")
+    file(READ "${scintilla_platqt_copy}" scintilla_platqt_written)
+endif()
+if(NOT scintilla_platqt_written STREQUAL scintilla_platqt)
+    file(WRITE "${scintilla_platqt_copy}" "${scintilla_platqt}")
+endif()
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${scintilla_qt_dir}/PlatQt.cpp")
+
 set(scintilla_sources
-    "${scintilla_qt_dir}/PlatQt.cpp"
+    "${scintilla_platqt_copy}"
     "${scintilla_qt_dir}/PlatQt.h"
     "${scintilla_qt_dir}/ScintillaEditBase.cpp"
     "${scintilla_qt_dir}/ScintillaEditBase.h"

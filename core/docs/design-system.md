@@ -16,7 +16,7 @@ copying web-specific implementation details.
   `actionPrimary` `#365FD6` (hover `#3151C6`, pressed `#2B46B7`) for filled
   primary buttons with white text
 - Two-pixel active-tab indicator
-- Inter for application chrome and the platform monospace font for source text
+- KÉT Sans for application chrome and KÉT Sans Mono Medium for source text
 - Semantic chrome colors for application controls
 - Separate syntax roles so keywords, types, numbers, and strings stay distinct
 
