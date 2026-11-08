@@ -2,7 +2,11 @@
 
 #include "terminal/TerminalSession.h"
 
+#include "KetAppearance.h"
+#include "KetButton.h"
+#include "KetIcons.h"
 #include "KetProfile.h"
+#include "KetTextField.h"
 #include "KetTokens.h"
 
 #include <QAction>
@@ -38,7 +42,7 @@ namespace ketplus {
 TerminalView::TerminalView(TerminalSession& session, QWidget* parent)
     : QAbstractScrollArea(parent), session_(session), cursorTimer_(new QTimer(this)),
       renderTimer_(new QTimer(this)), searchTimer_(new QTimer(this)),
-      searchBar_(new QWidget(viewport())), searchEdit_(new QLineEdit(searchBar_)),
+      searchBar_(new QWidget(viewport())), searchEdit_(new ket::TextField(searchBar_)),
       searchStatus_(new QLabel(searchBar_)) {
     setProperty("kvRole", QStringLiteral("terminalView"));
     setAccessibleName(QStringLiteral("Terminal"));
@@ -69,27 +73,29 @@ TerminalView::TerminalView(TerminalSession& session, QWidget* parent)
     searchStatus_->setMinimumWidth(48);
     searchStatus_->setObjectName(QStringLiteral("terminalSearchStatus"));
     searchStatus_->setAlignment(Qt::AlignCenter);
-    auto* previousButton = new QToolButton(searchBar_);
-    previousButton->setText(QString::fromUtf8("↑"));
-    previousButton->setToolTip(QStringLiteral("Previous match"));
-    auto* nextButton = new QToolButton(searchBar_);
-    nextButton->setText(QString::fromUtf8("↓"));
-    nextButton->setToolTip(QStringLiteral("Next match"));
-    auto* closeButton = new QToolButton(searchBar_);
-    closeButton->setText(QString::fromUtf8("×"));
-    closeButton->setToolTip(QStringLiteral("Close search"));
+    const auto iconButton = [this](QStringView name, const QString& label) {
+        auto* button = new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(name)), label,
+                                           searchBar_);
+        button->setControlSize(ket::ControlSize::Small);
+        return button;
+    };
+    auto* previousButton = iconButton(u"chevron-up", QStringLiteral("Previous match"));
+    auto* nextButton = iconButton(u"chevron-down", QStringLiteral("Next match"));
+    auto* closeButton = iconButton(u"x", QStringLiteral("Close search"));
     searchLayout->addWidget(searchEdit_, 1);
     searchLayout->addWidget(searchStatus_);
     searchLayout->addWidget(previousButton);
     searchLayout->addWidget(nextButton);
     searchLayout->addWidget(closeButton);
     searchBar_->hide();
+    connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, this,
+            [this] { updateSearchGeometry(); });
 
     connect(searchEdit_, &QLineEdit::textChanged, this, [this] { searchTimer_->start(); });
     connect(searchEdit_, &QLineEdit::returnPressed, this, [this] { findNext(false); });
-    connect(previousButton, &QToolButton::clicked, this, [this] { findNext(true); });
-    connect(nextButton, &QToolButton::clicked, this, [this] { findNext(false); });
-    connect(closeButton, &QToolButton::clicked, this, &TerminalView::closeSearch);
+    connect(previousButton, &QAbstractButton::clicked, this, [this] { findNext(true); });
+    connect(nextButton, &QAbstractButton::clicked, this, [this] { findNext(false); });
+    connect(closeButton, &QAbstractButton::clicked, this, &TerminalView::closeSearch);
 
     cursorTimer_->setInterval(530);
     connect(cursorTimer_, &QTimer::timeout, this, [this] {
@@ -804,10 +810,11 @@ void TerminalView::updateSearchGeometry() {
     if (!searchBar_->isVisible()) {
         return;
     }
-    const int width = std::min(430, std::max(260, viewport()->width() - 24));
+    const auto px = [](int value) { return qRound(ket::Appearance::instance().scaled(value)); };
+    const int width = qMax(1, qMin(px(430), viewport()->width() - px(24)));
     searchBar_->adjustSize();
     searchBar_->resize(width, searchBar_->sizeHint().height());
-    searchBar_->move(std::max(6, viewport()->width() - width - 10), 8);
+    searchBar_->move(std::max(px(6), viewport()->width() - width - px(10)), px(8));
 }
 
 void TerminalView::rebuildSearchMatches() {

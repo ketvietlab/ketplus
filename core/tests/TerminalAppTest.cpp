@@ -32,6 +32,7 @@ class TerminalAppTest final : public QObject {
     void followsTheKitAppearance();
     void savesAndRestoresTheAppearance();
     void usesTheSavedFontFamily();
+    void interfaceZoomPersistsWithoutChangingTerminalText();
     void showsTheKetPlusName();
     void drawsTheTerminalInKetSansMono();
 };
@@ -49,6 +50,7 @@ void TerminalAppTest::initTestCase() {
 
 void TerminalAppTest::cleanup() {
     QSettings().clear();
+    ket::Appearance::instance().setZoom(1);
     ket::Appearance::instance().setMode(ket::Appearance::Mode::Light);
 }
 
@@ -138,6 +140,20 @@ void TerminalAppTest::savesAndRestoresTheAppearance() {
     QSettings().setValue(QStringLiteral("appearance/theme"), QStringLiteral("sepia"));
     restoreTerminalAppearance();
     QCOMPARE(ket::Appearance::instance().mode(), ket::Appearance::Mode::Light);
+}
+
+void TerminalAppTest::interfaceZoomPersistsWithoutChangingTerminalText() {
+    TerminalWindow window(QDir::tempPath());
+    auto* zoom = window.findChild<QAction*>(QStringLiteral("terminalInterfaceZoom125"));
+    QVERIFY(zoom);
+    const int textSize = window.currentTab()->view()->font().pixelSize();
+    zoom->trigger();
+    QCOMPARE(ket::Appearance::instance().zoom(), 1.25);
+    QCOMPARE(window.currentTab()->view()->font().pixelSize(), textSize);
+    ket::Appearance::instance().setZoom(1);
+    restoreTerminalAppearance();
+    QCOMPARE(ket::Appearance::instance().zoom(), 1.25);
+    QVERIFY(zoom->isChecked());
 }
 
 void TerminalAppTest::usesTheSavedFontFamily() {

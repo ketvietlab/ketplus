@@ -78,8 +78,10 @@ The old `TypeScale` role ladder and sidebar/transcript text bias remain a
 compatibility adapter while those surfaces migrate to kit recipes. Removing
 that ladder is still part of #142; it is not a second approved design system.
 Editor and terminal text sizes and user-resized sidebar widths stay independent
-of interface zoom. Terminal's existing Bigger/Smaller Text actions change
-terminal text, not interface zoom.
+of interface zoom. Terminal's Bigger/Smaller Text actions change terminal text independently.
+Its View → Interface Zoom menu persists 75–200% under
+`appearance/interfaceZoom` in the existing Terminal settings domain. Search
+controls use kit fields/buttons and follow that zoom.
 
 ## Live updates and persistence
 
