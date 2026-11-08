@@ -95,6 +95,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void linksFileReferencesInInlineCode();
     void mermaidFillsGetReadableLabels();
     void sidebarDividerRemainsResizable();
+    void sidebarMatchesMockAtEveryZoom();
     void largeWorktreeCatalogDoesNotCreateSidebarRail();
     void exposesUiInteractions();
     void streamsAndKeepsSessionsByWorktree();

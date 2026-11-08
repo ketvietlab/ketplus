@@ -63,17 +63,18 @@ ColumnLayout {
         Repeater {
             objectName: "productNavigationRepeater"
             model: [
-                { id: "workspace", label: "Agent Workspace", icon: "messages-square.svg" },
-                { id: "explorer", label: "Files & Editor", icon: "folder.svg" },
-                { id: "source-control", label: "Source Control", icon: "git-branch.svg" },
-                { id: "connections", label: "Connections", icon: "unplug.svg" }
+                // Két Symbol names, as in the mock's sidebar.
+                { id: "workspace", label: "Agent Workspace", icon: "chats" },
+                { id: "explorer", label: "Files & Editor", icon: "folder" },
+                { id: "source-control", label: "Source Control", icon: "branch" },
+                { id: "connections", label: "Connections", icon: "network" }
             ]
             delegate: Kit.KetNavItem {
                 required property var modelData
                 objectName: "productNavigation_" + modelData.id
                 width: parent.width
                 text: modelData.label
-                iconName: Kit.KetTheme.iconForLucide(modelData.icon.replace(".svg", ""))
+                iconName: modelData.icon
                 checked: modelData.id === "workspace"
                 onClicked: agentHost.requestProductNavigation(modelData.id)
             }

@@ -1210,16 +1210,17 @@ Item {
             id: sidebar
             workspace: root
             visible: agentHost.productSidebarVisible && !agentHost.compactMode
-            SplitView.minimumWidth: visible ? 188 : 0
-            SplitView.preferredWidth: visible ? 216 : 0
-            SplitView.maximumWidth: visible ? 320 : 0
+            // Recipe widths follow interface zoom, as the mock's 240 px sidebar does.
+            SplitView.minimumWidth: visible ? KetTheme.px(188, KetTheme.zoom) : 0
+            SplitView.preferredWidth: visible ? KetTheme.px(240, KetTheme.zoom) : 0
+            SplitView.maximumWidth: visible ? KetTheme.px(320, KetTheme.zoom) : 0
         }
 
         Rectangle {
             id: chatPane
             objectName: "chatPane"
             SplitView.fillWidth: true
-            SplitView.minimumWidth: 260
+            SplitView.minimumWidth: KetTheme.px(260, KetTheme.zoom)
             color: KetTheme.t.pageBg
 
             ColumnLayout {

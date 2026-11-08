@@ -1,5 +1,6 @@
 // Native, synthetic #126 workload. No provider, daemon, real journal or polling
 // probe is involved during the measured interval. See run-agent-idle.py.
+#include "KetAppearance.h"
 #include "agent/AgentWorkspaceView.h"
 #include "ui/Theme.h"
 
@@ -92,7 +93,9 @@ int main(int argc, char** argv) {
     parser.addOptions({{"work", "running or idle", "state", "running"},
                        {"visibility", "active, inactive or hidden", "state", "active"},
                        {"seconds", "Measured interval (10–60 seconds)", "seconds", "12"},
-                       {"capture", "Optional native PNG before measurement", "path"}});
+                       {"capture", "Optional native PNG before measurement", "path"},
+                       {"theme", "system, light or dark", "theme", "system"},
+                       {"zoom", "Interface zoom (1–1.5)", "zoom", "1"}});
     parser.process(app);
     const auto work = parser.value("work");
     const auto visibility = parser.value("visibility");
@@ -104,7 +107,21 @@ int main(int argc, char** argv) {
         report({{"event", "error"}, {"reason", "Invalid workload, visibility or duration"}});
         return 2;
     }
+    const auto themeName = parser.value("theme");
+    bool validZoom = false;
+    const qreal zoom = parser.value("zoom").toDouble(&validZoom);
+    if ((themeName != "system" && themeName != "light" && themeName != "dark") || !validZoom ||
+        zoom < 1 || zoom > 1.5) {
+        report({{"event", "error"}, {"reason", "Invalid theme or zoom"}});
+        return 2;
+    }
     ketplus::ThemeManager theme(app);
+    // Applied before the view exists, like a saved appearance, for app/mock captures.
+    auto& appearance = ket::Appearance::instance();
+    if (themeName != "system")
+        appearance.setMode(themeName == "dark" ? ket::Appearance::Mode::Dark
+                                               : ket::Appearance::Mode::Light);
+    appearance.setZoom(zoom);
     ketplus::AgentWorkspaceView view;
     view.setWindowTitle("KétPlus idle CPU fixture");
     view.resize(1440, 900);

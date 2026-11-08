@@ -467,6 +467,36 @@ void AgentWorkspaceViewTest::sidebarDividerRemainsResizable() {
     QCOMPARE(divider->width(), 1.0);
 }
 
+void AgentWorkspaceViewTest::sidebarMatchesMockAtEveryZoom() {
+    auto& appearance = ket::Appearance::instance();
+    const qreal originalZoom = appearance.zoom();
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(1440, 900);
+    view.show();
+    auto* root = view.quickView()->rootObject();
+    QVERIFY(root);
+    auto* sidebar = root->findChild<QQuickItem*>("conversationSidebar");
+    auto* indicator = root->findChild<QQuickItem*>("workingAnimationIcon");
+    QVERIFY(sidebar);
+    QVERIFY(indicator);
+    // The mock's sidebar recipe: 240 px scaled by interface zoom.
+    for (const qreal zoom : {1.0, 1.25}) {
+        appearance.setZoom(zoom);
+        QTRY_COMPARE(sidebar->width(), ket::Appearance::scale(240, zoom));
+    }
+    appearance.setZoom(originalZoom);
+    // The working bars keep the recipe's success colour, as in the mock.
+    QCOMPARE(indicator->property("color").value<QColor>(), QColor(Qt::transparent));
+    QStringList icons;
+    for (const auto* id : {"workspace", "explorer", "source-control", "connections"}) {
+        auto* item = root->findChild<QObject*>(QStringLiteral("productNavigation_") + id);
+        QVERIFY(item);
+        icons << item->property("iconName").toString();
+    }
+    QCOMPARE(icons, (QStringList{"chats", "folder", "branch", "network"}));
+}
+
 void AgentWorkspaceViewTest::preservesQuestionDraftsAcrossScope() {
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());

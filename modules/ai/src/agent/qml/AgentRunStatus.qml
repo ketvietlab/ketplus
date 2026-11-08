@@ -25,7 +25,6 @@ Item {
             objectName: "workingAnimationIcon"
             Layout.preferredWidth: KetTheme.px(16, KetTheme.zoom)
             Layout.preferredHeight: KetTheme.px(16, KetTheme.zoom)
-            color: KetTheme.t.accentHover
             running: status.animationAllowed
         }
         Text {
