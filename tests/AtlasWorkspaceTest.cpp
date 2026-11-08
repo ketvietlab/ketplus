@@ -20,6 +20,7 @@
 #include <QListWidget>
 #include <QQuickItem>
 #include <QQuickView>
+#include <QScopeGuard>
 #include <QScreen>
 #include <QSettings>
 #include <QStatusBar>
@@ -43,6 +44,57 @@ class AtlasWorkspaceTest final : public QObject {
     }
 
   private slots:
+    void transcriptAtlasResultOpensExistingBuilder() {
+        QTemporaryDir settings;
+        QTemporaryDir workspace;
+        QVERIFY(writeAtlas(workspace.filePath("sample.ketatlas/atlas.json"), "Sample Atlas"));
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(workspace.path());
+        auto* bar = window.findChild<ketplus::ActivityBar*>();
+        QVERIFY(bar);
+        auto* agentButton = bar->findChild<QAbstractButton*>("agentWorkspaceActivityButton");
+        QVERIFY(agentButton);
+        agentButton->click();
+        auto* chat = window.findChild<ketplus::AgentWorkspaceView*>();
+        QVERIFY(chat);
+        chat->setActivePath(workspace.path());
+        chat->setExecutionBranch("main", workspace.path(), 1);
+        const auto receipt = chat->inspectAtlasResult("sample.ketatlas/atlas.json");
+        QVERIFY(receipt.value("available").toBool());
+        QCOMPARE(receipt.value("title").toString(), QString("Sample Atlas"));
+        QCOMPARE(receipt.value("screens").toInt(), 0);
+        QCOMPARE(receipt.value("flows").toInt(), 1);
+        const auto previousCli = qgetenv("KETPLUS_KETATLAS_CLI");
+        const auto restoreCli = qScopeGuard([previousCli] {
+            if (previousCli.isNull())
+                qunsetenv("KETPLUS_KETATLAS_CLI");
+            else
+                qputenv("KETPLUS_KETATLAS_CLI", previousCli);
+        });
+        qputenv("KETPLUS_KETATLAS_CLI", "/missing/ketatlas");
+        QSignalSpy viewerChanges(chat, &ketplus::AgentWorkspaceView::atlasResultsChanged);
+        chat->openAtlasResult("sample.ketatlas/atlas.json", true);
+        QVERIFY(!viewerChanges.isEmpty());
+        QVERIFY(!chat->inspectAtlasResult("sample.ketatlas/atlas.json")
+                     .value("viewerError")
+                     .toString()
+                     .isEmpty());
+        chat->openAtlasResult("sample.ketatlas/atlas.json", false);
+        auto* tabs = window.findChild<QTabWidget*>("atlasWorkspaceTabs");
+        QVERIFY(tabs);
+        auto* builder = qobject_cast<ketplus::AtlasBuilderTab*>(tabs->currentWidget());
+        QVERIFY(builder);
+        QTRY_COMPARE(
+            builder->atlasPath(),
+            QFileInfo(workspace.filePath("sample.ketatlas/atlas.json")).canonicalFilePath());
+        QVERIFY(builder->chatView()
+                    ->inspectAtlasResult("sample.ketatlas/atlas.json")
+                    .value("available")
+                    .toBool());
+    }
     void conversationHeaderOpensAtlasListAndEdit() {
         QTemporaryDir settings;
         QTemporaryDir workspace;

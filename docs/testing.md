@@ -545,3 +545,13 @@ ADR 0061 `SessionForkTest::journalForkPreservesUnsupportedSourceCounters` covers
 negative, fractional, TEXT and BLOB cursor/turn values. It checks exact source
 preservation, no destination, released transaction, fixture repair, retry and
 reopen. Run the combined fork suite and its affected backend matrix.
+
+## Atlas result receipts
+
+The Agent Workspace target covers explicit Markdown link extraction (including
+code/raw-HTML exclusions), completed-only receipts, long-message chunk placement,
+actual QML actions and conversation/worktree/deletion fences. `AtlasTest` checks
+manifest limits, metadata and canonical-root/symlink isolation. `AtlasWorkspaceTest`
+checks real manifest metadata and the existing builder action without invoking a
+provider. Browser launch remains the managed viewer's existing integration path;
+these tests do not start a browser or validate the Atlas screens themselves.

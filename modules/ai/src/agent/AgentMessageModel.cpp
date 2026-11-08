@@ -1,4 +1,5 @@
 #include "agent/AgentMessageModel.h"
+#include "agent/TranscriptAtlasLinks.h"
 
 #include <utility>
 
@@ -75,6 +76,7 @@ AgentMessageModel::AgentMessageModel(QObject* parent) : QAbstractListModel(paren
                              "durationMs",
                              "detailsData",
                              "payloadData",
+                             "atlasLinks",
                              "detailsRef",
                              "payloadRef",
                              "partialBody",
@@ -331,6 +333,7 @@ QVariantMap AgentMessageModel::normalized(QVariantMap item) {
         item.insert("title", item.value("meta").toString());
     if (item.value("summary").toString().isEmpty())
         item.insert("summary", item.value("body").toString());
+    item.insert("atlasLinks", QStringList{});
     if (!item.contains("running"))
         item.insert("running", false);
     if (!item.contains("partialBody"))
@@ -434,11 +437,14 @@ QList<QVariantMap> AgentMessageModel::renderedItems(const QVariantMap& source, i
     if (base.value("messageKey").toString().isEmpty())
         base.insert("messageKey", QStringLiteral("snapshot:%1").arg(sourceIndex));
     const QString body = base.value("body").toString();
-    if (base.value("kind") != QStringLiteral("assistant") || body.size() <= kMaximumChunkCharacters)
-        return {normalized(base)};
-
     QList<QVariantMap> result;
-    appendChunks(&result, base, body, base.value("messageKey").toString(), 0, false, false);
+    if (base.value("kind") != QStringLiteral("assistant") || body.size() <= kMaximumChunkCharacters)
+        result.append(normalized(base));
+    else
+        appendChunks(&result, base, body, base.value("messageKey").toString(), 0, false, false);
+    if (!result.isEmpty() && base.value("kind") == QStringLiteral("assistant") &&
+        !base.value("running").toBool() && !base.value("partialBody").toBool())
+        result.last().insert("atlasLinks", transcriptAtlasLinks(body));
     return result;
 }
 
@@ -1150,8 +1156,8 @@ bool AgentMessageModel::renderIncrementally(const int row, const QVariantMap& ol
     // non-final block's boundary depends only on text before it. Resume the
     // chunker at the last block instead of re-chunking the whole body.
     Q_UNUSED(row)
-    if (materializing_ || renderedRow < 0 || old.size() != updated.size() ||
-        updated.value("kind") != QStringLiteral("assistant"))
+    if (!updated.value("running").toBool() || materializing_ || renderedRow < 0 ||
+        old.size() != updated.size() || updated.value("kind") != QStringLiteral("assistant"))
         return false;
     const QString oldBody = old.value("body").toString();
     const QString body = updated.value("body").toString();

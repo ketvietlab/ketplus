@@ -71,6 +71,9 @@ class AtlasIndex final : public QObject {
     static QVector<AtlasDescriptor> scan(const QString& root,
                                          const std::shared_ptr<std::atomic_bool>& cancelled = {},
                                          bool* truncated = nullptr);
+    // Inspect one explicit local result without scanning other bundles.
+    static AtlasDescriptor readManifest(const QString& path, const QString& root);
+    static constexpr qint64 maximumManifestBytes = 4 * 1024 * 1024;
     static QVector<AtlasDescriptor> visibleAtlases(const QVector<AtlasDescriptor>& manifests);
 
   signals:

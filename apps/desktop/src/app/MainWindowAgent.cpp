@@ -111,6 +111,7 @@ void MainWindow::ensureAgentWorkspace() {
     }
 
     agentWorkspace_ = new AgentWorkspaceView(workspaceSplit_);
+    connectAtlasResults(agentWorkspace_);
     auto* atlasViewers = ManagedAtlasViewers::instance();
     agentWorkspace_->setAtlasRunningCount(atlasViewers->runningCount());
     connect(atlasViewers, &ManagedAtlasViewers::changed, agentWorkspace_, [this, atlasViewers] {

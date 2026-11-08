@@ -69,6 +69,7 @@ Item {
     required property var exitCode
     required property var durationMs
     required property string detailsData
+    required property var atlasLinks
     required property string payloadData
     required property string detailsRef
     required property string payloadRef
@@ -1098,6 +1099,17 @@ Item {
                     view.rememberActivityState(messageDelegate.userExpansionKey, {
                         expanded: messageDelegate.userExpanded
                     });
+                }
+            }
+
+            Repeater {
+                model: messageDelegate.atlasLinks || []
+                delegate: AtlasResultCard {
+                    required property string modelData
+                    width: messageColumn.width
+                    link: modelData
+                    host: messageDelegate.host
+                    tokens: shell.t
                 }
             }
 

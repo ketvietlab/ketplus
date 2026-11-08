@@ -568,3 +568,10 @@ The transcript action observes status without granting authorization; only a
 click may start a turn. This does not add conversation Plan/harness behavior,
 remote mobile authorization or an installed daemon update. ADR 0027 documents
 the protocol and limits; tests use fake providers only.
+
+Completed assistant Markdown links to local Atlas manifests now render compact
+result cards with current manifest counts and explicit Edit/Open actions. The
+receipt identifies a linked artifact, not successful preview validation. Invalid,
+missing, oversized or out-of-worktree manifests are unavailable; ambiguous
+relative links after a context change are blocked. No provider invocation is
+required to inspect a receipt.

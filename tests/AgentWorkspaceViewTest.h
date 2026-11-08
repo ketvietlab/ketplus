@@ -24,6 +24,8 @@ class AgentWorkspaceViewTest final : public QObject {
     void backgroundTaskBar();
     void heldMessageRequiresExplicitClickAndFencesDuplicates();
     void heldMessageNoticeRendersInTranscript();
+    void atlasResultsUseExplicitCompletedLinks();
+    void atlasResultCardFencesChangedWorktrees();
     void webSearchLabelsAndAnimation();
     void activityGalleryLoadsInBatches();
     void browserEvidenceStaysVisible_data();

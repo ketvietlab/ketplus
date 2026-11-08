@@ -54,6 +54,28 @@ class AtlasTest final : public QObject {
                 {}};
     }
   private slots:
+    void explicitManifestIsBoundedAndWorktreeScoped() {
+        QTemporaryDir workspace;
+        QTemporaryDir outside;
+        const auto atlas = fixture(workspace.path());
+        const auto actual = ketplus::AtlasIndex::readManifest(atlas.path, workspace.path());
+        QCOMPARE(actual.title, QString("Checkout"));
+        QCOMPARE(actual.screens.size(), 1);
+        QCOMPARE(actual.flowCount, 1);
+        QVERIFY(ketplus::AtlasIndex::readManifest(atlas.path, outside.path()).path.isEmpty());
+        const auto foreign = fixture(outside.path());
+        QVERIFY(QFile::link(QFileInfo(foreign.path).absolutePath(),
+                            workspace.filePath("link.ketatlas")));
+        QVERIFY(ketplus::AtlasIndex::readManifest(workspace.filePath("link.ketatlas/atlas.json"),
+                                                  workspace.path())
+                    .path.isEmpty());
+        QVERIFY(write(atlas.path, "{invalid"));
+        QVERIFY(ketplus::AtlasIndex::readManifest(atlas.path, workspace.path()).path.isEmpty());
+        QVERIFY(write(atlas.path, QByteArray(ketplus::AtlasIndex::maximumManifestBytes + 1, ' ')));
+        QVERIFY(ketplus::AtlasIndex::readManifest(atlas.path, workspace.path()).path.isEmpty());
+        QVERIFY(QFile::remove(atlas.path));
+        QVERIFY(ketplus::AtlasIndex::readManifest(atlas.path, workspace.path()).path.isEmpty());
+    }
     void boundsTheWalkOutsideGit() {
         QTemporaryDir root;
         write(root.filePath(".hidden/secret.ketatlas/atlas.json"), config());

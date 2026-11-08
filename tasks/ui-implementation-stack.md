@@ -35,7 +35,8 @@ The native references are `mockups/qt` and `mockups/terminal` (ADR 0033–34).
   existing runtime and preserving real IDs, drafts and actions.
 - [x] Phase 5: #163 / #130 held-message release — local authenticated operation,
   durable batch authorization/claim recovery and the explicit transcript action.
-- [ ] Phase 5: #163 attributed Atlas-result transcript receipt remains incomplete.
+- [ ] Phase 5: #163 explicit Atlas-result transcript receipts — implemented and
+  focused-tested in this layer; publication is recorded by the next stack entry.
 - [x] Phase 5: #164 overlays; #165 Worktrees/Connections available-runtime UI;
   #166 Settings available-runtime controls; #167 Atlas chrome/composition.
 - [ ] Phase 6: conversation Plan/harness — explicitly excluded, not started.
@@ -70,7 +71,7 @@ The base/head/draft chain below was checked against GitHub after #232 was pushed
 | [231](https://github.com/ketvietlab/ketplus/pull/231) | Shared font / theme cleanup | `feat/ui-stack-foundation-cleanup` | `feat/ui-stack-pro-atlas` |
 | [232](https://github.com/ketvietlab/ketplus/pull/232) | Application icons | `feat/ui-stack-brand-assets` | `feat/ui-stack-foundation-cleanup` |
 | [233](https://github.com/ketvietlab/ketplus/pull/233) | Provider operation aliases / checklist | `feat/ui-stack-completion-ledger` | `feat/ui-stack-brand-assets` |
-| This layer | Explicit held-message release | `feat/ui-stack-held-messages` | `feat/ui-stack-completion-ledger` |
+| [236](https://github.com/ketvietlab/ketplus/pull/236) | Explicit held-message release | `feat/ui-stack-held-messages` | `feat/ui-stack-completion-ledger` |
 
 The activity-alias layer renders `ScheduleWakeup` as a scheduled wake-up and
 `EnterPlanMode` as entering plan mode, with running/completed labels. This is
@@ -100,7 +101,7 @@ browser session or paid-provider test was used. `git diff --check` passes.
 
 | Remaining item | Evidence / constraint | Next work and owner |
 | --- | --- | --- |
-| #163 Atlas result receipt | Catalog/detail actions consume real manifests, but there is no typed result receipt attributed to its producing conversation in the transcript projection. | Atlas/runtime implementation must publish the attributed result contract; UI then renders the receipt. |
+| #163 Atlas result receipt | This layer derives a receipt from the completed assistant’s explicit Markdown link and reads real manifest metadata. This is link attribution, not proof of authorship or preview validation. | Publish this tested UI layer and record its PR. |
 | #159 / #120 reviewer assignment | Existing composer/actions are preserved; an assignment/orchestration service is not supplied by this layer. | #120 implementation owns assignment/state; follow-up UI consumes it. |
 | #158 metadata / #170 | Tags and attention consume supplied metadata; automatic classification is not claimed. | Behavior issue supplies authoritative classification updates. |
 | #165 SSH setup | Existing Linux flow is authenticated outbound Relay. | A separate transport/setup implementation must precede SSH-specific UI behavior. |

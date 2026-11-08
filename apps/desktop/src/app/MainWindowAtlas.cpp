@@ -264,6 +264,7 @@ void MainWindow::openAtlasBuilder(AtlasTab* picker) {
 
 void MainWindow::connectAtlasBuilder(AtlasBuilderTab* builder) {
     auto* chat = builder->chatView();
+    connectAtlasResults(chat);
     connect(chat, &AgentWorkspaceView::activityGroupRequested, builder,
             [this, builder](const QString& scope, const QString& key, bool expanded) {
                 agentManager_->setActivityGroupOpen(builder->workspaceRoot(), scope, key, expanded);
