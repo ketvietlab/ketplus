@@ -233,6 +233,12 @@ the corresponding Atlas mock first.
   tombstones, legacy fallback, malformed pages, fresh live-catalog ordering and
   stale reconnect callbacks. Opt in to 100k/300k synthetic deletion/catalog
   probes with `KETPLUS_RUN_DELETE_BACKLOG_TESTS=1`; they use temporary journals.
+- Staged fork copy (ADR 0094): `ketplus_daemon_session_fork_tests` covers one
+  read snapshot while the source changes, byte-exact malformed TEXT, interrupted
+  copies recovered as purge work at open, duplicate destinations and source
+  deletion during a host fork. Opt in to 100k/300k timing with
+  `KETPLUS_RUN_FORK_BACKLOG_TESTS=1`; begin, each pass and finish must stay
+  under 250 ms.
 - Bounded history purge (ADR 0093): `ketplus_provider_deletion_tests` covers an
   ignored purge marker, tombstone retention while purge is pending, a stalled
   pass, an ignored marker delete, event-loop draining and reopen. The opt-in

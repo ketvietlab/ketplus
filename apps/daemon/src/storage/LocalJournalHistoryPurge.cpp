@@ -15,10 +15,17 @@ struct HistoryTable {
 // manifests hold up to 32 MiB and chunks are fragment-sized, but text rows can be hundreds
 // of KiB each, so a pass over large rows can free hundreds of MiB.
 constexpr HistoryTable historyTables[] = {
-    {"large_event_payloads", 1},      {"large_event_payload_chunks", 32},
-    {"staged_attachment_chunks", 32}, {"events", 2048},
-    {"replay_events", 2048},          {"cloud_events", 2048},
-    {"activity_items", 2048},         {"activity_summaries", 2048},
+    {"large_event_payloads", 1},
+    {"large_event_payload_chunks", 32},
+    {"staged_attachment_chunks", 32},
+    {"events", 2048},
+    {"replay_events", 2048},
+    {"cloud_events", 2048},
+    {"activity_items", 2048},
+    {"activity_summaries", 2048},
+    // One row per generation; deletion removes them first, an abandoned fork copy here.
+    {"activity_heads", 1},
+    {"replay_projection_state", 1},
 };
 
 bool isBusy(const QSqlError& error) {

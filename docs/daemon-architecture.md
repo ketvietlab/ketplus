@@ -76,9 +76,11 @@ core target. The local slice includes:
   the journal; `session.list` exposes both `last_event_cursor` and
   `last_seen_cursor` so Desktop can restore unread completed conversations);
 - idle conversation forks through `session.fork` (ADR 0016): the provider forks
-  its native thread (Codex `thread/fork`, Claude SDK `forkSession`), then one
-  journal transaction copies the source generation's transcript at the same
-  cursors and the fork appends `session.forked`;
+  its native thread (Codex `thread/fork`, Claude SDK `forkSession`), then the
+  journal copies the source generation's transcript from one read snapshot in
+  bounded event-loop passes at the same cursors, stores the fork in one final
+  transaction and the fork appends `session.forked`
+  ([ADR 0094](decisions/0094-staged-session-fork-copy.md));
 - daemon-owned Codex app-server lifecycle;
 - approval and provider-neutral structured user-input requests with stable
   request/question revisions, generation fencing, strict single/multiple/custom
@@ -394,7 +396,8 @@ ownership or mismatched bytes returns media_unavailable without modifying files.
 
 SessionHost prepares fork media ownership inside the journal before-commit
 phase (ADR 0068). Unknown source metadata or conflicting destination ownership
-rolls back copied history. Matching ownership supports retry after commit failure;
+fails the final fork transaction; the staged history becomes purge work
+(ADR 0094). Matching ownership supports retry after commit failure;
 extra prepared references can be reclaimed after reopen using the live catalog.
 This is ordering across two stores, not a filesystem/SQLite atomic transaction.
 
