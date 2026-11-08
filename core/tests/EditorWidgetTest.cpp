@@ -38,6 +38,7 @@ class EditorWidgetTest final : public QObject {
     void replacesMatchesAsOneUndoStep();
     void matchesEditorTypography();
     void breadcrumbReservesSpaceWithoutChangingTheDocument();
+    void breadcrumbKeepsTheFirstLinesPainted();
     void appliesCustomTypography();
     void persistsEditorSettings();
     void emitsContextMenuRequest();
@@ -159,6 +160,30 @@ void EditorWidgetTest::breadcrumbReservesSpaceWithoutChangingTheDocument() {
     editor.setBreadcrumbPath({});
     QVERIFY(breadcrumb->isHidden());
     QVERIFY(editor.viewport()->geometry().top() < 4);
+}
+
+void EditorWidgetTest::breadcrumbKeepsTheFirstLinesPainted() {
+    // Scintilla's Qt port measured its client area from the viewport's position in the editor,
+    // so the lines under the breadcrumb's viewport margin were never painted.
+    ketplus::EditorWidget editor;
+    editor.resize(640, 400);
+    QByteArray text;
+    for (int line = 1; line <= 60; ++line)
+        text += "line " + QByteArray::number(line) + '\n';
+    editor.setText(text);
+    editor.setBreadcrumbPath(QStringLiteral("src/app.cpp"));
+    editor.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&editor));
+    QCOMPARE(editor.send(SCI_GETFIRSTVISIBLELINE), sptr_t(0));
+    const QImage image = editor.grab().toImage();
+    const int top = editor.viewport()->geometry().top();
+    const int lineHeight = int(editor.send(SCI_TEXTHEIGHT, 0));
+    const QColor background = image.pixelColor(editor.width() - 40, top + lineHeight / 2);
+    int inked = 0;
+    for (int y = top + 1; y < top + lineHeight - 1; ++y)
+        for (int x = 0; x < editor.viewport()->width(); ++x)
+            inked += qAbs(image.pixelColor(x, y).lightness() - background.lightness()) > 60;
+    QVERIFY2(inked > 10, "the first line is not painted below the breadcrumb");
 }
 
 void EditorWidgetTest::matchesEditorTypography() {
