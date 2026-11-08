@@ -212,6 +212,11 @@ class LocalJournal final {
     [[nodiscard]] qint64 appendEvent(const QString& sessionId, qint64 generation,
                                      const QString& type, const QJsonObject& payload,
                                      QString* error = nullptr);
+    // Persist local turn acceptance before publishing any of its two/three events.
+    [[nodiscard]] QJsonArray appendTurnStart(const StoredSession& session,
+                                             const QJsonObject& prompt,
+                                             const QJsonObject& configuration,
+                                             QString* error = nullptr);
     [[nodiscard]] QJsonArray eventsAfter(const QString& sessionId, qint64 generation, qint64 cursor,
                                          int limit = 500) const;
     // True when the newest turn.started has no turn.completed after it.
@@ -374,7 +379,8 @@ class LocalJournal final {
     [[nodiscard]] qint64 appendEventWithMutation(const QString& sessionId, qint64 generation,
                                                  const QString& type, const QJsonObject& payload,
                                                  QString* error,
-                                                 const std::function<bool()>& mutation);
+                                                 const std::function<bool()>& mutation,
+                                                 bool ownTransaction = true);
     bool initializeContexts();
     [[nodiscard]] TranscriptWindow transcriptWindowImpl(const QString& sessionId, qint64 generation,
                                                         qint64 beforeCursor, qint64 snapshotCursor,

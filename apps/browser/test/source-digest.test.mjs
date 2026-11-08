@@ -81,7 +81,8 @@ test("the build-time check refuses a runtime the sources moved away from", (t) =
   // A source edited after configure.
   fs.writeFileSync(path.join(dir, "src/nested/policy.mjs"), "export const a = 2;");
   assert.notEqual(check().status, 0);
-  assert.match(check().stderr, /was staged from sources/);
+  // CMake wraps diagnostics differently depending on the temporary path length.
+  assert.match(check().stderr, /was\s+staged\s+from\s+sources/);
   assert.equal(check("ON").status, 0);
   stage();
   // A source added after configure.
