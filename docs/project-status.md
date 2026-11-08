@@ -15,6 +15,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- Accepted local IPC sockets bound Qt's unread receive buffer to one maximum
+  frame plus header (ADR 0077). Pipelined exact-limit requests resume without
+  loss after dispatch pauses, both before and after authentication.
+
 - Local turn acceptance commits state/configuration and its two/three events
   together before publication (ADR 0076). Failed queued/configuration/projection/
   commit writes leave no accepted prompt; repair/retry and independent-reader

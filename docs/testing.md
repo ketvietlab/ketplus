@@ -137,6 +137,12 @@ never use a real key, Keychain item or inference quota.
 
 ## Minimum verification
 
+Local IPC receive-buffer changes run the lifecycle loopback flood and resume
+regression before/after hello, plus the directly affected protocol, headless,
+credential, upgrade and desktop IPC targets. The fixture uses valid exact-limit
+frames and measures actual unread bytes, rather than only checking a configured
+property; no provider account is required (ADR 0077).
+
 Changes to macOS signing also run `python3 tests/packaging/test_signing_cli.py`.
 These fixtures stub signing/Apple tools and never use a private key or notarization
 account. A replacement artifact additionally needs real Developer ID authority,
