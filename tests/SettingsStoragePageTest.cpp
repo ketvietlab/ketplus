@@ -5,7 +5,6 @@
 #include <QAccessible>
 #include <QCheckBox>
 #include <QComboBox>
-#include <QDialogButtonBox>
 #include <QLabel>
 #include <QPushButton>
 #include <QScrollArea>
@@ -563,7 +562,7 @@ class SettingsStoragePageTest final : public QObject {
         QTRY_VERIFY(page->isVisible());
         QTRY_VERIFY(days(*page)->isEnabled());
         QTRY_VERIFY(reload(*page)->isVisible());
-        QVERIFY(shell.findChild<QDialogButtonBox*>("settingsWorkspaceFooter")->isHidden());
+        QVERIFY(shell.findChild<QWidget*>("settingsWorkspaceFooter")->isHidden());
         if (modern) {
             auto* scroll = qobject_cast<QScrollArea*>(page->parentWidget()->parentWidget());
             QVERIFY(scroll);

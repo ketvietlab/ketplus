@@ -50,6 +50,7 @@ class SettingsDialogTest final : public QObject {
     void validatesPageRegistrationWithoutTransferringFailedOwnership();
     void ordersAndSelectsRegisteredPagesByStableIdentity();
     void removesDestroyedPageAndFallsBackToGeneral();
+    void zoomDuringExtensionRebuildKeepsNavigationAlive();
 };
 
 void SettingsDialogTest::defaultFontResolvesWithoutPlatformFallback() {
@@ -293,6 +294,26 @@ void SettingsDialogTest::removesDestroyedPageAndFallsBackToGeneral() {
     delete page;
     QCOMPARE(dialog.selectedPageId(), QStringLiteral("general"));
     QVERIFY(!dialog.selectPage(QStringLiteral("private/archive")));
+}
+
+void SettingsDialogTest::zoomDuringExtensionRebuildKeepsNavigationAlive() {
+    ketplus::ThemeManager theme(*qApp);
+    ketplus::SettingsDialog dialog(ketplus::AppearanceSettings{}, theme);
+    for (int i = 0; i < 12; ++i) {
+        auto* page = new TestSettingsPage(QStringLiteral("page-%1").arg(i));
+        dialog.addPage(page);
+        // Deliberately do not drain DeferredDelete before changing the global zoom.
+        theme.setInterfaceFontSizePixels(i % 2 == 0 ? 18 : 14);
+        QVERIFY(dialog.selectPage(page->id()));
+        QCOMPARE(dialog.selectedPageId(), page->id());
+    }
+    theme.setInterfaceFontSizePixels(14);
+    auto* navigation = dialog.findChild<QListWidget*>("settingsNavigation");
+    QCOMPARE(navigation->count(), 14);
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    theme.setInterfaceFontSizePixels(16);
+    QVERIFY(dialog.selectPage("page-0"));
+    QCOMPARE(dialog.selectedPageId(), QStringLiteral("page-0"));
 }
 
 QTEST_MAIN(SettingsDialogTest)

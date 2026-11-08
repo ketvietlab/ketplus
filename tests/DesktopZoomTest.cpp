@@ -8,6 +8,7 @@
 #include "ui/Theme.h"
 #include "workspace/ActivityBar.h"
 
+#include <QAbstractButton>
 #include <QAction>
 #include <QComboBox>
 #include <QDir>
@@ -38,7 +39,7 @@ void openSettings(MainWindow& window) {
     action->trigger();
 }
 void saveSettings(MainWindow& window) {
-    for (auto* button : window.findChildren<QPushButton*>()) {
+    for (auto* button : window.findChildren<QAbstractButton*>()) {
         if (button->property("kvRole") == QStringLiteral("primaryAction")) {
             button->click();
             return;
