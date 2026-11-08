@@ -76,8 +76,33 @@ QString toolTitle(const QJsonObject& item, const bool completed) {
 }
 
 QString semanticToolSubtype(const QJsonObject& item) {
-    const QString operation =
-        item.value(QStringLiteral("tool")).toString().toLower().section(QStringLiteral("__"), -1);
+    const QString operation = item.value(QStringLiteral("tool"))
+                                  .toString()
+                                  .toLower()
+                                  .section(QStringLiteral("__"), -1)
+                                  .section(QLatin1Char('.'), -1);
+    static const QHash<QString, QString> stepTypes{{"wait", "wait"},
+                                                   {"sleep", "wait"},
+                                                   {"monitor", "monitor"},
+                                                   {"wake", "wake"},
+                                                   {"resume_agent", "wake"},
+                                                   {"skill", "skill"},
+                                                   {"load_skill", "skill"},
+                                                   {"toolsearch", "toolsLoaded"},
+                                                   {"search_tools", "toolsLoaded"},
+                                                   {"taskstop", "taskStopped"},
+                                                   {"stop_task", "taskStopped"},
+                                                   {"agent", "subAgent"},
+                                                   {"task", "subAgent"},
+                                                   {"spawn_agent", "subAgent"},
+                                                   {"update_plan", "plan"},
+                                                   {"webfetch", "webFetch"},
+                                                   {"fetch_url", "webFetch"},
+                                                   {"websearch", "webSearch"},
+                                                   {"find_in_page", "webFind"},
+                                                   {"open_page", "webOpen"}};
+    if (const auto found = stepTypes.constFind(operation); found != stepTypes.cend())
+        return *found;
     if ((operation == QStringLiteral("read_file") || operation == "read"))
         return QStringLiteral("fileRead");
     if ((operation == QStringLiteral("search_files") || operation == "glob"))
@@ -608,6 +633,23 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
                                 ? QStringLiteral("integration.mcp")
                                 : QStringLiteral("tool.dynamic");
         QString readLocation;
+        static const QHash<QString, QStringList> stepLabels{
+            {"wait", {"Waited", "Waiting"}},
+            {"monitor", {"Checked activity", "Monitoring"}},
+            {"wake", {"Resumed agent", "Resuming agent"}},
+            {"skill", {"Loaded skill", "Loading skill"}},
+            {"toolsLoaded", {"Loaded tools", "Finding tools"}},
+            {"taskStopped", {"Stopped task", "Stopping task"}},
+            {"subAgent", {"Used subagent", "Running subagent"}},
+            {"plan", {"Updated plan", "Updating plan"}},
+            {"webFetch", {"Fetched page", "Fetching page"}},
+            {"webSearch", {"Searched web", "Searching web"}},
+            {"webFind", {"Searched page", "Searching page"}},
+            {"webOpen", {"Opened page", "Opening page"}}};
+        if (const auto labels = stepLabels.constFind(subtype); labels != stepLabels.cend()) {
+            title = labels->at(completed ? 0 : 1);
+            eventType = QStringLiteral("activity.") + subtype;
+        }
         if (subtype.startsWith(QStringLiteral("browser"))) {
             const QHash<QString, QStringList> operations{
                 {QStringLiteral("browserOpen"), {"open", "Opened website", "Opening website"}},

@@ -1,4 +1,5 @@
 import QtQuick
+import Ket 1.0 as Kit
 import QtQuick.Controls.Basic as Basic
 import "ChromeMetrics.js" as Metrics
 
@@ -45,7 +46,7 @@ Column {
             detailsRef: ""
             payloadRef: ""
             fileStats: modelData.fileChanges || []
-            imageSources: []
+            imageSources: modelData.images || []
             running: !!modelData.running
             compact: true
         }
@@ -61,9 +62,10 @@ Column {
         Accessible.role: Accessible.StaticText
         Accessible.name: text
     }
-    Basic.Button {
+    Kit.KetButton {
         visible: !!root.details.error
         text: "Retry"
+        controlSize: Kit.KetTheme.ControlSize.Small
         Accessible.name: "Retry loading activity group"
         onClicked: root.view.runAnchoredMutation(() => {
             root.view.messageModel.setGroupExpanded(root.groupKey, false);

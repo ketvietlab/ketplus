@@ -16,6 +16,19 @@ const families = {
     browserScreenshot: { icon: "image", family: "browser" },
     imageView: { icon: "image", family: "images" },
     imageGeneration: { icon: "image", family: "images" },
+    reasoning: { icon: "brain", family: "control" },
+    plan: { icon: "list-checks", family: "control" },
+    wait: { icon: "clock", family: "control" },
+    monitor: { icon: "activity", family: "control" },
+    wake: { icon: "play", family: "control" },
+    skill: { icon: "sparkles", family: "control" },
+    toolsLoaded: { icon: "wrench", family: "control" },
+    taskStopped: { icon: "square", family: "control" },
+    collaboration: { icon: "users", family: "control" },
+    subAgent: { icon: "bot", family: "control" },
+    webOpen: { icon: "globe", family: "integration" },
+    webFind: { icon: "search", family: "integration" },
+    webFetch: { icon: "download", family: "integration" },
     integration: { icon: "bot", family: "integration" }
 }
 
@@ -74,7 +87,7 @@ function detail(row) {
             const result = row.payload.result || row.details.results
             if (result) rows.push(typeof result === "string" ? result : JSON.stringify(result, null, 2))
         }
-        if (family === "generic" || family === "integration" || family === "browser") {
+        if (family === "generic" || family === "integration" || family === "control" || family === "browser") {
             if (Object.keys(row.payload).length) rows.push(JSON.stringify(row.payload, null, 2))
         }
     }

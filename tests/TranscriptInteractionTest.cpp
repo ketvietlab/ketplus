@@ -554,6 +554,29 @@ void AgentWorkspaceViewTest::transcriptRendererInteractionMatrix() {
 }
 
 void AgentWorkspaceViewTest::activityOperationSemantics() {
+    const QMap<QString, QString> controlTypes{
+        {"functions.wait", "wait"},    {"monitor", "monitor"},
+        {"resume_agent", "wake"},      {"Skill", "skill"},
+        {"ToolSearch", "toolsLoaded"}, {"TaskStop", "taskStopped"},
+        {"Agent", "subAgent"},         {"functions.update_plan", "plan"},
+        {"WebFetch", "webFetch"},      {"WebSearch", "webSearch"},
+        {"open_page", "webOpen"},      {"find_in_page", "webFind"}};
+    for (auto it = controlTypes.cbegin(); it != controlTypes.cend(); ++it) {
+        for (const auto& type : {"mcpToolCall", "dynamicToolCall"}) {
+            const QJsonObject item{{"type", type},
+                                   {"tool", it.key()},
+                                   {"id", "step"},
+                                   {"arguments", QJsonObject{{"query", "test"}}}};
+            const auto started = ketplus::agent_message::activityMessage(item, false);
+            const auto completed = ketplus::agent_message::activityMessage(item, true);
+            QCOMPARE(started.value("subtype").toString(), it.value());
+            QCOMPARE(started.value("status").toString(), QString("running"));
+            QCOMPARE(completed.value("status").toString(), QString("completed"));
+            QVERIFY(started.value("title") != completed.value("title"));
+            QVERIFY(!completed.value("sanitizedPayload").toMap().isEmpty());
+        }
+    }
+
     const QMap<QString, QString> searchTypes{
         {"read_file", "fileRead"}, {"search_files", "fileSearch"}, {"search_code", "codeSearch"}};
     for (auto it = searchTypes.cbegin(); it != searchTypes.cend(); ++it) {
