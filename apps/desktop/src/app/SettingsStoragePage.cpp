@@ -5,6 +5,8 @@
 #include <QLocale>
 #include <QPointer>
 #include <QPushButton>
+#include <QSignalBlocker>
+#include <QSpinBox>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <utility>
@@ -38,7 +40,8 @@ SettingsStoragePage::SettingsStoragePage(Requester requester, QWidget* parent)
     layout->setSpacing(12);
     layout->addWidget(label(tr("Storage"), "settingsWorkspaceSectionTitle", this));
     layout->addWidget(label(tr("Keep conversations on this computer and choose how long to retain "
-                               "their full tool details. Changes save immediately."),
+                               "their full tool details. Detail preferences save immediately; "
+                               "the database target has its own Save button."),
                             "settingsWorkspaceIntro", this));
     layout->addSpacing(8);
     usage_ = label(tr("Loading journal usage…"), "storageUsage", this);
@@ -74,6 +77,58 @@ SettingsStoragePage::SettingsStoragePage(Requester requester, QWidget* parent)
                  "it cannot restore detail already trimmed. Unused database pages can "
                  "still be reclaimed."),
               "settingsWorkspaceIntro", this));
+    sizeGroup_ = new QWidget(this);
+    sizeGroup_->setObjectName("storageSizeGroup");
+    auto* sizeLayout = new QVBoxLayout(sizeGroup_);
+    sizeLayout->setContentsMargins(0, 8, 0, 0);
+    sizeLayout->setSpacing(12);
+    limit_ = new QComboBox(sizeGroup_);
+    limit_->setObjectName("storageSizeLimit");
+    limit_->setAccessibleName(tr("Database size target"));
+    for (const qint64 gb : {1, 2, 5, 10})
+        limit_->addItem(tr("%1 GB").arg(gb), gb * 1'000'000'000LL);
+    limit_->addItem(tr("No limit"), qint64(0));
+    limit_->setMinimumHeight(32);
+    auto* limitLabel = label(tr("Database size target"), "settingsWorkspaceFieldLabel", sizeGroup_);
+    limitLabel->setBuddy(limit_);
+    sizeLayout->addWidget(limitLabel);
+    sizeLayout->addWidget(limit_, 0, Qt::AlignLeft);
+    warning_ = new QSpinBox(sizeGroup_);
+    warning_->setObjectName("storageWarningPercent");
+    warning_->setRange(1, 100);
+    warning_->setSuffix(tr("%"));
+    warning_->setMinimumHeight(32);
+    warning_->setAccessibleName(tr("Warn at"));
+    auto* warningLabel = label(tr("Warn at"), "settingsWorkspaceFieldLabel", sizeGroup_);
+    warningLabel->setBuddy(warning_);
+    sizeLayout->addWidget(warningLabel);
+    sizeLayout->addWidget(warning_, 0, Qt::AlignLeft);
+    sizeLayout->addWidget(label(tr("Saving a target enables earlier trimming of eligible detail "
+                                   "while idle. This soft database-page target excludes media and "
+                                   "other files; protected content can remain above it. Forever "
+                                   "and automatic-off preserve remaining detail. No limit disables "
+                                   "size pressure, but keeps ordinary age-based trimming."),
+                                "settingsWorkspaceIntro", sizeGroup_));
+    sizeStatus_ = label({}, "storageSizeStatus", sizeGroup_);
+    sizeLayout->addWidget(sizeStatus_);
+    sizeDraftStatus_ = label({}, "storageSizeDraftStatus", sizeGroup_);
+    sizeLayout->addWidget(sizeDraftStatus_);
+    const auto draftChanged = [this] {
+        if (busy_ || sizeRevision_ < 0)
+            return;
+        sizeDraftDirty_ = true;
+        sizeDraftStatus_->setText(
+            tr("Unsaved database target changes. Status above describes the saved target."));
+    };
+    connect(limit_, &QComboBox::currentIndexChanged, this, draftChanged);
+    connect(warning_, &QSpinBox::valueChanged, this, draftChanged);
+    saveSize_ = new QPushButton(tr("Save database target"), sizeGroup_);
+    saveSize_->setObjectName("storageSizeSave");
+    saveSize_->setMinimumHeight(32);
+    sizeLayout->addWidget(saveSize_, 0, Qt::AlignLeft);
+    connect(saveSize_, &QPushButton::clicked, this, &SettingsStoragePage::saveSize);
+    sizeGroup_->hide();
+    layout->addWidget(sizeGroup_);
     status_ = label(tr("Loading storage settings…"), "storageStatus", this);
     layout->addWidget(status_);
     refresh_ = new QPushButton(tr("Reload settings"), this);
@@ -92,9 +147,16 @@ void SettingsStoragePage::setBusy(bool busy) {
     days_->setEnabled(!busy && revision_ >= 0);
     automatic_->setEnabled(!busy && revision_ >= 0);
     refresh_->setEnabled(!busy);
+    limit_->setEnabled(!busy && sizeRevision_ >= 0);
+    warning_->setEnabled(!busy && sizeRevision_ >= 0);
+    saveSize_->setEnabled(!busy && sizeRevision_ >= 0);
 }
 void SettingsStoragePage::refresh() {
     revision_ = -1;
+    sizeRevision_ = -1;
+    sizeDraftDirty_ = false;
+    sizeDraftStatus_->clear();
+    sizeGroup_->hide();
     status_->setText(tr("Loading storage settings…"));
     request("read", {});
 }
@@ -117,22 +179,17 @@ void SettingsStoragePage::request(const QString& operation, const QJsonObject& p
     }
     const QPointer<SettingsStoragePage> guard(this);
     requester_(operation, payload,
-               [guard, generation, saving = operation == "apply"](const QJsonObject& result,
-                                                                  const QString& error) {
-                   if (guard && guard->generation_ == generation)
-                       guard->receive(result, error, saving);
+               [guard, generation, operation](const QJsonObject& result, const QString& error) {
+                   if (guard && guard->generation_ == generation) {
+                       if (operation.startsWith("size."))
+                           guard->receiveSize(result, error, operation == "size.apply");
+                       else
+                           guard->receive(result, error, operation == "apply");
+                   }
                });
 }
 void SettingsStoragePage::receive(const QJsonObject& result, const QString& error, bool saving) {
     timeout_->stop();
-    const auto fail = [this](const QString& message) {
-        revision_ = -1;
-        days_->setCurrentIndex(-1);
-        automatic_->setChecked(false);
-        usage_->setText(tr("Journal usage unavailable. Reload to check the current state."));
-        status_->setText(message);
-        setBusy(false);
-    };
     if (!error.isEmpty() || !result.value("ok").toBool()) {
         if (result.value("error_code").toString() == "policy_conflict")
             fail(tr("Settings changed in another window. Reload before making another change."));
@@ -159,6 +216,29 @@ void SettingsStoragePage::receive(const QJsonObject& result, const QString& erro
     revision_ = result.value("revision").toInteger();
     days_->setCurrentIndex(index);
     automatic_->setChecked(policy.value("automatic_detail_retention").toBool());
+    showUsage(result);
+    if (result.value("size_policy_supported").toBool()) {
+        request("size.read", {});
+        return;
+    }
+    sizeRevision_ = -1;
+    sizeDraftDirty_ = false;
+    sizeDraftStatus_->clear();
+    sizeGroup_->hide();
+    status_->setText(saving ? tr("Saved. Changes apply while KetPlus is idle.")
+                            : tr("Settings are up to date."));
+    setBusy(false);
+}
+void SettingsStoragePage::fail(const QString& message) {
+    revision_ = sizeRevision_ = -1;
+    days_->setCurrentIndex(-1);
+    automatic_->setChecked(false);
+    sizeStatus_->setText(tr("Database target status unavailable. Reload to check."));
+    usage_->setText(tr("Journal usage unavailable. Reload to check the current state."));
+    status_->setText(message);
+    setBusy(false);
+}
+void SettingsStoragePage::showUsage(const QJsonObject& result) {
     const auto usage = result.value("usage").toObject();
     const auto total = usage.value("database_page_bytes");
     const auto free = usage.value("free_page_bytes");
@@ -203,7 +283,75 @@ void SettingsStoragePage::receive(const QJsonObject& result, const QString& erro
         measurements += tr(" Disk space available is unknown.");
     }
     usage_->setText(usage_->text() + "\n" + measurements);
-    status_->setText(saving ? tr("Saved. Changes apply while KetPlus is idle.")
+}
+void SettingsStoragePage::saveSize() {
+    if (busy_ || sizeRevision_ < 0)
+        return;
+    status_->setText(tr("Saving database target…"));
+    request("size.apply",
+            {{"expected_revision", sizeRevision_},
+             {"policy", QJsonObject{{"limit_bytes", limit_->currentData().toLongLong()},
+                                    {"warning_percent", warning_->value()}}}});
+}
+void SettingsStoragePage::receiveSize(const QJsonObject& result, const QString& error,
+                                      bool saving) {
+    timeout_->stop();
+    if (!error.isEmpty() || !result.value("ok").toBool()) {
+        fail(tr("Could not confirm the database target. %1 Reload before making another change.")
+                 .arg(error.isEmpty() ? result.value("error_message").toString() : error));
+        return;
+    }
+    const auto policy = result.value("policy").toObject();
+    const auto limit = policy.value("limit_bytes");
+    const auto warning = policy.value("warning_percent");
+    const int index = integer(limit) ? limit_->findData(limit.toInteger()) : -1;
+    if (!integer(result.value("revision")) || policy.size() != 2 || index < 0 ||
+        !integer(warning, 100) || warning.toInt() < 1 ||
+        (saving && (result.value("revision").toInteger() != sizeRevision_ + 1 ||
+                    limit.toInteger() != limit_->currentData().toLongLong() ||
+                    warning.toInt() != warning_->value()))) {
+        fail(tr(
+            "The daemon did not confirm the database target. Reload to check the saved settings."));
+        return;
+    }
+    const bool preserveDraft = !saving && sizeDraftDirty_;
+    if (preserveDraft && result.value("revision").toInteger() != sizeRevision_) {
+        fail(tr("The database target changed in another window. Reload before saving your draft."));
+        return;
+    }
+    sizeRevision_ = result.value("revision").toInteger();
+    if (!preserveDraft) {
+        const QSignalBlocker limitBlocker(limit_);
+        const QSignalBlocker warningBlocker(warning_);
+        limit_->setCurrentIndex(index);
+        warning_->setValue(warning.toInt());
+        sizeDraftDirty_ = false;
+        sizeDraftStatus_->clear();
+    }
+    sizeGroup_->show();
+    showUsage(result);
+    const auto state = result.value("status").toObject();
+    QString details;
+    if (sizeRevision_ == 0)
+        details = tr("Size pressure has not been enabled. Save explicitly to configure it.");
+    else if (limit.toInteger() == 0)
+        details = tr("No size pressure. Age-based detail preferences still apply.");
+    else if (state.value("pressure_enabled").isBool())
+        details = state.value("pressure_enabled").toBool()
+                      ? tr("Size pressure is enabled while idle.")
+                      : tr("Size pressure is inactive under current detail preferences.");
+    else
+        details = tr("Size pressure status is unknown. Reload to check.");
+    if (state.value("target_scope").toString() != "sqlite_pages" ||
+        !state.value("over_limit").isBool() || !state.value("warning").isBool())
+        details += tr(" Target usage status is unavailable.");
+    else if (state.value("over_limit").toBool())
+        details +=
+            tr(" Database pages are above target; protected content may keep them above it.");
+    else if (state.value("warning").toBool())
+        details += tr(" Database pages have reached the warning threshold.");
+    sizeStatus_->setText(details);
+    status_->setText(saving ? tr("Database target saved. Changes apply while idle.")
                             : tr("Settings are up to date."));
     setBusy(false);
 }

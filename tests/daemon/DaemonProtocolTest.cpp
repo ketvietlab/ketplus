@@ -20,12 +20,15 @@
 #include <QProcess>
 #include <QScopeGuard>
 #include <QSignalSpy>
-#include <QStandardPaths>
 #include <QSqlDatabase>
+#include <QSqlError>
 #include <QSqlQuery>
+#include <QSqlRecord>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QUuid>
 #include <QtTest>
+#include <limits>
 
 using namespace ketplus::daemon;
 
@@ -477,6 +480,117 @@ class DaemonProtocolTest final : public QObject {
         QVERIFY(!QFileInfo::exists(store.directory()));
     }
 
+    void mediaDedupRequiresVerifiedStoredBytes_data() {
+        QTest::addColumn<QString>("fault");
+        QTest::addColumn<bool>("inlineItem");
+        for (const QString& fault :
+             {QStringLiteral("valid"), QStringLiteral("wide-permissions"),
+              QStringLiteral("corrupt"), QStringLiteral("short"), QStringLiteral("oversized"),
+              QStringLiteral("directory"), QStringLiteral("symlink"), QStringLiteral("dangling"),
+              QStringLiteral("unreadable"), QStringLiteral("root-symlink")}) {
+            for (const bool inlineItem : {false, true})
+                QTest::newRow(qPrintable(fault + (inlineItem ? "-item" : "-attachment")))
+                    << fault << inlineItem;
+        }
+    }
+
+    void mediaDedupRequiresVerifiedStoredBytes() {
+        QFETCH(QString, fault);
+        QFETCH(bool, inlineItem);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto png = fakePng(8, 6, 'd');
+        const auto hash = QCryptographicHash::hash(png, QCryptographicHash::Sha256).toHex();
+        const auto media = directory.filePath("media");
+        const auto outside = directory.filePath("outside");
+        QVERIFY(QDir().mkpath(outside));
+        const auto path = media + '/' + QString::fromLatin1(hash) + ".png";
+        const auto foreign = outside + '/' + QString::fromLatin1(hash) + ".png";
+        const auto originalBytes = fault == "corrupt" ? QByteArray(png.size(), 'x')
+                                   : fault == "short" ? png.left(10)
+                                   : fault == "oversized"
+                                       ? QByteArray(McpMediaStore::maximumImageBytes + 1, 'x')
+                                       : png;
+        const auto put = [](const QString& target, const QByteArray& bytes) {
+            QFile file(target);
+            return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
+        };
+        QVERIFY(put(foreign, png));
+        if (fault == "root-symlink")
+            QVERIFY(QFile::link(outside, media));
+        else
+            QVERIFY(QDir().mkpath(media));
+        if (fault == "directory") {
+            QVERIFY(QDir().mkpath(path));
+        } else if (fault == "symlink" || fault == "dangling") {
+            QVERIFY(QFile::link(fault == "symlink" ? foreign : outside + "/missing", path));
+        } else if (fault != "root-symlink") {
+            QVERIFY(put(path, originalBytes));
+            if (fault == "valid")
+                QVERIFY(
+                    QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+            if (fault == "unreadable")
+                QVERIFY(QFile::setPermissions(path, QFileDevice::WriteOwner));
+            if (fault == "wide-permissions")
+                QVERIFY(QFile::setPermissions(path,
+                                              QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                                                  QFileDevice::ReadGroup | QFileDevice::ReadOther));
+        }
+        const auto publish = [&]() {
+            McpMediaStore store(media);
+            if (!inlineItem)
+                return store.storeImage(png, "image/png", "session");
+            const QJsonObject item{
+                {"type", "mcpToolCall"},
+                {"result",
+                 QJsonObject{{"content", QJsonArray{QJsonObject{
+                                             {"type", "image"},
+                                             {"mimeType", "image/png"},
+                                             {"data", QString::fromLatin1(png.toBase64())}}}}}}};
+            return store.externalizeItem(item, "session")
+                .value("result")
+                .toObject()
+                .value("content")
+                .toArray()
+                .first()
+                .toObject();
+        };
+        const auto result = publish();
+        const bool valid = fault == "valid" || fault == "wide-permissions";
+        QCOMPARE(result.contains("media_ref"), valid);
+        if (!valid) {
+            if (inlineItem)
+                QCOMPARE(result.value("reason").toString(), "storage_unavailable");
+            QVERIFY(!QFileInfo::exists(media + "/refs"));
+            if (fault == "corrupt" || fault == "short" || fault == "oversized") {
+                QFile original(path);
+                QVERIFY(original.open(QIODevice::ReadOnly));
+                QCOMPARE(original.readAll(), originalBytes);
+            }
+            if (fault == "root-symlink") {
+                QVERIFY(QFile::remove(media));
+                QVERIFY(QDir().mkpath(media));
+            } else if (fault == "directory") {
+                QVERIFY(QDir().rmdir(path));
+            } else {
+                if (fault == "unreadable")
+                    QVERIFY(QFile::setPermissions(path, QFileDevice::ReadOwner |
+                                                            QFileDevice::WriteOwner));
+                QVERIFY(QFile::remove(path));
+            }
+            QCOMPARE(publish().value("media_ref").toString(),
+                     "sha256:" + QString::fromLatin1(hash));
+        }
+        QFile retained(path);
+        QVERIFY(retained.open(QIODevice::ReadOnly));
+        QCOMPARE(retained.readAll(), png);
+        QVERIFY(!(retained.permissions() & (QFileDevice::ReadGroup | QFileDevice::WriteGroup |
+                                            QFileDevice::ReadOther | QFileDevice::WriteOther)));
+        QFile preserved(foreign);
+        QVERIFY(preserved.open(QIODevice::ReadOnly));
+        QCOMPARE(preserved.readAll(), png);
+    }
+
     void mcpMediaIsStoredOwnerOnlyAndReferencedFromPayloads() {
         QTemporaryDir directory;
         const QString mediaDirectory = directory.filePath("state/media");
@@ -560,6 +674,139 @@ class DaemonProtocolTest final : public QObject {
             QCryptographicHash::hash(other, QCryptographicHash::Sha256).toHex())));
         QCOMPARE(McpMediaStore::directoryForJournal(directory.filePath("state/journal.sqlite3")),
                  QDir(directory.filePath("state")).absoluteFilePath("media"));
+    }
+
+    void mediaCapacityReclaimsFilesWithAnEmptyCatalog() {
+        for (bool present : {false, true}) {
+            QTemporaryDir dir;
+            const auto media = dir.filePath("media");
+            QVERIFY(QDir().mkpath(media));
+            const auto png = fakePng(8, 8, 'a');
+            const auto path = QDir(media).filePath(
+                QString::fromLatin1(
+                    QCryptographicHash::hash(png, QCryptographicHash::Sha256).toHex()) +
+                ".png");
+            QFile image(path);
+            QVERIFY(image.open(QIODevice::WriteOnly));
+            QCOMPARE(image.write(png), png.size());
+            image.close();
+            if (present)
+                QVERIFY(QDir().mkpath(QDir(media).filePath("refs")));
+            McpMediaStore store(media, 0);
+            store.enforceCapacity();
+            QVERIFY(!QFileInfo::exists(path));
+        }
+    }
+
+    void mediaCleanupPreservesUnknownReferences_data() {
+        QTest::addColumn<QString>("operation");
+        QTest::addColumn<QString>("fault");
+        QTest::addColumn<QString>("owner");
+        for (const auto& operation : {QString("release"), QString("retain"), QString("capacity")})
+            for (const auto& fault :
+                 {QString("malformed"), QString("oversized"), QString("directory"),
+                  QString("symlink"), QString("catalog-count"), QString("catalog-bytes"),
+                  QString("root-symlink"), QString("filename")})
+                for (const auto& owner : {QString("a"), QString("b")})
+                    if ((!fault.startsWith("catalog-") && fault != "root-symlink" &&
+                         fault != "filename") ||
+                        owner == "a")
+                        QTest::newRow(qPrintable(operation + "-" + fault + "-" + owner))
+                            << operation << fault << owner;
+    }
+    void mediaCleanupPreservesUnknownReferences() {
+        QFETCH(QString, operation);
+        QFETCH(QString, fault);
+        QFETCH(QString, owner);
+        QTemporaryDir dir;
+        const auto media = dir.filePath("media");
+        McpMediaStore store(media);
+        const auto png = fakePng(8, 8, 'a');
+        const auto first = store.storeImage(png, "image/png", "a");
+        QCOMPARE(store.storeImage(png, "image/png", "b"), first);
+        QVERIFY(!first.isEmpty());
+        const auto hash = first.value("media_ref").toString().mid(7);
+        const auto image = QDir(media).filePath(hash + ".png");
+        const auto refPath = [&](const QString& id) {
+            return QDir(media).filePath(
+                "refs/" +
+                QString::fromLatin1(
+                    QCryptographicHash::hash(id.toUtf8(), QCryptographicHash::Sha256).toHex()) +
+                ".refs");
+        };
+        const auto broken = refPath(owner);
+        const auto original = hash.toLatin1() + '\n';
+        QVERIFY(QFile::remove(broken));
+        const auto write = [](const QString& path, const QByteArray& contents) {
+            QFile f(path);
+            return f.open(QIODevice::WriteOnly) && f.write(contents) == contents.size();
+        };
+        QStringList extraFiles;
+        const auto refsDirectory = QDir(media).filePath("refs");
+        const auto outside = dir.filePath("outside-refs");
+        if (fault == "filename") {
+            QVERIFY(write(broken, original));
+            const auto unknown = refPath("unknown").chopped(5) + ".future.refs";
+            QVERIFY(write(unknown, original));
+            extraFiles.append(unknown);
+        } else if (fault == "root-symlink") {
+            QVERIFY(write(broken, original));
+            QVERIFY(QDir().rename(refsDirectory, outside));
+            QVERIFY(QFile::link(outside, refsDirectory));
+            if (!QFileInfo(refsDirectory).isSymLink())
+                QSKIP("Fixture requires a native directory symlink.");
+        } else if (fault.startsWith("catalog-")) {
+            QVERIFY(write(broken, original));
+            const int count = fault == "catalog-count" ? 4096 : 5;
+            const auto bytes = fault == "catalog-count"
+                                   ? QByteArray{}
+                                   : original.repeated(4 * 1024 * 1024 / original.size());
+            for (int n = 0; n < count; ++n) {
+                const auto path = refPath(QString("extra-%1").arg(n));
+                QVERIFY(write(path, bytes));
+                extraFiles.append(path);
+            }
+        } else if (fault == "directory")
+            QVERIFY(QDir().mkdir(broken));
+        else if (fault == "symlink") {
+            const auto target = dir.filePath("outside.refs");
+            QVERIFY(write(target, original));
+            QVERIFY(QFile::link(target, broken));
+            if (!QFileInfo(broken).isSymLink())
+                QSKIP("Fixture requires a native filesystem symlink.");
+        } else {
+            const auto damaged = fault == "oversized"
+                                     ? original.repeated(4 * 1024 * 1024 / original.size() + 1)
+                                     : QByteArray("unknown-reference-format\n");
+            QVERIFY(write(broken, damaged));
+        }
+        if (operation == "release")
+            store.releaseSession("a");
+        else if (operation == "retain")
+            store.retainSessions({"b"});
+        else {
+            McpMediaStore tiny(media, 0);
+            tiny.enforceCapacity();
+        }
+        QVERIFY2(QFileInfo::exists(image),
+                 "Unknown ownership must not authorize deleting shared bytes.");
+        QVERIFY2(QFileInfo::exists(refPath("a")),
+                 "Failed preflight must preserve retired references for retry.");
+        QVERIFY(QFileInfo::exists(refPath("b")));
+        if (fault == "root-symlink") {
+            QVERIFY(QFile::remove(refsDirectory));
+            QVERIFY(QDir().rename(outside, refsDirectory));
+        } else if (fault == "directory")
+            QVERIFY(QDir().rmdir(broken));
+        else
+            QVERIFY(QFile::remove(broken));
+        QVERIFY(write(broken, original));
+        for (const auto& path : extraFiles)
+            QVERIFY(QFile::remove(path));
+        store.releaseSession("a");
+        QVERIFY(QFileInfo::exists(image));
+        store.releaseSession("b");
+        QVERIFY(!QFileInfo::exists(image));
     }
 
     void mcpMediaStoreHandlesResourceBlobsReferencedEvictionAndOrphanRefs() {
@@ -901,7 +1148,11 @@ class DaemonProtocolTest final : public QObject {
         QCOMPARE(suffix.size(), 1);
         QCOMPARE(suffix.first().toObject().value("cursor").toInteger(), 2);
         QCOMPARE(suffix.first().toObject().value("event_type").toString(), "second");
-        QVERIFY(reopened.removeCloudEventsThrough("session-1", 3, 1));
+        const QJsonArray sent{reopened.cloudEvent("session-1", 3, 1)};
+        QVERIFY(reopened.prepareCloudEventUpload(sent));
+        QVERIFY(reopened.acknowledgeCloudEventUpload("fixture-scope", "session-1", 3, sent, 1));
+        QCOMPARE(reopened.cloudUploadCursor("fixture-scope", "session-1", 3), 1);
+        QVERIFY(reopened.pruneAcknowledgedCloudEvents());
         QVERIFY(reopened.cloudEvent("session-1", 3, 1).isEmpty());
         QVERIFY(reopened.acknowledgeCursor("cloud-control-v2", "session-1", 3, 0));
         QVERIFY(reopened.acknowledgeCursor("desktop", "session-1", 3, 2));
@@ -1112,6 +1363,325 @@ class DaemonProtocolTest final : public QObject {
         QVERIFY(!QFileInfo::exists(root.filePath(QStringLiteral("app-fresh"))));
     }
 
+    void appendRequiresEveryDurableWrite_data() {
+        QTest::addColumn<QString>("fault");
+        QTest::addColumn<bool>("large");
+        for (bool large : {false, true})
+            for (const auto& fault :
+                 {QString("raw"), QString("replay"), QString("state-insert"),
+                  QString("state-update"), QString("session"), QString("commit"),
+                  QString("revision"), QString("activity-head-insert"),
+                  QString("activity-head-update"), QString("activity-item-insert"),
+                  QString("activity-item-update"), QString("activity-summary-insert"),
+                  QString("activity-summary-update")})
+                QTest::newRow(qPrintable((large ? "large-" : "small-") + fault)) << fault << large;
+        QTest::newRow("large-manifest") << "manifest" << true;
+        QTest::newRow("large-fragment") << "fragment" << true;
+        QTest::newRow("large-fragment-late") << "fragment-late" << true;
+        QTest::newRow("large-raw-late") << "raw-late" << true;
+        QTest::newRow("large-state-chunk") << "state-chunk" << true;
+        for (const auto& mode : {QString("all"), QString("one")}) {
+            for (bool large : {false, true})
+                QTest::newRow(qPrintable(QString("replay-remove-%1-%2").arg(mode).arg(large)))
+                    << "replay-remove-" + mode << large;
+            QTest::newRow(qPrintable("command-remove-" + mode))
+                << "command-remove-" + mode << false;
+            for (const auto& target : {QString("item"), QString("summary")})
+                for (const auto& event : {QString("complete"), QString("error")})
+                    QTest::newRow(qPrintable("settle-" + target + "-" + mode + "-" + event))
+                        << "settle-" + target + "-" + mode + "-" + event << false;
+        }
+    }
+    void appendRequiresEveryDurableWrite() {
+        QFETCH(QString, fault);
+        QFETCH(bool, large);
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(journal.upsertSession({"s", dir.path(), "codex", {}, {}, "ready", 1, 0, 0, {}}));
+        QCOMPARE(journal.appendEvent("s", 1, "user.message", {{"text", "before"}}), 1);
+        if (fault == "revision")
+            QVERIFY(journal.appendEvent("s", 1, "assistant.delta",
+                                        {{"item_id", "probe"}, {"delta", "old"}}) > 1);
+        if (fault.startsWith("activity-"))
+            QVERIFY(journal.appendEvent("s", 1, "item.started",
+                                        {{"item_id", "probe"},
+                                         {"item_type", "mcpToolCall"},
+                                         {"item", QJsonObject{{"id", "probe"},
+                                                              {"type", "mcpToolCall"},
+                                                              {"tool", "read_file"}}}}) > 1);
+        const bool remove =
+            fault.startsWith("replay-remove-") || fault.startsWith("command-remove-");
+        const bool settle = fault.startsWith("settle-");
+        if (remove)
+            for (int n = 0; n < 2; ++n)
+                QVERIFY(journal.appendEvent("s", 1,
+                                            fault.startsWith("command-") ? "command.output_delta"
+                                                                         : "assistant.delta",
+                                            {{"item_id", "probe"}, {"delta", "old"}}) > 1);
+        if (settle)
+            for (int n = 1; n <= 3; ++n)
+                QVERIFY(journal.appendEvent(
+                            "s", 1, "item.started",
+                            {{"item_id", QString("probe-%1").arg(n)},
+                             {"item_type", "mcpToolCall"},
+                             {"item",
+                              QJsonObject{{"id", QString("probe-%1").arg(n)},
+                                          {"type", "mcpToolCall"},
+                                          {"tool", n == 3 ? "search_files" : "read_file"}}}}) > 1);
+        const auto rawBefore = journal.eventsAfter("s", 1, 0);
+        const auto replayBefore = journal.compactedEventsAfter("s", 1, 0, 500).events;
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == path)
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        const auto snapshot = [&] {
+            QVariantMap result;
+            for (const auto& table : {"events", "replay_events", "replay_projection_state",
+                                      "large_event_payloads", "large_event_payload_chunks",
+                                      "activity_heads", "activity_items", "activity_summaries"}) {
+                QSqlQuery q(db);
+                if (!q.exec(QString("SELECT count(*) FROM %1").arg(table)) || !q.next()) {
+                    QTest::qFail(qPrintable(q.lastError().text()), __FILE__, __LINE__);
+                    return QVariantMap{};
+                }
+                result.insert(table, q.value(0));
+            }
+            for (const auto& table : {"replay_projection_state", "activity_heads", "activity_items",
+                                      "activity_summaries"}) {
+                QSqlQuery rows(db);
+                if (!rows.exec(QString("SELECT * FROM %1 ORDER BY 1,2,3").arg(table))) {
+                    QTest::qFail(qPrintable(rows.lastError().text()), __FILE__, __LINE__);
+                    return QVariantMap{};
+                }
+                QVariantList values;
+                while (rows.next())
+                    for (int i = 0; i < rows.record().count(); ++i)
+                        values.append(rows.value(i));
+                result.insert(QString(table) + "-values", values);
+            }
+            QSqlQuery q(db);
+            if (!q.exec("SELECT last_cursor,current_turn_sequence FROM sessions WHERE id='s'") ||
+                !q.next()) {
+                QTest::qFail(qPrintable(q.lastError().text()), __FILE__, __LINE__);
+                return QVariantMap{};
+            }
+            result.insert("cursor", q.value(0));
+            result.insert("turn", q.value(1));
+            return result;
+        };
+        const auto before = snapshot();
+        QSqlQuery q(db);
+        if (fault == "commit") {
+            QVERIFY(q.exec("CREATE TABLE append_parent(id INTEGER PRIMARY KEY)"));
+            QVERIFY(q.exec("CREATE TABLE append_child(id INTEGER REFERENCES append_parent(id) "
+                           "DEFERRABLE INITIALLY DEFERRED)"));
+            QVERIFY(q.exec("CREATE TRIGGER fail_append AFTER UPDATE ON sessions "
+                           "WHEN NEW.last_cursor>OLD.last_cursor BEGIN INSERT INTO append_child "
+                           "VALUES(1); END"));
+        } else {
+            QString action = "INSERT";
+            QString condition;
+            QString table = fault.startsWith("raw")        ? "events"
+                            : fault == "replay"            ? "replay_events"
+                            : fault == "session"           ? "sessions"
+                            : fault == "manifest"          ? "large_event_payloads"
+                            : fault.startsWith("fragment") ? "large_event_payload_chunks"
+                                                           : "replay_projection_state";
+            if (fault.startsWith("activity-head"))
+                table = "activity_heads";
+            if (fault.startsWith("activity-item"))
+                table = "activity_items";
+            if (fault.startsWith("activity-summary"))
+                table = "activity_summaries";
+            if (fault == "session" || fault.endsWith("update") || fault == "revision")
+                action = "UPDATE";
+            if (fault == "revision")
+                condition = "WHEN NEW.revision > OLD.revision";
+            if (fault == "fragment-late")
+                condition = "WHEN NEW.chunk_offset > 0";
+            if (fault == "raw-late")
+                condition = "WHEN NEW.cursor > 2";
+            if (fault == "state-chunk")
+                condition = "WHEN NEW.last_cursor = 3";
+            if (remove) {
+                table = "replay_events";
+                action = "DELETE";
+                if (fault.endsWith("one"))
+                    condition = "WHEN OLD.cursor=3";
+            }
+            if (settle) {
+                table = fault.startsWith("settle-item-") ? "activity_items" : "activity_summaries";
+                action = "UPDATE";
+                if (fault.contains("-one-"))
+                    condition = table == "activity_items" ? "WHEN OLD.item_id='probe-2'"
+                                                          : "WHEN OLD.family='search'";
+            }
+            QVERIFY(q.exec(QString("CREATE TRIGGER fail_append BEFORE %1 ON %2 %3 "
+                                   "BEGIN SELECT RAISE(IGNORE); END")
+                               .arg(action, table, condition)));
+        }
+        const bool item = large || remove || fault == "revision" || fault.startsWith("activity-");
+        const QString type = settle ? (fault.endsWith("error") ? "runtime.error" : "turn.completed")
+                             : item ? "item.completed"
+                                    : "assistant.delta";
+        const QString itemType = fault.startsWith("activity-") ? "mcpToolCall" : "agentMessage";
+        QJsonObject payload =
+            item ? QJsonObject{{"item_id", "probe"},
+                               {"item_type", itemType},
+                               {"item",
+                                QJsonObject{
+                                    {"id", "probe"},
+                                    {"type", itemType},
+                                    {"tool", "read_file"},
+                                    {"text",
+                                     QString(large ? 2 * protocol::maximumEventPayloadBytes : 32,
+                                             'x')}}}}
+                 : QJsonObject{{"item_id", "probe"}, {"delta", "after"}};
+        if (fault.startsWith("command-remove-"))
+            payload = {{"item_id", "probe"},
+                       {"item_type", "commandExecution"},
+                       {"item", QJsonObject{{"id", "probe"},
+                                            {"type", "commandExecution"},
+                                            {"aggregatedOutput", "done"}}}};
+        if (settle)
+            payload = {{"status", "completed"}};
+        QString error;
+        QCOMPARE(journal.appendEvent("s", 1, type, payload, &error), -1);
+        QVERIFY(!error.isEmpty());
+        QVERIFY2(q.exec("BEGIN"), qPrintable(q.lastError().text()));
+        QVERIFY(q.exec("ROLLBACK"));
+        QCOMPARE(snapshot(), before);
+        QCOMPARE(journal.eventsAfter("s", 1, 0), rawBefore);
+        QCOMPARE(journal.compactedEventsAfter("s", 1, 0, 500).events, replayBefore);
+        QVERIFY(q.exec("DROP TRIGGER fail_append"));
+        const auto accepted = journal.appendEvent("s", 1, type, payload, &error);
+        QVERIFY2(accepted > 1, qPrintable(error));
+        QCOMPARE(journal.sessionHead("s").cursor, accepted);
+        LocalJournal reopened(path);
+        QVERIFY(reopened.isOpen());
+        QCOMPARE(reopened.sessionHead("s").cursor, accepted);
+        QCOMPARE(reopened.eventsAfter("s", 1, 0), journal.eventsAfter("s", 1, 0));
+        QCOMPARE(reopened.compactedEventsAfter("s", 1, 0, 500).events,
+                 journal.compactedEventsAfter("s", 1, 0, 500).events);
+    }
+
+    void appendPreservesUnsupportedCounters_data() {
+        QTest::addColumn<QString>("cursorSql");
+        QTest::addColumn<QString>("turnSql");
+        QTest::addColumn<bool>("large");
+        QTest::addColumn<bool>("userMessage");
+        QTest::addColumn<bool>("accepted");
+        for (bool large : {false, true}) {
+            for (const auto& value :
+                 {QString("-1"), QString("1.5"), QString("'unknown'"), QString("X'01'")}) {
+                QTest::newRow(qPrintable(QString("cursor-%1-%2").arg(large).arg(value)))
+                    << value << QString("1") << large << false << false;
+                QTest::newRow(qPrintable(QString("turn-%1-%2").arg(large).arg(value)))
+                    << QString("1") << value << large << false << false;
+            }
+        }
+        const auto maximum = QString::number(std::numeric_limits<qint64>::max());
+        QTest::newRow("cursor-exhausted") << maximum << QString("1") << false << false << false;
+        QTest::newRow("turn-exhausted") << QString("1") << maximum << false << true << false;
+        QTest::newRow("large-cursor-overflow")
+            << QString::number(std::numeric_limits<qint64>::max() - 2) << QString("1") << true
+            << false << false;
+        QTest::newRow("cursor-last-slot") << QString::number(std::numeric_limits<qint64>::max() - 1)
+                                          << QString("1") << false << false << true;
+        QTest::newRow("turn-last-slot")
+            << QString("1") << QString::number(std::numeric_limits<qint64>::max() - 1) << false
+            << true << true;
+        QTest::newRow("maximum-turn-no-increment")
+            << QString("1") << maximum << false << false << true;
+        QTest::newRow("large-last-slots")
+            << QString("large-fit") << QString("1") << true << false << true;
+    }
+    void appendPreservesUnsupportedCounters() {
+        QFETCH(QString, cursorSql);
+        QFETCH(QString, turnSql);
+        QFETCH(bool, large);
+        QFETCH(bool, userMessage);
+        QFETCH(bool, accepted);
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(journal.upsertSession({"s", dir.path(), "codex", {}, {}, "ready", 1, 0, 0, {}}));
+        QCOMPARE(journal.appendEvent("s", 1, "user.message", {{"text", "seed"}}), 1);
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == path)
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        const QJsonObject payload =
+            large
+                ? QJsonObject{{"item_id", "probe"},
+                              {"item_type", "agentMessage"},
+                              {"item",
+                               QJsonObject{
+                                   {"id", "probe"},
+                                   {"type", "agentMessage"},
+                                   {"text", QString(2 * protocol::maximumEventPayloadBytes, 'x')}}}}
+                : QJsonObject{{"text", "new"}, {"delta", "new"}};
+        const qint64 chunks =
+            (QJsonDocument(payload).toJson(QJsonDocument::Compact).size() + 96 * 1024 - 1) /
+            (96 * 1024);
+        if (cursorSql == "large-fit")
+            cursorSql = QString::number(std::numeric_limits<qint64>::max() - chunks - 1);
+        QSqlQuery q(db);
+        QVERIFY(q.exec(
+            QString("UPDATE sessions SET last_cursor=%1,current_turn_sequence=%2 WHERE id='s'")
+                .arg(cursorSql, turnSql)));
+        const auto snapshot = [&] {
+            QStringList values;
+            QSqlQuery query(db);
+            for (const auto& table : {"events", "replay_events", "large_event_payloads",
+                                      "large_event_payload_chunks", "activity_items"}) {
+                if (!query.exec(QString("SELECT count(*) FROM %1").arg(table)) || !query.next())
+                    return QStringList{};
+                values.append(query.value(0).toString());
+            }
+            if (!query.exec("SELECT quote(last_cursor),quote(current_turn_sequence) FROM sessions "
+                            "WHERE id='s'") ||
+                !query.next())
+                return QStringList{};
+            values.append(query.value(0).toString());
+            values.append(query.value(1).toString());
+            return values;
+        };
+        const auto before = snapshot();
+        QCOMPARE(before.size(), 7);
+        QString error;
+        const auto result = journal.appendEvent("s", 1,
+                                                large         ? "item.completed"
+                                                : userMessage ? "user.message"
+                                                              : "assistant.delta",
+                                                payload, &error);
+        if (!accepted) {
+            QCOMPARE(result, qint64(-1));
+            QVERIFY(!error.isEmpty());
+            QCOMPARE(snapshot(), before);
+        } else {
+            QCOMPARE(result, cursorSql.toLongLong() + (large ? chunks + 1 : 1));
+            QVERIFY(q.exec("SELECT current_turn_sequence FROM sessions WHERE id='s'"));
+            QVERIFY(q.next());
+            QCOMPARE(q.value(0).toLongLong(), turnSql.toLongLong() + (userMessage ? 1 : 0));
+        }
+        QVERIFY2(q.exec("BEGIN"), qPrintable(q.lastError().text()));
+        QVERIFY(q.exec("ROLLBACK"));
+        // Repair this temporary fixture; retry must not inherit an open transaction.
+        QVERIFY(
+            q.exec("UPDATE sessions SET last_cursor=1000,current_turn_sequence=1 WHERE id='s'"));
+        QCOMPARE(journal.appendEvent("s", 1, "assistant.delta", {{"delta", "retry"}}, &error),
+                 qint64(1001));
+        LocalJournal reopened(path);
+        QVERIFY2(reopened.isOpen(), qPrintable(reopened.errorString()));
+        QCOMPARE(reopened.sessionHead("s").cursor, qint64(1001));
+    }
+
     void journalRejectsOversizedPayloadBeforePersistence() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
@@ -1268,6 +1838,99 @@ class DaemonProtocolTest final : public QObject {
         next.generation = 2;
         QVERIFY(journal.upsertSession(next));
         QCOMPARE(journal.sessions().constFirst().lastCursor, 0);
+    }
+
+    void startupCommitFailurePreservesErrorAndReleasesTransaction_data() {
+        QTest::addColumn<QString>("phase");
+        for (const auto& phase : {"turn", "replay", "activity"})
+            QTest::newRow(phase) << QString(phase);
+    }
+    void startupCommitFailurePreservesErrorAndReleasesTransaction() {
+        QFETCH(QString, phase);
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        const auto snapshot = [](QSqlDatabase db) {
+            QVariantMap result;
+            for (const auto& table :
+                 {"sessions", "events", "replay_events", "replay_projection_state",
+                  "activity_heads", "activity_items", "activity_summaries", "startup_child"}) {
+                QSqlQuery q(db);
+                if (!q.exec(QString("SELECT * FROM %1 ORDER BY 1,2,3").arg(table))) {
+                    QTest::qFail(qPrintable(q.lastError().text()), __FILE__, __LINE__);
+                    return QVariantMap{};
+                }
+                QVariantList values;
+                while (q.next())
+                    for (int n = 0; n < q.record().count(); ++n)
+                        values.append(q.value(n));
+                result.insert(table, values);
+            }
+            return result;
+        };
+        QVariantMap before;
+        {
+            LocalJournal seed(path);
+            QVERIFY(seed.isOpen());
+            QVERIFY(seed.upsertSession({"s", dir.path(), "codex", {}, {}, "ready"}));
+            QCOMPARE(seed.appendEvent("s", 1, "user.message", {{"text", "seed"}}), qint64(1));
+            QCOMPARE(seed.appendEvent("s", 1, "item.started",
+                                      {{"item", QJsonObject{{"id", "probe"},
+                                                            {"type", "mcpToolCall"},
+                                                            {"tool", "read_file"}}}}),
+                     qint64(2));
+            QSqlDatabase db;
+            for (const auto& name : QSqlDatabase::connectionNames())
+                if (name.startsWith("ketplus-daemon-") &&
+                    QSqlDatabase::database(name).databaseName() == path)
+                    db = QSqlDatabase::database(name);
+            QVERIFY(db.isOpen());
+            QSqlQuery q(db);
+            QVERIFY(q.exec("CREATE TABLE startup_parent(id INTEGER PRIMARY KEY)"));
+            QVERIFY(q.exec("CREATE TABLE startup_child(id INTEGER REFERENCES startup_parent(id) "
+                           "DEFERRABLE INITIALLY DEFERRED, marker INTEGER, value INTEGER)"));
+            QVERIFY(q.exec("UPDATE sessions SET title='fixture'"));
+            QString mutation;
+            if (phase == "turn") {
+                QVERIFY(q.exec("UPDATE sessions SET current_turn_sequence=0"));
+                QVERIFY(q.exec("UPDATE events SET turn_sequence=0"));
+                mutation = "AFTER UPDATE ON sessions WHEN "
+                           "NEW.current_turn_sequence>OLD.current_turn_sequence";
+            } else if (phase == "replay") {
+                QVERIFY(q.exec("DELETE FROM replay_events"));
+                QVERIFY(q.exec("DELETE FROM replay_projection_state"));
+                mutation = "AFTER INSERT ON replay_projection_state";
+            } else {
+                QVERIFY(q.exec("DELETE FROM activity_heads"));
+                QVERIFY(q.exec("DELETE FROM activity_items"));
+                QVERIFY(q.exec("DELETE FROM activity_summaries"));
+                mutation = "AFTER INSERT ON activity_heads";
+            }
+            QVERIFY(q.exec(QString("CREATE TRIGGER fail_startup %1 BEGIN INSERT INTO startup_child "
+                                   "VALUES(1,0,0); END")
+                               .arg(mutation)));
+            before = snapshot(db);
+        }
+        LocalJournal failed(path);
+        QVERIFY2(!failed.isOpen(), "Failed startup must never advertise an initialized journal.");
+        QVERIFY2(failed.errorString().contains("FOREIGN KEY", Qt::CaseInsensitive),
+                 qPrintable(failed.errorString()));
+        const auto connection = QString("startup-repair-%1").arg(phase);
+        const auto remove = qScopeGuard([&] { QSqlDatabase::removeDatabase(connection); });
+        auto repair = QSqlDatabase::addDatabase("QSQLITE", connection);
+        repair.setConnectOptions("QSQLITE_BUSY_TIMEOUT=30");
+        repair.setDatabaseName(path);
+        QVERIFY(repair.open());
+        QSqlQuery q(repair);
+        // Keep the failed object alive: startup must release its write transaction itself.
+        QVERIFY2(q.exec("BEGIN IMMEDIATE"), qPrintable(q.lastError().text()));
+        QVERIFY(q.exec("ROLLBACK"));
+        QCOMPARE(snapshot(repair), before);
+        QVERIFY(q.exec("DROP TRIGGER fail_startup"));
+        LocalJournal reopened(path);
+        QVERIFY2(reopened.isOpen(), qPrintable(reopened.errorString()));
+        QCOMPARE(reopened.sessionHead("s").cursor, qint64(2));
+        QCOMPARE(reopened.eventsAfter("s", 1, 0).size(), 2);
+        QCOMPARE(reopened.compactedEventsAfter("s", 1, 0, 10).events.size(), 2);
     }
 
     void backfillNeverRenumbersPrunedSessions() {
