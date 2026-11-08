@@ -582,6 +582,11 @@ and `sign_in_error` when it failed; `remote.sign_in.cancel` and sign-out stop it
 
 ## Lifecycle
 
+Cursor model discovery reads both channels incrementally with a shared 1-MiB
+budget (ADR 0088). It retains stdout only, kills excess output, and parses only
+successful normal exits. The existing fallback catalog settles failed/timed-out
+requests and the 60-second cache/coalescing behavior remains unchanged.
+
 Provider version probes retain at most 4 KiB of merged output, kill excess output
 and accept banners only after successful normal exit (ADR 0072). Failed probes
 remain Unknown under the existing launch policy and are retried. Only matching

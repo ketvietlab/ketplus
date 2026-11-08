@@ -22,6 +22,7 @@
 #include <QUuid>
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 #if defined(Q_OS_WIN)
@@ -34,6 +35,7 @@ namespace {
 constexpr qsizetype maximumProviderMessageBytes = 16 * 1024 * 1024;
 constexpr qsizetype maximumStderrBytes = 1024 * 1024;
 constexpr qsizetype maximumImageBytes = 4 * 1024 * 1024;
+constexpr qsizetype maximumCatalogOutputBytes = 1024 * 1024;
 
 QString errorText(const QJsonObject& error) {
     const QString message = error.value(QStringLiteral("message")).toString();
@@ -1164,38 +1166,74 @@ void CursorAdapter::startCatalogProcess() {
         finishCatalog(modelCatalog());
         return;
     }
-    catalogProcess_ = new QProcess(this);
-    catalogProcess_->setProcessChannelMode(QProcess::SeparateChannels);
-    configureHiddenProcess(catalogProcess_);
+    QProcess* process = new QProcess(this);
+    catalogProcess_ = process;
+    process->setProcessChannelMode(QProcess::SeparateChannels);
+    configureHiddenProcess(process);
     QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
     environment.insert(QStringLiteral("NO_COLOR"), QStringLiteral("1"));
     environment.insert(QStringLiteral("TERM"), QStringLiteral("dumb"));
-    catalogProcess_->setProcessEnvironment(environment);
+    process->setProcessEnvironment(environment);
     const ProcessInvocation invocation = listModelsInvocation(executable_);
-    catalogProcess_->setProgram(invocation.program);
-    catalogProcess_->setArguments(invocation.arguments);
-    connect(catalogProcess_, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
-            [this](const int, const QProcess::ExitStatus) {
-                catalogTimer_->stop();
-                QJsonArray models;
-                if (catalogProcess_ != nullptr)
-                    models =
-                        parseModelList(QString::fromUtf8(catalogProcess_->readAllStandardOutput()));
-                if (catalogProcess_ != nullptr)
-                    catalogProcess_->deleteLater();
-                catalogProcess_ = nullptr;
-                finishCatalog(models.isEmpty() ? modelCatalog() : models);
-            });
-    connect(catalogProcess_, &QProcess::errorOccurred, this, [this](const QProcess::ProcessError) {
-        if (catalogProcess_ == nullptr || catalogProcess_->state() != QProcess::NotRunning)
+    process->setProgram(invocation.program);
+    process->setArguments(invocation.arguments);
+    connect(process, &QProcess::started, process, &QProcess::closeWriteChannel);
+    struct Output final {
+        QByteArray stdoutBytes;
+        qsizetype totalBytes{0};
+        bool rejected{false};
+    };
+    const auto output = std::make_shared<Output>();
+    const auto readOutput = [this, process, output](QProcess::ProcessChannel channel) {
+        if (catalogProcess_ != process || output->rejected)
             return;
+        process->setReadChannel(channel);
+        while (process->bytesAvailable() > 0) {
+            const qsizetype remaining = maximumCatalogOutputBytes - output->totalBytes;
+            const QByteArray chunk = process->read(qMin<qsizetype>(64 * 1024, remaining + 1));
+            if (chunk.isEmpty())
+                break;
+            if (chunk.size() > remaining) {
+                output->rejected = true;
+                output->stdoutBytes.clear();
+                process->closeReadChannel(QProcess::StandardOutput);
+                process->closeReadChannel(QProcess::StandardError);
+                process->kill();
+                return;
+            }
+            output->totalBytes += chunk.size();
+            if (channel == QProcess::StandardOutput)
+                output->stdoutBytes.append(chunk);
+        }
+    };
+    const auto complete = [this, process, output](bool successful) {
+        if (catalogProcess_ != process)
+            return;
+        const QJsonArray models = successful && !output->rejected
+                                      ? parseModelList(QString::fromUtf8(output->stdoutBytes))
+                                      : QJsonArray{};
         catalogTimer_->stop();
-        catalogProcess_->deleteLater();
+        process->disconnect(this);
+        process->deleteLater();
         catalogProcess_ = nullptr;
-        finishCatalog(modelCatalog());
+        finishCatalog(models.isEmpty() ? modelCatalog() : models);
+    };
+    connect(process, &QProcess::readyReadStandardOutput, this,
+            [readOutput] { readOutput(QProcess::StandardOutput); });
+    connect(process, &QProcess::readyReadStandardError, this,
+            [readOutput] { readOutput(QProcess::StandardError); });
+    connect(process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
+            [readOutput, complete](int exitCode, QProcess::ExitStatus status) {
+                readOutput(QProcess::StandardOutput);
+                readOutput(QProcess::StandardError);
+                complete(status == QProcess::NormalExit && exitCode == 0);
+            });
+    connect(process, &QProcess::errorOccurred, this, [complete](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart)
+            complete(false);
     });
     catalogTimer_->start(15 * 1000);
-    catalogProcess_->start();
+    process->start();
 }
 
 void CursorAdapter::finishCatalog(const QJsonArray& models) {
