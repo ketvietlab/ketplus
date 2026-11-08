@@ -405,6 +405,59 @@ void AgentWorkspaceViewTest::worktreeHeaderKeepsLabelVisible() {
     }
 }
 
+void AgentWorkspaceViewTest::permissionMenuFitsSmallZoomedWorkspace() {
+    // Wrapped mode descriptions make the menu taller than a short, zoomed workspace.
+    ket::Appearance::instance().setZoom(1.5);
+    const auto restoreZoom = qScopeGuard([] { ket::Appearance::instance().setZoom(1.0); });
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette(), 21);
+    view.setAgentAvailable(true);
+    view.setModels({QVariantMap{{"provider", "codex"},
+                                {"model", "astra"},
+                                {"displayName", "Astra"},
+                                {"defaultReasoningEffort", "medium"},
+                                {"permissions", ketplus::CodexAppServer::permissionProfiles()},
+                                {"defaultPermission", "workspace-write"}}});
+    view.resize(420, 420);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
+    auto* root = view.quickView()->rootObject();
+    QVERIFY(root);
+    auto* button = root->findChild<QQuickItem*>("permissionButton");
+    auto* menu = root->findChild<QObject*>("permissionMenu");
+    QVERIFY(button && menu);
+    QVERIFY(QMetaObject::invokeMethod(button, "clicked"));
+    QTRY_VERIFY(menu->property("opened").toBool());
+    auto* scroll = qvariant_cast<QQuickItem*>(menu->property("contentItem"));
+    QVERIFY(scroll);
+    QTRY_VERIFY(scroll->height() > 0 && scroll->property("contentHeight").toDouble() > 0);
+    // This size overflows, so the menu must scroll rather than grow past the window.
+    QVERIFY(scroll->property("contentHeight").toDouble() > scroll->height());
+    const auto top = scroll->mapToItem(root, QPointF(0, 0)).y();
+    QVERIFY2(top >= 0, qPrintable(QStringLiteral("Mode menu starts at y = %1").arg(top)));
+    QVERIFY(top + scroll->height() <= root->height());
+    const auto profiles = root->property("permissionProfiles").toList();
+    QVERIFY(profiles.size() >= 3);
+    const auto maximum = qMax(0.0, scroll->property("contentHeight").toDouble() - scroll->height());
+    for (const auto& profile : profiles) {
+        auto* option = findVisualItem(scroll, QStringLiteral("permissionOption_") +
+                                                  profile.toMap().value("id").toString());
+        QVERIFY(option);
+        // Every mode can be scrolled fully into view.
+        const auto y =
+            option->mapToItem(scroll, QPointF(0, 0)).y() + scroll->property("contentY").toDouble();
+        scroll->setProperty("contentY",
+                            qBound(0.0, y + option->height() - scroll->height(), maximum));
+        const auto shown = option->mapToItem(scroll, QPointF(0, 0)).y();
+        QVERIFY2(shown >= -1.0 && shown + option->height() <= scroll->height() + 1.0,
+                 qPrintable(QStringLiteral("option at %1, height %2, viewport %3, content %4")
+                                .arg(shown)
+                                .arg(option->height())
+                                .arg(scroll->height())
+                                .arg(scroll->property("contentHeight").toDouble())));
+    }
+}
+
 void AgentWorkspaceViewTest::composerPreview() {
     auto& appearance = ket::Appearance::instance();
     const auto previousMode = appearance.mode();
