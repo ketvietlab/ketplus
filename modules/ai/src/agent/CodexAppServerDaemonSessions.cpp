@@ -400,6 +400,21 @@ void CodexAppServer::daemonCall(const QString& method, const QJsonObject& params
                       std::move(callback));
         return;
     }
+    if (method == "agentMessages/read" || method == "agentMessages/release") {
+        const QString sessionId = params.value("threadId").toString();
+        const auto found = daemonSessions_.constFind(sessionId);
+        const QString operation = method.endsWith("/release")
+                                      ? QStringLiteral("session.agent_messages.release")
+                                      : QStringLiteral("session.agent_messages.read");
+        if (found == daemonSessions_.cend() || !daemon_->hasCapability(operation)) {
+            callback({},
+                     QStringLiteral("Update the daemon to receive held messages from Desktop."));
+            return;
+        }
+        daemon_->call(operation, {{"message_ids", params.value("messageIds")}}, sessionId,
+                      found->generation, std::move(callback));
+        return;
+    }
     if (method == QStringLiteral("task/stop") || method == QStringLiteral("task/output")) {
         const QString sessionId = params.value(QStringLiteral("threadId")).toString();
         auto found = daemonSessions_.find(sessionId);

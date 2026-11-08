@@ -397,6 +397,39 @@ QVariantList AgentSessionManager::backgroundTasks(const QString& worktreePath) c
     return found == sessions_.cend() ? QVariantList{} : (*found)->backgroundTasks;
 }
 
+void AgentSessionManager::heldMessageAction(const QString& worktreePath, const QString& messageId,
+                                            bool release) {
+    const QString path = normalizedPath(worktreePath);
+    const SessionPtr session = sessions_.value(path);
+    if (!session || session->threadId.isEmpty() || !server_->usesDaemon()) {
+        emit heldMessageResult(path, session ? session->threadId : QString{}, messageId,
+                               {{"error", "Held-message delivery needs a daemon conversation."}});
+        return;
+    }
+    const QString conversation = session->threadId;
+    server_->call(
+        release ? QStringLiteral("agentMessages/release") : QStringLiteral("agentMessages/read"),
+        {{"threadId", conversation}, {"messageIds", QJsonArray{messageId}}},
+        [this, path, conversation, messageId](const QJsonObject& result,
+                                              const QString& transportError) {
+            // A delayed reply cannot update a different conversation selected in this workspace.
+            const auto current = sessions_.value(path);
+            if (!current || current->threadId != conversation)
+                return;
+            const QString error = !transportError.isEmpty() ? transportError
+                                  : result.value("ok").toBool()
+                                      ? QString{}
+                                      : result.value("error_message").toString();
+            const auto messages = result.value("messages").toArray();
+            emit heldMessageResult(
+                path, conversation, messageId,
+                error.isEmpty() && !messages.isEmpty()
+                    ? messages.first().toObject().toVariantMap()
+                    : QVariantMap{
+                          {"error", error.isEmpty() ? "Message status is unavailable." : error}});
+        });
+}
+
 void AgentSessionManager::stopBackgroundTask(const QString& worktreePath, const QString& taskId) {
     callBackgroundTask(worktreePath, taskId, QStringLiteral("stop"));
 }

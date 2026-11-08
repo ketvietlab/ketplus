@@ -341,8 +341,8 @@ QList<AgentMessageRecord> LocalJournal::overdueAgentRequests(const QDateTime& wh
 QStringList LocalJournal::sessionsWithQueuedAgentMessages() const {
     QStringList sessions;
     QSqlQuery query(database_);
-    if (!query.exec(QStringLiteral(
-            "SELECT DISTINCT to_session FROM agent_messages WHERE state = 'queued'")))
+    if (!query.exec(QStringLiteral("SELECT DISTINCT to_session FROM agent_messages WHERE state IN "
+                                   "('queued', 'releasing')")))
         return sessions;
     while (query.next())
         sessions.append(query.value(0).toString());

@@ -459,8 +459,16 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& request, const QString
     const QString type = request.value(QStringLiteral("message_type")).toString();
     const QString messageId = request.value(QStringLiteral("message_id")).toString();
     // Local administration only, checked before the command-result cache.
+    if (type.startsWith("session.agent_messages.") && !localClient(clientId))
+        return error("forbidden", "Held-message authorization requires the local Desktop UI.");
     if (type.startsWith("storage.") && clientId == "cloud-control-v2")
         return error("forbidden", "Storage settings require local administration.");
+    if (type.startsWith("session.agent_messages.")) {
+        Session* session = nullptr;
+        const auto failure = checkedSession(request, &session);
+        if (!failure.isEmpty())
+            return failure;
+    }
     if (isMutating(type)) {
         const QJsonObject cached = journal_->commandResult(messageId);
         if (!cached.isEmpty()) {
@@ -531,6 +539,9 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& request, const QString
         result = sessionWorktrees(request);
     } else if (type == QStringLiteral("session.worktree.switch")) {
         result = switchWorktree(request);
+    } else if (type == QStringLiteral("session.agent_messages.read") ||
+               type == QStringLiteral("session.agent_messages.release")) {
+        result = heldAgentMessages(request, type.endsWith(".release"));
     } else if (type == QStringLiteral("session.start_turn")) {
         result = startTurn(request, localClient(clientId));
     } else if (type == QStringLiteral("session.rename")) {
@@ -2466,7 +2477,8 @@ SessionHost::Session* SessionHost::sessionForThread(const QString& threadId) {
 }
 
 bool SessionHost::isMutating(const QString& messageType) {
-    return messageType == QStringLiteral("storage.size.apply") ||
+    return messageType == QStringLiteral("session.agent_messages.release") ||
+           messageType == QStringLiteral("storage.size.apply") ||
            messageType == QStringLiteral("storage.retention.apply") ||
            messageType == QStringLiteral("session.worktree.switch") ||
            messageType == QStringLiteral("session.start_turn") ||

@@ -2,6 +2,7 @@
 #include "agent/AgentSessionManager.h"
 #include "agent/CodexAppServer.h"
 #include "agent/CodexRateLimits.h"
+#include "agent/DaemonTranscriptProjection.h"
 #include "agent/ProviderRuntimeStatus.h"
 #include "service/DaemonService.h"
 #include "storage/LocalJournal.h"
@@ -247,6 +248,38 @@ class DesktopDaemonClientTest final : public QObject {
         reopened.answerQuestion(worktree, question.value("messageKey").toString(),
                                 {{"scope", "Another answer"}});
         QCOMPARE(replayErrors.size(), 1);
+
+        // The live notice channel preserves the same typed action as history.
+        // This synthetic event must not authorize or deliver any real message.
+        const QJsonObject held{{"message_id", "live-held"},
+                               {"state", "held"},
+                               {"reason", "hop_limit"},
+                               {"direction", "incoming"},
+                               {"peer_number", "1093"}};
+        const auto presentation = agent_message::agentMessageNotice(held, "live-held-notice");
+        LocalJournal journal(state);
+        QVERIFY(journal.isOpen());
+        QVERIFY(!journal.sessions().isEmpty());
+        reopened.appServer()->notificationReceived(
+            "daemon/providerNotice", {{"threadId", journal.sessions().first().id},
+                                      {"itemId", "live-held-notice"},
+                                      {"presentation", QJsonObject::fromVariantMap(presentation)}});
+        const auto hasHeldAction = [&] {
+            for (const auto& value : reopened.messages(worktree)) {
+                const auto row = value.toMap();
+                if (row.value("subtype") == "heldAgentMessage" &&
+                    row.value("sanitizedPayload").toMap().value("messageId") == "live-held")
+                    return true;
+            }
+            return false;
+        };
+        QTRY_VERIFY(hasHeldAction());
+        QSignalSpy heldStatus(&reopened, &AgentSessionManager::heldMessageResult);
+        reopened.heldMessageAction(worktree, "live-held", false);
+        QTRY_COMPARE(heldStatus.size(), 1);
+        QCOMPARE(heldStatus.first().at(2).toString(), QString("live-held"));
+        QVERIFY(heldStatus.first().at(3).toMap().value("error").toString().contains(
+            "does not belong")); // synthetic IDs never become an authorization
 
         const auto deletedId = desktop.activeConversationId(worktree);
         QSignalSpy deletion(&desktop, &AgentSessionManager::conversationDeletionFinished);
@@ -530,6 +563,8 @@ class DesktopDaemonClientTest final : public QObject {
         QVERIFY(client.hasFeature(QStringLiteral("provider.runtime_status")));
         QVERIFY(client.hasFeature(QStringLiteral("session.fork")));
         QVERIFY(!client.hasFeature(QStringLiteral("not.a.feature")));
+        QVERIFY(client.hasCapability(QStringLiteral("session.agent_messages.read")));
+        QVERIFY(client.hasCapability(QStringLiteral("session.agent_messages.release")));
         QVERIFY(client.hasCapability(QStringLiteral("storage.retention.read")));
         QVERIFY(client.hasCapability(QStringLiteral("storage.retention.apply")));
 

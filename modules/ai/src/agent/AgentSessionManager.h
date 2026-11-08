@@ -56,6 +56,7 @@ class AgentSessionManager final : public QObject {
     [[nodiscard]] QVariantMap conversationConfiguration(const QString& worktreePath) const;
     [[nodiscard]] QVariantMap usageSnapshot(const QString& worktreePath) const;
     [[nodiscard]] QVariantList backgroundTasks(const QString& worktreePath) const;
+    void heldMessageAction(const QString& worktreePath, const QString& messageId, bool release);
     void stopBackgroundTask(const QString& worktreePath, const QString& taskId);
     void readBackgroundTaskOutput(const QString& worktreePath, const QString& taskId);
 
@@ -158,6 +159,8 @@ class AgentSessionManager final : public QObject {
     void usageSnapshotChanged(const QString& worktreePath, const QVariantMap& snapshot);
     void backgroundTasksChanged(const QString& worktreePath, const QVariantList& tasks);
     // result: {output,total_bytes,truncated}, or {error} when the task cannot be read or stopped.
+    void heldMessageResult(const QString& worktreePath, const QString& conversationId,
+                           const QString& messageId, const QVariantMap& result);
     void backgroundTaskResult(const QString& worktreePath, const QString& taskId,
                               const QString& action, const QVariantMap& result);
     void activityChanged();

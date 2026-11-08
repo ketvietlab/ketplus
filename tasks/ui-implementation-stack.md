@@ -33,8 +33,9 @@ The native references are `mockups/qt` and `mockups/terminal` (ADR 0033–34).
   #161 activity; #162 journal-derived notices.
 - [x] Phase 5: #163 question/approval/task/scope/running/error cards using the
   existing runtime and preserving real IDs, drafts and actions.
-- [ ] Phase 5: #163 Atlas-result transcript receipt and held-message release
-  action remain incomplete. Required runtime contracts are listed below.
+- [x] Phase 5: #163 / #130 held-message release — local authenticated operation,
+  durable batch authorization/claim recovery and the explicit transcript action.
+- [ ] Phase 5: #163 attributed Atlas-result transcript receipt remains incomplete.
 - [x] Phase 5: #164 overlays; #165 Worktrees/Connections available-runtime UI;
   #166 Settings available-runtime controls; #167 Atlas chrome/composition.
 - [ ] Phase 6: conversation Plan/harness — explicitly excluded, not started.
@@ -68,9 +69,10 @@ The base/head/draft chain below was checked against GitHub after #232 was pushed
 | [229](https://github.com/ketvietlab/ketplus/pull/229) | Atlas workspace | `feat/ui-stack-pro-atlas` | `feat/ui-stack-pro-settings` |
 | [231](https://github.com/ketvietlab/ketplus/pull/231) | Shared font / theme cleanup | `feat/ui-stack-foundation-cleanup` | `feat/ui-stack-pro-atlas` |
 | [232](https://github.com/ketvietlab/ketplus/pull/232) | Application icons | `feat/ui-stack-brand-assets` | `feat/ui-stack-foundation-cleanup` |
-| This layer | Provider operation aliases / final checklist | `feat/ui-stack-completion-ledger` | `feat/ui-stack-brand-assets` |
+| [233](https://github.com/ketvietlab/ketplus/pull/233) | Provider operation aliases / checklist | `feat/ui-stack-completion-ledger` | `feat/ui-stack-brand-assets` |
+| This layer | Explicit held-message release | `feat/ui-stack-held-messages` | `feat/ui-stack-completion-ledger` |
 
-The last layer renders `ScheduleWakeup` as a scheduled wake-up and
+The activity-alias layer renders `ScheduleWakeup` as a scheduled wake-up and
 `EnterPlanMode` as entering plan mode, with running/completed labels. This is
 provider-event presentation; it does not create or enforce conversation plans.
 
@@ -98,7 +100,6 @@ browser session or paid-provider test was used. `git diff --check` passes.
 
 | Remaining item | Evidence / constraint | Next work and owner |
 | --- | --- | --- |
-| #163 / #130 held-message release | The baseline only releases held messages with the next user turn. It has no authenticated, batch-scoped UI release operation with generation fencing/idempotency. The passive journal notice remains real. | Runtime implementation of #130 must supply the scoped action, then the UI layer binds/tests it. |
 | #163 Atlas result receipt | Catalog/detail actions consume real manifests, but there is no typed result receipt attributed to its producing conversation in the transcript projection. | Atlas/runtime implementation must publish the attributed result contract; UI then renders the receipt. |
 | #159 / #120 reviewer assignment | Existing composer/actions are preserved; an assignment/orchestration service is not supplied by this layer. | #120 implementation owns assignment/state; follow-up UI consumes it. |
 | #158 metadata / #170 | Tags and attention consume supplied metadata; automatic classification is not claimed. | Behavior issue supplies authoritative classification updates. |
@@ -117,3 +118,12 @@ focused descriptions and validation. Review/merge has not started. After the las
 branch is pushed, remove the implementation worktree only if it is clean, has no
 unpushed commits and no other conversation/process uses it. Never remove the
 repository's main checkout. Any new changes after cleanup use a new worktree.
+
+
+Held-message release verification: the entire fake-provider agent-messaging suite
+passes, including all guard reasons, authorization replay, whole-batch rollback,
+busy/urgent receivers, expiration/deletion/generation fences and recovery on both
+sides of the journaled input. Provider transcript suite passes. Focused Desktop
+live-notice/capability/bridge and three QML action/layout cases pass. Pro desktop
+and daemon targets build; an offscreen action capture is inspected. Agent-token
+IPC and cloud-control cannot grant the release. No installed daemon was updated.

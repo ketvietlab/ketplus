@@ -558,3 +558,13 @@ and update Files/Source Control and file search. Local repositories include both
 recent folders and the daemon’s enrolled catalog. Cross-repository remote use
 requires the companion relay target-grant authorization update; deployment and
 installed-bundle verification remain separate from source/build verification.
+
+
+The unreviewed UI stack adds local Desktop release of explicitly selected held
+agent messages (#130 / #163). The daemon authenticates the UI, checks message IDs
+and conversation generation, persists authorization/claims, queues busy receivers
+and reconciles a journaled input after restart before any repeat invocation.
+The transcript action observes status without granting authorization; only a
+click may start a turn. This does not add conversation Plan/harness behavior,
+remote mobile authorization or an installed daemon update. ADR 0027 documents
+the protocol and limits; tests use fake providers only.

@@ -142,6 +142,15 @@ QString agentMessageStateText(const QJsonObject& data) {
     }
     if (state == QStringLiteral("replied"))
         return QStringLiteral("Sent as the reply to %1.").arg(named);
+    if (state == "authorized")
+        return outgoing ? QStringLiteral("%1 authorized receipt of your message.").arg(named)
+                        : QStringLiteral("You authorized receipt of 1 message from %1.").arg(named);
+    if (state == "releasing")
+        return outgoing ? QStringLiteral("Delivering your message to %1.").arg(named)
+                        : QStringLiteral("Receiving the authorized message from %1.").arg(named);
+    if (state == "delivered")
+        return outgoing ? QStringLiteral("Message delivered to %1.").arg(named)
+                        : QStringLiteral("Received the authorized message from %1.").arg(named);
     if (state == QStringLiteral("held")) {
         const QString why = reason == QStringLiteral("hop_limit")
                                 ? QStringLiteral("the agents exchanged too many messages")
@@ -157,12 +166,27 @@ QString agentMessageStateText(const QJsonObject& data) {
                          .arg(peer, why);
     }
     if (state == QStringLiteral("expired"))
-        return QStringLiteral("%1 did not reply within 24 hours.").arg(peer);
+        return outgoing ? QStringLiteral("%1 did not reply within 24 hours.").arg(peer)
+                        : QStringLiteral("The message from %1 has expired.").arg(named);
     if (reason == QStringLiteral("no_reply"))
         return QStringLiteral("%1 finished without a reply.").arg(peer);
     if (reason.startsWith(QStringLiteral("turn_")))
         return QStringLiteral("%1 stopped before replying (%2).").arg(peer, reason.mid(5));
-    return QStringLiteral("Message to %1 failed: %2").arg(peer, reason);
+    return (outgoing ? QStringLiteral("Message to %1 failed: %2")
+                     : QStringLiteral("Receiving a message from %1 failed: %2"))
+        .arg(peer, reason);
+}
+
+QVariantMap agentMessageNotice(const QJsonObject& data, const QString& itemId) {
+    auto entry =
+        providerNoticeMessage(agentMessageStateText(data), itemId, agentMessageNoticeTitle());
+    if (data.value("direction").toString() == "incoming" &&
+        !data.value("message_id").toString().isEmpty()) {
+        entry.insert("subtype", "heldAgentMessage");
+        entry.insert("sanitizedPayload",
+                     QVariantMap{{"messageId", data.value("message_id").toString()}});
+    }
+    return entry;
 }
 
 void labelProvider(QVariantMap& entry, const QString& provider) {
@@ -388,8 +412,7 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
             entry = providerNoticeMessage(data.value("message").toString(), itemId,
                                           providerRuntimeNoticeTitle());
         } else if (type == "agent_message.state") {
-            entry = providerNoticeMessage(agentMessageStateText(data), itemId,
-                                          agentMessageNoticeTitle());
+            entry = agentMessageNotice(data, itemId);
         } else if (type == "user.message" || type == "turn.steered") {
             // A steer carries its images the way the turn's first message does.
             entry = message("user", data.value("text").toString(), "You", {}, itemId);

@@ -313,7 +313,10 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
             {{QStringLiteral("threadId"), sessionId},
              {QStringLiteral("itemId"), agent_message::daemonNoticeItemId(cursor)},
              {QStringLiteral("title"), agent_message::agentMessageNoticeTitle()},
-             {QStringLiteral("text"), agent_message::agentMessageStateText(data)}});
+             {QStringLiteral("text"), agent_message::agentMessageStateText(data)},
+             {QStringLiteral("presentation"),
+              QJsonObject::fromVariantMap(agent_message::agentMessageNotice(
+                  data, agent_message::daemonNoticeItemId(cursor)))}});
         return;
     }
     if (type == QStringLiteral("turn.started")) {

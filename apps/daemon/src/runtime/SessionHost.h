@@ -212,6 +212,7 @@ class SessionHost final : public QObject, private AgentHostPort {
     [[nodiscard]] QJsonObject acknowledge(const QJsonObject& request, const QString& clientId);
     [[nodiscard]] QJsonObject storeFork(const QString& sourceId, qint64 sourceGeneration,
                                         const QString& forkId, const QString& threadId);
+    [[nodiscard]] QJsonObject heldAgentMessages(const QJsonObject& request, bool release);
     [[nodiscard]] QJsonObject checkedSession(const QJsonObject& request, Session** session);
     [[nodiscard]] QJsonObject configurationOf(const StoredSession& stored,
                                               const QJsonArray& mergedCatalog) const;

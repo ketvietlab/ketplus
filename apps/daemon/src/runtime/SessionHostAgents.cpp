@@ -172,4 +172,24 @@ void SessionHost::addAgentContext(Session& session, const QString& userText, QJs
                                  {QStringLiteral("text"), references}});
 }
 
+QJsonObject SessionHost::heldAgentMessages(const QJsonObject& request, bool release) {
+    Session* session = nullptr;
+    const auto failure = checkedSession(request, &session);
+    if (!failure.isEmpty())
+        return failure;
+    const auto payload = request.value("payload").toObject();
+    const auto values = payload.value("message_ids").toArray();
+    QStringList ids;
+    for (const auto& value : values) {
+        if (!value.isString() || value.toString().isEmpty() || value.toString().size() > 128)
+            return {{"ok", false},
+                    {"error_code", "invalid_held_batch"},
+                    {"error_message", "Invalid message ID."}};
+        ids.append(value.toString());
+    }
+    return release ? agents_->releaseHeldMessages(session->stored.id, session->stored.generation,
+                                                  ids, request.value("message_id").toString())
+                   : agents_->heldMessages(session->stored.id, session->stored.generation, ids);
+}
+
 } // namespace ketplus::daemon

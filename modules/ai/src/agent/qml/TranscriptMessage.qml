@@ -252,6 +252,19 @@ Item {
                 status: kind === "error" ? "failed" : messageDelegate.status
                 subtype: messageDelegate.subtype
             }
+            Loader {
+                active: messageDelegate.subtype === "heldAgentMessage"
+                visible: active
+                width: parent.width
+                height: active && item ? item.implicitHeight : 0
+                sourceComponent: HeldMessageAction {
+                    tokens: shell.t
+                    messageId: {
+                        try { return JSON.parse(messageDelegate.payloadData).messageId || ""; }
+                        catch (e) { return ""; }
+                    }
+                }
+            }
             Text {
                 objectName: "transcriptSteerNotice"
                 visible: eventType === "turn.steered"

@@ -520,6 +520,11 @@ void AgentWorkspaceView::resetMessages(const QVariantList& messages,
     // leak into another conversation (including a warm A -> B -> A switch).
     flushStreamingMessages();
     const QString scope = conversationScope;
+    if (heldMessageScope_ != scope) {
+        heldMessageScope_ = scope;
+        heldMessageStates_.clear();
+        emit heldMessageStatesChanged();
+    }
     if (view_->rootObject())
         QMetaObject::invokeMethod(view_->rootObject(), "captureSessionTranscriptPosition");
     AgentMessageModel* model = messageModels_.value(scope);
