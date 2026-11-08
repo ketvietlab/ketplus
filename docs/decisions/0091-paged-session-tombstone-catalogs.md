@@ -26,7 +26,9 @@ by both keys, with a 129-candidate limit. Each page returns at most 128 rows and
 64 KiB of compact JSON array data. A row excluded by the byte budget is read
 again on the next page. Cursor keys must be nonempty text up to 1,024 UTF-8 bytes
 and a positive integer generation. SQL CASE projections check stored identity
-bytes/types and generation types before Qt materializes them. Malformed rows or
+bytes/types and generation types before Qt materializes them. Identities are
+projected as bounded bytes and decoded with strict UTF-8 validation; Qt must not
+silently replace malformed bytes and thereby change the identity. Malformed rows or
 read errors fail the whole page and retain the original database contents.
 These checks are not WHERE filters that can silently skip an invalid tombstone.
 The SQLite `octet_length` requirement/fail-closed behavior follows ADR 0085.

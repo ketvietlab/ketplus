@@ -256,6 +256,25 @@ class ProviderDeletionTest final : public QObject {
             QVERIFY(!journal.sessionTombstones());
             QVERIFY(q.exec("DELETE FROM session_tombstones"));
         }
+        for (const auto& invalid : {QString("80"), QString("C3")}) {
+            QVERIFY(q.exec(QString("INSERT INTO session_tombstones VALUES(CAST(x'%1' AS TEXT),"
+                                   "1,1,'op','now')")
+                               .arg(invalid)));
+            QVERIFY(!journal.sessionTombstones());
+            QVERIFY(q.exec("SELECT hex(session_id) FROM session_tombstones"));
+            QVERIFY(q.next());
+            QCOMPARE(q.value(0).toString(), invalid);
+            q.finish();
+            QVERIFY(q.exec("DELETE FROM session_tombstones"));
+        }
+        // A valid leading BOM is part of the identity, not a decoder marker.
+        QVERIFY(q.exec("INSERT INTO session_tombstones VALUES(CAST(x'EFBBBF313233' AS TEXT),"
+                       "1,1,'op','now')"));
+        page = journal.sessionTombstones();
+        QVERIFY(page.has_value());
+        QCOMPARE(page->tombstones.first().toObject().value("session_id").toString().toUtf8(),
+                 QByteArray::fromHex("EFBBBF313233"));
+        QVERIFY(q.exec("DELETE FROM session_tombstones"));
         QVERIFY(q.exec("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<200) "
                        "INSERT INTO session_tombstones SELECT 'same',i,1,'op','now' FROM n"));
         page = journal.sessionTombstones();

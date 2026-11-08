@@ -3,6 +3,7 @@
 #include <QJsonDocument>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QStringDecoder>
 #include <QVariant>
 
 namespace ketplus::daemon {
@@ -18,7 +19,7 @@ QString sessionTombstonesQuery(const bool continuation) {
     // Guard storage types and bytes before Qt materializes a corrupted identity.
     // Keep validation out of WHERE so malformed rows cannot disappear from a page.
     return "SELECT CASE WHEN typeof(session_id)='text' AND octet_length(session_id) BETWEEN 1 "
-           "AND 1024 THEN session_id END, CASE WHEN typeof(generation)='integer' AND "
+           "AND 1024 THEN CAST(session_id AS BLOB) END, CASE WHEN typeof(generation)='integer' AND "
            "generation>0 THEN generation END FROM session_tombstones " +
            QString(continuation ? "WHERE (session_id,generation)>(?,?) " : "") +
            "ORDER BY session_id,generation LIMIT ?";
@@ -88,7 +89,15 @@ std::optional<SessionTombstonePage> LocalJournal::sessionTombstones(const QJsonO
             setError("Malformed session tombstone remains in the journal.");
             return std::nullopt;
         }
-        const QJsonObject row{{"session_id", query.value(0).toString()},
+        QStringDecoder decoder(QStringDecoder::Utf8, QStringConverter::Flag::Stateless |
+                                                         QStringConverter::Flag::ConvertInitialBom);
+        const auto identity = query.value(0).toByteArray();
+        const QString sessionId = decoder(identity);
+        if (decoder.hasError() || sessionId.toUtf8() != identity) {
+            setError("Malformed UTF-8 session tombstone remains in the journal.");
+            return std::nullopt;
+        }
+        const QJsonObject row{{"session_id", sessionId},
                               {"session_generation", query.value(1).toLongLong()}};
         const auto size = QJsonDocument(row).toJson(QJsonDocument::Compact).size() + 1;
         if (result.tombstones.size() == rows || used + size > bytes) {

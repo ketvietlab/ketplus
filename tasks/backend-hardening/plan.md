@@ -1099,3 +1099,9 @@ Evidence: [h1-failed-journal-reuse-qt.json](evidence/h1-failed-journal-reuse-qt.
 - [ ] Resume explicit session-delete work bounds while preserving ADR 0055; do
   not label the measured 1.2-second atomic operation bounded or close #68 on this
   pagination fix. Whole-history fork/schema/crash/media gates remain in the dossier.
+
+- Final type/encoding probe at `8b42da44` exposed SQLite TEXT with invalid UTF-8
+  being silently replaced by Qt (2 controls pass / 1 failure). The projection now
+  returns bounded bytes and rejects decoding errors without changing the row.
+  The earlier Pro104/104 result belongs to `8b42da44`; run final gates again for
+  this production delta before review. No acceptance is inferred from the old run.
