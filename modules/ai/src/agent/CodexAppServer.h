@@ -141,8 +141,7 @@ class CodexAppServer final : public QObject {
     void setupDaemonTransport();
     void daemonCall(const QString& method, const QJsonObject& params, ResponseCallback callback);
     void refreshDaemonSessions();
-    void readDaemonSessionCatalogPage(quint64 epoch, QJsonObject after, ResponseCallback callback,
-                                      bool liveCatalog = false);
+    void readDaemonSessionCatalogPage(quint64 epoch, ResponseCallback callback);
     void applyDaemonTombstones(const QJsonArray& tombstones);
     void queueDaemonDiscovery(const QJsonObject& envelope);
     void discoverDaemonSessions();

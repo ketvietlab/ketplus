@@ -592,3 +592,10 @@ covers the final agent-schema stage and conversation-number ownership recovery.
 Run the protocol, activity-groups, agent-messaging, retention-policy, journal-space
 and headless-daemon targets in Release. This does not establish full startup
 atomicity, disk-full/crash or multi-GB/platform acceptance. Synthetic journals only.
+
+The ADR 0091 catalog regressions also cover deletion inserted behind the cursor,
+revision rollback, retention/update invalidation, reopen with an old token,
+malformed revision admission, three-retry exhaustion, discovery paging and
+`ketplusctl sessions` emitting a complete 30k-tombstone JSON object. The latter
+uses a fixture daemon, not an installed service or provider. A legacy catalog
+above 960 KiB verifies the actual serialized IPC envelope still fits 1 MiB.

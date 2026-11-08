@@ -511,7 +511,7 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& request, const QString
     } else if (type.startsWith("storage.retention.")) {
         result = storageRetention(type, request.value("payload").toObject());
     } else if (type == QStringLiteral("session.list")) {
-        result = listSessions(request.value("payload").toObject());
+        result = listSessions(request);
     } else if (type == QStringLiteral("session.attach") ||
                type == QStringLiteral("session.events_after")) {
         result = eventsAfter(request);

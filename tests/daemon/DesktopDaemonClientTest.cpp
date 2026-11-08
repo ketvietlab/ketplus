@@ -4,6 +4,7 @@
 #include "agent/CodexRateLimits.h"
 #include "agent/ProviderRuntimeStatus.h"
 #include "ipc/LocalIpcServer.h"
+#include "protocol/DaemonProtocol.h"
 #include "providers/CodexAdapter.h"
 #include "runtime/SessionHost.h"
 #include "service/DaemonService.h"
@@ -621,6 +622,94 @@ class DesktopDaemonClientTest final : public QObject {
         QCOMPARE(ipc.connectionCount(), 1);
     }
 
+    void catalogRestartsForDeletionBehindCursorAndDiscoveryAlsoPages() {
+        QTemporaryDir directory;
+        FakeDaemon daemon(useFakeDaemon(directory));
+        const auto restore = qScopeGuard(stopUsingFakeDaemon);
+        QVERIFY(daemon.listening);
+        LocalJournal journal(directory.filePath("journal.sqlite"));
+        CodexAdapter adapter(directory.filePath("missing-provider"));
+        SessionHost host(&journal, &adapter);
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (QSqlDatabase::database(name).databaseName() == journal.databasePath())
+                db = QSqlDatabase::database(name);
+        QSqlQuery q(db);
+        QVERIFY(q.exec("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n "
+                       "WHERE i<200) INSERT INTO session_tombstones "
+                       "SELECT 'middle-'||i,1,1,'op','now' FROM n"));
+        q.finish();
+        int changed = 0, walks = 0;
+        bool injected = false, discover = false;
+        daemon.onRequest = [&](const QJsonObject& request) {
+            if (request.value("message_type") != "session.list") {
+                daemon.answer(request, {{"ok", true}});
+                return;
+            }
+            const auto payload = request.value("payload").toObject();
+            QCOMPARE(payload.value("deleted_sessions_page_version").toInt(), 1);
+            if (!payload.contains("deleted_sessions_snapshot"))
+                ++walks;
+            auto result = host.handleCommand(request, "desktop");
+            if (result.value("error_code") == "session_catalog_changed")
+                ++changed;
+            if (discover && result.contains("sessions"))
+                result["sessions"] = QJsonArray{QJsonObject{{"session_id", "fresh"},
+                                                            {"session_generation", 1},
+                                                            {"worktree_path", directory.path()},
+                                                            {"last_event_cursor", 1}}};
+            daemon.answer(request, result);
+            if (!injected) {
+                injected = true;
+                // No broadcast: this models a retained deletion written between catalog pages.
+                QVERIFY(q.exec("INSERT INTO session_tombstones VALUES('aaa',1,1,'op','now')"));
+                q.finish();
+            }
+        };
+        CodexAppServer bridge;
+        QSet<QString> removed;
+        connect(&bridge, &CodexAppServer::daemonSessionDeleted, &bridge,
+                [&](const QString& id, qint64) { removed.insert(id); });
+        QSignalSpy discovered(&bridge, &CodexAppServer::daemonSessionDiscovered);
+        QTRY_COMPARE(removed.size(), 201);
+        QTRY_VERIFY(!bridge.isRestoring());
+        QVERIFY(removed.contains("aaa"));
+        QCOMPARE(changed, 1);
+        QCOMPARE(walks, 2);
+        discover = true;
+        daemon.current->write(
+            protocol::encodeFrame({{"message_type", "session.event"},
+                                   {"session_id", "fresh"},
+                                   {"session_generation", 1},
+                                   {"cursor", 1},
+                                   {"payload", QJsonObject{{"event_type", "session.created"}}}}));
+        daemon.current->flush();
+        QTRY_COMPARE(discovered.size(), 1);
+        QCOMPARE(discovered.first().first().toJsonObject().value("session_id").toString(), "fresh");
+        QCOMPARE(walks, 3);
+    }
+
+    void continuouslyChangingCatalogStopsAfterBoundedRetries() {
+        QTemporaryDir directory;
+        FakeDaemon daemon(useFakeDaemon(directory));
+        const auto restore = qScopeGuard(stopUsingFakeDaemon);
+        QVERIFY(daemon.listening);
+        int calls = 0;
+        daemon.onRequest = [&](const QJsonObject& request) {
+            if (request.value("message_type") != "session.list")
+                return;
+            ++calls;
+            daemon.answer(request, {{"ok", false},
+                                    {"error_code", "session_catalog_changed"},
+                                    {"error_message", "Catalog changed."}});
+        };
+        CodexAppServer bridge;
+        QTRY_COMPARE(calls, 4);
+        QTRY_VERIFY(!bridge.isRestoring());
+        QTest::qWait(50);
+        QCOMPARE(calls, 4);
+    }
+
     void tombstonesArePagedBeforeReadingAFreshLiveCatalog() {
         QTemporaryDir directory;
         FakeDaemon daemon(useFakeDaemon(directory));
@@ -645,6 +734,7 @@ class DesktopDaemonClientTest final : public QObject {
                               {{"ok", true},
                                {"deleted_sessions_page_version", 1},
                                {"deleted_sessions", QJsonArray{pages == 1 ? first : second}},
+                               {"deleted_sessions_snapshot", "fixture-snapshot"},
                                {"deleted_sessions_next", pages == 1 ? first : QJsonObject{}},
                                // A catalog obtained before the tombstone walk must not
                                // resurrect an entry deleted while pages were in flight.
@@ -657,6 +747,7 @@ class DesktopDaemonClientTest final : public QObject {
                               {{"ok", true},
                                {"deleted_sessions_page_version", 1},
                                {"deleted_sessions", QJsonArray{first}},
+                               {"deleted_sessions_snapshot", "fixture-snapshot"},
                                {"deleted_sessions_next", first},
                                {"transcript_window_version", 1},
                                {"sessions", QJsonArray{QJsonObject{{"session_id", "live"},
@@ -696,6 +787,7 @@ class DesktopDaemonClientTest final : public QObject {
             QJsonObject result{{"ok", true},
                                {"deleted_sessions_page_version", 1},
                                {"deleted_sessions", QJsonArray{pages == 1 ? first : second}},
+                               {"deleted_sessions_snapshot", "fixture-snapshot"},
                                {"deleted_sessions_next", pages == 1 ? first : QJsonObject{}}};
             if (pages == 2) {
                 if (fault == "repeated-cursor")
@@ -738,6 +830,7 @@ class DesktopDaemonClientTest final : public QObject {
             const auto payload = request.value("payload").toObject();
             QJsonObject result{{"ok", true},
                                {"deleted_sessions_page_version", 1},
+                               {"deleted_sessions_snapshot", "fixture-snapshot"},
                                {"deleted_sessions_next", QJsonObject{}}};
             if (daemon.connections == 1) {
                 if (payload.contains("deleted_sessions_after")) {

@@ -1,4 +1,5 @@
 #include "BrowserAgentInstructions.h"
+#include "SessionCatalogReader.h"
 #include "agent/CodexAppServer.h"
 
 #include "agent/DaemonTranscriptProjection.h"
@@ -452,72 +453,10 @@ void CodexAppServer::applyDaemonTombstones(const QJsonArray& tombstones) {
     }
 }
 
-void CodexAppServer::readDaemonSessionCatalogPage(const quint64 epoch, QJsonObject after,
-                                                  ResponseCallback callback,
-                                                  const bool liveCatalog) {
-    if (epoch != daemonSessionListEpoch_ || !daemon_->isReady())
-        return;
-    QJsonObject payload{{"deleted_sessions_page_version", 1},
-                        {"deleted_sessions_only", !liveCatalog}};
-    if (!after.isEmpty())
-        payload.insert("deleted_sessions_after", after);
-    daemon_->call(
-        "session.list", payload, {}, -1,
-        [this, epoch, after, liveCatalog,
-         callback = std::move(callback)](const QJsonObject& result, const QString& error) mutable {
-            if (epoch != daemonSessionListEpoch_)
-                return;
-            if (!error.isEmpty()) {
-                callback({}, error);
-                return;
-            }
-            if (after.isEmpty() && !liveCatalog &&
-                !result.contains("deleted_sessions_page_version")) {
-                callback(result, {}); // Existing daemons return the complete legacy response.
-                return;
-            }
-            const auto fail = [&] { callback({}, "Invalid daemon tombstone page."); };
-            const auto rows = result.value("deleted_sessions").toArray();
-            if (result.value("deleted_sessions_page_version").toInteger(-1) != 1 ||
-                !result.value("deleted_sessions").isArray() || rows.size() > 128 ||
-                QJsonDocument(rows).toJson(QJsonDocument::Compact).size() > 64 * 1024 ||
-                !result.value("deleted_sessions_next").isObject()) {
-                fail();
-                return;
-            }
-            auto previous = after;
-            for (const auto& value : rows) {
-                const auto row = value.toObject();
-                const auto id = row.value("session_id").toString().toUtf8();
-                const auto generation = row.value("session_generation").toInteger(-1);
-                const auto previousId = previous.value("session_id").toString().toUtf8();
-                if (row.size() != 2 || id.isEmpty() || id.size() > 1024 || generation < 1 ||
-                    (!previous.isEmpty() &&
-                     (id < previousId ||
-                      (id == previousId &&
-                       generation <= previous.value("session_generation").toInteger())))) {
-                    fail();
-                    return;
-                }
-                previous = row;
-            }
-            const auto next = result.value("deleted_sessions_next").toObject();
-            if (!next.isEmpty() && (rows.isEmpty() || next != previous)) {
-                fail();
-                return;
-            }
-            if (liveCatalog) {
-                // Read live sessions after the walk, so an intervening session.deleted
-                // event cannot be undone by replaying an older catalog snapshot.
-                callback(result, {});
-                return;
-            }
-            applyDaemonTombstones(rows);
-            QTimer::singleShot(
-                0, this, [this, epoch, next, callback = std::move(callback)]() mutable {
-                    readDaemonSessionCatalogPage(epoch, next, std::move(callback), next.isEmpty());
-                });
-        });
+void CodexAppServer::readDaemonSessionCatalogPage(const quint64 epoch, ResponseCallback callback) {
+    remote::readSessionCatalog(
+        daemon_, this, [this, epoch] { return epoch == daemonSessionListEpoch_; },
+        [this](const QJsonArray& rows, bool) { applyDaemonTombstones(rows); }, std::move(callback));
 }
 
 void CodexAppServer::refreshDaemonSessions() {
@@ -526,78 +465,77 @@ void CodexAppServer::refreshDaemonSessions() {
     daemonRestoreQueue_.clear();
     activeDaemonRestoreSession_.clear();
     setRestoring(true);
-    readDaemonSessionCatalogPage(
-        ++daemonSessionListEpoch_, {}, [this](const QJsonObject& result, const QString& error) {
-            daemonSessionListInFlight_ = false;
-            QTimer::singleShot(0, this, &CodexAppServer::discoverDaemonSessions);
-            if (!error.isEmpty()) {
-                setRestoring(false);
-                return;
+    readDaemonSessionCatalogPage(++daemonSessionListEpoch_, [this](const QJsonObject& result,
+                                                                   const QString& error) {
+        daemonSessionListInFlight_ = false;
+        QTimer::singleShot(0, this, &CodexAppServer::discoverDaemonSessions);
+        if (!error.isEmpty()) {
+            setRestoring(false);
+            return;
+        }
+        daemonHasByteBoundedReplay_ =
+            result.value(QStringLiteral("replay_page_max_bytes")).toInteger() > 0;
+        daemonHasTranscriptWindow_ = result.value("transcript_window_version").toInt() == 1;
+        daemonHasTranscriptAfterCursor_ =
+            result.value("transcript_window_after_cursor").toBool(false);
+        daemonTranscriptWindowMaxTurns_ =
+            std::clamp(result.value("transcript_window_max_turns").toInt(3), 1, 20);
+        daemonHasLargeEvents_ = result.value("transcript_large_event_version").toInt() == 1;
+        QStringList sessionIds;
+        applyDaemonTombstones(result.value("deleted_sessions").toArray());
+        for (const QJsonValue& value : result.value(QStringLiteral("sessions")).toArray()) {
+            const QJsonObject stored = value.toObject();
+            const QString sessionId = stored.value(QStringLiteral("session_id")).toString();
+            if (sessionId.isEmpty()) {
+                continue;
             }
-            daemonHasByteBoundedReplay_ =
-                result.value(QStringLiteral("replay_page_max_bytes")).toInteger() > 0;
-            daemonHasTranscriptWindow_ = result.value("transcript_window_version").toInt() == 1;
-            daemonHasTranscriptAfterCursor_ =
-                result.value("transcript_window_after_cursor").toBool(false);
-            daemonTranscriptWindowMaxTurns_ =
-                std::clamp(result.value("transcript_window_max_turns").toInt(3), 1, 20);
-            daemonHasLargeEvents_ = result.value("transcript_large_event_version").toInt() == 1;
-            QStringList sessionIds;
-            applyDaemonTombstones(result.value("deleted_sessions").toArray());
-            for (const QJsonValue& value : result.value(QStringLiteral("sessions")).toArray()) {
-                const QJsonObject stored = value.toObject();
-                const QString sessionId = stored.value(QStringLiteral("session_id")).toString();
-                if (sessionId.isEmpty()) {
-                    continue;
+            sessionIds.append(sessionId);
+            if (!daemonHasTranscriptWindow_)
+                restoringDaemonSessions_.insert(sessionId);
+            auto& session = daemonSessions_[sessionId];
+            const auto nextGeneration = stored.value("session_generation").toInteger(1);
+            if (session.generation != nextGeneration) {
+                session.windowCursor = 0;
+                session.deferredCursor = 0;
+                for (auto it = daemonApprovals_.begin(); it != daemonApprovals_.end();) {
+                    if (it->sessionId == sessionId)
+                        it = daemonApprovals_.erase(it);
+                    else
+                        ++it;
                 }
-                sessionIds.append(sessionId);
-                if (!daemonHasTranscriptWindow_)
-                    restoringDaemonSessions_.insert(sessionId);
-                auto& session = daemonSessions_[sessionId];
-                const auto nextGeneration = stored.value("session_generation").toInteger(1);
-                if (session.generation != nextGeneration) {
-                    session.windowCursor = 0;
-                    session.deferredCursor = 0;
-                    for (auto it = daemonApprovals_.begin(); it != daemonApprovals_.end();) {
-                        if (it->sessionId == sessionId)
-                            it = daemonApprovals_.erase(it);
-                        else
-                            ++it;
-                    }
-                }
-                session.cwd =
-                    normalizedLocalPath(stored.value(QStringLiteral("worktree_path")).toString());
-                session.contextRevision = stored.value("context_revision").toInteger(1);
-                const auto effective = stored.value("effective").toObject();
-                if (!effective.isEmpty()) {
-                    session.options.insert("model", effective.value("model"));
-                    session.options.insert("effort", effective.value("effort"));
-                }
-                session.generation =
-                    stored.value(QStringLiteral("session_generation")).toInteger(1);
-                if (daemonHasTranscriptWindow_) {
-                    session.windowReady = false;
-                    session.cursor = stored.value("last_event_cursor").toInteger();
-                }
-                emit daemonSessionDiscovered(stored);
-                emit notificationReceived(
-                    QStringLiteral("thread/backgroundTasks/updated"),
-                    {{QStringLiteral("threadId"), sessionId},
-                     {QStringLiteral("tasks"), stored.value(QStringLiteral("background_tasks"))}});
-                if (!daemonHasTranscriptWindow_)
-                    emit daemonSessionRestoreStarted(sessionId);
             }
+            session.cwd =
+                normalizedLocalPath(stored.value(QStringLiteral("worktree_path")).toString());
+            session.contextRevision = stored.value("context_revision").toInteger(1);
+            const auto effective = stored.value("effective").toObject();
+            if (!effective.isEmpty()) {
+                session.options.insert("model", effective.value("model"));
+                session.options.insert("effort", effective.value("effort"));
+            }
+            session.generation = stored.value(QStringLiteral("session_generation")).toInteger(1);
             if (daemonHasTranscriptWindow_) {
-                setRestoring(false);
-                return;
+                session.windowReady = false;
+                session.cursor = stored.value("last_event_cursor").toInteger();
             }
-            daemonRestoreQueue_ = sessionIds;
-            reorderDaemonRestoreQueue();
-            restoreNextDaemonSession();
-            if (restoringDaemonSessions_.isEmpty()) {
-                setRestoring(false);
-            }
-        });
+            emit daemonSessionDiscovered(stored);
+            emit notificationReceived(
+                QStringLiteral("thread/backgroundTasks/updated"),
+                {{QStringLiteral("threadId"), sessionId},
+                 {QStringLiteral("tasks"), stored.value(QStringLiteral("background_tasks"))}});
+            if (!daemonHasTranscriptWindow_)
+                emit daemonSessionRestoreStarted(sessionId);
+        }
+        if (daemonHasTranscriptWindow_) {
+            setRestoring(false);
+            return;
+        }
+        daemonRestoreQueue_ = sessionIds;
+        reorderDaemonRestoreQueue();
+        restoreNextDaemonSession();
+        if (restoringDaemonSessions_.isEmpty()) {
+            setRestoring(false);
+        }
+    });
 }
 
 void CodexAppServer::reorderDaemonRestoreQueue() {

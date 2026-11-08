@@ -82,3 +82,10 @@ independent review/merge of the paging fix remains pending. See
 The #274 review also noted that successful compaction with retained staging
 artifacts does not surface `result.error` in `compactJournal`; preserve this
 operator-diagnostics follow-up alongside broader migration/crash acceptance.
+
+The #280 follow-up adds a revision/reopen fence and covers every built-in
+`session.list` consumer: Desktop refresh, incremental discovery, and CLI. A
+changed catalog restarts at most three times; the CLI spools history privately.
+Concurrent insertion behind the cursor must be observed on restart, even with
+no deletion broadcast. Final-head evidence/review is still required. Delta/since
+refresh work and atomic deletion latency remain separate from this correction.

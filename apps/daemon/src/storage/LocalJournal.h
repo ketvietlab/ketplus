@@ -169,6 +169,7 @@ class LocalJournal final {
                                           qint64 afterRow = 0) const;
     [[nodiscard]] std::optional<SessionTombstonePage>
     sessionTombstones(const QJsonObject& after = {}, bool legacy = false) const;
+    [[nodiscard]] std::optional<QString> sessionTombstoneSnapshot() const;
     bool completeProviderCleanup(const QString& sessionId, qint64 generation,
                                  const QString& provider, const QString& threadId);
     bool acknowledgeCloudDeletion(const QString& sessionId, qint64 generation,

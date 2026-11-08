@@ -1112,3 +1112,27 @@ Evidence: [h1-failed-journal-reuse-qt.json](evidence/h1-failed-journal-reuse-qt.
   Source/log hashes, raw scale measurements and both controls are recorded in
   `evidence/h1-tombstone-pagination-qt.json`. Independent review/merge remains
   pending; the final evidence commit changes documentation only.
+
+## 2026-11-08 — #280 concurrent catalog and caller follow-up
+
+- [x] Verify #274 already merged at `c3490da5`; the delayed OPEN report does not
+  reopen its review. #68 remains the active closure-first issue.
+- [x] Add a transactional mutation token for tombstone INSERT/UPDATE/DELETE and
+  an open-journal epoch. Continuations and final live reads share the token;
+  mutation or reopen requires restart, capped at three retries.
+- [x] Use one streamed reader for Desktop refresh, discovery and CLI. Preserve
+  CLI single-object JSON through a private temporary spool reset on retry.
+- [x] Advertise the additive feature; measure complete serialized response bytes
+  rather than reject a legacy catalog at an arbitrary 960-KiB threshold.
+- [x] Focused initial build and 3/3 targets pass: deletion42+4 scale skips,
+  bridge30+1 live skip, headless6. Concurrent behind-cursor, rollback/reopen,
+  discovery, retry-cap, legacy wire boundary and CLI30k regressions pass.
+- [x] Negative controls fail as expected: removing the token comparison loses
+  the behind-cursor row; restoring discovery/CLI callers breaks the new regressions.
+  Restore source and rebuild successfully.
+- [ ] Complete restored scale and full Release Pro at the committed code head;
+  record hashes/evidence, then send the final head to #7705.
+- [ ] Independent review, merge and linked-worktree/build cleanup.
+- [ ] Continue the separate atomic whole-session deletion gate and remaining #68
+  criteria. Per-page bounds do not establish a bounded total history refresh;
+  delta/since synchronization remains an explicit follow-up.

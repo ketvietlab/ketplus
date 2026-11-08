@@ -5,6 +5,7 @@
 #include <QSqlQuery>
 #include <QStringDecoder>
 #include <QVariant>
+#include <algorithm>
 
 namespace ketplus::daemon {
 
@@ -58,6 +59,25 @@ QJsonArray LocalJournal::deletionWork(const int limit, const bool pendingCloudOn
     return result;
 }
 
+std::optional<QString> LocalJournal::sessionTombstoneSnapshot() const {
+    QSqlQuery query(database_);
+    if (!query.exec("SELECT CASE WHEN typeof(revision)='text' AND octet_length(revision)=32 "
+                    "THEN revision END FROM session_tombstone_catalog WHERE id=1") ||
+        !query.next()) {
+        setError("Cannot read the tombstone catalog revision.");
+        return std::nullopt;
+    }
+    const auto revision = query.value(0).toString();
+    if (revision.size() != 32 || std::any_of(revision.cbegin(), revision.cend(), [](QChar c) {
+            return !((c >= u'0' && c <= u'9') || (c >= u'a' && c <= u'f'));
+        })) {
+        setError("Invalid tombstone catalog revision.");
+        return std::nullopt;
+    }
+    // A new journal instance invalidates outstanding cursors even without a mutation.
+    return connectionName_ + ':' + revision;
+}
+
 std::optional<SessionTombstonePage> LocalJournal::sessionTombstones(const QJsonObject& after,
                                                                     const bool legacy) const {
     const auto id = after.value("session_id").toString();
@@ -69,7 +89,7 @@ std::optional<SessionTombstonePage> LocalJournal::sessionTombstones(const QJsonO
     }
     constexpr int pageRows = 128;
     const int rows = legacy ? 32768 : pageRows;
-    const qsizetype bytes = legacy ? 960 * 1024 : 64 * 1024;
+    const qsizetype bytes = legacy ? 1024 * 1024 : 64 * 1024;
     QSqlQuery query(database_);
     query.setForwardOnly(true);
     query.prepare(detail::sessionTombstonesQuery(!after.isEmpty()));

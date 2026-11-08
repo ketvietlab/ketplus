@@ -17,7 +17,9 @@ The additive `session.list` request payload opts in with
 `deleted_sessions_page_version: 1`. A reply supplies `deleted_sessions`, the same
 version, and `deleted_sessions_next`. An empty next object means end of this
 walk; otherwise it is the last returned `{session_id, session_generation}` pair.
-Send that exact object as `deleted_sessions_after` for the next page. The
+Send that exact object as `deleted_sessions_after` together with the reply's
+opaque `deleted_sessions_snapshot` token (at most 128 characters) for the next
+page. `daemon.hello` advertises `session.tombstones/1`. The
 optional boolean `deleted_sessions_only` suppresses the live catalog even on the
 first page. Continuations always suppress it.
 
@@ -33,32 +35,51 @@ read errors fail the whole page and retain the original database contents.
 These checks are not WHERE filters that can silently skip an invalid tombstone.
 The SQLite `octet_length` requirement/fail-closed behavior follows ADR 0085.
 
-Without opt-in, the server returns the complete legacy result only when it fits
-a fixed 32,768-row/960-KiB tombstone budget. Otherwise it returns
-`session_catalog_upgrade_required`; it never labels a truncated list complete.
-The final live-plus-deleted response also reserves 16 KiB below the IPC frame
-limit and reports `session_catalog_too_large` instead of emitting an oversized
-frame. This is an explicit upgrade boundary for large legacy catalogs, not
-pagination support retrofitted into an old client.
+Without opt-in, the server reads at most 32,769 candidates and 1 MiB of
+serialized tombstone data. It returns the complete legacy result only when the
+actual serialized protocol response, including correlation id, capabilities and
+live sessions, fits the 1-MiB frame limit. Otherwise it returns
+`session_catalog_upgrade_required` when paging can help, or
+`session_catalog_too_large` for an oversized live catalog. It never labels a
+truncated list complete or reserves an arbitrary gap below the wire limit.
 
-The Desktop transport bridge reads one page at a time, checks row types/order,
-byte/row limits and cursor progress, and applies each page immediately without
-accumulating the history. A missing version is a legacy fallback only on the
-first reply. Reconnection invalidates callbacks and timers from the old walk.
-After the walk the bridge reads a fresh live catalog, so an old initial catalog
-cannot resurrect a conversation deleted while pages were in flight. The final
-catalog's first tombstone page may be applied again; deletion remains scoped to
-its exact generation and is idempotent.
+A singleton journal revision changes transactionally through INSERT/UPDATE/DELETE
+triggers on `session_tombstones`, including retention and older writers. Rollback
+restores the previous revision. Each token combines this revision with the open
+journal instance's random identity: a reopen invalidates old cursors. A read
+checks the token before and after querying and again before publishing the live
+catalog. A change yields `session_catalog_changed`, including insertion before
+the keyset cursor. Missing or oversized continuation tokens are rejected. This
+is a revision fence with restart, not a long-lived SQL snapshot. The revision
+column is type/length checked before Qt reads it; an invalid/missing revision
+fails closed.
 
-This is an ordered walk, not a long-lived database snapshot. Concurrent
-`session.deleted` events and a fresh live catalog provide the current view;
-reconnecting starts the walk over. Tombstones expiring under existing retention
-are not resurrected by pagination. No UI layout or rendering behavior changes.
+The shared remote `SessionCatalogReader` is used by Desktop refresh, incremental
+discovery and `ketplusctl sessions`. It reads one page at a time, checks row
+types/order, byte/row limits and cursor progress, and streams each valid page to
+its consumer. A missing version is a legacy fallback only on the first reply.
+Reconnection invalidates Desktop callbacks from the old walk. Catalog changes
+restart from the beginning, at most three times, then return an explicit error.
+After EOF it fetches fresh live sessions under the same revision token; it never
+publishes a stale initial live catalog. Deletion application remains scoped to
+the exact generation and idempotent across retries.
+
+The CLI writes tombstones to an automatically removed, private temporary file,
+resetting it on each retry. Only a complete successful walk is streamed to stdout
+as the existing single JSON object, using 64-KiB reads. This preserves the output
+contract without retaining all tombstones in RAM. Raw `ketplusctl call
+session.list` remains a single RPC and accepts explicit paging payloads.
+
+A walk still visits all retained tombstones. Delta/since synchronization and total
+refresh work are separate bounds, not established by the per-page and retry caps.
+No UI layout or rendering behavior changes.
 
 ## Consequences
 
 The synthetic backlog, real local IPC, legacy fallback, malformed continuation,
-reconnect epoch, escaped-identity byte budget, mixed generations, removed cursor
+concurrent insertion behind the cursor, rollback/reopen fences, bounded retries,
+discovery, CLI output above 1 MiB, reconnect epoch, escaped-identity byte budget,
+mixed generations, removed cursor
 row, actual prepared query plan and SQL read/type failures have focused tests.
 Large 100k/300k fixtures require `KETPLUS_RUN_DELETE_BACKLOG_TESTS=1`; the normal
 suite retains the smaller functional cases. No provider quota or live data is

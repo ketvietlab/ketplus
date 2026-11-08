@@ -4,7 +4,9 @@ This file distinguishes current code from target architecture. Update it when a
 milestone changes state.
 
 Tombstone catalog hardening (ADR 0091) adds bounded, opt-in keyset pages and
-sequential Desktop transport consumption. Legacy catalogs exceeding the bounded
+revision-fenced shared transport consumption by Desktop refresh/discovery and
+`ketplusctl sessions`. Concurrent mutation/reopen invalidates a cursor; retries
+are capped and CLI history is spooled privately. Legacy catalogs exceeding the bounded
 response return an explicit upgrade error. This is backend/transport work;
 whole-session atomic-delete latency, live-catalog bounds and the remaining #68
 acceptance gates stay open.

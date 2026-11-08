@@ -723,8 +723,10 @@ returns `deleted_sessions` so reconnecting clients remove stale persisted entrie
 Newer generations are not removed by an older tombstone.
 Tombstone catalogs support opt-in version-1 keyset pages (128 rows/64 KiB), with
 bounded SQL projections and explicit errors for oversized legacy responses. The
-Desktop transport consumes pages sequentially, fences stale reconnect callbacks,
-and reads live sessions after the walk. See
+shared transport reader covers Desktop refresh/discovery and `ketplusctl sessions`,
+fences catalog mutations and stale reconnect callbacks, and reads live sessions
+after the walk. A changed catalog restarts at most three times; CLI output uses a
+private temporary spool instead of accumulating tombstones in memory. See
 [ADR 0091](decisions/0091-paged-session-tombstone-catalogs.md); this does not make
 explicit deletion asynchronous or bound the live catalog itself.
 The tombstone and cleanup-work inserts must each affect one row, and each

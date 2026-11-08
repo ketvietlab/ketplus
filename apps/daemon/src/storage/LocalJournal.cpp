@@ -146,6 +146,20 @@ bool LocalJournal::initialize() {
                        "session_id TEXT NOT NULL, generation INTEGER NOT NULL, "
                        "lifecycle_revision INTEGER NOT NULL, operation_id TEXT NOT NULL, "
                        "deleted_at TEXT NOT NULL, PRIMARY KEY(session_id, generation))"),
+        // A mutation token fences keyset walks, including retention and older writers.
+        QStringLiteral("CREATE TABLE IF NOT EXISTS session_tombstone_catalog ("
+                       "id INTEGER PRIMARY KEY CHECK(id=1), revision TEXT NOT NULL)"),
+        QStringLiteral("INSERT OR IGNORE INTO session_tombstone_catalog VALUES "
+                       "(1,lower(hex(randomblob(16))))"),
+        QStringLiteral("CREATE TRIGGER IF NOT EXISTS session_tombstone_insert_revision "
+                       "AFTER INSERT ON session_tombstones BEGIN UPDATE session_tombstone_catalog "
+                       "SET revision=lower(hex(randomblob(16))) WHERE id=1; END"),
+        QStringLiteral("CREATE TRIGGER IF NOT EXISTS session_tombstone_update_revision "
+                       "AFTER UPDATE ON session_tombstones BEGIN UPDATE session_tombstone_catalog "
+                       "SET revision=lower(hex(randomblob(16))) WHERE id=1; END"),
+        QStringLiteral("CREATE TRIGGER IF NOT EXISTS session_tombstone_delete_revision "
+                       "AFTER DELETE ON session_tombstones BEGIN UPDATE session_tombstone_catalog "
+                       "SET revision=lower(hex(randomblob(16))) WHERE id=1; END"),
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS session_deletion_work ("
             "session_id TEXT NOT NULL, generation INTEGER NOT NULL, "

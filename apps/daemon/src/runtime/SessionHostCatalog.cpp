@@ -10,7 +10,8 @@ QJsonObject error(const QString& code, const QString& message) {
 }
 } // namespace
 
-QJsonObject SessionHost::listSessions(const QJsonObject& payload) const {
+QJsonObject SessionHost::listSessions(const QJsonObject& request) const {
+    const auto payload = request.value("payload").toObject();
     const bool paged = payload.contains("deleted_sessions_page_version");
     if ((paged && payload.value("deleted_sessions_page_version").toInteger(-1) != 1) ||
         (payload.contains("deleted_sessions_only") &&
@@ -19,20 +20,59 @@ QJsonObject SessionHost::listSessions(const QJsonObject& payload) const {
          (!paged || !payload.value("deleted_sessions_after").isObject() ||
           payload.value("deleted_sessions_after").toObject().isEmpty())))
         return error("invalid_tombstone_page", "Unsupported tombstone page or cursor.");
+    const auto snapshot = journal_->sessionTombstoneSnapshot();
+    if (!snapshot)
+        return error("journal_error", journal_->errorString());
+    const auto supplied = payload.value("deleted_sessions_snapshot");
+    if ((payload.contains("deleted_sessions_after") && !supplied.isString()) ||
+        (!supplied.isUndefined() &&
+         (!paged || !supplied.isString() || supplied.toString().isEmpty() ||
+          supplied.toString().size() > 128)))
+        return error("invalid_tombstone_page", "Invalid tombstone snapshot token.");
+    if (!supplied.isUndefined() && supplied.toString() != *snapshot)
+        return error("session_catalog_changed", "The deletion catalog changed; restart the walk.");
     const auto page =
         journal_->sessionTombstones(payload.value("deleted_sessions_after").toObject(), !paged);
     if (!page)
         return error("journal_error", journal_->errorString());
+    const auto afterRead = journal_->sessionTombstoneSnapshot();
+    if (!afterRead)
+        return error("journal_error", journal_->errorString());
+    if (*snapshot != *afterRead)
+        return error("session_catalog_changed", "The deletion catalog changed; restart the walk.");
     if (!paged && !page->next.isEmpty())
         return error("session_catalog_upgrade_required",
                      "This deletion catalog requires a client with tombstone pagination.");
+    const auto finish = [&](const QJsonObject& catalog) {
+        const auto finalSnapshot = journal_->sessionTombstoneSnapshot();
+        if (!finalSnapshot)
+            return error("journal_error", journal_->errorString());
+        if (*snapshot != *finalSnapshot)
+            return error("session_catalog_changed",
+                         "The deletion catalog changed; restart the walk.");
+        const auto wireBytes = [&](const QJsonObject& value) {
+            return QJsonDocument(protocol::response(request, value))
+                .toJson(QJsonDocument::Compact)
+                .size();
+        };
+        if (wireBytes(catalog) <= protocol::maximumFrameBytes)
+            return catalog;
+        auto liveOnly = catalog;
+        liveOnly.insert("deleted_sessions", QJsonArray{});
+        if (!paged && wireBytes(liveOnly) <= protocol::maximumFrameBytes)
+            return error("session_catalog_upgrade_required",
+                         "This deletion catalog requires a client with tombstone pagination.");
+        return error("session_catalog_too_large",
+                     "The live session catalog exceeds its byte limit.");
+    };
     QJsonObject catalog{{"ok", true}, {"deleted_sessions", page->tombstones}};
     if (paged) {
         catalog.insert("deleted_sessions_page_version", 1);
+        catalog.insert("deleted_sessions_snapshot", *snapshot);
         catalog.insert("deleted_sessions_next", page->next);
         if (payload.contains("deleted_sessions_after") ||
             payload.value("deleted_sessions_only").toBool())
-            return catalog; // A continuation never reloads the live session catalog.
+            return finish(catalog); // A continuation never reloads the live session catalog.
     }
 
     QJsonArray values;
@@ -78,13 +118,7 @@ QJsonObject SessionHost::listSessions(const QJsonObject& payload) const {
          static_cast<qint64>(protocol::maximumReplayPayloadBytes)}};
     for (auto it = live.begin(); it != live.end(); ++it)
         catalog.insert(it.key(), it.value());
-    // Leave room for the IPC response envelope; never knowingly send a frame
-    // that the client must reject. Live-session pagination is a separate gate.
-    if (QJsonDocument(catalog).toJson(QJsonDocument::Compact).size() >
-        protocol::maximumFrameBytes - 16 * 1024)
-        return error("session_catalog_too_large",
-                     "The live session catalog exceeds its byte limit.");
-    return catalog;
+    return finish(catalog);
 }
 
 } // namespace ketplus::daemon
