@@ -588,6 +588,16 @@ pending calls with a static diagnostic and uses existing restart backoff. JSON
 control bytes must be escaped inside strings; outside JSON whitespace remains
 allowed. Valid-object RPC schemas and absent-response deadlines remain separate.
 
+Outgoing provider calls use positive integer JSON ids. Response lookup preserves
+that type and numeric value across all three adapters, including Codex oversized
+responses (ADR 0074). Invalid/unrelated ids leave pending calls untouched; incoming
+provider request ids and pending-call timeout policy remain separate.
+
+Matched replies must contain exactly one result (object or explicit null) or error
+(object). Invalid envelopes fail that callback with a static protocol diagnostic;
+initialize uses its existing failure path, while other pending calls survive.
+Provider-specific result schemas remain separate (ADR 0075).
+
 Cursor model discovery reads both channels incrementally with a shared 1-MiB
 budget (ADR 0088). It retains stdout only, kills excess output, and parses only
 successful normal exits. The existing fallback catalog settles failed/timed-out

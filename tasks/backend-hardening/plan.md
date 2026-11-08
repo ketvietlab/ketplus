@@ -821,17 +821,56 @@ remain explicitly open.
 - [x] Preserve bounded raw tokens, validate/decode JSON strings, refuse dotted-key
   aliases and withhold all routing when captured metadata is invalid (ADR 0073).
   Expanded focused suite 91/91 includes depth/memory and next-line recovery.
-- [ ] Full Pro shared-header matrix, integrate parent #256, independent exact-head
-  review, merge and cleanup. No UI implementation change.
+- [x] Full Pro build and 97/97 tests pass at `6fd79e51` (308.05 seconds).
+  Draft #259 is pushed; generated builds are removed. No UI implementation change.
+- [x] #256 and #259 integrated and reviewed by #7705; merged at `7ceebc34`
+  and `b93394bb`. Task worktrees and builds were removed after safe checks.
 - [ ] Duplicate keys/outer structure, RPC request-id typing, timeout/recovery and
   broader stderr/normal-frame encoding remain open; this is selective extraction.
 
-### 2026-11-08 integration packet #71
 
-- #256 is independently reviewed and merged at `7ceebc34`; earlier dispatch-hold notes above are historical. Reviewer is now #7705.
-- #257 includes the reviewed #259 production/test tree and the documentation clarification in ADR 0073; final matrix and review of this combined head remain required before merge.
-- Keep #71 open for the remaining catalog output, malformed normal frames, request semantics and capability acceptance. No UI implementation, provider quota or deployment.
+### H3.4 preserve response call identity
 
+- [x] Fake-provider handshake reproduces 15 wrong-id failures across Codex, Claude,
+  Cursor and Codex oversized responses; 23 controls already pass.
+- [x] Use a shared typed positive-integer lookup guard. Focused 39/39 passes;
+  invalid ids preserve pending initialize, followed by exactly one valid completion
+  (ADR 0074). Numeric boundary controls also pass.
+- [x] Full Pro build and 97/97 tests pass at `d835d334` (316.56 seconds).
+  Draft #260 is pushed; generated build is removed. It branches from merged
+  integration, independently of the waiting metadata/string packages.
+- [ ] Independent exact-head review by #7705, merge and source cleanup; the
+  user reassignment supersedes the historical dispatch hold.
+- [ ] Continue result/error-envelope validation, incoming ids, duplicate fields,
+  counter exhaustion and pending-call admission/timeout/cancellation checks.
+
+### H3.4 validate matched response envelopes
+
+- [x] Reproduce 72 malformed-envelope failures on the original three adapters;
+  17 control/setup checks pass. Missing/scalar results can falsely complete
+  initialize; ambiguous/error-shape failures also lack a protocol diagnostic.
+- [x] Share a bounded envelope guard (ADR 0075): one object/null result or object
+  error, static failure, exactly-once callback. Combined focused 126/126 PASS,
+  including outstanding-call isolation, duplicate replies and valid recovery.
+- [ ] Full Pro shared-header gate, integrate parent #260, independent exact-head
+  review, merge and cleanup. No UI implementation changes.
+- [ ] Continue pending-call/counter/lifecycle and method-schema audit; broader H3
+  remains open. Current closure-first priority is #71; do not start a new domain.
+
+
+### 2026-11-08 — integrate the existing #260/#261 response package
+
+- #256/#259/#257/#258/#275 are merged; integration is `4cd20d4f`.
+  Catalog review PASS at `2bbd4661`: independent 14/14 and daemon 52/52.
+  Its worktree/build were safely removed after the PR was pushed.
+- #261 already contains #260; combine their integration/review rather than
+  rebuilding the same shared headers twice. No new production fix is added here.
+  #7705 must review both original changes and the combined final head.
+- [ ] Run full Release Pro build and offscreen suite on the integrated response
+  head; verify the combined 126-case fixture and preserve failure evidence.
+- [ ] Review and merge the combined package; verify #260 is included before
+  closing or marking its work complete. Keep #71 open for malformed frame
+  settlement, capability coverage and remaining concrete bounds findings.
 
 ## 2026-11-08 — #71 closure-first integration and catalog output
 
@@ -852,9 +891,13 @@ remain explicitly open.
 - [x] Catalog code commit `3f7892b1`: Release headless build and the affected
   **17/17 targets PASS**, 261.33 s, serial/offscreen. The following evidence-only
   commit preserves the tested production/test hashes; no full Desktop claim.
-- [x] #7705 passed catalog `2bbd4661`: independent 14/14 focused and 52/52
-  headless targets. #275 merged at `4cd20d4f`; its worktree/build were safely
-  removed after pushing.
+- [x] #7705 passed catalog head `2bbd4661` with independent Debug headless
+  14/14 focused and 52/52 daemon targets. #275 merged at `4cd20d4f`; the
+  task worktree/build had already been safely removed after pushing.
+- [x] Integrate #275 into the combined #260/#261 branch before the full Pro
+  test run. Production merges cleanly; preserve both docs additions.
+- [ ] Next concrete #71 package: malformed normal-frame settlement/recovery
+  across all three adapters. This follows the catalog merge; no new domain audit.
 - [ ] Finish #71 acceptance: normal malformed/binary/invalid-UTF8 frame behavior,
   capability-to-adapter coverage, and disposition of remaining probe/waiter limits.
   Existing #260/#261 own response id/envelope work overlapping #74; do not duplicate
@@ -875,10 +918,15 @@ The relay rollout gate remains external and does not block this provider work.
 - [ ] Full Release Pro build and full offscreen suite at the final code head;
   preserve the exact head, focused totals, full-run failures and any justified rerun.
 - [ ] Independent #7705 review, merge and safe worktree/build cleanup.
-- #260/#261 combined head `d4737f95` includes catalog #275 and is under #7705
-  review. Author Release Pro: 100/101 first pass (421.97 s), response 126/126;
+- [x] #260/#261 combined head `d4737f95` passed #7705 review (126/126 response,
+  53/53 daemon independently) and merged via #261 at `a6967590`. Author Release Pro: 100/101 first pass (421.97 s), response 126/126;
   unchanged serial Cursor rerun 24/24 (12.23 s) after a 3 s timeout needed 3.1 s.
-  Do not call that a clean first-pass 101/101. Both response fixes remain unmerged.
+  Do not call that a clean first-pass 101/101. #260 is included by exact ancestry.
 - [ ] Finish capability-to-adapter acceptance and disposition of concrete #71
   findings before closing the issue. Do not begin another domain audit. No UI,
   provider quota, live journal, install or deploy work is authorized here.
+
+- PR #276 integrates that response tree before final testing. Remaining capability
+  acceptance found a concrete P2: omitted ACP v1 loadSession/image flags stay
+  enabled. Fix and regress this in the same #71 completion package before the
+  final full matrix and independent review; no second new unreviewed package.

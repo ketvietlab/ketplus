@@ -5,6 +5,8 @@
 #include "ComputerToolLaunch.h"
 #include "providers/ClaudeCredentials.h"
 #include "providers/ProviderFrameValidation.h"
+#include "providers/ProviderResponseEnvelope.h"
+#include "providers/ProviderResponseId.h"
 #include "runtime/ResponseGuidance.h"
 #include <QRegularExpression>
 
@@ -499,12 +501,17 @@ void ClaudeAdapter::consumeLine(const QByteArray& line) {
     if (!object.contains(QStringLiteral("id"))) {
         return;
     }
-    const quint64 id = object.value(QStringLiteral("id")).toVariant().toULongLong();
+    const auto responseId = providerResponseId(object.value(QStringLiteral("id")));
+    if (!responseId)
+        return;
+    const quint64 id = *responseId;
     const auto callback = pending_.take(id);
     if (!callback) {
         return;
     }
-    if (object.contains(QStringLiteral("error"))) {
+    if (!validProviderResponseEnvelope(object)) {
+        callback({}, QStringLiteral("Malformed provider response envelope."));
+    } else if (object.contains(QStringLiteral("error"))) {
         callback({}, errorText(object.value(QStringLiteral("error")).toObject()));
     } else {
         callback(object.value(QStringLiteral("result")).toObject(), {});
