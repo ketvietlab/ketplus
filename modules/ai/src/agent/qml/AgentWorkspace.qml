@@ -1184,9 +1184,16 @@ Item {
     }
 
     Basic.SplitView {
+        id: workspaceSplit
         objectName: "agentWorkspaceSplit"
         anchors.fill: parent
         orientation: Qt.Horizontal
+        // A drag sets the sidebar's preferred width; keep it in unscaled pixels so a
+        // zoom change rescales the user's choice instead of restoring the default.
+        onResizingChanged: {
+            if (!resizing && sidebar.visible)
+                sidebar.unscaledWidth = Math.max(188, Math.min(320, sidebar.width / KetTheme.zoom));
+        }
         handle: Item {
             objectName: "sidebarResizeHandle"
             implicitWidth: agentHost.productSidebarVisible && !agentHost.compactMode ? KetTheme.px(6, KetTheme.zoom) : 0
@@ -1210,16 +1217,26 @@ Item {
             id: sidebar
             workspace: root
             visible: agentHost.productSidebarVisible && !agentHost.compactMode
-            SplitView.minimumWidth: visible ? 188 : 0
-            SplitView.preferredWidth: visible ? 216 : 0
-            SplitView.maximumWidth: visible ? 320 : 0
+            // Recipe widths follow interface zoom, as the mock's 240 px sidebar does.
+            property real unscaledWidth: 240
+            function applyWidth() {
+                SplitView.preferredWidth = KetTheme.px(unscaledWidth, KetTheme.zoom);
+            }
+            SplitView.minimumWidth: visible ? KetTheme.px(188, KetTheme.zoom) : 0
+            SplitView.maximumWidth: visible ? KetTheme.px(320, KetTheme.zoom) : 0
+            Component.onCompleted: applyWidth()
+            onUnscaledWidthChanged: applyWidth()
+            Connections {
+                target: KetTheme
+                function onZoomChanged() { sidebar.applyWidth(); }
+            }
         }
 
         Rectangle {
             id: chatPane
             objectName: "chatPane"
             SplitView.fillWidth: true
-            SplitView.minimumWidth: 260
+            SplitView.minimumWidth: KetTheme.px(260, KetTheme.zoom)
             color: KetTheme.t.pageBg
 
             ColumnLayout {

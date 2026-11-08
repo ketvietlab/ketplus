@@ -467,6 +467,52 @@ void AgentWorkspaceViewTest::sidebarDividerRemainsResizable() {
     QCOMPARE(divider->width(), 1.0);
 }
 
+void AgentWorkspaceViewTest::sidebarMatchesMockAtEveryZoom() {
+    auto& appearance = ket::Appearance::instance();
+    const qreal originalZoom = appearance.zoom();
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(1440, 900);
+    view.show();
+    auto* root = view.quickView()->rootObject();
+    QVERIFY(root);
+    auto* sidebar = root->findChild<QQuickItem*>("conversationSidebar");
+    auto* indicator = root->findChild<QQuickItem*>("workingAnimationIcon");
+    QVERIFY(sidebar);
+    QVERIFY(indicator);
+    // The mock's sidebar recipe: 240 px scaled by interface zoom.
+    for (const qreal zoom : {1.0, 1.25}) {
+        appearance.setZoom(zoom);
+        QTRY_COMPARE(sidebar->width(), ket::Appearance::scale(240, zoom));
+    }
+    // A dragged width survives zoom changes in both directions.
+    appearance.setZoom(1.0);
+    QTRY_COMPARE(sidebar->width(), 240.0);
+    auto* handle = root->findChild<QQuickItem*>("sidebarResizeHandle");
+    QVERIFY(handle);
+    const auto start = handle->mapToScene(QPointF(3, 100)).toPoint();
+    QTest::mousePress(view.quickView(), Qt::LeftButton, Qt::NoModifier, start);
+    QTest::mouseMove(view.quickView(), start + QPoint(70, 0), 30);
+    QTest::mouseRelease(view.quickView(), Qt::LeftButton, Qt::NoModifier, start + QPoint(70, 0));
+    QTRY_VERIFY(sidebar->width() > 290);
+    const qreal dragged = sidebar->width();
+    appearance.setZoom(1.25);
+    QTRY_COMPARE(sidebar->width(), std::min(ket::Appearance::scale(dragged, 1.25),
+                                            ket::Appearance::scale(320, 1.25)));
+    appearance.setZoom(1.0);
+    QTRY_COMPARE(sidebar->width(), dragged);
+    appearance.setZoom(originalZoom);
+    // The working bars keep the recipe's success colour, as in the mock.
+    QCOMPARE(indicator->property("color").value<QColor>(), QColor(Qt::transparent));
+    QStringList icons;
+    for (const auto* id : {"workspace", "explorer", "source-control", "connections"}) {
+        auto* item = findVisualItem(root, QStringLiteral("productNavigation_") + id);
+        QVERIFY(item);
+        icons << item->property("iconName").toString();
+    }
+    QCOMPARE(icons, (QStringList{"chats", "folder", "branch", "network"}));
+}
+
 void AgentWorkspaceViewTest::preservesQuestionDraftsAcrossScope() {
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());

@@ -1131,7 +1131,8 @@ void AgentWorkspaceViewTest::composerFormattingSettles() {
 void AgentWorkspaceViewTest::formatsStreamingText() {
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());
-    view.resize(900, 640);
+    // The transcript keeps the width this gallery layout was written for.
+    view.resize(924, 640);
     view.show();
     auto message = QVariantMap{{"kind", "assistant"},
                                {"meta", "Agent"},
