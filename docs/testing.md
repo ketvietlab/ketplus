@@ -230,7 +230,13 @@ state during a visible-window sample invalidates it. A readiness timeout is not 
 low-CPU result.
 
 The runner saves JSON events, environment metadata, stderr and the requested
-`top -l 5 -s 2 -pid <pid>` samples. Compare the four interval samples after top's
+`top -l 5 -s 2 -pid <pid>` samples. Use a new, empty output directory for every
+attempt, including invalid ones; the runner refuses a directory that already has
+files. It stops the fixture and reports a collection failure when the run exceeds
+`--timeout` (150 seconds by default) or `top` did not record all five samples for
+the fixture process. The fixture also invalidates a sample when the window is
+resized, minimized, moved to another screen or changes device pixel ratio while
+it is measured, and checks the fixture conditions again at the end. Compare the four interval samples after top's
 initial sample, alongside the fixture's process-CPU and rendered-frame counts.
 Check `fixtureValid` and `valid`: Cocoa/Metal, 1440×900 at 2×, three realized rows,
 stopped transcript measurement, expected activity-clock ownership and stable
