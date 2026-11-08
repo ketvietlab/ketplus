@@ -93,13 +93,14 @@ int main(int argc, char** argv) {
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
     QCommandLineParser parser;
     parser.addHelpOption();
-    parser.addOptions({{"work", "running or idle", "state", "running"},
-                       {"visibility", "active, inactive, hidden or minimized", "state", "active"},
-                       {"seconds", "Measured interval (10–60 seconds)", "seconds", "12"},
-                       {"capture", "Optional native PNG before measurement", "path"},
-                       {"theme", "system, light or dark", "theme", "system"},
-                       {"zoom", "Interface zoom (1–1.5)", "zoom", "1"},
-                       {"open", "mode, model or limits: a composer panel, for captures", "panel"}});
+    parser.addOptions(
+        {{"work", "running or idle", "state", "running"},
+         {"visibility", "active, inactive, hidden or minimized", "state", "active"},
+         {"seconds", "Measured interval (10–60 seconds)", "seconds", "12"},
+         {"capture", "Optional native PNG before measurement", "path"},
+         {"theme", "system, light or dark", "theme", "system"},
+         {"zoom", "Interface zoom (1–1.5)", "zoom", "1"},
+         {"open", "mode, model or limits (a composer panel) or welcome, for captures", "panel"}});
     parser.process(app);
     const auto work = parser.value("work");
     const auto visibility = parser.value("visibility");
@@ -124,7 +125,9 @@ int main(int argc, char** argv) {
     const QHash<QString, QString> panelButtons{
         {"mode", "permissionButton"}, {"model", "modelButton"}, {"limits", "usageLimitsButton"}};
     const auto panel = parser.value("open");
-    if (!panel.isEmpty() && !panelButtons.contains(panel)) {
+    // `welcome` opens no panel: the conversation has no messages, like the mock's welcome state.
+    const bool welcome = panel == "welcome";
+    if (!panel.isEmpty() && !welcome && !panelButtons.contains(panel)) {
         report({{"event", "error"}, {"reason", "Invalid panel"}});
         return 2;
     }
@@ -216,13 +219,17 @@ int main(int argc, char** argv) {
     view.setModels(catalog);
     QObject::connect(&view, &ketplus::AgentWorkspaceView::modelsRequested, &view,
                      [&view, catalog] { view.setModels(catalog); });
-    view.resetMessages({QVariantMap{{"kind", "user"},
-                                    {"messageKey", "prompt"},
-                                    {"body", "Inspect the repository and run the focused checks."}},
-                        QVariantMap{{"kind", "assistant"},
-                                    {"messageKey", "response"},
-                                    {"body", "The patch is ready. Checking the remaining tasks."}}},
-                       "idle-cpu-fixture");
+    if (welcome)
+        view.resetMessages({}, "idle-cpu-fixture");
+    else
+        view.resetMessages(
+            {QVariantMap{{"kind", "user"},
+                         {"messageKey", "prompt"},
+                         {"body", "Inspect the repository and run the focused checks."}},
+             QVariantMap{{"kind", "assistant"},
+                         {"messageKey", "response"},
+                         {"body", "The patch is ready. Checking the remaining tasks."}}},
+            "idle-cpu-fixture");
     view.setSessionState("Idle CPU qualification", work == "running" ? "Working" : "Ready",
                          work == "running");
     view.show();
@@ -246,7 +253,7 @@ int main(int argc, char** argv) {
                                            {"effort", "medium"},
                                            {"permission", "workspace-write"},
                                            {"compactWindowSupported", true}});
-    if (!panel.isEmpty())
+    if (!panel.isEmpty() && !welcome)
         QTimer::singleShot(1000, &view, [&] {
             auto* button = findItem(view.quickView()->rootObject(), panelButtons.value(panel));
             if (!button || !QMetaObject::invokeMethod(button, "clicked"))

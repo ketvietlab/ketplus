@@ -2132,6 +2132,8 @@ Flickable {
     }
 
     AgentEmptyState {
+        // The viewport, not the content item: an empty transcript's content is not as tall as the view.
+        parent: transcript
         anchors.fill: parent
         workspace: shell
         visible: transcript.messageModel.count === 0 && !transcript.messageModel.materializing && !host.historyState.loading && !host.historyState.error

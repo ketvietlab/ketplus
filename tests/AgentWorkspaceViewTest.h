@@ -137,6 +137,9 @@ class AgentWorkspaceViewTest final : public QObject {
     void reopenedRowFormatsItsDocumentOnce();
     void conversationColumnFollowsConfiguredWidth();
     void pastesImagesAndOpensIndividualFiles();
+    void welcomeSitsInTheViewport();
+    void welcomeScrollsToEveryStarter_data();
+    void welcomeScrollsToEveryStarter();
     void composerPreview();
     void composerFormattingSettles();
     void composerPlaceholderTracksCaret();
