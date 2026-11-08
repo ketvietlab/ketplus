@@ -14,9 +14,11 @@
 #include "preview/MarkdownPreviewPane.h"
 #include "terminal/TerminalView.h"
 #include "ui/Theme.h"
+#include "ui/TypeScale.h"
 #include "update/AppUpdater.h"
 #include "workspace/ActivityBar.h"
 
+#include <QAbstractButton>
 #include <QAction>
 #include <QApplication>
 #include <QComboBox>

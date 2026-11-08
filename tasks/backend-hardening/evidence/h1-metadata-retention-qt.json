@@ -1,0 +1,48 @@
+{
+  "baseline": "1bdaee5b608da4ef0a958b5888e83859dd920dee",
+  "fixture": "Synthetic Qt Release, 100000 future-dated rows plus 256 accepted writes; no live journal",
+  "before": {
+    "command": {
+      "removed": 90256,
+      "milliseconds": 359
+    },
+    "audit": {
+      "removed": 90256,
+      "milliseconds": 159
+    },
+    "newly_accepted_write_after_clock_rollback": "missing in both cases"
+  },
+  "after": {
+    "command": {
+      "removed": 256,
+      "milliseconds": 7
+    },
+    "audit": {
+      "removed": 256,
+      "milliseconds": 3
+    },
+    "newly_accepted_write_after_clock_rollback": "preserved in both cases"
+  },
+  "focused": {
+    "passed": 20,
+    "failed": 0,
+    "skipped": 0
+  },
+  "mutations": [
+    {
+      "mutation": "row-budget",
+      "exit": 2,
+      "caught": true
+    },
+    {
+      "mutation": "byte-budget",
+      "exit": 1,
+      "caught": true
+    }
+  ],
+  "limits": [
+    "Synthetic macOS Qt 6.11.2 only",
+    "No Windows/live journal/mixed multi-GB acceptance",
+    "Full Pro and exact-head review gates recorded separately in plan/PR"
+  ]
+}
