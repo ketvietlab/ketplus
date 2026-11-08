@@ -8,11 +8,19 @@
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QScopeGuard>
+#include <QSignalBlocker>
 #include <QTemporaryDir>
 #include <QtEndian>
 #include <QtTest>
 
 #include <memory>
+
+namespace ketplus::remote {
+class DaemonClientTestAccess {
+  public:
+    static QLocalSocket& socket(DaemonClient& client) { return client.socket_; }
+};
+} // namespace ketplus::remote
 
 namespace {
 
@@ -91,6 +99,98 @@ class DaemonClientUpgradePolicyTest final : public QObject {
     Q_OBJECT
 
   private slots:
+    void unreadTransportIsBounded_data() {
+        QTest::addColumn<bool>("authenticated");
+        QTest::newRow("before-hello") << false;
+        QTest::newRow("after-hello") << true;
+    }
+    void unreadTransportIsBounded() {
+        QFETCH(bool, authenticated);
+        QTemporaryDir directory(QDir::tempPath() + "/kp-client-rx-XXXXXX");
+        QVERIFY(directory.isValid());
+        QMap<QByteArray, QByteArray> saved;
+        for (const auto& key : {"KETPLUS_DAEMON_TOKEN_FILE", "KETPLUS_DAEMON_SOCKET",
+                                "KETPLUS_DISABLE_DAEMON_AUTOSTART"})
+            saved.insert(key, qgetenv(key));
+        const auto restore = qScopeGuard([&] {
+            for (auto it = saved.cbegin(); it != saved.cend(); ++it)
+                it.value().isNull() ? qunsetenv(it.key().constData())
+                                    : qputenv(it.key().constData(), it.value());
+        });
+        const auto endpoint = directory.filePath("fake.sock");
+        const auto tokenPath = directory.filePath("local.token");
+        QFile token(tokenPath);
+        QVERIFY(token.open(QIODevice::WriteOnly));
+        QVERIFY(token.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+        QCOMPARE(token.write(QByteArray(43, 'k')), 43);
+        token.close();
+        qputenv("KETPLUS_DAEMON_SOCKET", endpoint.toUtf8());
+        qputenv("KETPLUS_DAEMON_TOKEN_FILE", tokenPath.toUtf8());
+        qputenv("KETPLUS_DISABLE_DAEMON_AUTOSTART", "1");
+
+        QByteArray requests;
+        QJsonObject hello;
+        QLocalSocket* peer = nullptr;
+        QLocalServer server;
+        QVERIFY(server.listen(endpoint));
+        connect(&server, &QLocalServer::newConnection, &server, [&] {
+            peer = server.nextPendingConnection();
+            connect(peer, &QLocalSocket::readyRead, &server, [&] {
+                requests.append(peer->readAll());
+                if (!hello.isEmpty() || requests.size() < 4)
+                    return;
+                const auto size = qFromBigEndian<quint32>(requests.constData());
+                if (requests.size() >= 4 + qsizetype(size))
+                    hello = QJsonDocument::fromJson(requests.mid(4, size)).object();
+            });
+        });
+        ketplus::remote::DaemonClient client;
+        QSignalSpy events(&client, &ketplus::remote::DaemonClient::eventReceived);
+        client.call("session.list", {}, {}, -1, [](const QJsonObject&, const QString&) {});
+        QTRY_VERIFY_WITH_TIMEOUT(!hello.isEmpty(), 3000);
+        QCOMPARE(hello.value("message_type").toString(), QString("daemon.hello"));
+        const QJsonObject helloReply{{"correlation_id", hello.value("message_id")},
+                                     {"payload", QJsonObject{{"ok", true}}}};
+        const auto encode = [](const QJsonObject& value) {
+            const auto body = QJsonDocument(value).toJson(QJsonDocument::Compact);
+            QByteArray frame(4, Qt::Uninitialized);
+            qToBigEndian<quint32>(quint32(body.size()), frame.data());
+            return frame + body;
+        };
+        if (authenticated) {
+            peer->write(encode(helloReply));
+            QTRY_VERIFY(client.isReady());
+        }
+        auto& incoming = ketplus::remote::DaemonClientTestAccess::socket(client);
+        QSignalBlocker held(&incoming);
+        constexpr qsizetype frameLimit = 1024 * 1024;
+        for (int index = 0; index < 3; ++index) {
+            auto value = !authenticated && index == 0
+                             ? helloReply
+                             : QJsonObject{{"message_type", "session.event"}, {"index", index}};
+            value.insert("padding", "");
+            const auto overhead = QJsonDocument(value).toJson(QJsonDocument::Compact).size();
+            value.insert("padding", QString(frameLimit - overhead, 'x'));
+            const auto frame = encode(value);
+            QCOMPARE(frame.size(), frameLimit + 4);
+            QCOMPARE(peer->write(frame), frame.size());
+        }
+        peer->flush();
+        QTRY_VERIFY_WITH_TIMEOUT(incoming.bytesAvailable() >= frameLimit, 2000);
+        QTest::qWait(100);
+        qInfo() << "Client unread bytes while dispatch held:" << incoming.bytesAvailable();
+        QVERIFY2(incoming.bytesAvailable() <= frameLimit + 4,
+                 "Client transport buffer exceeded one maximum frame plus header.");
+        held.unblock();
+        QVERIFY(QMetaObject::invokeMethod(&incoming, "readyRead", Qt::DirectConnection));
+        const auto expected = authenticated ? 3 : 2;
+        QTRY_COMPARE_WITH_TIMEOUT(events.size(), expected, 3000);
+        QVERIFY(client.isReady());
+        QCOMPARE(incoming.state(), QLocalSocket::ConnectedState);
+        peer->write(encode({{"message_type", "session.event"}, {"index", 3}}));
+        QTRY_COMPARE_WITH_TIMEOUT(events.size(), expected + 1, 1000);
+    }
+
     void compatibleDaemon_data() {
         QTest::addColumn<QString>("version");
         QTest::addColumn<bool>("older");

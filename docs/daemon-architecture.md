@@ -499,6 +499,11 @@ bytes. On Unix, descriptor-based admission rejects symlinks, nonregular files,
 another UID or group/other permissions. Refusal preserves the file for repair;
 ancestor-directory and non-Unix ACL guarantees are not implied (ADR 0078).
 
+The local Qt client's unread socket buffer is capped at one maximum IPC frame
+plus its four-byte header, including the hello phase. Paused dispatch applies
+backpressure; valid pipelined frames resume without loss (ADR 0079). This is not
+a process-wide memory or request-work limit.
+
 Advanced model, effort and execution controls are revision-fenced daemon
 commands backed by the active adapter's advertised capabilities. Encrypted
 attachments use bounded, individually durable command chunks and a locally

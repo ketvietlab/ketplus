@@ -15,6 +15,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- The local Qt client applies transport backpressure before hello (ADR 0079),
+  limiting unread socket bytes to one maximum frame plus header while preserving
+  valid pipelined events. Broader IPC work/queue/lifetime bounds remain open.
+
 - Local daemon/client credential reads share a 4-KiB raw-file bound (ADR 0078).
   Unix admission checks the opened descriptor's ownership/type/permissions;
   unsupported files remain intact and client reconnect can recover after repair.
