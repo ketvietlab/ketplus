@@ -328,9 +328,11 @@ bool LocalJournal::migrateTranscriptSchema() {
         return false;
     }
     // Conversations from before the column existed take their latest user message's time.
-    // Pruned events may have left it only in the replay projection.
+    // Pruned events may have left it only in the replay projection. Only a journal from before
+    // the format marker can hold one; this scan grows with the history (ADR 0096).
     QSqlQuery turnStarts(database_);
-    if (!turnStarts.exec(QStringLiteral(
+    if (openedFormat_ < 1 &&
+        !turnStarts.exec(QStringLiteral(
             "UPDATE sessions SET last_turn_started_at = max("
             "COALESCE((SELECT MAX(sent_at) FROM events e WHERE e.session_id = sessions.id "
             "AND e.generation = sessions.generation AND e.event_type = 'user.message'), ''), "
@@ -373,6 +375,10 @@ bool LocalJournal::migrateTranscriptSchema() {
 }
 
 bool LocalJournal::backfillTurnSequences() {
+    // Turn numbers and titles predate the format marker; a stamped journal never needs this
+    // per-session scan again, including sessions whose first prompt had no text (ADR 0096).
+    if (openedFormat_ >= 1)
+        return true;
     QSqlQuery sessions(database_);
     if (!sessions.exec(
             QStringLiteral("SELECT s.id, s.generation FROM sessions s WHERE "

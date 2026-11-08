@@ -9,7 +9,7 @@ counting as merged fixes. No UI, live journal, provider quota or deployment work
 
 | Original criterion | Available evidence | Remaining acceptance / owner |
 | --- | --- | --- |
-| Forward-only, idempotent migrations; newer-daemon journal safety | Startup transaction failures #250; #273 closes failed storage objects; #274 protects migration staging (merged `c3490da5`) | Newer format refused unchanged (ADR 0095); interruption/low-space and large-index startup remain / #3329 |
+| Forward-only, idempotent migrations; newer-daemon journal safety | Startup transaction failures #250; #273 closes failed storage objects; #274 protects migration staging (merged `c3490da5`) | Newer format refused unchanged (ADR 0095); legacy backfills once (ADR 0096); interruption/low-space and the one-time activity backfill remain / #3329 |
 | Transactions, crash consistency and surfaced errors | Append/delete/fork/replay fixes #241–250; #254 (merged through #255) prepares media ownership before journal commit | Cross-file interruption and broader read/commit failure coverage; do not infer power-loss atomicity from callback order / #2739 |
 | Bounded/indexed reads on large journals | GC #220, ACK #223, metadata #228, staging #230, deletion queue #235, cloud cache #237, cancellation #240; #272 bounds stored policy JSON (merged through #274) | Explicit session-delete and whole-history fork work; actual query plans and representative payload mix / #2739 |
 | Retention and deletion remove rows/media | Transactional cleanup and retention tests above; media cleanup/dedup #251–252 | Physical media/blob retirement, shared-reference preservation and steady-state acceptance; #128 archive behavior is not implied / #2739 |
@@ -150,3 +150,13 @@ byte-identical by `ketplus_daemon_journal_space_tests`, with negative controls
 for each guard. Pre-versioning journals are upgraded after their migrations
 succeed. Daemon suite 57/57. Low space and interruption beyond fork staging,
 media races and steady-state bounds remain.
+
+## Large-journal startup (ADR 0096)
+
+A Release fixture (300k raw + 300k replay rows, 20k sessions) opened in 5.6 s
+the first time (activity-index backfill 5.3 s, one-time) and 360 ms on every
+later start: the turn-start and turn-number/title backfills rescanned sessions
+whose values stay empty. Both now run only below format 1; later opens take
+16 ms. A behavioural test fails when the gate is removed. Remaining: the
+synchronous one-time activity backfill on first upgrade, low space and
+interruption.
