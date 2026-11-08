@@ -90,6 +90,11 @@ struct SessionTombstone final {
     QString deletedAt;
 };
 
+struct SessionTombstonePage final {
+    QJsonArray tombstones;
+    QJsonObject next;
+};
+
 struct EventReplayPage final {
     QJsonArray events;
     qint64 nextCursor{0};
@@ -162,7 +167,9 @@ class LocalJournal final {
                        const QJsonArray& providerTargets = {});
     [[nodiscard]] QJsonArray deletionWork(int limit = 64, bool pendingCloudOnly = false,
                                           qint64 afterRow = 0) const;
-    [[nodiscard]] QJsonArray sessionTombstones() const;
+    [[nodiscard]] std::optional<SessionTombstonePage>
+    sessionTombstones(const QJsonObject& after = {}, bool legacy = false) const;
+    [[nodiscard]] std::optional<QString> sessionTombstoneSnapshot() const;
     bool completeProviderCleanup(const QString& sessionId, qint64 generation,
                                  const QString& provider, const QString& threadId);
     bool acknowledgeCloudDeletion(const QString& sessionId, qint64 generation,

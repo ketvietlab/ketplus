@@ -201,6 +201,12 @@ the corresponding Atlas mock first.
 - Reference-preview changes: `ketplus_daemon_media_preview_tests` exercises
   canonical references, ownership bounds/types/links, blob identity, byte limits,
   unchanged invalid data and repaired JPEG output; no UI or live media is used.
+- Tombstone catalog pagination: `ketplus_provider_deletion_tests` covers actual
+  keyset plans, row/byte limits, removed cursor rows and malformed storage;
+  `ketplus_desktop_daemon_client_tests` covers real local IPC with 30,000
+  tombstones, legacy fallback, malformed pages, fresh live-catalog ordering and
+  stale reconnect callbacks. Opt in to 100k/300k synthetic deletion/catalog
+  probes with `KETPLUS_RUN_DELETE_BACKLOG_TESTS=1`; they use temporary journals.
 - One Pro module: focused target plus its directly affected tests.
 - Shared header or desktop shell: full build and full Pro test suite.
 - `core/` change: the Lite suite (`ctest --preset lite-dev`), then the full Pro suite.
@@ -586,3 +592,10 @@ covers the final agent-schema stage and conversation-number ownership recovery.
 Run the protocol, activity-groups, agent-messaging, retention-policy, journal-space
 and headless-daemon targets in Release. This does not establish full startup
 atomicity, disk-full/crash or multi-GB/platform acceptance. Synthetic journals only.
+
+The ADR 0091 catalog regressions also cover deletion inserted behind the cursor,
+revision rollback, retention/update invalidation, reopen with an old token,
+malformed revision admission, three-retry exhaustion, discovery paging and
+`ketplusctl sessions` emitting a complete 30k-tombstone JSON object. The latter
+uses a fixture daemon, not an installed service or provider. A legacy catalog
+above 960 KiB verifies the actual serialized IPC envelope still fits 1 MiB.

@@ -229,7 +229,7 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | --- | --- | --- | --- |
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
 | H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 and cloud #237 merged; transaction recovery #241 merged; cancellation #240 merged; explicit session-delete bounds still open | Audit explicit session deletion and tombstone enumeration / #2739 |
-| H1.2 | In progress | #272/#273 integrated into #274 with #255; combined Pro 104/104 at 5a8bca1c | Final-head #274 review / #7705, then merge / #2739; broader migration/crash gates remain |
+| H1.2 | In progress | #272/#273 integrated into #274 with #255; combined Pro 104/104 at 5a8bca1c | #274 reviewed and merged c3490da5; broader migration/crash gates remain / #2739 |
 | H1.4 | In progress | #253–255 merged via 691d18c4; author Pro104/104 and independent daemon56/56 | Remaining write-admission, filesystem races and bounds / #2739 |
 | H1.5–H1.7 | Not started | No claim that #128 backend acceptance is complete | Continue storage acceptance / #2739 |
 | H1.3 | In progress | Delete/ownership #241–243, append #244–245 and fork #246–247 merged; stream recovery #248 merged; replay/activity #249 merged; startup #250 merged | Continue caller atomicity/read failures / #2739 |
@@ -996,9 +996,9 @@ The relay rollout gate remains external and does not block this provider work.
 - [x] Independent #7705 PASS at `dae6a297`: protocol199/199, fork44/44,
   preview15/15 and daemon56/56; original-source preview/fork controls fail.
   #255 merged `691d18c4`; GitHub also confirms #253/#254 MERGED.
-- [ ] Remove the pushed linked worktree/build after clean/pushed/usage checks.
-- [ ] Drain existing #272/#273/#274 journal policy/startup/migration fixes next,
-  then reconcile all seven original #68 criteria before claiming issue completion.
+- [x] Removed the pushed media worktree/build after clean/pushed/usage checks.
+- [x] Integrated #272/#273/#274 at `c3490da5`; their author worktree/build and
+  merged branch were removed. Continue the seven original #68 criteria.
   Whole-history bounds, filesystem races, crash recovery and #128 archive policy
   are not closed by this media package.
 
@@ -1078,3 +1078,64 @@ Evidence: [h1-failed-journal-reuse-qt.json](evidence/h1-failed-journal-reuse-qt.
 - [ ] Independent #7705 final-head review and merge. This package does not complete
   H1.2/H1.6 or #68; the seven original criteria remain in `issue-68-acceptance.md`.
 - [ ] Safe cleanup of the pushed linked worktree/build after all checks.
+
+### 2026-11-08 — #274 merged; bounded tombstone catalog
+
+- [x] Independent #7705 PASS #274 at `c30fc59e`; daemon56/56 and old-production
+  controls confirm all three fixes. Merged `c3490da5`; GitHub confirms #272/#273
+  MERGED as well. Prior linked journal/media worktrees and owned builds are removed.
+- [x] Measure real SessionHost deletion and catalog paths on temporary journals.
+  300k raw + 300k replay + 256-MiB chunks take 1,192 ms synchronously, with correct
+  physical deletion, idempotency, unrelated-session preservation and reopen.
+  100k/300k tombstones exceed the IPC frame at 5,389,329/16,389,329 encoded bytes.
+- [x] Implement versioned 128-row/64-KiB tombstone pages with indexed keyset seeks,
+  bounded SQL projections and fail-closed legacy overflow; consume sequentially
+  in the transport bridge with reconnect and cursor checks. No UI changes.
+- [ ] Final focused/full Pro gates and independent #7705 review, then merge and
+  safe worktree cleanup. Focused Pro passes deletion44/44 and Desktop bridge
+  28 pass/1 live-provider skip, including real IPC with 30k tombstones and reconnect.
+  Original bridge control: 3 pass/2 fail on the selected new/legacy cases; restored
+  source rebuilt. Full matrix still requires its own fixed-commit run.
+- [ ] Resume explicit session-delete work bounds while preserving ADR 0055; do
+  not label the measured 1.2-second atomic operation bounded or close #68 on this
+  pagination fix. Whole-history fork/schema/crash/media gates remain in the dossier.
+
+- Final type/encoding probe at `8b42da44` exposed SQLite TEXT with invalid UTF-8
+  being silently replaced by Qt (2 controls pass / 1 failure). The projection now
+  returns bounded bytes and rejects decoding errors without changing the row.
+  The earlier Pro104/104 result belongs to `8b42da44`; run final gates again for
+  this production delta before review. No acceptance is inferred from the old run.
+
+- [x] Final Release Pro build and full offscreen104/104 pass at `221eb2f8`
+  (362.39 s, first run at this head). Final opt-in deletion44/44 and Desktop
+  bridge28 pass/1 live-provider skip pass on the same commit (22.24 s, 2 targets).
+  Source/log hashes, raw scale measurements and both controls are recorded in
+  `evidence/h1-tombstone-pagination-qt.json`. Independent review/merge remains
+  pending; the final evidence commit changes documentation only.
+
+## 2026-11-08 — #280 concurrent catalog and caller follow-up
+
+- [x] Verify #274 already merged at `c3490da5`; the delayed OPEN report does not
+  reopen its review. #68 remains the active closure-first issue.
+- [x] Add a transactional mutation token for tombstone INSERT/UPDATE/DELETE and
+  an open-journal epoch. Continuations and final live reads share the token;
+  mutation or reopen requires restart, capped at three retries.
+- [x] Use one streamed reader for Desktop refresh, discovery and CLI. Preserve
+  CLI single-object JSON through a private temporary spool reset on retry.
+- [x] Advertise the additive feature; measure complete serialized response bytes
+  rather than reject a legacy catalog at an arbitrary 960-KiB threshold.
+- [x] Focused initial build and 3/3 targets pass: deletion42+4 scale skips,
+  bridge30+1 live skip, headless6. Concurrent behind-cursor, rollback/reopen,
+  discovery, retry-cap, legacy wire boundary and CLI30k regressions pass.
+- [x] Negative controls fail as expected: removing the token comparison prevents
+  successful restart/reconciliation; restoring discovery/CLI callers breaks the new regressions.
+  Restore source and rebuild successfully.
+- [x] Restored code `96038758`: full Release Pro104/104 (383.56 s, first run),
+  scale/bridge/CLI3/3 (21.85 s): deletion46/46, bridge30+1 live skip, headless6/6.
+  300k tombstones: 2,344 pages / 1,182 ms; atomic deletion still 1,166 ms.
+  Source/log hashes and controls: `evidence/h1-tombstone-snapshot-callers-qt.json`.
+- [ ] Send the final head to #7705 for independent review.
+- [ ] Independent review, merge and linked-worktree/build cleanup.
+- [ ] Continue the separate atomic whole-session deletion gate and remaining #68
+  criteria. Per-page bounds do not establish a bounded total history refresh;
+  delta/since synchronization remains an explicit follow-up.

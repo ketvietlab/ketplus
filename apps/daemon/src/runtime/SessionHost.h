@@ -145,7 +145,7 @@ class SessionHost final : public QObject, private AgentHostPort {
         bool journalBufferFullReported{false};
     };
 
-    [[nodiscard]] QJsonObject listSessions() const;
+    [[nodiscard]] QJsonObject listSessions(const QJsonObject& payload) const;
     [[nodiscard]] QJsonObject storageRetention(const QString& type, const QJsonObject& payload);
     [[nodiscard]] QJsonObject storageSize(const QString& type, const QJsonObject& payload);
     QJsonObject workspaceCatalog(const QString& type, const QJsonObject& payload);

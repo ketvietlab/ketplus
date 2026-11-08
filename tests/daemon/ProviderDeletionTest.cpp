@@ -3,6 +3,7 @@
 #include "providers/CodexAdapter.h"
 #include "runtime/SessionHost.h"
 #include "storage/LocalJournal.h"
+#include <QElapsedTimer>
 #include <QFile>
 #include <QSignalSpy>
 #include <QSqlDatabase>
@@ -10,6 +11,10 @@
 #include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QtTest>
+
+namespace ketplus::daemon::detail {
+QString sessionTombstonesQuery(bool continuation);
+}
 
 using namespace ketplus::daemon;
 namespace {
@@ -27,6 +32,375 @@ QList<QPair<QString, QString>> unsupportedOwnershipMetadata() {
 class ProviderDeletionTest final : public QObject {
     Q_OBJECT
   private slots:
+    void deletionBacklogCharacterization_data() {
+        QTest::addColumn<int>("rows");
+        QTest::newRow("1000") << 1000;
+        QTest::newRow("100000") << 100000;
+        QTest::newRow("300000") << 300000;
+    }
+    void deletionBacklogCharacterization() {
+        QFETCH(int, rows);
+        if (rows > 1000 && !qEnvironmentVariableIsSet("KETPLUS_RUN_DELETE_BACKLOG_TESTS"))
+            QSKIP("Opt-in synthetic backlog characterization");
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(journal.isOpen());
+        StoredSession stored;
+        stored.id = "deleted";
+        stored.generation = 1;
+        stored.worktreePath = dir.path();
+        stored.adapter = "codex";
+        stored.state = "ready";
+        QVERIFY(journal.upsertSession(stored));
+        stored.id = "unrelated";
+        QVERIFY(journal.upsertSession(stored));
+        QVERIFY(journal.appendEvent(stored.id, 1, "assistant.delta", {{"text", "keep"}}) > 0);
+        const auto unrelatedBefore = journal.eventsAfter(stored.id, 1, 0);
+        CodexAdapter adapter(dir.filePath("missing-fixture-provider"));
+        SessionHost host(&journal, &adapter);
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == path)
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        QSqlQuery q(db);
+        QVERIFY(db.transaction());
+        const auto cte = QString("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n "
+                                 "WHERE i<%1) ")
+                             .arg(rows);
+        QVERIFY2(q.exec(cte + "INSERT INTO events(session_id,generation,cursor,event_type,payload,"
+                              "sent_at,turn_sequence) SELECT 'deleted',1,i,'assistant.delta',"
+                              "'{\"text\":\"bounded fixture\"}',datetime('now'),1 FROM n"),
+                 qPrintable(q.lastError().text()));
+        QVERIFY2(q.exec(cte + "INSERT INTO replay_events(session_id,generation,cursor,event_type,"
+                              "item_id,payload,sent_at,turn_sequence) SELECT 'deleted',1,i,"
+                              "'assistant.delta','item','{\"text\":\"bounded fixture\"}',"
+                              "datetime('now'),1 FROM n"),
+                 qPrintable(q.lastError().text()));
+        const int chunks = qMin(rows, 4096);
+        QVERIFY2(q.exec(QString("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n "
+                                "WHERE i<%1) INSERT INTO large_event_payload_chunks "
+                                "SELECT 'deleted',1,'transfer',i*65536,zeroblob(65536) FROM n")
+                            .arg(chunks)),
+                 qPrintable(q.lastError().text()));
+        QVERIFY(db.commit());
+        q.finish();
+        const QJsonObject request{{"protocol_version", 0},
+                                  {"message_id", "delete-op"},
+                                  {"message_type", "session.delete"},
+                                  {"session_id", "deleted"},
+                                  {"session_generation", 1},
+                                  {"payload", QJsonObject{}}};
+        bool ticked = false;
+        QTimer::singleShot(0, &host, [&] { ticked = true; });
+        QElapsedTimer timer;
+        timer.start();
+        const auto result = host.handleCommand(request, "desktop");
+        const auto elapsed = timer.elapsed();
+        QVERIFY2(result.value("ok").toBool(), qPrintable(QJsonDocument(result).toJson()));
+        QVERIFY(result.value("applied").toBool());
+        QVERIFY(!ticked);
+        qInfo() << "delete-characterization rows-per-event-table" << rows << "chunk-bytes"
+                << qint64(chunks) * 65536 << "synchronous-ms" << elapsed;
+        for (const auto& table : {"events", "replay_events", "large_event_payload_chunks"}) {
+            QVERIFY2(
+                q.exec(QString("SELECT count(*) FROM %1 WHERE session_id='deleted'").arg(table)),
+                qPrintable(q.lastError().text()));
+            QVERIFY(q.next());
+            QCOMPARE(q.value(0).toLongLong(), 0);
+            q.finish();
+        }
+        QCOMPARE(journal.eventsAfter("unrelated", 1, 0), unrelatedBefore);
+        QCOMPARE(journal.sessions().size(), 1);
+        QCOMPARE(journal.sessionTombstone("deleted", 1).operationId, QString("delete-op"));
+        QVERIFY(host.handleCommand(request, "desktop").value("applied").toBool());
+        auto different = request;
+        different["message_id"] = "different-op";
+        QVERIFY(!host.handleCommand(different, "desktop").value("ok").toBool());
+        QCoreApplication::processEvents();
+        QVERIFY(ticked);
+        LocalJournal reopened(path);
+        QVERIFY(reopened.isOpen());
+        QCOMPARE(reopened.sessions().size(), 1);
+        QCOMPARE(reopened.sessionTombstone("deleted", 1).operationId, QString("delete-op"));
+    }
+    void tombstoneBacklogCharacterization_data() {
+        QTest::addColumn<int>("rows");
+        QTest::newRow("1000") << 1000;
+        QTest::newRow("100000") << 100000;
+        QTest::newRow("300000") << 300000;
+    }
+    void tombstoneBacklogCharacterization() {
+        QFETCH(int, rows);
+        if (rows > 1000 && !qEnvironmentVariableIsSet("KETPLUS_RUN_DELETE_BACKLOG_TESTS"))
+            QSKIP("Opt-in synthetic backlog characterization");
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite"));
+        QVERIFY(journal.isOpen());
+        CodexAdapter adapter(dir.filePath("missing-fixture-provider"));
+        SessionHost host(&journal, &adapter);
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == journal.databasePath())
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        QSqlQuery q(db);
+        QVERIFY2(q.exec(QString("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n "
+                                "WHERE i<%1) INSERT INTO session_tombstones "
+                                "SELECT 'deleted-'||i,1,1,'operation-'||i,datetime('now') FROM n")
+                            .arg(rows)),
+                 qPrintable(q.lastError().text()));
+        q.finish();
+        QElapsedTimer timer;
+        timer.start();
+        const auto result = host.handleCommand({{"protocol_version", 0},
+                                                {"message_id", "list"},
+                                                {"message_type", "session.list"},
+                                                {"payload", QJsonObject{}}},
+                                               "desktop");
+        const auto elapsed = timer.elapsed();
+        if (rows <= 8192) {
+            QVERIFY(result.value("ok").toBool());
+            QCOMPARE(result.value("deleted_sessions").toArray().size(), rows);
+        } else {
+            QVERIFY(!result.value("ok").toBool());
+            QCOMPARE(result.value("error_code").toString(), "session_catalog_upgrade_required");
+        }
+        qsizetype total = 0, pages = 0, maximumBytes = 0;
+        QJsonObject after;
+        QString snapshot;
+        QElapsedTimer pageTimer;
+        qint64 maximumMs = 0;
+        do {
+            QJsonObject payload{{"deleted_sessions_page_version", 1},
+                                {"deleted_sessions_only", true}};
+            if (!after.isEmpty())
+                payload.insert("deleted_sessions_after", after);
+            if (!snapshot.isEmpty())
+                payload.insert("deleted_sessions_snapshot", snapshot);
+            pageTimer.start();
+            const auto page = host.handleCommand(
+                {{"message_type", "session.list"}, {"payload", payload}}, "desktop");
+            maximumMs = qMax(maximumMs, pageTimer.elapsed());
+            QVERIFY2(page.value("ok").toBool(), qPrintable(QJsonDocument(page).toJson()));
+            const auto count = page.value("deleted_sessions").toArray().size();
+            QVERIFY(count <= 128);
+            QVERIFY(!page.contains("sessions"));
+            const auto size = QJsonDocument(page).toJson(QJsonDocument::Compact).size();
+            QVERIFY(size < 66 * 1024);
+            maximumBytes = qMax(maximumBytes, size);
+            total += count;
+            ++pages;
+            const auto next = page.value("deleted_sessions_next").toObject();
+            QVERIFY(next.isEmpty() || next != after);
+            after = next;
+            snapshot = page.value("deleted_sessions_snapshot").toString();
+        } while (!after.isEmpty());
+        QCOMPARE(total, rows);
+        qInfo() << "tombstone-characterization rows" << rows << "legacy-ms" << elapsed << "pages"
+                << pages << "maximum-page-bytes" << maximumBytes << "maximum-page-ms" << maximumMs
+                << "all-pages-ms" << timer.elapsed();
+    }
+    void legacyCatalogUsesActualWireBudget() {
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite"));
+        QVERIFY(journal.isOpen());
+        CodexAdapter adapter(dir.filePath("missing-provider"));
+        SessionHost host(&journal, &adapter);
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (QSqlDatabase::database(name).databaseName() == journal.databasePath())
+                db = QSqlDatabase::database(name);
+        QSqlQuery q(db);
+        QVERIFY(q.exec("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n "
+                       "WHERE i<18700) INSERT INTO session_tombstones "
+                       "SELECT 'deleted-'||i,1,1,'op','now' FROM n"));
+        q.finish();
+        const QJsonObject request{{"message_type", "session.list"},
+                                  {"message_id", QString(128, QChar(1))},
+                                  {"payload", QJsonObject{}}};
+        const auto result = host.handleCommand(request, "desktop");
+        QVERIFY2(result.value("ok").toBool(), qPrintable(QJsonDocument(result).toJson()));
+        QCOMPARE(result.value("deleted_sessions").toArray().size(), 18700);
+        const auto bytes = protocol::encodeFrame(protocol::response(request, result)).size() - 4;
+        QVERIFY(bytes > 960 * 1024);
+        QVERIFY(bytes <= protocol::maximumFrameBytes);
+    }
+
+    void tombstoneSnapshotFencesMutationRollbackAndRestart() {
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite"));
+        QVERIFY(journal.isOpen());
+        CodexAdapter adapter(dir.filePath("missing-provider"));
+        SessionHost host(&journal, &adapter);
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (QSqlDatabase::database(name).databaseName() == journal.databasePath())
+                db = QSqlDatabase::database(name);
+        QSqlQuery q(db);
+        QVERIFY(q.exec("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n "
+                       "WHERE i<200) INSERT INTO session_tombstones "
+                       "SELECT 'middle-'||i,1,1,'op','now' FROM n"));
+        q.finish();
+        const auto list = [&](const QJsonObject& payload) {
+            return host.handleCommand({{"message_type", "session.list"}, {"payload", payload}},
+                                      "desktop");
+        };
+        const QJsonObject firstPayload{{"deleted_sessions_page_version", 1},
+                                       {"deleted_sessions_only", true}};
+        const auto first = list(firstPayload);
+        QVERIFY(first.value("ok").toBool());
+        const auto token = first.value("deleted_sessions_snapshot");
+        const QJsonObject continuation{
+            {"deleted_sessions_page_version", 1},
+            {"deleted_sessions_snapshot", token},
+            {"deleted_sessions_after", first.value("deleted_sessions_next")}};
+        QVERIFY(list(continuation).value("ok").toBool());
+        QVERIFY(db.transaction());
+        QVERIFY(q.exec("INSERT INTO session_tombstones VALUES('aaa',1,1,'op','now')"));
+        QVERIFY(db.rollback());
+        QCOMPARE(list(firstPayload).value("deleted_sessions_snapshot"), token);
+        // A committed insertion behind the keyset cursor must not silently disappear.
+        QVERIFY(q.exec("INSERT INTO session_tombstones VALUES('aaa',1,1,'op','now')"));
+        QCOMPARE(list(continuation).value("error_code").toString(), "session_catalog_changed");
+        auto current = list(firstPayload);
+        QCOMPARE(current.value("deleted_sessions")
+                     .toArray()
+                     .first()
+                     .toObject()
+                     .value("session_id")
+                     .toString(),
+                 "aaa");
+        // Fence the final fresh-live read too, and invalidate on retention and metadata updates.
+        for (const auto& sql :
+             {"UPDATE session_tombstones SET operation_id='changed' WHERE session_id='aaa'",
+              "DELETE FROM session_tombstones WHERE session_id='aaa'"}) {
+            const auto previous = current.value("deleted_sessions_snapshot");
+            QVERIFY(q.exec(sql));
+            QCOMPARE(list({{"deleted_sessions_page_version", 1},
+                           {"deleted_sessions_snapshot", previous}})
+                         .value("error_code")
+                         .toString(),
+                     "session_catalog_changed");
+            current = list(firstPayload);
+        }
+        q.finish();
+        {
+            LocalJournal reopened(journal.databasePath());
+            QVERIFY(reopened.isOpen());
+            CodexAdapter other(dir.filePath("missing-provider"));
+            SessionHost restarted(&reopened, &other);
+            const auto result = restarted.handleCommand(
+                {{"message_type", "session.list"},
+                 {"payload", QJsonObject{{"deleted_sessions_page_version", 1},
+                                         {"deleted_sessions_snapshot",
+                                          current.value("deleted_sessions_snapshot")}}}},
+                "desktop");
+            QCOMPARE(result.value("error_code").toString(), "session_catalog_changed");
+        }
+        auto invalid = continuation;
+        invalid.remove("deleted_sessions_snapshot");
+        QCOMPARE(list(invalid).value("error_code").toString(), "invalid_tombstone_page");
+        invalid.insert("deleted_sessions_snapshot", QString(129, 'x'));
+        QCOMPARE(list(invalid).value("error_code").toString(), "invalid_tombstone_page");
+        QVERIFY(q.exec("UPDATE session_tombstone_catalog SET revision=zeroblob(2097152)"));
+        QCOMPARE(list(firstPayload).value("error_code").toString(), "journal_error");
+    }
+
+    void tombstonePagesValidateStorageAndSeekTheActualQuery() {
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite"));
+        QVERIFY(journal.isOpen());
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == journal.databasePath())
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        QSqlQuery q(db);
+        // Large escaped identities hit the byte budget before the row budget.
+        QVERIFY(q.prepare("INSERT INTO session_tombstones VALUES(?,1,1,'op',datetime('now'))"));
+        for (int i = 0; i < 40; ++i) {
+            q.bindValue(0, QString(1000, QChar(1)) + QString::number(i).rightJustified(3, '0'));
+            QVERIFY(q.exec());
+        }
+        auto page = journal.sessionTombstones();
+        QVERIFY(page.has_value());
+        QVERIFY(page->tombstones.size() < 128);
+        QVERIFY(!page->next.isEmpty());
+        QVERIFY(QJsonDocument(page->tombstones).toJson(QJsonDocument::Compact).size() <= 64 * 1024);
+        const auto cursor = page->next;
+        QVERIFY(q.prepare("EXPLAIN QUERY PLAN " + detail::sessionTombstonesQuery(true)));
+        q.addBindValue(cursor.value("session_id").toString());
+        q.addBindValue(cursor.value("session_generation").toInteger());
+        q.addBindValue(129);
+        QVERIFY(q.exec());
+        QString plan;
+        while (q.next())
+            plan += q.value(3).toString();
+        QVERIFY2(plan.contains("SEARCH session_tombstones USING COVERING INDEX"), qPrintable(plan));
+        QVERIFY2(plan.contains("(session_id,generation)>(?,?)"), qPrintable(plan));
+        QVERIFY(!plan.contains("TEMP B-TREE"));
+        q.finish();
+        QVERIFY(!journal.sessionTombstones({{"session_id", "id"}}));
+        QVERIFY(!journal.sessionTombstones({{"session_id", "id"}, {"session_generation", 1.5}}));
+        QVERIFY(q.exec("DELETE FROM session_tombstones"));
+        for (const auto& bad : {"''", "zeroblob(2097152)", "CAST(zeroblob(2097152) AS TEXT)"}) {
+            QVERIFY(q.exec(
+                QString("INSERT INTO session_tombstones VALUES(%1,1,1,'op','now')").arg(bad)));
+            QVERIFY(!journal.sessionTombstones());
+            QVERIFY(q.exec(detail::sessionTombstonesQuery(false).replace("?", "129")));
+            QVERIFY(q.next());
+            QVERIFY(q.value(0).isNull());
+            QCOMPARE(q.value(0).toByteArray().size(), 0);
+            q.finish();
+            QVERIFY(q.exec("DELETE FROM session_tombstones"));
+        }
+        for (const auto& bad : {"-1", "1.5", "zeroblob(2097152)", "'broken'"}) {
+            QVERIFY(q.exec(
+                QString("INSERT INTO session_tombstones VALUES('id',%1,1,'op','now')").arg(bad)));
+            QVERIFY(!journal.sessionTombstones());
+            QVERIFY(q.exec("DELETE FROM session_tombstones"));
+        }
+        for (const auto& invalid : {QString("80"), QString("C3")}) {
+            QVERIFY(q.exec(QString("INSERT INTO session_tombstones VALUES(CAST(x'%1' AS TEXT),"
+                                   "1,1,'op','now')")
+                               .arg(invalid)));
+            QVERIFY(!journal.sessionTombstones());
+            QVERIFY(q.exec("SELECT hex(session_id) FROM session_tombstones"));
+            QVERIFY(q.next());
+            QCOMPARE(q.value(0).toString(), invalid);
+            q.finish();
+            QVERIFY(q.exec("DELETE FROM session_tombstones"));
+        }
+        // A valid leading BOM is part of the identity, not a decoder marker.
+        QVERIFY(q.exec("INSERT INTO session_tombstones VALUES(CAST(x'EFBBBF313233' AS TEXT),"
+                       "1,1,'op','now')"));
+        page = journal.sessionTombstones();
+        QVERIFY(page.has_value());
+        QCOMPARE(page->tombstones.first().toObject().value("session_id").toString().toUtf8(),
+                 QByteArray::fromHex("EFBBBF313233"));
+        QVERIFY(q.exec("DELETE FROM session_tombstones"));
+        QVERIFY(q.exec("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<200) "
+                       "INSERT INTO session_tombstones SELECT 'same',i,1,'op','now' FROM n"));
+        page = journal.sessionTombstones();
+        QVERIFY(page.has_value());
+        QCOMPARE(page->tombstones.size(), 128);
+        QCOMPARE(page->next.value("session_generation").toInteger(), 128);
+        // Removing the cursor row between pages cannot shift an OFFSET and skip a row.
+        QVERIFY(q.exec("DELETE FROM session_tombstones WHERE generation<=128"));
+        page = journal.sessionTombstones(page->next);
+        QVERIFY(page.has_value());
+        QCOMPARE(page->tombstones.size(), 72);
+        QCOMPARE(page->tombstones.first().toObject().value("session_generation").toInteger(), 129);
+        QVERIFY(page->next.isEmpty());
+        QVERIFY(q.exec("DROP TABLE session_tombstones"));
+        QVERIFY(!journal.sessionTombstones());
+    }
     void failedSessionDeletionRollsBackAndCanRetry_data() {
         QTest::addColumn<QString>("fault");
         QTest::newRow("commit") << "commit";
