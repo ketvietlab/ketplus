@@ -165,8 +165,9 @@ Item {
             // ADR 0067: the conversation that reviews each finished turn and replies here.
             readonly property var assigned: agentHost.reviewerState.reviewer || null
             readonly property string name: assigned ? "@agent/" + assigned.number : ""
-            // As in the mock, the Reviewer label collapses before the title or scope elide.
-            readonly property bool full: titleRow.width >= (conversationNumber.visible ? conversationNumber.implicitWidth + titleRow.spacing : 0) + conversationTitle.implicitWidth + conversationStatusBadge.width + (scopeChip.visible ? scopeChip.implicitWidth + titleRow.spacing : 0) + reviewerProbe.implicitWidth + titleRow.spacing * 2
+            // As in the mock, the Reviewer label collapses before the title or scope elide. It
+            // counts every visible item and the spacing before the trailing filler.
+            readonly property bool full: titleRow.width >= (conversationNumber.visible ? conversationNumber.implicitWidth + titleRow.spacing : 0) + conversationTitle.implicitWidth + conversationStatusBadge.width + (scopeChip.visible ? scopeChip.implicitWidth + titleRow.spacing : 0) + (conversationTags.visible ? conversationTags.implicitWidth + titleRow.spacing : 0) + reviewerProbe.implicitWidth + titleRow.spacing * 3
             readonly property string fullText: (name ? "Reviewer · " + name : "Reviewer") + "  ▾"
             readonly property string detail: "An agent reviews each finished turn and replies to this conversation. Reviewers never merge."
             visible: !agentHost.compactWindow && agentHost.reviewerState.available === true

@@ -83,6 +83,63 @@ class DesktopReviewerTest final : public QObject {
         QVERIFY2(!state.contains("error"), qPrintable(state.value("error").toString()));
         QVERIFY(!state.contains("reviewer"));
     }
+
+    // The view asks once, when the restored conversation appears, which is before the daemon
+    // has listed its sessions; the read must not stay failed.
+    void readsTheReviewerAgainOnceTheDaemonHasRestored() {
+        Environment env;
+        QVERIFY(env.directory.isValid());
+        const auto path = QFileInfo(env.directory.path()).canonicalFilePath();
+        const auto executable = env.directory.filePath("fake-codex");
+        QVERIFY(writeFakeCodex(executable, env.directory.filePath("provider.log")));
+        {
+            LocalJournal journal(env.directory.filePath("journal.sqlite3"));
+            QVERIFY(journal.upsertSession(
+                {"working", path, "codex", {}, {}, "ready", 1, 0, 0, "Working"}));
+            QVERIFY(
+                journal.upsertSession({"peer", path, "claude", {}, {}, "ready", 1, 0, 0, "Peer"}));
+            QString error;
+            QVERIFY2(journal.setConversationReviewer(
+                         {.sessionId = "working", .reviewerSessionId = "peer"}, &error),
+                     qPrintable(error));
+        }
+        rememberConversation(path, "working");
+        DaemonService service({env.directory.filePath("journal.sqlite3"),
+                               env.directory.filePath("local.token"),
+                               env.directory.filePath("daemon.sock"), executable});
+        QVERIFY2(service.start(), qPrintable(service.errorString()));
+        CodexAppServer server;
+        AgentSessionManager desktop(&server);
+        QSignalSpy results(&desktop, &AgentSessionManager::reviewerResult);
+        int reads = 0;
+        connect(&desktop, &AgentSessionManager::conversationsChanged, this,
+                [&](const QString&, const QVariantList& conversations) {
+                    for (const auto& value : conversations)
+                        if (const auto row = value.toMap(); row.value("active").toBool() &&
+                                                            row.value("started").toBool() &&
+                                                            reads == 0) {
+                            ++reads;
+                            desktop.readReviewer(path);
+                        }
+                });
+        desktop.activate(path);
+        QCOMPARE(reads, 1);
+        QTRY_VERIFY_WITH_TIMEOUT(!results.isEmpty() &&
+                                     results.last()
+                                             .at(2)
+                                             .toMap()
+                                             .value("reviewer")
+                                             .toMap()
+                                             .value("session_id")
+                                             .toString() == QStringLiteral("peer"),
+                                 5000);
+        QVERIFY(results.first().at(2).toMap().contains("error"));
+        QCOMPARE(reads, 1);
+        // A later restore with nothing to retry asks nothing more.
+        const auto settled = results.size();
+        QTest::qWait(300);
+        QCOMPARE(results.size(), settled);
+    }
 };
 
 QTEST_GUILESS_MAIN(DesktopReviewerTest)

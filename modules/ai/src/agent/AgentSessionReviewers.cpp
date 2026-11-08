@@ -2,6 +2,8 @@
 #include "agent/AgentSessionState.h"
 #include "agent/CodexAppServer.h"
 
+#include <utility>
+
 namespace ketplus {
 
 // ADR 0067: the conversation that reviews each finished turn of the active one.
@@ -55,6 +57,8 @@ void AgentSessionManager::callReviewer(const QString& worktreePath, const QStrin
                                                 ? QString{}
                                                 : result.value("error_message").toString();
                       if (!error.isEmpty()) {
+                          if (!method.endsWith("/set"))
+                              reviewerReadsToRetry_.insert(path);
                           emit reviewerResult(
                               path, conversation,
                               {{"error", error}, {"change", method.endsWith("/set")}});
@@ -65,6 +69,11 @@ void AgentSessionManager::callReviewer(const QString& worktreePath, const QStrin
                           state.insert("reviewer", assigned.toObject().toVariantMap());
                       emit reviewerResult(path, conversation, state);
                   });
+}
+
+void AgentSessionManager::retryReviewerReads() {
+    for (const QString& path : std::exchange(reviewerReadsToRetry_, {}))
+        readReviewer(path);
 }
 
 } // namespace ketplus

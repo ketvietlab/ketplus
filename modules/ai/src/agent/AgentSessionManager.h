@@ -373,6 +373,10 @@ class AgentSessionManager final : public QObject {
     void applyModelOverride(QJsonObject& params, bool includeEffort) const;
     void callReviewer(const QString& worktreePath, const QString& method,
                       const QJsonObject& reviewer);
+    // Reads that failed, often because the daemon had not listed its sessions yet. Each is
+    // tried once more when the daemon finishes restoring.
+    void retryReviewerReads();
+    QSet<QString> reviewerReadsToRetry_;
     [[nodiscard]] static QString normalizedPath(const QString& path);
 
     CodexAppServer* server_{nullptr};

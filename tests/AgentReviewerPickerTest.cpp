@@ -1,7 +1,9 @@
 #include "AgentWorkspaceViewTest.h"
+#include "KetAppearance.h"
 #include "agent/AgentWorkspaceView.h"
 
 #include <QQuickView>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QtTest>
 
@@ -149,4 +151,58 @@ void AgentWorkspaceViewTest::reviewerPickerFollowsTheActiveConversation() {
     view.setConversations(
         {conversation("a", "9410", true, true), conversation("b", "9411", false, false)});
     QCOMPARE(reads.size(), 2);
+}
+
+void AgentWorkspaceViewTest::reviewerLabelCollapsesBeforeTagsSqueezeTheTitle_data() {
+    QTest::addColumn<qreal>("zoom");
+    QTest::newRow("medium") << qreal(1);
+    QTest::newRow("large") << qreal(1.25);
+}
+
+// The full "Reviewer · @agent/N" label shows only when every visible header item fits.
+void AgentWorkspaceViewTest::reviewerLabelCollapsesBeforeTagsSqueezeTheTitle() {
+    QFETCH(qreal, zoom);
+    auto& appearance = ket::Appearance::instance();
+    const qreal previousZoom = appearance.zoom();
+    appearance.setZoom(zoom);
+    const auto restoreZoom = qScopeGuard([&] { appearance.setZoom(previousZoom); });
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.setAgentAvailable(true);
+    view.setActivePath(QDir::tempPath());
+    view.setProductSidebarVisible(false); // as in the shell, which has its own sidebar
+    auto tagged = conversation("a", "9410", true, true);
+    tagged.insert("tags", QVariantList{"UI", "Review"});
+    view.setConversations({tagged});
+    view.setSessionState("Startup profiling", "Ready", false);
+    view.acceptReviewerState(
+        {{"available", true},
+         {"reviewer",
+          QVariantMap{{"number", "1093"}, {"title", "Parser"}, {"provider", "claude"}}}});
+    view.resize(1400, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
+    auto* root = view.quickView()->rootObject();
+    QQuickItem* button = nullptr;
+    QTRY_VERIFY((button = findVisualItem(root, "headerReviewerButton")) && button->isVisible());
+    auto* title = findVisualItem(root, "conversationTitle");
+    auto* scope = findVisualItem(root, "workspaceScopeChip");
+    QVERIFY(title && scope);
+    bool sawTags = false;
+    bool sawCollapsed = false;
+    for (int width = 1400; width >= 760; width -= 20) {
+        view.resize(width, 700);
+        QTest::qWait(20);
+        const bool full = button->property("text").toString() != QStringLiteral("▾");
+        sawCollapsed = sawCollapsed || !full;
+        sawTags = sawTags || findVisualItem(root, "conversationTag_UI")->isVisible();
+        if (!full)
+            continue;
+        QVERIFY2(title->width() >= title->implicitWidth() - 1,
+                 qPrintable(QStringLiteral("title squeezed at %1").arg(width)));
+        QVERIFY2(scope->width() >= scope->implicitWidth() - 1,
+                 qPrintable(QStringLiteral("scope squeezed at %1").arg(width)));
+    }
+    QVERIFY(sawTags);
+    QVERIFY(sawCollapsed);
 }
