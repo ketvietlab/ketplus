@@ -18,6 +18,18 @@ target_link_libraries(ketplus_agent_benchmark PRIVATE
 )
 ketplus_enable_warnings(ketplus_agent_benchmark)
 
+qt_add_executable(ketplus_agent_idle_benchmark AgentIdleBenchmark.cpp)
+target_link_libraries(ketplus_agent_idle_benchmark PRIVATE
+    Qt6::Quick Qt6::Widgets ketplus_ai KetPlusCM::ui
+)
+ketplus_enable_warnings(ketplus_agent_idle_benchmark)
+if(APPLE)
+    set_target_properties(ketplus_agent_idle_benchmark PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_GUI_IDENTIFIER dev.ketplus.benchmark.idle
+        MACOSX_BUNDLE_BUNDLE_NAME "KetPlus Idle Benchmark"
+    )
+endif()
 
 qt_add_executable(ketplus_daemon_restore_benchmark DaemonRestoreBenchmark.cpp)
 target_link_libraries(ketplus_daemon_restore_benchmark PRIVATE
