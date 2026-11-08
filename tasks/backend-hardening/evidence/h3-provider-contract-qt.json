@@ -1,0 +1,90 @@
+{
+  "scope": "Issue #71, malformed normal-sized provider frames and ACP v1 capability defaults; ADRs 0089/0090",
+  "tested_code_commit": "ed2ec8616ca175d4a302aafd5c87400577b350ee",
+  "integration_base": "a69675902b11e89782b238fecaed1b6a9a5e9a4c",
+  "environment": {
+    "os": "macOS arm64",
+    "qt": "6.11.2",
+    "build": "Release Pro",
+    "qpa": "offscreen",
+    "providers": "local fake process fixtures only"
+  },
+  "source_sha256": {
+    "apps/daemon/sources.cmake": "a570a28fbedd8701e4f3e650008dc17c9b21ac033a1255f1044d5045b859fc7c",
+    "apps/daemon/src/providers/ClaudeAdapter.cpp": "db2d32e51b4e977e6186bb63e5c6a527bbefee5beebd8a62cec7428358f7fda1",
+    "apps/daemon/src/providers/ClaudeAdapter.h": "798b71ea299740a2108d1a134ea1050e899c26159c52c3f2688718537ad9a168",
+    "apps/daemon/src/providers/CodexAdapter.cpp": "c08d54395f6d1570f9b55a590bb2b3c015d9769c658bffbd94004d53db0eb179",
+    "apps/daemon/src/providers/CodexAdapter.h": "f62dc7353d3e7c75e0e359ae90d4aa1bd2831eda83997496a7c69a79dfa5fee4",
+    "apps/daemon/src/providers/CursorAdapter.cpp": "1ef25183c76ad6904610ec7013394c46bc7b3d372ab158307cff94bf4c266616",
+    "apps/daemon/src/providers/CursorAdapter.h": "39ad9484e83c78b471e3a777c0aa2592104ee44ff4be37f6181056c564dbc73f",
+    "apps/daemon/src/providers/ProviderFrameValidation.h": "704ea6005eef1cf6d2b9323a95736d0c23b7d23146d3ca9cc7644474d7aa7106",
+    "apps/daemon/src/providers/compat/ProviderCapabilities.cpp": "3d47fb306b2d6ab2c18a2805a67aecfe89664b1fd94f257dd834c29810898025",
+    "tests/daemon/CMakeLists.txt": "b98232ba30b3869204a498ca5d2a0f90ed73857fd4b2ff3a07f29f1c97edee76",
+    "tests/daemon/CursorAdapterTest.cpp": "714956d550dc327f11853120ab7a55659fa2bd88ecbe165e7f4caa4245422685",
+    "tests/daemon/FakeCursor.h": "d4d893b77968482c42b39fe69bf19f90598d2b79b65ee621c71e37e48cb642f6",
+    "tests/daemon/ProviderCompatibilityTest.cpp": "c34019329dd59ab974ce1c87fbebf37df667fb3cbc715d97a5ec144f1e6e1186",
+    "tests/daemon/ProviderMalformedFrameTest.cpp": "869c1986dd33bc242ff2670b1dee88fab07db8fc3f5853f238324372aadd4053"
+  },
+  "log_sha256": {
+    "ketplus-issue71-final-build.log": "6d6dfcc15b7a6c53b01900e16972a64403fde113bb3e246ac4c429be59712057",
+    "ketplus-issue71-final-pro-test.log": "7edd28d4922902cc8e82a1858f484966b630de4ad7e27fccb08536039ee5a8ef",
+    "ketplus-issue71-final-pro-LastTest.log": "bd0a399e43116d767a381a55365e7ba9c507e8877f7a6f331bab8174d3d4a0ab",
+    "ketplus-issue71-final-ui-rerun.log": "0f3ac9dddc1e59c5d7ffd9f64247eb2eb744c74adc18520a475577b6303007c5",
+    "ketplus-issue71-final-ui-rerun-LastTest.log": "5f88d95a5417de71d3d44ac6d212a4401b782edbac94043b1b1bd27f146df4e3",
+    "ketplus-issue71-frames-red-final-test.log": "6affadc3ed85db8da29874de2e6297127f2f06a17817cbec2624577c84309f64",
+    "ketplus-issue71-capability-red-test.log": "78948f6e46e595c08528917427ad5aba60b9ced389f8b61ec28086fd66f8731a"
+  },
+  "regression_controls": {
+    "malformed_frames": {
+      "passed": 5,
+      "failed": 42
+    },
+    "capabilities": {
+      "passed": 20,
+      "failed": 12
+    },
+    "cursor_capabilities": {
+      "passed": 24,
+      "failed": 3
+    }
+  },
+  "build": "passed",
+  "full_suite": {
+    "passed_targets": 99,
+    "failed_targets": 3,
+    "total_targets": 102,
+    "elapsed_seconds": 548.67,
+    "parallelism": 2,
+    "failures": {
+      "ketplus_agent_tests": "streamingResponseStaysAnchoredAboveRunStatus: 0.5px anchor assertion",
+      "ketplus_agent_shell_tests": "sidebarConversationInAnotherWorktreeResetsTranscriptOnce: function timeout",
+      "ketplus_chat_mermaid_tests": "switchingToMermaidWhileStreamingIsSmooth(following-the-tail): 150ms threshold"
+    }
+  },
+  "unchanged_serial_rerun": {
+    "passed_targets": 3,
+    "failed_targets": 0,
+    "elapsed_seconds": 140.33,
+    "parallelism": 1,
+    "source_or_timeout_changed": false,
+    "interpretation": "The failures did not reproduce serially; this is not a clean first-pass full suite or a proven root cause."
+  },
+  "focused_cases_in_full_suite": {
+    "ketplus_provider_malformed_frame_tests": 47,
+    "ketplus_provider_compatibility_tests": 32,
+    "ketplus_daemon_cursor_adapter_tests": 27,
+    "ketplus_provider_response_id_tests": 126,
+    "ketplus_cursor_catalog_bounds_tests": 14
+  },
+  "remaining_gates": [
+    "independent final-head review and issue #71 acceptance",
+    "merge"
+  ],
+  "not_verified": [
+    "Linux or Windows (POSIX fake process cases skip on Windows)",
+    "Lite",
+    "live providers or journal",
+    "universal QProcess peak memory or waiter admission",
+    "installation or deployment"
+  ]
+}

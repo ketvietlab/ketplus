@@ -5,10 +5,13 @@
 #include "providers/compat/ProviderCompatibility.h"
 #include "runtime/SessionHost.h"
 #include "storage/LocalJournal.h"
+#include "storage/McpMediaStore.h"
 
 #include "FakeClaude.h"
 #include "FakeCodex.h"
 
+#include <QCryptographicHash>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -99,6 +102,167 @@ class SessionForkTest final : public QObject {
     Q_OBJECT
 
   private slots:
+    void forkRequiresMediaOwnershipBeforeJournalCommit_data() {
+        QTest::addColumn<QString>("fault");
+        for (const auto* value :
+             {"source-malformed", "source-directory", "source-symlink", "source-unreadable",
+              "source-oversized", "target-directory", "target-symlink", "target-conflict",
+              "root-symlink", "commit-failure", "target-matching", "empty-source"})
+            QTest::newRow(value) << QString(value);
+    }
+
+    void forkRequiresMediaOwnershipBeforeJournalCommit() {
+        QFETCH(QString, fault);
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto executable = dir.filePath("fake-codex");
+        QVERIFY(writeFakeCodex(executable, dir.filePath("codex.log")));
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(journal.upsertSession({"source",
+                                       QFileInfo(dir.path()).canonicalFilePath(),
+                                       "codex",
+                                       "source-thread",
+                                       {},
+                                       "ready",
+                                       1,
+                                       0,
+                                       0,
+                                       {}}));
+        const auto media = McpMediaStore::directoryForJournal(path);
+        const auto refs = media + "/refs";
+        const auto refPath = [&](const QByteArray& id) {
+            return refs + '/' + QCryptographicHash::hash(id, QCryptographicHash::Sha256).toHex() +
+                   ".refs";
+        };
+        const auto sourceRef = refPath("source");
+        const auto targetRef = refPath("target");
+        const auto put = [](const QString& name, const QByteArray& bytes) {
+            QFile file(name);
+            return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
+        };
+        McpMediaStore store(media);
+        const auto png = QByteArray::fromHex("89504e470d0a1a0a0000000d494844520000000800000006");
+        const auto hash = QCryptographicHash::hash(png, QCryptographicHash::Sha256).toHex();
+        const auto original = hash + '\n';
+        if (fault != "empty-source") {
+            const auto image = store.storeImage(png, "image/png", "source");
+            QVERIFY(!image.isEmpty());
+            QVERIFY(journal.appendEvent(
+                        "source", 1, "item.completed",
+                        {{"item",
+                          QJsonObject{{"id", "picture"},
+                                      {"type", "mcpToolCall"},
+                                      {"result", QJsonObject{{"content", QJsonArray{image}}}}}}}) >
+                    0);
+        }
+        CodexAdapter codex(executable);
+        SessionHost host(&journal, &codex);
+        bool ready = false;
+        codex.call("model/list", {},
+                   [&](const QJsonObject&, const QString& error) { ready = error.isEmpty(); });
+        QTRY_VERIFY_WITH_TIMEOUT(ready, 5000);
+        const auto before = journal.eventsAfter("source", 1, 0);
+        const auto foreign = dir.filePath("foreign.refs");
+        QVERIFY(put(foreign, original));
+        const auto backup = dir.filePath("backup-refs");
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == path)
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        QSqlQuery sql(db);
+        QByteArray damaged;
+        if (fault == "source-malformed" || fault == "source-oversized") {
+            damaged = fault == "source-malformed"
+                          ? original + "unsupported\n"
+                          : original.repeated(4 * 1024 * 1024 / original.size() + 1);
+            QVERIFY(put(sourceRef, damaged));
+        } else if (fault == "source-directory" || fault == "source-symlink") {
+            QVERIFY(QFile::remove(sourceRef));
+            if (fault == "source-directory")
+                QVERIFY(QDir().mkpath(sourceRef));
+            else
+                QVERIFY(QFile::link(foreign, sourceRef));
+        } else if (fault == "source-unreadable") {
+            QVERIFY(QFile::setPermissions(sourceRef, QFileDevice::WriteOwner));
+        } else if (fault == "target-directory") {
+            QVERIFY(QDir().mkpath(targetRef));
+        } else if (fault == "target-symlink") {
+            QVERIFY(QFile::link(foreign, targetRef));
+        } else if (fault == "target-conflict" || fault == "target-matching") {
+            damaged = fault == "target-conflict" ? QByteArray(64, 'b') + '\n' : original;
+            QVERIFY(put(targetRef, damaged));
+        } else if (fault == "root-symlink") {
+            QVERIFY(QDir().rename(refs, backup));
+            QVERIFY(QFile::link(backup, refs));
+        } else if (fault == "commit-failure") {
+            QVERIFY(sql.exec("PRAGMA foreign_keys=ON"));
+            QVERIFY(sql.exec("CREATE TABLE fork_media_parent(id INTEGER PRIMARY KEY)"));
+            QVERIFY(sql.exec("CREATE TABLE fork_media_child(id INTEGER REFERENCES "
+                             "fork_media_parent(id) DEFERRABLE INITIALLY DEFERRED)"));
+            QVERIFY(sql.exec("CREATE TRIGGER reject_media_fork AFTER INSERT ON sessions WHEN "
+                             "NEW.id='target' BEGIN INSERT INTO fork_media_child VALUES(1); END"));
+        }
+        const auto result = fork(host, "media-fork", "source", {{"fork_session_id", "target"}});
+        const bool valid = fault == "target-matching" || fault == "empty-source";
+        QCOMPARE(result.value("ok").toBool(), valid);
+        QCOMPARE(journal.eventsAfter("source", 1, 0), before);
+        if (!valid) {
+            QCOMPARE(result.value("error_code").toString(), "journal_error");
+            QVERIFY(storedSession(journal, "target").id.isEmpty());
+            QVERIFY(journal.eventsAfter("target", 1, 0).isEmpty());
+            if (fault == "source-malformed" || fault == "source-oversized")
+                QCOMPARE(logText(sourceRef), damaged);
+            if (fault == "target-conflict")
+                QCOMPARE(logText(targetRef), damaged);
+            if (fault == "root-symlink") {
+                QVERIFY(QFile::remove(refs));
+                QVERIFY(QDir().rename(backup, refs));
+            } else if (fault == "source-directory") {
+                QVERIFY(QDir().rmdir(sourceRef));
+            } else if (fault == "source-symlink") {
+                QVERIFY(QFile::remove(sourceRef));
+            } else if (fault == "source-unreadable") {
+                QVERIFY(QFile::setPermissions(sourceRef,
+                                              QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+            } else if (fault == "target-directory") {
+                QVERIFY(QDir().rmdir(targetRef));
+            } else if (fault == "target-symlink" || fault == "target-conflict") {
+                QVERIFY(QFile::remove(targetRef));
+            } else if (fault == "commit-failure") {
+                QCOMPARE(logText(targetRef), original); // prepared ownership survives DB rollback
+                QVERIFY(sql.exec("DROP TRIGGER reject_media_fork"));
+                LocalJournal reopened(path);
+                QVERIFY2(reopened.isOpen(), qPrintable(reopened.errorString()));
+                const auto live = reopened.sessionIds();
+                QVERIFY(live.has_value());
+                QVERIFY(live->contains("source"));
+                QVERIFY(!live->contains("target"));
+                McpMediaStore restartedStore(media);
+                restartedStore.retainSessions(*live);
+                QVERIFY(!QFileInfo::exists(targetRef));
+                QVERIFY(QFileInfo::exists(media + '/' + hash + ".png"));
+                QCOMPARE(logText(sourceRef), original);
+            }
+            QVERIFY(put(sourceRef, original));
+            const auto retry =
+                fork(host, "media-fork-retry", "source", {{"fork_session_id", "target"}});
+            QVERIFY2(retry.value("ok").toBool(), qPrintable(text(retry)));
+        }
+        QCOMPARE(journal.eventsAfter("source", 1, 0), before);
+        QVERIFY(!storedSession(journal, "target").id.isEmpty());
+        QCOMPARE(logText(foreign), original);
+        if (fault != "empty-source") {
+            QCOMPARE(logText(targetRef), original);
+            store.releaseSession("source");
+            QVERIFY(QFileInfo::exists(media + '/' + hash + ".png"));
+            store.releaseSession("target");
+            QVERIFY(!QFileInfo::exists(media + '/' + hash + ".png"));
+        }
+    }
+
     void destinationCreatedWhileProviderForkIsPendingIsPreserved() {
         QTemporaryDir dir;
         const auto executable = dir.filePath("fake-codex");
