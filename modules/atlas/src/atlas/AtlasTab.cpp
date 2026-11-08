@@ -1,9 +1,10 @@
 #include "atlas/AtlasTab.h"
 #include "ui/ChromeGeometry.h"
-#include "ui/LucideIcon.h"
+#include "ui/SymbolIcon.h"
 
 #include "ui/TypeScale.h"
 
+#include "KetIcons.h"
 #include <QApplication>
 #include <QDir>
 #include <QEvent>
@@ -37,18 +38,15 @@ namespace ketplus {
 namespace {
 const QString ketAtlasPackage = QStringLiteral("ketatlas@0.6.1");
 
-// Lucide ISC path data, kept private and limited to glyphs used by this surface.
-constexpr auto networkIcon =
-    R"(<rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/>)";
-constexpr auto gridIcon =
-    R"(<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>)";
-constexpr auto listIcon = R"(<path d="M2 5h20"/><path d="M6 12h12"/><path d="M9 19h6"/>)";
-constexpr auto folderIcon =
-    R"(<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>)";
+// Két Symbol names for the Atlas library.
+constexpr auto networkIcon = "network";
+constexpr auto gridIcon = "layout-grid";
+constexpr auto listIcon = "list-filter";
+constexpr auto folderIcon = "folder";
 
-class LucideLabel final : public QLabel {
+class SymbolLabel final : public QLabel {
   public:
-    explicit LucideLabel(QByteArray body, const int iconSize, QWidget* parent,
+    explicit SymbolLabel(QByteArray body, const int iconSize, QWidget* parent,
                          const QPalette::ColorRole role = QPalette::Highlight)
         : QLabel(parent), body_(std::move(body)), role_(role) {
         setFixedSize(iconSize, iconSize);
@@ -57,7 +55,7 @@ class LucideLabel final : public QLabel {
   protected:
     void paintEvent(QPaintEvent*) override {
         QPainter painter(this);
-        lucide_icon::paint(painter, body_, palette().color(role_), rect());
+        symbol_icon::paint(painter, body_, palette().color(role_), rect());
     }
 
   private:
@@ -65,9 +63,9 @@ class LucideLabel final : public QLabel {
     QPalette::ColorRole role_;
 };
 
-class LucideButton final : public QToolButton {
+class SymbolButton final : public QToolButton {
   public:
-    explicit LucideButton(QByteArray body, QWidget* parent)
+    explicit SymbolButton(QByteArray body, QWidget* parent)
         : QToolButton(parent), body_(std::move(body)) {}
 
   protected:
@@ -79,7 +77,7 @@ class LucideButton final : public QToolButton {
         option.icon = {};
         style()->drawComplexControl(QStyle::CC_ToolButton, &option, &painter, this);
         const QColor color = palette().color(QPalette::ButtonText);
-        lucide_icon::paint(painter, body_, color,
+        symbol_icon::paint(painter, body_, color,
                            QRectF((width() - 17) / 2.0, (height() - 17) / 2.0, 17, 17));
     }
 
@@ -243,7 +241,7 @@ AtlasTab::AtlasTab(AtlasIndex* index, QWidget* parent)
     auto* scopeRow = new QHBoxLayout;
     chrome_geometry::margins(scopeRow, 0, 2, 0, 0);
     chrome_geometry::spacing(scopeRow, 6);
-    auto* scopeIcon = new LucideLabel(folderIcon, 14, picker_, QPalette::WindowText);
+    auto* scopeIcon = new SymbolLabel(folderIcon, 14, picker_, QPalette::WindowText);
     scopeIcon->setObjectName(QStringLiteral("atlasScopeIcon"));
     scopeRow->addWidget(scopeIcon);
     scope_->setObjectName(QStringLiteral("atlasScope"));
@@ -253,7 +251,7 @@ AtlasTab::AtlasTab(AtlasIndex* index, QWidget* parent)
     pageHeader->addLayout(headingCopy, 1);
     auto* create = new QPushButton(tr("Create Atlas"), picker_);
     create->setObjectName(QStringLiteral("atlasCreateButton"));
-    create->setIcon(QIcon(QStringLiteral(":/atlas/icons/plus.svg")));
+    create->setIcon(ket::Icons::icon(ket::Icons::codeForLucide(u"plus")));
     pageHeader->addWidget(create);
     pickerLayout->addLayout(pageHeader);
     chrome_geometry::addSpacing(pickerLayout, 27);
@@ -271,14 +269,14 @@ AtlasTab::AtlasTab(AtlasIndex* index, QWidget* parent)
     auto* switcherLayout = new QHBoxLayout(switcher);
     chrome_geometry::margins(switcherLayout, 3, 3, 3, 3);
     chrome_geometry::spacing(switcherLayout, 3);
-    auto* gridMode = new LucideButton(gridIcon, switcher);
+    auto* gridMode = new SymbolButton(gridIcon, switcher);
     gridMode->setObjectName(QStringLiteral("atlasGridModeButton"));
     gridMode->setToolTip(tr("Grid view"));
     gridMode->setAccessibleName(tr("Grid view"));
     gridMode->setCheckable(true);
     gridMode->setChecked(true);
     gridMode->setProperty("atlasViewToggle", true);
-    auto* listMode = new LucideButton(listIcon, switcher);
+    auto* listMode = new SymbolButton(listIcon, switcher);
     listMode->setObjectName(QStringLiteral("atlasListModeButton"));
     listMode->setToolTip(tr("List view"));
     listMode->setAccessibleName(tr("List view"));
@@ -304,7 +302,7 @@ AtlasTab::AtlasTab(AtlasIndex* index, QWidget* parent)
     auto* emptyLayout = new QVBoxLayout(emptyPanel);
     emptyLayout->setAlignment(Qt::AlignCenter);
     chrome_geometry::spacing(emptyLayout, 14);
-    auto* emptyIcon = new LucideLabel(networkIcon, 35, emptyPanel);
+    auto* emptyIcon = new SymbolLabel(networkIcon, 35, emptyPanel);
     emptyIcon->setObjectName(QStringLiteral("atlasEmptyIcon"));
     emptyIcon->setAlignment(Qt::AlignCenter);
     emptyLayout->addWidget(emptyIcon);

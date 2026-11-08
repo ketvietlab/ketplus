@@ -1,6 +1,6 @@
 #include "workspace/ExplorerPanel.h"
 #include "workspace/ActivityBar.h"
-#include "workspace/LucideIcons.h"
+#include "workspace/SymbolIcons.h"
 
 #include "ui/InterfaceZoom.h"
 #include "ui/Theme.h"
@@ -361,15 +361,15 @@ void ExplorerPanelTest::conversationStatusMarksUnreadCompletionAndRotatesWorking
     QVERIFY(unread);
     QVERIFY(working);
     QVERIFY(waiting);
-    QCOMPARE(seen->property("lucideColorRole").toString(), QStringLiteral("muted"));
-    QCOMPARE(persisted->property("lucideColorRole").toString(), QStringLiteral("muted"));
-    QCOMPARE(unread->property("lucideColorRole").toString(), QStringLiteral("accent"));
+    QCOMPARE(seen->property("symbolColorRole").toString(), QStringLiteral("muted"));
+    QCOMPARE(persisted->property("symbolColorRole").toString(), QStringLiteral("muted"));
+    QCOMPARE(unread->property("symbolColorRole").toString(), QStringLiteral("accent"));
     // The loader uses the main text colour so it stays readable on the dark sidebar.
-    QCOMPARE(working->property("lucideColorRole").toString(), QStringLiteral("main"));
+    QCOMPARE(working->property("symbolColorRole").toString(), QStringLiteral("main"));
     QVERIFY(working->property("spinning").toBool());
-    QCOMPARE(waiting->property("lucideBody").toByteArray(),
-             QByteArray(ketplus::lucide::pauseCircle));
-    QCOMPARE(waiting->property("lucideColorRole").toString(), QStringLiteral("warning"));
+    QCOMPARE(waiting->property("symbolName").toByteArray(),
+             QByteArray(ketplus::symbols::pauseCircle));
+    QCOMPARE(waiting->property("symbolColorRole").toString(), QStringLiteral("warning"));
     QVERIFY(!waiting->property("spinning").toBool());
     const int angle = working->property("rotationAngle").toInt();
     QTRY_VERIFY(working->property("rotationAngle").toInt() != angle);
@@ -379,7 +379,7 @@ void ExplorerPanelTest::conversationStatusMarksUnreadCompletionAndRotatesWorking
     });
     QVERIFY(unreadRow != rows.cend());
     (*unreadRow)->click();
-    QCOMPARE(unread->property("lucideColorRole").toString(), QStringLiteral("muted"));
+    QCOMPARE(unread->property("symbolColorRole").toString(), QStringLiteral("muted"));
 
     // A later daemon projection can clear the read marker after a background turn.
     QVariantList refreshed = conversations;
@@ -390,7 +390,7 @@ void ExplorerPanelTest::conversationStatusMarksUnreadCompletionAndRotatesWorking
                                {QStringLiteral("seen"), false},
                                {QStringLiteral("path"), QStringLiteral("/repo/feature")}};
     bar.setRepositories({{QStringLiteral("/repo"), QStringLiteral("repo"), true, refreshed}});
-    QCOMPARE(statusFor(QStringLiteral("unread"))->property("lucideColorRole").toString(),
+    QCOMPARE(statusFor(QStringLiteral("unread"))->property("symbolColorRole").toString(),
              QStringLiteral("accent"));
 }
 

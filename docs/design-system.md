@@ -98,7 +98,10 @@ The transcript remains a virtualized Qt Quick view; macOS uses Metal.
 
 ## Migration and verification
 
-The application still contains legacy QSS, TypeScale and Lucide consumers.
+The application still contains legacy QSS and TypeScale consumers. Product glyph
+renderers now resolve Két Symbols through the kit mapping (optical masters and
+light weight). Legacy QML resource URLs are compatibility identifiers; the
+SymbolImageProvider renders kit symbols, not the old SVG paths.
 The mock uses Két kit components and symbols; a design capture is not evidence
 that every production control has migrated. Terminal defaults and Mermaid configuration now resolve semantic tokens.
 Mermaid resources retain diagram/security settings and token placeholders; the

@@ -2,7 +2,7 @@
 
 #include "DaemonClient.h"
 #include "ui/ChromeGeometry.h"
-#include "ui/LucideIcon.h"
+#include "ui/SymbolIcon.h"
 
 #include <QAccessible>
 #include <QAccessibleWidget>
@@ -104,20 +104,14 @@ QString device(const QJsonObject& entry, const QHash<QString, QString>& names) {
 namespace {
 
 // Lucide ISC path data for the kinds of request.
-constexpr auto sendIcon =
-    R"(<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/>)";
-constexpr auto stopIcon =
-    R"(<circle cx="12" cy="12" r="10"/><rect x="9" y="9" width="6" height="6" rx="1"/>)";
-constexpr auto branchIcon =
-    R"(<line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>)";
-constexpr auto trashIcon =
-    R"(<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>)";
-constexpr auto slidersIcon =
-    R"(<line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/>)";
-constexpr auto checkIcon = R"(<path d="M20 6 9 17l-5-5"/>)";
-constexpr auto terminalIcon =
-    R"(<polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>)";
-constexpr auto closeIcon = R"(<path d="M18 6 6 18"/><path d="m6 6 12 12"/>)";
+constexpr auto sendIcon = "send";
+constexpr auto stopIcon = "square";
+constexpr auto branchIcon = "git-branch";
+constexpr auto trashIcon = "trash-2";
+constexpr auto slidersIcon = "sliders-horizontal";
+constexpr auto checkIcon = "check";
+constexpr auto terminalIcon = "square-terminal";
+constexpr auto closeIcon = "x";
 
 QByteArray actionIcon(const QString& kind) {
     if (kind == QStringLiteral("session.start_turn") || kind == QStringLiteral("session.steer"))
@@ -152,7 +146,7 @@ class GlyphLabel final : public QLabel {
   protected:
     void paintEvent(QPaintEvent*) override {
         QPainter painter(this);
-        lucide_icon::paint(painter, body_, palette().color(QPalette::WindowText), rect());
+        symbol_icon::paint(painter, body_, palette().color(QPalette::WindowText), rect());
     }
 
   private:
@@ -487,7 +481,7 @@ void RemoteActivitySection::runDialog(const QString& title, const QString& devic
     close->setProperty("remoteTertiary", true);
     close->setAccessibleName(QStringLiteral("Close"));
     close->setIcon(QIcon(
-        lucide_icon::pixmap(closeIcon, palette().color(QPalette::WindowText), QSize(16, 16))));
+        symbol_icon::pixmap(closeIcon, palette().color(QPalette::WindowText), QSize(16, 16))));
     chrome_geometry::fixedSize(close, 30, 30);
     connect(close, &QPushButton::clicked, &dialog, &QDialog::reject);
     headerLayout->addWidget(close);

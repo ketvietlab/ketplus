@@ -1,6 +1,6 @@
 #include "app/AtlasBuilderTab.h"
 #include "ui/ChromeGeometry.h"
-#include "ui/LucideIcon.h"
+#include "ui/SymbolIcon.h"
 
 #include "agent/AgentMessageModel.h"
 #include "agent/AgentWorkspaceView.h"
@@ -62,13 +62,7 @@ QLabel#atlasBuilderSamplePrompt { color:%5; font-size:{{caption}}px; padding:13p
 }
 
 QPixmap networkPixmap(const QColor& color) {
-    return lucide_icon::pixmap(
-        QByteArrayLiteral("<rect x=\"16\" y=\"16\" width=\"6\" height=\"6\" rx=\"1\"/>"
-                          "<rect x=\"2\" y=\"16\" width=\"6\" height=\"6\" rx=\"1\"/>"
-                          "<rect x=\"9\" y=\"2\" width=\"6\" height=\"6\" rx=\"1\"/>"
-                          "<path d=\"M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3\"/>"
-                          "<path d=\"M12 12V8\"/>"),
-        color, QSize(35, 35));
+    return symbol_icon::pixmap("network", color, QSize(35, 35));
 }
 
 quint64 bundleFingerprint(const QString& directory) {

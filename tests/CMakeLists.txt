@@ -101,8 +101,8 @@ target_link_libraries(ketplus_transcript_window_model_tests PRIVATE Qt6::Test Qt
 ketplus_add_gui_test(ketplus_transcript_activity_groups_tests TranscriptActivityGroupsTest.cpp)
 target_link_libraries(ketplus_transcript_activity_groups_tests PRIVATE Qt6::Test ketplus_ai)
 
-ketplus_add_gui_test(ketplus_lucide_icon_tests LucideIconTest.cpp)
-target_link_libraries(ketplus_lucide_icon_tests PRIVATE Qt6::Test ketplus_ai)
+ketplus_add_gui_test(ketplus_symbol_icon_tests SymbolIconTest.cpp)
+target_link_libraries(ketplus_symbol_icon_tests PRIVATE Qt6::Test ketplus_ai)
 
 ketplus_add_gui_test(ketplus_agent_viewport_tests AgentTranscriptViewportTest.cpp)
 target_link_libraries(ketplus_agent_viewport_tests PRIVATE Qt6::Test ketplus_ai)

@@ -1,4 +1,5 @@
 #include "app/SpotlightDialog.h"
+#include "KetIcons.h"
 #include "ui/ChromeGeometry.h"
 
 #include "ui/TypeScale.h"
@@ -37,8 +38,8 @@ QString displayCategory(const QString& category) {
 
 QIcon iconForKind(const QString& kind) {
     if (kind == QStringLiteral("atlas"))
-        return QIcon(QStringLiteral(":/agent/icons/network.svg"));
-    return QIcon(QStringLiteral(":/agent/icons/file-code.svg"));
+        return ket::Icons::icon(ket::Icons::codeForLucide(u"network"));
+    return ket::Icons::icon(ket::Icons::codeForLucide(u"file-code"));
 }
 
 class SpotlightDelegate final : public QStyledItemDelegate {
@@ -128,7 +129,8 @@ SpotlightDialog::SpotlightDialog(QWidget* parent)
     chrome_geometry::spacing(searchLayout, 11);
     auto* searchGlyph = new QLabel(searchHeader);
     searchGlyph->setObjectName(QStringLiteral("spotlightSearchGlyph"));
-    auto searchIcon = QIcon(":/agent/icons/search.svg").pixmap(20, 20);
+    auto searchIcon = ket::Icons::pixmap(ket::Icons::codeForLucide(u"search"), 20, 1,
+                                         palette().color(QPalette::Text));
     if (!searchIcon.isNull()) {
         QPainter painter(&searchIcon);
         painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
