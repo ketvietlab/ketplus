@@ -14,6 +14,7 @@
 #include <QJsonDocument>
 #include <QMessageAuthenticationCode>
 #include <QProcess>
+#include <QScopeGuard>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QTemporaryDir>
@@ -529,6 +530,162 @@ class CloudPrivacyTest final : public QObject {
         const auto plaintext = decrypt(c, c.outgoing().first().toObject());
         QVERIFY(!plaintext.isEmpty());
         QVERIFY(!plaintext.contains(marker.toUtf8()));
+    }
+
+    void failedCacheInvalidationDoesNotClaimReconciliation_data() {
+        QTest::addColumn<bool>("wrongTurn");
+        QTest::newRow("policy") << false;
+        QTest::newRow("turn") << true;
+    }
+    void failedCacheInvalidationDoesNotClaimReconciliation() {
+        QFETCH(bool, wrongTurn);
+        QTemporaryDir dir;
+        const QString path = dir.filePath("cache-failure.sqlite");
+        Context c(path);
+        c.item("completed");
+        c.start();
+        auto legacy = legacyEnvelope(c);
+        if (wrongTurn)
+            legacy.insert("turnSequence", 99999);
+        QVERIFY(c.journal.storeCloudEvent("session-synthetic", 1, 1, legacy, 0));
+        const QString name = "cloud-cache-fault-" + dir.path();
+        QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", name);
+        const auto cleanup = qScopeGuard([&] {
+            db.close();
+            db = {};
+            QSqlDatabase::removeDatabase(name);
+        });
+        db.setDatabaseName(path);
+        QVERIFY(db.open());
+        QSqlQuery query(db);
+        QVERIFY(query.exec("CREATE TRIGGER ignore_cache_delete BEFORE DELETE ON cloud_events "
+                           "BEGIN SELECT RAISE(IGNORE); END"));
+        Access::upload(*c.client);
+        QVERIFY(Access::idle(*c.client));
+        QVERIFY(c.transport.bodies.isEmpty());
+        QCOMPARE(c.journal.cloudEvent("session-synthetic", 1, 1), legacy);
+        QCOMPARE(Access::error(*c.client), QString("Cloud cache entry was not discarded."));
+        QVERIFY(query.exec("DROP TRIGGER ignore_cache_delete"));
+        Access::upload(*c.client);
+        if (!wrongTurn) {
+            QCOMPARE(Access::error(*c.client),
+                     QString("cloud_event_cache_requires_reconciliation"));
+            QVERIFY(c.transport.bodies.isEmpty());
+            Access::upload(*c.client);
+        }
+        QTRY_VERIFY(Access::idle(*c.client));
+        QCOMPARE(c.outgoing().size(), 1);
+        QVERIFY(!decrypt(c, c.outgoing().first().toObject()).contains(marker.toUtf8()));
+    }
+
+    void oldUploadReceiptAfterSignOutCannotRestoreProgressOrDeleteCache() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("stale-upload.sqlite"));
+        c.item("completed");
+        c.start();
+        c.transport.status = 202;
+        c.transport.response =
+            R"({"acceptedThrough":[{"sessionId":"session-synthetic","sessionGeneration":1,"cursor":1}]})";
+        Access::upload(*c.client);
+        QVERIFY(!Access::idle(*c.client));
+        const auto cached = c.journal.cloudEvent("session-synthetic", 1, 1);
+        QVERIFY(!cached.isEmpty());
+        QString error;
+        c.client->handleLocal("remote.sign_out", {},
+                              [&](const QJsonObject&, const QString& detail) { error = detail; });
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QTRY_VERIFY(Access::idle(*c.client));
+        QVERIFY(!r03::credentials.contains(
+            "dev.ketplus.daemon.control/uploaded-cursor-session-synthetic-1"));
+        QVERIFY(c.journal.pruneAcknowledgedCloudEvents());
+        QCOMPARE(c.journal.cloudEvent("session-synthetic", 1, 1), cached);
+        QCOMPARE(c.journal.eventsAfter("session-synthetic", 1, 0).size(), 1);
+    }
+
+    void failedReceiptRemainsRetryableAfterProgress() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("failed-receipt.sqlite");
+        Context c(path);
+        c.item("completed");
+        c.start();
+        c.transport.status = 202;
+        c.transport.response =
+            R"({"acceptedThrough":[{"sessionId":"session-synthetic","sessionGeneration":1,"cursor":1}]})";
+        const QString name = "reviewer-receipt-" + dir.path();
+        QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", name);
+        const auto cleanup = qScopeGuard([&] {
+            db.close();
+            db = {};
+            QSqlDatabase::removeDatabase(name);
+        });
+        db.setDatabaseName(path);
+        QVERIFY(db.open());
+        QSqlQuery query(db);
+        QVERIFY(query.exec("CREATE TRIGGER ignore_receipt BEFORE UPDATE OF upload_acked ON "
+                           "cloud_events WHEN NEW.upload_acked=1 BEGIN SELECT RAISE(IGNORE); END"));
+        Access::uploadAll(*c.client);
+        QTRY_VERIFY(Access::idle(*c.client));
+        QCOMPARE(Access::error(*c.client), QString("Cloud upload cache receipt was not stored."));
+        QVERIFY(!r03::credentials.contains(
+            "dev.ketplus.daemon.control/uploaded-cursor-session-synthetic-1"));
+        const auto firstBody = c.transport.bodies.first();
+        QVERIFY(query.exec("SELECT upload_acked FROM cloud_events WHERE cursor=1"));
+        QVERIFY(query.next());
+        QCOMPARE(query.value(0).toInt(), 0);
+        query.finish();
+        QVERIFY(query.exec("DROP TRIGGER ignore_receipt"));
+        const auto requests = c.transport.bodies.size();
+        Access::uploadAll(*c.client);
+        QTRY_VERIFY(Access::idle(*c.client));
+        QCOMPARE(c.transport.bodies.size() - requests, 1);
+        QCOMPARE(c.transport.bodies.last(), firstBody);
+        c.item("failed");
+        c.transport.response =
+            R"({"acceptedThrough":[{"sessionId":"session-synthetic","sessionGeneration":1,"cursor":2}]})";
+        Access::uploadAll(*c.client);
+        QTRY_VERIFY(Access::idle(*c.client));
+        for (int i = 0; i < 3; ++i)
+            QVERIFY(c.journal.pruneAcknowledgedCloudEvents());
+        qInfo() << "Progress after next successful batch"
+                << r03::credentials.value(
+                       "dev.ketplus.daemon.control/uploaded-cursor-session-synthetic-1");
+        LocalJournal reopened(path);
+        QVERIFY(reopened.isOpen());
+        QVERIFY(reopened.pruneAcknowledgedCloudEvents());
+        QVERIFY2(reopened.cloudEvent("session-synthetic", 1, 1).isEmpty(),
+                 "Receipt failure permanently strands cache after persisted progress, retry, "
+                 "subsequent ACK and reopen");
+    }
+
+    void durableReceiptRecoversAfterCredentialFailureAndRestart() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("receipt-restart.sqlite");
+        const QString cursorAccount = "uploaded-cursor-session-synthetic-1";
+        {
+            Context c(path);
+            c.item("completed");
+            c.start();
+            c.transport.status = 202;
+            c.transport.response =
+                R"({"acceptedThrough":[{"sessionId":"session-synthetic","sessionGeneration":1,"cursor":1}]})";
+            Access::uploadAll(*c.client);
+            r03::failWritesTo = cursorAccount;
+            QTRY_VERIFY(Access::idle(*c.client));
+            QVERIFY(!Access::error(*c.client).isEmpty());
+            QVERIFY(!r03::credentials.contains("dev.ketplus.daemon.control/" + cursorAccount));
+            // A crash/reopen may reclaim cache, but must not force new ciphertext
+            // for an event the relay already accepted.
+            QVERIFY(c.journal.pruneAcknowledgedCloudEvents());
+            QVERIFY(c.journal.cloudEvent("session-synthetic", 1, 1).isEmpty());
+        }
+        r03::failWritesTo.clear();
+        Context restarted(path);
+        restarted.start();
+        Access::uploadAll(*restarted.client);
+        QTRY_VERIFY(Access::idle(*restarted.client));
+        QVERIFY(restarted.transport.bodies.isEmpty());
+        QCOMPARE(r03::credentials.value("dev.ketplus.daemon.control/" + cursorAccount),
+                 QByteArray("1"));
     }
 
     void freshCryptoFailureAndMissingScopeDoNotUpload() {

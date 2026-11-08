@@ -115,10 +115,15 @@ void CodexAppServer::daemonCall(const QString& method, const QJsonObject& params
         callback({}, QStringLiteral("KetPlus Daemon executable was not found."));
         return;
     }
-    if (method.startsWith(QStringLiteral("daemon/storageRetention/"))) {
-        const QString operation = method.mid(QStringLiteral("daemon/storageRetention/").size());
-        const QString capability = QStringLiteral("storage.retention.") + operation;
-        if ((operation != QStringLiteral("read") && operation != QStringLiteral("apply")) ||
+    if (method.startsWith(QStringLiteral("daemon/storage"))) {
+        const bool retention = method.startsWith(QStringLiteral("daemon/storageRetention/"));
+        const bool size = method.startsWith(QStringLiteral("daemon/storageSize/"));
+        const QString operation = method.section('/', -1);
+        const QString capability =
+            (retention ? QStringLiteral("storage.retention.") : QStringLiteral("storage.size.")) +
+            operation;
+        if ((!retention && !size) || method.count('/') != 2 ||
+            (operation != QStringLiteral("read") && operation != QStringLiteral("apply")) ||
             !daemon_->isReady() || !daemon_->hasCapability(capability)) {
             callback(
                 {},

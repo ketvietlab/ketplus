@@ -1,0 +1,28 @@
+{
+  "scope": "H1.3 fail-closed provider ownership database reads",
+  "baseline_commit": "0f6f39e05a007d889064760ffc64b6f1673851ac",
+  "integration_base": "0455bd89919a28c7b17f832ed4ef97bb8bef80bf",
+  "environment": "macOS arm64 Qt 6.11.2 Release Pro offscreen; synthetic journals and fake Codex only",
+  "baseline_failures": [
+    "query error issued fake thread/delete for retained shared thread",
+    "mid-row-fetch error issued fake thread/delete for retained shared thread",
+    "new local deletion returned success while ownership catalog was unreadable"
+  ],
+  "focused_cases_passed": 13,
+  "focused_duration_ms": 2758,
+  "verified": [
+    "no provider delete or cleanup receipt on ownership read failure",
+    "pending target survives for repair/restart",
+    "shared thread protected after repair",
+    "new local deletion preserves both sessions and history on error",
+    "fresh local delete request succeeds after repair with shared reference protected"
+  ],
+  "final_full_pro": "pending exact-head run",
+  "not_verified": [
+    "malformed ownership JSON or unsupported row types",
+    "catalog or per-record work bounds",
+    "provider lifecycle races",
+    "Windows/live provider/live journal",
+    "packaging/install/deployment"
+  ]
+}
