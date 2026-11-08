@@ -62,8 +62,8 @@ family. The product and mock share the profile overrides for code, conversation
 numbers, sidebar weights and the compact composer usage ring.
 
 Small, Medium and Large retain their persisted 12, 14 and 16 pixel values and
-geometry factors 12/14, 1 and 16/14. Pro maps legacy values up to 13 to Small and
-values from 15 to Large. Lite retains its existing numeric interface-size setting.
+geometry factors 12/14, 1 and 16/14. Both editions retain numeric Settings values
+from 8 to 24; a named shortcut only changes the value when selected.
 The shared mapping is exported from `core/src/ui/InterfaceZoom.h`.
 
 `ThemeManager` publishes interface pixels / 14 to `ket::Appearance` before
@@ -74,9 +74,8 @@ stay fixed; text keeps its 8 pixel readability floor. The legacy QML
 `ChromeMetrics.px` uses the same factor from its token map. Scaled values are
 always recomputed from designed dimensions, never scaled a second time.
 
-The old `TypeScale` role ladder and sidebar/transcript text bias remain a
-compatibility adapter while those surfaces migrate to kit recipes. Removing
-that ladder is still part of #142; it is not a second approved design system.
+`TypeScale` compatibility names resolve the current kit profile roles; they no
+longer own a separate type ladder or add a sidebar/transcript text bias.
 Editor and terminal text sizes and user-resized sidebar widths stay independent
 of interface zoom. Terminal's Bigger/Smaller Text actions change terminal text independently.
 Its View → Interface Zoom menu persists 75–200% under
@@ -103,7 +102,11 @@ The transcript remains a virtualized Qt Quick view; macOS uses Metal.
 The application still contains legacy QSS and TypeScale consumers. Product glyph
 renderers now resolve Két Symbols through the kit mapping (optical masters and
 light weight). Legacy QML resource URLs are compatibility identifiers; the
-SymbolImageProvider renders kit symbols, not the old SVG paths.
+`TintedIcon` compatibility item renders `KetIcon`, not the old SVG paths.
+Pro links the static Ket QML module/plugin and its resources for offline loading.
+Its tooltip adapter delegates to `KetToolTip`. Working indicators and custom
+status effects share the kit clock, releasing holds when hidden, inactive,
+restoring history or when reduced motion is enabled.
 The mock uses Két kit components and symbols; a design capture is not evidence
 that every production control has migrated. Terminal defaults and Mermaid configuration now resolve semantic tokens.
 Mermaid resources retain diagram/security settings and token placeholders; the

@@ -574,17 +574,9 @@ Rectangle {
                                         elide: Text.ElideRight
                                         font: statusText.font
                                     }
-                                    SequentialAnimation on x {
-                                        running: statusShine.animating
-                                        loops: Animation.Infinite
-                                        NumberAnimation {
-                                            from: -statusShine.width
-                                            to: Math.min(statusText.paintedWidth, statusText.width)
-                                            duration: 1350
-                                            easing.type: Easing.InOutQuad
-                                        }
-                                        PauseAnimation { duration: 220 }
-                                    }
+                                    MotionClock { id: shineClock; running: statusShine.animating }
+                                    x: -width + Math.min((shineClock.time % 1570) / 1350, 1)
+                                       * (Math.min(statusText.paintedWidth, statusText.width) + width)
                                 }
                             }
                         }

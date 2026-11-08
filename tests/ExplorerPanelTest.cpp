@@ -539,38 +539,26 @@ void ExplorerPanelTest::scalesSidebarTypeWithInterfaceZoom() {
     palette.danger = QStringLiteral("#EF665C");
     palette.dark = true;
 
-    QCOMPARE(ketplus::TypeScale::pixels(ketplus::TypeStep::Body,
-                                        ketplus::InterfaceZoomMetrics::mediumPixels),
-             12);
-    QCOMPARE(ketplus::TypeScale::pixels(ketplus::TypeStep::Body,
-                                        ketplus::InterfaceZoomMetrics::largePixels),
-             14);
-    QCOMPARE(ketplus::TypeScale::pixels(ketplus::TypeStep::Reading,
-                                        ketplus::InterfaceZoomMetrics::largePixels),
-             16);
+    const auto& profile = ket::Profile::current();
+    QCOMPARE(ketplus::TypeScale::pixels(ketplus::TypeStep::Body, 14),
+             qRound(profile.buttonFontPixels));
+    QCOMPARE(ketplus::TypeScale::pixels(ketplus::TypeStep::Body, 16),
+             ketplus::InterfaceZoomMetrics::scale(qRound(profile.buttonFontPixels), 16));
+    QCOMPARE(ketplus::TypeScale::pixels(ketplus::TypeStep::Reading, 16),
+             ketplus::InterfaceZoomMetrics::scale(qRound(profile.readingPixels), 16));
 
     ketplus::ActivityBar bar;
     bar.applyPalette(palette, ketplus::InterfaceZoomMetrics::mediumPixels);
     const QString medium = bar.styleSheet();
-    // Sidebar bias +2 on every zoom step: body 12→14, caption 11→13, micro 10→12.
-    QVERIFY(medium.contains(QStringLiteral("font-size: 14px")));
-    QVERIFY(medium.contains(QStringLiteral("font-size: 13px")));
-    QVERIFY(medium.contains(QStringLiteral("font-size: 12px")));
-    QVERIFY(!medium.contains(QStringLiteral("font-size: 11px")));
-    QVERIFY(!medium.contains(QStringLiteral("font-size: 10px")));
-    QVERIFY(!medium.contains(QStringLiteral("font-size: 9px")));
+    QVERIFY(
+        medium.contains(QStringLiteral("font-size: %1px").arg(qRound(profile.buttonFontPixels))));
     QVERIFY(!medium.contains(QStringLiteral("{{")));
-
-    bar.applyPalette(palette, ketplus::InterfaceZoomMetrics::largePixels);
+    bar.applyPalette(palette, 16);
     const QString large = bar.styleSheet();
-    // Large +2: body 14→16, caption 13→15, micro 11→13.
-    QVERIFY(large.contains(QStringLiteral("font-size: 16px")));
-    QVERIFY(large.contains(QStringLiteral("font-size: 15px")));
-    QVERIFY(large.contains(QStringLiteral("font-size: 13px")));
-    QVERIFY(!large.contains(QStringLiteral("font-size: 14px")));
-    QVERIFY(!large.contains(QStringLiteral("font-size: 12px")));
-    QVERIFY(!large.contains(QStringLiteral("font-size: 11px")));
-    QVERIFY(!large.contains(QStringLiteral("font-size: 10px")));
+    QVERIFY(large.contains(QStringLiteral("font-size: %1px")
+                               .arg(ketplus::TypeScale::pixels(ketplus::TypeStep::Body, 16))));
+    bar.applyPalette(palette, 14);
+    QCOMPARE(bar.styleSheet(), medium);
 }
 
 QTEST_MAIN(ExplorerPanelTest)

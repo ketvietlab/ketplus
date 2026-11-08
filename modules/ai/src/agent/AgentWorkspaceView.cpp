@@ -8,7 +8,6 @@
 
 #include "agent/CodexAppServer.h"
 #include "agent/FileReveal.h"
-#include "agent/SymbolImageProvider.h"
 #include "agent/TranscriptTrace.h"
 #include "app/AppearanceSettings.h"
 #include "ui/InterfaceFont.h"
@@ -54,10 +53,13 @@
 #include <QTimer>
 #include <QUuid>
 #include <QVBoxLayout>
+#include <QtQml/QQmlExtensionPlugin>
 
 #include <algorithm>
 #include <cmath>
 #include <utility>
+
+Q_IMPORT_QML_PLUGIN(KetPlugin)
 
 namespace ketplus {
 namespace {
@@ -122,10 +124,7 @@ QString monoFontFamily() {
 }
 
 void mergeTypeScaleTokens(QVariantMap& tokens, const int basePixels) {
-    // Match the product sidebar: transcript/chrome text sits +2px above the
-    // shared TypeScale at every Interface zoom step. Glyphs stay unbiased.
-    constexpr int transcriptBiasPixels = 2;
-    const QVariantMap scale = TypeScale::tokens(basePixels, transcriptBiasPixels);
+    const QVariantMap scale = TypeScale::tokens(basePixels);
     for (auto it = scale.cbegin(); it != scale.cend(); ++it)
         tokens.insert(it.key(), it.value());
 }
@@ -174,45 +173,9 @@ AgentWorkspaceView::AgentWorkspaceView(QWidget* parent)
     view_->setResizeMode(QQuickView::SizeRootObjectToView);
     view_->setPersistentGraphics(true);
     view_->setPersistentSceneGraph(true);
-    // Safe bootstrap values prevent undefined QML colors before ThemeManager supplies
-    // the KetJS semantic token mapping.
-    tokens_ = {
-        {QStringLiteral("dark"), true},
-        {QStringLiteral("pageBackground"), QStringLiteral("#1b1f24")},
-        {QStringLiteral("sidebarBackground"), QStringLiteral("#171b20")},
-        {QStringLiteral("surfaceRaised"), QStringLiteral("#242930")},
-        {QStringLiteral("surfaceHover"), QStringLiteral("#292f37")},
-        {QStringLiteral("textMain"), QStringLiteral("#f2f4f7")},
-        {QStringLiteral("textSecondary"), QStringLiteral("#c5cad3")},
-        {QStringLiteral("textMuted"), QStringLiteral("#858d99")},
-        {QStringLiteral("textDisabled"), QStringLiteral("#5f6670")},
-        {QStringLiteral("border"), QStringLiteral("#292d33")},
-        {QStringLiteral("borderStrong"), QStringLiteral("#3b424c")},
-        {QStringLiteral("interactiveBackground"), QStringLiteral("#22272e")},
-        {QStringLiteral("interactiveActive"), QStringLiteral("#343b45")},
-        {QStringLiteral("accent"), QStringLiteral("#1746FF")},
-        {QStringLiteral("accentHover"), QStringLiteral("#1238DB")},
-        {QStringLiteral("accentActive"), QStringLiteral("#102EB3")},
-        {QStringLiteral("accentSubtle"), QStringLiteral("#202C4B")},
-        {QStringLiteral("accentMuted"), QStringLiteral("#23315D")},
-        {QStringLiteral("focus"), QStringLiteral("#668CFF")},
-        {QStringLiteral("tabActiveText"), QStringLiteral("#9EB5FF")},
-        {QStringLiteral("accentText"), QStringLiteral("#9EB5FF")},
-        {QStringLiteral("actionPrimary"), QStringLiteral("#365FD6")},
-        {QStringLiteral("actionPrimaryHover"), QStringLiteral("#3151C6")},
-        {QStringLiteral("actionPrimaryActive"), QStringLiteral("#2B46B7")},
-        {QStringLiteral("inlineCodeBackground"), QStringLiteral("#1CF2F4F7")},
-        {QStringLiteral("codeBlockBackground"), codeBlockBackground(true)},
-        {QStringLiteral("codeBlockBorder"), codeBlockBorder(true)},
-        {QStringLiteral("positive"), QStringLiteral("#42b883")},
-        {QStringLiteral("warning"), QStringLiteral("#d9a441")},
-        {QStringLiteral("danger"), QStringLiteral("#ef6b73")},
-        {QStringLiteral("uiFont"), InterfaceUiFont::resolvedFamily()},
-        {QStringLiteral("monoFont"), monoFontFamily()},
-    };
-    mergeTypeScaleTokens(tokens_, InterfaceZoomMetrics::mediumPixels);
+    // Bootstrap from the same semantic palette as Widgets; no second hard-coded theme.
+    applyTheme(currentThemePalette(), AppearanceSettings::load().interfaceFontSizePixels);
     view_->rootContext()->setContextProperty(QStringLiteral("agentHost"), this);
-    view_->engine()->addImageProvider(QStringLiteral("symbols"), new SymbolImageProvider);
     view_->setSource(QUrl(QStringLiteral("qrc:/agent/AgentWorkspace.qml")));
     if (view_->rootObject())
         transcriptPolish_ = new TranscriptPolish(view_->rootObject());

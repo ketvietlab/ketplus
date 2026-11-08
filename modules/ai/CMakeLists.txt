@@ -85,6 +85,8 @@ target_link_libraries(ketplus_ai
         Qt6::Qml
         Qt6::Quick
         Qt6::QuickControls2
+        KetQt::Quick
+        KetQt::QuickPlugin
         Qt6::Sql
         Qt6::Widgets
         ketplus_browser_tools
@@ -113,7 +115,7 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS "AgentProductNavigation.qml"
 )
 foreach(component AgentWorkspaceHeader AgentRunStatus AgentScopeNotice AgentEmptyState
-        BackgroundTaskBar)
+        BackgroundTaskBar MotionClock)
     set_source_files_properties(src/agent/qml/${component}.qml
         PROPERTIES QT_RESOURCE_ALIAS "${component}.qml"
     )
@@ -250,6 +252,7 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
         src/agent/qml/AgentScopeNotice.qml
         src/agent/qml/AgentEmptyState.qml
         src/agent/qml/BackgroundTaskBar.qml
+        src/agent/qml/MotionClock.qml
         src/agent/qml/UsageLimitsPopover.qml
         src/agent/qml/ClaudeUsageSection.qml
         src/agent/qml/UsageRingButton.qml

@@ -1,38 +1,22 @@
 import QtQuick
-import QtQuick.Effects
+import Ket
 
+// Compatibility adapter for semantic source names used by existing transcript delegates.
+// Két selects the optical master and tints it directly; no per-icon MultiEffect layer.
 Item {
     id: root
     property url source
-    property color color: "white"
-
-    // Legacy source URLs resolve semantic names through the Két Symbol kit.
-    readonly property string symbolPrefix: "qrc:/agent/icons/"
-    readonly property url resolvedSource: {
-        const text = root.source.toString()
-        if (!text.startsWith(root.symbolPrefix) || !text.endsWith(".svg"))
-            return root.source
-        if (root.width <= 0)
-            return ""
-        return "image://symbols/" + text.slice(root.symbolPrefix.length, -4) + "/"
-            + Math.round(root.width * 2) / 2
+    property color color: KetTheme.t.textMain
+    implicitWidth: KetTheme.px(16, KetTheme.zoom)
+    implicitHeight: implicitWidth
+    readonly property string symbolName: {
+        const value = source.toString()
+        return value.slice(value.lastIndexOf("/") + 1).replace(/\.svg$/, "")
     }
-
-    Image {
-        id: sourceImage
-        anchors.fill: parent
-        source: root.resolvedSource
-        sourceSize.width: width
-        sourceSize.height: height
-        fillMode: Image.PreserveAspectFit
-        visible: false
-        smooth: true
-    }
-
-    MultiEffect {
-        anchors.fill: parent
-        source: sourceImage
-        colorization: 1.0
-        colorizationColor: root.color
+    KetIcon {
+        anchors.centerIn: parent
+        name: KetTheme.iconForLucide(root.symbolName)
+        box: Math.min(root.width, root.height)
+        color: root.color
     }
 }

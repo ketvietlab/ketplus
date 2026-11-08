@@ -1,4 +1,6 @@
 #include "AgentWorkspaceViewTest.h"
+#include "KetAppearance.h"
+#include "KetRecipes.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/CodexAppServer.h"
@@ -151,10 +153,11 @@ void AgentWorkspaceViewTest::selectsModelsInUnifiedPicker() {
     };
     QTest::qWait(100);
     QVERIFY(capture(".dark"));
-    QCOMPARE(qRound(popup->property("x").toDouble() * 2.0 + popup->property("width").toDouble()),
-             qRound(root->width()));
-    QCOMPARE(qRound(popup->property("y").toDouble() * 2.0 + popup->property("height").toDouble()),
-             qRound(root->height()));
+    // Centred on whole pixels: an odd remainder leaves at most one pixel of difference.
+    QVERIFY(qAbs(popup->property("x").toDouble() * 2.0 + popup->property("width").toDouble() -
+                 root->width()) <= 1.0);
+    QVERIFY(qAbs(popup->property("y").toDouble() * 2.0 + popup->property("height").toDouble() -
+                 root->height()) <= 1.0);
     search->setProperty("text", "  LUNA  ");
     QTRY_COMPARE(list->property("count").toInt(), 1);
     QTest::keyClick(view.quickView(), Qt::Key_Down);
@@ -690,18 +693,21 @@ void AgentWorkspaceViewTest::tooltipsFollowDesignSystem() {
     auto* tooltip = attachButton->findChild<QObject*>(QStringLiteral("ketToolTip"));
     QVERIFY(tooltip);
 
-    QCOMPARE(tooltip->property("backgroundColor").value<QColor>(), QColor(palette.accent));
-    QCOMPARE(tooltip->property("labelColor").value<QColor>(), QColor(Qt::white));
-    QCOMPARE(tooltip->property("cornerRadius").toDouble(), 5.0);
-    QCOMPARE(tooltip->property("opacity").toDouble(), 1.0);
+    const auto recipe = ket::tooltipRecipe(ket::Appearance::instance().theme());
+    const auto zoom = ket::Appearance::instance().zoom();
+    QCOMPARE(tooltip->property("backgroundColor").value<QColor>(), recipe.background);
+    QCOMPARE(tooltip->property("labelColor").value<QColor>(), recipe.text);
+    QCOMPARE(tooltip->property("cornerRadius").toDouble(),
+             ket::Appearance::scale(recipe.radius, zoom));
 
     auto* background = qvariant_cast<QObject*>(tooltip->property("background"));
     auto* contentItem = qvariant_cast<QObject*>(tooltip->property("contentItem"));
     QVERIFY(background);
     QVERIFY(contentItem);
-    QCOMPARE(background->property("color").value<QColor>(), QColor(palette.accent));
-    QCOMPARE(background->property("radius").toDouble(), 5.0);
-    QCOMPARE(contentItem->property("color").value<QColor>(), QColor(Qt::white));
+    QCOMPARE(background->property("color").value<QColor>(), recipe.background);
+    QCOMPARE(background->property("radius").toDouble(),
+             ket::Appearance::scale(recipe.radius, zoom));
+    QCOMPARE(contentItem->property("color").value<QColor>(), recipe.text);
 
     tooltip->setProperty("visible", true);
     QTRY_VERIFY(tooltip->property("visible").toBool());
@@ -1826,8 +1832,9 @@ void AgentWorkspaceViewTest::pastesImagesAndOpensIndividualFiles() {
     auto* fileTooltip = rows.constFirst()->findChild<QObject*>(QStringLiteral("ketToolTip"));
     QVERIFY(fileTooltip);
     QCOMPARE(fileTooltip->property("backgroundColor").value<QColor>(),
-             QColor(testPalette().accent));
-    QCOMPARE(fileTooltip->property("labelColor").value<QColor>(), QColor(Qt::white));
+             ket::tooltipRecipe(ket::Appearance::instance().theme()).background);
+    QCOMPARE(fileTooltip->property("labelColor").value<QColor>(),
+             ket::tooltipRecipe(ket::Appearance::instance().theme()).text);
     QTest::mouseClick(view.quickView(), Qt::RightButton, Qt::NoModifier,
                       rows.constFirst()->mapToScene(QPointF(30, 12)).toPoint());
     auto* contextMenu = rows.constFirst()->findChild<QObject*>("changedFileContextMenu");

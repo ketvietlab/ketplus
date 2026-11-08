@@ -115,7 +115,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void streamingPreservesReadingPosition_data();
     void promotesConversationWhenAgentStarts();
     void animatesRunningConversationStatus();
-    void workingOpacityAnimatorLifecycle();
+    void workingIndicatorClockLifecycle();
     void formatsStreamingText();
     void opensInlineMarkdownLinks();
     void linksInlineCodeOnceFilesAreListed();

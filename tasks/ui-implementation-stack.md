@@ -68,3 +68,5 @@ Lite shell: PR #210 on #209. The next layer replaces pane/find controls, Quick O
 Lite controls: PR #211. The model layer `feat/ui-stack-lite-models` adds virtualized recipe rows/Git decorations, inline creation with collision protection, serialized stage/unstage/commit-index commands, recipe Markdown/diff rendering and shared TerminalTab ownership for embedded multi-tab sessions. Tests cover literal paths, unborn index, untracked-file preservation, inline creation/cancel and independent PTY sessions. Native comparisons remain deferred.
 
 Model layer validation: all 16 Lite targets pass; Source Control rendered offscreen at 224 × 640 with real grouped snapshot data. No full native/theme/zoom acceptance or release work claimed.
+
+Lite models: PR #213 on #211. Pro foundation now links the offline Ket QML module, resolves profile typography without the old +2 bias, retains numeric zoom, draws QML symbols/tooltips with kit components and shares the gated animation clock. Runtime selected QML checks pass; font, zoom and Lite regression evidence is recorded in the PR.
