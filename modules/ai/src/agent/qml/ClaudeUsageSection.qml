@@ -76,7 +76,7 @@ ColumnLayout {
         text: "Session totals include restored history and subagents. The query budget counts only the current query's spend, so these values are not a budget progress ratio. SDK cost is an estimate."
         color: KetTheme.t.textMuted
         font.family: KetTheme.fontFamily
-        font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+        font.pixelSize: KetTheme.px(13, KetTheme.zoom)
         wrapMode: Text.WordWrap
     }
     Rectangle {
@@ -107,7 +107,7 @@ ColumnLayout {
         text: "Period: " + (root.report.startingAt || "").slice(0, 10) + " → " + (root.report.endingAt || "").slice(0, 10) + " UTC · Data updated " + root.timestamp(root.report.dataRefreshedAt) + (root.account.stale ? " · Stale; refresh needed" : "")
         color: KetTheme.t.textMuted
         font.family: KetTheme.fontFamily
-        font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+        font.pixelSize: KetTheme.px(13, KetTheme.zoom)
         wrapMode: Text.WordWrap
     }
     Text {
@@ -115,7 +115,7 @@ ColumnLayout {
         text: "All products and keys in the Admin key's organization, which may differ from the inference key's account. Cost is after discounts, before credits; balance and spending limits are available in Console."
         color: KetTheme.t.textMuted
         font.family: KetTheme.fontFamily
-        font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+        font.pixelSize: KetTheme.px(13, KetTheme.zoom)
         wrapMode: Text.WordWrap
     }
     RowLayout {

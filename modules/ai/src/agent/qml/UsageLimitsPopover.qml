@@ -306,7 +306,7 @@ Popup {
                 text: "Limits are shared across conversations for this provider."
                 color: root.mutedColor
                 font.family: KetTheme.fontFamily
-                font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+                font.pixelSize: KetTheme.px(13, KetTheme.zoom)
                 wrapMode: Text.WordWrap
             }
         }
