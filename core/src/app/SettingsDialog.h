@@ -94,8 +94,6 @@ class SettingsDialog final : public QDialog, public SettingsHost {
 
   protected:
     void reject() override;
-
-  protected:
     void keyPressEvent(QKeyEvent* event) override;
 
   private:

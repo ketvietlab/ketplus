@@ -21,6 +21,7 @@
 #include "update/AppUpdater.h"
 
 #include "app/PixelSelect.h"
+#include <QAbstractButton>
 #include <QButtonGroup>
 #include <QComboBox>
 #include <QFrame>
@@ -485,6 +486,7 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     bodyLayout->addWidget(pages, 1);
     contentLayout->addWidget(body, 1);
 
+    // The public dialog's footer is a kit button row; Cancel has no meaning in a page.
     auto* settingsFooter = dialog_->findChild<QWidget*>(QStringLiteral("settingsButtons"));
     if (settingsFooter) {
         if (auto* cancel =
