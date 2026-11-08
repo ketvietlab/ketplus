@@ -135,6 +135,12 @@ budget/session total/account total and captures `/tmp/ketplus-claude-usage.png`.
 Live organization reporting requires the user's separately configured Admin key; tests
 never use a real key, Keychain item or inference quota.
 
+Atlas tunnel completion (`ketplus_atlas_live_tunnel_tests`, ADR 0084) exercises
+per-frame, half-window and delayed full-window credits against a synthetic
+loopback origin. It requires complete binary response bytes and exactly one EOF
+without a final credit grant. Run the runtime, cloud-privacy and remote-control
+client targets alongside it; no real CLI/provider or relay is required.
+
 Daemon Atlas readiness (`ketplus_atlas_live_runtime_tests`, ADR 0083) includes a
 Unix synthetic Python CLI: wrong/longer port, embedded/partial/truncated banners,
 LF/CRLF/slash/split compatibility, stop-time output and a one-shot start callback
@@ -608,7 +614,6 @@ ADR 0061 `SessionForkTest::journalForkPreservesUnsupportedSourceCounters` covers
 negative, fractional, TEXT and BLOB cursor/turn values. It checks exact source
 preservation, no destination, released transaction, fixture repair, retry and
 reopen. Run the combined fork suite and its affected backend matrix.
-
 
 ### Failed journal reuse (ADR 0086)
 
