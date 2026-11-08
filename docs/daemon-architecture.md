@@ -592,6 +592,11 @@ Matched replies must contain exactly one result (object or explicit null) or err
 initialize uses its existing failure path, while other pending calls survive.
 Provider-specific result schemas remain separate (ADR 0075).
 
+Cursor model discovery reads both channels incrementally with a shared 1-MiB
+budget (ADR 0088). It retains stdout only, kills excess output, and parses only
+successful normal exits. The existing fallback catalog settles failed/timed-out
+requests and the 60-second cache/coalescing behavior remains unchanged.
+
 Provider version probes retain at most 4 KiB of merged output, kill excess output
 and accept banners only after successful normal exit (ADR 0072). Failed probes
 remain Unknown under the existing launch policy and are retried. Only matching

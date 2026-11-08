@@ -14,6 +14,10 @@ milestone changes state.
   and fractional ids cannot consume pending calls in Codex, Claude or Cursor,
   including Codex oversized responses. Valid replies still complete exactly once.
 
+- Cursor model-catalog subprocesses drain both channels while running and enforce
+  a shared 1-MiB output budget (ADR 0088). Excess output and unsuccessful exits use
+  the existing fallback catalog; successful exact-budget output remains usable.
+
 - Provider version probes bound merged output while reading and require successful
   exit before accepting a banner (ADR 0072). Concurrent executable generations
   retain their own result; failed probes remain retryable without a cached version.

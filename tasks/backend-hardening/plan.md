@@ -860,8 +860,9 @@ remain explicitly open.
 
 ### 2026-11-08 — integrate the existing #260/#261 response package
 
-- #256/#259/#257/#258 are merged; integration is `9825970f`. #275 is the
-  sole new unreviewed package for #71, with catalog 14/14 and affected 17/17.
+- #256/#259/#257/#258/#275 are merged; integration is `4cd20d4f`.
+  Catalog review PASS at `2bbd4661`: independent 14/14 and daemon 52/52.
+  Its worktree/build were safely removed after the PR was pushed.
 - #261 already contains #260; combine their integration/review rather than
   rebuilding the same shared headers twice. No new production fix is added here.
   #7705 must review both original changes and the combined final head.
@@ -870,3 +871,37 @@ remain explicitly open.
 - [ ] Review and merge the combined package; verify #260 is included before
   closing or marking its work complete. Keep #71 open for malformed frame
   settlement, capability coverage and remaining concrete bounds findings.
+
+## 2026-11-08 — #71 closure-first integration and catalog output
+
+- [x] #256 merged at `7ceebc34`; #259 merged at `b93394bb` after the
+  doc-only count clarification passed review at `16d8ee70`.
+- [x] #257 integration head `6981197f` passed independent delta review and merged
+  at `d76d0a89`. Author Release headless matrix: 48/50 first pass; two timing
+  failures passed unchanged in a serial 2/2 rerun. This is not a clean first-pass
+  50/50 result. Production/regression code matched the previously reviewed head.
+- [x] #258 integration head `216b2043`: Release headless build and serial
+  **51/51 PASS**, 372.28 s. Production and regression match its previously
+  reviewed head. #7705 passed the exact-head delta; merged at `9825970f`.
+- [x] Reproduce Cursor catalog accumulation and unsuccessful-exit acceptance;
+  implement the owning-path fix in ADR 0088. Final self-hosted CLI fixture:
+  original production **7 pass / 7 fail**; fixed **14/14 PASS**, including
+  interrupting stdout and stderr 64-MiB floods before their completion marker.
+  Evidence: `evidence/h3-cursor-catalog-bounds-qt.json`.
+- [x] Catalog code commit `3f7892b1`: Release headless build and the affected
+  **17/17 targets PASS**, 261.33 s, serial/offscreen. The following evidence-only
+  commit preserves the tested production/test hashes; no full Desktop claim.
+- [x] #7705 passed catalog head `2bbd4661` with independent Debug headless
+  14/14 focused and 52/52 daemon targets. #275 merged at `4cd20d4f`; the
+  task worktree/build had already been safely removed after pushing.
+- [x] Integrate #275 into the combined #260/#261 branch before the full Pro
+  test run. Production merges cleanly; preserve both docs additions.
+- [ ] Next concrete #71 package: malformed normal-frame settlement/recovery
+  across all three adapters. This follows the catalog merge; no new domain audit.
+- [ ] Finish #71 acceptance: normal malformed/binary/invalid-UTF8 frame behavior,
+  capability-to-adapter coverage, and disposition of remaining probe/waiter limits.
+  Existing #260/#261 own response id/envelope work overlapping #74; do not duplicate
+  them. Do not close #71 solely because the first four PRs passed.
+
+Owner #2739 continues this issue; no new domain audit or UI implementation starts.
+The relay rollout gate remains external and does not block this provider work.
