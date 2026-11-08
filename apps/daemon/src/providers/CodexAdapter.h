@@ -30,6 +30,7 @@ class ProviderVersionProbe;
 
 class CodexAdapter final : public ProviderAdapter {
     Q_OBJECT
+    friend class ProviderStderrFloodTest;
 
   public:
     explicit CodexAdapter(const QString& executable = {}, QObject* parent = nullptr);

@@ -5,6 +5,10 @@ milestone changes state.
 
 ## Implemented
 
+- Long-lived provider stderr draining has a Codex/Claude/Cursor process regression:
+  two 32-MiB floods retain only the newest 1 MiB while stdout round trips and
+  subsequent calls continue on the same process. The fixture uses no real CLI.
+
 - ACP v1 capability negotiation requires explicit boolean support (ADR 0090).
   Missing/mistyped loadSession and image flags no longer retain baseline support;
   Cursor does not issue session/load when it was not advertised.

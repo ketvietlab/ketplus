@@ -949,9 +949,27 @@ The relay rollout gate remains external and does not block this provider work.
   Focused cases: malformed frames **47/47**, capabilities **32/32**, Cursor
   **27/27**, response admission **126/126**, catalog **14/14**.
   See `evidence/h3-provider-contract-qt.json` for source/log hashes and limits.
-- [ ] Obtain independent #7705 review of the final head and #71 acceptance,
-  merge, then close #71 only when its concrete criteria are satisfied.
-- [ ] Remove the pushed linked worktrees/builds after verifying clean state,
-  remote heads and absence of other users/processes.
+- [x] Obtain independent #7705 review of final head `c33730ff` and merge #276 at
+  `00b2f003`. Reviewer daemon suite passed 54/54; the stderr regression gap below
+  remains before #71 closure.
+- [x] Remove the pushed response/frame worktrees and builds after verifying clean
+  state, remote heads and absence of other users/processes.
   Request/waiter admission and absent-response deadlines remain H3.4; no universal
   QProcess memory, live-provider, other-platform, installation or deployment claim.
+
+### #71 final stderr regression gate
+
+- [x] Merge #276 at `00b2f003` after final-head review PASS and author verification.
+  Independent reviewer confirmed line bounds, version behavior and capability
+  mappings; the remaining closure gap is long-lived adapter stderr regression.
+- [x] Add a fake-process fixture for two 32-MiB stderr floods per adapter, with
+  mandatory stdout round trips between bursts and successful calls afterward.
+  Test-only friendship observes the existing adapter tail without a runtime API.
+- [x] Focused fixture passes 5/5. Mutations removing the drain or tail cap each
+  fail all three adapter cases (2 setup/cleanup pass, 3 fail); restored code passes
+  5/5 again. The failures identify unread QProcess stderr and an over-limit tail.
+- [ ] Run full Release Pro verification for the three adapter-header friend
+  declarations. Runtime drain implementations are unchanged.
+- [ ] Obtain #7705 review, merge and close #71 only after all five criteria have
+  evidence. Request/waiter admission and absent-response deadlines stay H3.4/#74.
+- [ ] Remove the pushed worktree/build after ownership and clean-state checks.
