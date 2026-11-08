@@ -1,0 +1,29 @@
+{
+  "scope": "H1.3 append counter bounds",
+  "base": "2438e3fe97a16ea313145ed86ce851bbef6dfa71",
+  "environment": "macOS arm64 Qt6.11.2 Release Pro/headless offscreen; temporary journals",
+  "baseline_failed": 14,
+  "baseline_passed": 11,
+  "focused_passed": 25,
+  "positive_boundary_controls": 4,
+  "initial_affected_targets": 13,
+  "initial_affected_seconds": 84.64,
+  "initial_matrix_note": "Before typed SQL projection and integration of #244; final combined-head gate is required",
+  "verified": [
+    "negative/type/overflow rejection",
+    "last cursor and last turn accepted",
+    "unchanged maximum turn accepted",
+    "large transfer fitting last cursor accepted",
+    "rollback preserves counters/history",
+    "repair/retry/reopen"
+  ],
+  "not_verified": [
+    "migration/backfill/fork/revision counter limits",
+    "process interruption",
+    "arbitrary catalog field bounds",
+    "live provider/journal",
+    "Windows",
+    "multi-GB",
+    "install/deploy"
+  ]
+}

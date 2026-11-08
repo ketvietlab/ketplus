@@ -10,9 +10,15 @@
 #include "FakeCodex.h"
 
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QScopeGuard>
+#include <QSqlDatabase>
+#include <QSqlError>
+#include <QSqlQuery>
+#include <QSqlRecord>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -93,6 +99,328 @@ class SessionForkTest final : public QObject {
     Q_OBJECT
 
   private slots:
+    void destinationCreatedWhileProviderForkIsPendingIsPreserved() {
+        QTemporaryDir dir;
+        const auto executable = dir.filePath("fake-codex");
+        const auto log = dir.filePath("codex.log");
+        const auto gate = dir.filePath("release-fork");
+        QVERIFY(writeFakeCodex(executable, log));
+        QFile script(executable);
+        QVERIFY(script.open(QIODevice::ReadOnly));
+        auto bytes = script.readAll();
+        script.close();
+        const QByteArray marker =
+            "        log('fork:' + json.dumps(message['params'], sort_keys=True))\n";
+        QVERIFY(bytes.contains(marker));
+        const auto gateExpr =
+            QJsonDocument(QJsonArray{gate}).toJson(QJsonDocument::Compact) + "[0]";
+        bytes.replace(marker, marker + "        while not os.path.exists(" + gateExpr +
+                                  "):\n            time.sleep(0.005)\n");
+        QVERIFY(script.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        QCOMPARE(script.write(bytes), bytes.size());
+        script.close();
+        LocalJournal journal(dir.filePath("journal.sqlite"));
+        QVERIFY(journal.upsertSession({"source",
+                                       QFileInfo(dir.path()).canonicalFilePath(),
+                                       "codex",
+                                       "source-thread",
+                                       {},
+                                       "ready",
+                                       1,
+                                       0,
+                                       0,
+                                       {}}));
+        CodexAdapter codex(executable);
+        SessionHost host(&journal, &codex);
+        const auto release = qScopeGuard([&] {
+            QFile f(gate);
+            f.open(QIODevice::WriteOnly);
+        });
+        bool ready = false;
+        codex.call("model/list", {},
+                   [&](const QJsonObject&, const QString& error) { ready = error.isEmpty(); });
+        QTRY_VERIFY_WITH_TIMEOUT(ready, 5000);
+        const auto sourceBefore = journal.eventsAfter("source", 1, 0);
+        QJsonObject forked;
+        host.forkSession(
+            request("session.fork", "fork-race", {{"fork_session_id", "target"}}, "source", 1),
+            [&](const QJsonObject& value) { forked = value; });
+        QTRY_VERIFY_WITH_TIMEOUT(logText(log).contains("fork:"), 5000);
+        QVERIFY(forked.isEmpty());
+        const auto started =
+            startTurn(host, "new-owner", dir.path(), "codex", "owned history", "target");
+        QVERIFY2(started.value("ok").toBool(), qPrintable(text(started)));
+        QFile gateFile(gate);
+        QVERIFY(gateFile.open(QIODevice::WriteOnly));
+        gateFile.close();
+        QTRY_VERIFY_WITH_TIMEOUT(!forked.isEmpty(), 5000);
+        QVERIFY2(!forked.value("ok").toBool(), qPrintable(text(forked)));
+        QCOMPARE(forked.value("error_code").toString(), QString("journal_error"));
+        QTRY_VERIFY_WITH_TIMEOUT(turnCompleted(journal, "target"), 5000);
+        QCOMPARE(storedSession(journal, "target").threadId, QString("thread-1"));
+        QCOMPARE(journal.eventsAfter("source", 1, 0), sourceBefore);
+        QVERIFY(!eventTypes(journal, "target").contains("session.forked"));
+        QCOMPARE(storedSession(journal, "source").threadId, QString("source-thread"));
+    }
+
+    void journalForkRequiresUnusedDestination_data() {
+        QTest::addColumn<QString>("destination");
+        for (const auto& value : {"existing", "self", "deleted"})
+            QTest::newRow(value) << QString(value);
+    }
+    void journalForkRequiresUnusedDestination() {
+        QFETCH(QString, destination);
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        StoredSession source{"source", dir.path(), "codex", "source-thread", {}, "ready", 1,
+                             0,        0,          {}};
+        QVERIFY(journal.upsertSession(source));
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == path)
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        QSqlQuery q(db);
+        if (destination == "existing") {
+            QVERIFY(journal.upsertSession(
+                {"target", dir.path(), "codex", "owned-thread", {}, "ready", 1, 0, 0, {}}));
+            QVERIFY(journal.appendEvent("target", 1, "user.message", {{"text", "owned-history"}}) >
+                    0);
+        }
+        if (destination == "deleted")
+            QVERIFY(q.exec("INSERT INTO session_tombstones "
+                           "VALUES('target',1,1,'deleted-operation','2026-01-01T00:00:00.000Z')"));
+        const auto snapshot = [&] {
+            QVariantList result;
+            QSqlQuery rows(db);
+            if (!rows.exec("SELECT * FROM sessions ORDER BY id"))
+                return result;
+            while (rows.next())
+                for (int i = 0; i < rows.record().count(); ++i)
+                    result.append(rows.value(i));
+            return result;
+        };
+        const auto before = snapshot();
+        QVERIFY(!before.isEmpty());
+        const auto history = journal.eventsAfter("target", 1, 0);
+        StoredSession copy = source;
+        copy.id = destination == "self" ? "source" : "target";
+        copy.threadId = "new-fork-thread";
+        QString error;
+        QVERIFY(!journal.forkSession("source", 1, copy, &error));
+        QVERIFY(!error.isEmpty());
+        QCOMPARE(snapshot(), before);
+        QCOMPARE(journal.eventsAfter("target", 1, 0), history);
+        QVERIFY(q.exec("BEGIN"));
+        QVERIFY(q.exec("ROLLBACK"));
+        if (destination == "deleted") {
+            QVERIFY(q.exec("SELECT count(*) FROM session_tombstones WHERE session_id='target'"));
+            QVERIFY(q.next());
+            QCOMPARE(q.value(0).toInt(), 1);
+        }
+        LocalJournal reopened(path);
+        QVERIFY(reopened.isOpen());
+        QCOMPARE(reopened.eventsAfter("target", 1, 0), history);
+    }
+
+    void journalForkCopiesEmptyHistory() {
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite"));
+        StoredSession source{"source", dir.path(), "codex", {}, {}, "ready", 1, 0, 0, {}};
+        QVERIFY(journal.upsertSession(source));
+        StoredSession copy = source;
+        copy.id = "fork";
+        QString error;
+        QVERIFY2(journal.forkSession("source", 1, copy, &error), qPrintable(error));
+        QCOMPARE(journal.sessionHead("fork").generation, qint64(1));
+        QCOMPARE(journal.sessionHead("fork").cursor, qint64(0));
+        QCOMPARE(journal.sessions().size(), 2);
+    }
+    void journalForkRequiresCompleteCopy_data() {
+        QTest::addColumn<QString>("fault");
+        for (const auto& fault :
+             {"activity_summaries", "activity_items", "activity_heads", "events", "replay_events",
+              "replay_projection_state", "large_event_payloads", "large_event_payload_chunks",
+              "session-start", "commit", "events-late", "chunks-late"})
+            QTest::newRow(fault) << QString(fault);
+    }
+    void journalForkRequiresCompleteCopy() {
+        QFETCH(QString, fault);
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        StoredSession source{"source", dir.path(), "codex", {}, {}, "ready", 1, 0, 0, {}};
+        QVERIFY(journal.upsertSession(source));
+        QVERIFY(
+            journal.upsertSession({"other", dir.path(), "codex", {}, {}, "ready", 1, 0, 0, {}}));
+        QVERIFY(journal.appendEvent("other", 1, "user.message", {{"text", "unrelated"}}) > 0);
+        QVERIFY(journal.appendEvent("source", 1, "user.message", {{"text", "seed"}}) > 0);
+        QVERIFY(journal.appendEvent(
+                    "source", 1, "item.started",
+                    {{"item_id", "command"},
+                     {"item_type", "commandExecution"},
+                     {"item", QJsonObject{{"id", "command"}, {"type", "commandExecution"}}}}) > 0);
+        const auto cursor = journal.appendEvent(
+            "source", 1, "item.completed",
+            {{"item_id", "large"},
+             {"item_type", "agentMessage"},
+             {"item",
+              QJsonObject{{"id", "large"},
+                          {"type", "agentMessage"},
+                          {"text", QString(2 * protocol::maximumEventPayloadBytes, 'x')}}}});
+        QVERIFY(cursor > 2);
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == path)
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        const QStringList history{"activity_summaries",   "activity_items",
+                                  "activity_heads",       "events",
+                                  "replay_events",        "replay_projection_state",
+                                  "large_event_payloads", "large_event_payload_chunks"};
+        const auto snapshot = [&] {
+            QVariantMap result;
+            for (const auto& table :
+                 history + QStringList{"sessions", "session_contexts", "worktree_catalog"}) {
+                QSqlQuery rows(db);
+                if (!rows.exec(QString("SELECT * FROM %1 ORDER BY 1,2,3").arg(table)))
+                    return QVariantMap{};
+                QVariantList values;
+                while (rows.next())
+                    for (int i = 0; i < rows.record().count(); ++i)
+                        values.append(rows.value(i));
+                if (rows.lastError().isValid())
+                    return QVariantMap{};
+                result.insert(table, values);
+            }
+            return result;
+        };
+        const auto before = snapshot();
+        QCOMPARE(before.size(), history.size() + 3);
+        QSqlQuery q(db);
+        if (fault == "commit") {
+            QVERIFY(q.exec("CREATE TABLE fork_parent(id INTEGER PRIMARY KEY)"));
+            QVERIFY(q.exec("CREATE TABLE fork_child(id INTEGER REFERENCES fork_parent(id) "
+                           "DEFERRABLE INITIALLY DEFERRED)"));
+            QVERIFY(q.exec("CREATE TRIGGER fail_fork AFTER UPDATE ON sessions WHEN NEW.id='fork' "
+                           "BEGIN INSERT INTO fork_child VALUES(1); END"));
+        } else if (fault == "session-start") {
+            QVERIFY(q.exec("CREATE TRIGGER fail_fork BEFORE UPDATE ON sessions WHEN NEW.id='fork' "
+                           "BEGIN SELECT RAISE(IGNORE); END"));
+        } else {
+            const auto table = fault == "events-late"   ? QString("events")
+                               : fault == "chunks-late" ? QString("large_event_payload_chunks")
+                                                        : fault;
+            const auto condition = fault == "events-late"   ? " AND NEW.cursor>2"
+                                   : fault == "chunks-late" ? " AND NEW.chunk_offset>0"
+                                                            : "";
+            QVERIFY(q.exec(QString("CREATE TRIGGER fail_fork BEFORE INSERT ON %1 WHEN "
+                                   "NEW.session_id='fork'%2 BEGIN SELECT RAISE(IGNORE); END")
+                               .arg(table, condition)));
+        }
+        StoredSession copy = source;
+        copy.id = "fork";
+        copy.threadId = "forked-thread";
+        QString error;
+        QVERIFY(!journal.forkSession("source", 1, copy, &error));
+        QVERIFY(!error.isEmpty());
+        QVERIFY2(q.exec("BEGIN"), qPrintable(q.lastError().text()));
+        QVERIFY(q.exec("ROLLBACK"));
+        QCOMPARE(snapshot(), before);
+        QVERIFY(q.exec("DROP TRIGGER fail_fork"));
+        QVERIFY2(journal.forkSession("source", 1, copy, &error), qPrintable(error));
+        QCOMPARE(journal.sessionHead("source").cursor, cursor);
+        QCOMPARE(journal.sessionHead("fork").cursor, cursor);
+        const auto rowsFor = [&](const QString& table, const QString& id) {
+            QVariantList result;
+            QSqlQuery rows(db);
+            rows.prepare(
+                QString("SELECT * FROM %1 WHERE session_id=? AND generation=1 ORDER BY 3,4")
+                    .arg(table));
+            rows.addBindValue(id);
+            if (!rows.exec())
+                return QVariantList{};
+            while (rows.next())
+                for (int i = 2; i < rows.record().count(); ++i)
+                    result.append(rows.value(i));
+            return result;
+        };
+        for (const auto& table : history) {
+            const auto sourceRows = rowsFor(table, "source");
+            QVERIFY2(!sourceRows.isEmpty(), qPrintable(table));
+            QCOMPARE(rowsFor(table, "fork"), sourceRows);
+        }
+        LocalJournal reopened(path);
+        QVERIFY2(reopened.isOpen(), qPrintable(reopened.errorString()));
+        QCOMPARE(reopened.sessionHead("source").cursor, cursor);
+        QCOMPARE(reopened.sessionHead("fork").cursor, cursor);
+        QCOMPARE(reopened.sessionHead("other").cursor, qint64(1));
+    }
+
+    void journalForkPreservesUnsupportedSourceCounters_data() {
+        QTest::addColumn<QString>("column");
+        QTest::addColumn<QString>("value");
+        for (const auto& column : {QString("last_cursor"), QString("current_turn_sequence")})
+            for (const auto& value :
+                 {QString("-1"), QString("1.5"), QString("'unknown'"), QString("X'01'")})
+                QTest::newRow(qPrintable(column + "-" + value)) << column << value;
+    }
+    void journalForkPreservesUnsupportedSourceCounters() {
+        QFETCH(QString, column);
+        QFETCH(QString, value);
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        StoredSession source{"source", dir.path(), "codex", {}, {}, "ready", 1, 0, 0, {}};
+        QVERIFY(journal.upsertSession(source));
+        QCOMPARE(journal.appendEvent("source", 1, "user.message", {{"text", "preserved"}}),
+                 qint64(1));
+        const auto history = journal.eventsAfter("source", 1, 0);
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == path)
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        QSqlQuery q(db);
+        QVERIFY(q.exec(QString("UPDATE sessions SET %1=%2 WHERE id='source'").arg(column, value)));
+        const auto counters = [&] {
+            QSqlQuery read(db);
+            if (!read.exec("SELECT quote(last_cursor),quote(current_turn_sequence) FROM sessions "
+                           "WHERE id='source'") ||
+                !read.next())
+                return QStringList{};
+            return QStringList{read.value(0).toString(), read.value(1).toString()};
+        };
+        const auto before = counters();
+        QCOMPARE(before.size(), 2);
+        StoredSession copy = source;
+        copy.id = "fork";
+        QString error;
+        QVERIFY(!journal.forkSession("source", 1, copy, &error));
+        QVERIFY(!error.isEmpty());
+        QCOMPARE(counters(), before);
+        QCOMPARE(journal.eventsAfter("source", 1, 0), history);
+        QVERIFY(q.exec("SELECT count(*) FROM sessions WHERE id='fork'"));
+        QVERIFY(q.next());
+        QCOMPARE(q.value(0).toInt(), 0);
+        QVERIFY2(q.exec("BEGIN"), qPrintable(q.lastError().text()));
+        QVERIFY(q.exec("ROLLBACK"));
+        QVERIFY(
+            q.exec("UPDATE sessions SET last_cursor=1,current_turn_sequence=1 WHERE id='source'"));
+        QVERIFY2(journal.forkSession("source", 1, copy, &error), qPrintable(error));
+        QCOMPARE(copy.lastCursor, qint64(1));
+        QCOMPARE(copy.currentTurnSequence, qint64(1));
+        LocalJournal reopened(path);
+        QVERIFY2(reopened.isOpen(), qPrintable(reopened.errorString()));
+        QCOMPARE(reopened.sessionHead("source").cursor, qint64(1));
+        QCOMPARE(reopened.sessionHead("fork").cursor, qint64(1));
+        QCOMPARE(reopened.eventsAfter("source", 1, 0), history);
+    }
+
     void onlyCodexAndClaudeCanFork() {
         QCOMPARE(compat::capabilityForMethod(u"thread/fork"), QStringLiteral("threadFork"));
         QVERIFY(compat::policy(QStringLiteral("codex"))

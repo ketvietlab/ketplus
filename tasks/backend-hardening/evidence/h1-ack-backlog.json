@@ -1,0 +1,42 @@
+{
+  "scope": "Synthetic Qt ACK path, no live journal or provider account",
+  "baseline_head": "d4325b2f8e76d6c3a2fc6280b1869cb4dd00e19c",
+  "baseline_ms": 7183,
+  "fixture": {
+    "raw_events": 100000,
+    "raw_payload_approx_bytes": 1000,
+    "large_payload_metadata": 32
+  },
+  "bounded_ms": 1,
+  "rows_deleted_first_pass": 128,
+  "queue_persisted": true,
+  "focused_cases": {
+    "ack": 24,
+    "protocol": 43,
+    "transcript_window": 28,
+    "handoff": 6,
+    "usage_retention": 124
+  },
+  "full_matrix": "Pending implementation PR gate",
+  "limits": [
+    "Other retention sweeps remain unchecked",
+    "Unsupported raw values retained",
+    "Older SQLite without octet_length defers raw cleanup",
+    "No Windows/mixed multi-GB/live journal/crash-process/installation/deployment acceptance"
+  ],
+  "mutations_caught": [
+    "row budget 128 changed to 1024",
+    "slowest-client min changed to max",
+    "skip unsupported raw row and delete its suffix"
+  ],
+  "handoff_change": "Compare handoff history both while raw cleanup is pending and after bounded drain; production unchanged",
+  "retention_fixture_change": "Acknowledged seed explicitly drains raw queue; new case proves large-detail compaction defers until raw cleanup finishes",
+  "raw_prefix_regression": {
+    "red_cases_failed": 4,
+    "green_cases_passed": 4,
+    "path": "SessionHost::handleCommand(session.events_after)",
+    "cases": "head/middle x oversized/binary",
+    "fix": "Preserve unsupported row and complete raw tail; only remove contiguous acknowledged prefix",
+    "review": "Independent re-review pending"
+  }
+}

@@ -173,6 +173,9 @@ class LocalJournal final {
                      QString* error = nullptr);
     [[nodiscard]] SessionTombstone sessionTombstone(const QString& sessionId,
                                                     qint64 generation) const;
+    // Ownership-sensitive work must distinguish an empty catalog from any read
+    // failure, including errors after some rows have already been fetched.
+    [[nodiscard]] std::optional<QList<StoredSession>> readSessions() const;
     [[nodiscard]] QList<StoredSession> sessions() const;
     // The id of every session, or nullopt when they could not all be read. sessions() returns
     // an empty list on a failed read, which must not pass for every session being deleted.
@@ -292,17 +295,31 @@ class LocalJournal final {
     bool storeCloudEvent(const QString& sessionId, qint64 generation, qint64 cursor,
                          const QJsonObject& event,
                          int projectionPolicyVersion = currentCloudProjectionPolicyVersion);
-    bool removeCloudEventsThrough(const QString& sessionId, qint64 generation, qint64 cursor);
+    // Invalidation is exact and synchronous; ACK cache reclamation is eventual/bounded.
+    bool discardCloudEvent(const QString& sessionId, qint64 generation, qint64 cursor);
+    bool prepareCloudEventUpload(const QJsonArray& envelopes);
+    bool acknowledgeCloudEventUpload(const QString& scope, const QString& sessionId,
+                                     qint64 generation, const QJsonArray& envelopes,
+                                     qint64 acceptedThrough);
+    [[nodiscard]] qint64 cloudUploadCursor(const QString& scope, const QString& sessionId,
+                                           qint64 generation) const;
+    bool pruneAcknowledgedCloudEvents();
     bool acknowledgeCursor(const QString& clientId, const QString& sessionId, qint64 generation,
                            qint64 cursor);
-    // Bounded retention for tables without a session lifecycle: idempotency results, deletion
-    // tombstones and large payloads no longer referenced by any retained event.
+    // Eventual age/cap cleanup for metadata and unreferenced payloads. Each metadata table
+    // has an independent transactional 256-row/1-MiB deletion budget per pass (ADR 0050).
     static constexpr int commandResultRetentionDays = 7;
     static constexpr int maximumCommandResults = 10000;
     static constexpr int tombstoneRetentionDays = 90;
     static constexpr int remoteCommandRetentionDays = 90;
     static constexpr int maximumRemoteCommands = 10000;
     bool pruneRetention();
+    // Opportunistic bounded orphan maintenance; busy transactions defer without advancing.
+    bool pruneLargePayloadGarbage();
+    // Physical raw delivery cleanup is eventual; ACK and its retry queue commit together.
+    bool pruneAcknowledgedEvents();
+    // Expired staging identities remain reserved until bounded chunk cleanup finishes.
+    bool purgeExpiredAttachments();
     // The latest background task snapshot of each session that reported one.
     bool storeBackgroundTasks(const QString& sessionId, qint64 generation, const QJsonArray& tasks);
     [[nodiscard]] QHash<QString, QJsonArray> backgroundTaskSnapshots() const;
@@ -337,8 +354,8 @@ class LocalJournal final {
   private:
     bool initializeAgents();
     bool initializeRemoteAudit();
-    // The audit's 90-day, 10,000-row bound. Run from pruneRetention and every 256 audit rows,
-    // because commands refused before they ran store no command result to trigger it.
+    // The audit's eventual 90-day, 10,000-row cap. Run from pruneRetention and every 256 audit
+    // rows, because commands refused before they ran store no command result to trigger it.
     bool pruneRemoteAudit();
     bool checkpointReclaimedPages();
     // Inside deleteSession's transaction: releases the number and ends undelivered messages.
@@ -358,7 +375,6 @@ class LocalJournal final {
     bool migrateTranscriptSchema();
     bool backfillTurnSequences();
     bool backfillReplayProjection();
-    bool purgeExpiredAttachments();
     bool updateReplayProjection(const QString& sessionId, qint64 generation, qint64 cursor,
                                 qint64 turnSequence, const QString& type,
                                 const QString& encodedPayload, const QString& sentAt,
@@ -370,7 +386,6 @@ class LocalJournal final {
                                           QString* error = nullptr);
     bool pruneUnreferencedLargePayloads(const QString& sessionId, qint64 generation,
                                         const QStringList& transferIds);
-    bool pruneOrphanLargePayloads();
     bool initializeActivityGroups();
     bool updateActivityGroups(const QString& sessionId, qint64 generation, qint64 cursor,
                               qint64 turnSequence, const QString& type, const QJsonObject& payload,

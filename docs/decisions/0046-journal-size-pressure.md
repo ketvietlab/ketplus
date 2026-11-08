@@ -8,12 +8,12 @@ saving the two-field detail policy cannot overwrite it. `limit_bytes` accepts 0
 1–100, default 80. Strict two-field JSON, a 4 KiB stored bound, expected-revision
 CAS, transaction rollback and malformed-row fail-closed behavior match ADR 0042.
 A successful policy save resets the pressure phase and bounded scan cursor.
-Until Desktop size controls are present, recent-detail pressure is **opt-in**:
+Recent-detail pressure remains **opt-in**:
 revision zero exposes the 5 GB target/status but does not shorten the configured
 full-detail period. An explicit owner size-policy save enables it (unless no-limit,
 Forever or automatic-off applies). This preserves the existing Settings promise
-for clients that have never configured a size target. Default automatic activation
-and the complete size-limit acceptance remain pending the UI/rollout change.
+for clients that have never configured a size target. Desktop exposes an explicit Save database target action; opening or editing controls
+never opts in. Default automatic activation and complete total-storage acceptance remain pending.
 
 This is a **soft target for allocated SQLite pages**, not a hard filesystem quota.
 The status explicitly reports `target_scope: sqlite_pages`. File/WAL/SHM lengths
@@ -44,9 +44,15 @@ as retention operations. Responses include policy/revision, optional page/file m
 and warning/over-target/pressure-enabled status. Cloud-control is refused before the
 command-result cache; agent tokens remain agents-only. Interrupted storage requests
 fail instead of replaying after reconnect. Saving never starts compaction or providers;
-the existing idle timer performs work. The existing retention API is unchanged.
+the existing idle timer performs work. Retention replies add `size_policy_supported: true`; older daemons omit it and
+Desktop keeps the existing detail-only page. All storage methods stay daemon-only
+and cannot fall through to a provider. Size saves validate policy and revision ACK,
+and errors/conflicts/timeouts require reload. An unsaved size draft survives an
+unrelated detail save; a changed size revision blocks that draft until explicit
+reload instead of silently rebasing or replacing it. Size status and optional measurements
+refresh after read/save; missing metrics never imply a healthy target.
 
-The CLI can configure the backend; Desktop size controls, sidebar/remote warnings,
+Desktop and CLI can configure the backend; sidebar/remote warnings,
 archive expiry, media policy, Compact now and export remain pending. No installed
 journal, deployment or device-installation acceptance follows from this backend.
 

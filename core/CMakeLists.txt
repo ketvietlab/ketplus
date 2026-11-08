@@ -522,6 +522,7 @@ if(KETPLUS_CM_BUILD_TESTS)
     target_link_libraries(ketplus_settings_tests
         PRIVATE Qt6::Test KetPlusCM::settings_ui
     )
+    ketplus_cm_add_ket_fonts(ketplus_settings_tests ketplus_ket_fonts)
     ketplus_enable_warnings(ketplus_settings_tests)
 
     ketplus_cm_add_test(ketplus_settings_tests ketplus_settings_tests)

@@ -1,0 +1,36 @@
+{
+  "scope": "H1.3 preserve unsupported provider ownership metadata",
+  "base": "b74fa25eba040012db76a232c78f75f435d5b67c",
+  "environment": "macOS arm64, Qt6.11.2 Release Pro/headless offscreen; fake Codex and temporary journals",
+  "baseline_new_probe_failures": 23,
+  "baseline_new_probe_passes": 5,
+  "baseline_note": "Selected new probes include two existing SQL-read error cases plus init/cleanup; source-empty-provider was already rejected",
+  "unsupported_shapes": [
+    "invalid JSON",
+    "root array",
+    "provider entry not object",
+    "thread_id not string",
+    "retired_thread_ids not array",
+    "retired ID not string",
+    "unknown entry fields",
+    "empty provider ID"
+  ],
+  "final_focused_passed": 37,
+  "affected_targets_passed": 7,
+  "affected_seconds": 31.07,
+  "live_lifecycle_case_skipped": 1,
+  "verified": [
+    "local source and retained unsupported metadata preserved",
+    "queued provider delete blocked before response barrier",
+    "pending target retained for repair/restart",
+    "historical shared reference protected after repair"
+  ],
+  "not_verified": [
+    "catalog/record byte bounds",
+    "unsupported SQL column types",
+    "handoff normalization",
+    "provider lifecycle races",
+    "Windows/live journal/provider quota",
+    "packaging/install/deploy"
+  ]
+}
