@@ -213,6 +213,11 @@ class SessionHost final : public QObject, private AgentHostPort {
     [[nodiscard]] QJsonObject storeFork(const QString& sourceId, qint64 sourceGeneration,
                                         const QString& forkId, const QString& threadId);
     [[nodiscard]] QJsonObject heldAgentMessages(const QJsonObject& request, bool release);
+    // ADR 0067: the conversation's reviewer, read or replaced by a local client.
+    [[nodiscard]] QJsonObject conversationReviewer(const QJsonObject& request, bool apply);
+    [[nodiscard]] QJsonObject reviewerJson(const QString& sessionId) const;
+    QString startReviewerConversation(const Session& working, const QString& provider,
+                                      QString* error);
     [[nodiscard]] QJsonObject checkedSession(const QJsonObject& request, Session** session);
     [[nodiscard]] QJsonObject configurationOf(const StoredSession& stored,
                                               const QJsonArray& mergedCatalog) const;

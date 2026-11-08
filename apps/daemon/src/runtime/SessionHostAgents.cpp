@@ -111,6 +111,36 @@ QString SessionHost::startAgentTurn(const QString& sessionId, const qint64 gener
                : result.value(QStringLiteral("error_message")).toString();
 }
 
+// A new review agent: a read-only conversation in the same worktree whose first turn
+// only introduces the role. Returns its session id, or empty with `error` set.
+QString SessionHost::startReviewerConversation(const Session& working, const QString& provider,
+                                               QString* error) {
+    const QString number =
+        journal_->conversationNumber(working.stored.id, working.stored.generation);
+    const QString prompt =
+        QStringLiteral(
+            "KetPlus made this conversation the reviewer of #%1 \"%2\" in %3. After each "
+            "turn it finishes, you will receive that turn's changes to review. Reviews "
+            "are read-only: you cannot edit files, run commands that change anything, "
+            "push, merge or approve. Reply \"Ready.\" now.")
+            .arg(number, working.stored.title, working.stored.worktreePath);
+    const QJsonObject result =
+        startTurn(internalRequest(
+                      QStringLiteral("session.start_turn"), {}, -1,
+                      {{QStringLiteral("prompt"), prompt},
+                       {QStringLiteral("display_text"), QStringLiteral("Reviewer for #") + number},
+                       {QStringLiteral("worktree_path"), working.stored.worktreePath},
+                       {QStringLiteral("options"),
+                        QJsonObject{{QStringLiteral("provider"), provider},
+                                    {QStringLiteral("permission"), QStringLiteral("read-only")}}}}),
+                  true);
+    if (!result.value(QStringLiteral("ok")).toBool()) {
+        *error = result.value(QStringLiteral("error_message")).toString();
+        return {};
+    }
+    return result.value(QStringLiteral("session_id")).toString();
+}
+
 QString SessionHost::steerAgentTurn(const QString& sessionId, const qint64 generation,
                                     const QString& providerText, const QJsonObject& origin) {
     const auto it = sessions_.constFind(sessionId);

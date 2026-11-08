@@ -1,6 +1,7 @@
 #pragma once
 
 #include "storage/AgentMessageRecord.h"
+#include "storage/ConversationReviewer.h"
 #include "storage/JournalRetentionPolicy.h"
 #include "storage/JournalSizePolicy.h"
 #include "storage/JournalSpace.h"
@@ -357,6 +358,13 @@ class LocalJournal final {
                                                const QDateTime& since) const;
     [[nodiscard]] QList<AgentMessageRecord> overdueAgentRequests(const QDateTime& now) const;
     [[nodiscard]] QStringList sessionsWithQueuedAgentMessages() const;
+    // ADR 0067: the conversation that reviews another's finished turns.
+    bool setConversationReviewer(const ConversationReviewer& reviewer, QString* error = nullptr);
+    bool clearConversationReviewer(const QString& sessionId, QString* error = nullptr);
+    [[nodiscard]] std::optional<ConversationReviewer>
+    conversationReviewer(const QString& sessionId) const;
+    // Review requests a conversation sent in one chain of turns.
+    [[nodiscard]] int reviewRequestsInChain(const QString& chainId, const QString& sessionId) const;
 
   private:
     bool initializeAgents();
