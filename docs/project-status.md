@@ -14,6 +14,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- Session fork copies one read snapshot in bounded event-loop passes into an
+  unlisted identity and stores the fork in one final transaction (ADR 0094).
+  Failed, abandoned and interrupted copies become history purge work.
+
 - Session deletion commits the tombstone, cleanup work and per-generation state
   with one bounded history batch (ADR 0093). Remaining history is unreachable and
   drained in bounded event-loop passes; the tombstone outlives the purge marker.

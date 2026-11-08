@@ -18,6 +18,7 @@
 #include <QTimer>
 
 #include <functional>
+#include <memory>
 
 namespace ketplus::daemon {
 
@@ -214,8 +215,14 @@ class SessionHost final : public QObject, private AgentHostPort {
     [[nodiscard]] QJsonObject commitAttachment(const QJsonObject& request);
     [[nodiscard]] QJsonObject cancelAttachment(const QJsonObject& request);
     [[nodiscard]] QJsonObject acknowledge(const QJsonObject& request, const QString& clientId);
-    [[nodiscard]] QJsonObject storeFork(const QString& sourceId, qint64 sourceGeneration,
-                                        const QString& forkId, const QString& threadId);
+    // Copies the source history in bounded event-loop passes (ADR 0094), then answers.
+    struct PendingFork;
+    void storeFork(const QString& sourceId, qint64 sourceGeneration, const QString& forkId,
+                   const QString& threadId, std::function<void(const QJsonObject&)> finish);
+    void advanceFork(const std::shared_ptr<PendingFork>& pending);
+    void completeFork(const std::shared_ptr<PendingFork>& pending);
+    void abandonFork(const std::shared_ptr<PendingFork>& pending, const QJsonObject& failure);
+    QSet<QString> forksInFlight_;
     [[nodiscard]] QJsonObject checkedSession(const QJsonObject& request, Session** session);
     [[nodiscard]] QJsonObject configurationOf(const StoredSession& stored,
                                               const QJsonArray& mergedCatalog) const;

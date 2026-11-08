@@ -8,6 +8,7 @@
 #include <QDateTime>
 #include <QHash>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <utility>
 
@@ -17,6 +18,7 @@
 #include <QSet>
 #include <QSqlDatabase>
 #include <QString>
+#include <QVariant>
 
 namespace ketplus::daemon {
 
@@ -63,6 +65,26 @@ struct RemoteCommandAudit final {
     QString sessionId;
     QString resultCode;
     QDateTime recordedAt;
+};
+
+// One staged fork's read snapshot and copy position. Destroying it releases the snapshot;
+// an unfinished copy is recovered as purge work when the journal next opens.
+struct ForkCopy final {
+    ForkCopy() = default;
+    ForkCopy(const ForkCopy&) = delete;
+    ForkCopy& operator=(const ForkCopy&) = delete;
+    ~ForkCopy();
+    QString readerName;
+    QString sourceId;
+    qint64 sourceGeneration{0};
+    QString forkId;
+    qint64 forkGeneration{1};
+    qint64 lastCursor{0};
+    qint64 currentTurnSequence{0};
+    int table{0};
+    QVariantList after;
+    qint64 copiedRows{0};
+    bool settled{false};
 };
 
 struct SessionHead final {
@@ -179,13 +201,25 @@ class LocalJournal final {
                                  const QString& provider, const QString& threadId);
     bool acknowledgeCloudDeletion(const QString& sessionId, qint64 generation,
                                   const QString& operationId);
-    // Stores `fork` as a new session holding a copy of the source generation's transcript, in
-    // one transaction. Fills the fork's cursor counters from the source. The
-    // optional synchronous preparation must succeed before committing history;
-    // its external effects may remain if the subsequent database commit fails.
+    // Stores `fork` as a new session holding a copy of the source generation's transcript,
+    // running the staged copy below to completion. Fills the fork's cursor counters from the
+    // source. The optional synchronous preparation must succeed before the session is stored;
+    // its external effects may remain if the subsequent database commit fails. A failure
+    // removes everything it staged before returning.
     bool forkSession(const QString& sourceId, qint64 sourceGeneration, StoredSession& fork,
                      QString* error = nullptr,
                      const std::function<bool(QString*)>& beforeCommit = {});
+    // A staged fork (ADR 0094) copies history from one read snapshot in bounded passes into
+    // an unlisted identity; finishFork stores the session in one transaction. An abandoned
+    // or interrupted copy becomes history purge work (ADR 0093).
+    enum class ForkStep { Progress, Copied, Deferred, Failed };
+    [[nodiscard]] std::unique_ptr<ForkCopy> beginFork(const QString& sourceId,
+                                                      qint64 sourceGeneration, StoredSession& fork,
+                                                      QString* error);
+    ForkStep continueFork(ForkCopy& copy, QString* error);
+    bool finishFork(ForkCopy& copy, StoredSession& fork, QString* error,
+                    const std::function<bool(QString*)>& beforeCommit = {});
+    bool abandonFork(ForkCopy& copy, QString* error = nullptr);
     [[nodiscard]] SessionTombstone sessionTombstone(const QString& sessionId,
                                                     qint64 generation) const;
     // Ownership-sensitive work must distinguish an empty catalog from any read
@@ -384,6 +418,10 @@ class LocalJournal final {
                            QSqlError* error);
     // Inside deleteSession's transaction: the first batch, then a purge marker if any remains.
     bool startHistoryPurge(const QString& sessionId, qint64 generation, QString* error);
+    // At open: turns interrupted fork copies into purge work, or keeps them staged.
+    bool recoverForkStaging();
+    // Removes a staged fork's rows now (synchronous forkSession) or leaves purge work.
+    bool discardForkStaging(ForkCopy& copy, bool immediately, QString* error);
     // Inside deleteSession's transaction: releases the number and ends undelivered messages.
     bool releaseAgentState(const QString& sessionId, qint64 generation, QString* error);
     bool writeCommandResult(const QString& messageId, const QJsonObject& result, bool replace);

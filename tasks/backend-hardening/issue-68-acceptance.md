@@ -130,3 +130,13 @@ controls: cloud event upload re-read residual history on a 413 retry (now fenced
 by live generation at entry and in the reply callback; cached restore pages are
 also fenced), and an ignored marker delete reported progress (now fails). Batch
 limits are documented as row counts, not a byte budget. Daemon suite 57/57.
+
+## Staged session fork copy (ADR 0094)
+
+Whole-history fork copied every row in one synchronous transaction: 1,899 ms
+for 100k and 2,952 ms for 300k rows per event table with 256 MiB chunks. The
+fork now copies one read snapshot in bounded passes; begin 3–7 ms, finish
+0–1 ms, slowest pass 17 / 73 / 29 ms for 1k / 100k / 300k (Release daemon,
+`KETPLUS_RUN_FORK_BACKLOG_TESTS=1`). Total copy time roughly doubles (5.7 s at
+300k) without a long stall. Daemon suite 57/57. Newer schema, low space,
+interruption beyond fork staging, media races and steady-state bounds remain.

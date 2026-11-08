@@ -173,6 +173,11 @@ bool LocalJournal::initialize() {
         QStringLiteral("CREATE TABLE IF NOT EXISTS session_history_purge ("
                        "session_id TEXT NOT NULL, generation INTEGER NOT NULL, "
                        "PRIMARY KEY(session_id, generation))"),
+        // Forks still copying history (ADR 0094). Only the daemon owns the journal, so a row
+        // left at open is an interrupted copy: recoverForkStaging makes it purge work.
+        QStringLiteral("CREATE TABLE IF NOT EXISTS session_fork_staging ("
+                       "session_id TEXT NOT NULL, generation INTEGER NOT NULL, "
+                       "PRIMARY KEY(session_id, generation))"),
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS cloud_upload_progress ("
             "scope TEXT NOT NULL, session_id TEXT NOT NULL, generation INTEGER NOT NULL, "
@@ -239,8 +244,8 @@ bool LocalJournal::initialize() {
         }
     }
     return migrateTranscriptSchema() && purgeExpiredAttachments() && backfillTurnSequences() &&
-           backfillReplayProjection() && initializeRemoteAudit() && pruneAcknowledgedEvents() &&
-           pruneRetention();
+           backfillReplayProjection() && initializeRemoteAudit() && recoverForkStaging() &&
+           pruneAcknowledgedEvents() && pruneRetention();
 }
 
 bool LocalJournal::migrateTranscriptSchema() {
@@ -661,6 +666,24 @@ bool LocalJournal::upsertSession(const StoredSession& session) {
         return false;
     }
     const bool isNew = !existing.next();
+    existing.finish();
+    // A new session must not adopt rows that a staged fork or a pending purge still owns.
+    if (isNew) {
+        existing.prepare(QStringLiteral(
+            "SELECT 1 FROM session_fork_staging WHERE session_id = ? AND generation = ? "
+            "UNION ALL SELECT 1 FROM session_history_purge WHERE session_id = ? AND "
+            "generation = ?"));
+        existing.addBindValue(session.id);
+        existing.addBindValue(session.generation);
+        existing.addBindValue(session.id);
+        existing.addBindValue(session.generation);
+        if (!existing.exec() || existing.next() || existing.lastError().isValid()) {
+            setError(existing.lastError().isValid()
+                         ? existing.lastError().text()
+                         : QStringLiteral("This session identity is still being cleaned up."));
+            return false;
+        }
+    }
     QSqlQuery query(database_);
     query.prepare(QStringLiteral(
         "INSERT INTO sessions(id, worktree_path, adapter, thread_id, turn_id, state, "
