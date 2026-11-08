@@ -1,4 +1,5 @@
 #include "DaemonClient.h"
+#include "DaemonCredentialFile.h"
 #include "DaemonPaths.h"
 
 #include "KetPlusProductVersion.h"
@@ -50,6 +51,8 @@ DaemonClient::DaemonClient(QObject* parent)
       statePath_(defaultStatePath()),
       clientId_(
           QStringLiteral("desktop-%1").arg(QUuid::createUuid().toString(QUuid::WithoutBraces))) {
+    // Keep transport backpressure active even while application dispatch is paused.
+    socket_.setReadBufferSize(maximumFrameBytes + 4);
     reconnectTimer_.setSingleShot(true);
     connect(&reconnectTimer_, &QTimer::timeout, this, &DaemonClient::connectToDaemon);
     stableTimer_.setSingleShot(true);
@@ -239,14 +242,8 @@ void DaemonClient::launchDaemon() {
 }
 
 void DaemonClient::authenticate() {
-    QFile tokenFile(tokenPath_);
-    if (!tokenFile.open(QIODevice::ReadOnly)) {
-        socket_.abort();
-        scheduleReconnect();
-        return;
-    }
-    const QByteArray token = tokenFile.readAll().trimmed();
-    if (token.size() < 32) {
+    const QByteArray token = readLocalDaemonCredential(tokenPath_);
+    if (token.isEmpty()) {
         socket_.abort();
         scheduleReconnect();
         return;

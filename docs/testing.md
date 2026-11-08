@@ -62,6 +62,7 @@ obsolete run. See `docs/release-process.md`.
 | Long-lived provider stderr | `ketplus_provider_stderr_flood_tests` | Codex/Claude/Cursor fake processes each emit two 32-MiB floods with eight mandatory stdout round trips per flood; drain and 1-MiB newest-tail bounds are observed directly, then a normal call succeeds on the same process |
 | Workspace boundary | `ketplus_workspace_tests` | Pro shell with CM explorer behavior |
 | Async question lifetime | `ketplus_async_question_lifetime_tests` | turn expiry, session/generation isolation, late items and stale answers |
+| Local turn acceptance | `ketplus_turn_acceptance_tests` | Raw/projection/state/configuration abort and ignored writes, deferred-FK commit failure, no rejected prompt publication, independent-reader visibility, repair/retry/reopen, duplicate result replay, counter/revision exhaustion, bounded oversized-payload refusal (ADR 0076) |
 | Session/provider deletion | `ketplus_provider_deletion_tests` | Failed commit releases the transaction; ignored tombstone/work/history mutations roll back; retry/reopen preserves history, conversation number, cleanup work and unrelated sessions; shared provider threads and unsupported providers remain protected; query/mid-fetch ownership failures prevent fake-provider deletion, preserve pending work/history and recover after repair/restart; malformed/unknown ownership JSON blocks queued and local deletion for both source and retained sessions |
 | Provider response identity/envelopes | `ketplus_provider_response_id_tests` | Fake-provider handshake barriers, typed id isolation, valid-response recovery, exactly-once callbacks and Codex oversized responses; numeric limits; malformed result/error shape, initialization refusal, outstanding-call isolation, duplicate replies and subsequent recovery; POSIX launcher cases skip on Windows |
 | Provider version probing | `ketplus_provider_version_probe_tests` | Incremental stdout/stderr cap, excessive-output termination, exit status, timeout/EOF, retry/cache, distinct concurrent executables and same-path replacement; local helper only |
@@ -136,6 +137,12 @@ never use a real key, Keychain item or inference quota.
 
 ## Minimum verification
 
+Local IPC receive-buffer changes run the lifecycle loopback flood and resume
+regression before/after hello, plus the directly affected protocol, headless,
+credential, upgrade and desktop IPC targets. The fixture uses valid exact-limit
+frames and measures actual unread bytes, rather than only checking a configured
+property; no provider account is required (ADR 0077).
+
 Changes to macOS signing also run `python3 tests/packaging/test_signing_cli.py`.
 These fixtures stub signing/Apple tools and never use a private key or notarization
 account. A replacement artifact additionally needs real Developer ID authority,
@@ -152,8 +159,9 @@ reference envelope is consumed without treating the Mac path as a phone file.
 
 The Linux headless lane uses `-DKETPLUS_EDITION=pro -DKETPLUS_BUILD_DESKTOP=OFF`; it runs all daemon
 tests and requires no provider account or display. The new focused targets are
-`ketplus_headless_daemon_tests` (zero-session catalog, local auth, isolated real
-daemon/CLI, SIGTERM), `ketplus_device_authorization_tests` (PKCE, polling,
+`ketplus_headless_daemon_tests` (zero-session catalog, local auth, bounded
+credential admission/preservation/repair at daemon startup and client hello,
+isolated real daemon/CLI, SIGTERM), `ketplus_device_authorization_tests` (PKCE, polling,
 cancellation and expiry) and `ketplus_remote_control_client_tests` (host/client
 E2EE, key-bound pairing, refresh recovery, immutable command retries and signed
 results). The normal full Desktop suite still covers the shared build/interface
@@ -214,6 +222,9 @@ the corresponding Atlas mock first.
   Server tests prove tombstone tables are not read and retain the wire limit.
 - One Pro module: focused target plus its directly affected tests.
 - Shared header or desktop shell: full build and full Pro test suite.
+- Client transport-buffer changes: `ketplus_daemon_client_upgrade_policy_tests`
+  observes unread bytes with dispatch paused before/after hello, then verifies
+  exact-limit pipelined frames and subsequent delivery without reconnect.
 - `core/` change: the Lite suite (`ctest --preset lite-dev`), then the full Pro suite.
 - QML layout or native rendering: offscreen tests plus the relevant native
   screenshot/pixel check documented in `agent-workspace.md`.

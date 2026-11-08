@@ -45,6 +45,8 @@ class DaemonClient final : public QObject {
     void disconnected(const QString& reason);
 
   private:
+    friend class DaemonClientTestAccess;
+
     struct QueuedCall final {
         QString messageId;
         QString type;
