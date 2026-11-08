@@ -12,22 +12,26 @@ Item {
 
     readonly property var selectedConversation: {
         for (const conversation of agentHost.conversations || [])
-            if (conversation.active) return conversation
-        return ({})
+            if (conversation.active)
+                return conversation;
+        return ({});
     }
-    readonly property var tags: (selectedConversation.tags || []).map(tag =>
-        typeof tag === "string" ? {label: tag, color: Kit.KetTheme.t.accent} : tag)
+    readonly property var tags: (selectedConversation.tags || []).map(tag => typeof tag === "string" ? {
+            label: tag,
+            color: Kit.KetTheme.t.accent
+        } : tag)
     readonly property var selectedWorktree: {
         for (let candidate of agentHost.worktrees) {
-            if (candidate.selected) return candidate
+            if (candidate.selected)
+                return candidate;
         }
-        return ({})
+        return ({});
     }
     readonly property real maximumTitleWidth: Math.max(Metrics.px(160, workspace.t), Math.min(Metrics.px(420, workspace.t), width * 0.45))
     readonly property string scopeLabel: {
-        const branch = agentHost.executionBranch || selectedWorktree.branch || "workspace"
-        const repository = agentHost.repositoryName || "Repository"
-        return repository + " · " + branch
+        const branch = agentHost.executionBranch || selectedWorktree.branch || "workspace";
+        const repository = agentHost.repositoryName || "Repository";
+        return repository + " · " + branch;
     }
 
     // One compact row: title, status and a muted scope chip on the left, icon actions right.
@@ -64,11 +68,7 @@ Item {
             id: conversationTitle
             objectName: "conversationTitle"
             // Long handoff titles must not push the status badge and scope chip away.
-            Layout.maximumWidth: Math.max(0, Math.min(header.maximumTitleWidth, titleRow.width - conversationStatusBadge.width
-                                             - Math.min(scopeChip.implicitWidth, 80)
-                                             - (conversationNumber.visible ? conversationNumber.implicitWidth + titleRow.spacing : 0)
-                                             - (conversationTags.visible ? conversationTags.implicitWidth + titleRow.spacing : 0)
-                                             - titleRow.spacing * 2))
+            Layout.maximumWidth: Math.max(0, Math.min(header.maximumTitleWidth, titleRow.width - conversationStatusBadge.width - (scopeChip.visible ? Math.min(scopeChip.implicitWidth, 80) : 0) - (conversationNumber.visible ? conversationNumber.implicitWidth + titleRow.spacing : 0) - (conversationTags.visible ? conversationTags.implicitWidth + titleRow.spacing : 0) - titleRow.spacing * 2))
             text: agentHost.sessionTitle
             color: workspace.t.textMain
             elide: Text.ElideRight
@@ -92,8 +92,7 @@ Item {
                 anchors.centerIn: parent
                 width: Math.min(implicitWidth, parent.width - Metrics.px(12, workspace.t))
                 text: agentHost.sessionRunning ? "Working" : agentHost.sessionStatus
-                color: agentHost.sessionRunning ? workspace.t.accentHover
-                                                : workspace.t.textMuted
+                color: agentHost.sessionRunning ? workspace.t.accentHover : workspace.t.textMuted
                 font.family: workspace.t.uiFont
                 font.pixelSize: workspace.t.micro
                 font.weight: Font.Medium
@@ -105,6 +104,7 @@ Item {
         Rectangle {
             id: scopeChip
             objectName: "workspaceScopeChip"
+            visible: !agentHost.compactWindow
             // Measure the unelided text independently of the allocated chip width.
             implicitWidth: scopeText.implicitWidth + Metrics.px(30, workspace.t)
             Layout.preferredHeight: Metrics.px(20, workspace.t)
@@ -174,7 +174,9 @@ Item {
                 }
             }
         }
-        Item { Layout.fillWidth: true }
+        Item {
+            Layout.fillWidth: true
+        }
     }
 
     Row {
@@ -185,8 +187,17 @@ Item {
         spacing: Metrics.px(2, workspace.t)
 
         Kit.KetIconButton {
+            objectName: "headerCompactWindowButton"
+            visible: !agentHost.compactMode
+            controlSize: Kit.KetTheme.ControlSize.Small
+            iconName: agentHost.compactWindow ? "fullscreen" : "panel-left"
+            text: agentHost.compactWindow ? "Leave compact window" : "Compact window"
+            onClicked: agentHost.requestCompactWindow()
+        }
+        Kit.KetIconButton {
             id: atlasButton
             objectName: "headerAtlasButton"
+            visible: !agentHost.compactWindow
             controlSize: Kit.KetTheme.ControlSize.Small
             iconName: Kit.KetTheme.iconForLucide("network")
             text: agentHost.atlasRunningCount > 0 ? "Atlases, " + agentHost.atlasRunningCount + " running across worktrees" : "Atlases"
@@ -203,7 +214,7 @@ Item {
         }
         Kit.KetIconButton {
             objectName: "headerNewConversationButton"
-            visible: !agentHost.compactMode
+            visible: !agentHost.compactMode && !agentHost.compactWindow
             controlSize: Kit.KetTheme.ControlSize.Small
             iconName: Kit.KetTheme.iconForLucide("square-pen")
             text: "New conversation"
@@ -211,7 +222,7 @@ Item {
         }
         Kit.KetIconButton {
             objectName: "headerTerminalButton"
-            visible: !agentHost.compactMode
+            visible: !agentHost.compactMode && !agentHost.compactWindow
             controlSize: Kit.KetTheme.ControlSize.Small
             iconName: Kit.KetTheme.iconForLucide("square-terminal")
             text: "Open terminal"

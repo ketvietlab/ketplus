@@ -83,6 +83,61 @@ class AgentWorkspaceShellTest final : public QObject {
                     .filePath(QStringLiteral("conversation-worktrees.sqlite"))
                     .toUtf8());
     }
+    void compactConversationWindowPreservesSessionAndDraft() {
+        QTemporaryDir settings;
+        QTemporaryDir workspace;
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(workspace.path());
+        window.resize(1100, 760);
+        window.show();
+        for (auto* action : window.findChildren<QAction*>())
+            if (action->text() == QStringLiteral("Agent Workspace"))
+                action->setChecked(true);
+        auto* view = window.findChild<ketplus::AgentWorkspaceView*>();
+        auto* action = window.findChild<QAction*>("compactConversationWindowAction");
+        auto* sidebar = window.findChild<ketplus::ActivityBar*>();
+        QVERIFY(view && action && sidebar);
+        auto* prompt = view->quickView()->rootObject()->findChild<QQuickItem*>("agentPrompt");
+        QVERIFY(prompt);
+        prompt->setProperty("text", QStringLiteral("Keep this unfinished draft"));
+        const auto path = view->activePath();
+        const auto normalSize = window.size();
+        const auto normalMinimum = window.minimumSize();
+        QSignalSpy pathChanged(view, &ketplus::AgentWorkspaceView::activePathChanged);
+        action->trigger();
+        QTRY_VERIFY(view->compactWindow());
+        QVERIFY(!view->compactMode()); // Atlas restrictions and token compaction are independent.
+        QVERIFY(!sidebar->isVisible());
+        QTRY_VERIFY(window.width() <= 520);
+        QCOMPARE(view->activePath(), path);
+        QCOMPARE(prompt->property("text").toString(), QStringLiteral("Keep this unfinished draft"));
+        QVERIFY(view->isVisible());
+        QVERIFY(view->width() > 300 && view->width() <= window.width());
+        auto* scope = view->quickView()->rootObject()->findChild<QQuickItem*>("workspaceScopeChip");
+        auto* expand =
+            view->quickView()->rootObject()->findChild<QQuickItem*>("headerCompactWindowButton");
+        QVERIFY(scope && expand);
+        QVERIFY(!scope->isVisible());
+        QVERIFY(expand->isVisible());
+        QVERIFY(expand->mapToScene(QPointF(expand->width(), 0)).x() <= view->width());
+        const auto capture = qEnvironmentVariable("KETPLUS_COMPACT_UI_CAPTURE");
+        if (!capture.isEmpty()) {
+            QTest::qWait(60);
+            QVERIFY(view->quickView()->grabWindow().save(capture));
+        }
+        view->requestCompactWindow();
+        QTRY_VERIFY(!view->compactWindow());
+        QVERIFY(!action->isChecked());
+        QTRY_VERIFY(sidebar->isVisible());
+        QCOMPARE(window.minimumSize(), normalMinimum);
+        QCOMPARE(window.size(), normalSize);
+        QCOMPARE(prompt->property("text").toString(), QStringLiteral("Keep this unfinished draft"));
+        QCOMPARE(pathChanged.count(), 0);
+    }
+
     void transcriptFileReopenReadsExternalChangesAndKeepsDirtyEdits() {
         QTemporaryDir settings;
         QTemporaryDir workspace;

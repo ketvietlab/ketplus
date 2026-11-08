@@ -408,3 +408,15 @@ The standalone Agent Workspace sidebar also uses repository → conversation
 composition. It does not render a worktree rail; the execution picker and
 Worktrees page own checkout selection and management. The native shell retains
 its multi-repository grouping.
+
+Pro Quick search wraps the kit CommandPalette in a transparent native popup so it
+stays above the embedded QQuickView. Product filtering retains ranked name/path
+matches and Atlas IDs; unavailable entries cannot activate and produce an explicit
+empty-state explanation when they are the only matches. Context menus use kit
+recipes and route Change worktree through the existing revisioned execution picker.
+
+Compact conversation window (Shift+Cmd/Ctrl+M or the header icon) is desktop
+presentation only: the same view, conversation and composer draft remain mounted.
+It hides sidebar/details, restores prior geometry on exit and expands when opening
+a file detail. This is distinct from the provider context-token compactWindow in
+ADR 0021 and from Atlas Builder's restricted compactMode.

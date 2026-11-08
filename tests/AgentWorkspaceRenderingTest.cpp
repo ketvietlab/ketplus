@@ -746,33 +746,33 @@ void AgentWorkspaceViewTest::contextMenuFollowsDesignSystem() {
         (conversationRow = findVisualItem(root, QStringLiteral("conversationRow_conversation"))));
     auto* menu = qvariant_cast<QObject*>(conversationRow->property("contextMenu"));
     QVERIFY(menu);
-    QCOMPARE(menu->property("backgroundColor").value<QColor>(), QColor(palette.panelBackground));
-    QCOMPARE(menu->property("borderColor").value<QColor>(), QColor(palette.borderStrong));
-    QCOMPARE(menu->property("cornerRadius").toDouble(), 7.0);
-    QCOMPARE(menu->property("padding").toDouble(), 5.0);
-    QCOMPARE(menu->property("opacity").toDouble(), 1.0);
-
-    auto* menuBackground = qvariant_cast<QObject*>(menu->property("background"));
+    const auto menuRecipe = ket::menuRecipe(ket::Appearance::instance().theme());
+    const auto zoom = ket::Appearance::instance().zoom();
+    QCOMPARE(menu->property("padding").toDouble(),
+             ket::Appearance::scale(menuRecipe.padding, zoom));
     auto* renameItem = qvariant_cast<QObject*>(conversationRow->property("renameMenuItem"));
-    QVERIFY(menuBackground);
     QVERIFY(renameItem);
-    QCOMPARE(menuBackground->property("color").value<QColor>(), QColor(palette.panelBackground));
-    QCOMPARE(menuBackground->property("radius").toDouble(), 7.0);
-    QCOMPARE(renameItem->property("implicitHeight").toDouble(), 34.0);
-
-    auto* itemContent = qvariant_cast<QObject*>(renameItem->property("contentItem"));
     auto* itemBackground = qvariant_cast<QObject*>(renameItem->property("background"));
-    QVERIFY(itemContent);
     QVERIFY(itemBackground);
-    QCOMPARE(itemContent->property("color").value<QColor>(), QColor(palette.textMain));
-    QCOMPARE(itemBackground->property("radius").toDouble(), 5.0);
-
+    const auto itemRecipe = ket::menuItemRecipe(false, true, ket::MenuItemTone::Normal,
+                                                ket::Appearance::instance().theme());
+    QCOMPARE(itemBackground->property("radius").toDouble(),
+             ket::Appearance::scale(itemRecipe.radius, zoom));
+    QVERIFY(renameItem->property("implicitHeight").toDouble() >=
+            ket::Appearance::scale(itemRecipe.height, zoom));
     QVERIFY(QMetaObject::invokeMethod(menu, "open"));
     QTRY_VERIFY(menu->property("visible").toBool());
     menu->setProperty("currentIndex", 0);
     QTRY_VERIFY(renameItem->property("highlighted").toBool());
-    QTRY_COMPARE(itemContent->property("color").value<QColor>(), QColor(palette.accentText));
-    QTRY_COMPARE(itemBackground->property("color").value<QColor>(), QColor(palette.accentSubtle));
+    const auto selected = ket::menuItemRecipe(true, true, ket::MenuItemTone::Normal,
+                                              ket::Appearance::instance().theme());
+    QTRY_COMPARE(itemBackground->property("color").value<QColor>(), selected.background);
+    auto* worktree = menu->findChild<QObject*>("changeConversationWorktreeMenuItem");
+    QVERIFY(worktree);
+    QSignalSpy requested(&view, &ketplus::AgentWorkspaceView::conversationWorktreeRequested);
+    QVERIFY(QMetaObject::invokeMethod(worktree, "triggered"));
+    QTRY_COMPARE(requested.count(), 1);
+    QCOMPARE(requested.first().first().toString(), QStringLiteral("conversation"));
     const QString capture = qEnvironmentVariable("KETPLUS_CONTEXT_MENU_CAPTURE");
     if (!capture.isEmpty()) {
         QTest::qWait(100);

@@ -170,6 +170,8 @@ void MainWindow::ensureAgentWorkspace() {
                                                  agentManager_->isRunning(path));
             }
         });
+    connect(agentWorkspace_, &AgentWorkspaceView::compactWindowRequested, this,
+            [this] { setCompactConversationWindow(!compactConversationWindow_); });
     connect(agentWorkspace_, &AgentWorkspaceView::executionWorktreeRequested, this, [this] {
         const auto path = agentWorkspace_->activePath();
         const auto conversation = agentManager_->activeConversationId(path);
@@ -425,6 +427,10 @@ void MainWindow::ensureAgentWorkspace() {
             });
     connect(agentWorkspace_, &AgentWorkspaceView::stopRequested, this,
             [this] { agentManager_->cancel(agentWorkspace_->activePath()); });
+    connect(agentWorkspace_, &AgentWorkspaceView::conversationWorktreeRequested, this,
+            [this](const QString& id) {
+                changeAgentConversationWorktree(agentWorkspace_->activePath(), id);
+            });
     connect(agentWorkspace_, &AgentWorkspaceView::conversationRenameRequested, this,
             [this](const QString& conversationId) {
                 QTimer::singleShot(0, this, [this, conversationId] {
@@ -665,6 +671,8 @@ void MainWindow::startNewAgentConversation() {
 }
 
 void MainWindow::setAgentWorkspaceVisible(const bool visible) {
+    if (!visible && compactConversationWindow_)
+        setCompactConversationWindow(false);
     // Sidebar navigation selects its target after showing the workspace. When
     // it already shows this workspace, activating the previous session resets
     // and hydrates a transcript that will immediately be replaced. A retained
@@ -747,6 +755,13 @@ void MainWindow::syncAgentWorkspaceContext(const bool loadTranscript) {
     refreshAgentWorktrees();
 }
 
+void MainWindow::changeAgentConversationWorktree(const QString& path, const QString& id) {
+    openSidebarConversation(path, id);
+    if (agentWorkspace_ && agentManager_ && agentWorkspace_->activePath() == path &&
+        agentManager_->activeConversationId(path) == id)
+        agentWorkspace_->requestExecutionWorktree();
+}
+
 void MainWindow::renameAgentConversation(const QString& worktreePath,
                                          const QString& conversationId) {
     if (agentManager_ == nullptr || conversationId.isEmpty())
@@ -788,9 +803,13 @@ void MainWindow::showAgentConversationContextMenu(const QString& worktreePath,
         return;
 
     QMenu menu(this);
+    auto* rename = menu.addAction(tr("Rename…"));
+    rename->setObjectName(QStringLiteral("renameConversationAction"));
     auto* fork = menu.addAction(tr("Fork this conversation"));
     fork->setObjectName(QStringLiteral("forkConversationAction"));
     fork->setEnabled(forkable);
+    auto* changeWorktree = menu.addAction(tr("Change worktree…"));
+    changeWorktree->setObjectName(QStringLiteral("changeConversationWorktreeAction"));
     menu.addSeparator();
     auto* archive = menu.addAction(tr("Archive conversation"));
     archive->setObjectName(QStringLiteral("archiveConversationAction"));
@@ -802,7 +821,11 @@ void MainWindow::showAgentConversationContextMenu(const QString& worktreePath,
         reason->setEnabled(false);
     }
     QAction* selected = menu.exec(QCursor::pos());
-    if (selected == fork)
+    if (selected == rename)
+        renameAgentConversation(path, conversationId);
+    else if (selected == changeWorktree)
+        changeAgentConversationWorktree(path, conversationId);
+    else if (selected == fork)
         forkAgentConversation(path, conversationId);
     else if (selected == archive)
         archiveAgentConversation(path, conversationId);

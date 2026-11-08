@@ -15,6 +15,11 @@ milestone changes state.
 
 ## Implemented
 
+- The unreviewed Pro overlays layer uses kit Quick search and conversation menus.
+  Compact conversation window preserves the mounted session/draft and restores
+  window geometry. Repository/worktree picker skinning continues in the next
+  stack layer; native acceptance and release remain deferred.
+
 - Pro header/composer now compose kit buttons, model-search field, usage ring,
   meters and composer/attachment recipes. The header stays 44 px, with number,
   compact title and filterable supplied tags. The input retains IME/draft/steering
