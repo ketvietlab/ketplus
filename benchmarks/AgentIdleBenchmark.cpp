@@ -7,6 +7,7 @@
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QElapsedTimer>
+#include <QHash>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QQuickItem>
@@ -95,7 +96,8 @@ int main(int argc, char** argv) {
                        {"seconds", "Measured interval (10–60 seconds)", "seconds", "12"},
                        {"capture", "Optional native PNG before measurement", "path"},
                        {"theme", "system, light or dark", "theme", "system"},
-                       {"zoom", "Interface zoom (1–1.5)", "zoom", "1"}});
+                       {"zoom", "Interface zoom (1–1.5)", "zoom", "1"},
+                       {"open", "mode, model or limits: a composer panel, for captures", "panel"}});
     parser.process(app);
     const auto work = parser.value("work");
     const auto visibility = parser.value("visibility");
@@ -113,6 +115,14 @@ int main(int argc, char** argv) {
     if ((themeName != "system" && themeName != "light" && themeName != "dark") || !validZoom ||
         zoom < 1 || zoom > 1.5) {
         report({{"event", "error"}, {"reason", "Invalid theme or zoom"}});
+        return 2;
+    }
+    // The composer button that opens each panel, as in the mock's --open.
+    const QHash<QString, QString> panelButtons{
+        {"mode", "permissionButton"}, {"model", "modelButton"}, {"limits", "usageLimitsButton"}};
+    const auto panel = parser.value("open");
+    if (!panel.isEmpty() && !panelButtons.contains(panel)) {
+        report({{"event", "error"}, {"reason", "Invalid panel"}});
         return 2;
     }
     ketplus::ThemeManager theme(app);
@@ -157,6 +167,12 @@ int main(int argc, char** argv) {
     };
     if (visibility == "hidden")
         QTimer::singleShot(1000, &view, &QWidget::hide);
+    if (!panel.isEmpty())
+        QTimer::singleShot(1000, &view, [&] {
+            auto* button = findItem(view.quickView()->rootObject(), panelButtons.value(panel));
+            if (!button || !QMetaObject::invokeMethod(button, "clicked"))
+                report({{"event", "error"}, {"reason", "Panel button not found"}});
+        });
     report({{"event", "ready"},
             {"pid", qint64(app.applicationPid())},
             {"work", work},
