@@ -101,7 +101,10 @@ Item {
                         rightPadding: composer.recipe.textPaddingInline
                         topPadding: composer.recipe.textPaddingBlock - leadingShift
                         bottomPadding: composer.recipe.textPaddingBlock + leadingShift
-                        property string hint: agentHost.presentationState.folder === "missing" ? "Continue in the main worktree…" : "Type / for commands, @ for files, $ for skills"
+                        // As in the mock's composer: a new conversation asks what to build, later turns name the provider.
+                        property string hint: agentHost.presentationState.folder === "missing" ? "Continue in the main worktree…"
+                                              : root.messageCount === 0 ? "Describe what you want to build…"
+                                              : "Message " + root.providerTitle(root.selectedProvider) + "…"
                         // Drafting must remain available even while the
                         // transport reconnects; submission is gated separately.
                         enabled: true
