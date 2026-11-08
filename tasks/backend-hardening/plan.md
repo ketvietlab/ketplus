@@ -1105,3 +1105,10 @@ Evidence: [h1-failed-journal-reuse-qt.json](evidence/h1-failed-journal-reuse-qt.
   returns bounded bytes and rejects decoding errors without changing the row.
   The earlier Pro104/104 result belongs to `8b42da44`; run final gates again for
   this production delta before review. No acceptance is inferred from the old run.
+
+- [x] Final Release Pro build and full offscreen104/104 pass at `221eb2f8`
+  (362.39 s, first run at this head). Final opt-in deletion44/44 and Desktop
+  bridge28 pass/1 live-provider skip pass on the same commit (22.24 s, 2 targets).
+  Source/log hashes, raw scale measurements and both controls are recorded in
+  `evidence/h1-tombstone-pagination-qt.json`. Independent review/merge remains
+  pending; the final evidence commit changes documentation only.

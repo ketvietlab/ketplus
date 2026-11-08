@@ -75,7 +75,9 @@ operation/revision fencing and reopen remained correct. Tombstone catalogs at
 100k/300k rows encoded to 5,389,329/16,389,329 bytes, exceeding the 1-MiB IPC limit.
 The active fix adds versioned bounded pages and sequential bridge consumption
 (ADR 0091). Explicit atomic-delete latency is still open; no partial deletion is
-acknowledged as complete. Final Pro/review evidence is pending for the paging fix.
+acknowledged as complete. Final Pro104/104 and focused scale/bridge gates pass at `221eb2f8`;
+independent review/merge of the paging fix remains pending. See
+[evidence](evidence/h1-tombstone-pagination-qt.json).
 
 The #274 review also noted that successful compaction with retained staging
 artifacts does not surface `result.error` in `compactJournal`; preserve this
