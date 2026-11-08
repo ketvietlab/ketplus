@@ -418,6 +418,10 @@ class LocalJournal final {
                            QSqlError* error);
     // Inside deleteSession's transaction: the first batch, then a purge marker if any remains.
     bool startHistoryPurge(const QString& sessionId, qint64 generation, QString* error);
+    // At open: refuses a journal newer than journal_format::current before writing anything,
+    // and records the current format once every migration has succeeded (ADR 0095).
+    bool acceptsFormat();
+    bool markFormat();
     // At open: turns interrupted fork copies into purge work, or keeps them staged.
     bool recoverForkStaging();
     // Removes a staged fork's rows now (synchronous forkSession) or leaves purge work.

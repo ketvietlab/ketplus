@@ -339,6 +339,11 @@ retry, with a 1-MiB stored-column bound and checked transaction. Unsupported or
 legacy unmarked entries remain for separate recovery; see
 [ADR 0053](decisions/0053-bounded-cloud-event-cache-cleanup.md).
 
+The journal records its format in `PRAGMA user_version`. A daemon refuses a
+journal newer than its `journal_format::current` before writing anything, and
+startup compaction leaves such a journal untouched
+([ADR 0095](decisions/0095-journal-format-version.md)).
+
 Deleted rows return their space to the disk (#128). A new journal is created
 with `auto_vacuum = INCREMENTAL`. An older one moves to it once at daemon start,
 before the endpoint listens:
