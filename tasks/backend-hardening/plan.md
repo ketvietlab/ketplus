@@ -941,7 +941,17 @@ The relay rollout gate remains external and does not block this provider work.
   20 pass/12 fail; Cursor 24 pass/3 fail, including actual forbidden session/load.
 - [x] Require explicit true for loadSession/image and correct the fake provider's
   advertised feature set (ADR 0090). This stays in #276, the single new package.
-- [ ] Run full Release Pro/offscreen verification of the combined frame/capability
-  tree, then independent #7705 review, merge, final #71 acceptance and cleanup.
-  Do not close #71 before these gates. Request/waiter admission and absent-response
-  deadlines remain H3.4; no universal QProcess memory or live-provider claim.
+- [x] Run full Release Pro/offscreen verification at code commit `ed2ec861`:
+  build passed; first run **99/102 targets** in 548.67 s with parallelism 2.
+  Agent, agent-shell and chat-Mermaid UI targets failed; a single unchanged serial
+  rerun passed **3/3** in 140.33 s. No source, UI or timeout was changed between
+  runs. These results are not a clean first-pass 102/102 or proof of root cause.
+  Focused cases: malformed frames **47/47**, capabilities **32/32**, Cursor
+  **27/27**, response admission **126/126**, catalog **14/14**.
+  See `evidence/h3-provider-contract-qt.json` for source/log hashes and limits.
+- [ ] Obtain independent #7705 review of the final head and #71 acceptance,
+  merge, then close #71 only when its concrete criteria are satisfied.
+- [ ] Remove the pushed linked worktrees/builds after verifying clean state,
+  remote heads and absence of other users/processes.
+  Request/waiter admission and absent-response deadlines remain H3.4; no universal
+  QProcess memory, live-provider, other-platform, installation or deployment claim.
