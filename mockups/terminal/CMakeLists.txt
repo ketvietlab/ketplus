@@ -71,11 +71,15 @@ add_library(terminal_mock_core STATIC
     "${core_dir}/src/terminal/TerminalSession.h"
     "${core_dir}/src/terminal/TerminalView.cpp"
     "${core_dir}/src/terminal/TerminalView.h"
-    "${core_dir}/src/terminal_app/TerminalTab.cpp"
-    "${core_dir}/src/terminal_app/TerminalTab.h"
+    "${core_dir}/src/terminal/TerminalTab.cpp"
+    "${core_dir}/src/terminal/TerminalTab.h"
+    # The view takes its colours from the shipped theme.
+    "${core_dir}/src/ui/Theme.cpp"
+    "${core_dir}/src/ui/Theme.h"
 )
 target_include_directories(terminal_mock_core PUBLIC "${core_dir}/src")
-target_link_libraries(terminal_mock_core PUBLIC Qt6::Widgets KetQt::Tokens terminal_mock_vterm)
+target_link_libraries(terminal_mock_core PUBLIC Qt6::Widgets KetQt::Tokens KetQt::Icons KetQt::Widgets
+                                                terminal_mock_vterm)
 if(UNIX AND NOT APPLE)
     target_link_libraries(terminal_mock_core PRIVATE util)
 endif()

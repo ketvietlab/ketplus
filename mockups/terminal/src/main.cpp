@@ -8,8 +8,8 @@
 #include "KetAppearance.h"
 #include "KetStyle.h"
 #include "TerminalMockWindow.h"
+#include "terminal/TerminalTab.h"
 #include "terminal/TerminalView.h"
-#include "terminal_app/TerminalTab.h"
 
 #include <QApplication>
 #include <QCommandLineParser>
