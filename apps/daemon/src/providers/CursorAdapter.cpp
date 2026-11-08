@@ -1482,22 +1482,38 @@ void CursorAdapter::sendObject(const QJsonObject& object) {
 }
 
 void CursorAdapter::consumeStdout() {
-    stdoutBuffer_.append(process_->readAllStandardOutput());
-    if (stdoutBuffer_.size() > maximumProviderMessageBytes && !stdoutBuffer_.contains('\n')) {
-        const QString reason =
-            QStringLiteral("The Cursor ACP process emitted an oversized message.");
-        stdoutBuffer_.clear();
-        failPending(reason);
-        emit stopped(reason);
-        process_->kill();
-        return;
-    }
-    qsizetype newline = -1;
-    while ((newline = stdoutBuffer_.indexOf('\n')) >= 0) {
-        const QByteArray line = stdoutBuffer_.left(newline).trimmed();
-        stdoutBuffer_.remove(0, newline + 1);
-        if (!line.isEmpty())
-            consumeLine(line);
+    constexpr qint64 readChunkBytes = 64 * 1024;
+    process_->setReadChannel(QProcess::StandardOutput);
+    while (process_->bytesAvailable() > 0) {
+        const QByteArray chunk = process_->read(readChunkBytes);
+        if (chunk.isEmpty())
+            return;
+        stdoutBuffer_.append(chunk);
+        while (true) {
+            const qsizetype newline = stdoutBuffer_.indexOf('\n');
+            const qsizetype lineBytes = newline < 0 ? stdoutBuffer_.size() : newline;
+            if (lineBytes > maximumProviderMessageBytes) {
+                const QString reason =
+                    QStringLiteral("The Cursor ACP process emitted an oversized message.");
+                stdoutBuffer_.clear();
+                // Quarantine this process generation, including already-buffered output.
+                // Closing a read channel alone leaves its received bytes available.
+                process_->closeReadChannel(QProcess::StandardOutput);
+                while (process_->bytesAvailable() > 0)
+                    if (process_->read(readChunkBytes).isEmpty())
+                        break;
+                failPending(reason);
+                emit stopped(reason);
+                process_->kill();
+                return;
+            }
+            if (newline < 0)
+                break;
+            const QByteArray line = stdoutBuffer_.left(newline).trimmed();
+            stdoutBuffer_.remove(0, newline + 1);
+            if (!line.isEmpty())
+                consumeLine(line);
+        }
     }
 }
 

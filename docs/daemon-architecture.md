@@ -592,6 +592,28 @@ Matched replies must contain exactly one result (object or explicit null) or err
 initialize uses its existing failure path, while other pending calls survive.
 Provider-specific result schemas remain separate (ADR 0075).
 
+Provider version probes retain at most 4 KiB of merged output, kill excess output
+and accept banners only after successful normal exit (ADR 0072). Failed probes
+remain Unknown under the existing launch policy and are retried. Only matching
+executable fingerprints share an in-flight result; other checks are deferred and
+revalidated, including a binary replaced while the first probe is running.
+
+Claude/Cursor stdout is read in 64-KiB chunks and checks each raw line, including
+an unfinished suffix, against the existing 16-MiB limit before parse (ADR 0071).
+An over-limit generation is closed/drained before pending callbacks fail and the
+process is killed; later output from it cannot publish another request. Normal
+lines and a fresh process retain their existing behavior.
+
+Oversized Codex metadata decodes bounded JSON strings and refuses literal dotted
+keys as nested paths (ADR 0073). Invalid captured metadata clears routing for that
+line; subsequent lines reset normally. This does not validate the entire discarded
+JSON payload or resolve missing terminal events and pending-request timeouts.
+
+Codex oversized-line scanning keeps at most 64 routing frames and a scalar count
+of deeper containers (ADR 0070). It still extracts shallow fields after the deep
+value and resumes on the next line; clear/reset discards all prior scan state.
+This bounds scanner nesting storage, not aggregate process I/O or event-loop time.
+
 The intended state flow is `registered -> connecting -> online -> draining ->
 stopped`, with a recoverable `offline` state. Session state is separate from
 connection state so a temporary network outage does not kill a local process.

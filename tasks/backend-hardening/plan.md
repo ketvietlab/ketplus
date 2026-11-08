@@ -1,6 +1,6 @@
 # Backend hardening execution plan
 
-Updated: 2026-11-07. Owner: conversation #2739. Independent reviewer: #6212.
+Updated: 2026-11-08. Owner: conversation #2739. Independent reviewer: #7705 (reassigned by the user on 2026-11-08).
 Baseline: integration `90388ea772bf75267e66233ee66566bc0e2e18e8` (PR #212).
 
 This is the durable execution queue for finishing the existing non-UI domain
@@ -35,10 +35,15 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
    regression; run the required matrix; record the final commit and evidence.
 3. A review finding loops back to the same item. A PASS only unlocks the merge
    gate; it does not complete merge, cleanup, packaging or deployment.
-4. Send one complete exact-head request to #6212. While an item awaits review,
-   continue an independent ready audit. Do not poll the peer or stop with an
-   invitation to continue. If all remaining items depend on an external gate,
-   record its owner and exact missing evidence instead of claiming completion.
+4. Send one complete exact-head request to #7705. Do not poll the peer or bypass
+   a held dispatch. The 2026-11-08 closure audit supersedes the previous rule to
+   start another independent audit while waiting: freeze new audit branches,
+   finish the already-started migration-copy package and drain the existing
+   review queue by issue. Review/merge the #71 fixes and finish that issue's
+   acceptance before starting the next domain; do not wait for all drafts to
+   merge before preparing its closure. Allow at most one new unreviewed package
+   needed for the current issue. Resolve its findings before advancing.
+   Record external gates separately from unperformed work owned by #2739.
 5. After exact-head tests and review pass, merge using the existing authorization.
    Address all P0/P1/P2 findings; do not self-accept a risk to empty the checklist.
    Lower-severity findings are either fixed or explicitly accepted by the user.
@@ -818,8 +823,8 @@ remain explicitly open.
   Expanded focused suite 91/91 includes depth/memory and next-line recovery.
 - [x] Full Pro build and 97/97 tests pass at `6fd79e51` (308.05 seconds).
   Draft #259 is pushed; generated builds are removed. No UI implementation change.
-- [ ] Integrate parent #256, revalidate/review the final head, merge and source
-  cleanup. Review dispatch remains held by KetPlus `chain_limit`.
+- [x] #256 and #259 integrated and reviewed by #7705; merged at `7ceebc34`
+  and `b93394bb`. Task worktrees and builds were removed after safe checks.
 - [ ] Duplicate keys/outer structure, RPC request-id typing, timeout/recovery and
   broader stderr/normal-frame encoding remain open; this is selective extraction.
 
@@ -834,7 +839,8 @@ remain explicitly open.
 - [x] Full Pro build and 97/97 tests pass at `d835d334` (316.56 seconds).
   Draft #260 is pushed; generated build is removed. It branches from merged
   integration, independently of the waiting metadata/string packages.
-- [ ] Independent exact-head review, merge and source cleanup; dispatch held.
+- [ ] Independent exact-head review by #7705, merge and source cleanup; the
+  user reassignment supersedes the historical dispatch hold.
 - [ ] Continue result/error-envelope validation, incoming ids, duplicate fields,
   counter exhaustion and pending-call admission/timeout/cancellation checks.
 
@@ -849,5 +855,18 @@ remain explicitly open.
 - [ ] Full Pro shared-header gate, integrate parent #260, independent exact-head
   review, merge and cleanup. No UI implementation changes.
 - [ ] Continue pending-call/counter/lifecycle and method-schema audit; broader H3
-  remains open. The next independent safety audit is H1.3 start-turn atomicity:
-  a committed user.message followed by failed turn.queued can leave a ghost prompt.
+  remains open. Current closure-first priority is #71; do not start a new domain.
+
+
+### 2026-11-08 — integrate the existing #260/#261 response package
+
+- #256/#259/#257/#258 are merged; integration is `9825970f`. #275 is the
+  sole new unreviewed package for #71, with catalog 14/14 and affected 17/17.
+- #261 already contains #260; combine their integration/review rather than
+  rebuilding the same shared headers twice. No new production fix is added here.
+  #7705 must review both original changes and the combined final head.
+- [ ] Run full Release Pro build and offscreen suite on the integrated response
+  head; verify the combined 126-case fixture and preserve failure evidence.
+- [ ] Review and merge the combined package; verify #260 is included before
+  closing or marking its work complete. Keep #71 open for malformed frame
+  settlement, capability coverage and remaining concrete bounds findings.

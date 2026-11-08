@@ -14,6 +14,22 @@ milestone changes state.
   and fractional ids cannot consume pending calls in Codex, Claude or Cursor,
   including Codex oversized responses. Valid replies still complete exactly once.
 
+- Provider version probes bound merged output while reading and require successful
+  exit before accepting a banner (ADR 0072). Concurrent executable generations
+  retain their own result; failed probes remain retryable without a cached version.
+
+- Claude/Cursor stdout enforces the 16-MiB limit per raw line before parsing,
+  including complete lines and partial suffixes after valid lines (ADR 0071).
+  Bounded reads and failure draining preserve valid frames and fresh generations.
+
+- Oversized provider routing uses bounded JSON string decoding and structural
+  path segments (ADR 0073). Invalid captured metadata withholds all routing fields
+  for the line; valid escapes/Unicode and subsequent messages remain usable.
+
+- Oversized Codex line scanning retains at most 64 routing frames, tracking deeper
+  containers with a scalar depth (ADR 0070). Shallow fields after the nested value
+  still route correctly; broader provider framing remains under audit.
+
 - Existing media blobs are validated before dedup returns a reference (ADR 0066):
   exact bounded bytes, regular nonsymlink files and owner-only permissions.
   Invalid entries remain intact for repair; reference durability remains open.
