@@ -17,7 +17,7 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             width: KetTheme.px(46, KetTheme.zoom)
             height: KetTheme.px(46, KetTheme.zoom)
-            source: "qrc:/agent/icons/ketplus-mark-" + (workspace.t.dark ? "dark" : "light") + ".svg"
+            source: "qrc:/agent/icons/ketplus-mark-" + (KetTheme.dark ? "dark" : "light") + ".svg"
             fillMode: Image.PreserveAspectFit
             Accessible.name: "KétPlus Pro"
         }
@@ -25,9 +25,9 @@ Item {
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
             text: "YOUR WORKSPACE"
-            color: workspace.t.textMuted
-            font.family: workspace.t.uiFont
-            font.pixelSize: workspace.t.micro
+            color: KetTheme.t.textMuted
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.dayDividerRecipe(KetTheme.dark, KetTheme.zoom).fontPixels
             font.weight: Font.Bold
             font.letterSpacing: 0.7
         }
@@ -36,10 +36,10 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             text: agentHost.agentAvailable ? "Start with an idea."
                                            : "Codex is not available on this Mac."
-            color: workspace.t.textMain
+            color: KetTheme.t.textMain
             wrapMode: Text.Wrap
-            font.family: workspace.t.uiFont
-            font.pixelSize: workspace.t.heading
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.markdownRecipe(KetTheme.dark, KetTheme.zoom).heading2Pixels
             font.weight: Font.DemiBold
             Accessible.role: Accessible.Heading
         }
@@ -49,10 +49,10 @@ Item {
             text: agentHost.agentAvailable
                   ? "Explore code, solve problems, and work with your Agent to bring ideas to life."
                   : "Install or reconnect Codex to continue. Your workspace and drafts are preserved."
-            color: workspace.t.textMuted
+            color: KetTheme.t.textMuted
             wrapMode: Text.Wrap
-            font.family: workspace.t.uiFont
-            font.pixelSize: workspace.t.body
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
         }
         Column {
             width: parent.width
@@ -86,7 +86,7 @@ Item {
                             Layout.preferredWidth: KetTheme.px(17, KetTheme.zoom)
                             Layout.preferredHeight: KetTheme.px(17, KetTheme.zoom)
                             name: KetTheme.iconForLucide(("qrc:/agent/icons/" + suggestion.modelData.icon).toString().split("/").pop().replace(/\.svg$/, ""))
-                            color: workspace.t.textSecondary
+                            color: KetTheme.t.textSecondary
                             box: KetTheme.px(17, KetTheme.zoom)
                         }
                         Column {
@@ -95,34 +95,34 @@ Item {
                             Text {
                                 width: parent.width
                                 text: suggestion.modelData.title
-                                color: workspace.t.textMain
+                                color: KetTheme.t.textMain
                                 elide: Text.ElideRight
-                                font.family: workspace.t.uiFont
-                                font.pixelSize: workspace.t.body
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                                 font.weight: Font.DemiBold
                             }
                             Text {
                                 width: parent.width
                                 text: suggestion.modelData.detail
-                                color: workspace.t.textMuted
+                                color: KetTheme.t.textMuted
                                 elide: Text.ElideRight
-                                font.family: workspace.t.uiFont
-                                font.pixelSize: workspace.t.micro
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: KetTheme.dayDividerRecipe(KetTheme.dark, KetTheme.zoom).fontPixels
                             }
                         }
                         Text {
                             text: "↗"
-                            color: workspace.t.textMuted
-                            font.family: workspace.t.uiFont
-                            font.pixelSize: workspace.t.reading
+                            color: KetTheme.t.textMuted
+                            font.family: KetTheme.fontFamily
+                            font.pixelSize: KetTheme.markdownRecipe(KetTheme.dark, KetTheme.zoom).bodyPixels
                         }
                     }
                     background: Rectangle {
                         radius: KetTheme.px(7, KetTheme.zoom)
-                        color: suggestion.hovered ? workspace.t.surfaceHover
-                                                  : workspace.t.interactiveBackground
-                        border.color: suggestion.visualFocus ? workspace.t.focus
-                                                             : workspace.t.border
+                        color: suggestion.hovered ? KetTheme.t.surfaceHover
+                                                  : KetTheme.t.interactiveBg
+                        border.color: suggestion.visualFocus ? KetTheme.t.colorFocus
+                                                             : KetTheme.t.panelBorder
                     }
                 }
             }

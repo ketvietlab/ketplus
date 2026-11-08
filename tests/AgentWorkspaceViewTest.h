@@ -9,6 +9,8 @@ class AgentWorkspaceViewTest final : public QObject {
     Q_OBJECT
 
   private slots:
+    void init();
+    void markdownTableAfterCodeKeepsHeaderCells();
     void manualCompactWindow();
     void builtInBrowserSkillFollowsBrowserTools();
     void pathChangeScansSkillsOffTheGuiThread();
@@ -178,41 +180,7 @@ class AgentWorkspaceViewTest final : public QObject {
 
 namespace agent_workspace_test {
 
-inline ketplus::ThemePalette testPalette() {
-    ketplus::ThemePalette palette;
-    palette.dark = true;
-    palette.appBackground = QStringLiteral("#12161b");
-    palette.pageBackground = QStringLiteral("#1b1f24");
-    palette.sidebarBackground = QStringLiteral("#171b20");
-    palette.panelBackground = QStringLiteral("#20252b");
-    palette.panelSubtle = QStringLiteral("#1e2329");
-    palette.surfaceRaised = QStringLiteral("#242930");
-    palette.surfaceHover = QStringLiteral("#292f37");
-    palette.textMain = QStringLiteral("#f2f4f7");
-    palette.textSecondary = QStringLiteral("#c5cad3");
-    palette.textMuted = QStringLiteral("#858d99");
-    palette.textDisabled = QStringLiteral("#5f6670");
-    palette.border = QStringLiteral("#292d33");
-    palette.borderStrong = QStringLiteral("#3b424c");
-    palette.interactiveBackground = QStringLiteral("#22272e");
-    palette.interactiveHover = QStringLiteral("#292f37");
-    palette.interactiveActive = QStringLiteral("#343b45");
-    palette.accent = QStringLiteral("#4f6fff");
-    palette.accentHover = QStringLiteral("#6380ff");
-    palette.accentActive = QStringLiteral("#8094ff");
-    palette.accentSubtle = QStringLiteral("#252d4a");
-    palette.accentMuted = QStringLiteral("#354476");
-    palette.focus = QStringLiteral("#6b82ff");
-    palette.tabActiveText = QStringLiteral("#8094ff");
-    palette.accentText = QStringLiteral("#9eb5ff");
-    palette.actionPrimary = QStringLiteral("#365fd6");
-    palette.actionPrimaryHover = QStringLiteral("#3151c6");
-    palette.actionPrimaryActive = QStringLiteral("#2b46b7");
-    palette.positive = QStringLiteral("#42b883");
-    palette.warning = QStringLiteral("#d9a441");
-    palette.danger = QStringLiteral("#ef6461");
-    return palette;
-}
+inline ketplus::ThemePalette testPalette() { return ketplus::currentThemePalette(); }
 
 inline QQuickItem* findVisualItem(QQuickItem* item, const QString& name) {
     if (item->objectName() == name) {

@@ -7,6 +7,7 @@
 #include "agent/MermaidLabelContrast.h"
 #include "agent/TranscriptFileLinks.h"
 #include "agent/TranscriptSyntax.h"
+#include "agent/TranscriptTableStyle.h"
 #include "preview/MermaidDiagramDialog.h"
 #include "preview/MermaidRenderer.h"
 #include <QProcess>
@@ -62,8 +63,8 @@ constexpr qreal inlineCodePaddingX = 4;
 constexpr qreal inlineCodePaddingY = 2;
 
 // The document and its overlay frames use the same scaled recipe dimensions.
-qreal recipePixels(qreal value, const QVariantMap& tokens) {
-    return ket::Appearance::scale(value, tokens.value("zoomFactor", 1.0).toReal());
+qreal recipePixels(qreal value) {
+    return ket::Appearance::scale(value, ket::Appearance::instance().zoom());
 }
 
 bool isCodeBlock(const QTextBlock& block) {
@@ -552,32 +553,20 @@ void AgentWorkspaceView::formatMessageDocument(QObject* document, qreal fontPixe
     QTextDocument* textDocument = quickDocument->textDocument();
     QTextCursor edit(textDocument);
     edit.beginEditBlock();
-    const auto theme = tokens_.value("dark").toBool() ? ket::Theme::Dark : ket::Theme::Light;
+    const auto theme = ket::Appearance::instance().theme();
     const auto recipe = ket::markdownRecipe(theme);
     const auto codeRecipe = ket::codeBlockRecipe(theme);
-    const qreal zoom = tokens_.value("zoomFactor", 1.0).toReal();
+    const qreal zoom = ket::Appearance::instance().zoom();
     const auto px = [zoom](qreal value) { return ket::Appearance::scale(value, zoom); };
     const qreal codePadding = px(codeRecipe.padding);
     const qreal codeVerticalPadding = codePadding;
     const qreal mermaidHeaderHeight = px(34);
-    const QBrush tableBorder{recipe.tableBorder};
-    const QString monoFamily = tokens_.value(QStringLiteral("monoFont")).toString();
+    const QString monoFamily = monoFontFamily_;
     const QColor linkColor = recipe.link;
     applyTranscriptSyntax(textDocument, theme);
     textDocument->setIndentWidth(px(recipe.listIndent));
     fileLinks_.setRoot(activePath_.isEmpty() ? QString{} : executionPath());
-    for (QTextFrame* frame : textDocument->rootFrame()->childFrames()) {
-        auto* table = qobject_cast<QTextTable*>(frame);
-        if (!table)
-            continue;
-        auto tableFormat = table->format();
-        if (tableFormat.borderBrush() == tableBorder &&
-            qFuzzyCompare(tableFormat.cellPadding(), px(recipe.tableCellPadding)))
-            continue;
-        tableFormat.setBorderBrush(tableBorder);
-        tableFormat.setCellPadding(px(recipe.tableCellPadding));
-        table->setFormat(tableFormat);
-    }
+    styleTranscriptTables(textDocument, recipe, zoom, codePadding);
     for (auto block = textDocument->begin(); block.isValid(); block = block.next()) {
         bool containsImage = false;
         bool mermaidView = false;
@@ -687,7 +676,7 @@ void AgentWorkspaceView::formatMessageDocument(QObject* document, qreal fontPixe
             QTextCursor cursor(block);
             if (format != block.blockFormat())
                 cursor.setBlockFormat(format);
-            const auto family = tokens_.value(QStringLiteral("monoFont")).toString();
+            const auto family = monoFontFamily_;
             const auto charFormat = block.charFormat();
             if (charFormat.intProperty(QTextFormat::FontPixelSize) != codeFontSize ||
                 charFormat.fontFamilies().toStringList() != QStringList{family}) {
@@ -720,7 +709,9 @@ void AgentWorkspaceView::formatMessageDocument(QObject* document, qreal fontPixe
                                 : heading && block.previous().isValid()
                                     ? px(recipe.paragraphSpacing)
                                     : 0;
-        const qreal bottomMargin = mermaidView     ? codeVerticalPadding
+        const bool tableCell = QTextCursor(block).currentTable() != nullptr;
+        const qreal bottomMargin = tableCell       ? 0
+                                   : mermaidView   ? codeVerticalPadding
                                    : heading       ? px(recipe.headingSpacingAfter)
                                    : continuesList ? px(recipe.listItemGap)
                                                    : px(recipe.paragraphSpacing);
@@ -763,7 +754,7 @@ QVariantList AgentWorkspaceView::messageCodeBlocks(QObject* document) const {
     auto* textDocument = quickDocument->textDocument();
     auto* layout = textDocument->documentLayout();
     QVariantList frames;
-    const qreal codeVerticalPadding = recipePixels(ket::Profile::current().codePadding, tokens_);
+    const qreal codeVerticalPadding = recipePixels(ket::Profile::current().codePadding);
     QRectF bounds;
     bool startsDocument = false;
     for (auto block = textDocument->begin(); block.isValid(); block = block.next()) {
@@ -802,9 +793,9 @@ QVariantMap AgentWorkspaceView::mermaidLayout(QObject* document, const QString& 
     auto* textDocument = quickDocument->textDocument();
     auto* documentLayout = textDocument->documentLayout();
     const auto frames = messageCodeBlocks(document);
-    const qreal codePadding = recipePixels(ket::Profile::current().codePadding, tokens_);
+    const qreal codePadding = recipePixels(ket::Profile::current().codePadding);
     const qreal codeVerticalPadding = codePadding;
-    const qreal mermaidHeaderHeight = recipePixels(34, tokens_);
+    const qreal mermaidHeaderHeight = recipePixels(34);
     QList<QRectF> views;
     for (auto block = textDocument->begin(); block.isValid(); block = block.next()) {
         for (auto it = block.begin(); !it.atEnd(); ++it) {

@@ -1,7 +1,6 @@
 import Ket
 import Ket as Kit
 import QtQuick
-import Ket 1.0 as Kit
 import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
 import "TranscriptRenderers.js" as Renderers
@@ -9,8 +8,8 @@ import "TranscriptRenderers.js" as Renderers
 Column {
     id: root
 
-    readonly property var filesRecipe: Kit.KetTheme.changedFilesRecipe(tokens.dark, tokens.zoomFactor)
-    required property var tokens
+    readonly property var filesRecipe: Kit.KetTheme.changedFilesRecipe(KetTheme.dark, KetTheme.zoom)
+
     required property var host
     required property string messageKey
     required property var stateStore
@@ -154,9 +153,9 @@ Column {
             width: parent.width - (openTarget.visible ? openTarget.width + parent.spacing : 0)
             text: root.target
             textFormat: Text.PlainText
-            color: root.tokens.textMuted
-            font.family: root.tokens.uiFont
-            font.pixelSize: root.tokens.caption
+            color: KetTheme.t.textMuted
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
             elide: Text.ElideMiddle
         }
         Basic.Button {
@@ -168,13 +167,13 @@ Column {
             verticalPadding: 0
             contentItem: Text {
                 text: openTarget.text
-                color: root.tokens.accentText
-                font.family: root.tokens.uiFont
-                font.pixelSize: root.tokens.caption
+                color: KetTheme.t.accentText
+                font.family: KetTheme.fontFamily
+                font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                 verticalAlignment: Text.AlignVCenter
             }
             background: Rectangle {
-                color: openTarget.hovered ? root.tokens.surfaceHover : "transparent"
+                color: openTarget.hovered ? KetTheme.t.surfaceHover : "transparent"
                 radius: KetTheme.px(5, KetTheme.zoom)
             }
             Accessible.name: "Open " + root.target
@@ -193,9 +192,9 @@ Column {
         text: visible ? Renderers.browserError(root) : ""
         textFormat: Text.PlainText
         wrapMode: Text.WrapAnywhere
-        color: root.tokens.danger
-        font.family: root.tokens.uiFont
-        font.pixelSize: root.tokens.body
+        color: KetTheme.t.danger
+        font.family: KetTheme.fontFamily
+        font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
     }
 
     // Visual evidence remains visible independently of the technical receipt.
@@ -212,7 +211,7 @@ Column {
             width: Math.min(parent.width, preferredWidth)
             enabled: root.visible && root.enabled
             sources: root.images
-            tokens: root.tokens
+
             maximumVisible: 3
             onExpanded: root.saveExpansion()
             showUnavailable: true
@@ -264,11 +263,11 @@ Column {
                 selectByMouse: true
                 persistentSelection: true
                 wrapMode: root.commandExpanded ? TextEdit.WrapAnywhere : TextEdit.NoWrap
-                color: root.tokens.textSecondary
-                selectionColor: root.tokens.accent
-                selectedTextColor: Kit.KetTheme.t.actionPrimaryInk
-                font.family: root.tokens.monoFont
-                font.pixelSize: root.tokens.body
+                color: KetTheme.t.textSecondary
+                selectionColor: KetTheme.t.accent
+                selectedTextColor: KetTheme.t.actionPrimaryInk
+                font.family: agentHost.monoFontFamily
+                font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                 Keys.onShortcutOverride: event => event.accepted = (event.matches(StandardKey.Copy) && selectedText.length > 0) || event.matches(StandardKey.SelectAll)
                 // Export the exact selection; Qt rich fragments can prepend a list paragraph.
                 Keys.onPressed: event => {
@@ -290,9 +289,9 @@ Column {
                 background: Item {}
                 contentItem: Text {
                     text: commandMore.text
-                    color: root.tokens.accentText
-                    font.family: root.tokens.uiFont
-                    font.pixelSize: root.tokens.caption
+                    color: KetTheme.t.accentText
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                     horizontalAlignment: Text.AlignRight
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -329,11 +328,11 @@ Column {
             selectByMouse: true
             persistentSelection: true
             wrapMode: TextEdit.WrapAnywhere
-            color: root.tokens.textMuted
-            selectionColor: root.tokens.accent
-            selectedTextColor: Kit.KetTheme.t.actionPrimaryInk
-            font.family: root.subtype === "command" || root.subtype === "generic" ? root.tokens.monoFont : root.tokens.uiFont
-            font.pixelSize: root.tokens.body
+            color: KetTheme.t.textMuted
+            selectionColor: KetTheme.t.accent
+            selectedTextColor: KetTheme.t.actionPrimaryInk
+            font.family: root.subtype === "command" || root.subtype === "generic" ? agentHost.monoFontFamily : KetTheme.fontFamily
+            font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
         }
 
         Rectangle {
@@ -342,8 +341,8 @@ Column {
             width: parent.width
             height: visible ? Math.min(KetTheme.px(300, KetTheme.zoom), commandOutputFlick.contentHeight + KetTheme.px(16, KetTheme.zoom)) : 0
             visible: root.expanded && root.commandOutput.length > 0
-            color: root.tokens.panelBackground || root.tokens.surfaceRaised
-            border.color: root.tokens.border
+            color: KetTheme.t.panelBg || KetTheme.t.surfaceRaised
+            border.color: KetTheme.t.panelBorder
             border.width: 1
             radius: KetTheme.px(7, KetTheme.zoom)
             clip: true
@@ -373,11 +372,11 @@ Column {
                     readOnly: true
                     selectByMouse: true
                     wrapMode: TextEdit.WrapAnywhere
-                    color: root.tokens.textMuted
-                    selectionColor: root.tokens.accent
-                    selectedTextColor: Kit.KetTheme.t.actionPrimaryInk
-                    font.family: root.tokens.monoFont
-                    font.pixelSize: root.tokens.body
+                    color: KetTheme.t.textMuted
+                    selectionColor: KetTheme.t.accent
+                    selectedTextColor: KetTheme.t.actionPrimaryInk
+                    font.family: agentHost.monoFontFamily
+                    font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                 }
             }
         }
@@ -400,13 +399,13 @@ Column {
             padding: KetTheme.px(6, KetTheme.zoom)
             contentItem: Text {
                 text: copyDetailsButton.text
-                color: root.tokens.textSecondary
-                font.family: root.tokens.uiFont
-                font.pixelSize: root.tokens.body
+                color: KetTheme.t.textSecondary
+                font.family: KetTheme.fontFamily
+                font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
             }
             background: Rectangle {
-                color: copyDetailsButton.hovered ? root.tokens.interactiveHover : "transparent"
-                border.color: copyDetailsButton.activeFocus ? root.tokens.focus : root.tokens.border
+                color: copyDetailsButton.hovered ? KetTheme.t.interactiveHover : "transparent"
+                border.color: copyDetailsButton.activeFocus ? KetTheme.t.colorFocus : KetTheme.t.panelBorder
                 radius: KetTheme.px(4, KetTheme.zoom)
             }
             onClicked: root.host.copyText(root.subtype === "command" ? root.command : root.detailText())
@@ -425,13 +424,13 @@ Column {
             }
             contentItem: Text {
                 text: openResource.text
-                color: root.tokens.textSecondary
-                font.family: root.tokens.uiFont
-                font.pixelSize: root.tokens.body
+                color: KetTheme.t.textSecondary
+                font.family: KetTheme.fontFamily
+                font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
             }
             background: Rectangle {
-                color: openResource.hovered ? root.tokens.interactiveHover : "transparent"
-                border.color: openResource.activeFocus ? root.tokens.focus : root.tokens.border
+                color: openResource.hovered ? KetTheme.t.interactiveHover : "transparent"
+                border.color: openResource.activeFocus ? KetTheme.t.colorFocus : KetTheme.t.panelBorder
                 radius: KetTheme.px(4, KetTheme.zoom)
             }
         }

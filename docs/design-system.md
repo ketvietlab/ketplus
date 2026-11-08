@@ -71,8 +71,14 @@ The shared mapping is exported from `core/src/ui/InterfaceZoom.h`.
 pixels / 14 to `ket::Appearance`, so Qt repolish cannot overwrite kit recipe fonts. Kit Widgets and QML `KetTheme.zoom` therefore receive
 the same zoom as the legacy product adapters. `ChromeGeometry` and `TypeScale`
 use the kit's rounding function through the shared mapping: zero and hairlines
-stay fixed; text keeps its 8 pixel readability floor. Agent Workspace QML calls
-`KetTheme.px(value, KetTheme.zoom)` directly. Scaled values are
+stay fixed; the legacy type adapter keeps its 8 pixel readability floor.
+Agent Workspace QML reads `KetTheme.t`, `KetTheme.fontFamily` and kit component
+recipe text sizes directly, and calls `KetTheme.px(value, KetTheme.zoom)`.
+Bundled fonts register before the first QML component reads the kit's constant
+font-family properties, including standalone and Atlas hosts.
+There is no host palette/type map or per-component token injection. The host
+exposes the persisted editor mono family separately; transcript rich-text
+formatting reads the same `ket::Appearance` theme and zoom as QML. Scaled values are
 always recomputed from designed dimensions, never scaled a second time.
 
 `TypeScale` compatibility names resolve the current kit profile roles; they no

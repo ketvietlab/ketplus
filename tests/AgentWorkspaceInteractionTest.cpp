@@ -824,8 +824,8 @@ void AgentWorkspaceViewTest::heldMessageRequiresExplicitClickAndFencesDuplicates
     QSignalSpy actions(&view, &ketplus::AgentWorkspaceView::heldMessageActionRequested);
     QQmlComponent component(view.quickView()->engine(), QUrl("qrc:/agent/HeldMessageAction.qml"));
     QVERIFY2(component.isReady(), qPrintable(component.errorString()));
-    QScopedPointer<QQuickItem> card(qobject_cast<QQuickItem*>(component.createWithInitialProperties(
-        {{"width", 600}, {"tokens", view.tokens()}, {"messageId", "held-1"}})));
+    QScopedPointer<QQuickItem> card(qobject_cast<QQuickItem*>(
+        component.createWithInitialProperties({{"width", 600}, {"messageId", "held-1"}})));
     QVERIFY(card);
     card->setParentItem(view.quickView()->rootObject());
     QCOMPARE(actions.size(), 1);
@@ -861,6 +861,16 @@ void AgentWorkspaceViewTest::heldMessageRequiresExplicitClickAndFencesDuplicates
     QTRY_COMPARE(button->property("text").toString(), QString("Retry receiving"));
     QVERIFY(QMetaObject::invokeMethod(button, "clicked"));
     QCOMPARE(actions.size(), 3);
+    view.acceptHeldMessageState("held-1", {{"state", "queued"}, {"can_release", false}});
+    auto* refresh = card->findChild<QObject*>("heldMessageRefreshTimer");
+    QVERIFY(refresh);
+    QTRY_VERIFY(refresh->property("running").toBool());
+    view.hide();
+    QTRY_VERIFY(!refresh->property("running").toBool());
+    view.show();
+    QTRY_VERIFY(refresh->property("running").toBool());
+    view.acceptHeldMessageState("held-1", {{"state", "delivered"}, {"can_release", false}});
+    QTRY_VERIFY(!refresh->property("running").toBool());
     view.resetMessages({}, "different-conversation");
     QVERIFY(view.heldMessageStates().isEmpty());
 }
@@ -1615,8 +1625,7 @@ void AgentWorkspaceViewTest::questionCardSingleClickAndFreeText() {
                                                     {"options", choices}}}},
              {"pending", true},
              {"answerData", QVariantMap{}},
-             {"messageKey", "single-click"},
-             {"tokens", view.tokens()}}));
+             {"messageKey", "single-click"}}));
     };
     QScopedPointer<QQuickItem> card(makeCard(options, false));
     QVERIFY(card);

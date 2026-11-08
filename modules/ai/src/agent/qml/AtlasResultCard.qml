@@ -1,3 +1,4 @@
+import Ket
 import QtQuick
 import Ket as Kit
 
@@ -6,9 +7,9 @@ Rectangle {
     objectName: "atlasResultCard"
     required property string link
     required property var host
-    required property var tokens
+
     property var result: ({})
-    readonly property var recipe: Kit.KetTheme.updateCardRecipe(tokens.dark, tokens.zoomFactor, false)
+    readonly property var recipe: Kit.KetTheme.updateCardRecipe(KetTheme.dark, KetTheme.zoom, false)
     function refresh() { result = host.inspectAtlasResult(link); }
     Component.onCompleted: refresh()
     onLinkChanged: refresh()
@@ -30,14 +31,14 @@ Rectangle {
         x: card.recipe.paddingInline
         y: card.recipe.paddingBlock
         width: parent.width - 2 * x
-        spacing: Kit.KetTheme.px(6, card.tokens.zoomFactor)
+        spacing: Kit.KetTheme.px(6, KetTheme.zoom)
         Text {
             width: parent.width
             text: card.result.title || "Atlas result"
             textFormat: Text.PlainText
             elide: Text.ElideRight
             color: card.recipe.title
-            font.family: card.tokens.uiFont
+            font.family: KetTheme.fontFamily
             font.pixelSize: card.recipe.titlePixels
             font.weight: card.recipe.titleWeight
         }
@@ -50,7 +51,7 @@ Rectangle {
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
             color: card.recipe.detail
-            font.family: card.tokens.uiFont
+            font.family: KetTheme.fontFamily
             font.pixelSize: card.recipe.detailPixels
         }
         Text {
@@ -60,13 +61,13 @@ Rectangle {
             text: card.result.viewerError || ""
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
-            color: card.tokens.danger
-            font.family: card.tokens.uiFont
-            font.pixelSize: card.tokens.caption
+            color: KetTheme.t.danger
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
         }
         Flow {
             width: parent.width
-            spacing: Kit.KetTheme.px(6, card.tokens.zoomFactor)
+            spacing: Kit.KetTheme.px(6, KetTheme.zoom)
             Kit.KetButton {
                 objectName: "editAtlasResultButton"
                 text: "Edit in KétPlus"

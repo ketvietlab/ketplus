@@ -218,11 +218,17 @@ class DesktopZoomTest final : public QObject {
         QVERIFY(zoom);
         zoom->setCurrentIndex(16 - AppearanceSettings::minimumInterfaceFontSizePixels);
         saveSettings(first);
-        QTRY_COMPARE(
-            one->tokens().value("reading").toInt(),
-            InterfaceZoomMetrics::scale(qRound(ket::Profile::current().readingPixels), 16));
-        QTRY_COMPARE(two->tokens().value("reading").toInt(),
-                     one->tokens().value("reading").toInt());
+        const auto readingPixels = [](AgentWorkspaceView* view) {
+            return view->quickView()
+                ->rootObject()
+                ->findChild<QQuickItem*>("conversationTitle")
+                ->property("font")
+                .value<QFont>()
+                .pixelSize();
+        };
+        QTRY_COMPARE(readingPixels(one), InterfaceZoomMetrics::scale(
+                                             qRound(ket::Profile::current().readingPixels), 16));
+        QTRY_COMPARE(readingPixels(two), readingPixels(one));
         openSettings(second);
         auto* secondZoom = second.findChild<ket::StepSlider*>("interfaceZoomSteps");
         QVERIFY(secondZoom);
@@ -233,10 +239,10 @@ class DesktopZoomTest final : public QObject {
         family->addItem(QStringLiteral("Courier New"));
         family->setCurrentText(QStringLiteral("Courier New"));
         saveSettings(second);
-        QTRY_COMPARE(one->tokens().value("monoFont").toString(), QStringLiteral("Courier New"));
-        QTRY_COMPARE(two->tokens().value("monoFont").toString(), QStringLiteral("Courier New"));
+        QTRY_COMPARE(one->monoFontFamily(), QStringLiteral("Courier New"));
+        QTRY_COMPARE(two->monoFontFamily(), QStringLiteral("Courier New"));
         AgentWorkspaceView later;
-        QCOMPARE(later.tokens().value("monoFont").toString(), QStringLiteral("Courier New"));
+        QCOMPARE(later.monoFontFamily(), QStringLiteral("Courier New"));
         // First window still has a form opened before the font change. Saving a
         // different field must not overwrite the newer font from the other window.
         QTest::qWait(50);

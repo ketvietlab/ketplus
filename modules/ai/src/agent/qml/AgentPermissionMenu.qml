@@ -19,10 +19,10 @@ Basic.Popup {
     height: permissionItems.implicitHeight + KetTheme.px(16, KetTheme.zoom)
     padding: KetTheme.px(8, KetTheme.zoom)
     background: Rectangle {
-        color: root.t.surfaceRaised
+        color: KetTheme.t.surfaceRaised
         radius: KetTheme.px(12, KetTheme.zoom)
         border.width: 1
-        border.color: root.t.borderStrong
+        border.color: KetTheme.t.borderStrong
     }
     Column {
         id: permissionItems
@@ -44,9 +44,9 @@ Basic.Popup {
             topPadding: KetTheme.px(2, KetTheme.zoom)
             bottomPadding: KetTheme.px(6, KetTheme.zoom)
             text: "Mode"
-            color: root.t.textMuted
-            font.family: root.t.uiFont
-            font.pixelSize: root.t.micro
+            color: KetTheme.t.textMuted
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.dayDividerRecipe(KetTheme.dark, KetTheme.zoom).fontPixels
         }
         Repeater {
             model: root.permissionProfiles
@@ -76,17 +76,17 @@ Basic.Popup {
                             width: parent.width
                             text: modelData.label
                             color: root.permissionLabelColor(modelData)
-                            font.family: root.t.uiFont
-                            font.pixelSize: root.t.body
+                            font.family: KetTheme.fontFamily
+                            font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                         }
                         Text {
                             width: parent.width
                             text: modelData.description || ""
                             elide: Text.ElideRight
-                            color: modelData.elevated === true ? (root.t.warning) : root.t.textMuted
+                            color: modelData.elevated === true ? (KetTheme.t.warning) : KetTheme.t.textMuted
                             opacity: modelData.elevated === true ? 0.85 : 1
-                            font.family: root.t.uiFont
-                            font.pixelSize: root.t.micro
+                            font.family: KetTheme.fontFamily
+                            font.pixelSize: KetTheme.dayDividerRecipe(KetTheme.dark, KetTheme.zoom).fontPixels
                         }
                     }
                     Rectangle {
@@ -97,28 +97,28 @@ Basic.Popup {
                         radius: KetTheme.px(5, KetTheme.zoom)
                         color: "transparent"
                         border.width: 1
-                        border.color: root.t.warning
+                        border.color: KetTheme.t.warning
                         Text {
                             id: enableText
                             anchors.centerIn: parent
                             text: "Enable"
-                            color: root.t.warning
-                            font.family: root.t.uiFont
-                            font.pixelSize: root.t.micro
+                            color: KetTheme.t.warning
+                            font.family: KetTheme.fontFamily
+                            font.pixelSize: KetTheme.dayDividerRecipe(KetTheme.dark, KetTheme.zoom).fontPixels
                         }
                     }
                     Text {
                         text: root.permission === modelData.id ? "✓" : ""
                         color: root.permissionLabelColor(modelData)
-                        font.pixelSize: root.t.caption
+                        font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                         Layout.preferredWidth: KetTheme.px(12, KetTheme.zoom)
                         Layout.alignment: Qt.AlignVCenter
                     }
                     Text {
                         text: String(index + 1)
-                        color: root.t.textMuted
-                        font.family: root.t.uiFont
-                        font.pixelSize: root.t.micro
+                        color: KetTheme.t.textMuted
+                        font.family: KetTheme.fontFamily
+                        font.pixelSize: KetTheme.dayDividerRecipe(KetTheme.dark, KetTheme.zoom).fontPixels
                         Layout.preferredWidth: KetTheme.px(10, KetTheme.zoom)
                         Layout.alignment: Qt.AlignVCenter
                         horizontalAlignment: Text.AlignRight
@@ -126,7 +126,7 @@ Basic.Popup {
                 }
                 background: Rectangle {
                     radius: KetTheme.px(6, KetTheme.zoom)
-                    color: parent.hovered ? root.t.interactiveActive : "transparent"
+                    color: parent.hovered ? KetTheme.t.interactiveActive : "transparent"
                 }
                 onClicked: {
                     root.permission = modelData.id;

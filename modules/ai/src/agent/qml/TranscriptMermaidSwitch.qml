@@ -7,7 +7,6 @@ import QtQuick.Controls.Basic as Basic
 Rectangle {
     id: control
 
-    required property var tokens
     // True while the block shows its diagram.
     property bool rendered: false
     signal modeRequested(bool rendered)
@@ -15,8 +14,8 @@ Rectangle {
     implicitWidth: row.implicitWidth + 2 * KetTheme.px(2, KetTheme.zoom)
     implicitHeight: KetTheme.px(24, KetTheme.zoom)
     radius: KetTheme.px(5, KetTheme.zoom)
-    color: tokens.panelSubtle
-    border.color: tokens.border
+    color: KetTheme.t.panelBgSubtle
+    border.color: KetTheme.t.panelBorder
     border.width: 1
 
     Row {
@@ -44,15 +43,15 @@ Rectangle {
                     text: modelData.label
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
-                    color: parent.current ? control.tokens.textMain : control.tokens.textSecondary
-                    font.family: control.tokens.uiFont
-                    font.pixelSize: control.tokens.caption
+                    color: parent.current ? KetTheme.t.textMain : KetTheme.t.textSecondary
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                     font.weight: parent.current ? Font.DemiBold : Font.Normal
                 }
                 background: Rectangle {
                     radius: KetTheme.px(4, KetTheme.zoom)
-                    color: parent.current ? control.tokens.codeBlockBackground : parent.hovered ? control.tokens.surfaceHover : "transparent"
-                    border.color: parent.visualFocus ? control.tokens.focus : "transparent"
+                    color: parent.current ? KetTheme.codeBlockRecipe(KetTheme.dark, KetTheme.zoom).background : parent.hovered ? KetTheme.t.surfaceHover : "transparent"
+                    border.color: parent.visualFocus ? KetTheme.t.colorFocus : "transparent"
                 }
                 onClicked: if (!current)
                     control.modeRequested(modelData.rendered)

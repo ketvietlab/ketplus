@@ -171,7 +171,7 @@ Flickable {
         id: transcriptContextMenu
         parent: transcript
         host: transcript.host
-        tokens: transcript.shell.t
+
         // While a turn runs only the loaded rows are copied; otherwise the whole
         // conversation is read from history, which can be cancelled.
         onCopyConversationRequested: transcript.host.historyState.copying ? transcript.host.cancelConversationCopy() : transcript.host.sessionRunning ? transcript.host.copyText(transcript.shell.conversationCopyText()) : transcript.host.copyConversation(transcript.shell.conversationCopyText())
@@ -853,9 +853,9 @@ Flickable {
     // Widest body a delegate has reported at this layout: an assistant answer,
     // which spans the conversation column.
     property real bodyWidth: 0
-    readonly property font readingFont: Qt.font({family: shell.t.uiFont, pixelSize: shell.t.reading})
-    readonly property string layoutFingerprint: Math.round(width) + "|" + shell.t.uiFont + "|"
-        + shell.t.monoFont + "|" + shell.t.zoomFactor + "|" + Qt.application.font.pixelSize + "|" + Screen.devicePixelRatio + "|" + shell.conversationColumnWidth
+    readonly property font readingFont: Qt.font({family: KetTheme.fontFamily, pixelSize: KetTheme.markdownRecipe(KetTheme.dark, KetTheme.zoom).bodyPixels})
+    readonly property string layoutFingerprint: Math.round(width) + "|" + KetTheme.fontFamily + "|"
+        + agentHost.monoFontFamily + "|" + KetTheme.zoom + "|" + Qt.application.font.pixelSize + "|" + Screen.devicePixelRatio + "|" + shell.conversationColumnWidth
     onLayoutFingerprintChanged: {
         measurementPending = true;
         if (!messageModel)
@@ -1812,7 +1812,7 @@ Flickable {
             radius: KetTheme.px(2, KetTheme.zoom)
             x: parent.width - width - 1.5
             y: 2 + transcript.conversationPosition * Math.max(0, parent.height - height - 4)
-            color: shell.t.textMuted
+            color: KetTheme.t.textMuted
         }
         Behavior on opacity {
             NumberAnimation {
@@ -1966,14 +1966,14 @@ Flickable {
                 anchors.centerIn: parent
                 box: Math.min(parent.width, parent.height)
                 name: KetTheme.iconForLucide("arrow-up")
-                color: shell.t.textMain
+                color: KetTheme.t.textMain
                 rotation: 180
             }
         }
         background: Rectangle {
-            color: parent.hovered ? shell.t.surfaceHover : shell.t.surfaceRaised
+            color: parent.hovered ? KetTheme.t.surfaceHover : KetTheme.t.surfaceRaised
             radius: KetTheme.px(5, KetTheme.zoom)
-            border.color: shell.t.border
+            border.color: KetTheme.t.panelBorder
         }
         onClicked: shell.jumpToLatest()
         Accessible.name: transcript.newMessageCount > 0 ? "Jump to latest, " + transcript.newMessageCount + " new" : "Jump to latest"
@@ -1988,15 +1988,15 @@ Flickable {
             height: KetTheme.px(18, KetTheme.zoom)
             width: Math.max(KetTheme.px(18, KetTheme.zoom), newMessageLabel.implicitWidth + KetTheme.px(10, KetTheme.zoom))
             radius: KetTheme.px(9, KetTheme.zoom)
-            color: shell.t.accent
+            color: KetTheme.t.accent
             Text {
                 id: newMessageLabel
                 objectName: "newMessageBadgeLabel"
                 anchors.centerIn: parent
                 text: transcript.newMessageCount + " new"
-                color: Kit.KetTheme.t.actionPrimaryInk
-                font.family: shell.t.uiFont
-                font.pixelSize: shell.t.micro
+                color: KetTheme.t.actionPrimaryInk
+                font.family: KetTheme.fontFamily
+                font.pixelSize: KetTheme.dayDividerRecipe(KetTheme.dark, KetTheme.zoom).fontPixels
                 font.weight: Font.DemiBold
             }
         }
@@ -2031,9 +2031,9 @@ Flickable {
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 text: "Loading earlier messages"
-                font.family: shell.t.uiFont
-                font.pixelSize: shell.t.caption
-                color: shell.t.textMuted
+                font.family: KetTheme.fontFamily
+                font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+                color: KetTheme.t.textMuted
             }
         }
         Basic.Button {
@@ -2050,15 +2050,15 @@ Flickable {
             onClicked: transcript.retryHistory()
             contentItem: Text {
                 text: olderMessagesButton.text
-                font.family: shell.t.uiFont
-                font.pixelSize: shell.t.caption
-                color: shell.t.textSecondary
+                font.family: KetTheme.fontFamily
+                font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+                color: KetTheme.t.textSecondary
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
                 elide: Text.ElideRight
             }
             background: Rectangle {
-                color: olderMessagesButton.hovered ? shell.t.surfaceHover : "transparent"
+                color: olderMessagesButton.hovered ? KetTheme.t.surfaceHover : "transparent"
                 radius: KetTheme.px(5, KetTheme.zoom)
             }
             KetToolTip {
@@ -2102,11 +2102,11 @@ Flickable {
                     anchors.centerIn: parent
                     box: Math.min(parent.width, parent.height)
                     name: KetTheme.iconForLucide(host.historyState.copying ? "square" : "copy")
-                    color: shell.t.textMuted
+                    color: KetTheme.t.textMuted
                 }
             }
             background: Rectangle {
-                color: parent.hovered ? shell.t.surfaceHover : "transparent"
+                color: parent.hovered ? KetTheme.t.surfaceHover : "transparent"
                 radius: KetTheme.px(5, KetTheme.zoom)
             }
             readonly property string label: host.historyState.copying ? "Cancel copying" : host.sessionRunning ? "Copy loaded conversation" : "Copy conversation"

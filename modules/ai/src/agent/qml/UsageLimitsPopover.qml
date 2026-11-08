@@ -32,9 +32,9 @@ Popup {
                                                / Number(contextUsage.limitTokens))) : 0
     readonly property color panelColor: look.background
     readonly property color trackColor: contextLook.track
-    readonly property color primaryColor: workspace.t.accent
-    readonly property color mutedColor: workspace.t.textMuted
-    readonly property color mainColor: workspace.t.textMain
+    readonly property color primaryColor: KetTheme.t.accent
+    readonly property color mutedColor: KetTheme.t.textMuted
+    readonly property color mainColor: KetTheme.t.textMain
 
     width: KetTheme.px(430, KetTheme.zoom)
     padding: 0
@@ -116,8 +116,8 @@ Popup {
                         Text {
                             text: "Context window"
                             color: root.mainColor
-                            font.family: workspace.t.uiFont
-                            font.pixelSize: workspace.t.reading
+                            font.family: KetTheme.fontFamily
+                            font.pixelSize: KetTheme.markdownRecipe(KetTheme.dark, KetTheme.zoom).bodyPixels
                         }
                         Item { Layout.fillWidth: true }
                         Text {
@@ -127,9 +127,9 @@ Popup {
                                     + root.compactNumber(root.contextUsage.limitTokens) + " ("
                                     + Math.round(root.contextPercent) + "%)"
                                   : "Not reported"
-                            color: root.contextAvailable ? root.mutedColor : workspace.t.textDisabled
-                            font.family: workspace.t.uiFont
-                            font.pixelSize: workspace.t.reading
+                            color: root.contextAvailable ? root.mutedColor : KetTheme.t.textDisabled
+                            font.family: KetTheme.fontFamily
+                            font.pixelSize: KetTheme.markdownRecipe(KetTheme.dark, KetTheme.zoom).bodyPixels
                         }
                     }
 
@@ -168,8 +168,8 @@ Popup {
                                     + Math.round(Number(root.contextUsage.autoCompactPercent)) + "%"
                                   : "Context compaction is managed by the provider"
                             color: root.mutedColor
-                            font.family: workspace.t.uiFont
-                            font.pixelSize: workspace.t.body
+                            font.family: KetTheme.fontFamily
+                            font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                         }
                         Basic.Button {
                             id: compactSessionButton
@@ -183,14 +183,14 @@ Popup {
                             contentItem: Text {
                                 id: compactText
                                 text: "Compact session"
-                                color: workspace.t.accentText
-                                font.family: workspace.t.uiFont
-                                font.pixelSize: workspace.t.body
+                                color: KetTheme.t.accentText
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
                             }
                             background: Rectangle {
-                                color: compactSessionButton.hovered ? workspace.t.accentSubtle : "transparent"
+                                color: compactSessionButton.hovered ? KetTheme.t.accentSubtle : "transparent"
                                 radius: KetTheme.px(4, KetTheme.zoom)
                             }
                             KetToolTip {
@@ -231,8 +231,8 @@ Popup {
                 Text {
                     text: "Plan usage limits"
                     color: root.mutedColor
-                    font.family: workspace.t.uiFont
-                    font.pixelSize: workspace.t.body
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                 }
 
                 Repeater {
@@ -248,8 +248,8 @@ Popup {
                                 Layout.fillWidth: true
                                 text: modelData.label || "Usage limit"
                                 color: root.mainColor
-                                font.family: workspace.t.uiFont
-                                font.pixelSize: workspace.t.reading
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: KetTheme.markdownRecipe(KetTheme.dark, KetTheme.zoom).bodyPixels
                                 elide: Text.ElideRight
                             }
                             Text {
@@ -257,9 +257,9 @@ Popup {
                                       ? root.resetText(modelData.resetsAt) + "  "
                                         + Math.round(root.clamp(modelData.usedPercent)) + "%"
                                       : "Not reported"
-                                color: modelData.available ? root.mutedColor : workspace.t.textDisabled
-                                font.family: workspace.t.uiFont
-                                font.pixelSize: workspace.t.body
+                                color: modelData.available ? root.mutedColor : KetTheme.t.textDisabled
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                                 horizontalAlignment: Text.AlignRight
                             }
                         }
@@ -283,9 +283,9 @@ Popup {
                 Text {
                     visible: root.limitRows.length === 0
                     text: "No plan limits are available for this provider."
-                    color: workspace.t.textDisabled
-                    font.family: workspace.t.uiFont
-                    font.pixelSize: workspace.t.body
+                    color: KetTheme.t.textDisabled
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                 }
             }
 
@@ -305,8 +305,8 @@ Popup {
                 visible: !root.claude || root.sessionUsage.mode !== "api_key"
                 text: "Limits are shared across conversations for this provider."
                 color: root.mutedColor
-                font.family: workspace.t.uiFont
-                font.pixelSize: workspace.t.caption
+                font.family: KetTheme.fontFamily
+                font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                 wrapMode: Text.WordWrap
             }
         }

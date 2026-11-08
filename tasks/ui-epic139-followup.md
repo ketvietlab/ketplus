@@ -20,8 +20,19 @@ release-only gate. Plan/harness and release deployment remain outside this work.
 - [x] Focused motion/tooltip checks pass. The complete Agent Workspace, row
   measurement and geometry targets pass together (3/3); Desktop zoom passes
   separately (1/1). The native Cocoa composer fixture also passes.
-- [ ] Complete the remaining host palette/type adapter migration required by
-  the foundation issues; direct geometry/icon/tooltip consumption is only part of it.
+- [x] Remove the Agent Workspace host palette/type map. QML reads kit tokens,
+  font family and component recipe sizes directly; editor mono preferences remain
+  separate. HTML/Mermaid rendering follows shared Appearance changes.
+- [x] Register bundled font families before loading QML in a fresh process.
+- [x] Queue document formatting after theme/zoom bindings settle; keep the code
+  frame and inline chips aligned with text. Fix the Qt Markdown table-after-fence
+  empty paragraph without deleting intentionally empty cells.
+- [x] Fit the product brand image inside a fixed-width sidebar at larger zoom.
+- [x] Build the final palette/type and document fixes and run the full Pro suite:
+  96/96 targets pass. The fresh-process Cocoa theme fixture also passes.
+- [x] Native Cocoa checks cover light/dark × 1/1.25 for this synthetic transcript,
+  including font, colour, code-frame geometry, header alignment and logo bounds.
+  This is a targeted regression matrix, not every app/mock state.
 - [ ] Measure #126's foreground/background/no-work CPU cases on the native app.
 - [ ] Compare native app/mock states at both themes and zooms. A synthetic Cocoa
   render is useful evidence, but does not establish the full matrix.
@@ -52,7 +63,8 @@ label. A subsequent run hit the existing steering test's 5-second timeout
 final complete run passed without a timeout change. Live-provider opt-ins remain
 disabled; no provider quota or installed app replacement is involved.
 
-The synthetic Cocoa composer and its menus render successfully. Computer use
-still returns `cgWindowNotFound` for the isolated test app, so native interaction
-through that tool and the full app/mock matrix remain unverified. No release,
+The synthetic Cocoa composer and its menus render successfully. The last
+computer-use attempt returned `cgWindowNotFound` for the isolated test app. The theme-authority
+follow-up uses native Cocoa fixture captures and geometry assertions; interaction
+through computer use and the full app/mock matrix remain unverified. No release,
 bundle packaging, device installation or whole-epic completion is claimed.

@@ -188,6 +188,17 @@ the corresponding Atlas mock first.
   `measurementTimerStopsAndRestartsForNewRows` exercises measurement exhaustion,
   layout changes and window visibility. The row-measurement suite checks that
   resource-backed bodies do not starve text and that a new layout re-enables work.
+  `ketplus_interface_font_tests::agentThemeUsesKitAndEditorMono` changes the
+  shared theme and zoom without a host update and checks the rendered header,
+  page colour, profile typography and configured mono font. It runs first in its
+  process so earlier font tests cannot preload KÉT Sans and hide a startup bug.
+  It also checks code-frame/caret alignment, table header baselines and the brand
+  image bounds after zoom changes. `markdownTableAfterCodeKeepsHeaderCells` covers
+  Qt Markdown's leading empty cell paragraph and preserves intentionally empty
+  headers across repeated formatting. Set
+  `KETPLUS_THEME_AUTHORITY_CAPTURE=<prefix>` in its native Cocoa run to capture
+  light/dark at 1/1.25 zoom. These captures cover the theme-authority regression;
+  the complete app/mock state matrix remains a separate acceptance item.
   These checks do not replace the Apple Silicon foreground/background CPU
   measurements required by #126 or the app/mock comparison required by #136.
 - Performance-sensitive behavior: Release build and the matching script under

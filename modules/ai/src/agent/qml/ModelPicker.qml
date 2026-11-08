@@ -10,7 +10,6 @@ Basic.Popup {
     objectName: "modelPopup"
     readonly property var look: Kit.KetTheme.dialogRecipe(Kit.KetTheme.dark, Kit.KetTheme.zoom)
 
-    required property var tokens
     required property Item viewport
     required property Item anchorItem
     property var models: []
@@ -203,8 +202,8 @@ Basic.Popup {
             Text {
                 Layout.fillWidth: true
                 text: qsTr("Model & context")
-                color: picker.tokens.textMain
-                font.family: picker.tokens.uiFont
+                color: KetTheme.t.textMain
+                font.family: KetTheme.fontFamily
                 font.pixelSize: picker.look.titlePixels
                 font.weight: picker.look.titleWeight
             }
@@ -222,13 +221,13 @@ Basic.Popup {
                         box: Math.min(parent.width, parent.height)
                         name: KetTheme.iconForLucide("plus")
                         rotation: 45
-                        color: picker.tokens.textMuted
+                        color: KetTheme.t.textMuted
                     }
                 }
                 background: Rectangle {
                     radius: KetTheme.px(6, KetTheme.zoom)
                     color: closeButton.hovered || closeButton.visualFocus
-                           ? picker.tokens.surfaceHover : "transparent"
+                           ? KetTheme.t.surfaceHover : "transparent"
                 }
                 enabled: !picker.applying
                 onClicked: picker.close()
@@ -241,7 +240,7 @@ Basic.Popup {
             }
         }
 
-        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: picker.tokens.border }
+        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: KetTheme.t.panelBorder }
 
         Basic.ScrollView {
             id: settingsScroll
@@ -286,10 +285,10 @@ Basic.Popup {
                     Accessible.description: enabled ? (picker.selectedProviderTab === modelData.id ? "Current provider" : "Select provider") : lockedOut ? "Switch to " + modelData.label + " after this turn" : modelData.id === "cursor" ? "Install Cursor CLI, then retry" : "Not supported yet"
                     contentItem: Text {
                         text: providerButton.modelData.label
-                        color: providerButton.enabled ? picker.tokens.tabActiveText : picker.tokens.textMuted
+                        color: providerButton.enabled ? KetTheme.t.tabActiveText : KetTheme.t.textMuted
                         opacity: providerButton.enabled ? 1 : 0.62
-                        font.family: picker.tokens.uiFont
-                        font.pixelSize: picker.tokens.body
+                        font.family: KetTheme.fontFamily
+                        font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                         font.weight: providerButton.enabled && picker.selectedProviderTab === providerButton.modelData.id ? Font.DemiBold : Font.Normal
                         verticalAlignment: Text.AlignVCenter
                     }
@@ -300,7 +299,7 @@ Basic.Popup {
                             anchors.bottom: parent.bottom
                             height: KetTheme.px(2, KetTheme.zoom)
                             visible: providerButton.enabled && picker.selectedProviderTab === providerButton.modelData.id
-                            color: picker.tokens.accent
+                            color: KetTheme.t.accent
                         }
                     }
                     KetToolTip {
@@ -340,9 +339,9 @@ Basic.Popup {
                   : picker.hasCursorModels
                     ? "Codex is ready. Cursor is available."
                     : "Codex is ready. Other providers are not supported yet."
-            color: picker.tokens.textMuted
-            font.family: picker.tokens.uiFont
-            font.pixelSize: picker.tokens.caption
+            color: KetTheme.t.textMuted
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
             elide: Text.ElideRight
         }
 
@@ -419,14 +418,14 @@ Basic.Popup {
                             color: "transparent"
                             border.width: 1
                             border.color: modelRow.highlighted
-                                          ? picker.tokens.tabActiveText : picker.tokens.borderStrong
+                                          ? KetTheme.t.tabActiveText : KetTheme.t.borderStrong
                             Rectangle {
                                 anchors.centerIn: parent
                                 width: KetTheme.px(6, KetTheme.zoom)
                                 height: KetTheme.px(6, KetTheme.zoom)
                                 radius: KetTheme.px(3, KetTheme.zoom)
                                 visible: modelRow.highlighted
-                                color: picker.tokens.tabActiveText
+                                color: KetTheme.t.tabActiveText
                             }
                         }
                         Column {
@@ -436,18 +435,18 @@ Basic.Popup {
                                 width: parent.width
                                 text: modelRow.modelData.displayName || modelRow.modelData.model
                                 elide: Text.ElideRight
-                                color: picker.tokens.textMain
-                                font.family: picker.tokens.uiFont
-                                font.pixelSize: picker.tokens.body
+                                color: KetTheme.t.textMain
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                                 font.weight: Font.DemiBold
                             }
                             Text {
                                 width: parent.width
                                 text: modelRow.modelData.description || modelRow.modelData.model
                                 elide: Text.ElideRight
-                                color: picker.tokens.textMuted
-                                font.family: picker.tokens.uiFont
-                                font.pixelSize: picker.tokens.micro
+                                color: KetTheme.t.textMuted
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: KetTheme.dayDividerRecipe(KetTheme.dark, KetTheme.zoom).fontPixels
                             }
                         }
                         Rectangle {
@@ -455,14 +454,14 @@ Basic.Popup {
                             Layout.preferredWidth: KetTheme.px(50, KetTheme.zoom)
                             Layout.preferredHeight: KetTheme.px(22, KetTheme.zoom)
                             radius: KetTheme.px(4, KetTheme.zoom)
-                            color: picker.tokens.interactiveBackground
-                            border.color: picker.tokens.border
+                            color: KetTheme.t.interactiveBg
+                            border.color: KetTheme.t.panelBorder
                             Text {
                                 anchors.centerIn: parent
                                 text: "Default"
-                                color: picker.tokens.textSecondary
-                                font.family: picker.tokens.uiFont
-                                font.pixelSize: picker.tokens.micro
+                                color: KetTheme.t.textSecondary
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: KetTheme.dayDividerRecipe(KetTheme.dark, KetTheme.zoom).fontPixels
                             }
                         }
                     }
@@ -472,14 +471,14 @@ Basic.Popup {
                             anchors.right: parent.right
                             anchors.bottom: parent.bottom
                             height: 1
-                            color: picker.tokens.border
+                            color: KetTheme.t.panelBorder
                         }
                         Rectangle {
                             anchors.fill: parent
                             radius: KetTheme.px(5, KetTheme.zoom)
-                            color: modelRow.hovered ? picker.tokens.surfaceHover : "transparent"
+                            color: modelRow.hovered ? KetTheme.t.surfaceHover : "transparent"
                             border.color: modelRow.visualFocus || (modelList.activeFocus && modelRow.ListView.isCurrentItem)
-                                          ? picker.tokens.focus : "transparent"
+                                          ? KetTheme.t.colorFocus : "transparent"
                         }
                     }
                     onClicked: {
@@ -507,9 +506,9 @@ Basic.Popup {
                           : picker.providerModels.length === 0 ? "Models unavailable" : "No models found"
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.Wrap
-                    color: picker.tokens.textMuted
-                    font.family: picker.tokens.uiFont
-                    font.pixelSize: picker.tokens.body
+                    color: KetTheme.t.textMuted
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                 }
                 Basic.Button {
                     id: retryModels
@@ -517,21 +516,21 @@ Basic.Popup {
                     Layout.alignment: Qt.AlignHCenter
                     visible: picker.available && !picker.loading
                     text: picker.providerModels.length === 0 ? "Retry" : "Clear search"
-                    font.family: picker.tokens.uiFont
-                    font.pixelSize: picker.tokens.body
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                     implicitHeight: KetTheme.px(32, KetTheme.zoom)
                     horizontalPadding: KetTheme.px(12, KetTheme.zoom)
                     contentItem: Text {
                         text: retryModels.text
                         font: retryModels.font
-                        color: picker.tokens.textMain
+                        color: KetTheme.t.textMain
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                     }
                     background: Rectangle {
                         radius: KetTheme.px(5, KetTheme.zoom)
-                        color: retryModels.hovered ? picker.tokens.surfaceHover : picker.tokens.interactiveBackground
-                        border.color: retryModels.visualFocus ? picker.tokens.focus : picker.tokens.borderStrong
+                        color: retryModels.hovered ? KetTheme.t.surfaceHover : KetTheme.t.interactiveBg
+                        border.color: retryModels.visualFocus ? KetTheme.t.colorFocus : KetTheme.t.borderStrong
                     }
                     onClicked: {
                         modelSearch.clear()
@@ -546,7 +545,7 @@ Basic.Popup {
             visible: picker.displayedEfforts.length > 1
             Layout.fillWidth: true
             Layout.preferredHeight: 1
-            color: picker.tokens.border
+            color: KetTheme.t.panelBorder
         }
 
         ColumnLayout {
@@ -563,17 +562,17 @@ Basic.Popup {
                 Text {
                     Layout.fillWidth: true
                     text: "Reasoning effort"
-                    color: picker.tokens.textMain
-                    font.family: picker.tokens.uiFont
-                    font.pixelSize: picker.tokens.body
+                    color: KetTheme.t.textMain
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                     font.weight: Font.DemiBold
                 }
                 Text {
                     objectName: "selectedEffortLabel"
                     text: picker.draftEffort ? picker.effortLabel(picker.draftEffort) : "Default"
-                    color: picker.tokens.tabActiveText
-                    font.family: picker.tokens.uiFont
-                    font.pixelSize: picker.tokens.caption
+                    color: KetTheme.t.tabActiveText
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                 }
             }
 
@@ -599,13 +598,13 @@ Basic.Popup {
                     width: effortSlider.availableWidth
                     height: KetTheme.px(4, KetTheme.zoom)
                     radius: KetTheme.px(2, KetTheme.zoom)
-                    color: picker.tokens.interactiveActive
-                    border.color: effortSlider.visualFocus ? picker.tokens.focus : picker.tokens.borderStrong
+                    color: KetTheme.t.interactiveActive
+                    border.color: effortSlider.visualFocus ? KetTheme.t.colorFocus : KetTheme.t.borderStrong
                     Rectangle {
                         height: parent.height
                         width: effortSlider.position * parent.width
                         radius: KetTheme.px(2, KetTheme.zoom)
-                        color: picker.tokens.accent
+                        color: KetTheme.t.accent
                         visible: effortSlider.enabled && picker.effortIndex >= 0
                     }
                 }
@@ -617,8 +616,8 @@ Basic.Popup {
                     height: KetTheme.px(16, KetTheme.zoom)
                     radius: KetTheme.px(8, KetTheme.zoom)
                     visible: picker.effortIndex >= 0
-                    color: effortSlider.enabled ? picker.tokens.accent : picker.tokens.textDisabled
-                    border.color: picker.tokens.surfaceRaised
+                    color: effortSlider.enabled ? KetTheme.t.accent : KetTheme.t.textDisabled
+                    border.color: KetTheme.t.surfaceRaised
                     border.width: 2
                 }
                 Accessible.name: "Reasoning effort"
@@ -640,9 +639,9 @@ Basic.Popup {
                         x: Math.max(0, Math.min(parent.width - width, tickCenter - width / 2))
                         anchors.verticalCenter: parent.verticalCenter
                         text: picker.effortLabel(modelData.reasoningEffort)
-                        color: picker.tokens.textMuted
-                        font.family: picker.tokens.uiFont
-                        font.pixelSize: picker.tokens.micro
+                        color: KetTheme.t.textMuted
+                        font.family: KetTheme.fontFamily
+                        font.pixelSize: KetTheme.dayDividerRecipe(KetTheme.dark, KetTheme.zoom).fontPixels
                     }
                 }
             }
@@ -655,7 +654,7 @@ Basic.Popup {
             Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
             Layout.topMargin: KetTheme.px(16, KetTheme.zoom)
             Layout.bottomMargin: KetTheme.px(16, KetTheme.zoom)
-            tokens: picker.tokens
+
             onFocusRequested: (item) => picker.revealControl(item)
             supported: picker.canCustomizeCompact
             capacity: picker.selectedCapacity
@@ -671,15 +670,15 @@ Basic.Popup {
             visible: picker.applyError.length > 0
             text: picker.applyError
             wrapMode: Text.Wrap
-            color: picker.tokens.danger
-            font.family: picker.tokens.uiFont
-            font.pixelSize: picker.tokens.caption
+            color: KetTheme.t.danger
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
             Accessible.role: Accessible.AlertMessage
         }
             }
         }
 
-        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: picker.tokens.border }
+        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: KetTheme.t.panelBorder }
 
         RowLayout {
             Layout.fillWidth: true
@@ -699,15 +698,15 @@ Basic.Popup {
                 horizontalPadding: KetTheme.px(12, KetTheme.zoom)
                 contentItem: Text {
                     text: resetEffort.text
-                    color: resetEffort.enabled ? picker.tokens.textMain : picker.tokens.textDisabled
-                    font.family: picker.tokens.uiFont
-                    font.pixelSize: picker.tokens.body
+                    color: resetEffort.enabled ? KetTheme.t.textMain : KetTheme.t.textDisabled
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
                 background: Rectangle {
                     radius: KetTheme.px(5, KetTheme.zoom)
-                    color: resetEffort.hovered ? picker.tokens.surfaceHover : "transparent"
+                    color: resetEffort.hovered ? KetTheme.t.surfaceHover : "transparent"
                 }
                 onClicked: picker.restoreDefaults()
             }
@@ -720,12 +719,12 @@ Basic.Popup {
                 horizontalPadding: KetTheme.px(12, KetTheme.zoom)
                 contentItem: Text {
                     text: cancelButton.text
-                    color: picker.tokens.textMain
-                    font.family: picker.tokens.uiFont
-                    font.pixelSize: picker.tokens.body
+                    color: KetTheme.t.textMain
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                     verticalAlignment: Text.AlignVCenter
                 }
-                background: Rectangle { radius: KetTheme.px(5, KetTheme.zoom); color: cancelButton.hovered ? picker.tokens.surfaceHover : "transparent" }
+                background: Rectangle { radius: KetTheme.px(5, KetTheme.zoom); color: cancelButton.hovered ? KetTheme.t.surfaceHover : "transparent" }
                 onClicked: picker.close()
             }
             Basic.Button {
@@ -737,16 +736,16 @@ Basic.Popup {
                 horizontalPadding: KetTheme.px(15, KetTheme.zoom)
                 contentItem: Text {
                     text: applyButton.text
-                    color: Kit.KetTheme.t.actionPrimaryInk
-                    font.family: picker.tokens.uiFont
-                    font.pixelSize: picker.tokens.body
+                    color: KetTheme.t.actionPrimaryInk
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
                 background: Rectangle {
                     radius: KetTheme.px(5, KetTheme.zoom)
-                    color: applyButton.pressed ? picker.tokens.actionPrimaryActive
-                           : applyButton.hovered ? picker.tokens.actionPrimaryHover : picker.tokens.actionPrimary
+                    color: applyButton.pressed ? KetTheme.t.actionPrimaryActive
+                           : applyButton.hovered ? KetTheme.t.actionPrimaryHover : KetTheme.t.actionPrimaryBg
                 }
                 onClicked: picker.applyRequested(picker.draftModel, picker.draftEffort, picker.selectedProviderTab,
                     picker.compactSupported ? {compactWindow: compactControl.requested, expected_revision: picker.draftRevision} : {expected_revision: picker.draftRevision})

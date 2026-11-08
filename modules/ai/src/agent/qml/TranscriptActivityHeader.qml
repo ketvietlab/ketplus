@@ -1,11 +1,11 @@
 import Ket
 import QtQuick
-import Ket 1.0 as Kit
+import Ket as Kit
 
 Kit.KetActivityRow {
     id: activityHeader
     required property var activity
-    readonly property var tokens: activity.tokens
+
     objectName: "transcriptActivityHeader"
     width: parent.width
     height: Math.max(recipe.height, activityTitle.implicitHeight)
@@ -23,7 +23,7 @@ Kit.KetActivityRow {
     Rectangle {
         anchors.fill: parent
         color: "transparent"
-        border.color: activity.activeFocus ? activity.tokens.focus : "transparent"
+        border.color: activity.activeFocus ? KetTheme.t.colorFocus : "transparent"
         radius: activityHeader.recipe.radius
     }
 
@@ -36,7 +36,7 @@ Kit.KetActivityRow {
         anchors.leftMargin: activity.compact ? 0 : activityHeader.recipe.paddingInline
         y: Math.round(activityHeader.firstLineCenter - height / 2)
         name: KetTheme.iconForLucide((activity.iconSource()).toString().split("/").pop().replace(/\.svg$/, ""))
-        color: activity.running ? activity.tokens.accentText : activity.tokens.textMuted
+        color: activity.running ? KetTheme.t.accentText : KetTheme.t.textMuted
         box: activity.compact ? 0 : activityHeader.recipe.iconSize
     }
 
@@ -52,9 +52,9 @@ Kit.KetActivityRow {
         // multi-line command folds onto one; a command is never markup.
         text: activity.expanded && activity.subtype === "command" && !activity.describedCommand ? (activity.running ? "Running command" : "Ran command") + (activity.status === "failed" ? " · Failed" : activity.status === "interrupted" ? " · Interrupted" : "") : activity.expanded ? activity.displayTitle : activity.displayTitle.replace(/\s*\n\s*/g, " ")
         textFormat: Text.PlainText
-        color: activity.status === "failed" ? activity.tokens.danger : titleHover.hovered && activity.opensFile ? activity.tokens.accentText : activity.tokens.textSecondary
+        color: activity.status === "failed" ? KetTheme.t.danger : titleHover.hovered && activity.opensFile ? KetTheme.t.accentText : KetTheme.t.textSecondary
         font.underline: titleHover.hovered && activity.opensFile
-        font.family: activity.subtype === "command" && !activity.describedCommand ? activity.tokens.monoFont : activity.tokens.uiFont
+        font.family: activity.subtype === "command" && !activity.describedCommand ? agentHost.monoFontFamily : KetTheme.fontFamily
         font.pixelSize: activityHeader.recipe.fontPixels
         font.weight: Font.Normal
         wrapMode: activity.expanded ? Text.WrapAnywhere : Text.NoWrap
@@ -75,7 +75,7 @@ Kit.KetActivityRow {
         visible: activity.hasDetails
         name: activity.expanded ? "chevron-down" : "chevron-right"
         box: activityHeader.recipe.chevronSize
-        color: activity.tokens.textMuted
+        color: KetTheme.t.textMuted
     }
 
     Kit.KetButton {
@@ -93,9 +93,9 @@ Kit.KetActivityRow {
         background: Item {}
         contentItem: Text {
             text: browserOpen.text
-            color: activity.tokens.accentText
-            font.family: activity.tokens.uiFont
-            font.pixelSize: activity.tokens.caption
+            color: KetTheme.t.accentText
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
         }
@@ -114,7 +114,7 @@ Kit.KetActivityRow {
         width: KetTheme.px(4, KetTheme.zoom)
         height: KetTheme.px(4, KetTheme.zoom)
         radius: KetTheme.px(2, KetTheme.zoom)
-        color: activity.tokens.accent
+        color: KetTheme.t.accent
     }
 
     TapHandler {

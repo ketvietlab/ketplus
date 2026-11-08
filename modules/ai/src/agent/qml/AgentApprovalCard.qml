@@ -1,6 +1,6 @@
 import Ket
 import QtQuick
-import Ket 1.0 as Kit
+import Ket as Kit
 import QtQuick.Controls.Basic as Basic
 
 Kit.KetQuestionCard {
@@ -19,7 +19,7 @@ Kit.KetQuestionCard {
     readonly property var decisionQuestion: questions.length > 0 ? questions[0] : ({})
     // The receipt holds the chosen option's label.
     readonly property bool declined: answered && decision === "Decline"
-    readonly property color stateColor: declined ? tokens.danger : answered ? tokens.positive : tokens.warning
+    readonly property color stateColor: declined ? KetTheme.t.danger : answered ? KetTheme.t.positive : KetTheme.t.warning
 
     signal decisionSubmitted(var answers)
 
@@ -45,7 +45,6 @@ Kit.KetQuestionCard {
         });
     }
 
-    required property var tokens
     label: declined ? "Approval declined" : answered ? "Approval granted" : "Approval required"
     question: prompt
     Column {
@@ -57,7 +56,7 @@ Kit.KetQuestionCard {
             horizontalAlignment: Text.AlignRight
             text: root.declined ? "Declined" : root.answered ? "Allowed once" : root.pending ? "Agent is waiting" : "Closed"
             color: root.recipe.step
-            font.family: root.tokens.uiFont
+            font.family: KetTheme.fontFamily
             font.pixelSize: root.recipe.labelPixels
         }
         Kit.KetButton {
@@ -75,9 +74,9 @@ Kit.KetQuestionCard {
             readOnly: true
             selectByMouse: true
             wrapMode: TextEdit.WrapAnywhere
-            color: root.tokens.textSecondary
-            font.family: root.tokens.monoFont
-            font.pixelSize: root.tokens.body
+            color: KetTheme.t.textSecondary
+            font.family: agentHost.monoFontFamily
+            font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
         }
     }
     footer: [

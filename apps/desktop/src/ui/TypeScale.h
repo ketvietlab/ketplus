@@ -5,7 +5,6 @@
 
 #include <QRegularExpression>
 #include <QString>
-#include <QVariantMap>
 #include <QtGlobal>
 
 namespace ketplus {
@@ -105,24 +104,6 @@ struct TypeScale final {
         }
         out.append(sheet.mid(pos));
         return out;
-    }
-
-    // Merged into Agent Workspace QML tokens. Named steps only (7 text + 2 glyph).
-    [[nodiscard]] static QVariantMap tokens(const int basePixels,
-                                            const int /*legacyBiasPixels*/ = 0) {
-        const auto text = [basePixels](const TypeStep step) { return pixels(step, basePixels); };
-        return QVariantMap{
-            {QStringLiteral("zoomFactor"), InterfaceZoomMetrics::factor(basePixels)},
-            {QStringLiteral("micro"), text(TypeStep::Micro)},
-            {QStringLiteral("caption"), text(TypeStep::Caption)},
-            {QStringLiteral("body"), text(TypeStep::Body)},
-            {QStringLiteral("reading"), text(TypeStep::Reading)},
-            {QStringLiteral("title"), text(TypeStep::Title)},
-            {QStringLiteral("heading"), text(TypeStep::Heading)},
-            {QStringLiteral("display"), text(TypeStep::Display)},
-            {QStringLiteral("glyphSmall"), pixels(TypeStep::GlyphSmall, basePixels)},
-            {QStringLiteral("glyphLarge"), pixels(TypeStep::GlyphLarge, basePixels)},
-        };
     }
 };
 

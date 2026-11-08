@@ -107,11 +107,11 @@ Item {
                         enabled: true
                         color: composer.recipe.text
                         placeholderTextColor: composer.recipe.placeholder
-                        selectionColor: root.t.accentMuted
-                        selectedTextColor: root.t.textMain
+                        selectionColor: KetTheme.t.accentMuted
+                        selectedTextColor: KetTheme.t.textMain
                         wrapMode: TextArea.Wrap
                         background: null
-                        font.family: root.t.uiFont
+                        font.family: KetTheme.fontFamily
                         font.pixelSize: composer.recipe.textPixels
                         Text {
                             id: composerPlaceholder
@@ -212,9 +212,9 @@ Item {
         height: slashCommandList.implicitHeight + KetTheme.px(8, KetTheme.zoom)
         visible: root.visibleSlashCommands.length > 0 && !agentHost.sessionRunning
         radius: KetTheme.px(12, KetTheme.zoom)
-        color: root.t.surfaceRaised
+        color: KetTheme.t.surfaceRaised
         border.width: 1
-        border.color: root.t.borderStrong
+        border.color: KetTheme.t.borderStrong
         Column {
             id: slashCommandList
             anchors.left: parent.left
@@ -233,17 +233,17 @@ Item {
                         spacing: KetTheme.px(10, KetTheme.zoom)
                         Text {
                             text: modelData.label
-                            color: root.t.textMain
-                            font.family: root.t.monoFont
-                            font.pixelSize: root.t.reading
+                            color: KetTheme.t.textMain
+                            font.family: agentHost.monoFontFamily
+                            font.pixelSize: KetTheme.markdownRecipe(KetTheme.dark, KetTheme.zoom).bodyPixels
                             Layout.preferredWidth: KetTheme.px(92, KetTheme.zoom)
                             verticalAlignment: Text.AlignVCenter
                         }
                         Text {
                             text: modelData.description
-                            color: root.t.textMuted
-                            font.family: root.t.uiFont
-                            font.pixelSize: root.t.body
+                            color: KetTheme.t.textMuted
+                            font.family: KetTheme.fontFamily
+                            font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                             elide: Text.ElideRight
                             Layout.fillWidth: true
                             verticalAlignment: Text.AlignVCenter
@@ -251,7 +251,7 @@ Item {
                     }
                     background: Rectangle {
                         radius: KetTheme.px(8, KetTheme.zoom)
-                        color: parent.hovered ? root.t.interactiveActive : "transparent"
+                        color: parent.hovered ? KetTheme.t.interactiveActive : "transparent"
                     }
                     onClicked: root.applySlashCommand(modelData)
                 }
@@ -270,9 +270,9 @@ Item {
         height: Math.min(KetTheme.px(360, KetTheme.zoom), skillSuggestionList.contentHeight + KetTheme.px(8, KetTheme.zoom))
         visible: root.visibleSkillSuggestions.length > 0
         radius: KetTheme.px(12, KetTheme.zoom)
-        color: root.t.surfaceRaised
+        color: KetTheme.t.surfaceRaised
         border.width: 1
-        border.color: root.t.borderStrong
+        border.color: KetTheme.t.borderStrong
 
         ListView {
             id: skillSuggestionList
@@ -304,17 +304,17 @@ Item {
                             objectName: "fileMentionPath"
                             Layout.fillWidth: true
                             text: (suggestionRow.modelData.path || "").replace(/\/$/, "")
-                            color: root.t.accentHover
-                            font.family: root.t.monoFont
-                            font.pixelSize: root.t.reading
+                            color: KetTheme.t.accentHover
+                            font.family: agentHost.monoFontFamily
+                            font.pixelSize: KetTheme.markdownRecipe(KetTheme.dark, KetTheme.zoom).bodyPixels
                             // Long paths keep both the top folder and the file name.
                             elide: Text.ElideMiddle
                         }
                         Text {
                             text: suggestionRow.modelData.directory ? "Folder" : "File"
-                            color: root.t.textMuted
-                            font.family: root.t.uiFont
-                            font.pixelSize: root.t.micro
+                            color: KetTheme.t.textMuted
+                            font.family: KetTheme.fontFamily
+                            font.pixelSize: KetTheme.dayDividerRecipe(KetTheme.dark, KetTheme.zoom).fontPixels
                         }
                     }
                     RowLayout {
@@ -323,9 +323,9 @@ Item {
                         spacing: KetTheme.px(10, KetTheme.zoom)
                         Text {
                             text: suggestionRow.modelData.mention || ""
-                            color: root.t.accentHover
-                            font.family: root.t.monoFont
-                            font.pixelSize: root.t.reading
+                            color: KetTheme.t.accentHover
+                            font.family: agentHost.monoFontFamily
+                            font.pixelSize: KetTheme.markdownRecipe(KetTheme.dark, KetTheme.zoom).bodyPixels
                             Layout.preferredWidth: KetTheme.px(150, KetTheme.zoom)
                             elide: Text.ElideRight
                         }
@@ -335,23 +335,23 @@ Item {
                             Text {
                                 Layout.fillWidth: true
                                 text: suggestionRow.modelData.description || ""
-                                color: root.t.textMain
-                                font.family: root.t.uiFont
-                                font.pixelSize: root.t.body
+                                color: KetTheme.t.textMain
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
                                 elide: Text.ElideRight
                             }
                             Text {
                                 text: suggestionRow.modelData.kind === "conversation" ? (suggestionRow.modelData.detail || "") : (suggestionRow.modelData.source || "") + " skill"
-                                color: root.t.textMuted
-                                font.family: root.t.uiFont
-                                font.pixelSize: root.t.micro
+                                color: KetTheme.t.textMuted
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: KetTheme.dayDividerRecipe(KetTheme.dark, KetTheme.zoom).fontPixels
                             }
                         }
                     }
                 }
                 background: Rectangle {
                     radius: KetTheme.px(8, KetTheme.zoom)
-                    color: parent.highlighted || parent.hovered ? root.t.interactiveActive : "transparent"
+                    color: parent.highlighted || parent.hovered ? KetTheme.t.interactiveActive : "transparent"
                 }
                 onClicked: root.applySkillSuggestion(modelData)
             }
@@ -419,7 +419,7 @@ Item {
                     text: permissionButton.text
                     visible: !composer.compactControls
                     color: root.permissionAccent
-                    font.family: root.t.uiFont
+                    font.family: KetTheme.fontFamily
                     font.pixelSize: permissionButton.recipe.fontPixels
                     anchors.verticalCenter: parent.verticalCenter
                 }
@@ -428,7 +428,7 @@ Item {
                     height: KetTheme.px(14, KetTheme.zoom)
                     anchors.verticalCenter: parent.verticalCenter
                     name: KetTheme.iconForLucide("chevron-down")
-                    color: root.permissionElevated ? root.permissionAccent : root.t.textMuted
+                    color: root.permissionElevated ? root.permissionAccent : KetTheme.t.textMuted
                     box: KetTheme.px(14, KetTheme.zoom)
                 }
             }
@@ -464,14 +464,14 @@ Item {
                     height: KetTheme.px(14, KetTheme.zoom)
                     anchors.verticalCenter: parent.verticalCenter
                     name: KetTheme.iconForLucide("zap")
-                    color: root.enabledSkillCount() > 0 ? root.t.accentHover : root.t.textSecondary
+                    color: root.enabledSkillCount() > 0 ? KetTheme.t.accentHover : KetTheme.t.textSecondary
                     box: KetTheme.px(14, KetTheme.zoom)
                 }
                 Text {
                     text: skillsButton.text
                     visible: !composer.compactControls
-                    color: root.enabledSkillCount() > 0 ? root.t.accentHover : root.t.textSecondary
-                    font.family: root.t.uiFont
+                    color: root.enabledSkillCount() > 0 ? KetTheme.t.accentHover : KetTheme.t.textSecondary
+                    font.family: KetTheme.fontFamily
                     font.pixelSize: permissionButton.recipe.fontPixels
                     anchors.verticalCenter: parent.verticalCenter
                 }
@@ -509,8 +509,8 @@ Item {
                 Text {
                     Layout.fillWidth: true
                     text: root.composerModelText()
-                    color: root.t.textSecondary
-                    font.family: root.t.uiFont
+                    color: KetTheme.t.textSecondary
+                    font.family: KetTheme.fontFamily
                     font.pixelSize: modelButton.recipe.fontPixels
                     elide: Text.ElideRight
                     verticalAlignment: Text.AlignVCenter
@@ -520,7 +520,7 @@ Item {
                     Layout.preferredHeight: KetTheme.px(14, KetTheme.zoom)
                     name: KetTheme.iconForLucide("chevron-down")
                     rotation: modelPopup.visible ? 180 : 0
-                    color: root.t.textMuted
+                    color: KetTheme.t.textMuted
                     box: KetTheme.px(14, KetTheme.zoom)
                 }
             }
@@ -539,14 +539,14 @@ Item {
         }
         UsageRingButton {
             id: usageRingButton
-            tokens: root.t
+
             Layout.alignment: Qt.AlignVCenter
             Layout.preferredWidth: implicitWidth
             Layout.preferredHeight: implicitHeight
             progress: root.usageRingProgress
-            trackColor: root.t.borderStrong
-            fillColor: root.usageRingProgress >= 0.9 ? root.t.warning : root.t.textSecondary
-            hoverColor: root.t.surfaceHover
+            trackColor: KetTheme.t.borderStrong
+            fillColor: root.usageRingProgress >= 0.9 ? KetTheme.t.warning : KetTheme.t.textSecondary
+            hoverColor: KetTheme.t.surfaceHover
             onClicked: {
                 skillsPopup.close();
                 permissionMenu.close();

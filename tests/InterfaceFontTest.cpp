@@ -1,10 +1,16 @@
 #include "ui/InterfaceFont.h"
+#include "KetAppearance.h"
+#include "KetTokens.h"
 #include "agent/AgentWorkspaceView.h"
 #include "app/AppearanceSettings.h"
 #include "ui/InterfaceZoom.h"
 #include "ui/Theme.h"
 #include "ui/TypeScale.h"
+#include <QQuickItem>
+#include <QQuickView>
 
+#include <QAbstractTextDocumentLayout>
+#include <QApplication>
 #include <QCoreApplication>
 #include <QDir>
 #include <QDirIterator>
@@ -12,12 +18,16 @@
 #include <QFileInfo>
 #include <QFontDatabase>
 #include <QGuiApplication>
+#include <QQuickTextDocument>
 #include <QRawFont>
 #include <QRegularExpression>
 #include <QScopeGuard>
 #include <QSet>
 #include <QSettings>
 #include <QTemporaryDir>
+#include <QTextBlock>
+#include <QTextDocument>
+#include <QTextTable>
 #include <QtTest>
 
 class InterfaceFontTest final : public QObject {
@@ -25,10 +35,11 @@ class InterfaceFontTest final : public QObject {
 
   private slots:
     void initTestCase();
+    // Run first: another font test must not preload fonts and hide a startup failure.
+    void agentThemeUsesKitAndEditorMono();
     void resolvedFamilyPrefersEmbeddedKetSans();
     void embeddedWeightsCoverVietnamese_data();
     void embeddedWeightsCoverVietnamese();
-    void agentTokensShareUiResolverAndEditorMono();
     void typeScaleApplyAndLiteralScalingAreMediumInert();
     void rejectsRawFontSizeLiteralsOutsideTypeScale();
 };
@@ -82,7 +93,7 @@ void InterfaceFontTest::embeddedWeightsCoverVietnamese() {
         QCOMPARE(advance.x(), advances.first().x());
 }
 
-void InterfaceFontTest::agentTokensShareUiResolverAndEditorMono() {
+void InterfaceFontTest::agentThemeUsesKitAndEditorMono() {
     QTemporaryDir settingsDirectory;
     QVERIFY(settingsDirectory.isValid());
     QSettings::setDefaultFormat(QSettings::IniFormat);
@@ -94,33 +105,121 @@ void InterfaceFontTest::agentTokensShareUiResolverAndEditorMono() {
     appearance.save();
     QCOMPARE(ketplus::AppearanceSettings::load().editor.fontFamily, QStringLiteral("Courier New"));
 
-    // First AgentWorkspaceView in this process resolves the current monoFont.
-    ketplus::AgentWorkspaceView view;
-    ketplus::ThemePalette palette;
-    palette.pageBackground = QStringLiteral("#1b1f24");
-    view.applyTheme(palette, ketplus::InterfaceZoomMetrics::mediumPixels);
-    QCOMPARE(view.tokens().value(QStringLiteral("uiFont")).toString(),
-             ketplus::InterfaceUiFont::resolvedFamily());
-    QCOMPARE(view.tokens().value(QStringLiteral("monoFont")).toString(),
-             QStringLiteral("Courier New"));
+    ketplus::ThemeManager theme(*qApp);
+    auto& kit = ket::Appearance::instance();
+    const auto previousMode = kit.mode();
+    const auto previousZoom = kit.zoom();
     const auto original = ket::Profile::current();
-    const auto restore = qScopeGuard([original] { ket::Profile::setCurrent(original); });
-    QCOMPARE(view.tokens().value(QStringLiteral("reading")).toInt(),
-             qRound(original.readingPixels));
-    QCOMPARE(view.tokens().value(QStringLiteral("body")).toInt(),
-             qRound(original.buttonFontPixels));
-    QCOMPARE(view.tokens().value(QStringLiteral("micro")).toInt(),
-             qRound(original.dayDividerPixels));
-    QCOMPARE(view.tokens().value(QStringLiteral("title")).toInt(),
-             qRound(original.dialogTitlePixels));
-    QCOMPARE(view.tokens().value(QStringLiteral("glyphSmall")).toInt(), qRound(original.iconSize));
-    QVERIFY(!view.tokens().contains(QStringLiteral("px9")));
+    const auto restore = qScopeGuard([&] {
+        ket::Profile::setCurrent(original);
+        kit.setMode(previousMode);
+        kit.setZoom(previousZoom);
+    });
+    QTest::failOnWarning(QRegularExpression(".*(Unable to assign|ReferenceError|TypeError).*"));
+    ketplus::AgentWorkspaceView view;
+    view.resize(1100, 740);
+    view.setAgentAvailable(true);
+    view.setSessionState("Review theme and typography", "Ready", false);
+    view.resetMessages(
+        {QVariantMap{{"kind", "user"},
+                     {"messageKey", "theme-prompt"},
+                     {"body", "Keep the conversation readable as I change theme and zoom."}},
+         QVariantMap{{"kind", "assistant"},
+                     {"messageKey", "theme-answer"},
+                     {"body", "## Shared appearance\n\nThe header, `inline code` and transcript "
+                              "follow the same theme. Your editor font stays selected.\n\n"
+                              "```cpp\nconst auto zoom = appearance.zoom();\n```\n\n"
+                              "| Surface | State |\n| --- | --- |\n| Conversation | Ready |"}}},
+        "theme-authority");
+    view.show();
+    auto* root = view.quickView()->rootObject();
+    QVERIFY(root);
+    auto* title = root->findChild<QQuickItem*>("conversationTitle");
+    auto* number = root->findChild<QQuickItem*>("conversationNumber");
+    auto* pane = root->findChild<QQuickItem*>("chatPane");
+    QVERIFY(title && number && pane);
+    QCOMPARE(view.monoFontFamily(), QStringLiteral("Courier New"));
+    QCOMPARE(number->property("font").value<QFont>().family(), QStringLiteral("Courier New"));
+    QCOMPARE(title->property("font").value<QFont>().family(),
+             ketplus::InterfaceUiFont::resolvedFamily());
+    QVERIFY(view.metaObject()->indexOfProperty("tokens") < 0);
+
+    const auto findVisual = [](auto&& self, QQuickItem* item, const QString& name) -> QQuickItem* {
+        if (item->objectName() == name)
+            return item;
+        for (auto* child : item->childItems())
+            if (auto* found = self(self, child, name))
+                return found;
+        return nullptr;
+    };
+    const auto documentGeometryMatches = [&] {
+        auto* frame = findVisual(findVisual, root, "messageCodeBlockFrame");
+        if (!frame)
+            return false;
+        auto* body = frame->parentItem();
+        auto* quickDoc = qvariant_cast<QQuickTextDocument*>(body->property("textDocument"));
+        if (!quickDoc)
+            return false;
+        auto* doc = quickDoc->textDocument();
+        const auto code = doc->find("const auto zoom");
+        QRectF caret;
+        if (code.isNull() ||
+            !QMetaObject::invokeMethod(body, "positionToRectangle", Q_RETURN_ARG(QRectF, caret),
+                                       Q_ARG(int, code.selectionStart())))
+            return false;
+        if (!QRectF(frame->x(), frame->y(), frame->width(), frame->height())
+                 .contains(caret.center()))
+            return false;
+        for (auto* child : doc->rootFrame()->childFrames()) {
+            auto* table = qobject_cast<QTextTable*>(child);
+            if (!table)
+                continue;
+            const auto first = table->cellAt(0, 0).firstCursorPosition().block();
+            const auto second = table->cellAt(0, 1).firstCursorPosition().block();
+            const auto a = doc->documentLayout()->blockBoundingRect(first);
+            const auto b = doc->documentLayout()->blockBoundingRect(second);
+            return first.text() == "Surface" && qAbs(a.y() - b.y()) < 1 &&
+                   a.y() >= frame->y() + frame->height() - body->property("topPadding").toReal();
+        }
+        return false;
+    };
+    // No host applyTheme call: every mounted view must react to the shared authority.
+    for (bool dark : {false, true}) {
+        kit.setMode(dark ? ket::Appearance::Mode::Dark : ket::Appearance::Mode::Light);
+        for (qreal zoom : {1.0, 1.25, 1.0}) {
+            kit.setZoom(zoom);
+            QTRY_COMPARE(title->property("font").value<QFont>().pixelSize(),
+                         qRound(ket::Appearance::scale(original.readingPixels, zoom)));
+            QTRY_COMPARE(number->property("font").value<QFont>().pixelSize(),
+                         qRound(ket::Appearance::scale(original.buttonFontPixels, zoom)));
+            QTRY_COMPARE(title->property("color").value<QColor>(),
+                         ket::Tokens::color(u"text-main", kit.theme()));
+            QTRY_COMPARE(pane->property("color").value<QColor>(),
+                         ket::Tokens::color(u"page-bg", kit.theme()));
+            QCOMPARE(view.quickView()->color(), ket::Tokens::color(u"page-bg", kit.theme()));
+            QTRY_VERIFY(documentGeometryMatches());
+            auto* logo = findVisual(findVisual, root, "productBrandImage");
+            QVERIFY(logo);
+            QVERIFY(logo->x() >= 0 && logo->x() + logo->width() <= logo->parentItem()->width());
+            const auto capture = qEnvironmentVariable("KETPLUS_THEME_AUTHORITY_CAPTURE");
+            if (!capture.isEmpty()) {
+                QTest::qWait(60);
+                QVERIFY(view.quickView()->grabWindow().save(
+                    capture +
+                    QString("-%1-%2.png").arg(dark ? "dark" : "light").arg(qRound(zoom * 100))));
+            }
+        }
+    }
     auto custom = original;
     custom.readingPixels = 19;
     ket::Profile::setCurrent(custom);
-    view.applyTheme(palette, 18);
-    QCOMPARE(view.tokens().value(QStringLiteral("zoomFactor")).toDouble(), 18.0 / 14);
-    QCOMPARE(view.tokens().value(QStringLiteral("reading")).toInt(), qRound(19 * 18.0 / 14));
+    kit.setZoom(18.0 / 14);
+    QTRY_COMPARE(title->property("font").value<QFont>().pixelSize(), qRound(19 * 18.0 / 14));
+    appearance.editor.fontFamily = QStringLiteral("KÉT Sans Mono");
+    appearance.save();
+    view.applyTheme(ketplus::currentThemePalette());
+    QTRY_COMPARE(number->property("font").value<QFont>().family(),
+                 ketplus::AppearanceSettings::load().editor.fontFamily);
 }
 
 void InterfaceFontTest::typeScaleApplyAndLiteralScalingAreMediumInert() {
