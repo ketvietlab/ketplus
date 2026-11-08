@@ -53,8 +53,10 @@ class ProviderLineReader final {
 
     // Streaming scan of the line being discarded.
     bool discarding_{false};
+    bool routingValid_{true};
     OversizedProviderLine discarded_;
     QList<Frame> frames_;
+    quint64 skippedDepth_{0};
     bool inString_{false};
     bool escaped_{false};
     bool stringIsKey_{false};

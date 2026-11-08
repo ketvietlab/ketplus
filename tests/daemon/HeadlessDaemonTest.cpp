@@ -5,6 +5,7 @@
 #include "runtime/SessionHost.h"
 #include "service/DaemonService.h"
 #include "storage/LocalJournal.h"
+#include <QDir>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -13,6 +14,7 @@
 #include <QMap>
 #include <QProcess>
 #include <QScopeGuard>
+#include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QUuid>
 #include <QtTest>
@@ -279,6 +281,19 @@ class HeadlessDaemonTest final : public QObject {
         QTemporaryDir directory("/tmp/kp-headless-XXXXXX");
         QVERIFY(directory.isValid());
         QVERIFY(initializeGit(directory.path()));
+        QVERIFY(QDir().mkpath(directory.filePath("daemon")));
+        {
+            LocalJournal journal(directory.filePath("daemon/journal.sqlite3"));
+            QVERIFY(journal.isOpen());
+            QSqlDatabase db;
+            for (const auto& name : QSqlDatabase::connectionNames())
+                if (QSqlDatabase::database(name).databaseName() == journal.databasePath())
+                    db = QSqlDatabase::database(name);
+            QSqlQuery q(db);
+            QVERIFY(q.exec("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n "
+                           "WHERE i<30000) INSERT INTO session_tombstones "
+                           "SELECT 'deleted-'||i,1,1,'operation-'||i,datetime('now') FROM n"));
+        }
         QProcess daemon;
         auto environment = QProcessEnvironment::systemEnvironment();
         environment.insert("KETPLUS_DAEMON_DATA_DIR", directory.path());
@@ -301,6 +316,17 @@ class HeadlessDaemonTest final : public QObject {
         QVERIFY(cli.waitForFinished(8000));
         QCOMPARE(cli.exitCode(), 0);
         QVERIFY(QJsonDocument::fromJson(cli.readAllStandardOutput()).object().value("ok").toBool());
+        cli.start(KETPLUS_TEST_CTL, {"--timeout", "15", "sessions"});
+        QVERIFY(cli.waitForFinished(20000));
+        QCOMPARE(cli.exitCode(), 0);
+        const auto catalog = QJsonDocument::fromJson(cli.readAllStandardOutput()).object();
+        QVERIFY(catalog.value("ok").toBool());
+        QVERIFY(catalog.value("sessions").isArray());
+        QCOMPARE(catalog.value("deleted_sessions").toArray().size(), 30000);
+        QSet<QString> identities;
+        for (const auto& row : catalog.value("deleted_sessions").toArray())
+            identities.insert(row.toObject().value("session_id").toString());
+        QCOMPARE(identities.size(), 30000);
         // The local credential is mandatory even with access to the same socket.
         QFile wrong(directory.filePath("wrong.token"));
         QVERIFY(wrong.open(QIODevice::WriteOnly));

@@ -3,11 +3,77 @@
 This file distinguishes current code from target architecture. Update it when a
 milestone changes state.
 
+Tombstone catalog hardening (ADR 0091) adds bounded, opt-in keyset pages and
+revision-fenced shared transport consumption by Desktop refresh and
+`ketplusctl sessions`. Concurrent mutation/reopen invalidates a cursor; retries
+are capped and CLI history is spooled privately. Legacy catalogs exceeding the bounded
+response return an explicit upgrade error. This is backend/transport work;
+whole-session atomic-delete latency, live-catalog bounds and the remaining #68
+acceptance gates stay open. Incremental discovery now requests only live sessions
+(ADR 0092), avoiding tombstone walks and repeated deletion signals. Full refresh
+and CLI retain complete reconciliation; older daemon replies remain compatible.
+
 ## Implemented
 
 - Local daemon/client credential reads share a 4-KiB raw-file bound (ADR 0078).
   Unix admission checks the opened descriptor's ownership/type/permissions;
   unsupported files remain intact and client reconnect can recover after repair.
+
+- Reference-based previews use bounded validated ownership and verify blob
+  SHA-256 before decoding the same byte snapshot (ADR 0069). Unknown metadata,
+  linked roots and mismatched bytes remain intact and return unavailable.
+
+- Fork prepares validated media ownership before committing copied history
+  (ADR 0068). Failed preparation rolls back the journal; conflicting destination
+  metadata is preserved. Matching prepared ownership permits retry after a
+  database commit failure; reopen cleanup preserves source-owned images.
+
+- Image publication requires a checked atomic ownership-file update (ADR 0067).
+  Invalid metadata is preserved, repeated hashes are deduplicated and failed
+  writes cannot publish successful new references. Fork-copy and orphan bounds
+  remain separate work.
+
+- Long-lived provider stderr draining has a Codex/Claude/Cursor process regression:
+  two 32-MiB floods retain only the newest 1 MiB while stdout round trips and
+  subsequent calls continue on the same process. The fixture uses no real CLI.
+
+- ACP v1 capability negotiation requires explicit boolean support (ADR 0090).
+  Missing/mistyped loadSession and image flags no longer retain baseline support;
+  Cursor does not issue session/load when it was not advertised.
+
+- Malformed normal-sized provider frames reject their process generation (ADR 0089).
+  Syntax/UTF-8/non-object frames and raw control bytes cannot be followed by a
+  dispatched suffix. Pending calls receive a static error and a fresh process can
+  recover; method schemas and absent-response deadlines remain separate.
+
+- Matched provider responses require one valid result/error envelope (ADR 0075).
+  Malformed replies fail their callback once, without successful initialization,
+  unrelated-call failure or echoing malformed payloads. Null void results and
+  Claude message-only errors stay compatible; method schemas remain separate.
+
+- Provider responses preserve numeric call identity (ADR 0074): strings, booleans
+  and fractional ids cannot consume pending calls in Codex, Claude or Cursor,
+  including Codex oversized responses. Valid replies still complete exactly once.
+
+- Cursor model-catalog subprocesses drain both channels while running and enforce
+  a shared 1-MiB output budget (ADR 0088). Excess output and unsuccessful exits use
+  the existing fallback catalog; successful exact-budget output remains usable.
+
+- Provider version probes bound merged output while reading and require successful
+  exit before accepting a banner (ADR 0072). Concurrent executable generations
+  retain their own result; failed probes remain retryable without a cached version.
+
+- Claude/Cursor stdout enforces the 16-MiB limit per raw line before parsing,
+  including complete lines and partial suffixes after valid lines (ADR 0071).
+  Bounded reads and failure draining preserve valid frames and fresh generations.
+
+- Oversized provider routing uses bounded JSON string decoding and structural
+  path segments (ADR 0073). Invalid captured metadata withholds all routing fields
+  for the line; valid escapes/Unicode and subsequent messages remain usable.
+
+- Oversized Codex line scanning retains at most 64 routing frames, tracking deeper
+  containers with a scalar depth (ADR 0070). Shallow fields after the nested value
+  still route correctly; broader provider framing remains under audit.
 - Existing media blobs are validated before dedup returns a reference (ADR 0066):
   exact bounded bytes, regular nonsymlink files and owner-only permissions.
   Invalid entries remain intact for repair; reference durability remains open.
@@ -22,9 +88,11 @@ milestone changes state.
   partial indexes restrict settlement checks to running rows in the target turn.
   Large running turns and initial index construction remain separate bounds work.
 
-- Failed activity-backfill commits now preserve their diagnostic and release the
-  write transaction (ADR 0064). A separate connection can repair and reopen while
-  the failed journal object remains alive; broader startup recovery remains open.
+- Failed activity-backfill commits preserve their diagnostic and release the
+  write transaction (ADR 0064). Any failed constructor stage also closes the
+  journal connection (ADR 0086): subsequent operations cannot revive or mutate
+  that object. A separate connection can repair and a fresh object reopen while
+  the failed object remains alive; broader startup recovery remains open.
 
 - Media cleanup requires a complete bounded reference catalog before deleting
   metadata or image bytes (ADR 0065). Unknown shapes, symlinks and read failures
@@ -483,7 +551,6 @@ reading column and collapse after 20 lines with a reversible Show more control.
 Collapsed activity rows keep one title line; browser-open rows retain an Open
 action. Composer block line-height matches
 the transcript at 1.75; focused Qt tests cover Vietnamese single-line sizing and composer undo.
-
 
 ## Qt design mock
 

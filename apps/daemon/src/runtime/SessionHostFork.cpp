@@ -133,9 +133,12 @@ QJsonObject SessionHost::storeFork(const QString& sourceId, const qint64 sourceG
                             ? QStringLiteral("Fork")
                             : source->stored.title + QStringLiteral(" (fork)");
     QString journalError;
-    if (!journal_->forkSession(sourceId, sourceGeneration, fork.stored, &journalError))
+    if (!journal_->forkSession(sourceId, sourceGeneration, fork.stored, &journalError,
+                               [this, sourceId, forkId](QString* error) {
+                                   return mediaStore_.copySessionReferences(sourceId, forkId,
+                                                                            error);
+                               }))
         return forkError(QStringLiteral("journal_error"), journalError);
-    mediaStore_.copySessionReferences(sourceId, forkId);
     const qint64 throughCursor = fork.stored.lastCursor;
     const bool copiedActiveTurn = source->startingTurn ||
                                   source->stored.state == QStringLiteral("starting") ||

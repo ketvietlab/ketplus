@@ -109,11 +109,12 @@ The names are `images`, `modelList`, `rateLimits`, `threadCompact`,
 
 1. the dialect's baseline from the manifest (before the version probe has
    answered, the newest dialect's); then
-2. narrowed by what the CLI advertises at runtime: ACP `initialize` removes
-   `threadResume` when `agentCapabilities.loadSession` is `false` and `images`
-   when `promptCapabilities.image` is `false`. Only explicit `false` narrows,
-   because ACP omits defaults. Codex `initialize` advertises nothing usable yet;
-   then
+2. narrowed by what the CLI advertises at runtime: ACP `initialize` preserves
+   baseline `threadResume` only when `agentCapabilities.loadSession` is boolean
+   `true`, and baseline `images` only when `promptCapabilities.image` is boolean
+   `true`. Missing, null and wrong-type fields remove support; ACP v1 defaults
+   both capabilities to false (ADR 0090). Codex `initialize` advertises nothing
+   usable yet; then
 3. narrowed for the life of the CLI process when a call is answered with
    `-32601`. A new process starts from the baseline again.
 

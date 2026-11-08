@@ -1,0 +1,142 @@
+{
+  "scope": "Issue68 / H1.1 PR280 catalog mutation fence, all built-in callers and actual wire budget",
+  "base": "08154f919a1afb826f5e5819438a009d56e7ea5d",
+  "code_head": "960387587417433e2ac19a72eb37a256d32143be",
+  "environment": {
+    "platform": "macOS arm64",
+    "qt": "6.11.2",
+    "build": "Release Pro",
+    "qpa": "offscreen",
+    "fixture_only": true
+  },
+  "build_log_sha256": "ccc5542c6a6b9ab8114a014d428b39e5fa91694775ac65b7d281e8a71e1a30e0",
+  "source_sha256": {
+    "apps/daemon/src/cli/main.cpp": "4bbc1a75b795cafdeb06d0d7367ae6f80485a3d0186cff89aba3ecabac65546d",
+    "apps/daemon/src/protocol/DaemonProtocol.cpp": "2b3aaef651ee7b808a425d5bd05f0c1099b4e3b2debc01cd3be9a69f1cd130e8",
+    "apps/daemon/src/runtime/SessionHost.cpp": "37affc2806a4d22f3c1109299bb2ac885a7c9c02a1ef1804a649cbc248b551dc",
+    "apps/daemon/src/runtime/SessionHostCatalog.cpp": "805835f407ade809f25fb7f6a4ebb1d8e9fbad3db548029159c5d59fcb42b9f9",
+    "apps/daemon/src/storage/LocalJournal.cpp": "0bf0d325032e92b6c9336eaf58138aff97ee911881759002cbad61ad5da0bd85",
+    "apps/daemon/src/storage/LocalJournal.h": "8b10d76a50b7785441b8cc1a9051c78367fdca81dc1ec2976957a50833cfa1e4",
+    "apps/daemon/src/storage/LocalJournalDeletion.cpp": "5eefbb0f9f923bd9ee9bf9bbd29e55a26dd0cadea23dac3f436725eb6ea5388c",
+    "modules/ai/src/agent/CodexAppServer.h": "14c604fe4e787ed18586df036d221298324cc3bd367b1aa878e1d7a5e779d77b",
+    "modules/ai/src/agent/CodexAppServerDaemonSessions.cpp": "d541cfb3074b37e0925277cb2416ce9f27bcb7bf385ec77c237dc754cba81714",
+    "modules/ai/src/agent/CodexDaemonDiscovery.cpp": "32b9e4020222a753175f7cf3d04d27053a78d31fc24e66e588734efe7e54776b",
+    "modules/remote/CMakeLists.txt": "f9ba341ce108ff6e21b58b2b2651a7f9ea9b9c64b1b17b1716ae6c31e5246b61",
+    "modules/remote/src/SessionCatalogReader.cpp": "6e2e9066c80aadd1d4ae5d40bdd3bffd2781b3deb9230b23c4486b444fcfb7d0",
+    "modules/remote/src/SessionCatalogReader.h": "7d3d70bafb94d1f453683965be7ed226b829bd4d9886d276912df2c8313ac0dc",
+    "tests/daemon/DesktopDaemonClientTest.cpp": "f656574542259d0a4c3054699d622aeb45c5784f74e8485d9755ccea5038efbb",
+    "tests/daemon/HeadlessDaemonTest.cpp": "9e07b37e6c0eac12d1fae0dbefecc7f7879699b6510bcb7c5c8599c40fd9f031",
+    "tests/daemon/ProviderDeletionTest.cpp": "00d19531a37e29160beaa48c51890bd22ecc79f7e284b7fea2c14473b0f5f9dc"
+  },
+  "full_pro": {
+    "head": "960387587417433e2ac19a72eb37a256d32143be",
+    "head_after": "960387587417433e2ac19a72eb37a256d32143be",
+    "exit_code": 0,
+    "elapsed_seconds": 383.6,
+    "parallelism": 2,
+    "qpa": "offscreen",
+    "mode": "full",
+    "live_opt_in": false,
+    "targets_passed": 104,
+    "logs_sha256": {
+      "-test.log": "9b511dbc0ea79ba34a43e16a3b1929f29c4f4d44bb3a7daa440e59a08d0f862a",
+      "-LastTest.log": "41b01c155ac52e5254e1aea4ba56e90df9347bd78953d40a417ac3a626e019a9"
+    }
+  },
+  "scale_bridge_cli": {
+    "head": "960387587417433e2ac19a72eb37a256d32143be",
+    "head_after": "960387587417433e2ac19a72eb37a256d32143be",
+    "exit_code": 0,
+    "elapsed_seconds": 21.87,
+    "parallelism": 2,
+    "qpa": "offscreen",
+    "mode": "scale",
+    "live_opt_in": false,
+    "targets_passed": 3,
+    "logs_sha256": {
+      "-test.log": "00074020c8da7d91d9768f60fb6871dbbb954915cacf1b5516929b61eb053188",
+      "-LastTest.log": "b7800430fc9ee03dc04b45454c3be13bc3dbd137fc57684370a1079e5a58df69"
+    }
+  },
+  "scale_case_totals": [
+    "46 passed, 0 failed, 0 skipped, 0 blacklisted, 16904ms",
+    "6 passed, 0 failed, 0 skipped, 0 blacklisted, 1580ms",
+    "30 passed, 0 failed, 1 skipped, 0 blacklisted, 21791ms"
+  ],
+  "scale_metrics": [
+    "ProviderDeletionTest::deletionBacklogCharacterization(1000) delete-characterization rows-per-event-table 1000 chunk-bytes 65536000 synchronous-ms 23",
+    "ProviderDeletionTest::deletionBacklogCharacterization(100000) delete-characterization rows-per-event-table 100000 chunk-bytes 268435456 synchronous-ms 471",
+    "ProviderDeletionTest::deletionBacklogCharacterization(300000) delete-characterization rows-per-event-table 300000 chunk-bytes 268435456 synchronous-ms 1166",
+    "ProviderDeletionTest::tombstoneBacklogCharacterization(1000) tombstone-characterization rows 1000 legacy-ms 3 pages 8 maximum-page-bytes 6900 maximum-page-ms 0 all-pages-ms 7",
+    "ProviderDeletionTest::tombstoneBacklogCharacterization(100000) tombstone-characterization rows 100000 legacy-ms 35 pages 782 maximum-page-bytes 7158 maximum-page-ms 0 all-pages-ms 413",
+    "ProviderDeletionTest::tombstoneBacklogCharacterization(300000) tombstone-characterization rows 300000 legacy-ms 33 pages 2344 maximum-page-bytes 7287 maximum-page-ms 0 all-pages-ms 1182"
+  ],
+  "negative_controls": [
+    {
+      "step": "no-fence-build",
+      "exit_code": 0
+    },
+    {
+      "step": "no-fence-storage",
+      "exit_code": 1
+    },
+    {
+      "step": "no-fence-bridge",
+      "exit_code": 1
+    },
+    {
+      "step": "old-callers-build",
+      "exit_code": 0
+    },
+    {
+      "step": "old-discovery",
+      "exit_code": 1
+    },
+    {
+      "step": "old-cli",
+      "exit_code": 1
+    },
+    {
+      "step": "restored-build",
+      "exit_code": 0
+    },
+    {
+      "restored_source_hashes": {
+        "apps/daemon/src/runtime/SessionHostCatalog.cpp": "805835f407ade809f25fb7f6a4ebb1d8e9fbad3db548029159c5d59fcb42b9f9",
+        "modules/ai/src/agent/CodexDaemonDiscovery.cpp": "32b9e4020222a753175f7cf3d04d27053a78d31fc24e66e588734efe7e54776b",
+        "apps/daemon/src/cli/main.cpp": "4bbc1a75b795cafdeb06d0d7367ae6f80485a3d0186cff89aba3ecabac65546d"
+      }
+    }
+  ],
+  "negative_control_logs_sha256": {
+    "ketplus-280-control-no-fence-bridge.log": "7d5890cdc27603d43aa2078be411cad84ae0dd0e5019265a8ec0ae816c652750",
+    "ketplus-280-control-no-fence-build.log": "94ded197522a7b0a72cb75a8133003eb6e4b57cd3d04a73a306e600a7c205cf7",
+    "ketplus-280-control-no-fence-storage.log": "26cc0bc9a7595279ec6002ecfa977de387d994cefff2e822b882d9bfebabdb59",
+    "ketplus-280-control-old-callers-build.log": "c792e91f2830385676b477df77f6de4055f98050e9c0798ab9f7eaac6cd0309b",
+    "ketplus-280-control-old-cli.log": "3049ba5fc78f17dc7c06756b8b5b43d8dbcc2dc594c4be78ea49851a661b19ab",
+    "ketplus-280-control-old-discovery.log": "c0102483671248baf02051de1daf0d9a109dcb43207950e03d4d2d0fe9d5181c",
+    "ketplus-280-control-restored-build.log": "d11f8fe5da11cba5f5adc483a3b463b8616c79e3656ecf6d37431c67c9b8cda0"
+  },
+  "coverage": [
+    "mutation inserted behind a keyset cursor without broadcast",
+    "transaction rollback preserves revision",
+    "retention/update and reopened journal invalidate snapshot",
+    "malformed revision bytes fail closed",
+    "three restart limit",
+    "incremental discovery uses the shared page reader",
+    "CLI emits complete unique 30000-row JSON catalog via private spool",
+    "legacy catalog above 960KiB fits the actual serialized envelope",
+    "100000/300000-row paging and existing actual-query/type/UTF8 controls"
+  ],
+  "not_verified": [
+    "independent review of this head",
+    "bounded total refresh work or delta/since synchronization",
+    "atomic whole-session deletion latency bound",
+    "whole-history fork bounds",
+    "live provider or user journal",
+    "Windows/Linux/Lite",
+    "mixed multi-GB steady state",
+    "unknown schema/crash/filesystem acceptance",
+    "packaging/install/deploy"
+  ]
+}

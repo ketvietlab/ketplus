@@ -1,0 +1,201 @@
+{
+  "snapshot_at": "2026-11-08T01:17:21.301774+00:00",
+  "source": "GitHub issue and pull request APIs for ketvietlab/ketplus",
+  "day": "2026-11-07",
+  "timezone": "Asia/Ho_Chi_Minh",
+  "merged_prs": [
+    252,
+    251,
+    250,
+    249,
+    248,
+    247,
+    246,
+    245,
+    244,
+    243,
+    242,
+    241,
+    240,
+    237,
+    235,
+    230,
+    228,
+    223,
+    220,
+    217,
+    212,
+    206,
+    205,
+    204,
+    203,
+    202,
+    201,
+    200,
+    199,
+    196,
+    195,
+    194,
+    193,
+    192,
+    191
+  ],
+  "closed_issues": [],
+  "pending_prs_at_snapshot": [
+    {
+      "number": 273,
+      "head": "b59821055c5502315b72ff9af5ef16b499cfbb28",
+      "state": "OPEN",
+      "draft": true
+    },
+    {
+      "number": 272,
+      "head": "fe2e63e829446190e97da171e929b2bc973d90f6",
+      "state": "OPEN",
+      "draft": true
+    },
+    {
+      "number": 271,
+      "head": "b0343766695dac75a649ca37eb3b48fbed2884b7",
+      "state": "OPEN",
+      "draft": true
+    },
+    {
+      "number": 270,
+      "head": "966e3c0a8d802d0bdb58be88450a0c1536ca38e3",
+      "state": "OPEN",
+      "draft": true
+    },
+    {
+      "number": 269,
+      "head": "6abf2dc13977dbf430acb44e788733cf6a311aa9",
+      "state": "OPEN",
+      "draft": true
+    },
+    {
+      "number": 268,
+      "head": "f3d648d481233f75ac30a6c2071aaad7333f2c5c",
+      "state": "OPEN",
+      "draft": true
+    },
+    {
+      "number": 267,
+      "head": "a796bae23dfa45b3a4a021ad96b586c20d6889f4",
+      "state": "OPEN",
+      "draft": true
+    },
+    {
+      "number": 266,
+      "head": "c663eea96ad5fdd9ae2fdbca5c2ecf10b539d5cb",
+      "state": "OPEN",
+      "draft": true
+    },
+    {
+      "number": 265,
+      "head": "d761f28660f42d781c1b8fdbbf7fa87f092887f9",
+      "state": "OPEN",
+      "draft": true
+    },
+    {
+      "number": 264,
+      "head": "e3aafd8d29d040f8e40734a18575c9ede39cbf5b",
+      "state": "OPEN",
+      "draft": true
+    },
+    {
+      "number": 263,
+      "head": "6b1b034ab73338505384fa740e5c7335252df41c",
+      "state": "OPEN",
+      "draft": true
+    },
+    {
+      "number": 262,
+      "head": "4813b747d1e01aeddd75bec303260b63a7a9c159",
+      "state": "OPEN",
+      "draft": true
+    },
+    {
+      "number": 261,
+      "head": "5d4f44bf7b974c3b20ff67f9310ab6f33da3eb13",
+      "state": "OPEN",
+      "draft": true
+    },
+    {
+      "number": 260,
+      "head": "d835d3348b19794476b7030383be3feae0808060",
+      "state": "OPEN",
+      "draft": true
+    },
+    {
+      "number": 259,
+      "head": "6fd79e51711da1557aedf39d4ff2f763d1f11b36",
+      "state": "OPEN",
+      "draft": true
+    },
+    {
+      "number": 258,
+      "head": "d3b1cee9a2f9c276764d40c4a5cc876d3b17134b",
+      "state": "OPEN",
+      "draft": true
+    },
+    {
+      "number": 257,
+      "head": "927d6f0de9a9ff8a48a7e478288dd72ae8764bc0",
+      "state": "OPEN",
+      "draft": true
+    },
+    {
+      "number": 256,
+      "head": "413514afff07a713355ad325ef4fa7d7c7c98ddc",
+      "state": "OPEN",
+      "draft": true
+    },
+    {
+      "number": 255,
+      "head": "20156fc754b7ee89c79eccd78837b55363a59043",
+      "state": "OPEN",
+      "draft": true
+    },
+    {
+      "number": 254,
+      "head": "7397165c70045e7dc3c953db10dbac9ecb29b97d",
+      "state": "OPEN",
+      "draft": true
+    },
+    {
+      "number": 253,
+      "head": "98ad19467aac12e311550681c837daa81e189126",
+      "state": "OPEN",
+      "draft": true
+    }
+  ],
+  "in_scope_issue_states": {
+    "128": "OPEN",
+    "110": "OPEN",
+    "109": "OPEN",
+    "108": "OPEN",
+    "107": "OPEN",
+    "105": "OPEN",
+    "103": "OPEN",
+    "97": "OPEN",
+    "85": "OPEN",
+    "78": "OPEN",
+    "77": "OPEN",
+    "75": "OPEN",
+    "74": "OPEN",
+    "73": "OPEN",
+    "72": "OPEN",
+    "71": "OPEN",
+    "69": "OPEN",
+    "68": "OPEN",
+    "67": "OPEN",
+    "66": "OPEN",
+    "65": "OPEN"
+  },
+  "limits": [
+    "PR merge counts are not issue completion",
+    "per-branch test results are not combined integration results",
+    "the migration-copy package was already in progress and is additional to the pending-PR snapshot",
+    "rollout and UI criteria remain open; no issue was closed by this audit"
+  ]
+}
