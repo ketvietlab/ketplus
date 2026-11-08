@@ -754,6 +754,12 @@ revision. `raw_activity_details` is an explicit local read option used for
 conversation export. Relay/mobile remain on the legacy projection. See
 [ADR 0022](decisions/0022-daemon-activity-group-details.md).
 
+Opening a journal only marks sessions whose activity index is behind in
+`activity_backfill`. `SessionHost` drains the markers with bounded passes that
+defer on a busy journal, and a new event indexes its session's earlier rows
+first. Until then older activity may read ungrouped
+([ADR 0097](decisions/0097-activity-backfill-after-open.md)).
+
 ## Permanent deletion propagation and provider cleanup
 
 An idle `session.delete` transaction removes the session and its per-generation

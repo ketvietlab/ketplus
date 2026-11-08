@@ -181,6 +181,10 @@ class SessionHost final : public QObject, private AgentHostPort {
     void scheduleHistoryPurge(int delayMs);
     void purgeDeletedHistory();
     bool historyPurgeScheduled_{false};
+    // Drives bounded passes indexing activity behind older history (ADR 0097).
+    void scheduleActivityBackfill(int delayMs);
+    void backfillActivity();
+    bool activityBackfillScheduled_{false};
     [[nodiscard]] std::optional<QJsonArray>
     providerCleanupTargets(const StoredSession& session) const;
     QSet<QString> providerCleanupInFlight_;

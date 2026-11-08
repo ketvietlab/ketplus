@@ -2012,7 +2012,8 @@ class DaemonProtocolTest final : public QObject {
     void startupCommitFailurePreservesErrorAndReleasesTransaction_data() {
         QTest::addColumn<QString>("phase");
         QTest::addColumn<QString>("operation");
-        for (const auto& phase : {"turn", "replay", "activity"})
+        // Activity indexing no longer runs at open (ADR 0097); JournalStartupTest covers it.
+        for (const auto& phase : {"turn", "replay"})
             for (const auto& operation : {"none", "read-policy", "write-policy", "write-session"}) {
                 const auto name = QString("%1-%2").arg(phase, operation).toLatin1();
                 QTest::newRow(name.constData()) << QString(phase) << QString(operation);

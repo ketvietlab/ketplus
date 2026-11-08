@@ -391,6 +391,16 @@ bool LocalJournal::finishFork(ForkCopy& copy, StoredSession& fork, QString* erro
         return fail(started.lastError().isValid()
                         ? started.lastError().text()
                         : QStringLiteral("The fork timestamp was not stored."));
+    // A copy of a source still being indexed keeps catching up as its own session (ADR 0097).
+    QSqlQuery backfill(database_);
+    backfill.prepare(QStringLiteral(
+        "INSERT OR IGNORE INTO activity_backfill SELECT s.id,s.generation FROM sessions s LEFT "
+        "JOIN activity_heads h ON h.session_id=s.id AND h.generation=s.generation WHERE s.id=? "
+        "AND s.generation=? AND s.last_cursor>COALESCE(h.indexed_cursor,0)"));
+    backfill.addBindValue(fork.id);
+    backfill.addBindValue(fork.generation);
+    if (!backfill.exec())
+        return fail(backfill.lastError().text());
     QString preparationError;
     if (beforeCommit && !beforeCommit(&preparationError))
         return fail(preparationError.isEmpty()

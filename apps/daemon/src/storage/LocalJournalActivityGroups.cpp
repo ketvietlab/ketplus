@@ -71,52 +71,16 @@ bool LocalJournal::initializeActivityGroups() {
             return false;
         }
     }
-    // Upgrade old journals once, streaming retained events rather than materializing history.
-    if (!database_.transaction()) {
-        setError(database_.lastError().text());
-        return false;
-    }
-    QSqlQuery sessions(database_);
-    if (!sessions.exec(QStringLiteral(
-            "SELECT s.id,s.generation,COALESCE(h.indexed_cursor,0) FROM sessions s LEFT JOIN "
-            "activity_heads h ON h.session_id=s.id AND h.generation=s.generation WHERE "
-            "s.last_cursor>COALESCE(h.indexed_cursor,0)"))) {
-        setError(sessions.lastError().text());
-        database_.rollback();
-        return false;
-    }
-    QList<QVariantList> pending;
-    while (sessions.next())
-        pending.append({sessions.value(0), sessions.value(1), sessions.value(2)});
-    sessions.finish();
-    for (const auto& session : pending) {
-        QSqlQuery rows(database_);
-        rows.prepare("SELECT cursor,turn_sequence,event_type,payload FROM replay_events WHERE "
-                     "session_id=? AND generation=? AND cursor>? ORDER BY cursor");
-        for (const auto& value : session)
-            rows.addBindValue(value);
-        if (!rows.exec()) {
-            setError(rows.lastError().text());
-            database_.rollback();
-            return false;
-        }
-        while (rows.next()) {
-            QString error;
-            if (!updateActivityGroups(
-                    session.at(0).toString(), session.at(1).toLongLong(),
-                    rows.value(0).toLongLong(), rows.value(1).toLongLong(),
-                    rows.value(2).toString(),
-                    QJsonDocument::fromJson(rows.value(3).toString().toUtf8()).object(), &error)) {
-                setError(error);
-                database_.rollback();
-                return false;
-            }
-        }
-    }
-    if (!database_.commit()) {
-        const QString commitError = database_.lastError().text();
-        database_.rollback();
-        setError(commitError);
+    // A session indexed behind its history is caught up in bounded passes after open, or before
+    // its next event, instead of blocking startup (ADR 0097).
+    if (!query.exec(QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS activity_backfill (session_id TEXT NOT NULL, generation "
+            "INTEGER NOT NULL, PRIMARY KEY(session_id,generation))")) ||
+        !query.exec(QStringLiteral(
+            "INSERT OR IGNORE INTO activity_backfill SELECT s.id,s.generation FROM sessions s "
+            "LEFT JOIN activity_heads h ON h.session_id=s.id AND h.generation=s.generation "
+            "WHERE s.last_cursor>COALESCE(h.indexed_cursor,0)"))) {
+        setError(query.lastError().text());
         return false;
     }
     return true;
@@ -134,6 +98,15 @@ bool LocalJournal::updateActivityGroups(const QString& session, qint64 generatio
                          : QStringLiteral("Activity projection row was not stored.");
         return false;
     };
+    // Index older history first, so this event's group sees every earlier item.
+    if (!activityCatchUp_) {
+        QString catchUpError;
+        if (!catchUpActivityBeforeEvent(session, generation, cursor, &catchUpError)) {
+            if (error)
+                *error = catchUpError;
+            return false;
+        }
+    }
     qint64 head = 0;
     QSqlQuery current(database_);
     current.prepare("SELECT group_cursor,turn_sequence FROM activity_heads WHERE session_id=? AND "
