@@ -1,6 +1,6 @@
 # Backend hardening execution plan
 
-Updated: 2026-11-07. Owner: conversation #2739. Independent reviewer: #6212.
+Updated: 2026-11-08. Owner: conversation #2739. Independent reviewer: #7705 (reassigned by the user on 2026-11-08).
 Baseline: integration `90388ea772bf75267e66233ee66566bc0e2e18e8` (PR #212).
 
 This is the durable execution queue for finishing the existing non-UI domain
@@ -35,10 +35,15 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
    regression; run the required matrix; record the final commit and evidence.
 3. A review finding loops back to the same item. A PASS only unlocks the merge
    gate; it does not complete merge, cleanup, packaging or deployment.
-4. Send one complete exact-head request to #6212. While an item awaits review,
-   continue an independent ready audit. Do not poll the peer or stop with an
-   invitation to continue. If all remaining items depend on an external gate,
-   record its owner and exact missing evidence instead of claiming completion.
+4. Send one complete exact-head request to #7705. Do not poll the peer or bypass
+   a held dispatch. The 2026-11-08 closure audit supersedes the previous rule to
+   start another independent audit while waiting: freeze new audit branches,
+   finish the already-started migration-copy package and drain the existing
+   review queue by issue. Review/merge the #71 fixes and finish that issue's
+   acceptance before starting the next domain; do not wait for all drafts to
+   merge before preparing its closure. Allow at most one new unreviewed package
+   needed for the current issue. Resolve its findings before advancing.
+   Record external gates separately from unperformed work owned by #2739.
 5. After exact-head tests and review pass, merge using the existing authorization.
    Address all P0/P1/P2 findings; do not self-accept a risk to empty the checklist.
    Lower-severity findings are either fixed or explicitly accepted by the user.
@@ -801,7 +806,28 @@ remain explicitly open.
 - [x] Bound merged output while reading, require successful exit, retain Unknown
   retry behavior, and only join matching executable generations (ADR 0072).
   Focused fixture 13/13 passes, including early flood termination and repair.
-- [ ] Affected adapter/compatibility/lifecycle matrix, independent exact-head
-  review, merge and cleanup. No UI or shared-header changes.
+- [x] #258 head `d3b1cee9`: Release headless build and affected 15/15 targets
+  PASS (89.23 s). Generated build removed after preserving evidence.
+- [ ] Independent exact-head review, merge and source cleanup. No UI or shared
+  header changes; dispatch remains held by the chain limit.
 - [ ] Continue stderr/encoding, process I/O/event-loop and waiter-admission bounds;
   H3.1 is not complete solely from these three provider packages.
+
+
+### H3.1/H3.4 oversized routing string semantics
+
+- [x] Original scanner fails 24 encoding/path cases; 14 valid/refusal checks pass.
+  The first test-harness run did not register the new slots and is not evidence.
+- [x] Preserve bounded raw tokens, validate/decode JSON strings, refuse dotted-key
+  aliases and withhold all routing when captured metadata is invalid (ADR 0073).
+  Expanded focused suite 91/91 includes depth/memory and next-line recovery.
+- [ ] Full Pro shared-header matrix, integrate parent #256, independent exact-head
+  review, merge and cleanup. No UI implementation change.
+- [ ] Duplicate keys/outer structure, RPC request-id typing, timeout/recovery and
+  broader stderr/normal-frame encoding remain open; this is selective extraction.
+
+### 2026-11-08 integration packet #71
+
+- #256 is independently reviewed and merged at `7ceebc34`; earlier dispatch-hold notes above are historical. Reviewer is now #7705.
+- #257 includes the reviewed #259 production/test tree and the documentation clarification in ADR 0073; final matrix and review of this combined head remain required before merge.
+- Keep #71 open for the remaining catalog output, malformed normal frames, request semantics and capability acceptance. No UI implementation, provider quota or deployment.
