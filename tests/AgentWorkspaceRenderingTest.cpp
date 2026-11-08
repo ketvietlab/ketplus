@@ -512,6 +512,81 @@ void AgentWorkspaceViewTest::welcomeSitsInTheViewport() {
         QStringLiteral("Your Agent works in ketplus-app on develop.")));
 }
 
+void AgentWorkspaceViewTest::welcomeScrollsToEveryStarter_data() {
+    QTest::addColumn<QSize>("size");
+    QTest::addColumn<qreal>("zoom");
+    QTest::addColumn<bool>("paired");
+    QTest::newRow("short") << QSize(720, 520) << qreal(1) << true;
+    QTest::newRow("short, large") << QSize(720, 520) << qreal(1.25) << true;
+    QTest::newRow("largest") << QSize(1200, 800) << qreal(1.5) << true;
+    QTest::newRow("narrow, largest") << QSize(720, 560) << qreal(1.5) << false;
+}
+
+// A short or zoomed viewport scrolls the welcome, and every starter can be clicked.
+void AgentWorkspaceViewTest::welcomeScrollsToEveryStarter() {
+    QFETCH(QSize, size);
+    QFETCH(qreal, zoom);
+    QFETCH(bool, paired);
+    auto& appearance = ket::Appearance::instance();
+    const qreal previousZoom = appearance.zoom();
+    appearance.setZoom(zoom);
+    const auto restoreZoom = qScopeGuard([&] { appearance.setZoom(previousZoom); });
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.setAgentAvailable(true);
+    view.setProductSidebarVisible(false);
+    view.resetMessages({}, "welcome");
+    view.resize(size);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
+    auto* root = view.quickView()->rootObject();
+    QVERIFY(root);
+    auto* prompt = root->findChild<QQuickItem*>("agentPrompt");
+    auto* composer = root->findChild<QQuickItem*>("agentComposer");
+    QQuickItem* welcome = nullptr;
+    QTRY_VERIFY((welcome = findVisualItem(root, QStringLiteral("agentEmptyState"))) &&
+                welcome->isVisible() && welcome->height() > 0);
+    QVERIFY(prompt && composer);
+    QTest::qWait(50);
+    QList<QQuickItem*> starters;
+    const auto collect = [&](auto&& self, QQuickItem* item) -> void {
+        if (item->objectName() == QStringLiteral("workspaceSuggestion"))
+            starters.append(item);
+        for (auto* child : item->childItems())
+            self(self, child);
+    };
+    collect(collect, welcome);
+    QCOMPARE(starters.size(), 4);
+    QCOMPARE(starters.at(0)->x() != starters.at(1)->x(), paired);
+    const auto viewportTop = welcome->mapToItem(root, QPointF()).y();
+    const auto viewportBottom = qMin(welcome->mapToItem(root, QPointF(0, welcome->height())).y(),
+                                     composer->mapToItem(root, QPointF()).y());
+    const auto maximum =
+        qMax(0.0, welcome->property("contentHeight").toDouble() - welcome->height());
+    for (auto* starter : starters) {
+        const auto contentTop =
+            starter->mapToItem(welcome, QPointF()).y() + welcome->property("contentY").toDouble();
+        welcome->setProperty(
+            "contentY",
+            qBound(0.0, contentTop + starter->height() - (viewportBottom - viewportTop), maximum));
+        QTest::qWait(20);
+        const auto top = starter->mapToItem(root, QPointF()).y();
+        const auto bottom = top + starter->height();
+        QVERIFY2(top >= viewportTop - 1 && bottom <= viewportBottom + 1,
+                 qPrintable(QStringLiteral("%1 at %2–%3, visible %4–%5")
+                                .arg(starter->property("text").toString())
+                                .arg(top)
+                                .arg(bottom)
+                                .arg(viewportTop)
+                                .arg(viewportBottom)));
+        const auto centre =
+            starter->mapToScene(QPointF(starter->width() / 2, starter->height() / 2)).toPoint();
+        QTest::mouseClick(view.quickView(), Qt::LeftButton, {}, centre);
+        QTRY_COMPARE(prompt->property("text").toString(), starter->property("text").toString());
+        prompt->setProperty("text", QString{});
+    }
+}
+
 void AgentWorkspaceViewTest::composerPreview() {
     auto& appearance = ket::Appearance::instance();
     const auto previousMode = appearance.mode();

@@ -4,8 +4,9 @@ import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
 
 // A new conversation, as the mock's workspace/welcome draws it: the mark, a question, where
-// the Agent works, and starters in two columns at the transcript's reading width.
-Item {
+// the Agent works, and starters in two columns at the transcript's reading width. It scrolls on
+// its own when a short or zoomed viewport cannot show every starter.
+Flickable {
     id: emptyState
     required property var workspace
     readonly property real column: Math.min(width - KetTheme.px(48, KetTheme.zoom), KetTheme.px(760, KetTheme.zoom))
@@ -17,6 +18,12 @@ Item {
         return "";
     }
     objectName: "agentEmptyState"
+    clip: true
+    contentWidth: width
+    contentHeight: welcome.y + welcome.implicitHeight + KetTheme.px(24, KetTheme.zoom)
+    interactive: contentHeight > height
+    boundsBehavior: Flickable.StopAtBounds
+    Basic.ScrollBar.vertical: Basic.ScrollBar { policy: emptyState.interactive ? Basic.ScrollBar.AsNeeded : Basic.ScrollBar.AlwaysOff }
 
     Column {
         id: welcome
