@@ -207,6 +207,11 @@ the corresponding Atlas mock first.
   tombstones, legacy fallback, malformed pages, fresh live-catalog ordering and
   stale reconnect callbacks. Opt in to 100k/300k synthetic deletion/catalog
   probes with `KETPLUS_RUN_DELETE_BACKLOG_TESTS=1`; they use temporary journals.
+- Live-only discovery (ADR 0092): run provider deletion, Desktop daemon client,
+  Desktop session discovery, lifecycle and headless CLI targets. Real temporary
+  daemons with fake providers cover 20k/100k retained tombstones and zero repeated
+  deletion signals; scripted peers cover legacy/paged fallback and replay gaps.
+  Server tests prove tombstone tables are not read and retain the wire limit.
 - One Pro module: focused target plus its directly affected tests.
 - Shared header or desktop shell: full build and full Pro test suite.
 - `core/` change: the Lite suite (`ctest --preset lite-dev`), then the full Pro suite.

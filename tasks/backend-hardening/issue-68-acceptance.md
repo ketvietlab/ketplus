@@ -76,7 +76,7 @@ operation/revision fencing and reopen remained correct. Tombstone catalogs at
 The active fix adds versioned bounded pages and sequential bridge consumption
 (ADR 0091). Explicit atomic-delete latency is still open; no partial deletion is
 acknowledged as complete. Final Pro104/104 and focused scale/bridge gates pass at `221eb2f8`;
-independent review/merge of the paging fix remains pending. See
+independent review and merge were completed by the #280 follow-up below. See
 [evidence](evidence/h1-tombstone-pagination-qt.json).
 
 The #274 review also noted that successful compaction with retained staging
@@ -89,7 +89,16 @@ changed catalog restarts at most three times; the CLI spools history privately.
 Concurrent insertion behind the cursor must be observed on restart, even with
 no deletion broadcast. Code `96038758` passes full Pro104/104 and scale/bridge/CLI3/3
 (deletion46, bridge30+1 live skip, headless6). Negative controls catch the missing
-fence and old discovery/CLI callers. Independent review/merge remains pending;
+fence and old discovery/CLI callers. #7705 independently passed final head
+`8ec98aee` (full Pro104/104); #280 merged at `fdec1645`;
 [source and log hashes](evidence/h1-tombstone-snapshot-callers-qt.json) record the
 new evidence. Delta/since refresh work and atomic deletion latency remain
 separate from this correction.
+
+
+Independent #280 review also measured 100k tombstones causing 857 ms and a
+full batch of deletion signals on each incremental discovery. ADR 0092 separates
+that path into a single live-only request. Initial/reconnect and CLI reconciliation
+remain complete; per-row revision-trigger writes and total refresh work are not
+claimed bounded. Release tests and independent review for this follow-up remain
+pending. The next separate acceptance gate is still atomic session-delete work.
