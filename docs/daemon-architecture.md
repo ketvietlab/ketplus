@@ -582,6 +582,12 @@ and `sign_in_error` when it failed; `remote.sign_in.cancel` and sign-out stop it
 
 ## Lifecycle
 
+Claude/Cursor stdout is read in 64-KiB chunks and checks each raw line, including
+an unfinished suffix, against the existing 16-MiB limit before parse (ADR 0071).
+An over-limit generation is closed/drained before pending callbacks fail and the
+process is killed; later output from it cannot publish another request. Normal
+lines and a fresh process retain their existing behavior.
+
 Oversized Codex metadata decodes bounded JSON strings and refuses literal dotted
 keys as nested paths (ADR 0073). Invalid captured metadata clears routing for that
 line; subsequent lines reset normally. This does not validate the entire discarded

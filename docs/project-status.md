@@ -5,6 +5,10 @@ milestone changes state.
 
 ## Implemented
 
+- Claude/Cursor stdout enforces the 16-MiB limit per raw line before parsing,
+  including complete lines and partial suffixes after valid lines (ADR 0071).
+  Bounded reads and failure draining preserve valid frames and fresh generations.
+
 - Oversized provider routing uses bounded JSON string decoding and structural
   path segments (ADR 0073). Invalid captured metadata withholds all routing fields
   for the line; valid escapes/Unicode and subsequent messages remain usable.
