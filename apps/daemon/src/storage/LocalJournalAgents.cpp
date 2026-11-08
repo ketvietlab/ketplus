@@ -89,7 +89,14 @@ bool LocalJournal::initializeAgents() {
         QStringLiteral("CREATE INDEX IF NOT EXISTS agent_messages_sender ON "
                        "agent_messages(from_session, from_generation, created_at)"),
         QStringLiteral(
-            "CREATE INDEX IF NOT EXISTS agent_messages_chain ON agent_messages(chain_id)")};
+            "CREATE INDEX IF NOT EXISTS agent_messages_chain ON agent_messages(chain_id)"),
+        // ADR 0067. One reviewer per working conversation.
+        QStringLiteral("CREATE TABLE IF NOT EXISTS conversation_reviewers (session_id TEXT "
+                       "PRIMARY KEY, reviewer_session_id TEXT NOT NULL, auto_fix INTEGER NOT "
+                       "NULL DEFAULT 1, max_rounds INTEGER NOT NULL DEFAULT 2, updated_at TEXT "
+                       "NOT NULL)"),
+        QStringLiteral("CREATE INDEX IF NOT EXISTS conversation_reviewers_reviewer ON "
+                       "conversation_reviewers(reviewer_session_id)")};
     for (const QString& statement : statements) {
         if (!query.exec(statement)) {
             setError(query.lastError().text());
@@ -363,10 +370,17 @@ bool LocalJournal::releaseAgentState(const QString& sessionId, const qint64 gene
         "to_session = ? AND to_generation = ? AND state IN ('queued', 'held', 'delivered')"));
     expire.addBindValue(sessionId);
     expire.addBindValue(generation);
-    if (!release.exec() || !expire.exec()) {
+    // A deleted conversation neither reviews nor is reviewed (ADR 0067).
+    QSqlQuery reviewers(database_);
+    reviewers.prepare(QStringLiteral(
+        "DELETE FROM conversation_reviewers WHERE session_id = ? OR reviewer_session_id = ?"));
+    reviewers.addBindValue(sessionId);
+    reviewers.addBindValue(sessionId);
+    if (!release.exec() || !expire.exec() || !reviewers.exec()) {
         if (error)
-            *error = release.lastError().text().isEmpty() ? expire.lastError().text()
-                                                          : release.lastError().text();
+            *error = !release.lastError().text().isEmpty() ? release.lastError().text()
+                     : !expire.lastError().text().isEmpty() ? expire.lastError().text()
+                                                            : reviewers.lastError().text();
         return false;
     }
     return true;

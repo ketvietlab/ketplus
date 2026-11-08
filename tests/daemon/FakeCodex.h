@@ -99,6 +99,8 @@ for line in sys.stdin:
         emit({'method': 'thread/name/updated', 'params': {
             'threadId': thread_id, 'threadName': name}})
     elif method == 'turn/start':
+        log('turn-start:' + json.dumps({'approvalPolicy': message['params'].get('approvalPolicy'),
+                                        'sandboxPolicy': message['params'].get('sandboxPolicy')}))
         turns += 1
         thread_id = message['params']['threadId']
         turn_id = 'turn-' + str(turns)

@@ -204,6 +204,17 @@ milestone changes state.
   re-injection after a daemon restart and a fork's own number. Cursor live
   turns and Codex per-thread config on `thread/fork` alone are not verified.
 
+- Automatic turn review, daemon side (ADR 0067, #120). A conversation can name a
+  Claude or Codex reviewer conversation, an existing one or a new read-only one,
+  through local `session.reviewer.get/set`. Each completed turn with changes
+  sends the reviewer one `review` request with the diff. The review turn runs
+  read-only (Codex read-only sandbox with approvals `never`; Claude plan mode with
+  every permission request denied). A reply with findings starts the working
+  agent's fix turn until `max_rounds` (default 2); "no findings", auto-fix off or
+  the last round only records the reply. Verified with the scripted fake
+  providers and sidecar tests. The Desktop picker and the rendering of recorded
+  reviews are not implemented yet, and no live provider run was made.
+
 - Claude usage separates SDK session estimates/tokens and query budget from optional
   Admin-key organization month-to-date cost/tokens. Admin credentials remain in a
   separate host Keychain entry, outside agent environments and journals. Reports are

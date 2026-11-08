@@ -13,7 +13,14 @@
 namespace ketplus::daemon {
 namespace {
 
+// ADR 0067: a review of another conversation's turn is read-only whatever the reviewer's mode.
+bool reviewGuard(const QJsonObject& options) {
+    return options.value(QStringLiteral("review_guard")).toBool();
+}
+
 QString sandboxName(const QJsonObject& options) {
+    if (reviewGuard(options))
+        return QStringLiteral("read-only");
     if (options.value(QStringLiteral("execution_policy")).toString() == QStringLiteral("full"))
         return QStringLiteral("danger-full-access");
     if (options.value("execution_policy").toString() == "read-only")
@@ -26,6 +33,9 @@ QString sandboxName(const QJsonObject& options) {
 }
 
 QString approvalPolicy(const QJsonObject& options) {
+    // A guarded review never asks the user, so no prompt can widen its sandbox.
+    if (reviewGuard(options))
+        return QStringLiteral("never");
     return options.value(QStringLiteral("execution_policy")).toString() == QStringLiteral("full")
                ? QStringLiteral("never")
                : QStringLiteral("on-request");
@@ -203,6 +213,8 @@ void SessionHost::beginClaudeTurn(const QString& sessionId, const qint64 generat
                        // reaches the agent as its prompt-free mode, not only Codex's sandbox.
                        {QStringLiteral("permission"), sandboxName(options)},
                        {QStringLiteral("images"), imagePaths(input)}};
+    if (reviewGuard(options))
+        params.insert(QStringLiteral("reviewGuard"), true);
     params.insert(QStringLiteral("freshContext"), it->stored.threadId.isEmpty());
     // The handoff transcript lives outside the worktree; Claude may read it without asking.
     const QString handoff = handoffDirectory(sessionId);

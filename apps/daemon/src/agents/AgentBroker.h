@@ -9,6 +9,7 @@
 #include <QString>
 #include <QTimer>
 
+#include <functional>
 #include <optional>
 
 namespace ketplus::daemon {
@@ -95,6 +96,8 @@ class AgentBroker final : public QObject {
     // Conversations whose running turn a message started, by session id: the first sender's
     // `number`, `title` and `kind`. Clients show the sender on the conversation's row.
     [[nodiscard]] QHash<QString, QJsonObject> automaticTurnSenders() const;
+    // ADR 0067: a reviewer was assigned; the next finished turn is compared with this moment.
+    void noteReviewerAssigned(const QString& sessionId);
 
   private:
     struct TurnOrigin final {
@@ -106,6 +109,13 @@ class AgentBroker final : public QObject {
         QStringList expectReply;
         QString lastItemId;
         QString lastText;
+        // Started by a review request: read-only, and never itself reviewed (ADR 0067).
+        bool review{false};
+    };
+    // A worktree state to compare the next finished turn with: a commit and untracked files.
+    struct ReviewSnapshot final {
+        QString base;
+        QSet<QString> untracked;
     };
 
     [[nodiscard]] QJsonObject whoami(const AgentConversation& caller) const;
@@ -125,6 +135,15 @@ class AgentBroker final : public QObject {
     void notice(const AgentMessageRecord& message, const QString& state, const QString& reason);
     [[nodiscard]] static QJsonObject messageJson(const AgentMessageRecord& message);
     [[nodiscard]] static QJsonObject conversationJson(const AgentConversation& conversation);
+    // ADR 0067, in AgentBrokerReviews.cpp.
+    void snapshotWorktree(const QString& sessionId, const QString& worktree,
+                          std::function<void(ReviewSnapshot)> done);
+    void reviewFinishedTurn(const QString& sessionId, qint64 generation, const QString& status,
+                            const TurnOrigin& origin);
+    void postReview(const QString& sessionId, qint64 generation, const TurnOrigin& origin,
+                    const QString& base, const QString& diff, const QStringList& added);
+    // Records a review reply that should not start a turn. False when it is delivered as usual.
+    bool recordReviewReply(AgentMessageRecord& reply, const AgentMessageRecord& request);
 
     LocalJournal* journal_{nullptr};
     AgentHostPort* host_{nullptr};
@@ -132,6 +151,9 @@ class AgentBroker final : public QObject {
     QHash<QString, QString> tokenBySession_;
     QHash<QString, TurnOrigin> turns_;
     QSet<QString> pendingDeliveries_;
+    QHash<QString, ReviewSnapshot> reviewSnapshots_;
+    // The latest request a user typed in each conversation, for its review.
+    QHash<QString, QString> userRequests_;
     QTimer deliveryTimer_;
     QTimer expiryTimer_;
 };

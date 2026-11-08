@@ -461,6 +461,8 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& request, const QString
     // Local administration only, checked before the command-result cache.
     if (type.startsWith("session.agent_messages.") && !localClient(clientId))
         return error("forbidden", "Held-message authorization requires the local Desktop UI.");
+    if (type.startsWith("session.reviewer.") && !localClient(clientId))
+        return error("forbidden", "Choosing a reviewer requires the local Desktop UI.");
     if (type.startsWith("storage.") && clientId == "cloud-control-v2")
         return error("forbidden", "Storage settings require local administration.");
     if (type.startsWith("session.agent_messages.")) {
@@ -542,6 +544,9 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& request, const QString
     } else if (type == QStringLiteral("session.agent_messages.read") ||
                type == QStringLiteral("session.agent_messages.release")) {
         result = heldAgentMessages(request, type.endsWith(".release"));
+    } else if (type == QStringLiteral("session.reviewer.get") ||
+               type == QStringLiteral("session.reviewer.set")) {
+        result = conversationReviewer(request, type.endsWith(".set"));
     } else if (type == QStringLiteral("session.start_turn")) {
         result = startTurn(request, localClient(clientId));
     } else if (type == QStringLiteral("session.rename")) {
@@ -1385,6 +1390,10 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
     turnOptions.insert(QStringLiteral("effort"), it->stored.effort);
     turnOptions.insert(QStringLiteral("execution_policy"), it->stored.executionPolicy);
     turnOptions.insert(QStringLiteral("mode"), it->stored.mode);
+    // Only the broker's review requests set this; clients cannot (ADR 0067).
+    turnOptions.remove(QStringLiteral("review_guard"));
+    if (agentOrigin.value(QStringLiteral("review_guard")).toBool())
+        turnOptions.insert(QStringLiteral("review_guard"), true);
     turnOptions.insert(QStringLiteral("compactWindow"),
                        context_harness::compactWindowJson(it->stored.compactWindow));
     if (it->stored.contextRevision > 1) {
@@ -2478,6 +2487,7 @@ SessionHost::Session* SessionHost::sessionForThread(const QString& threadId) {
 
 bool SessionHost::isMutating(const QString& messageType) {
     return messageType == QStringLiteral("session.agent_messages.release") ||
+           messageType == QStringLiteral("session.reviewer.set") ||
            messageType == QStringLiteral("storage.size.apply") ||
            messageType == QStringLiteral("storage.retention.apply") ||
            messageType == QStringLiteral("session.worktree.switch") ||

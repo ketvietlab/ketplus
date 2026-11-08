@@ -75,6 +75,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/ProviderCatalogCache.h
     src/agents/AgentBroker.cpp
     src/agents/AgentBrokerRelease.cpp
+    src/agents/AgentBrokerReviews.cpp
     src/agents/AgentBroker.h
     src/agents/AgentInstructions.cpp
     src/agents/AgentInstructions.h
@@ -86,6 +87,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/SessionHostAgents.cpp
     src/storage/AgentMessageRecord.h
     src/storage/LocalJournalAgents.cpp
+    src/storage/LocalJournalReviewers.cpp
+    src/runtime/SessionHostReviewers.cpp
     src/storage/LocalJournalAgentRelease.cpp
     src/runtime/SessionHostUsage.cpp
     src/runtime/SessionHostStorage.cpp
