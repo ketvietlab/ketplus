@@ -490,7 +490,7 @@ void AgentWorkspaceViewTest::sidebarMatchesMockAtEveryZoom() {
     QCOMPARE(indicator->property("color").value<QColor>(), QColor(Qt::transparent));
     QStringList icons;
     for (const auto* id : {"workspace", "explorer", "source-control", "connections"}) {
-        auto* item = root->findChild<QObject*>(QStringLiteral("productNavigation_") + id);
+        auto* item = findVisualItem(root, QStringLiteral("productNavigation_") + id);
         QVERIFY(item);
         icons << item->property("iconName").toString();
     }
