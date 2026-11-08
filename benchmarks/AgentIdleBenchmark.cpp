@@ -2,6 +2,7 @@
 // probe is involved during the measured interval. See run-agent-idle.py.
 #include "KetAppearance.h"
 #include "agent/AgentWorkspaceView.h"
+#include "agent/CodexAppServer.h"
 #include "ui/Theme.h"
 
 #include <QApplication>
@@ -148,6 +149,35 @@ int main(int argc, char** argv) {
                                          {"started", true},
                                          {"status", work == "running" ? "Working" : "Done"}});
     view.setConversations(conversations);
+    // A fixed catalog, so the model panel opens without a provider. Re-sent on request.
+    QVariantList efforts;
+    for (const char* effort : {"low", "medium", "high", "xhigh", "max"})
+        efforts.append(QVariantMap{{"reasoningEffort", effort}, {"description", effort}});
+    const auto model = [&efforts](const QString& provider, const QString& id, const QString& name,
+                                  const QString& description, bool isDefault) {
+        return QVariantMap{
+            {"provider", provider},
+            {"id", id},
+            {"model", id},
+            {"displayName", name},
+            {"description", description},
+            {"isDefault", isDefault},
+            {"modelContextWindow", 500000},
+            {"defaultReasoningEffort", "medium"},
+            {"supportedReasoningEfforts", efforts},
+            {"permissions", ketplus::CodexAppServer::permissionProfilesFor(provider)},
+            {"defaultPermission", "workspace-write"}};
+    };
+    const QVariantList catalog{
+        model("claude", "default", "Default (recommended)",
+              "Sonnet 5.5 · Efficient for routine tasks", true),
+        model("claude", "opus", "Opus 5.5", "For complex work and everyday tasks", false),
+        model("claude", "fable", "Fable 5.1", "For your toughest challenges", false),
+        model("codex", "astra", "GPT-6-Astra", "Available through Codex", true),
+        model("codex", "luna", "GPT-5.6-Luna", "Available through Codex", false)};
+    view.setModels(catalog);
+    QObject::connect(&view, &ketplus::AgentWorkspaceView::modelsRequested, &view,
+                     [&view, catalog] { view.setModels(catalog); });
     view.resetMessages({QVariantMap{{"kind", "user"},
                                     {"messageKey", "prompt"},
                                     {"body", "Inspect the repository and run the focused checks."}},
@@ -172,6 +202,13 @@ int main(int argc, char** argv) {
         QTimer::singleShot(1000, &view, &QWidget::hide);
     if (visibility == "minimized")
         QTimer::singleShot(1000, &view, &QWidget::showMinimized);
+    // Captures show the mock's Claude Opus 5.5 conversation; CPU samples keep the default.
+    if (!panel.isEmpty())
+        view.setConversationConfiguration({{"provider", "claude"},
+                                           {"model", "opus"},
+                                           {"effort", "medium"},
+                                           {"permission", "workspace-write"},
+                                           {"compactWindowSupported", true}});
     if (!panel.isEmpty())
         QTimer::singleShot(1000, &view, [&] {
             auto* button = findItem(view.quickView()->rootObject(), panelButtons.value(panel));
