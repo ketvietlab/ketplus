@@ -231,6 +231,103 @@ class ProviderDeletionTest final : public QObject {
         QVERIFY(bytes <= protocol::maximumFrameBytes);
     }
 
+    void liveCatalogDoesNotReadDeletionHistory() {
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite"));
+        QVERIFY(
+            journal.upsertSession({"live", dir.path(), "codex", {}, {}, "ready", 1, 0, 0, "Live"}));
+        CodexAdapter adapter(dir.filePath("missing-provider"));
+        SessionHost host(&journal, &adapter);
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (QSqlDatabase::database(name).databaseName() == journal.databasePath())
+                db = QSqlDatabase::database(name);
+        QSqlQuery q(db);
+        const QJsonObject payload{{"deleted_sessions_page_version", 1},
+                                  {"session_catalog_live_only", true}};
+        const auto list = [&](const QJsonObject& value) {
+            return host.handleCommand({{"message_type", "session.list"}, {"payload", value}},
+                                      "desktop");
+        };
+        for (const auto& table : {"session_tombstone_catalog", "session_tombstones"}) {
+            QVERIFY(q.exec(QString("DROP TABLE %1").arg(table)));
+            q.finish();
+            const auto result = list(payload);
+            QVERIFY2(result.value("ok").toBool(), qPrintable(QJsonDocument(result).toJson()));
+            QVERIFY(result.value("session_catalog_live_only").toBool());
+            QCOMPARE(result.value("sessions").toArray().size(), 1);
+            QCOMPARE(result.value("sessions").toArray().first().toObject().value("session_id"),
+                     QJsonValue("live"));
+            for (const auto& key : {"deleted_sessions", "deleted_sessions_page_version",
+                                    "deleted_sessions_next", "deleted_sessions_snapshot"})
+                QVERIFY(!result.contains(key));
+            QCOMPARE(list({{"deleted_sessions_page_version", 1}}).value("error_code").toString(),
+                     "journal_error"); // Full reconciliation still fails closed.
+        }
+        QVERIFY(protocol::features(1).contains("session.catalog_live/1"));
+    }
+
+    void liveCatalogRejectsAmbiguousRequests() {
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite"));
+        CodexAdapter adapter(dir.filePath("missing-provider"));
+        SessionHost host(&journal, &adapter);
+        const auto list = [&](const QJsonObject& payload) {
+            return host.handleCommand({{"message_type", "session.list"}, {"payload", payload}},
+                                      "desktop");
+        };
+        const QJsonObject valid{{"deleted_sessions_page_version", 1},
+                                {"session_catalog_live_only", true}};
+        for (const auto& key :
+             {"deleted_sessions_after", "deleted_sessions_snapshot", "deleted_sessions_only"}) {
+            auto invalid = valid;
+            invalid.insert(key, false); // Presence is ambiguous even when false or empty.
+            QCOMPARE(list(invalid).value("error_code"), QJsonValue("invalid_session_catalog"));
+        }
+        for (const auto& value : {QJsonValue("true"), QJsonValue(1), QJsonValue(QJsonValue::Null),
+                                  QJsonValue(QJsonObject{})}) {
+            auto invalid = valid;
+            invalid.insert("session_catalog_live_only", value);
+            QCOMPARE(list(invalid).value("error_code"), QJsonValue("invalid_session_catalog"));
+        }
+        auto invalid = valid;
+        invalid.remove("deleted_sessions_page_version");
+        QCOMPARE(list(invalid).value("error_code"), QJsonValue("invalid_session_catalog"));
+        invalid = valid;
+        invalid.insert("deleted_sessions_page_version", 2);
+        QCOMPARE(list(invalid).value("error_code"), QJsonValue("invalid_tombstone_page"));
+        auto disabled = valid;
+        disabled.insert("session_catalog_live_only", false);
+        const auto normal = list(disabled);
+        QVERIFY(normal.value("ok").toBool());
+        QVERIFY(normal.contains("deleted_sessions"));
+        QVERIFY(!normal.contains("session_catalog_live_only"));
+    }
+
+    void liveCatalogStillChecksTheWireBudget() {
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite"));
+        QVERIFY(journal.upsertSession({"live",
+                                       dir.path(),
+                                       "codex",
+                                       {},
+                                       {},
+                                       "ready",
+                                       1,
+                                       0,
+                                       0,
+                                       QString(protocol::maximumFrameBytes, 'x')}));
+        CodexAdapter adapter(dir.filePath("missing-provider"));
+        SessionHost host(&journal, &adapter);
+        const auto result =
+            host.handleCommand({{"message_type", "session.list"},
+                                {"payload", QJsonObject{{"deleted_sessions_page_version", 1},
+                                                        {"session_catalog_live_only", true}}}},
+                               "desktop");
+        QCOMPARE(result.value("error_code"), QJsonValue("session_catalog_too_large"));
+        QVERIFY(!result.contains("sessions"));
+    }
+
     void tombstoneSnapshotFencesMutationRollbackAndRestart() {
         QTemporaryDir dir;
         LocalJournal journal(dir.filePath("journal.sqlite"));

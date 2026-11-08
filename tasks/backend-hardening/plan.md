@@ -1091,11 +1091,10 @@ Evidence: [h1-failed-journal-reuse-qt.json](evidence/h1-failed-journal-reuse-qt.
 - [x] Implement versioned 128-row/64-KiB tombstone pages with indexed keyset seeks,
   bounded SQL projections and fail-closed legacy overflow; consume sequentially
   in the transport bridge with reconnect and cursor checks. No UI changes.
-- [ ] Final focused/full Pro gates and independent #7705 review, then merge and
-  safe worktree cleanup. Focused Pro passes deletion44/44 and Desktop bridge
-  28 pass/1 live-provider skip, including real IPC with 30k tombstones and reconnect.
-  Original bridge control: 3 pass/2 fail on the selected new/legacy cases; restored
-  source rebuilt. Full matrix still requires its own fixed-commit run.
+- [x] Complete focused/full Pro gates and independent #7705 review, then merge and
+  safe worktree cleanup. The initial deletion44/44 and bridge28+1 live skip
+  evidence is superseded by the reviewed concurrent-catalog follow-up below.
+  Original bridge control: 3 pass/2 fail; restored source rebuilt.
 - [ ] Resume explicit session-delete work bounds while preserving ADR 0055; do
   not label the measured 1.2-second atomic operation bounded or close #68 on this
   pagination fix. Whole-history fork/schema/crash/media gates remain in the dossier.
@@ -1134,8 +1133,29 @@ Evidence: [h1-failed-journal-reuse-qt.json](evidence/h1-failed-journal-reuse-qt.
   scale/bridge/CLI3/3 (21.85 s): deletion46/46, bridge30+1 live skip, headless6/6.
   300k tombstones: 2,344 pages / 1,182 ms; atomic deletion still 1,166 ms.
   Source/log hashes and controls: `evidence/h1-tombstone-snapshot-callers-qt.json`.
-- [ ] Send the final head to #7705 for independent review.
-- [ ] Independent review, merge and linked-worktree/build cleanup.
+- [x] #7705 independently PASSed `8ec98aee`: full Pro104/104, deletion46/46,
+  bridge30+1 live skip, discovery6/6 and headless6/6. Additional 20k/100k actual
+  discovery probes pass. Review: PR #280 review 5817064002.
+- [x] Merge #280 at `fdec1645`; author/reviewer linked worktrees and builds removed.
 - [ ] Continue the separate atomic whole-session deletion gate and remaining #68
   criteria. Per-page bounds do not establish a bounded total history refresh;
   delta/since synchronization remains an explicit follow-up.
+
+
+## 2026-11-08 — #68 live-only incremental discovery
+
+- [x] Integrate reviewed #280 before starting the next change; #68 remains active.
+- [x] Separate one-request live discovery from complete deletion reconciliation,
+  without touching UI. Keep legacy/paged peers, reconnect fencing and event-gap replay.
+- [x] Add regression cases for 20k/100k retained tombstones, zero repeated deletion
+  signals, older peers, missing tombstone tables and full-envelope size errors.
+- [x] Initial Release affected5/5 pass. Previous production fails new server
+  tests (3 pass/2 fail) and discovery tests (3 pass/8 fail); actual discovery
+  repeats exactly 20k/100k deletion signals. Restore source and rebuild.
+- [x] Release affected5/5 at `38ebde39` (56.44 s): deletion45+4 optional scale
+  skips, bridge30+1 live skip, discovery11, lifecycle42+1 live skip, CLI6.
+  Real 20k/100k discovery emits no additional deletion signals. Source/log hashes
+  and previous-code controls: `evidence/h1-live-session-discovery-qt.json`.
+- [ ] Independent #7705 review, merge and safe linked-worktree/build cleanup.
+- [ ] Continue atomic whole-session deletion and remaining dossier gates. Full
+  reconnect walks and per-row revision triggers remain explicit separate limits.

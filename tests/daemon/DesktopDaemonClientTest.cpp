@@ -622,7 +622,7 @@ class DesktopDaemonClientTest final : public QObject {
         QCOMPARE(ipc.connectionCount(), 1);
     }
 
-    void catalogRestartsForDeletionBehindCursorAndDiscoveryAlsoPages() {
+    void catalogRestartsForDeletionBehindCursorButDiscoveryReadsOnlyLiveSessions() {
         QTemporaryDir directory;
         FakeDaemon daemon(useFakeDaemon(directory));
         const auto restore = qScopeGuard(stopUsingFakeDaemon);
@@ -639,7 +639,7 @@ class DesktopDaemonClientTest final : public QObject {
                        "WHERE i<200) INSERT INTO session_tombstones "
                        "SELECT 'middle-'||i,1,1,'op','now' FROM n"));
         q.finish();
-        int changed = 0, walks = 0;
+        int changed = 0, walks = 0, liveReads = 0;
         bool injected = false, discover = false;
         daemon.onRequest = [&](const QJsonObject& request) {
             if (request.value("message_type") != "session.list") {
@@ -648,7 +648,9 @@ class DesktopDaemonClientTest final : public QObject {
             }
             const auto payload = request.value("payload").toObject();
             QCOMPARE(payload.value("deleted_sessions_page_version").toInt(), 1);
-            if (!payload.contains("deleted_sessions_snapshot"))
+            if (payload.value("session_catalog_live_only").toBool())
+                ++liveReads;
+            else if (!payload.contains("deleted_sessions_snapshot"))
                 ++walks;
             auto result = host.handleCommand(request, "desktop");
             if (result.value("error_code") == "session_catalog_changed")
@@ -676,6 +678,7 @@ class DesktopDaemonClientTest final : public QObject {
         QVERIFY(removed.contains("aaa"));
         QCOMPARE(changed, 1);
         QCOMPARE(walks, 2);
+        QSignalSpy repeatedDeletions(&bridge, &CodexAppServer::daemonSessionDeleted);
         discover = true;
         daemon.current->write(
             protocol::encodeFrame({{"message_type", "session.event"},
@@ -686,7 +689,9 @@ class DesktopDaemonClientTest final : public QObject {
         daemon.current->flush();
         QTRY_COMPARE(discovered.size(), 1);
         QCOMPARE(discovered.first().first().toJsonObject().value("session_id").toString(), "fresh");
-        QCOMPARE(walks, 3);
+        QCOMPARE(walks, 2);
+        QCOMPARE(liveReads, 1);
+        QCOMPARE(repeatedDeletions.size(), 0);
     }
 
     void continuouslyChangingCatalogStopsAfterBoundedRetries() {

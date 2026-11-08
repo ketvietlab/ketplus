@@ -723,12 +723,17 @@ returns `deleted_sessions` so reconnecting clients remove stale persisted entrie
 Newer generations are not removed by an older tombstone.
 Tombstone catalogs support opt-in version-1 keyset pages (128 rows/64 KiB), with
 bounded SQL projections and explicit errors for oversized legacy responses. The
-shared transport reader covers Desktop refresh/discovery and `ketplusctl sessions`,
+shared transport reader covers Desktop refresh and `ketplusctl sessions`,
 fences catalog mutations and stale reconnect callbacks, and reads live sessions
 after the walk. A changed catalog restarts at most three times; CLI output uses a
 private temporary spool instead of accumulating tombstones in memory. See
 [ADR 0091](decisions/0091-paged-session-tombstone-catalogs.md); this does not make
 explicit deletion asynchronous or bound the live catalog itself.
+Incremental discovery uses `session_catalog_live_only: true` with page version 1
+([ADR 0092](decisions/0092-live-only-session-discovery.md)): one live-catalog
+request, no tombstone query or deletion signals, and the same wire-byte guard.
+Older paged daemons return page one with live sessions; discovery ignores its
+deletion fields. Initial/reconnect reconciliation still walks the full catalog.
 The tombstone and cleanup-work inserts must each affect one row, and each
 history-table delete must leave no matching row. A failed statement or commit
 rolls back and releases the transaction before returning failure, so retries

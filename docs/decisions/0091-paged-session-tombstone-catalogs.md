@@ -54,8 +54,9 @@ is a revision fence with restart, not a long-lived SQL snapshot. The revision
 column is type/length checked before Qt reads it; an invalid/missing revision
 fails closed.
 
-The shared remote `SessionCatalogReader` is used by Desktop refresh, incremental
-discovery and `ketplusctl sessions`. It reads one page at a time, checks row
+The shared remote `SessionCatalogReader` is used by Desktop refresh and
+`ketplusctl sessions`. Incremental discovery uses the live-only request in
+[ADR 0092](0092-live-only-session-discovery.md). It reads one page at a time, checks row
 types/order, byte/row limits and cursor progress, and streams each valid page to
 its consumer. A missing version is a legacy fallback only on the first reply.
 Reconnection invalidates Desktop callbacks from the old walk. Catalog changes
