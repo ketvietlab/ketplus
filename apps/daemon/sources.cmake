@@ -120,6 +120,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/LocalJournalAttachments.cpp
     src/storage/LocalJournalAttachmentRetention.cpp
     src/storage/LocalJournalFork.cpp
+    src/storage/JournalFormat.cpp
     src/storage/LocalJournalFormat.cpp
     src/storage/LocalJournalLargeEvents.cpp
     src/storage/LocalJournalOutput.cpp

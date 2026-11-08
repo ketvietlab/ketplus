@@ -1,4 +1,5 @@
 #include "storage/LocalJournal.h"
+#include "storage/JournalFormat.h"
 #include "storage/TranscriptItemSnapshot.h"
 
 #include "protocol/DaemonProtocol.h"
@@ -57,6 +58,12 @@ LocalJournal::LocalJournal(const QString& path)
                           .arg(QUuid::createUuid().toString(QUuid::WithoutBraces))),
       database_(QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName_)) {
     database_.setDatabaseName(path);
+    // Before a writable connection exists: closing one could checkpoint a newer journal's WAL.
+    if (QString format;
+        journal_format::check(path, &format) == journal_format::Status::Unsupported) {
+        setError(format);
+        return;
+    }
     if (!database_.open()) {
         setError(database_.lastError().text());
         return;

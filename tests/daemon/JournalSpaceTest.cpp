@@ -10,6 +10,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
+#include <QProcess>
 #include <QScopeGuard>
 #include <QSqlDatabase>
 #include <QSqlError>
@@ -503,8 +504,7 @@ class JournalSpaceTest final : public QObject {
         // Its auto_vacuum would otherwise make startup compaction rewrite it.
         const auto result = journal_space::migrateToIncrementalVacuum(path);
         QCOMPARE(result.outcome, journal_space::Migration::Deferred);
-        QCOMPARE(result.error, QStringLiteral("The journal has the newer format %1.")
-                                   .arg(journal_format::current + 1));
+        QVERIFY2(result.error.contains(QStringLiteral("newer KetPlus")), qPrintable(result.error));
         QVERIFY(!QFileInfo::exists(path + QStringLiteral(".compact")));
         {
             LocalJournal journal(path);
@@ -519,6 +519,97 @@ class JournalSpaceTest final : public QObject {
         QCOMPARE(check.value(QStringLiteral("PRAGMA user_version")).toInt(),
                  journal_format::current + 1);
         QCOMPARE(check.value(QStringLiteral("SELECT count(*) FROM blobs")).toInt(), 500);
+    }
+
+    void aNewerFormatOnlyInTheLogIsLeftAsFound_data() {
+        QTest::addColumn<bool>("compaction");
+        QTest::newRow("LocalJournal") << false;
+        QTest::newRow("startup compaction") << true;
+    }
+    void aNewerFormatOnlyInTheLogIsLeftAsFound() {
+        // A newer daemon committed its format into the WAL and stopped without a checkpoint.
+        QFETCH(bool, compaction);
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("journal.sqlite3"));
+        const QString python = QStandardPaths::findExecutable(QStringLiteral("python3"));
+        if (python.isEmpty())
+            QSKIP("python3 writes the uncheckpointed fixture");
+        QProcess writer;
+        writer.start(python,
+                     {QStringLiteral("-c"),
+                      QStringLiteral("import sqlite3, sys, os\n"
+                                     "c = sqlite3.connect(sys.argv[1])\n"
+                                     "c.execute('PRAGMA journal_mode=WAL')\n"
+                                     "c.execute('PRAGMA wal_autocheckpoint=0')\n"
+                                     "c.execute('CREATE TABLE future_data(body BLOB)')\n"
+                                     "c.execute('INSERT INTO future_data VALUES(zeroblob(8192))')\n"
+                                     "c.execute('PRAGMA user_version=%1')\n"
+                                     "c.commit()\n"
+                                     "os._exit(0)\n")
+                          .arg(journal_format::current + 1),
+                      path});
+        QVERIFY(writer.waitForFinished(10000));
+        QCOMPARE(writer.exitCode(), 0);
+        const auto bytes = [](const QString& name) {
+            QFile file(name);
+            return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+        };
+        const QByteArray main = bytes(path);
+        const QByteArray log = bytes(path + QStringLiteral("-wal"));
+        QVERIFY(!log.isEmpty());
+        if (compaction) {
+            const auto result = journal_space::migrateToIncrementalVacuum(path);
+            QCOMPARE(result.outcome, journal_space::Migration::Deferred);
+        } else {
+            LocalJournal journal(path);
+            QVERIFY(!journal.isOpen());
+            QVERIFY2(journal.errorString().contains(QStringLiteral("newer KetPlus")),
+                     qPrintable(journal.errorString()));
+        }
+        QCOMPARE(bytes(path), main);
+        QCOMPARE(bytes(path + QStringLiteral("-wal")), log);
+    }
+
+    void compactionLeavesANewerJournalsArtifacts() {
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("journal.sqlite3"));
+        {
+            Database newer(path);
+            QVERIFY(newer.exec(QStringLiteral("CREATE TABLE future_data(value INTEGER)")));
+            QVERIFY(newer.exec(
+                QStringLiteral("PRAGMA user_version=%1").arg(journal_format::current + 1)));
+        }
+        QFile artifact(path + QStringLiteral(".compact"));
+        QVERIFY(artifact.open(QIODevice::WriteOnly));
+        QCOMPARE(artifact.write("future copy"), qint64(11));
+        artifact.close();
+        QCOMPARE(journal_space::migrateToIncrementalVacuum(path).outcome,
+                 journal_space::Migration::Deferred);
+        QVERIFY(QFileInfo::exists(path + QStringLiteral(".compact")));
+    }
+
+    void aNegativeFormatIsNeitherCompactedNorOpened() {
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("journal.sqlite3"));
+        writeJournalWithFreePages(path);
+        {
+            Database damaged(path);
+            QVERIFY(damaged.exec(QStringLiteral("PRAGMA user_version=-1")));
+            QVERIFY(damaged.exec(QStringLiteral("PRAGMA wal_checkpoint(TRUNCATE)")));
+            QVERIFY(damaged.exec(QStringLiteral("PRAGMA journal_mode=DELETE")));
+        }
+        const auto bytes = [&path] {
+            QFile file(path);
+            return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+        };
+        const QByteArray before = bytes();
+        QCOMPARE(journal_space::migrateToIncrementalVacuum(path).outcome,
+                 journal_space::Migration::Deferred);
+        {
+            LocalJournal journal(path);
+            QVERIFY(!journal.isOpen());
+        }
+        QCOMPARE(bytes(), before);
     }
 
     void journalsRecordTheirFormatOnceUpgraded() {

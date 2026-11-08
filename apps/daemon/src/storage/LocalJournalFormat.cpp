@@ -8,17 +8,16 @@
 namespace ketplus::daemon {
 
 bool LocalJournal::acceptsFormat() {
-    // Runs before any schema statement: a newer journal is refused without a single write.
+    // The read-only preflight in the constructor ran before this connection opened; this repeats
+    // it on the open connection, in case the file changed in between.
     QSqlQuery query(database_);
     if (!query.exec(QStringLiteral("PRAGMA user_version")) || !query.next()) {
         setError(query.lastError().text());
         return false;
     }
-    const int version = query.value(0).toInt();
-    if (version < 0 || version > journal_format::current) {
+    if (const int version = query.value(0).toInt(); !journal_format::supported(version)) {
         setError(QStringLiteral("This journal was written by a newer KetPlus (journal format %1; "
-                                "this version opens up to %2). Update KetPlus; the journal "
-                                "was not changed.")
+                                "this version opens up to %2). Update KetPlus.")
                      .arg(version)
                      .arg(journal_format::current));
         return false;

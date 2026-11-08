@@ -235,7 +235,10 @@ the corresponding Atlas mock first.
   probes with `KETPLUS_RUN_DELETE_BACKLOG_TESTS=1`; they use temporary journals.
 - Journal format (ADR 0095): `ketplus_daemon_journal_space_tests` refuses a newer
   journal in both startup compaction and `LocalJournal` with byte-identical file
-  contents, and records the format for new and pre-versioning journals.
+  contents, including a newer format only in an uncheckpointed WAL (written by
+  `python3`; skipped without it), keeps a newer journal's `.compact` artifact,
+  refuses a negative format, and records the format for new and pre-versioning
+  journals.
 - Staged fork copy (ADR 0094): `ketplus_daemon_session_fork_tests` covers one
   read snapshot while the source changes, byte-exact malformed TEXT, interrupted
   copies recovered as purge work at open, ignored purge/staging writes on abandon

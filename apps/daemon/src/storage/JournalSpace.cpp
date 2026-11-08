@@ -185,6 +185,13 @@ qint64 migrationMargin(const Usage& usage) {
 
 MigrationResult migrateToIncrementalVacuum(const QString& path) {
     MigrationResult result;
+    // Before cleanup or any writable connection: a newer journal and its artifacts stay as found.
+    if (QString format;
+        journal_format::check(path, &format) == journal_format::Status::Unsupported) {
+        result.outcome = Migration::Deferred;
+        result.error = format;
+        return result;
+    }
     // An earlier attempt stopped before its rename: the original is the journal.
     if (!removeCompactCopy(path)) {
         result.outcome = Migration::Failed;
@@ -219,9 +226,9 @@ MigrationResult migrateToIncrementalVacuum(const QString& path) {
     // A newer daemon's journal is never rewritten; LocalJournal then refuses to open it.
     if (!first.exec(QStringLiteral("PRAGMA user_version")) || !first.next())
         return failed(result, path, first.lastError().text());
-    if (const int version = first.value(0).toInt(); version > journal_format::current) {
+    if (const int version = first.value(0).toInt(); !journal_format::supported(version)) {
         result.outcome = Migration::Deferred;
-        result.error = QStringLiteral("The journal has the newer format %1.").arg(version);
+        result.error = QStringLiteral("The journal has the unsupported format %1.").arg(version);
         return result;
     }
     first.finish();
