@@ -1,0 +1,42 @@
+{
+  "scope": "Synthetic Qt Release global orphan GC. No live journal, provider calls or deployment.",
+  "baseline": "90388ea772bf75267e66233ee66566bc0e2e18e8",
+  "environment": {
+    "hardware": "MacBookPro18,1",
+    "cpus": 10,
+    "ram_bytes": 34359738368,
+    "os": "macOS 26.2.0",
+    "qt": "6.11.2",
+    "compiler": "Apple LLVM 21.0.0",
+    "configuration": "Release Pro"
+  },
+  "red_regression": {
+    "metadata_candidates": 32,
+    "raw_rows": 100000,
+    "raw_payload_approx_bytes": 1000,
+    "reopen_ms": 7172,
+    "command_result_256_ms": 7066,
+    "expected_failures": 2
+  },
+  "green_regression": {
+    "reopen_ms": 22,
+    "command_result_256_ms": 0,
+    "timer_resolution": "integer milliseconds; zero means under 1 ms",
+    "focused_cases_passed": 21,
+    "failed": 0,
+    "retained_same_item_replay_rows": 300000,
+    "retained_replay_ms_prior_run": 12,
+    "chunk_fixture_bytes": 47185920,
+    "chunk_fixture_passes": 45
+  },
+  "mutations_caught": [
+    "byte budget changed from 1 MiB to 16 MiB",
+    "pending raw-generation guards disabled"
+  ],
+  "limits": [
+    "Full Pro gate tracked in implementation PR, not inferred from focused tests",
+    "Other retention sweeps still require bounded-work fixes/evidence",
+    "Oversized legacy blobs and malformed chunks preserved for later work",
+    "No Windows, multi-GB mixed journal, install or deployment evidence"
+  ]
+}

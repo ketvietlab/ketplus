@@ -1,0 +1,47 @@
+{
+  "baseline": "8f0858bc67b0eba99b9b5529bf5d123f2b179678",
+  "fixture": "Synthetic Qt 6.11.2 Release on macOS; no live journal/provider calls",
+  "before": {
+    "completed_backlog": 100000,
+    "completion_removed_rows": 100001,
+    "completion_milliseconds": 413,
+    "focused_regressions_failed": 8
+  },
+  "after": {
+    "completion_only_updates_its_own_job": true,
+    "gc_max_candidates_and_rows_per_lane": 256,
+    "gc_max_column_bytes": 1048576,
+    "indexed_pending_pages": {
+      "completed_backlog": 100000,
+      "page_calls": 25,
+      "milliseconds": 1
+    },
+    "completion_milliseconds": 0
+  },
+  "focused": {
+    "passed": 32,
+    "failed": 0,
+    "skipped": 0
+  },
+  "mutation": {
+    "change": "replace pending-state expression index with session_id index",
+    "test": "actualDeletionPagePlansUseStateAndRowidSeeks",
+    "caught": true,
+    "actual_plan": "SEARCH session_deletion_work USING INTEGER PRIMARY KEY (rowid>?)",
+    "restored": true
+  },
+  "limits": [
+    "Synthetic data only, not Windows/live-journal/mixed multi-GB acceptance",
+    "One-time index construction and pending JSON record-size limits remain open",
+    "Affected final-head matrix and independent review recorded in plan/PR",
+    "Explicit session deletion, cloud cache and tombstone enumeration remain separate audits"
+  ],
+  "affected_matrix": {
+    "passed_targets": 10,
+    "failed_targets": 0,
+    "seconds": 63.25,
+    "configuration": "Release Pro headless",
+    "full_pro_rerun": false,
+    "reason": "No CMake/core/shared interface or application composition changed; affected daemon matrix per docs/testing.md"
+  }
+}
