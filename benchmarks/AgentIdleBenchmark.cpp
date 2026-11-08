@@ -7,6 +7,7 @@
 
 #include <QApplication>
 #include <QCommandLineParser>
+#include <QDateTime>
 #include <QElapsedTimer>
 #include <QHash>
 #include <QJsonDocument>
@@ -148,6 +149,43 @@ int main(int argc, char** argv) {
                                          {"running", work == "running"},
                                          {"started", true},
                                          {"status", work == "running" ? "Working" : "Done"}});
+    // Captures show the mock's Claude conversation and its usage; CPU samples keep the default.
+    if (!panel.isEmpty()) {
+        auto active = conversations.first().toMap();
+        active.insert("provider", "claude");
+        conversations[0] = active;
+        const auto resetsAt = [](int day, int hour, int minute) {
+            return QDateTime(QDate(2026, 11, day), QTime(hour, minute)).toSecsSinceEpoch();
+        };
+        view.setUsageSnapshot(
+            {{"provider", "claude"},
+             {"context",
+              QVariantMap{{"available", true}, {"usedTokens", 80000}, {"limitTokens", 500000}}},
+             {"session", QVariantMap{{"mode", "runtime"},
+                                     {"estimatedCostUsd", 139.6424},
+                                     {"inputTokens", 22383},
+                                     {"outputTokens", 1561880},
+                                     {"cacheReadInputTokens", 400672151},
+                                     {"cacheCreationInputTokens", 3522600}}},
+             {"limits", QVariantList{QVariantMap{{"id", "five-hour"},
+                                                 {"label", "Session · 5 hours"},
+                                                 {"available", true},
+                                                 {"usedPercent", 2},
+                                                 {"resetsAt", resetsAt(6, 12, 10)}},
+                                     QVariantMap{{"id", "weekly"},
+                                                 {"label", "Weekly · all models"},
+                                                 {"available", true},
+                                                 {"usedPercent", 85},
+                                                 {"resetsAt", resetsAt(8, 7, 0)}},
+                                     QVariantMap{{"id", "weekly-fable"},
+                                                 {"label", "Weekly · Fable"},
+                                                 {"available", true},
+                                                 {"usedPercent", 0},
+                                                 {"resetsAt", resetsAt(8, 7, 0)}}}}});
+        view.setClaudeUsageRequester([](ketplus::AgentWorkspaceView::UsageReply reply) {
+            reply({{"configured", false}}, {});
+        });
+    }
     view.setConversations(conversations);
     // A fixed catalog, so the model panel opens without a provider. Re-sent on request.
     QVariantList efforts;
@@ -202,7 +240,6 @@ int main(int argc, char** argv) {
         QTimer::singleShot(1000, &view, &QWidget::hide);
     if (visibility == "minimized")
         QTimer::singleShot(1000, &view, &QWidget::showMinimized);
-    // Captures show the mock's Claude Opus 5.5 conversation; CPU samples keep the default.
     if (!panel.isEmpty())
         view.setConversationConfiguration({{"provider", "claude"},
                                            {"model", "opus"},

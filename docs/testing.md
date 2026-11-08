@@ -223,7 +223,10 @@ python3 benchmarks/run-agent-idle.py build/release /tmp/idle-minimized --visibil
 
 `--visibility minimized` minimizes the window a second after `ready` and expects no
 held clock. For captures, the fixture binary also accepts `--open=mode`, `model` or
-`limits` to open that composer panel first, like the mock's `--open`.
+`limits` to open that composer panel first, like the mock's `--open`. With `--open`, the
+active conversation is the mock's Claude Opus 5.5 conversation with its fixed catalog and
+usage (context, session cost and tokens, and three plan limits); runs without `--open`
+keep the default CPU workload.
 
 Use an Apple Silicon Mac with a 2× display. The macOS app bundle lets computer use
 identify the fixture separately from the installed app. After `ready`, focus the
