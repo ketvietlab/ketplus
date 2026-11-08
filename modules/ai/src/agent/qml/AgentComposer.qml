@@ -403,6 +403,8 @@ Item {
             variant: Kit.KetTheme.ButtonVariant.Ghost
             controlSize: Kit.KetTheme.ControlSize.Small
             objectName: "permissionButton"
+            // Keeps the hover fill while its menu is open, as the mock's footer buttons do.
+            previewState: permissionMenu.visible ? {hovered: true, focused: visualFocus} : null
             Layout.minimumHeight: KetTheme.px(28, KetTheme.zoom)
             text: root.currentPermission.label
             contentItem: Row {
@@ -428,6 +430,7 @@ Item {
                     height: KetTheme.px(14, KetTheme.zoom)
                     anchors.verticalCenter: parent.verticalCenter
                     name: KetTheme.iconForLucide("chevron-down")
+                    rotation: permissionMenu.visible ? 180 : 0
                     color: root.permissionElevated ? root.permissionAccent : KetTheme.t.textMuted
                     box: KetTheme.px(14, KetTheme.zoom)
                 }

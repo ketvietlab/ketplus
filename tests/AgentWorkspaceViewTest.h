@@ -141,6 +141,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void composerFormattingSettles();
     void composerPlaceholderTracksCaret();
     void worktreeHeaderKeepsLabelVisible();
+    void permissionMenuFitsSmallZoomedWorkspace();
     void tooltipsFollowDesignSystem();
     void measurementTimerStopsAndRestartsForNewRows();
     void transcriptFrameAnimationsStopOnTheirOwn();
