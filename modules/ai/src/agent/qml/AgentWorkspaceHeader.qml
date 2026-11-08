@@ -65,7 +65,8 @@ Item {
             id: conversationTitle
             objectName: "conversationTitle"
             // Long handoff titles must not push the status badge and scope chip away.
-            Layout.maximumWidth: Math.max(0, Math.min(header.maximumTitleWidth, titleRow.width - conversationStatusBadge.width - (scopeChip.visible ? Math.min(scopeChip.implicitWidth, 80) : 0) - (reviewerButton.visible ? reviewerButton.implicitWidth + titleRow.spacing : 0) - (conversationNumber.visible ? conversationNumber.implicitWidth + titleRow.spacing : 0) - (conversationTags.visible ? conversationTags.implicitWidth + titleRow.spacing : 0) - titleRow.spacing * 2))
+            // Everything else at its narrowest, each with its spacing; the trailing filler adds one more.
+            Layout.maximumWidth: Math.max(0, Math.min(header.maximumTitleWidth, titleRow.width - Math.min(conversationStatusBadge.Layout.preferredWidth, conversationStatusBadge.Layout.maximumWidth) - titleRow.spacing - (scopeChip.visible ? scopeChip.Layout.minimumWidth + titleRow.spacing : 0) - (reviewerButton.visible ? reviewerButton.implicitWidth + titleRow.spacing : 0) - (conversationNumber.visible ? conversationNumber.implicitWidth + titleRow.spacing : 0) - (conversationTags.visible ? conversationTags.implicitWidth + titleRow.spacing : 0) - titleRow.spacing))
             text: agentHost.sessionTitle
             color: KetTheme.t.textMain
             elide: Text.ElideRight

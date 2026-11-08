@@ -157,6 +157,7 @@ void AgentWorkspaceViewTest::reviewerLabelCollapsesBeforeTagsSqueezeTheTitle_dat
     QTest::addColumn<qreal>("zoom");
     QTest::newRow("medium") << qreal(1);
     QTest::newRow("large") << qreal(1.25);
+    QTest::newRow("largest") << qreal(1.5);
 }
 
 // The full "Reviewer · @agent/N" label shows only when every visible header item fits.
@@ -175,6 +176,7 @@ void AgentWorkspaceViewTest::reviewerLabelCollapsesBeforeTagsSqueezeTheTitle() {
     tagged.insert("tags", QVariantList{"UI", "Review"});
     view.setConversations({tagged});
     view.setSessionState("Startup profiling", "Ready", false);
+    view.setExecutionBranch("feat/customer-care-routine-workflow");
     view.acceptReviewerState(
         {{"available", true},
          {"reviewer",
@@ -193,6 +195,25 @@ void AgentWorkspaceViewTest::reviewerLabelCollapsesBeforeTagsSqueezeTheTitle() {
     for (int width = 1400; width >= 760; width -= 20) {
         view.resize(width, 700);
         QTest::qWait(20);
+        // The title row always ends before the header actions, collapsed or not.
+        qreal actionsLeft = width;
+        for (const char* name : {"headerCompactWindowButton", "headerAtlasButton",
+                                 "headerNewConversationButton", "headerTerminalButton"}) {
+            auto* action = findVisualItem(root, name);
+            if (action && action->isVisible())
+                actionsLeft = qMin(actionsLeft, action->mapToItem(root, QPointF()).x());
+        }
+        for (auto* item : {button, findVisualItem(root, "conversationTag_Review")}) {
+            if (!item || !item->isVisible())
+                continue;
+            const auto right = item->mapToItem(root, QPointF(item->width(), 0)).x();
+            QVERIFY2(right <= actionsLeft,
+                     qPrintable(QStringLiteral("%1 ends at %2, actions start at %3 (width %4)")
+                                    .arg(item->objectName())
+                                    .arg(right)
+                                    .arg(actionsLeft)
+                                    .arg(width)));
+        }
         const bool full = button->property("text").toString() != QStringLiteral("▾");
         sawCollapsed = sawCollapsed || !full;
         sawTags = sawTags || findVisualItem(root, "conversationTag_UI")->isVisible();
