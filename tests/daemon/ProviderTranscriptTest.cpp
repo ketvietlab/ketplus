@@ -139,6 +139,64 @@ class ProviderTranscriptTest : public QObject {
                  "Sent as the reply to #4821 · Release.");
     }
 
+    // ADR 0067: review requests, skipped reviews and recorded reviews.
+    void reviewNoticesShowTheRoundVerdictAndReviewer() {
+        QCOMPARE(agentMessageStateText({{"state", "sent"},
+                                        {"kind", "review"},
+                                        {"delivery", "starting"},
+                                        {"round", 1},
+                                        {"max_rounds", 2},
+                                        {"peer_number", "1093"},
+                                        {"peer_title", "Reviewer for #4821"}}),
+                 "Asked #1093 · Reviewer for #4821 to review this turn (round 1 of 2).");
+        QCOMPARE(agentMessageStateText(
+                     {{"state", "review_skipped"}, {"kind", "review"}, {"reason", "no_changes"}}),
+                 "No review: this turn changed no files.");
+        QCOMPARE(agentMessageStateText({{"state", "review_skipped"}, {"reason", "round_limit"}}),
+                 "No review: this exchange used all its review rounds.");
+        const auto skipped = agentMessageNotice(
+            {{"state", "review_skipped"}, {"kind", "review"}, {"reason", "reviewer_busy"}},
+            "notice:7");
+        QCOMPARE(skipped.value("subtype").toString(), "notice");
+        QCOMPARE(skipped.value("title").toString(), "Review");
+
+        // A recorded review is the reviewer's message, never a held-message action.
+        const auto rows = daemonWindowMessages(
+            {{"events",
+              QJsonArray{QJsonObject{{"event_type", "agent_message.state"},
+                                     {"cursor", 8},
+                                     {"turn_sequence", 2},
+                                     {"payload", QJsonObject{{"message_id", "r1"},
+                                                             {"kind", "reply"},
+                                                             {"state", "review_recorded"},
+                                                             {"verdict", "no_findings"},
+                                                             {"body", "Looks fine.\nVerdict: no "
+                                                                      "findings"},
+                                                             {"direction", "incoming"},
+                                                             {"peer_number", "1093"},
+                                                             {"peer_title", "Reviewer"}}}}}}});
+        QCOMPARE(rows.size(), 1);
+        const auto review = rows.first().toMap();
+        QCOMPARE(review.value("kind").toString(), "user");
+        QCOMPARE(review.value("subtype").toString(), "agentMessage");
+        QCOMPARE(review.value("meta").toString(), "Review from #1093 · Reviewer · No findings");
+        QCOMPARE(review.value("body").toString(), "Looks fine.\nVerdict: no findings");
+        QVERIFY(!review.value("sanitizedPayload").toMap().contains("messageId"));
+        QCOMPARE(
+            agentMessageNotice(
+                {{"state", "review_recorded"}, {"verdict", "findings"}, {"peer_number", "1093"}},
+                "notice:9")
+                .value("meta")
+                .toString(),
+            "Review from #1093 · Findings");
+
+        // The reviewer's turn names what it was asked for.
+        QVariantMap request{{"kind", "user"}};
+        markAgentOrigin(request,
+                        QJsonArray{QJsonObject{{"kind", "review"}, {"from_number", "4821"}}});
+        QCOMPARE(request.value("meta").toString(), "Review request from #4821");
+    }
+
     void cursorPartialToolUpdatesKeepInputsAndResults() {
         auto raw = cursorToolUpdate({}, {{"toolCallId", "r"},
                                          {"kind", "read"},

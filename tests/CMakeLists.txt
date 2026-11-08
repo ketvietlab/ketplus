@@ -65,6 +65,7 @@ ketplus_add_gui_test(ketplus_agent_tests
     AgentWorkspaceSessionTest.cpp
     AgentWorkspaceMissingWorktreeTest.cpp
     AgentConversationForkMenuTest.cpp
+    AgentReviewerPickerTest.cpp
     AgentWorkspaceViewTest.cpp
     AgentWorkspaceViewTest.h
     TranscriptPhase5Test.cpp

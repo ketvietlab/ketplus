@@ -266,6 +266,22 @@ void MainWindow::ensureAgentWorkspace() {
                 if (normalizedPath(path) == normalizedPath(agentWorkspace_->activePath()))
                     agentWorkspace_->acceptHeldMessageState(messageId, result);
             });
+    connect(agentWorkspace_, &AgentWorkspaceView::reviewerRequested, this,
+            [this] { agentManager_->readReviewer(agentWorkspace_->activePath()); });
+    connect(agentWorkspace_, &AgentWorkspaceView::reviewerChangeRequested, this,
+            [this](const QString& number, const QString& newProvider) {
+                agentManager_->setReviewer(agentWorkspace_->activePath(), number, newProvider);
+            });
+    connect(agentManager_, &AgentSessionManager::reviewerResult, this,
+            [this](const QString& path, const QString&, const QVariantMap& result) {
+                if (normalizedPath(path) != normalizedPath(agentWorkspace_->activePath()))
+                    return;
+                agentWorkspace_->acceptReviewerState(result);
+                if (const QString error = result.value("error").toString();
+                    !error.isEmpty() && result.value("change").toBool())
+                    statusBar()->showMessage(tr("Unable to change the reviewer: %1").arg(error),
+                                             7000);
+            });
     connect(agentWorkspace_, &AgentWorkspaceView::backgroundTaskStopRequested, this,
             [this](const QString& taskId) {
                 agentManager_->stopBackgroundTask(agentWorkspace_->activePath(), taskId);

@@ -68,7 +68,7 @@ Item {
             id: conversationTitle
             objectName: "conversationTitle"
             // Long handoff titles must not push the status badge and scope chip away.
-            Layout.maximumWidth: Math.max(0, Math.min(header.maximumTitleWidth, titleRow.width - conversationStatusBadge.width - (scopeChip.visible ? Math.min(scopeChip.implicitWidth, 80) : 0) - (conversationNumber.visible ? conversationNumber.implicitWidth + titleRow.spacing : 0) - (conversationTags.visible ? conversationTags.implicitWidth + titleRow.spacing : 0) - titleRow.spacing * 2))
+            Layout.maximumWidth: Math.max(0, Math.min(header.maximumTitleWidth, titleRow.width - conversationStatusBadge.width - (scopeChip.visible ? Math.min(scopeChip.implicitWidth, 80) : 0) - (reviewerButton.visible ? reviewerButton.implicitWidth + titleRow.spacing : 0) - (conversationNumber.visible ? conversationNumber.implicitWidth + titleRow.spacing : 0) - (conversationTags.visible ? conversationTags.implicitWidth + titleRow.spacing : 0) - titleRow.spacing * 2))
             text: agentHost.sessionTitle
             color: KetTheme.t.textMain
             elide: Text.ElideRight
@@ -109,9 +109,10 @@ Item {
             implicitWidth: scopeText.implicitWidth + KetTheme.px(30, KetTheme.zoom)
             Layout.preferredHeight: KetTheme.px(20, KetTheme.zoom)
             Layout.preferredWidth: implicitWidth
-            Layout.fillWidth: false
+            // Shrinks (its label elides) before the title and Reviewer button run out of room.
+            Layout.fillWidth: true
             Layout.maximumWidth: implicitWidth
-            Layout.minimumWidth: 0
+            Layout.minimumWidth: Math.min(implicitWidth, KetTheme.px(80, KetTheme.zoom))
             radius: KetTheme.px(5, KetTheme.zoom)
             color: KetTheme.t.interactiveBg
             border.color: KetTheme.t.panelBorder
@@ -157,6 +158,31 @@ Item {
             Accessible.role: Accessible.Button
             Accessible.name: "Choose Files and Source Control worktree"
             Accessible.onPressAction: agentHost.requestExecutionWorktree()
+        }
+        Kit.KetButton {
+            id: reviewerButton
+            objectName: "headerReviewerButton"
+            // ADR 0067: the conversation that reviews each finished turn and replies here.
+            readonly property var assigned: agentHost.reviewerState.reviewer || null
+            readonly property string name: assigned ? "@agent/" + assigned.number : ""
+            // As in the mock, the Reviewer label collapses before the title or scope elide.
+            readonly property bool full: titleRow.width >= (conversationNumber.visible ? conversationNumber.implicitWidth + titleRow.spacing : 0) + conversationTitle.implicitWidth + conversationStatusBadge.width + (scopeChip.visible ? scopeChip.implicitWidth + titleRow.spacing : 0) + reviewerProbe.implicitWidth + titleRow.spacing * 2
+            readonly property string fullText: (name ? "Reviewer · " + name : "Reviewer") + "  ▾"
+            readonly property string detail: "An agent reviews each finished turn and replies to this conversation. Reviewers never merge."
+            visible: !agentHost.compactWindow && agentHost.reviewerState.available === true
+            enabled: agentHost.reviewerState.pending !== true
+            controlSize: Kit.KetTheme.ControlSize.Small
+            variant: assigned ? Kit.KetTheme.ButtonVariant.Secondary : Kit.KetTheme.ButtonVariant.Ghost
+            iconName: "eye"
+            text: full ? fullText : "▾"
+            onClicked: header.openReviewerMenu()
+            KetToolTip {
+                objectName: "reviewerToolTip"
+                visible: reviewerButton.hovered && !reviewerMenu.visible
+                text: agentHost.reviewerState.error ? agentHost.reviewerState.error : (reviewerButton.full ? "" : (reviewerButton.assigned ? "Reviewer: " + reviewerButton.name + ". " : "Reviewer. ")) + reviewerButton.detail
+            }
+            Accessible.name: assigned ? "Reviewer: " + name : "Reviewer"
+            Accessible.description: detail
         }
         Row {
             id: conversationTags
@@ -228,6 +254,86 @@ Item {
             iconName: Kit.KetTheme.iconForLucide("square-terminal")
             text: "Open terminal"
             onClicked: agentHost.requestTerminal()
+        }
+    }
+
+    // Off-screen measure of the full Reviewer button.
+    Kit.KetButton {
+        id: reviewerProbe
+        visible: false
+        controlSize: Kit.KetTheme.ControlSize.Small
+        iconName: "eye"
+        text: reviewerButton.fullText
+    }
+
+    function openReviewerMenu() {
+        reviewerMenu.candidates = agentHost.reviewerCandidates();
+        reviewerMenu.popup(reviewerButton, 0, reviewerButton.height);
+    }
+
+    Kit.KetMenu {
+        id: reviewerMenu
+        objectName: "reviewerMenu"
+        property var candidates: []
+        readonly property string assignedNumber: reviewerButton.assigned ? String(reviewerButton.assigned.number) : ""
+        // Checks are set on every open: triggering a checkable item replaces a binding.
+        onAboutToShow: {
+            noReviewerItem.checked = assignedNumber.length === 0;
+            for (let index = 0; index < count; ++index) {
+                const item = itemAt(index);
+                if (item && item.reviewerNumber)
+                    item.checked = item.reviewerNumber === assignedNumber;
+            }
+        }
+        Kit.KetMenuItem {
+            id: noReviewerItem
+            objectName: "noReviewerItem"
+            text: "No reviewer"
+            description: "Turns finish without a review"
+            checkable: true
+            onTriggered: agentHost.chooseReviewer("", "")
+        }
+        Kit.KetMenuSection {
+            text: "New review agent"
+        }
+        Kit.KetMenuItem {
+            objectName: "newClaudeReviewerItem"
+            text: "Claude"
+            description: "Starts a reviewer in this worktree, read only"
+            iconName: "bot"
+            onTriggered: agentHost.chooseReviewer("", "claude")
+        }
+        Kit.KetMenuItem {
+            objectName: "newCodexReviewerItem"
+            text: "Codex"
+            description: "Starts a reviewer in this worktree, read only"
+            iconName: "bot"
+            onTriggered: agentHost.chooseReviewer("", "codex")
+        }
+        Kit.KetMenuSection {
+            text: "Existing conversation"
+        }
+        // Appended in order after the section: a Repeater inside a Menu misplaces its items.
+        Instantiator {
+            model: reviewerMenu.candidates.length > 0 ? reviewerMenu.candidates : [
+                {
+                    number: "",
+                    title: "No other Claude or Codex conversation"
+                }
+            ]
+            onObjectAdded: (index, object) => reviewerMenu.addItem(object)
+            onObjectRemoved: (index, object) => reviewerMenu.removeItem(object)
+            Kit.KetMenuItem {
+                required property var modelData
+                readonly property string reviewerNumber: String(modelData.number)
+                objectName: "existingReviewerItem_" + reviewerNumber
+                enabled: reviewerNumber.length > 0
+                text: modelData.title
+                description: reviewerNumber.length > 0 ? ["@agent/" + reviewerNumber, modelData.provider === "claude" ? "Claude" : "Codex", modelData.worktree].filter(part => part).join(" · ") : ""
+                iconName: "chat"
+                checkable: reviewerNumber.length > 0
+                onTriggered: agentHost.chooseReviewer(reviewerNumber, "")
+            }
         }
     }
 

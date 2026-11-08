@@ -146,6 +146,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void agentQmlUsesBoundedAnimationsAndKitPrimitives();
     void contextMenuFollowsDesignSystem();
     void conversationMenusOfferFork();
+    void reviewerPickerFollowsTheActiveConversation();
     void selectsModelsInUnifiedPicker();
     void restoresStoredConversationModelInsteadOfCatalogDefault();
     void prefetchesModelsWhenAgentBecomesAvailable();
