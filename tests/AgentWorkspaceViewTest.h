@@ -143,6 +143,8 @@ class AgentWorkspaceViewTest final : public QObject {
     void worktreeHeaderKeepsLabelVisible();
     void tooltipsFollowDesignSystem();
     void measurementTimerStopsAndRestartsForNewRows();
+    void transcriptFrameAnimationsStopOnTheirOwn();
+    void minimizedWindowReleasesTheWorkingClock();
     void agentQmlUsesBoundedAnimationsAndKitPrimitives();
     void contextMenuFollowsDesignSystem();
     void conversationMenusOfferFork();

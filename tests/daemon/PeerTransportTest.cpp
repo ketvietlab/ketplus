@@ -118,8 +118,10 @@ class PeerTransportTest final : public QObject {
     }
     void helloEpochSupersedeAndRevocation() {
         RemotePeers peers(empty);
+        QVERIFY(!peers.ticking());
         auto* first = new Link;
         QVERIFY(peers.accept("one", "device", 1, grant(), first, 10));
+        QVERIFY(peers.ticking());
         first->hello("one");
         QCOMPARE(QJsonDocument::fromJson(first->sent[0].bytes).object().value("epoch").toInteger(),
                  10);
@@ -134,6 +136,7 @@ class PeerTransportTest final : public QObject {
         peers.revoke("device");
         QVERIFY(second->stopped);
         QCOMPARE(peers.size(), 0);
+        QVERIFY(!peers.ticking()); // no peers, no wakeups (#126)
     }
     void grantScopeCapabilityAndExpiry() {
         RemotePeers peers(empty);
