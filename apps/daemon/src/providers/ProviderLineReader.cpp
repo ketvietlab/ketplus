@@ -28,6 +28,7 @@ void ProviderLineReader::resetScan() {
     discarding_ = false;
     discarded_ = {};
     frames_.clear();
+    skippedDepth_ = 0;
     inString_ = escaped_ = stringIsKey_ = capturing_ = false;
     token_.clear();
     scalar_.clear();
@@ -99,30 +100,36 @@ void ProviderLineReader::scan(const QByteArray& data) {
         case '"':
             finishScalar();
             inString_ = true;
-            stringIsKey_ = !frames_.isEmpty() && frames_.last().object && frames_.last().expectKey;
+            stringIsKey_ = skippedDepth_ == 0 && !frames_.isEmpty() && frames_.last().object &&
+                           frames_.last().expectKey;
             capturing_ = stringIsKey_ || fieldPaths_.contains(valuePath());
             break;
         case '{':
         case '[':
             finishScalar();
-            // Below the scan depth a container is treated as an array: nothing in it matches.
-            frames_.append(frames_.size() < maximumScanDepth ? Frame{c == '{', c == '{', {}}
-                                                             : Frame{});
+            // Keep only the shallow routing stack. Count deeper containers without
+            // allocating frames, then resume the outer object after they close.
+            if (skippedDepth_ > 0 || frames_.size() >= maximumScanDepth)
+                ++skippedDepth_;
+            else
+                frames_.append(Frame{c == '{', c == '{', {}});
             break;
         case '}':
         case ']':
             finishScalar();
-            if (!frames_.isEmpty())
+            if (skippedDepth_ > 0)
+                --skippedDepth_;
+            else if (!frames_.isEmpty())
                 frames_.removeLast();
             break;
         case ':':
             finishScalar();
-            if (!frames_.isEmpty())
+            if (skippedDepth_ == 0 && !frames_.isEmpty())
                 frames_.last().expectKey = false;
             break;
         case ',':
             finishScalar();
-            if (!frames_.isEmpty() && frames_.last().object)
+            if (skippedDepth_ == 0 && !frames_.isEmpty() && frames_.last().object)
                 frames_.last().expectKey = true;
             break;
         case ' ':
@@ -132,7 +139,7 @@ void ProviderLineReader::scan(const QByteArray& data) {
             finishScalar();
             break;
         default:
-            if (scalar_.size() <= maximumFieldBytes)
+            if (skippedDepth_ == 0 && scalar_.size() <= maximumFieldBytes)
                 scalar_.append(c);
             break;
         }
@@ -157,6 +164,8 @@ void ProviderLineReader::finishValue(const QJsonValue& value) {
 }
 
 QString ProviderLineReader::valuePath() const {
+    if (skippedDepth_ > 0)
+        return QStringLiteral("[]");
     QStringList keys;
     for (const Frame& frame : frames_) {
         // A value inside an array, or a key still being read, never matches a field path.
