@@ -55,6 +55,7 @@ class ProviderLineReader final {
     bool discarding_{false};
     OversizedProviderLine discarded_;
     QList<Frame> frames_;
+    quint64 skippedDepth_{0};
     bool inString_{false};
     bool escaped_{false};
     bool stringIsKey_{false};
