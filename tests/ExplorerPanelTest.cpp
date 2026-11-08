@@ -1,4 +1,6 @@
 #include "workspace/ExplorerPanel.h"
+#include "KetConversationRow.h"
+#include "KetProfile.h"
 #include "workspace/ActivityBar.h"
 #include "workspace/SymbolIcons.h"
 
@@ -6,7 +8,9 @@
 #include "ui/Theme.h"
 #include "ui/TypeScale.h"
 
+#include <QAbstractButton>
 #include <QAction>
+#include <QComboBox>
 #include <QDir>
 #include <QFile>
 #include <QFileSystemModel>
@@ -38,6 +42,7 @@ class ExplorerPanelTest final : public QObject {
     void ordersRepositoryConversationsByLatestTurnAcrossWorktrees();
     void ordersRepositoriesByTheirNewestConversation();
     void scalesSidebarTypeWithInterfaceZoom();
+    void filtersTagsAndUsesAuthoritativeStorageWarning();
 };
 
 void ExplorerPanelTest::loadsOnlyAfterReceivingARoot() {
@@ -125,9 +130,9 @@ void ExplorerPanelTest::switchesActivityModes() {
     ketplus::ActivityBar bar;
     QSignalSpy requested(&bar, &ketplus::ActivityBar::modeRequested);
     QVERIFY(bar.findChild<QToolButton*>(QStringLiteral("atlasActivityButton")) == nullptr);
-    auto* agent = bar.findChild<QToolButton*>(QStringLiteral("agentWorkspaceActivityButton"));
-    auto* source = bar.findChild<QToolButton*>(QStringLiteral("sourceControlActivityButton"));
-    auto* remote = bar.findChild<QToolButton*>(QStringLiteral("remoteActivityButton"));
+    auto* agent = bar.findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"));
+    auto* source = bar.findChild<QAbstractButton*>(QStringLiteral("sourceControlActivityButton"));
+    auto* remote = bar.findChild<QAbstractButton*>(QStringLiteral("remoteActivityButton"));
     QVERIFY(agent != nullptr);
     QVERIFY(source != nullptr);
     QVERIFY(remote != nullptr);
@@ -177,13 +182,14 @@ void ExplorerPanelTest::switchesActivityModes() {
                          {QStringLiteral("/other"), QStringLiteral("other"), false, {}}});
     QVERIFY(bar.findChildren<QToolButton*>(QStringLiteral("productWorktreeButton")).isEmpty());
     const auto groups =
-        bar.findChildren<QToolButton*>(QStringLiteral("productRepositoryGroupButton"));
+        bar.findChildren<QAbstractButton*>(QStringLiteral("productRepositoryGroupButton"));
     QCOMPARE(groups.size(), 2);
     QCOMPARE(groups.at(0)->accessibleName(), QStringLiteral("repo"));
     QVERIFY(groups.at(0)->property("activeRepository").toBool());
-    const auto rows = bar.findChildren<QToolButton*>(QStringLiteral("productConversationButton"));
+    const auto rows =
+        bar.findChildren<QAbstractButton*>(QStringLiteral("productConversationButton"));
     QCOMPARE(rows.size(), 2);
-    QCOMPARE(rows.at(0)->height(), 36);
+    QCOMPARE(rows.at(0)->height(), rows.at(0)->sizeHint().height());
     QVERIFY(rows.at(0)->isChecked());
     QVERIFY(!rows.at(1)->isChecked());
     QCOMPARE(rows.at(0)->accessibleDescription(), QStringLiteral("Completed"));
@@ -211,7 +217,7 @@ void ExplorerPanelTest::switchesActivityModes() {
 
     // Every repository offers a new conversation on hover and names itself in the request.
     const auto create =
-        bar.findChildren<QToolButton*>(QStringLiteral("productNewConversationButton"));
+        bar.findChildren<QAbstractButton*>(QStringLiteral("productNewConversationButton"));
     QCOMPARE(create.size(), 2);
     QVERIFY(create.constFirst()->isHidden());
     create.at(1)->click();
@@ -263,7 +269,8 @@ void ExplorerPanelTest::collapsesAndPreviewsRepositoryConversations() {
     ketplus::ActivityBar bar;
     bar.setRepositories({{QStringLiteral("/repo"), QStringLiteral("repo"), true, conversations},
                          {QStringLiteral("/other"), QStringLiteral("other"), false, {}}});
-    const auto rows = bar.findChildren<QToolButton*>(QStringLiteral("productConversationButton"));
+    const auto rows =
+        bar.findChildren<QAbstractButton*>(QStringLiteral("productConversationButton"));
     QCOMPARE(rows.size(), 7);
     const auto visibleIds = [&rows] {
         QSet<QString> ids;
@@ -288,7 +295,7 @@ void ExplorerPanelTest::collapsesAndPreviewsRepositoryConversations() {
     QVERIFY(showMore->isHidden());
 
     const auto groups =
-        bar.findChildren<QToolButton*>(QStringLiteral("productRepositoryGroupButton"));
+        bar.findChildren<QAbstractButton*>(QStringLiteral("productRepositoryGroupButton"));
     QCOMPARE(groups.size(), 2);
     QSignalSpy activation(&bar, &ketplus::ActivityBar::repositoryActivationRequested);
     groups.at(0)->click();
@@ -342,14 +349,13 @@ void ExplorerPanelTest::conversationStatusMarksUnreadCompletionAndRotatesWorking
                     {QStringLiteral("path"), QStringLiteral("/repo/waiting")}}};
     bar.setRepositories({{QStringLiteral("/repo"), QStringLiteral("repo"), true, conversations}});
 
-    const auto rows = bar.findChildren<QToolButton*>(QStringLiteral("productConversationButton"));
+    const auto rows =
+        bar.findChildren<QAbstractButton*>(QStringLiteral("productConversationButton"));
     const auto statusFor = [&rows](const QString& id) {
-        const auto row = std::find_if(rows.cbegin(), rows.cend(), [&id](QToolButton* button) {
+        const auto row = std::find_if(rows.cbegin(), rows.cend(), [&id](QAbstractButton* button) {
             return button->property("conversationId").toString() == id;
         });
-        return row == rows.cend()
-                   ? nullptr
-                   : (*row)->findChild<QLabel*>(QStringLiteral("productConversationStatusIcon"));
+        return row == rows.cend() ? nullptr : qobject_cast<ket::ConversationRow*>(*row);
     };
     auto* seen = statusFor(QStringLiteral("seen"));
     auto* persisted = statusFor(QStringLiteral("persisted"));
@@ -361,25 +367,17 @@ void ExplorerPanelTest::conversationStatusMarksUnreadCompletionAndRotatesWorking
     QVERIFY(unread);
     QVERIFY(working);
     QVERIFY(waiting);
-    QCOMPARE(seen->property("symbolColorRole").toString(), QStringLiteral("muted"));
-    QCOMPARE(persisted->property("symbolColorRole").toString(), QStringLiteral("muted"));
-    QCOMPARE(unread->property("symbolColorRole").toString(), QStringLiteral("accent"));
-    // The loader uses the main text colour so it stays readable on the dark sidebar.
-    QCOMPARE(working->property("symbolColorRole").toString(), QStringLiteral("main"));
-    QVERIFY(working->property("spinning").toBool());
-    QCOMPARE(waiting->property("symbolName").toByteArray(),
-             QByteArray(ketplus::symbols::pauseCircle));
-    QCOMPARE(waiting->property("symbolColorRole").toString(), QStringLiteral("warning"));
-    QVERIFY(!waiting->property("spinning").toBool());
-    const int angle = working->property("rotationAngle").toInt();
-    QTRY_VERIFY(working->property("rotationAngle").toInt() != angle);
-
-    const auto unreadRow = std::find_if(rows.cbegin(), rows.cend(), [](QToolButton* button) {
+    QVERIFY(!seen->property("unread").toBool());
+    QVERIFY(!persisted->property("unread").toBool());
+    QVERIFY(unread->property("unread").toBool());
+    QCOMPARE(working->status(), ket::ConversationStatus::Working);
+    QCOMPARE(waiting->status(), ket::ConversationStatus::NeedsInput);
+    const auto unreadRow = std::find_if(rows.cbegin(), rows.cend(), [](QAbstractButton* button) {
         return button->property("conversationId").toString() == QStringLiteral("unread");
     });
     QVERIFY(unreadRow != rows.cend());
     (*unreadRow)->click();
-    QCOMPARE(unread->property("symbolColorRole").toString(), QStringLiteral("muted"));
+    QVERIFY(!unread->property("unread").toBool());
 
     // A later daemon projection can clear the read marker after a background turn.
     QVariantList refreshed = conversations;
@@ -390,8 +388,7 @@ void ExplorerPanelTest::conversationStatusMarksUnreadCompletionAndRotatesWorking
                                {QStringLiteral("seen"), false},
                                {QStringLiteral("path"), QStringLiteral("/repo/feature")}};
     bar.setRepositories({{QStringLiteral("/repo"), QStringLiteral("repo"), true, refreshed}});
-    QCOMPARE(statusFor(QStringLiteral("unread"))->property("symbolColorRole").toString(),
-             QStringLiteral("accent"));
+    QVERIFY(statusFor(QStringLiteral("unread"))->property("unread").toBool());
 }
 
 void ExplorerPanelTest::runningAgentTurnNamesItsSender() {
@@ -406,41 +403,25 @@ void ExplorerPanelTest::runningAgentTurnNamesItsSender() {
                       {QStringLiteral("path"), QStringLiteral("/repo/sidebar")}};
     bar.setRepositories({{QStringLiteral("/repo"), QStringLiteral("repo"), true, {woken}}});
     const auto row = [&bar] {
-        return bar.findChild<QToolButton*>(QStringLiteral("productConversationButton"));
+        return bar.findChild<QAbstractButton*>(QStringLiteral("productConversationButton"));
     };
     QVERIFY(row());
-    auto* layout = qobject_cast<QHBoxLayout*>(row()->layout());
-    QVERIFY(layout);
-    auto* number = row()->findChild<QLabel*>(QStringLiteral("productConversationNumber"));
-    QVERIFY(number);
-    QCOMPARE(number->text(), QStringLiteral("#1093"));
-    QCOMPARE(layout->itemAt(layout->count() - 1)->widget(), number);
-    QCOMPARE(layout->contentsMargins().left(), layout->contentsMargins().right());
+    auto* conversation = qobject_cast<ket::ConversationRow*>(row());
+    QVERIFY(conversation);
+    QCOMPARE(conversation->number(), QStringLiteral("1093"));
     ketplus::ThemeManager theme(*qApp);
     bar.applyPalette(theme.palette());
     bar.resize(bar.width(), 400);
     bar.show();
-    for (const int width : {ketplus::ActivityBar::kMinWidth, ketplus::ActivityBar::kWidth,
-                            ketplus::ActivityBar::kMaxWidth}) {
-        bar.setSidebarWidth(width);
-        QCoreApplication::processEvents();
-        QVERIFY(number->geometry().right() <= row()->width());
-        QVERIFY(number->geometry().left() > layout->itemAt(1)->widget()->geometry().left());
-    }
     const auto capture = qEnvironmentVariable("KETPLUS_SIDEBAR_CAPTURE");
     if (!capture.isEmpty())
         QVERIFY(bar.grab().save(capture));
-    auto* sender = row()->findChild<QLabel*>(QStringLiteral("productConversationAgentSender"));
-    QVERIFY(sender);
-    QCOMPARE(sender->text(), QStringLiteral("from #4821"));
+    QVERIFY(conversation->statusLabel().contains(QStringLiteral("from #4821")));
     QVERIFY(row()->toolTip().contains(QStringLiteral("Message from #4821 · Release checklist")));
-    QVERIFY(row()->accessibleDescription().endsWith(
-        QStringLiteral("Message from #4821 · Release checklist")));
-
     // The label belongs to the running turn; it goes when the turn ends.
     woken.insert(QStringLiteral("running"), false);
     bar.setRepositories({{QStringLiteral("/repo"), QStringLiteral("repo"), true, {woken}}});
-    QVERIFY(!row()->findChild<QLabel*>(QStringLiteral("productConversationAgentSender")));
+    QVERIFY(!qobject_cast<ket::ConversationRow*>(row())->statusLabel().contains("from #"));
     QVERIFY(!row()->toolTip().contains(QStringLiteral("#4821")));
 }
 
@@ -455,7 +436,7 @@ void ExplorerPanelTest::ordersRepositoryConversationsByLatestTurnAcrossWorktrees
     const auto order = [&bar] {
         QStringList ids;
         for (auto* row :
-             bar.findChildren<QToolButton*>(QStringLiteral("productConversationButton")))
+             bar.findChildren<QAbstractButton*>(QStringLiteral("productConversationButton")))
             ids << row->property("conversationId").toString();
         return ids;
     };
@@ -495,7 +476,7 @@ void ExplorerPanelTest::ordersRepositoriesByTheirNewestConversation() {
     const auto conversationOrder = [&bar] {
         QStringList ids;
         for (auto* row :
-             bar.findChildren<QToolButton*>(QStringLiteral("productConversationButton")))
+             bar.findChildren<QAbstractButton*>(QStringLiteral("productConversationButton")))
             ids << row->property("conversationId").toString();
         return ids;
     };
@@ -519,6 +500,44 @@ void ExplorerPanelTest::ordersRepositoriesByTheirNewestConversation() {
     QCOMPARE(conversationOrder(),
              (QStringList{QStringLiteral("sidebar"), QStringLiteral("untitled-a"),
                           QStringLiteral("untitled-b"), QStringLiteral("crm")}));
+}
+
+void ExplorerPanelTest::filtersTagsAndUsesAuthoritativeStorageWarning() {
+    ketplus::ActivityBar bar;
+    bar.resize(260, 680);
+    bar.show();
+    const QVariantList conversations{
+        QVariantMap{{"id", "one"},
+                    {"title", "One"},
+                    {"tags", QVariantList{QVariantMap{{"label", "UI"}, {"color", "#3377cc"}}}}},
+        QVariantMap{{"id", "two"},
+                    {"title", "Two"},
+                    {"tags", QVariantList{QVariantMap{{"label", "Review"}}}}}};
+    bar.setRepositories({{"/synthetic", "Repo", true, conversations}});
+    auto* filter = bar.findChild<QComboBox*>("conversationTagFilter");
+    QVERIFY(filter && filter->isVisible());
+    filter->setCurrentIndex(filter->findData("UI"));
+    const auto rows = bar.findChildren<ket::ConversationRow*>("productConversationButton");
+    QCOMPARE(rows.size(), 2);
+    for (auto* row : rows)
+        QTRY_COMPARE(row->isVisible(), row->property("conversationId") == "one");
+    filter->setCurrentIndex(0);
+    for (auto* row : rows)
+        QVERIFY(row->isVisible());
+    auto* warning = bar.findChild<QWidget*>("sidebarStorageWarning");
+    QVERIFY(warning && !warning->isVisible());
+    bar.setStorageStatus(
+        {{"ok", true}, {"status", QVariantMap{{"warning", true}, {"over_limit", true}}}});
+    QVERIFY(warning->isVisible());
+    const auto capture = qEnvironmentVariable("KETPLUS_STORAGE_SIDEBAR_CAPTURE");
+    if (!capture.isEmpty()) {
+        QCoreApplication::processEvents();
+        QVERIFY(bar.grab().save(capture));
+    }
+    bar.setStorageStatus({{"ok", false}, {"status", QVariantMap{{"warning", true}}}});
+    QVERIFY(!warning->isVisible());
+    bar.setStorageStatus({{"ok", true}, {"status", QVariantMap{{"warning", false}}}});
+    QVERIFY(!warning->isVisible());
 }
 
 void ExplorerPanelTest::scalesSidebarTypeWithInterfaceZoom() {

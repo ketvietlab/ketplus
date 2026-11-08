@@ -8,6 +8,7 @@
 #include "ui/Theme.h"
 #include "workspace/ExplorerPanel.h"
 #include "workspace/SidebarRepositoryList.h"
+#include <QAbstractButton>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -42,7 +43,7 @@ class WorktreePickerTest : public QObject {
         ketplus::MainWindow window(theme);
         window.openFolder(first);
         window.show();
-        window.findChild<QToolButton*>("agentWorkspaceActivityButton")->click();
+        window.findChild<QAbstractButton*>("agentWorkspaceActivityButton")->click();
         auto* agent = window.findChild<ketplus::AgentWorkspaceView*>();
         QVERIFY(agent);
         const auto before = agent->activePath();
@@ -76,7 +77,7 @@ class WorktreePickerTest : public QObject {
         ketplus::MainWindow window(theme);
         window.openFolder(a);
         window.show();
-        window.findChild<QToolButton*>("agentWorkspaceActivityButton")->click();
+        window.findChild<QAbstractButton*>("agentWorkspaceActivityButton")->click();
         auto* agent = window.findChild<ketplus::AgentWorkspaceView*>();
         auto* manager = window.findChild<ketplus::AgentSessionManager*>();
         auto* server = manager->findChild<ketplus::CodexAppServer*>();
@@ -100,8 +101,8 @@ class WorktreePickerTest : public QObject {
                  QFileInfo(b).canonicalFilePath());
         QCOMPARE(manager->conversations(anchor).first().toMap().value("executionPath").toString(),
                  b);
-        QTRY_VERIFY(window.findChild<QToolButton*>("productRepositoryGroupButton"));
-        const auto groups = window.findChildren<QToolButton*>("productRepositoryGroupButton");
+        QTRY_VERIFY(window.findChild<QAbstractButton*>("productRepositoryGroupButton"));
+        const auto groups = window.findChildren<QAbstractButton*>("productRepositoryGroupButton");
         QCOMPARE(groups.first()->toolTip(), QFileInfo(b).canonicalFilePath());
         emit server->executionContextChanged("same-conversation", "old", a, 1);
         QCOMPARE(agent->executionPath(), b);
@@ -122,7 +123,7 @@ class WorktreePickerTest : public QObject {
         manager->activate(anchor, false);
         QTest::qWait(50);
         bool targetActive = false;
-        for (auto* group : window.findChildren<QToolButton*>("productRepositoryGroupButton")) {
+        for (auto* group : window.findChildren<QAbstractButton*>("productRepositoryGroupButton")) {
             if (group->toolTip() == QFileInfo(b).canonicalFilePath())
                 targetActive = group->property("activeRepository").toBool();
         }
@@ -157,7 +158,7 @@ class WorktreePickerTest : public QObject {
         ketplus::MainWindow window(theme);
         window.openFolder(first);
         window.show();
-        window.findChild<QToolButton*>("agentWorkspaceActivityButton")->click();
+        window.findChild<QAbstractButton*>("agentWorkspaceActivityButton")->click();
         auto* agent = window.findChild<ketplus::AgentWorkspaceView*>();
         auto* service = window.findChild<ketplus::GitService*>();
         QVERIFY(agent && service);

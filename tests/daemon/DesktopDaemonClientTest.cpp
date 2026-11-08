@@ -543,6 +543,7 @@ class DesktopDaemonClientTest final : public QObject {
                                sizeState = result;
                            });
         QTRY_VERIFY(sizeState.value("ok").toBool());
+        QVERIFY(sizeState.value("status").toObject().value("warning").isBool());
         QCOMPARE(sizeState.value("revision").toInteger(), 0);
         sizeState = {};
         storageBridge.call(

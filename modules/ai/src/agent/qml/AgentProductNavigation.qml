@@ -1,5 +1,6 @@
 import "ChromeMetrics.js" as Metrics
 import QtQuick
+import Ket as Kit
 import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
 
@@ -35,50 +36,18 @@ ColumnLayout {
         }
     }
 
-    Basic.Button {
+    Kit.KetNavItem {
         id: quickSearch
         objectName: "productQuickSearch"
         Layout.fillWidth: true
-        Layout.preferredHeight: Metrics.px(32, workspace.t)
         Layout.leftMargin: Metrics.px(9, workspace.t)
         Layout.rightMargin: Metrics.px(9, workspace.t)
-        Layout.bottomMargin: navigation.compactHeight ? Metrics.px(10, workspace.t) : Metrics.px(19, workspace.t)
-        padding: 0
+        Layout.bottomMargin: Metrics.px(10, workspace.t)
+        text: "Quick search"
+        iconName: Kit.KetTheme.iconForLucide("search")
+        shortcut: "⌘ K"
+        checkable: false
         onClicked: agentHost.requestProductNavigation("search")
-        contentItem: RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: Metrics.px(9, workspace.t)
-            anchors.rightMargin: Metrics.px(9, workspace.t)
-            spacing: Metrics.px(8, workspace.t)
-            TintedIcon {
-                Layout.preferredWidth: Metrics.px(14, workspace.t)
-                Layout.preferredHeight: Metrics.px(14, workspace.t)
-                source: "qrc:/agent/icons/search.svg"
-                color: navigation.workspace.t.textMuted
-            }
-            Text {
-                Layout.fillWidth: true
-                text: "Quick search"
-                color: navigation.workspace.t.textSecondary
-                font.family: navigation.workspace.t.uiFont
-                font.pixelSize: navigation.workspace.t.body
-            }
-            Text {
-                text: "⌘ K"
-                color: navigation.workspace.t.textMuted
-                font.family: navigation.workspace.t.uiFont
-                font.pixelSize: navigation.workspace.t.micro
-            }
-        }
-        background: Rectangle {
-            radius: Metrics.px(5, workspace.t)
-            color: quickSearch.hovered ? navigation.workspace.t.surfaceHover
-                                       : navigation.workspace.t.panelBackground
-                                         || navigation.workspace.t.pageBackground
-            border.color: quickSearch.visualFocus ? navigation.workspace.t.focus
-                                                   : navigation.workspace.t.border
-        }
-        Accessible.name: "Quick search"
     }
 
     Column {
@@ -97,47 +66,14 @@ ColumnLayout {
                 { id: "source-control", label: "Source Control", icon: "git-branch.svg" },
                 { id: "connections", label: "Connections", icon: "unplug.svg" }
             ]
-            delegate: Basic.Button {
-                id: navigationButton
+            delegate: Kit.KetNavItem {
                 required property var modelData
                 objectName: "productNavigation_" + modelData.id
                 width: parent.width
-                height: Metrics.px(34, workspace.t)
-                padding: 0
+                text: modelData.label
+                iconName: Kit.KetTheme.iconForLucide(modelData.icon.replace(".svg", ""))
                 checked: modelData.id === "workspace"
                 onClicked: agentHost.requestProductNavigation(modelData.id)
-                contentItem: RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: Metrics.px(9, workspace.t)
-                    anchors.rightMargin: Metrics.px(9, workspace.t)
-                    spacing: Metrics.px(9, workspace.t)
-                    TintedIcon {
-                        Layout.preferredWidth: Metrics.px(16, workspace.t)
-                        Layout.preferredHeight: Metrics.px(16, workspace.t)
-                        source: "qrc:/agent/icons/" + navigationButton.modelData.icon
-                        color: navigationButton.checked ? navigation.workspace.t.accentText
-                                                        : navigation.workspace.t.textMuted
-                    }
-                    Text {
-                        Layout.fillWidth: true
-                        text: navigationButton.modelData.label
-                        color: navigationButton.checked ? navigation.workspace.t.accentText
-                                                        : navigation.workspace.t.textSecondary
-                        elide: Text.ElideRight
-                        font.family: navigation.workspace.t.uiFont
-                        font.pixelSize: navigation.workspace.t.body
-                        font.weight: navigationButton.checked ? Font.DemiBold : Font.Medium
-                    }
-                }
-                background: Rectangle {
-                    radius: Metrics.px(5, workspace.t)
-                    color: navigationButton.checked ? navigation.workspace.t.accentSubtle
-                           : navigationButton.hovered ? navigation.workspace.t.surfaceHover
-                                                      : "transparent"
-                    border.color: navigationButton.visualFocus ? navigation.workspace.t.focus
-                                                                : "transparent"
-                }
-                Accessible.name: modelData.label
             }
         }
     }

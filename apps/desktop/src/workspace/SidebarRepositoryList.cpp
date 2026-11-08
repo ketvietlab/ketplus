@@ -1,4 +1,8 @@
 #include "workspace/SidebarRepositoryList.h"
+#include "KetAppearance.h"
+#include "KetButton.h"
+#include "KetConversationRow.h"
+#include "KetTreeItem.h"
 #include "ui/ChromeGeometry.h"
 #include "ui/InterfaceZoom.h"
 
@@ -23,120 +27,58 @@
 namespace ketplus {
 namespace {
 
-constexpr int kHeaderHeight = 28;
-constexpr int kConversationHeight = 36;
 constexpr int kConversationSpacing = 2;
 constexpr int kGroupSpacing = 12;
-constexpr int kRepositoryNameWidth = 150;
 constexpr int kPreviewConversationCount = 5;
 constexpr int kShowMoreHeight = 26;
 const auto kCollapsedSetting = QStringLiteral("sidebar/collapsedRepositories");
 
-// Elides to its current width so titles reach the sidebar edge at any sidebar width.
-class ElidedLabel final : public QLabel {
-  public:
-    ElidedLabel(QString text, QWidget* parent) : QLabel(parent), fullText_(std::move(text)) {
-        setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-        setMinimumWidth(1);
-    }
-
-  protected:
-    void changeEvent(QEvent* event) override {
-        QLabel::changeEvent(event);
-        if (event->type() == QEvent::FontChange || event->type() == QEvent::StyleChange)
-            setText(fontMetrics().elidedText(fullText_, Qt::ElideRight, width()));
-    }
-    void resizeEvent(QResizeEvent* event) override {
-        QLabel::resizeEvent(event);
-        setText(fontMetrics().elidedText(fullText_, Qt::ElideRight, width()));
-    }
-
-  private:
-    QString fullText_;
-};
-
-struct ConversationPresentation final {
-    QString label;
-    QString tone;
-    QByteArray icon;
-    bool spinning{false};
-};
-
-ConversationPresentation conversationPresentation(const QVariantMap& conversation,
-                                                  const bool seen) {
-    const QString status = conversation.value(QStringLiteral("status")).toString().toLower();
-    if (conversation.value(QStringLiteral("needsInput")).toBool() ||
-        status.contains(QStringLiteral("input")) || status.contains(QStringLiteral("question")) ||
-        status == QStringLiteral("waiting for your answer…"))
-        return {QStringLiteral("Needs input"), QStringLiteral("warning"), symbols::pauseCircle};
+ket::ConversationStatus conversationStatus(const QVariantMap& conversation) {
+    using Status = ket::ConversationStatus;
+    const auto status = conversation.value(QStringLiteral("status")).toString().toLower();
+    if (conversation.value(QStringLiteral("needsInput")).toBool() || status.contains("input") ||
+        status.contains("question") || status == QStringLiteral("waiting for your answer…"))
+        return Status::NeedsInput;
+    if (conversation.value(QStringLiteral("awaitingReply")).toBool())
+        return Status::AwaitingReply;
     if (conversation.value(QStringLiteral("running")).toBool())
-        // The main text colour: the accent loader was too dark to read on the dark sidebar.
-        return {QStringLiteral("Working"), QStringLiteral("main"), symbols::loaderCircle, true};
-    if (status.contains(QStringLiteral("fail")) || status.contains(QStringLiteral("error")) ||
-        status.contains(QStringLiteral("disconnect")) ||
-        status.contains(QStringLiteral("missing")) || status.contains(QStringLiteral("not found")))
-        return {QStringLiteral("Disconnected"), QStringLiteral("danger"), symbols::triangleAlert};
-    if (status.contains(QStringLiteral("stop")))
-        return {QStringLiteral("Stopped"), QStringLiteral("muted"), symbols::square};
-    if (!conversation.value(QStringLiteral("started")).toBool())
-        return {QStringLiteral("Not started"), QStringLiteral("muted"), symbols::circle};
-    if (!conversation.value(QStringLiteral("selected")).toBool() && !seen)
-        return {QStringLiteral("Completed, unread"), QStringLiteral("accent"),
-                symbols::circleCheck};
-    return {QStringLiteral("Completed"), QStringLiteral("muted"), symbols::circleCheck};
+        return Status::Working;
+    if (status.contains("fail") || status.contains("error") || status.contains("disconnect") ||
+        status.contains("missing") || status.contains("not found"))
+        return Status::Error;
+    if (status.contains("stop"))
+        return Status::Stopped;
+    return conversation.value(QStringLiteral("started")).toBool() ? Status::Completed
+                                                                  : Status::NotStarted;
 }
 
-// QLabel has no rotation property. Paint the normal Két Symbol pixmap through a rotating painter so
-// the loader remains crisp at its native device-pixel ratio and stops immediately with the turn.
-class RotatingIconLabel final : public QLabel {
-  public:
-    explicit RotatingIconLabel(QWidget* parent) : QLabel(parent), timer_(this) {
-        timer_.setInterval(60);
-        connect(&timer_, &QTimer::timeout, this, [this] {
-            angle_ = (angle_ + 18) % 360;
-            setProperty("rotationAngle", angle_);
-            update();
-        });
+void updateConversation(ket::ConversationRow* row, const QVariantMap& conversation, bool seen) {
+    const auto status = conversationStatus(conversation);
+    row->setStatus(status);
+    const bool unread = status == ket::ConversationStatus::Completed && !seen;
+    row->setProperty("unread", unread);
+    QString label =
+        unread ? QObject::tr("Completed, unread") : ket::conversationStatusLabel(status);
+    const QString sender = conversation.value(QStringLiteral("agentTurnNumber")).toString();
+    if (status == ket::ConversationStatus::Working && !sender.isEmpty())
+        label += QObject::tr(" · from #%1").arg(sender);
+    row->setStatusLabel(label);
+    row->setAccessibleDescription(label);
+    QList<ket::ConversationTag> tags;
+    for (const auto& value : conversation.value(QStringLiteral("tags")).toList()) {
+        const auto tag = value.toMap();
+        const auto text = tag.value(QStringLiteral("label"), value.toString()).toString().trimmed();
+        if (text.isEmpty())
+            continue;
+        QColor color(tag.value(QStringLiteral("color")).toString());
+        if (!color.isValid())
+            color = ket::conversationStatusRecipe(ket::ConversationStatus::Working,
+                                                  ket::Appearance::instance().theme())
+                        .iconColor;
+        tags.append({text, color});
     }
-
-    void setSpinning(const bool spinning) {
-        if (spinning_ == spinning)
-            return;
-        spinning_ = spinning;
-        setProperty("spinning", spinning_);
-        if (spinning_)
-            timer_.start();
-        else {
-            timer_.stop();
-            angle_ = 0;
-            setProperty("rotationAngle", angle_);
-        }
-        update();
-    }
-
-  protected:
-    void paintEvent(QPaintEvent* event) override {
-        const QPixmap icon = pixmap(Qt::ReturnByValue);
-        if (!spinning_ || icon.isNull()) {
-            QLabel::paintEvent(event);
-            return;
-        }
-        QPainter painter(this);
-        painter.setRenderHint(QPainter::SmoothPixmapTransform);
-        painter.translate(width() / 2.0, height() / 2.0);
-        painter.rotate(angle_);
-        // The source rect is in physical pixels (the Két Symbol pixmap is 2× retina), while the
-        // destination is in widget coordinates. Using the device-independent size for both
-        // sampled only the pixmap's upper-left quadrant and visibly clipped the spinner.
-        painter.drawPixmap(QRectF(-width() / 2.0, -height() / 2.0, width(), height()), icon,
-                           QRectF(icon.rect()));
-    }
-
-  private:
-    QTimer timer_;
-    int angle_{0};
-    bool spinning_{false};
-};
+    row->setTags(tags);
+}
 
 // Everything that needs new widgets. Selection and turn status are updated in place.
 // The conversation whose message started a running turn; empty once the turn ends.
@@ -162,17 +104,6 @@ QStringList structureOf(const QVector<SidebarRepository>& repositories) {
         structure << QString();
     }
     return structure;
-}
-
-RotatingIconLabel* iconLabel(const QByteArray& body, const QString& role, const bool spinning,
-                             const int size, QWidget* parent) {
-    auto* icon = new RotatingIconLabel(parent);
-    icon->setProperty("symbolName", body);
-    icon->setProperty("symbolColorRole", role);
-    chrome_geometry::fixedSize(icon, size, size);
-    icon->setAttribute(Qt::WA_TransparentForMouseEvents);
-    icon->setSpinning(spinning);
-    return icon;
 }
 
 // Newest rows stay first. Running and selected conversations keep a slot even
@@ -308,47 +239,22 @@ void SidebarRepositoryList::setRepositories(const QVector<SidebarRepository>& pr
         chrome_geometry::margins(groupLayout, 0, 0, 0, 0);
         chrome_geometry::spacing(groupLayout, kConversationSpacing);
 
-        auto* header = new QWidget(group);
+        auto* header = new ket::GroupHeader(repository.name, group);
         header->setObjectName(QStringLiteral("productRepositoryGroupHeader"));
-        chrome_geometry::fixedHeight(header, kHeaderHeight);
-        auto* headerLayout = new QHBoxLayout(header);
-        chrome_geometry::margins(headerLayout, 0, 0, 2, 0);
-        chrome_geometry::spacing(headerLayout, 2);
-        auto* name = new QToolButton(header);
+        auto* name = header->toggle();
         name->setObjectName(QStringLiteral("productRepositoryGroupButton"));
-        name->setProperty("kvRole", QStringLiteral("productRepositoryGroup"));
-        name->setProperty("activeRepository", repository.active);
-        name->setText(
-            name->fontMetrics().elidedText(repository.name, Qt::ElideRight, kRepositoryNameWidth));
         name->setToolTip(repository.path);
-        name->setAccessibleName(repository.name);
-        name->setToolButtonStyle(Qt::ToolButtonTextOnly);
-        chrome_geometry::fixedHeight(name, kHeaderHeight);
-        connect(name, &QToolButton::clicked, this,
-                [this, path = repository.path] { onRepositoryHeaderClicked(path); });
-        headerLayout->addWidget(name);
-        headerLayout->addStretch();
+        name->setProperty("activeRepository", repository.active);
+        header->setSelected(repository.active);
         header->setProperty("activeRepository", repository.active);
+        connect(name, &QAbstractButton::clicked, this,
+                [this, path = repository.path] { onRepositoryHeaderClicked(path); });
+        auto* create = header->action();
+        create->setObjectName(QStringLiteral("productNewConversationButton"));
+        create->setToolTip(tr("New conversation in %1").arg(repository.name));
+        connect(header, &ket::GroupHeader::actionTriggered, this,
+                [this, path = repository.path] { emit newConversationRequested(path); });
         headers_.append(header);
-        {
-            auto* create = new QToolButton(header);
-            create->setObjectName(QStringLiteral("productNewConversationButton"));
-            create->setProperty("kvRole", QStringLiteral("productSectionAction"));
-            create->setProperty("symbolName", QByteArray(symbols::plus));
-            create->setToolTip(tr("New conversation in %1").arg(repository.name));
-            create->setAccessibleName(create->toolTip());
-            chrome_geometry::iconSize(create, QSize(14, 14));
-            chrome_geometry::fixedSize(create, 24, 24);
-            QSizePolicy policy = create->sizePolicy();
-            policy.setRetainSizeWhenHidden(true);
-            create->setSizePolicy(policy);
-            create->hide();
-            connect(create, &QToolButton::clicked, this,
-                    [this, path = repository.path] { emit newConversationRequested(path); });
-            header->setProperty("hoverAction", QVariant::fromValue<QObject*>(create));
-            header->installEventFilter(this);
-            headerLayout->addWidget(create);
-        }
         groupLayout->addWidget(header);
 
         for (const QVariant& value : repository.conversations) {
@@ -360,11 +266,9 @@ void SidebarRepositoryList::setRepositories(const QVector<SidebarRepository>& pr
                 title = tr("New conversation");
             const bool seen = conversation.value(QStringLiteral("seen")).toBool() ||
                               seenConversationIds_.contains(id);
-            const ConversationPresentation presentation =
-                conversationPresentation(conversation, seen);
             const bool selected = conversation.value(QStringLiteral("selected")).toBool();
 
-            auto* button = new QToolButton(group);
+            auto* button = new ket::ConversationRow(title, group);
             button->setObjectName(QStringLiteral("productConversationButton"));
             button->setProperty("kvRole", QStringLiteral("productConversation"));
             button->setProperty("worktreePath", worktreePath);
@@ -394,49 +298,17 @@ void SidebarRepositoryList::setRepositories(const QVector<SidebarRepository>& pr
                                (origin.isEmpty() ? QString() : origin + QLatin1Char('\n')) +
                                QFileInfo(worktreePath).fileName());
             button->setAccessibleName(numbered);
-            button->setAccessibleDescription(origin.isEmpty() ? presentation.label
-                                                              : presentation.label +
-                                                                    QStringLiteral(". ") + origin);
-            button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-            chrome_geometry::fixedHeight(button, kConversationHeight);
-            button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-            auto* row = new QHBoxLayout(button);
-            chrome_geometry::margins(row, 8, 0, 8, 0);
-            chrome_geometry::spacing(row, 8);
-            auto* status =
-                iconLabel(presentation.icon, presentation.tone, presentation.spinning, 14, button);
-            status->setObjectName(QStringLiteral("productConversationStatusIcon"));
-            auto* titleLabel = new ElidedLabel(title, button);
-            titleLabel->setProperty("kvRole", QStringLiteral("productConversationTitle"));
-            titleLabel->setProperty("selectedConversation", selected);
-            titleLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
-            row->addWidget(status);
-            row->addWidget(titleLabel, 1);
-            if (!sender.isEmpty()) {
-                auto* senderLabel = new QLabel(tr("from #%1").arg(sender), button);
-                senderLabel->setObjectName(QStringLiteral("productConversationAgentSender"));
-                senderLabel->setProperty("kvRole",
-                                         QStringLiteral("productConversationAgentSender"));
-                senderLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
-                row->addWidget(senderLabel);
-            }
-            if (!number.isEmpty()) {
-                auto* numberLabel = new QLabel(QLatin1Char('#') + number, button);
-                numberLabel->setObjectName(QStringLiteral("productConversationNumber"));
-                numberLabel->setProperty("kvRole", QStringLiteral("productConversationNumber"));
-                numberLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
-                row->addWidget(numberLabel);
-            }
-            connect(button, &QToolButton::clicked, this, [this, button, worktreePath, id] {
+            button->setNumber(number);
+            updateConversation(button, conversation, seen);
+            connect(button, &QAbstractButton::clicked, this, [this, button, worktreePath, id] {
                 markConversationSeen(id);
                 // Selection follows the session manager; the refresh re-checks the row.
                 button->setChecked(button->property("selectedConversation").toBool());
                 emit conversationRequested(worktreePath, id);
             });
-            connect(button, &QToolButton::customContextMenuRequested, this,
-                    [this, worktreePath, id] {
-                        emit conversationContextMenuRequested(worktreePath, id);
-                    });
+            connect(button, &QWidget::customContextMenuRequested, this, [this, worktreePath, id] {
+                emit conversationContextMenuRequested(worktreePath, id);
+            });
             groupLayout->addWidget(button);
             rows_.append(button);
         }
@@ -465,16 +337,10 @@ void SidebarRepositoryList::setRepositories(const QVector<SidebarRepository>& pr
 
 void SidebarRepositoryList::updateRows(const QVector<SidebarRepository>& repositories) {
     for (qsizetype group = 0; group < repositories.size() && group < headers_.size(); ++group) {
-        QWidget* header = headers_.at(group);
-        const bool active = repositories.at(group).active;
-        header->setProperty("activeRepository", active);
-        auto* name =
-            header->findChild<QToolButton*>(QStringLiteral("productRepositoryGroupButton"));
-        if (name != nullptr && name->property("activeRepository").toBool() != active) {
-            name->setProperty("activeRepository", active);
-            name->style()->unpolish(name);
-            name->style()->polish(name);
-        }
+        auto* header = qobject_cast<ket::GroupHeader*>(headers_.at(group));
+        header->setSelected(repositories.at(group).active);
+        header->toggle()->setProperty("activeRepository", repositories.at(group).active);
+        header->setProperty("activeRepository", repositories.at(group).active);
     }
     qsizetype row = 0;
     for (const SidebarRepository& repository : repositories) {
@@ -486,27 +352,10 @@ void SidebarRepositoryList::updateRows(const QVector<SidebarRepository>& reposit
             const QString id = conversation.value(QStringLiteral("id")).toString();
             const bool seen = conversation.value(QStringLiteral("seen")).toBool() ||
                               seenConversationIds_.contains(id);
-            const ConversationPresentation presentation =
-                conversationPresentation(conversation, seen);
-            QToolButton* button = rows_.at(row++);
+            auto* button = rows_.at(row++);
             button->setProperty("selectedConversation", selected);
             button->setChecked(selected);
-            button->setAccessibleDescription(presentation.label);
-            if (auto* status =
-                    button->findChild<QLabel*>(QStringLiteral("productConversationStatusIcon"))) {
-                status->setProperty("symbolName", presentation.icon);
-                status->setProperty("symbolColorRole", presentation.tone);
-                static_cast<RotatingIconLabel*>(status)->setSpinning(presentation.spinning);
-            }
-            for (auto* title : button->findChildren<QLabel*>()) {
-                if (title->property("kvRole").toString() !=
-                        QStringLiteral("productConversationTitle") ||
-                    title->property("selectedConversation").toBool() == selected)
-                    continue;
-                title->setProperty("selectedConversation", selected);
-                title->style()->unpolish(title);
-                title->style()->polish(title);
-            }
+            updateConversation(button, conversation, seen);
         }
     }
 }
@@ -525,6 +374,11 @@ void SidebarRepositoryList::applyZoom(const int basePixels) {
     applyPresentation();
 }
 
+void SidebarRepositoryList::setTagFilter(const QString& tag) {
+    tagFilter_ = tag;
+    applyPresentation();
+}
+
 void SidebarRepositoryList::applyPresentation() {
     const auto px = [this](int n) {
         return InterfaceZoomMetrics::geometry(n, chrome_geometry::basePixels(this));
@@ -540,29 +394,41 @@ void SidebarRepositoryList::applyPresentation() {
         const bool showAll = showAllPaths_.contains(repository.path);
         const QSet<QString> preview = previewedConversationIds(repository.conversations, showAll);
         int visibleRows = 0;
-        for (auto* button :
-             group->findChildren<QToolButton*>(QStringLiteral("productConversationButton"))) {
-            const bool visible =
-                !collapsed && preview.contains(button->property("conversationId").toString());
+        for (auto* button : group->findChildren<ket::ConversationRow*>(
+                 QStringLiteral("productConversationButton"))) {
+            const auto tags = button->tags();
+            const bool matches =
+                tagFilter_.isEmpty() ||
+                std::any_of(tags.cbegin(), tags.cend(), [this](const ket::ConversationTag& tag) {
+                    return tag.label == tagFilter_;
+                });
+            const bool visible = matches && !collapsed &&
+                                 (!tagFilter_.isEmpty() ||
+                                  preview.contains(button->property("conversationId").toString()));
+            button->setFixedHeight(button->sizeHint().height());
             button->setVisible(visible);
             if (visible)
                 ++visibleRows;
         }
         auto* showMore =
             group->findChild<QToolButton*>(QStringLiteral("productShowMoreConversations"));
-        const bool moreVisible = showMore != nullptr && !collapsed && !showAll &&
-                                 repository.conversations.size() > preview.size();
+        const bool moreVisible = tagFilter_.isEmpty() && showMore != nullptr && !collapsed &&
+                                 !showAll && repository.conversations.size() > preview.size();
         if (showMore != nullptr)
             showMore->setVisible(moreVisible);
-        if (auto* name =
-                group->findChild<QToolButton*>(QStringLiteral("productRepositoryGroupButton"))) {
+        if (auto* name = group->findChild<QAbstractButton*>(
+                QStringLiteral("productRepositoryGroupButton"))) {
             name->setAccessibleDescription(repository.conversations.isEmpty() ? QString()
                                            : collapsed                        ? tr("Collapsed")
                                                                               : tr("Expanded"));
         }
         const int extra = moreVisible ? px(kShowMoreHeight) + px(kConversationSpacing) : 0;
-        group->setFixedHeight(px(kHeaderHeight) +
-                              visibleRows * (px(kConversationHeight) + px(kConversationSpacing)) +
+        auto* header = qobject_cast<ket::GroupHeader*>(headers_.at(index));
+        header->setExpanded(!collapsed);
+        group->setFixedHeight(header->sizeHint().height() +
+                              visibleRows *
+                                  ((rows_.isEmpty() ? 0 : rows_.first()->sizeHint().height()) +
+                                   px(kConversationSpacing)) +
                               extra);
         height += group->height();
     }

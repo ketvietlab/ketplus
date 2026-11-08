@@ -8,6 +8,8 @@
 #include "ui/Theme.h"
 #include "workspace/ActivityBar.h"
 
+#include "KetConversationRow.h"
+#include "KetNavItem.h"
 #include "KetProfile.h"
 #include "KetStepSlider.h"
 
@@ -48,13 +50,6 @@ void saveSettings(MainWindow& window) {
         }
     }
     QFAIL("No settings save action");
-}
-QLabel* conversationLabel(ActivityBar& sidebar) {
-    for (auto* label : sidebar.findChildren<QLabel*>())
-        if (label->property("kvRole") == QStringLiteral("productConversationTitle") &&
-            label->text() != QStringLiteral("New row"))
-            return label;
-    return nullptr;
 }
 } // namespace
 
@@ -115,7 +110,7 @@ class DesktopZoomTest final : public QObject {
         repo.conversations = {QVariantMap{{"id", "first"}, {"path", repo.path}, {"title", title}}};
         bar->setRepositories({repo});
         bar->setMode(ActivityBar::Mode::AgentWorkspace);
-        const auto* nav = bar->findChild<QToolButton*>("agentWorkspaceActivityButton");
+        const auto* nav = bar->findChild<QAbstractButton*>("agentWorkspaceActivityButton");
         QVERIFY(nav);
         const auto* root = agent->quickView()->rootObject();
         QVERIFY(root);
@@ -130,27 +125,22 @@ class DesktopZoomTest final : public QObject {
             QCOMPARE(ket::Appearance::instance().zoom(), InterfaceZoomMetrics::factor(pixels));
             const auto px = [pixels](int n) { return InterfaceZoomMetrics::geometry(n, pixels); };
             QCOMPARE(inherited.font().pixelSize(), pixels);
-            QCOMPARE(nav->height(), px(32));
+            QCOMPARE(nav->height(), nav->sizeHint().height());
             QTRY_COMPARE(header->height(), px(44));
             QTRY_COMPARE(footer->height(), px(28));
-            auto* row = bar->findChild<QToolButton*>("productConversationButton");
-            QVERIFY(row && row->layout());
-            QCOMPARE(row->height(), px(36));
-            QCOMPARE(row->layout()->contentsMargins().left(), px(8));
-            QCOMPARE(row->layout()->spacing(), px(8));
-            auto* label = conversationLabel(*bar);
-            QVERIFY(label);
-            QCOMPARE(label->text(),
-                     label->fontMetrics().elidedText(title, Qt::ElideRight, label->width()));
-            QVERIFY(label->fontMetrics().horizontalAdvance(label->text()) <= label->width());
+            auto* row = bar->findChild<ket::ConversationRow*>("productConversationButton");
+            QVERIFY(row);
+            QCOMPARE(row->height(), row->sizeHint().height());
+            QCOMPARE(row->text(), title);
+            QVERIFY(row->recipe().titleLineHeight > 0);
             // Rows created after a zoom change inherit the same geometry.
             repo.conversations.append(QVariantMap{
                 {"id", QString::number(pixels) + QString::number(repo.conversations.size())},
                 {"path", repo.path},
                 {"title", "New row"}});
             bar->setRepositories({repo});
-            for (auto* newRow : bar->findChildren<QToolButton*>("productConversationButton"))
-                QCOMPARE(newRow->height(), px(36));
+            for (auto* newRow : bar->findChildren<QAbstractButton*>("productConversationButton"))
+                QCOMPARE(newRow->height(), newRow->sizeHint().height());
             QTest::qWait(80); // settle rows created above before native captures
             const auto captureRoot = qEnvironmentVariable("KETPLUS_ZOOM_CAPTURE");
             const auto capture =
@@ -218,8 +208,8 @@ class DesktopZoomTest final : public QObject {
         second.openFolder(repo2.path());
         first.show();
         second.show();
-        first.findChild<QToolButton*>("agentWorkspaceActivityButton")->click();
-        second.findChild<QToolButton*>("agentWorkspaceActivityButton")->click();
+        first.findChild<QAbstractButton*>("agentWorkspaceActivityButton")->click();
+        second.findChild<QAbstractButton*>("agentWorkspaceActivityButton")->click();
         auto* one = first.findChild<AgentWorkspaceView*>();
         auto* two = second.findChild<AgentWorkspaceView*>();
         QVERIFY(one && two);

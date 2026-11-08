@@ -9,6 +9,12 @@ milestone changes state.
 
 ## Implemented
 
+- Pro sidebar uses kit navigation, repository groups, two-line conversation rows,
+  tag filtering and update pills. Storage pressure warnings consume the local
+  daemon's existing size-status contract. Waiting-for-reply and tags render only
+  when metadata supplies them; automatic intent classification/reviewer orchestration
+  are separate behaviour work. Native acceptance remains deferred.
+
 - Lite shell implementation now connects the Qt mock activity rail to Explorer,
   Search, Source Control and Settings. First use opens a folder welcome surface;
   file tabs show a kit breadcrumb outside the Scintilla document viewport.

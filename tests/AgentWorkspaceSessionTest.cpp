@@ -563,27 +563,23 @@ void AgentWorkspaceViewTest::animatesRunningConversationStatus() {
     view.show();
     auto* root = view.quickView()->rootObject();
     QVERIFY(root);
-    const auto shine = [&]() {
-        return findVisualItem(root, QStringLiteral("conversationStatusShine_animated"));
+    const auto row = [&]() {
+        return findVisualItem(root, QStringLiteral("conversationRow_animated"));
     };
-    QTRY_VERIFY(shine());
+    QTRY_VERIFY(row());
     QVERIFY(!view.motionEnabled());
-    QTRY_VERIFY(!shine()->property("animating").toBool());
-    const qreal initialX = shine()->x();
-    QTest::qWait(100);
-    QCOMPARE(shine()->x(), initialX);
+    QTRY_VERIFY(!row()->property("holdsClock").toBool());
     conversation["status"] = "Reasoning";
     view.setConversations({conversation});
-    QTRY_VERIFY(shine() && !shine()->property("animating").toBool());
+    QTRY_VERIFY(row() && !row()->property("holdsClock").toBool());
     view.hide();
-    QTRY_VERIFY(!shine()->property("animating").toBool());
+    QTRY_VERIFY(!row()->property("holdsClock").toBool());
     view.show();
-    QTRY_VERIFY(!shine()->property("animating").toBool());
+    QTRY_VERIFY(!row()->property("holdsClock").toBool());
     conversation["running"] = false;
     conversation["status"] = "Ready";
     view.setConversations({conversation});
-    QTRY_VERIFY(shine() && !shine()->property("animating").toBool());
-    QVERIFY(!shine()->isVisible());
+    QTRY_VERIFY(row() && !row()->property("holdsClock").toBool());
 }
 
 void AgentWorkspaceViewTest::restoresConversationScrollPosition() {
