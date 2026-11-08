@@ -109,3 +109,9 @@ kit banner; background task rows retain real stop/output actions and locally
 dismiss completed receipts without deleting daemon history. Focused runtime
 checks pass, including dismissal followed by a new running task. Atlas results
 and the right details pane remain part of the Atlas layer; #163 is not complete.
+
+Cards: draft PR #222 on #221. Sidebar correction follows: standalone QML now
+uses repository → conversation, removing the inherited worktree rail and its
+filter/reveal logic. The native shell already groups conversations by repository.
+Six focused cases pass, including a 120-worktree catalog without sidebar rows,
+group collapse/create, resizing and context actions; the dark capture is inspected.

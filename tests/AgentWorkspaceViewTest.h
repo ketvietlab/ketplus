@@ -14,7 +14,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void pathChangeScansSkillsOffTheGuiThread();
     void loadsQmlAndMapsWorktrees();
     void mentionsOnlyFilesInConversationWorktree();
-    void hidesWorktreesWithoutConversationsByDefault();
+    void sidebarGroupsConversationsWithoutWorktreeRail();
     void restoringDoesNotCoverChatPane();
     void weeklyLimitFooter();
     void compactFollowsProviderCapabilities();
@@ -89,7 +89,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void linksFileReferencesInInlineCode();
     void mermaidFillsGetReadableLabels();
     void sidebarDividerRemainsResizable();
-    void filtersLargeWorktreeSets();
+    void largeWorktreeCatalogDoesNotCreateSidebarRail();
     void exposesUiInteractions();
     void streamsAndKeepsSessionsByWorktree();
     void missingWorktreeKeepsHistoryAndCanStop();

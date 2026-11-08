@@ -438,7 +438,7 @@ void AgentWorkspaceViewTest::composerPreview() {
     QVERIFY(root);
     auto* composer = root->findChild<QQuickItem*>("agentComposer");
     auto* prompt = root->findChild<QQuickItem*>("agentPrompt");
-    auto* sidebar = root->findChild<QQuickItem*>("worktreeSidebar");
+    auto* sidebar = root->findChild<QQuickItem*>("conversationSidebar");
     auto* productNavigationLayout = root->findChild<QQuickItem*>("agentProductNavigation");
     auto* brand = root->findChild<QQuickItem*>("productBrand");
     auto* quickSearch = root->findChild<QQuickItem*>("productQuickSearch");
