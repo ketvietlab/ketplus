@@ -1,3 +1,4 @@
+#include "KetIcons.h"
 #include "KetTokens.h"
 #include "agent/AgentWorkspaceView.h"
 #include "app/AtlasBuilderTab.h"
@@ -178,8 +179,8 @@ class AtlasWorkspaceTest final : public QObject {
         auto* addTab = window.findChild<QAbstractButton*>("atlasNewTabButton");
         QVERIFY(tabs);
         QVERIFY(addTab);
-        QVERIFY(QFile::exists(":/atlas/icons/plus.svg"));
-        QVERIFY(QFile::exists(":/atlas/icons/x.svg"));
+        QVERIFY(!ket::Icons::codeForLucide(u"plus").isEmpty());
+        QVERIFY(!ket::Icons::codeForLucide(u"x").isEmpty());
         QCOMPARE(tabs->cornerWidget(Qt::TopRightCorner), addTab);
         QTRY_VERIFY(tabs->rect().contains(QRect(addTab->mapTo(tabs, QPoint()), addTab->size())));
         QVERIFY(tabs->isVisible());

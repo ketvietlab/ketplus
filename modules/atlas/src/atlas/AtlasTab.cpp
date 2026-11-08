@@ -86,7 +86,7 @@ QString atlasStyle(const QPalette& palette, const int basePixels) {
     QString css = TypeScale::apply(QStringLiteral(R"QSS(
 QWidget#atlasTab, QWidget#atlasPicker, QStackedWidget#atlasPages { background:@page@; color:@text@; }
 QLabel#atlasEyebrow { color:@accentText@; font-size:{{caption}}px; font-weight:600; letter-spacing:1px; }
-QLabel#atlasLibraryTitle { color:@text@; font-size:30px; font-weight:600; }
+QLabel#atlasLibraryTitle { color:@text@; font-size:{{px:30}}px; font-weight:600; }
 QLabel#atlasLibrarySubtitle { color:@muted@; font-size:{{reading}}px; }
 QLabel#atlasScopeIcon { color:@muted@; }
 QLabel#atlasScope { color:@secondary@; font-size:{{body}}px; font-weight:600; }

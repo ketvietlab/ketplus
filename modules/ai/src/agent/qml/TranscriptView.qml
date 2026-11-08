@@ -1,3 +1,4 @@
+import Ket as Kit
 import "ChromeMetrics.js" as Metrics
 import QtQuick
 import QtQuick.Controls
@@ -1965,7 +1966,7 @@ Flickable {
                 objectName: "newMessageBadgeLabel"
                 anchors.centerIn: parent
                 text: transcript.newMessageCount + " new"
-                color: "#ffffff"
+                color: Kit.KetTheme.t.actionPrimaryInk
                 font.family: shell.t.uiFont
                 font.pixelSize: shell.t.micro
                 font.weight: Font.DemiBold

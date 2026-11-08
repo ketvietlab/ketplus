@@ -143,6 +143,8 @@ void InterfaceFontTest::typeScaleApplyAndLiteralScalingAreMediumInert() {
     QCOMPARE(medium, expected(14));
     QCOMPARE(ketplus::TypeScale::apply(templateSheet, 16), expected(16));
 
+    QCOMPARE(ketplus::TypeScale::apply(QStringLiteral("QLabel { font-size:{{px:30}}px; }"), 21),
+             QStringLiteral("QLabel { font-size:45px; }"));
     // Input samples for scaleLiteralFontSizes — intentional raw literals.
     const QString literals =
         QStringLiteral("QLabel { font-size: 12px; } QPushButton { font-size:14px; }");

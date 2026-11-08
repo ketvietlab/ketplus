@@ -12,6 +12,7 @@
 #include <QColor>
 #include <QFont>
 #include <QFontDatabase>
+#include <QRegularExpression>
 #include <QSettings>
 #include <QToolTip>
 
@@ -124,23 +125,15 @@ int tooltipFontPixels() {
 
 namespace {
 
-QString styleSheetFor(const ThemePalette& palette, const QString& fontFamily,
-                      const int interfaceFontSizePixels) {
+QString styleSheetFor(const ThemePalette& palette, const int interfaceFontSizePixels) {
     const QString terminalFontFamily = QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
     QString style = QStringLiteral(R"QSS(
-QWidget {
-    color: {{textMain}};
-    font-family: "{{fontFamily}}";
-    font-size: {{interfaceFontSize}}px;
-    selection-background-color: {{accentMuted}};
-    selection-color: {{textMain}};
-}
-
 QToolTip {
     font-size: {{tooltipFontSize}}px;
 }
 
-QMainWindow, QDialog, QMessageBox {
+QMainWindow, QDialog, QMessageBox,
+QStackedWidget#liteWorkspacePages, QWidget#liteWelcome {
     background: {{pageBackground}};
 }
 
@@ -603,22 +596,13 @@ QListWidget#settingsNavigation {
     outline: 0;
 }
 
-QListWidget#settingsNavigation::item {
-    min-height: 34px;
-    padding: 0 10px;
-    border-radius: 5px;
-    color: {{textSecondary}};
-}
-
-QListWidget#settingsNavigation::item:hover {
-    background: {{surfaceHover}};
-    color: {{textMain}};
-}
-
+QListWidget#settingsNavigation::item,
+QListWidget#settingsNavigation::item:hover,
 QListWidget#settingsNavigation::item:selected {
-    border-left: 2px solid {{focus}};
-    background: {{accentSubtle}};
-    color: {{tabActiveText}};
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: transparent;
 }
 
 QScrollArea#appearanceSettingsScroll {
@@ -825,11 +809,24 @@ QToolButton[kvRole="sidebarAction"]:hover {
 }
 )QSS");
 
+    // Scale legacy product text once, before token expansion. Kit controls own
+    // their fonts; the tooltip token deliberately keeps its recipe size.
+    static const QRegularExpression fontSize(QStringLiteral(R"((font-size:\s*)(\d+)px)"));
+    auto matches = fontSize.globalMatch(style);
+    QList<QRegularExpressionMatch> sizes;
+    while (matches.hasNext())
+        sizes.append(matches.next());
+    for (auto it = sizes.crbegin(); it != sizes.crend(); ++it)
+        style.replace(it->capturedStart(2), it->capturedLength(2),
+                      QString::number(InterfaceZoomMetrics::scale(it->captured(2).toInt(),
+                                                                  interfaceFontSizePixels)));
+
     const std::pair<const char*, QString> replacements[] = {
-        {"{{fontFamily}}", fontFamily},
         {"{{terminalFontFamily}}", terminalFontFamily},
         {"{{interfaceFontSize}}", QString::number(interfaceFontSizePixels)},
-        {"{{tooltipFontSize}}", QString::number(tooltipFontPixels())},
+        {"{{tooltipFontSize}}",
+         QString::number(qRound(ket::tooltipRecipe(ket::Appearance::instance().theme()).fontPixels *
+                                interfaceFontSizePixels / InterfaceZoomMetrics::designedAtPixels))},
         {"{{pageBackground}}", palette.pageBackground},
         {"{{panelBackground}}", palette.panelBackground},
         {"{{panelSubtle}}", palette.panelSubtle},
@@ -893,11 +890,8 @@ ThemeManager::ThemeManager(QApplication& application, QObject* parent)
 
     // ket::Appearance owns light, dark and following the system; QML (KetTheme), the kit's
     // style and KétPlus Terminal read it, so the palette follows it too.
-    connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this, [this] {
-        if (!syncingAppearance_) {
-            apply();
-        }
-    });
+    connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this,
+            [this] { apply(); });
     syncAppearance();
 }
 
@@ -940,32 +934,40 @@ void ThemeManager::setInterfaceFontSizePixels(const int fontSizePixels) {
         return;
     }
     interfaceFontSizePixels_ = normalized;
-    // The Pro shell snaps its named sizes; Lite retains its existing numeric setting.
-    // Both publish the same ratio to kit Widgets and KetTheme.zoom before repainting.
-    ket::Appearance::instance().setZoom(qreal(normalized) / InterfaceZoomMetrics::designedAtPixels);
+    // Finish QApplication/QSS propagation before notifying kit widgets. Qt's
+    // stylesheet repolish resets child fonts, including explicit recipe fonts.
     QFont font = application_.font();
     font.setPixelSize(interfaceFontSizePixels_);
     setApplicationFont(font);
-    apply();
+    apply(false);
+    ket::Appearance::instance().setZoom(qreal(normalized) / InterfaceZoomMetrics::designedAtPixels);
+    // apply() sized the tooltip font from the previous zoom.
+    restoreTooltipFont();
+    emit themeChanged();
 }
 
 void ThemeManager::syncAppearance() {
     const Mode mode = effectiveMode();
-    syncingAppearance_ = true;
+    const auto previousTheme = ket::Appearance::instance().theme();
     ket::Appearance::instance().setMode(mode == Mode::Dark    ? ket::Appearance::Mode::Dark
                                         : mode == Mode::Light ? ket::Appearance::Mode::Light
                                                               : ket::Appearance::Mode::System);
-    syncingAppearance_ = false;
-    apply();
+    // A changed theme already calls apply() before the kit widgets' observers.
+    // Reapplying afterwards would overwrite the fonts they just refreshed.
+    if (previousTheme == ket::Appearance::instance().theme())
+        apply();
 }
 
-void ThemeManager::apply() {
+void ThemeManager::apply(const bool notify) {
     palette_ = paletteFor(ket::Appearance::instance().theme());
 
-    application_.setStyleSheet(styleSheetFor(palette_, uiFontFamily_, interfaceFontSizePixels_));
+    const auto sheet = styleSheetFor(palette_, interfaceFontSizePixels_);
+    if (application_.styleSheet() != sheet)
+        application_.setStyleSheet(sheet);
     restoreTooltipFont();
 
-    emit themeChanged();
+    if (notify)
+        emit themeChanged();
 }
 
 ThemeManager::Mode ThemeManager::effectiveMode() const noexcept {
@@ -973,16 +975,9 @@ ThemeManager::Mode ThemeManager::effectiveMode() const noexcept {
 }
 
 void ThemeManager::loadInterfaceFont() {
-    uiFontFamily_ = QStringLiteral("Inter");
-    const int fontId =
-        QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/InterVariable.ttf"));
-    const auto families = QFontDatabase::applicationFontFamilies(fontId);
-    if (!families.isEmpty()) {
-        uiFontFamily_ = families.constFirst();
-    }
-
-    if (QFontDatabase::hasFamily(QStringLiteral("KET Sans")))
-        uiFontFamily_ = QStringLiteral("KET Sans");
+    uiFontFamily_ = QFontDatabase::hasFamily(QStringLiteral("KET Sans"))
+                        ? QStringLiteral("KET Sans")
+                        : QFontDatabase::systemFont(QFontDatabase::GeneralFont).family();
 
     QFont font(uiFontFamily_);
     font.setPixelSize(interfaceFontSizePixels_);

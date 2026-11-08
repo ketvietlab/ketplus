@@ -281,3 +281,8 @@ and its three pinned submodules. Dependency build trees stay local to each build
 The daemon advertises `transport.webrtc/1`; it admits offers only after a heartbeat
 negotiates that capability. Relay feature flags remain the rollout control.
 No provider account or quota is needed for `ketplus_daemon_peer_transport_tests`.
+
+`KETPLUS_CAPTURE` and `KETPLUS_BENCHMARK_STARTUP` runs of Lite use a temporary
+INI preference store. They neither restore nor overwrite the installed app's
+session/window settings. Captures therefore start from a clean profile; use
+`KETPLUS_CAPTURE_THEME=light|dark` to choose the preview theme.

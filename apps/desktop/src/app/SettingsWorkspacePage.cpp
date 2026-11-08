@@ -613,11 +613,11 @@ QWidget#settingsWorkspaceAppearance, QWidget#settingsWorkspaceTypography,
 QStackedWidget#settingsWorkspacePages, QScrollArea#settingsWorkspaceScroll,
 QScrollArea#settingsWorkspaceScroll > QWidget > QWidget { background:%1; color:%2; }
 QLabel#settingsWorkspaceEyebrow { color:%7; font-size:{{caption}}px; font-weight:600; letter-spacing:1px; }
-QLabel#settingsWorkspaceTitle { color:%2; font-size:30px; font-weight:600; }
+QLabel#settingsWorkspaceTitle { color:%2; font-size:{{px:30}}px; font-weight:600; }
 QLabel#settingsWorkspaceSubtitle, QLabel#settingsWorkspaceIntro { color:%3; font-size:{{reading}}px; }
 QLabel#settingsWorkspaceShortcut { color:%3; font-size:{{caption}}px; }
 QLabel#settingsWorkspaceHelp { color:%3; font-size:{{body}}px; }
-QLabel#settingsWorkspaceSectionTitle { color:%2; font-size:22px; font-weight:500; }
+QLabel#settingsWorkspaceSectionTitle { color:%2; font-size:{{px:22}}px; font-weight:500; }
 QLabel#settingsWorkspaceSubheading { color:%2; font-size:{{reading}}px; font-weight:600; }
 QListWidget#settingsWorkspaceNavigation { padding:0 20px 0 0; border:0;
  border-right:1px solid %5; background:transparent; outline:0; }

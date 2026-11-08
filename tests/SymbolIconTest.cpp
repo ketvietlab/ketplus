@@ -1,6 +1,5 @@
 #include "ui/SymbolIcon.h"
 #include "KetIcons.h"
-#include "agent/SymbolImageProvider.h"
 #include <QtTest>
 using namespace ketplus;
 class SymbolIconTest final : public QObject {
@@ -26,19 +25,17 @@ class SymbolIconTest final : public QObject {
             }
         }
     }
-    void providerResolvesNamesWithoutLegacySvgResources() {
-        SymbolImageProvider provider;
-        QSize size;
-        for (const auto* name : {"search", "plus", "git-branch", "messages-square", "shield",
-                                 "square-terminal", "layers", "monitor"}) {
-            const auto image =
-                provider.requestImage(QString::fromLatin1(name) + "/16", &size, {32, 32});
-            QVERIFY2(!image.isNull(), name);
-            QCOMPARE(size, QSize(32, 32));
+
+    void mapsLegacyNamesWithoutSvgResources() {
+        for (const char* name :
+             {"plus", "x", "chevron-down", "copy", "git-branch", "network", "bot", "search",
+              "square-terminal", "file-code", "shield", "lock"}) {
+            const auto code = ket::Icons::codeForLucide(QString::fromLatin1(name));
+            QVERIFY2(!code.isEmpty(), name);
+            QVERIFY2(!ket::Icons::icon(code).isNull(), name);
         }
-        QVERIFY(provider.requestImage("missing/16", &size, {}).isNull());
-        QVERIFY(provider.requestImage("plus/0", &size, {}).isNull());
-        QVERIFY(provider.requestImage("plus/99999", &size, {}).isNull());
+        QVERIFY(!QFile::exists(QStringLiteral(":/agent/icons/plus.svg")));
+        QVERIFY(!QFile::exists(QStringLiteral(":/atlas/icons/plus.svg")));
     }
 };
 QTEST_MAIN(SymbolIconTest)

@@ -57,6 +57,10 @@ struct TypeScale final {
     // Scales literal QSS geometry and expands {{micro}}, {{caption}}, … font steps.
     [[nodiscard]] static QString apply(QString sheet, const int basePixels,
                                        const int /*legacyBiasPixels*/ = 0) {
+        // Explicit product-composition values (for example a 30 px page title)
+        // are still scaled here, rather than introducing another type ladder.
+        static const QRegularExpression productPixels(QStringLiteral(R"(\{\{px:(\d+)\}\})"));
+        sheet.replace(productPixels, QStringLiteral("\\1"));
         // Only literal geometry is present before expanding font placeholders.
         static const QRegularExpression geometry(QStringLiteral(R"((?<![\w.])(\d+)px)"));
         auto matches = geometry.globalMatch(sheet);
@@ -84,7 +88,7 @@ struct TypeScale final {
 
     // Rewrites every `font-size: <n>px` in a live stylesheet to the zoom-scaled
     // pixel value. At Medium this is a no-op (same numbers). Used to scale the
-    // CM Theme.cpp sheet without editing vendor. Does not snap literals onto
+    // shared Theme.cpp compatibility sheet. Does not snap literals onto
     // the type ladder — pure zoom of whatever number is present.
     [[nodiscard]] static QString scaleLiteralFontSizes(QString sheet, const int basePixels) {
         static const QRegularExpression re(QStringLiteral(R"(font-size:\s*(\d+)px)"));

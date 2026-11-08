@@ -1,6 +1,10 @@
 #include "app/SettingsDialog.h"
+#include "KetAppearance.h"
+#include "KetEmptyState.h"
+#include "KetRecipes.h"
 #include "ui/KetFonts.h"
 #include "ui/Theme.h"
+#include <QLabel>
 
 #include <QAbstractButton>
 #include <QApplication>
@@ -43,6 +47,7 @@ class SettingsDialogTest final : public QObject {
 
   private slots:
     void editsAndResetsTypography();
+    void kitLabelsKeepRecipeFontsAcrossThemeChanges();
     void defaultFontResolvesWithoutPlatformFallback();
     void persistsAndNormalizesAppearance();
     void previewsAndCancelsThemeSelection();
@@ -52,6 +57,32 @@ class SettingsDialogTest final : public QObject {
     void removesDestroyedPageAndFallsBackToGeneral();
     void zoomDuringExtensionRebuildKeepsNavigationAlive();
 };
+
+void SettingsDialogTest::kitLabelsKeepRecipeFontsAcrossThemeChanges() {
+    ketplus::ThemeManager theme(*qApp);
+    ket::EmptyState empty({}, "Title", "Message");
+    const auto title = [&empty] {
+        for (auto* label : empty.findChildren<QLabel*>())
+            if (label->text() == "Title")
+                return label;
+        return static_cast<QLabel*>(nullptr);
+    }();
+    QVERIFY(title);
+    empty.show();
+    for (const auto mode :
+         {ketplus::ThemeManager::Mode::Light, ketplus::ThemeManager::Mode::Dark}) {
+        theme.setMode(mode);
+        theme.previewMode(mode);
+        theme.cancelPreview();
+        for (int pixels : {14, 21, 14}) {
+            theme.setInterfaceFontSizePixels(pixels);
+            QCoreApplication::processEvents();
+            const auto recipe = ket::emptyStateRecipe(ket::Appearance::instance().theme());
+            QCOMPARE(title->font().pixelSize(), qRound(recipe.titlePixels * pixels / 14.0));
+            QCOMPARE(int(title->font().weight()), recipe.titleWeight);
+        }
+    }
+}
 
 void SettingsDialogTest::defaultFontResolvesWithoutPlatformFallback() {
     ketplus::registerKetFonts();

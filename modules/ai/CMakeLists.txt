@@ -65,8 +65,6 @@ add_library(ketplus_ai STATIC
     src/agent/AgentWorkspaceStreaming.cpp
     src/agent/AgentWorkspaceUsage.cpp
     src/agent/AgentWorkspaceView.cpp
-    src/agent/SymbolImageProvider.cpp
-    src/agent/SymbolImageProvider.h
     src/agent/AgentWorkspaceView.h
     src/agent/CodexAppServer.cpp
     src/agent/CodexAppServer.h
@@ -119,7 +117,7 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS "AgentProductNavigation.qml"
 )
 foreach(component AgentWorkspaceHeader AgentRunStatus AgentScopeNotice AgentEmptyState
-        BackgroundTaskBar MotionClock AgentComposer AgentComposerAction AgentPermissionMenu AgentSkillsMenu AgentAttachmentChip)
+        BackgroundTaskBar AgentComposer AgentComposerAction AgentPermissionMenu AgentSkillsMenu AgentAttachmentChip)
     set_source_files_properties(src/agent/qml/${component}.qml
         PROPERTIES QT_RESOURCE_ALIAS "${component}.qml"
     )
@@ -222,11 +220,6 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS "icons/ketplus-mark.png"
 )
 
-foreach(icon zap shield lock arrow-up send square git-branch bot square-terminal file-code image search copy play)
-    set_source_files_properties(src/agent/icons/${icon}.svg
-        PROPERTIES QT_RESOURCE_ALIAS "icons/${icon}.svg"
-    )
-endforeach()
 set_source_files_properties(
     "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1/ketplus-logo-light.png"
     PROPERTIES QT_RESOURCE_ALIAS "brand/ketplus-logo-light.png"
@@ -235,16 +228,6 @@ set_source_files_properties(
     "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1/ketplus-logo-dark.png"
     PROPERTIES QT_RESOURCE_ALIAS "brand/ketplus-logo-dark.png"
 )
-foreach(icon messages-square folder network unplug settings chevron-down chevron-right square-pen paperclip sparkles)
-    set_source_files_properties(src/agent/icons/${icon}.svg
-        PROPERTIES QT_RESOURCE_ALIAS "icons/${icon}.svg"
-    )
-endforeach()
-foreach(icon plus rotate-ccw check)
-    set_source_files_properties("${PROJECT_SOURCE_DIR}/assets/icons/lucide/${icon}.svg"
-        PROPERTIES QT_RESOURCE_ALIAS "icons/${icon}.svg"
-    )
-endforeach()
 
 set_source_files_properties(src/agent/qml/ChromeMetrics.js PROPERTIES QT_RESOURCE_ALIAS "ChromeMetrics.js")
 
@@ -259,7 +242,6 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
         src/agent/qml/AgentScopeNotice.qml
         src/agent/qml/AgentEmptyState.qml
         src/agent/qml/BackgroundTaskBar.qml
-        src/agent/qml/MotionClock.qml
         src/agent/qml/AgentComposer.qml
         src/agent/qml/AgentComposerAction.qml
         src/agent/qml/AgentAttachmentChip.qml
@@ -292,34 +274,34 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
         src/agent/qml/TranscriptMessage.qml
         src/agent/mermaid-placeholder.svg
         src/agent/mermaid-pending.svg
-        src/agent/icons/zap.svg
-        src/agent/icons/shield.svg
-        src/agent/icons/lock.svg
-        src/agent/icons/arrow-up.svg
-        src/agent/icons/send.svg
-        src/agent/icons/square.svg
-        src/agent/icons/git-branch.svg
-        src/agent/icons/bot.svg
-        src/agent/icons/sparkles.svg
-        src/agent/icons/square-terminal.svg
-        src/agent/icons/file-code.svg
-        src/agent/icons/image.svg
-        src/agent/icons/search.svg
-        src/agent/icons/copy.svg
-        src/agent/icons/play.svg
-        src/agent/icons/messages-square.svg
-        src/agent/icons/folder.svg
-        src/agent/icons/network.svg
-        src/agent/icons/unplug.svg
-        src/agent/icons/settings.svg
-        src/agent/icons/chevron-down.svg
-        src/agent/icons/chevron-right.svg
-        src/agent/icons/square-pen.svg
-        src/agent/icons/paperclip.svg
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1/ketplus-logo-light.png"
         "${PROJECT_SOURCE_DIR}/ketplus.ketatlas/assets/brand/ketplus-v1/ketplus-logo-dark.png"
-        "${PROJECT_SOURCE_DIR}/assets/icons/lucide/plus.svg"
-        "${PROJECT_SOURCE_DIR}/assets/icons/lucide/rotate-ccw.svg"
-        "${PROJECT_SOURCE_DIR}/assets/icons/lucide/check.svg"
+
+
+
         "${PROJECT_SOURCE_DIR}/assets/brand/ketplus-mark.png"
 )

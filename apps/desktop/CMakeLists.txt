@@ -177,7 +177,6 @@ qt_add_executable(ketplus WIN32 MACOSX_BUNDLE
 )
 target_link_libraries(ketplus PRIVATE ketplus_desktop_shell ketplus_product_version)
 ketplus_enable_warnings(ketplus)
-ketplus_cm_add_font_resources(ketplus)
 
 qt_add_resources(ketplus "ketplus_brand"
     PREFIX "/brand"

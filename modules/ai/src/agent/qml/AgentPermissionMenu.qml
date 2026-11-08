@@ -82,7 +82,7 @@ Basic.Popup {
                             width: parent.width
                             text: modelData.description || ""
                             elide: Text.ElideRight
-                            color: modelData.elevated === true ? (root.t.warning || "#d9a441") : root.t.textMuted
+                            color: modelData.elevated === true ? (root.t.warning) : root.t.textMuted
                             opacity: modelData.elevated === true ? 0.85 : 1
                             font.family: root.t.uiFont
                             font.pixelSize: root.t.micro
@@ -96,12 +96,12 @@ Basic.Popup {
                         radius: Metrics.px(5, root.t)
                         color: "transparent"
                         border.width: 1
-                        border.color: root.t.warning || "#d9a441"
+                        border.color: root.t.warning
                         Text {
                             id: enableText
                             anchors.centerIn: parent
                             text: "Enable"
-                            color: root.t.warning || "#d9a441"
+                            color: root.t.warning
                             font.family: root.t.uiFont
                             font.pixelSize: root.t.micro
                         }

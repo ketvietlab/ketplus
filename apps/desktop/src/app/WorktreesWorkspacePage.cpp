@@ -289,8 +289,8 @@ void WorktreesWorkspacePage::applyPalette(const ThemePalette& palette,
 QWidget#worktreesWorkspacePage, QWidget#worktreesWorkspaceScrollBody,
 QWidget#worktreesWorkspaceContent { background:%1; color:%3; }
 QScrollArea#worktreesWorkspaceScroll { border:0; background:%1; }
-QLabel#worktreesWorkspaceTitle { color:%3; font-size:30px; font-weight:600; }
-QLabel#worktreesWorkspaceSubtitle { color:%4; font-size:14px; }
+QLabel#worktreesWorkspaceTitle { color:%3; font-size:{{px:30}}px; font-weight:600; }
+QLabel#worktreesWorkspaceSubtitle { color:%4; font-size:{{px:14}}px; }
 QPushButton#worktreesPruneButton { min-width:112px; padding:0 12px; border:1px solid %5;
  border-radius:5px; background:%2; color:%3; font-size:{{caption}}px; font-weight:550; }
 QPushButton#worktreesPruneButton:hover { background:%6; }
@@ -305,8 +305,8 @@ QToolButton[kvRole="worktreesManageButton"] { padding:0 7px; font-size:{{caption
 QToolButton[kvRole="worktreesManageButton"]:hover,
 QToolButton[kvRole="worktreesTextButton"]:hover { background:%6; }
 QToolButton[kvRole="worktreesTextButton"] { padding:0 8px; color:%4; font-size:{{caption}}px; }
-QLabel#worktreesWorkspaceName { color:%3; font-size:15px; font-weight:500; }
-QLabel#worktreesWorkspaceMeta, QLabel#worktreesWorkspaceEmpty { color:%4; font-size:13px; }
+QLabel#worktreesWorkspaceName { color:%3; font-size:{{px:15}}px; font-weight:500; }
+QLabel#worktreesWorkspaceMeta, QLabel#worktreesWorkspaceEmpty { color:%4; font-size:{{px:13}}px; }
 QLabel#worktreesWorkspaceActivity { color:%4; font-size:{{caption}}px; }
 QLabel#worktreesWorkspaceActivity[running="true"] { color:%7; }
 QLabel#worktreesWorkspaceState { min-height:22px; padding:0 8px; border:1px solid %5;

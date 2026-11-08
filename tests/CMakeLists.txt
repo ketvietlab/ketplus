@@ -28,11 +28,7 @@ target_link_libraries(ketplus_spotlight_tests PRIVATE
     Qt6::Test
     ketplus_desktop_support
 )
-qt_add_resources(ketplus_spotlight_tests "spotlight_test_icons"
-    PREFIX "/agent"
-    BASE "${PROJECT_SOURCE_DIR}/modules/ai/src/agent"
-    FILES "${PROJECT_SOURCE_DIR}/modules/ai/src/agent/icons/search.svg"
-)
+
 
 ketplus_add_gui_test(ketplus_atlas_tests AtlasTest.cpp)
 target_link_libraries(ketplus_atlas_tests PRIVATE Qt6::Test ketplus_atlas)

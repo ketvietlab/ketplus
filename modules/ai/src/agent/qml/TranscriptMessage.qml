@@ -1,3 +1,4 @@
+import Ket as Kit
 import "ChromeMetrics.js" as Metrics
 import QtQuick
 import Ket 1.0 as Kit
@@ -700,7 +701,7 @@ Item {
                 selectByMouse: true
                 persistentSelection: true
                 selectionColor: shell.t.accent
-                selectedTextColor: "#ffffff"
+                selectedTextColor: Kit.KetTheme.t.actionPrimaryInk
                 color: messageSurface.agentMessage ? shell.t.textMain : kind === "user" ? userRecipe.text : kind === "file" ? shell.t.tabActiveText : shell.t.textMain
                 wrapMode: TextEdit.Wrap
                 textFormat: kind === "assistant" && !renderedPartialBody ? TextEdit.MarkdownText : TextEdit.PlainText

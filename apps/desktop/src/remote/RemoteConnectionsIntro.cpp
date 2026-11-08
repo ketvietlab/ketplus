@@ -2,6 +2,7 @@
 #include "KetButton.h"
 #include "KetIcons.h"
 #include "KetTextField.h"
+#include "KetTokens.h"
 #include "ui/ChromeGeometry.h"
 #include "ui/InterfaceZoom.h"
 #include "ui/SymbolIcon.h"
@@ -162,8 +163,8 @@ class ConnectionsScene final : public QWidget {
         shadow(painter, phone, 26 * s, 18 * s, 0.16);
         QPainterPath body;
         body.addRoundedRect(phone, 26 * s, 26 * s);
-        painter.fillPath(body, QColor(0x11, 0x12, 0x14));
-        painter.setPen(QPen(QColor(255, 255, 255, 20), 1));
+        painter.fillPath(body, ket::Tokens::color(u"page-bg", ket::Theme::Dark));
+        painter.setPen(QPen(ket::Tokens::color(u"panel-border", ket::Theme::Dark), 1));
         painter.drawPath(body);
         const QRectF screen = phone.adjusted(bezel, bezel, -bezel, -bezel);
         QPainterPath screenPath;

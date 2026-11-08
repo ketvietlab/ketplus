@@ -75,7 +75,7 @@ Basic.Popup {
                         Text {
                             anchors.centerIn: parent
                             text: modelData.enabled ? "✓" : ""
-                            color: "#ffffff"
+                            color: Kit.KetTheme.t.actionPrimaryInk
                             font.pixelSize: root.t.body
                         }
                     }
