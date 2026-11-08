@@ -563,3 +563,16 @@ ADR 0061 `SessionForkTest::journalForkPreservesUnsupportedSourceCounters` covers
 negative, fractional, TEXT and BLOB cursor/turn values. It checks exact source
 preservation, no destination, released transaction, fixture repair, retry and
 reopen. Run the combined fork suite and its affected backend matrix.
+
+
+### Failed journal reuse (ADR 0086)
+
+`DaemonProtocolTest::startupCommitFailurePreservesErrorAndReleasesTransaction`
+covers policy-read, policy-write and session-write attempts after turn/replay/
+activity commit failures, plus the original no-operation controls. The failed
+object stays closed, a separate writer can repair, and a fresh journal reopens
+without retained-row changes. `failedAgentSchemaCannotBeUsedUntilReopened`
+covers the final agent-schema stage and conversation-number ownership recovery.
+Run the protocol, activity-groups, agent-messaging, retention-policy, journal-space
+and headless-daemon targets in Release. This does not establish full startup
+atomicity, disk-full/crash or multi-GB/platform acceptance. Synthetic journals only.

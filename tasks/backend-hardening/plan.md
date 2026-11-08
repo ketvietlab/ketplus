@@ -1020,3 +1020,22 @@ before moving to another issue. #85 retains its original rollout gate.
   acceptance remains H1.7. No UI, deployment or installed journal was changed.
 
 Evidence: [h1-stored-policy-read-qt.json](evidence/h1-stored-policy-read-qt.json).
+
+### H1.2 quarantine a failed journal object
+
+- [x] Reproduce ten unsafe-reuse failures: policy/session operations continue after
+  turn/replay/activity commit failures, and a policy read succeeds after incompatible
+  agent-schema initialization. Three existing no-operation controls pass.
+- [x] Close the connection if any constructor stage fails; repair requires a fresh
+  initialized object (ADR 0086). Keep service startup checks and rollback behavior.
+- [x] Focused 15/15 (444 ms); Release headless affected 6/6 (19.95 s): protocol
+  181/181, activity groups 10/10, agent messaging 15/15, retention policy 15/15,
+  headless daemon 6/6 and journal space 10 pass / 1 scale opt-in skip.
+  Initial diagnostics, writer release, preserved rows and repair/reopen pass.
+- [ ] Independent exact-head review/merge. Dispatch remains held by `chain_limit`;
+  do not bypass or repeatedly resend the pending review request.
+- [ ] Continue H1.2 unsupported schemas, mid-fetch failure, low disk, interruption
+  and large-index startup. No claim of whole-startup atomicity or live-journal,
+  full Pro/Windows, packaging, installation or deployment acceptance.
+
+Evidence: [h1-failed-journal-reuse-qt.json](evidence/h1-failed-journal-reuse-qt.json).
