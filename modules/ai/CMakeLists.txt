@@ -28,6 +28,7 @@ add_library(ketplus_ai STATIC
     src/agent/DaemonTranscriptProjection.cpp
     src/agent/DaemonTranscriptProjection.h
     src/agent/AgentSessionManager.cpp
+    src/agent/AgentSessionReviewers.cpp
     src/agent/AgentSessionConfiguration.cpp
     src/agent/AgentSessionManager.h
     src/agent/AgentSessionNotifications.cpp
@@ -68,6 +69,7 @@ add_library(ketplus_ai STATIC
     src/agent/AgentWorkspaceUsage.cpp
     src/agent/AgentWorkspaceView.cpp
     src/agent/AgentWorkspaceHeldMessages.cpp
+    src/agent/AgentWorkspaceReviewers.cpp
     src/agent/AgentWorkspaceAtlasResults.cpp
     src/agent/TranscriptAtlasLinks.cpp
     src/agent/TranscriptAtlasLinks.h

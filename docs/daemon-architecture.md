@@ -720,7 +720,9 @@ reviewer must be Claude. Its turn runs under the review guard: the sidecar stays
 in plan mode and denies every permission request. Review requests never join a
 user turn. The verdict line of the reply, whether it is the final answer or an
 `agents_send` reply, decides whether the working agent starts a fix turn or the
-reply is only recorded. `session.reviewer.get/set` are local Desktop operations.
+reply is only recorded. `session.reviewer.get/set` are local Desktop operations;
+Desktop calls them as `reviewer/get` and `reviewer/set` through `CodexAppServer`
+and resolves the picker's conversation numbers to session ids itself.
 
 Providers launch `ketplus_daemon --mcp-agents` with the endpoint's absolute path
 and the token. `daemon.hello` with `agent_token` authenticates an agents-only

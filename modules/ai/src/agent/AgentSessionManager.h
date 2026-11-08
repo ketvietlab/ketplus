@@ -57,6 +57,11 @@ class AgentSessionManager final : public QObject {
     [[nodiscard]] QVariantMap usageSnapshot(const QString& worktreePath) const;
     [[nodiscard]] QVariantList backgroundTasks(const QString& worktreePath) const;
     void heldMessageAction(const QString& worktreePath, const QString& messageId, bool release);
+    // ADR 0067. readReviewer only reads; setReviewer assigns conversation #reviewerNumber,
+    // starts a new reviewer with newProvider, or clears the reviewer when both are empty.
+    void readReviewer(const QString& worktreePath);
+    void setReviewer(const QString& worktreePath, const QString& reviewerNumber,
+                     const QString& newProvider);
     void stopBackgroundTask(const QString& worktreePath, const QString& taskId);
     void readBackgroundTaskOutput(const QString& worktreePath, const QString& taskId);
 
@@ -161,6 +166,10 @@ class AgentSessionManager final : public QObject {
     // result: {output,total_bytes,truncated}, or {error} when the task cannot be read or stopped.
     void heldMessageResult(const QString& worktreePath, const QString& conversationId,
                            const QString& messageId, const QVariantMap& result);
+    // result: {available, reviewer: {number,title,provider,model} or absent}, or {error, change}
+    // where change tells a failed assignment from a failed read.
+    void reviewerResult(const QString& worktreePath, const QString& conversationId,
+                        const QVariantMap& result);
     void backgroundTaskResult(const QString& worktreePath, const QString& taskId,
                               const QString& action, const QVariantMap& result);
     void activityChanged();
@@ -362,6 +371,12 @@ class AgentSessionManager final : public QObject {
     bool markSeen(const SessionPtr& session);
     [[nodiscard]] bool isActiveSession(const SessionPtr& session) const;
     void applyModelOverride(QJsonObject& params, bool includeEffort) const;
+    void callReviewer(const QString& worktreePath, const QString& method,
+                      const QJsonObject& reviewer);
+    // Reads that failed, often because the daemon had not listed its sessions yet. Each is
+    // tried once more when the daemon finishes restoring.
+    void retryReviewerReads();
+    QSet<QString> reviewerReadsToRetry_;
     [[nodiscard]] static QString normalizedPath(const QString& path);
 
     CodexAppServer* server_{nullptr};

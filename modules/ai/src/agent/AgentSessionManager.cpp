@@ -228,6 +228,11 @@ AgentSessionManager::AgentSessionManager(CodexAppServer* server, QObject* parent
             emit restoreStateChanged(false);
         }
     });
+    // A reviewer read sent before the daemon listed its sessions is answered "unknown session".
+    connect(server_, &CodexAppServer::restoreStateChanged, this, [this](const bool restoring) {
+        if (!restoring)
+            retryReviewerReads();
+    });
     connect(server_, &CodexAppServer::readyChanged, this, [this](const bool ready) {
         if (ready)
             loadModels();

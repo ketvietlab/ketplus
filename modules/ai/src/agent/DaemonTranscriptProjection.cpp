@@ -97,15 +97,19 @@ void markAgentOrigin(QVariantMap& entry, const QJsonArray& agentMessages) {
         return;
     QStringList senders;
     bool replies = true;
+    bool reviews = true;
     for (const QJsonValue& value : agentMessages) {
         const QJsonObject message = value.toObject();
         const QString sender = QLatin1Char('#') + message.value("from_number").toString();
         if (!senders.contains(sender))
             senders.append(sender);
         replies = replies && message.value("kind").toString() == QStringLiteral("reply");
+        reviews = reviews && message.value("kind").toString() == QStringLiteral("review");
     }
     const QJsonObject first = agentMessages.first().toObject();
-    QString label = (replies ? QStringLiteral("Reply from ") : QStringLiteral("Message from ")) +
+    QString label = (replies   ? QStringLiteral("Reply from ")
+                     : reviews ? QStringLiteral("Review request from ")
+                               : QStringLiteral("Message from ")) +
                     senders.join(QStringLiteral(", "));
     if (senders.size() == 1) {
         if (const QString title = first.value("from_title").toString(); !title.isEmpty())
@@ -127,9 +131,30 @@ QString agentMessageStateText(const QJsonObject& data) {
     const bool outgoing = data.value("direction").toString() == QStringLiteral("outgoing");
     const QString title = data.value("peer_title").toString();
     const QString named = title.isEmpty() ? peer : peer + QStringLiteral(" · ") + title;
+    if (state == QStringLiteral("review_skipped")) {
+        if (reason == QStringLiteral("no_changes"))
+            return QStringLiteral("No review: this turn changed no files.");
+        if (reason == QStringLiteral("round_limit"))
+            return QStringLiteral("No review: this exchange used all its review rounds.");
+        if (reason == QStringLiteral("reviewer_missing"))
+            return QStringLiteral("No review: the reviewer conversation no longer exists.");
+        if (reason == QStringLiteral("reviewer_busy"))
+            return QStringLiteral("No review: the reviewer was busy with another turn.");
+        if (reason == QStringLiteral("reviewer_unsupported"))
+            return QStringLiteral("No review: only a Claude conversation can review turns.");
+        if (reason == QStringLiteral("snapshot_failed"))
+            return QStringLiteral("No review: KetPlus could not read this turn's changes. The "
+                                  "next review includes them.");
+        return QStringLiteral("The review request could not be sent.");
+    }
     if (state == QStringLiteral("sent")) {
         if (data.value("kind").toString() == QStringLiteral("reply"))
             return QStringLiteral("Replied to %1.").arg(named);
+        if (data.value("kind").toString() == QStringLiteral("review"))
+            return QStringLiteral("Asked %1 to review this turn (round %2 of %3).")
+                .arg(named)
+                .arg(data.value("round").toInt())
+                .arg(data.value("max_rounds").toInt());
         const QString delivery = data.value("delivery").toString();
         QString text = QStringLiteral("Sent to %1 · ").arg(named) +
                        (delivery == QStringLiteral("starting") ? QStringLiteral("started a turn")
@@ -170,6 +195,9 @@ QString agentMessageStateText(const QJsonObject& data) {
                         : QStringLiteral("The message from %1 has expired.").arg(named);
     if (reason == QStringLiteral("no_reply"))
         return QStringLiteral("%1 finished without a reply.").arg(peer);
+    if (reason == QStringLiteral("reviewer_unsupported"))
+        return QStringLiteral("%1 no longer runs on Claude, so it did not review this turn.")
+            .arg(named);
     if (reason.startsWith(QStringLiteral("turn_")))
         return QStringLiteral("%1 stopped before replying (%2).").arg(peer, reason.mid(5));
     return (outgoing ? QStringLiteral("Message to %1 failed: %2")
@@ -178,8 +206,24 @@ QString agentMessageStateText(const QJsonObject& data) {
 }
 
 QVariantMap agentMessageNotice(const QJsonObject& data, const QString& itemId) {
+    // ADR 0067: a review that starts no turn reads like the reviewer's message.
+    if (data.value("state").toString() == QStringLiteral("review_recorded")) {
+        QString label = QStringLiteral("Review from #") + data.value("peer_number").toString();
+        if (const QString title = data.value("peer_title").toString(); !title.isEmpty())
+            label += QStringLiteral(" · ") + title;
+        label += data.value("verdict").toString() == QStringLiteral("no_findings")
+                     ? QStringLiteral(" · No findings")
+                     : QStringLiteral(" · Findings");
+        auto entry =
+            message(QStringLiteral("user"), data.value("body").toString(), label, {}, itemId);
+        entry.insert(QStringLiteral("subtype"), QStringLiteral("agentMessage"));
+        entry.insert(QStringLiteral("title"), label);
+        return entry;
+    }
+    const bool review = data.value("kind").toString() == QStringLiteral("review");
     auto entry =
-        providerNoticeMessage(agentMessageStateText(data), itemId, agentMessageNoticeTitle());
+        providerNoticeMessage(agentMessageStateText(data), itemId,
+                              review ? QStringLiteral("Review") : agentMessageNoticeTitle());
     if (data.value("direction").toString() == "incoming" &&
         !data.value("message_id").toString().isEmpty()) {
         entry.insert("subtype", "heldAgentMessage");

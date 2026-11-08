@@ -259,6 +259,14 @@ class AgentWorkspaceView final : public QWidget {
     Q_INVOKABLE void requestHeldMessageState(const QString& messageId);
     Q_INVOKABLE void releaseHeldMessage(const QString& messageId);
     void acceptHeldMessageState(const QString& messageId, const QVariantMap& value);
+    // ADR 0067: {available, pending, error, reviewer: {number,title,provider,model}}.
+    Q_PROPERTY(QVariantMap reviewerState READ reviewerState NOTIFY reviewerStateChanged)
+    QVariantMap reviewerState() const { return reviewerState_; }
+    // Claude conversations that can review the active one, newest first.
+    Q_INVOKABLE QVariantList reviewerCandidates() const;
+    // Assigns conversation #number, starts a new reviewer with newProvider, or clears it.
+    Q_INVOKABLE void chooseReviewer(const QString& number, const QString& newProvider);
+    void acceptReviewerState(const QVariantMap& value);
     Q_INVOKABLE void stopBackgroundTask(const QString& taskId) {
         emit backgroundTaskStopRequested(taskId);
     }
@@ -497,6 +505,10 @@ class AgentWorkspaceView final : public QWidget {
     void atlasResultOpenRequested(const QString& path, const QString& root, bool inBrowser);
     void heldMessageStatesChanged();
     void heldMessageActionRequested(const QString& messageId, bool release);
+    void reviewerStateChanged();
+    // Both empty reads the reviewer; otherwise as chooseReviewer.
+    void reviewerRequested();
+    void reviewerChangeRequested(const QString& number, const QString& newProvider);
     void backgroundTaskStopRequested(const QString& taskId);
     void backgroundTaskOutputRequested(const QString& taskId);
     void backgroundTaskFailed(const QString& message);
@@ -607,6 +619,7 @@ class AgentWorkspaceView final : public QWidget {
     // False when a mention points outside the conversation worktree; the error is emitted.
     [[nodiscard]] bool referencedPathsForPrompt(const QString& prompt, QVariantList& paths);
     void setComposerScope(const QString& scope);
+    void setReviewerScope(const QString& scope);
 
     QString composerScope_;
     bool steeringPending_{false};
@@ -625,6 +638,8 @@ class AgentWorkspaceView final : public QWidget {
     AtlasResultInspector atlasResultInspector_;
     QVariantMap heldMessageStates_;
     QString heldMessageScope_;
+    QVariantMap reviewerState_;
+    QString reviewerScope_;
     QVariantMap backgroundTaskOutput_;
     QVariantList skills_;
     QSet<QString> enabledSkillPaths_;

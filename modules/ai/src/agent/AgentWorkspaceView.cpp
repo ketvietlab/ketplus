@@ -377,14 +377,17 @@ void AgentWorkspaceView::setConversations(const QVariantList& conversations) {
     }
     conversations_ = ordered;
     QString scope = activePath_;
+    bool started = false;
     for (qsizetype index = 0; index < conversations_.size(); ++index) {
         const auto conversation = conversations_.at(index).toMap();
         if (conversation.value("active").toBool()) {
             scope += ":" + conversation.value("id").toString();
+            started = conversation.value("started").toBool();
             break;
         }
     }
     setComposerScope(scope);
+    setReviewerScope(started ? scope : QString{});
     emit conversationsChanged();
 }
 
