@@ -1,6 +1,9 @@
 #include "DaemonClient.h"
 #include "TranscriptWindowTestSupport.h"
 
+#include <QElapsedTimer>
+#include <QSqlDatabase>
+#include <QSqlQuery>
 #include <QStandardPaths>
 
 class DesktopSessionDiscoveryTest final : public QObject {
@@ -8,7 +11,15 @@ class DesktopSessionDiscoveryTest final : public QObject {
   private slots:
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
 
+    void discoversAnotherClientThroughRealDaemon_data() {
+        QTest::addColumn<int>("tombstones");
+        QTest::newRow("empty") << 0;
+        QTest::newRow("20000") << 20000;
+        QTest::newRow("100000") << 100000;
+    }
+
     void discoversAnotherClientThroughRealDaemon() {
+        QFETCH(int, tombstones);
         Environment env;
         QVERIFY(env.directory.isValid());
         const auto path = QFileInfo(env.directory.path()).canonicalFilePath();
@@ -19,17 +30,40 @@ class DesktopSessionDiscoveryTest final : public QObject {
             QVERIFY(journal.upsertSession(
                 {"desktop", path, "codex", {}, {}, "ready", 1, 0, 0, "Desktop"}));
         }
+        if (tombstones) {
+            const auto name = "discovery-backlog";
+            {
+                auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+                db.setDatabaseName(env.directory.filePath("journal.sqlite3"));
+                QVERIFY(db.open());
+                QSqlQuery q(db);
+                QVERIFY(q.exec(
+                    QString(
+                        "WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<%1) "
+                        "INSERT INTO session_tombstones SELECT 'deleted-'||i,1,1,'op','now' FROM n")
+                        .arg(tombstones)));
+            }
+            QSqlDatabase::removeDatabase(name);
+        }
         rememberConversation(path, "desktop");
-        DaemonService service({env.directory.filePath("journal.sqlite3"),
-                               env.directory.filePath("local.token"),
-                               env.directory.filePath("daemon.sock"), executable});
+        DaemonService service(
+            {env.directory.filePath("journal.sqlite3"), env.directory.filePath("local.token"),
+             env.directory.filePath("daemon.sock"), executable,
+             env.directory.filePath("missing-claude"), env.directory.filePath("missing-cursor")});
         QVERIFY2(service.start(), qPrintable(service.errorString()));
         CodexAppServer server;
         AgentSessionManager desktop(&server);
+        int deletions = 0;
+        connect(&server, &CodexAppServer::daemonSessionDeleted, &server,
+                [&](const QString&, qint64) { ++deletions; });
         desktop.activate(path);
         QTRY_VERIFY(server.isReady());
         QTRY_VERIFY(!server.isRestoring());
+        QVERIFY(deletions >= tombstones); // Initial refresh still reconciles retained deletions.
+        const auto initialDeletions = deletions;
         const auto selected = desktop.activeConversationId(path);
+        QElapsedTimer timer;
+        timer.start();
         remote::DaemonClient phone;
         bool finished = false;
         QString failure;
@@ -42,6 +76,9 @@ class DesktopSessionDiscoveryTest final : public QObject {
         QVERIFY2(failure.isEmpty(), qPrintable(failure));
         QTRY_COMPARE_WITH_TIMEOUT(desktop.conversations(path).size(), 2, 5000);
         QCOMPARE(desktop.activeConversationId(path), selected);
+        QCOMPARE(deletions, initialDeletions); // Discovery must not replay deletion history.
+        qInfo() << "live discovery" << tombstones << "retained tombstones:" << timer.elapsed()
+                << "ms, additional deletion signals:" << deletions - initialDeletions;
         const auto phoneRow = [&]() {
             for (const auto& value : desktop.conversations(path)) {
                 if (value.toMap().value("id") == "phone-created")
@@ -78,14 +115,19 @@ class DesktopSessionDiscoveryTest final : public QObject {
     void discoversPhoneConversation_data() {
         QTest::addColumn<bool>("otherWorkspace");
         QTest::addColumn<bool>("duringInitialList");
-        QTest::newRow("same-workspace") << false << false;
-        QTest::newRow("other-workspace") << true << false;
-        QTest::newRow("during-initial-list") << false << true;
+        QTest::addColumn<bool>("olderPagedDaemon");
+        QTest::newRow("legacy-same-workspace") << false << false << false;
+        QTest::newRow("legacy-other-workspace") << true << false << false;
+        QTest::newRow("legacy-during-initial-list") << false << true << false;
+        QTest::newRow("paged-same-workspace") << false << false << true;
+        QTest::newRow("paged-other-workspace") << true << false << true;
+        QTest::newRow("paged-during-initial-list") << false << true << true;
     }
 
     void discoversPhoneConversation() {
         QFETCH(bool, otherWorkspace);
         QFETCH(bool, duringInitialList);
+        QFETCH(bool, olderPagedDaemon);
         Environment env;
         QVERIFY(writeToken(env.directory));
         const auto path = QFileInfo(env.directory.path()).canonicalFilePath();
@@ -120,7 +162,18 @@ class DesktopSessionDiscoveryTest final : public QObject {
                         phoneExists = true;
                         fake->push(liveEvent("phone", "session.created", {}, 1, 0));
                     }
-                    return {{"transcript_window_version", 1}, {"sessions", sessions}};
+                    QJsonObject catalog{{"transcript_window_version", 1}, {"sessions", sessions}};
+                    if (olderPagedDaemon && lists > 1) {
+                        // A daemon predating live-only ignores the opt-in and returns
+                        // page one with sessions. Discovery must not walk its next page.
+                        const QJsonObject deleted{{"session_id", "deleted"},
+                                                  {"session_generation", 1}};
+                        catalog.insert("deleted_sessions_page_version", 1);
+                        catalog.insert("deleted_sessions_snapshot", "old-daemon-token");
+                        catalog.insert("deleted_sessions", QJsonArray{deleted});
+                        catalog.insert("deleted_sessions_next", deleted);
+                    }
+                    return catalog;
                 }
                 const auto id = request.value("session_id").toString();
                 if (type == "session.transcript_window")
@@ -148,6 +201,7 @@ class DesktopSessionDiscoveryTest final : public QObject {
         CodexAppServer server;
         AgentSessionManager desktop(&server);
         QSignalSpy discovered(&server, &CodexAppServer::daemonSessionDiscovered);
+        QSignalSpy deleted(&server, &CodexAppServer::daemonSessionDeleted);
         desktop.activate(path);
         QTRY_VERIFY(server.isReady());
         QTRY_VERIFY(daemon.received.contains("session.transcript_window"));
@@ -165,9 +219,16 @@ class DesktopSessionDiscoveryTest final : public QObject {
         QCOMPARE(desktop.activeConversationId(path), active);
         QCOMPARE(lists, 2); // Event burst is coalesced into one incremental catalog read.
         QCOMPARE(discovered.size(), 2); // The existing conversation was not re-discovered.
+        QCOMPARE(deleted.size(), 0);
         QCOMPARE(daemon.received.count("session.transcript_window"), windowReads);
         bool recoveredGap = false;
+        int catalogReads = 0;
         for (const auto& request : daemon.envelopes) {
+            if (request.value("message_type") == "session.list" && ++catalogReads > 1) {
+                const auto payload = request.value("payload").toObject();
+                QVERIFY(payload.value("session_catalog_live_only").toBool());
+                QCOMPARE(payload.value("deleted_sessions_page_version").toInt(), 1);
+            }
             if (request.value("message_type") == "session.attach") {
                 QCOMPARE(request.value("session_id").toString(), QString("phone"));
                 QCOMPARE(request.value("payload").toObject().value("after_cursor").toInteger(), 1);

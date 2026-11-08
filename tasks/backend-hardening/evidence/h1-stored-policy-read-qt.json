@@ -1,0 +1,43 @@
+{
+  "scope": "H1.6 bounded stored policy JSON admission; no pressure/default/UI changes",
+  "baseline_commit": "886fbe201ad88e2bbd466c8e0689f3fc7a423223",
+  "environment": "macOS arm64 Qt 6.11.2 Release headless offscreen, synthetic journals only",
+  "baseline": {
+    "focused_passed": 10,
+    "focused_failed": 8,
+    "duration_ms": 939,
+    "note": "8 valid data controls plus setup/cleanup pass; 8 oversized rows accepted incorrectly"
+  },
+  "fixed_focused": {
+    "passed": 18,
+    "failed": 0,
+    "skipped": 0,
+    "duration_ms": 1032
+  },
+  "affected": {
+    "targets_passed": 4,
+    "duration_seconds": 37.67,
+    "cases": {
+      "retention_policy": "31/31",
+      "size_policy": "5/5",
+      "usage_retention": "124/124",
+      "journal_space": "10 pass, 1 scale opt-in skip"
+    }
+  },
+  "verified": [
+    "current schema rejects normal oversized writes",
+    "4095/4096 accepted and 4097/1048576 rejected for both policy kinds and TEXT/BLOB storage",
+    "invalid stored rows prevent configured trimming and saves",
+    "exact policy bytes, SQLite type, revision and replay detail remain unchanged",
+    "reopen preserves failure; repair allows revision-fenced save and configured trimming",
+    "existing size-policy promises and guards covered by affected target"
+  ],
+  "not_verified": [
+    "independent exact-head review/merge",
+    "full Pro/Windows matrix at this head",
+    "total SQLite/daemon memory or other corrupt columns",
+    "global timestamp ordering across restored/forked turns",
+    "representative multi-GB mixed payload/crash acceptance",
+    "live journal, packaging, installation or deployment"
+  ]
+}

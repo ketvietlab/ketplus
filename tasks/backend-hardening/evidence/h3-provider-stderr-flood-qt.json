@@ -1,0 +1,86 @@
+{
+  "scope": "Issue #71 final regression: long-lived provider stderr drainage and retained-tail bounds",
+  "tested_code_commit": "a8d4502924acf26ab3f192b8bfdb6670c896944a",
+  "integration_base": "00b2f003524414073b0f14c03268789463ff6876",
+  "environment": {
+    "os": "macOS arm64",
+    "qt": "6.11.2",
+    "build": "Release Pro",
+    "qpa": "offscreen",
+    "provider_processes": "self-hosted local fixture executable only"
+  },
+  "source_sha256": {
+    "apps/daemon/src/providers/ClaudeAdapter.h": "64e696e19de74cd25909171a66ef02dad56c84bbd3d67ca3fbe344063f8c83a8",
+    "apps/daemon/src/providers/CodexAdapter.h": "423f0cc0f66f5dd121742fc4dc84d0ffd110b5ba159f72346064f8d1d426feda",
+    "apps/daemon/src/providers/CursorAdapter.h": "caa9cb46cce2ed12744956be873824378f5a0e197469d342c7fc906800738b8b",
+    "tests/daemon/CMakeLists.txt": "ed1c88364b74fe3fe6a2443b901bdbea89932ccac9454e3d75045cd1ab6dd7c0",
+    "tests/daemon/ProviderStderrFloodTest.cpp": "37d8436ec9a57e88baae03cc4db0feff26722aa8edb768ff43388755e69d8116"
+  },
+  "log_sha256": {
+    "ketplus-issue71-stderr-focused-LastTest.log": "e1a0ac3ebe1a77589f3022c46c8cf18e4b6b99818ebd3fcbe58460d44de88eb1",
+    "ketplus-issue71-stderr-missing-drain-LastTest.log": "853daffbd4b89b27290edfc5d36e63ea8232d5c7a72a55696a7b7206ab740f77",
+    "ketplus-issue71-stderr-missing-cap-LastTest.log": "d1a578c1477257b7bc7c876309be395942514d72e84f82226d6f9f8c517c0012",
+    "ketplus-issue71-stderr-restored-LastTest.log": "4fd368a475912820a371144067d5682b64132cfd9a9f52c12a0dcc056cc16384",
+    "ketplus-issue71-stderr-pro-build.log": "0b8023ddf869141448cede301539a46fc30c7cea55986d8dbaa9f86ebeb5ef12",
+    "ketplus-issue71-stderr-pro-test.log": "93379b87604f6b00dd60d277b56e59c912ed96a397c70ec81613f65a9a91bd33",
+    "ketplus-issue71-stderr-pro-LastTest.log": "11d4d22946e77e169d83593fbefeef80e2dae292499141284c43f41b25bc8cd4"
+  },
+  "fixture": {
+    "providers": [
+      "Codex",
+      "Claude",
+      "Cursor"
+    ],
+    "floods_per_provider": 2,
+    "bytes_per_flood": 33554432,
+    "write_chunk_bytes": 65536,
+    "required_stdout_round_trips_per_flood": 8,
+    "retained_tail_bytes": 1048576,
+    "checks": [
+      "QProcess unread stderr is zero after production drain",
+      "tail never exceeds budget after drain",
+      "tail equals the newest bytes after both floods",
+      "normal calls still succeed on the original process"
+    ]
+  },
+  "focused": {
+    "passed": 5,
+    "failed": 0,
+    "skipped": 0
+  },
+  "mutation_controls": {
+    "missing_drain": {
+      "passed": 2,
+      "failed": 3,
+      "failure": "QProcess retained unread stderr"
+    },
+    "missing_cap": {
+      "passed": 2,
+      "failed": 3,
+      "failure": "adapter retained more than 1 MiB"
+    },
+    "restored": {
+      "passed": 5,
+      "failed": 0
+    }
+  },
+  "full_pro": {
+    "build": "passed",
+    "passed_targets": 103,
+    "failed_targets": 0,
+    "parallelism": 2,
+    "runner_elapsed_seconds": 368.16
+  },
+  "remaining_gates": [
+    "independent #7705 review",
+    "merge and issue #71 closure"
+  ],
+  "not_verified": [
+    "universal transient QProcess/RSS bound",
+    "Windows (fixture process cases skip there)",
+    "Linux",
+    "Lite",
+    "live providers or journals",
+    "installation or deployment"
+  ]
+}

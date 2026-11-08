@@ -334,13 +334,17 @@ before the endpoint listens:
   connection has the journal open, including a daemon from before the lock, so
   the move waits for the next start and the file is not touched. The lock is
   held until after the rename;
-- it runs `VACUUM INTO <journal>.compact`;
+- it creates an owner-only `<journal>.compact-private` directory and runs
+  `VACUUM INTO` its `journal.sqlite` child (ADR 0087);
 - it checks the copy (`quick_check`, the same schema, incremental vacuum);
-- it syncs the copy and renames it over the original, then syncs the directory.
+- it requires owner-only permissions on the completed copy on POSIX, syncs it
+  and renames it over the original, then syncs the directory.
 
 The move runs only when the free disk exceeds the kept data plus the larger of
 256 MB and 10%. Otherwise it waits for the next start. If a move is interrupted,
-the original stays whole and the copy is removed at the next start. The move
+the original stays whole and recognized staging files are removed at the next
+start. Unsupported entries or permissions are preserved for repair and reported
+as migration failure; cleanup never recursively removes a staging directory. The move
 takes as long as one read of the kept data.
 
 After that, once a minute while no session is active, up to 4,096 free pages
@@ -370,6 +374,23 @@ directory entries. Unknown, unreadable or over-budget ownership defers deletion;
 capacity can remain above its limit pending recovery. Valid ownership retains the
 existing eviction order. This guard does not establish reference-write durability
 or a cross-file transaction; see ADR 0065.
+
+Reference-based previews share the bounded ownership parser and require canonical
+references and nonsymlink roots (ADR 0069). The daemon verifies the bounded image
+bytes against their SHA-256 and decodes that snapshot through QBuffer; unknown
+ownership or mismatched bytes returns media_unavailable without modifying files.
+
+SessionHost prepares fork media ownership inside the journal before-commit
+phase (ADR 0068). Unknown source metadata or conflicting destination ownership
+rolls back copied history. Matching ownership supports retry after commit failure;
+extra prepared references can be reclaimed after reopen using the live catalog.
+This is ordering across two stores, not a filesystem/SQLite atomic transaction.
+
+Image attachment and externalization publish new references only after a checked
+ownership-file commit (ADR 0067). The store preserves unsupported metadata and
+writes unique canonical hashes atomically with owner-only permissions; failure
+uses the existing omission path. Blob/ownership/database coordination remains
+separate, and a failed ownership update can leave unreferenced blob bytes.
 
 Media deduplication checks the existing file type, size, bounded contents and
 owner-only permissions before publishing a blob reference (ADR 0066). Unsupported
@@ -582,6 +603,53 @@ and `sign_in_error` when it failed; `remote.sign_in.cancel` and sign-out stop it
 
 ## Lifecycle
 
+ACP v1 `loadSession` and `promptCapabilities.image` are opt-in booleans (ADR 0090).
+An omitted, null or wrong-type field removes that baseline capability; only true
+preserves support. Each process initializes a fresh narrowing state.
+
+Malformed normal-sized stdout frames quarantine the provider generation before it
+is killed (ADR 0089). Buffered suffixes are discarded; the finished path settles
+pending calls with a static diagnostic and uses existing restart backoff. JSON
+control bytes must be escaped inside strings; outside JSON whitespace remains
+allowed. Valid-object RPC schemas and absent-response deadlines remain separate.
+
+Outgoing provider calls use positive integer JSON ids. Response lookup preserves
+that type and numeric value across all three adapters, including Codex oversized
+responses (ADR 0074). Invalid/unrelated ids leave pending calls untouched; incoming
+provider request ids and pending-call timeout policy remain separate.
+
+Matched replies must contain exactly one result (object or explicit null) or error
+(object). Invalid envelopes fail that callback with a static protocol diagnostic;
+initialize uses its existing failure path, while other pending calls survive.
+Provider-specific result schemas remain separate (ADR 0075).
+
+Cursor model discovery reads both channels incrementally with a shared 1-MiB
+budget (ADR 0088). It retains stdout only, kills excess output, and parses only
+successful normal exits. The existing fallback catalog settles failed/timed-out
+requests and the 60-second cache/coalescing behavior remains unchanged.
+
+Provider version probes retain at most 4 KiB of merged output, kill excess output
+and accept banners only after successful normal exit (ADR 0072). Failed probes
+remain Unknown under the existing launch policy and are retried. Only matching
+executable fingerprints share an in-flight result; other checks are deferred and
+revalidated, including a binary replaced while the first probe is running.
+
+Claude/Cursor stdout is read in 64-KiB chunks and checks each raw line, including
+an unfinished suffix, against the existing 16-MiB limit before parse (ADR 0071).
+An over-limit generation is closed/drained before pending callbacks fail and the
+process is killed; later output from it cannot publish another request. Normal
+lines and a fresh process retain their existing behavior.
+
+Oversized Codex metadata decodes bounded JSON strings and refuses literal dotted
+keys as nested paths (ADR 0073). Invalid captured metadata clears routing for that
+line; subsequent lines reset normally. This does not validate the entire discarded
+JSON payload or resolve missing terminal events and pending-request timeouts.
+
+Codex oversized-line scanning keeps at most 64 routing frames and a scalar count
+of deeper containers (ADR 0070). It still extracts shallow fields after the deep
+value and resumes on the next line; clear/reset discards all prior scan state.
+This bounds scanner nesting storage, not aggregate process I/O or event-loop time.
+
 The intended state flow is `registered -> connecting -> online -> draining ->
 stopped`, with a recoverable `offline` state. Session state is separate from
 connection state so a temporary network outage does not kill a local process.
@@ -656,6 +724,19 @@ generation tombstone and durable deletion work. Live background tasks must first
 stop. Attached Desktop clients receive `session.deleted`; `session.list` also
 returns `deleted_sessions` so reconnecting clients remove stale persisted entries.
 Newer generations are not removed by an older tombstone.
+Tombstone catalogs support opt-in version-1 keyset pages (128 rows/64 KiB), with
+bounded SQL projections and explicit errors for oversized legacy responses. The
+shared transport reader covers Desktop refresh and `ketplusctl sessions`,
+fences catalog mutations and stale reconnect callbacks, and reads live sessions
+after the walk. A changed catalog restarts at most three times; CLI output uses a
+private temporary spool instead of accumulating tombstones in memory. See
+[ADR 0091](decisions/0091-paged-session-tombstone-catalogs.md); this does not make
+explicit deletion asynchronous or bound the live catalog itself.
+Incremental discovery uses `session_catalog_live_only: true` with page version 1
+([ADR 0092](decisions/0092-live-only-session-discovery.md)): one live-catalog
+request, no tombstone query or deletion signals, and the same wire-byte guard.
+Older paged daemons return page one with live sessions; discovery ignores its
+deletion fields. Initial/reconnect reconciliation still walks the full catalog.
 The tombstone and cleanup-work inserts must each affect one row, and each
 history-table delete must leave no matching row. A failed statement or commit
 rolls back and releases the transaction before returning failure, so retries
@@ -742,6 +823,15 @@ scan journal content nor checkpoint it, and failures do not invalidate committed
 policy saves. Media/backups are excluded; absent filesystem data is unknown. See
 [ADR 0045](decisions/0045-journal-file-measurements.md).
 
+### Failed journal initialization
+
+A failed base/activity/agent initialization closes the journal connection before
+construction returns. Later operations on that object cannot turn a cleared
+operation error into a usable journal. Repair the cause separately and open a
+fresh journal; the failed object remains closed. The service's immediate startup
+check and existing rollback behavior remain in place. See
+[ADR 0086](decisions/0086-quarantine-failed-journal-initialization.md) for scope.
+
 ### SQLite-page size pressure
 
 The separate owner-only size policy defaults to a soft 5 decimal GB SQLite-page
@@ -751,6 +841,10 @@ then may compact eligible recent detail without bypassing retention guards.
 Forever/off still preserve remaining detail. Unsupported/protected data may leave
 the target unmet. File/WAL and total-application usage are not this page target;
 see [ADR 0046](decisions/0046-journal-size-pressure.md) for scope and remaining work.
+Both stored policy JSON values are admitted through a 4 KiB SQL projection before
+Qt parses them. Unsupported oversized rows remain intact and disable policy saves
+and configured detail trimming until repaired; see
+[ADR 0085](decisions/0085-bounded-stored-policy-json.md).
 
 Bounded large-tool retention (ADR 0047) applies the existing detail transformers
 to version-1 fragmented payloads within the shared 1 MiB pass budget. It requires

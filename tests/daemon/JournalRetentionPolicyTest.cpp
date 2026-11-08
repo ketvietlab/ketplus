@@ -2,6 +2,7 @@
 #include "runtime/SessionHost.h"
 #include "storage/LocalJournal.h"
 #include <QJsonDocument>
+#include <QScopeGuard>
 #include <QSqlQuery>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -162,6 +163,103 @@ class JournalRetentionPolicyTest final : public QObject {
         const auto before = journal.compactedEventsAfter("s", 1, 0, 500).events;
         QVERIFY(!journal.pruneConfiguredReplayDetails(QDateTime::currentDateTimeUtc()));
         QCOMPARE(journal.compactedEventsAfter("s", 1, 0, 500).events, before);
+    }
+    void storedPolicyReadBounds_data() {
+        QTest::addColumn<bool>("sizePolicy");
+        QTest::addColumn<bool>("blob");
+        QTest::addColumn<int>("bytes");
+        for (bool size : {false, true})
+            for (bool blob : {false, true})
+                for (int bytes : {4095, 4096, 4097, 1024 * 1024}) {
+                    const auto name = QString("%1-%2-%3")
+                                          .arg(size ? "size" : "detail", blob ? "blob" : "text")
+                                          .arg(bytes)
+                                          .toLatin1();
+                    QTest::newRow(name.constData()) << size << blob << bytes;
+                }
+    }
+    void storedPolicyReadBounds() {
+        QFETCH(bool, sizePolicy);
+        QFETCH(bool, blob);
+        QFETCH(int, bytes);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("journal.sqlite");
+        const auto table = sizePolicy ? "journal_size_settings" : "journal_retention_settings";
+        const auto canonical =
+            QJsonDocument(sizePolicy ? JournalSizePolicy{0, 95, 0}.toJson()
+                                     : JournalRetentionPolicy{7, true, 0}.toJson())
+                .toJson(QJsonDocument::Compact);
+        const auto stored = canonical + QByteArray(bytes - canonical.size(), ' ');
+        const auto name = QUuid::createUuid().toString();
+        auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+        const auto cleanup = qScopeGuard([&] {
+            db.close();
+            db = QSqlDatabase();
+            QSqlDatabase::removeDatabase(name);
+        });
+        db.setDatabaseName(path);
+        QJsonArray before;
+        const auto valid = [&](LocalJournal& journal) {
+            return sizePolicy ? bool(journal.sizePolicy()) : bool(journal.retentionPolicy());
+        };
+        const auto save = [&](LocalJournal& journal) {
+            return sizePolicy ? journal.setSizePolicy({0, 95, 0}, 1)
+                              : journal.setRetentionPolicy({7, true, 0}, 1);
+        };
+        const auto unchanged = [&] {
+            QSqlQuery query(db);
+            if (!query.exec(QString("SELECT revision,policy,typeof(policy) FROM %1").arg(table)) ||
+                !query.next())
+                return false;
+            return query.value(0).toLongLong() == 1 && query.value(1).toByteArray() == stored &&
+                   query.value(2).toString() == (blob ? "blob" : "text");
+        };
+        {
+            LocalJournal journal(path);
+            QVERIFY(seed(journal, path));
+            QVERIFY(journal.setRetentionPolicy({7, true, 0}, 0));
+            QVERIFY(journal.setSizePolicy({0, 95, 0}, 0));
+            QVERIFY(db.open());
+            QSqlQuery query(db);
+            query.prepare(QString("UPDATE %1 SET policy=?").arg(table));
+            query.addBindValue(blob ? QVariant(stored) : QVariant(QString::fromUtf8(stored)));
+            // Current writes remain bounded. Simulate an unsupported/corrupt stored row only.
+            QCOMPARE(query.exec(), bytes <= 4096);
+            QVERIFY(query.exec("PRAGMA ignore_check_constraints=ON"));
+            query.prepare(QString("UPDATE %1 SET policy=?").arg(table));
+            query.addBindValue(blob ? QVariant(stored) : QVariant(QString::fromUtf8(stored)));
+            QVERIFY(query.exec());
+            QVERIFY(query.exec("PRAGMA ignore_check_constraints=OFF"));
+            query.finish();
+            before = journal.compactedEventsAfter("s", 1, 0, 500).events;
+            QCOMPARE(valid(journal), bytes <= 4096);
+            if (bytes > 4096) {
+                QVERIFY(!journal.pruneConfiguredReplayDetails(QDateTime::currentDateTimeUtc()));
+                QVERIFY(!save(journal));
+            }
+            QVERIFY(unchanged());
+            QCOMPARE(journal.compactedEventsAfter("s", 1, 0, 500).events, before);
+        }
+        LocalJournal reopened(path);
+        QCOMPARE(valid(reopened), bytes <= 4096);
+        if (bytes > 4096) {
+            QVERIFY(!save(reopened));
+            QVERIFY(!reopened.pruneConfiguredReplayDetails(QDateTime::currentDateTimeUtc()));
+        }
+        QVERIFY(unchanged());
+        QCOMPARE(reopened.compactedEventsAfter("s", 1, 0, 500).events, before);
+        QSqlQuery repair(db);
+        repair.prepare(QString("UPDATE %1 SET policy=?").arg(table));
+        repair.addBindValue(QString::fromUtf8(canonical));
+        QVERIFY(repair.exec());
+        repair.finish();
+        QVERIFY(valid(reopened));
+        QVERIFY(save(reopened));
+        QCOMPARE(
+            sizePolicy ? reopened.sizePolicy()->revision : reopened.retentionPolicy()->revision, 2);
+        QCOMPARE(reopened.pruneConfiguredReplayDetails(QDateTime::currentDateTimeUtc()),
+                 std::optional<qint64>(1));
     }
     void unavailableDiskMetricsDoNotInvalidateCommittedPolicy() {
         LocalJournal journal(":memory:");
