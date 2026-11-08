@@ -1,0 +1,33 @@
+{
+  "scope": "H6.2 deterministic update archive preflight; no UI or real publication",
+  "base": "886fbe201ad88e2bbd466c8e0689f3fc7a423223",
+  "baseline": {
+    "test_methods": 12,
+    "failing_methods": 8,
+    "failure_entries_including_subtests": 12,
+    "original_notes_only_probe": "7 failures / 10 methods"
+  },
+  "fixed": {
+    "update_archive_cli": "12/12 PASS",
+    "signing_cli": "8/8 PASS",
+    "bash_syntax": "PASS",
+    "diff_check": "PASS"
+  },
+  "fixtures": "Synthetic bundle with redirected Apple utilities in a temporary script copy; no private keys, network or provider calls",
+  "preserved": [
+    "valid archive with and without HTML/Markdown notes",
+    "filename-safe prerelease version",
+    "existing archive/notes bytes",
+    "dangling symlink and outside target",
+    "repair/retry at same version"
+  ],
+  "remaining": [
+    "independent review",
+    "atomic archive/appcast generation on tool failure/crash",
+    "concurrent/ancestor/appcast path mutation",
+    "key-path canonicalization",
+    "real signing/notarization/update verification",
+    "channel and downgrade acceptance",
+    "deployment and installation"
+  ]
+}

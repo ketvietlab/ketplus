@@ -37,6 +37,12 @@ Branch protection: `integration` has no required checks but allows no
 force-push or deletion; `develop` requires `promotion provenance` and the
 `build` jobs, including for administrators; `main` keeps its release rules.
 
+Workflow actions use full upstream commit SHAs (ADR 0080), retaining the previous
+version/ref as a comment. Updating one requires verifying the replacement commit
+in its owning upstream repository. Build, promotion and spike jobs use explicit
+read-only content permissions and do not persist checkout credentials. These
+settings do not replace hosted promotion/release checks or the dependency audit.
+
 ## Versions and tags
 
 Each edition keeps its own version:
@@ -79,6 +85,11 @@ A production desktop release additionally requires:
 - the license files and exact third-party notices required by `licensing.md`;
 - an About surface that identifies the source revision;
 - no tokens, transcripts, or signing material in the repository or packages.
+
+Update preparation validates a filename-safe bundle version and readable HTML/Markdown
+notes before creating an archive. Existing archive or notes destinations, including
+dangling symlinks, are refused rather than overwritten (ADR 0082). This preflight
+does not make artifact generation transactional or safe for concurrent writers.
 
 Packaging is not complete yet. Passing CI is necessary but does not by itself
 authorize distribution of an official binary.

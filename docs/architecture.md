@@ -128,7 +128,10 @@ Qt application shell
   does not stop the shell. The first implementation retains one session, while
   the planned session registry will retain one or more sessions per worktree.
 - `modules/atlas/src` owns Atlas process/WebView integration and the private
-  `AtlasIndex`. The index scans only the active workspace/worktree for exact
+  `AtlasIndex`. Process readiness accepts only a complete line naming the current
+  attempt's selected loopback port; partial/truncated log suffixes and stop-time
+  output cannot publish a new endpoint (ADR 0081). The index scans only the active
+  workspace/worktree for exact
   `*.ketatlas/atlas.json` bundles; switching worktrees replaces its root rather
   than expanding into linked worktrees. Atlas descriptors retain screen IDs,
   titles, URLs, and resolved local paths for future per-screen audit, while

@@ -1,0 +1,29 @@
+{
+  "scope": "H2.2 local client unread transport-buffer bound",
+  "base": "886fbe201ad88e2bbd466c8e0689f3fc7a423223",
+  "environment": "macOS arm64, Qt 6.11.2 Release Pro/offscreen; synthetic local server and credential",
+  "baseline_failures": 2,
+  "baseline_control_setup_passes": 2,
+  "baseline_unread_bytes_each_phase": 3145740,
+  "final_unread_bytes_each_phase": 1048580,
+  "phases": [
+    "before hello",
+    "after hello"
+  ],
+  "final_focused_passes": 9,
+  "final_focused_ms": 1147,
+  "full_pro_targets_passed": 96,
+  "full_pro_seconds": 349.94,
+  "verified": [
+    "transport buffer bound while application dispatch is paused",
+    "complete receipt of all exact-limit pipelined frames and one later event without reconnect",
+    "existing upgrade/version compatibility controls"
+  ],
+  "not_verified": [
+    "total process RSS or OS buffer bounds",
+    "callback lifetime and reentrancy",
+    "request fairness, pending/write queue limits and timeouts",
+    "cross-platform acceptance",
+    "installation or deployment"
+  ]
+}
