@@ -30,19 +30,37 @@ AtlasProcess::AtlasProcess(QObject* parent) : QObject(parent) {
         stop();
         emit failed(tr("KetAtlas did not become ready within 20 seconds."));
     });
-    connect(&process_, &QProcess::readyReadStandardOutput, this, [this] {
-        output_.append(process_.readAllStandardOutput());
-        if (output_.size() > 32768)
-            output_ = output_.right(32768);
-        static const QRegularExpression address(
-            QStringLiteral("KetAtlas: (http://127\\.0\\.0\\.1:[0-9]+)"));
-        const auto match = address.match(QString::fromUtf8(output_));
-        if (!ready_ && match.hasMatch()) {
-            ready_ = true;
-            timeout_.stop();
-            emit ready(QUrl(match.captured(1)));
-        }
-    });
+    connect(&process_, &QProcess::readyReadStandardOutput, this,
+            [this, outputStartsAtLineBoundary = true]() mutable {
+                // launchAttempt clears the buffer; the next output begins a new attempt.
+                if (output_.isEmpty())
+                    outputStartsAtLineBoundary = true;
+                output_.append(process_.readAllStandardOutput());
+                if (output_.size() > 32768) {
+                    const auto removed = output_.size() - 32768;
+                    outputStartsAtLineBoundary = output_.at(removed - 1) == '\n';
+                    output_ = output_.right(32768);
+                }
+                if (ready_ || stopping_ || port_ == 0)
+                    return;
+                static const QRegularExpression address(
+                    QStringLiteral("^KetAtlas: (http://127\\.0\\.0\\.1:[0-9]+)/?[\\t ]*\\r?\\n"),
+                    QRegularExpression::MultilineOption);
+                auto matches = address.globalMatch(QString::fromUtf8(output_));
+                while (matches.hasNext()) {
+                    const auto match = matches.next();
+                    // Trimming a long log line must not turn its suffix into a banner.
+                    if (match.capturedStart() == 0 && !outputStartsAtLineBoundary)
+                        continue;
+                    const QUrl endpoint(match.captured(1));
+                    if (!endpoint.isValid() || endpoint.port() != port_)
+                        continue;
+                    ready_ = true;
+                    timeout_.stop();
+                    emit ready(endpoint);
+                    return;
+                }
+            });
     connect(&process_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
         if (!stopping_ && error == QProcess::FailedToStart) {
             timeout_.stop();

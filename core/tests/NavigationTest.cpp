@@ -1,3 +1,4 @@
+#include "TestSymlink.h"
 #include "editor/DefinitionPattern.h"
 #include "editor/EditorWidget.h"
 #include "editor/SymbolExtractor.h"
@@ -240,12 +241,21 @@ void NavigationTest::listsRepositoryFilesByIgnoreRules() {
     QVERIFY(outsideFile.open(QIODevice::WriteOnly));
     outsideFile.close();
     QVERIFY(QDir(root.filePath(QStringLiteral("src"))).removeRecursively());
-    QVERIFY(QFile::link(outside.path(), root.filePath(QStringLiteral("src"))));
+    const QString linkError =
+        ketplus::test::createSymlink(outside.path(), root.filePath(QStringLiteral("src")), true);
+    QVERIFY2(linkError.isEmpty(), qPrintable(linkError));
     QVERIFY(QFileInfo(root.filePath(QStringLiteral("src/out/gen.c"))).isFile());
     const auto linked = ketplus::collectWorkspaceFiles(directory.path());
     QVERIFY2(!linked.relativePaths.contains(QStringLiteral("src/out/gen.c")),
              qPrintable(linked.relativePaths.join(u',')));
     QVERIFY(linked.relativePaths.contains(QStringLiteral("vendor/lib.c")));
+    // Remove the directory link before its target's QTemporaryDir is destroyed.
+    // Qt's recursive cleanup cannot remove a dangling Windows directory link.
+    std::error_code unlinkError;
+    QVERIFY(std::filesystem::remove(
+        QFile(root.filePath(QStringLiteral("src"))).filesystemFileName(), unlinkError));
+    QVERIFY2(!unlinkError, unlinkError.message().c_str());
+    QVERIFY(QFileInfo(outsideFile.fileName()).isFile());
 }
 
 void NavigationTest::extractsCppSymbols() {
