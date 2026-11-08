@@ -35,5 +35,6 @@ class AtlasLiveRuntime final : public QObject {
     quint16 viewerPort_{0}, rendererPort_{0};
     qint64 revision_{0};
     bool checkingVersion_{true}, stopped_{false}, launched_{false};
+    bool outputStartsAtLineBoundary_{true};
 };
 } // namespace ketplus::daemon

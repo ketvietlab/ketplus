@@ -2,10 +2,12 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonArray>
+#include <QRegularExpression>
 #include <QStandardPaths>
 #include <QTcpServer>
 #include <QUrlQuery>
 #include <QUuid>
+#include <utility>
 
 namespace ketplus::daemon {
 AtlasLiveRuntime::AtlasLiveRuntime(QObject* parent) : QObject(parent) {
@@ -45,8 +47,8 @@ void AtlasLiveRuntime::start(const AtlasDescriptor& atlas, QUrl relay, const QSt
         return;
     }
     process_.setWorkingDirectory(atlas_.directory);
-    process_.start(cli_, {"--version"});
     timeout_.start(30000);
+    process_.start(cli_, {"--version"});
 }
 void AtlasLiveRuntime::launch() {
     QTcpServer viewer, renderer;
@@ -67,18 +69,34 @@ void AtlasLiveRuntime::launch() {
     viewer.close();
     renderer.close();
     output_.clear();
+    outputStartsAtLineBoundary_ = true;
     process_.start(cli_, args);
 }
 void AtlasLiveRuntime::inspectOutput() {
     output_ += process_.readAllStandardOutput();
-    if (output_.size() > 32768)
+    if (output_.size() > 32768) {
+        const auto removed = output_.size() - 32768;
+        outputStartsAtLineBoundary_ = output_.at(removed - 1) == '\n';
         output_ = output_.right(32768);
-    if (checkingVersion_ || launched_ ||
-        !output_.contains("KetAtlas: http://127.0.0.1:" + QByteArray::number(viewerPort_)))
+    }
+    if (stopped_ || checkingVersion_ || launched_ || viewerPort_ == 0)
         return;
-    launched_ = true;
-    timeout_.stop();
-    attach(relay_, bearer_, std::move(callback_));
+    static const QRegularExpression address(
+        QStringLiteral("^KetAtlas: (http://127\\.0\\.0\\.1:[0-9]+)/?[\\t ]*\\r?\\n"),
+        QRegularExpression::MultilineOption);
+    auto matches = address.globalMatch(QString::fromUtf8(output_));
+    while (matches.hasNext()) {
+        const auto match = matches.next();
+        if (match.capturedStart() == 0 && !outputStartsAtLineBoundary_)
+            continue;
+        const QUrl endpoint(match.captured(1));
+        if (!endpoint.isValid() || endpoint.port() != viewerPort_)
+            continue;
+        launched_ = true;
+        timeout_.stop();
+        attach(relay_, bearer_, std::move(callback_));
+        return;
+    }
 }
 void AtlasLiveRuntime::attach(QUrl relay, const QString& bearer, Callback callback) {
     relay_ = std::move(relay);
@@ -117,8 +135,11 @@ void AtlasLiveRuntime::attach(QUrl relay, const QString& bearer, Callback callba
     bearer_.clear();
     if (stopped_)
         return;
+    // Complete internal setup before calling an owner that may stop this runtime.
+    timeout_.start(30000);
+    connect(tunnel_, &AtlasLiveTunnel::ready, &timeout_, &QTimer::stop);
     if (callback_) {
-        auto callback = std::move(callback_);
+        auto callback = std::exchange(callback_, {});
         callback({{"ok", true},
                   {"repository_id", property("repositoryId").toString()},
                   {"worktree_id", property("worktreeId").toString()},
@@ -128,17 +149,15 @@ void AtlasLiveRuntime::attach(QUrl relay, const QString& bearer, Callback callba
                   {"context_revision", revision_},
                   {"title", atlas_.title}});
     }
-    // A client that never attaches must not leave a renderer behind.
-    timeout_.start(30000);
-    connect(tunnel_, &AtlasLiveTunnel::ready, &timeout_, &QTimer::stop);
 }
 void AtlasLiveRuntime::fail(const QString& code) {
-    if (callback_) {
-        auto callback = std::move(callback_);
-        callback({{"ok", false}, {"error_code", code}});
-    }
+    if (stopped_)
+        return;
+    auto callback = std::exchange(callback_, {});
     stop();
     deleteLater();
+    if (callback)
+        callback({{"ok", false}, {"error_code", code}});
 }
 void AtlasLiveRuntime::stop() {
     if (stopped_)

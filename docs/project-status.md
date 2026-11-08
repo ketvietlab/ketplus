@@ -15,6 +15,12 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- Daemon Atlas readiness requires a complete line for the owned viewer port and
+  ignores partial/embedded/truncated-prefix or post-stop output (ADR 0083). Start
+  results are delivered once even if the process exits immediately after ready.
+  Synthetic CLI cases and the full Pro suite pass; executable/port trust and
+  wider tunnel/renderer lifetime acceptance remain separate.
+
 - Atlas process readiness requires a complete banner for the current attempt's
   selected loopback port, including truncation/restart and stop-time guards
   (ADR 0081). Executable/listener identity and broader lifecycle remain open.

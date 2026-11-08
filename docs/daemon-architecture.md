@@ -719,6 +719,13 @@ remove that history.
 
 `AtlasLiveRuntime` owns only the KetAtlas viewer and optional declared renderer it starts. Version 0.5.2 is required, the viewer is read-only, and framework startup uses the local renderer contract without a shell. Discovery returns opaque project IDs. `atlas.start` fences the selected execution context; reconnect by an existing attachment channel instead retains that runtime's source even after a conversation switches. Back releases the connection with a five-minute idle lease; `atlas.detach` explicitly stops the owned runtime. Existing desktop viewers are not adopted or stopped.
 
+Daemon readiness requires a complete stdout banner for its current loopback viewer
+port. Partial/embedded/wrong-port and post-stop output cannot publish an
+attachment; the diagnostic tail retains its line-boundary state. The start
+callback is consumed before invocation and cannot run again when the process
+exits immediately after readiness (ADR 0083). Synthetic CLI regressions cover
+these boundaries without starting a real viewer or renderer.
+
 `AtlasLiveTunnel` multiplexes bounded byte streams to registered loopback viewer/renderer ports over a persistent authenticated WebSocket. Each attachment gets a new random key/channel; AES-GCM frames bind channel, direction and exact sequence. The phone uses matching loopback origins and an ephemeral HttpOnly cookie for its native bridge. HTTP, streaming bodies, renderer WebSockets and SSE remain ordinary protocols inside the encrypted byte streams. The relay forwards ciphertext and rechecks grants periodically; it cannot see resource bodies. There is no automatic write replay.
 
 `session.resource.resolve` resolves only resource references recorded in an exact event. It returns an opaque source scope and current content revision, never a historical content snapshot or inferred legacy provenance. For agent messages, it also validates inline Markdown file destinations in that exact event. Relative destinations remain bound to the recorded execution context; absolute destinations may identify another existing Git checkout. Switching the current worktree does not rewrite a link’s source. Messages without a recorded context revision remain unverified.
