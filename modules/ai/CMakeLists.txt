@@ -148,6 +148,10 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS "ModelPicker.qml"
 )
 set_source_files_properties(
+    src/agent/qml/ModelProviderTabs.qml
+    PROPERTIES QT_RESOURCE_ALIAS "ModelProviderTabs.qml"
+)
+set_source_files_properties(
     src/agent/qml/MessageImageGallery.qml
     PROPERTIES QT_RESOURCE_ALIAS "MessageImageGallery.qml"
 )
@@ -255,6 +259,7 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
         src/agent/qml/UsageRingButton.qml
         src/agent/qml/CompactWindowControl.qml
         src/agent/qml/ModelPicker.qml
+        src/agent/qml/ModelProviderTabs.qml
         src/agent/qml/MessageImageGallery.qml
         src/agent/qml/TranscriptRemoteGroup.qml
         src/agent/qml/TranscriptNotice.qml

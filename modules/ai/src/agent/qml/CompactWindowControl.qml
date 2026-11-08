@@ -54,7 +54,7 @@ ColumnLayout {
         Text {
             Layout.fillWidth: true
             text: control.capacity > 0
-                ? qsTr("%1 model capacity").arg(Number(control.capacity).toLocaleString(Qt.locale(), "f", 0))
+                ? qsTr("%1 model capacity").arg(Number(control.capacity).toLocaleString(Qt.locale("en_US"), "f", 0))
                 : qsTr("Model capacity not reported")
             horizontalAlignment: Text.AlignRight
             wrapMode: Text.Wrap

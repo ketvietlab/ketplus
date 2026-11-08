@@ -15,7 +15,7 @@ ColumnLayout {
         return typeof value === "number" && isFinite(value) && value >= 0 ? "$" + value.toFixed(4) : "Not reported";
     }
     function tokens(value) {
-        return typeof value === "number" && isFinite(value) && value >= 0 ? value.toLocaleString(Qt.locale(), "f", 0) : "Not reported";
+        return typeof value === "number" && isFinite(value) && value >= 0 ? value.toLocaleString(Qt.locale("en_US"), "f", 0) : "Not reported";
     }
     function timestamp(value) {
         const date = new Date(value);

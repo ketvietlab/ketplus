@@ -213,17 +213,17 @@ void AgentWorkspaceViewTest::selectsModelsInUnifiedPicker() {
     QVERIFY(slider->isEnabled());
     slider->setProperty("value", 1);
     QVERIFY(QMetaObject::invokeMethod(slider, "moved"));
-    auto* effortHandle = findVisualItem(popupContent, "effortHandle");
-    auto* selectedEffortTick = findVisualItem(popupContent, "effortTickLabel_1");
-    QVERIFY(effortHandle && selectedEffortTick);
-    const auto handleCenter =
-        effortHandle->mapToItem(root, QPointF(effortHandle->width() / 2.0, 0.0)).x();
-    const auto labelCenter =
-        selectedEffortTick->mapToItem(root, QPointF(selectedEffortTick->width() / 2.0, 0.0)).x();
-    QVERIFY2(qAbs(labelCenter - handleCenter) <= 1.0,
-             qPrintable(QStringLiteral("Effort label center %1 must match handle center %2")
-                            .arg(labelCenter)
-                            .arg(handleCenter)));
+    auto* minLabel = findVisualItem(popupContent, "effortMinLabel");
+    auto* maxLabel = findVisualItem(popupContent, "effortMaxLabel");
+    QVERIFY(minLabel && maxLabel);
+    QVERIFY(!minLabel->property("text").toString().isEmpty());
+    QVERIFY(!maxLabel->property("text").toString().isEmpty());
+    const auto sliderLeft = slider->mapToItem(root, QPointF(0, 0)).x();
+    const auto sliderRight = slider->mapToItem(root, QPointF(slider->width(), 0)).x();
+    QVERIFY(qAbs(minLabel->mapToItem(root, QPointF(0, 0)).x() - sliderLeft) <= 1.0);
+    QVERIFY(qAbs(maxLabel->mapToItem(root, QPointF(maxLabel->width(), 0)).x() - sliderRight) <=
+            1.0);
+    QVERIFY(!findVisualItem(popupContent, "effortTickLabel_1"));
     slider->setProperty("value", 2);
     QVERIFY(QMetaObject::invokeMethod(slider, "moved"));
     search->setProperty("text", "");
