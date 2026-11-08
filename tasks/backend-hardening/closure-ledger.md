@@ -1,8 +1,8 @@
 # Backend hardening closure ledger
 
-Snapshot: 2026-11-08. Scope remains non-UI; no release/install/deploy permission.
+Updated: 2026-11-08 after #71 closure. Scope remains non-UI; no release/install/deploy permission. The original morning inventory below is historical.
 
-## Why issues remain open
+## Original closure audit and current progress
 
 GitHub records 35 merged PRs and zero closed issues on 2026-11-07 in
 Asia/Ho_Chi_Minh. Merged PRs: #191–196, #199–206, #212, #217, #220, #223, #228,
@@ -24,8 +24,8 @@ next domain, rather than waiting for every unrelated draft to merge first.
 
 | Issue / plan area | Established evidence | Required before closure | Owner / next action |
 | --- | --- | --- | --- |
-| #71 / H3.1 | Provider bounds/probes fixes prepared in #256–259, with per-branch regressions and matrices | Independent review, dependency-aware integration; complete stderr, malformed-input and capability checklist; final affected matrix | #2739: first issue dossier after queue review resumes; #7705: independent review |
-| #65 / H2.1–2 | IPC/token fixes prepared in #263/#264/#266 | Review/merge; finish permissions, single instance, slow clients, reassembly, reconnect and compatibility criteria | #2739 after #71; no claim these checks are complete |
+| #71 / H3.1 | CLOSED after #277 merged `b3af8ed5`; author Pro 103/103, independent daemon 55/55; all five criteria checked | [Closure evidence](https://github.com/ketvietlab/ketplus/issues/71#issuecomment-6717547995); H3.4 remains separate | None; current issue is #68 |
+| #65 / H2.1–2 | IPC/token fixes prepared in #263/#264/#266 | Review/merge; finish permissions, single instance, slow clients, reassembly, reconnect and compatibility criteria | #2739 after the current #68 queue; no claim these checks are complete |
 | #66–67 / H2.3–4 | Append/fork/recovery fixes through #250 merged; turn acceptance #262 and media fork #254 pending | Two-client/late-event/handoff, approval/question/task and destructive-lifecycle acceptance; integrated tests | #2739, queued after the current closure target |
 | #68 / H1.1–4 | Storage/GC/transaction fixes through #252 merged; #253–255/#272/#273 and migration-copy package pending | Remaining delete/fork bounds, schema/failure/crash and media race/ownership acceptance; exact-head review and integration | #2739; completing the migration-copy package does not close this issue |
 | #69 / H2.5 | Existing agent messaging suite and earlier runtime work | Complete identity, reply, loop/flood, authentication, secret-isolation and delivery audit | #2739; not completed, not blocked solely by relay |
@@ -46,16 +46,20 @@ next domain, rather than waiting for every unrelated draft to merge first.
   Its PR still requires independent review; this is not issue acceptance.
 - [x] User reassigned independent review to #7705; preserve historical #6212 PASS
   evidence. This is an explicit owner change, not an automatic bypass.
-- [ ] Review the existing #71 packet through #7705, then finish its acceptance.
-  Do not repeatedly send if the new dispatch is held.
+- [x] Review and merge the #71 packet through #7705; finish all five criteria.
+  Final #277 review passed `5880b17d`; merge `b3af8ed5`.
 - [ ] Respect stacks: #253 → #254 → #255; #256 → #259; #260 → #261;
   #265 → #268. Reconcile current base and retest/review changed heads after merge.
 - [ ] Merge only with the required author matrix and independent review.
 - [ ] Verify and remove every unused clean/pushed linked worktree; keep the main
   checkout and any worktree owned by another process/conversation.
-- [ ] Complete #71's original checklist and record each finding as fixed or
-  explicitly accepted before closing it; then advance to the next issue.
+- [x] Complete #71's original checklist and close it with evidence.
+- [ ] Drain existing #68 media #253–255 and journal #272–274 packages, then
+  reconcile the original seven criteria; remaining bounds/crash/filesystem work
+  stays visible and no #68 closure is inferred from package PASS.
 
-No issue is declared complete by this ledger. Packaging, deployment and device
+Only #71 is declared complete by the linked closure evidence. Packaging, deployment and device
 installation are not inferred from build/test results. The existing mixed UI and
 operator gates remain open under their original acceptance criteria.
+
+Current #68 criteria and next gate: [acceptance dossier](issue-68-acceptance.md).
