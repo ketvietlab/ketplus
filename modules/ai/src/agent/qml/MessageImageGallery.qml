@@ -21,7 +21,6 @@ Grid {
     readonly property real thumbnailHeight: KetTheme.px(largePreview ? 225 : 78, KetTheme.zoom)
     readonly property real gap: KetTheme.px(8, KetTheme.zoom)
     readonly property real preferredWidth: tileCount * thumbnailSide + Math.max(0, tileCount - 1) * gap
-    readonly property real bubblePreferredWidth: preferredWidth
 
     signal imageClicked(url source)
 

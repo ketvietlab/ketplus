@@ -21,6 +21,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QProcess>
+#include <QQmlProperty>
 #include <QQuickItem>
 #include <QQuickItemGrabResult>
 #include <QQuickTextDocument>
@@ -2249,6 +2250,96 @@ void AgentWorkspaceViewTest::userBubbleFitsShortTextAndWrapsLongText() {
     QCOMPARE(document->toPlainText(), QString("one\ntwo"));
 }
 
+void AgentWorkspaceViewTest::userTurnLeadsWithOriginAndImages() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 900);
+    view.show();
+    QTemporaryDir images;
+    QImage sample(240, 156, QImage::Format_RGB32);
+    sample.fill(Qt::green);
+    const auto imagePath = images.filePath("capture.png");
+    QVERIFY(sample.save(imagePath));
+    const QString image = QUrl::fromLocalFile(imagePath).toString();
+    view.resetMessages({QVariantMap{{"kind", "user"},
+                                    {"body", "Check it against this capture."},
+                                    {"messageKey", "prompt"},
+                                    {"images", QStringList{image}}}},
+                       "lead-images");
+    auto* root = view.quickView()->rootObject();
+    // The bubble of the row that holds an item, whether the item sits in it or beside it.
+    const auto bubbleOf = [](QQuickItem* item) -> QQuickItem* {
+        for (; item; item = item->parentItem())
+            for (auto* child : item->childItems())
+                if (child->objectName() == "messageSurface")
+                    return child;
+        return nullptr;
+    };
+    auto* activeTranscript = root->findChild<QQuickItem*>(QStringLiteral("agentTranscript"));
+    QVERIFY(activeTranscript);
+    QQuickItem* gallery = nullptr;
+    QQuickItem* surface = nullptr;
+    QTRY_VERIFY((gallery = findVisualItem(activeTranscript, "messageImageGallery")) &&
+                (surface = bubbleOf(gallery)));
+    // The mock's prompt: thumbnails right-aligned above the bubble, not inside it.
+    QTRY_VERIFY(gallery->height() > 0);
+    const QRectF shot = gallery->mapRectToScene(gallery->childrenRect());
+    const QRectF bubble =
+        surface->mapRectToScene(QRectF(0, 0, surface->width(), surface->height()));
+    QVERIFY2(shot.bottom() <= bubble.top(),
+             qPrintable(QString("%1 > %2").arg(shot.bottom()).arg(bubble.top())));
+    QCOMPARE(qRound(shot.right()), qRound(bubble.right()));
+
+    // A prompt of only images keeps no empty bubble.
+    view.resetMessages({QVariantMap{{"kind", "user"},
+                                    {"body", ""},
+                                    {"messageKey", "only"},
+                                    {"images", QStringList{image}}}},
+                       "images-only");
+    QTRY_VERIFY((gallery = findVisualItem(activeTranscript, "messageImageGallery")) &&
+                (surface = bubbleOf(gallery)) && !surface->isVisible());
+
+    // Another agent's message names its sender above a plain bubble; a steer says so below.
+    view.resetMessages({QVariantMap{{"kind", "user"},
+                                    {"body", "Keep 4 behind another app."},
+                                    {"messageKey", "reply"},
+                                    {"subtype", "agentMessage"},
+                                    {"meta", "Reply from @agent/8941 · DS Icon · Claude"}},
+                        QVariantMap{{"kind", "user"},
+                                    {"body", "Also check dark mode."},
+                                    {"messageKey", "steer"},
+                                    {"eventType", "turn.steered"}}},
+                       "agent-and-steer");
+    const auto shown = [](const auto& self, QQuickItem* item, const QString& name) -> QQuickItem* {
+        if (!item->isVisible())
+            return nullptr;
+        if (item->objectName() == name)
+            return item;
+        for (auto* child : item->childItems())
+            if (auto* match = self(self, child, name))
+                return match;
+        return nullptr;
+    };
+    QQuickItem* origin = nullptr;
+    QQuickItem* steer = nullptr;
+    QTRY_VERIFY((origin = shown(shown, activeTranscript, "agentMessageOrigin")));
+    QTRY_VERIFY((steer = shown(shown, activeTranscript, "transcriptSteerNotice")));
+    QCOMPARE(origin->property("text").toString(),
+             QString("Reply from @agent/8941 · DS Icon · Claude"));
+    QCOMPARE(origin->property("color").value<QColor>(), steer->property("color").value<QColor>());
+    auto* replyBubble = bubbleOf(origin);
+    auto* steerBubble = bubbleOf(steer);
+    QVERIFY(replyBubble && steerBubble);
+    QCOMPARE(QQmlProperty::read(replyBubble, "border.color").value<QColor>(),
+             QQmlProperty::read(steerBubble, "border.color").value<QColor>());
+    QCOMPARE(replyBubble->property("color"), steerBubble->property("color"));
+    QVERIFY(origin->mapToScene(QPointF(0, origin->height())).y() <=
+            replyBubble->mapToScene(QPointF()).y());
+    QVERIFY(steer->mapToScene(QPointF()).y() >=
+            steerBubble->mapToScene(QPointF(0, steerBubble->height())).y());
+    QVERIFY(steer->property("text").toString().startsWith("Sent while "));
+}
+
 void AgentWorkspaceViewTest::transcriptDayDividersUseJournalDates() {
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());
@@ -2258,8 +2349,8 @@ void AgentWorkspaceViewTest::transcriptDayDividersUseJournalDates() {
         return QVariantMap{
             {"kind", "user"}, {"body", "A prompt"}, {"messageKey", key}, {"timestamp", date}};
     };
-    view.resetMessages({user("one", "2026-11-01T12:00:00Z"), user("two", "2026-11-01T13:00:00Z"),
-                        user("three", "2026-11-02T12:00:00Z"), user("legacy", "")},
+    view.resetMessages({user("one", "2025-11-01T12:00:00Z"), user("two", "2025-11-01T13:00:00Z"),
+                        user("three", "2025-11-02T12:00:00Z"), user("legacy", "")},
                        "dated-transcript");
     auto* root = view.quickView()->rootObject();
     QVERIFY(root);
@@ -2275,7 +2366,19 @@ void AgentWorkspaceViewTest::transcriptDayDividersUseJournalDates() {
         return dates;
     };
     QTRY_COMPARE(visibleDates().size(), 2);
-    QVERIFY(visibleDates().join(" ").contains("2026"));
+    QCOMPARE(visibleDates(), (QStringList{"Saturday, 1 November 2025", "Sunday, 2 November 2025"}));
+    // Recent days read as words; the current year drops from older dates.
+    const auto now = QDateTime::currentDateTime();
+    const auto stamp = [](const QDateTime& at) { return at.toUTC().toString(Qt::ISODate); };
+    const QDate thisYear(now.date().year(), now.date().month() == 1 ? 12 : 1, 15);
+    view.resetMessages({user("older", stamp(QDateTime(thisYear, QTime(12, 0))).toUtf8()),
+                        user("yesterday", stamp(now.addDays(-1)).toUtf8()),
+                        user("today", stamp(now).toUtf8())},
+                       "relative-transcript");
+    QTRY_COMPARE(visibleDates().size(), 3);
+    QCOMPARE(visibleDates().mid(1), (QStringList{"Yesterday", "Today"}));
+    QCOMPARE(visibleDates().first(),
+             QLocale(QLocale::English, QLocale::UnitedKingdom).toString(thisYear, "dddd, d MMMM"));
     // Reformatting a live document after a numeric zoom must not compound insets.
     view.resetMessages({QVariantMap{{"kind", "assistant"}, {"body", "```cpp\nreturn 42;\n```"}}},
                        "zoomed-code");

@@ -646,7 +646,13 @@ Flickable {
             if (before.toDateString() === date.toDateString()) return "";
             break;
         }
-        return Qt.formatDateTime(date, "ddd, MMM d, yyyy");
+        const today = new Date();
+        const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+        if (date.toDateString() === today.toDateString()) return qsTr("Today");
+        if (date.toDateString() === yesterday.toDateString()) return qsTr("Yesterday");
+        // The mock's divider reads "Thursday, 24 September"; other years add theirs.
+        const format = date.getFullYear() === today.getFullYear() ? "dddd, d MMMM" : "dddd, d MMMM yyyy";
+        return date.toLocaleDateString(Qt.locale("en_GB"), format);
     }
     property string cacheScope: ""
     property var messageModel: null
