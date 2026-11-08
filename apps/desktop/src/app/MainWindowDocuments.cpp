@@ -945,7 +945,9 @@ void MainWindow::setSettingsWorkspaceVisible(const bool visible) {
                 reply({}, SettingsStoragePage::tr("Agents are not available."));
                 return;
             }
-            agents->appServer()->call(QStringLiteral("daemon/storageRetention/") + operation,
+            agents->appServer()->call(operation.startsWith("size.")
+                                          ? QStringLiteral("daemon/storageSize/") + operation.mid(5)
+                                          : QStringLiteral("daemon/storageRetention/") + operation,
                                       payload, std::move(reply));
         });
     workspaceSplit_->addWidget(settingsWorkspace_);

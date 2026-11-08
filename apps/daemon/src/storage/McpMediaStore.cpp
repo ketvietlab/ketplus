@@ -5,12 +5,16 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QJsonArray>
 #include <QSaveFile>
 #include <QSet>
 #include <QSize>
 #include <QtEndian>
 
+#include <algorithm>
+#include <filesystem>
+#include <optional>
 #include <utility>
 
 namespace ketplus::daemon {
@@ -74,21 +78,78 @@ QJsonObject omitted(const QString& type, const QString& reason) {
 }
 
 bool ensureOwnerDirectory(const QString& path) {
+    const QFileInfo existing(path);
+    if (existing.isSymLink() || (existing.exists() && !existing.isDir()))
+        return false;
     if (!QDir().mkpath(path))
         return false;
-    return QFile::setPermissions(path, ownerDirectory);
+    const QFileInfo created(path);
+    return created.isDir() && !created.isSymLink() && QFile::setPermissions(path, ownerDirectory);
 }
 
-QSet<QString> readRefs(const QString& path) {
-    QSet<QString> hashes;
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly))
-        return hashes;
-    for (const QByteArray& line : file.readAll().split('\n')) {
-        if (line.size() == 64)
-            hashes.insert(QString::fromLatin1(line));
+constexpr qint64 maximumReferenceFileBytes = 4 * 1024 * 1024;
+constexpr qint64 maximumReferenceCatalogBytes = 16 * 1024 * 1024;
+constexpr int maximumReferenceEntries = 4096;
+using ReferenceCatalog = QHash<QString, QSet<QString>>;
+
+bool isDigest(const QByteArray& value) {
+    return value.size() == 64 && std::all_of(value.cbegin(), value.cend(), [](char c) {
+               return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+           });
+}
+
+std::optional<ReferenceCatalog> readReferenceCatalog(const QString& directory) {
+    try {
+        const auto path = std::filesystem::u8path(directory.toUtf8().toStdString());
+        std::error_code failure;
+        const auto root = std::filesystem::symlink_status(path, failure);
+        if (root.type() == std::filesystem::file_type::not_found &&
+            (!failure || failure == std::errc::no_such_file_or_directory))
+            return ReferenceCatalog{};
+        if (failure || !std::filesystem::is_directory(root) || std::filesystem::is_symlink(root))
+            return std::nullopt;
+        ReferenceCatalog result;
+        qint64 totalBytes = 0;
+        int entries = 0;
+        // Count every directory entry, including unknown names, so filtering cannot
+        // hide an unbounded traversal. A partial catalog never authorizes deletion.
+        std::filesystem::directory_iterator files(path, failure), end;
+        for (; !failure && files != end; files.increment(failure)) {
+            if (++entries > maximumReferenceEntries)
+                return std::nullopt;
+            const auto utf8 = files->path().u8string();
+            const QFileInfo info(QString::fromUtf8(reinterpret_cast<const char*>(utf8.data()),
+                                                   qsizetype(utf8.size())));
+            if (!info.fileName().endsWith(QStringLiteral(".refs")))
+                continue;
+            if (info.isSymLink() || !info.isFile() ||
+                !isDigest(info.completeBaseName().toLatin1()) ||
+                info.size() > maximumReferenceFileBytes)
+                return std::nullopt;
+            QFile file(info.absoluteFilePath());
+            if (!file.open(QIODevice::ReadOnly))
+                return std::nullopt;
+            const auto bytes = file.read(maximumReferenceFileBytes + 1);
+            if (file.error() != QFileDevice::NoError || bytes.size() > maximumReferenceFileBytes ||
+                totalBytes + bytes.size() > maximumReferenceCatalogBytes)
+                return std::nullopt;
+            totalBytes += bytes.size();
+            QSet<QString> hashes;
+            for (const auto& line : bytes.split('\n')) {
+                if (line.isEmpty())
+                    continue;
+                if (!isDigest(line))
+                    return std::nullopt;
+                hashes.insert(QString::fromLatin1(line));
+            }
+            result.insert(info.fileName(), hashes);
+        }
+        if (failure)
+            return std::nullopt;
+        return result;
+    } catch (const std::filesystem::filesystem_error&) {
+        return std::nullopt;
     }
-    return hashes;
 }
 
 } // namespace
@@ -239,9 +300,18 @@ QJsonObject McpMediaStore::write(const QByteArray& bytes, const QString& extensi
         QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
     const QString path = QDir(directory_).filePath(hex + QLatin1Char('.') + extension);
     bool ok = ensureOwnerDirectory(directory_);
-    if (ok && QFileInfo::exists(path)) {
-        QFile existing(path); // dedupe hit: refresh the LRU timestamp
-        if (existing.open(QIODevice::ReadOnly))
+    const QFileInfo info(path);
+    if (info.isSymLink())
+        return {};
+    if (ok && info.exists()) {
+        // A content-addressed name alone does not prove that the stored bytes
+        // still match. Preserve unsupported entries for repair, never overwrite.
+        if (!info.isFile() || info.size() != bytes.size())
+            return {};
+        QFile existing(path);
+        ok = existing.open(QIODevice::ReadOnly) && existing.read(maximumImageBytes + 1) == bytes &&
+             existing.error() == QFileDevice::NoError && existing.setPermissions(ownerFile);
+        if (ok) // LRU refresh is best effort; content and privacy are mandatory.
             existing.setFileTime(QDateTime::currentDateTime(), QFileDevice::FileModificationTime);
     } else if (ok) {
         QSaveFile file(path);
@@ -280,14 +350,17 @@ void McpMediaStore::reference(const QString& sessionId, const QStringList& hashe
 
 void McpMediaStore::releaseSession(const QString& sessionId) {
     const QString refs = refsPath(sessionId);
-    const QSet<QString> released = readRefs(refs);
-    QFile::remove(refs);
-    if (released.isEmpty())
+    const auto catalog = readReferenceCatalog(QFileInfo(refs).absolutePath());
+    if (!catalog)
         return;
+    const auto name = QFileInfo(refs).fileName();
+    const auto released = catalog->value(name);
     QSet<QString> retained;
-    const QDir refsDirectory(QFileInfo(refs).absolutePath());
-    for (const QString& name : refsDirectory.entryList({QStringLiteral("*.refs")}, QDir::Files))
-        retained.unite(readRefs(refsDirectory.filePath(name)));
+    for (auto entry = catalog->cbegin(); entry != catalog->cend(); ++entry)
+        if (entry.key() != name)
+            retained.unite(entry.value());
+    if (!QFile::remove(refs))
+        return;
     for (const QString& hash : released) {
         if (retained.contains(hash))
             continue;
@@ -298,23 +371,23 @@ void McpMediaStore::releaseSession(const QString& sessionId) {
 
 void McpMediaStore::retainSessions(const QSet<QString>& sessionIds) {
     const QDir refsDirectory(QDir(directory_).filePath(QStringLiteral("refs")));
-    if (!refsDirectory.exists())
+    const auto catalog = readReferenceCatalog(refsDirectory.path());
+    if (!catalog)
         return;
     QSet<QString> live;
     for (const QString& sessionId : sessionIds)
         live.insert(QFileInfo(refsPath(sessionId)).fileName());
     QSet<QString> released;
-    for (const QString& name : refsDirectory.entryList({QStringLiteral("*.refs")}, QDir::Files)) {
-        if (live.contains(name))
-            continue;
-        released.unite(readRefs(refsDirectory.filePath(name)));
-        QFile::remove(refsDirectory.filePath(name));
-    }
-    if (released.isEmpty())
-        return;
     QSet<QString> retained;
-    for (const QString& name : refsDirectory.entryList({QStringLiteral("*.refs")}, QDir::Files))
-        retained.unite(readRefs(refsDirectory.filePath(name)));
+    for (auto entry = catalog->cbegin(); entry != catalog->cend(); ++entry) {
+        if (live.contains(entry.key())) {
+            retained.unite(entry.value());
+        } else {
+            if (!QFile::remove(refsDirectory.filePath(entry.key())))
+                return;
+            released.unite(entry.value());
+        }
+    }
     for (const QString& hash : std::as_const(released)) {
         if (retained.contains(hash))
             continue;
@@ -333,10 +406,12 @@ void McpMediaStore::enforceCapacity() {
         total += file.size();
     if (total <= capacityBytes_)
         return;
+    const auto catalog = readReferenceCatalog(QDir(directory_).filePath(QStringLiteral("refs")));
+    if (!catalog)
+        return;
     QSet<QString> referenced;
-    const QDir refsDirectory(QDir(directory_).filePath(QStringLiteral("refs")));
-    for (const QString& name : refsDirectory.entryList({QStringLiteral("*.refs")}, QDir::Files))
-        referenced.unite(readRefs(refsDirectory.filePath(name)));
+    for (const auto& hashes : *catalog)
+        referenced.unite(hashes);
     // Unreferenced media goes first (oldest first); media a live session still shows is evicted
     // only when that alone cannot bring the store under its cap.
     for (const bool evictReferenced : {false, true}) {
