@@ -599,6 +599,53 @@ and `sign_in_error` when it failed; `remote.sign_in.cancel` and sign-out stop it
 
 ## Lifecycle
 
+ACP v1 `loadSession` and `promptCapabilities.image` are opt-in booleans (ADR 0090).
+An omitted, null or wrong-type field removes that baseline capability; only true
+preserves support. Each process initializes a fresh narrowing state.
+
+Malformed normal-sized stdout frames quarantine the provider generation before it
+is killed (ADR 0089). Buffered suffixes are discarded; the finished path settles
+pending calls with a static diagnostic and uses existing restart backoff. JSON
+control bytes must be escaped inside strings; outside JSON whitespace remains
+allowed. Valid-object RPC schemas and absent-response deadlines remain separate.
+
+Outgoing provider calls use positive integer JSON ids. Response lookup preserves
+that type and numeric value across all three adapters, including Codex oversized
+responses (ADR 0074). Invalid/unrelated ids leave pending calls untouched; incoming
+provider request ids and pending-call timeout policy remain separate.
+
+Matched replies must contain exactly one result (object or explicit null) or error
+(object). Invalid envelopes fail that callback with a static protocol diagnostic;
+initialize uses its existing failure path, while other pending calls survive.
+Provider-specific result schemas remain separate (ADR 0075).
+
+Cursor model discovery reads both channels incrementally with a shared 1-MiB
+budget (ADR 0088). It retains stdout only, kills excess output, and parses only
+successful normal exits. The existing fallback catalog settles failed/timed-out
+requests and the 60-second cache/coalescing behavior remains unchanged.
+
+Provider version probes retain at most 4 KiB of merged output, kill excess output
+and accept banners only after successful normal exit (ADR 0072). Failed probes
+remain Unknown under the existing launch policy and are retried. Only matching
+executable fingerprints share an in-flight result; other checks are deferred and
+revalidated, including a binary replaced while the first probe is running.
+
+Claude/Cursor stdout is read in 64-KiB chunks and checks each raw line, including
+an unfinished suffix, against the existing 16-MiB limit before parse (ADR 0071).
+An over-limit generation is closed/drained before pending callbacks fail and the
+process is killed; later output from it cannot publish another request. Normal
+lines and a fresh process retain their existing behavior.
+
+Oversized Codex metadata decodes bounded JSON strings and refuses literal dotted
+keys as nested paths (ADR 0073). Invalid captured metadata clears routing for that
+line; subsequent lines reset normally. This does not validate the entire discarded
+JSON payload or resolve missing terminal events and pending-request timeouts.
+
+Codex oversized-line scanning keeps at most 64 routing frames and a scalar count
+of deeper containers (ADR 0070). It still extracts shallow fields after the deep
+value and resumes on the next line; clear/reset discards all prior scan state.
+This bounds scanner nesting storage, not aggregate process I/O or event-loop time.
+
 The intended state flow is `registered -> connecting -> online -> draining ->
 stopped`, with a recoverable `offline` state. Session state is separate from
 connection state so a temporary network outage does not kill a local process.
