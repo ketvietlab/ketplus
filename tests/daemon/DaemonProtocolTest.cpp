@@ -29,6 +29,10 @@
 #include <QUuid>
 #include <QtTest>
 #include <limits>
+#ifdef Q_OS_UNIX
+#include <csignal>
+#include <sys/resource.h>
+#endif
 
 using namespace ketplus::daemon;
 
@@ -449,7 +453,7 @@ class DaemonProtocolTest final : public QObject {
             const auto projected = projectEventPayloadForCloud("item.completed", {{"item", item}});
             QCOMPARE(projected.value("item").toObject().value("result"), item.value("result"));
         }
-        store.copySessionReferences("session", "fork");
+        QVERIFY(store.copySessionReferences("session", "fork"));
         store.releaseSession("session");
         QCOMPARE(QDir(store.directory()).entryList({"*.png"}, QDir::Files).size(), 1);
         store.releaseSession("fork");
@@ -478,6 +482,166 @@ class DaemonProtocolTest final : public QObject {
         source.close();
         QCOMPARE(result(source.fileName()).value("reason").toString(), "too_large");
         QVERIFY(!QFileInfo::exists(store.directory()));
+    }
+
+    void mediaOwnershipCommitFailurePreservesPreviousFile() {
+#ifdef Q_OS_UNIX
+        QProcess probe;
+        probe.setProcessChannelMode(QProcess::MergedChannels);
+        probe.start(QCoreApplication::applicationFilePath(), {"--media-reference-write-fault"});
+        QVERIFY(probe.waitForStarted());
+        QVERIFY(probe.waitForFinished(30000));
+        const auto output = probe.readAll();
+        QVERIFY2(probe.exitStatus() == QProcess::NormalExit && probe.exitCode() == 0,
+                 qPrintable(QStringLiteral("exit %1: %2")
+                                .arg(probe.exitCode())
+                                .arg(QString::fromUtf8(output))));
+#else
+        QSKIP("The isolated file-size write-failure fixture requires POSIX resource limits.");
+#endif
+    }
+
+    void mediaPublicationRequiresStoredOwnership_data() {
+        QTest::addColumn<QString>("fault");
+        QTest::addColumn<QString>("entry");
+        for (const QString& fault :
+             {QStringLiteral("valid"), QStringLiteral("directory"), QStringLiteral("symlink"),
+              QStringLiteral("dangling"), QStringLiteral("malformed"), QStringLiteral("oversized"),
+              QStringLiteral("unreadable"), QStringLiteral("root-symlink"),
+              QStringLiteral("root-file")})
+            for (const QString& entry :
+                 {QStringLiteral("attachment"), QStringLiteral("inline"), QStringLiteral("local")})
+                QTest::newRow(qPrintable(fault + '-' + entry)) << fault << entry;
+    }
+
+    void mediaPublicationRequiresStoredOwnership() {
+        QFETCH(QString, fault);
+        QFETCH(QString, entry);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto media = directory.filePath("media");
+        const auto refs = media + "/refs";
+        const auto backup = directory.filePath("reference-backup");
+        const auto referencePath =
+            refs + '/' + QCryptographicHash::hash("a", QCryptographicHash::Sha256).toHex() +
+            ".refs";
+        const auto put = [](const QString& path, const QByteArray& bytes) {
+            QFile file(path);
+            return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
+        };
+        const auto oldImage = fakePng(8, 6, 'o');
+        const auto newImage = fakePng(8, 6, 'n');
+        const auto oldHash = QCryptographicHash::hash(oldImage, QCryptographicHash::Sha256).toHex();
+        const auto newHash = QCryptographicHash::hash(newImage, QCryptographicHash::Sha256).toHex();
+        McpMediaStore store(media);
+        QVERIFY(!store.storeImage(oldImage, "image/png", "a").isEmpty());
+        QVERIFY(!store.storeImage(oldImage, "image/png", "b").isEmpty());
+        const auto original = oldHash + '\n';
+        const auto foreign = directory.filePath("foreign.refs");
+        QVERIFY(put(foreign, original));
+        QByteArray damaged;
+        if (fault == "root-symlink" || fault == "root-file") {
+            QVERIFY(QDir().rename(refs, backup));
+            if (fault == "root-symlink")
+                QVERIFY(QFile::link(backup, refs));
+            else
+                QVERIFY(put(refs, "unsupported root"));
+        } else if (fault == "directory" || fault == "symlink" || fault == "dangling") {
+            QVERIFY(QFile::remove(referencePath));
+            if (fault == "directory")
+                QVERIFY(QDir().mkpath(referencePath));
+            else
+                QVERIFY(QFile::link(fault == "symlink" ? foreign : directory.filePath("missing"),
+                                    referencePath));
+        } else if (fault == "malformed" || fault == "oversized") {
+            damaged = fault == "malformed"
+                          ? original + "not-a-digest\n"
+                          : original.repeated(4 * 1024 * 1024 / original.size() + 1);
+            QVERIFY(put(referencePath, damaged));
+        } else if (fault == "unreadable") {
+            QVERIFY(QFile::setPermissions(referencePath, QFileDevice::WriteOwner));
+        }
+        const auto imagePath = directory.filePath("source.png");
+        QVERIFY(put(imagePath, newImage));
+        const auto publish = [&]() {
+            if (entry == "attachment")
+                return QJsonArray{store.storeImage(newImage, "image/png", "a")};
+            QJsonObject item;
+            if (entry == "local") {
+                item = {{"type", "imageView"}, {"path", imagePath}};
+            } else {
+                const auto data = QString::fromLatin1(newImage.toBase64());
+                item = {{"type", "mcpToolCall"},
+                        {"result",
+                         QJsonObject{
+                             {"content",
+                              QJsonArray{
+                                  QJsonObject{{"type", "text"}, {"text", "keep text"}},
+                                  QJsonObject{
+                                      {"type", "image"}, {"mimeType", "image/png"}, {"data", data}},
+                                  QJsonObject{{"type", "resource"},
+                                              {"resource", QJsonObject{{"uri", "synthetic://image"},
+                                                                       {"mimeType", "image/png"},
+                                                                       {"blob", data}}}}}}}}};
+            }
+            return store.externalizeItem(item, "a")
+                .value("result")
+                .toObject()
+                .value("content")
+                .toArray();
+        };
+        const auto first = publish();
+        const int begin = entry == "inline" ? 1 : 0;
+        if (entry == "inline")
+            QCOMPARE(first.first().toObject().value("text").toString(), "keep text");
+        for (int i = begin; i < first.size(); ++i) {
+            const auto block = first[i].toObject();
+            QCOMPARE(block.contains("media_ref"), fault == "valid");
+            if (fault != "valid" && entry != "attachment")
+                QVERIFY(block.value("omitted").toBool());
+        }
+        if (fault != "valid") {
+            if (fault == "root-symlink" || fault == "root-file") {
+                QVERIFY(QFile::remove(refs));
+                QVERIFY(QDir().rename(backup, refs));
+            } else if (fault == "directory") {
+                QVERIFY(QDir().rmdir(referencePath));
+            } else if (fault == "symlink" || fault == "dangling") {
+                QVERIFY(QFile::remove(referencePath));
+            } else if (fault == "unreadable") {
+                QVERIFY(QFile::setPermissions(referencePath,
+                                              QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+            } else {
+                QFile unchanged(referencePath);
+                QVERIFY(unchanged.open(QIODevice::ReadOnly));
+                QCOMPARE(unchanged.readAll(), damaged);
+            }
+            QVERIFY(put(referencePath, original));
+        }
+        for (int retry = 0; retry < 2; ++retry) {
+            const auto result = publish();
+            for (int i = begin; i < result.size(); ++i)
+                QCOMPARE(result[i].toObject().value("media_ref").toString(),
+                         "sha256:" + QString::fromLatin1(newHash));
+        }
+        QFile saved(referencePath);
+        QVERIFY(saved.open(QIODevice::ReadOnly));
+        auto hashes = saved.readAll().split('\n');
+        hashes.removeAll(QByteArray{});
+        QCOMPARE(hashes.size(), 2); // repeated/inline-duplicate publication does not grow metadata
+        QVERIFY(hashes.contains(oldHash));
+        QVERIFY(hashes.contains(newHash));
+        QVERIFY(!(saved.permissions() & (QFileDevice::ReadGroup | QFileDevice::WriteGroup |
+                                         QFileDevice::ReadOther | QFileDevice::WriteOther)));
+        saved.close();
+        QFile outside(foreign);
+        QVERIFY(outside.open(QIODevice::ReadOnly));
+        QCOMPARE(outside.readAll(), original);
+        store.releaseSession("b");
+        QVERIFY(QFileInfo::exists(media + '/' + oldHash + ".png"));
+        QVERIFY(QFileInfo::exists(media + '/' + newHash + ".png"));
+        store.releaseSession("a");
+        QVERIFY(QDir(media).entryList({"*.png"}, QDir::Files).isEmpty());
     }
 
     void mediaDedupRequiresVerifiedStoredBytes_data() {
@@ -2389,5 +2553,69 @@ class DaemonProtocolTest final : public QObject {
     }
 };
 
-QTEST_GUILESS_MAIN(DaemonProtocolTest)
+#ifdef Q_OS_UNIX
+static int mediaReferenceWriteFailureProbe() {
+    QTemporaryDir directory;
+    if (!directory.isValid())
+        return 10;
+    const auto media = directory.filePath("media");
+    McpMediaStore store(media);
+    const auto oldImage = QByteArray::fromHex("89504e470d0a1a0a0000000d494844520000000800000006");
+    auto newImage = oldImage;
+    newImage[newImage.size() - 1] = '\x07';
+    if (store.storeImage(oldImage, "image/png", "a").isEmpty())
+        return 11;
+    const auto refs = media + "/refs/" +
+                      QCryptographicHash::hash("a", QCryptographicHash::Sha256).toHex() + ".refs";
+    const auto read = [&]() {
+        QFile file(refs);
+        return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
+    };
+    const auto original = read();
+    if (original.size() != 65)
+        return 12;
+    struct rlimit previous{};
+    if (getrlimit(RLIMIT_FSIZE, &previous) != 0)
+        return 13;
+    auto limited = previous;
+    limited.rlim_cur = 90; // both 24-byte images fit; the two-hash reference file cannot
+    std::signal(SIGXFSZ, SIG_IGN);
+    if (setrlimit(RLIMIT_FSIZE, &limited) != 0)
+        return 14;
+    const auto restore = qScopeGuard([&] { setrlimit(RLIMIT_FSIZE, &previous); });
+    const auto attachment = store.storeImage(newImage, "image/png", "a");
+    const QJsonObject image{{"type", "image"},
+                            {"mimeType", "image/png"},
+                            {"data", QString::fromLatin1(newImage.toBase64())}};
+    const auto item = store.externalizeItem(
+        {{"type", "mcpToolCall"}, {"result", QJsonObject{{"content", QJsonArray{image}}}}}, "a");
+    const auto block =
+        item.value("result").toObject().value("content").toArray().first().toObject();
+    if (setrlimit(RLIMIT_FSIZE, &previous) != 0)
+        return 15;
+    if (!attachment.isEmpty() || block.contains("media_ref") || !block.value("omitted").toBool()) {
+        qWarning("Reference persistence failure was reported as successful media publication");
+        return 16;
+    }
+    if (read() != original) {
+        qWarning("Failed reference commit modified existing ownership");
+        return 17;
+    }
+    if (store.storeImage(newImage, "image/png", "a").isEmpty() || read().size() != 130)
+        return 18;
+    return 0;
+}
+#endif
+
+int main(int argc, char** argv) {
+    QCoreApplication application(argc, argv);
+    application.setAttribute(Qt::AA_Use96Dpi, true);
+#ifdef Q_OS_UNIX
+    if (application.arguments().contains("--media-reference-write-fault"))
+        return mediaReferenceWriteFailureProbe();
+#endif
+    DaemonProtocolTest test;
+    QTEST_SET_MAIN_SOURCE_PATH
+    return QTest::qExec(&test, argc, argv);
+}
 #include "DaemonProtocolTest.moc"

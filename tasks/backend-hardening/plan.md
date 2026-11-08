@@ -38,10 +38,10 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 4. Send one complete exact-head request to #7705. Do not poll the peer or bypass
    a held dispatch. The 2026-11-08 closure audit supersedes the previous rule to
    start another independent audit while waiting: freeze new audit branches,
-   finish the already-started migration-copy package and drain the existing
-   review queue by issue. Review/merge the #71 fixes and finish that issue's
-   acceptance before starting the next domain; do not wait for all drafts to
-   merge before preparing its closure. Allow at most one new unreviewed package
+   drain the existing review queue by issue. Issue #71 is now closed; the
+   current issue is #68 (journal and media). Integrate/review its existing media,
+   policy and migration packages before opening another domain. Do not wait for
+   all drafts to merge before preparing closure. Allow at most one new unreviewed package
    needed for the current issue. Resolve its findings before advancing.
    Record external gates separately from unperformed work owned by #2739.
 5. After exact-head tests and review pass, merge using the existing authorization.
@@ -157,8 +157,10 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 
 ## H3 — Provider adapters and credentials (#71–75)
 
-- [ ] H3.1 Common framing: huge/no-newline/binary/invalid-UTF8 input, stderr drain,
-  bounded buffering, version-probe timeout/cache and honest capability flags.
+- [x] H3.1 Common framing: huge/no-newline/binary/invalid-UTF8 input, stderr drain,
+  bounded line/output retention, version-probe timeout/cache and honest capability
+  flags. #71 closed after #277; request/waiter and transient process-memory bounds
+  remain separate H3.4 work.
 - [ ] H3.2 Claude sidecar framing/crash/resume/worktree identity, bounded background
   tasks, pinned packaging and absence of runtime network installs.
 - [ ] H3.3 Credential/keychain failure handling, sign-out clearing, request
@@ -228,14 +230,15 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
 | H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 and cloud #237 merged; transaction recovery #241 merged; cancellation #240 merged; explicit session-delete bounds still open | Audit explicit session deletion and tombstone enumeration / #2739 |
 | H1.2 | In progress | Startup commit failure #250 merged; other migration/read/crash cases remain | Continue remaining failure-path audit / #2739 |
-| H1.4 | In progress | Cleanup #251 and dedup #252 merged; publication #253 and fork #254 full suites PASS; review dispatch held; preview #255 affected matrix PASS | Restart exact-head review / user and #6212; continue H3.1 / #2739 |
+| H1.4 | In progress | #253/#254 are ancestors of #255; integrated production/test files match 20156fc7; full Pro 104/104 on 74804ad8 | Independent combined #255 review / #7705; integration / #2739 |
 | H1.5–H1.7 | Not started | No claim that #128 backend acceptance is complete | Continue storage acceptance / #2739 |
 | H1.3 | In progress | Delete/ownership #241–243, append #244–245 and fork #246–247 merged; stream recovery #248 merged; replay/activity #249 merged; startup #250 merged | Continue caller atomicity/read failures / #2739 |
-| H2–H3 | Partially started | H2.3 volatile retry subset #248 merged; full lifecycle and provider audits remain | Continue remaining daemon/provider checks / #2739 |
+| H2; H3.2–H3.5 | Partially started | H2.3 volatile retry subset #248 merged; broader lifecycle/provider work remains | Drain current #68 queue first / #2739 |
+| H3.1 / #71 | Complete | #277 merged b3af8ed5; author Pro103/103 and independent daemon55/55; all five criteria accepted | None |
 | H4.1–H4.3 | Not started | Existing remote fixes are not a full #85 closure | Audit local transport/privacy with fixtures / #2739 |
 | H4.4 | Waiting, external | Relay code merged; no deployment/readiness evidence supplied | Relay release operator, unassigned; #2739 tracks gate |
 | H5–H6 | Not started | Nonvisual subsets explicitly scoped | Audit after earlier safety work / #2739 |
-| H7 | Pending | Requires all applicable packages and evidence | Integrate and close only verified criteria / #2739, review #6212 |
+| H7 | Pending | Requires all applicable packages and evidence | Integrate and close only verified criteria / #2739, review #7705 |
 
 ### Initial H1.1 audit (baseline commit above)
 
@@ -721,9 +724,9 @@ remain explicitly open.
   withholds references on failure; repeated hashes are deduplicated (ADR 0067).
   Focused media set 91/91, including POSIX partial-write rollback/repair.
 - [x] #253 head `98ad1946`: full Release Pro build and 96/96 suite (324.78 s).
-- [ ] Independent exact-head review, merge and cleanup. Review dispatch is held
-  by the conversation-chain limit; the user must manually restart reviewer #6212.
-  No merge gate is waived.
+- [ ] Independent exact-head review, merge and cleanup through the combined #255
+  head. The user reassigned review to #7705; the old #6212 dispatch hold no longer
+  describes the active queue. No merge gate is waived.
 - [ ] Fork-copy/journal coordination, crash durability, write-admission/blob cleanup
   after failure and broader path/decode/enumeration bounds remain separate work.
 
@@ -755,9 +758,9 @@ remain explicitly open.
 - [x] Focused preview fixture 15/15, including repair and decoded JPEG bounds.
 - [x] #255 head `20156fc7`: Release headless build and affected 15/15 targets
   PASS (107.00 s). Generated build removed after preserving evidence.
-- [ ] Parent integration, independent exact-head review, merge and source cleanup.
-  Review dispatch is held by the chain limit; continue independent local audits
-  without bypassing the merge gate.
+- [x] Integrate the #253/#254 ancestry with current integration in #255.
+- [ ] Independent exact-head review by #7705, merge and source cleanup. Drain this
+  existing issue queue before starting another domain audit.
 - [ ] Ancestor races, decode/concurrency acceptance, total blob enumeration,
   write-admission/orphan recovery and the approved media/archive policy remain.
 
@@ -896,14 +899,15 @@ remain explicitly open.
   task worktree/build had already been safely removed after pushing.
 - [x] Integrate #275 into the combined #260/#261 branch before the full Pro
   test run. Production merges cleanly; preserve both docs additions.
-- [ ] Next concrete #71 package: malformed normal-frame settlement/recovery
+- [x] Completed #71 package: malformed normal-frame settlement/recovery
   across all three adapters. This follows the catalog merge; no new domain audit.
-- [ ] Finish #71 acceptance: normal malformed/binary/invalid-UTF8 frame behavior,
+- [x] Finished #71 acceptance: normal malformed/binary/invalid-UTF8 frame behavior,
   capability-to-adapter coverage, and disposition of remaining probe/waiter limits.
   Existing #260/#261 own response id/envelope work overlapping #74; do not duplicate
   them. Do not close #71 solely because the first four PRs passed.
 
-Owner #2739 continues this issue; no new domain audit or UI implementation starts.
+Owner #2739 now drains the existing #68 queue after the closure recorded below;
+no UI implementation starts.
 The relay rollout gate remains external and does not block this provider work.
 
 
@@ -971,6 +975,28 @@ The relay rollout gate remains external and does not block this provider work.
 - [x] Full Release Pro build and 103/103 offscreen targets pass at `a8d45029`
   (368.10 s, parallelism 2, no rerun). Runtime drain implementations are unchanged.
   Evidence and source/log hashes: `evidence/h3-provider-stderr-flood-qt.json`.
-- [ ] Obtain #7705 review, merge and close #71 only after all five criteria have
-  evidence. Request/waiter admission and absent-response deadlines stay H3.4/#74.
-- [ ] Remove the pushed worktree/build after ownership and clean-state checks.
+- [x] #7705 passed final #277 head `5880b17d`, independently reproducing both
+  mutations and passing focused 5/5 plus daemon 55/55. #277 merged `b3af8ed5`.
+- [x] Close [#71](https://github.com/ketvietlab/ketplus/issues/71) with all five
+  criteria and the [closure evidence](https://github.com/ketvietlab/ketplus/issues/71#issuecomment-6717547995).
+  Request/waiter admission and absent-response deadlines stay H3.4/#74; no broader
+  platform, live-provider, installation or deployment claim.
+- [x] Remove the pushed stderr worktree/build after ownership and clean-state checks.
+
+### #68 existing media stack integration
+
+- [x] Verify #253 `98ad1946` is an ancestor of #254 `7397165c`, which is an ancestor
+  of #255 `20156fc7`; use #255 as the combined ownership/fork/preview review head.
+- [x] Merge integration `b3af8ed5`; code merges cleanly. Resolve only project-status
+  and plan conflicts, retaining both histories. Media production/test files remain
+  byte-identical to `20156fc7`; the integrated code head is `74804ad8`.
+- [x] Full Release Pro build and 104/104 offscreen targets pass on `74804ad8`
+  (456.04 s, two-way parallelism, first run/no retries). Evidence and hashes:
+  `evidence/h1-media-integration-qt.json`.
+- [ ] Independent final-head #255 review by #7705, then handle findings and merge
+  the verified stack. Parent PRs #253/#254 are included.
+- [ ] Remove the pushed linked worktree/build after clean/pushed/usage checks.
+- [ ] Drain existing #272/#273/#274 journal policy/startup/migration fixes next,
+  then reconcile all seven original #68 criteria before claiming issue completion.
+  Whole-history bounds, filesystem races, crash recovery and #128 archive policy
+  are not closed by this media package.
