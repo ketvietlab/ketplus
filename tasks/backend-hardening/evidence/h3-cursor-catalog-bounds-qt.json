@@ -1,0 +1,70 @@
+{
+  "scope": "Issue #71, Cursor one-shot model catalog output; ADR 0088",
+  "base": "216b2043cdf89f1390b4ef6c719490dca14a2a3a",
+  "environment": {
+    "os": "macOS arm64",
+    "qt": "6.11.2",
+    "build": "Release headless",
+    "providers": "self-hosted test executable only"
+  },
+  "source_sha256": {
+    "apps/daemon/src/providers/CursorAdapter.cpp": "ae84be30c8568bd7086aa09eda0ff70cc6250fcdbbe0b0667d90804e91a0ea4a",
+    "tests/daemon/CursorCatalogBoundsTest.cpp": "e3a935eddb1761f981d5cfb4acd6d6e8823dd2e49c928f3858c8d7bcb2c00c6d"
+  },
+  "regression_control": {
+    "source": "base CursorAdapter.cpp with final fixture",
+    "passed": 7,
+    "failed": 7,
+    "findings": [
+      "stdout and stderr overflow accepted",
+      "nonzero exit accepted",
+      "both 64-MiB floods reached completion marker",
+      "channels retained output before exit"
+    ]
+  },
+  "fixed_focused": {
+    "passed": 14,
+    "failed": 0,
+    "skipped": 0
+  },
+  "remaining_gates": [
+    "independent exact-head review",
+    "merge"
+  ],
+  "not_verified": [
+    "QProcess universal peak RSS",
+    "catalog waiter admission",
+    "Windows",
+    "Linux",
+    "live provider",
+    "installed app",
+    "deployment"
+  ],
+  "tested_code_commit": "3f7892b1901c8045284fcc34e2ea2b12d9eece8d",
+  "affected_matrix": {
+    "targets": [
+      "ketplus_provider_framing_tests",
+      "ketplus_daemon_claude_adapter_tests",
+      "ketplus_daemon_cursor_adapter_tests",
+      "ketplus_daemon_claude_worktree_tests",
+      "ketplus_daemon_context_relay_tests",
+      "ketplus_daemon_lifecycle_tests",
+      "ketplus_provider_compatibility_tests",
+      "ketplus_provider_handoff_tests",
+      "ketplus_daemon_session_fork_tests",
+      "ketplus_agent_messaging_tests",
+      "ketplus_daemon_protocol_tests",
+      "ketplus_computer_provider_integration_tests",
+      "ketplus_provider_deletion_tests",
+      "ketplus_daemon_worktree_context_tests",
+      "ketplus_headless_daemon_tests",
+      "ketplus_cursor_catalog_bounds_tests",
+      "ketplus_provider_catalog_cache_tests"
+    ],
+    "passed": 17,
+    "failed": 0,
+    "seconds": 261.33,
+    "parallel_jobs": 1
+  },
+  "evidence_delta": "Documentation/evidence only; production and test SHA-256 unchanged from tested code commit."
+}

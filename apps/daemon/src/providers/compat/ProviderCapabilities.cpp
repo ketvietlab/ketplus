@@ -36,14 +36,14 @@ QString CapabilityNarrowing::methodNotFound(const QStringView method) {
 
 void CapabilityNarrowing::acpInitialized(const QJsonObject& result) {
     const QJsonObject agent = result.value(QStringLiteral("agentCapabilities")).toObject();
-    const auto explicitlyFalse = [](const QJsonObject& object, const QString& key) {
+    const auto explicitlySupported = [](const QJsonObject& object, const QString& key) {
         const QJsonValue value = object.value(key);
-        return value.isBool() && !value.toBool();
+        return value.isBool() && value.toBool();
     };
-    if (explicitlyFalse(agent, QStringLiteral("loadSession")))
+    if (!explicitlySupported(agent, QStringLiteral("loadSession")))
         remove(capability::threadResume);
-    if (explicitlyFalse(agent.value(QStringLiteral("promptCapabilities")).toObject(),
-                        QStringLiteral("image")))
+    if (!explicitlySupported(agent.value(QStringLiteral("promptCapabilities")).toObject(),
+                             QStringLiteral("image")))
         remove(capability::images);
 }
 

@@ -143,14 +143,18 @@ class CursorAdapterTest final : public QObject {
 
     void skipsSessionLoadWhenTheAgentCannotLoad_data() {
         QTest::addColumn<bool>("loadSession");
-        QTest::newRow("advertised") << true;
-        QTest::newRow("not advertised") << false;
+        QTest::addColumn<QByteArray>("capabilityMode");
+        QTest::newRow("advertised") << true << QByteArray("1");
+        QTest::newRow("explicit-false") << false << QByteArray("0");
+        QTest::newRow("missing-fields") << false << QByteArray("missing");
+        QTest::newRow("missing-agent") << false << QByteArray("absent");
+        QTest::newRow("wrong-type") << false << QByteArray("wrong-type");
     }
 
     void skipsSessionLoadWhenTheAgentCannotLoad() {
         QFETCH(bool, loadSession);
-        if (!loadSession)
-            qputenv("KETPLUS_FAKE_CURSOR_LOAD_SESSION", "0");
+        QFETCH(QByteArray, capabilityMode);
+        qputenv("KETPLUS_FAKE_CURSOR_LOAD_SESSION", capabilityMode);
         const auto restore = qScopeGuard([] { qunsetenv("KETPLUS_FAKE_CURSOR_LOAD_SESSION"); });
         QTemporaryDir directory;
         QVERIFY(directory.isValid());

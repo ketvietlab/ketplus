@@ -1,0 +1,59 @@
+{
+  "scope": "journal existing #68 package integration; not complete issue acceptance",
+  "code_head": "5a8bca1ce86937ea70cab125888b7a7f229cd330",
+  "base": "b3af8ed53f67ff63df666c0a24c84d871afa1618",
+  "environment": "macOS arm64, Release Pro, Qt 6.11.2, offscreen; synthetic journals/fake providers only",
+  "source_sha256": {
+    "apps/daemon/sources.cmake": "49615380ac7daa1a197a64f6cb5e68de082c96ca7de3a8c6241acdcc0dde86ff",
+    "apps/daemon/src/runtime/SessionHostFork.cpp": "555da5e38c3dcd32990208d97a0dca18643ddd7d36791e50eb09fd88514b5376",
+    "apps/daemon/src/storage/JournalSpace.cpp": "c7e01d8f172dc4d1ad7be15b2152e2f6162bc4965ff09a996177f9339c08333e",
+    "apps/daemon/src/storage/JournalSpace.h": "1ca28fd24a74ec5327b195e53e6c402ef6eeca11f01b0b8b0259d332d9bc25ce",
+    "apps/daemon/src/storage/LocalJournal.cpp": "500b93cc409726de2c0bc66267eb484740b81ec84c2b8e41a9d334093aee2698",
+    "apps/daemon/src/storage/LocalJournal.h": "785860689027a04e92284d37df3b8d95b287ef0fa9e166d9c09b83f0c3a57b81",
+    "apps/daemon/src/storage/LocalJournalFork.cpp": "7c47f5efdf0bd16544a5240d03939cb00804524a401493f409b9ed671658892e",
+    "apps/daemon/src/storage/LocalJournalRetentionPolicy.cpp": "50d9de4c6d5f2b199262a9d32903266edd1249e32a2dab4e820816acf7af7164",
+    "apps/daemon/src/storage/LocalJournalSizePolicy.cpp": "05f6d45d9d446cc85afbb15d3670b62c00f682bc91e487694e25b7030e46260f",
+    "apps/daemon/src/storage/McpMediaPreview.cpp": "01b984fa53420c16f231280e577bf296e4734be56a66a8ebb8ce36683cea2e88",
+    "apps/daemon/src/storage/McpMediaReferences.cpp": "97de02d652e442db258c55dea6dad86256fc79f46af16754cccea7306dffe73c",
+    "apps/daemon/src/storage/McpMediaStore.cpp": "d8f4d43d45faf90e44e34c95f3b5b5c8bd2e25fa8e31e805c074a350a4802169",
+    "apps/daemon/src/storage/McpMediaStore.h": "99692e18b6b8e0e05f4e6515b698bcebd77b681cea1f236b4ba2a645defc9ea8",
+    "tests/daemon/CMakeLists.txt": "e190048ec37c6068961db2eb62514520e65f3a050e0c778c9a09a3ffed4940a1",
+    "tests/daemon/DaemonProtocolTest.cpp": "b3047a7513e5f9e1be12cc962f82de7834b2f47076e1be3ce15b9e79b4d05946",
+    "tests/daemon/JournalRetentionPolicyTest.cpp": "9169e9c2d78e14397474da354c4a7352b971c24135d638944445897874481c80",
+    "tests/daemon/JournalSpaceTest.cpp": "9d4c43e362bd0fb44b7993cc78387f6c6c651805401736d881fbb19b387f1319",
+    "tests/daemon/McpMediaPreviewTest.cpp": "164ee8154c766c7e6940cb7e6e30973c18eb9fd04ad3656fd25bd7dbed31e3ee",
+    "tests/daemon/SessionForkTest.cpp": "20e5f04ae4a140046ab9512a40d9484231b8895f96789c845f262f031269aa56"
+  },
+  "format": {
+    "changed_cpp_checked": true,
+    "new_format_drift": false,
+    "note": "DaemonProtocolTest.cpp has the same 55 changed-format lines as integration; no formatting-only edits added"
+  },
+  "full_pro": {
+    "head": "5a8bca1ce86937ea70cab125888b7a7f229cd330",
+    "head_after": "5a8bca1ce86937ea70cab125888b7a7f229cd330",
+    "exit_code": 0,
+    "elapsed_seconds": 427.64,
+    "parallelism": 2,
+    "qpa": "offscreen",
+    "live_opt_in": false,
+    "total": 104,
+    "passed": 104,
+    "failed": 0,
+    "build": "PASS"
+  },
+  "log_sha256": {
+    "-test.log": "f49a82caa1c2a1e2c6a7382c69d3ff859a49cfb1abb7bcfedcc93dcfb3e226cd",
+    "-LastTest.log": "cc4ee575a0621c6e0822fe60909c030fc0169b45421610af0b76cb3871d5e928"
+  },
+  "not_verified": [
+    "Linux/Windows",
+    "Lite",
+    "real provider",
+    "live journal/media",
+    "ancestor/same-user filesystem replacement races",
+    "all power-loss interruption points",
+    "mixed multi-GB steady state",
+    "packaging/install/deploy"
+  ]
+}

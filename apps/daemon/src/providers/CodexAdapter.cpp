@@ -1,5 +1,8 @@
 #include "providers/CodexAdapter.h"
 #include "BrowserAgentInstructions.h"
+#include "providers/ProviderFrameValidation.h"
+#include "providers/ProviderResponseEnvelope.h"
+#include "providers/ProviderResponseId.h"
 
 #include "CodexBrowserTools.h"
 #include "CodexLaunchReloader.h"
@@ -95,6 +98,15 @@ CodexAdapter::CodexAdapter(const QString& executable, QObject* parent)
                     return;
                 }
                 noteUnexpectedStop();
+                if (malformedOutput_) {
+                    const QString reason =
+                        QStringLiteral("Codex app-server emitted a malformed protocol message.");
+                    failPending(reason);
+                    // Initialization already publishes its own failure; do not emit it twice.
+                    if (!stopping_)
+                        emit stopped(reason);
+                    return;
+                }
                 QString reason =
                     QStringLiteral("Codex app-server stopped (exit %1%2)")
                         .arg(exitCode)
@@ -303,6 +315,7 @@ void CodexAdapter::ensureStarted() {
         return;
     }
     versionCleared_ = false;
+    malformedOutput_ = false;
     stopping_ = false;
     starting_ = true;
     stdoutReader_.clear();
@@ -389,6 +402,13 @@ void CodexAdapter::sendObject(const QJsonObject& object) {
 }
 
 void CodexAdapter::consumeStdout() {
+    if (malformedOutput_) {
+        process_->setReadChannel(QProcess::StandardOutput);
+        while (process_->bytesAvailable() > 0)
+            if (process_->read(64 * 1024).isEmpty())
+                break;
+        return;
+    }
     stdoutReader_.append(
         process_->readAllStandardOutput(), [this](const QByteArray& line) { consumeLine(line); },
         [this](const OversizedProviderLine& line) { skipOversized(line); });
@@ -405,9 +425,11 @@ void CodexAdapter::skipOversized(const OversizedProviderLine& line) {
              qUtf8Printable(method.isEmpty() ? QStringLiteral("a response") : method));
     if (method.isEmpty()) {
         // A response: only the call waiting for it fails.
-        const quint64 callId = id.toVariant().toULongLong();
-        pendingMethods_.remove(callId);
-        if (const auto callback = pending_.take(callId))
+        const auto callId = providerResponseId(id);
+        if (!callId)
+            return;
+        pendingMethods_.remove(*callId);
+        if (const auto callback = pending_.take(*callId))
             callback({}, reason);
         reloader_->idleChanged();
         return;
@@ -444,7 +466,15 @@ void CodexAdapter::handleNotification(const QString& method, const QJsonObject& 
 void CodexAdapter::consumeLine(const QByteArray& line) {
     QJsonParseError parseError;
     const QJsonDocument document = QJsonDocument::fromJson(line, &parseError);
-    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+    if (!providerFrameHasValidControlBytes(line) || parseError.error != QJsonParseError::NoError ||
+        !document.isObject()) {
+        // No reliable call identity survives a broken frame. Quarantine the whole
+        // generation; finished settles pending calls through the existing lifecycle.
+        malformedOutput_ = true;
+        setReady(false);
+        stdoutReader_.clear();
+        process_->closeReadChannel(QProcess::StandardOutput);
+        process_->kill();
         return;
     }
     const QJsonObject object = document.object();
@@ -461,13 +491,18 @@ void CodexAdapter::consumeLine(const QByteArray& line) {
     if (!object.contains(QStringLiteral("id"))) {
         return;
     }
-    const quint64 id = object.value(QStringLiteral("id")).toVariant().toULongLong();
+    const auto responseId = providerResponseId(object.value(QStringLiteral("id")));
+    if (!responseId)
+        return;
+    const quint64 id = *responseId;
     const auto callback = pending_.take(id);
     const QString method = pendingMethods_.take(id);
     if (!callback) {
         return;
     }
-    if (object.contains(QStringLiteral("error"))) {
+    if (!validProviderResponseEnvelope(object)) {
+        callback({}, QStringLiteral("Malformed provider response envelope."));
+    } else if (object.contains(QStringLiteral("error"))) {
         const QJsonObject error = object.value(QStringLiteral("error")).toObject();
         if (error.value(QStringLiteral("code")).toInt() == -32601)
             (void)narrowing_.methodNotFound(method);
