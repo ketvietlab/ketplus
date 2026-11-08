@@ -1,9 +1,9 @@
 #include "protocol/DaemonProtocol.h"
 #include "characterization/ProjectionChecks.h"
 #include "cloud/CloudControlBatching.h"
+#include "cloud/CloudEventProjection.h"
 #include "cloud/WorktreeBranches.h"
 #include "cloud/WorktreeRepositories.h"
-#include "cloud/CloudEventProjection.h"
 #include "providers/CodexAdapter.h"
 #include "runtime/ApprovalBroker.h"
 #include "runtime/SessionHost.h"
@@ -59,13 +59,12 @@ class DaemonProtocolTest final : public QObject {
         CodexAdapter adapter(QStringLiteral("/nonexistent/ketplus-test-codex"));
         SessionHost host(&journal, &adapter);
         const auto entry = [](const QString& provider, const QString& id, const QString& effort) {
-            return QJsonObject{
-                {QStringLiteral("id"), id},
-                {QStringLiteral("label"), id},
-                {QStringLiteral("provider"), provider},
-                {QStringLiteral("efforts"),
-                 QJsonArray{QJsonObject{{QStringLiteral("id"), effort},
-                                        {QStringLiteral("label"), effort}}}}};
+            return QJsonObject{{QStringLiteral("id"), id},
+                               {QStringLiteral("label"), id},
+                               {QStringLiteral("provider"), provider},
+                               {QStringLiteral("efforts"),
+                                QJsonArray{QJsonObject{{QStringLiteral("id"), effort},
+                                                       {QStringLiteral("label"), effort}}}}};
         };
         const QJsonObject codexModel = entry("codex", "shared-model", "medium");
         const QJsonArray merged{codexModel, entry("claude", "claude-model", "high"),
@@ -118,10 +117,11 @@ class DaemonProtocolTest final : public QObject {
             {QStringLiteral("efforts"),
              QJsonArray{QJsonObject{{QStringLiteral("id"), QStringLiteral("high")},
                                     {QStringLiteral("label"), QStringLiteral("High")}}}}};
-        const QJsonArray merged{codexModel, QJsonObject{{QStringLiteral("id"), QStringLiteral("claude-model")},
-                                                        {QStringLiteral("label"), QStringLiteral("Claude model")},
-                                                        {QStringLiteral("provider"), QStringLiteral("claude")},
-                                                        {QStringLiteral("efforts"), QJsonArray{}}}};
+        const QJsonArray merged{
+            codexModel, QJsonObject{{QStringLiteral("id"), QStringLiteral("claude-model")},
+                                    {QStringLiteral("label"), QStringLiteral("Claude model")},
+                                    {QStringLiteral("provider"), QStringLiteral("claude")},
+                                    {QStringLiteral("efforts"), QJsonArray{}}}};
         // Before the first message the phone reads what a new conversation starts with.
         const QJsonObject offered = host.newConversationConfiguration(merged);
         QVERIFY(offered.value(QStringLiteral("ok")).toBool());
@@ -188,7 +188,8 @@ class DaemonProtocolTest final : public QObject {
                 .toObject();
         };
         const QJsonObject chosen = effective(QStringLiteral("full-session"));
-        QCOMPARE(chosen.value(QStringLiteral("execution_policy")).toString(), QStringLiteral("full"));
+        QCOMPARE(chosen.value(QStringLiteral("execution_policy")).toString(),
+                 QStringLiteral("full"));
         QCOMPARE(chosen.value(QStringLiteral("model")).toString(), QStringLiteral("codex-model"));
         QCOMPARE(chosen.value(QStringLiteral("effort")).toString(), QStringLiteral("high"));
         QCOMPARE(effective(QStringLiteral("unacknowledged-session"))
@@ -1140,11 +1141,12 @@ class DaemonProtocolTest final : public QObject {
                        QStringLiteral("item.completed"),
                        {{"item_id", "read-1"},
                         {"item_type", "dynamicToolCall"},
-                        {"item", QJsonObject{{"id", "read-1"},
-                                             {"type", "dynamicToolCall"},
-                                             {"tool", "Read"},
-                                             {"path", path},
-                                             {"arguments", QJsonObject{{"file_path", "/w/" + path}}}}}})
+                        {"item",
+                         QJsonObject{{"id", "read-1"},
+                                     {"type", "dynamicToolCall"},
+                                     {"tool", "Read"},
+                                     {"path", path},
+                                     {"arguments", QJsonObject{{"file_path", "/w/" + path}}}}}})
                 .value("item")
                 .toObject();
         };
@@ -1496,30 +1498,33 @@ class DaemonProtocolTest final : public QObject {
         QVERIFY(git(repository, {"commit", "-q", "--allow-empty", "-m", "first"}));
         QVERIFY(git(repository, {"branch", "main"}));
         QVERIFY(git(repository, {"update-ref", "refs/remotes/origin/release/1.0", "HEAD"}));
-        QVERIFY(git(repository,
-                    {"symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/release/1.0"}));
+        QVERIFY(git(repository, {"symbolic-ref", "refs/remotes/origin/HEAD",
+                                 "refs/remotes/origin/release/1.0"}));
 
         const RepositoryBranches branches = readRepositoryBranches(repository);
         QVERIFY(branches.ok);
         QCOMPARE(branches.local, (QStringList{"develop", "main"}));
         QCOMPARE(branches.remote, QStringList{"origin/release/1.0"});
 
-        const AddedWorktree added =
-            addWorktree(repository, QStringLiteral("feat/phone"), QStringLiteral("origin/release/1.0"));
+        const AddedWorktree added = addWorktree(repository, QStringLiteral("feat/phone"),
+                                                QStringLiteral("origin/release/1.0"));
         QVERIFY2(added.errorCode.isEmpty(), qPrintable(added.message));
         QCOMPARE(added.path, root.filePath(QStringLiteral("app-feat-phone")));
         QCOMPARE(checkoutBranch(added.path), QStringLiteral("feat/phone"));
         QCOMPARE(worktreeRepository(added.path), repository);
         QCOMPARE(repositoryCheckouts(repository), (QStringList{repository, added.path}));
 
-        QCOMPARE(addWorktree(repository, "main", "develop").errorCode, QStringLiteral("branch_exists"));
+        QCOMPARE(addWorktree(repository, "main", "develop").errorCode,
+                 QStringLiteral("branch_exists"));
         QVERIFY(QDir().mkpath(root.filePath(QStringLiteral("app-taken"))));
-        QCOMPARE(addWorktree(repository, "taken", "develop").errorCode, QStringLiteral("worktree_exists"));
+        QCOMPARE(addWorktree(repository, "taken", "develop").errorCode,
+                 QStringLiteral("worktree_exists"));
         QCOMPARE(addWorktree(repository, "fresh", "HEAD~1").errorCode,
                  QStringLiteral("base_branch_not_found"));
         QCOMPARE(addWorktree(repository, "fresh", "--orphan").errorCode,
                  QStringLiteral("base_branch_not_found"));
-        for (const QString& invalid : {"", "has space", "-x", "a..b", "a/", "a.lock", "x/.y", "a:b", "@"})
+        for (const QString& invalid :
+             {"", "has space", "-x", "a..b", "a/", "a.lock", "x/.y", "a:b", "@"})
             QVERIFY2(!validNewBranchName(invalid), qPrintable(invalid));
         QVERIFY(validNewBranchName(QStringLiteral("feat/mobile-ui_2.0")));
         QCOMPARE(addWorktree(repository, "bad name", "develop").errorCode,
@@ -2061,6 +2066,8 @@ class DaemonProtocolTest final : public QObject {
             QVERIFY(q.exec("UPDATE sessions SET title='fixture'"));
             QString mutation;
             if (phase == "turn") {
+                // Turn numbers are backfilled only in a journal from before the format marker.
+                QVERIFY(q.exec("PRAGMA user_version=0"));
                 QVERIFY(q.exec("UPDATE sessions SET current_turn_sequence=0"));
                 QVERIFY(q.exec("UPDATE events SET turn_sequence=0"));
                 mutation = "AFTER UPDATE ON sessions WHEN "
@@ -2572,6 +2579,7 @@ class DaemonProtocolTest final : public QObject {
             QVERIFY(database.open());
             QSqlQuery query(database);
             QVERIFY(query.exec(QStringLiteral("UPDATE sessions SET last_turn_started_at = ''")));
+            QVERIFY(query.exec(QStringLiteral("PRAGMA user_version=0")));
             database.close();
         }
         QSqlDatabase::removeDatabase(connection);

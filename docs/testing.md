@@ -233,6 +233,10 @@ the corresponding Atlas mock first.
   tombstones, legacy fallback, malformed pages, fresh live-catalog ordering and
   stale reconnect callbacks. Opt in to 100k/300k synthetic deletion/catalog
   probes with `KETPLUS_RUN_DELETE_BACKLOG_TESTS=1`; they use temporary journals.
+- Journal startup (ADR 0096): `ketplus_daemon_journal_startup_tests` checks that
+  legacy turn-number, title and turn-start backfills run only below format 1.
+  Opt in to the 300k-row/20k-session timing with
+  `KETPLUS_RUN_STARTUP_BACKLOG_TESTS=1`; the second open must stay under 250 ms.
 - Journal format (ADR 0095): `ketplus_daemon_journal_space_tests` refuses a newer
   journal in both startup compaction and `LocalJournal` with byte-identical file
   contents, including a newer format only in an uncheckpointed WAL (written by

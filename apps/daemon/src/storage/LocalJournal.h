@@ -462,6 +462,8 @@ class LocalJournal final {
     void setError(const QString& error) const;
 
     QString connectionName_;
+    // PRAGMA user_version as found at open; legacy backfills run only below format 1.
+    int openedFormat_{0};
     QSqlDatabase database_;
     mutable QString error_;
     int commandResultsSincePrune_{0};

@@ -15,7 +15,8 @@ bool LocalJournal::acceptsFormat() {
         setError(query.lastError().text());
         return false;
     }
-    if (const int version = query.value(0).toInt(); !journal_format::supported(version)) {
+    openedFormat_ = query.value(0).toInt();
+    if (const int version = openedFormat_; !journal_format::supported(version)) {
         setError(QStringLiteral("This journal was written by a newer KetPlus (journal format %1; "
                                 "this version opens up to %2). Update KetPlus.")
                      .arg(version)
