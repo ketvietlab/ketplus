@@ -18,7 +18,7 @@ A rejected frame marks its provider process generation unusable before killing t
 process, clears the line reader/buffer and closes stdout. Later buffered output
 is drained without parsing. The existing finished path fails queued/pending calls
 with a static protocol diagnostic, clears active runtime state and applies restart
-backoff. It does not publish a second stopped signal when initialization already
+backoff. Existing model-catalog error-to-fallback behavior remains in place. It does not publish a second stopped signal when initialization already
 published its failure. A fresh launch resets rejection and can serve calls again.
 Codex's line-reader generation fence also stops parsing the current coalesced chunk.
 

@@ -582,6 +582,10 @@ and `sign_in_error` when it failed; `remote.sign_in.cancel` and sign-out stop it
 
 ## Lifecycle
 
+ACP v1 `loadSession` and `promptCapabilities.image` are opt-in booleans (ADR 0090).
+An omitted, null or wrong-type field removes that baseline capability; only true
+preserves support. Each process initializes a fresh narrowing state.
+
 Malformed normal-sized stdout frames quarantine the provider generation before it
 is killed (ADR 0089). Buffered suffixes are discarded; the finished path settles
 pending calls with a static diagnostic and uses existing restart backoff. JSON

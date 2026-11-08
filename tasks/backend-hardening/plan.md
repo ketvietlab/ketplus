@@ -930,3 +930,18 @@ The relay rollout gate remains external and does not block this provider work.
   acceptance found a concrete P2: omitted ACP v1 loadSession/image flags stay
   enabled. Fix and regress this in the same #71 completion package before the
   final full matrix and independent review; no second new unreviewed package.
+
+
+### #276 final contract/compatibility integration
+
+- [x] Integrate reviewed #260/#261 (`a6967590`) into the frame package. Source
+  conflicts were include insertions only; preserve frame rejection and response
+  admission together. GitHub also marks #260 merged through this inclusion.
+- [x] Reproduce ACP v1 omitted/wrong-type capability defaults: compatibility
+  20 pass/12 fail; Cursor 24 pass/3 fail, including actual forbidden session/load.
+- [x] Require explicit true for loadSession/image and correct the fake provider's
+  advertised feature set (ADR 0090). This stays in #276, the single new package.
+- [ ] Run full Release Pro/offscreen verification of the combined frame/capability
+  tree, then independent #7705 review, merge, final #71 acceptance and cleanup.
+  Do not close #71 before these gates. Request/waiter admission and absent-response
+  deadlines remain H3.4; no universal QProcess memory or live-provider claim.
