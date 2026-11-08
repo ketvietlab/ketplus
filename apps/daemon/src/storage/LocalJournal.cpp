@@ -63,7 +63,8 @@ LocalJournal::LocalJournal(const QString& path)
     }
     // Operations reset their own errors. Keep failed startup unusable even if a later
     // operation clears that diagnostic; recovery requires a freshly initialized journal.
-    if (!initialize() || !initializeActivityGroups() || !initializeAgents())
+    if (!acceptsFormat() || !initialize() || !initializeActivityGroups() || !initializeAgents() ||
+        !markFormat())
         database_.close();
 }
 

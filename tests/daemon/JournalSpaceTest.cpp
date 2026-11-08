@@ -1,5 +1,6 @@
 #include "storage/JournalSpace.h"
 #include "service/DaemonService.h"
+#include "storage/JournalFormat.h"
 #include "storage/LocalJournal.h"
 
 #include <QCoreApplication>
@@ -476,6 +477,71 @@ class JournalSpaceTest final : public QObject {
         QVERIFY(older.exec(QStringLiteral("INSERT INTO blobs VALUES (100000, x'00')")));
         QCOMPARE(older.value(QStringLiteral("SELECT count(*) FROM blobs")).toInt(), 501);
         QCOMPARE(older.value(QStringLiteral("PRAGMA auto_vacuum")).toInt(), 0);
+    }
+
+    void aNewerJournalIsRefusedWithoutAnyWrite() {
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("journal.sqlite3"));
+        writeJournalWithFreePages(path);
+        {
+            // A later KetPlus wrote this journal; settle it into one file to compare its bytes.
+            Database newer(path);
+            QVERIFY(newer.exec(
+                QStringLiteral("PRAGMA user_version=%1").arg(journal_format::current + 1)));
+            QVERIFY(newer.exec(QStringLiteral("PRAGMA wal_checkpoint(TRUNCATE)")));
+            QVERIFY(newer.exec(QStringLiteral("PRAGMA journal_mode=DELETE")));
+        }
+        const auto bytes = [&path] {
+            QFile file(path);
+            return file.open(QIODevice::ReadOnly)
+                       ? QCryptographicHash::hash(file.readAll(), QCryptographicHash::Sha256)
+                       : QByteArray();
+        };
+        const QByteArray before = bytes();
+        QVERIFY(!before.isEmpty());
+
+        // Its auto_vacuum would otherwise make startup compaction rewrite it.
+        const auto result = journal_space::migrateToIncrementalVacuum(path);
+        QCOMPARE(result.outcome, journal_space::Migration::Deferred);
+        QCOMPARE(result.error, QStringLiteral("The journal has the newer format %1.")
+                                   .arg(journal_format::current + 1));
+        QVERIFY(!QFileInfo::exists(path + QStringLiteral(".compact")));
+        {
+            LocalJournal journal(path);
+            QVERIFY(!journal.isOpen());
+            QVERIFY2(journal.errorString().contains(QStringLiteral("newer KetPlus")),
+                     qPrintable(journal.errorString()));
+        }
+        QCOMPARE(bytes(), before);
+        QVERIFY(!QFileInfo::exists(path + QStringLiteral("-wal")) ||
+                QFileInfo(path + QStringLiteral("-wal")).size() == 0);
+        Database check(path);
+        QCOMPARE(check.value(QStringLiteral("PRAGMA user_version")).toInt(),
+                 journal_format::current + 1);
+        QCOMPARE(check.value(QStringLiteral("SELECT count(*) FROM blobs")).toInt(), 500);
+    }
+
+    void journalsRecordTheirFormatOnceUpgraded() {
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("journal.sqlite3"));
+        {
+            LocalJournal journal(path);
+            QVERIFY2(journal.isOpen(), qPrintable(journal.errorString()));
+        }
+        {
+            Database written(path);
+            QCOMPARE(written.value(QStringLiteral("PRAGMA user_version")).toInt(),
+                     journal_format::current);
+            // A journal from before versioning reads 0.
+            QVERIFY(written.exec(QStringLiteral("PRAGMA user_version=0")));
+        }
+        {
+            LocalJournal legacy(path);
+            QVERIFY2(legacy.isOpen(), qPrintable(legacy.errorString()));
+        }
+        Database upgraded(path);
+        QCOMPARE(upgraded.value(QStringLiteral("PRAGMA user_version")).toInt(),
+                 journal_format::current);
     }
 
     void aNewJournalNeedsNoCopyAndStartsOnIncrementalVacuum() {

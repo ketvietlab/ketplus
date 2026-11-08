@@ -9,7 +9,7 @@ counting as merged fixes. No UI, live journal, provider quota or deployment work
 
 | Original criterion | Available evidence | Remaining acceptance / owner |
 | --- | --- | --- |
-| Forward-only, idempotent migrations; newer-daemon journal safety | Startup transaction failures #250; #273 closes failed storage objects; #274 protects migration staging (merged `c3490da5`) | Unknown/newer schema preservation, interruption/low-space and large-index startup / #2739 |
+| Forward-only, idempotent migrations; newer-daemon journal safety | Startup transaction failures #250; #273 closes failed storage objects; #274 protects migration staging (merged `c3490da5`) | Newer format refused unchanged (ADR 0095); interruption/low-space and large-index startup remain / #3329 |
 | Transactions, crash consistency and surfaced errors | Append/delete/fork/replay fixes #241–250; #254 (merged through #255) prepares media ownership before journal commit | Cross-file interruption and broader read/commit failure coverage; do not infer power-loss atomicity from callback order / #2739 |
 | Bounded/indexed reads on large journals | GC #220, ACK #223, metadata #228, staging #230, deletion queue #235, cloud cache #237, cancellation #240; #272 bounds stored policy JSON (merged through #274) | Explicit session-delete and whole-history fork work; actual query plans and representative payload mix / #2739 |
 | Retention and deletion remove rows/media | Transactional cleanup and retention tests above; media cleanup/dedup #251–252 | Physical media/blob retirement, shared-reference preservation and steady-state acceptance; #128 archive behavior is not implied / #2739 |
@@ -140,3 +140,13 @@ fork now copies one read snapshot in bounded passes; begin 3–7 ms, finish
 `KETPLUS_RUN_FORK_BACKLOG_TESTS=1`). Total copy time roughly doubles (5.7 s at
 300k) without a long stall. Daemon suite 57/57. Newer schema, low space,
 interruption beyond fork staging, media races and steady-state bounds remain.
+
+## Journal format version (ADR 0095)
+
+There was no format marker, so an older daemon would migrate and compact a
+newer journal. The journal now records `PRAGMA user_version`; `LocalJournal`
+and startup compaction refuse a newer format before any write, verified
+byte-identical by `ketplus_daemon_journal_space_tests`, with negative controls
+for each guard. Pre-versioning journals are upgraded after their migrations
+succeed. Daemon suite 57/57. Low space and interruption beyond fork staging,
+media races and steady-state bounds remain.

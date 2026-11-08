@@ -14,6 +14,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- The journal records its format in `PRAGMA user_version` (ADR 0095). A daemon
+  refuses, without writing, a journal newer than it supports; startup compaction
+  leaves it untouched. Earlier releases do not read the marker.
+
 - Session fork copies one read snapshot in bounded event-loop passes into an
   unlisted identity and stores the fork in one final transaction (ADR 0094).
   Failed, abandoned and interrupted copies become history purge work.

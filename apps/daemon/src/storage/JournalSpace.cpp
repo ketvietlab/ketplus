@@ -1,5 +1,7 @@
 #include "storage/JournalSpace.h"
 
+#include "storage/JournalFormat.h"
+
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -213,6 +215,15 @@ MigrationResult migrateToIncrementalVacuum(const QString& path) {
         return failed(result, path, first.lastError().text());
     }
     const qint64 tables = first.value(0).toLongLong();
+    first.finish();
+    // A newer daemon's journal is never rewritten; LocalJournal then refuses to open it.
+    if (!first.exec(QStringLiteral("PRAGMA user_version")) || !first.next())
+        return failed(result, path, first.lastError().text());
+    if (const int version = first.value(0).toInt(); version > journal_format::current) {
+        result.outcome = Migration::Deferred;
+        result.error = QStringLiteral("The journal has the newer format %1.").arg(version);
+        return result;
+    }
     first.finish();
     const auto before = readUsage(source.database(), &error);
     if (!before)
