@@ -27,6 +27,7 @@ QJsonObject SessionHost::storageRetention(const QString& type, const QJsonObject
     }
     QJsonObject result{
         {"ok", true}, {"revision", current->revision}, {"policy", current->toJson()}};
+    result.insert("size_policy_supported", true);
     const auto space = journal_->space();
     // Statistics are advisory; a failed metrics read must not report a committed save as failed.
     if (space)

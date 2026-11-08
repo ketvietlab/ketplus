@@ -1,66 +1,251 @@
+#include "protocol/DaemonProtocol.h"
 #include "runtime/SessionHost.h"
+
+#include <QJsonDocument>
+#include <QPointer>
+#include <limits>
 
 namespace ketplus::daemon {
 namespace {
+constexpr qsizetype maximumDeferredEventsPerSession = 128;
+constexpr qsizetype maximumDeferredEventsTotal = 512;
+constexpr qsizetype maximumDeferredBytesPerSession = 40 * 1024 * 1024;
+constexpr qsizetype maximumDeferredBytesTotal = 80 * 1024 * 1024;
+constexpr int journalRetryMs = 1000;
 
 bool isStreamDelta(const QString& type) {
     return type == QStringLiteral("assistant.delta") ||
            type == QStringLiteral("command.output_delta");
 }
 
-// Two deltas continue one stream when everything but their text matches: the same item from the
-// same provider.
+bool requiresDurableAcceptance(const QString& type) {
+    return type == QStringLiteral("user.message") || type == QStringLiteral("turn.queued") ||
+           type == QStringLiteral("session.created") ||
+           type == QStringLiteral("session.provider_changed");
+}
+
 bool continuesDelta(QJsonObject held, QJsonObject next) {
     held.remove(QStringLiteral("delta"));
     next.remove(QStringLiteral("delta"));
     return held == next;
 }
 
+void scheduleFlush(QTimer& timer, int delay) {
+    if (!timer.isActive() || timer.remainingTime() > delay)
+        timer.start(delay);
+}
 } // namespace
 
 SessionHost::~SessionHost() {
-    // Text held back for coalescing is journaled rather than lost with the daemon.
     deltaFlush_.stop();
-    flushDeltas();
+    // Drain accepted in-memory data while storage is available. A failed write
+    // stops this session's drain; shutdown must not spin on an unavailable disk.
+    const auto ids = sessions_.keys();
+    for (const auto& id : ids) {
+        for (qsizetype attempt = 0; attempt <= maximumDeferredEventsPerSession; ++attempt) {
+            auto it = sessions_.find(id);
+            if (it == sessions_.end() ||
+                (it->pendingDeltaType.isEmpty() && it->deferredJournal.isEmpty()))
+                break;
+            it->journalRetryAt = QDeadlineTimer(0);
+            if (!flushDelta(*it))
+                break;
+        }
+    }
+    deltaFlush_.stop();
+}
+
+bool SessionHost::deferJournalEvent(Session& session, const QString& type,
+                                    const QJsonObject& payload, QString* error) {
+    QJsonObject held = payload;
+    bool merge = false;
+    qsizetype oldBytes = 0;
+    if (!session.deferredJournal.isEmpty() && isStreamDelta(type)) {
+        const auto& last = session.deferredJournal.last();
+        const QString text =
+            last.payload.value("delta").toString() + payload.value("delta").toString();
+        if (last.type == type && continuesDelta(last.payload, payload) &&
+            text.size() <= maximumCoalescedDeltaBytes) {
+            merge = true;
+            held.insert("delta", text);
+            oldBytes = last.bytes;
+        }
+    }
+    const qsizetype encodedBytes = QJsonDocument(held).toJson(QJsonDocument::Compact).size();
+    const qsizetype bytes = encodedBytes + type.toUtf8().size() + 512;
+    const qsizetype added = bytes - oldBytes;
+    const auto item = held.value(QStringLiteral("item")).toObject();
+    const auto itemType =
+        held.value(QStringLiteral("item_type")).toString(item.value("type").toString());
+    const auto itemId = held.value(QStringLiteral("item_id")).toString();
+    const bool chunkable =
+        (type == QStringLiteral("item.started") || type == QStringLiteral("item.completed")) &&
+        itemType != QStringLiteral("commandExecution") &&
+        (!itemId.isEmpty() || !item.value("id").toString().isEmpty());
+    // Match the journal's large-item lane. A permanently unrepresentable event
+    // must not pin the retry head and block otherwise valid later events.
+    if (encodedBytes > 32 * 1024 * 1024 ||
+        (encodedBytes > protocol::maximumEventPayloadBytes && !chunkable) ||
+        session.deferredJournalBytes + added > maximumDeferredBytesPerSession ||
+        deferredJournalBytes_ + added > maximumDeferredBytesTotal ||
+        (!merge && (session.deferredJournal.size() >= maximumDeferredEventsPerSession ||
+                    deferredJournalCount_ >= maximumDeferredEventsTotal))) {
+        const QString message =
+            QStringLiteral("The journal recovery buffer cannot retain this event.");
+        if (error)
+            *error = message;
+        if (!session.journalBufferFullReported) {
+            qWarning("Unable to retain journal event %s for session %s: recovery limit reached",
+                     qUtf8Printable(type), qUtf8Printable(session.stored.id));
+            session.journalBufferFullReported = true;
+        }
+        return false;
+    }
+    if (session.deferredJournal.isEmpty())
+        session.journalRetryAt.setRemainingTime(journalRetryMs);
+    if (merge)
+        session.deferredJournal.last() = {type, held, bytes};
+    else {
+        session.deferredJournal.append({type, held, bytes});
+        ++deferredJournalCount_;
+    }
+    session.deferredJournalBytes += added;
+    deferredJournalBytes_ += added;
+    scheduleFlush(deltaFlush_, int(qMax<qint64>(0, session.journalRetryAt.remainingTime())));
+    return true;
 }
 
 bool SessionHost::appendEvent(Session& session, const QString& type, const QJsonObject& payload,
                               QString* error) {
+    const QString id = session.stored.id;
+    const qint64 generation = session.stored.generation;
+    const QPointer<SessionHost> alive(this);
+    const auto current = [&]() -> Session* {
+        if (alive.isNull())
+            return nullptr;
+        auto it = sessions_.find(id);
+        return it != sessions_.end() && it->stored.generation == generation ? &*it : nullptr;
+    };
+    const auto retain = [&](Session& target) {
+        if (error && error->isEmpty())
+            *error = QStringLiteral("The local journal has events awaiting recovery.");
+        // A rejected user command must never become a queued ghost prompt.
+        if (requiresDurableAcceptance(type))
+            return false;
+        if (!target.pendingDeltaType.isEmpty()) {
+            if (!deferJournalEvent(target, target.pendingDeltaType, target.pendingDelta, error))
+                return false;
+            target.pendingDeltaType.clear();
+            target.pendingDelta = {};
+        }
+        (void)deferJournalEvent(target, type, payload, error);
+        return false; // Retained is not the same as committed.
+    };
+    if (!session.deferredJournal.isEmpty())
+        return retain(session);
     if (!isStreamDelta(type)) {
-        // Journal what the provider streamed before whatever followed it.
-        (void)flushDelta(session);
-        return journalEvent(session, type, payload, error);
+        if (!flushDelta(session, error))
+            return retain(session);
+        auto* active = current();
+        if (!active)
+            return false;
+        if (journalEvent(*active, type, payload, error))
+            return true;
+        return retain(*active);
     }
-    if (!session.pendingDeltaType.isEmpty() &&
-        (session.pendingDeltaType != type || !continuesDelta(session.pendingDelta, payload)))
-        (void)flushDelta(session);
-    if (session.pendingDeltaType.isEmpty()) {
-        session.pendingDeltaType = type;
-        session.pendingDelta = payload;
+    const bool same =
+        session.pendingDeltaType == type && continuesDelta(session.pendingDelta, payload);
+    const bool fits = session.pendingDelta.value("delta").toString().size() +
+                          payload.value("delta").toString().size() <=
+                      maximumCoalescedDeltaBytes;
+    if (!session.pendingDeltaType.isEmpty() && (!same || !fits)) {
+        if (!flushDelta(session, error))
+            return retain(session);
+    }
+    auto* active = current();
+    if (!active)
+        return false;
+    if (active->pendingDeltaType.isEmpty()) {
+        active->pendingDeltaType = type;
+        active->pendingDelta = payload;
     } else {
-        session.pendingDelta.insert(QStringLiteral("delta"),
-                                    session.pendingDelta.value(QStringLiteral("delta")).toString() +
-                                        payload.value(QStringLiteral("delta")).toString());
+        active->pendingDelta.insert("delta", active->pendingDelta.value("delta").toString() +
+                                                 payload.value("delta").toString());
     }
-    if (session.pendingDelta.value(QStringLiteral("delta")).toString().size() >=
-        maximumCoalescedDeltaBytes)
-        return flushDelta(session, error);
-    if (!deltaFlush_.isActive())
-        deltaFlush_.start();
+    if (active->pendingDelta.value("delta").toString().size() >= maximumCoalescedDeltaBytes)
+        return flushDelta(*active, error);
+    scheduleFlush(deltaFlush_, deltaCoalesceMs);
     return true;
 }
 
 bool SessionHost::flushDelta(Session& session, QString* error) {
-    if (session.pendingDeltaType.isEmpty())
+    if (session.pendingDeltaType.isEmpty() && session.deferredJournal.isEmpty())
         return true;
+    if (!session.journalRetryAt.hasExpired()) {
+        if (error)
+            *error = QStringLiteral("The local journal has events awaiting recovery.");
+        return false;
+    }
+    if (!session.deferredJournal.isEmpty()) {
+        const auto event = session.deferredJournal.takeFirst();
+        session.deferredJournalBytes -= event.bytes;
+        deferredJournalBytes_ -= event.bytes;
+        --deferredJournalCount_;
+        const bool wasFull = session.journalBufferFullReported;
+        if (session.deferredJournal.isEmpty())
+            session.journalBufferFullReported = false;
+        else
+            scheduleFlush(deltaFlush_, 0);
+        // Detach before emission: a synchronous subscriber can delete the session.
+        if (journalEvent(session, event.type, event.payload, error))
+            return true;
+        session.deferredJournal.prepend(event);
+        session.deferredJournalBytes += event.bytes;
+        deferredJournalBytes_ += event.bytes;
+        ++deferredJournalCount_;
+        session.journalBufferFullReported = wasFull;
+        session.journalRetryAt.setRemainingTime(journalRetryMs);
+        scheduleFlush(deltaFlush_, journalRetryMs);
+        return false;
+    }
     const QString type = std::exchange(session.pendingDeltaType, {});
     const QJsonObject payload = std::exchange(session.pendingDelta, {});
-    return journalEvent(session, type, payload, error);
+    if (journalEvent(session, type, payload, error))
+        return true;
+    if (!deferJournalEvent(session, type, payload, error) &&
+        QJsonDocument(payload).toJson(QJsonDocument::Compact).size() <=
+            protocol::maximumEventPayloadBytes) {
+        // A full shared recovery budget must not erase the already-held prefix.
+        session.pendingDeltaType = type;
+        session.pendingDelta = payload;
+        session.journalRetryAt.setRemainingTime(journalRetryMs);
+        scheduleFlush(deltaFlush_, journalRetryMs);
+    }
+    return false;
 }
 
 void SessionHost::flushDeltas() {
-    for (Session& session : sessions_)
-        (void)flushDelta(session);
+    const QPointer<SessionHost> alive(this);
+    const auto ids = sessions_.keys();
+    for (const auto& id : ids) {
+        auto it = sessions_.find(id);
+        if (it != sessions_.end() && it->journalRetryAt.hasExpired())
+            (void)flushDelta(*it);
+        if (alive.isNull())
+            return;
+    }
+    int delay = std::numeric_limits<int>::max();
+    for (const auto& session : sessions_) {
+        if (!session.deferredJournal.isEmpty() || !session.pendingDeltaType.isEmpty()) {
+            const qint64 remaining = session.journalRetryAt.remainingTime();
+            const int next = remaining > 0                        ? int(remaining)
+                             : !session.deferredJournal.isEmpty() ? 0
+                                                                  : deltaCoalesceMs;
+            delay = qMin(delay, next);
+        }
+    }
+    if (delay != std::numeric_limits<int>::max())
+        scheduleFlush(deltaFlush_, delay);
 }
 
 } // namespace ketplus::daemon

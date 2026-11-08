@@ -1,0 +1,36 @@
+{
+  "scope": "H1.3 mandatory append writes",
+  "base": "857c5590c4c7c6d843123245cbebdc4cfaeea31e",
+  "environment": "macOS arm64 Qt6.11.2 Release Pro/headless offscreen, synthetic journals",
+  "baseline_failed": 30,
+  "baseline_passed": 3,
+  "baseline_note": "Existing large-append commit case plus setup/cleanup pass; other 30 scenarios fail original production",
+  "focused_passed": 33,
+  "affected_matrix": {
+    "passed": 13,
+    "seconds": 84.57,
+    "protocol_passed": 74,
+    "retention_passed": 124,
+    "intentional_skips": [
+      "live lifecycle",
+      "opt-in 9 GiB fixture"
+    ]
+  },
+  "verified": [
+    "ordinary/chunked ignored write refusal",
+    "late chunk failure rollback",
+    "replay revision and activity UPSERT rollback",
+    "commit failure diagnostic",
+    "fresh transaction after failure",
+    "repair/retry and reopen"
+  ],
+  "not_verified": [
+    "ignored multirow settlement/removal",
+    "integer overflow/unsupported stored types",
+    "process crash",
+    "live journal/provider",
+    "Windows",
+    "multi-GB",
+    "package/install/deploy"
+  ]
+}

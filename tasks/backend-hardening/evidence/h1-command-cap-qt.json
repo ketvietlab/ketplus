@@ -1,0 +1,18 @@
+{
+  "scope": "Temporary Qt Release probe of current command-result cap, synthetic rows only",
+  "head": "9ea2efd2b0bef9a6a62a205f815d16c361ef8a63",
+  "rows_before_trigger": 100255,
+  "rows_after_trigger": 10000,
+  "rows_removed_on_256th_write": 90256,
+  "elapsed_ms_runs": [
+    341,
+    337
+  ],
+  "fixture": "100000 results with future completed_at (2099) and ~1KiB JSON, followed by 256 current writes",
+  "clock_rollback_observation": "Newest accepted message_id=trigger is absent after the cap pass",
+  "limits": [
+    "Not an ordinary-timestamp steady-state benchmark",
+    "No live journal or provider used",
+    "Cap implementation has not been changed by this ACK PR"
+  ]
+}
