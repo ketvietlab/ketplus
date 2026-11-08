@@ -5,6 +5,7 @@
 #include "agent/CodexAppServer.h"
 #include "ui/Theme.h"
 
+#include "AgentTranscriptFixture.h"
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QDateTime>
@@ -100,7 +101,11 @@ int main(int argc, char** argv) {
          {"capture", "Optional native PNG before measurement", "path"},
          {"theme", "system, light or dark", "theme", "system"},
          {"zoom", "Interface zoom (1–1.5)", "zoom", "1"},
-         {"open", "mode, model or limits (a composer panel) or welcome, for captures", "panel"}});
+         {"open", "mode, model or limits (a composer panel) or welcome, for captures", "panel"},
+         {"transcript", "claude, codex or cursor: the mock's workspace/<provider> messages",
+          "provider"},
+         {"scroll", "With --transcript: 0 shows the top, 1 the end, like the mock's --scroll",
+          "fraction"}});
     parser.process(app);
     const auto work = parser.value("work");
     const auto visibility = parser.value("visibility");
@@ -131,6 +136,15 @@ int main(int argc, char** argv) {
         report({{"event", "error"}, {"reason", "Invalid panel"}});
         return 2;
     }
+    const auto transcript = parser.value("transcript");
+    if (!transcript.isEmpty() && transcript != "claude" && transcript != "codex" &&
+        transcript != "cursor") {
+        report({{"event", "error"}, {"reason", "Invalid transcript"}});
+        return 2;
+    }
+    // Captures show a mock conversation; CPU samples keep the default workload.
+    const bool capture = !panel.isEmpty() || !transcript.isEmpty();
+    const QString captureProvider = transcript.isEmpty() ? QStringLiteral("claude") : transcript;
     ketplus::ThemeManager theme(app);
     // Applied before the view exists, like a saved appearance, for app/mock captures.
     auto& appearance = ket::Appearance::instance();
@@ -152,10 +166,10 @@ int main(int argc, char** argv) {
                                          {"running", work == "running"},
                                          {"started", true},
                                          {"status", work == "running" ? "Working" : "Done"}});
-    // Captures show the mock's Claude conversation and its usage; CPU samples keep the default.
-    if (!panel.isEmpty()) {
+    // Captures show the mock's conversation and its usage; CPU samples keep the default.
+    if (capture) {
         auto active = conversations.first().toMap();
-        active.insert("provider", "claude");
+        active.insert("provider", captureProvider);
         conversations[0] = active;
         const auto resetsAt = [](int day, int hour, int minute) {
             return QDateTime(QDate(2026, 11, day), QTime(hour, minute)).toSecsSinceEpoch();
@@ -221,6 +235,9 @@ int main(int argc, char** argv) {
                      [&view, catalog] { view.setModels(catalog); });
     if (welcome)
         view.resetMessages({}, "idle-cpu-fixture");
+    else if (!transcript.isEmpty())
+        view.resetMessages(ketplus::benchmark::transcriptFixture(transcript, KETPLUS_MOCK_ASSETS),
+                           "idle-cpu-fixture");
     else
         view.resetMessages(
             {QVariantMap{{"kind", "user"},
@@ -247,12 +264,24 @@ int main(int argc, char** argv) {
         QTimer::singleShot(1000, &view, &QWidget::hide);
     if (visibility == "minimized")
         QTimer::singleShot(1000, &view, &QWidget::showMinimized);
-    if (!panel.isEmpty())
-        view.setConversationConfiguration({{"provider", "claude"},
-                                           {"model", "opus"},
+    if (capture)
+        view.setConversationConfiguration({{"provider", captureProvider},
+                                           {"model", captureProvider == "claude"  ? "opus"
+                                                     : captureProvider == "codex" ? "astra"
+                                                                                  : "auto"},
                                            {"effort", "medium"},
                                            {"permission", "workspace-write"},
                                            {"compactWindowSupported", true}});
+    if (!transcript.isEmpty() && parser.isSet("scroll"))
+        QTimer::singleShot(1000, &view, [&view, fraction = parser.value("scroll").toDouble()] {
+            auto* list = findItem(view.quickView()->rootObject(), "agentTranscript");
+            if (!list)
+                return;
+            list->setProperty("followTail", false);
+            const qreal range = list->property("contentHeight").toDouble() - list->height();
+            list->setProperty("contentY", list->property("originY").toDouble() +
+                                              qBound(0.0, fraction, 1.0) * qMax(0.0, range));
+        });
     if (!panel.isEmpty() && !welcome)
         QTimer::singleShot(1000, &view, [&] {
             auto* button = findItem(view.quickView()->rootObject(), panelButtons.value(panel));

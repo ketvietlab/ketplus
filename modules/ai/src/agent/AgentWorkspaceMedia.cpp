@@ -765,8 +765,12 @@ QVariantList AgentWorkspaceView::messageCodeBlocks(QObject* document) const {
             startsDocument = !block.previous().isValid();
         bounds = sameCodeBlock(block.previous(), block) ? bounds.united(rect) : rect;
         if (!sameCodeBlock(block, block.next())) {
-            // blockBoundingRect already spans the horizontal paragraph margins.
-            const auto padded = bounds.adjusted(0, -codeVerticalPadding, 0, codeVerticalPadding);
+            // blockBoundingRect starts at the paragraph's edge but is only as wide as the lines
+            // inside its margins; the frame adds both so it spans the column like the mock's.
+            const auto margins = block.blockFormat();
+            const auto padded =
+                bounds.adjusted(0, -codeVerticalPadding,
+                                margins.leftMargin() + margins.rightMargin(), codeVerticalPadding);
             frames.append(QVariantMap{{"x", padded.x()},
                                       {"y", padded.y()},
                                       {"width", padded.width()},

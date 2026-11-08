@@ -2087,7 +2087,7 @@ Flickable {
             id: copyConversationButton
             objectName: "copyConversationButton"
             // Keep conversation export on the right, separate from the answer copy action.
-            x: parent.width - Math.max(KetTheme.px(20, KetTheme.zoom), (parent.width - shell.conversationColumnWidth) / 2 + KetTheme.px(20, KetTheme.zoom)) - width
+            x: parent.width - Math.max(KetTheme.px(20, KetTheme.zoom), (parent.width - shell.conversationColumnWidth) / 2) - width
             anchors.top: parent.top
             anchors.topMargin: host.sessionRunning ? KetTheme.px(6, KetTheme.zoom) : -KetTheme.px(4, KetTheme.zoom)
             z: 1
@@ -2124,8 +2124,8 @@ Flickable {
             visible: host.sessionRunning
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.leftMargin: Math.max(KetTheme.px(16, KetTheme.zoom), (parent.width - shell.conversationColumnWidth) / 2 + KetTheme.px(16, KetTheme.zoom))
-            anchors.rightMargin: Math.max(KetTheme.px(16, KetTheme.zoom), (parent.width - shell.conversationColumnWidth) / 2 + KetTheme.px(16, KetTheme.zoom))
+            anchors.leftMargin: Math.max(KetTheme.px(16, KetTheme.zoom), (parent.width - shell.conversationColumnWidth) / 2 - KetTheme.px(4, KetTheme.zoom))
+            anchors.rightMargin: Math.max(KetTheme.px(16, KetTheme.zoom), (parent.width - shell.conversationColumnWidth) / 2 - KetTheme.px(4, KetTheme.zoom))
             anchors.top: parent.top
             anchors.topMargin: KetTheme.px(8, KetTheme.zoom)
         }

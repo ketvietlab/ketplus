@@ -21,8 +21,8 @@ Item {
     property alias limitsPopover: usageLimitsPopover
     function scheduleDraftSave() { composerDraftSaveTimer.restart() }
 
-    // The reading column the transcript and composer share. The host sets its
-    // width; 0 lets the conversation fill the pane.
+    // The reading column the transcript text and composer share, as in the mock: the host
+    // sets its width (760 by default); 0 lets the conversation fill the pane.
     readonly property real conversationColumnWidth: agentHost.conversationWidth > 0
         ? KetTheme.px(agentHost.conversationWidth, KetTheme.zoom) : Number.POSITIVE_INFINITY
     readonly property int messageCount: messages.count
@@ -1417,7 +1417,7 @@ Item {
                 BackgroundTaskBar {
                     workspace: root
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.preferredWidth: Math.min(parent.width - KetTheme.px(40, KetTheme.zoom), root.conversationColumnWidth - KetTheme.px(40, KetTheme.zoom))
+                    Layout.preferredWidth: Math.min(parent.width - KetTheme.px(40, KetTheme.zoom), root.conversationColumnWidth)
                     Layout.preferredHeight: implicitHeight
                     Layout.bottomMargin: visible ? KetTheme.px(6, KetTheme.zoom) : 0
                 }
