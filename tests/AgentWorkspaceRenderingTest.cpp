@@ -581,6 +581,19 @@ void AgentWorkspaceViewTest::composerPreview() {
     QTest::qWait(100);
     if (!capture.isEmpty())
         QVERIFY(view.quickView()->grabWindow().save(capture + ".permissions.png"));
+    {
+        // The chosen mode is checked in the leading column, before its icon, as in the mock.
+        auto* menu = root->findChild<QObject*>("permissionMenu");
+        QVERIFY(menu && menu->property("visible").toBool());
+        QVERIFY(!permissionButton->property("previewState").isNull());
+        auto* menuContent = qvariant_cast<QQuickItem*>(menu->property("contentItem"));
+        const QString chosen = root->property("permission").toString();
+        auto* option = findVisualItem(menuContent, QStringLiteral("permissionOption_") + chosen);
+        QVERIFY(option);
+        auto* check = findVisualItem(option, QStringLiteral("permissionCheck"));
+        QVERIFY(check && check->isVisible());
+        QVERIFY(check->mapToItem(option, QPointF(0, 0)).x() < option->width() / 4);
+    }
     QVERIFY(QMetaObject::invokeMethod(root->findChild<QObject*>("permissionMenu"), "close"));
     QVERIFY(QMetaObject::invokeMethod(root->findChild<QObject*>("modelPopup"), "close"));
     view.setModels({QVariantMap{
