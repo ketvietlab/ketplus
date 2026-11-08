@@ -33,7 +33,8 @@ QStringList columnsOf(QSqlDatabase database, const QString& table) {
 } // namespace
 
 bool LocalJournal::forkSession(const QString& sourceId, const qint64 sourceGeneration,
-                               StoredSession& fork, QString* error) {
+                               StoredSession& fork, QString* error,
+                               const std::function<bool(QString*)>& beforeCommit) {
     const auto fail = [this, error](const QString& message) {
         database_.rollback();
         setError(message);
@@ -133,6 +134,11 @@ bool LocalJournal::forkSession(const QString& sourceId, const qint64 sourceGener
                             ? copy.lastError().text()
                             : QStringLiteral("The %1 fork copy is incomplete.").arg(table));
     }
+    QString preparationError;
+    if (beforeCommit && !beforeCommit(&preparationError))
+        return fail(preparationError.isEmpty()
+                        ? QStringLiteral("The fork ownership could not be prepared.")
+                        : preparationError);
     if (!database_.commit())
         return fail(database_.lastError().text());
     return true;

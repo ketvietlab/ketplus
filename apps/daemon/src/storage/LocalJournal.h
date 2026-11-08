@@ -90,6 +90,11 @@ struct SessionTombstone final {
     QString deletedAt;
 };
 
+struct SessionTombstonePage final {
+    QJsonArray tombstones;
+    QJsonObject next;
+};
+
 struct EventReplayPage final {
     QJsonArray events;
     qint64 nextCursor{0};
@@ -162,15 +167,20 @@ class LocalJournal final {
                        const QJsonArray& providerTargets = {});
     [[nodiscard]] QJsonArray deletionWork(int limit = 64, bool pendingCloudOnly = false,
                                           qint64 afterRow = 0) const;
-    [[nodiscard]] QJsonArray sessionTombstones() const;
+    [[nodiscard]] std::optional<SessionTombstonePage>
+    sessionTombstones(const QJsonObject& after = {}, bool legacy = false) const;
+    [[nodiscard]] std::optional<QString> sessionTombstoneSnapshot() const;
     bool completeProviderCleanup(const QString& sessionId, qint64 generation,
                                  const QString& provider, const QString& threadId);
     bool acknowledgeCloudDeletion(const QString& sessionId, qint64 generation,
                                   const QString& operationId);
     // Stores `fork` as a new session holding a copy of the source generation's transcript, in
-    // one transaction. Fills the fork's cursor counters from the source.
+    // one transaction. Fills the fork's cursor counters from the source. The
+    // optional synchronous preparation must succeed before committing history;
+    // its external effects may remain if the subsequent database commit fails.
     bool forkSession(const QString& sourceId, qint64 sourceGeneration, StoredSession& fork,
-                     QString* error = nullptr);
+                     QString* error = nullptr,
+                     const std::function<bool(QString*)>& beforeCommit = {});
     [[nodiscard]] SessionTombstone sessionTombstone(const QString& sessionId,
                                                     qint64 generation) const;
     // Ownership-sensitive work must distinguish an empty catalog from any read

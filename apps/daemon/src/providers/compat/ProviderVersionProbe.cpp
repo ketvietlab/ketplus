@@ -1,10 +1,12 @@
 #include "providers/compat/ProviderVersionProbe.h"
 
 #include <QFileInfo>
+#include <QPointer>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QTimer>
 
+#include <memory>
 #include <utility>
 
 namespace ketplus::daemon::compat {
@@ -12,6 +14,11 @@ namespace {
 
 // Version banners are one short line; anything longer is not a version banner.
 constexpr qsizetype maximumOutputBytes = 4096;
+
+struct ProbeOutput final {
+    QByteArray bytes;
+    bool oversized{false};
+};
 
 } // namespace
 
@@ -58,6 +65,17 @@ void ProviderVersionProbe::check(const QString& executable, Callback callback) {
         callback(*runtime);
         return;
     }
+    if (process_ != nullptr &&
+        (probing_ != executable || probingFingerprint_ != fingerprintOf(executable))) {
+        // Only identical executable generations share a result. Re-check this request
+        // after the current probe, including cache/fingerprint validation at that point.
+        waiters_.append([guard = QPointer<ProviderVersionProbe>(this), executable,
+                         callback = std::move(callback)](const Runtime&) mutable {
+            if (guard)
+                guard->check(executable, std::move(callback));
+        });
+        return;
+    }
     waiters_.append(std::move(callback));
     if (process_ != nullptr)
         return;
@@ -76,11 +94,28 @@ void ProviderVersionProbe::check(const QString& executable, Callback callback) {
     process_->setArguments(invocation.arguments);
     // A CLI that ignores --version and reads stdin must still exit.
     connect(process_, &QProcess::started, process_, &QProcess::closeWriteChannel);
+    const auto output = std::make_shared<ProbeOutput>();
+    const auto readOutput = [this, output] {
+        if (process_ == nullptr || output->oversized)
+            return;
+        const qsizetype remaining = maximumOutputBytes - output->bytes.size();
+        const QByteArray chunk = process_->read(remaining + 1);
+        if (chunk.size() > remaining) {
+            output->oversized = true;
+            // No further data from this one-shot probe can become a version result.
+            process_->closeReadChannel(QProcess::StandardOutput);
+            process_->kill();
+            return;
+        }
+        output->bytes.append(chunk);
+    };
+    connect(process_, &QProcess::readyRead, this, readOutput);
     connect(process_, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
-            [this](int, QProcess::ExitStatus status) {
-                const QByteArray output = process_->readAll().left(maximumOutputBytes);
-                finish(status == QProcess::NormalExit ? QString::fromUtf8(output).trimmed()
-                                                      : QString());
+            [this, output, readOutput](int exitCode, QProcess::ExitStatus status) {
+                readOutput();
+                finish(status == QProcess::NormalExit && exitCode == 0 && !output->oversized
+                           ? QString::fromUtf8(output->bytes).trimmed()
+                           : QString());
             });
     connect(process_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
         if (error == QProcess::FailedToStart)
