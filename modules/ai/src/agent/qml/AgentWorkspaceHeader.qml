@@ -303,13 +303,6 @@ Item {
             iconName: "bot"
             onTriggered: agentHost.chooseReviewer("", "claude")
         }
-        Kit.KetMenuItem {
-            objectName: "newCodexReviewerItem"
-            text: "Codex"
-            description: "Starts a reviewer in this worktree, read only"
-            iconName: "bot"
-            onTriggered: agentHost.chooseReviewer("", "codex")
-        }
         Kit.KetMenuSection {
             text: "Existing conversation"
         }
@@ -318,7 +311,7 @@ Item {
             model: reviewerMenu.candidates.length > 0 ? reviewerMenu.candidates : [
                 {
                     number: "",
-                    title: "No other Claude or Codex conversation"
+                    title: "No other Claude conversation"
                 }
             ]
             onObjectAdded: (index, object) => reviewerMenu.addItem(object)
@@ -329,7 +322,7 @@ Item {
                 objectName: "existingReviewerItem_" + reviewerNumber
                 enabled: reviewerNumber.length > 0
                 text: modelData.title
-                description: reviewerNumber.length > 0 ? ["@agent/" + reviewerNumber, modelData.provider === "claude" ? "Claude" : "Codex", modelData.worktree].filter(part => part).join(" · ") : ""
+                description: reviewerNumber.length > 0 ? ["@agent/" + reviewerNumber, modelData.worktree].filter(part => part).join(" · ") : ""
                 iconName: "chat"
                 checkable: reviewerNumber.length > 0
                 onTriggered: agentHost.chooseReviewer(reviewerNumber, "")

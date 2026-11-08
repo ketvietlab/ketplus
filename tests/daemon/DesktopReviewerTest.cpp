@@ -20,7 +20,7 @@ class DesktopReviewerTest final : public QObject {
             QVERIFY(journal.upsertSession(
                 {"working", path, "codex", {}, {}, "ready", 1, 0, 0, "Working"}));
             QVERIFY(
-                journal.upsertSession({"peer", path, "codex", {}, {}, "ready", 1, 0, 0, "Peer"}));
+                journal.upsertSession({"peer", path, "claude", {}, {}, "ready", 1, 0, 0, "Peer"}));
         }
         rememberConversation(path, "working");
         DaemonService service({env.directory.filePath("journal.sqlite3"),
@@ -61,7 +61,7 @@ class DesktopReviewerTest final : public QObject {
         const auto reviewer = state.value("reviewer").toMap();
         QCOMPARE(reviewer.value("session_id").toString(), QStringLiteral("peer"));
         QCOMPARE(reviewer.value("number").toString(), number("peer"));
-        QCOMPARE(reviewer.value("provider").toString(), QStringLiteral("codex"));
+        QCOMPARE(reviewer.value("provider").toString(), QStringLiteral("claude"));
 
         // A number Desktop does not know never reaches the daemon.
         const auto unknown = call([&] { desktop.setReviewer(path, QStringLiteral("99999"), {}); });

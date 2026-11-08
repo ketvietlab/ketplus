@@ -262,7 +262,7 @@ class AgentWorkspaceView final : public QWidget {
     // ADR 0067: {available, pending, error, reviewer: {number,title,provider,model}}.
     Q_PROPERTY(QVariantMap reviewerState READ reviewerState NOTIFY reviewerStateChanged)
     QVariantMap reviewerState() const { return reviewerState_; }
-    // Claude and Codex conversations that can review the active one, newest first.
+    // Claude conversations that can review the active one, newest first.
     Q_INVOKABLE QVariantList reviewerCandidates() const;
     // Assigns conversation #number, starts a new reviewer with newProvider, or clears it.
     Q_INVOKABLE void chooseReviewer(const QString& number, const QString& newProvider);

@@ -25,9 +25,8 @@ QVariantList AgentWorkspaceView::reviewerCandidates() const {
         auto conversation = value.toMap();
         const QString number = conversation.value("number").toString();
         const QString provider = conversation.value("provider").toString();
-        // Only these providers enforce the read-only review guard.
-        if (number.isEmpty() || number == active ||
-            (provider != QStringLiteral("claude") && provider != QStringLiteral("codex")))
+        // Only Claude enforces the read-only review guard (ADR 0067).
+        if (number.isEmpty() || number == active || provider != QStringLiteral("claude"))
             continue;
         conversation.insert("worktree", conversation.value("path").toString().section(
                                             QLatin1Char('/'), -1, -1, QString::SectionSkipEmpty));

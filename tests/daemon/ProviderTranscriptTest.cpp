@@ -154,6 +154,17 @@ class ProviderTranscriptTest : public QObject {
                  "No review: this turn changed no files.");
         QCOMPARE(agentMessageStateText({{"state", "review_skipped"}, {"reason", "round_limit"}}),
                  "No review: this exchange used all its review rounds.");
+        QCOMPARE(agentMessageStateText(
+                     {{"state", "review_skipped"}, {"reason", "reviewer_unsupported"}}),
+                 "No review: only a Claude conversation can review turns.");
+        QVERIFY(agentMessageStateText({{"state", "review_skipped"}, {"reason", "snapshot_failed"}})
+                    .contains("next review includes them"));
+        QCOMPARE(agentMessageStateText({{"state", "failed"},
+                                        {"kind", "review"},
+                                        {"reason", "reviewer_unsupported"},
+                                        {"direction", "outgoing"},
+                                        {"peer_number", "1093"}}),
+                 "#1093 no longer runs on Claude, so it did not review this turn.");
         const auto skipped = agentMessageNotice(
             {{"state", "review_skipped"}, {"kind", "review"}, {"reason", "reviewer_busy"}},
             "notice:7");

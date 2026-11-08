@@ -47,7 +47,8 @@ void AgentWorkspaceViewTest::reviewerPickerFollowsTheActiveConversation() {
                         {"title", "Parser"},
                         {"provider", "claude"},
                         {"path", "/work/parser"}},
-            QVariantMap{{"number", "2044"}, {"title", "Cursor"}, {"provider", "cursor"}}};
+            QVariantMap{{"number", "2044"}, {"title", "Cursor"}, {"provider", "cursor"}},
+            QVariantMap{{"number", "3055"}, {"title", "Codex"}, {"provider", "codex"}}};
     });
     view.resize(1000, 700);
     view.show();
@@ -74,7 +75,7 @@ void AgentWorkspaceViewTest::reviewerPickerFollowsTheActiveConversation() {
     QTRY_VERIFY(button->isVisible());
     QCOMPARE(button->property("text").toString(), QStringLiteral("Reviewer  ▾"));
 
-    // Only other Claude and Codex conversations can review.
+    // Only other Claude conversations can review.
     const auto candidates = view.reviewerCandidates();
     QCOMPARE(candidates.size(), 1);
     QCOMPARE(candidates.first().toMap().value("number").toString(), QStringLiteral("1093"));
@@ -90,6 +91,8 @@ void AgentWorkspaceViewTest::reviewerPickerFollowsTheActiveConversation() {
     auto* existing = menuItem(menu, "existingReviewerItem_1093");
     QVERIFY(existing);
     QVERIFY(!menuItem(menu, "existingReviewerItem_2044"));
+    QVERIFY(!menuItem(menu, "existingReviewerItem_3055"));
+    QVERIFY(!menuItem(menu, "newCodexReviewerItem"));
     QVERIFY(QMetaObject::invokeMethod(existing, "triggered"));
     QCOMPARE(changes.size(), 1);
     QCOMPARE(changes.first().at(0).toString(), QStringLiteral("1093"));

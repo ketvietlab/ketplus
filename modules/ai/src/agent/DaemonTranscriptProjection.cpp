@@ -140,6 +140,11 @@ QString agentMessageStateText(const QJsonObject& data) {
             return QStringLiteral("No review: the reviewer conversation no longer exists.");
         if (reason == QStringLiteral("reviewer_busy"))
             return QStringLiteral("No review: the reviewer was busy with another turn.");
+        if (reason == QStringLiteral("reviewer_unsupported"))
+            return QStringLiteral("No review: only a Claude conversation can review turns.");
+        if (reason == QStringLiteral("snapshot_failed"))
+            return QStringLiteral("No review: KetPlus could not read this turn's changes. The "
+                                  "next review includes them.");
         return QStringLiteral("The review request could not be sent.");
     }
     if (state == QStringLiteral("sent")) {
@@ -190,6 +195,9 @@ QString agentMessageStateText(const QJsonObject& data) {
                         : QStringLiteral("The message from %1 has expired.").arg(named);
     if (reason == QStringLiteral("no_reply"))
         return QStringLiteral("%1 finished without a reply.").arg(peer);
+    if (reason == QStringLiteral("reviewer_unsupported"))
+        return QStringLiteral("%1 no longer runs on Claude, so it did not review this turn.")
+            .arg(named);
     if (reason.startsWith(QStringLiteral("turn_")))
         return QStringLiteral("%1 stopped before replying (%2).").arg(peer, reason.mid(5));
     return (outgoing ? QStringLiteral("Message to %1 failed: %2")
