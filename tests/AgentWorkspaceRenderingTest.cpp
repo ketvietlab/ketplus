@@ -458,6 +458,60 @@ void AgentWorkspaceViewTest::permissionMenuFitsSmallZoomedWorkspace() {
     }
 }
 
+void AgentWorkspaceViewTest::welcomeSitsInTheViewport() {
+    // An emptied transcript has almost no content height; the welcome must still fill the view.
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.setAgentAvailable(true);
+    view.setRepositoryName("ketplus-app");
+    view.setExecutionBranch("develop");
+    view.resetMessages({}, "welcome");
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
+    auto* root = view.quickView()->rootObject();
+    QVERIFY(root);
+    auto* header = root->findChild<QQuickItem*>("agentWorkspaceHeader");
+    auto* composer = root->findChild<QQuickItem*>("agentComposer");
+    QQuickItem* title = nullptr;
+    QTRY_VERIFY((title = findVisualItem(root, QStringLiteral("agentEmptyStateTitle"))) &&
+                title->isVisible());
+    QVERIFY(header && composer);
+    QTest::qWait(50);
+    const auto headerBottom = header->mapToItem(root, QPointF(0, header->height())).y();
+    const auto titleTop = title->mapToItem(root, QPointF()).y();
+    QVERIFY2(titleTop >= headerBottom,
+             qPrintable(QStringLiteral("Welcome title at y = %1, header ends at %2")
+                            .arg(titleTop)
+                            .arg(headerBottom)));
+    const auto composerTop = composer->mapToItem(root, QPointF()).y();
+    QList<QQuickItem*> starters;
+    const auto collect = [&](auto&& self, QQuickItem* item) -> void {
+        if (item->objectName() == QStringLiteral("workspaceSuggestion"))
+            starters.append(item);
+        for (auto* child : item->childItems())
+            self(self, child);
+    };
+    collect(collect, root);
+    QCOMPARE(starters.size(), 4);
+    auto* state = findVisualItem(root, QStringLiteral("agentEmptyState"));
+    QVERIFY(state);
+    const auto stateBottom = state->mapToItem(root, QPointF(0, state->height())).y();
+    for (auto* starter : starters) {
+        const auto bottom = starter->mapToItem(root, QPointF(0, starter->height())).y();
+        QVERIFY(bottom <= composerTop);
+        // The welcome's own item holds its starters, so they stay inside it for input.
+        QVERIFY2(
+            bottom <= stateBottom,
+            qPrintable(
+                QStringLiteral("Starter ends at %1, welcome at %2").arg(bottom).arg(stateBottom)));
+    }
+    auto* place = findVisualItem(root, QStringLiteral("agentEmptyStatePlace"));
+    QVERIFY(place);
+    QVERIFY(place->property("text").toString().startsWith(
+        QStringLiteral("Your Agent works in ketplus-app on develop.")));
+}
+
 void AgentWorkspaceViewTest::composerPreview() {
     auto& appearance = ket::Appearance::instance();
     const auto previousMode = appearance.mode();

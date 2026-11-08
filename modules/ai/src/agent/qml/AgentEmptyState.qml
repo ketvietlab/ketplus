@@ -3,127 +3,92 @@ import QtQuick
 import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
 
+// A new conversation, as the mock's workspace/welcome draws it: the mark, a question, where
+// the Agent works, and starters in two columns at the transcript's reading width.
 Item {
     id: emptyState
     required property var workspace
+    readonly property real column: Math.min(width - KetTheme.px(48, KetTheme.zoom), KetTheme.px(760, KetTheme.zoom))
+    readonly property string place: {
+        const repository = agentHost.repositoryName || "";
+        const branch = agentHost.executionBranch || "";
+        if (repository && branch) return "Your Agent works in " + repository + " on " + branch + ". ";
+        if (repository) return "Your Agent works in " + repository + ". ";
+        return "";
+    }
     objectName: "agentEmptyState"
 
     Column {
-        anchors.centerIn: parent
-        width: Math.min(parent.width - KetTheme.px(48, KetTheme.zoom), KetTheme.px(520, KetTheme.zoom))
-        spacing: KetTheme.px(10, KetTheme.zoom)
+        id: welcome
+        x: (emptyState.width - width) / 2
+        y: KetTheme.px(24, KetTheme.zoom)
+        width: emptyState.column
+        spacing: KetTheme.px(18, KetTheme.zoom)
+        topPadding: KetTheme.px(90, KetTheme.zoom)
 
         Image {
             anchors.horizontalCenter: parent.horizontalCenter
-            width: KetTheme.px(46, KetTheme.zoom)
-            height: KetTheme.px(46, KetTheme.zoom)
+            width: KetTheme.px(44, KetTheme.zoom)
+            height: width
+            sourceSize: Qt.size(width * 2, height * 2)
             source: "qrc:/agent/icons/ketplus-mark-" + (KetTheme.dark ? "dark" : "light") + ".svg"
             fillMode: Image.PreserveAspectFit
             Accessible.name: "KétPlus Pro"
         }
         Text {
+            objectName: "agentEmptyStateTitle"
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
-            text: "YOUR WORKSPACE"
-            color: KetTheme.t.textMuted
-            font.family: KetTheme.fontFamily
-            font.pixelSize: KetTheme.dayDividerRecipe(KetTheme.dark, KetTheme.zoom).fontPixels
-            font.weight: Font.Bold
-            font.letterSpacing: 0.7
-        }
-        Text {
-            width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            text: agentHost.agentAvailable ? "Start with an idea."
+            text: agentHost.agentAvailable ? "What will you create today?"
                                            : "Codex is not available on this Mac."
             color: KetTheme.t.textMain
             wrapMode: Text.Wrap
             font.family: KetTheme.fontFamily
-            font.pixelSize: KetTheme.markdownRecipe(KetTheme.dark, KetTheme.zoom).heading2Pixels
+            font.pixelSize: KetTheme.px(26, KetTheme.zoom)
             font.weight: Font.DemiBold
             Accessible.role: Accessible.Heading
         }
         Text {
+            objectName: "agentEmptyStatePlace"
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
             text: agentHost.agentAvailable
-                  ? "Explore code, solve problems, and work with your Agent to bring ideas to life."
+                  ? emptyState.place + "Ask anything or start from an idea."
                   : "Install or reconnect Codex to continue. Your workspace and drafts are preserved."
-            color: KetTheme.t.textMuted
+            color: KetTheme.t.textSecondary
             wrapMode: Text.Wrap
             font.family: KetTheme.fontFamily
-            font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
+            font.pixelSize: KetTheme.px(14, KetTheme.zoom)
         }
-        Column {
-            width: parent.width
-            topPadding: KetTheme.px(6, KetTheme.zoom)
-            spacing: KetTheme.px(6, KetTheme.zoom)
+        Grid {
+            id: starters
+            // Two columns, as in the mock; one when the workspace is too narrow for both.
+            readonly property bool paired: emptyState.column >= KetTheme.px(480, KetTheme.zoom)
+            anchors.horizontalCenter: parent.horizontalCenter
+            columns: paired ? 2 : 1
+            spacing: KetTheme.px(10, KetTheme.zoom)
+            topPadding: KetTheme.px(12, KetTheme.zoom)
             Repeater {
+                // The title becomes the prompt.
                 model: [
-                    { icon: "file-code.svg", title: "Explore the codebase",
-                      detail: "Understand the structure and where to start" },
-                    { icon: "copy.svg", title: "Review changes",
-                      detail: "Review diffs, find issues, and suggest fixes" },
-                    { icon: "bot.svg", title: "Design with Atlas",
-                      detail: "Turn a brief into interactive screens" }
+                    { icon: "layers", title: "Explain this repository",
+                      caption: "Architecture, modules and entry points" },
+                    { icon: "compare", title: "Review my changes",
+                      caption: "Review diffs, find issues and suggest fixes" },
+                    { icon: "palette", title: "Design a new screen",
+                      caption: "Start an Atlas from a prompt" },
+                    { icon: "terminal", title: "Fix the failing tests",
+                      caption: "Run the tests, then fix what fails" }
                 ]
-                delegate: Basic.Button {
-                    id: suggestion
+                delegate: KetSuggestion {
                     required property var modelData
                     objectName: "workspaceSuggestion"
-                    width: parent.width
-                    height: KetTheme.px(50, KetTheme.zoom)
+                    width: starters.paired ? (emptyState.column - starters.spacing) / 2 : emptyState.column
+                    text: modelData.title
+                    caption: modelData.caption
+                    iconName: modelData.icon
                     enabled: agentHost.agentAvailable
-                    padding: 0
-                    onClicked: workspace.useSuggestion(modelData.title)
-                    Accessible.name: modelData.title + ". " + modelData.detail
-                    contentItem: RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: KetTheme.px(13, KetTheme.zoom)
-                        anchors.rightMargin: KetTheme.px(13, KetTheme.zoom)
-                        spacing: KetTheme.px(11, KetTheme.zoom)
-                        KetIcon {
-                            Layout.preferredWidth: KetTheme.px(17, KetTheme.zoom)
-                            Layout.preferredHeight: KetTheme.px(17, KetTheme.zoom)
-                            name: KetTheme.iconForLucide(("qrc:/agent/icons/" + suggestion.modelData.icon).toString().split("/").pop().replace(/\.svg$/, ""))
-                            color: KetTheme.t.textSecondary
-                            box: KetTheme.px(17, KetTheme.zoom)
-                        }
-                        Column {
-                            Layout.fillWidth: true
-                            spacing: KetTheme.px(2, KetTheme.zoom)
-                            Text {
-                                width: parent.width
-                                text: suggestion.modelData.title
-                                color: KetTheme.t.textMain
-                                elide: Text.ElideRight
-                                font.family: KetTheme.fontFamily
-                                font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
-                                font.weight: Font.DemiBold
-                            }
-                            Text {
-                                width: parent.width
-                                text: suggestion.modelData.detail
-                                color: KetTheme.t.textMuted
-                                elide: Text.ElideRight
-                                font.family: KetTheme.fontFamily
-                                font.pixelSize: KetTheme.dayDividerRecipe(KetTheme.dark, KetTheme.zoom).fontPixels
-                            }
-                        }
-                        Text {
-                            text: "↗"
-                            color: KetTheme.t.textMuted
-                            font.family: KetTheme.fontFamily
-                            font.pixelSize: KetTheme.markdownRecipe(KetTheme.dark, KetTheme.zoom).bodyPixels
-                        }
-                    }
-                    background: Rectangle {
-                        radius: KetTheme.px(7, KetTheme.zoom)
-                        color: suggestion.hovered ? KetTheme.t.surfaceHover
-                                                  : KetTheme.t.interactiveBg
-                        border.color: suggestion.visualFocus ? KetTheme.t.colorFocus
-                                                             : KetTheme.t.panelBorder
-                    }
+                    onClicked: emptyState.workspace.useSuggestion(modelData.title)
                 }
             }
         }
