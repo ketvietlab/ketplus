@@ -1152,7 +1152,10 @@ Evidence: [h1-failed-journal-reuse-qt.json](evidence/h1-failed-journal-reuse-qt.
 - [x] Initial Release affected5/5 pass. Previous production fails new server
   tests (3 pass/2 fail) and discovery tests (3 pass/8 fail); actual discovery
   repeats exactly 20k/100k deletion signals. Restore source and rebuild.
-- [ ] Record fixed-commit affected evidence, then independent #7705 review,
-  merge and safe linked-worktree/build cleanup.
+- [x] Release affected5/5 at `38ebde39` (56.44 s): deletion45+4 optional scale
+  skips, bridge30+1 live skip, discovery11, lifecycle42+1 live skip, CLI6.
+  Real 20k/100k discovery emits no additional deletion signals. Source/log hashes
+  and previous-code controls: `evidence/h1-live-session-discovery-qt.json`.
+- [ ] Independent #7705 review, merge and safe linked-worktree/build cleanup.
 - [ ] Continue atomic whole-session deletion and remaining dossier gates. Full
   reconnect walks and per-row revision triggers remain explicit separate limits.

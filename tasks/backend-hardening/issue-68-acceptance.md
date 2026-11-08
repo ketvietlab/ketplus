@@ -100,5 +100,8 @@ Independent #280 review also measured 100k tombstones causing 857 ms and a
 full batch of deletion signals on each incremental discovery. ADR 0092 separates
 that path into a single live-only request. Initial/reconnect and CLI reconciliation
 remain complete; per-row revision-trigger writes and total refresh work are not
-claimed bounded. Release tests and independent review for this follow-up remain
-pending. The next separate acceptance gate is still atomic session-delete work.
+claimed bounded. Release affected5/5 pass at `38ebde39`; 20k/100k discovery emits
+zero additional deletion signals, while the previous code repeats all 20k/100k.
+[Evidence and controls](evidence/h1-live-session-discovery-qt.json) record the exact
+source and logs. Independent review/merge remains pending. The next separate
+acceptance gate is still atomic session-delete work.
