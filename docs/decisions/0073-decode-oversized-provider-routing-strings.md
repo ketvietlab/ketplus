@@ -6,8 +6,11 @@ The oversized Codex scanner removed escape backslashes and decoded tokens with
 fromUtf8. Valid escaped keys/values, Unicode escapes and surrogate pairs could
 route differently from the equivalent normal JSON message. Invalid UTF-8 became
 replacement characters, and literal dotted keys could alias nested paths. The
-original focused fixture reproduces 24 failures across three input chunk sizes;
-14 valid/refusal checks pass.
+initial 38-check focused fixture reproduces 24 failures across three input chunk
+sizes; 14 valid/refusal checks pass. The final expanded 91-check fixture, run
+independently against the preceding #256 implementation, reports 61 passes and
+30 failures. These counts describe different fixture revisions, not two results
+for the same suite.
 
 Keep bounded raw token bytes, validate JSON escape spelling and unescaped controls,
 then use Qt's JSON string decoder for Unicode. Explicit lexical validation is
