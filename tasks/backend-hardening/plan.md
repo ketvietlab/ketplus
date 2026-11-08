@@ -999,3 +999,24 @@ The relay rollout gate remains external and does not block this provider work.
 The closure ledger overrides the old parallel-audit dispatch order. New audit
 branches are frozen; finish the existing #71 packet and its complete acceptance
 before moving to another issue. #85 retains its original rollout gate.
+
+### H1.6 stored policy JSON admission
+
+- [x] Reproduce eight unsupported-row failures in the actual Qt readers: both
+  policy types accept valid JSON padded beyond 4 KiB in TEXT and BLOB columns.
+  Eight valid boundary controls pass; normal writes remain schema-bounded.
+- [x] Gate policy projection with metadata byte lengths before Qt/JSON parsing;
+  preserve rejected rows instead of returning default revision zero (ADR 0085).
+- [x] Focused 18/18; Release headless affected 4/4 targets (37.67 s): policy 31/31,
+  size policy 5/5, retention 124/124, journal space 10 pass / 1 scale opt-in skip.
+  Reopen, unchanged bytes/revision/history, repair/save and normal retention pass.
+- [ ] Independent exact-head review and merge. Reviewer dispatch remains held by
+  `chain_limit`; the queued request needs manual activation, not another retry.
+- [ ] H1.6 remains open. ADR 0046 specifies append-row order within each age phase,
+  not global timestamp order; do not claim the plan's oldest-turn wording has
+  been globally verified or silently change that contract. The existing size
+  fixture covers expired-before-recent, free pages first, Forever/off/no-limit,
+  revision changes and guarded turns; representative integrated scale/crash
+  acceptance remains H1.7. No UI, deployment or installed journal was changed.
+
+Evidence: [h1-stored-policy-read-qt.json](evidence/h1-stored-policy-read-qt.json).

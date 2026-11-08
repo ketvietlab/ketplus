@@ -799,6 +799,10 @@ then may compact eligible recent detail without bypassing retention guards.
 Forever/off still preserve remaining detail. Unsupported/protected data may leave
 the target unmet. File/WAL and total-application usage are not this page target;
 see [ADR 0046](decisions/0046-journal-size-pressure.md) for scope and remaining work.
+Both stored policy JSON values are admitted through a 4 KiB SQL projection before
+Qt parses them. Unsupported oversized rows remain intact and disable policy saves
+and configured detail trimming until repaired; see
+[ADR 0085](decisions/0085-bounded-stored-policy-json.md).
 
 Bounded large-tool retention (ADR 0047) applies the existing detail transformers
 to version-1 fragmented payloads within the shared 1 MiB pass budget. It requires

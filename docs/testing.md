@@ -462,7 +462,12 @@ synthetic temporary journals and no provider processes.
 
 `ketplus_daemon_retention_policy_tests` verifies strict policy parsing, defaults,
 revision-fenced persistence/reopen/rollback, actual configured retention, malformed
-policy fail-closed behavior and local-only API/cache boundaries. The agent-token
+policy fail-closed behavior and local-only API/cache boundaries. ADR 0085 adds
+TEXT/BLOB stored JSON boundary cases for both policies (4095/4096 accepted,
+4097/1 MiB rejected), preserving row bytes/revision/history across reopen and
+repair/retry. Run this target plus `ketplus_daemon_size_policy_tests`,
+`ketplus_daemon_usage_retention_tests` and `ketplus_daemon_journal_space_tests`
+in Release for stored-policy reader changes. The agent-token
 IPC test also rejects both retention operations. Changes to the shared journal or
 host headers require the full Pro build and suite. No provider quota is consumed.
 
