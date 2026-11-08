@@ -15,6 +15,11 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- Local turn acceptance commits state/configuration and its two/three events
+  together before publication (ADR 0076). Failed queued/configuration/projection/
+  commit writes leave no accepted prompt; repair/retry and independent-reader
+  visibility are covered. Whole-command idempotency/crash recovery remains open.
+
 - Reference-based previews use bounded validated ownership and verify blob
   SHA-256 before decoding the same byte snapshot (ADR 0069). Unknown metadata,
   linked roots and mismatched bytes remain intact and return unavailable.
@@ -548,7 +553,6 @@ reading column and collapse after 20 lines with a reversible Show more control.
 Collapsed activity rows keep one title line; browser-open rows retain an Open
 action. Composer block line-height matches
 the transcript at 1.75; focused Qt tests cover Vietnamese single-line sizing and composer undo.
-
 
 ## Qt design mock
 
