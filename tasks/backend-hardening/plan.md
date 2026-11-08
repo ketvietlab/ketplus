@@ -843,15 +843,17 @@ remain explicitly open.
   50/50 result. Production/regression code matched the previously reviewed head.
 - [x] #258 integration head `216b2043`: Release headless build and serial
   **51/51 PASS**, 372.28 s. Production and regression match its previously
-  reviewed head; integration delta review and merge are still required.
+  reviewed head. #7705 passed the exact-head delta; merged at `9825970f`.
 - [x] Reproduce Cursor catalog accumulation and unsuccessful-exit acceptance;
   implement the owning-path fix in ADR 0088. Final self-hosted CLI fixture:
   original production **7 pass / 7 fail**; fixed **14/14 PASS**, including
   interrupting stdout and stderr 64-MiB floods before their completion marker.
   Evidence: `evidence/h3-cursor-catalog-bounds-qt.json`.
-- [ ] Finish the catalog affected-target matrix, exact-head independent review
-  by #7705, then merge and clean its worktree. This is the sole new unreviewed
-  package for the current issue.
+- [x] Catalog code commit `3f7892b1`: Release headless build and the affected
+  **17/17 targets PASS**, 261.33 s, serial/offscreen. The following evidence-only
+  commit preserves the tested production/test hashes; no full Desktop claim.
+- [ ] Finish catalog exact-head independent review by #7705, then merge and
+  clean its worktree. This is the sole new unreviewed package for the issue.
 - [ ] Finish #71 acceptance: normal malformed/binary/invalid-UTF8 frame behavior,
   capability-to-adapter coverage, and disposition of remaining probe/waiter limits.
   Existing #260/#261 own response id/envelope work overlapping #74; do not duplicate

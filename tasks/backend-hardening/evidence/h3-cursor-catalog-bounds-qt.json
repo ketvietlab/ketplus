@@ -28,7 +28,6 @@
     "skipped": 0
   },
   "remaining_gates": [
-    "affected-target matrix",
     "independent exact-head review",
     "merge"
   ],
@@ -40,5 +39,32 @@
     "live provider",
     "installed app",
     "deployment"
-  ]
+  ],
+  "tested_code_commit": "3f7892b1901c8045284fcc34e2ea2b12d9eece8d",
+  "affected_matrix": {
+    "targets": [
+      "ketplus_provider_framing_tests",
+      "ketplus_daemon_claude_adapter_tests",
+      "ketplus_daemon_cursor_adapter_tests",
+      "ketplus_daemon_claude_worktree_tests",
+      "ketplus_daemon_context_relay_tests",
+      "ketplus_daemon_lifecycle_tests",
+      "ketplus_provider_compatibility_tests",
+      "ketplus_provider_handoff_tests",
+      "ketplus_daemon_session_fork_tests",
+      "ketplus_agent_messaging_tests",
+      "ketplus_daemon_protocol_tests",
+      "ketplus_computer_provider_integration_tests",
+      "ketplus_provider_deletion_tests",
+      "ketplus_daemon_worktree_context_tests",
+      "ketplus_headless_daemon_tests",
+      "ketplus_cursor_catalog_bounds_tests",
+      "ketplus_provider_catalog_cache_tests"
+    ],
+    "passed": 17,
+    "failed": 0,
+    "seconds": 261.33,
+    "parallel_jobs": 1
+  },
+  "evidence_delta": "Documentation/evidence only; production and test SHA-256 unchanged from tested code commit."
 }
