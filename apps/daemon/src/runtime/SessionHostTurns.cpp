@@ -33,7 +33,7 @@ QString sandboxName(const QJsonObject& options) {
 }
 
 QString approvalPolicy(const QJsonObject& options) {
-    // A guarded review never asks the user, so no prompt can widen its sandbox.
+    // Defence in depth: reviews only reach Claude (AgentBroker::enforcesReviewGuard).
     if (reviewGuard(options))
         return QStringLiteral("never");
     return options.value(QStringLiteral("execution_policy")).toString() == QStringLiteral("full")

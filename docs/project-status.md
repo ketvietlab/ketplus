@@ -205,13 +205,14 @@ milestone changes state.
   turns and Codex per-thread config on `thread/fork` alone are not verified.
 
 - Automatic turn review, daemon side (ADR 0067, #120). A conversation can name a
-  Claude or Codex reviewer conversation, an existing one or a new read-only one,
-  through local `session.reviewer.get/set`. Each completed turn with changes
-  sends the reviewer one `review` request with the diff. The review turn runs
-  read-only (Codex read-only sandbox with approvals `never`; Claude plan mode with
-  every permission request denied). A reply with findings starts the working
-  agent's fix turn until `max_rounds` (default 2); "no findings", auto-fix off or
-  the last round only records the reply. Verified with the scripted fake
+  Claude reviewer conversation, an existing one or a new read-only one, through
+  local `session.reviewer.get/set`. Each completed turn with changes sends the
+  reviewer one `review` request with the diff between two worktree snapshots
+  (tracked and untracked files). The review turn runs in Claude plan mode with
+  every permission request denied. Codex is not a reviewer yet, because its
+  process-wide browser MCP server approves itself. A reply with findings starts
+  the working agent's fix turn until `max_rounds` (default 2); "no findings",
+  auto-fix off or the last round only records the reply. Verified with the scripted fake
   providers and sidecar tests. The Desktop picker and the rendering of recorded
   reviews are not implemented yet, and no live provider run was made.
 

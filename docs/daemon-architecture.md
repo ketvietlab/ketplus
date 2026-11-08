@@ -714,12 +714,13 @@ into the phone's session metadata as `agentTurn`, beside `number`.
 
 `AgentBrokerReviews.cpp` adds automatic turn review (ADR 0067). A conversation's
 `conversation_reviewers` row names its reviewer. After each completed turn, the
-broker diffs the worktree against its previous snapshot and sends the reviewer a
-`review` request with `expect_reply`. The reviewer's turn runs under the review
-guard: Codex gets a read-only sandbox with approvals `never`, and the Claude
-sidecar stays in plan mode and denies every permission request. The verdict line
-of the reply decides whether the working agent starts a fix turn or the reply is
-only recorded. `session.reviewer.get/set` are local Desktop operations.
+broker diffs two snapshot trees of the worktree (written through a copy of its
+index) and sends the reviewer a `review` request with `expect_reply`. The
+reviewer must be Claude. Its turn runs under the review guard: the sidecar stays
+in plan mode and denies every permission request. Review requests never join a
+user turn. The verdict line of the reply, whether it is the final answer or an
+`agents_send` reply, decides whether the working agent starts a fix turn or the
+reply is only recorded. `session.reviewer.get/set` are local Desktop operations.
 
 Providers launch `ketplus_daemon --mcp-agents` with the endpoint's absolute path
 and the token. `daemon.hello` with `agent_token` authenticates an agents-only

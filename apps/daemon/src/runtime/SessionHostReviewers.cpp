@@ -13,9 +13,6 @@ QJsonObject failure(const QString& code, const QString& message) {
             {QStringLiteral("error_message"), message}};
 }
 
-bool enforcesReviewGuard(const QString& adapter) {
-    return adapter == QStringLiteral("claude") || adapter == QStringLiteral("codex");
-}
 } // namespace
 
 QJsonObject SessionHost::reviewerJson(const QString& sessionId) const {
@@ -60,13 +57,11 @@ QJsonObject SessionHost::conversationReviewer(const QJsonObject& request, const 
             if (!reviewerId.isEmpty() && !sessions_.contains(reviewerId))
                 return failure(QStringLiteral("reviewer_not_found"),
                                QStringLiteral("The reviewer conversation no longer exists."));
-            // Only these providers enforce the read-only review guard.
-            if (!enforcesReviewGuard(reviewerId.isEmpty()
-                                         ? newProvider
-                                         : sessions_.value(reviewerId).stored.adapter))
-                return failure(
-                    QStringLiteral("invalid_reviewer"),
-                    QStringLiteral("A reviewer must be a Claude or Codex conversation."));
+            if (!AgentBroker::enforcesReviewGuard(reviewerId.isEmpty()
+                                                      ? newProvider
+                                                      : sessions_.value(reviewerId).stored.adapter))
+                return failure(QStringLiteral("invalid_reviewer"),
+                               QStringLiteral("A reviewer must be a Claude conversation."));
             if (rounds < 1 || rounds > maximumReviewRounds)
                 return failure(QStringLiteral("invalid_reviewer"),
                                QStringLiteral("Review rounds must be between 1 and 3."));

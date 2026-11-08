@@ -1,7 +1,9 @@
 // ADR 0067: automatic review of finished turns. Scripted fake providers only.
 #include "AgentTestFixture.h"
 
+#include <QDateTime>
 #include <QDir>
+#include <QJsonDocument>
 #include <QProcess>
 #include <QStandardPaths>
 #include <QtTest>
@@ -69,7 +71,8 @@ class TurnReviewTest final : public QObject {
         Fixture fixture;
         QVERIFY(fixture.open());
         const QString working = fixture.start("claude", "working");
-        const QString reviewer = fixture.start("codex", "reviewer");
+        const QString reviewer = fixture.start("claude", "reviewer");
+        const QString codex = fixture.start("codex", "codex");
         const QString cursor = fixture.start("cursor", "cursor");
         QTRY_COMPARE_WITH_TIMEOUT(fixture.count(working, "turn.completed"), 1, 5000);
         QTRY_COMPARE_WITH_TIMEOUT(fixture.count(reviewer, "turn.completed"), 1, 5000);
@@ -79,15 +82,19 @@ class TurnReviewTest final : public QObject {
         };
         QCOMPARE(code(setReviewer(fixture, working, {{"reviewer_session_id", working}})),
                  "invalid_reviewer");
-        // Cursor cannot enforce the read-only review guard.
-        QCOMPARE(code(setReviewer(fixture, working, {{"reviewer_session_id", cursor}})),
-                 "invalid_reviewer");
-        QCOMPARE(code(setReviewer(fixture, working, {{"new_provider", "cursor"}})),
-                 "invalid_reviewer");
+        // Only Claude enforces the read-only review guard on every tool call.
+        for (const QString& unguarded : {codex, cursor}) {
+            QTRY_COMPARE_WITH_TIMEOUT(fixture.count(unguarded, "turn.completed"), 1, 5000);
+            QCOMPARE(code(setReviewer(fixture, working, {{"reviewer_session_id", unguarded}})),
+                     "invalid_reviewer");
+        }
+        for (const QString provider : {"codex", "cursor"})
+            QCOMPARE(code(setReviewer(fixture, working, {{"new_provider", provider}})),
+                     "invalid_reviewer");
         QCOMPARE(code(setReviewer(fixture, working, {{"reviewer_session_id", "missing"}})),
                  "reviewer_not_found");
         QCOMPARE(code(setReviewer(fixture, working,
-                                  {{"reviewer_session_id", reviewer}, {"new_provider", "codex"}})),
+                                  {{"reviewer_session_id", reviewer}, {"new_provider", "claude"}})),
                  "invalid_reviewer");
         for (const int rounds : {0, 4})
             QCOMPARE(code(setReviewer(fixture, working,
@@ -111,7 +118,7 @@ class TurnReviewTest final : public QObject {
         QCOMPARE(chosen.value("session_id").toString(), reviewer);
         QCOMPARE(chosen.value("number").toString(), fixture.number(reviewer));
         QCOMPARE(chosen.value("title").toString(), "reviewer");
-        QCOMPARE(chosen.value("provider").toString(), "codex");
+        QCOMPARE(chosen.value("provider").toString(), "claude");
         QCOMPARE(chosen.value("auto_fix").toBool(), false);
         QCOMPARE(chosen.value("max_rounds").toInt(), 3);
 
@@ -134,12 +141,12 @@ class TurnReviewTest final : public QObject {
         QVERIFY(!worktree.isEmpty());
         const QString working = fixture.start("claude", "working", {}, worktree);
         QTRY_COMPARE_WITH_TIMEOUT(fixture.count(working, "turn.completed"), 1, 5000);
-        const QJsonObject set = setReviewer(fixture, working, {{"new_provider", "codex"}});
+        const QJsonObject set = setReviewer(fixture, working, {{"new_provider", "claude"}});
         QVERIFY2(set.value("ok").toBool(), qPrintable(text(set)));
         const QJsonObject reviewer = set.value("reviewer").toObject();
         const QString reviewerId = reviewer.value("session_id").toString();
         QVERIFY(!reviewerId.isEmpty());
-        QCOMPARE(reviewer.value("provider").toString(), "codex");
+        QCOMPARE(reviewer.value("provider").toString(), "claude");
         QCOMPARE(reviewer.value("title").toString(), "Reviewer for #" + fixture.number(working));
         QTRY_COMPARE_WITH_TIMEOUT(fixture.count(reviewerId, "turn.completed"), 1, 5000);
         const auto stored = fixture.journal->readSessions();
@@ -185,9 +192,9 @@ class TurnReviewTest final : public QObject {
         QCOMPARE(review.value("kind").toString(), "review");
         QVERIFY(review.value("expect_reply").toBool());
         const QString body = review.value("body").toString();
-        QVERIFY2(body.contains("Changed files: README.md"), qPrintable(body));
+        QVERIFY2(body.contains("Changed files: README.md, notes.txt (added)"), qPrintable(body));
         QVERIFY(body.contains("+Parser fix"));
-        QVERIFY(body.contains("New untracked files (read them in the worktree): notes.txt"));
+        QVERIFY(body.contains("+Untracked")); // untracked contents are part of the diff
         QVERIFY(body.contains("Fix the parser"));
         QVERIFY(body.contains("round 1 of 2"));
         QVERIFY(body.contains("\"Verdict: findings\" or \"Verdict: no findings\""));
@@ -213,43 +220,160 @@ class TurnReviewTest final : public QObject {
         QCOMPARE(lastNotice(fixture, working, "sent").value("kind").toString(), "review");
     }
 
-    void codexReviewTurnIsSandboxedWithoutApprovals() {
+    void aReviewerThatStopsEnforcingTheGuardGetsNoReview() {
         Fixture fixture;
         QVERIFY(fixture.open());
         const QString worktree = repository(fixture);
         QVERIFY(!worktree.isEmpty());
         const QString working = fixture.start("claude", "working", {}, worktree);
-        const QString reviewer = fixture.start("codex", "reviewer", {}, worktree);
+        const QString reviewer = fixture.start("claude", "reviewer", {}, worktree);
         QTRY_COMPARE_WITH_TIMEOUT(fixture.count(working, "turn.completed"), 1, 5000);
         QTRY_COMPARE_WITH_TIMEOUT(fixture.count(reviewer, "turn.completed"), 1, 5000);
-        // Even a full-access Codex conversation reviews read-only.
-        qint64 revision = -1;
-        for (const auto& session : fixture.journal->readSessions().value_or(QList<StoredSession>{}))
-            if (session.id == reviewer)
-                revision = session.configurationRevision;
-        const QJsonObject full =
-            fixture.host->handleCommand(request("session.execution_policy.apply",
-                                                {{"execution_policy", "full"},
-                                                 {"risk_acknowledged", true},
-                                                 {"expected_revision", revision}},
-                                                reviewer, 1),
-                                        "desktop-test");
-        QVERIFY2(full.value("ok").toBool(), qPrintable(text(full)));
+        QVERIFY(setReviewer(fixture, working, {{"reviewer_session_id", reviewer}})
+                    .value("ok")
+                    .toBool());
+        // Handed off to Cursor after it was chosen.
+        QVERIFY(!fixture.start("cursor", "switch", reviewer, worktree).isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(reviewer, "turn.completed"), 2, 5000);
+        QVERIFY(write(worktree + "/README.md", "Unguarded\n"));
+        QVERIFY(!fixture.start("claude", "Change it", working, worktree).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(
+            lastNotice(fixture, working, "review_skipped").value("reason").toString() ==
+                "reviewer_unsupported",
+            10000);
+        QCOMPARE(reviewsFrom(fixture, working).size(), 0);
+        QCOMPARE(fixture.count(reviewer, "turn.completed"), 2);
+    }
+
+    void aPendingReviewNeverJoinsTheReviewersOwnTurn() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const QString working = fixture.start("claude", "working");
+        const QString reviewer = fixture.start("claude", "reviewer");
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(working, "turn.completed"), 1, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(reviewer, "turn.completed"), 1, 5000);
+        AgentMessageRecord held;
+        held.id = QStringLiteral("held-review");
+        held.chainId = QStringLiteral("chain");
+        held.hop = 7;
+        held.fromSession = working;
+        held.fromGeneration = 1;
+        held.fromNumber = fixture.number(working);
+        held.toSession = reviewer;
+        held.toGeneration = 1;
+        held.toNumber = fixture.number(reviewer);
+        held.kind = QStringLiteral("review");
+        held.expectReply = true;
+        held.body = QStringLiteral("Review this held diff");
+        held.state = QStringLiteral("held");
+        held.createdAt = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
+        QString error;
+        QVERIFY2(fixture.journal->insertAgentMessage(held, &error), qPrintable(error));
+        // The user's own turn keeps its mode and does not carry the review.
+        QVERIFY(!fixture.start("claude", "plain", reviewer).isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(reviewer, "turn.completed"), 2, 5000);
+        const QJsonObject own = fixture.payloads(reviewer, "user.message").last();
+        QVERIFY(!own.contains("agent_messages"));
+        QVERIFY(!QJsonDocument(own).toJson().contains("held diff"));
+        QVERIFY(!logText(fixture.claudeLog).contains("held diff"));
+        QCOMPARE(fixture.journal->agentMessage("held-review")->state, "held");
+    }
+
+    void aReplySentWithAgentsSendFollowsTheVerdictPolicy() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const QString worktree = repository(fixture);
+        QVERIFY(!worktree.isEmpty());
+        const QString working = fixture.start("claude", "working", {}, worktree);
+        const QString reviewer = fixture.start("claude", "reviewer", {}, worktree);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(working, "turn.completed"), 1, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(reviewer, "turn.completed"), 1, 5000);
         QVERIFY(
-            setReviewer(fixture, working, {{"reviewer_session_id", reviewer}, {"auto_fix", false}})
+            setReviewer(fixture, working,
+                        {{"reviewer_session_id", reviewer}, {"auto_fix", false}, {"max_rounds", 1}})
                 .value("ok")
                 .toBool());
         QTest::qWait(300);
-        QVERIFY(write(worktree + "/README.md", "Codex review\n"));
+        // The diff makes the fake reviewer's turn wait, so it answers with agents_send.
+        QVERIFY(write(worktree + "/README.md", "please hang\n"));
         QVERIFY(!fixture.start("claude", "Change it", working, worktree).isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(reviewer, "turn.started"), 2, 10000);
+        const auto reviews = reviewsFrom(fixture, working);
+        QCOMPARE(reviews.size(), 1);
+        const QJsonObject sent =
+            fixture.agents(reviewer, "agents.send",
+                           {{"to", fixture.number(working)},
+                            {"reply_to", reviews.first().id},
+                            {"text", "README.md:1 is wrong.\nVerdict: findings"}});
+        QVERIFY2(sent.value("ok").toBool(), qPrintable(text(sent)));
+        QCOMPARE(sent.value("delivery").toString(), "recorded");
+        const QJsonObject recorded = lastNotice(fixture, working, "review_recorded");
+        QCOMPARE(recorded.value("verdict").toString(), "findings");
+        QCOMPARE(fixture.journal->agentMessage(reviews.first().id)->state, "answered");
+        QTest::qWait(500);
+        QCOMPARE(fixture.count(working, "turn.completed"), 2); // auto_fix is off
+        QVERIFY(fixture.host
+                    ->handleCommand(request("session.interrupt", {}, reviewer, 1), "desktop-test")
+                    .value("ok")
+                    .toBool());
+    }
+
+    void untrackedEditsFailedSnapshotsAndLargeDiffsAreReviewed() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const QString worktree = repository(fixture);
+        QVERIFY(!worktree.isEmpty());
+        QVERIFY(write(worktree + "/draft.txt", "Draft\n")); // untracked before the baseline
+        const QString working = fixture.start("claude", "working", {}, worktree);
+        const QString reviewer = fixture.start("claude", "reviewer", {}, worktree);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(working, "turn.completed"), 1, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(reviewer, "turn.completed"), 1, 5000);
+        QVERIFY(
+            setReviewer(fixture, working,
+                        {{"reviewer_session_id", reviewer}, {"auto_fix", false}, {"max_rounds", 3}})
+                .value("ok")
+                .toBool());
+        QTest::qWait(300);
+        const auto lastReview = [&] {
+            AgentMessageRecord newest;
+            for (const auto& review : reviewsFrom(fixture, working))
+                if (review.createdAt > newest.createdAt)
+                    newest = review;
+            return newest.body;
+        };
+
+        // An edit to an untracked file that already existed is a change.
+        QVERIFY(write(worktree + "/draft.txt", "Draft\nEdited\n"));
+        QVERIFY(!fixture.start("claude", "Edit the draft", working, worktree).isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(reviewsFrom(fixture, working).size(), 1, 10000);
+        QVERIFY2(lastReview().contains("Changed files: draft.txt"), qPrintable(lastReview()));
+        QVERIFY(lastReview().contains("+Edited"));
         QTRY_COMPARE_WITH_TIMEOUT(fixture.count(reviewer, "turn.completed"), 2, 10000);
-        const QList<QByteArray> lines = logText(fixture.codexLog).split('\n');
-        QByteArray last;
-        for (const QByteArray& line : lines)
-            if (line.startsWith("turn-start:"))
-                last = line;
-        QVERIFY2(last.contains("\"approvalPolicy\": \"never\""), last.constData());
-        QVERIFY2(last.contains("\"type\": \"readOnly\""), last.constData());
+
+        // A snapshot git cannot take is reported, and its changes wait for the next turn.
+        QVERIFY(QDir(worktree).rename(".git", "git-away"));
+        QVERIFY(write(worktree + "/README.md", "Base\nWhile away\n"));
+        QVERIFY(!fixture.start("claude", "Change it", working, worktree).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(
+            lastNotice(fixture, working, "review_skipped").value("reason").toString() ==
+                "snapshot_failed",
+            10000);
+        QCOMPARE(reviewsFrom(fixture, working).size(), 1);
+        QVERIFY(QDir(worktree).rename("git-away", ".git"));
+
+        // The whole request stays within one message and names what it left out.
+        QByteArray large;
+        for (int line = 0; line < 2000; ++line)
+            large += "Line " + QByteArray::number(line) + " of a generated file\n";
+        QVERIFY(write(worktree + "/large.txt", large));
+        QVERIFY(!fixture.start("claude", "Generate it", working, worktree).isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(reviewsFrom(fixture, working).size(), 2, 10000);
+        const QString body = lastReview();
+        QVERIFY(body.toUtf8().size() <= AgentBroker::maximumBodyBytes);
+        QVERIFY2(body.contains("+While away"), qPrintable(body.left(2000)));
+        QVERIFY(body.contains("The diff was shortened to fit one message. Read these files in "
+                              "the worktree: large.txt"));
+        QVERIFY(body.contains("\"Verdict: findings\" or \"Verdict: no findings\""));
     }
 
     void noFindingsAndTheRoundLimitStopTheLoop() {
