@@ -1,6 +1,6 @@
 # Backend hardening execution plan
 
-Updated: 2026-11-08. Owner: conversation #2739. Independent reviewer: #6212.
+Updated: 2026-11-08. Owner: conversation #2739. Independent reviewer: #7705 (reassigned by the user on 2026-11-08).
 Baseline: integration `90388ea772bf75267e66233ee66566bc0e2e18e8` (PR #212).
 
 This is the durable execution queue for finishing the existing non-UI domain
@@ -35,7 +35,7 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
    regression; run the required matrix; record the final commit and evidence.
 3. A review finding loops back to the same item. A PASS only unlocks the merge
    gate; it does not complete merge, cleanup, packaging or deployment.
-4. Send one complete exact-head request to #6212. Do not poll the peer or bypass
+4. Send one complete exact-head request to #7705. Do not poll the peer or bypass
    a held dispatch. The 2026-11-08 closure audit supersedes the previous rule to
    start another independent audit while waiting: freeze new audit branches,
    finish the already-started migration-copy package and drain the existing

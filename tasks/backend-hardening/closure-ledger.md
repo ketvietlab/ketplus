@@ -11,11 +11,12 @@ issue acceptance dossier was produced. The implementation stream kept starting
 independent audits instead of finishing a domain. At this snapshot, #253–273
 are 21 open drafts, and the migration-copy package was already being built.
 
-Independent-review dispatch is held by the conversation system's chain limit.
-That blocks review/merge of pending code; it does not explain the unperformed
+The former #6212 independent-review dispatch was held by the conversation system's chain limit.
+That delayed review/merge of pending code; it does not explain the unperformed
 audits, integration work or missing issue updates, which remain owned by #2739.
-The queue must not grow with more independent investigations while this gate is
-held. Preserve work on pushed branches and remove unused linked worktrees.
+The user reassigned independent review to #7705 on 2026-11-08. The former
+reviewer hold is historical, not a reason to stop the new dispatch. The queue
+must not grow with more independent investigations. Preserve work on pushed branches and remove unused linked worktrees.
 Drain it by issue: finish #71's review/integration/acceptance before starting the
 next domain, rather than waiting for every unrelated draft to merge first.
 
@@ -23,7 +24,7 @@ next domain, rather than waiting for every unrelated draft to merge first.
 
 | Issue / plan area | Established evidence | Required before closure | Owner / next action |
 | --- | --- | --- | --- |
-| #71 / H3.1 | Provider bounds/probes fixes prepared in #256–259, with per-branch regressions and matrices | Independent review, dependency-aware integration; complete stderr, malformed-input and capability checklist; final affected matrix | #2739: first issue dossier after queue review resumes; #6212: independent review |
+| #71 / H3.1 | Provider bounds/probes fixes prepared in #256–259, with per-branch regressions and matrices | Independent review, dependency-aware integration; complete stderr, malformed-input and capability checklist; final affected matrix | #2739: first issue dossier after queue review resumes; #7705: independent review |
 | #65 / H2.1–2 | IPC/token fixes prepared in #263/#264/#266 | Review/merge; finish permissions, single instance, slow clients, reassembly, reconnect and compatibility criteria | #2739 after #71; no claim these checks are complete |
 | #66–67 / H2.3–4 | Append/fork/recovery fixes through #250 merged; turn acceptance #262 and media fork #254 pending | Two-client/late-event/handoff, approval/question/task and destructive-lifecycle acceptance; integrated tests | #2739, queued after the current closure target |
 | #68 / H1.1–4 | Storage/GC/transaction fixes through #252 merged; #253–255/#272/#273 and migration-copy package pending | Remaining delete/fork bounds, schema/failure/crash and media race/ownership acceptance; exact-head review and integration | #2739; completing the migration-copy package does not close this issue |
@@ -43,8 +44,10 @@ next domain, rather than waiting for every unrelated draft to merge first.
   Journal-space 19 pass/1 optional scale skip; full Pro first run 93/96, then
   the three timeout targets passed on one isolated retry without source changes.
   Its PR still requires independent review; this is not issue acceptance.
-- [ ] Review existing drafts; transport requires manual reviewer reactivation by
-  the conversation owner. Do not repeatedly send or use another agent to evade it.
+- [x] User reassigned independent review to #7705; preserve historical #6212 PASS
+  evidence. This is an explicit owner change, not an automatic bypass.
+- [ ] Review the existing #71 packet through #7705, then finish its acceptance.
+  Do not repeatedly send if the new dispatch is held.
 - [ ] Respect stacks: #253 → #254 → #255; #256 → #259; #260 → #261;
   #265 → #268. Reconcile current base and retest/review changed heads after merge.
 - [ ] Merge only with the required author matrix and independent review.
