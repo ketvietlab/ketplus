@@ -462,7 +462,7 @@ void AgentWorkspaceViewTest::composerPreview() {
     QCOMPARE(productNavigationLayout->height(), productNavigationLayout->implicitHeight());
     QVERIFY(productNavigationLayout->mapToItem(sidebar, QPointF()).y() >= 0.0);
     QCOMPARE(brand->height(), 54.0);
-    QCOMPARE(quickSearch->height(), 32.0);
+    QCOMPARE(quickSearch->height(), quickSearch->implicitHeight());
     QVERIFY(composerFooter->isVisible());
     QTRY_VERIFY(identity->mapToItem(sidebar, QPointF(0, identity->height())).y() <=
                 sidebar->height() + 1.0);
