@@ -1,4 +1,5 @@
 #include "DaemonClient.h"
+#include "DaemonCredentialFile.h"
 #include "DaemonPaths.h"
 
 #include "KetPlusProductVersion.h"
@@ -239,14 +240,8 @@ void DaemonClient::launchDaemon() {
 }
 
 void DaemonClient::authenticate() {
-    QFile tokenFile(tokenPath_);
-    if (!tokenFile.open(QIODevice::ReadOnly)) {
-        socket_.abort();
-        scheduleReconnect();
-        return;
-    }
-    const QByteArray token = tokenFile.readAll().trimmed();
-    if (token.size() < 32) {
+    const QByteArray token = readLocalDaemonCredential(tokenPath_);
+    if (token.isEmpty()) {
         socket_.abort();
         scheduleReconnect();
         return;

@@ -43,6 +43,7 @@ class DesktopActivityGroupsTest : public QObject {
         const QByteArray token(64, 'a');
         QFile file(env.directory.filePath("local.token"));
         QVERIFY(file.open(QIODevice::WriteOnly));
+        QVERIFY(file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner));
         QCOMPARE(file.write(token), token.size());
         file.close();
         CodexAdapter adapter(env.directory.filePath("unavailable-provider"));

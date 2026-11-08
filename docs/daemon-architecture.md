@@ -493,8 +493,11 @@ thread, so they never queue a phone's read.
 
 The daemon process
 runs with umask 077; its state and token directories are owner-only, and the
-token, journal and SQLite WAL/SHM files are 0600. A token file that is a symlink
-or owned by another account is rejected.
+token, journal and SQLite WAL/SHM files are 0600. Both daemon and local client
+limit raw token files to 4096 bytes before trimming, with at least 32 trimmed
+bytes. On Unix, descriptor-based admission rejects symlinks, nonregular files,
+another UID or group/other permissions. Refusal preserves the file for repair;
+ancestor-directory and non-Unix ACL guarantees are not implied (ADR 0078).
 
 Advanced model, effort and execution controls are revision-fenced daemon
 commands backed by the active adapter's advertised capabilities. Encrypted

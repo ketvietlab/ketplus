@@ -15,6 +15,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- Local daemon/client credential reads share a 4-KiB raw-file bound (ADR 0078).
+  Unix admission checks the opened descriptor's ownership/type/permissions;
+  unsupported files remain intact and client reconnect can recover after repair.
+
 - Accepted local IPC sockets bound Qt's unread receive buffer to one maximum
   frame plus header (ADR 0077). Pipelined exact-limit requests resume without
   loss after dispatch pauses, both before and after authentication.
@@ -79,7 +83,6 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 - Oversized Codex line scanning retains at most 64 routing frames, tracking deeper
   containers with a scalar depth (ADR 0070). Shallow fields after the nested value
   still route correctly; broader provider framing remains under audit.
-
 - Existing media blobs are validated before dedup returns a reference (ADR 0066):
   exact bounded bytes, regular nonsymlink files and owner-only permissions.
   Invalid entries remain intact for repair; reference durability remains open.

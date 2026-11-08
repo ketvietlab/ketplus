@@ -159,8 +159,9 @@ reference envelope is consumed without treating the Mac path as a phone file.
 
 The Linux headless lane uses `-DKETPLUS_EDITION=pro -DKETPLUS_BUILD_DESKTOP=OFF`; it runs all daemon
 tests and requires no provider account or display. The new focused targets are
-`ketplus_headless_daemon_tests` (zero-session catalog, local auth, isolated real
-daemon/CLI, SIGTERM), `ketplus_device_authorization_tests` (PKCE, polling,
+`ketplus_headless_daemon_tests` (zero-session catalog, local auth, bounded
+credential admission/preservation/repair at daemon startup and client hello,
+isolated real daemon/CLI, SIGTERM), `ketplus_device_authorization_tests` (PKCE, polling,
 cancellation and expiry) and `ketplus_remote_control_client_tests` (host/client
 E2EE, key-bound pairing, refresh recovery, immutable command retries and signed
 results). The normal full Desktop suite still covers the shared build/interface
