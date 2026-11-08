@@ -23,8 +23,9 @@ counting as merged fixes. No UI, live journal, provider quota or deployment work
    production/test content and includes integration `b3af8ed5`.
 2. #274 contains #272 and #273. Integrated code `6347493f` preserves each original
    package's production/test content and includes the same integration baseline.
-   Before its full matrix, incorporate the final #255 head so the journal gate
-   also verifies the combined media/journal behavior and subsequent merge tree.
+   Final #255 `dae6a297` is included at combined code `5a8bca1c`; full Release
+   Pro build and 104/104 targets pass first run in 427.64 s. Independent review
+   remains required. Media alone passed 104/104 at `74804ad8` in 456.04 s.
 3. Merge reviewed packages with exact-head author evidence; resolve their shared
    documentation and daemon-test additions without dropping either side.
 4. Continue the existing H1.1 explicit session-delete bound gate. Publish a
@@ -39,6 +40,20 @@ transaction assembly; and command-result persistence. These are natural behavior
 boundaries. Existing fork, replay reads, policy, ACK cleanup, attachments and
 retention units already demonstrate the split pattern. Avoid an arbitrary line
 split or a broad refactor while checking a two-line constructor failure fix.
+
+## Next bounded-work characterization
+
+Source inspection at combined code `5a8bca1c` identifies the concrete next gate:
+`LocalJournal.cpp::deleteSession` deletes every row for a generation across its
+tables in one synchronous transaction, then checks that no history remains.
+`LocalJournalDeletion.cpp::sessionTombstones` materializes the complete tombstone
+query. These observations are not a measured latency/memory regression yet.
+
+Use a temporary Qt fixture with large raw/replay/chunk and tombstone backlogs;
+measure the real SessionHost path and verify rollback, repair, duplicate deletion
+and wrong-session preservation. Preserve #241's no-false-success guarantee when
+choosing a bounded implementation. Do not silently turn an atomic deletion into
+an acknowledged partial deletion merely to meet a row budget.
 
 ## Limits
 

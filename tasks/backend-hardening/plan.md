@@ -229,7 +229,7 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | --- | --- | --- | --- |
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
 | H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 and cloud #237 merged; transaction recovery #241 merged; cancellation #240 merged; explicit session-delete bounds still open | Audit explicit session deletion and tombstone enumeration / #2739 |
-| H1.2 | In progress | Startup commit failure #250 merged; other migration/read/crash cases remain | Continue remaining failure-path audit / #2739 |
+| H1.2 | In progress | #272/#273 integrated into #274 with #255; combined Pro 104/104 at 5a8bca1c | Final-head #274 review / #7705, then merge / #2739; broader migration/crash gates remain |
 | H1.4 | In progress | #253/#254 are ancestors of #255; integrated production/test files match 20156fc7; full Pro 104/104 on 74804ad8 | Independent combined #255 review / #7705; integration / #2739 |
 | H1.5–H1.7 | Not started | No claim that #128 backend acceptance is complete | Continue storage acceptance / #2739 |
 | H1.3 | In progress | Delete/ownership #241–243, append #244–245 and fork #246–247 merged; stream recovery #248 merged; replay/activity #249 merged; startup #250 merged | Continue caller atomicity/read failures / #2739 |
@@ -1069,6 +1069,9 @@ Evidence: [h1-failed-journal-reuse-qt.json](evidence/h1-failed-journal-reuse-qt.
   history. Production/test files match their original package heads byte-for-byte.
 - [x] Include final #255 head `dae6a297` before the combined Pro matrix; media
   has passed its own 104/104 gate and is under #7705 review.
-- [ ] Full Release Pro matrix on the combined journal/media head, then independent
-  #7705 review and merge. This package does not complete H1.2/H1.6 or #68.
+- [x] Full Release Pro build and 104/104 offscreen targets pass at combined
+  journal/media code `5a8bca1c` (427.64 s, two-way parallelism, first run/no retries).
+  Source/log hashes: `evidence/h1-journal-integration-qt.json`.
+- [ ] Independent #7705 final-head review and merge. This package does not complete
+  H1.2/H1.6 or #68; the seven original criteria remain in `issue-68-acceptance.md`.
 - [ ] Safe cleanup of the pushed linked worktree/build after all checks.
