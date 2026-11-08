@@ -5,6 +5,10 @@ milestone changes state.
 
 ## Implemented
 
+- Provider version probes bound merged output while reading and require successful
+  exit before accepting a banner (ADR 0072). Concurrent executable generations
+  retain their own result; failed probes remain retryable without a cached version.
+
 - Claude/Cursor stdout enforces the 16-MiB limit per raw line before parsing,
   including complete lines and partial suffixes after valid lines (ADR 0071).
   Bounded reads and failure draining preserve valid frames and fresh generations.

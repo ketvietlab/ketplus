@@ -582,6 +582,12 @@ and `sign_in_error` when it failed; `remote.sign_in.cancel` and sign-out stop it
 
 ## Lifecycle
 
+Provider version probes retain at most 4 KiB of merged output, kill excess output
+and accept banners only after successful normal exit (ADR 0072). Failed probes
+remain Unknown under the existing launch policy and are retried. Only matching
+executable fingerprints share an in-flight result; other checks are deferred and
+revalidated, including a binary replaced while the first probe is running.
+
 Claude/Cursor stdout is read in 64-KiB chunks and checks each raw line, including
 an unfinished suffix, against the existing 16-MiB limit before parse (ADR 0071).
 An over-limit generation is closed/drained before pending callbacks fail and the
