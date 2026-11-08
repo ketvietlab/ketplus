@@ -2,7 +2,12 @@
 
 #include "ui/Theme.h"
 
-#include <QCheckBox>
+#include "KetFieldRow.h"
+#include "KetIcons.h"
+#include "KetStepSlider.h"
+#include "KetTextField.h"
+#include "KetThemeCard.h"
+#include "KetToggle.h"
 #include <QComboBox>
 #include <QFontDatabase>
 #include <QFontMetrics>
@@ -190,7 +195,7 @@ QWidget* SettingsDialog::createThemeCard() {
     layout->setSpacing(9);
 
     auto* toolbar = new QHBoxLayout;
-    themeSearch_ = new QLineEdit(card);
+    themeSearch_ = new ket::TextField(card);
     themeSearch_->setObjectName(QStringLiteral("themeSearch"));
     themeSearch_->setPlaceholderText(QStringLiteral("Search installed themes"));
     themeSearch_->setClearButtonEnabled(true);
@@ -212,7 +217,7 @@ QWidget* SettingsDialog::createThemeCard() {
     toolbar->addWidget(install);
     layout->addLayout(toolbar);
 
-    followSystem_ = new QCheckBox(QStringLiteral("Follow system appearance"), card);
+    followSystem_ = new ket::Checkbox(QStringLiteral("Follow system appearance"), card);
     followSystem_->setObjectName(QStringLiteral("followSystemTheme"));
     followSystem_->setToolTip(
         QStringLiteral("Use Két Light or Két Dark with the operating system appearance"));
@@ -221,12 +226,37 @@ QWidget* SettingsDialog::createThemeCard() {
     themeList_ = new QListWidget(card);
     themeList_->setObjectName(QStringLiteral("installedThemeList"));
     themeList_->setProperty("kvRole", QStringLiteral("themeList"));
-    themeList_->setMinimumHeight(104);
+    themeList_->setViewMode(QListView::IconMode);
+    themeList_->setFlow(QListView::LeftToRight);
+    themeList_->setResizeMode(QListView::Adjust);
+    themeList_->setMovement(QListView::Static);
+    themeList_->setSpacing(8);
+    themeList_->setMinimumHeight(160);
     auto* light = new QListWidgetItem(QStringLiteral("Két Light    Built-in · Light"), themeList_);
     light->setData(Qt::UserRole, static_cast<int>(ThemeManager::Mode::Light));
     auto* dark = new QListWidgetItem(QStringLiteral("Két Dark     Built-in · Dark"), themeList_);
     dark->setData(Qt::UserRole, static_cast<int>(ThemeManager::Mode::Dark));
+    for (auto* item : {light, dark}) {
+        auto* preview =
+            new ket::ThemeCard(item == light ? tr("Két Light") : tr("Két Dark"),
+                               item == light ? ket::Theme::Light : ket::Theme::Dark, themeList_);
+        item->setSizeHint(preview->sizeHint());
+        themeList_->setItemWidget(item, preview);
+        connect(preview, &QAbstractButton::clicked, themeList_, [this, item] {
+            themeList_->setCurrentItem(item);
+            selectThemeMode(item->data(Qt::UserRole).toInt());
+        });
+    }
     layout->addWidget(themeList_);
+    layout->addWidget(new ket::FieldRow(tr("Accent"), new ket::AccentSwatch(card), {}, card));
+    zoomStep_ = new ket::StepSlider(tr("Interface zoom"), card);
+    zoomStep_->setObjectName(QStringLiteral("interfaceZoomSteps"));
+    QStringList steps;
+    for (int px = AppearanceSettings::minimumInterfaceFontSizePixels;
+         px <= AppearanceSettings::maximumInterfaceFontSizePixels; ++px)
+        steps.append(QString::number(qRound(px * 100.0 / 14.0)) + '%');
+    zoomStep_->setSteps(steps);
+    layout->addWidget(zoomStep_);
 
     connect(themeSearch_, &QLineEdit::textChanged, this, [this](const QString& query) {
         for (int index = 0; index < themeList_->count(); ++index) {
@@ -234,7 +264,7 @@ QWidget* SettingsDialog::createThemeCard() {
             item->setHidden(!item->text().contains(query, Qt::CaseInsensitive));
         }
     });
-    connect(followSystem_, &QCheckBox::toggled, this, [this](const bool checked) {
+    connect(followSystem_, &QAbstractButton::toggled, this, [this](const bool checked) {
         themeList_->setEnabled(!checked);
         if (checked) {
             selectThemeMode(static_cast<int>(ThemeManager::Mode::System));
@@ -264,20 +294,10 @@ QWidget* SettingsDialog::createTypographyCard() {
     grid->setHorizontalSpacing(9);
     grid->setVerticalSpacing(9);
     grid->setColumnStretch(0, 1);
-    grid->addWidget(
-        makeLabel(QStringLiteral("Surface"), QStringLiteral("settingsFieldHelp"), fields), 0, 0);
-    grid->addWidget(makeLabel(QStringLiteral("Size"), QStringLiteral("settingsFieldHelp"), fields),
-                    0, 1);
-    grid->addWidget(makeLabel(QStringLiteral("Line"), QStringLiteral("settingsFieldHelp"), fields),
-                    0, 2);
-
     editorFontBox_ = new LazyFontComboBox(fields);
     editorFontBox_->setObjectName(QStringLiteral("editorFontFamily"));
     editorFontBox_->setProperty("fontListLoaded", false);
-    grid->addWidget(
-        makeLabel(QStringLiteral("Editor font"), QStringLiteral("settingsFieldLabel"), fields), 1,
-        0);
-    grid->addWidget(editorFontBox_, 1, 1, 1, 2);
+    grid->addWidget(new ket::FieldRow(tr("Editor font"), editorFontBox_, {}, fields), 0, 0);
 
     interfaceFontSizeBox_ = makePixelBox(
         QStringLiteral("interfaceFontSize"), AppearanceSettings::minimumInterfaceFontSizePixels,
@@ -301,17 +321,25 @@ QWidget* SettingsDialog::createTypographyCard() {
                                          TextTypographySettings::minimumLineHeightPixels,
                                          TextTypographySettings::maximumLineHeightPixels, fields);
 
-    auto addTypographyRow = [grid, fields](const int row, const QString& title, const QString& help,
+    connect(zoomStep_, &ket::StepSlider::currentIndexChanged, interfaceFontSizeBox_,
+            [this](int index) {
+                interfaceFontSizeBox_->setValue(index +
+                                                AppearanceSettings::minimumInterfaceFontSizePixels);
+            });
+    connect(interfaceFontSizeBox_, &QSpinBox::valueChanged, zoomStep_, [this](int value) {
+        const QSignalBlocker blocker(zoomStep_);
+        zoomStep_->setCurrentIndex(value - AppearanceSettings::minimumInterfaceFontSizePixels);
+    });
+    auto addTypographyRow = [grid, fields](int row, const QString& title, const QString& help,
                                            QWidget* size, QWidget* line) {
-        auto* copy = new QWidget(fields);
-        auto* copyLayout = new QVBoxLayout(copy);
-        copyLayout->setContentsMargins(0, 0, 0, 0);
-        copyLayout->setSpacing(2);
-        copyLayout->addWidget(makeLabel(title, QStringLiteral("settingsFieldLabel"), copy));
-        copyLayout->addWidget(makeLabel(help, QStringLiteral("settingsFieldHelp"), copy));
-        grid->addWidget(copy, row, 0);
-        grid->addWidget(size, row, 1, Qt::AlignVCenter);
-        grid->addWidget(line, row, 2, Qt::AlignVCenter);
+        auto* controls = new QWidget(fields);
+        auto* values = new QHBoxLayout(controls);
+        values->setContentsMargins(0, 0, 0, 0);
+        values->addWidget(size);
+        values->addWidget(line);
+        size->setToolTip(QObject::tr("Font size (pixels)"));
+        line->setToolTip(QObject::tr("Line height (pixels)"));
+        grid->addWidget(new ket::FieldRow(title, controls, help, fields), row, 0);
     };
 
     auto* automatic =

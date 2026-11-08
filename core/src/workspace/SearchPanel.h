@@ -5,10 +5,9 @@
 #include <QStringList>
 #include <QWidget>
 
-class QCheckBox;
+class QAbstractButton;
 class QLabel;
 class QLineEdit;
-class QPushButton;
 class QTreeWidget;
 class QTreeWidgetItem;
 
@@ -58,11 +57,11 @@ class SearchPanel final : public QWidget {
     QLineEdit* queryEdit_{nullptr};
     QLineEdit* replaceEdit_{nullptr};
     QLineEdit* includeEdit_{nullptr};
-    QCheckBox* matchCaseCheck_{nullptr};
-    QCheckBox* wholeWordCheck_{nullptr};
-    QCheckBox* regexCheck_{nullptr};
-    QPushButton* searchButton_{nullptr};
-    QPushButton* replaceAllButton_{nullptr};
+    QAbstractButton* matchCaseCheck_{nullptr};
+    QAbstractButton* wholeWordCheck_{nullptr};
+    QAbstractButton* regexCheck_{nullptr};
+    QAbstractButton* searchButton_{nullptr};
+    QAbstractButton* replaceAllButton_{nullptr};
     QLabel* statusLabel_{nullptr};
     QTreeWidget* results_{nullptr};
     struct ResultColors final {

@@ -9,6 +9,8 @@
 #include <ScintillaMessages.h>
 #include <ScintillaStructures.h>
 
+#include "KetButton.h"
+#include "KetIcons.h"
 #include <QAbstractTableModel>
 #include <QApplication>
 #include <QClipboard>
@@ -26,7 +28,6 @@
 #include <QTableView>
 #include <QTextCharFormat>
 #include <QTextLayout>
-#include <QToolButton>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -484,7 +485,8 @@ GitDiffView::GitDiffView(QWidget* parent)
     : QWidget(parent), model_(new GitDiffModel(this)), table_(new QTableView(this)),
       syntaxEngine_(new EditorWidget(this)), fileLabel_(new QLabel(this)),
       pathLabel_(new QLabel(this)), scopeLabel_(new QLabel(this)), statsLabel_(new QLabel(this)),
-      openButton_(new QToolButton(this)), contextButton_(new QToolButton(this)) {
+      openButton_(new ket::Button({}, ket::ButtonVariant::Ghost, this)),
+      contextButton_(new ket::Button({}, ket::ButtonVariant::Ghost, this)) {
     revisionContent_ = new GitRevisionContent(this);
     markdownModes_ = new MarkdownModeController(table_, [this] { return revisionText_; }, true);
     connect(markdownModes_, &MarkdownModeController::fileOpenRequested, this,
@@ -521,12 +523,12 @@ GitDiffView::GitDiffView(QWidget* parent)
     contextButton_->setToolTip(QStringLiteral("Toggle unchanged context rows"));
     updateContextButton();
 
-    auto* copyButton = new QToolButton(this);
+    auto* copyButton = new ket::Button({}, ket::ButtonVariant::Ghost, this);
     copyButton->setText(QStringLiteral("Copy Diff"));
     copyButton->setProperty("kvRole", QStringLiteral("diffAction"));
 
-    auto* refreshButton = new QToolButton(this);
-    refreshButton->setText(QString::fromUtf8("↻"));
+    auto* refreshButton = new ket::Button({}, ket::ButtonVariant::Ghost, this);
+    refreshButton->setIcon(ket::Icons::icon(ket::Icons::codeForLucide(u"refresh-cw")));
     refreshButton->setProperty("kvRole", QStringLiteral("sidebarAction"));
     refreshButton->setToolTip(QStringLiteral("Refresh this diff"));
     refreshButton->setAccessibleName(QStringLiteral("Refresh this diff"));
@@ -579,9 +581,9 @@ GitDiffView::GitDiffView(QWidget* parent)
     layout->addWidget(header);
     layout->addWidget(table_, 1);
 
-    connect(openButton_, &QToolButton::clicked, this,
+    connect(openButton_, &QAbstractButton::clicked, this,
             [this] { emit openFileRequested(filePath_); });
-    connect(contextButton_, &QToolButton::toggled, this, [this](const bool checked) {
+    connect(contextButton_, &QAbstractButton::toggled, this, [this](const bool checked) {
         hideUnchangedRows_ = checked;
         model_->setHideUnchangedRows(hideUnchangedRows_);
         model_->applySyntax(filePath_, *syntaxEngine_, palette_);
@@ -589,9 +591,9 @@ GitDiffView::GitDiffView(QWidget* parent)
         updateContextButton();
         updateSpans();
     });
-    connect(copyButton, &QToolButton::clicked, this,
+    connect(copyButton, &QAbstractButton::clicked, this,
             [this] { QApplication::clipboard()->setText(rawDiff_); });
-    connect(refreshButton, &QToolButton::clicked, this,
+    connect(refreshButton, &QAbstractButton::clicked, this,
             [this] { emit refreshRequested(filePath_, mode_); });
 }
 

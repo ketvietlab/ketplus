@@ -1,13 +1,14 @@
 #include "app/MainWindow.h"
 
 #include "editor/DefinitionPattern.h"
-#include "index/SymbolIndex.h"
 #include "editor/EditorWidget.h"
 #include "editor/SymbolExtractor.h"
-#include "workspace/SearchPanel.h"
+#include "index/SymbolIndex.h"
 #include "ui/Theme.h"
 #include "workspace/QuickOpenPopup.h"
+#include "workspace/SearchPanel.h"
 
+#include "ui/MessageDialog.h"
 #include <QAction>
 #include <QApplication>
 #include <QDateTime>
@@ -16,7 +17,6 @@
 #include <QKeySequence>
 #include <QMenu>
 #include <QMenuBar>
-#include <QMessageBox>
 #include <QSettings>
 #include <QStatusBar>
 #include <QTabWidget>
@@ -51,7 +51,6 @@ QuickOpenPopup* MainWindow::ensureQuickOpen() {
             }
         });
     }
-    quickOpen_->setStyleSheet(quickOpenStyleSheet());
     return quickOpen_;
 }
 
@@ -84,7 +83,7 @@ void MainWindow::showCommandPalette() {
     paletteActions_.clear();
     QList<QuickOpenItem> items;
     const std::function<void(QMenu*, const QString&)> collect = [&](QMenu* menu,
-                                                                   const QString& path) {
+                                                                    const QString& path) {
         for (QAction* action : menu->actions()) {
             const QString text = strippedMenuText(action->text());
             if (action->isSeparator() || text.isEmpty() || !action->isVisible() ||
@@ -100,7 +99,8 @@ void MainWindow::showCommandPalette() {
             }
             QString detail = action->shortcut().toString(QKeySequence::NativeText);
             if (action->isCheckable()) {
-                const QString state = action->isChecked() ? QStringLiteral("On") : QStringLiteral("Off");
+                const QString state =
+                    action->isChecked() ? QStringLiteral("On") : QStringLiteral("Off");
                 detail = detail.isEmpty() ? state : QStringLiteral("%1 · %2").arg(state, detail);
             }
             items.append({path + text, detail, static_cast<int>(paletteActions_.size())});
@@ -119,11 +119,11 @@ void MainWindow::showCommandPalette() {
 
 void MainWindow::showGoToFile() {
     quickOpenMode_ = QuickOpenMode::Files;
-    ensureQuickOpen()->open(workspaceRoot_.isEmpty()
-                                ? QStringLiteral("Go to an open file")
-                                : QStringLiteral("Go to file in %1")
-                                      .arg(QFileInfo(workspaceRoot_).fileName()),
-                            {});
+    ensureQuickOpen()->open(
+        workspaceRoot_.isEmpty()
+            ? QStringLiteral("Go to an open file")
+            : QStringLiteral("Go to file in %1").arg(QFileInfo(workspaceRoot_).fileName()),
+        {});
     updateGoToFileItems();
     refreshWorkspaceFileIndex(false);
 }
@@ -143,10 +143,10 @@ void MainWindow::updateGoToFileItems() {
             continue;
         }
         const QString path = editor->document().filePath();
-        const bool insideWorkspace =
-            !workspaceRoot_.isEmpty() && !root.relativeFilePath(path).startsWith(QStringLiteral(".."));
-        items.append({insideWorkspace ? root.relativeFilePath(path) : path,
-                      QStringLiteral("open"), path});
+        const bool insideWorkspace = !workspaceRoot_.isEmpty() &&
+                                     !root.relativeFilePath(path).startsWith(QStringLiteral(".."));
+        items.append(
+            {insideWorkspace ? root.relativeFilePath(path) : path, QStringLiteral("open"), path});
         openPaths.append(QDir::cleanPath(path));
     }
 
@@ -174,9 +174,9 @@ void MainWindow::refreshWorkspaceFileIndex(const bool force) {
     if (workspaceRoot_.isEmpty() || workspaceIndexing_) {
         return;
     }
-    const bool fresh = workspaceFilesRoot_ == workspaceRoot_ &&
-                       QDateTime::currentMSecsSinceEpoch() - workspaceFilesIndexedAt_ <
-                           workspaceIndexMaxAgeMs;
+    const bool fresh =
+        workspaceFilesRoot_ == workspaceRoot_ &&
+        QDateTime::currentMSecsSinceEpoch() - workspaceFilesIndexedAt_ < workspaceIndexMaxAgeMs;
     if (fresh && !force) {
         return;
     }
@@ -237,10 +237,9 @@ void MainWindow::finishWorkspaceFileIndex(const QString& root, const WorkspaceFi
 }
 
 WorkspaceFileList MainWindow::cachedWorkspaceFiles(const QString& root) const {
-    const bool fresh = workspaceFilesRoot_ == root && !workspaceIndexing_ &&
-                       !workspaceFiles_.isEmpty() &&
-                       QDateTime::currentMSecsSinceEpoch() - workspaceFilesIndexedAt_ <
-                           workspaceIndexMaxAgeMs;
+    const bool fresh =
+        workspaceFilesRoot_ == root && !workspaceIndexing_ && !workspaceFiles_.isEmpty() &&
+        QDateTime::currentMSecsSinceEpoch() - workspaceFilesIndexedAt_ < workspaceIndexMaxAgeMs;
     if (!fresh) {
         return {};
     }
@@ -261,7 +260,7 @@ void MainWindow::askAboutFullWorkspaceScan(const QString& root) {
         return;
     }
 
-    const auto answer = QMessageBox::question(
+    const auto answer = message_dialog::question(
         this, QStringLiteral("Large folder"),
         QStringLiteral("%1 holds more than %L2 files, so Go to File and Search in Files only "
                        "cover the first %L2.\n\nScan the whole folder? It uses more memory and "
@@ -308,9 +307,8 @@ void MainWindow::showGoToSymbol() {
     }
     symbolEditor_ = editor;
     quickOpenMode_ = QuickOpenMode::Symbols;
-    ensureQuickOpen()->open(QStringLiteral("Go to symbol in %1")
-                                .arg(editor->document().displayName()),
-                            items);
+    ensureQuickOpen()->open(
+        QStringLiteral("Go to symbol in %1").arg(editor->document().displayName()), items);
 }
 
 void MainWindow::activateQuickOpenItem(const QVariant& data) {
@@ -370,8 +368,7 @@ void MainWindow::goToDefinition() {
     }
     const auto position = editor->caretWordPosition();
     resolveDefinition(editor, editor->wordAtPosition(position),
-                      editor->fileTokenAtPosition(position),
-                      editor->lineTextAtPosition(position));
+                      editor->fileTokenAtPosition(position), editor->lineTextAtPosition(position));
 }
 
 void MainWindow::resolveDefinition(EditorWidget* editor, const QString& symbol,
@@ -450,12 +447,12 @@ void MainWindow::clearSymbolIndex() {
     const int workspaces = symbolIndex_->workspaceCount();
     const qint64 bytes = symbolIndex_->memoryBytes();
     symbolIndex_->clear();
-    statusBar()->showMessage(QStringLiteral("Cleared the index of %L1 %2 (%L3 MB)")
-                                 .arg(workspaces)
-                                 .arg(workspaces == 1 ? QStringLiteral("folder")
-                                                      : QStringLiteral("folders"))
-                                 .arg(bytes / (1024 * 1024)),
-                             3000);
+    statusBar()->showMessage(
+        QStringLiteral("Cleared the index of %L1 %2 (%L3 MB)")
+            .arg(workspaces)
+            .arg(workspaces == 1 ? QStringLiteral("folder") : QStringLiteral("folders"))
+            .arg(bytes / (1024 * 1024)),
+        3000);
 }
 
 bool MainWindow::resolveDefinitionFromIndex(EditorWidget* editor, const QString& symbol) {
@@ -540,11 +537,10 @@ void MainWindow::startSymbolIndex(const QString& root) {
                 symbolIndexThread_ = nullptr;
                 symbolIndexRoot_.clear();
                 if (!cancelled->load() && symbolIndex_ != nullptr) {
-                    statusBar()->showMessage(
-                        QStringLiteral("Indexed %L1 files in %2")
-                            .arg(symbolIndex_->fileCount(root))
-                            .arg(QFileInfo(root).fileName()),
-                        3000);
+                    statusBar()->showMessage(QStringLiteral("Indexed %L1 files in %2")
+                                                 .arg(symbolIndex_->fileCount(root))
+                                                 .arg(QFileInfo(root).fileName()),
+                                             3000);
                 }
             },
             Qt::QueuedConnection);
@@ -645,9 +641,8 @@ void MainWindow::finishDefinitionSearch() {
         useCount += static_cast<int>(file.matches.size());
     }
     if (useCount == 0) {
-        statusBar()->showMessage(QStringLiteral("%1 is not used anywhere in this folder")
-                                     .arg(definitionSymbol_),
-                                 4000);
+        statusBar()->showMessage(
+            QStringLiteral("%1 is not used anywhere in this folder").arg(definitionSymbol_), 4000);
         return;
     }
 
@@ -689,13 +684,12 @@ void MainWindow::finishDefinitionSearch() {
         panel->addFileResult(file);
     }
     panel->setSearching(false);
-    panel->setStatusText(showDeclarations
-                             ? QStringLiteral("%L1 declarations of %2")
-                                   .arg(declarationCount)
-                                   .arg(definitionSymbol_)
-                             : QStringLiteral("No declaration of %1 here; %L2 uses")
-                                   .arg(definitionSymbol_)
-                                   .arg(useCount));
+    panel->setStatusText(
+        showDeclarations
+            ? QStringLiteral("%L1 declarations of %2").arg(declarationCount).arg(definitionSymbol_)
+            : QStringLiteral("No declaration of %1 here; %L2 uses")
+                  .arg(definitionSymbol_)
+                  .arg(useCount));
 }
 
 MainWindow::NavigationLocation MainWindow::locationOf(EditorWidget* editor) const {
@@ -706,8 +700,8 @@ MainWindow::NavigationLocation MainWindow::locationOf(EditorWidget* editor) cons
     const EditorWidget* fileOwner =
         editor == splitEditor_ && splitSource_ != nullptr ? splitSource_ : editor;
     return {.editor = editor,
-            .filePath = fileOwner->document().isUntitled() ? QString()
-                                                           : fileOwner->document().filePath(),
+            .filePath =
+                fileOwner->document().isUntitled() ? QString() : fileOwner->document().filePath(),
             .position = static_cast<qint64>(editor->caretPosition()),
             .line = editor->currentLine()};
 }
@@ -735,8 +729,8 @@ void MainWindow::trackNavigation(EditorWidget* editor) {
     if (hasPrevious) {
         const bool switchedEditor = lastLocation_.editor != editor;
         // Small caret moves while typing are not history; large jumps and tab switches are.
-        const bool jumped = !switchedEditor &&
-                            qAbs(current.line - lastLocation_.line) >= navigationJumpLines;
+        const bool jumped =
+            !switchedEditor && qAbs(current.line - lastLocation_.line) >= navigationJumpLines;
         if (switchedEditor || jumped) {
             pushNavigationLocation(lastLocation_);
         }

@@ -1,10 +1,12 @@
 #include "preview/MarkdownModeController.h"
+#include "KetAppearance.h"
+#include "KetSegmentedControl.h"
 #include "preview/MarkdownPreviewPane.h"
 #include <QEvent>
 #include <QHBoxLayout>
 #include <QPlainTextEdit>
+#include <QSignalBlocker>
 #include <QTimer>
-#include <QToolButton>
 #include <QWidget>
 
 namespace ketplus {
@@ -18,23 +20,22 @@ MarkdownModeController::MarkdownModeController(QWidget* surface, Source source, 
     layout->setSpacing(4);
     const QStringList modes =
         diff ? QStringList{"diff", "preview", "source"} : QStringList{"preview", "source"};
-    for (const auto& mode : modes) {
-        auto* button = new QToolButton(bar_);
-        button->setObjectName("markdownMode-" + mode);
-        button->setText(mode.left(1).toUpper() + mode.mid(1));
-        button->setAccessibleName("Show Markdown " + mode);
-        button->setCheckable(true);
-        button->setMinimumHeight(28);
-        button->setProperty("mode", mode);
-        layout->addWidget(button);
-        buttons_.append(button);
-        connect(button, &QToolButton::clicked, this, [this, mode] { setMode(mode); });
-    }
+    QStringList labels;
+    for (const auto& mode : modes)
+        labels.append(mode.left(1).toUpper() + mode.mid(1));
+    segments_ = new ket::SegmentedControl(labels, bar_);
+    segments_->setAccessibleName(QStringLiteral("Markdown display mode"));
+    layout->addWidget(segments_);
+    connect(segments_, &ket::SegmentedControl::currentChanged, this, [this, modes](int index) {
+        if (index >= 0 && index < modes.size())
+            setMode(modes.at(index));
+    });
     bar_->hide();
     refreshTimer_->setSingleShot(true);
     refreshTimer_->setInterval(100);
     connect(refreshTimer_, &QTimer::timeout, this, &MarkdownModeController::refresh);
     surface_->installEventFilter(this);
+    connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, this, [this] { place(); });
 }
 void MarkdownModeController::configure(const QString& path, const ThemePalette& palette,
                                        bool enabled) {
@@ -46,13 +47,9 @@ void MarkdownModeController::configure(const QString& path, const ThemePalette& 
     palette_ = palette;
     enabled_ = enabled;
     bar_->setStyleSheet(
-        QStringLiteral("#markdownModeBar { background:%1; border:1px solid %2; border-radius:8px; }"
-                       "QToolButton { color:%3; background:transparent; border:0; padding:4px "
-                       "12px; border-radius:6px; }"
-                       "QToolButton:checked { background:%4; color:%6; }"
-                       "QToolButton:focus { border:1px solid %5; }")
-            .arg(palette.surfaceRaised, palette.border, palette.textMain, palette.accentSubtle,
-                 palette.accent, palette.accentText));
+        QStringLiteral(
+            "#markdownModeBar { background:%1; border:1px solid %2; border-radius:8px; }")
+            .arg(palette.surfaceRaised, palette.border));
     if (!enabled) {
         bar_->hide();
         surface_->setFocusProxy(nullptr);
@@ -89,8 +86,13 @@ void MarkdownModeController::setMode(const QString& mode) {
         preview_->setVisible(mode == "preview");
     if (sourceView_)
         sourceView_->setVisible(mode == "source");
-    for (auto* button : buttons_)
-        button->setChecked(button->property("mode").toString() == mode);
+    {
+        const QSignalBlocker blocker(segments_);
+        segments_->setCurrentIndex(diff_ ? (mode == "diff"      ? 0
+                                            : mode == "preview" ? 1
+                                                                : 2)
+                                         : (mode == "preview" ? 0 : 1));
+    }
     surface_->setFocusProxy(mode == "preview"           ? static_cast<QWidget*>(preview_)
                             : diff_ && mode == "source" ? static_cast<QWidget*>(sourceView_)
                                                         : nullptr);
@@ -142,7 +144,8 @@ void MarkdownModeController::place() {
         sourceView_->setGeometry(surface_->rect());
     bar_->adjustSize();
     bar_->move(qMax(8, (surface_->width() - bar_->width()) / 2),
-               qMax(8, surface_->height() - bar_->height() - 100));
+               qMax(8, surface_->height() - bar_->height() -
+                           qRound(ket::Appearance::instance().scaled(100))));
     bar_->raise();
 }
 bool MarkdownModeController::eventFilter(QObject* watched, QEvent* event) {

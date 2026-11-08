@@ -3,6 +3,7 @@
 #include "preview/MermaidRenderer.h"
 #include "ui/Theme.h"
 
+#include <QAbstractButton>
 #include <QDir>
 #include <QFile>
 #include <QGraphicsSvgItem>
@@ -12,7 +13,6 @@
 #include <QNativeGestureEvent>
 #include <QPainter>
 #include <QPointingDevice>
-#include <QPushButton>
 #include <QSvgRenderer>
 #include <QTemporaryDir>
 #include <QTextBlock>
@@ -344,7 +344,7 @@ void MarkdownPreviewPaneTest::opensVectorDiagramWithPanControls() {
 
     ketplus::MermaidDiagramDialog dialog(svgPath, ketplus::ThemePalette{});
     auto* view = dialog.findChild<QGraphicsView*>(QStringLiteral("mermaidDiagramView"));
-    auto* zoomIn = dialog.findChild<QPushButton*>(QStringLiteral("mermaidZoomIn"));
+    auto* zoomIn = dialog.findChild<QAbstractButton*>(QStringLiteral("mermaidZoomIn"));
     QVERIFY(view != nullptr);
     QVERIFY(zoomIn != nullptr);
     QCOMPARE(view->dragMode(), QGraphicsView::ScrollHandDrag);

@@ -2,11 +2,11 @@
 #include "ui/KetFonts.h"
 #include "ui/Theme.h"
 
+#include <QAbstractButton>
 #include <QApplication>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QListWidget>
-#include <QPushButton>
 #include <QRawFont>
 #include <QSettings>
 #include <QSpinBox>
@@ -50,6 +50,7 @@ class SettingsDialogTest final : public QObject {
     void validatesPageRegistrationWithoutTransferringFailedOwnership();
     void ordersAndSelectsRegisteredPagesByStableIdentity();
     void removesDestroyedPageAndFallsBackToGeneral();
+    void zoomDuringExtensionRebuildKeepsNavigationAlive();
 };
 
 void SettingsDialogTest::defaultFontResolvesWithoutPlatformFallback() {
@@ -110,8 +111,8 @@ void SettingsDialogTest::editsAndResetsTypography() {
     QVERIFY(fontBox->count() >= 1);
     fontBox->hidePopup();
 
-    QPushButton* resetButton = nullptr;
-    for (auto* button : dialog.findChildren<QPushButton*>()) {
+    QAbstractButton* resetButton = nullptr;
+    for (auto* button : dialog.findChildren<QAbstractButton*>()) {
         if (button->property("kvRole") == QStringLiteral("settingsReset")) {
             resetButton = button;
             break;
@@ -182,9 +183,9 @@ void SettingsDialogTest::previewsAndCancelsThemeSelection() {
     QVERIFY(theme.palette().dark);
     QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Light);
 
-    auto* buttons = dialog.findChild<QDialogButtonBox*>();
+    auto* buttons = dialog.findChild<QWidget*>(QStringLiteral("settingsButtons"));
     QVERIFY(buttons != nullptr);
-    buttons->button(QDialogButtonBox::Cancel)->click();
+    buttons->findChild<QAbstractButton*>(QStringLiteral("settingsCancelButton"))->click();
     QVERIFY(!theme.palette().dark);
     QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Light);
 }
@@ -194,11 +195,11 @@ void SettingsDialogTest::extensionPagesDriveDirtyState() {
     auto* page = new TestSettingsPage;
     dialog.addPage(page);
 
-    auto* buttons = dialog.findChild<QDialogButtonBox*>();
+    auto* buttons = dialog.findChild<QWidget*>(QStringLiteral("settingsButtons"));
     QVERIFY(buttons != nullptr);
-    auto* save = buttons->button(QDialogButtonBox::Save);
+    auto* save = buttons->findChild<QAbstractButton*>(QStringLiteral("settingsSaveButton"));
     if (save == nullptr) {
-        for (auto* button : buttons->findChildren<QPushButton*>()) {
+        for (auto* button : buttons->findChildren<QAbstractButton*>()) {
             if (button->property("kvRole") == QStringLiteral("primaryAction")) {
                 save = button;
                 break;
@@ -293,6 +294,26 @@ void SettingsDialogTest::removesDestroyedPageAndFallsBackToGeneral() {
     delete page;
     QCOMPARE(dialog.selectedPageId(), QStringLiteral("general"));
     QVERIFY(!dialog.selectPage(QStringLiteral("private/archive")));
+}
+
+void SettingsDialogTest::zoomDuringExtensionRebuildKeepsNavigationAlive() {
+    ketplus::ThemeManager theme(*qApp);
+    ketplus::SettingsDialog dialog(ketplus::AppearanceSettings{}, theme);
+    for (int i = 0; i < 12; ++i) {
+        auto* page = new TestSettingsPage(QStringLiteral("page-%1").arg(i));
+        dialog.addPage(page);
+        // Deliberately do not drain DeferredDelete before changing the global zoom.
+        theme.setInterfaceFontSizePixels(i % 2 == 0 ? 18 : 14);
+        QVERIFY(dialog.selectPage(page->id()));
+        QCOMPARE(dialog.selectedPageId(), page->id());
+    }
+    theme.setInterfaceFontSizePixels(14);
+    auto* navigation = dialog.findChild<QListWidget*>("settingsNavigation");
+    QCOMPARE(navigation->count(), 14);
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    theme.setInterfaceFontSizePixels(16);
+    QVERIFY(dialog.selectPage("page-0"));
+    QCOMPARE(dialog.selectedPageId(), QStringLiteral("page-0"));
 }
 
 QTEST_MAIN(SettingsDialogTest)

@@ -8,11 +8,11 @@
 #include "git/GitParser.h"
 #include "ui/Theme.h"
 
+#include <QAbstractButton>
 #include <QApplication>
 #include <QDialogButtonBox>
 #include <QFontInfo>
 #include <QListWidget>
-#include <QPushButton>
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QToolTip>
@@ -75,18 +75,17 @@ class SyntheticSettingsPage final : public ketplus::SettingsPage {
     int bufferedValue_{0};
 };
 
-QPushButton* findButton(ketplus::SettingsDialog& dialog,
-                        const QDialogButtonBox::StandardButton role,
-                        const QString& fallbackRole = {}) {
-    auto* buttons = dialog.findChild<QDialogButtonBox*>();
+QAbstractButton* findButton(ketplus::SettingsDialog& dialog,
+                            const QDialogButtonBox::StandardButton role,
+                            const QString& fallbackRole = {}) {
+    auto* buttons = dialog.findChild<QWidget*>(QStringLiteral("settingsButtons"));
     if (buttons == nullptr) {
         return nullptr;
     }
-    if (auto* button = buttons->button(role); button != nullptr) {
-        return button;
-    }
-    for (auto* button : buttons->findChildren<QPushButton*>()) {
-        if (!fallbackRole.isEmpty() && button->property("kvRole") == fallbackRole) {
+    for (auto* button : buttons->findChildren<QAbstractButton*>()) {
+        if ((role != QDialogButtonBox::NoButton &&
+             button->property("standardButton").toInt() == int(role)) ||
+            (!fallbackRole.isEmpty() && button->property("kvRole") == fallbackRole)) {
             return button;
         }
     }

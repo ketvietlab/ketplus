@@ -16,6 +16,7 @@
 #include "ui/Theme.h"
 #include "workspace/ExplorerPanel.h"
 
+#include "ui/MessageDialog.h"
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
@@ -30,7 +31,6 @@
 #include <QList>
 #include <QMenu>
 #include <QMenuBar>
-#include <QMessageBox>
 #include <QSettings>
 #include <QSignalBlocker>
 #include <QSplitter>
@@ -160,7 +160,7 @@ bool MainWindow::saveEditor(EditorWidget* editor, const bool choosePath) {
     const QByteArray content = editor->text();
     const auto result = document.saveAs(path, content);
     if (!result.ok) {
-        QMessageBox::critical(this, QStringLiteral("Unable to save file"), result.error);
+        message_dialog::critical(this, QStringLiteral("Unable to save file"), result.error);
         return false;
     }
 
@@ -196,7 +196,7 @@ bool MainWindow::maybeCloseEditor(EditorWidget* editor) {
         return true;
     }
 
-    const auto answer = QMessageBox::warning(
+    const auto answer = message_dialog::warning(
         this, QStringLiteral("Unsaved changes"),
         QStringLiteral("Save changes to %1?").arg(editor->document().displayName()),
         QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, QMessageBox::Save);
@@ -526,7 +526,7 @@ void MainWindow::activateCurrentTab() {
     if (editor->isHibernated()) {
         const auto result = editor->restoreFromDisk();
         if (!result.ok) {
-            QMessageBox::critical(
+            message_dialog::critical(
                 this, QStringLiteral("Unable to restore tab"),
                 QStringLiteral("%1\n\nThe tab stays read-only until the file can be read.")
                     .arg(result.error));

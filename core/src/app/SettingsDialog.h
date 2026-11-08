@@ -6,12 +6,14 @@
 #include <QString>
 #include <QWidget>
 
-class QCheckBox;
+class QAbstractButton;
 class QDialogButtonBox;
 class QComboBox;
 class QLineEdit;
 class QListWidget;
-class QPushButton;
+namespace ket {
+class StepSlider;
+}
 class QSpinBox;
 class QStackedWidget;
 
@@ -92,6 +94,7 @@ class SettingsDialog final : public QDialog, public SettingsHost {
 
   protected:
     void reject() override;
+    void keyPressEvent(QKeyEvent* event) override;
 
   private:
     void initialize(const AppearanceSettings& settings);
@@ -120,7 +123,7 @@ class SettingsDialog final : public QDialog, public SettingsHost {
     QListWidget* navigation_{nullptr};
     QStackedWidget* pages_{nullptr};
     QLineEdit* themeSearch_{nullptr};
-    QCheckBox* followSystem_{nullptr};
+    QAbstractButton* followSystem_{nullptr};
     QListWidget* themeList_{nullptr};
     QComboBox* editorFontBox_{nullptr};
     QString editorFontFamily_;
@@ -134,9 +137,10 @@ class SettingsDialog final : public QDialog, public SettingsHost {
     QSpinBox* previewFontSizeBox_{nullptr};
     QSpinBox* previewLineHeightBox_{nullptr};
     TypographyPreview* preview_{nullptr};
-    QDialogButtonBox* buttons_{nullptr};
-    QPushButton* resetButton_{nullptr};
-    QPushButton* saveButton_{nullptr};
+    QWidget* buttons_{nullptr};
+    ket::StepSlider* zoomStep_{nullptr};
+    QAbstractButton* resetButton_{nullptr};
+    QAbstractButton* saveButton_{nullptr};
     QList<SettingsPage*> extensionPages_;
     QList<RegisteredPage> registeredPages_;
     qsizetype nextRegistrationSequence_{0};
