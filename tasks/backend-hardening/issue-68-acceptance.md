@@ -1,6 +1,6 @@
 # Issue 68 acceptance dossier
 
-Owner: #2739. Independent reviewer: #7705. Updated: 2026-11-08.
+Owner: #3329 (from #2739). Reviewer: #2739, single pass. Updated: 2026-11-08.
 Original issue: https://github.com/ketvietlab/ketplus/issues/68
 
 This maps the original seven criteria to evidence and remaining work. It is not
@@ -105,3 +105,22 @@ zero additional deletion signals, while the previous code repeats all 20k/100k.
 [Evidence and controls](evidence/h1-live-session-discovery-qt.json) record the exact
 source and logs. Independent review/merge remains pending. The next separate
 acceptance gate is still atomic session-delete work.
+
+## Bounded session history purge (ADR 0093)
+
+`deleteSession` now commits the tombstone, cleanup work, per-generation state and
+one bounded batch of bulky history; any remainder gets a `session_history_purge`
+marker in the same transaction. `SessionHost` drains it one pass per event-loop
+turn; tombstone retention waits for the marker. Release daemon build, fixture
+checkpointed before timing (`KETPLUS_RUN_DELETE_BACKLOG_TESTS=1`):
+
+| Rows per event table / chunk bytes | Delete command | Purge passes | Slowest pass |
+| --- | --- | --- | --- |
+| 1k / 64 MiB | 17 ms | 30 | 0 ms |
+| 100k / 256 MiB | 38 ms | 127 | 30 ms |
+| 300k / 256 MiB | 30 ms | 146 | 35 ms |
+
+The previous synchronous delete took 1,192 ms for the 300k case. Daemon suite
+56/56 passes. Ignored purge markers, stalled passes, retention while pending,
+event-loop draining and reopen are regressions. Whole-history fork bounds and the
+remaining gates above stay open.

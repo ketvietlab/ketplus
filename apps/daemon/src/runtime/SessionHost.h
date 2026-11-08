@@ -176,6 +176,10 @@ class SessionHost final : public QObject, private AgentHostPort {
     void recordWorktreeActivity(Session& session, const QString& type, const QJsonObject& payload,
                                 qint64 cursor);
     void processDeletionWork();
+    // Drives bounded passes over deleted sessions' remaining history (ADR 0093).
+    void scheduleHistoryPurge(int delayMs);
+    void purgeDeletedHistory();
+    bool historyPurgeScheduled_{false};
     [[nodiscard]] std::optional<QJsonArray>
     providerCleanupTargets(const StoredSession& session) const;
     QSet<QString> providerCleanupInFlight_;

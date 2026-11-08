@@ -73,7 +73,38 @@ std::optional<QJsonArray> SessionHost::providerCleanupTargets(const StoredSessio
     return targets;
 }
 
+void SessionHost::scheduleHistoryPurge(const int delayMs) {
+    if (historyPurgeScheduled_)
+        return;
+    historyPurgeScheduled_ = true;
+    QTimer::singleShot(delayMs, this, [this] {
+        historyPurgeScheduled_ = false;
+        purgeDeletedHistory();
+    });
+}
+
+void SessionHost::purgeDeletedHistory() {
+    // One pass per event-loop turn keeps IPC responsive while a large history drains.
+    switch (journal_->purgeDeletedSessionHistory()) {
+    case LocalJournal::HistoryPurge::Progress:
+        scheduleHistoryPurge(0);
+        return;
+    case LocalJournal::HistoryPurge::Deferred:
+        scheduleHistoryPurge(250);
+        return;
+    case LocalJournal::HistoryPurge::Failed:
+        // The marker stays durable; the periodic deletion work retries.
+        qWarning("Deleted session history cleanup deferred: %s",
+                 qUtf8Printable(journal_->errorString()));
+        return;
+    case LocalJournal::HistoryPurge::Idle:
+        return;
+    }
+}
+
 void SessionHost::processDeletionWork() {
+    if (journal_->hasPendingHistoryPurge())
+        scheduleHistoryPurge(0);
     for (const auto& value : journal_->deletionWork(64, false, deletionWorkCursor_)) {
         const auto work = value.toObject();
         deletionWorkCursor_ = work.value("work_id").toInteger();

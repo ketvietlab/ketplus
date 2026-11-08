@@ -716,8 +716,12 @@ conversation export. Relay/mobile remain on the legacy projection. See
 
 ## Permanent deletion propagation and provider cleanup
 
-An idle `session.delete` transaction removes local history and writes both a
-generation tombstone and durable deletion work. Live background tasks must first
+An idle `session.delete` transaction removes the session and its per-generation
+state, one bounded batch of bulky history and writes a generation tombstone and
+durable deletion work. Remaining history gets a `session_history_purge` marker
+in the same transaction; `SessionHost` drains it one bounded pass per event-loop
+turn, and the tombstone outlives the marker
+([ADR 0093](decisions/0093-bounded-session-history-purge.md)). Live background tasks must first
 stop. Attached Desktop clients receive `session.deleted`; `session.list` also
 returns `deleted_sessions` so reconnecting clients remove stale persisted entries.
 Newer generations are not removed by an older tombstone.
@@ -727,15 +731,16 @@ shared transport reader covers Desktop refresh and `ketplusctl sessions`,
 fences catalog mutations and stale reconnect callbacks, and reads live sessions
 after the walk. A changed catalog restarts at most three times; CLI output uses a
 private temporary spool instead of accumulating tombstones in memory. See
-[ADR 0091](decisions/0091-paged-session-tombstone-catalogs.md); this does not make
-explicit deletion asynchronous or bound the live catalog itself.
+[ADR 0091](decisions/0091-paged-session-tombstone-catalogs.md); this does not
+bound the live catalog itself.
 Incremental discovery uses `session_catalog_live_only: true` with page version 1
 ([ADR 0092](decisions/0092-live-only-session-discovery.md)): one live-catalog
 request, no tombstone query or deletion signals, and the same wire-byte guard.
 Older paged daemons return page one with live sessions; discovery ignores its
 deletion fields. Initial/reconnect reconciliation still walks the full catalog.
-The tombstone and cleanup-work inserts must each affect one row, and each
-history-table delete must leave no matching row. A failed statement or commit
+The tombstone, cleanup-work and purge-marker inserts must each affect one row.
+Each per-generation state delete must leave no matching row, and a history batch
+that removes nothing while rows remain fails the deletion. A failed statement or commit
 rolls back and releases the transaction before returning failure, so retries
 cannot observe uncommitted deletion state. See
 [ADR 0055](decisions/0055-session-delete-transaction-recovery.md). Explicit deletion
