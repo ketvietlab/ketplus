@@ -44,7 +44,8 @@ Record technical verification separately from the later review/acceptance phase.
 - [ ] Pro: questions/details #163.
 - [x] Pro: overlays #164, including the existing revisioned repository/worktree picker.
 - [x] Pro: worktrees/connections #165 available-runtime UI (Relay pairing; SSH setup limitation below).
-- [ ] Pro: settings #166 and Atlas #167.
+- [x] Pro: settings #166 available-runtime controls (messaging behavior dependency remains separate).
+- [ ] Pro: Atlas #167.
 
 Behaviour dependencies (#120, #125, #126, #128, #130, #170) must be represented
 honestly: preserve real runtime state and actions, and record missing contracts
@@ -141,3 +142,12 @@ Validation: execution picker 2/2 substantive cases pass; worktree listing/creati
 cases skipped. Final typography/width cases pass. The implemented Linux connection
 flow is authenticated outbound Relay; a new SSH setup/transport is not supplied by
 this UI layer. Native acceptance, review, packaging and deployment remain deferred.
+
+Settings layer on #226 uses kit navigation/theme/accent/segmented/form controls,
+restores the shared staged Save/Reset footer and Follow system checkbox, preserves
+custom numeric zoom, and routes the sidebar storage warning to Storage without
+recreating an open draft. Browser/Computer/Providers/Archived/Updates and Claude
+credentials retain their behavior; usage popover buttons use the kit. The four
+Settings targets pass across focused runs; two Claude usage cases pass. Storage
+light/dark offscreen captures expose and then verify removal of duplicate list
+text beneath the kit navigation rows. No quota, native acceptance or review run.

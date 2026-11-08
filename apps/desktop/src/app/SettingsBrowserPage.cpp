@@ -1,16 +1,19 @@
 #include "app/SettingsBrowserPage.h"
+#include "KetButton.h"
+#include "KetTextField.h"
+#include "KetToggle.h"
 
 #include "ToolPackageRegistry.h"
 
 #include <QButtonGroup>
-#include <QCheckBox>
+
+#include <QAbstractButton>
 #include <QCoreApplication>
 #include <QFutureWatcher>
 #include <QGridLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPointer>
-#include <QPushButton>
 #include <QRadioButton>
 #include <QSignalBlocker>
 #include <QTimer>
@@ -75,12 +78,12 @@ SettingsBrowserPage::SettingsBrowserPage(QString settingsPath, QString searchSta
         status_->setText(tr("Browser settings could not be read: %1").arg(settings_.loadError));
     layout->addWidget(status_);
     layout->addSpacing(8);
-    auto* recheck = new QPushButton(tr("Check again"), this);
+    auto* recheck = new ket::Button(tr("Check again"), ket::ButtonVariant::Secondary, this);
     recheck->setObjectName(QStringLiteral("browserToolsRecheck"));
     layout->addWidget(recheck, 0, Qt::AlignLeft);
     layout->addSpacing(20);
 
-    enabled_ = new QCheckBox(tr("Let agents use a browser"), this);
+    enabled_ = new ket::Checkbox(tr("Let agents use a browser"), this);
     enabled_->setObjectName(QStringLiteral("browserToolsEnabled"));
     enabled_->setChecked(settings_.enabled);
     layout->addWidget(enabled_);
@@ -109,11 +112,13 @@ SettingsBrowserPage::SettingsBrowserPage(QString settingsPath, QString searchSta
     grid->setVerticalSpacing(13);
     grid->setColumnMinimumWidth(0, 145);
     grid->setColumnStretch(1, 1);
-    origins_ = new QLineEdit(
-        isAllOrigins(settings_.allowedOrigins) ? QString() : settings_.allowedOrigins, fields);
+    origins_ = new ket::TextField(fields);
+    origins_->setText(isAllOrigins(settings_.allowedOrigins) ? QString()
+                                                             : settings_.allowedOrigins);
     origins_->setObjectName(QStringLiteral("browserToolsOrigins"));
     origins_->setPlaceholderText(QStringLiteral("loopback, https://staging.example.com"));
-    appPath_ = new QLineEdit(settings_.browserAppPath, fields);
+    appPath_ = new ket::TextField(fields);
+    appPath_->setText(settings_.browserAppPath);
     appPath_->setObjectName(QStringLiteral("browserToolsAppPath"));
     const QString detected = browser_tools::detectBrowserAppPath(searchStart_);
     appPath_->setPlaceholderText(detected.isEmpty() ? tr("Only needed for a source checkout")
@@ -137,14 +142,14 @@ SettingsBrowserPage::SettingsBrowserPage(QString settingsPath, QString searchSta
         QStringLiteral("settingsWorkspaceHelp"), this));
     layout->addStretch(1);
 
-    connect(enabled_, &QCheckBox::toggled, this, &SettingsBrowserPage::setEnabledByUser);
+    connect(enabled_, &QAbstractButton::toggled, this, &SettingsBrowserPage::setEnabledByUser);
     connect(allOrigins_, &QRadioButton::toggled, this, &SettingsBrowserPage::setAllOriginsByUser);
     connect(origins_, &QLineEdit::editingFinished, this, &SettingsBrowserPage::saveOriginsByUser);
     connect(appPath_, &QLineEdit::editingFinished, this, [this] {
         saveAppPathByUser();
         refresh();
     });
-    connect(recheck, &QPushButton::clicked, this, &SettingsBrowserPage::refresh);
+    connect(recheck, &QAbstractButton::clicked, this, &SettingsBrowserPage::refresh);
     updateOriginControls();
     QTimer::singleShot(0, this, &SettingsBrowserPage::refresh);
 }

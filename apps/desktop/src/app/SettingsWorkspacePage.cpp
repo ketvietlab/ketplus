@@ -1,5 +1,12 @@
 #include "app/SettingsWorkspacePage.h"
+#include "KetIcons.h"
+#include "KetNavItem.h"
+#include "KetSegmentedControl.h"
+#include "KetSelect.h"
+#include "KetThemeCard.h"
 #include "ui/ChromeGeometry.h"
+#include <QPersistentModelIndex>
+#include <QSignalBlocker>
 
 #include "agent/AgentWorkspaceView.h"
 #include "app/AgentConversationWidth.h"
@@ -9,28 +16,23 @@
 #include "app/SettingsUpdatesPage.h"
 #include "ui/InterfaceFont.h"
 #include "ui/InterfaceZoom.h"
-#include "ui/SymbolIcon.h"
 #include "ui/Theme.h"
 #include "ui/TypeScale.h"
 #include "update/AppUpdater.h"
 
 #include <QAbstractButton>
 #include <QButtonGroup>
-#include <QCheckBox>
 #include <QComboBox>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
-#include <QPainter>
-#include <QPushButton>
 #include <QScrollArea>
 #include <QSizePolicy>
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QTimer>
-#include <QToolButton>
 #include <QVBoxLayout>
 
 namespace ketplus {
@@ -54,47 +56,6 @@ QLabel* label(const QString& text, const QString& objectName, QWidget* parent) {
     return value;
 }
 
-QPixmap themePreview(const bool dark) {
-    constexpr int width = 190;
-    constexpr int height = 123;
-    QPixmap pixmap(width * 2, height * 2);
-    pixmap.setDevicePixelRatio(2.0);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    const QColor page = dark ? QColor("#191D22") : QColor("#F8F6F6");
-    const QColor panel = dark ? QColor("#22272E") : QColor("#FFFFFF");
-    const QColor line = dark ? QColor("#414852") : QColor("#DAD7D8");
-    const QColor muted = dark ? QColor("#7E8793") : QColor("#B0ADAE");
-    painter.setPen(QPen(line, 1));
-    painter.setBrush(page);
-    painter.drawRoundedRect(QRectF(0.5, 0.5, width - 1, height - 1), 5, 5);
-    painter.fillRect(QRectF(0, 0, 47, height), panel);
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor("#1746FF"));
-    painter.drawRoundedRect(QRectF(8, 15, 31, 6), 3, 3);
-    painter.setBrush(muted);
-    for (int row = 0; row < 6; ++row)
-        painter.drawRoundedRect(QRectF(8, 34 + row * 13, 25 + (row % 2) * 8, 3), 1.5, 1.5);
-    painter.setBrush(panel);
-    painter.drawRoundedRect(QRectF(59, 15, 118, 93), 4, 4);
-    painter.setBrush(line);
-    painter.drawRoundedRect(QRectF(70, 29, 67, 4), 2, 2);
-    painter.setBrush(muted);
-    painter.drawRoundedRect(QRectF(70, 43, 89, 3), 1.5, 1.5);
-    painter.drawRoundedRect(QRectF(70, 52, 74, 3), 1.5, 1.5);
-    painter.setBrush(dark ? QColor("#2C3351") : QColor("#F0F1FC"));
-    painter.drawRoundedRect(QRectF(70, 67, 40, 22), 3, 3);
-    painter.drawRoundedRect(QRectF(117, 67, 40, 22), 3, 3);
-    painter.setBrush(line);
-    painter.drawRoundedRect(QRectF(70, 98, 77, 3), 1.5, 1.5);
-    return pixmap;
-}
-
-QIcon navigationIcon(const QByteArray& body, const QColor& color, const QSize& size) {
-    return QIcon(symbol_icon::pixmap(body, color, size));
-}
-
 QByteArray navigationIconBody(const QString& id) {
     static const QHash<QString, QByteArray> names{
         {QStringLiteral("appearance"), "palette"},
@@ -110,17 +71,10 @@ QByteArray navigationIconBody(const QString& id) {
     return names.value(id, "archive");
 }
 
-QToolButton* themeCard(const QString& title, const bool dark, QWidget* parent) {
-    auto* card = new QToolButton(parent);
+ket::ThemeCard* themeCard(const QString& title, const bool dark, QWidget* parent) {
+    auto* card = new ket::ThemeCard(title, dark ? ket::Theme::Dark : ket::Theme::Light, parent);
     card->setObjectName(dark ? QStringLiteral("settingsDarkThemeCard")
                              : QStringLiteral("settingsLightThemeCard"));
-    card->setProperty("kvRole", QStringLiteral("settingsThemeCard"));
-    card->setText(title);
-    card->setIcon(QIcon(themePreview(dark)));
-    chrome_geometry::iconSize(card, QSize(190, 123));
-    card->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
-    card->setCheckable(true);
-    chrome_geometry::fixedSize(card, 208, 170);
     return card;
 }
 
@@ -173,19 +127,6 @@ class ConversationWidthState final : public SettingsPage {
 
 // One bordered track with the buttons inside it, so no button has to overlap a
 // neighbour to share an edge, and every side of the group is always drawn.
-QWidget* segmentedGroup(const QString& objectName, QWidget* parent) {
-    auto* group = new QWidget(parent);
-    group->setObjectName(objectName);
-    group->setProperty("kvRole", QStringLiteral("segmentedGroup"));
-    group->setAttribute(Qt::WA_StyledBackground, true);
-    // A help line beside it may make the row taller; the track keeps its own height.
-    group->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* layout = new QHBoxLayout(group);
-    chrome_geometry::margins(layout, 2, 2, 2, 2);
-    chrome_geometry::spacing(layout, 2);
-    return group;
-}
-
 void addField(QGridLayout* grid, const int row, const QString& title, QWidget* control,
               QWidget* parent) {
     auto* titleLabel = label(title, QStringLiteral("settingsWorkspaceFieldLabel"), parent);
@@ -255,7 +196,7 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     auto* navigation = new QListWidget(body);
     navigation_ = navigation;
     navigation->setObjectName(QStringLiteral("settingsWorkspaceNavigation"));
-    chrome_geometry::fixedWidth(navigation, 173);
+    chrome_geometry::fixedWidth(navigation, 200);
     chrome_geometry::iconSize(navigation, QSize(14, 14));
     chrome_geometry::spacing(navigation, 2);
     navigation->setWordWrap(true);
@@ -263,9 +204,16 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
         auto* item = new QListWidgetItem(title, navigation);
         item->setData(Qt::UserRole, id);
         item->setData(Qt::UserRole + 1, navigationIconBody(id));
-        item->setIcon(navigationIcon(navigationIconBody(id), QColor(QStringLiteral("#7A7E86")),
-                                     navigation->iconSize()));
-        item->setSizeHint(QSize(0, id == QStringLiteral("account-devices") ? 48 : 34));
+        auto* control = new ket::NavItem(
+            title, ket::Icons::codeForLucide(QString::fromLatin1(navigationIconBody(id))),
+            navigation);
+        item->setSizeHint(control->sizeHint());
+        navigation->setItemWidget(item, control);
+        const QPersistentModelIndex index(navigation->model()->index(navigation->row(item), 0));
+        connect(control, &QAbstractButton::clicked, navigation, [navigation, index] {
+            if (index.isValid())
+                navigation->setCurrentRow(index.row());
+        });
     };
     addNavigation(tr("Appearance"), QStringLiteral("appearance"));
     addNavigation(tr("Typography"), QStringLiteral("typography"));
@@ -322,8 +270,8 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     auto* accentLayout = new QHBoxLayout(accent);
     chrome_geometry::margins(accentLayout, 13, 10, 13, 10);
     chrome_geometry::spacing(accentLayout, 10);
-    auto* accentSwatch = label(QString(), QStringLiteral("settingsAccentSwatch"), accent);
-    chrome_geometry::fixedSize(accentSwatch, 29, 29);
+    auto* accentSwatch = new ket::AccentSwatch(accent);
+    accentSwatch->setObjectName(QStringLiteral("settingsAccentSwatch"));
     accentLayout->addWidget(accentSwatch);
     auto* accentCopy = new QWidget(accent);
     auto* accentCopyLayout = new QVBoxLayout(accentCopy);
@@ -408,55 +356,45 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
         previewLine->hide();
     if (interfaceSize != nullptr)
         interfaceSize->hide();
-    auto* interfaceFont = new QComboBox(fields);
+    auto* interfaceFont = new ket::Select(fields);
     interfaceFont->setObjectName(QStringLiteral("settingsInterfaceFont"));
     interfaceFont->addItem(InterfaceUiFont::settingsLabel());
     interfaceFont->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* interfaceZoom = segmentedGroup(QStringLiteral("interfaceZoom"), fields);
-    auto* interfaceZoomLayout = static_cast<QHBoxLayout*>(interfaceZoom->layout());
-    auto* zoomGroup = new QButtonGroup(interfaceZoom);
-    zoomGroup->setExclusive(true);
-    auto addZoomButton = [&](const InterfaceZoom zoom, const QString& objectName,
-                             const QString& text) {
-        auto* button = new QToolButton(interfaceZoom);
-        button->setObjectName(objectName);
-        button->setProperty("kvRole", QStringLiteral("interfaceZoom"));
-        button->setText(text);
-        button->setCheckable(true);
-        button->setAutoExclusive(true);
-        button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        zoomGroup->addButton(button);
-        interfaceZoomLayout->addWidget(button);
-        if (interfaceSize != nullptr) {
-            connect(button, &QToolButton::clicked, this, [interfaceSize, zoom] {
-                interfaceSize->setValue(InterfaceZoomMetrics::pixels(zoom));
-            });
+    auto* interfaceZoom =
+        new ket::SegmentedControl({tr("Small"), tr("Medium"), tr("Large")}, fields);
+    interfaceZoom->setObjectName(QStringLiteral("interfaceZoom"));
+    interfaceZoom->setExpanding(true);
+    const auto syncZoom = [interfaceSize, interfaceZoom] {
+        const int pixels =
+            interfaceSize ? interfaceSize->value() : InterfaceZoomMetrics::mediumPixels;
+        const QList<int> values{InterfaceZoomMetrics::smallPixels,
+                                InterfaceZoomMetrics::mediumPixels,
+                                InterfaceZoomMetrics::largePixels};
+        auto options = QStringList{tr("Small"), tr("Medium"), tr("Large")};
+        int index = values.indexOf(pixels);
+        if (index < 0) {
+            options.append(tr("Custom (%1)").arg(pixels));
+            index = 3;
         }
-        return button;
+        const QSignalBlocker blocker(interfaceZoom);
+        interfaceZoom->setOptions(options);
+        interfaceZoom->setCurrentIndex(index);
     };
-    auto* zoomSmall =
-        addZoomButton(InterfaceZoom::Small, QStringLiteral("interfaceZoomSmall"), tr("Small"));
-    auto* zoomMedium = addZoomButton(InterfaceZoom::Medium, QStringLiteral("interfaceZoomMedium"),
-                                     tr("Medium (Default)"));
-    auto* zoomLarge =
-        addZoomButton(InterfaceZoom::Large, QStringLiteral("interfaceZoomLarge"), tr("Large"));
-    const auto syncZoomButtons = [interfaceSize, zoomSmall, zoomMedium, zoomLarge] {
-        const auto zoom = InterfaceZoomMetrics::fromPixels(
-            interfaceSize != nullptr ? interfaceSize->value() : InterfaceZoomMetrics::mediumPixels);
-        zoomSmall->setChecked(zoom == InterfaceZoom::Small);
-        zoomMedium->setChecked(zoom == InterfaceZoom::Medium);
-        zoomLarge->setChecked(zoom == InterfaceZoom::Large);
-    };
-    if (interfaceSize != nullptr) {
-        connect(interfaceSize, &QSpinBox::valueChanged, this,
-                [this, syncZoomButtons](const int pixels) {
-                    syncZoomButtons();
-                    if (palette_.pageBackground.isEmpty())
-                        return;
-                    applyPalette(palette_, pixels);
-                });
-    }
-    syncZoomButtons();
+    connect(interfaceZoom, &ket::SegmentedControl::currentChanged, this,
+            [interfaceSize](int index) {
+                const QList<int> values{InterfaceZoomMetrics::smallPixels,
+                                        InterfaceZoomMetrics::mediumPixels,
+                                        InterfaceZoomMetrics::largePixels};
+                if (interfaceSize && index >= 0 && index < values.size())
+                    interfaceSize->setValue(values[index]);
+            });
+    if (interfaceSize)
+        connect(interfaceSize, &QSpinBox::valueChanged, this, [this, syncZoom](int pixels) {
+            syncZoom();
+            if (!palette_.pageBackground.isEmpty())
+                applyPalette(palette_, pixels);
+        });
+    syncZoom();
     auto* interfaceSizeCopy = new QWidget(fields);
     auto* interfaceSizeCopyLayout = new QVBoxLayout(interfaceSizeCopy);
     chrome_geometry::margins(interfaceSizeCopyLayout, 0, 0, 0, 0);
@@ -477,33 +415,27 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     // staged until Save, like the fields above.
     auto* widthState = new ConversationWidthState;
     dialog_->addPage(widthState);
-    auto* conversationWidth = segmentedGroup(QStringLiteral("agentConversationWidth"), fields);
-    auto* conversationWidthLayout = static_cast<QHBoxLayout*>(conversationWidth->layout());
-    auto* widthGroup = new QButtonGroup(conversationWidth);
-    widthGroup->setExclusive(true);
-    for (const auto& choice : AgentConversationWidth::choices()) {
-        auto* button = new QToolButton(conversationWidth);
-        button->setObjectName(QStringLiteral("agentConversationWidth%1").arg(choice.pixels));
-        button->setProperty("kvRole", QStringLiteral("interfaceZoom"));
-        button->setProperty("conversationWidth", choice.pixels);
-        button->setText(choice.label);
-        if (choice.pixels > 0)
-            button->setToolTip(tr("%1 px").arg(choice.pixels));
-        button->setCheckable(true);
-        button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        widthGroup->addButton(button);
-        conversationWidthLayout->addWidget(button);
-        connect(button, &QToolButton::clicked, widthState,
-                [widthState, pixels = choice.pixels] { widthState->select(pixels); });
-    }
-    const auto syncWidthButtons = [widthGroup, widthState] {
-        for (auto* button : widthGroup->buttons())
-            button->setChecked(button->property("conversationWidth").toInt() ==
-                               widthState->pixels());
+    QStringList widthLabels;
+    for (const auto& choice : AgentConversationWidth::choices())
+        widthLabels.append(choice.label);
+    auto* conversationWidth = new ket::SegmentedControl(widthLabels, fields);
+    conversationWidth->setObjectName(QStringLiteral("agentConversationWidth"));
+    conversationWidth->setExpanding(true);
+    connect(conversationWidth, &ket::SegmentedControl::currentChanged, widthState,
+            [widthState](int index) {
+                const auto choices = AgentConversationWidth::choices();
+                if (index >= 0 && index < choices.size())
+                    widthState->select(choices[index].pixels);
+            });
+    const auto syncWidth = [conversationWidth, widthState] {
+        const QSignalBlocker blocker(conversationWidth);
+        const auto choices = AgentConversationWidth::choices();
+        for (qsizetype index = 0; index < choices.size(); ++index)
+            if (choices[index].pixels == widthState->pixels())
+                conversationWidth->setCurrentIndex(int(index));
     };
-    // Reset defaults changes the state without a click.
-    connect(widthState, &SettingsPage::changed, conversationWidth, syncWidthButtons);
-    syncWidthButtons();
+    connect(widthState, &SettingsPage::changed, conversationWidth, syncWidth);
+    syncWidth();
     auto* conversationWidthCopy = new QWidget(fields);
     auto* conversationWidthCopyLayout = new QVBoxLayout(conversationWidthCopy);
     chrome_geometry::margins(conversationWidthCopyLayout, 0, 0, 0, 0);
@@ -593,10 +525,10 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
             }
         }
     };
-    connect(lightCard, &QToolButton::clicked, this, [selectPublicTheme] {
+    connect(lightCard, &QAbstractButton::clicked, this, [selectPublicTheme] {
         selectPublicTheme(static_cast<int>(ThemeManager::Mode::Light));
     });
-    connect(darkCard, &QToolButton::clicked, this,
+    connect(darkCard, &QAbstractButton::clicked, this,
             [selectPublicTheme] { selectPublicTheme(static_cast<int>(ThemeManager::Mode::Dark)); });
     auto syncThemeCards = [themeList, followSystem, lightCard, darkCard] {
         const bool system = followSystem != nullptr && followSystem->isChecked();
@@ -617,15 +549,9 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     connect(navigation, &QListWidget::currentRowChanged, this,
             [this, navigation, pages, updates, computer, storage, settingsFooter](const int row) {
                 for (int index = 0; index < navigation->count(); ++index) {
-                    const bool dark =
-                        navigation->palette().color(QPalette::Window).lightness() < 128;
-                    // Két Design System accent-text: Két Blue that stays readable on dark.
-                    const QColor color(index == row ? (dark ? QStringLiteral("#9EB5FF")
-                                                            : QStringLiteral("#1238DB"))
-                                                    : QStringLiteral("#7A7E86"));
-                    navigation->item(index)->setIcon(navigationIcon(
-                        navigation->item(index)->data(Qt::UserRole + 1).toByteArray(), color,
-                        navigation->iconSize()));
+                    if (auto* control = qobject_cast<ket::NavItem*>(
+                            navigation->itemWidget(navigation->item(index))))
+                        control->setChecked(index == row);
                 }
                 const QString id =
                     row < 0 ? QString() : navigation->item(row)->data(Qt::UserRole).toString();
@@ -686,40 +612,28 @@ QWidget#settingsWorkspaceHeading, QWidget#settingsWorkspaceBody,
 QWidget#settingsWorkspaceAppearance, QWidget#settingsWorkspaceTypography,
 QStackedWidget#settingsWorkspacePages, QScrollArea#settingsWorkspaceScroll,
 QScrollArea#settingsWorkspaceScroll > QWidget > QWidget { background:%1; color:%2; }
-QLabel#settingsWorkspaceEyebrow { color:%9; font-size:{{caption}}px; font-weight:600; letter-spacing:1px; }
-QLabel#settingsWorkspaceTitle { color:%2; font-size:{{display}}px; font-weight:620; }
+QLabel#settingsWorkspaceEyebrow { color:%7; font-size:{{caption}}px; font-weight:600; letter-spacing:1px; }
+QLabel#settingsWorkspaceTitle { color:%2; font-size:30px; font-weight:600; }
 QLabel#settingsWorkspaceSubtitle, QLabel#settingsWorkspaceIntro { color:%3; font-size:{{reading}}px; }
 QLabel#settingsWorkspaceShortcut { color:%3; font-size:{{caption}}px; }
 QLabel#settingsWorkspaceHelp { color:%3; font-size:{{body}}px; }
-QLabel#settingsWorkspaceSectionTitle { color:%2; font-size:{{heading}}px; font-weight:600; }
+QLabel#settingsWorkspaceSectionTitle { color:%2; font-size:22px; font-weight:500; }
 QLabel#settingsWorkspaceSubheading { color:%2; font-size:{{reading}}px; font-weight:600; }
 QListWidget#settingsWorkspaceNavigation { padding:0 20px 0 0; border:0;
  border-right:1px solid %5; background:transparent; outline:0; }
-QListWidget#settingsWorkspaceNavigation::item { height:34px; padding:0 10px; border-radius:5px;
- color:%3; font-size:{{reading}}px; }
-QListWidget#settingsWorkspaceNavigation::item:selected { background:%6; color:%9; }
-QToolButton[kvRole="settingsThemeCard"] { padding:7px; border:1px solid %5; border-radius:7px;
- background:%7; color:%2; font-size:{{reading}}px; font-weight:500; }
-QToolButton[kvRole="settingsThemeCard"]:hover { border-color:%8; }
-QToolButton[kvRole="settingsThemeCard"]:checked { border:2px solid %4; background:%6; }
-QWidget[kvRole="segmentedGroup"] { border:1px solid %5; border-radius:8px; background:%7; }
-QToolButton[kvRole="interfaceZoom"] { min-height:24px; padding:0 12px; border:1px solid transparent;
- border-radius:5px; background:transparent; color:%2; font-size:{{reading}}px; font-weight:500; }
-QToolButton[kvRole="interfaceZoom"]:hover { background:%1; }
-QToolButton[kvRole="interfaceZoom"]:checked { background:%6; color:%9; border-color:%4; }
+QListWidget#settingsWorkspaceNavigation::item { padding:0; border:0; background:transparent; color:transparent; }
 QFrame#settingsWorkspaceDivider { border:0; background:%5; }
 QFrame#settingsWorkspaceAccent { border:0; background:transparent; }
 QFrame#settingsWorkspacePreview, QFrame#settingsTypographySample {
- border:1px solid %5; border-radius:7px; background:%7; }
-QLabel#settingsAccentSwatch { border:3px solid %6; border-radius:6px; background:%4; }
-QLabel#settingsAccentCheck { color:%9; font-size:{{reading}}px; }
+ border:1px solid %5; border-radius:7px; background:%6; }
+QLabel#settingsAccentCheck { color:%7; font-size:{{reading}}px; }
 QLabel#settingsAccentTitle { color:%2; font-size:{{body}}px; font-weight:600; }
 QLabel#settingsPreviewTabs { min-height:32px; padding:0 12px; border-bottom:2px solid %4;
- color:%2; background:%7; font-size:{{micro}}px; }
+ color:%2; background:%6; font-size:{{micro}}px; }
 QLabel#settingsPreviewCode { padding:14px 17px; color:%3; font-family:monospace; font-size:{{body}}px; }
 QLabel#settingsPreviewMessage { min-height:34px; padding:0 17px; border-top:1px solid %5;
- color:%2; background:%7; font-size:{{body}}px; }
-QCheckBox#followSystemTheme, QCheckBox#storageAutomaticDetail, QLabel#storageUsage,
+ color:%2; background:%6; font-size:{{body}}px; }
+QLabel#storageUsage,
 QLabel#storageStatus, QComboBox#storageDetailDays, QLabel#settingsWorkspaceFieldLabel,
 QComboBox#settingsInterfaceFont, QComboBox#editorFontFamily, QComboBox#computerWorkDisplay,
 QSpinBox#interfaceFontSize, QSpinBox#editorFontSize, QSpinBox#terminalFontSize,
@@ -734,8 +648,8 @@ QDialog[kvRole="settingsDialog"] { border:0; background:transparent; }
 )QSS"),
                                            interfaceFontSizePixels_);
     setStyleSheet(sheet.arg(palette.pageBackground, palette.textMain, palette.textMuted,
-                            palette.accent, palette.border, palette.accentSubtle,
-                            palette.panelBackground, palette.borderStrong, palette.accentText));
+                            palette.accent, palette.border, palette.panelBackground,
+                            palette.accentText));
     chrome_geometry::apply(this, interfaceFontSizePixels);
 }
 

@@ -168,3 +168,13 @@ because Claude SDK accounting is cumulative; a page without usage evidence omits
 it. Retryable errors show reconnecting without changing the running lifecycle.
 Older retained-output/diff/text markers stay visible. Unsupported queue actions
 are not shown; queued status follows the daemon state.
+
+Pro Settings keeps its workspace presentation and uses kit navigation, theme
+cards, accent swatch, segmented choices and form controls. The workspace reuses
+the core dialog's staged Save/Reset footer and Follow system control. Numeric
+interface sizes outside Small/Medium/Large remain visible as a Custom choice;
+opening Settings never coerces a stored value. Storage, Browser and Computer
+preferences retain their existing immediate-save contracts. The sidebar Storage
+action selects that section without rebuilding an already open settings draft.
+Provider status and Claude usage remain authoritative runtime data; unavailable
+limits or credentials are never rendered as configured mock state.

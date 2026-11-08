@@ -3,7 +3,7 @@
 #include <QString>
 #include <QWidget>
 
-class QCheckBox;
+class QAbstractButton;
 class QComboBox;
 class QLabel;
 class QLineEdit;
@@ -31,7 +31,7 @@ class SettingsComputerPage final : public QWidget {
     QString settingsPath_;
     QString applicationDir_;
     QLabel* status_{nullptr};
-    QCheckBox* enabled_{nullptr};
+    QAbstractButton* enabled_{nullptr};
     QLineEdit* deniedApps_{nullptr};
     QComboBox* display_{nullptr};
     QLabel* error_{nullptr};

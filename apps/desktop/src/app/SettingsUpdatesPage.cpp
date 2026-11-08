@@ -1,12 +1,13 @@
 #include "app/SettingsUpdatesPage.h"
+#include "KetButton.h"
+#include "KetToggle.h"
 
 #include "update/AppUpdater.h"
 
-#include <QCheckBox>
+#include <QAbstractButton>
 #include <QCoreApplication>
 #include <QLabel>
 #include <QLocale>
-#include <QPushButton>
 #include <QSignalBlocker>
 #include <QVBoxLayout>
 
@@ -39,7 +40,7 @@ SettingsUpdatesPage::SettingsUpdatesPage(AppUpdater& updater, QWidget* parent)
     status_ = textLabel({}, QStringLiteral("updatesStatus"), this);
     layout->addWidget(status_);
     layout->addSpacing(8);
-    check_ = new QPushButton(tr("Check for Updates"), this);
+    check_ = new ket::Button(tr("Check for Updates"), ket::ButtonVariant::Secondary, this);
     check_->setObjectName(QStringLiteral("updatesCheckNow"));
     layout->addWidget(check_, 0, Qt::AlignLeft);
     layout->addSpacing(24);
@@ -47,11 +48,11 @@ SettingsUpdatesPage::SettingsUpdatesPage(AppUpdater& updater, QWidget* parent)
     layout->addWidget(
         textLabel(tr("Preferences"), QStringLiteral("settingsWorkspaceSubheading"), this));
     layout->addSpacing(10);
-    automaticChecks_ = new QCheckBox(tr("Check for updates automatically"), this);
+    automaticChecks_ = new ket::Checkbox(tr("Check for updates automatically"), this);
     automaticChecks_->setObjectName(QStringLiteral("updatesAutomaticChecks"));
     layout->addWidget(automaticChecks_);
     layout->addSpacing(6);
-    automaticDownloads_ = new QCheckBox(tr("Download updates in the background"), this);
+    automaticDownloads_ = new ket::Checkbox(tr("Download updates in the background"), this);
     automaticDownloads_->setObjectName(QStringLiteral("updatesAutomaticDownloads"));
     layout->addWidget(automaticDownloads_);
     layout->addSpacing(4);
@@ -70,10 +71,10 @@ SettingsUpdatesPage::SettingsUpdatesPage(AppUpdater& updater, QWidget* parent)
         QStringLiteral("settingsWorkspaceHelp"), this));
     layout->addStretch(1);
 
-    connect(check_, &QPushButton::clicked, this, [this] { updater_.checkForUpdates(); });
-    connect(automaticChecks_, &QCheckBox::toggled, this,
+    connect(check_, &QAbstractButton::clicked, this, [this] { updater_.checkForUpdates(); });
+    connect(automaticChecks_, &QAbstractButton::toggled, this,
             [this](const bool enabled) { updater_.setAutomaticallyChecksForUpdates(enabled); });
-    connect(automaticDownloads_, &QCheckBox::toggled, this,
+    connect(automaticDownloads_, &QAbstractButton::toggled, this,
             [this](const bool enabled) { updater_.setAutomaticallyDownloadsUpdates(enabled); });
     connect(&updater_, &AppUpdater::stateChanged, this, &SettingsUpdatesPage::refresh);
     connect(&updater_, &AppUpdater::pendingVersionChanged, this, &SettingsUpdatesPage::refresh);

@@ -2,11 +2,10 @@
 #include "app/SettingsDialog.h"
 #include "app/SettingsWorkspacePage.h"
 #include "ui/Theme.h"
+#include <QAbstractButton>
 #include <QAccessible>
-#include <QCheckBox>
 #include <QComboBox>
 #include <QLabel>
-#include <QPushButton>
 #include <QScrollArea>
 #include <QSpinBox>
 #include <QTimer>
@@ -52,12 +51,12 @@ QJsonObject lowDiskState() {
 QComboBox* days(SettingsStoragePage& page) {
     return page.findChild<QComboBox*>("storageDetailDays");
 }
-QCheckBox* automatic(SettingsStoragePage& page) {
-    return page.findChild<QCheckBox*>("storageAutomaticDetail");
+QAbstractButton* automatic(SettingsStoragePage& page) {
+    return page.findChild<QAbstractButton*>("storageAutomaticDetail");
 }
 QLabel* status(SettingsStoragePage& page) { return page.findChild<QLabel*>("storageStatus"); }
-QPushButton* reload(SettingsStoragePage& page) {
-    return page.findChild<QPushButton*>("storageReload");
+QAbstractButton* reload(SettingsStoragePage& page) {
+    return page.findChild<QAbstractButton*>("storageReload");
 }
 void choose(SettingsStoragePage& page, int value) {
     days(page)->setCurrentIndex(days(page)->findData(value));
@@ -91,7 +90,7 @@ class SettingsStoragePageTest final : public QObject {
                 reply(sizeState(1, 0, 95), {});
             }
         });
-        auto* save = page.findChild<QPushButton*>("storageSizeSave");
+        auto* save = page.findChild<QAbstractButton*>("storageSizeSave");
         auto* limit = page.findChild<QComboBox*>("storageSizeLimit");
         auto* warning = page.findChild<QSpinBox*>("storageWarningPercent");
         QTRY_VERIFY(save->isEnabled());
@@ -131,7 +130,7 @@ class SettingsStoragePageTest final : public QObject {
                 saveReply = reply;
             }
         });
-        auto* button = page.findChild<QPushButton*>("storageSizeSave");
+        auto* button = page.findChild<QAbstractButton*>("storageSizeSave");
         auto* limit = page.findChild<QComboBox*>("storageSizeLimit");
         auto* warning = page.findChild<QSpinBox*>("storageWarningPercent");
         QTRY_VERIFY(button->isEnabled());
@@ -172,7 +171,7 @@ class SettingsStoragePageTest final : public QObject {
             else
                 pending = reply;
         });
-        auto* button = page.findChild<QPushButton*>("storageSizeSave");
+        auto* button = page.findChild<QAbstractButton*>("storageSizeSave");
         QTRY_VERIFY(button->isEnabled());
         button->click();
         QVERIFY(bool(pending));
@@ -216,7 +215,7 @@ class SettingsStoragePageTest final : public QObject {
             reply(op == "read" ? supportedState() : malformed, {});
         });
         QTRY_VERIFY(reload(page)->isEnabled());
-        QVERIFY(!page.findChild<QPushButton*>("storageSizeSave")->isEnabled());
+        QVERIFY(!page.findChild<QAbstractButton*>("storageSizeSave")->isEnabled());
         QVERIFY(!days(page)->isEnabled());
     }
     void sizeReplyAfterDestruction() {
@@ -244,7 +243,7 @@ class SettingsStoragePageTest final : public QObject {
                 reply(value, {});
             }
         });
-        auto* button = page.findChild<QPushButton*>("storageSizeSave");
+        auto* button = page.findChild<QAbstractButton*>("storageSizeSave");
         QTRY_VERIFY(button->isEnabled());
         QVERIFY(page.findChild<QLabel*>("storageSizeStatus")->text().contains("unknown"));
         modern = false;
@@ -505,7 +504,7 @@ class SettingsStoragePageTest final : public QObject {
         scroll.setWidgetResizable(true);
         scroll.resize(width, 700);
         scroll.show();
-        auto* save = page->findChild<QPushButton*>("storageSizeSave");
+        auto* save = page->findChild<QAbstractButton*>("storageSizeSave");
         auto* limit = page->findChild<QComboBox*>("storageSizeLimit");
         auto* warning = page->findChild<QSpinBox*>("storageWarningPercent");
         QTRY_VERIFY(save->isEnabled());

@@ -66,6 +66,7 @@ class ActivityBar final : public QWidget {
     void conversationContextMenuRequested(const QString& worktreePath,
                                           const QString& conversationId);
     void settingsRequested();
+    void settingsSectionRequested(const QString& id);
     void identityRequested();
     void updatesRequested();
     void sidebarWidthChanged(int width);

@@ -1,4 +1,8 @@
 #include "app/SettingsClaudeCredentials.h"
+#include "KetButton.h"
+#include "KetSelect.h"
+#include "KetTextField.h"
+#include <QAbstractButton>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QGridLayout>
@@ -6,7 +10,6 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPointer>
-#include <QPushButton>
 #include <QTimer>
 
 namespace ketplus {
@@ -32,11 +35,11 @@ SettingsClaudeCredentials::SettingsClaudeCredentials(Requester requester, QWidge
                  "configuration. Changes apply to new queries after current work finishes."),
               "settingsWorkspaceHelp"),
         1, 0, 1, 2);
-    mode_ = new QComboBox(this);
+    mode_ = new ket::Select(this);
     mode_->setObjectName("claudeAuthenticationMode");
     mode_->addItem(tr("Existing Claude runtime authentication"));
     mode_->addItem(tr("My Anthropic API key"));
-    key_ = new QLineEdit(this);
+    key_ = new ket::TextField(this);
     key_->setObjectName("claudeApiKey");
     key_->setEchoMode(QLineEdit::Password);
     key_->setMaxLength(512);
@@ -66,13 +69,13 @@ SettingsClaudeCredentials::SettingsClaudeCredentials(Requester requester, QWidge
     auto* buttons = new QGridLayout(actions);
     buttons->setContentsMargins(0, 0, 0, 0);
     buttons->setSpacing(8);
-    save_ = new QPushButton(tr("Save Claude settings"), actions);
+    save_ = new ket::Button(tr("Save Claude settings"), ket::ButtonVariant::Primary, actions);
     save_->setObjectName("claudeCredentialsSave");
-    check_ = new QPushButton(tr("Check connection"), actions);
+    check_ = new ket::Button(tr("Check connection"), ket::ButtonVariant::Secondary, actions);
     check_->setObjectName("claudeCredentialsCheck");
-    remove_ = new QPushButton(tr("Remove key…"), actions);
+    remove_ = new ket::Button(tr("Remove key…"), ket::ButtonVariant::GhostDanger, actions);
     remove_->setObjectName("claudeCredentialsRemove");
-    refresh_ = new QPushButton(tr("Refresh"), actions);
+    refresh_ = new ket::Button(tr("Refresh"), ket::ButtonVariant::Secondary, actions);
     refresh_->setObjectName("claudeCredentialsRefresh");
     buttons->addWidget(save_, 0, 0);
     buttons->addWidget(check_, 0, 1);
@@ -86,16 +89,16 @@ SettingsClaudeCredentials::SettingsClaudeCredentials(Requester requester, QWidge
     grid->addWidget(observation_, 8, 0, 1, 2);
     connect(mode_, &QComboBox::currentIndexChanged, this,
             &SettingsClaudeCredentials::updateControls);
-    connect(save_, &QPushButton::clicked, this, [this] {
+    connect(save_, &QAbstractButton::clicked, this, [this] {
         const QJsonObject payload{{"enabled", mode_->currentIndex() == 1},
                                   {"key", key_->text()},
                                   {"budget_usd", budget_->value()}};
         key_->clear();
         request("save", payload);
     });
-    connect(check_, &QPushButton::clicked, this, [this] { request("check"); });
-    connect(refresh_, &QPushButton::clicked, this, &SettingsClaudeCredentials::refresh);
-    connect(remove_, &QPushButton::clicked, this, [this] {
+    connect(check_, &QAbstractButton::clicked, this, [this] { request("check"); });
+    connect(refresh_, &QAbstractButton::clicked, this, &SettingsClaudeCredentials::refresh);
+    connect(remove_, &QAbstractButton::clicked, this, [this] {
         if (QMessageBox::question(
                 this, tr("Remove Claude API key?"),
                 tr("New queries will use the existing Claude runtime authentication. Running "

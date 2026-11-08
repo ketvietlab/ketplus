@@ -1,10 +1,13 @@
 #include "app/SettingsStoragePage.h"
-#include <QCheckBox>
+#include "KetButton.h"
+#include "KetSelect.h"
+#include "KetToggle.h"
+
+#include <QAbstractButton>
 #include <QComboBox>
 #include <QLabel>
 #include <QLocale>
 #include <QPointer>
-#include <QPushButton>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QTimer>
@@ -52,7 +55,7 @@ SettingsStoragePage::SettingsStoragePage(Requester requester, QWidget* parent)
                  "Measurements refresh when you reload or save."),
               "settingsWorkspaceIntro", this));
     layout->addSpacing(8);
-    days_ = new QComboBox(this);
+    days_ = new ket::Select(this);
     days_->setObjectName("storageDetailDays");
     days_->setAccessibleName(tr("Keep full detail for"));
     days_->setAccessibleDescription(tr("Keep full detail for. Changes save immediately."));
@@ -66,7 +69,7 @@ SettingsStoragePage::SettingsStoragePage(Requester requester, QWidget* parent)
     title->setBuddy(days_);
     layout->addWidget(title);
     layout->addWidget(days_, 0, Qt::AlignLeft);
-    automatic_ = new QCheckBox(tr("Trim older detail automatically while idle"), this);
+    automatic_ = new ket::Checkbox(tr("Trim older detail automatically while idle"), this);
     automatic_->setObjectName("storageAutomaticDetail");
     automatic_->setAccessibleName(automatic_->text());
     layout->addWidget(automatic_);
@@ -82,7 +85,7 @@ SettingsStoragePage::SettingsStoragePage(Requester requester, QWidget* parent)
     auto* sizeLayout = new QVBoxLayout(sizeGroup_);
     sizeLayout->setContentsMargins(0, 8, 0, 0);
     sizeLayout->setSpacing(12);
-    limit_ = new QComboBox(sizeGroup_);
+    limit_ = new ket::Select(sizeGroup_);
     limit_->setObjectName("storageSizeLimit");
     limit_->setAccessibleName(tr("Database size target"));
     for (const qint64 gb : {1, 2, 5, 10})
@@ -122,23 +125,24 @@ SettingsStoragePage::SettingsStoragePage(Requester requester, QWidget* parent)
     };
     connect(limit_, &QComboBox::currentIndexChanged, this, draftChanged);
     connect(warning_, &QSpinBox::valueChanged, this, draftChanged);
-    saveSize_ = new QPushButton(tr("Save database target"), sizeGroup_);
+    saveSize_ =
+        new ket::Button(tr("Save database target"), ket::ButtonVariant::Primary, sizeGroup_);
     saveSize_->setObjectName("storageSizeSave");
     saveSize_->setMinimumHeight(32);
     sizeLayout->addWidget(saveSize_, 0, Qt::AlignLeft);
-    connect(saveSize_, &QPushButton::clicked, this, &SettingsStoragePage::saveSize);
+    connect(saveSize_, &QAbstractButton::clicked, this, &SettingsStoragePage::saveSize);
     sizeGroup_->hide();
     layout->addWidget(sizeGroup_);
     status_ = label(tr("Loading storage settings…"), "storageStatus", this);
     layout->addWidget(status_);
-    refresh_ = new QPushButton(tr("Reload settings"), this);
+    refresh_ = new ket::Button(tr("Reload settings"), ket::ButtonVariant::Secondary, this);
     refresh_->setObjectName("storageReload");
     refresh_->setMinimumHeight(32);
     layout->addWidget(refresh_, 0, Qt::AlignLeft);
     layout->addStretch(1);
     connect(days_, &QComboBox::activated, this, [this] { save(); });
-    connect(automatic_, &QCheckBox::clicked, this, [this] { save(); });
-    connect(refresh_, &QPushButton::clicked, this, &SettingsStoragePage::refresh);
+    connect(automatic_, &QAbstractButton::clicked, this, [this] { save(); });
+    connect(refresh_, &QAbstractButton::clicked, this, &SettingsStoragePage::refresh);
     setBusy(true);
     QTimer::singleShot(0, this, &SettingsStoragePage::refresh);
 }

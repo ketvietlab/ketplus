@@ -8,7 +8,7 @@
 
 class QLabel;
 class QListWidget;
-class QPushButton;
+class QAbstractButton;
 
 namespace ketplus {
 
@@ -30,8 +30,8 @@ class ArchivedSettingsPage final : public SettingsPage {
     StopConversation stop_;
     QLabel* emptyState_{nullptr};
     QListWidget* list_{nullptr};
-    QPushButton* restoreButton_{nullptr};
-    QPushButton* stopButton_{nullptr};
+    QAbstractButton* restoreButton_{nullptr};
+    QAbstractButton* stopButton_{nullptr};
 };
 
 } // namespace ketplus
