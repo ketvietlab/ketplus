@@ -66,7 +66,6 @@ class ProviderHandoffTest final : public QObject {
         }
         // This is the normal desktop ACK path, missing from the original handoff test.
         QVERIFY(journal.acknowledgeCursor("desktop", session.id, session.generation, lastCursor));
-        QVERIFY(journal.eventsAfter(session.id, session.generation, 0).isEmpty());
 
         const QJsonArray events = provider_handoff::journalEvents(journal, session.id, 1);
         QCOMPARE(events.size(), 1 + 3 * turns); // Completed answers replace deltas.
@@ -79,6 +78,14 @@ class ProviderHandoffTest final : public QObject {
         QVERIFY(!transcript.contains("partial"));
         QVERIFY(provider_handoff::journalEvents(journal, session.id, 2).isEmpty());
         QVERIFY(provider_handoff::journalEvents(journal, "other-session", 1).isEmpty());
+
+        // Physical raw cleanup is now bounded/eventual. Handoff must be identical
+        // while cleanup is queued and after every acknowledged delivery row is gone.
+        for (int pass = 0;
+             pass < 64 && !journal.eventsAfter(session.id, session.generation, 0).isEmpty(); ++pass)
+            QVERIFY(journal.pruneAcknowledgedEvents());
+        QVERIFY(journal.eventsAfter(session.id, session.generation, 0).isEmpty());
+        QCOMPARE(provider_handoff::journalEvents(journal, session.id, 1), events);
     }
 };
 

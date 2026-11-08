@@ -101,6 +101,8 @@ class CloudControlClient final : public QObject {
     void approvePairing(const QJsonObject& payload, LocalCallback callback);
     void revokePairing(const QJsonObject& payload, LocalCallback callback);
     void revokeDevice(const QJsonObject& payload, LocalCallback callback);
+    QString uploadScope() const;
+    qint64 uploadedCursor(const QString& sessionId, qint64 generation);
     bool registerCloudCursors();
     bool registerCloudCursor(const StoredSession& session);
     void initializePeerTransport();

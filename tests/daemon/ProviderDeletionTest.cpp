@@ -5,13 +5,106 @@
 #include "storage/LocalJournal.h"
 #include <QFile>
 #include <QSignalSpy>
+#include <QSqlDatabase>
+#include <QSqlError>
+#include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QtTest>
 
 using namespace ketplus::daemon;
+namespace {
+QList<QPair<QString, QString>> unsupportedOwnershipMetadata() {
+    return {{"broken-json", "not-json"},
+            {"root-array", "[]"},
+            {"provider-string", R"({"codex":"unknown"})"},
+            {"thread-number", R"({"codex":{"thread_id":42}})"},
+            {"retired-string", R"({"codex":{"retired_thread_ids":"shared-thread"}})"},
+            {"retired-number", R"({"codex":{"retired_thread_ids":[42]}})"},
+            {"unknown-fields", R"({"codex":{"future_refs":["shared-thread"]}})"},
+            {"empty-provider", R"({"":{"thread_id":"shared-thread"}})"}};
+}
+} // namespace
 class ProviderDeletionTest final : public QObject {
     Q_OBJECT
   private slots:
+    void failedSessionDeletionRollsBackAndCanRetry_data() {
+        QTest::addColumn<QString>("fault");
+        QTest::newRow("commit") << "commit";
+        QTest::newRow("ignored-tombstone") << "session_tombstones";
+        QTest::newRow("ignored-work") << "session_deletion_work";
+        QTest::newRow("ignored-history") << "events";
+    }
+    void failedSessionDeletionRollsBackAndCanRetry() {
+        QFETCH(QString, fault);
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(journal.isOpen());
+        StoredSession session;
+        session.id = "deleted";
+        session.generation = 1;
+        session.worktreePath = dir.path();
+        session.adapter = "codex";
+        session.state = "ready";
+        QVERIFY(journal.upsertSession(session));
+        const auto number = journal.assignConversationNumber(session.id, 1);
+        QVERIFY(!number.isEmpty());
+        QVERIFY(journal.appendEvent(session.id, 1, "assistant.delta", {{"text", "keep"}}) > 0);
+        const auto before = journal.eventsAfter(session.id, 1, 0);
+        session.id = "unrelated";
+        QVERIFY(journal.upsertSession(session));
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == path)
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        QSqlQuery q(db);
+        if (fault == "commit") {
+            QVERIFY(q.exec("CREATE TABLE deletion_parent(id INTEGER PRIMARY KEY)"));
+            QVERIFY(q.exec("CREATE TABLE deletion_child(id INTEGER REFERENCES deletion_parent(id) "
+                           "DEFERRABLE INITIALLY DEFERRED)"));
+            QVERIFY(q.exec("CREATE TRIGGER fail_delete AFTER DELETE ON sessions "
+                           "BEGIN INSERT INTO deletion_child VALUES(1); END"));
+        } else if (fault == "events") {
+            QVERIFY(q.exec("CREATE TRIGGER fail_delete BEFORE DELETE ON events "
+                           "BEGIN SELECT RAISE(IGNORE); END"));
+        } else {
+            QVERIFY(q.exec(QString("CREATE TRIGGER fail_delete BEFORE INSERT ON %1 "
+                                   "BEGIN SELECT RAISE(IGNORE); END")
+                               .arg(fault)));
+        }
+        QString error;
+        const QJsonArray targets{QJsonObject{{"provider", "codex"}, {"thread_id", "owned"}}};
+        QVERIFY(!journal.deleteSession("deleted", 1, "delete-op", 1, &error, targets));
+        QVERIFY(!error.isEmpty());
+        // A failed commit must release the write transaction, not expose an
+        // uncommitted tombstone that would falsely succeed on the next retry.
+        QVERIFY2(q.exec("BEGIN"), qPrintable(q.lastError().text()));
+        QVERIFY(q.exec("ROLLBACK"));
+        QCOMPARE(journal.sessions().size(), 2);
+        QCOMPARE(journal.eventsAfter("deleted", 1, 0), before);
+        QCOMPARE(journal.conversationNumber("deleted", 1), number);
+        QVERIFY(journal.sessionTombstone("deleted", 1).sessionId.isEmpty());
+        QVERIFY(journal.deletionWork().isEmpty());
+        QVERIFY(q.exec("DROP TRIGGER fail_delete"));
+        QVERIFY2(journal.deleteSession("deleted", 1, "delete-op", 1, &error, targets),
+                 qPrintable(error));
+        QCOMPARE(journal.sessions().size(), 1);
+        QCOMPARE(journal.sessions().first().id, QString("unrelated"));
+        QVERIFY(journal.eventsAfter("deleted", 1, 0).isEmpty());
+        QCOMPARE(journal.sessionTombstone("deleted", 1).operationId, QString("delete-op"));
+        QCOMPARE(journal.deletionWork().size(), 1);
+        QCOMPARE(journal.deletionWork().first().toObject().value("provider_targets").toArray(),
+                 targets);
+        QVERIFY(journal.deleteSession("deleted", 1, "delete-op", 1, &error, targets));
+        QVERIFY(!journal.deleteSession("deleted", 1, "different-op", 1, &error, targets));
+        LocalJournal reopened(path);
+        QVERIFY(reopened.isOpen());
+        QCOMPARE(reopened.sessions().size(), 1);
+        QCOMPARE(reopened.sessionTombstone("deleted", 1).operationId, QString("delete-op"));
+        QCOMPARE(reopened.deletionWork().size(), 1);
+    }
     void purgeIsDurableAndScopedToUnsharedProviderThreads() {
         QTemporaryDir directory;
         const auto executable = directory.filePath("codex");
@@ -143,6 +236,221 @@ class ProviderDeletionTest final : public QObject {
                                                "desktop");
         QCOMPARE(result.value("error_code").toString(), "provider_cleanup_unsupported");
         QCOMPARE(journal.sessions().size(), 1);
+        QVERIFY(journal.deletionWork().isEmpty());
+    }
+    void newDeletionDefersWhenOwnershipCannotBeRead() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        StoredSession session;
+        session.id = "first";
+        session.generation = 1;
+        session.adapter = "codex";
+        session.threadId = "shared-thread";
+        session.worktreePath = dir.path();
+        session.state = "ready";
+        QVERIFY(journal.upsertSession(session));
+        session.id = "second";
+        QVERIFY(journal.upsertSession(session));
+        CodexAdapter adapter("/missing-provider");
+        SessionHost host(&journal, &adapter);
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == path)
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        QSqlQuery q(db);
+        QVERIFY(q.exec("ALTER TABLE sessions RENAME COLUMN provider_threads TO hidden_threads"));
+        const auto result = host.handleCommand({{"protocol_version", 0},
+                                                {"message_id", "delete-with-unreadable-ownership"},
+                                                {"message_type", "session.delete"},
+                                                {"session_id", "first"},
+                                                {"session_generation", 1},
+                                                {"payload", QJsonObject{}}},
+                                               "desktop");
+        QVERIFY(q.exec("ALTER TABLE sessions RENAME COLUMN hidden_threads TO provider_threads"));
+        QVERIFY2(!result.value("ok").toBool(), QJsonDocument(result).toJson().constData());
+        QCOMPARE(journal.sessions().size(), 2);
+        QVERIFY(journal.sessionTombstone("first", 1).sessionId.isEmpty());
+        QVERIFY(journal.deletionWork().isEmpty());
+        const auto retry = host.handleCommand({{"protocol_version", 0},
+                                               {"message_id", "delete-after-repair"},
+                                               {"message_type", "session.delete"},
+                                               {"session_id", "first"},
+                                               {"session_generation", 1},
+                                               {"payload", QJsonObject{}}},
+                                              "desktop");
+        QVERIFY(retry.value("ok").toBool());
+        QCOMPARE(journal.sessions().size(), 1);
+        QCOMPARE(journal.sessions().first().id, QString("second"));
+        QVERIFY(journal.deletionWork()
+                    .first()
+                    .toObject()
+                    .value("provider_targets")
+                    .toArray()
+                    .isEmpty());
+    }
+    void queuedCleanupDefersWhenOwnershipCannotBeRead_data() {
+        QTest::addColumn<QString>("fault");
+        QTest::addColumn<QString>("malformed");
+        QTest::newRow("query-error") << "query" << QString{};
+        QTest::newRow("partial-row-error") << "partial" << QString{};
+        for (const auto& entry : unsupportedOwnershipMetadata())
+            QTest::newRow(qPrintable(entry.first)) << "metadata" << entry.second;
+    }
+    void queuedCleanupDefersWhenOwnershipCannotBeRead() {
+        QFETCH(QString, fault);
+        QFETCH(QString, malformed);
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        const auto executable = dir.filePath("codex");
+        const auto log = dir.filePath("codex.log");
+        QVERIFY(writeFakeCodex(executable, log));
+        LocalJournal journal(path);
+        StoredSession session;
+        session.id = "deleted";
+        session.generation = 1;
+        session.adapter = "codex";
+        session.threadId = "shared-thread";
+        session.worktreePath = dir.path();
+        session.state = "ready";
+        QVERIFY(journal.upsertSession(session));
+        QString error;
+        QVERIFY(journal.deleteSession(
+            "deleted", 1, "op", 1, &error,
+            {QJsonObject{{"provider", "codex"}, {"thread_id", "shared-thread"}}}));
+        const QString historical = R"({"codex":{"retired_thread_ids":["shared-thread"]}})";
+        session.id = "z-retained";
+        session.threadId = "current-thread";
+        session.providerThreads = historical;
+        QVERIFY(journal.upsertSession(session));
+        session.id = "a-readable";
+        session.threadId = "unrelated-thread";
+        session.providerThreads = "{}";
+        QVERIFY(journal.upsertSession(session));
+        CodexAdapter adapter(executable);
+        bool warm = false;
+        adapter.call("model/list", {}, [&](const QJsonObject&, const QString& e) {
+            QVERIFY2(e.isEmpty(), qPrintable(e));
+            warm = true;
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(warm, 5000);
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == path)
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        QSqlQuery q(db);
+        {
+            SessionHost host(&journal, &adapter);
+            if (fault == "partial") {
+                QVERIFY(q.exec("PRAGMA table_info(sessions)"));
+                QStringList columns;
+                while (q.next()) {
+                    const auto column = q.value(1).toString();
+                    columns.append(
+                        column == "provider_threads"
+                            ? "CASE WHEN id='z-retained' THEN json_extract('invalid','$') "
+                              "ELSE provider_threads END AS provider_threads"
+                            : '"' + column + '"');
+                }
+                q.finish();
+                QVERIFY(q.exec("ALTER TABLE sessions RENAME TO held_sessions"));
+                QVERIFY(q.exec("CREATE VIEW sessions AS SELECT " + columns.join(',') +
+                               " FROM held_sessions"));
+            } else if (fault == "query") {
+                QVERIFY(q.exec(
+                    "ALTER TABLE sessions RENAME COLUMN provider_threads TO hidden_threads"));
+            } else {
+                q.prepare("UPDATE sessions SET provider_threads=? WHERE id='z-retained'");
+                q.addBindValue(malformed);
+                QVERIFY(q.exec());
+            }
+            // Run the queued maintenance, then a provider barrier. Any earlier
+            // thread/delete must finish before that barrier response arrives.
+            QCoreApplication::sendPostedEvents();
+            bool barrier = false;
+            adapter.call("model/list", {}, [&](const QJsonObject&, const QString& e) {
+                QVERIFY2(e.isEmpty(), qPrintable(e));
+                barrier = true;
+            });
+            QTRY_VERIFY_WITH_TIMEOUT(barrier, 5000);
+            QFile calls(log);
+            QVERIFY(calls.open(QIODevice::ReadOnly));
+            const auto recorded = calls.readAll();
+            QVERIFY2(!recorded.contains("delete:shared-thread"), recorded.constData());
+            QCOMPARE(journal.deletionWork()
+                         .first()
+                         .toObject()
+                         .value("provider_targets")
+                         .toArray()
+                         .size(),
+                     1);
+            if (fault == "partial") {
+                QVERIFY(q.exec("DROP VIEW sessions"));
+                QVERIFY(q.exec("ALTER TABLE held_sessions RENAME TO sessions"));
+            } else if (fault == "query") {
+                QVERIFY(q.exec(
+                    "ALTER TABLE sessions RENAME COLUMN hidden_threads TO provider_threads"));
+            } else {
+                q.prepare("UPDATE sessions SET provider_threads=? WHERE id='z-retained'");
+                q.addBindValue(historical);
+                QVERIFY(q.exec());
+            }
+        }
+        SessionHost restarted(&journal, &adapter);
+        QTRY_VERIFY(journal.deletionWork()
+                        .first()
+                        .toObject()
+                        .value("provider_targets")
+                        .toArray()
+                        .isEmpty());
+        QFile calls(log);
+        QVERIFY(calls.open(QIODevice::ReadOnly));
+        QVERIFY(!calls.readAll().contains("delete:shared-thread"));
+        QCOMPARE(journal.sessions().size(), 2);
+    }
+    void localDeletionPreservesUnsupportedOwnershipMetadata_data() {
+        QTest::addColumn<QString>("malformed");
+        QTest::addColumn<bool>("corruptSource");
+        for (const auto& entry : unsupportedOwnershipMetadata()) {
+            QTest::newRow(qPrintable("source-" + entry.first)) << entry.second << true;
+            QTest::newRow(qPrintable("retained-" + entry.first)) << entry.second << false;
+        }
+    }
+    void localDeletionPreservesUnsupportedOwnershipMetadata() {
+        QFETCH(QString, malformed);
+        QFETCH(bool, corruptSource);
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite"));
+        StoredSession session;
+        session.id = "first";
+        session.generation = 1;
+        session.adapter = "codex";
+        session.threadId = "shared-thread";
+        session.worktreePath = dir.path();
+        session.state = "ready";
+        session.providerThreads = corruptSource ? malformed : "{}";
+        QVERIFY(journal.upsertSession(session));
+        session.id = "second";
+        session.threadId = "unrelated-current-thread";
+        session.providerThreads = corruptSource ? "{}" : malformed;
+        QVERIFY(journal.upsertSession(session));
+        CodexAdapter adapter("/missing-provider");
+        SessionHost host(&journal, &adapter);
+        const auto result = host.handleCommand({{"protocol_version", 0},
+                                                {"message_id", "delete-with-unsupported-ownership"},
+                                                {"message_type", "session.delete"},
+                                                {"session_id", "first"},
+                                                {"session_generation", 1},
+                                                {"payload", QJsonObject{}}},
+                                               "desktop");
+        QVERIFY2(!result.value("ok").toBool(), QJsonDocument(result).toJson().constData());
+        QCOMPARE(journal.sessions().size(), 2);
+        QCOMPARE(journal.sessions().at(corruptSource ? 0 : 1).providerThreads, malformed);
+        QVERIFY(journal.sessionTombstone("first", 1).sessionId.isEmpty());
         QVERIFY(journal.deletionWork().isEmpty());
     }
     void sharedThreadsRemainOwnedByTheOtherConversation() {

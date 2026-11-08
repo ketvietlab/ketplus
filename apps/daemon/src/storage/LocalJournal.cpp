@@ -6,10 +6,12 @@
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QJsonDocument>
+#include <QScopeGuard>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QUuid>
 #include <QVariant>
+#include <limits>
 
 namespace ketplus::daemon {
 namespace {
@@ -92,6 +94,24 @@ bool LocalJournal::initialize() {
             "singleton INTEGER PRIMARY KEY CHECK(singleton=1), "
             "revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision>0), "
             "policy TEXT NOT NULL CHECK(length(CAST(policy AS BLOB))<=4096))"),
+        QStringLiteral("CREATE TABLE IF NOT EXISTS journal_attachment_gc ("
+                       "singleton INTEGER PRIMARY KEY CHECK(singleton=1), "
+                       "manifest_row INTEGER NOT NULL DEFAULT 0 CHECK(manifest_row>=0), "
+                       "chunk_row INTEGER NOT NULL DEFAULT 0 CHECK(chunk_row>=0))"),
+        QStringLiteral("INSERT OR IGNORE INTO journal_attachment_gc(singleton) VALUES(1)"),
+        QStringLiteral("CREATE TABLE IF NOT EXISTS journal_gc_state ("
+                       "singleton INTEGER PRIMARY KEY CHECK(singleton=1), "
+                       "payload_row INTEGER NOT NULL DEFAULT 0 CHECK(payload_row>=0), "
+                       "chunk_row INTEGER NOT NULL DEFAULT 0 CHECK(chunk_row>=0))"),
+        QStringLiteral("INSERT OR IGNORE INTO journal_gc_state(singleton) VALUES(1)"),
+        QStringLiteral("CREATE TABLE IF NOT EXISTS journal_ack_gc ("
+                       "queue_id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, "
+                       "generation INTEGER NOT NULL, "
+                       "UNIQUE(session_id,generation))"),
+        QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS journal_metadata_gc ("
+            "table_name TEXT PRIMARY KEY, age_row INTEGER NOT NULL DEFAULT 0 CHECK(age_row>=0), "
+            "cap_row INTEGER NOT NULL DEFAULT 0 CHECK(cap_row>=0))"),
         QStringLiteral("CREATE TABLE IF NOT EXISTS sessions ("
                        "id TEXT PRIMARY KEY, worktree_path TEXT NOT NULL, adapter TEXT NOT NULL, "
                        "thread_id TEXT NOT NULL, turn_id TEXT NOT NULL, state TEXT NOT NULL, "
@@ -129,17 +149,28 @@ bool LocalJournal::initialize() {
             "session_id TEXT NOT NULL, generation INTEGER NOT NULL, "
             "deletion TEXT NOT NULL, provider_targets TEXT NOT NULL DEFAULT '[]', "
             "cloud_acked INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(session_id, generation))"),
+        QStringLiteral("CREATE INDEX IF NOT EXISTS session_deletion_pending ON "
+                       "session_deletion_work((provider_targets != '[]' OR cloud_acked=0))"),
+        QStringLiteral("CREATE INDEX IF NOT EXISTS session_deletion_cloud_pending ON "
+                       "session_deletion_work(cloud_acked)"),
+        QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS cloud_upload_progress ("
+            "scope TEXT NOT NULL, session_id TEXT NOT NULL, generation INTEGER NOT NULL, "
+            "cursor INTEGER NOT NULL, PRIMARY KEY(scope,session_id,generation))"),
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS cloud_events ("
             "session_id TEXT NOT NULL, generation INTEGER NOT NULL, cursor INTEGER NOT NULL, "
             "event TEXT NOT NULL, created_at TEXT NOT NULL, "
             "projection_policy_version INTEGER NOT NULL DEFAULT 0, "
+            "upload_acked INTEGER NOT NULL DEFAULT 0, "
             "PRIMARY KEY(session_id, generation, cursor))"),
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS client_cursors ("
             "client_id TEXT NOT NULL, session_id TEXT NOT NULL, generation INTEGER NOT NULL, "
             "cursor INTEGER NOT NULL, acknowledged_at TEXT NOT NULL, "
             "PRIMARY KEY(client_id, session_id, generation))"),
+        QStringLiteral("CREATE INDEX IF NOT EXISTS client_cursors_generation ON "
+                       "client_cursors(session_id,generation,cursor)"),
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS replay_events ("
             "session_id TEXT NOT NULL, generation INTEGER NOT NULL, cursor INTEGER NOT NULL, "
@@ -188,38 +219,8 @@ bool LocalJournal::initialize() {
         }
     }
     return migrateTranscriptSchema() && purgeExpiredAttachments() && backfillTurnSequences() &&
-           backfillReplayProjection() && initializeRemoteAudit() && pruneRetention();
-}
-
-bool LocalJournal::purgeExpiredAttachments() {
-    if (!database_.transaction()) {
-        setError(database_.lastError().text());
-        return false;
-    }
-    QSqlQuery chunks(database_);
-    if (!chunks.exec(QStringLiteral(
-            "DELETE FROM staged_attachment_chunks WHERE EXISTS (SELECT 1 FROM staged_attachments "
-            "a WHERE a.session_id=staged_attachment_chunks.session_id AND "
-            "a.generation=staged_attachment_chunks.generation AND "
-            "a.attachment_id=staged_attachment_chunks.attachment_id AND "
-            "datetime(a.created_at) < datetime('now','-1 day'))"))) {
-        database_.rollback();
-        setError(chunks.lastError().text());
-        return false;
-    }
-    QSqlQuery manifests(database_);
-    if (!manifests.exec(QStringLiteral("DELETE FROM staged_attachments WHERE datetime(created_at) "
-                                       "< datetime('now','-1 day')"))) {
-        database_.rollback();
-        setError(manifests.lastError().text());
-        return false;
-    }
-    if (!database_.commit()) {
-        database_.rollback();
-        setError(database_.lastError().text());
-        return false;
-    }
-    return true;
+           backfillReplayProjection() && initializeRemoteAudit() && pruneAcknowledgedEvents() &&
+           pruneRetention();
 }
 
 bool LocalJournal::migrateTranscriptSchema() {
@@ -278,6 +279,8 @@ bool LocalJournal::migrateTranscriptSchema() {
                       QStringLiteral("TEXT NOT NULL DEFAULT ''")) ||
         !ensureColumn(QStringLiteral("cloud_events"), QStringLiteral("projection_policy_version"),
                       QStringLiteral("INTEGER NOT NULL DEFAULT 0")) ||
+        !ensureColumn(QStringLiteral("cloud_events"), QStringLiteral("upload_acked"),
+                      QStringLiteral("INTEGER NOT NULL DEFAULT 0")) ||
         // -1 marks legacy rows whose bytes live only in payload (no chunk rows).
         !ensureColumn(QStringLiteral("large_event_payloads"), QStringLiteral("total_bytes"),
                       QStringLiteral("INTEGER NOT NULL DEFAULT -1"))) {
@@ -322,6 +325,14 @@ bool LocalJournal::migrateTranscriptSchema() {
     if (!index.exec(QStringLiteral(
             "CREATE INDEX IF NOT EXISTS replay_events_item_cursor ON "
             "replay_events(session_id, generation, item_id, turn_sequence, cursor)"))) {
+        setError(index.lastError().text());
+        return false;
+    }
+    // Blob GC must seek the transfer instead of parsing every replay row for an item.
+    // This initializer also runs when opening journals created before this index.
+    if (!index.exec(QStringLiteral("CREATE INDEX IF NOT EXISTS replay_events_item_transfer ON "
+                                   "replay_events(session_id, generation, item_id, "
+                                   "json_extract(payload,'$.large_event.transfer_id'))"))) {
         setError(index.lastError().text());
         return false;
     }
@@ -510,9 +521,11 @@ bool LocalJournal::updateReplayProjection(const QString& sessionId, const qint64
         state.addBindValue(generation);
         state.addBindValue(cursor);
         state.addBindValue(cursor);
-        if (!state.exec()) {
+        if (!state.exec() || state.numRowsAffected() != 1) {
             if (error != nullptr) {
-                *error = state.lastError().text();
+                *error = state.lastError().isValid()
+                             ? state.lastError().text()
+                             : QStringLiteral("Replay cursor state was not stored.");
             }
             return false;
         }
@@ -526,9 +539,10 @@ bool LocalJournal::updateReplayProjection(const QString& sessionId, const qint64
          (payload.value("item").toObject().value("type") == "commandExecution" &&
           payload.value("item").toObject().value("aggregatedOutput").isString()))) {
         QSqlQuery removeDeltas(database_);
-        removeDeltas.prepare(QStringLiteral(
-            "DELETE FROM replay_events WHERE session_id = ? AND generation = ? AND item_id = ? "
-            "AND turn_sequence = ? AND event_type IN ('assistant.delta', 'command.output_delta')"));
+        const QString deltaPredicate = QStringLiteral(
+            "session_id = ? AND generation = ? AND item_id = ? AND turn_sequence = ? "
+            "AND event_type IN ('assistant.delta', 'command.output_delta')");
+        removeDeltas.prepare(QStringLiteral("DELETE FROM replay_events WHERE ") + deltaPredicate);
         removeDeltas.addBindValue(sessionId);
         removeDeltas.addBindValue(generation);
         removeDeltas.addBindValue(itemId);
@@ -539,6 +553,19 @@ bool LocalJournal::updateReplayProjection(const QString& sessionId, const qint64
             }
             return false;
         }
+        QSqlQuery remaining(database_);
+        remaining.prepare(QStringLiteral("SELECT EXISTS(SELECT 1 FROM replay_events WHERE ") +
+                          deltaPredicate + ')');
+        for (const auto& value : removeDeltas.boundValues())
+            remaining.addBindValue(value);
+        if (!remaining.exec() || !remaining.next() || remaining.value(0).toBool()) {
+            if (error)
+                *error =
+                    remaining.lastError().isValid()
+                        ? remaining.lastError().text()
+                        : QStringLiteral("Superseded replay deltas were not completely removed.");
+            return false;
+        }
         if (removeDeltas.numRowsAffected() > 0) {
             QSqlQuery revision(database_);
             revision.prepare(
@@ -546,9 +573,11 @@ bool LocalJournal::updateReplayProjection(const QString& sessionId, const qint64
                                "revision + 1 WHERE session_id = ? AND generation = ?"));
             revision.addBindValue(sessionId);
             revision.addBindValue(generation);
-            if (!revision.exec()) {
+            if (!revision.exec() || revision.numRowsAffected() != 1) {
                 if (error != nullptr) {
-                    *error = revision.lastError().text();
+                    *error = revision.lastError().isValid()
+                                 ? revision.lastError().text()
+                                 : QStringLiteral("Replay revision was not stored.");
                 }
                 return false;
             }
@@ -567,9 +596,11 @@ bool LocalJournal::updateReplayProjection(const QString& sessionId, const qint64
         insert.addBindValue(encodedPayload);
         insert.addBindValue(sentAt);
         insert.addBindValue(turnSequence);
-        if (!insert.exec()) {
+        if (!insert.exec() || insert.numRowsAffected() != 1) {
             if (error != nullptr) {
-                *error = insert.lastError().text();
+                *error = insert.lastError().isValid()
+                             ? insert.lastError().text()
+                             : QStringLiteral("Replay event was not stored.");
             }
             return false;
         }
@@ -584,9 +615,11 @@ bool LocalJournal::updateReplayProjection(const QString& sessionId, const qint64
     state.addBindValue(generation);
     state.addBindValue(cursor);
     state.addBindValue(cursor);
-    if (!state.exec()) {
+    if (!state.exec() || state.numRowsAffected() != 1) {
         if (error != nullptr) {
-            *error = state.lastError().text();
+            *error = state.lastError().isValid()
+                         ? state.lastError().text()
+                         : QStringLiteral("Replay cursor state was not stored.");
         }
         return false;
     }
@@ -725,6 +758,11 @@ bool LocalJournal::deleteSession(const QString& sessionId, const qint64 generati
             *error = database_.lastError().text();
         return false;
     }
+    bool transaction = true;
+    const auto rollback = qScopeGuard([&] {
+        if (transaction)
+            database_.rollback();
+    });
     QSqlQuery tombstone(database_);
     tombstone.prepare(
         QStringLiteral("INSERT INTO session_tombstones(session_id, generation, lifecycle_revision, "
@@ -734,10 +772,11 @@ bool LocalJournal::deleteSession(const QString& sessionId, const qint64 generati
     tombstone.addBindValue(lifecycleRevision);
     tombstone.addBindValue(operationId);
     tombstone.addBindValue(QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs));
-    if (!tombstone.exec()) {
-        database_.rollback();
+    if (!tombstone.exec() || tombstone.numRowsAffected() != 1) {
         if (error != nullptr)
-            *error = tombstone.lastError().text();
+            *error = tombstone.lastError().isValid()
+                         ? tombstone.lastError().text()
+                         : QStringLiteral("The deletion tombstone was not stored.");
         return false;
     }
     const QJsonObject deletion{
@@ -755,14 +794,14 @@ bool LocalJournal::deleteSession(const QString& sessionId, const qint64 generati
     cleanup.addBindValue(QString::fromUtf8(QJsonDocument(deletion).toJson(QJsonDocument::Compact)));
     cleanup.addBindValue(
         QString::fromUtf8(QJsonDocument(providerTargets).toJson(QJsonDocument::Compact)));
-    if (!cleanup.exec()) {
-        database_.rollback();
+    if (!cleanup.exec() || cleanup.numRowsAffected() != 1) {
         if (error)
-            *error = cleanup.lastError().text();
+            *error = cleanup.lastError().isValid()
+                         ? cleanup.lastError().text()
+                         : QStringLiteral("The deletion work was not stored.");
         return false;
     }
     if (QString agentError; !releaseAgentState(sessionId, generation, &agentError)) {
-        database_.rollback();
         if (error != nullptr)
             *error = agentError;
         return false;
@@ -781,9 +820,23 @@ bool LocalJournal::deleteSession(const QString& sessionId, const qint64 generati
         query.addBindValue(sessionId);
         query.addBindValue(generation);
         if (!query.exec()) {
-            database_.rollback();
             if (error != nullptr)
                 *error = query.lastError().text();
+            return false;
+        }
+        query.finish();
+        // A successful statement can still ignore rows (for example a trigger).
+        // Never commit a tombstone while this generation's history remains.
+        query.prepare(QStringLiteral("SELECT 1 FROM %1 WHERE session_id=? AND generation=? "
+                                     "LIMIT 1")
+                          .arg(table));
+        query.addBindValue(sessionId);
+        query.addBindValue(generation);
+        if (!query.exec() || query.next() || query.lastError().isValid()) {
+            if (error != nullptr)
+                *error = query.lastError().isValid()
+                             ? query.lastError().text()
+                             : QStringLiteral("Session history cleanup was incomplete.");
             return false;
         }
     }
@@ -792,7 +845,6 @@ bool LocalJournal::deleteSession(const QString& sessionId, const qint64 generati
     session.addBindValue(sessionId);
     session.addBindValue(generation);
     if (!session.exec() || session.numRowsAffected() != 1) {
-        database_.rollback();
         if (error != nullptr)
             *error = session.lastError().text().isEmpty()
                          ? QStringLiteral("The session no longer exists.")
@@ -804,55 +856,18 @@ bool LocalJournal::deleteSession(const QString& sessionId, const qint64 generati
             *error = database_.lastError().text();
         return false;
     }
+    transaction = false;
     // Retention failure must not turn a committed delete into a reported failure.
     if (!pruneRetention())
         qWarning("Journal retention pass failed: %s", qUtf8Printable(error_));
     return true;
 }
 
-bool LocalJournal::pruneRetention() {
-    QSqlQuery query(database_);
-    const QStringList statements{
-        QStringLiteral("DELETE FROM command_results WHERE datetime(completed_at) < "
-                       "datetime('now', '-%1 days')")
-            .arg(commandResultRetentionDays),
-        QStringLiteral("DELETE FROM command_results WHERE rowid NOT IN (SELECT rowid FROM "
-                       "command_results ORDER BY completed_at DESC LIMIT %1)")
-            .arg(maximumCommandResults),
-        // A tombstone fences replayed deletes and stale upserts of a deleted generation; cloud
-        // command replay windows are far shorter than this bound.
-        QStringLiteral("DELETE FROM session_tombstones WHERE datetime(deleted_at) < "
-                       "datetime('now', '-%1 days')")
-            .arg(tombstoneRetentionDays),
-        QStringLiteral("DELETE FROM large_event_payload_chunks WHERE NOT EXISTS (SELECT 1 FROM "
-                       "large_event_payloads p WHERE p.session_id = "
-                       "large_event_payload_chunks.session_id AND p.generation = "
-                       "large_event_payload_chunks.generation AND p.transfer_id = "
-                       "large_event_payload_chunks.transfer_id)"),
-        QStringLiteral("DELETE FROM client_cursors WHERE NOT EXISTS (SELECT 1 FROM sessions s "
-                       "WHERE s.id = client_cursors.session_id AND s.generation = "
-                       "client_cursors.generation)"),
-        QStringLiteral("DELETE FROM background_tasks WHERE NOT EXISTS (SELECT 1 FROM sessions s "
-                       "WHERE s.id = background_tasks.session_id AND s.generation = "
-                       "background_tasks.generation)"),
-    };
-    if (!pruneOrphanLargePayloads() || !pruneRemoteAudit())
-        return false;
-    for (const QString& statement : statements) {
-        if (!query.exec(statement)) {
-            setError(query.lastError().text());
-            return false;
-        }
-    }
-    commandResultsSincePrune_ = 0;
-    return true;
-}
-
-namespace {
+namespace detail {
 // Whether nothing retained names the large payload `p` any longer: no raw event still waiting for
 // a client (manifest or chunk), and no compacted replay manifest. Replay rows are found through
-// the item index, since a manifest carries its payload's item_id; only the few rows of that item
-// are parsed. Raw events are only those no client has acknowledged yet.
+// the exact transfer expression index. Unary + removes the TEXT affinity of p.transfer_id
+// so SQLite can use the fourth expression key. Raw events await client acknowledgement.
 QString largePayloadUnreferenced() {
     return QStringLiteral(
         "NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id = p.session_id AND e.generation = "
@@ -861,9 +876,9 @@ QString largePayloadUnreferenced() {
         "= "
         "p.transfer_id)) AND NOT EXISTS (SELECT 1 FROM replay_events r WHERE r.session_id = "
         "p.session_id AND r.generation = p.generation AND r.item_id = p.item_id AND "
-        "json_extract(r.payload, '$.large_event.transfer_id') = p.transfer_id)");
+        "json_extract(r.payload, '$.large_event.transfer_id') = +p.transfer_id)");
 }
-} // namespace
+} // namespace detail
 
 bool LocalJournal::pruneUnreferencedLargePayloads(const QString& sessionId, const qint64 generation,
                                                   const QStringList& transferIds) {
@@ -872,7 +887,7 @@ bool LocalJournal::pruneUnreferencedLargePayloads(const QString& sessionId, cons
         unreferenced.prepare(QStringLiteral("SELECT 1 FROM large_event_payloads p WHERE "
                                             "p.session_id = ? AND p.generation = ? AND "
                                             "p.transfer_id = ? AND %1")
-                                 .arg(largePayloadUnreferenced()));
+                                 .arg(detail::largePayloadUnreferenced()));
         unreferenced.addBindValue(sessionId);
         unreferenced.addBindValue(generation);
         unreferenced.addBindValue(transferId);
@@ -895,25 +910,6 @@ bool LocalJournal::pruneUnreferencedLargePayloads(const QString& sessionId, cons
                 setError(remove.lastError().text());
                 return false;
             }
-        }
-    }
-    return true;
-}
-
-// A backstop for payloads no acknowledgement will reach: those left by earlier releases, which
-// pruned only on acknowledgements, or by a session that stopped before its manifests were sent.
-bool LocalJournal::pruneOrphanLargePayloads() {
-    QSqlQuery query(database_);
-    const QString orphans = QStringLiteral("SELECT p.session_id, p.generation, p.transfer_id FROM "
-                                           "large_event_payloads p WHERE %1")
-                                .arg(largePayloadUnreferenced());
-    for (const QString& table :
-         {QStringLiteral("large_event_payload_chunks"), QStringLiteral("large_event_payloads")}) {
-        if (!query.exec(QStringLiteral("DELETE FROM %1 WHERE (session_id, generation, transfer_id) "
-                                       "IN (%2)")
-                            .arg(table, orphans))) {
-            setError(query.lastError().text());
-            return false;
         }
     }
     return true;
@@ -967,7 +963,7 @@ SessionHead LocalJournal::sessionHead(const QString& sessionId) const {
     return {query.value(0).toLongLong(), query.value(1).toLongLong()};
 }
 
-QList<StoredSession> LocalJournal::sessions() const {
+std::optional<QList<StoredSession>> LocalJournal::readSessions() const {
     QList<StoredSession> result;
     QSqlQuery query(database_);
     if (!query.exec(QStringLiteral(
@@ -977,7 +973,7 @@ QList<StoredSession> LocalJournal::sessions() const {
             "context_revision, compact_window "
             "FROM sessions ORDER BY id"))) {
         setError(query.lastError().text());
-        return result;
+        return std::nullopt;
     }
     while (query.next()) {
         result.append({query.value(0).toString(),    query.value(1).toString(),
@@ -991,7 +987,15 @@ QList<StoredSession> LocalJournal::sessions() const {
                        query.value(16).toLongLong(), query.value(17).toString(),
                        query.value(18).toLongLong(), query.value(19).toLongLong()});
     }
+    if (query.lastError().isValid()) {
+        setError(query.lastError().text());
+        return std::nullopt;
+    }
     return result;
+}
+
+QList<StoredSession> LocalJournal::sessions() const {
+    return readSessions().value_or(QList<StoredSession>{});
 }
 
 QStringList LocalJournal::worktreePaths() const {
@@ -1080,8 +1084,11 @@ qint64 LocalJournal::appendEventWithMutation(const QString& sessionId, const qin
         return -1;
     }
     QSqlQuery read(database_);
-    read.prepare(QStringLiteral("SELECT last_cursor, current_turn_sequence FROM sessions "
-                                "WHERE id = ? AND generation = ?"));
+    read.prepare(QStringLiteral(
+        "SELECT CASE WHEN typeof(last_cursor)='integer' THEN last_cursor END, "
+        "CASE WHEN typeof(current_turn_sequence)='integer' THEN current_turn_sequence END, "
+        "typeof(last_cursor), typeof(current_turn_sequence) FROM sessions "
+        "WHERE id = ? AND generation = ?"));
     read.addBindValue(sessionId);
     read.addBindValue(generation);
     if (!read.exec() || !read.next()) {
@@ -1092,9 +1099,23 @@ qint64 LocalJournal::appendEventWithMutation(const QString& sessionId, const qin
         }
         return -1;
     }
-    const qint64 cursor = read.value(0).toLongLong() + 1;
-    const qint64 turnSequence =
-        read.value(1).toLongLong() + (type == QStringLiteral("user.message") ? 1 : 0);
+    const auto invalidCounters = [&] {
+        database_.rollback();
+        if (error != nullptr)
+            *error = QStringLiteral("Journal counters are unsupported or exhausted.");
+        return qint64(-1);
+    };
+    if (read.value(2).toString() != QStringLiteral("integer") ||
+        read.value(3).toString() != QStringLiteral("integer"))
+        return invalidCounters();
+    const qint64 lastCursor = read.value(0).toLongLong();
+    const qint64 previousTurn = read.value(1).toLongLong();
+    const bool newTurn = type == QStringLiteral("user.message");
+    if (lastCursor < 0 || lastCursor == std::numeric_limits<qint64>::max() || previousTurn < 0 ||
+        (newTurn && previousTurn == std::numeric_limits<qint64>::max()))
+        return invalidCounters();
+    const qint64 cursor = lastCursor + 1;
+    const qint64 turnSequence = previousTurn + (newTurn ? 1 : 0);
     if (encoded.size() > protocol::maximumEventPayloadBytes) {
         return appendLargeEvent(sessionId, generation, cursor, turnSequence, type, payload, encoded,
                                 error);
@@ -1111,10 +1132,11 @@ qint64 LocalJournal::appendEventWithMutation(const QString& sessionId, const qin
     const QString sentAt = protocol::timestamp();
     insert.addBindValue(sentAt);
     insert.addBindValue(turnSequence);
-    if (!insert.exec()) {
+    if (!insert.exec() || insert.numRowsAffected() != 1) {
         database_.rollback();
         if (error != nullptr) {
-            *error = insert.lastError().text();
+            *error = insert.lastError().isValid() ? insert.lastError().text()
+                                                  : QStringLiteral("Journal event was not stored.");
         }
         return -1;
     }
@@ -1151,11 +1173,20 @@ qint64 LocalJournal::appendEventWithMutation(const QString& sessionId, const qin
     update.addBindValue(sentAt);
     update.addBindValue(sessionId);
     update.addBindValue(generation);
-    if (!update.exec() || !database_.commit()) {
+    if (!update.exec() || update.numRowsAffected() != 1) {
         database_.rollback();
         if (error != nullptr) {
-            *error = update.lastError().text();
+            *error = update.lastError().isValid()
+                         ? update.lastError().text()
+                         : QStringLiteral("Session cursor was not stored.");
         }
+        return -1;
+    }
+    if (!database_.commit()) {
+        const QString commitError = database_.lastError().text();
+        database_.rollback();
+        if (error != nullptr)
+            *error = commitError;
         return -1;
     }
     return cursor;
@@ -1421,395 +1452,6 @@ bool LocalJournal::writeCommandResult(const QString& messageId, const QJsonObjec
     }
     if (++commandResultsSincePrune_ >= 256 && !pruneRetention())
         qWarning("Journal retention pass failed: %s", qUtf8Printable(error_));
-    return true;
-}
-
-bool LocalJournal::beginAttachment(const QString& sessionId, const qint64 generation,
-                                   const QString& attachmentId, const qint64 expectedRevision,
-                                   const QString& name, const QString& mediaType,
-                                   const qint64 totalBytes, const int chunkCount,
-                                   const QString& digestSha256, QString* error) {
-    if (!purgeExpiredAttachments()) {
-        if (error)
-            *error = QStringLiteral("attachment_gc_failed");
-        return false;
-    }
-    if (attachmentId.isEmpty() || attachmentId.size() > 128 || name.isEmpty() ||
-        name.size() > 255 || mediaType.isEmpty() || mediaType.size() > 128 ||
-        expectedRevision != 0 || totalBytes < 1 || totalBytes > 20 * 1024 * 1024 ||
-        chunkCount < 1 || chunkCount > 640 || digestSha256.size() != 64) {
-        if (error)
-            *error = QStringLiteral("invalid_attachment_manifest");
-        return false;
-    }
-    QSqlQuery quota(database_);
-    quota.prepare(QStringLiteral(
-        "SELECT COUNT(*),COALESCE(SUM(total_bytes),0) FROM staged_attachments WHERE session_id=? "
-        "AND generation=? AND attachment_id<>?"));
-    quota.addBindValue(sessionId);
-    quota.addBindValue(generation);
-    quota.addBindValue(attachmentId);
-    if (!quota.exec() || !quota.next() || quota.value(0).toInt() >= 5 ||
-        quota.value(1).toLongLong() + totalBytes > 40 * 1024 * 1024) {
-        if (error)
-            *error = QStringLiteral("attachment_draft_limit");
-        return false;
-    }
-    QSqlQuery query(database_);
-    query.prepare(QStringLiteral(
-        "INSERT INTO staged_attachments(session_id,generation,attachment_id,revision,name,"
-        "media_type,total_bytes,chunk_count,digest_sha256,status,created_at) "
-        "VALUES(?,?,?,?,?,?,?,?,?,'uploading',?) ON CONFLICT DO NOTHING"));
-    query.addBindValue(sessionId);
-    query.addBindValue(generation);
-    query.addBindValue(attachmentId);
-    query.addBindValue(1);
-    query.addBindValue(name);
-    query.addBindValue(mediaType);
-    query.addBindValue(totalBytes);
-    query.addBindValue(chunkCount);
-    query.addBindValue(digestSha256);
-    query.addBindValue(protocol::timestamp());
-    if (!query.exec()) {
-        if (error)
-            *error = query.lastError().text();
-        return false;
-    }
-    QSqlQuery verify(database_);
-    verify.prepare(QStringLiteral(
-        "SELECT revision,name,media_type,total_bytes,chunk_count,digest_sha256 FROM "
-        "staged_attachments WHERE session_id=? AND generation=? AND attachment_id=?"));
-    verify.addBindValue(sessionId);
-    verify.addBindValue(generation);
-    verify.addBindValue(attachmentId);
-    const bool matches =
-        verify.exec() && verify.next() && verify.value(0).toLongLong() == 1 &&
-        verify.value(1).toString() == name && verify.value(2).toString() == mediaType &&
-        verify.value(3).toLongLong() == totalBytes && verify.value(4).toInt() == chunkCount &&
-        verify.value(5).toString() == digestSha256;
-    if (!matches && error)
-        *error = QStringLiteral("attachment_conflict");
-    return matches;
-}
-
-bool LocalJournal::appendAttachmentChunk(const QString& sessionId, const qint64 generation,
-                                         const QString& attachmentId, const qint64 expectedRevision,
-                                         const int chunkIndex, const QByteArray& bytes,
-                                         const QString& digestSha256, QString* error) {
-    QSqlQuery manifest(database_);
-    manifest.prepare(QStringLiteral(
-        "SELECT revision,chunk_count,status FROM staged_attachments WHERE session_id=? AND "
-        "generation=? AND attachment_id=?"));
-    manifest.addBindValue(sessionId);
-    manifest.addBindValue(generation);
-    manifest.addBindValue(attachmentId);
-    const bool known = manifest.exec() && manifest.next();
-    if (!known || manifest.value(2).toString() != QStringLiteral("uploading") ||
-        expectedRevision != manifest.value(0).toLongLong() || chunkIndex < 0 ||
-        chunkIndex >= manifest.value(1).toInt() || bytes.isEmpty() || bytes.size() > 32 * 1024 ||
-        QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex()) !=
-            digestSha256) {
-        if (error)
-            *error = QStringLiteral("invalid_attachment_chunk");
-        return false;
-    }
-    QSqlQuery query(database_);
-    query.prepare(QStringLiteral(
-        "INSERT INTO staged_attachment_chunks(session_id,generation,attachment_id,revision,"
-        "chunk_index,digest_sha256,payload) VALUES(?,?,?,?,?,?,?) ON CONFLICT DO NOTHING"));
-    query.addBindValue(sessionId);
-    query.addBindValue(generation);
-    query.addBindValue(attachmentId);
-    query.addBindValue(expectedRevision);
-    query.addBindValue(chunkIndex);
-    query.addBindValue(digestSha256);
-    query.addBindValue(bytes);
-    if (!query.exec()) {
-        if (error)
-            *error = query.lastError().text();
-        return false;
-    }
-    QSqlQuery verify(database_);
-    verify.prepare(QStringLiteral(
-        "SELECT digest_sha256,payload FROM staged_attachment_chunks WHERE session_id=? AND "
-        "generation=? AND attachment_id=? AND chunk_index=?"));
-    verify.addBindValue(sessionId);
-    verify.addBindValue(generation);
-    verify.addBindValue(attachmentId);
-    verify.addBindValue(chunkIndex);
-    const bool matches = verify.exec() && verify.next() &&
-                         verify.value(0).toString() == digestSha256 &&
-                         verify.value(1).toByteArray() == bytes;
-    if (!matches && error)
-        *error = QStringLiteral("attachment_chunk_conflict");
-    return matches;
-}
-
-bool LocalJournal::commitAttachment(const QString& sessionId, const qint64 generation,
-                                    const QString& attachmentId, const qint64 expectedRevision,
-                                    QString* error) {
-    QSqlQuery manifest(database_);
-    manifest.prepare(QStringLiteral(
-        "SELECT total_bytes,chunk_count,digest_sha256,status FROM staged_attachments WHERE "
-        "session_id=? AND generation=? AND attachment_id=? AND revision=?"));
-    manifest.addBindValue(sessionId);
-    manifest.addBindValue(generation);
-    manifest.addBindValue(attachmentId);
-    manifest.addBindValue(expectedRevision);
-    if (!manifest.exec() || !manifest.next()) {
-        if (error)
-            *error = QStringLiteral("attachment_not_found");
-        return false;
-    }
-    if (manifest.value(3).toString() == QStringLiteral("ready"))
-        return true;
-    QSqlQuery completeness(database_);
-    completeness.prepare(QStringLiteral(
-        "SELECT COUNT(*),COALESCE(MIN(chunk_index),-1),COALESCE(MAX(chunk_index),-1),"
-        "COALESCE(SUM(length(payload)),0) FROM staged_attachment_chunks WHERE session_id=? "
-        "AND generation=? AND attachment_id=? AND revision=?"));
-    completeness.addBindValue(sessionId);
-    completeness.addBindValue(generation);
-    completeness.addBindValue(attachmentId);
-    completeness.addBindValue(expectedRevision);
-    const int expectedChunks = manifest.value(1).toInt();
-    if (!completeness.exec() || !completeness.next() ||
-        completeness.value(0).toInt() != expectedChunks || completeness.value(1).toInt() != 0 ||
-        completeness.value(2).toInt() != expectedChunks - 1 ||
-        completeness.value(3).toLongLong() != manifest.value(0).toLongLong()) {
-        if (error)
-            *error = QStringLiteral("attachment_incomplete");
-        return false;
-    }
-    const StagedAttachment assembled = attachment(sessionId, generation, attachmentId);
-    const QString digest = QString::fromLatin1(
-        QCryptographicHash::hash(assembled.bytes, QCryptographicHash::Sha256).toHex());
-    if (assembled.bytes.size() != manifest.value(0).toLongLong() ||
-        digest != manifest.value(2).toString()) {
-        if (error)
-            *error = QStringLiteral("attachment_incomplete");
-        return false;
-    }
-    QSqlQuery update(database_);
-    update.prepare(QStringLiteral(
-        "UPDATE staged_attachments SET status='ready' WHERE session_id=? AND generation=? AND "
-        "attachment_id=? AND revision=? AND status='uploading'"));
-    update.addBindValue(sessionId);
-    update.addBindValue(generation);
-    update.addBindValue(attachmentId);
-    update.addBindValue(expectedRevision);
-    return update.exec() && update.numRowsAffected() == 1;
-}
-
-bool LocalJournal::cancelAttachment(const QString& sessionId, const qint64 generation,
-                                    const QString& attachmentId, const qint64 expectedRevision,
-                                    QString* error) {
-    if (!database_.transaction())
-        return false;
-    for (const QString& table :
-         {QStringLiteral("staged_attachment_chunks"), QStringLiteral("staged_attachments")}) {
-        QSqlQuery query(database_);
-        query.prepare(QStringLiteral("DELETE FROM %1 WHERE session_id=? AND generation=? AND "
-                                     "attachment_id=? AND revision=?")
-                          .arg(table));
-        query.addBindValue(sessionId);
-        query.addBindValue(generation);
-        query.addBindValue(attachmentId);
-        query.addBindValue(expectedRevision);
-        if (!query.exec()) {
-            database_.rollback();
-            if (error)
-                *error = query.lastError().text();
-            return false;
-        }
-    }
-    return database_.commit();
-}
-
-StagedAttachment LocalJournal::attachment(const QString& sessionId, const qint64 generation,
-                                          const QString& attachmentId) const {
-    StagedAttachment result;
-    QSqlQuery manifest(database_);
-    manifest.prepare(QStringLiteral(
-        "SELECT name,media_type,revision,total_bytes,chunk_count,digest_sha256,status "
-        "FROM staged_attachments WHERE session_id=? AND "
-        "generation=? AND attachment_id=?"));
-    manifest.addBindValue(sessionId);
-    manifest.addBindValue(generation);
-    manifest.addBindValue(attachmentId);
-    if (!manifest.exec() || !manifest.next())
-        return result;
-    result.id = attachmentId;
-    result.name = manifest.value(0).toString();
-    result.mediaType = manifest.value(1).toString();
-    result.revision = manifest.value(2).toLongLong();
-    result.totalBytes = manifest.value(3).toLongLong();
-    result.chunkCount = manifest.value(4).toInt();
-    result.digestSha256 = manifest.value(5).toString();
-    result.status = manifest.value(6).toString();
-    QSqlQuery chunks(database_);
-    chunks.prepare(QStringLiteral(
-        "SELECT payload FROM staged_attachment_chunks WHERE session_id=? AND generation=? AND "
-        "attachment_id=? AND revision=? ORDER BY chunk_index"));
-    chunks.addBindValue(sessionId);
-    chunks.addBindValue(generation);
-    chunks.addBindValue(attachmentId);
-    chunks.addBindValue(result.revision);
-    if (!chunks.exec())
-        return {};
-    while (chunks.next())
-        result.bytes.append(chunks.value(0).toByteArray());
-    return result;
-}
-
-QJsonObject LocalJournal::cloudEvent(const QString& sessionId, const qint64 generation,
-                                     const qint64 cursor) const {
-    QSqlQuery query(database_);
-    query.prepare(QStringLiteral(
-        "SELECT event FROM cloud_events WHERE session_id = ? AND generation = ? AND cursor = ?"));
-    query.addBindValue(sessionId);
-    query.addBindValue(generation);
-    query.addBindValue(cursor);
-    if (!query.exec()) {
-        setError(query.lastError().text());
-        return {};
-    }
-    return query.next() ? parseObject(query.value(0).toString()) : QJsonObject{};
-}
-
-int LocalJournal::cloudEventProjectionPolicyVersion(const QString& sessionId,
-                                                    const qint64 generation,
-                                                    const qint64 cursor) const {
-    QSqlQuery query(database_);
-    query.prepare(QStringLiteral("SELECT projection_policy_version FROM cloud_events "
-                                 "WHERE session_id = ? AND generation = ? AND cursor = ?"));
-    query.addBindValue(sessionId);
-    query.addBindValue(generation);
-    query.addBindValue(cursor);
-    if (!query.exec()) {
-        setError(query.lastError().text());
-        return -1;
-    }
-    return query.next() ? query.value(0).toInt() : -1;
-}
-
-bool LocalJournal::storeCloudEvent(const QString& sessionId, const qint64 generation,
-                                   const qint64 cursor, const QJsonObject& event,
-                                   const int projectionPolicyVersion) {
-    QSqlQuery query(database_);
-    query.prepare(QStringLiteral(
-        "INSERT OR IGNORE INTO cloud_events(session_id, generation, cursor, event, created_at, "
-        "projection_policy_version) VALUES(?, ?, ?, ?, ?, ?)"));
-    query.addBindValue(sessionId);
-    query.addBindValue(generation);
-    query.addBindValue(cursor);
-    query.addBindValue(compact(event));
-    query.addBindValue(protocol::timestamp());
-    query.addBindValue(projectionPolicyVersion);
-    if (!query.exec()) {
-        setError(query.lastError().text());
-        return false;
-    }
-    const QJsonObject stored = cloudEvent(sessionId, generation, cursor);
-    if (stored != event || cloudEventProjectionPolicyVersion(sessionId, generation, cursor) !=
-                               projectionPolicyVersion) {
-        setError(QStringLiteral("Cloud event cache conflicts with the local journal."));
-        return false;
-    }
-    return true;
-}
-
-bool LocalJournal::removeCloudEventsThrough(const QString& sessionId, const qint64 generation,
-                                            const qint64 cursor) {
-    QSqlQuery query(database_);
-    query.prepare(QStringLiteral(
-        "DELETE FROM cloud_events WHERE session_id = ? AND generation = ? AND cursor <= ?"));
-    query.addBindValue(sessionId);
-    query.addBindValue(generation);
-    query.addBindValue(cursor);
-    if (!query.exec()) {
-        setError(query.lastError().text());
-        return false;
-    }
-    return true;
-}
-
-bool LocalJournal::acknowledgeCursor(const QString& clientId, const QString& sessionId,
-                                     const qint64 generation, const qint64 cursor) {
-    // A cursor never moves back, so an acknowledgement at or behind the stored one changes
-    // nothing and needs no write, no synchronous commit and no prune.
-    QSqlQuery current(database_);
-    current.prepare(QStringLiteral("SELECT cursor FROM client_cursors WHERE client_id = ? AND "
-                                   "session_id = ? AND generation = ?"));
-    current.addBindValue(clientId);
-    current.addBindValue(sessionId);
-    current.addBindValue(generation);
-    if (!current.exec()) {
-        setError(current.lastError().text());
-        return false;
-    }
-    if (current.next() && current.value(0).toLongLong() >= cursor)
-        return true;
-    if (!database_.transaction()) {
-        setError(database_.lastError().text());
-        return false;
-    }
-    QSqlQuery query(database_);
-    query.prepare(QStringLiteral(
-        "INSERT INTO client_cursors(client_id, session_id, generation, cursor, acknowledged_at) "
-        "VALUES(?, ?, ?, ?, ?) ON CONFLICT(client_id, session_id, generation) DO UPDATE SET "
-        "cursor=MAX(cursor, excluded.cursor), acknowledged_at=excluded.acknowledged_at"));
-    query.addBindValue(clientId);
-    query.addBindValue(sessionId);
-    query.addBindValue(generation);
-    query.addBindValue(cursor);
-    query.addBindValue(protocol::timestamp());
-    if (!query.exec()) {
-        database_.rollback();
-        setError(query.lastError().text());
-        return false;
-    }
-    QSqlQuery minimum(database_);
-    minimum.prepare(QStringLiteral(
-        "SELECT MIN(cursor) FROM client_cursors WHERE session_id = ? AND generation = ?"));
-    minimum.addBindValue(sessionId);
-    minimum.addBindValue(generation);
-    if (!minimum.exec() || !minimum.next() || minimum.value(0).isNull()) {
-        database_.rollback();
-        setError(minimum.lastError().text());
-        return false;
-    }
-    // Only a removed raw event can leave a large payload unreferenced, so only the transfers the
-    // removed events name are checked, never the whole session. Most sessions have none.
-    QStringList transferIds;
-    QSqlQuery named(database_);
-    named.prepare(QStringLiteral(
-        "SELECT p.transfer_id FROM large_event_payloads p WHERE p.session_id = ? AND "
-        "p.generation = ? AND EXISTS (SELECT 1 FROM events e WHERE e.session_id = p.session_id AND "
-        "e.generation = p.generation AND e.cursor <= ? AND instr(e.payload, p.transfer_id) > 0)"));
-    named.addBindValue(sessionId);
-    named.addBindValue(generation);
-    named.addBindValue(minimum.value(0));
-    if (!named.exec()) {
-        database_.rollback();
-        setError(named.lastError().text());
-        return false;
-    }
-    while (named.next())
-        transferIds.append(named.value(0).toString());
-    QSqlQuery prune(database_);
-    prune.prepare(QStringLiteral(
-        "DELETE FROM events WHERE session_id = ? AND generation = ? AND cursor <= ?"));
-    prune.addBindValue(sessionId);
-    prune.addBindValue(generation);
-    prune.addBindValue(minimum.value(0));
-    if (!prune.exec() || !pruneUnreferencedLargePayloads(sessionId, generation, transferIds) ||
-        !database_.commit()) {
-        database_.rollback();
-        if (!prune.lastError().text().isEmpty())
-            setError(prune.lastError().text());
-        return false;
-    }
     return true;
 }
 
