@@ -1,0 +1,29 @@
+{
+  "scope": "H1.3 session deletion atomic failure recovery",
+  "baseline_commit": "0f6f39e05a007d889064760ffc64b6f1673851ac",
+  "environment": "macOS arm64, Qt 6.11.2, Release Pro/headless, offscreen",
+  "baseline_regressions": [
+    "failed commit leaves write transaction open",
+    "ignored tombstone insert reports success",
+    "ignored cleanup-work insert reports success",
+    "ignored raw-history deletion reports success"
+  ],
+  "focused_passed": 10,
+  "affected_targets_passed": 12,
+  "affected_seconds": 75.49,
+  "live_lifecycle_cases_skipped": 1,
+  "verified": [
+    "failed transaction releases SQLite connection",
+    "history and conversation number survive rollback",
+    "same-operation retry persists tombstone and cleanup work across reopen",
+    "unrelated session survives",
+    "different operation cannot reuse completed deletion"
+  ],
+  "not_verified": [
+    "whole-session work bounds",
+    "previously committed incomplete state",
+    "low-space or process-kill recovery",
+    "Windows/live journal",
+    "packaging/install/deployment"
+  ]
+}

@@ -1,6 +1,7 @@
 #include "remote/RemoteControlView.h"
 #include "remote/RemoteActivitySection.h"
 #include "remote/RemoteConnectionsIntro.h"
+#include "ui/TypeScale.h"
 
 #include <QAccessible>
 #include <QJsonArray>
@@ -325,7 +326,8 @@ void RemoteControlViewTest::opensOnSignInPrompt() {
     QVERIFY(text->text().startsWith(QStringLiteral("Continue a conversation from your phone")));
     auto* headline = view.findChild<QLabel*>(QStringLiteral("remoteWelcomeHeadline"));
     QVERIFY(headline);
-    QVERIFY(headline->font().pixelSize() >= 28);
+    QCOMPARE(headline->font().pixelSize(),
+             TypeScale::pixels(TypeStep::Display, InterfaceZoomMetrics::mediumPixels));
     QCOMPARE(signInPrompt->text(), QStringLiteral("Sign in"));
     QVERIFY(!view.findChild<QWidget*>(QStringLiteral("remotePageTitle"))->isVisible());
 }

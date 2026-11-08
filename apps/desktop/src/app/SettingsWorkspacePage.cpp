@@ -14,10 +14,10 @@
 #include "ui/TypeScale.h"
 #include "update/AppUpdater.h"
 
+#include <QAbstractButton>
 #include <QButtonGroup>
 #include <QCheckBox>
 #include <QComboBox>
-#include <QDialogButtonBox>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -245,7 +245,7 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     auto* publicNavigation = dialog_->findChild<QListWidget*>(QStringLiteral("settingsNavigation"));
     auto* publicPages = dialog_->findChild<QStackedWidget*>(QStringLiteral("settingsPages"));
     auto* themeList = dialog_->findChild<QListWidget*>(QStringLiteral("installedThemeList"));
-    auto* followSystem = dialog_->findChild<QCheckBox*>(QStringLiteral("followSystemTheme"));
+    auto* followSystem = dialog_->findChild<QAbstractButton*>(QStringLiteral("followSystemTheme"));
 
     auto* body = new QWidget(content);
     body->setObjectName(QStringLiteral("settingsWorkspaceBody"));
@@ -569,13 +569,16 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     bodyLayout->addWidget(pages, 1);
     contentLayout->addWidget(body, 1);
 
-    auto* settingsFooter = dialog_->findChild<QDialogButtonBox*>();
-    if (auto* buttons = settingsFooter) {
-        if (auto* cancel = buttons->button(QDialogButtonBox::Cancel))
+    // The public dialog's footer is a kit button row; Cancel has no meaning in a page.
+    auto* settingsFooter = dialog_->findChild<QWidget*>(QStringLiteral("settingsButtons"));
+    if (settingsFooter) {
+        if (auto* cancel =
+                settingsFooter->findChild<QAbstractButton*>(QStringLiteral("settingsCancelButton")))
             cancel->hide();
-        buttons->setParent(content);
-        buttons->setObjectName(QStringLiteral("settingsWorkspaceFooter"));
-        contentLayout->addWidget(buttons);
+        settingsFooter->setParent(content);
+        settingsFooter->setObjectName(QStringLiteral("settingsWorkspaceFooter"));
+        contentLayout->addWidget(settingsFooter);
+        settingsFooter->show();
     }
 
     auto selectPublicTheme = [themeList, followSystem](const int mode) {
@@ -607,7 +610,7 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
         connect(themeList, &QListWidget::currentItemChanged, this,
                 [syncThemeCards](QListWidgetItem*, QListWidgetItem*) { syncThemeCards(); });
     if (followSystem != nullptr)
-        connect(followSystem, &QCheckBox::toggled, this,
+        connect(followSystem, &QAbstractButton::toggled, this,
                 [syncThemeCards](bool) { syncThemeCards(); });
     syncThemeCards();
 
@@ -725,7 +728,7 @@ QLabel#settingsTypographyUiSample { color:%2; font-size:{{reading}}px; }
 QLabel#settingsTypographyCodeSample, QLabel#settingsTypographyTerminalSample,
 QLabel#settingsTypographyMarkdownSample {
  color:%3; font-family:monospace; font-size:{{reading}}px; }
-QDialogButtonBox#settingsWorkspaceFooter { padding-top:18px; border-top:1px solid %5;
+QWidget#settingsWorkspaceFooter { padding-top:18px; border-top:1px solid %5;
  background:transparent; }
 QDialog[kvRole="settingsDialog"] { border:0; background:transparent; }
 )QSS"),
