@@ -35,9 +35,12 @@ void CodexAppServer::discoverDaemonSessions() {
     daemonDiscoveryInFlight_ = true;
     const auto observed = std::exchange(daemonDiscoveryCursors_, {});
     const auto epoch = daemonDiscoveryEpoch_;
+    // A new-session event needs only the live catalog. Full refresh owns
+    // deletion reconciliation; older daemons ignore the live-only opt-in and
+    // return a legacy catalog or the first bounded tombstone page with sessions.
     daemon_->call(
-        "session.list", {}, {}, -1,
-        [this, observed, epoch](const QJsonObject& result, const QString& error) {
+        "session.list", {{"deleted_sessions_page_version", 1}, {"session_catalog_live_only", true}},
+        {}, 0, [this, observed, epoch](const QJsonObject& result, const QString& error) {
             if (epoch != daemonDiscoveryEpoch_)
                 return;
             daemonDiscoveryInFlight_ = false;

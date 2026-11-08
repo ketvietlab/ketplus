@@ -1,0 +1,126 @@
+{
+  "code_commit": "38ebde39ba9d1fe13334f85031a1166d17d6c4aa",
+  "base_commit": "fdec1645405e1a76ba8f0788a9d48232e75229dc",
+  "scope": "issue #68: live-only incremental discovery; no UI implementation",
+  "platform": {
+    "os": "macOS 26.2",
+    "architecture": "arm64",
+    "qt": "6.11.2",
+    "compiler": "Apple Clang 21",
+    "build": "Release"
+  },
+  "source_sha256": {
+    "apps/daemon/src/protocol/DaemonProtocol.cpp": "54dcc9fb9236110a4eb62e46fc8a87db8255591c74bfb590d3d45aa7513e3d7b",
+    "apps/daemon/src/runtime/SessionHostCatalog.cpp": "1a4aef51933b5b365aaccbbdc580843f2d3e49ff0c63aec99693d48127654f71",
+    "modules/ai/src/agent/CodexDaemonDiscovery.cpp": "366a5f5d2cf33cb48924da0a611dc506d66ef43eb0ecd0e63dec72c37ad84dcc",
+    "tests/daemon/ProviderDeletionTest.cpp": "2b26d943727eebd2d11be1d20a27bd4a4cd2226732bcb7cec99197016951773f",
+    "tests/daemon/DesktopDaemonClientTest.cpp": "02a7a4a5e8f23141a68cd2d49cfd31de2eefd63107892dc4ac4a4372413ae389",
+    "tests/daemon/DesktopSessionDiscoveryTest.cpp": "2c8a68cf216402ad86cfc0e159fcf923f3d75482afcfd367dd9d35edd3dfec3d"
+  },
+  "affected_matrix": {
+    "head": "38ebde39ba9d1fe13334f85031a1166d17d6c4aa",
+    "head_after": "38ebde39ba9d1fe13334f85031a1166d17d6c4aa",
+    "exit_code": 0,
+    "elapsed_seconds": 56.44,
+    "parallelism": 2,
+    "qpa": "offscreen",
+    "mode": "focused",
+    "live_opt_in": false,
+    "targets_passed": 5,
+    "cases": {
+      "provider_deletion": {
+        "passed": 45,
+        "skipped": 4
+      },
+      "desktop_daemon_client": {
+        "passed": 30,
+        "skipped": 1
+      },
+      "desktop_session_discovery": {
+        "passed": 11,
+        "skipped": 0
+      },
+      "daemon_lifecycle": {
+        "passed": 42,
+        "skipped": 1
+      },
+      "headless_daemon": {
+        "passed": 6,
+        "skipped": 0
+      }
+    },
+    "logs_sha256": {
+      "-test.log": "7d1d748ff6aeadefef3871d44aaa3176b4a830572d5086e3db687fe12fd01c67",
+      "-LastTest.log": "a4c1cfc3f4a057e64e0053b6ea80887d2c1d705d022833b1ec5eab443ea2cd82",
+      "-build.log": "b2ccda955bcfffd009b52fea707597f30c8c61e18359164d12fe6aed4fbc628f"
+    }
+  },
+  "discovery_observations": [
+    {
+      "retained_tombstones": 0,
+      "elapsed_ms": 55,
+      "additional_deletion_signals": 0
+    },
+    {
+      "retained_tombstones": 20000,
+      "elapsed_ms": 51,
+      "additional_deletion_signals": 0
+    },
+    {
+      "retained_tombstones": 100000,
+      "elapsed_ms": 51,
+      "additional_deletion_signals": 0
+    }
+  ],
+  "observation_limit": "End-to-end real temporary daemon/fake-provider discovery; includes Qt 50-ms polling. Not an isolated microbenchmark or a live-provider measurement.",
+  "negative_controls": {
+    "base": "fdec1645",
+    "server": {
+      "passed": 3,
+      "failed": 2,
+      "finding": "Old server reads deletion tables and does not reject ambiguous live-only requests."
+    },
+    "discovery": {
+      "passed": 3,
+      "failed": 8,
+      "finding": "Old discovery re-emits exactly 20k/100k deletion signals; legacy/paged fixtures also reject the old behavior."
+    },
+    "execution": {
+      "old-build": {
+        "exit_code": 0,
+        "seconds": 6.6,
+        "log_sha256": "d50b9e2bc6538e63615106888607a4caacc04d08961d0f86313e8a74db67abf8"
+      },
+      "old-server": {
+        "exit_code": 2,
+        "seconds": 0.57,
+        "log_sha256": "2339b7103e79d28aaa1d5ffa13b2a14eb3183573c07bb9b2ab8323a699a50398"
+      },
+      "old-discovery": {
+        "exit_code": 8,
+        "seconds": 51.83,
+        "log_sha256": "7b1b91a96d11d1f6868f0281b69617e913b65c83d2619117a654ef7622396c4a"
+      },
+      "restored_source_sha256": {
+        "apps/daemon/src/runtime/SessionHostCatalog.cpp": "1a4aef51933b5b365aaccbbdc580843f2d3e49ff0c63aec99693d48127654f71",
+        "modules/ai/src/agent/CodexDaemonDiscovery.cpp": "366a5f5d2cf33cb48924da0a611dc506d66ef43eb0ecd0e63dec72c37ad84dcc"
+      },
+      "restored-build": {
+        "exit_code": 0,
+        "seconds": 1.8,
+        "log_sha256": "5256fc014983b468c0439a3e04a8bd2a2c8bdcfcacccd427aae5ffed32384dd9"
+      }
+    }
+  },
+  "commands": [
+    "cmake --preset dev -DCMAKE_BUILD_TYPE=Release",
+    "cmake --build --preset dev -j4 --target ketplus_provider_deletion_tests ketplus_desktop_daemon_client_tests ketplus_desktop_session_discovery_tests ketplus_daemon_lifecycle_tests ketplus_headless_daemon_tests",
+    "ctest --preset dev --output-on-failure -j2 -R ^ketplus_(provider_deletion|desktop_daemon_client|desktop_session_discovery|daemon_lifecycle|headless_daemon)_tests$"
+  ],
+  "limits": [
+    "No new full Pro or Lite suite; focused plus directly affected matrix per docs/testing.md; no shared header/core/UI change.",
+    "No Windows, real provider calls, live journal, packaging, installation or deployment.",
+    "Full reconnect/CLI walk, per-row revision triggers, live-catalog size, atomic deletion and other issue #68 criteria remain separate.",
+    "Four optional 100k/300k deletion/catalog scale rows skipped; the new discovery 20k/100k rows ran. Two live-provider tests skipped."
+  ]
+}

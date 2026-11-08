@@ -1,8 +1,10 @@
 #include "DaemonClient.h"
+#include "SessionCatalogReader.h"
 #include <QCommandLineParser>
 #include <QCoreApplication>
 #include <QFile>
 #include <QJsonDocument>
+#include <QTemporaryFile>
 #include <QTextStream>
 #include <QTimer>
 #include <functional>
@@ -134,15 +136,74 @@ int main(int argc, char** argv) {
                 }
             });
     });
-    client.call(operation, payload, {}, 0, [&](const QJsonObject& value, const QString& error) {
-        if (command != "login" || !error.isEmpty()) {
-            finish(value, error);
-            return;
+    QTemporaryFile tombstones;
+    bool spoolOk = true;
+    bool firstTombstone = true;
+    if (command == "sessions") {
+        if (!tombstones.open()) {
+            QTextStream(stderr) << "Cannot create the private catalog spool.\n";
+            return 1;
         }
-        QTextStream(stdout) << QJsonDocument(value).toJson(QJsonDocument::Indented);
-        deadline.start(qMin(3600, qMax(seconds, 610)) * 1000);
-        poll.start();
-    });
+        ketplus::remote::readSessionCatalog(
+            &client, &app, [] { return true; },
+            [&](const QJsonArray& rows, bool reset) {
+                if (reset) {
+                    spoolOk = tombstones.resize(0) && tombstones.seek(0);
+                    firstTombstone = true;
+                }
+                for (const auto& row : rows) {
+                    const auto bytes = (firstTombstone ? QByteArray{} : QByteArray(",")) +
+                                       QJsonDocument(row.toObject()).toJson(QJsonDocument::Compact);
+                    spoolOk = spoolOk && tombstones.write(bytes) == bytes.size();
+                    firstTombstone = false;
+                }
+            },
+            [&](const QJsonObject& value, const QString& error) {
+                if (!error.isEmpty() || !value.contains("deleted_sessions_page_version")) {
+                    finish(value, error);
+                    return;
+                }
+                if (!spoolOk || !tombstones.flush() || !tombstones.seek(0)) {
+                    finish({}, "Cannot spool the deletion catalog.");
+                    return;
+                }
+                // Keep the existing one-object JSON output without holding its history in RAM.
+                QFile output;
+                if (!output.open(stdout, QIODevice::WriteOnly)) {
+                    finish({}, "Cannot write the session catalog.");
+                    return;
+                }
+                auto tail = value;
+                tail.remove("deleted_sessions");
+                tail.remove("deleted_sessions_next");
+                tail.remove("deleted_sessions_page_version");
+                tail.remove("deleted_sessions_snapshot");
+                const auto write = [&](const QByteArray& bytes) {
+                    return output.write(bytes) == bytes.size();
+                };
+                bool ok = write("{\"deleted_sessions\":[");
+                while (ok && !tombstones.atEnd()) {
+                    const auto bytes = tombstones.read(64 * 1024);
+                    ok = !bytes.isEmpty() && write(bytes);
+                }
+                ok = ok && write("],") &&
+                     write(QJsonDocument(tail).toJson(QJsonDocument::Compact).mid(1)) &&
+                     write("\n") && output.flush();
+                if (!ok)
+                    QTextStream(stderr) << "Cannot write the session catalog.\n";
+                result = ok ? 0 : 1;
+                app.quit();
+            });
+    } else
+        client.call(operation, payload, {}, 0, [&](const QJsonObject& value, const QString& error) {
+            if (command != "login" || !error.isEmpty()) {
+                finish(value, error);
+                return;
+            }
+            QTextStream(stdout) << QJsonDocument(value).toJson(QJsonDocument::Indented);
+            deadline.start(qMin(3600, qMax(seconds, 610)) * 1000);
+            poll.start();
+        });
     app.exec();
     return result;
 }
