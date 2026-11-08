@@ -1,4 +1,3 @@
-import "ChromeMetrics.js" as Metrics
 import QtQuick
 import Ket as Kit
 

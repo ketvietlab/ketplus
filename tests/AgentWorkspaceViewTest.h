@@ -139,6 +139,8 @@ class AgentWorkspaceViewTest final : public QObject {
     void composerPlaceholderTracksCaret();
     void worktreeHeaderKeepsLabelVisible();
     void tooltipsFollowDesignSystem();
+    void measurementTimerStopsAndRestartsForNewRows();
+    void agentQmlUsesBoundedAnimationsAndKitPrimitives();
     void contextMenuFollowsDesignSystem();
     void conversationMenusOfferFork();
     void selectsModelsInUnifiedPicker();

@@ -1,4 +1,4 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
 import QtQuick.Controls.Basic as Basic
 
@@ -17,9 +17,9 @@ Grid {
     readonly property int tileCount: visibleCount + (remainingCount > 0 ? 1 : 0)
     signal expanded()
     property bool largePreview: false
-    readonly property real thumbnailSide: Metrics.px(largePreview ? 360 : 120, tokens)
-    readonly property real thumbnailHeight: Metrics.px(largePreview ? 225 : 78, tokens)
-    readonly property real gap: Metrics.px(8, tokens)
+    readonly property real thumbnailSide: KetTheme.px(largePreview ? 360 : 120, KetTheme.zoom)
+    readonly property real thumbnailHeight: KetTheme.px(largePreview ? 225 : 78, KetTheme.zoom)
+    readonly property real gap: KetTheme.px(8, KetTheme.zoom)
     readonly property real preferredWidth: tileCount * thumbnailSide + Math.max(0, tileCount - 1) * gap
     readonly property real bubblePreferredWidth: preferredWidth
 
@@ -56,7 +56,7 @@ Grid {
                      || root.showUnavailable
             width: root.cellSide
             height: root.cellHeight
-            radius: Metrics.px(8, root.tokens)
+            radius: KetTheme.px(8, KetTheme.zoom)
             color: root.tokens.interactiveBackground
             border.width: 1
             border.color: imageHover.hovered || activeFocus ? root.tokens.focus : root.tokens.border
@@ -79,7 +79,7 @@ Grid {
 
             Text {
                 anchors.centerIn: parent
-                width: parent.width - Metrics.px(8, tokens)
+                width: parent.width - KetTheme.px(8, KetTheme.zoom)
                 visible: root.showUnavailable && attachmentImage.status === Image.Error
                 objectName: "messageAttachmentUnavailable"
                 text: root.unavailableText
@@ -123,7 +123,7 @@ Grid {
             verticalAlignment: Text.AlignVCenter
         }
         background: Rectangle {
-            radius: Metrics.px(8, root.tokens)
+            radius: KetTheme.px(8, KetTheme.zoom)
             color: moreButton.hovered ? root.tokens.interactiveHover : root.tokens.interactiveBackground
             border.width: 1
             border.color: moreButton.activeFocus ? root.tokens.focus : root.tokens.border

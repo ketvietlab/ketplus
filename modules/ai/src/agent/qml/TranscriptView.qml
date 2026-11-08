@@ -1,5 +1,5 @@
+import Ket
 import Ket as Kit
-import "ChromeMetrics.js" as Metrics
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Basic as Basic
@@ -18,6 +18,9 @@ Flickable {
     required property var host
     required property var preview
     required property var settleTimer
+    readonly property bool windowVisible: visible && Window.window !== null
+        && Window.window.visible && Window.window.visibility !== Window.Minimized
+    property bool measurementPending: true
     property var activityStates: ({})
     property var activityStateOrder: []
     function activityState(key) {
@@ -563,7 +566,7 @@ Flickable {
         return {
             x: start.x,
             y: start.y,
-            width: Math.max(Metrics.px(4, shell.t), sameLine ? end.x - start.x : textItem.width - start.x),
+            width: Math.max(KetTheme.px(4, KetTheme.zoom), sameLine ? end.x - start.x : textItem.width - start.x),
             height: start.height
         };
     }
@@ -730,6 +733,7 @@ Flickable {
         }
     }
     onMessageModelChanged: {
+        measurementPending = true;
         // Another conversation: its session has not heard this view's key.
         lastReportedReadingKey = "\u0001";
         idlePrefetchDone = false;
@@ -830,9 +834,11 @@ Flickable {
     // so they are still paced rather than delivered in one burst.
     Timer {
         id: rowMeasurementTimer
+        objectName: "transcriptMeasurementTimer"
         interval: 120
         repeat: true
-        running: !!transcript.messageModel && !transcript.scrolling && !transcript.dragging
+        running: !!transcript.messageModel && transcript.measurementPending
+            && transcript.windowVisible && !transcript.scrolling && !transcript.dragging
         onTriggered: {
             if (!transcript.messageModel || transcript.width <= 0)
                 return;
@@ -841,7 +847,7 @@ Flickable {
             // application's. Anything else is a height every row corrects
             // when it is realized, under the reader.
             const width = transcript.bodyWidth > 0 ? transcript.bodyWidth : transcript.width - 64;
-            transcript.messageModel.measureUnmeasuredRows(32, width, transcript.readingFont);
+            transcript.measurementPending = transcript.messageModel.measureUnmeasuredRows(32, width, transcript.readingFont);
         }
     }
     // Widest body a delegate has reported at this layout: an assistant answer,
@@ -851,6 +857,7 @@ Flickable {
     readonly property string layoutFingerprint: Math.round(width) + "|" + shell.t.uiFont + "|"
         + shell.t.monoFont + "|" + shell.t.zoomFactor + "|" + Qt.application.font.pixelSize + "|" + Screen.devicePixelRatio + "|" + shell.conversationColumnWidth
     onLayoutFingerprintChanged: {
+        measurementPending = true;
         if (!messageModel)
             return;
         clearMeasuredHeights();
@@ -1354,6 +1361,10 @@ Flickable {
     // found by binary search over the same prefix sum the rows are placed from.
     property bool updatingRowWindow: false
     function updateRowWindow() {
+        if (!windowVisible) {
+            rowWindowGrowth.running = false;
+            return;
+        }
         if (!windowModel || !geometry)
             return;
         // Mid-mutation the rows have moved but the viewport has not been put back
@@ -1417,11 +1428,13 @@ Flickable {
     readonly property int realizeRowsPerFrame: 3
     FrameAnimation {
         id: rowWindowGrowth
+        objectName: "transcriptRowWindowGrowth"
         onTriggered: transcript.updateRowWindow()
     }
     Connections {
         target: transcript.geometry
         function onGeometryChanged() {
+            transcript.measurementPending = true;
             transcript.geometryUpdated();
         }
     }
@@ -1601,6 +1614,14 @@ Flickable {
     // the content is, so a position hold that shifts contentY mid-glide does not
     // change where the glide takes the reader.
     property real wheelGlideRemaining: 0
+    onWindowVisibleChanged: {
+        if (!windowVisible) {
+            wheelGlideRemaining = 0;
+            rowWindowGrowth.running = false;
+        } else {
+            updateRowWindow();
+        }
+    }
     function glideWheel(pixels) {
         // Reversing direction drops what was left of the other way.
         if (wheelGlideRemaining * pixels < 0)
@@ -1609,7 +1630,8 @@ Flickable {
     }
     FrameAnimation {
         id: wheelGlide
-        running: Math.abs(transcript.wheelGlideRemaining) > 0
+        objectName: "transcriptWheelGlide"
+        running: transcript.windowVisible && Math.abs(transcript.wheelGlideRemaining) > 0
         onTriggered: {
             const remaining = transcript.wheelGlideRemaining;
             // Exponential approach: most of a notch lands in the first ~100 ms.
@@ -1756,7 +1778,7 @@ Flickable {
     }
     ScrollBar.vertical: Basic.ScrollBar {
         id: transcriptScrollBar
-        width: Metrics.px(7, shell.t)
+        width: KetTheme.px(7, KetTheme.zoom)
         policy: ScrollBar.AlwaysOn
         hoverEnabled: false
         // The loaded rows are a window onto the conversation, and their height
@@ -1780,14 +1802,14 @@ Flickable {
         }
         background: null
         contentItem: Item {
-            implicitWidth: Metrics.px(4, shell.t)
+            implicitWidth: KetTheme.px(4, KetTheme.zoom)
         }
         Rectangle {
             id: positionThumb
             objectName: "transcriptPositionThumb"
-            width: Metrics.px(4, shell.t)
-            height: Metrics.px(40, shell.t)
-            radius: Metrics.px(2, shell.t)
+            width: KetTheme.px(4, KetTheme.zoom)
+            height: KetTheme.px(40, KetTheme.zoom)
+            radius: KetTheme.px(2, KetTheme.zoom)
             x: parent.width - width - 1.5
             y: 2 + transcript.conversationPosition * Math.max(0, parent.height - height - 4)
             color: shell.t.textMuted
@@ -1927,24 +1949,30 @@ Flickable {
         objectName: "jumpToLatestButton"
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        anchors.margins: Metrics.px(12, shell.t)
+        anchors.margins: KetTheme.px(12, KetTheme.zoom)
         // A Flickable adopts its children into the scrolling content; this button
         // belongs to the viewport, or it rides along with the rows and is only on
         // screen when the bottom of the loaded content is.
         parent: transcript
         z: 3
-        height: Metrics.px(44, shell.t)
-        width: Metrics.px(44, shell.t)
-        padding: Metrics.px(13, shell.t)
+        height: KetTheme.px(44, KetTheme.zoom)
+        width: KetTheme.px(44, KetTheme.zoom)
+        padding: KetTheme.px(13, KetTheme.zoom)
         visible: !transcript.followTail && transcript.messageModel.count > 0
-        contentItem: TintedIcon {
-            source: "qrc:/agent/icons/arrow-up.svg"
-            color: shell.t.textMain
-            rotation: 180
+        contentItem: Item {
+            implicitWidth: KetTheme.px(16, KetTheme.zoom)
+            implicitHeight: implicitWidth
+            KetIcon {
+                anchors.centerIn: parent
+                box: Math.min(parent.width, parent.height)
+                name: KetTheme.iconForLucide("arrow-up")
+                color: shell.t.textMain
+                rotation: 180
+            }
         }
         background: Rectangle {
             color: parent.hovered ? shell.t.surfaceHover : shell.t.surfaceRaised
-            radius: Metrics.px(5, shell.t)
+            radius: KetTheme.px(5, KetTheme.zoom)
             border.color: shell.t.border
         }
         onClicked: shell.jumpToLatest()
@@ -1955,11 +1983,11 @@ Flickable {
             visible: transcript.newMessageCount > 0
             anchors.right: parent.right
             anchors.bottom: parent.top
-            anchors.bottomMargin: -Metrics.px(10, shell.t)
-            anchors.rightMargin: -Metrics.px(6, shell.t)
-            height: Metrics.px(18, shell.t)
-            width: Math.max(Metrics.px(18, shell.t), newMessageLabel.implicitWidth + Metrics.px(10, shell.t))
-            radius: Metrics.px(9, shell.t)
+            anchors.bottomMargin: -KetTheme.px(10, KetTheme.zoom)
+            anchors.rightMargin: -KetTheme.px(6, KetTheme.zoom)
+            height: KetTheme.px(18, KetTheme.zoom)
+            width: Math.max(KetTheme.px(18, KetTheme.zoom), newMessageLabel.implicitWidth + KetTheme.px(10, KetTheme.zoom))
+            radius: KetTheme.px(9, KetTheme.zoom)
             color: shell.t.accent
             Text {
                 id: newMessageLabel
@@ -1973,7 +2001,7 @@ Flickable {
             }
         }
         KetToolTip {
-            tokens: shell.t
+            objectName: "ketToolTip"
             visible: jumpToLatestButton.hovered
             text: jumpToLatestButton.Accessible.name
         }
@@ -1987,19 +2015,18 @@ Flickable {
         // Slim, non-blocking edge row: a spinner while a page loads and a
         // retry control only on error. The slot is reserved while older
         // history exists so its appearance never shifts the reading rows.
-        height: host.historyState.loading || host.historyState.hasOlder || host.historyState.error ? Metrics.px(24, shell.t) : 0
+        height: host.historyState.loading || host.historyState.hasOlder || host.historyState.error ? KetTheme.px(24, KetTheme.zoom) : 0
         readonly property bool showRetry: !!host.historyState.error || !!host.historyState.resyncRequired
         Row {
             objectName: "olderHistoryIndicator"
             anchors.centerIn: parent
-            spacing: Metrics.px(6, shell.t)
+            spacing: KetTheme.px(6, KetTheme.zoom)
             visible: historyHeader.height > 0 && !!host.historyState.loading && !historyHeader.showRetry
-            Basic.BusyIndicator {
+            KetActivityIndicator {
                 anchors.verticalCenter: parent.verticalCenter
-                width: Metrics.px(14, shell.t)
-                height: Metrics.px(14, shell.t)
-                padding: 0
-                running: parent.visible
+                width: KetTheme.px(14, KetTheme.zoom)
+                height: KetTheme.px(14, KetTheme.zoom)
+                running: parent.visible && transcript.windowVisible && host.workingMotionEnabled
             }
             Text {
                 anchors.verticalCenter: parent.verticalCenter
@@ -2013,10 +2040,10 @@ Flickable {
             id: olderMessagesButton
             objectName: "loadOlderMessagesButton"
             anchors.centerIn: parent
-            width: Math.min(parent.width - Metrics.px(32, shell.t), implicitWidth)
-            height: Metrics.px(22, shell.t)
-            padding: Metrics.px(2, shell.t)
-            horizontalPadding: Metrics.px(10, shell.t)
+            width: Math.min(parent.width - KetTheme.px(32, KetTheme.zoom), implicitWidth)
+            height: KetTheme.px(22, KetTheme.zoom)
+            padding: KetTheme.px(2, KetTheme.zoom)
+            horizontalPadding: KetTheme.px(10, KetTheme.zoom)
             visible: historyHeader.height > 0 && historyHeader.showRetry
             enabled: !host.historyState.loading
             text: host.historyState.resyncRequired ? "History changed · Reload latest" : "Retry loading history"
@@ -2032,10 +2059,10 @@ Flickable {
             }
             background: Rectangle {
                 color: olderMessagesButton.hovered ? shell.t.surfaceHover : "transparent"
-                radius: Metrics.px(5, shell.t)
+                radius: KetTheme.px(5, KetTheme.zoom)
             }
             KetToolTip {
-                tokens: shell.t
+                objectName: "ketToolTip"
                 visible: olderMessagesButton.hovered && !!host.historyState.error
                 text: host.historyState.error || ""
             }
@@ -2054,33 +2081,39 @@ Flickable {
         // real gutter above it so a one-line command delegate
         // can never paint beneath the footer while its implicit
         // layout is settling during a streamed model update.
-        height: host.sessionRunning ? Metrics.px(62, shell.t) : (transcript.messageModel.count > 0 ? Metrics.px(48, shell.t) : 0)
+        height: host.sessionRunning ? KetTheme.px(62, KetTheme.zoom) : (transcript.messageModel.count > 0 ? KetTheme.px(48, KetTheme.zoom) : 0)
 
         Basic.ToolButton {
             id: copyConversationButton
             objectName: "copyConversationButton"
             // Keep conversation export on the right, separate from the answer copy action.
-            x: parent.width - Math.max(Metrics.px(20, shell.t), (parent.width - shell.conversationColumnWidth) / 2 + Metrics.px(20, shell.t)) - width
+            x: parent.width - Math.max(KetTheme.px(20, KetTheme.zoom), (parent.width - shell.conversationColumnWidth) / 2 + KetTheme.px(20, KetTheme.zoom)) - width
             anchors.top: parent.top
-            anchors.topMargin: host.sessionRunning ? Metrics.px(6, shell.t) : -Metrics.px(4, shell.t)
+            anchors.topMargin: host.sessionRunning ? KetTheme.px(6, KetTheme.zoom) : -KetTheme.px(4, KetTheme.zoom)
             z: 1
-            width: Metrics.px(44, shell.t)
-            height: Metrics.px(44, shell.t)
-            padding: Metrics.px(13, shell.t)
+            width: KetTheme.px(44, KetTheme.zoom)
+            height: KetTheme.px(44, KetTheme.zoom)
+            padding: KetTheme.px(13, KetTheme.zoom)
             visible: transcript.messageModel.count > 0
-            contentItem: TintedIcon {
-                source: host.historyState.copying ? "qrc:/agent/icons/square.svg" : "qrc:/agent/icons/copy.svg"
-                color: shell.t.textMuted
+            contentItem: Item {
+                implicitWidth: KetTheme.px(16, KetTheme.zoom)
+                implicitHeight: implicitWidth
+                KetIcon {
+                    anchors.centerIn: parent
+                    box: Math.min(parent.width, parent.height)
+                    name: KetTheme.iconForLucide(host.historyState.copying ? "square" : "copy")
+                    color: shell.t.textMuted
+                }
             }
             background: Rectangle {
                 color: parent.hovered ? shell.t.surfaceHover : "transparent"
-                radius: Metrics.px(5, shell.t)
+                radius: KetTheme.px(5, KetTheme.zoom)
             }
             readonly property string label: host.historyState.copying ? "Cancel copying" : host.sessionRunning ? "Copy loaded conversation" : "Copy conversation"
             onClicked: host.historyState.copying ? host.cancelConversationCopy() : host.sessionRunning ? host.copyText(shell.conversationCopyText()) : host.copyConversation(shell.conversationCopyText())
             Accessible.name: label
             KetToolTip {
-                tokens: shell.t
+                objectName: "ketToolTip"
                 visible: copyConversationButton.hovered
                 text: copyConversationButton.label
             }
@@ -2091,10 +2124,10 @@ Flickable {
             visible: host.sessionRunning
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.leftMargin: Math.max(Metrics.px(16, shell.t), (parent.width - shell.conversationColumnWidth) / 2 + Metrics.px(16, shell.t))
-            anchors.rightMargin: Math.max(Metrics.px(16, shell.t), (parent.width - shell.conversationColumnWidth) / 2 + Metrics.px(16, shell.t))
+            anchors.leftMargin: Math.max(KetTheme.px(16, KetTheme.zoom), (parent.width - shell.conversationColumnWidth) / 2 + KetTheme.px(16, KetTheme.zoom))
+            anchors.rightMargin: Math.max(KetTheme.px(16, KetTheme.zoom), (parent.width - shell.conversationColumnWidth) / 2 + KetTheme.px(16, KetTheme.zoom))
             anchors.top: parent.top
-            anchors.topMargin: Metrics.px(8, shell.t)
+            anchors.topMargin: KetTheme.px(8, KetTheme.zoom)
         }
     }
 

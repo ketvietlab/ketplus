@@ -1,4 +1,4 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
 import Ket 1.0 as Kit
 import QtQuick.Layouts
@@ -17,9 +17,9 @@ Kit.KetBanner {
     objectName: "agentScopeNotice"
     visible: shown
     Layout.fillWidth: true
-    Layout.leftMargin: Math.max(Metrics.px(20, workspace.t), (parent.width - Metrics.px(792, workspace.t)) / 2 + Metrics.px(20, workspace.t))
+    Layout.leftMargin: Math.max(KetTheme.px(20, KetTheme.zoom), (parent.width - KetTheme.px(792, KetTheme.zoom)) / 2 + KetTheme.px(20, KetTheme.zoom))
     Layout.rightMargin: Layout.leftMargin
-    Layout.topMargin: shown ? Metrics.px(12, workspace.t) : 0
+    Layout.topMargin: shown ? KetTheme.px(12, KetTheme.zoom) : 0
     Layout.preferredHeight: shown ? implicitHeight : 0
     tone: historyFailed ? Kit.KetTheme.BannerTone.Danger : folderMissing ? Kit.KetTheme.BannerTone.Warning : Kit.KetTheme.BannerTone.Info
     message: detail

@@ -1,4 +1,4 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Basic as Basic
@@ -14,18 +14,18 @@ Basic.Popup {
     focus: true
     y: -height - 4
     x: Math.min(0, root.width - anchorItem.mapToItem(root, 0, 0).x - width - 12)
-    width: Math.min(Metrics.px(420, root.t), root.width - Metrics.px(24, root.t))
-    height: Math.min(root.height - Metrics.px(32, root.t), skillsContent.implicitHeight + Metrics.px(16, root.t))
-    padding: Metrics.px(8, root.t)
+    width: Math.min(KetTheme.px(420, KetTheme.zoom), root.width - KetTheme.px(24, KetTheme.zoom))
+    height: Math.min(root.height - KetTheme.px(32, KetTheme.zoom), skillsContent.implicitHeight + KetTheme.px(16, KetTheme.zoom))
+    padding: KetTheme.px(8, KetTheme.zoom)
     background: Rectangle {
         color: root.t.surfaceRaised
-        radius: Metrics.px(12, root.t)
+        radius: KetTheme.px(12, KetTheme.zoom)
         border.color: root.t.borderStrong
     }
     ColumnLayout {
         id: skillsContent
         width: parent.width
-        spacing: Metrics.px(6, root.t)
+        spacing: KetTheme.px(6, KetTheme.zoom)
         RowLayout {
             Layout.fillWidth: true
             Text {
@@ -61,14 +61,14 @@ Basic.Popup {
                 id: skillOption
                 required property var modelData
                 width: ListView.view.width
-                height: Metrics.px(62, root.t)
-                padding: Metrics.px(8, root.t)
+                height: KetTheme.px(62, KetTheme.zoom)
+                padding: KetTheme.px(8, KetTheme.zoom)
                 contentItem: RowLayout {
-                    spacing: Metrics.px(10, root.t)
+                    spacing: KetTheme.px(10, KetTheme.zoom)
                     Rectangle {
-                        Layout.preferredWidth: Metrics.px(18, root.t)
-                        Layout.preferredHeight: Metrics.px(18, root.t)
-                        radius: Metrics.px(5, root.t)
+                        Layout.preferredWidth: KetTheme.px(18, KetTheme.zoom)
+                        Layout.preferredHeight: KetTheme.px(18, KetTheme.zoom)
+                        radius: KetTheme.px(5, KetTheme.zoom)
                         color: modelData.enabled ? root.t.accent : "transparent"
                         border.width: 1
                         border.color: modelData.enabled ? root.t.accentHover : root.t.borderStrong
@@ -81,7 +81,7 @@ Basic.Popup {
                     }
                     Column {
                         Layout.fillWidth: true
-                        spacing: Metrics.px(3, root.t)
+                        spacing: KetTheme.px(3, KetTheme.zoom)
                         Text {
                             width: parent.width
                             text: modelData.name + " · " + modelData.source
@@ -110,12 +110,12 @@ Basic.Popup {
                     }
                 }
                 background: Rectangle {
-                    radius: Metrics.px(8, root.t)
+                    radius: KetTheme.px(8, KetTheme.zoom)
                     color: modelData.enabled ? root.t.interactiveActive : parent.hovered ? root.t.surfaceHover : "transparent"
                 }
                 onClicked: agentHost.toggleSkill(modelData.path, !modelData.enabled)
                 KetToolTip {
-                    tokens: root.t
+                    objectName: "ketToolTip"
                     visible: skillOption.hovered
                     text: modelData.description || modelData.displayPath
                 }

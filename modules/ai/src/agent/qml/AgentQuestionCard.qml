@@ -1,4 +1,4 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
 import Ket 1.0 as Kit
 import QtQuick.Layouts
@@ -139,7 +139,7 @@ Kit.KetQuestionCard {
         Flow {
             visible: root.confirmation
             width: parent.width
-            spacing: Metrics.px(8, root.tokens)
+            spacing: KetTheme.px(8, KetTheme.zoom)
             Repeater {
                 model: root.confirmation ? root.currentQuestion.options : []
                 Kit.KetButton {

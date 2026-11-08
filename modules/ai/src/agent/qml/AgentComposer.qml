@@ -1,4 +1,4 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Basic as Basic
@@ -20,7 +20,7 @@ Item {
     property alias modelButton: modelButton
     property alias usageRingButton: usageRingButton
     Layout.fillWidth: true
-    Layout.preferredHeight: composer.height + composerFooter.height + Metrics.px(18, root.t)
+    Layout.preferredHeight: composer.height + composerFooter.height + KetTheme.px(18, KetTheme.zoom)
 
     Rectangle {
         id: composer
@@ -29,7 +29,7 @@ Item {
         readonly property bool compactControls: width < 520
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
-        width: Math.min(parent.width - Metrics.px(40, root.t), root.conversationColumnWidth - Metrics.px(40, root.t))
+        width: Math.min(parent.width - KetTheme.px(40, KetTheme.zoom), root.conversationColumnWidth - KetTheme.px(40, KetTheme.zoom))
         height: composerColumn.implicitHeight + 2 * (recipe.padding + recipe.ringWidth + 1)
         radius: recipe.radius
         color: recipe.background
@@ -77,7 +77,7 @@ Item {
                 Layout.fillWidth: true
                 Layout.preferredHeight: childrenRect.height
                 visible: agentHost.attachments.length > 0
-                spacing: Metrics.px(6, root.t)
+                spacing: KetTheme.px(6, KetTheme.zoom)
                 Repeater {
                     model: agentHost.attachments
                     AgentAttachmentChip {
@@ -207,11 +207,11 @@ Item {
         anchors.left: composer.left
         anchors.right: composer.right
         anchors.bottom: composer.top
-        anchors.bottomMargin: Metrics.px(6, root.t)
+        anchors.bottomMargin: KetTheme.px(6, KetTheme.zoom)
         z: 20
-        height: slashCommandList.implicitHeight + Metrics.px(8, root.t)
+        height: slashCommandList.implicitHeight + KetTheme.px(8, KetTheme.zoom)
         visible: root.visibleSlashCommands.length > 0 && !agentHost.sessionRunning
-        radius: Metrics.px(12, root.t)
+        radius: KetTheme.px(12, KetTheme.zoom)
         color: root.t.surfaceRaised
         border.width: 1
         border.color: root.t.borderStrong
@@ -220,23 +220,23 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            anchors.margins: Metrics.px(4, root.t)
-            spacing: Metrics.px(2, root.t)
+            anchors.margins: KetTheme.px(4, KetTheme.zoom)
+            spacing: KetTheme.px(2, KetTheme.zoom)
             Repeater {
                 model: root.visibleSlashCommands
                 Basic.ItemDelegate {
                     required property var modelData
                     width: slashCommandList.width
-                    height: Metrics.px(42, root.t)
-                    padding: Metrics.px(8, root.t)
+                    height: KetTheme.px(42, KetTheme.zoom)
+                    padding: KetTheme.px(8, KetTheme.zoom)
                     contentItem: RowLayout {
-                        spacing: Metrics.px(10, root.t)
+                        spacing: KetTheme.px(10, KetTheme.zoom)
                         Text {
                             text: modelData.label
                             color: root.t.textMain
                             font.family: root.t.monoFont
                             font.pixelSize: root.t.reading
-                            Layout.preferredWidth: Metrics.px(92, root.t)
+                            Layout.preferredWidth: KetTheme.px(92, KetTheme.zoom)
                             verticalAlignment: Text.AlignVCenter
                         }
                         Text {
@@ -250,7 +250,7 @@ Item {
                         }
                     }
                     background: Rectangle {
-                        radius: Metrics.px(8, root.t)
+                        radius: KetTheme.px(8, KetTheme.zoom)
                         color: parent.hovered ? root.t.interactiveActive : "transparent"
                     }
                     onClicked: root.applySlashCommand(modelData)
@@ -265,11 +265,11 @@ Item {
         anchors.left: composer.left
         anchors.right: composer.right
         anchors.bottom: composer.top
-        anchors.bottomMargin: Metrics.px(6, root.t)
+        anchors.bottomMargin: KetTheme.px(6, KetTheme.zoom)
         z: 20
-        height: Math.min(Metrics.px(360, root.t), skillSuggestionList.contentHeight + Metrics.px(8, root.t))
+        height: Math.min(KetTheme.px(360, KetTheme.zoom), skillSuggestionList.contentHeight + KetTheme.px(8, KetTheme.zoom))
         visible: root.visibleSkillSuggestions.length > 0
-        radius: Metrics.px(12, root.t)
+        radius: KetTheme.px(12, KetTheme.zoom)
         color: root.t.surfaceRaised
         border.width: 1
         border.color: root.t.borderStrong
@@ -278,9 +278,9 @@ Item {
             id: skillSuggestionList
             objectName: "skillSuggestionList"
             anchors.fill: parent
-            anchors.margins: Metrics.px(4, root.t)
+            anchors.margins: KetTheme.px(4, KetTheme.zoom)
             clip: true
-            spacing: Metrics.px(2, root.t)
+            spacing: KetTheme.px(2, KetTheme.zoom)
             model: root.visibleSkillSuggestions
             currentIndex: Math.min(root.selectedSkillSuggestion, Math.max(0, count - 1))
 
@@ -291,8 +291,8 @@ Item {
                 readonly property bool fileEntry: modelData.kind === "file"
                 width: skillSuggestionList.width
                 // A file shows its worktree path, then whether it is a file or folder.
-                height: Metrics.px(46, root.t)
-                padding: Metrics.px(8, root.t)
+                height: KetTheme.px(46, KetTheme.zoom)
+                padding: KetTheme.px(8, KetTheme.zoom)
                 highlighted: index === skillSuggestionList.currentIndex
                 contentItem: Item {
                     ColumnLayout {
@@ -320,13 +320,13 @@ Item {
                     RowLayout {
                         anchors.fill: parent
                         visible: !suggestionRow.fileEntry
-                        spacing: Metrics.px(10, root.t)
+                        spacing: KetTheme.px(10, KetTheme.zoom)
                         Text {
                             text: suggestionRow.modelData.mention || ""
                             color: root.t.accentHover
                             font.family: root.t.monoFont
                             font.pixelSize: root.t.reading
-                            Layout.preferredWidth: Metrics.px(150, root.t)
+                            Layout.preferredWidth: KetTheme.px(150, KetTheme.zoom)
                             elide: Text.ElideRight
                         }
                         ColumnLayout {
@@ -350,7 +350,7 @@ Item {
                     }
                 }
                 background: Rectangle {
-                    radius: Metrics.px(8, root.t)
+                    radius: KetTheme.px(8, KetTheme.zoom)
                     color: parent.highlighted || parent.hovered ? root.t.interactiveActive : "transparent"
                 }
                 onClicked: root.applySkillSuggestion(modelData)
@@ -364,11 +364,11 @@ Item {
         anchors.left: composer.left
         anchors.right: composer.right
         anchors.top: composer.bottom
-        anchors.topMargin: Metrics.px(4, root.t)
-        anchors.leftMargin: Metrics.px(2, root.t)
-        anchors.rightMargin: Metrics.px(2, root.t)
-        height: Metrics.px(28, root.t)
-        spacing: Metrics.px(2, root.t)
+        anchors.topMargin: KetTheme.px(4, KetTheme.zoom)
+        anchors.leftMargin: KetTheme.px(2, KetTheme.zoom)
+        anchors.rightMargin: KetTheme.px(2, KetTheme.zoom)
+        height: KetTheme.px(28, KetTheme.zoom)
+        spacing: KetTheme.px(2, KetTheme.zoom)
 
         Kit.KetIconButton {
             id: attachButton
@@ -393,7 +393,7 @@ Item {
             }
             onClicked: agentHost.chooseAttachments()
             KetToolTip {
-                tokens: root.t
+                objectName: "ketToolTip"
                 visible: attachButton.hovered
                 text: "Add images or text files"
             }
@@ -403,16 +403,17 @@ Item {
             variant: Kit.KetTheme.ButtonVariant.Ghost
             controlSize: Kit.KetTheme.ControlSize.Small
             objectName: "permissionButton"
-            Layout.minimumHeight: Metrics.px(28, root.t)
+            Layout.minimumHeight: KetTheme.px(28, KetTheme.zoom)
             text: root.currentPermission.label
             contentItem: Row {
-                spacing: Metrics.px(6, root.t)
-                TintedIcon {
-                    width: Metrics.px(14, root.t)
-                    height: Metrics.px(14, root.t)
+                spacing: KetTheme.px(6, KetTheme.zoom)
+                KetIcon {
+                    width: KetTheme.px(14, KetTheme.zoom)
+                    height: KetTheme.px(14, KetTheme.zoom)
                     anchors.verticalCenter: parent.verticalCenter
-                    source: root.permissionIconSource(root.permission)
+                    name: KetTheme.iconForLucide((root.permissionIconSource(root.permission)).toString().split("/").pop().replace(/\.svg$/, ""))
                     color: root.permissionAccent
+                    box: KetTheme.px(14, KetTheme.zoom)
                 }
                 Text {
                     text: permissionButton.text
@@ -422,12 +423,13 @@ Item {
                     font.pixelSize: permissionButton.recipe.fontPixels
                     anchors.verticalCenter: parent.verticalCenter
                 }
-                TintedIcon {
-                    width: Metrics.px(14, root.t)
-                    height: Metrics.px(14, root.t)
+                KetIcon {
+                    width: KetTheme.px(14, KetTheme.zoom)
+                    height: KetTheme.px(14, KetTheme.zoom)
                     anchors.verticalCenter: parent.verticalCenter
-                    source: "qrc:/agent/icons/chevron-down.svg"
+                    name: KetTheme.iconForLucide("chevron-down")
                     color: root.permissionElevated ? root.permissionAccent : root.t.textMuted
+                    box: KetTheme.px(14, KetTheme.zoom)
                 }
             }
             onClicked: {
@@ -441,7 +443,7 @@ Item {
                 anchorItem: permissionButton
             }
             KetToolTip {
-                tokens: root.t
+                objectName: "ketToolTip"
                 visible: permissionButton.hovered
                 text: "Permissions for the next message. Restricted actions are blocked without approval prompts."
             }
@@ -451,18 +453,19 @@ Item {
             variant: Kit.KetTheme.ButtonVariant.Ghost
             controlSize: Kit.KetTheme.ControlSize.Small
             objectName: "skillsButton"
-            Layout.minimumHeight: Metrics.px(28, root.t)
+            Layout.minimumHeight: KetTheme.px(28, KetTheme.zoom)
             visible: false
             enabled: !agentHost.sessionRunning
             text: root.enabledSkillCount() > 0 ? "Skills " + root.enabledSkillCount() : "Skills"
             contentItem: Row {
-                spacing: Metrics.px(6, root.t)
-                TintedIcon {
-                    width: Metrics.px(14, root.t)
-                    height: Metrics.px(14, root.t)
+                spacing: KetTheme.px(6, KetTheme.zoom)
+                KetIcon {
+                    width: KetTheme.px(14, KetTheme.zoom)
+                    height: KetTheme.px(14, KetTheme.zoom)
                     anchors.verticalCenter: parent.verticalCenter
-                    source: "qrc:/agent/icons/zap.svg"
+                    name: KetTheme.iconForLucide("zap")
                     color: root.enabledSkillCount() > 0 ? root.t.accentHover : root.t.textSecondary
+                    box: KetTheme.px(14, KetTheme.zoom)
                 }
                 Text {
                     text: skillsButton.text
@@ -485,7 +488,7 @@ Item {
                 anchorItem: skillsButton
             }
             KetToolTip {
-                tokens: root.t
+                objectName: "ketToolTip"
                 visible: skillsButton.hovered
                 text: "Manage skills included with the next agent turn"
             }
@@ -498,11 +501,11 @@ Item {
             variant: Kit.KetTheme.ButtonVariant.Ghost
             controlSize: Kit.KetTheme.ControlSize.Small
             objectName: "modelButton"
-            Layout.minimumWidth: Metrics.px(40, root.t)
-            Layout.minimumHeight: Metrics.px(28, root.t)
-            Layout.maximumWidth: Math.max(Metrics.px(40, root.t), composer.width - (composer.compactControls ? Metrics.px(120, root.t) : Metrics.px(240, root.t)))
+            Layout.minimumWidth: KetTheme.px(40, KetTheme.zoom)
+            Layout.minimumHeight: KetTheme.px(28, KetTheme.zoom)
+            Layout.maximumWidth: Math.max(KetTheme.px(40, KetTheme.zoom), composer.width - (composer.compactControls ? KetTheme.px(120, KetTheme.zoom) : KetTheme.px(240, KetTheme.zoom)))
             contentItem: RowLayout {
-                spacing: Metrics.px(6, root.t)
+                spacing: KetTheme.px(6, KetTheme.zoom)
                 Text {
                     Layout.fillWidth: true
                     text: root.composerModelText()
@@ -512,12 +515,13 @@ Item {
                     elide: Text.ElideRight
                     verticalAlignment: Text.AlignVCenter
                 }
-                TintedIcon {
-                    Layout.preferredWidth: Metrics.px(14, root.t)
-                    Layout.preferredHeight: Metrics.px(14, root.t)
-                    source: "qrc:/agent/icons/chevron-down.svg"
+                KetIcon {
+                    Layout.preferredWidth: KetTheme.px(14, KetTheme.zoom)
+                    Layout.preferredHeight: KetTheme.px(14, KetTheme.zoom)
+                    name: KetTheme.iconForLucide("chevron-down")
                     rotation: modelPopup.visible ? 180 : 0
                     color: root.t.textMuted
+                    box: KetTheme.px(14, KetTheme.zoom)
                 }
             }
             onClicked: {
@@ -528,7 +532,7 @@ Item {
             }
             Accessible.name: "Choose model and reasoning effort"
             KetToolTip {
-                tokens: root.t
+                objectName: "ketToolTip"
                 visible: modelButton.hovered && !modelPopup.visible
                 text: root.composerModelTooltip()
             }
@@ -550,7 +554,7 @@ Item {
                 usageLimitsPopover.toggleFromAnchor();
             }
             KetToolTip {
-                tokens: root.t
+                objectName: "ketToolTip"
                 visible: usageRingButton.hovered && !usageLimitsPopover.visible
                 text: {
                     const pct = Math.round(root.usageRingProgress * 100);

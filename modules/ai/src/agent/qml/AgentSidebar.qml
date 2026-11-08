@@ -1,4 +1,4 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
 import Ket as Kit
 import QtQuick.Controls
@@ -30,8 +30,8 @@ Rectangle {
             id: repositoryGroup
             objectName: "sidebarRepositoryGroup"
             Layout.fillWidth: true
-            Layout.leftMargin: Metrics.px(6, workspace.t)
-            Layout.rightMargin: Metrics.px(6, workspace.t)
+            Layout.leftMargin: KetTheme.px(6, KetTheme.zoom)
+            Layout.rightMargin: KetTheme.px(6, KetTheme.zoom)
             name: agentHost.repositoryName || "Open repository"
             onActionTriggered: agentHost.requestNewSession()
         }
@@ -42,9 +42,9 @@ Rectangle {
             visible: repositoryGroup.expanded
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.leftMargin: Metrics.px(8, workspace.t)
-            Layout.rightMargin: Metrics.px(8, workspace.t)
-            spacing: Metrics.px(2, workspace.t)
+            Layout.leftMargin: KetTheme.px(8, KetTheme.zoom)
+            Layout.rightMargin: KetTheme.px(8, KetTheme.zoom)
+            spacing: KetTheme.px(2, KetTheme.zoom)
             clip: true
             model: agentHost.conversations
             property string firstConversationId: ""
@@ -153,15 +153,15 @@ Rectangle {
             property var quota: agentHost.statusProvider === "codex" ? agentHost.weeklyLimit : ({})
             visible: agentHost.statusProvider.length > 0
             Layout.fillWidth: true
-            Layout.preferredHeight: Metrics.px(58, workspace.t)
+            Layout.preferredHeight: KetTheme.px(58, KetTheme.zoom)
             RowLayout {
                 anchors.left: parent.left
-                anchors.leftMargin: Metrics.px(12, workspace.t)
+                anchors.leftMargin: KetTheme.px(12, KetTheme.zoom)
                 anchors.right: parent.right
-                anchors.rightMargin: Metrics.px(8, workspace.t)
+                anchors.rightMargin: KetTheme.px(8, KetTheme.zoom)
                 anchors.top: parent.top
-                anchors.topMargin: Metrics.px(8, workspace.t)
-                spacing: Metrics.px(4, workspace.t)
+                anchors.topMargin: KetTheme.px(8, KetTheme.zoom)
+                spacing: KetTheme.px(4, KetTheme.zoom)
                 Text {
                     text: "Usage"
                     color: workspace.t.textSecondary
@@ -181,20 +181,26 @@ Rectangle {
                 Basic.ToolButton {
                     id: refreshWeeklyLimitButton
                     objectName: "refreshWeeklyLimitButton"
-                    Layout.preferredWidth: Metrics.px(22, workspace.t)
-                    Layout.preferredHeight: Metrics.px(24, workspace.t)
+                    Layout.preferredWidth: KetTheme.px(22, KetTheme.zoom)
+                    Layout.preferredHeight: KetTheme.px(24, KetTheme.zoom)
                     enabled: agentHost.statusProvider === "codex" && agentHost.agentAvailable && !weeklyFooter.quota.loading
-                    contentItem: TintedIcon {
-                        source: "qrc:/agent/icons/rotate-ccw.svg"
-                        color: workspace.t.textMuted
+                    contentItem: Item {
+                        implicitWidth: KetTheme.px(16, KetTheme.zoom)
+                        implicitHeight: implicitWidth
+                        KetIcon {
+                            anchors.centerIn: parent
+                            box: Math.min(parent.width, parent.height)
+                            name: KetTheme.iconForLucide("rotate-ccw")
+                            color: workspace.t.textMuted
+                        }
                     }
                     background: Rectangle {
                         color: parent.hovered ? workspace.t.surfaceHover : "transparent"
-                        radius: Metrics.px(4, workspace.t)
+                        radius: KetTheme.px(4, KetTheme.zoom)
                     }
                     onClicked: agentHost.requestWeeklyLimit()
                     KetToolTip {
-                        tokens: workspace.t
+                        objectName: "ketToolTip"
                         visible: refreshWeeklyLimitButton.hovered
                         text: "Refresh weekly limit"
                     }
@@ -204,24 +210,24 @@ Rectangle {
             Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.margins: Metrics.px(12, workspace.t)
+                anchors.margins: KetTheme.px(12, KetTheme.zoom)
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: Metrics.px(12, workspace.t)
-                height: Metrics.px(3, workspace.t)
+                anchors.bottomMargin: KetTheme.px(12, KetTheme.zoom)
+                height: KetTheme.px(3, KetTheme.zoom)
                 color: workspace.t.border
                 Rectangle {
                     objectName: "weeklyLimitProgress"
                     height: parent.height
-                    width: parent.width * (weeklyFooter.quota.available ? Math.min(1, Math.max(0, weeklyFooter.quota.usedPercent / Metrics.px(100, workspace.t))) : 0)
+                    width: parent.width * (weeklyFooter.quota.available ? Math.min(1, Math.max(0, weeklyFooter.quota.usedPercent / KetTheme.px(100, KetTheme.zoom))) : 0)
                     color: weeklyFooter.quota.usedPercent >= 90 ? workspace.t.warning : workspace.t.accent
                 }
                 MouseArea {
                     id: weeklyLimitMouse
                     anchors.fill: parent
-                    anchors.margins: -Metrics.px(5, workspace.t)
+                    anchors.margins: -KetTheme.px(5, KetTheme.zoom)
                     hoverEnabled: true
                     KetToolTip {
-                        tokens: workspace.t
+                        objectName: "ketToolTip"
                         visible: weeklyLimitMouse.containsMouse
                         text: weeklyFooter.quota.available ? (weeklyFooter.quota.resetsAt > 0 ? "Resets " + Qt.formatDateTime(new Date(weeklyFooter.quota.resetsAt * 1000), "ddd, dd MMM yyyy hh:mm") : "Reset time unavailable") : "Weekly limit unavailable"
                     }
@@ -239,22 +245,23 @@ Rectangle {
             id: settingsNavigationButton
             objectName: "productNavigation_settings"
             Layout.fillWidth: true
-            Layout.preferredHeight: Metrics.px(34, workspace.t)
-            Layout.leftMargin: Metrics.px(8, workspace.t)
-            Layout.rightMargin: Metrics.px(8, workspace.t)
-            Layout.topMargin: Metrics.px(4, workspace.t)
+            Layout.preferredHeight: KetTheme.px(34, KetTheme.zoom)
+            Layout.leftMargin: KetTheme.px(8, KetTheme.zoom)
+            Layout.rightMargin: KetTheme.px(8, KetTheme.zoom)
+            Layout.topMargin: KetTheme.px(4, KetTheme.zoom)
             padding: 0
             onClicked: agentHost.requestSettings()
             contentItem: RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: Metrics.px(9, workspace.t)
-                anchors.rightMargin: Metrics.px(9, workspace.t)
-                spacing: Metrics.px(9, workspace.t)
-                TintedIcon {
-                    Layout.preferredWidth: Metrics.px(16, workspace.t)
-                    Layout.preferredHeight: Metrics.px(16, workspace.t)
-                    source: "qrc:/agent/icons/settings.svg"
+                anchors.leftMargin: KetTheme.px(9, KetTheme.zoom)
+                anchors.rightMargin: KetTheme.px(9, KetTheme.zoom)
+                spacing: KetTheme.px(9, KetTheme.zoom)
+                KetIcon {
+                    Layout.preferredWidth: KetTheme.px(16, KetTheme.zoom)
+                    Layout.preferredHeight: KetTheme.px(16, KetTheme.zoom)
+                    name: KetTheme.iconForLucide("settings")
                     color: workspace.t.textMuted
+                    box: KetTheme.px(16, KetTheme.zoom)
                 }
                 Text {
                     Layout.fillWidth: true
@@ -271,7 +278,7 @@ Rectangle {
                 }
             }
             background: Rectangle {
-                radius: Metrics.px(6, workspace.t)
+                radius: KetTheme.px(6, KetTheme.zoom)
                 color: settingsNavigationButton.hovered ? workspace.t.surfaceHover : "transparent"
                 border.color: settingsNavigationButton.visualFocus ? workspace.t.focus : "transparent"
             }
@@ -281,23 +288,23 @@ Rectangle {
         Item {
             objectName: "productIdentity"
             Layout.fillWidth: true
-            Layout.preferredHeight: Metrics.px(54, workspace.t)
-            Layout.leftMargin: Metrics.px(8, workspace.t)
-            Layout.rightMargin: Metrics.px(8, workspace.t)
+            Layout.preferredHeight: KetTheme.px(54, KetTheme.zoom)
+            Layout.leftMargin: KetTheme.px(8, KetTheme.zoom)
+            Layout.rightMargin: KetTheme.px(8, KetTheme.zoom)
 
             Rectangle {
                 anchors.fill: parent
-                anchors.margins: Metrics.px(2, workspace.t)
-                radius: Metrics.px(6, workspace.t)
+                anchors.margins: KetTheme.px(2, KetTheme.zoom)
+                radius: KetTheme.px(6, KetTheme.zoom)
                 color: identityMouse.containsMouse ? workspace.t.surfaceHover : "transparent"
             }
             Rectangle {
                 anchors.left: parent.left
-                anchors.leftMargin: Metrics.px(9, workspace.t)
+                anchors.leftMargin: KetTheme.px(9, KetTheme.zoom)
                 anchors.verticalCenter: parent.verticalCenter
-                width: Metrics.px(25, workspace.t)
-                height: Metrics.px(25, workspace.t)
-                radius: Metrics.px(13, workspace.t)
+                width: KetTheme.px(25, KetTheme.zoom)
+                height: KetTheme.px(25, KetTheme.zoom)
+                radius: KetTheme.px(13, KetTheme.zoom)
                 color: workspace.t.accentMuted
                 Text {
                     anchors.centerIn: parent
@@ -310,9 +317,9 @@ Rectangle {
             }
             Column {
                 anchors.left: parent.left
-                anchors.leftMargin: Metrics.px(43, workspace.t)
+                anchors.leftMargin: KetTheme.px(43, KetTheme.zoom)
                 anchors.right: identityChevron.left
-                anchors.rightMargin: Metrics.px(7, workspace.t)
+                anchors.rightMargin: KetTheme.px(7, KetTheme.zoom)
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 1
                 Text {
@@ -333,15 +340,16 @@ Rectangle {
                     font.pixelSize: workspace.t.micro
                 }
             }
-            TintedIcon {
+            KetIcon {
                 id: identityChevron
                 anchors.right: parent.right
-                anchors.rightMargin: Metrics.px(10, workspace.t)
+                anchors.rightMargin: KetTheme.px(10, KetTheme.zoom)
                 anchors.verticalCenter: parent.verticalCenter
-                width: Metrics.px(14, workspace.t)
-                height: Metrics.px(14, workspace.t)
-                source: "qrc:/agent/icons/chevron-down.svg"
+                width: KetTheme.px(14, KetTheme.zoom)
+                height: KetTheme.px(14, KetTheme.zoom)
+                name: KetTheme.iconForLucide("chevron-down")
                 color: workspace.t.textMuted
+                box: KetTheme.px(14, KetTheme.zoom)
             }
             MouseArea {
                 id: identityMouse

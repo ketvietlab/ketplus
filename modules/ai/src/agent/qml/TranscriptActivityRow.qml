@@ -1,5 +1,5 @@
+import Ket
 import Ket as Kit
-import "ChromeMetrics.js" as Metrics
 import QtQuick
 import Ket 1.0 as Kit
 import QtQuick.Controls.Basic as Basic
@@ -104,7 +104,7 @@ Column {
     // list under the group's rail.
     property bool compact: false
     // Where the title starts; details and images line up under it.
-    readonly property real contentInset: compact ? 0 : Metrics.px(25, tokens)
+    readonly property real contentInset: compact ? 0 : KetTheme.px(25, KetTheme.zoom)
 
     function parseObject(text) {
         try {
@@ -140,7 +140,7 @@ Column {
     }
 
     width: parent ? parent.width : implicitWidth
-    spacing: Metrics.px(7, tokens)
+    spacing: KetTheme.px(7, KetTheme.zoom)
 
     TranscriptActivityHeader { activity: root; width: parent.width }
 
@@ -149,7 +149,7 @@ Column {
         width: parent.width - root.contentInset
         x: root.contentInset
         visible: root.expanded && !root.browserOpenAction && root.subtype !== "command" && root.subtype !== "fileChange" && !root.describedCommand && root.target.length > 0
-        spacing: Metrics.px(8, tokens)
+        spacing: KetTheme.px(8, KetTheme.zoom)
         Text {
             width: parent.width - (openTarget.visible ? openTarget.width + parent.spacing : 0)
             text: root.target
@@ -163,8 +163,8 @@ Column {
             id: openTarget
             visible: /^https?:\/\//.test(root.target)
             text: "Open"
-            height: Metrics.px(26, tokens)
-            horizontalPadding: Metrics.px(8, tokens)
+            height: KetTheme.px(26, KetTheme.zoom)
+            horizontalPadding: KetTheme.px(8, KetTheme.zoom)
             verticalPadding: 0
             contentItem: Text {
                 text: openTarget.text
@@ -175,7 +175,7 @@ Column {
             }
             background: Rectangle {
                 color: openTarget.hovered ? root.tokens.surfaceHover : "transparent"
-                radius: Metrics.px(5, tokens)
+                radius: KetTheme.px(5, KetTheme.zoom)
             }
             Accessible.name: "Open " + root.target
             onClicked: root.host.openRelativeFile(root.target)
@@ -203,7 +203,7 @@ Column {
         width: parent.width - root.contentInset
         x: root.contentInset
         visible: root.images.length > 0
-        spacing: Metrics.px(6, tokens)
+        spacing: KetTheme.px(6, KetTheme.zoom)
         MessageImageGallery {
             id: gallery
             objectName: "transcriptActivityGallery"
@@ -238,9 +238,9 @@ Column {
             width: parent.width
             height: commandInputText.height
             visible: root.subtype === "command" && root.command.length > 0
-            readonly property real buttonGap: Metrics.px(8, tokens)
+            readonly property real buttonGap: KetTheme.px(8, KetTheme.zoom)
             readonly property bool needsExpansion: root.command.indexOf("\n") >= 0 ||
-                                                   commandMeasure.implicitWidth > width - Metrics.px(84, tokens)
+                                                   commandMeasure.implicitWidth > width - KetTheme.px(84, KetTheme.zoom)
             FontMetrics {
                 id: commandMetrics
                 font: commandInputText.font
@@ -284,7 +284,7 @@ Column {
                 visible: commandInputRow.needsExpansion
                 anchors.right: parent.right
                 y: 0
-                width: Metrics.px(76, tokens)
+                width: KetTheme.px(76, KetTheme.zoom)
                 height: commandMetrics.height
                 text: root.commandExpanded ? "Show less" : "Show more"
                 background: Item {}
@@ -340,17 +340,17 @@ Column {
             id: commandOutputFrame
             objectName: "transcriptCommandOutput"
             width: parent.width
-            height: visible ? Math.min(Metrics.px(300, tokens), commandOutputFlick.contentHeight + Metrics.px(16, tokens)) : 0
+            height: visible ? Math.min(KetTheme.px(300, KetTheme.zoom), commandOutputFlick.contentHeight + KetTheme.px(16, KetTheme.zoom)) : 0
             visible: root.expanded && root.commandOutput.length > 0
             color: root.tokens.panelBackground || root.tokens.surfaceRaised
             border.color: root.tokens.border
             border.width: 1
-            radius: Metrics.px(7, tokens)
+            radius: KetTheme.px(7, KetTheme.zoom)
             clip: true
             Flickable {
                 id: commandOutputFlick
                 anchors.fill: parent
-                anchors.margins: Metrics.px(8, tokens)
+                anchors.margins: KetTheme.px(8, KetTheme.zoom)
                 clip: true
                 contentWidth: width
                 contentHeight: commandOutputText.contentHeight
@@ -397,7 +397,7 @@ Column {
             visible: root.subtype !== "fileChange" && (root.command.length > 0 || root.detailText().length > 0)
             text: root.subtype === "command" ? "Copy command" : "Copy details"
             Accessible.name: text
-            padding: Metrics.px(6, tokens)
+            padding: KetTheme.px(6, KetTheme.zoom)
             contentItem: Text {
                 text: copyDetailsButton.text
                 color: root.tokens.textSecondary
@@ -407,7 +407,7 @@ Column {
             background: Rectangle {
                 color: copyDetailsButton.hovered ? root.tokens.interactiveHover : "transparent"
                 border.color: copyDetailsButton.activeFocus ? root.tokens.focus : root.tokens.border
-                radius: Metrics.px(4, tokens)
+                radius: KetTheme.px(4, KetTheme.zoom)
             }
             onClicked: root.host.copyText(root.subtype === "command" ? root.command : root.detailText())
         }
@@ -418,7 +418,7 @@ Column {
             visible: resource.length > 0
             text: "Open resource"
             Accessible.name: text + ": " + resource
-            padding: Metrics.px(6, tokens)
+            padding: KetTheme.px(6, KetTheme.zoom)
             onClicked: root.host.openRelativeFile(resource)
             HoverHandler {
                 cursorShape: Qt.PointingHandCursor
@@ -432,7 +432,7 @@ Column {
             background: Rectangle {
                 color: openResource.hovered ? root.tokens.interactiveHover : "transparent"
                 border.color: openResource.activeFocus ? root.tokens.focus : root.tokens.border
-                radius: Metrics.px(4, tokens)
+                radius: KetTheme.px(4, KetTheme.zoom)
             }
         }
     }

@@ -1,7 +1,7 @@
+import Ket
 import QtQuick
 import Ket 1.0 as Kit
 import QtQuick.Controls.Basic as Basic
-import "ChromeMetrics.js" as Metrics
 
 Column {
     id: root
@@ -16,7 +16,7 @@ Column {
         const value = detailsRef.length > 0 ? host.resolveTranscriptPayload(detailsRef) : detailsData;
         try { return JSON.parse(value || "{}"); } catch (_) { return {}; }
     }
-    spacing: Metrics.px(8, tokens)
+    spacing: KetTheme.px(8, KetTheme.zoom)
 
     Repeater {
         model: root.details.groupItems || []

@@ -183,6 +183,13 @@ the corresponding Atlas mock first.
 - `core/` change: the Lite suite (`ctest --preset lite-dev`), then the full Pro suite.
 - QML layout or native rendering: offscreen tests plus the relevant native
   screenshot/pixel check documented in `agent-workspace.md`.
+  `agentQmlUsesBoundedAnimationsAndKitPrimitives` rejects infinite animation loops,
+  unexpected frame animations, and the removed local metrics/icon/tooltip resources.
+  `measurementTimerStopsAndRestartsForNewRows` exercises measurement exhaustion,
+  layout changes and window visibility. The row-measurement suite checks that
+  resource-backed bodies do not starve text and that a new layout re-enables work.
+  These checks do not replace the Apple Silicon foreground/background CPU
+  measurements required by #126 or the app/mock comparison required by #136.
 - Performance-sensitive behavior: Release build and the matching script under
   `benchmarks/`; record hardware and raw results.
 

@@ -138,10 +138,6 @@ set_source_files_properties(
     src/agent/qml/UsageRingButton.qml
     PROPERTIES QT_RESOURCE_ALIAS "UsageRingButton.qml"
 )
-set_source_files_properties(
-    src/agent/qml/TintedIcon.qml
-    PROPERTIES QT_RESOURCE_ALIAS "TintedIcon.qml"
-)
 set_source_files_properties(src/agent/qml/CompactWindowControl.qml PROPERTIES QT_RESOURCE_ALIAS "CompactWindowControl.qml")
 set_source_files_properties(
     src/agent/qml/ModelPicker.qml
@@ -171,10 +167,6 @@ set_source_files_properties(
 set_source_files_properties(
     src/agent/qml/TranscriptMermaidSwitch.qml
     PROPERTIES QT_RESOURCE_ALIAS "TranscriptMermaidSwitch.qml"
-)
-set_source_files_properties(
-    src/agent/qml/KetToolTip.qml
-    PROPERTIES QT_RESOURCE_ALIAS "KetToolTip.qml"
 )
 set_source_files_properties(
     src/agent/qml/AgentQuestionCard.qml
@@ -237,7 +229,6 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS "brand/ketplus-logo-dark.png"
 )
 
-set_source_files_properties(src/agent/qml/ChromeMetrics.js PROPERTIES QT_RESOURCE_ALIAS "ChromeMetrics.js")
 
 qt_add_resources(ketplus_ai "ketplus_ai_resources"
     PREFIX "/agent"
@@ -258,7 +249,6 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
         src/agent/qml/UsageLimitsPopover.qml
         src/agent/qml/ClaudeUsageSection.qml
         src/agent/qml/UsageRingButton.qml
-        src/agent/qml/TintedIcon.qml
         src/agent/qml/CompactWindowControl.qml
         src/agent/qml/ModelPicker.qml
         src/agent/qml/MessageImageGallery.qml
@@ -271,11 +261,9 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
         src/agent/qml/TranscriptChangedFiles.qml
         src/agent/qml/TranscriptCopyButton.qml
         src/agent/qml/TranscriptMermaidSwitch.qml
-        src/agent/qml/KetToolTip.qml
         src/agent/qml/AgentQuestionCard.qml
         src/agent/qml/AgentApprovalCard.qml
         src/agent/qml/WarmTranscriptHost.qml
-        src/agent/qml/ChromeMetrics.js
         src/agent/qml/TranscriptPosition.js
         src/agent/qml/TranscriptRenderers.js
         src/agent/qml/TranscriptScrollController.qml

@@ -697,24 +697,27 @@ QString AgentMessageModel::rowShape(const QVariantMap& item) {
                                                                       : QString{});
 }
 
-void AgentMessageModel::measureUnmeasuredRows(const int limit, const qreal width,
+bool AgentMessageModel::measureUnmeasuredRows(const int limit, const qreal width,
                                               const QFont& font) {
-    const QStringList keys = geometry_->unmeasuredKeys(limit);
-    if (keys.isEmpty())
-        return;
+    if (limit <= 0 || width <= 0)
+        return false;
+    const QStringList keys = geometry_->unmeasuredKeys(std::numeric_limits<int>::max());
     QList<TranscriptRowMeasurer::Request> requests;
-    requests.reserve(keys.size());
+    requests.reserve(std::min(qsizetype(limit), keys.size()));
     for (const QString& key : keys) {
         const QVariantMap item = rowForKey(key);
-        if (item.isEmpty())
+        if (item.isEmpty() || !TranscriptRowMeasurer::measurable(item.value("body").toString()))
             continue;
         // The delegate renders a complete assistant body as Markdown and
         // everything else literally; measuring the other one would answer a
         // different question than the reader will see.
         const bool markdown = TranscriptRowMeasurer::markdownBody(item);
         requests.append({key, item.value(QStringLiteral("body")).toString(), markdown});
+        if (requests.size() == limit)
+            break;
     }
     measurer_->measure(requests, width, font);
+    return !requests.isEmpty();
 }
 
 void AgentMessageModel::rebuildKeys() {

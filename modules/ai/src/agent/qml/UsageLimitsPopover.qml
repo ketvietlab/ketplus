@@ -1,4 +1,4 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
 import Ket as Kit
 import QtQuick.Controls
@@ -36,7 +36,7 @@ Popup {
     readonly property color mutedColor: workspace.t.textMuted
     readonly property color mainColor: workspace.t.textMain
 
-    width: Metrics.px(430, workspace.t)
+    width: KetTheme.px(430, KetTheme.zoom)
     padding: 0
     modal: false
     focus: true
@@ -100,19 +100,19 @@ Popup {
             spacing: 0
             Item {
                 Layout.fillWidth: true
-                Layout.leftMargin: Metrics.px(16, workspace.t)
-                Layout.rightMargin: Metrics.px(16, workspace.t)
-                Layout.topMargin: Metrics.px(15, workspace.t)
+                Layout.leftMargin: KetTheme.px(16, KetTheme.zoom)
+                Layout.rightMargin: KetTheme.px(16, KetTheme.zoom)
+                Layout.topMargin: KetTheme.px(15, KetTheme.zoom)
                 Layout.bottomMargin: root.contextAvailable ? 14 : 15
                 implicitHeight: contextColumn.implicitHeight
 
                 ColumnLayout {
                     id: contextColumn
                     anchors.fill: parent
-                    spacing: Metrics.px(8, workspace.t)
+                    spacing: KetTheme.px(8, KetTheme.zoom)
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: Metrics.px(8, workspace.t)
+                        spacing: KetTheme.px(8, KetTheme.zoom)
                         Text {
                             text: "Context window"
                             color: root.mainColor
@@ -150,8 +150,8 @@ Popup {
                             visible: Number(root.contextUsage.autoCompactPercent) > 0
                             x: Math.max(0, Math.min(parent.width - width,
                                 parent.width * Number(root.contextUsage.autoCompactPercent) / 100))
-                            width: Metrics.px(2, workspace.t)
-                            height: parent.height + Metrics.px(4, workspace.t)
+                            width: KetTheme.px(2, KetTheme.zoom)
+                            height: parent.height + KetTheme.px(4, KetTheme.zoom)
                             anchors.verticalCenter: parent.verticalCenter
                             color: root.panelColor
                         }
@@ -160,7 +160,7 @@ Popup {
                     RowLayout {
                         visible: root.contextAvailable
                         Layout.fillWidth: true
-                        spacing: Metrics.px(8, workspace.t)
+                        spacing: KetTheme.px(8, KetTheme.zoom)
                         Text {
                             Layout.fillWidth: true
                             text: Number(root.contextUsage.autoCompactPercent) > 0
@@ -176,8 +176,8 @@ Popup {
                             objectName: "compactSessionButton"
                             visible: root.compactEnabled
                             enabled: root.compactEnabled
-                            implicitWidth: compactText.implicitWidth + Metrics.px(12, workspace.t)
-                            implicitHeight: Metrics.px(24, workspace.t)
+                            implicitWidth: compactText.implicitWidth + KetTheme.px(12, KetTheme.zoom)
+                            implicitHeight: KetTheme.px(24, KetTheme.zoom)
                             padding: 0
                             onClicked: root.compactRequested()
                             contentItem: Text {
@@ -191,10 +191,10 @@ Popup {
                             }
                             background: Rectangle {
                                 color: compactSessionButton.hovered ? workspace.t.accentSubtle : "transparent"
-                                radius: Metrics.px(4, workspace.t)
+                                radius: KetTheme.px(4, KetTheme.zoom)
                             }
                             KetToolTip {
-                                tokens: workspace.t
+                                objectName: "ketToolTip"
                                 visible: compactSessionButton.hovered
                                 text: "Compact this Codex conversation"
                             }
@@ -205,8 +205,8 @@ Popup {
 
             Rectangle {
                 Layout.fillWidth: true
-                Layout.leftMargin: Metrics.px(16, workspace.t)
-                Layout.rightMargin: Metrics.px(16, workspace.t)
+                Layout.leftMargin: KetTheme.px(16, KetTheme.zoom)
+                Layout.rightMargin: KetTheme.px(16, KetTheme.zoom)
                 Layout.preferredHeight: 1
                 color: root.trackColor
             }
@@ -217,17 +217,17 @@ Popup {
                 session: root.sessionUsage
                 account: root.accountUsage
                 Layout.fillWidth: true
-                Layout.margins: Metrics.px(16, workspace.t)
+                Layout.margins: KetTheme.px(16, KetTheme.zoom)
                 onRefreshRequested: root.accountRefreshRequested()
             }
             ColumnLayout {
                 visible: !root.claude || root.sessionUsage.mode !== "api_key"
                 Layout.fillWidth: true
-                Layout.leftMargin: Metrics.px(16, workspace.t)
-                Layout.rightMargin: Metrics.px(16, workspace.t)
-                Layout.topMargin: Metrics.px(13, workspace.t)
-                Layout.bottomMargin: Metrics.px(12, workspace.t)
-                spacing: Metrics.px(11, workspace.t)
+                Layout.leftMargin: KetTheme.px(16, KetTheme.zoom)
+                Layout.rightMargin: KetTheme.px(16, KetTheme.zoom)
+                Layout.topMargin: KetTheme.px(13, KetTheme.zoom)
+                Layout.bottomMargin: KetTheme.px(12, KetTheme.zoom)
+                spacing: KetTheme.px(11, KetTheme.zoom)
                 Text {
                     text: "Plan usage limits"
                     color: root.mutedColor
@@ -240,10 +240,10 @@ Popup {
                     delegate: ColumnLayout {
                         required property var modelData
                         Layout.fillWidth: true
-                        spacing: Metrics.px(6, workspace.t)
+                        spacing: KetTheme.px(6, KetTheme.zoom)
                         RowLayout {
                             Layout.fillWidth: true
-                            spacing: Metrics.px(8, workspace.t)
+                            spacing: KetTheme.px(8, KetTheme.zoom)
                             Text {
                                 Layout.fillWidth: true
                                 text: modelData.label || "Usage limit"
@@ -291,17 +291,17 @@ Popup {
 
             Rectangle {
                 Layout.fillWidth: true
-                Layout.leftMargin: Metrics.px(16, workspace.t)
-                Layout.rightMargin: Metrics.px(16, workspace.t)
+                Layout.leftMargin: KetTheme.px(16, KetTheme.zoom)
+                Layout.rightMargin: KetTheme.px(16, KetTheme.zoom)
                 Layout.preferredHeight: 1
                 color: root.trackColor
             }
             Text {
                 Layout.fillWidth: true
-                Layout.leftMargin: Metrics.px(16, workspace.t)
-                Layout.rightMargin: Metrics.px(16, workspace.t)
-                Layout.topMargin: Metrics.px(11, workspace.t)
-                Layout.bottomMargin: Metrics.px(13, workspace.t)
+                Layout.leftMargin: KetTheme.px(16, KetTheme.zoom)
+                Layout.rightMargin: KetTheme.px(16, KetTheme.zoom)
+                Layout.topMargin: KetTheme.px(11, KetTheme.zoom)
+                Layout.bottomMargin: KetTheme.px(13, KetTheme.zoom)
                 visible: !root.claude || root.sessionUsage.mode !== "api_key"
                 text: "Limits are shared across conversations for this provider."
                 color: root.mutedColor

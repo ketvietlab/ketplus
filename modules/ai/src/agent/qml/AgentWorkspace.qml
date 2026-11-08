@@ -1,4 +1,4 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
 import Ket 1.0 as Kit
 import QtQuick.Controls
@@ -25,7 +25,7 @@ Item {
     // The reading column the transcript and composer share. The host sets its
     // width; 0 lets the conversation fill the pane.
     readonly property real conversationColumnWidth: agentHost.conversationWidth > 0
-        ? Metrics.px(agentHost.conversationWidth, t) : Number.POSITIVE_INFINITY
+        ? KetTheme.px(agentHost.conversationWidth, KetTheme.zoom) : Number.POSITIVE_INFINITY
     readonly property int messageCount: messages.count
     property string selectedModel: ""
     property string modelLabel: "Codex default"
@@ -542,18 +542,18 @@ Item {
         objectName: "imagePreview"
         parent: Overlay.overlay
         anchors.centerIn: parent
-        width: Math.min(Metrics.px(1100, root.t), root.width - Metrics.px(32, root.t))
-        height: Math.min(Metrics.px(850, root.t), root.height - Metrics.px(32, root.t))
+        width: Math.min(KetTheme.px(1100, KetTheme.zoom), root.width - KetTheme.px(32, KetTheme.zoom))
+        height: Math.min(KetTheme.px(850, KetTheme.zoom), root.height - KetTheme.px(32, KetTheme.zoom))
         modal: true
         focus: true
-        padding: Metrics.px(16, root.t)
+        padding: KetTheme.px(16, KetTheme.zoom)
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        background: Rectangle { color: root.t.surfaceRaised; radius: Metrics.px(8, root.t) }
+        background: Rectangle { color: root.t.surfaceRaised; radius: KetTheme.px(8, KetTheme.zoom) }
         property url imageSource
         Image {
             objectName: "imagePreviewContent"
             anchors.fill: parent
-            anchors.topMargin: Metrics.px(32, root.t)
+            anchors.topMargin: KetTheme.px(32, KetTheme.zoom)
             source: imagePreview.imageSource
             fillMode: Image.PreserveAspectFit
             autoTransform: true
@@ -1191,7 +1191,7 @@ Item {
         orientation: Qt.Horizontal
         handle: Item {
             objectName: "sidebarResizeHandle"
-            implicitWidth: agentHost.productSidebarVisible && !agentHost.compactMode ? Metrics.px(6, root.t) : 0
+            implicitWidth: agentHost.productSidebarVisible && !agentHost.compactMode ? KetTheme.px(6, KetTheme.zoom) : 0
             readonly property color dividerColor: SplitHandle.pressed ? root.t.accent
                                                  : SplitHandle.hovered ? root.t.borderStrong : root.t.border
             Rectangle {
@@ -1247,7 +1247,7 @@ Item {
                     Layout.fillHeight: true
                     // Keep the final row clear of the composer even while
                     // the viewport is pinned during streaming or a new send.
-                    Layout.bottomMargin: Metrics.px(20, root.t)
+                    Layout.bottomMargin: KetTheme.px(20, KetTheme.zoom)
                     initialModel: agentHost.messageModel
                     transcriptFactory: cachedTranscriptFactory
                     onTranscriptActivated: function(view) {
@@ -1264,11 +1264,11 @@ Item {
                         z: 10
                         anchors.top: parent.top
                         anchors.right: parent.right
-                        anchors.topMargin: Metrics.px(8, root.t)
-                        anchors.rightMargin: Metrics.px(16, root.t)
-                        width: Math.min(parent.width - Metrics.px(32, root.t), Metrics.px(380, root.t))
-                        height: findRow.height + (findStatusText.visible ? findStatusText.height + Metrics.px(4, root.t) : 0) + Metrics.px(8, root.t)
-                        radius: Metrics.px(7, root.t)
+                        anchors.topMargin: KetTheme.px(8, KetTheme.zoom)
+                        anchors.rightMargin: KetTheme.px(16, KetTheme.zoom)
+                        width: Math.min(parent.width - KetTheme.px(32, KetTheme.zoom), KetTheme.px(380, KetTheme.zoom))
+                        height: findRow.height + (findStatusText.visible ? findStatusText.height + KetTheme.px(4, KetTheme.zoom) : 0) + KetTheme.px(8, KetTheme.zoom)
+                        radius: KetTheme.px(7, KetTheme.zoom)
                         color: root.t.surfaceRaised
                         border.color: root.t.borderStrong
                         Accessible.role: Accessible.ToolBar
@@ -1283,16 +1283,16 @@ Item {
                         }
                         Row {
                             id: findRow
-                            x: Metrics.px(6, root.t)
-                            y: Metrics.px(4, root.t)
-                            width: parent.width - Metrics.px(12, root.t)
-                            height: Metrics.px(30, root.t)
-                            spacing: Metrics.px(4, root.t)
+                            x: KetTheme.px(6, KetTheme.zoom)
+                            y: KetTheme.px(4, KetTheme.zoom)
+                            width: parent.width - KetTheme.px(12, KetTheme.zoom)
+                            height: KetTheme.px(30, KetTheme.zoom)
+                            spacing: KetTheme.px(4, KetTheme.zoom)
                             Basic.TextField {
                                 id: findField
                                 objectName: "transcriptFindField"
-                                width: parent.width - findCount.width - 3 * Metrics.px(28, root.t) - 3 * parent.spacing
-                                height: Metrics.px(30, root.t)
+                                width: parent.width - findCount.width - 3 * KetTheme.px(28, KetTheme.zoom) - 3 * parent.spacing
+                                height: KetTheme.px(30, KetTheme.zoom)
                                 placeholderText: "Find in conversation"
                                 color: root.t.textMain
                                 placeholderTextColor: root.t.textMuted
@@ -1319,31 +1319,55 @@ Item {
                             }
                             Basic.ToolButton {
                                 objectName: "transcriptFindPrevious"
-                                width: Metrics.px(28, root.t)
-                                height: Metrics.px(28, root.t)
-                                padding: Metrics.px(7, root.t)
-                                contentItem: TintedIcon { source: "qrc:/agent/icons/arrow-up.svg"; color: root.t.textMain }
-                                background: Rectangle { color: parent.hovered ? root.t.surfaceHover : "transparent"; radius: Metrics.px(4, root.t) }
+                                width: KetTheme.px(28, KetTheme.zoom)
+                                height: KetTheme.px(28, KetTheme.zoom)
+                                padding: KetTheme.px(7, KetTheme.zoom)
+                                contentItem: Item {
+                                    implicitWidth: KetTheme.px(16, KetTheme.zoom)
+                                    implicitHeight: implicitWidth
+                                    KetIcon {
+                                        anchors.centerIn: parent
+                                        box: Math.min(parent.width, parent.height)
+                                        name: KetTheme.iconForLucide("arrow-up"); color: root.t.textMain
+                                    }
+                                }
+                                background: Rectangle { color: parent.hovered ? root.t.surfaceHover : "transparent"; radius: KetTheme.px(4, KetTheme.zoom) }
                                 onClicked: transcriptFindBar.view.findPrevious()
                                 Accessible.name: "Previous match"
                             }
                             Basic.ToolButton {
                                 objectName: "transcriptFindNext"
-                                width: Metrics.px(28, root.t)
-                                height: Metrics.px(28, root.t)
-                                padding: Metrics.px(7, root.t)
-                                contentItem: TintedIcon { source: "qrc:/agent/icons/arrow-up.svg"; color: root.t.textMain; rotation: 180 }
-                                background: Rectangle { color: parent.hovered ? root.t.surfaceHover : "transparent"; radius: Metrics.px(4, root.t) }
+                                width: KetTheme.px(28, KetTheme.zoom)
+                                height: KetTheme.px(28, KetTheme.zoom)
+                                padding: KetTheme.px(7, KetTheme.zoom)
+                                contentItem: Item {
+                                    implicitWidth: KetTheme.px(16, KetTheme.zoom)
+                                    implicitHeight: implicitWidth
+                                    KetIcon {
+                                        anchors.centerIn: parent
+                                        box: Math.min(parent.width, parent.height)
+                                        name: KetTheme.iconForLucide("arrow-up"); color: root.t.textMain; rotation: 180
+                                    }
+                                }
+                                background: Rectangle { color: parent.hovered ? root.t.surfaceHover : "transparent"; radius: KetTheme.px(4, KetTheme.zoom) }
                                 onClicked: transcriptFindBar.view.findNext()
                                 Accessible.name: "Next match"
                             }
                             Basic.ToolButton {
                                 objectName: "transcriptFindClose"
-                                width: Metrics.px(28, root.t)
-                                height: Metrics.px(28, root.t)
-                                padding: Metrics.px(7, root.t)
-                                contentItem: TintedIcon { source: "qrc:/agent/icons/plus.svg"; color: root.t.textMain; rotation: 45 }
-                                background: Rectangle { color: parent.hovered ? root.t.surfaceHover : "transparent"; radius: Metrics.px(4, root.t) }
+                                width: KetTheme.px(28, KetTheme.zoom)
+                                height: KetTheme.px(28, KetTheme.zoom)
+                                padding: KetTheme.px(7, KetTheme.zoom)
+                                contentItem: Item {
+                                    implicitWidth: KetTheme.px(16, KetTheme.zoom)
+                                    implicitHeight: implicitWidth
+                                    KetIcon {
+                                        anchors.centerIn: parent
+                                        box: Math.min(parent.width, parent.height)
+                                        name: KetTheme.iconForLucide("plus"); color: root.t.textMain; rotation: 45
+                                    }
+                                }
+                                background: Rectangle { color: parent.hovered ? root.t.surfaceHover : "transparent"; radius: KetTheme.px(4, KetTheme.zoom) }
                                 onClicked: transcriptFindBar.view.closeFind()
                                 Accessible.name: "Close find"
                             }
@@ -1351,9 +1375,9 @@ Item {
                         Text {
                             id: findStatusText
                             objectName: "transcriptFindStatus"
-                            x: Metrics.px(12, root.t)
-                            y: findRow.y + findRow.height + Metrics.px(2, root.t)
-                            width: parent.width - Metrics.px(24, root.t)
+                            x: KetTheme.px(12, KetTheme.zoom)
+                            y: findRow.y + findRow.height + KetTheme.px(2, KetTheme.zoom)
+                            width: parent.width - KetTheme.px(24, KetTheme.zoom)
                             visible: text.length > 0
                             text: transcriptFindBar.view ? transcriptFindBar.view.findStatus : ""
                             color: root.t.textMuted
@@ -1378,9 +1402,9 @@ Item {
                 BackgroundTaskBar {
                     workspace: root
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.preferredWidth: Math.min(parent.width - Metrics.px(40, root.t), root.conversationColumnWidth - Metrics.px(40, root.t))
+                    Layout.preferredWidth: Math.min(parent.width - KetTheme.px(40, KetTheme.zoom), root.conversationColumnWidth - KetTheme.px(40, KetTheme.zoom))
                     Layout.preferredHeight: implicitHeight
-                    Layout.bottomMargin: visible ? Metrics.px(6, root.t) : 0
+                    Layout.bottomMargin: visible ? KetTheme.px(6, KetTheme.zoom) : 0
                 }
 
                 AgentComposer {
