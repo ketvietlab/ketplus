@@ -1,3 +1,5 @@
+#include "KetAppearance.h"
+#include "KetRecipes.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/CodexAppServer.h"
@@ -407,7 +409,9 @@ class AgentWorkspaceShellTest final : public QObject {
         QCOMPARE(sidebar->width(), ketplus::ActivityBar::kWidth);
         QCOMPARE(sidebar->minimumWidth(), ketplus::ActivityBar::kWidth);
         QCOMPARE(sidebar->maximumWidth(), ketplus::ActivityBar::kWidth);
-        QCOMPARE(search->height(), 32);
+        const auto nav = ket::navItemRecipe(false, {}, ket::Appearance::instance().theme());
+        QCOMPARE(search->height(),
+                 qRound(ket::Appearance::scale(nav.height, ket::Appearance::instance().zoom())));
         QVERIFY(window.findChild<QWidget*>(QStringLiteral("productTopBar")) == nullptr);
         QVERIFY(window.findChild<QToolButton*>(QStringLiteral("productBranchButton")) == nullptr);
         QVERIFY(window.findChild<QToolButton*>(QStringLiteral("productTerminalButton")) == nullptr);
@@ -417,7 +421,7 @@ class AgentWorkspaceShellTest final : public QObject {
             const auto groups = sidebar->findChildren<QAbstractButton*>(
                 QStringLiteral("productRepositoryGroupButton"));
             return std::any_of(
-                groups.cbegin(), groups.cend(), [&workspace](const QToolButton* group) {
+                groups.cbegin(), groups.cend(), [&workspace](const QAbstractButton* group) {
                     return group->accessibleName() == QFileInfo(workspace.path()).fileName() &&
                            group->property("activeRepository").toBool();
                 });
@@ -550,7 +554,7 @@ class AgentWorkspaceShellTest final : public QObject {
         QVERIFY(agent);
         agent->click();
         const auto activeRepositoryGroup = [&window] {
-            for (auto* group : window.findChildren<QToolButton*>(
+            for (auto* group : window.findChildren<QAbstractButton*>(
                      QStringLiteral("productRepositoryGroupButton"))) {
                 if (group->property("activeRepository").toBool())
                     return group->accessibleName();
@@ -894,7 +898,7 @@ class AgentWorkspaceShellTest final : public QObject {
 
         explorerButton->click();
         QTRY_VERIFY(!view->isVisible());
-        const auto conversationButton = [&window](const QString& title) -> QToolButton* {
+        const auto conversationButton = [&window](const QString& title) -> QAbstractButton* {
             for (auto* button : window.findChildren<QAbstractButton*>(
                      QStringLiteral("productConversationButton"))) {
                 if (button->accessibleName() == title)
@@ -973,7 +977,7 @@ class AgentWorkspaceShellTest final : public QObject {
         agent->click();
         auto* view = window.findChild<ketplus::AgentWorkspaceView*>();
         QVERIFY(view);
-        const auto conversationButton = [&window](const QString& title) -> QToolButton* {
+        const auto conversationButton = [&window](const QString& title) -> QAbstractButton* {
             for (auto* button : window.findChildren<QAbstractButton*>(
                      QStringLiteral("productConversationButton"))) {
                 if (button->accessibleName() == title)
@@ -1028,7 +1032,7 @@ class AgentWorkspaceShellTest final : public QObject {
         agent->click();
         auto* view = window.findChild<ketplus::AgentWorkspaceView*>();
         QVERIFY(view);
-        const auto conversationButton = [&window](const QString& title) -> QToolButton* {
+        const auto conversationButton = [&window](const QString& title) -> QAbstractButton* {
             for (auto* button : window.findChildren<QAbstractButton*>(
                      QStringLiteral("productConversationButton"))) {
                 if (button->accessibleName() == title)
@@ -1333,7 +1337,7 @@ class AgentWorkspaceShellTest final : public QObject {
         manager->activate(linkedPath);
         const QString id = manager->activeConversationId(linkedPath);
         manager->renameConversation(linkedPath, id, QStringLiteral("Refactor conversation"));
-        const auto conversationButton = [&window]() -> QToolButton* {
+        const auto conversationButton = [&window]() -> QAbstractButton* {
             for (auto* button : window.findChildren<QAbstractButton*>(
                      QStringLiteral("productConversationButton"))) {
                 if (button->accessibleName() == QStringLiteral("Refactor conversation"))
