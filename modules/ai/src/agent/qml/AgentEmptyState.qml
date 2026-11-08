@@ -1,4 +1,4 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
 import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
@@ -10,13 +10,13 @@ Item {
 
     Column {
         anchors.centerIn: parent
-        width: Math.min(parent.width - Metrics.px(48, workspace.t), Metrics.px(520, workspace.t))
-        spacing: Metrics.px(10, workspace.t)
+        width: Math.min(parent.width - KetTheme.px(48, KetTheme.zoom), KetTheme.px(520, KetTheme.zoom))
+        spacing: KetTheme.px(10, KetTheme.zoom)
 
         Image {
             anchors.horizontalCenter: parent.horizontalCenter
-            width: Metrics.px(46, workspace.t)
-            height: Metrics.px(46, workspace.t)
+            width: KetTheme.px(46, KetTheme.zoom)
+            height: KetTheme.px(46, KetTheme.zoom)
             source: "qrc:/agent/icons/ketplus-mark-" + (workspace.t.dark ? "dark" : "light") + ".svg"
             fillMode: Image.PreserveAspectFit
             Accessible.name: "KétPlus Pro"
@@ -56,8 +56,8 @@ Item {
         }
         Column {
             width: parent.width
-            topPadding: Metrics.px(6, workspace.t)
-            spacing: Metrics.px(6, workspace.t)
+            topPadding: KetTheme.px(6, KetTheme.zoom)
+            spacing: KetTheme.px(6, KetTheme.zoom)
             Repeater {
                 model: [
                     { icon: "file-code.svg", title: "Explore the codebase",
@@ -72,25 +72,26 @@ Item {
                     required property var modelData
                     objectName: "workspaceSuggestion"
                     width: parent.width
-                    height: Metrics.px(50, workspace.t)
+                    height: KetTheme.px(50, KetTheme.zoom)
                     enabled: agentHost.agentAvailable
                     padding: 0
                     onClicked: workspace.useSuggestion(modelData.title)
                     Accessible.name: modelData.title + ". " + modelData.detail
                     contentItem: RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: Metrics.px(13, workspace.t)
-                        anchors.rightMargin: Metrics.px(13, workspace.t)
-                        spacing: Metrics.px(11, workspace.t)
-                        TintedIcon {
-                            Layout.preferredWidth: Metrics.px(17, workspace.t)
-                            Layout.preferredHeight: Metrics.px(17, workspace.t)
-                            source: "qrc:/agent/icons/" + suggestion.modelData.icon
+                        anchors.leftMargin: KetTheme.px(13, KetTheme.zoom)
+                        anchors.rightMargin: KetTheme.px(13, KetTheme.zoom)
+                        spacing: KetTheme.px(11, KetTheme.zoom)
+                        KetIcon {
+                            Layout.preferredWidth: KetTheme.px(17, KetTheme.zoom)
+                            Layout.preferredHeight: KetTheme.px(17, KetTheme.zoom)
+                            name: KetTheme.iconForLucide(("qrc:/agent/icons/" + suggestion.modelData.icon).toString().split("/").pop().replace(/\.svg$/, ""))
                             color: workspace.t.textSecondary
+                            box: KetTheme.px(17, KetTheme.zoom)
                         }
                         Column {
                             Layout.fillWidth: true
-                            spacing: Metrics.px(2, workspace.t)
+                            spacing: KetTheme.px(2, KetTheme.zoom)
                             Text {
                                 width: parent.width
                                 text: suggestion.modelData.title
@@ -117,7 +118,7 @@ Item {
                         }
                     }
                     background: Rectangle {
-                        radius: Metrics.px(7, workspace.t)
+                        radius: KetTheme.px(7, KetTheme.zoom)
                         color: suggestion.hovered ? workspace.t.surfaceHover
                                                   : workspace.t.interactiveBackground
                         border.color: suggestion.visualFocus ? workspace.t.focus

@@ -1,4 +1,4 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
 import QtQuick.Controls.Basic as Basic
 
@@ -12,9 +12,9 @@ Rectangle {
     property bool rendered: false
     signal modeRequested(bool rendered)
 
-    implicitWidth: row.implicitWidth + 2 * Metrics.px(2, tokens)
-    implicitHeight: Metrics.px(24, tokens)
-    radius: Metrics.px(5, tokens)
+    implicitWidth: row.implicitWidth + 2 * KetTheme.px(2, KetTheme.zoom)
+    implicitHeight: KetTheme.px(24, KetTheme.zoom)
+    radius: KetTheme.px(5, KetTheme.zoom)
     color: tokens.panelSubtle
     border.color: tokens.border
     border.width: 1
@@ -36,8 +36,8 @@ Rectangle {
                 readonly property bool current: control.rendered === modelData.rendered
                 objectName: modelData.rendered ? "mermaidSwitchDiagram" : "mermaidSwitchSource"
                 focusPolicy: Qt.TabFocus
-                implicitWidth: label.implicitWidth + 2 * Metrics.px(8, control.tokens)
-                implicitHeight: control.height - 2 * Metrics.px(2, control.tokens)
+                implicitWidth: label.implicitWidth + 2 * KetTheme.px(8, KetTheme.zoom)
+                implicitHeight: control.height - 2 * KetTheme.px(2, KetTheme.zoom)
                 checkable: false
                 contentItem: Text {
                     id: label
@@ -50,7 +50,7 @@ Rectangle {
                     font.weight: parent.current ? Font.DemiBold : Font.Normal
                 }
                 background: Rectangle {
-                    radius: Metrics.px(4, control.tokens)
+                    radius: KetTheme.px(4, KetTheme.zoom)
                     color: parent.current ? control.tokens.codeBlockBackground : parent.hovered ? control.tokens.surfaceHover : "transparent"
                     border.color: parent.visualFocus ? control.tokens.focus : "transparent"
                 }

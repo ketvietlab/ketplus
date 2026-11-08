@@ -55,7 +55,8 @@ class AgentMessageModel final : public QAbstractListModel {
     TranscriptWindowModel* window() const { return window_; }
     // Asks the measurer for bodies of rows no delegate has reported, so the
     // geometry knows a window the reader has not scrolled through yet.
-    Q_INVOKABLE void measureUnmeasuredRows(int limit, qreal width, const QFont& font);
+    // False when no off-thread work remains; resource-backed rows wait for their delegate.
+    Q_INVOKABLE bool measureUnmeasuredRows(int limit, qreal width, const QFont& font);
     Q_INVOKABLE int indexOfKey(const QString& key) const;
     // The key of the row the view shows for `key`: the key itself when it is a
     // row, the group row while it is withheld in a collapsed group, and the

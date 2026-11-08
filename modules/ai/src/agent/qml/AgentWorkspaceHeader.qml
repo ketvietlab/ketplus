@@ -1,4 +1,4 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
 import Ket as Kit
 import QtQuick.Controls.Basic as Basic
@@ -8,7 +8,7 @@ Item {
     id: header
     required property var workspace
     objectName: "agentWorkspaceHeader"
-    implicitHeight: Metrics.px(44, workspace.t)
+    implicitHeight: KetTheme.px(44, KetTheme.zoom)
 
     readonly property var selectedConversation: {
         for (const conversation of agentHost.conversations || [])
@@ -27,7 +27,7 @@ Item {
         }
         return ({});
     }
-    readonly property real maximumTitleWidth: Math.max(Metrics.px(160, workspace.t), Math.min(Metrics.px(420, workspace.t), width * 0.45))
+    readonly property real maximumTitleWidth: Math.max(KetTheme.px(160, KetTheme.zoom), Math.min(KetTheme.px(420, KetTheme.zoom), width * 0.45))
     readonly property string scopeLabel: {
         const branch = agentHost.executionBranch || selectedWorktree.branch || "workspace";
         const repository = agentHost.repositoryName || "Repository";
@@ -39,10 +39,10 @@ Item {
         id: titleRow
         anchors.left: parent.left
         anchors.right: headerActions.left
-        anchors.leftMargin: Metrics.px(16, workspace.t)
-        anchors.rightMargin: Metrics.px(8, workspace.t)
+        anchors.leftMargin: KetTheme.px(16, KetTheme.zoom)
+        anchors.rightMargin: KetTheme.px(8, KetTheme.zoom)
         anchors.verticalCenter: parent.verticalCenter
-        spacing: Metrics.px(8, workspace.t)
+        spacing: KetTheme.px(8, KetTheme.zoom)
 
         Text {
             id: conversationNumber
@@ -81,16 +81,16 @@ Item {
         Rectangle {
             id: conversationStatusBadge
             objectName: "conversationStatusBadge"
-            Layout.preferredHeight: Metrics.px(18, workspace.t)
-            Layout.preferredWidth: statusText.implicitWidth + Metrics.px(12, workspace.t)
-            Layout.maximumWidth: Metrics.px(120, workspace.t)
-            radius: Metrics.px(4, workspace.t)
+            Layout.preferredHeight: KetTheme.px(18, KetTheme.zoom)
+            Layout.preferredWidth: statusText.implicitWidth + KetTheme.px(12, KetTheme.zoom)
+            Layout.maximumWidth: KetTheme.px(120, KetTheme.zoom)
+            radius: KetTheme.px(4, KetTheme.zoom)
             color: agentHost.sessionRunning ? workspace.t.accentSubtle : "transparent"
             border.color: agentHost.sessionRunning ? workspace.t.accent : workspace.t.border
             Text {
                 id: statusText
                 anchors.centerIn: parent
-                width: Math.min(implicitWidth, parent.width - Metrics.px(12, workspace.t))
+                width: Math.min(implicitWidth, parent.width - KetTheme.px(12, KetTheme.zoom))
                 text: agentHost.sessionRunning ? "Working" : agentHost.sessionStatus
                 color: agentHost.sessionRunning ? workspace.t.accentHover : workspace.t.textMuted
                 font.family: workspace.t.uiFont
@@ -106,34 +106,35 @@ Item {
             objectName: "workspaceScopeChip"
             visible: !agentHost.compactWindow
             // Measure the unelided text independently of the allocated chip width.
-            implicitWidth: scopeText.implicitWidth + Metrics.px(30, workspace.t)
-            Layout.preferredHeight: Metrics.px(20, workspace.t)
+            implicitWidth: scopeText.implicitWidth + KetTheme.px(30, KetTheme.zoom)
+            Layout.preferredHeight: KetTheme.px(20, KetTheme.zoom)
             Layout.preferredWidth: implicitWidth
             Layout.fillWidth: false
             Layout.maximumWidth: implicitWidth
             Layout.minimumWidth: 0
-            radius: Metrics.px(5, workspace.t)
+            radius: KetTheme.px(5, KetTheme.zoom)
             color: workspace.t.interactiveBackground
             border.color: workspace.t.border
             clip: true
             Row {
                 id: scopeRow
                 anchors.left: parent.left
-                anchors.leftMargin: Metrics.px(6, workspace.t)
+                anchors.leftMargin: KetTheme.px(6, KetTheme.zoom)
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: Metrics.px(4, workspace.t)
-                TintedIcon {
+                spacing: KetTheme.px(4, KetTheme.zoom)
+                KetIcon {
                     anchors.verticalCenter: parent.verticalCenter
-                    width: Metrics.px(14, workspace.t)
-                    height: Metrics.px(14, workspace.t)
-                    source: "qrc:/agent/icons/git-branch.svg"
+                    width: KetTheme.px(14, KetTheme.zoom)
+                    height: KetTheme.px(14, KetTheme.zoom)
+                    name: KetTheme.iconForLucide("git-branch")
                     color: workspace.t.textMuted
+                    box: KetTheme.px(14, KetTheme.zoom)
                 }
                 Text {
                     id: scopeText
                     objectName: "workspaceScopeLabel"
                     anchors.verticalCenter: parent.verticalCenter
-                    width: Math.min(implicitWidth, Math.max(0, scopeChip.width - Metrics.px(30, workspace.t)))
+                    width: Math.min(implicitWidth, Math.max(0, scopeChip.width - KetTheme.px(30, KetTheme.zoom)))
                     text: header.scopeLabel
                     color: workspace.t.textSecondary
                     elide: Text.ElideMiddle
@@ -149,7 +150,7 @@ Item {
                 onClicked: agentHost.requestExecutionWorktree()
             }
             KetToolTip {
-                tokens: workspace.t
+                objectName: "ketToolTip"
                 visible: scopeMouse.containsMouse
                 text: header.scopeLabel
             }
@@ -159,8 +160,8 @@ Item {
         }
         Row {
             id: conversationTags
-            visible: header.tags.length > 0 && header.width > Metrics.px(760, workspace.t)
-            spacing: Metrics.px(4, workspace.t)
+            visible: header.tags.length > 0 && header.width > KetTheme.px(760, KetTheme.zoom)
+            spacing: KetTheme.px(4, KetTheme.zoom)
             Repeater {
                 model: header.tags.slice(0, 2)
                 Kit.KetTag {
@@ -168,7 +169,7 @@ Item {
                     objectName: "conversationTag_" + modelData.label
                     text: modelData.label
                     tagColor: modelData.color || Kit.KetTheme.t.accent
-                    maxWidth: Metrics.px(100, workspace.t)
+                    maxWidth: KetTheme.px(100, KetTheme.zoom)
                     filterable: true
                     onClicked: agentHost.requestTagFilter(text)
                 }
@@ -182,9 +183,9 @@ Item {
     Row {
         id: headerActions
         anchors.right: parent.right
-        anchors.rightMargin: Metrics.px(8, workspace.t)
+        anchors.rightMargin: KetTheme.px(8, KetTheme.zoom)
         anchors.verticalCenter: parent.verticalCenter
-        spacing: Metrics.px(2, workspace.t)
+        spacing: KetTheme.px(2, KetTheme.zoom)
 
         Kit.KetIconButton {
             objectName: "headerCompactWindowButton"

@@ -1,4 +1,3 @@
-import "ChromeMetrics.js" as Metrics
 import QtQuick
 import Ket
 import QtQuick.Controls
@@ -22,6 +21,8 @@ Rectangle {
     property bool collapsed: false
     property string confirmingStop: ""
     property real now: Date.now()
+    readonly property bool windowVisible: visible && Window.window !== null
+        && Window.window.visible && Window.window.visibility !== Window.Minimized
 
     function live(task) {
         return task.status === "running" || task.status === "stopping";
@@ -74,8 +75,8 @@ Rectangle {
 
     objectName: "backgroundTaskBar"
     visible: tasks.length > 0
-    implicitHeight: visible ? column.implicitHeight + Metrics.px(12, t) : 0
-    radius: Metrics.px(12, t)
+    implicitHeight: visible ? column.implicitHeight + KetTheme.px(12, KetTheme.zoom) : 0
+    radius: KetTheme.px(12, KetTheme.zoom)
     color: t.surfaceRaised
     border.width: 1
     border.color: t.border
@@ -84,13 +85,14 @@ Rectangle {
 
     Timer {
         // Elapsed time ticks locally; the daemon reports progress only every few seconds.
-        running: bar.visible && bar.liveCount > 0 && !bar.offline
+        objectName: "backgroundTaskElapsedTimer"
+        running: bar.windowVisible && bar.liveCount > 0 && !bar.offline
         interval: 1000
         repeat: true
         onTriggered: bar.now = Date.now()
     }
     Timer {
-        running: bar.visible && !bar.offline && bar.openedTask !== undefined && bar.openedTask.kind !== "agent" && bar.live(bar.openedTask) && !bar.pane.loading
+        running: bar.windowVisible && !bar.offline && bar.openedTask !== undefined && bar.openedTask.kind !== "agent" && bar.live(bar.openedTask) && !bar.pane.loading
         interval: 2000
         onTriggered: agentHost.requestBackgroundTaskOutput(bar.pane.taskId)
     }
@@ -102,8 +104,8 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        anchors.margins: Metrics.px(6, bar.t)
-        spacing: Metrics.px(2, bar.t)
+        anchors.margins: KetTheme.px(6, KetTheme.zoom)
+        spacing: KetTheme.px(2, KetTheme.zoom)
 
         AbstractButton {
             objectName: "backgroundTaskBarHeader"
@@ -112,13 +114,14 @@ Rectangle {
             Accessible.name: bar.headline + (bar.collapsed ? ", collapsed" : ", expanded")
             onClicked: bar.collapsed = !bar.collapsed
             contentItem: RowLayout {
-                spacing: Metrics.px(6, bar.t)
-                TintedIcon {
-                    Layout.leftMargin: Metrics.px(4, bar.t)
-                    Layout.preferredWidth: Metrics.px(14, bar.t)
-                    Layout.preferredHeight: Metrics.px(14, bar.t)
-                    source: bar.collapsed ? "qrc:/agent/icons/chevron-right.svg" : "qrc:/agent/icons/chevron-down.svg"
+                spacing: KetTheme.px(6, KetTheme.zoom)
+                KetIcon {
+                    Layout.leftMargin: KetTheme.px(4, KetTheme.zoom)
+                    Layout.preferredWidth: KetTheme.px(14, KetTheme.zoom)
+                    Layout.preferredHeight: KetTheme.px(14, KetTheme.zoom)
+                    name: KetTheme.iconForLucide(bar.collapsed ? "chevron-right" : "chevron-down")
                     color: bar.t.textMuted
+                    box: KetTheme.px(14, KetTheme.zoom)
                 }
                 Text {
                     Layout.fillWidth: true
@@ -131,7 +134,7 @@ Rectangle {
                 }
             }
             background: Rectangle {
-                radius: Metrics.px(7, bar.t)
+                radius: KetTheme.px(7, KetTheme.zoom)
                 color: parent.hovered ? bar.t.surfaceHover : "transparent"
             }
         }
@@ -143,7 +146,7 @@ Rectangle {
                 required property var modelData
                 readonly property bool confirming: bar.confirmingStop === modelData.task_id
                 Layout.fillWidth: true
-                spacing: Metrics.px(4, bar.t)
+                spacing: KetTheme.px(4, KetTheme.zoom)
                 objectName: "backgroundTask_" + modelData.task_id
                 RowLayout {
                     Layout.fillWidth: true
@@ -218,9 +221,9 @@ Rectangle {
             readonly property var task: bar.openedTask
             visible: !bar.collapsed && task !== undefined
             Layout.fillWidth: true
-            Layout.topMargin: Metrics.px(4, bar.t)
-            Layout.preferredHeight: visible ? paneColumn.implicitHeight + Metrics.px(16, bar.t) : 0
-            radius: Metrics.px(8, bar.t)
+            Layout.topMargin: KetTheme.px(4, KetTheme.zoom)
+            Layout.preferredHeight: visible ? paneColumn.implicitHeight + KetTheme.px(16, KetTheme.zoom) : 0
+            radius: KetTheme.px(8, KetTheme.zoom)
             color: bar.t.codeBlockBackground
             border.width: 1
             border.color: bar.t.codeBlockBorder
@@ -230,8 +233,8 @@ Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                anchors.margins: Metrics.px(8, bar.t)
-                spacing: Metrics.px(6, bar.t)
+                anchors.margins: KetTheme.px(8, KetTheme.zoom)
+                spacing: KetTheme.px(6, KetTheme.zoom)
 
                 Text {
                     Layout.fillWidth: true
@@ -248,7 +251,7 @@ Rectangle {
                     id: outputScroll
                     visible: outputPane.task !== undefined && outputPane.task.kind !== "agent"
                     Layout.fillWidth: true
-                    Layout.preferredHeight: Math.min(outputText.implicitHeight, Metrics.px(220, bar.t))
+                    Layout.preferredHeight: Math.min(outputText.implicitHeight, KetTheme.px(220, KetTheme.zoom))
                     clip: true
                     TextEdit {
                         id: outputText
@@ -291,7 +294,7 @@ Rectangle {
         Text {
             visible: bar.offline && !bar.collapsed
             Layout.fillWidth: true
-            Layout.margins: Metrics.px(4, bar.t)
+            Layout.margins: KetTheme.px(4, KetTheme.zoom)
             text: "The daemon is unreachable. These tasks may have ended; Stop and live output return when it reconnects."
             color: bar.t.textMuted
             font.family: bar.t.uiFont

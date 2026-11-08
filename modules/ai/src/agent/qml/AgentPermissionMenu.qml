@@ -1,4 +1,4 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Basic as Basic
@@ -15,19 +15,19 @@ Basic.Popup {
     onOpened: permissionItems.forceActiveFocus()
     y: -height - 4
     x: Math.min(0, root.width - anchorItem.mapToItem(root, 0, 0).x - width - 12)
-    width: Math.min(Metrics.px(320, root.t), root.width - Metrics.px(24, root.t))
-    height: permissionItems.implicitHeight + Metrics.px(16, root.t)
-    padding: Metrics.px(8, root.t)
+    width: Math.min(KetTheme.px(320, KetTheme.zoom), root.width - KetTheme.px(24, KetTheme.zoom))
+    height: permissionItems.implicitHeight + KetTheme.px(16, KetTheme.zoom)
+    padding: KetTheme.px(8, KetTheme.zoom)
     background: Rectangle {
         color: root.t.surfaceRaised
-        radius: Metrics.px(12, root.t)
+        radius: KetTheme.px(12, KetTheme.zoom)
         border.width: 1
         border.color: root.t.borderStrong
     }
     Column {
         id: permissionItems
         width: parent.width
-        spacing: Metrics.px(2, root.t)
+        spacing: KetTheme.px(2, KetTheme.zoom)
         focus: true
         Keys.onPressed: function (event) {
             const choice = event.key - Qt.Key_1;
@@ -40,9 +40,9 @@ Basic.Popup {
         }
         Text {
             width: parent.width
-            leftPadding: Metrics.px(8, root.t)
-            topPadding: Metrics.px(2, root.t)
-            bottomPadding: Metrics.px(6, root.t)
+            leftPadding: KetTheme.px(8, KetTheme.zoom)
+            topPadding: KetTheme.px(2, KetTheme.zoom)
+            bottomPadding: KetTheme.px(6, KetTheme.zoom)
             text: "Mode"
             color: root.t.textMuted
             font.family: root.t.uiFont
@@ -55,22 +55,23 @@ Basic.Popup {
                 required property var modelData
                 required property int index
                 width: permissionItems.width
-                height: Metrics.px(52, root.t)
-                leftPadding: Metrics.px(8, root.t)
-                rightPadding: Metrics.px(8, root.t)
+                height: KetTheme.px(52, KetTheme.zoom)
+                leftPadding: KetTheme.px(8, KetTheme.zoom)
+                rightPadding: KetTheme.px(8, KetTheme.zoom)
                 contentItem: RowLayout {
-                    spacing: Metrics.px(8, root.t)
-                    TintedIcon {
-                        Layout.preferredWidth: Metrics.px(14, root.t)
-                        Layout.preferredHeight: Metrics.px(14, root.t)
+                    spacing: KetTheme.px(8, KetTheme.zoom)
+                    KetIcon {
+                        Layout.preferredWidth: KetTheme.px(14, KetTheme.zoom)
+                        Layout.preferredHeight: KetTheme.px(14, KetTheme.zoom)
                         Layout.alignment: Qt.AlignVCenter
-                        source: root.permissionIconSource(modelData.id)
+                        name: KetTheme.iconForLucide((root.permissionIconSource(modelData.id)).toString().split("/").pop().replace(/\.svg$/, ""))
                         color: root.permissionLabelColor(modelData)
+                        box: KetTheme.px(14, KetTheme.zoom)
                     }
                     Column {
                         Layout.fillWidth: true
                         Layout.alignment: Qt.AlignVCenter
-                        spacing: Metrics.px(3, root.t)
+                        spacing: KetTheme.px(3, KetTheme.zoom)
                         Text {
                             width: parent.width
                             text: modelData.label
@@ -90,10 +91,10 @@ Basic.Popup {
                     }
                     Rectangle {
                         visible: modelData.elevated === true && root.permission !== modelData.id
-                        Layout.preferredWidth: enableText.implicitWidth + Metrics.px(12, root.t)
-                        Layout.preferredHeight: Metrics.px(18, root.t)
+                        Layout.preferredWidth: enableText.implicitWidth + KetTheme.px(12, KetTheme.zoom)
+                        Layout.preferredHeight: KetTheme.px(18, KetTheme.zoom)
                         Layout.alignment: Qt.AlignVCenter
-                        radius: Metrics.px(5, root.t)
+                        radius: KetTheme.px(5, KetTheme.zoom)
                         color: "transparent"
                         border.width: 1
                         border.color: root.t.warning
@@ -110,7 +111,7 @@ Basic.Popup {
                         text: root.permission === modelData.id ? "✓" : ""
                         color: root.permissionLabelColor(modelData)
                         font.pixelSize: root.t.caption
-                        Layout.preferredWidth: Metrics.px(12, root.t)
+                        Layout.preferredWidth: KetTheme.px(12, KetTheme.zoom)
                         Layout.alignment: Qt.AlignVCenter
                     }
                     Text {
@@ -118,13 +119,13 @@ Basic.Popup {
                         color: root.t.textMuted
                         font.family: root.t.uiFont
                         font.pixelSize: root.t.micro
-                        Layout.preferredWidth: Metrics.px(10, root.t)
+                        Layout.preferredWidth: KetTheme.px(10, KetTheme.zoom)
                         Layout.alignment: Qt.AlignVCenter
                         horizontalAlignment: Text.AlignRight
                     }
                 }
                 background: Rectangle {
-                    radius: Metrics.px(6, root.t)
+                    radius: KetTheme.px(6, KetTheme.zoom)
                     color: parent.hovered ? root.t.interactiveActive : "transparent"
                 }
                 onClicked: {

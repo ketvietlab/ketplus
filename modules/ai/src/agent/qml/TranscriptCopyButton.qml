@@ -1,4 +1,4 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
 import QtQuick.Controls.Basic as Basic
 
@@ -13,15 +13,21 @@ Basic.ToolButton {
     property bool showToolTip: true
     property color idleColor: "transparent"
     property color hoverColor: tokens.surfaceHover
-    property real cornerRadius: Metrics.px(4, tokens)
+    property real cornerRadius: KetTheme.px(4, KetTheme.zoom)
     property bool focusBorder: false
     property int copiedInterval: 1500
     readonly property bool copied: copiedTimer.running
 
     focusPolicy: Qt.TabFocus
-    contentItem: TintedIcon {
-        source: control.copied ? "qrc:/agent/icons/check.svg" : "qrc:/agent/icons/copy.svg"
-        color: control.copied ? control.tokens.textMain : control.tokens.textMuted
+    contentItem: Item {
+        implicitWidth: KetTheme.px(16, KetTheme.zoom)
+        implicitHeight: implicitWidth
+        KetIcon {
+            anchors.centerIn: parent
+            box: Math.min(parent.width, parent.height)
+            name: KetTheme.iconForLucide(control.copied ? "check" : "copy")
+            color: control.copied ? control.tokens.textMain : control.tokens.textMuted
+        }
     }
     background: Rectangle {
         color: control.hovered ? control.hoverColor : control.idleColor
@@ -37,7 +43,7 @@ Basic.ToolButton {
         interval: control.copiedInterval
     }
     KetToolTip {
-        tokens: control.tokens
+        objectName: "ketToolTip"
         visible: control.showToolTip && (control.hovered || control.copied)
         text: control.copied ? "Copied" : control.label
     }

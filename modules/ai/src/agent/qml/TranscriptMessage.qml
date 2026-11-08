@@ -1,5 +1,5 @@
+import Ket
 import Ket as Kit
-import "ChromeMetrics.js" as Metrics
 import QtQuick
 import Ket 1.0 as Kit
 import QtQuick.Controls.Basic as Basic
@@ -47,7 +47,7 @@ Item {
     // and hangs under a rail indented by groupRailInset.
     readonly property bool groupNested: activityRow && groupRole.length > 0 && groupExpanded
     readonly property real groupRailInset: groupRecipe.childrenIndent + groupRecipe.childrenPadding + 1
-    readonly property int surfaceInset: activityRow ? 0 : Metrics.px(4, shell.t)
+    readonly property int surfaceInset: activityRow ? 0 : KetTheme.px(4, KetTheme.zoom)
     onYChanged: {
         if (!view.followTail && shell.transcriptWheel.direction !== 0)
             host.scheduleTranscriptRestore();
@@ -103,17 +103,17 @@ Item {
     Loader {
         active: (kind === "user" ? messageDelegate.copyableMessage : messageDelegate.turnAnswered) && messageDelegate.chromeActive
         z: 2
-        width: Metrics.px(28, shell.t)
-        height: Metrics.px(28, shell.t)
+        width: KetTheme.px(28, KetTheme.zoom)
+        height: KetTheme.px(28, KetTheme.zoom)
         x: kind === "user" ? messageSurface.x - width - 4 : messageSurface.x
-        y: kind === "user" ? messageSurface.y + 2 : messageSurface.y + messageSurface.height + Metrics.px(8, shell.t)
+        y: kind === "user" ? messageSurface.y + 2 : messageSurface.y + messageSurface.height + KetTheme.px(8, KetTheme.zoom)
         sourceComponent: TranscriptCopyButton {
             objectName: "copyMessageButton"
             tokens: shell.t
             label: kind === "user" ? "Copy message" : "Copy response"
-            padding: Metrics.px(7, shell.t)
+            padding: KetTheme.px(7, KetTheme.zoom)
             idleColor: shell.t.pageBackground
-            cornerRadius: Metrics.px(5, shell.t)
+            cornerRadius: KetTheme.px(5, KetTheme.zoom)
             focusBorder: true
             onActiveFocusChanged: messageDelegate.chromeFocusHold = activeFocus
             onClicked: host.copyText(kind === "user" ? view.messageCopyText(messageDelegate.index) : view.answerCopyText(messageDelegate.index))
@@ -137,11 +137,11 @@ Item {
         z: 3
         sourceComponent: Rectangle {
             objectName: "keyboardFocusRing"
-            x: messageSurface.x - Metrics.px(6, shell.t)
+            x: messageSurface.x - KetTheme.px(6, KetTheme.zoom)
             y: messageSurface.y - 3
-            width: messageSurface.width + Metrics.px(12, shell.t)
-            height: messageSurface.height + Metrics.px(6, shell.t)
-            radius: Metrics.px(6, shell.t)
+            width: messageSurface.width + KetTheme.px(12, KetTheme.zoom)
+            height: messageSurface.height + KetTheme.px(6, KetTheme.zoom)
+            radius: KetTheme.px(6, KetTheme.zoom)
             color: "transparent"
             border.color: shell.t.focus
             border.width: 2
@@ -152,18 +152,18 @@ Item {
         active: messageDelegate.findCurrentRow && messageDelegate.activityRow
         sourceComponent: Rectangle {
             objectName: "findActivityHighlight"
-            x: messageSurface.x - Metrics.px(6, shell.t)
+            x: messageSurface.x - KetTheme.px(6, KetTheme.zoom)
             y: messageSurface.y - 2
-            width: messageSurface.width + Metrics.px(12, shell.t)
-            height: messageSurface.height + Metrics.px(4, shell.t)
-            radius: Metrics.px(6, shell.t)
+            width: messageSurface.width + KetTheme.px(12, KetTheme.zoom)
+            height: messageSurface.height + KetTheme.px(4, KetTheme.zoom)
+            radius: KetTheme.px(6, KetTheme.zoom)
             color: "transparent"
             border.color: shell.t.accent
             border.width: 1
         }
     }
     width: view.width
-    height: messageSurface.y + messageSurface.height + surfaceInset + (activityRow ? Metrics.px(3, shell.t) : kind === "user" ? Metrics.px(25, shell.t) : copyableMessage ? Metrics.px(44, shell.t) : view.rowSpacing)
+    height: messageSurface.y + messageSurface.height + surfaceInset + (activityRow ? KetTheme.px(3, KetTheme.zoom) : kind === "user" ? KetTheme.px(25, KetTheme.zoom) : copyableMessage ? KetTheme.px(44, KetTheme.zoom) : view.rowSpacing)
     // Publish what this row actually is. The geometry model only ever learns a
     // height from the row that laid itself out, so a row it has not seen keeps
     // one fixed constant instead of borrowing another row's size.
@@ -183,17 +183,17 @@ Item {
     Rectangle {
         objectName: "transcriptGroupRail"
         visible: messageDelegate.groupNested
-        x: messageSurface.x + Metrics.px(7, shell.t)
+        x: messageSurface.x + KetTheme.px(7, KetTheme.zoom)
         y: messageDelegate.groupLeader ? messageSurface.y + messageColumn.y + transcriptActivityLoader.y : 0
-        width: Math.max(1, Metrics.px(2, shell.t))
+        width: Math.max(1, KetTheme.px(2, KetTheme.zoom))
         height: Math.max(0, parent.height - y)
         color: shell.t.border
     }
     Kit.KetDayDivider {
         id: dayDivider
         objectName: "transcriptDayDivider"
-        width: messageDelegate.contentColumnWidth - Metrics.px(40, shell.t)
-        x: messageDelegate.contentColumnX + Metrics.px(20, shell.t)
+        width: messageDelegate.contentColumnWidth - KetTheme.px(40, KetTheme.zoom)
+        x: messageDelegate.contentColumnX + KetTheme.px(20, KetTheme.zoom)
         text: kind === "user" && !chunkContinuation ? view.dayLabel(index, timestamp, view.messageModel ? view.messageModel.count : 0) : ""
         visible: text.length > 0
         height: visible ? implicitHeight : 0
@@ -201,16 +201,16 @@ Item {
     Rectangle {
         id: messageSurface
         objectName: "messageSurface"
-        readonly property int horizontalPadding: messageDelegate.activityRow || kind === "assistant" ? 0 : (kind === "user" ? userRecipe.paddingInline : Metrics.px(18, shell.t))
+        readonly property int horizontalPadding: messageDelegate.activityRow || kind === "assistant" ? 0 : (kind === "user" ? userRecipe.paddingInline : KetTheme.px(18, KetTheme.zoom))
         readonly property bool userMessage: kind === "user"
         // ADR 0027: another conversation's agent wrote this turn's opening message.
         readonly property bool agentMessage: kind === "user" && subtype === "agentMessage"
-        readonly property real userMaximumWidth: Math.max(Metrics.px(160, shell.t), Math.min(messageDelegate.contentColumnWidth * userRecipe.maxWidth, messageDelegate.contentColumnWidth - Metrics.px(63, shell.t)))
-        x: kind === "user" ? messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - Metrics.px(20, shell.t) : messageDelegate.contentColumnX + Metrics.px(20, shell.t)
+        readonly property real userMaximumWidth: Math.max(KetTheme.px(160, KetTheme.zoom), Math.min(messageDelegate.contentColumnWidth * userRecipe.maxWidth, messageDelegate.contentColumnWidth - KetTheme.px(63, KetTheme.zoom)))
+        x: kind === "user" ? messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - KetTheme.px(20, KetTheme.zoom) : messageDelegate.contentColumnX + KetTheme.px(20, KetTheme.zoom)
         y: messageDelegate.surfaceInset + dayDivider.height
-        width: kind === "user" ? Math.min(userMaximumWidth, Math.max(Math.ceil(bodyMetrics.advanceWidth) + Metrics.px(10, shell.t), agentMessage ? Math.ceil(agentOriginMetrics.advanceWidth) + Metrics.px(4, shell.t) : 0, imageGallery.bubblePreferredWidth) + horizontalPadding * 2) : messageDelegate.contentColumnWidth - Metrics.px(40, shell.t)
-        height: messageColumn.implicitHeight + (messageDelegate.activityRow ? 0 : kind === "user" ? 2 * userRecipe.paddingBlock : Metrics.px(16, shell.t))
-        radius: kind === "user" ? userRecipe.radius : kind === "file" ? Metrics.px(7, shell.t) : 0
+        width: kind === "user" ? Math.min(userMaximumWidth, Math.max(Math.ceil(bodyMetrics.advanceWidth) + KetTheme.px(10, KetTheme.zoom), agentMessage ? Math.ceil(agentOriginMetrics.advanceWidth) + KetTheme.px(4, KetTheme.zoom) : 0, imageGallery.bubblePreferredWidth) + horizontalPadding * 2) : messageDelegate.contentColumnWidth - KetTheme.px(40, KetTheme.zoom)
+        height: messageColumn.implicitHeight + (messageDelegate.activityRow ? 0 : kind === "user" ? 2 * userRecipe.paddingBlock : KetTheme.px(16, KetTheme.zoom))
+        radius: kind === "user" ? userRecipe.radius : kind === "file" ? KetTheme.px(7, KetTheme.zoom) : 0
         color: agentMessage ? shell.t.surfaceRaised : kind === "user" ? userRecipe.background : kind === "file" ? shell.t.surfaceRaised : "transparent"
         border.color: agentMessage ? shell.t.accent : kind === "file" ? shell.t.border : "transparent"
 
@@ -221,7 +221,7 @@ Item {
             anchors.leftMargin: messageSurface.horizontalPadding
             anchors.rightMargin: messageSurface.horizontalPadding
             anchors.verticalCenter: parent.verticalCenter
-            spacing: kind === "file" ? Metrics.px(4, shell.t) : Metrics.px(7, shell.t)
+            spacing: kind === "file" ? KetTheme.px(4, KetTheme.zoom) : KetTheme.px(7, KetTheme.zoom)
 
             Text {
                 id: agentOrigin
@@ -299,7 +299,7 @@ Item {
                         objectName: "transcriptGroupSummary"
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
-                        width: Math.min(implicitWidth, parent.width - groupChevron.width - Metrics.px(36, shell.t))
+                        width: Math.min(implicitWidth, parent.width - groupChevron.width - KetTheme.px(36, KetTheme.zoom))
                         text: messageDelegate.groupSummary + (messageDelegate.groupRunning ? " · Running" : "")
                         color: messageDelegate.groupFailed > 0 ? shell.t.danger : messageDelegate.groupRecipe.text
                         font.family: shell.t.uiFont
@@ -307,17 +307,18 @@ Item {
                         font.weight: Font.Normal
                         elide: Text.ElideRight
                     }
-                    TintedIcon {
+                    KetIcon {
                         id: groupChevron
                         objectName: "transcriptGroupChevron"
                         anchors.left: groupSummaryText.right
-                        anchors.leftMargin: Metrics.px(4, shell.t)
+                        anchors.leftMargin: KetTheme.px(4, KetTheme.zoom)
                         anchors.verticalCenter: parent.verticalCenter
-                        width: Metrics.px(14, shell.t)
+                        width: KetTheme.px(14, KetTheme.zoom)
                         height: width
-                        source: "qrc:/agent/icons/chevron-right.svg"
+                        name: KetTheme.iconForLucide("chevron-right")
                         color: shell.t.textMuted
                         rotation: messageDelegate.groupExpanded ? 90 : 0
+                        box: KetTheme.px(14, KetTheme.zoom)
                     }
                     HoverHandler {
                         cursorShape: Qt.PointingHandCursor
@@ -392,15 +393,16 @@ Item {
             }
 
             Row {
-                height: Metrics.px(16, shell.t)
-                spacing: Metrics.px(7, shell.t)
+                height: KetTheme.px(16, KetTheme.zoom)
+                spacing: KetTheme.px(7, KetTheme.zoom)
                 visible: !messageDelegate.noticeRow && !messageDelegate.activityRow && !messageDelegate.chunkContinuation && kind !== "user" && kind !== "assistant" && subtype !== "question" && subtype !== "approval"
-                TintedIcon {
+                KetIcon {
                     anchors.verticalCenter: parent.verticalCenter
-                    width: Metrics.px(15, shell.t)
-                    height: Metrics.px(15, shell.t)
-                    source: subtype === "compaction" ? "qrc:/agent/icons/bot.svg" : subtype === "webSearch" ? "qrc:/agent/icons/search.svg" : kind === "tool" ? "qrc:/agent/icons/square-terminal.svg" : kind === "file" ? "qrc:/agent/icons/file-code.svg" : "qrc:/agent/icons/sparkles.svg"
+                    width: KetTheme.px(15, KetTheme.zoom)
+                    height: KetTheme.px(15, KetTheme.zoom)
+                    name: KetTheme.iconForLucide(subtype === "compaction" ? "bot" : subtype === "webSearch" ? "search" : kind === "tool" ? "square-terminal" : kind === "file" ? "file-code" : "sparkles")
                     color: subtype === "compaction" ? shell.t.textMuted : subtype === "webSearch" ? shell.t.textMuted : kind === "tool" ? shell.t.warning : kind === "file" ? shell.t.tabActiveText : shell.t.accentText
+                    box: KetTheme.px(15, KetTheme.zoom)
                 }
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
@@ -849,8 +851,8 @@ Item {
                         tokens: shell.t
                         rendered: modelData.rendered
                         // Beside the copy button of a source block, in the corner of a diagram.
-                        x: modelData.x + modelData.width - width - Metrics.px(4, shell.t) - (rendered ? 0 : Metrics.px(30, shell.t))
-                        y: modelData.y + bodyText.topPadding + Metrics.px(5, shell.t)
+                        x: modelData.x + modelData.width - width - KetTheme.px(4, KetTheme.zoom) - (rendered ? 0 : KetTheme.px(30, KetTheme.zoom))
+                        y: modelData.y + bodyText.topPadding + KetTheme.px(5, KetTheme.zoom)
                         z: 2
                         onModeRequested: rendered => {
                             // The row changes height under the reader's line, so the change runs
@@ -872,7 +874,7 @@ Item {
                         width: modelData.width
                         height: modelData.height
                         z: -1
-                        radius: Metrics.px(4, shell.t)
+                        radius: KetTheme.px(4, KetTheme.zoom)
                         color: shell.t.inlineCodeBackground
                     }
                 }
@@ -893,7 +895,7 @@ Item {
                         y: range ? range.y : 0
                         width: range ? range.width : 0
                         height: range ? range.height : 0
-                        radius: Metrics.px(2, shell.t)
+                        radius: KetTheme.px(2, KetTheme.zoom)
                         color: shell.t.accentMuted
                     }
                 }
@@ -906,14 +908,14 @@ Item {
                         objectName: "copyCodeBlockButton"
                         required property var modelData
                         required property int index
-                        x: modelData.x + modelData.width - width - Metrics.px(4, shell.t)
-                        y: modelData.y + bodyText.topPadding + Metrics.px(4, shell.t)
+                        x: modelData.x + modelData.width - width - KetTheme.px(4, KetTheme.zoom)
+                        y: modelData.y + bodyText.topPadding + KetTheme.px(4, KetTheme.zoom)
                         z: 2
-                        width: Metrics.px(26, shell.t)
-                        height: Metrics.px(26, shell.t)
+                        width: KetTheme.px(26, KetTheme.zoom)
+                        height: KetTheme.px(26, KetTheme.zoom)
                         tokens: shell.t
                         label: "Copy code"
-                        padding: Metrics.px(6, shell.t)
+                        padding: KetTheme.px(6, KetTheme.zoom)
                         idleColor: shell.t.codeBlockBackground
                         onActiveFocusChanged: messageDelegate.chromeFocusHold = activeFocus
                         onClicked: host.copyText(host.codeBlockSources(messageDelegate.body)[bodyText.codeFencesIdentity ? index : bodyText.codeFences[index]] || "")
@@ -966,7 +968,7 @@ Item {
                         height: modelData.height
                         color: shell.t.panelSubtle
                         border.color: shell.t.border
-                        radius: Metrics.px(6, shell.t)
+                        radius: KetTheme.px(6, KetTheme.zoom)
                         Text {
                             objectName: "mermaidPendingLabel"
                             anchors.centerIn: parent
@@ -978,8 +980,8 @@ Item {
                         }
                         Column {
                             anchors.centerIn: parent
-                            width: parent.width - Metrics.px(24, shell.t)
-                            spacing: Metrics.px(8, shell.t)
+                            width: parent.width - KetTheme.px(24, KetTheme.zoom)
+                            spacing: KetTheme.px(8, KetTheme.zoom)
                             visible: !parent.pending
                             Text {
                                 text: host.mermaidInstalling ? "Installing Mermaid..." : "Mermaid"
@@ -989,7 +991,7 @@ Item {
                             }
                             Row {
                                 width: parent.width
-                                spacing: Metrics.px(8, shell.t)
+                                spacing: KetTheme.px(8, KetTheme.zoom)
                                 TextEdit {
                                     objectName: "mermaidInstallCommand"
                                     // Claim Copy and Select All before the Edit menu can: a read-only TextEdit does not,
@@ -1002,8 +1004,8 @@ Item {
                                             event.accepted = true;
                                         }
                                     }
-                                    width: parent.width - Metrics.px(40, shell.t)
-                                    height: Math.max(Metrics.px(32, shell.t), contentHeight)
+                                    width: parent.width - KetTheme.px(40, KetTheme.zoom)
+                                    height: Math.max(KetTheme.px(32, KetTheme.zoom), contentHeight)
                                     verticalAlignment: TextEdit.AlignVCenter
                                     text: "npm install -g @mermaid-js/mermaid-cli"
                                     readOnly: true
@@ -1016,22 +1018,28 @@ Item {
                                 Basic.ToolButton {
                                     id: mermaidInstallButton
                                     objectName: "mermaidInstallButton"
-                                    width: Metrics.px(32, shell.t)
-                                    height: Metrics.px(32, shell.t)
-                                    padding: Metrics.px(7, shell.t)
+                                    width: KetTheme.px(32, KetTheme.zoom)
+                                    height: KetTheme.px(32, KetTheme.zoom)
+                                    padding: KetTheme.px(7, KetTheme.zoom)
                                     enabled: !host.mermaidInstalling
-                                    contentItem: TintedIcon {
-                                        source: "qrc:/agent/icons/play.svg"
-                                        color: parent.enabled ? shell.t.textMain : shell.t.textDisabled
+                                    contentItem: Item {
+                                        implicitWidth: KetTheme.px(16, KetTheme.zoom)
+                                        implicitHeight: implicitWidth
+                                        KetIcon {
+                                            anchors.centerIn: parent
+                                            box: Math.min(parent.width, parent.height)
+                                            name: KetTheme.iconForLucide("play")
+                                            color: parent.enabled ? shell.t.textMain : shell.t.textDisabled
+                                        }
                                     }
                                     background: Rectangle {
                                         color: parent.hovered ? shell.t.surfaceHover : "transparent"
-                                        radius: Metrics.px(4, shell.t)
+                                        radius: KetTheme.px(4, KetTheme.zoom)
                                     }
                                     onClicked: host.installMermaid()
                                     Accessible.name: "Install Mermaid"
                                     KetToolTip {
-                                        tokens: shell.t
+                                        objectName: "ketToolTip"
                                         visible: mermaidInstallButton.hovered
                                         text: "Install Mermaid"
                                     }
@@ -1047,7 +1055,7 @@ Item {
                                 elide: Text.ElideRight
                                 maximumLineCount: 1
                                 KetToolTip {
-                                    tokens: shell.t
+                                    objectName: "ketToolTip"
                                     visible: errorHover.hovered
                                     text: host.mermaidInstallError
                                 }
@@ -1080,7 +1088,7 @@ Item {
                 visible: bodyText.userOverlong
                 text: messageDelegate.userExpanded ? "Show less" : "Show more"
                 Accessible.name: text + " user message"
-                implicitHeight: visible ? Metrics.px(26, shell.t) : 0
+                implicitHeight: visible ? KetTheme.px(26, KetTheme.zoom) : 0
                 leftPadding: 0
                 rightPadding: 0
                 topPadding: 0

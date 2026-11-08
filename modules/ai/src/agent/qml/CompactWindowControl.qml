@@ -1,4 +1,4 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
 import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
@@ -26,7 +26,7 @@ ColumnLayout {
         (Number.isInteger(requested) && requested >= 100000 && requested <= maximum)
     Accessible.role: Accessible.Grouping
     Accessible.name: qsTr("Auto-compact")
-    spacing: Metrics.px(8, tokens)
+    spacing: KetTheme.px(8, KetTheme.zoom)
 
     function moveChoice(index, direction) {
         for (let step = 1; step <= choiceRepeater.count; ++step) {
@@ -73,9 +73,9 @@ ColumnLayout {
     }
     GridLayout {
         Layout.fillWidth: true
-        columns: width >= Metrics.px(400, control.tokens) ? 5 : 3
-        columnSpacing: Metrics.px(8, control.tokens)
-        rowSpacing: Metrics.px(8, control.tokens)
+        columns: width >= KetTheme.px(400, KetTheme.zoom) ? 5 : 3
+        columnSpacing: KetTheme.px(8, KetTheme.zoom)
+        rowSpacing: KetTheme.px(8, KetTheme.zoom)
         visible: control.supported
         Repeater {
             id: choiceRepeater
@@ -91,11 +91,11 @@ ColumnLayout {
                 objectName: "compactWindow_" + modelData.value
                 onActiveFocusChanged: if (activeFocus) control.focusRequested(choice)
                 Layout.fillWidth: true
-                Layout.preferredHeight: Metrics.px(36, control.tokens)
+                Layout.preferredHeight: KetTheme.px(36, KetTheme.zoom)
                 readonly property bool selected: modelData.value === -1 ? control.custom
                     : !control.custom && control.preset === modelData.value
                 enabled: !control.blocked && (modelData.value < 0 || modelData.value <= control.maximum)
-                padding: Metrics.px(6, control.tokens)
+                padding: KetTheme.px(6, KetTheme.zoom)
                 contentItem: Text {
                     text: choice.modelData.label
                     elide: Text.ElideRight
@@ -107,7 +107,7 @@ ColumnLayout {
                     font.weight: choice.selected ? Font.DemiBold : Font.Normal
                 }
                 background: Rectangle {
-                    radius: Metrics.px(5, control.tokens)
+                    radius: KetTheme.px(5, KetTheme.zoom)
                     color: choice.selected ? control.tokens.accentSubtle
                         : choice.hovered ? control.tokens.surfaceHover : control.tokens.surfaceRaised
                     border.color: choice.visualFocus ? control.tokens.focus
@@ -125,7 +125,7 @@ ColumnLayout {
                     if (modelData.value === -1) { control.custom = true; customInput.forceActiveFocus() }
                     else { control.preset = modelData.value; control.custom = false }
                 }
-                KetToolTip { tokens: control.tokens; visible: choice.hovered; text: choice.modelData.label }
+                KetToolTip { objectName: "ketToolTip"; visible: choice.hovered; text: choice.modelData.label }
             }
         }
     }
@@ -134,7 +134,7 @@ ColumnLayout {
         objectName: "compactWindowInput"
         onActiveFocusChanged: if (activeFocus) control.focusRequested(customInput)
         Layout.fillWidth: true
-        Layout.preferredHeight: Metrics.px(36, control.tokens)
+        Layout.preferredHeight: KetTheme.px(36, KetTheme.zoom)
         visible: control.supported && control.custom
         enabled: !control.blocked
         text: control.customText
@@ -146,10 +146,10 @@ ColumnLayout {
         placeholderTextColor: control.tokens.textMuted
         font.family: control.tokens.uiFont
         font.pixelSize: control.tokens.body
-        padding: Metrics.px(8, control.tokens)
+        padding: KetTheme.px(8, KetTheme.zoom)
         Accessible.name: qsTr("Compact window in tokens")
         background: Rectangle {
-            radius: Metrics.px(5, control.tokens)
+            radius: KetTheme.px(5, KetTheme.zoom)
             color: control.tokens.surfaceRaised
             border.width: 1
             border.color: customInput.activeFocus ? control.tokens.focus : control.tokens.border

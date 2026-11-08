@@ -40,9 +40,11 @@ Column {
                                    : agentHost.releaseHeldMessage(root.messageId)
     }
     Timer {
+        objectName: "heldMessageRefreshTimer"
         interval: 1000
         repeat: true
-        running: root.visible && !root.pending &&
+        running: root.visible && Window.window !== null && Window.window.visible
+                 && Window.window.visibility !== Window.Minimized && !root.pending &&
                  (root.state.state === "queued" || root.state.state === "releasing")
         onTriggered: agentHost.requestHeldMessageState(root.messageId)
     }

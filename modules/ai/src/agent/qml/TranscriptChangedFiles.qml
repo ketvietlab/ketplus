@@ -1,7 +1,7 @@
+import Ket
 import QtQuick
 import QtQuick.Controls.Basic as Basic
 import Ket 1.0 as Kit
-import "ChromeMetrics.js" as Metrics
 
 // Product file identities and recovery actions over the kit ChangedFiles recipe.
 Rectangle {
@@ -61,7 +61,7 @@ Rectangle {
                     objectName: "changedFileLabel"
                     anchors.left: parent.left
                     anchors.right: fileCounts.left
-                    anchors.rightMargin: Metrics.px(8, tokens)
+                    anchors.rightMargin: KetTheme.px(8, KetTheme.zoom)
                     anchors.verticalCenter: parent.verticalCenter
                     text: (fileRow.modelData.operation ? fileRow.modelData.operation + " " : "") + activity.host.displayFilePath(fileRow.modelData.path || "") + (fileRow.modelData.destination ? " → " + activity.host.displayFilePath(fileRow.modelData.destination) : "")
                     color: fileRow.missing ? activity.tokens.danger : activity.filesRecipe.name
@@ -73,7 +73,7 @@ Rectangle {
                     id: fileCounts
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: Metrics.px(7, tokens)
+                    spacing: KetTheme.px(7, KetTheme.zoom)
                     visible: fileRow.modelData.known === true
                     Text {
                         objectName: "fileAdditions"
@@ -110,17 +110,17 @@ Rectangle {
                 Basic.Menu {
                     id: fileContextMenu
                     objectName: "changedFileContextMenu"
-                    padding: Metrics.px(5, tokens)
+                    padding: KetTheme.px(5, KetTheme.zoom)
                     margins: 8
                     font.family: activity.tokens.uiFont
                     font.pixelSize: activity.tokens.body
                     background: Rectangle {
-                        implicitWidth: Metrics.px(190, tokens)
-                        implicitHeight: Metrics.px(112, tokens)
+                        implicitWidth: KetTheme.px(190, KetTheme.zoom)
+                        implicitHeight: KetTheme.px(112, KetTheme.zoom)
                         color: activity.tokens.panelBackground || activity.tokens.surfaceRaised
                         border.color: activity.tokens.borderStrong || activity.tokens.border
                         border.width: 1
-                        radius: Metrics.px(7, tokens)
+                        radius: KetTheme.px(7, KetTheme.zoom)
                     }
                     Basic.MenuItem {
                         objectName: "copyChangedFilePathAction"
@@ -141,7 +141,7 @@ Rectangle {
                     }
                 }
                 KetToolTip {
-                    tokens: activity.tokens
+                    objectName: "ketToolTip"
                     visible: fileHover.hovered
                     text: activity.host.displayFilePath(fileRow.modelData.path || "") + (fileRow.missing ? " — no longer exists" : "")
                 }

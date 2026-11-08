@@ -71,8 +71,8 @@ The shared mapping is exported from `core/src/ui/InterfaceZoom.h`.
 pixels / 14 to `ket::Appearance`, so Qt repolish cannot overwrite kit recipe fonts. Kit Widgets and QML `KetTheme.zoom` therefore receive
 the same zoom as the legacy product adapters. `ChromeGeometry` and `TypeScale`
 use the kit's rounding function through the shared mapping: zero and hairlines
-stay fixed; text keeps its 8 pixel readability floor. The legacy QML
-`ChromeMetrics.px` uses the same factor from its token map. Scaled values are
+stay fixed; text keeps its 8 pixel readability floor. Agent Workspace QML calls
+`KetTheme.px(value, KetTheme.zoom)` directly. Scaled values are
 always recomputed from designed dimensions, never scaled a second time.
 
 `TypeScale` compatibility names resolve the current kit profile roles; they no
@@ -115,12 +115,17 @@ The transcript remains a virtualized Qt Quick view; macOS uses Metal.
 
 The application still contains legacy QSS and TypeScale consumers. Product glyph
 renderers now resolve Két Symbols through the kit mapping (optical masters and
-light weight). Legacy QML resource URLs are compatibility identifiers; the
-`TintedIcon` compatibility item renders `KetIcon`, not the old SVG paths.
+light weight). Agent Workspace uses `KetIcon` directly; legacy icon identifiers
+from activity/provider data are converted to symbol names at their consuming boundary.
 Pro links the static Ket QML module/plugin and its resources for offline loading.
-Its tooltip adapter delegates to `KetToolTip`. Working indicators and custom
-status effects share the kit clock, releasing holds when hidden, inactive,
-restoring history or when reduced motion is enabled.
+Tooltips use the kit's `KetToolTip` without a local type shadowing it. Working and
+history-loading indicators use the kit clock, releasing holds when hidden,
+minimized, restoring history or when reduced motion is enabled. The working
+indicator follows the kit's reduced clock rate when the application is inactive.
+Transcript premeasurement stops after all measurable bodies are exhausted;
+resource-backed bodies wait for their delegates instead of keeping a polling timer alive.
+New rows and layout changes re-arm measurement. Background-task elapsed time and
+held-message status polling stop while their window is hidden or minimized.
 The mock uses Két kit components and symbols; a design capture is not evidence
 that every production control has migrated. Terminal defaults and Mermaid configuration now resolve semantic tokens.
 Mermaid resources retain diagram/security settings and token placeholders; the

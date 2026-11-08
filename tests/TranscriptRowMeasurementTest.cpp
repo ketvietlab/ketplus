@@ -1,3 +1,4 @@
+#include "agent/AgentMessageModel.h"
 #include "agent/ChatMarkdown.h"
 #include "agent/TranscriptRowGeometry.h"
 #include "agent/TranscriptRowMeasurer.h"
@@ -45,6 +46,7 @@ class TranscriptRowMeasurementTest final : public QObject {
     void chromeLearnedFromOneRowSizesItsWholeShape();
     void realizedHeightOutranksADerivedOne();
     void unmeasuredKeysReportsNewestFirst();
+    void idleMeasurementExhaustsTextAndSkipsResourceBodies();
     void premeasuredPageMatchesTheGuiThread();
     void cachedPageTracksBodyFormatAndGeometryChanges();
 };
@@ -181,6 +183,24 @@ void TranscriptRowMeasurementTest::unmeasuredKeysReportsNewestFirst() {
 
     geometry.setBodyHeight(QStringLiteral("b"), 500);
     QCOMPARE(geometry.unmeasuredKeys(3), QStringList({QStringLiteral("a")}));
+}
+
+void TranscriptRowMeasurementTest::idleMeasurementExhaustsTextAndSkipsResourceBodies() {
+    ketplus::AgentMessageModel model;
+    model.reset(
+        {QVariantMap{{"kind", "assistant"}, {"messageKey", "text"}, {"body", paragraphs(3)}},
+         QVariantMap{
+             {"kind", "assistant"}, {"messageKey", "image"}, {"body", "![preview](missing.png)"}}});
+    // An unmeasurable newest row must not starve an older text row at a one-row limit.
+    QVERIFY(model.measureUnmeasuredRows(1, 400, QFont{}));
+    QTRY_VERIFY(!model.measureUnmeasuredRows(1, 400, QFont{}));
+    // A new layout invalidates the previous measurements and makes work available again.
+    model.geometry()->setLayoutFingerprint(QStringLiteral("narrow"));
+    QVERIFY(model.measureUnmeasuredRows(1, 240, QFont{}));
+    QTRY_VERIFY(!model.measureUnmeasuredRows(1, 240, QFont{}));
+    model.append({{"kind", "assistant"}, {"messageKey", "new"}, {"body", paragraphs(2)}});
+    QVERIFY(model.measureUnmeasuredRows(1, 240, QFont{}));
+    QTRY_VERIFY(!model.measureUnmeasuredRows(1, 240, QFont{}));
 }
 
 // A page measured before it reaches the model is only worth having if each row

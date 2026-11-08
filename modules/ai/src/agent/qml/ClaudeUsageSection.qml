@@ -1,4 +1,4 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
 import Ket as Kit
 import QtQuick.Layouts
@@ -9,7 +9,7 @@ ColumnLayout {
     property var session: ({})
     property var account: ({})
     signal refreshRequested
-    spacing: Metrics.px(8, workspace.t)
+    spacing: KetTheme.px(8, KetTheme.zoom)
     readonly property var report: account.report || ({})
     function dollars(value) {
         return typeof value === "number" && isFinite(value) && value >= 0 ? "$" + value.toFixed(4) : "Not reported";
@@ -81,8 +81,8 @@ ColumnLayout {
     }
     Rectangle {
         Layout.fillWidth: true
-        Layout.topMargin: Metrics.px(4, workspace.t)
-        Layout.bottomMargin: Metrics.px(4, workspace.t)
+        Layout.topMargin: KetTheme.px(4, KetTheme.zoom)
+        Layout.bottomMargin: KetTheme.px(4, KetTheme.zoom)
         Layout.preferredHeight: 1
         color: workspace.t.border
     }

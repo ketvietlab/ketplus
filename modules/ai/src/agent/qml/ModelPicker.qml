@@ -1,4 +1,4 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
 import Ket as Kit
 import QtQuick.Controls
@@ -103,15 +103,15 @@ Basic.Popup {
         const flick = settingsScroll.contentItem
         if (!flick || flick.contentY === undefined) return
         const top = item.mapToItem(settingsBody, 0, 0).y
-        const inset = Metrics.px(8, tokens)
+        const inset = KetTheme.px(8, KetTheme.zoom)
         let offset = flick.contentY
         if (top < offset + inset) offset = top - inset
         else if (top + item.height > offset + flick.height - inset)
             offset = top + item.height - flick.height + inset
         flick.contentY = Math.max(0, Math.min(offset, Math.max(0, flick.contentHeight - flick.height)))
     }
-    width: Math.min(Metrics.px(500, tokens), viewport.width - Metrics.px(32, tokens))
-    height: Math.min(settingsBody.implicitHeight + Metrics.px(116, tokens) + 2, viewport.height - Metrics.px(32, tokens))
+    width: Math.min(KetTheme.px(500, KetTheme.zoom), viewport.width - KetTheme.px(32, KetTheme.zoom))
+    height: Math.min(settingsBody.implicitHeight + KetTheme.px(116, KetTheme.zoom) + 2, viewport.height - KetTheme.px(32, KetTheme.zoom))
     x: (viewport.width - width) / 2
     y: (viewport.height - height) / 2
     padding: 0
@@ -195,10 +195,10 @@ Basic.Popup {
 
         RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: Metrics.px(58, tokens)
-            Layout.leftMargin: Metrics.px(22, tokens)
-            Layout.rightMargin: Metrics.px(14, tokens)
-            spacing: Metrics.px(8, tokens)
+            Layout.preferredHeight: KetTheme.px(58, KetTheme.zoom)
+            Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.rightMargin: KetTheme.px(14, KetTheme.zoom)
+            spacing: KetTheme.px(8, KetTheme.zoom)
 
             Text {
                 Layout.fillWidth: true
@@ -211,16 +211,22 @@ Basic.Popup {
             Basic.ToolButton {
                 id: closeButton
                 objectName: "closeModelPickerButton"
-                Layout.preferredWidth: Metrics.px(34, tokens)
-                Layout.preferredHeight: Metrics.px(34, tokens)
-                padding: Metrics.px(9, tokens)
-                contentItem: TintedIcon {
-                    source: "qrc:/agent/icons/plus.svg"
-                    rotation: 45
-                    color: picker.tokens.textMuted
+                Layout.preferredWidth: KetTheme.px(34, KetTheme.zoom)
+                Layout.preferredHeight: KetTheme.px(34, KetTheme.zoom)
+                padding: KetTheme.px(9, KetTheme.zoom)
+                contentItem: Item {
+                    implicitWidth: KetTheme.px(16, KetTheme.zoom)
+                    implicitHeight: implicitWidth
+                    KetIcon {
+                        anchors.centerIn: parent
+                        box: Math.min(parent.width, parent.height)
+                        name: KetTheme.iconForLucide("plus")
+                        rotation: 45
+                        color: picker.tokens.textMuted
+                    }
                 }
                 background: Rectangle {
-                    radius: Metrics.px(6, tokens)
+                    radius: KetTheme.px(6, KetTheme.zoom)
                     color: closeButton.hovered || closeButton.visualFocus
                            ? picker.tokens.surfaceHover : "transparent"
                 }
@@ -228,7 +234,7 @@ Basic.Popup {
                 onClicked: picker.close()
                 Accessible.name: "Close model picker"
                 KetToolTip {
-                    tokens: picker.tokens
+                    objectName: "ketToolTip"
                     visible: closeButton.hovered
                     text: "Close"
                 }
@@ -251,11 +257,11 @@ Basic.Popup {
             id: providerGrid
             objectName: "providerTabs"
             Layout.fillWidth: true
-            Layout.preferredHeight: Metrics.px(28, tokens)
-            Layout.leftMargin: Metrics.px(22, tokens)
-            Layout.rightMargin: Metrics.px(22, tokens)
-            Layout.topMargin: Metrics.px(12, tokens)
-            spacing: Metrics.px(22, tokens)
+            Layout.preferredHeight: KetTheme.px(28, KetTheme.zoom)
+            Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.topMargin: KetTheme.px(12, KetTheme.zoom)
+            spacing: KetTheme.px(22, KetTheme.zoom)
 
             Repeater {
                 model: [
@@ -269,7 +275,7 @@ Basic.Popup {
                     required property var modelData
                     objectName: "providerTab_" + modelData.id
                     width: contentItem.implicitWidth
-                    height: Metrics.px(28, tokens)
+                    height: KetTheme.px(28, KetTheme.zoom)
                     readonly property bool supported: modelData.id === "codex"
                         || (modelData.id === "claude" && picker.hasClaudeModels)
                         || (modelData.id === "cursor" && picker.hasCursorModels)
@@ -292,13 +298,13 @@ Basic.Popup {
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.bottom: parent.bottom
-                            height: Metrics.px(2, tokens)
+                            height: KetTheme.px(2, KetTheme.zoom)
                             visible: providerButton.enabled && picker.selectedProviderTab === providerButton.modelData.id
                             color: picker.tokens.accent
                         }
                     }
                     KetToolTip {
-                        tokens: picker.tokens
+                        objectName: "ketToolTip"
                         visible: providerButton.hovered
                         text: providerButton.enabled ? providerButton.modelData.label
                               : providerButton.lockedOut ? "Switch to " + providerButton.modelData.label + " after this turn"
@@ -318,9 +324,9 @@ Basic.Popup {
 
         Text {
             Layout.fillWidth: true
-            Layout.leftMargin: Metrics.px(22, tokens)
-            Layout.rightMargin: Metrics.px(22, tokens)
-            Layout.topMargin: Metrics.px(7, tokens)
+            Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.topMargin: KetTheme.px(7, KetTheme.zoom)
             text: picker.selectedProviderTab === "claude"
                   ? "Claude uses the local Agent SDK sidecar."
                   : picker.selectedProviderTab === "cursor"
@@ -344,8 +350,8 @@ Basic.Popup {
             Layout.fillWidth: true
             Layout.leftMargin: picker.look.paddingInline
             Layout.rightMargin: picker.look.paddingInline
-            Layout.topMargin: Metrics.px(14, tokens)
-            Layout.bottomMargin: Metrics.px(12, tokens)
+            Layout.topMargin: KetTheme.px(14, KetTheme.zoom)
+            Layout.bottomMargin: KetTheme.px(12, KetTheme.zoom)
             Kit.KetTextField {
                 id: modelSearch
                 objectName: "modelSearch"
@@ -372,10 +378,10 @@ Basic.Popup {
 
         Item {
             Layout.fillWidth: true
-            Layout.preferredHeight: Metrics.px(Math.max(60, Math.min(180, picker.filteredModels.length * 60)), tokens)
-            Layout.minimumHeight: Metrics.px(48, tokens)
-            Layout.leftMargin: Metrics.px(22, tokens)
-            Layout.rightMargin: Metrics.px(22, tokens)
+            Layout.preferredHeight: KetTheme.px(Math.max(60, Math.min(180, picker.filteredModels.length * 60)), KetTheme.zoom)
+            Layout.minimumHeight: KetTheme.px(48, KetTheme.zoom)
+            Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
 
             ListView {
                 id: modelList
@@ -399,33 +405,33 @@ Basic.Popup {
                     required property int index
                     objectName: "modelOption_" + modelData.model
                     width: ListView.view.width
-                    height: Metrics.px(60, tokens)
+                    height: KetTheme.px(60, KetTheme.zoom)
                     padding: 0
                     highlighted: picker.catalogMatches(modelData, picker.draftModel)
                     Accessible.name: modelData.displayName || modelData.model
 
                     contentItem: RowLayout {
-                        spacing: Metrics.px(11, tokens)
+                        spacing: KetTheme.px(11, KetTheme.zoom)
                         Rectangle {
-                            Layout.preferredWidth: Metrics.px(14, tokens)
-                            Layout.preferredHeight: Metrics.px(14, tokens)
-                            radius: Metrics.px(7, tokens)
+                            Layout.preferredWidth: KetTheme.px(14, KetTheme.zoom)
+                            Layout.preferredHeight: KetTheme.px(14, KetTheme.zoom)
+                            radius: KetTheme.px(7, KetTheme.zoom)
                             color: "transparent"
                             border.width: 1
                             border.color: modelRow.highlighted
                                           ? picker.tokens.tabActiveText : picker.tokens.borderStrong
                             Rectangle {
                                 anchors.centerIn: parent
-                                width: Metrics.px(6, tokens)
-                                height: Metrics.px(6, tokens)
-                                radius: Metrics.px(3, tokens)
+                                width: KetTheme.px(6, KetTheme.zoom)
+                                height: KetTheme.px(6, KetTheme.zoom)
+                                radius: KetTheme.px(3, KetTheme.zoom)
                                 visible: modelRow.highlighted
                                 color: picker.tokens.tabActiveText
                             }
                         }
                         Column {
                             Layout.fillWidth: true
-                            spacing: Metrics.px(3, tokens)
+                            spacing: KetTheme.px(3, KetTheme.zoom)
                             Text {
                                 width: parent.width
                                 text: modelRow.modelData.displayName || modelRow.modelData.model
@@ -446,9 +452,9 @@ Basic.Popup {
                         }
                         Rectangle {
                             visible: modelRow.index === 0
-                            Layout.preferredWidth: Metrics.px(50, tokens)
-                            Layout.preferredHeight: Metrics.px(22, tokens)
-                            radius: Metrics.px(4, tokens)
+                            Layout.preferredWidth: KetTheme.px(50, KetTheme.zoom)
+                            Layout.preferredHeight: KetTheme.px(22, KetTheme.zoom)
+                            radius: KetTheme.px(4, KetTheme.zoom)
                             color: picker.tokens.interactiveBackground
                             border.color: picker.tokens.border
                             Text {
@@ -470,7 +476,7 @@ Basic.Popup {
                         }
                         Rectangle {
                             anchors.fill: parent
-                            radius: Metrics.px(5, tokens)
+                            radius: KetTheme.px(5, KetTheme.zoom)
                             color: modelRow.hovered ? picker.tokens.surfaceHover : "transparent"
                             border.color: modelRow.visualFocus || (modelList.activeFocus && modelRow.ListView.isCurrentItem)
                                           ? picker.tokens.focus : "transparent"
@@ -481,7 +487,7 @@ Basic.Popup {
                         picker.chooseDraft(modelData)
                     }
                     KetToolTip {
-                        tokens: picker.tokens
+                        objectName: "ketToolTip"
                         visible: modelRow.hovered
                         text: modelData.description || modelData.model
                     }
@@ -492,7 +498,7 @@ Basic.Popup {
             ColumnLayout {
                 anchors.centerIn: parent
                 width: parent.width
-                spacing: Metrics.px(8, tokens)
+                spacing: KetTheme.px(8, KetTheme.zoom)
                 visible: picker.loading || !picker.available || picker.filteredModels.length === 0
                 Text {
                     objectName: "modelPickerEmptyState"
@@ -513,8 +519,8 @@ Basic.Popup {
                     text: picker.providerModels.length === 0 ? "Retry" : "Clear search"
                     font.family: picker.tokens.uiFont
                     font.pixelSize: picker.tokens.body
-                    implicitHeight: Metrics.px(32, tokens)
-                    horizontalPadding: Metrics.px(12, tokens)
+                    implicitHeight: KetTheme.px(32, KetTheme.zoom)
+                    horizontalPadding: KetTheme.px(12, KetTheme.zoom)
                     contentItem: Text {
                         text: retryModels.text
                         font: retryModels.font
@@ -523,7 +529,7 @@ Basic.Popup {
                         verticalAlignment: Text.AlignVCenter
                     }
                     background: Rectangle {
-                        radius: Metrics.px(5, tokens)
+                        radius: KetTheme.px(5, KetTheme.zoom)
                         color: retryModels.hovered ? picker.tokens.surfaceHover : picker.tokens.interactiveBackground
                         border.color: retryModels.visualFocus ? picker.tokens.focus : picker.tokens.borderStrong
                     }
@@ -546,11 +552,11 @@ Basic.Popup {
         ColumnLayout {
             visible: picker.displayedEfforts.length > 1
             Layout.fillWidth: true
-            Layout.leftMargin: Metrics.px(22, tokens)
-            Layout.rightMargin: Metrics.px(22, tokens)
-            Layout.topMargin: Metrics.px(14, tokens)
-            Layout.bottomMargin: Metrics.px(14, tokens)
-            spacing: Metrics.px(7, tokens)
+            Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.topMargin: KetTheme.px(14, KetTheme.zoom)
+            Layout.bottomMargin: KetTheme.px(14, KetTheme.zoom)
+            spacing: KetTheme.px(7, KetTheme.zoom)
 
             RowLayout {
                 Layout.fillWidth: true
@@ -575,7 +581,7 @@ Basic.Popup {
                 id: effortSlider
                 objectName: "effortSlider"
                 Layout.fillWidth: true
-                Layout.preferredHeight: Metrics.px(24, tokens)
+                Layout.preferredHeight: KetTheme.px(24, KetTheme.zoom)
                 from: 0
                 to: Math.max(1, picker.displayedEfforts.length - 1)
                 stepSize: 1
@@ -591,14 +597,14 @@ Basic.Popup {
                     x: effortSlider.leftPadding
                     y: (effortSlider.height - height) / 2
                     width: effortSlider.availableWidth
-                    height: Metrics.px(4, tokens)
-                    radius: Metrics.px(2, tokens)
+                    height: KetTheme.px(4, KetTheme.zoom)
+                    radius: KetTheme.px(2, KetTheme.zoom)
                     color: picker.tokens.interactiveActive
                     border.color: effortSlider.visualFocus ? picker.tokens.focus : picker.tokens.borderStrong
                     Rectangle {
                         height: parent.height
                         width: effortSlider.position * parent.width
-                        radius: Metrics.px(2, tokens)
+                        radius: KetTheme.px(2, KetTheme.zoom)
                         color: picker.tokens.accent
                         visible: effortSlider.enabled && picker.effortIndex >= 0
                     }
@@ -607,9 +613,9 @@ Basic.Popup {
                     objectName: "effortHandle"
                     x: effortSlider.leftPadding + effortSlider.visualPosition * (effortSlider.availableWidth - width)
                     y: (effortSlider.height - height) / 2
-                    width: Metrics.px(16, tokens)
-                    height: Metrics.px(16, tokens)
-                    radius: Metrics.px(8, tokens)
+                    width: KetTheme.px(16, KetTheme.zoom)
+                    height: KetTheme.px(16, KetTheme.zoom)
+                    radius: KetTheme.px(8, KetTheme.zoom)
                     visible: picker.effortIndex >= 0
                     color: effortSlider.enabled ? picker.tokens.accent : picker.tokens.textDisabled
                     border.color: picker.tokens.surfaceRaised
@@ -621,7 +627,7 @@ Basic.Popup {
 
             Item {
                 Layout.fillWidth: true
-                Layout.preferredHeight: Metrics.px(14, tokens)
+                Layout.preferredHeight: KetTheme.px(14, KetTheme.zoom)
                 Repeater {
                     model: picker.displayedEfforts
                     Text {
@@ -645,10 +651,10 @@ Basic.Popup {
         CompactWindowControl {
             id: compactControl
             Layout.fillWidth: true
-            Layout.leftMargin: Metrics.px(22, tokens)
-            Layout.rightMargin: Metrics.px(22, tokens)
-            Layout.topMargin: Metrics.px(16, tokens)
-            Layout.bottomMargin: Metrics.px(16, tokens)
+            Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.topMargin: KetTheme.px(16, KetTheme.zoom)
+            Layout.bottomMargin: KetTheme.px(16, KetTheme.zoom)
             tokens: picker.tokens
             onFocusRequested: (item) => picker.revealControl(item)
             supported: picker.canCustomizeCompact
@@ -659,9 +665,9 @@ Basic.Popup {
         Text {
             objectName: "modelConfigurationError"
             Layout.fillWidth: true
-            Layout.leftMargin: Metrics.px(22, tokens)
-            Layout.rightMargin: Metrics.px(22, tokens)
-            Layout.bottomMargin: Metrics.px(12, tokens)
+            Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.bottomMargin: KetTheme.px(12, KetTheme.zoom)
             visible: picker.applyError.length > 0
             text: picker.applyError
             wrapMode: Text.Wrap
@@ -677,10 +683,10 @@ Basic.Popup {
 
         RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: Metrics.px(58, tokens)
-            Layout.leftMargin: Metrics.px(22, tokens)
-            Layout.rightMargin: Metrics.px(22, tokens)
-            spacing: Metrics.px(8, tokens)
+            Layout.preferredHeight: KetTheme.px(58, KetTheme.zoom)
+            Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
+            spacing: KetTheme.px(8, KetTheme.zoom)
             Item { Layout.fillWidth: true }
             Basic.Button {
                 id: resetEffort
@@ -689,8 +695,8 @@ Basic.Popup {
                 enabled: picker.available && !picker.loading &&
                          (compactControl.requested !== null || (picker.defaultEffort.length > 0 && picker.defaultEffort !== picker.draftEffort) ||
                           (picker.providerModels.length > 0 && picker.providerModels[0].model !== picker.draftModel))
-                implicitHeight: Metrics.px(34, tokens)
-                horizontalPadding: Metrics.px(12, tokens)
+                implicitHeight: KetTheme.px(34, KetTheme.zoom)
+                horizontalPadding: KetTheme.px(12, KetTheme.zoom)
                 contentItem: Text {
                     text: resetEffort.text
                     color: resetEffort.enabled ? picker.tokens.textMain : picker.tokens.textDisabled
@@ -700,7 +706,7 @@ Basic.Popup {
                     verticalAlignment: Text.AlignVCenter
                 }
                 background: Rectangle {
-                    radius: Metrics.px(5, tokens)
+                    radius: KetTheme.px(5, KetTheme.zoom)
                     color: resetEffort.hovered ? picker.tokens.surfaceHover : "transparent"
                 }
                 onClicked: picker.restoreDefaults()
@@ -710,8 +716,8 @@ Basic.Popup {
                 objectName: "cancelModelButton"
                 text: qsTr("Cancel")
                 enabled: !picker.applying
-                implicitHeight: Metrics.px(34, tokens)
-                horizontalPadding: Metrics.px(12, tokens)
+                implicitHeight: KetTheme.px(34, KetTheme.zoom)
+                horizontalPadding: KetTheme.px(12, KetTheme.zoom)
                 contentItem: Text {
                     text: cancelButton.text
                     color: picker.tokens.textMain
@@ -719,7 +725,7 @@ Basic.Popup {
                     font.pixelSize: picker.tokens.body
                     verticalAlignment: Text.AlignVCenter
                 }
-                background: Rectangle { radius: Metrics.px(5, tokens); color: cancelButton.hovered ? picker.tokens.surfaceHover : "transparent" }
+                background: Rectangle { radius: KetTheme.px(5, KetTheme.zoom); color: cancelButton.hovered ? picker.tokens.surfaceHover : "transparent" }
                 onClicked: picker.close()
             }
             Basic.Button {
@@ -727,8 +733,8 @@ Basic.Popup {
                 objectName: "applyModelButton"
                 text: picker.applying ? qsTr("Applying…") : picker.applyError ? qsTr("Retry") : qsTr("Apply")
                 enabled: picker.available && !picker.loading && !picker.applying && !picker.blockedReason && compactControl.valid && picker.draftModel.length > 0
-                implicitHeight: Metrics.px(34, tokens)
-                horizontalPadding: Metrics.px(15, tokens)
+                implicitHeight: KetTheme.px(34, KetTheme.zoom)
+                horizontalPadding: KetTheme.px(15, KetTheme.zoom)
                 contentItem: Text {
                     text: applyButton.text
                     color: Kit.KetTheme.t.actionPrimaryInk
@@ -738,7 +744,7 @@ Basic.Popup {
                     verticalAlignment: Text.AlignVCenter
                 }
                 background: Rectangle {
-                    radius: Metrics.px(5, tokens)
+                    radius: KetTheme.px(5, KetTheme.zoom)
                     color: applyButton.pressed ? picker.tokens.actionPrimaryActive
                            : applyButton.hovered ? picker.tokens.actionPrimaryHover : picker.tokens.actionPrimary
                 }

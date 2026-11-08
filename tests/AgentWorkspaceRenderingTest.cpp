@@ -584,6 +584,8 @@ void AgentWorkspaceViewTest::composerPreview() {
         const auto shot = view.quickView()->grabWindow();
         QVERIFY(!shot.isNull());
         QVERIFY(shot.save(capture));
+        // Opt-in time for native computer-use inspection of this synthetic fixture.
+        QTest::qWait(qBound(0, qEnvironmentVariableIntValue("KETPLUS_COMPOSER_INSPECT_MS"), 60000));
     }
     auto* permissionButton = root->findChild<QQuickItem*>("permissionButton");
     QVERIFY(permissionButton);
@@ -704,11 +706,6 @@ void AgentWorkspaceViewTest::tooltipsFollowDesignSystem() {
 
     const auto recipe = ket::tooltipRecipe(ket::Appearance::instance().theme());
     const auto zoom = ket::Appearance::instance().zoom();
-    QCOMPARE(tooltip->property("backgroundColor").value<QColor>(), recipe.background);
-    QCOMPARE(tooltip->property("labelColor").value<QColor>(), recipe.text);
-    QCOMPARE(tooltip->property("cornerRadius").toDouble(),
-             ket::Appearance::scale(recipe.radius, zoom));
-
     auto* background = qvariant_cast<QObject*>(tooltip->property("background"));
     auto* contentItem = qvariant_cast<QObject*>(tooltip->property("contentItem"));
     QVERIFY(background);
@@ -1909,9 +1906,12 @@ void AgentWorkspaceViewTest::pastesImagesAndOpensIndividualFiles() {
     QCOMPARE(firstLabel->property("text").toString(), QStringLiteral("worktree-a/src/first.cpp"));
     auto* fileTooltip = rows.constFirst()->findChild<QObject*>(QStringLiteral("ketToolTip"));
     QVERIFY(fileTooltip);
-    QCOMPARE(fileTooltip->property("backgroundColor").value<QColor>(),
+    auto* tooltipBackground = qvariant_cast<QObject*>(fileTooltip->property("background"));
+    auto* tooltipLabel = qvariant_cast<QObject*>(fileTooltip->property("contentItem"));
+    QVERIFY(tooltipBackground && tooltipLabel);
+    QCOMPARE(tooltipBackground->property("color").value<QColor>(),
              ket::tooltipRecipe(ket::Appearance::instance().theme()).background);
-    QCOMPARE(fileTooltip->property("labelColor").value<QColor>(),
+    QCOMPARE(tooltipLabel->property("color").value<QColor>(),
              ket::tooltipRecipe(ket::Appearance::instance().theme()).text);
     QTest::mouseClick(view.quickView(), Qt::RightButton, Qt::NoModifier,
                       rows.constFirst()->mapToScene(QPointF(30, 12)).toPoint());

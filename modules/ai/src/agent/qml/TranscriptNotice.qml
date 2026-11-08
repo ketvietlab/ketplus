@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
 import Ket 1.0 as Kit
-import "ChromeMetrics.js" as Metrics
 
 Rectangle {
     id: notice

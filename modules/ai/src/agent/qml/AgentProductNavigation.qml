@@ -1,4 +1,4 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
 import Ket as Kit
 import QtQuick.Controls.Basic as Basic
@@ -10,21 +10,21 @@ ColumnLayout {
     required property var workspace
     required property bool compactHeight
     spacing: 0
-    implicitHeight: compactHeight ? Metrics.px(259, workspace.t) : Metrics.px(293, workspace.t)
+    implicitHeight: compactHeight ? KetTheme.px(259, KetTheme.zoom) : KetTheme.px(293, KetTheme.zoom)
     Layout.minimumHeight: implicitHeight
 
     Item {
         id: brand
         objectName: "productBrand"
         Layout.fillWidth: true
-        Layout.preferredHeight: navigation.compactHeight ? Metrics.px(54, workspace.t) : Metrics.px(67, workspace.t)
+        Layout.preferredHeight: navigation.compactHeight ? KetTheme.px(54, KetTheme.zoom) : KetTheme.px(67, KetTheme.zoom)
 
         Image {
             anchors.left: parent.left
-            anchors.leftMargin: Metrics.px(13, workspace.t)
+            anchors.leftMargin: KetTheme.px(13, KetTheme.zoom)
             anchors.verticalCenter: parent.verticalCenter
-            width: Metrics.px(176, workspace.t)
-            height: Metrics.px(44, workspace.t)
+            width: KetTheme.px(176, KetTheme.zoom)
+            height: KetTheme.px(44, KetTheme.zoom)
             source: navigation.workspace.t.dark
                     ? "qrc:/agent/brand/ketplus-logo-dark.png"
                     : "qrc:/agent/brand/ketplus-logo-light.png"
@@ -40,9 +40,9 @@ ColumnLayout {
         id: quickSearch
         objectName: "productQuickSearch"
         Layout.fillWidth: true
-        Layout.leftMargin: Metrics.px(9, workspace.t)
-        Layout.rightMargin: Metrics.px(9, workspace.t)
-        Layout.bottomMargin: Metrics.px(10, workspace.t)
+        Layout.leftMargin: KetTheme.px(9, KetTheme.zoom)
+        Layout.rightMargin: KetTheme.px(9, KetTheme.zoom)
+        Layout.bottomMargin: KetTheme.px(10, KetTheme.zoom)
         text: "Quick search"
         iconName: Kit.KetTheme.iconForLucide("search")
         shortcut: "⌘ K"
@@ -54,9 +54,9 @@ ColumnLayout {
         id: productNavigation
         objectName: "productNavigation"
         Layout.fillWidth: true
-        Layout.leftMargin: Metrics.px(8, workspace.t)
-        Layout.rightMargin: Metrics.px(8, workspace.t)
-        spacing: Metrics.px(2, workspace.t)
+        Layout.leftMargin: KetTheme.px(8, KetTheme.zoom)
+        Layout.rightMargin: KetTheme.px(8, KetTheme.zoom)
+        spacing: KetTheme.px(2, KetTheme.zoom)
 
         Repeater {
             objectName: "productNavigationRepeater"
@@ -82,10 +82,10 @@ ColumnLayout {
         id: divider
         Layout.fillWidth: true
         Layout.preferredHeight: 1
-        Layout.leftMargin: Metrics.px(11, workspace.t)
-        Layout.rightMargin: Metrics.px(11, workspace.t)
-        Layout.topMargin: navigation.compactHeight ? Metrics.px(10, workspace.t) : Metrics.px(18, workspace.t)
-        Layout.bottomMargin: navigation.compactHeight ? Metrics.px(10, workspace.t) : Metrics.px(14, workspace.t)
+        Layout.leftMargin: KetTheme.px(11, KetTheme.zoom)
+        Layout.rightMargin: KetTheme.px(11, KetTheme.zoom)
+        Layout.topMargin: navigation.compactHeight ? KetTheme.px(10, KetTheme.zoom) : KetTheme.px(18, KetTheme.zoom)
+        Layout.bottomMargin: navigation.compactHeight ? KetTheme.px(10, KetTheme.zoom) : KetTheme.px(14, KetTheme.zoom)
         color: navigation.workspace.t.border
     }
 }

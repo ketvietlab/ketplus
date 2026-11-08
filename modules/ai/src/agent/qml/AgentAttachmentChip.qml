@@ -1,8 +1,8 @@
+import Ket
 import QtQuick
 import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
 import Ket as Kit
-import "ChromeMetrics.js" as Metrics
 
 Rectangle {
     id: attachmentChip
@@ -64,11 +64,11 @@ Rectangle {
                 box: attachmentChip.recipe.iconSize
                 color: attachmentChip.recipe.text
             }
-            Layout.preferredWidth: Metrics.px(24, root.t)
-            Layout.preferredHeight: Metrics.px(24, root.t)
+            Layout.preferredWidth: KetTheme.px(24, KetTheme.zoom)
+            Layout.preferredHeight: KetTheme.px(24, KetTheme.zoom)
             onClicked: agentHost.removeAttachment(index)
             KetToolTip {
-                tokens: root.t
+                objectName: "ketToolTip"
                 visible: removeAttachmentButton.hovered
                 text: "Remove attachment"
             }
@@ -85,7 +85,7 @@ Rectangle {
         onClicked: attachmentChip.previewAttachment()
     }
     KetToolTip {
-        tokens: root.t
+        objectName: "ketToolTip"
         visible: modelData.image && attachmentChipHover.hovered && !removeAttachmentButton.hovered
         text: "Click to preview"
     }

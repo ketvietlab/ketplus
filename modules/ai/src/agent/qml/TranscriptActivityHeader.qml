@@ -1,6 +1,6 @@
+import Ket
 import QtQuick
 import Ket 1.0 as Kit
-import "ChromeMetrics.js" as Metrics
 
 Kit.KetActivityRow {
     id: activityHeader
@@ -27,7 +27,7 @@ Kit.KetActivityRow {
         radius: activityHeader.recipe.radius
     }
 
-    TintedIcon {
+    KetIcon {
         id: activityIcon
         visible: !activity.compact
         width: activity.compact ? 0 : activityHeader.recipe.iconSize
@@ -35,8 +35,9 @@ Kit.KetActivityRow {
         anchors.left: parent.left
         anchors.leftMargin: activity.compact ? 0 : activityHeader.recipe.paddingInline
         y: Math.round(activityHeader.firstLineCenter - height / 2)
-        source: activity.iconSource()
+        name: KetTheme.iconForLucide((activity.iconSource()).toString().split("/").pop().replace(/\.svg$/, ""))
         color: activity.running ? activity.tokens.accentText : activity.tokens.textMuted
+        box: activity.compact ? 0 : activityHeader.recipe.iconSize
     }
 
     Text {
@@ -45,7 +46,7 @@ Kit.KetActivityRow {
         anchors.left: activityIcon.right
         anchors.leftMargin: activity.compact ? 0 : activityHeader.recipe.spacing
         anchors.right: browserOpen.left
-        anchors.rightMargin: Metrics.px(8, tokens)
+        anchors.rightMargin: KetTheme.px(8, KetTheme.zoom)
         y: activityHeader.titleTop
         // Middle elision only applies to a single line, so a collapsed
         // multi-line command folds onto one; a command is never markup.
@@ -70,7 +71,7 @@ Kit.KetActivityRow {
         objectName: "transcriptActivityChevron"
         anchors.right: parent.right
         y: Math.round(activityHeader.firstLineCenter - height / 2)
-        width: activity.hasDetails ? Metrics.px(18, tokens) : 0
+        width: activity.hasDetails ? KetTheme.px(18, KetTheme.zoom) : 0
         visible: activity.hasDetails
         name: activity.expanded ? "chevron-down" : "chevron-right"
         box: activityHeader.recipe.chevronSize
@@ -82,10 +83,10 @@ Kit.KetActivityRow {
         objectName: "transcriptBrowserOpen"
         visible: activity.browserOpenAction
         anchors.right: detailChevron.left
-        anchors.rightMargin: visible ? Metrics.px(8, tokens) : 0
+        anchors.rightMargin: visible ? KetTheme.px(8, KetTheme.zoom) : 0
         y: Math.round(activityHeader.firstLineCenter - height / 2)
-        width: visible ? Metrics.px(46, tokens) : 0
-        height: Metrics.px(26, tokens)
+        width: visible ? KetTheme.px(46, KetTheme.zoom) : 0
+        height: KetTheme.px(26, KetTheme.zoom)
         text: "Open"
         variant: Kit.KetTheme.ButtonVariant.Ghost
         controlSize: Kit.KetTheme.ControlSize.Small
@@ -110,9 +111,9 @@ Kit.KetActivityRow {
         objectName: "toolActivityShine"
         visible: activity.running && !activity.compact
         anchors.verticalCenter: activityIcon.verticalCenter
-        width: Metrics.px(4, tokens)
-        height: Metrics.px(4, tokens)
-        radius: Metrics.px(2, tokens)
+        width: KetTheme.px(4, KetTheme.zoom)
+        height: KetTheme.px(4, KetTheme.zoom)
+        radius: KetTheme.px(2, KetTheme.zoom)
         color: activity.tokens.accent
     }
 
@@ -124,7 +125,7 @@ Kit.KetActivityRow {
         onTapped: function (point) {
             if (activity.browserOpenAction && point.position.x >= browserOpen.x)
                 return;
-            if (activity.opensFile && (!activity.hasDetails || point.position.x < detailChevron.x - Metrics.px(4, activity.tokens)))
+            if (activity.opensFile && (!activity.hasDetails || point.position.x < detailChevron.x - KetTheme.px(4, KetTheme.zoom)))
                 activity.openFile();
             else
                 activity.toggleDetails();

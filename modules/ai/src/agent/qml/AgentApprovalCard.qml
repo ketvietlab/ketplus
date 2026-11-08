@@ -1,4 +1,4 @@
-import "ChromeMetrics.js" as Metrics
+import Ket
 import QtQuick
 import Ket 1.0 as Kit
 import QtQuick.Controls.Basic as Basic
