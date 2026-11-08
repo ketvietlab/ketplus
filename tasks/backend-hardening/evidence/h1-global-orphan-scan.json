@@ -1,0 +1,42 @@
+{
+  "baseline": "90388ea772bf75267e66233ee66566bc0e2e18e8",
+  "scope": "isolated SELECT probe of production orphan predicate, not Qt runtime acceptance",
+  "raw_payload_bytes_approx": 1024,
+  "temporary_databases_removed": true,
+  "results": [
+    {
+      "raw_events": 0,
+      "orphan_candidates": 32,
+      "ms": [
+        0.06,
+        0.04,
+        0.03
+      ],
+      "plan": [
+        "SCAN p",
+        "CORRELATED SCALAR SUBQUERY 1",
+        "SEARCH e USING INDEX events_turn (session_id=? AND generation=?)",
+        "CORRELATED SCALAR SUBQUERY 2",
+        "SEARCH r USING INDEX replay_events_item_transfer (session_id=? AND generation=? AND item_id=? AND <expr>=?)"
+      ],
+      "sqlite": "3.43.1"
+    },
+    {
+      "raw_events": 100000,
+      "orphan_candidates": 32,
+      "ms": [
+        4435.48,
+        4701.39,
+        4719.78
+      ],
+      "plan": [
+        "SCAN p",
+        "CORRELATED SCALAR SUBQUERY 1",
+        "SEARCH e USING INDEX events_turn (session_id=? AND generation=?)",
+        "CORRELATED SCALAR SUBQUERY 2",
+        "SEARCH r USING INDEX replay_events_item_transfer (session_id=? AND generation=? AND item_id=? AND <expr>=?)"
+      ],
+      "sqlite": "3.43.1"
+    }
+  ]
+}

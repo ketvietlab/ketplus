@@ -8,27 +8,65 @@
 
 namespace ketplus::daemon {
 namespace {
-QJsonArray threadsOf(const StoredSession& session) {
-    return provider_handoff::threadReferences(
-        session.adapter, session.threadId,
-        QJsonDocument::fromJson(session.providerThreads.toUtf8()).object());
+std::optional<QJsonArray> threadsOf(const StoredSession& session) {
+    const auto document = QJsonDocument::fromJson(session.providerThreads.toUtf8());
+    if (!document.isObject())
+        return std::nullopt;
+    const auto threads = document.object();
+    for (auto provider = threads.begin(); provider != threads.end(); ++provider) {
+        if (provider.key().isEmpty() || !provider.value().isObject())
+            return std::nullopt;
+        const auto entry = provider.value().toObject();
+        // Unknown fields may carry ownership in a newer format. Preserve them
+        // for recovery instead of proving absence from a partial interpretation.
+        for (auto field = entry.begin(); field != entry.end(); ++field)
+            if (field.key() != "thread_id" && field.key() != "retired_thread_ids")
+                return std::nullopt;
+        if (entry.contains("thread_id") && !entry.value("thread_id").isString())
+            return std::nullopt;
+        if (entry.contains("retired_thread_ids")) {
+            if (!entry.value("retired_thread_ids").isArray())
+                return std::nullopt;
+            for (const auto& id : entry.value("retired_thread_ids").toArray())
+                if (!id.isString())
+                    return std::nullopt;
+        }
+    }
+    return provider_handoff::threadReferences(session.adapter, session.threadId, threads);
 }
-bool referenced(const QList<StoredSession>& sessions, const QString& except,
-                const QString& provider, const QString& threadId) {
-    for (const auto& session : sessions)
-        if (session.id != except && threadsOf(session).contains(QJsonObject{
-                                        {"provider", provider}, {"thread_id", threadId}}))
+using Ownership = QList<QPair<QString, QJsonArray>>;
+std::optional<Ownership> readOwnership(const LocalJournal& journal) {
+    const auto sessions = journal.readSessions();
+    if (!sessions)
+        return std::nullopt;
+    Ownership result;
+    for (const auto& session : *sessions) {
+        const auto threads = threadsOf(session);
+        if (!threads)
+            return std::nullopt;
+        result.append({session.id, *threads});
+    }
+    return result;
+}
+bool referenced(const Ownership& ownership, const QString& except, const QString& provider,
+                const QString& threadId) {
+    const QJsonObject target{{"provider", provider}, {"thread_id", threadId}};
+    for (const auto& session : ownership)
+        if (session.first != except && session.second.contains(target))
             return true;
     return false;
 }
 } // namespace
 
-QJsonArray SessionHost::providerCleanupTargets(const StoredSession& session) const {
+std::optional<QJsonArray> SessionHost::providerCleanupTargets(const StoredSession& session) const {
     QJsonArray targets;
-    const auto retained = journal_->sessions();
-    for (const auto& value : threadsOf(session)) {
+    const auto retained = readOwnership(*journal_);
+    const auto owned = threadsOf(session);
+    if (!retained || !owned)
+        return std::nullopt;
+    for (const auto& value : *owned) {
         const auto target = value.toObject();
-        if (!referenced(retained, session.id, target.value("provider").toString(),
+        if (!referenced(*retained, session.id, target.value("provider").toString(),
                         target.value("thread_id").toString()))
             targets.append(target);
     }
@@ -52,7 +90,13 @@ void SessionHost::processDeletionWork() {
             if (providerCleanupInFlight_.contains(key))
                 continue;
             // A retained conversation wins over a queued cleanup, including after restart.
-            if (referenced(journal_->sessions(), {}, provider, thread)) {
+            const auto retained = readOwnership(*journal_);
+            if (!retained) {
+                qWarning("Provider cleanup deferred: retained session ownership is unreadable or "
+                         "unsupported.");
+                return;
+            }
+            if (referenced(*retained, {}, provider, thread)) {
                 journal_->completeProviderCleanup(id, generation, provider, thread);
                 continue;
             }

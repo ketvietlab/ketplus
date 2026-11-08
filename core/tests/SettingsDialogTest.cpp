@@ -1,4 +1,5 @@
 #include "app/SettingsDialog.h"
+#include "ui/KetFonts.h"
 #include "ui/Theme.h"
 
 #include <QAbstractButton>
@@ -6,6 +7,7 @@
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QListWidget>
+#include <QRawFont>
 #include <QSettings>
 #include <QSpinBox>
 #include <QTemporaryDir>
@@ -41,6 +43,7 @@ class SettingsDialogTest final : public QObject {
 
   private slots:
     void editsAndResetsTypography();
+    void defaultFontResolvesWithoutPlatformFallback();
     void persistsAndNormalizesAppearance();
     void previewsAndCancelsThemeSelection();
     void extensionPagesDriveDirtyState();
@@ -48,6 +51,19 @@ class SettingsDialogTest final : public QObject {
     void ordersAndSelectsRegisteredPagesByStableIdentity();
     void removesDestroyedPageAndFallsBackToGeneral();
 };
+
+void SettingsDialogTest::defaultFontResolvesWithoutPlatformFallback() {
+    ketplus::registerKetFonts();
+    ketplus::ThemeManager theme(*qApp);
+    auto settings = ketplus::EditorSettings::defaults();
+    QCOMPARE(QRawFont::fromFont(settings.font()).familyName(), QStringLiteral("KET Sans Mono"));
+    QCOMPARE(QRawFont::fromFont(settings.font()).styleName(), QStringLiteral("Medium"));
+    settings.fontFamily = QStringLiteral("KÉT Sans Mono");
+    QCOMPARE(settings.normalized().fontFamily, QStringLiteral("KET Sans Mono"));
+    QCOMPARE(QRawFont::fromFont(settings.font()).familyName(), QStringLiteral("KET Sans Mono"));
+    settings.fontFamily = QStringLiteral("Custom mono family");
+    QCOMPARE(settings.normalized().fontFamily, settings.fontFamily);
+}
 
 void SettingsDialogTest::editsAndResetsTypography() {
     auto initial = ketplus::EditorSettings::defaults();
@@ -118,7 +134,7 @@ void SettingsDialogTest::persistsAndNormalizesAppearance() {
     QVERIFY(directory.isValid());
     QSettings storage(directory.filePath(QStringLiteral("settings.ini")), QSettings::IniFormat);
     auto settings = ketplus::AppearanceSettings::defaults();
-    QCOMPARE(settings.editor.fontFamily, QStringLiteral("KÉT Sans Mono"));
+    QCOMPARE(settings.editor.fontFamily, QStringLiteral("KET Sans Mono"));
     QCOMPARE(settings.editor.fontSizePixels, 14);
     settings.interfaceFontSizePixels = 99;
     settings.editor.fontSizePixels = 18;

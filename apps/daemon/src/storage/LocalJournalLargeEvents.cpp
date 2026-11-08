@@ -7,6 +7,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QUuid>
+#include <limits>
 
 namespace ketplus::daemon {
 namespace {
@@ -49,9 +50,11 @@ bool insertEvent(QSqlDatabase database, const QString& sessionId, const qint64 g
     insert.addBindValue(QString::fromUtf8(encoded));
     insert.addBindValue(sentAt);
     insert.addBindValue(turnSequence);
-    if (!insert.exec()) {
+    if (!insert.exec() || insert.numRowsAffected() != 1) {
         if (error != nullptr) {
-            *error = insert.lastError().text();
+            *error = insert.lastError().isValid()
+                         ? insert.lastError().text()
+                         : QStringLiteral("Large-item delivery event was not stored.");
         }
         return false;
     }
@@ -82,6 +85,12 @@ qint64 LocalJournal::appendLargeEvent(const QString& sessionId, const qint64 gen
         QCryptographicHash::hash(encodedPayload, QCryptographicHash::Sha256).toHex());
     const qint64 totalBytes = encodedPayload.size();
     const qint64 chunkCount = (totalBytes + cloudChunkBytes - 1) / cloudChunkBytes;
+    if (firstCursor < 1 || firstCursor > std::numeric_limits<qint64>::max() - chunkCount) {
+        database_.rollback();
+        if (error != nullptr)
+            *error = QStringLiteral("Journal cursor cannot hold the complete large-item transfer.");
+        return -1;
+    }
     const qint64 revision = firstCursor + chunkCount;
     const QString sentAt = protocol::timestamp();
 
@@ -101,10 +110,12 @@ qint64 LocalJournal::appendLargeEvent(const QString& sessionId, const qint64 gen
     large.addBindValue(QByteArray(""));
     large.addBindValue(sentAt);
     large.addBindValue(totalBytes);
-    if (!large.exec()) {
+    if (!large.exec() || large.numRowsAffected() != 1) {
         database_.rollback();
         if (error != nullptr) {
-            *error = large.lastError().text();
+            *error = large.lastError().isValid()
+                         ? large.lastError().text()
+                         : QStringLiteral("Large-item manifest was not stored.");
         }
         return -1;
     }
@@ -118,10 +129,12 @@ qint64 LocalJournal::appendLargeEvent(const QString& sessionId, const qint64 gen
         slice.addBindValue(transferId);
         slice.addBindValue(offset);
         slice.addBindValue(encodedPayload.mid(offset, storedFragmentBytes));
-        if (!slice.exec()) {
+        if (!slice.exec() || slice.numRowsAffected() != 1) {
             database_.rollback();
             if (error != nullptr) {
-                *error = slice.lastError().text();
+                *error = slice.lastError().isValid()
+                             ? slice.lastError().text()
+                             : QStringLiteral("Large-item fragment was not stored.");
             }
             return -1;
         }
@@ -205,12 +218,20 @@ qint64 LocalJournal::appendLargeEvent(const QString& sessionId, const qint64 gen
     update.addBindValue(turnSequence);
     update.addBindValue(sessionId);
     update.addBindValue(generation);
-    if (!update.exec() || !database_.commit()) {
+    if (!update.exec() || update.numRowsAffected() != 1) {
         database_.rollback();
         if (error != nullptr) {
-            *error = update.lastError().text().isEmpty() ? database_.lastError().text()
-                                                         : update.lastError().text();
+            *error = update.lastError().isValid()
+                         ? update.lastError().text()
+                         : QStringLiteral("Large-item session cursor was not stored.");
         }
+        return -1;
+    }
+    if (!database_.commit()) {
+        const QString commitError = database_.lastError().text();
+        database_.rollback();
+        if (error != nullptr)
+            *error = commitError;
         return -1;
     }
     return cursor;
