@@ -346,11 +346,11 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAda
         }
         // Clients read a turn as running until its turn.completed arrives, so an interrupted
         // turn without one kept the phone's composer locked.
-        if (session.stored.state == QStringLiteral("interrupted") &&
-            journal_->hasOpenTurn(session.stored.id, session.stored.generation))
-            (void)appendEvent(session, QStringLiteral("turn.completed"),
-                              {{QStringLiteral("status"), QStringLiteral("interrupted")}});
         auto inserted = sessions_.insert(stored.id, session);
+        if (inserted->stored.state == QStringLiteral("interrupted") &&
+            journal_->hasOpenTurn(stored.id, stored.generation))
+            (void)appendEvent(*inserted, QStringLiteral("turn.completed"),
+                              {{QStringLiteral("status"), QStringLiteral("interrupted")}});
         // Older builds could persist an entire pasted handoff as a provider title.
         // Repair only that recognizable shape; ordinary and manual titles stay intact.
         if (stored.title.contains(QStringLiteral("<ketplus_response_preferences>")) &&
@@ -1518,7 +1518,11 @@ QJsonObject SessionHost::deleteSession(const QJsonObject& request) {
                          "Stop background tasks before deleting this conversation.");
     }
     const auto targets = providerCleanupTargets(session->stored);
-    for (const auto& value : targets) {
+    if (!targets)
+        return error(QStringLiteral("journal_error"),
+                     QStringLiteral("Provider thread ownership could not be read; the conversation "
+                                    "was kept."));
+    for (const auto& value : *targets) {
         const auto provider = value.toObject().value("provider").toString();
         if (provider != "codex" && provider != "claude")
             return error(
@@ -1528,12 +1532,14 @@ QJsonObject SessionHost::deleteSession(const QJsonObject& request) {
     const auto lastCursor = session->stored.lastCursor;
     QString journalError;
     if (!journal_->deleteSession(sessionId, generation, operationId, lifecycleRevision,
-                                 &journalError, targets)) {
+                                 &journalError, *targets)) {
         return error(QStringLiteral("journal_error"), journalError);
     }
     if (!threadId.isEmpty())
         sessionsByThread_.remove(threadId);
     QDir(handoffDirectory(sessionId)).removeRecursively();
+    deferredJournalBytes_ -= session->deferredJournalBytes;
+    deferredJournalCount_ -= session->deferredJournal.size();
     sessions_.remove(sessionId);
     agents_->forget(sessionId);
     mediaStore_.releaseSession(sessionId);
@@ -2424,12 +2430,19 @@ bool SessionHost::journalEvent(Session& session, const QString& type, const QJso
     if (cursor < 0) {
         if (appendError.isEmpty())
             appendError = QStringLiteral("The local journal rejected the event.");
-        qWarning("Unable to journal %s for session %s: %s", qUtf8Printable(type),
-                 qUtf8Printable(session.stored.id), qUtf8Printable(appendError));
+        if (session.lastJournalError != appendError) {
+            qWarning("Unable to journal %s for session %s: %s", qUtf8Printable(type),
+                     qUtf8Printable(session.stored.id), qUtf8Printable(appendError));
+            session.lastJournalError = appendError;
+        }
         if (error != nullptr)
             *error = appendError;
         return false;
     }
+    session.lastJournalError.clear();
+    const QString sessionId = session.stored.id;
+    const qint64 generation = session.stored.generation;
+    const QPointer<SessionHost> alive(this);
     session.stored.lastCursor = cursor;
     if (type == QStringLiteral("user.message")) {
         ++session.stored.currentTurnSequence;
@@ -2443,12 +2456,17 @@ bool SessionHost::journalEvent(Session& session, const QString& type, const QJso
             session.stored.lastTurnStartedAt = event.value(QStringLiteral("sent_at")).toString();
         emit eventReady(event);
     }
+    if (alive.isNull())
+        return true;
+    const auto current = sessions_.constFind(sessionId);
+    if (current == sessions_.cend() || current->stored.generation != generation)
+        return true;
     // Turn-scoped async questions must not survive completion, process failure or a new turn.
     // This emits the existing question.expired event, so live and replayed clients agree.
     if (type == "turn.completed" || type == "runtime.stopped" || type == "user.message")
-        approvals_->expireAssistantQuestions(session.stored.id, session.stored.generation);
-    if (agents_ != nullptr)
-        agents_->noteEvent(session.stored.id, session.stored.generation, type, contextualPayload);
+        approvals_->expireAssistantQuestions(sessionId, generation);
+    if (!alive.isNull() && agents_ != nullptr)
+        agents_->noteEvent(sessionId, generation, type, contextualPayload);
     return true;
 }
 

@@ -51,7 +51,7 @@ int main(int argc, char* argv[]) {
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/brand/ketplus-terminal-icon.png")));
 
     // The kit draws the window: the KÉT fonts (its font-sans and the profile's monospace), the
-    // KétPlus metrics, the saved appearance, then the style. Inter stays as font-sans' fallback.
+    // KétPlus metrics, the saved appearance, then the style.
     ketplus::registerKetFonts();
     ket::Profile::setCurrent(ket::Profile::ketPlus());
     ketplus::restoreTerminalAppearance();

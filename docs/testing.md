@@ -37,7 +37,7 @@ obsolete run. See `docs/release-process.md`.
 | Editor features | `ketplus_editor_features_tests` | CM 0.2.0 commands in the Pro shell: recent and closed tabs, Save All, command palette, Spotlight files and back navigation, split view, search and replace in files, file format controls |
 | CM document modes | `ketplus_desktop_document_modes_tests` | Markdown defaults to Preview, floating mode control/menu synchronization, CM terminal search/clear/restart controls |
 | Claude API key | `ketplus_claude_credentials_tests`, `ketplus_claude_credentials_settings_tests`, `ketplus_claude_sidecar_tests`, `ketplus_desktop_daemon_client_tests` | local IPC authentication, memory-backed secret store, fixed endpoint and network failures, SDK credential scope, background rotation, disconnect without credential replay, native form states; no live API or real Keychain |
-| Storage preferences | `ketplus_settings_storage_page_tests`, `ketplus_desktop_daemon_client_tests` | Immediate revisioned saves, read-only loading, conflict/error reload, malformed policy, advisory usage failure, late replies, keyboard/accessibility, narrow/wide native layout; capability negotiation and no reconnect replay; real local-daemon bridge read/apply |
+| Storage preferences | `ketplus_settings_storage_page_tests`, `ketplus_desktop_daemon_client_tests` | Immediate detail saves and explicit size-target saves, independent revisions, old-daemon capability fallback, read-only loading, conflict/error reload, malformed policy, advisory usage failure, late replies, keyboard/accessibility, narrow/wide native layout; capability negotiation and no reconnect replay; real local-daemon bridge read/apply |
 | Settings composition | `ketplus_settings_integration_tests` | Shared appearance persistence across Pro shell surfaces; Providers page |
 | Atlas process/WebView | `ketplus_atlas_tests` | Atlas process and tab behavior |
 | Atlas shell integration | `ketplus_atlas_workspace_tests` | Desktop and Atlas composition |
@@ -61,9 +61,15 @@ obsolete run. See `docs/release-process.md`.
 | Chat Mermaid | `ketplus_chat_mermaid_tests` | Markdown and Mermaid integration |
 | Workspace boundary | `ketplus_workspace_tests` | Pro shell with CM explorer behavior |
 | Async question lifetime | `ketplus_async_question_lifetime_tests` | turn expiry, session/generation isolation, late items and stale answers |
+| Session/provider deletion | `ketplus_provider_deletion_tests` | Failed commit releases the transaction; ignored tombstone/work/history mutations roll back; retry/reopen preserves history, conversation number, cleanup work and unrelated sessions; shared provider threads and unsupported providers remain protected; query/mid-fetch ownership failures prevent fake-provider deletion, preserve pending work/history and recover after repair/restart; malformed/unknown ownership JSON blocks queued and local deletion for both source and retained sessions |
 | Daemon protocol/storage | `ketplus_daemon_protocol_tests` | framing, journal, deduplication, approval expiry |
 | Daemon challenge v2 (#85) | `ketplus_daemon_machine_challenge_tests` | relay conformance bytes/signature, strict schema and machine/key binding, no legacy retry or credential request on rejection, and real HTTP serialization/signing with an in-memory credential store |
 | Journal usage retention (#128) | `ketplus_daemon_usage_retention_tests` | final usage samples, unchanged content/order, replay/page agreement, revision fencing, latest 20 actual turns including sequence gaps, raw-event acknowledgment, active/open/recent/question/approval/generation guards, bounded scan progress, transactional rollback and nonblocking writer contention with timeout restoration |
+| Acknowledged delivery cleanup (ADR 0049) | `ketplus_daemon_ack_retention_tests` | Qt backlog ACK, row/byte budgets and actual prepared plans; slowest/new client and generation fences; queue fairness/reopen; NUL/oversized/binary values; capability deferral; atomic ACK/queue writes and rollback/retry |
+| Cloud cache retention (ADR 0053) | `ketplus_daemon_cloud_cache_retention_tests`, `ketplus_daemon_cloud_privacy_tests` | ACK row/byte/reopen bounds; exact ciphertext receipts, pending resets, stale cursor/account callbacks and legacy migration; isolated invalidation; unsupported rows; actual prepared plans; ignored/aborted/commit rollback and busy restoration; atomic scoped recovery cursor, receipt failure through retry/reopen and credential failure through restart; transport fails closed on failed policy/turn invalidation |
+| Journal metadata retention (ADR 0050/0052) | `ketplus_daemon_metadata_retention_tests` | completed deletion work GC, exact indexed round-robin pending pages, malformed targets and ignored completion writes; actual 256th command/audit backlog path and clock rollback; shared age/cap row/byte bounds; cursor reopen, malformed-row fairness and orphan generation guards; actual prepared query plans; abort/ignored-write/commit rollback, busy writer and missing byte-length capability |
+| Staged attachment expiry/cancellation (ADR 0051/0054) | `ketplus_daemon_attachment_retention_tests` | actual upload-begin and explicit cancellation backlog paths, bounded candidates across 100k other-revision chunks, invalid-input side effects, manifest/chunk row and byte budgets, retirement/reopen/ID reuse, current/unknown parent protection, revision/generation isolation, actual prepared query plans, ignored/aborted writes, commit rollback and busy/capability deferral |
+| Global payload GC (ADR 0048) | `ketplus_daemon_garbage_collection_tests` | Qt reopen/256th-command raw-backlog regression; actual indexed query plans and same-item replay backlog; metadata/chunk work and byte budgets; shared/generation fences, cursor restart/wrap, unsupported rows; abort/ignored-write/commit rollback; busy writer and WAL reader |
 | Journal space (#128) | `ketplus_daemon_journal_space_tests` | the move to incremental vacuum keeps every row, drops the free pages and the copy is owner-only; an interrupted copy is discarded; an unreadable journal, or one open in an older daemon, is left as it is; new journals start on incremental vacuum; batched reclaim, the file shrinking while open, readers deferring the checkpoint, then the log emptying, without a wait, and the minimum; one daemon per journal |
 | Economic context harness | `ketplus_context_harness_tests` | strict window validation, journal migration/inheritance, Codex start/resume/fork/reset, idle configuration fences, Claude inherited turn options; fake providers only |
 | Browser provider wiring | `ketplus_browser_provider_integration_tests` | host routing instructions for direct/daemon Codex and new/resumed Claude/Cursor, prompt/image preservation, scoped approvals, disabled/damaged/missing runtime |
@@ -76,7 +82,7 @@ obsolete run. See `docs/release-process.md`.
 | Provider CLI compatibility | `ketplus_provider_compatibility_tests` | version parsing and statuses, manifest, Homebrew update command, version probe cache, outdated CLI blocked, untested CLI journaled once, `provider.runtime_status`, dialects and capabilities, `-32601` narrowing and steer gate, unknown Codex input (ignored notifications counted, protocol errors, declined requests, unknown item types) |
 | Codex protocol contract | `ketplus_codex_contract_tests` (Node) | declared Codex usage exists in every tested schema snapshot; daemon code names only declared methods |
 | Relay browser sign-in | `ketplus_daemon_browser_sign_in_tests` | relay paths appended to a base path, loopback redirect, PKCE S256 challenge, wrong state/path refused, one-time callback |
-| Daemon lifecycle/IPC | `ketplus_daemon_lifecycle_tests` | authentication, protocol minor and features, reconnect replay, isolation, fencing |
+| Daemon lifecycle/IPC | `ketplus_daemon_lifecycle_tests` | authentication, protocol minor and features, reconnect replay, isolation, fencing; failed stream ordering, bounded recovery queues, deletion/shutdown and SQLite writer-lock retry |
 | Daemon upgrade | `ketplus_daemon_upgrade_tests` | version advertisement, idle replacement, active-turn deferral |
 | Desktop daemon attach | `ketplus_desktop_daemon_client_tests` | detached UI lifetime, discovery, normalized transcript replay, negotiated features, provider capabilities, fork through the daemon |
 | macOS bundle layout | `ketplus_macos_bundle_layout_tests` | embedded matching daemon, loadable Qt runtime plugins, and absence of bundled Codex |
@@ -157,6 +163,21 @@ enable live-provider flags when running this lane. UI changes require updating
 the corresponding Atlas mock first.
 
 - Documentation-only: `git diff --check`; validate any edited YAML/JSON.
+- Multirow journal append changes: the daemon protocol fault fixture verifies
+  complete/partial ignored writes, rollback, repair and reopen; activity tests
+  also exercise running-turn lookup plans over 100,000 historical rows.
+
+- Journal startup changes: deferred commit-failure fixtures cover turn/replay/
+  activity backfills, unchanged stored rows, diagnostic preservation, write-lock
+  release while the failed object remains alive, repair and reopen.
+
+- Media cleanup changes: temporary reference catalogs exercise malformed data,
+  file/directory symlinks, unsupported filenames, per-file/catalog limits, preserved
+  shared bytes and metadata, repair/retry and absent/empty-catalog compatibility.
+
+- Media dedup changes: attachment/inline-item fixtures cover valid files, corrupt/
+  short/oversized bytes, directories, symlinks, unreadable files, owner-only
+  permissions and repair/retry without changing unsupported entries.
 - One Pro module: focused target plus its directly affected tests.
 - Shared header or desktop shell: full build and full Pro test suite.
 - `core/` change: the Lite suite (`ctest --preset lite-dev`), then the full Pro suite.
@@ -487,6 +508,43 @@ Forever/off, running/unacknowledged/question/latest-twenty guards, complete expi
 sweeps before recent detail, and existing free-page priority. Agent-token denial
 and disconnected-request tests include both storage API families. Shared headers
 require full Pro build/CTest. No installed journal or live provider is used.
+
+The usage-retention suite also exercises bounded large-tool manifests: real
+fragment storage, the shared byte budget, latest-twenty and ACK/session guards,
+corrupt/oversize chunks, identity/digest mismatches, unknown manifests, shared
+references, stale snapshot fencing and rollback at blob deletion/projection
+revision. These synthetic fixtures do not validate image preview conversion or
+retention of payloads above 1 MiB (ADR 0047).
+
+The large-payload GC regression also reopens a journal missing the transfer
+expression index with 300,000 retained same-item updates. It verifies index
+creation, correlated production-predicate query-plan selection with bound parameters,
+25 exact GC lookups and retained-row preservation;
+timings separate startup index construction from the idle pass.
+
+The ADR 0058 `DaemonProtocolTest::appendRequiresEveryDurableWrite` fixture injects
+ignored mandatory row writes and deferred-constraint commit failures for ordinary
+and chunked appends. It verifies unchanged delivery/replay/projection state,
+transaction release, repair/retry and reopen. Run the protocol target plus affected
+activity, retention, compaction, lifecycle, worktree/fork and cloud privacy targets.
+It does not exercise a live journal or spend provider quota.
+
+ADR 0059 `DaemonProtocolTest::appendPreservesUnsupportedCounters` covers integer
+storage/type guards, overflow refusal for normal/chunked appends, positive boundary
+controls, unchanged history/counters after refusal, transaction release and
+repair/retry/reopen. Use temporary journals and the affected backend matrix.
+
+ADR 0060 `SessionForkTest` injects ignored copies/timestamp and commit failures,
+verifies rollback of source/destination/context/catalog state, then retry/reopen
+and exact copied values. Empty history and existing/self/deleted destinations have
+separate controls. A gated fake Codex fork response exercises a destination claimed
+by another start command while the provider call is pending. Run the fork target
+and affected protocol/activity/transcript/lifecycle/worktree/retention targets.
+
+ADR 0061 `SessionForkTest::journalForkPreservesUnsupportedSourceCounters` covers
+negative, fractional, TEXT and BLOB cursor/turn values. It checks exact source
+preservation, no destination, released transaction, fixture repair, retry and
+reopen. Run the combined fork suite and its affected backend matrix.
 
 ## Atlas result receipts
 

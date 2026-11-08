@@ -455,10 +455,15 @@ EditorWidget* MainWindow::createEditor() {
 
 void MainWindow::updateTabTitle(EditorWidget* editor) {
     const QString path = editor->document().filePath();
+    // Files outside the open folder keep their full path rather than a chain of "..".
+    const QString relative =
+        workspaceRoot_.isEmpty() ? QString() : QDir(workspaceRoot_).relativeFilePath(path);
+    const bool inside = !relative.isEmpty() && !QDir::isAbsolutePath(relative) &&
+                        relative != QStringLiteral("..") &&
+                        !relative.startsWith(QStringLiteral("../"));
     editor->setBreadcrumbPath(path.isEmpty() ? editor->document().displayName()
-                              : workspaceRoot_.isEmpty()
-                                  ? path
-                                  : QDir(workspaceRoot_).relativeFilePath(path));
+                              : inside       ? relative
+                                             : path);
     if (splitPane_ != nullptr) {
         splitPane_->updateSourceTitle(editor);
     }
