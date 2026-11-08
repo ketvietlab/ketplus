@@ -1,5 +1,5 @@
-#include "agent/CodexAppServer.h"
 #include "BrowserAgentInstructions.h"
+#include "agent/CodexAppServer.h"
 
 #include "agent/DaemonTranscriptProjection.h"
 #include <algorithm>
@@ -262,6 +262,7 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
             {{QStringLiteral("threadId"), sessionId},
              {QStringLiteral("itemId"), agent_message::daemonUserItemId(cursor)},
              {QStringLiteral("clientMessageId"), data.value(QStringLiteral("client_message_id"))},
+             {QStringLiteral("timestamp"), envelope.value(QStringLiteral("sent_at"))},
              {QStringLiteral("text"), data.value(QStringLiteral("text"))},
              {QStringLiteral("images"), data.value(QStringLiteral("images"))},
              {QStringLiteral("agentMessages"), data.value(QStringLiteral("agent_messages"))}});

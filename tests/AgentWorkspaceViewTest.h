@@ -117,6 +117,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void animatesRunningConversationStatus();
     void workingIndicatorClockLifecycle();
     void formatsStreamingText();
+    void transcriptDayDividersUseJournalDates();
     void opensInlineMarkdownLinks();
     void linksInlineCodeOnceFilesAreListed();
     void userMessageBubbleIgnoresUnavailableImage();

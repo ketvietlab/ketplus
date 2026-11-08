@@ -137,3 +137,20 @@ nonempty drafts or attachments show Send guidance in the same action position.
 Model/permission selection still uses the existing revisioned configuration path.
 Header tags dispatch a filter to the native sidebar; unavailable metadata is not
 invented. Automatic reviewer orchestration remains a separate #120 dependency.
+
+## Transcript composition
+
+The virtualized message TextEdit keeps its document, selection, streaming and reading
+anchor contracts. Its formatter consumes the kit Markdown and CodeBlock recipes;
+it does not replace the document with a second Markdown component. Fenced code
+uses the kit syntax scanner through a document highlighter (including multiline
+comment state). Reformatting and numeric zoom replace applied padding rather than
+accumulating it. File links, raw HTML escaping, original-source copy and Mermaid
+source/diagram geometry remain product responsibilities.
+
+User bubbles use UserMessageRecipe. Attachment previews are 120 × 78 logical
+pixels; generated images use a 360 × 225 preview, with fixed aspect geometry
+before decoding. The lightbox opens the original image. Day dividers use the
+journal's `sent_at` carried as presentation `timestamp` on user messages, including
+live echoes. Missing or invalid timestamps do not create invented dates. Labels
+use the viewer's local date and remain part of the row's measured height.

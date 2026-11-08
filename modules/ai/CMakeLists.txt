@@ -54,6 +54,8 @@ add_library(ketplus_ai STATIC
     src/agent/ChatMarkdown.h
     src/agent/TranscriptWindowModel.cpp
     src/agent/TranscriptWindowModel.h
+    src/agent/TranscriptSyntax.cpp
+    src/agent/TranscriptSyntax.h
     src/agent/AgentWorkspaceMedia.cpp
     src/agent/AgentWorkspaceMentions.cpp
     src/agent/AgentWorkspaceRenderCache.cpp

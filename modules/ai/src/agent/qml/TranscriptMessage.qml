@@ -1,10 +1,13 @@
 import "ChromeMetrics.js" as Metrics
 import QtQuick
+import Ket 1.0 as Kit
 import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
 
 Item {
     id: messageDelegate
+    readonly property var userRecipe: Kit.KetTheme.userMessageRecipe(shell.t.dark, shell.t.zoomFactor)
+    readonly property var codeRecipe: Kit.KetTheme.codeBlockRecipe(shell.t.dark, shell.t.zoomFactor)
     required property var shell
     required property var host
     required property var preview
@@ -21,6 +24,7 @@ Item {
     required property var fileStats
     required property var questionData
     required property var questionAnswerData
+    required property string timestamp
     required property string meta
     required property string filePath
     required property string subtype
@@ -181,24 +185,33 @@ Item {
         height: Math.max(0, parent.height - y)
         color: shell.t.border
     }
+    Kit.KetDayDivider {
+        id: dayDivider
+        objectName: "transcriptDayDivider"
+        width: messageDelegate.contentColumnWidth - Metrics.px(40, shell.t)
+        x: messageDelegate.contentColumnX + Metrics.px(20, shell.t)
+        text: kind === "user" && !chunkContinuation ? view.dayLabel(index, timestamp, view.messageModel ? view.messageModel.count : 0) : ""
+        visible: text.length > 0
+        height: visible ? implicitHeight : 0
+    }
     Rectangle {
         id: messageSurface
         objectName: "messageSurface"
-        readonly property int horizontalPadding: messageDelegate.activityRow || kind === "assistant" ? 0 : Metrics.px(kind === "user" ? 12 : 18, shell.t)
+        readonly property int horizontalPadding: messageDelegate.activityRow || kind === "assistant" ? 0 : (kind === "user" ? userRecipe.paddingInline : Metrics.px(18, shell.t))
         readonly property bool userMessage: kind === "user"
         // ADR 0027: another conversation's agent wrote this turn's opening message.
         readonly property bool agentMessage: kind === "user" && subtype === "agentMessage"
-        readonly property real userMaximumWidth: Math.max(Metrics.px(160, shell.t), Math.min(messageDelegate.contentColumnWidth * 0.8, messageDelegate.contentColumnWidth - Metrics.px(63, shell.t)))
+        readonly property real userMaximumWidth: Math.max(Metrics.px(160, shell.t), Math.min(messageDelegate.contentColumnWidth * userRecipe.maxWidth, messageDelegate.contentColumnWidth - Metrics.px(63, shell.t)))
         x: kind === "user" ? messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - Metrics.px(20, shell.t) : messageDelegate.contentColumnX + Metrics.px(20, shell.t)
-        y: messageDelegate.surfaceInset
+        y: messageDelegate.surfaceInset + dayDivider.height
         width: kind === "user"
                    ? Math.min(userMaximumWidth, Math.max(Math.ceil(bodyMetrics.advanceWidth) + Metrics.px(10, shell.t),
                               agentMessage ? Math.ceil(agentOriginMetrics.advanceWidth) + Metrics.px(4, shell.t) : 0,
                               imageGallery.bubblePreferredWidth) + horizontalPadding * 2)
                    : messageDelegate.contentColumnWidth - Metrics.px(40, shell.t)
-        height: messageColumn.implicitHeight + (messageDelegate.activityRow ? 0 : Metrics.px(16, shell.t))
-        radius: kind === "user" ? Metrics.px(12, shell.t) : kind === "file" ? Metrics.px(7, shell.t) : 0
-        color: agentMessage ? shell.t.surfaceRaised : kind === "user" ? Qt.darker(shell.t.accent, 1.35) : kind === "file" ? shell.t.surfaceRaised : "transparent"
+        height: messageColumn.implicitHeight + (messageDelegate.activityRow ? 0 : kind === "user" ? 2 * userRecipe.paddingBlock : Metrics.px(16, shell.t))
+        radius: kind === "user" ? userRecipe.radius : kind === "file" ? Metrics.px(7, shell.t) : 0
+        color: agentMessage ? shell.t.surfaceRaised : kind === "user" ? userRecipe.background : kind === "file" ? shell.t.surfaceRaised : "transparent"
         border.color: agentMessage ? shell.t.accent : kind === "file" ? shell.t.border : "transparent"
 
         Column {
@@ -453,8 +466,8 @@ Item {
                     ? Math.min(implicitHeight, userCollapsedHeight)
                     : sourceInitialized ? Math.max(implicitHeight, font.pixelSize * 1.4) : estimatedUnrenderedHeight
                 clip: userOverlong && !messageDelegate.userExpanded
-                topPadding: codeBlocks.length > 0 && codeBlocks[0].startsDocument ? 8 : 0
-                bottomPadding: codeBlocks.length > 0 && codeBlocks[codeBlocks.length - 1].endsDocument ? 8 : 0
+                topPadding: codeBlocks.length > 0 && codeBlocks[0].startsDocument ? codeRecipe.padding : 0
+                bottomPadding: codeBlocks.length > 0 && codeBlocks[codeBlocks.length - 1].endsDocument ? codeRecipe.padding : 0
                 // Keep measured geometry for cached rows, but do not parse a
                 // growing Markdown document outside the reading viewport.
                 // Source stays authoritative in the message model; returning
@@ -664,7 +677,7 @@ Item {
                 persistentSelection: true
                 selectionColor: shell.t.accent
                 selectedTextColor: "#ffffff"
-                color: messageSurface.agentMessage ? shell.t.textMain : kind === "user" ? "#ffffff" : kind === "file" ? shell.t.tabActiveText : shell.t.textMain
+                color: messageSurface.agentMessage ? shell.t.textMain : kind === "user" ? userRecipe.text : kind === "file" ? shell.t.tabActiveText : shell.t.textMain
                 wrapMode: TextEdit.Wrap
                 textFormat: kind === "assistant" && !renderedPartialBody ? TextEdit.MarkdownText : TextEdit.PlainText
                 baseUrl: host.messageBaseUrl
@@ -764,9 +777,9 @@ Item {
                         width: modelData.width
                         height: modelData.height
                         z: -1
-                        radius: Metrics.px(6, shell.t)
-                        color: shell.t.codeBlockBackground
-                        border.color: shell.t.codeBlockBorder
+                        radius: codeRecipe.radius
+                        color: codeRecipe.background
+                        border.color: codeRecipe.border
                         border.width: 1
                     }
                 }
@@ -782,9 +795,9 @@ Item {
                         width: modelData.width
                         height: modelData.height
                         z: -1
-                        radius: Metrics.px(6, shell.t)
-                        color: shell.t.codeBlockBackground
-                        border.color: shell.t.codeBlockBorder
+                        radius: codeRecipe.radius
+                        color: codeRecipe.background
+                        border.color: codeRecipe.border
                         border.width: 1
                     }
                 }
@@ -1039,7 +1052,7 @@ Item {
                 background: Item {}
                 contentItem: Text {
                     text: userMessageMore.text
-                    color: "#ffffff"
+                    color: userRecipe.text
                     font.family: shell.t.uiFont
                     font.pixelSize: shell.t.body
                     font.underline: userMessageMore.hovered || userMessageMore.activeFocus

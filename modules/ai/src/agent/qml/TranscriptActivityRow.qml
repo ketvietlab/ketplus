@@ -328,6 +328,7 @@ Column {
         MessageImageGallery {
             id: gallery
             objectName: "transcriptActivityGallery"
+            largePreview: root.subtype === "imageGeneration"
             host: root.host
             width: Math.min(parent.width, preferredWidth)
             enabled: root.visible && root.enabled

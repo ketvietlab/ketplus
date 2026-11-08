@@ -766,7 +766,9 @@ void AgentWorkspaceViewTest::streamingPreservesReadingPosition() {
     QVERIFY(bodyItem);
     auto* quickDocument = qvariant_cast<QQuickTextDocument*>(bodyItem->property("textDocument"));
     QVERIFY(quickDocument);
-    const qreal lineHeight = bodyItem->property("font").value<QFont>().pixelSize() * 1.45;
+    // Streaming must preserve the current kit typography, including custom zoom.
+    const qreal lineHeight = quickDocument->textDocument()->firstBlock().blockFormat().lineHeight();
+    QVERIFY(lineHeight > 0);
     auto capturePath = qEnvironmentVariable("KETPLUS_CHAT_CAPTURE");
     if (!capturePath.isEmpty())
         capturePath += QStringLiteral(".") + QTest::currentDataTag();

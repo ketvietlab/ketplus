@@ -1,11 +1,15 @@
 #include "AgentWorkspaceViewTest.h"
 #include "KetAppearance.h"
+#include "KetConversationRecipes.h"
 #include "KetProfile.h"
 #include "KetRecipes.h"
+#include "KetRichRecipes.h"
+#include "KetSyntax.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/CodexAppServer.h"
 #include "ui/Theme.h"
+#include <QScopeGuard>
 
 #include <QAbstractItemModelTester>
 #include <QAbstractTextDocumentLayout>
@@ -1159,17 +1163,20 @@ void AgentWorkspaceViewTest::formatsStreamingText() {
     auto* quickDocument = qvariant_cast<QQuickTextDocument*>(body->property("textDocument"));
     QVERIFY(quickDocument);
     auto* document = quickDocument->textDocument();
-    const qreal lineHeight = body->property("font").value<QFont>().pixelSize() * 1.45;
+    const qreal lineHeight = body->property("font").value<QFont>().pixelSize() *
+                             ket::Profile::current().readingLineHeight;
     QTRY_COMPARE(document->firstBlock().blockFormat().lineHeight(), lineHeight);
     QCOMPARE(document->firstBlock().blockFormat().lineHeightType(), QTextBlockFormat::FixedHeight);
-    QCOMPARE(document->firstBlock().blockFormat().bottomMargin(), 10.0);
+    QCOMPARE(document->firstBlock().blockFormat().bottomMargin(),
+             ket::Profile::current().markdownParagraphSpacing);
     QCOMPARE(document->toPlainText(), QStringLiteral("First paragraph.\nSecond bold paragraph."));
     QVERIFY(body->property("selectByMouse").toBool());
     message["body"] = "First paragraph.\n\nSecond **bold** paragraph.\n\nStreaming addition.";
     view.updateMessage(0, message);
     QTRY_VERIFY(document->toPlainText().endsWith("Streaming addition."));
     QTRY_COMPARE(document->lastBlock().blockFormat().lineHeight(), lineHeight);
-    QCOMPARE(document->lastBlock().blockFormat().bottomMargin(), 10.0);
+    QCOMPARE(document->lastBlock().blockFormat().bottomMargin(),
+             ket::Profile::current().markdownParagraphSpacing);
 
     message["body"] = "Intro.\n\n## Heading\n\nParagraph.\n\n- First\n- Second\n\nLast.";
     view.updateMessage(0, message);
@@ -1179,12 +1186,16 @@ void AgentWorkspaceViewTest::formatsStreamingText() {
     const QTextBlock paragraph = heading.next();
     const QTextBlock firstListItem = paragraph.next();
     const QTextBlock secondListItem = firstListItem.next();
-    QCOMPARE(intro.blockFormat().bottomMargin(), 10.0);
-    QCOMPARE(heading.blockFormat().topMargin(), 14.0);
-    QCOMPARE(heading.blockFormat().bottomMargin(), 8.0);
-    QCOMPARE(paragraph.blockFormat().bottomMargin(), 10.0);
-    QCOMPARE(firstListItem.blockFormat().bottomMargin(), 4.0);
-    QCOMPARE(secondListItem.blockFormat().bottomMargin(), 10.0);
+    QCOMPARE(intro.blockFormat().bottomMargin(), ket::Profile::current().markdownParagraphSpacing);
+    QCOMPARE(heading.blockFormat().topMargin(), ket::Profile::current().markdownParagraphSpacing);
+    QCOMPARE(heading.blockFormat().bottomMargin(),
+             ket::Profile::current().markdownHeadingSpacingAfter);
+    QCOMPARE(paragraph.blockFormat().bottomMargin(),
+             ket::Profile::current().markdownParagraphSpacing);
+    QCOMPARE(firstListItem.blockFormat().bottomMargin(),
+             ket::Profile::current().markdownListItemGap);
+    QCOMPARE(secondListItem.blockFormat().bottomMargin(),
+             ket::Profile::current().markdownParagraphSpacing);
 
     message["body"] = "| Name | State |\n| --- | --- |\n| Desktop | Ready |";
     view.updateMessage(0, message);
@@ -1195,13 +1206,13 @@ void AgentWorkspaceViewTest::formatsStreamingText() {
         }
         return QColor{};
     };
-    QTRY_COMPARE(tableBorderColor(), QColor(testPalette().border));
+    QTRY_COMPARE(tableBorderColor(), ket::markdownRecipe(ket::Theme::Dark).tableBorder);
 
     auto lightPalette = testPalette();
     lightPalette.dark = false;
     lightPalette.border = QStringLiteral("#e0e3e9");
     view.applyTheme(lightPalette);
-    QTRY_COMPARE(tableBorderColor(), QColor(lightPalette.border));
+    QTRY_COMPARE(tableBorderColor(), ket::markdownRecipe(ket::Theme::Light).tableBorder);
 
     QTemporaryDir images;
     QImage sample(600, 200, QImage::Format_RGB32);
@@ -1261,8 +1272,8 @@ void AgentWorkspaceViewTest::formatsStreamingText() {
     QTRY_VERIFY((attachment = findImage(findImage, activeTranscript)));
     QTRY_COMPARE(attachment->property("status").toInt(), 1);
     QCOMPARE(attachment->property("source").toUrl().toLocalFile(), imagePath);
-    QCOMPARE(attachment->parentItem()->width(), 88.0);
-    QCOMPARE(attachment->parentItem()->height(), 88.0);
+    QCOMPARE(attachment->parentItem()->width(), 120.0);
+    QCOMPARE(attachment->parentItem()->height(), 78.0);
     QTest::qWait(150);
     QTest::mouseClick(view.quickView(), Qt::LeftButton, Qt::NoModifier,
                       attachment->mapToScene(QPointF(20, 20)).toPoint());
@@ -1281,9 +1292,9 @@ void AgentWorkspaceViewTest::formatsStreamingText() {
     QCOMPARE(moreImages->property("text").toString(), QString("+1"));
     QVERIFY(QMetaObject::invokeMethod(moreImages, "clicked"));
     QTRY_VERIFY(!moreImages->isVisible());
-    gallery->setWidth(200); // An expanded gallery wraps when the column narrows.
+    gallery->setWidth(248); // An expanded gallery wraps when the column narrows.
     QTRY_COMPARE(gallery->property("columns").toInt(), 2);
-    QTRY_COMPARE(gallery->height(), 182.0);
+    QTRY_COMPARE(gallery->height(), 164.0);
     QList<QQuickItem*> thumbnails;
     const auto collectImages = [&](const auto& self, QQuickItem* item) -> void {
         if (item->objectName() == "messageAttachmentImage")
@@ -1297,8 +1308,8 @@ void AgentWorkspaceViewTest::formatsStreamingText() {
         return thumbnails.size() == 4;
     })());
     for (auto* thumbnail : thumbnails) {
-        QVERIFY(thumbnail->width() <= 88.0);
-        QVERIFY(thumbnail->height() <= 88.0);
+        QVERIFY(thumbnail->width() <= 120.0);
+        QVERIFY(thumbnail->height() <= 78.0);
     }
     // The row is reused rather than rebuilt when its images change, so the grid
     // re-positions its cells on the next polish instead of at creation.
@@ -1308,14 +1319,14 @@ void AgentWorkspaceViewTest::formatsStreamingText() {
                 thumbnails.at(0)->mapToItem(gallery, QPointF()).y());
 
     // Restore the explicit test width before reusing this delegate for an assistant.
-    gallery->setWidth(370);
+    gallery->setWidth(504);
     message["kind"] = "assistant";
     view.resetMessages({message});
     QQuickItem* assistantGallery = nullptr;
     QTRY_VERIFY((assistantGallery = findVisualItem(view.quickView()->rootObject(),
                                                    QStringLiteral("messageImageGallery"))));
     QCOMPARE(assistantGallery->property("columns").toInt(), 4);
-    QVERIFY(assistantGallery->width() <= 370.0);
+    QVERIFY(assistantGallery->width() <= 504.0);
 }
 
 void AgentWorkspaceViewTest::linksInlineCodeOnceFilesAreListed() {
@@ -1471,16 +1482,18 @@ void AgentWorkspaceViewTest::markdownHeadingsAndInlineCodeStayNearBodySize() {
         return block.begin().fragment().charFormat();
     };
     auto block = document->firstBlock();
-    const QList<qreal> scales{1.25, 1.125, 1.0};
+    const auto recipe = ket::markdownRecipe(ket::Theme::Dark);
+    const QList<qreal> headingSizes{recipe.heading1Pixels, recipe.heading2Pixels,
+                                    recipe.heading3Pixels};
     for (int level = 1; level <= 3; ++level, block = block.next()) {
         QCOMPARE(block.blockFormat().headingLevel(), level);
         const auto format = firstFormat(block);
-        const int expected = qRound(bodyPixels * scales.at(level - 1));
+        const int expected = qRound(headingSizes.at(level - 1));
         // Qt's importer would leave a +3..+1 size adjustment that doubles an H1.
         QCOMPARE(format.intProperty(QTextFormat::FontSizeAdjustment), 0);
         QCOMPARE(format.intProperty(QTextFormat::FontPixelSize), expected);
-        QCOMPARE(format.fontWeight(), int(QFont::DemiBold));
-        QCOMPARE(block.blockFormat().lineHeight(), std::ceil(expected * 1.3));
+        QCOMPARE(format.fontWeight(), recipe.headingWeight);
+        QCOMPARE(block.blockFormat().lineHeight(), std::ceil(expected * recipe.headingLineHeight));
     }
 
     QString code;
@@ -1490,15 +1503,14 @@ void AgentWorkspaceViewTest::markdownHeadingsAndInlineCodeStayNearBodySize() {
         const auto format = fragment.charFormat();
         if (format.fontFixedPitch()) {
             code += fragment.text();
-            QCOMPARE(format.intProperty(QTextFormat::FontPixelSize),
-                     qRound(bodyPixels * 0.875) - 1);
+            QCOMPARE(format.intProperty(QTextFormat::FontPixelSize), qRound(recipe.codePixels));
             // Code keeps the body colour; a rounded chip drawn behind it sets it apart.
             QVERIFY(!format.hasProperty(QTextFormat::ForegroundBrush));
             QVERIFY(!format.hasProperty(QTextFormat::BackgroundBrush));
             QVERIFY(format.fontFixedPitch());
         } else if (fragment.text() == "strong") {
             sawStrong = true;
-            QCOMPARE(format.fontWeight(), int(QFont::DemiBold));
+            QCOMPARE(format.fontWeight(), recipe.strongWeight);
         }
     }
     QCOMPARE(code, QStringLiteral("inline_code"));
@@ -1606,6 +1618,11 @@ void AgentWorkspaceViewTest::compactCodeBlocks_data() {
 void AgentWorkspaceViewTest::compactCodeBlocks() {
     QFETCH(int, width);
     QFETCH(bool, dark);
+    const auto previousMode = ket::Appearance::instance().mode();
+    const auto restoreMode =
+        qScopeGuard([previousMode] { ket::Appearance::instance().setMode(previousMode); });
+    ket::Appearance::instance().setMode(dark ? ket::Appearance::Mode::Dark
+                                             : ket::Appearance::Mode::Light);
     ketplus::AgentWorkspaceView view;
     auto palette = testPalette();
     if (!dark) {
@@ -1646,11 +1663,16 @@ void AgentWorkspaceViewTest::compactCodeBlocks() {
     // follow the body rather than a fixed pixel size.
     const int bodyPixels = body->property("font").value<QFont>().pixelSize();
     QVERIFY(bodyPixels > 0);
-    QCOMPARE(codeFont, bodyPixels - 2);
+    QCOMPARE(codeFont, qRound(ket::Profile::current().codePixels));
+    QTRY_VERIFY(!code.layout()->formats().isEmpty());
+    QCOMPARE(code.layout()->formats().first().format.foreground().color(),
+             ket::syntaxRecipe(dark ? ket::Theme::Dark : ket::Theme::Light).comment);
     // Code blocks already sit in a frame; they get no inline chips.
     QVERIFY(view.messageInlineCode(quickDocument).isEmpty());
-    QCOMPARE(document->firstBlock().blockFormat().lineHeight(), bodyPixels * 1.45);
-    QCOMPARE(code.blockFormat().lineHeight(), std::ceil((bodyPixels - 2) * 1.45));
+    QCOMPARE(document->firstBlock().blockFormat().lineHeight(),
+             bodyPixels * ket::Profile::current().readingLineHeight);
+    QCOMPARE(code.blockFormat().lineHeight(),
+             std::floor(codeFont * ket::Profile::current().codeLineHeight));
     QCOMPARE(code.next().blockFormat().bottomMargin(), 0.0);
     const auto height = body->height();
     view.formatMessageDocument(quickDocument, bodyPixels, body->width());
@@ -1702,7 +1724,8 @@ void AgentWorkspaceViewTest::compactCodeBlocks() {
     message["body"] = "```sh\nfirst line\nsecond line\n```\n\nDone.";
     view.updateMessage(0, message);
     QTRY_COMPARE(view.messageCodeBlocks(quickDocument).size(), 1);
-    QTRY_COMPARE(document->lastBlock().blockFormat().lineHeight(), bodyPixels * 1.45);
+    QTRY_COMPARE(document->lastBlock().blockFormat().lineHeight(),
+                 bodyPixels * ket::Profile::current().readingLineHeight);
     message["body"] = "Inline `code` stays in its paragraph.";
     view.updateMessage(0, message);
     QTRY_VERIFY(view.messageCodeBlocks(quickDocument).isEmpty());
@@ -1960,8 +1983,10 @@ void AgentWorkspaceViewTest::userBubbleFitsShortTextAndWrapsLongText() {
     auto* quickDocument = qvariant_cast<QQuickTextDocument*>(shortBody->property("textDocument"));
     QVERIFY(quickDocument);
     QTRY_COMPARE(quickDocument->textDocument()->begin().layout()->lineCount(), 1);
-    QCOMPARE(shortBody->property("color").value<QColor>(), QColor(Qt::white));
-    QCOMPARE(surface->property("color").value<QColor>(), QColor("#4f6fff").darker(135));
+    QCOMPARE(shortBody->property("color").value<QColor>(),
+             ket::userMessageRecipe(ket::Theme::Dark).text);
+    QCOMPARE(surface->property("color").value<QColor>(),
+             ket::userMessageRecipe(ket::Theme::Dark).background);
     const auto capture = qEnvironmentVariable("KETPLUS_USER_BUBBLE_CAPTURE");
     if (!capture.isEmpty()) {
         QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
@@ -2005,4 +2030,50 @@ void AgentWorkspaceViewTest::userBubbleFitsShortTextAndWrapsLongText() {
     view.formatComposerDocument(composer, font.pixelSize());
     document->undo();
     QCOMPARE(document->toPlainText(), QString("one\ntwo"));
+}
+
+void AgentWorkspaceViewTest::transcriptDayDividersUseJournalDates() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 900);
+    view.show();
+    const auto user = [](const char* key, const char* date) {
+        return QVariantMap{
+            {"kind", "user"}, {"body", "A prompt"}, {"messageKey", key}, {"timestamp", date}};
+    };
+    view.resetMessages({user("one", "2026-11-01T12:00:00Z"), user("two", "2026-11-01T13:00:00Z"),
+                        user("three", "2026-11-02T12:00:00Z"), user("legacy", "")},
+                       "dated-transcript");
+    auto* root = view.quickView()->rootObject();
+    QVERIFY(root);
+    const auto visibleDates = [&] {
+        QStringList dates;
+        const auto visit = [&](auto&& self, QQuickItem* item) -> void {
+            if (item->objectName() == "transcriptDayDivider" && item->isVisible())
+                dates.append(item->property("text").toString());
+            for (auto* child : item->childItems())
+                self(self, child);
+        };
+        visit(visit, root);
+        return dates;
+    };
+    QTRY_COMPARE(visibleDates().size(), 2);
+    QVERIFY(visibleDates().join(" ").contains("2026"));
+    // Reformatting a live document after a numeric zoom must not compound insets.
+    view.resetMessages({QVariantMap{{"kind", "assistant"}, {"body", "```cpp\nreturn 42;\n```"}}},
+                       "zoomed-code");
+    QQuickItem* body = nullptr;
+    QTRY_VERIFY((body = findVisualItem(root, "messageBody")));
+    view.applyTheme(testPalette(), 18);
+    QTest::qWait(50);
+    auto* doc = qvariant_cast<QQuickTextDocument*>(body->property("textDocument"));
+    QVERIFY(doc);
+    const auto pixels = body->property("font").value<QFont>().pixelSize();
+    view.formatMessageDocument(doc, pixels, body->width());
+    const auto before = doc->textDocument()->firstBlock().blockFormat();
+    view.formatMessageDocument(doc, pixels, body->width());
+    QCOMPARE(doc->textDocument()->firstBlock().blockFormat(), before);
+    QCOMPARE(before.leftMargin(),
+             ket::Appearance::scale(ket::Profile::current().codePadding, 18.0 / 14));
+    QCOMPARE(doc->textDocument()->toPlainText(), QString("return 42;"));
 }
