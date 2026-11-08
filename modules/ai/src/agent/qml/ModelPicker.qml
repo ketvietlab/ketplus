@@ -38,6 +38,9 @@ Basic.Popup {
         return draftModel === selectedModel && selectedProviderTab === selectedProvider ? modelCapacity : 0
     }
     property var effortLabel: function(value) { return value }
+    // Row titles and supporting text follow the mock's Model & context dialog.
+    readonly property real titlePixels: KetTheme.px(15, KetTheme.zoom)
+    readonly property real bodyPixels: KetTheme.px(13, KetTheme.zoom)
 
     property string selectedProviderTab: "codex"
     // While a turn runs the conversation keeps its provider; the other tabs say when to switch.
@@ -252,72 +255,20 @@ Basic.Popup {
                 id: settingsBody
                 width: settingsScroll.availableWidth
                 spacing: 0
-        Row {
-            id: providerGrid
-            objectName: "providerTabs"
+        ModelProviderTabs {
             Layout.fillWidth: true
-            Layout.preferredHeight: KetTheme.px(28, KetTheme.zoom)
             Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
             Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
-            Layout.topMargin: KetTheme.px(12, KetTheme.zoom)
-            spacing: KetTheme.px(22, KetTheme.zoom)
-
-            Repeater {
-                model: [
-                    {id: "codex", label: "Codex"},
-                    {id: "claude", label: "Claude"},
-                    {id: "cursor", label: "Cursor"},
-                    {id: "ketrouter", label: "K\u00e9tRouter"}
-                ]
-                Basic.ToolButton {
-                    id: providerButton
-                    required property var modelData
-                    objectName: "providerTab_" + modelData.id
-                    width: contentItem.implicitWidth
-                    height: KetTheme.px(28, KetTheme.zoom)
-                    readonly property bool supported: modelData.id === "codex"
-                        || (modelData.id === "claude" && picker.hasClaudeModels)
-                        || (modelData.id === "cursor" && picker.hasCursorModels)
-                    readonly property bool lockedOut: supported && picker.lockedProvider !== "" && picker.lockedProvider !== modelData.id
-                    enabled: supported && !lockedOut
-                    padding: 0
-                    Accessible.name: modelData.label
-                    Accessible.description: enabled ? (picker.selectedProviderTab === modelData.id ? "Current provider" : "Select provider") : lockedOut ? "Switch to " + modelData.label + " after this turn" : modelData.id === "cursor" ? "Install Cursor CLI, then retry" : "Not supported yet"
-                    contentItem: Text {
-                        text: providerButton.modelData.label
-                        color: providerButton.enabled ? KetTheme.t.tabActiveText : KetTheme.t.textMuted
-                        opacity: providerButton.enabled ? 1 : 0.62
-                        font.family: KetTheme.fontFamily
-                        font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
-                        font.weight: providerButton.enabled && picker.selectedProviderTab === providerButton.modelData.id ? Font.DemiBold : Font.Normal
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    background: Item {
-                        Rectangle {
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.bottom: parent.bottom
-                            height: KetTheme.px(2, KetTheme.zoom)
-                            visible: providerButton.enabled && picker.selectedProviderTab === providerButton.modelData.id
-                            color: KetTheme.t.accent
-                        }
-                    }
-                    KetToolTip {
-                        objectName: "ketToolTip"
-                        visible: providerButton.hovered
-                        text: providerButton.enabled ? providerButton.modelData.label
-                              : providerButton.lockedOut ? "Switch to " + providerButton.modelData.label + " after this turn"
-                              : providerButton.modelData.id === "cursor"
-                                ? "Install Cursor CLI: " + picker.cursorInstallCommand
-                              : providerButton.modelData.label + ": not supported yet"
-                    }
-                    onClicked: {
-                        if (!providerButton.enabled) return
-                        picker.selectedProviderTab = providerButton.modelData.id
-                        if (picker.providerModels.length > 0) picker.chooseDraft(picker.providerModels[0])
-                        picker.syncCurrentModel()
-                    }
-                }
+            Layout.topMargin: KetTheme.px(22, KetTheme.zoom)
+            selectedProvider: picker.selectedProviderTab
+            lockedProvider: picker.lockedProvider
+            hasClaudeModels: picker.hasClaudeModels
+            hasCursorModels: picker.hasCursorModels
+            cursorInstallCommand: picker.cursorInstallCommand
+            onProviderChosen: (provider) => {
+                picker.selectedProviderTab = provider
+                if (picker.providerModels.length > 0) picker.chooseDraft(picker.providerModels[0])
+                picker.syncCurrentModel()
             }
         }
 
@@ -325,7 +276,8 @@ Basic.Popup {
             Layout.fillWidth: true
             Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
             Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
-            Layout.topMargin: KetTheme.px(7, KetTheme.zoom)
+            Layout.topMargin: KetTheme.px(10, KetTheme.zoom)
+            Layout.bottomMargin: KetTheme.px(2, KetTheme.zoom)
             text: picker.selectedProviderTab === "claude"
                   ? "Claude uses the local Agent SDK sidecar."
                   : picker.selectedProviderTab === "cursor"
@@ -341,7 +293,7 @@ Basic.Popup {
                     : "Codex is ready. Other providers are not supported yet."
             color: KetTheme.t.textMuted
             font.family: KetTheme.fontFamily
-            font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+            font.pixelSize: picker.bodyPixels
             elide: Text.ElideRight
         }
 
@@ -410,23 +362,15 @@ Basic.Popup {
                     Accessible.name: modelData.displayName || modelData.model
 
                     contentItem: RowLayout {
-                        spacing: KetTheme.px(11, KetTheme.zoom)
-                        Rectangle {
-                            Layout.preferredWidth: KetTheme.px(14, KetTheme.zoom)
-                            Layout.preferredHeight: KetTheme.px(14, KetTheme.zoom)
-                            radius: KetTheme.px(7, KetTheme.zoom)
-                            color: "transparent"
-                            border.width: 1
-                            border.color: modelRow.highlighted
-                                          ? KetTheme.t.tabActiveText : KetTheme.t.borderStrong
-                            Rectangle {
-                                anchors.centerIn: parent
-                                width: KetTheme.px(6, KetTheme.zoom)
-                                height: KetTheme.px(6, KetTheme.zoom)
-                                radius: KetTheme.px(3, KetTheme.zoom)
-                                visible: modelRow.highlighted
-                                color: KetTheme.t.tabActiveText
-                            }
+                        spacing: KetTheme.px(10, KetTheme.zoom)
+                        KetRadio {
+                            Layout.leftMargin: KetTheme.px(2, KetTheme.zoom)
+                            // The row owns the choice; a click must not break this binding.
+                            checkable: false
+                            checked: modelRow.highlighted
+                            focusPolicy: Qt.NoFocus
+                            onClicked: modelRow.clicked()
+                            Accessible.ignored: true
                         }
                         Column {
                             Layout.fillWidth: true
@@ -437,7 +381,7 @@ Basic.Popup {
                                 elide: Text.ElideRight
                                 color: KetTheme.t.textMain
                                 font.family: KetTheme.fontFamily
-                                font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
+                                font.pixelSize: picker.titlePixels
                                 font.weight: Font.DemiBold
                             }
                             Text {
@@ -446,7 +390,7 @@ Basic.Popup {
                                 elide: Text.ElideRight
                                 color: KetTheme.t.textMuted
                                 font.family: KetTheme.fontFamily
-                                font.pixelSize: KetTheme.dayDividerRecipe(KetTheme.dark, KetTheme.zoom).fontPixels
+                                font.pixelSize: picker.bodyPixels
                             }
                         }
                         Rectangle {
@@ -471,6 +415,7 @@ Basic.Popup {
                             anchors.right: parent.right
                             anchors.bottom: parent.bottom
                             height: 1
+                            visible: modelRow.index < modelList.count - 1
                             color: KetTheme.t.panelBorder
                         }
                         Rectangle {
@@ -544,6 +489,9 @@ Basic.Popup {
         Rectangle {
             visible: picker.displayedEfforts.length > 1
             Layout.fillWidth: true
+            Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.topMargin: KetTheme.px(6, KetTheme.zoom)
             Layout.preferredHeight: 1
             color: KetTheme.t.panelBorder
         }
@@ -562,17 +510,17 @@ Basic.Popup {
                 Text {
                     Layout.fillWidth: true
                     text: "Reasoning effort"
-                    color: KetTheme.t.textMain
+                    color: effortSlider.recipe.label
                     font.family: KetTheme.fontFamily
-                    font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
-                    font.weight: Font.DemiBold
+                    font.pixelSize: effortSlider.recipe.labelPixels
+                    font.weight: effortSlider.recipe.labelWeight
                 }
                 Text {
                     objectName: "selectedEffortLabel"
                     text: picker.draftEffort ? picker.effortLabel(picker.draftEffort) : "Default"
-                    color: KetTheme.t.tabActiveText
+                    color: effortSlider.recipe.value
                     font.family: KetTheme.fontFamily
-                    font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+                    font.pixelSize: effortSlider.recipe.labelPixels
                 }
             }
 
@@ -592,57 +540,79 @@ Basic.Popup {
                     if (index >= 0 && index < picker.displayedEfforts.length)
                         picker.draftEffort = picker.displayedEfforts[index].reasoningEffort
                 }
-                background: Rectangle {
-                    x: effortSlider.leftPadding
-                    y: (effortSlider.height - height) / 2
-                    width: effortSlider.availableWidth
-                    height: KetTheme.px(4, KetTheme.zoom)
-                    radius: KetTheme.px(2, KetTheme.zoom)
-                    color: KetTheme.t.interactiveActive
-                    border.color: effortSlider.visualFocus ? KetTheme.t.colorFocus : KetTheme.t.borderStrong
+                // Drawn from ket::sliderRecipe like KetSlider; the handle hides until an effort is chosen.
+                readonly property var recipe: KetTheme.sliderRecipe(KetTheme.dark, KetTheme.zoom, hovered, pressed, enabled, visualFocus)
+                hoverEnabled: true
+                padding: 0
+                opacity: recipe.opacity
+                background: Item {
+                    x: effortSlider.leftPadding + effortSlider.recipe.handleSize / 2
+                    width: effortSlider.availableWidth - effortSlider.recipe.handleSize
+                    height: effortSlider.height
                     Rectangle {
-                        height: parent.height
-                        width: effortSlider.position * parent.width
-                        radius: KetTheme.px(2, KetTheme.zoom)
-                        color: KetTheme.t.accent
-                        visible: effortSlider.enabled && picker.effortIndex >= 0
+                        y: (parent.height - height) / 2
+                        width: parent.width
+                        height: effortSlider.recipe.trackHeight
+                        radius: height / 2
+                        color: effortSlider.recipe.track
+                    }
+                    Rectangle {
+                        y: (parent.height - height) / 2
+                        width: effortSlider.visualPosition * parent.width
+                        height: effortSlider.recipe.trackHeight
+                        radius: height / 2
+                        color: effortSlider.recipe.fill
+                        visible: picker.effortIndex >= 0
                     }
                 }
-                handle: Rectangle {
+                handle: Item {
                     objectName: "effortHandle"
                     x: effortSlider.leftPadding + effortSlider.visualPosition * (effortSlider.availableWidth - width)
                     y: (effortSlider.height - height) / 2
-                    width: KetTheme.px(16, KetTheme.zoom)
-                    height: KetTheme.px(16, KetTheme.zoom)
-                    radius: KetTheme.px(8, KetTheme.zoom)
+                    width: effortSlider.recipe.handleSize
+                    height: width
                     visible: picker.effortIndex >= 0
-                    color: effortSlider.enabled ? KetTheme.t.accent : KetTheme.t.textDisabled
-                    border.color: KetTheme.t.surfaceRaised
-                    border.width: 2
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: -2
+                        visible: effortSlider.recipe.focusRing.a > 0
+                        radius: width / 2
+                        color: "transparent"
+                        border.width: 2
+                        border.color: effortSlider.recipe.focusRing
+                    }
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: width / 2
+                        color: effortSlider.recipe.handle
+                        border.width: effortSlider.recipe.handleBorderWidth
+                        border.color: effortSlider.recipe.handleBorder
+                    }
                 }
                 Accessible.name: "Reasoning effort"
                 Accessible.description: picker.effortLabel(picker.draftEffort)
             }
 
+            // Only the range ends are named, as KetStepSlider does; the header shows the current step.
             Item {
+                readonly property var recipe: KetTheme.sliderRecipe(KetTheme.dark, KetTheme.zoom, false, false, true, false)
                 Layout.fillWidth: true
-                Layout.preferredHeight: KetTheme.px(14, KetTheme.zoom)
-                Repeater {
-                    model: picker.displayedEfforts
-                    Text {
-                        required property var modelData
-                        required property int index
-                        objectName: "effortTickLabel_" + index
-                        readonly property real tickCenter: picker.displayedEfforts.length <= 1
-                            ? parent.width / 2
-                            : 8 + index * (parent.width - 16) / (picker.displayedEfforts.length - 1)
-                        x: Math.max(0, Math.min(parent.width - width, tickCenter - width / 2))
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: picker.effortLabel(modelData.reasoningEffort)
-                        color: KetTheme.t.textMuted
-                        font.family: KetTheme.fontFamily
-                        font.pixelSize: KetTheme.dayDividerRecipe(KetTheme.dark, KetTheme.zoom).fontPixels
-                    }
+                Layout.preferredHeight: effortMinLabel.implicitHeight
+                Text {
+                    id: effortMinLabel
+                    objectName: "effortMinLabel"
+                    text: picker.displayedEfforts.length > 1 ? picker.effortLabel(picker.displayedEfforts[0].reasoningEffort) : ""
+                    color: parent.recipe.rangeLabel
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: parent.recipe.rangePixels
+                }
+                Text {
+                    objectName: "effortMaxLabel"
+                    anchors.right: parent.right
+                    text: picker.displayedEfforts.length > 1 ? picker.effortLabel(picker.displayedEfforts[picker.displayedEfforts.length - 1].reasoningEffort) : ""
+                    color: parent.recipe.rangeLabel
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: parent.recipe.rangePixels
                 }
             }
         }
