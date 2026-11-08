@@ -175,7 +175,7 @@ void TerminalView::setTypography(const int fontSizePixels, const int lineHeightP
                                                           : fontFamily.trimmed();
     if (!family.isEmpty() && QFontDatabase::hasFamily(family)) {
         terminalFont = QFont(family);
-        if (family == QStringLiteral("KÉT Sans Mono"))
+        if (family == QStringLiteral("KET Sans Mono"))
             terminalFont.setWeight(QFont::Medium);
         terminalFont.setStyleHint(QFont::Monospace);
         terminalFont.setFixedPitch(true);

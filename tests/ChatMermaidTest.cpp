@@ -616,7 +616,13 @@ class ChatMermaidTest final : public QObject {
         QTRY_VERIFY((body = findItem(view.quickView()->rootObject(), "messageBody")) != nullptr);
         QTRY_VERIFY_WITH_TIMEOUT(body->property("text").toString().contains("preview failed"),
                                  2000);
-        QVERIFY(body->property("text").toString().contains(source));
+        // QQuickTextEdit serializes styled Markdown (e.g. medium-weight code) back
+        // through QTextDocument. Verify readable/copyable source, not that serialization.
+        auto* document = qvariant_cast<QQuickTextDocument*>(body->property("textDocument"));
+        QVERIFY(document && document->textDocument());
+        const auto plainText = document->textDocument()->toPlainText();
+        QVERIFY2(plainText.contains("flowchart LR\nA --> B"), qPrintable(plainText));
+        QVERIFY(view.transcriptCopyText().contains(source));
         QVERIFY(!body->property("text").toString().contains("mermaid-pending.svg"));
         const auto capture = qEnvironmentVariable("KETPLUS_CHAT_MERMAID_CAPTURE");
         if (!capture.isEmpty()) {
