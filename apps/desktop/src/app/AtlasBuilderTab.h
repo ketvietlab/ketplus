@@ -71,6 +71,7 @@ class AtlasBuilderTab final : public QWidget {
     AgentWorkspaceView* chat_{nullptr};
     QAbstractButton* collapse_{nullptr};
     QWidget* toolbar_{nullptr};
+    QAbstractButton* back_{nullptr};
     QAbstractButton* aiButton_{nullptr};
     QTimer activityPulse_;
     bool pulseBright_{true};

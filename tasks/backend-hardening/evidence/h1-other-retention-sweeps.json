@@ -1,0 +1,96 @@
+{
+  "scope": "preliminary SQL-only synthetic audit; not Qt runtime acceptance",
+  "sqlite": "3.43.1",
+  "results": [
+    {
+      "rows": 10000,
+      "lane": "command-age",
+      "vm_steps_approx": 50000,
+      "removed": 0,
+      "ms": 0.95,
+      "plan": [
+        "SCAN command_results"
+      ]
+    },
+    {
+      "rows": 10000,
+      "lane": "command-cap",
+      "vm_steps_approx": 190000,
+      "removed": 0,
+      "ms": 4.68,
+      "plan": [
+        "SCAN command_results",
+        "LIST SUBQUERY 1",
+        "SCAN command_results",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "rows": 10000,
+      "lane": "audit-age",
+      "vm_steps_approx": 50000,
+      "removed": 0,
+      "ms": 0.98,
+      "plan": [
+        "SCAN remote_command_audit"
+      ]
+    },
+    {
+      "rows": 10000,
+      "lane": "audit-cap",
+      "vm_steps_approx": 130000,
+      "removed": 0,
+      "ms": 4.67,
+      "plan": [
+        "SCAN remote_command_audit",
+        "LIST SUBQUERY 1",
+        "SCAN remote_command_audit USING COVERING INDEX remote_command_audit_recorded"
+      ]
+    },
+    {
+      "rows": 100000,
+      "lane": "command-age",
+      "vm_steps_approx": 500000,
+      "removed": 0,
+      "ms": 9.23,
+      "plan": [
+        "SCAN command_results"
+      ]
+    },
+    {
+      "rows": 100000,
+      "lane": "command-cap",
+      "vm_steps_approx": 2440000,
+      "removed": 90000,
+      "ms": 279.07,
+      "plan": [
+        "SCAN command_results",
+        "LIST SUBQUERY 1",
+        "SCAN command_results",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    {
+      "rows": 100000,
+      "lane": "audit-age",
+      "vm_steps_approx": 500000,
+      "removed": 0,
+      "ms": 9.2,
+      "plan": [
+        "SCAN remote_command_audit"
+      ]
+    },
+    {
+      "rows": 100000,
+      "lane": "audit-cap",
+      "vm_steps_approx": 2020000,
+      "removed": 90000,
+      "ms": 73.08,
+      "plan": [
+        "SCAN remote_command_audit",
+        "LIST SUBQUERY 1",
+        "SCAN remote_command_audit USING COVERING INDEX remote_command_audit_recorded"
+      ]
+    }
+  ]
+}

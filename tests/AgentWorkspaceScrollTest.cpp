@@ -761,8 +761,9 @@ void AgentWorkspaceViewTest::imageAttachmentReservesHeight() {
     auto* attachment = findVisualItem(frame, "messageAttachmentImage");
     QVERIFY(attachment);
     QTRY_VERIFY(frame->width() > 0);
-    // Thumbnails reserve square geometry independent of source aspect ratio and decode state.
-    const double reserved = frame->width();
+    // The approved landscape thumbnail reserves 120:78 geometry before decoding.
+    constexpr double thumbnailAspect = 78.0 / 120.0;
+    const double reserved = frame->width() * thumbnailAspect;
     QVERIFY2(qAbs(frame->height() - reserved) < 0.5,
              qPrintable(QString("Reserved %1 px, expected %2 px (image status %3)")
                             .arg(frame->height())
@@ -775,7 +776,7 @@ void AgentWorkspaceViewTest::imageAttachmentReservesHeight() {
     const auto checkReservation = [&] {
         if (!frame->isVisible() || frame->width() <= 0)
             return;
-        const double expected = frame->width();
+        const double expected = frame->width() * thumbnailAspect;
         if (qAbs(frame->height() - expected) >= 0.5)
             violations << QString("%1x%2 (status %3)")
                               .arg(frame->width())
@@ -791,7 +792,7 @@ void AgentWorkspaceViewTest::imageAttachmentReservesHeight() {
     checkReservation();
     disconnect(frame, nullptr, this, nullptr);
     QVERIFY2(violations.isEmpty(), qPrintable(violations.join(", ")));
-    QVERIFY(qAbs(frame->height() - frame->width()) < 0.5);
+    QVERIFY(qAbs(frame->height() - frame->width() * thumbnailAspect) < 0.5);
 }
 
 void AgentWorkspaceViewTest::messageImageSizeRejectsNonRegularFiles() {
