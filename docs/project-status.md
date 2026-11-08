@@ -15,6 +15,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- Atlas process readiness requires a complete banner for the current attempt's
+  selected loopback port, including truncation/restart and stop-time guards
+  (ADR 0081). Executable/listener identity and broader lifecycle remain open.
+
 - The local Qt client applies transport backpressure before hello (ADR 0079),
   limiting unread socket bytes to one maximum frame plus header while preserving
   valid pipelined events. Broader IPC work/queue/lifetime bounds remain open.
