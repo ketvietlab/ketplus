@@ -968,8 +968,9 @@ The relay rollout gate remains external and does not block this provider work.
 - [x] Focused fixture passes 5/5. Mutations removing the drain or tail cap each
   fail all three adapter cases (2 setup/cleanup pass, 3 fail); restored code passes
   5/5 again. The failures identify unread QProcess stderr and an over-limit tail.
-- [ ] Run full Release Pro verification for the three adapter-header friend
-  declarations. Runtime drain implementations are unchanged.
+- [x] Full Release Pro build and 103/103 offscreen targets pass at `a8d45029`
+  (368.10 s, parallelism 2, no rerun). Runtime drain implementations are unchanged.
+  Evidence and source/log hashes: `evidence/h3-provider-stderr-flood-qt.json`.
 - [ ] Obtain #7705 review, merge and close #71 only after all five criteria have
   evidence. Request/waiter admission and absent-response deadlines stay H3.4/#74.
 - [ ] Remove the pushed worktree/build after ownership and clean-state checks.
