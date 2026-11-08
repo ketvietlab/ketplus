@@ -15,7 +15,7 @@ constexpr auto lineHeightKey = "editor/lineHeightPixels";
 
 EditorSettings EditorSettings::defaults() {
     return {
-        .fontFamily = QStringLiteral("KÉT Sans Mono"),
+        .fontFamily = QStringLiteral("KET Sans Mono"),
         .fontSizePixels = 14,
         .lineHeightPixels = 24,
     };
@@ -57,6 +57,9 @@ EditorSettings EditorSettings::normalized() const {
         value.fontFamily = defaults().fontFamily;
     } else {
         value.fontFamily = value.fontFamily.trimmed();
+        // Older UI-stack builds persisted the display spelling, not the registered family.
+        if (value.fontFamily == QStringLiteral("KÉT Sans Mono"))
+            value.fontFamily = QStringLiteral("KET Sans Mono");
     }
     value.fontSizePixels =
         qBound(minimumFontSizePixels, value.fontSizePixels, maximumFontSizePixels);
@@ -69,7 +72,7 @@ QFont EditorSettings::font() const {
     const auto value = normalized();
     QFont font(value.fontFamily);
     font.setPixelSize(value.fontSizePixels);
-    if (value.fontFamily == QStringLiteral("KÉT Sans Mono"))
+    if (value.fontFamily == QStringLiteral("KET Sans Mono"))
         font.setWeight(QFont::Medium);
     font.setStyleHint(QFont::Monospace);
     font.setFixedPitch(true);
