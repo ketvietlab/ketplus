@@ -1,0 +1,28 @@
+{
+  "scope": "H1.3 preserve unsupported fork source counters",
+  "base": "4d56c73c26df706e805ecbd83b266bbc80495db4",
+  "environment": "macOS arm64 Qt6.11.2 Release Pro/headless offscreen; temporary journals",
+  "original_probe_failed": 8,
+  "original_probe_passed": 2,
+  "baseline_note": "Setup/cleanup pass; every invalid counter scenario fails",
+  "preintegration_fork_suite_passed": 15,
+  "combined_fork_suite": 32,
+  "affected_matrix": "pending",
+  "verified": [
+    "source representations/history preserved on refusal",
+    "no fork destination",
+    "released transaction",
+    "repair/retry/reopen"
+  ],
+  "not_verified": [
+    "broader metadata types and read errors",
+    "startup/backfill compatibility",
+    "post-copy append failure handling",
+    "bounded whole-history work",
+    "process interruption",
+    "live provider/journal",
+    "Windows",
+    "multi-GB",
+    "package/install/deploy"
+  ]
+}

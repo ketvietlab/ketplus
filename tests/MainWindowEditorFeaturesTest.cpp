@@ -327,8 +327,8 @@ void MainWindowEditorFeaturesTest::searchesAndReplacesAcrossFiles() {
         }
     });
     confirm.start(50);
-    QPushButton* replaceAll = nullptr;
-    for (auto* button : panel->findChildren<QPushButton*>()) {
+    QAbstractButton* replaceAll = nullptr;
+    for (auto* button : panel->findChildren<QAbstractButton*>()) {
         if (button->text() == QStringLiteral("Replace All")) {
             replaceAll = button;
         }

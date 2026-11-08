@@ -535,6 +535,7 @@ class DesktopDaemonClientTest final : public QObject {
                            });
         QTRY_VERIFY(storageState.value("ok").toBool());
         QCOMPARE(storageState.value("policy").toObject().value("full_detail_days").toInt(), 30);
+        QVERIFY(storageState.value("size_policy_supported").toBool());
         QJsonObject sizeState;
         storageBridge.call("daemon/storageSize/read", {},
                            [&](const QJsonObject& result, const QString& error) {
@@ -543,6 +544,18 @@ class DesktopDaemonClientTest final : public QObject {
                            });
         QTRY_VERIFY(sizeState.value("ok").toBool());
         QVERIFY(sizeState.value("status").toObject().value("warning").isBool());
+        QCOMPARE(sizeState.value("revision").toInteger(), 0);
+        sizeState = {};
+        storageBridge.call(
+            "daemon/storageSize/apply",
+            {{"expected_revision", 0},
+             {"policy", QJsonObject{{"limit_bytes", 2'000'000'000LL}, {"warning_percent", 90}}}},
+            [&](const QJsonObject& result, const QString& error) {
+                QVERIFY(error.isEmpty());
+                sizeState = result;
+            });
+        QTRY_VERIFY(sizeState.value("ok").toBool());
+        QCOMPARE(sizeState.value("revision").toInteger(), 1);
         const auto expected = storageState.value("revision");
         storageState = {};
         storageBridge.call("daemon/storageRetention/apply",
@@ -607,7 +620,32 @@ class DesktopDaemonClientTest final : public QObject {
             QCOMPARE(request.value("message_type").toString(), "session.attach");
     }
 
+    void storageNeverStartsDirectProvider() {
+        QTemporaryDir directory;
+        const auto executable = directory.filePath("fake-codex");
+        const auto log = directory.filePath("provider.log");
+        QVERIFY(writeFakeCodex(executable, log));
+        CodexAppServer server(executable);
+        for (const auto& method : {"daemon/storageRetention/read", "daemon/storageSize/read",
+                                   "daemon/storageSize/apply", "daemon/storageUnknown/read"}) {
+            bool rejected = false;
+            server.call(method, {}, [&](const QJsonObject&, const QString& error) {
+                rejected = error.contains("local KetPlus daemon");
+            });
+            QVERIFY(rejected);
+        }
+        QVERIFY(server.isIdle());
+        QVERIFY(!QFile::exists(log));
+    }
+    void storageBridgeRefusesOldDaemonAndForwardsLocalOperations_data() {
+        QTest::addColumn<QString>("family");
+        QTest::newRow("retention") << QString("retention");
+        QTest::newRow("size") << QString("size");
+    }
     void storageBridgeRefusesOldDaemonAndForwardsLocalOperations() {
+        QFETCH(QString, family);
+        const QString wire = "storage." + family + ".";
+        const QString ui = family == "size" ? "daemon/storageSize/" : "daemon/storageRetention/";
         QTemporaryDir directory;
         FakeDaemon daemon(useFakeDaemon(directory));
         const auto restore = qScopeGuard(stopUsingFakeDaemon);
@@ -615,25 +653,32 @@ class DesktopDaemonClientTest final : public QObject {
         CodexAppServer bridge;
         QTRY_VERIFY(bridge.isReady());
         bool rejected = false;
-        bridge.call("daemon/storageRetention/read", {},
-                    [&](const QJsonObject&, const QString& error) {
-                        rejected = error.contains("updated local");
-                    });
+        bridge.call(ui + "read", {}, [&](const QJsonObject&, const QString& error) {
+            rejected = error.contains("updated local");
+        });
         QVERIFY(rejected);
         for (const auto& request : daemon.requests)
             QVERIFY(!request.value("message_type").toString().startsWith("storage."));
-        daemon.capabilities = {"storage.retention.read", "storage.retention.apply"};
+        daemon.capabilities = {wire + "read", wire + "apply"};
         daemon.current->disconnectFromServer();
         QTRY_VERIFY(!bridge.isReady());
         QTRY_VERIFY(bridge.isReady());
+        for (const auto& bad :
+             {ui + "unknown", ui + "extra/read", QString("daemon/storageUnknown/read")}) {
+            bool denied = false;
+            bridge.call(bad, {}, [&](const QJsonObject&, const QString& error) {
+                denied = !error.isEmpty();
+            });
+            QVERIFY(denied);
+        }
         bool done = false;
         daemon.onRequest = [&](const QJsonObject& request) {
-            if (request.value("message_type") == "storage.retention.apply") {
+            if (request.value("message_type") == wire + "apply") {
                 QCOMPARE(request.value("payload").toObject().value("expected_revision").toInt(), 4);
                 daemon.answer(request, {{"ok", true}, {"revision", 5}});
             }
         };
-        bridge.call("daemon/storageRetention/apply", {{"expected_revision", 4}},
+        bridge.call(ui + "apply", {{"expected_revision", 4}},
                     [&](const QJsonObject& result, const QString& error) {
                         QVERIFY(error.isEmpty());
                         QCOMPARE(result.value("revision").toInt(), 5);

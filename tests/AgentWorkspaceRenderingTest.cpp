@@ -154,10 +154,11 @@ void AgentWorkspaceViewTest::selectsModelsInUnifiedPicker() {
     };
     QTest::qWait(100);
     QVERIFY(capture(".dark"));
-    QCOMPARE(qRound(popup->property("x").toDouble() * 2.0 + popup->property("width").toDouble()),
-             qRound(root->width()));
-    QCOMPARE(qRound(popup->property("y").toDouble() * 2.0 + popup->property("height").toDouble()),
-             qRound(root->height()));
+    // Centred on whole pixels: an odd remainder leaves at most one pixel of difference.
+    QVERIFY(qAbs(popup->property("x").toDouble() * 2.0 + popup->property("width").toDouble() -
+                 root->width()) <= 1.0);
+    QVERIFY(qAbs(popup->property("y").toDouble() * 2.0 + popup->property("height").toDouble() -
+                 root->height()) <= 1.0);
     search->setProperty("text", "  LUNA  ");
     QTRY_COMPARE(list->property("count").toInt(), 1);
     QTest::keyClick(view.quickView(), Qt::Key_Down);
