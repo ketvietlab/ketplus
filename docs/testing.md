@@ -235,8 +235,14 @@ the corresponding Atlas mock first.
   probes with `KETPLUS_RUN_DELETE_BACKLOG_TESTS=1`; they use temporary journals.
 - Journal startup (ADR 0096): `ketplus_daemon_journal_startup_tests` checks that
   legacy turn-number, title and turn-start backfills run only below format 1.
-  Opt in to the 300k-row/20k-session timing with
-  `KETPLUS_RUN_STARTUP_BACKLOG_TESTS=1`; the second open must stay under 250 ms.
+  It also checks that activity indexing runs after open in passes bounded by rows
+  and payload bytes, that a failed, busy or marker-losing pass keeps its marker,
+  that a new event waits for its session's backfill, which goes first, that a
+  partly indexed group is not published and that drained rows match live indexing
+  (ADR 0097). Opt in to the 300k-row timing over 20k sessions and over one session
+  with `KETPLUS_RUN_STARTUP_BACKLOG_TESTS=1`; the first open, an append to a
+  marked session, each activity backfill pass and the second open must each stay
+  under 250 ms.
 - Journal format (ADR 0095): `ketplus_daemon_journal_space_tests` refuses a newer
   journal in both startup compaction and `LocalJournal` with byte-identical file
   contents, including a newer format only in an uncheckpointed WAL (written by

@@ -867,8 +867,9 @@ bool LocalJournal::deleteSession(const QString& sessionId, const qint64 generati
     // a purge marker for the rest (ADR 0093). The commit makes all of it unreachable.
     for (const QString& table :
          {QStringLiteral("background_tasks"), QStringLiteral("activity_heads"),
-          QStringLiteral("replay_projection_state"), QStringLiteral("client_cursors"),
-          QStringLiteral("staged_attachments"), QStringLiteral("session_contexts")}) {
+          QStringLiteral("activity_backfill"), QStringLiteral("replay_projection_state"),
+          QStringLiteral("client_cursors"), QStringLiteral("staged_attachments"),
+          QStringLiteral("session_contexts")}) {
         QSqlQuery query(database_);
         query.prepare(
             QStringLiteral("DELETE FROM %1 WHERE session_id = ? AND generation = ?").arg(table));

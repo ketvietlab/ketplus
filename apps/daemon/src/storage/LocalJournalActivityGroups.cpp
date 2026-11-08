@@ -71,52 +71,20 @@ bool LocalJournal::initializeActivityGroups() {
             return false;
         }
     }
-    // Upgrade old journals once, streaming retained events rather than materializing history.
-    if (!database_.transaction()) {
-        setError(database_.lastError().text());
-        return false;
-    }
-    QSqlQuery sessions(database_);
-    if (!sessions.exec(QStringLiteral(
-            "SELECT s.id,s.generation,COALESCE(h.indexed_cursor,0) FROM sessions s LEFT JOIN "
-            "activity_heads h ON h.session_id=s.id AND h.generation=s.generation WHERE "
-            "s.last_cursor>COALESCE(h.indexed_cursor,0)"))) {
-        setError(sessions.lastError().text());
-        database_.rollback();
-        return false;
-    }
-    QList<QVariantList> pending;
-    while (sessions.next())
-        pending.append({sessions.value(0), sessions.value(1), sessions.value(2)});
-    sessions.finish();
-    for (const auto& session : pending) {
-        QSqlQuery rows(database_);
-        rows.prepare("SELECT cursor,turn_sequence,event_type,payload FROM replay_events WHERE "
-                     "session_id=? AND generation=? AND cursor>? ORDER BY cursor");
-        for (const auto& value : session)
-            rows.addBindValue(value);
-        if (!rows.exec()) {
-            setError(rows.lastError().text());
-            database_.rollback();
-            return false;
-        }
-        while (rows.next()) {
-            QString error;
-            if (!updateActivityGroups(
-                    session.at(0).toString(), session.at(1).toLongLong(),
-                    rows.value(0).toLongLong(), rows.value(1).toLongLong(),
-                    rows.value(2).toString(),
-                    QJsonDocument::fromJson(rows.value(3).toString().toUtf8()).object(), &error)) {
-                setError(error);
-                database_.rollback();
-                return false;
-            }
-        }
-    }
-    if (!database_.commit()) {
-        const QString commitError = database_.lastError().text();
-        database_.rollback();
-        setError(commitError);
+    // A session indexed behind its history is caught up in bounded passes after open instead
+    // of blocking startup; sessions with new events go first (ADR 0097).
+    if (!query.exec(QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS activity_backfill (session_id TEXT NOT NULL, generation "
+            "INTEGER NOT NULL, wanted INTEGER NOT NULL DEFAULT 0, "
+            "PRIMARY KEY(session_id,generation))")) ||
+        !query.exec(QStringLiteral("CREATE INDEX IF NOT EXISTS activity_backfill_order ON "
+                                   "activity_backfill(wanted DESC)")) ||
+        !query.exec(QStringLiteral(
+            "INSERT OR IGNORE INTO activity_backfill(session_id,generation) "
+            "SELECT s.id,s.generation FROM sessions s "
+            "LEFT JOIN activity_heads h ON h.session_id=s.id AND h.generation=s.generation "
+            "WHERE s.last_cursor>COALESCE(h.indexed_cursor,0)"))) {
+        setError(query.lastError().text());
         return false;
     }
     return true;
@@ -134,6 +102,14 @@ bool LocalJournal::updateActivityGroups(const QString& session, qint64 generatio
                          : QStringLiteral("Activity projection row was not stored.");
         return false;
     };
+    // A session still being indexed indexes this event later, after every earlier one.
+    if (!activityCatchUp_) {
+        bool deferred = false;
+        if (!deferActivityToBackfill(session, generation, &deferred, error))
+            return false;
+        if (deferred)
+            return true;
+    }
     qint64 head = 0;
     QSqlQuery current(database_);
     current.prepare("SELECT group_cursor,turn_sequence FROM activity_heads WHERE session_id=? AND "
@@ -272,6 +248,13 @@ QJsonObject LocalJournal::activitySummaryEvent(const QJsonObject& event) const {
     if (!member.exec() || !member.next() || member.value(0).toLongLong() == 0)
         return event;
     const auto group = member.value(0).toLongLong();
+    // A partly indexed group would publish an incomplete count; stay ungrouped until drained.
+    bool pending = true;
+    if (!activityBackfillPending(event.value("session_id").toString(),
+                                 event.value("session_generation").toInteger(), &pending,
+                                 nullptr) ||
+        pending)
+        return event;
     QSqlQuery summary(database_);
     summary.prepare("SELECT family,count,running,failed,last_cursor FROM activity_summaries WHERE "
                     "session_id=? AND generation=? AND group_cursor=? ORDER BY family");
@@ -337,6 +320,13 @@ QJsonObject LocalJournal::activityGroupPage(const QString& session, qint64 gener
         return failure("invalid_page", "Activity cursor is out of range.");
     if (requestedRevision >= 0 && requestedRevision != revision)
         return failure("snapshot_changed", "Activity snapshot changed; reload the group.");
+    // Groups are published only once their session is fully indexed (ADR 0097).
+    bool pending = true;
+    QString pendingError;
+    if (!activityBackfillPending(session, generation, &pending, &pendingError))
+        return failure("journal_error", pendingError);
+    if (pending)
+        return failure("unknown_group", "Activity is still being indexed.");
     bool groupRunning = false;
     QSqlQuery exists(database_);
     exists.prepare("SELECT SUM(running),COUNT(*) FROM activity_summaries WHERE session_id=? AND "

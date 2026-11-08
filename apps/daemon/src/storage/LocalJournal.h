@@ -189,6 +189,10 @@ class LocalJournal final {
                        const QJsonArray& providerTargets = {});
     // One bounded pass over deleted generations' remaining history (ADR 0093). A busy
     // writer defers the pass; it commits all of its progress or none of it.
+    // One bounded pass indexing a session's activity behind its history (ADR 0097).
+    enum class ActivityBackfill { Idle, Progress, Deferred, Failed };
+    ActivityBackfill backfillActivityGroups();
+    [[nodiscard]] bool hasPendingActivityBackfill() const;
     enum class HistoryPurge { Idle, Progress, Deferred, Failed };
     HistoryPurge purgeDeletedSessionHistory();
     [[nodiscard]] bool hasPendingHistoryPurge() const;
@@ -422,6 +426,15 @@ class LocalJournal final {
     // and records the current format once every migration has succeeded (ADR 0095).
     bool acceptsFormat();
     bool markFormat();
+    // Indexes one bounded page of a marked session's replay rows inside the caller's
+    // transaction, and removes the marker once its history is indexed (ADR 0097).
+    bool catchUpActivity(const QString& session, qint64 generation, bool* indexed,
+                         QSqlError* error);
+    bool activityBackfillPending(const QString& session, qint64 generation, bool* pending,
+                                 QString* error) const;
+    // `deferred` when the session is still marked; its event is then indexed by the backfill.
+    bool deferActivityToBackfill(const QString& session, qint64 generation, bool* deferred,
+                                 QString* error);
     // At open: turns interrupted fork copies into purge work, or keeps them staged.
     bool recoverForkStaging();
     // Removes a staged fork's rows now (synchronous forkSession) or leaves purge work.
@@ -464,6 +477,7 @@ class LocalJournal final {
     QString connectionName_;
     // PRAGMA user_version as found at open; legacy backfills run only below format 1.
     int openedFormat_{0};
+    bool activityCatchUp_{false};
     QSqlDatabase database_;
     mutable QString error_;
     int commandResultsSincePrune_{0};

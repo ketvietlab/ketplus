@@ -102,9 +102,38 @@ void SessionHost::purgeDeletedHistory() {
     }
 }
 
+void SessionHost::scheduleActivityBackfill(const int delayMs) {
+    if (activityBackfillScheduled_)
+        return;
+    activityBackfillScheduled_ = true;
+    QTimer::singleShot(delayMs, this, [this] {
+        activityBackfillScheduled_ = false;
+        backfillActivity();
+    });
+}
+
+void SessionHost::backfillActivity() {
+    switch (journal_->backfillActivityGroups()) {
+    case LocalJournal::ActivityBackfill::Progress:
+        scheduleActivityBackfill(0);
+        return;
+    case LocalJournal::ActivityBackfill::Deferred:
+        scheduleActivityBackfill(250);
+        return;
+    case LocalJournal::ActivityBackfill::Failed:
+        // The marker stays durable; the periodic deletion work retries.
+        qWarning("Activity index backfill deferred: %s", qUtf8Printable(journal_->errorString()));
+        return;
+    case LocalJournal::ActivityBackfill::Idle:
+        return;
+    }
+}
+
 void SessionHost::processDeletionWork() {
     if (journal_->hasPendingHistoryPurge())
         scheduleHistoryPurge(0);
+    if (journal_->hasPendingActivityBackfill())
+        scheduleActivityBackfill(0);
     for (const auto& value : journal_->deletionWork(64, false, deletionWorkCursor_)) {
         const auto work = value.toObject();
         deletionWorkCursor_ = work.value("work_id").toInteger();

@@ -219,6 +219,7 @@ void SessionHost::completeFork(const std::shared_ptr<PendingFork>& pending) {
     }
     pending->copy.reset();
     forksInFlight_.remove(forkId);
+    scheduleActivityBackfill(0);
     const qint64 throughCursor = pending->fork.stored.lastCursor;
     auto it = sessions_.insert(forkId, pending->fork);
     sessionsByThread_.insert(pending->threadId, forkId);

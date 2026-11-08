@@ -110,6 +110,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/workspace/WorkspaceExposure.h
     src/service/DaemonService.cpp
     src/service/DaemonService.h
+    src/storage/LocalJournalActivityBackfill.cpp
     src/storage/LocalJournalActivityGroups.cpp
     src/storage/LocalJournal.cpp
     src/storage/LocalJournalAcknowledgements.cpp

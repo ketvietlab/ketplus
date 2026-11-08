@@ -254,6 +254,11 @@ class DaemonActivityGroupsTest : public QObject {
         for (int pass = 0; pass < 2; ++pass) {
             LocalJournal journal(path);
             QVERIFY(journal.isOpen());
+            // Indexing runs in bounded passes after open (ADR 0097), once.
+            QCOMPARE(journal.hasPendingActivityBackfill(), pass == 0);
+            while (journal.backfillActivityGroups() == LocalJournal::ActivityBackfill::Progress) {
+            }
+            QVERIFY(!journal.hasPendingActivityBackfill());
             const auto summary =
                 journal.activitySummaryEvent(last(journal, first)).value("payload").toObject();
             QCOMPARE(summary.value("count").toInt(), 1);

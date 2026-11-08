@@ -9,7 +9,7 @@ counting as merged fixes. No UI, live journal, provider quota or deployment work
 
 | Original criterion | Available evidence | Remaining acceptance / owner |
 | --- | --- | --- |
-| Forward-only, idempotent migrations; newer-daemon journal safety | Startup transaction failures #250; #273 closes failed storage objects; #274 protects migration staging (merged `c3490da5`) | Newer format refused unchanged (ADR 0095); legacy backfills once (ADR 0096); interruption/low-space and the one-time activity backfill remain / #3329 |
+| Forward-only, idempotent migrations; newer-daemon journal safety | Startup transaction failures #250; #273 closes failed storage objects; #274 protects migration staging (merged `c3490da5`) | Newer format refused unchanged (ADR 0095); legacy backfills once (ADR 0096); activity backfill after open (ADR 0097); interruption/low-space remain / #3329 |
 | Transactions, crash consistency and surfaced errors | Append/delete/fork/replay fixes #241–250; #254 (merged through #255) prepares media ownership before journal commit | Cross-file interruption and broader read/commit failure coverage; do not infer power-loss atomicity from callback order / #2739 |
 | Bounded/indexed reads on large journals | GC #220, ACK #223, metadata #228, staging #230, deletion queue #235, cloud cache #237, cancellation #240; #272 bounds stored policy JSON (merged through #274) | Explicit session-delete and whole-history fork work; actual query plans and representative payload mix / #2739 |
 | Retention and deletion remove rows/media | Transactional cleanup and retention tests above; media cleanup/dedup #251–252 | Physical media/blob retirement, shared-reference preservation and steady-state acceptance; #128 archive behavior is not implied / #2739 |
@@ -157,6 +157,13 @@ A Release fixture (300k raw + 300k replay rows, 20k sessions) opened in 5.6 s
 the first time (activity-index backfill 5.3 s, one-time) and 360 ms on every
 later start: the turn-start and turn-number/title backfills rescanned sessions
 whose values stay empty. Both now run only below format 1; later opens take
-16 ms. A behavioural test fails when the gate is removed. Remaining: the
-synchronous one-time activity backfill on first upgrade, low space and
-interruption.
+16 ms. A behavioural test fails when the gate is removed.
+
+The activity backfill now runs after open (ADR 0097): open records markers and
+the daemon indexes at most 2,048 rows or 1 MiB of payload per pass. Events for a
+marked session wait for its backfill, and its groups stay unpublished until it is
+indexed. The same fixture opens in 31 ms the first time; the slowest pass is
+10 ms. With 300k rows in one session an append takes under 1 ms and the slowest
+pass 34 ms. Drained rows match live indexing. Negative controls for event
+deferral, the group-page gate, the byte budget, `BEGIN IMMEDIATE` and the marker
+row check each fail their test. Remaining: low space and interruption.
