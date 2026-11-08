@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QHash>
 #include <QModelIndex>
 #include <QWidget>
 
@@ -7,6 +8,10 @@
 
 class QFileSystemModel;
 class QLabel;
+class QLineEdit;
+namespace ket {
+class Banner;
+}
 class QStackedWidget;
 class QTreeView;
 
@@ -24,8 +29,12 @@ class ExplorerPanel final : public QWidget {
     // a path whose folders are not there yet is revealed once they arrive.
     void revealPath(const QString& path);
     void focusTree();
+    void setFileStatuses(const QHash<QString, QString>& statuses);
     // How many open tabs with unsaved edits are at or under a path, so Move to Trash can say.
     void setUnsavedTabsQuery(std::function<int(const QString& path)> query);
+
+  public slots:
+    void createEntry(bool directory = false);
 
   signals:
     void fileOpenRequested(const QString& path);
@@ -37,10 +46,21 @@ class ExplorerPanel final : public QWidget {
     void openFolderRequested();
     void hideRequested();
 
+  protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
   private:
+    void installRowDelegate();
+    QHash<QString, QString> fileStatuses_;
     void activateIndex(const QModelIndex& index);
     void showContextMenu(const QPoint& position);
-    void createEntry(bool directory);
+    void commitNewEntry();
+    QWidget* entryRow_{nullptr};
+    QLineEdit* entryName_{nullptr};
+    QLabel* entryLocation_{nullptr};
+    ket::Banner* entryError_{nullptr};
+    QString entryParent_;
+    bool entryDirectory_{false};
     void renameSelected();
     void moveSelectedToTrash();
     void openContainingFolder();

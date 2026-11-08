@@ -68,6 +68,8 @@ QString nullDeviceForGit() {
 
 } // namespace
 
+QString GitService::canonicalEntryPath(const QString& path) { return entryPath(path); }
+
 GitService::GitService(QObject* parent)
     : QObject(parent), gitExecutable_(QStandardPaths::findExecutable(QStringLiteral("git"))),
       refreshTimer_(new QTimer(this)) {
@@ -153,13 +155,13 @@ void GitService::refresh() {
     const QString root = repositoryRoot_;
     const quint64 workspaceGeneration = workspaceGeneration_;
     const quint64 refreshGeneration = ++refreshGeneration_;
-    runGit({QStringLiteral("-C"), root, QStringLiteral("status"),
-            QStringLiteral("--porcelain=v2"), QStringLiteral("-z"),
-            QStringLiteral("--branch"), QStringLiteral("--untracked-files=all")},
+    runGit({QStringLiteral("-C"), root, QStringLiteral("status"), QStringLiteral("--porcelain=v2"),
+            QStringLiteral("-z"), QStringLiteral("--branch"),
+            QStringLiteral("--untracked-files=all")},
            root,
-           [this, root, workspaceGeneration, refreshGeneration](
-               const int exitCode, const QByteArray& output, const QByteArray& error,
-               const bool completedNormally) {
+           [this, root, workspaceGeneration,
+            refreshGeneration](const int exitCode, const QByteArray& output,
+                               const QByteArray& error, const bool completedNormally) {
                if (workspaceGeneration != workspaceGeneration_ ||
                    refreshGeneration != refreshGeneration_) {
                    return;
@@ -175,12 +177,11 @@ void GitService::refresh() {
     runGit({QStringLiteral("-C"), root, QStringLiteral("worktree"), QStringLiteral("list"),
             QStringLiteral("--porcelain"), QStringLiteral("-z")},
            root,
-           [this, root, workspaceGeneration, refreshGeneration](
-               const int exitCode, const QByteArray& output, const QByteArray&,
-               const bool completedNormally) {
+           [this, root, workspaceGeneration,
+            refreshGeneration](const int exitCode, const QByteArray& output, const QByteArray&,
+                               const bool completedNormally) {
                if (workspaceGeneration != workspaceGeneration_ ||
-                   refreshGeneration != refreshGeneration_ || !completedNormally ||
-                   exitCode != 0) {
+                   refreshGeneration != refreshGeneration_ || !completedNormally || exitCode != 0) {
                    return;
                }
                worktrees_ = git_parser::parseWorktrees(output, root);
@@ -227,8 +228,8 @@ void GitService::requestDiff(const QString& filePath, const GitDiffMode mode) {
     }
     if (isUntracked(relativePath) ||
         (combinedWithoutHead && (entry.isSymLink() || entry.isFile()))) {
-        arguments.append({QStringLiteral("--no-index"), QStringLiteral("--"),
-                          nullDeviceForGit(), absolutePath});
+        arguments.append(
+            {QStringLiteral("--no-index"), QStringLiteral("--"), nullDeviceForGit(), absolutePath});
         acceptedDifferenceExitCode = 1;
     } else {
         arguments.append(QStringLiteral("--find-renames"));

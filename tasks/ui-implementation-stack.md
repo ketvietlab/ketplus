@@ -32,9 +32,9 @@ Record technical verification separately from the later review/acceptance phase.
 - [ ] Foundation: symbol icons #143.
 - [ ] Terminal: remaining implementation gaps #144–#147.
 - [ ] Lite: shell #149, using the merged #148 mock.
-- [ ] Lite: Explorer/Search #150 and editor #151.
-- [ ] Lite: Git/diff #152 and Markdown/preview #153.
-- [ ] Lite: embedded terminal #154, settings #155, common controls #156.
+- [x] Lite: Explorer/Search #150 and editor #151 (implementation; acceptance deferred).
+- [x] Lite: Git/diff #152 and Markdown/preview #153 (implementation; acceptance deferred).
+- [x] Lite: embedded terminal #154, settings #155, common controls #156 (implementation; acceptance deferred).
 - [ ] Pro: kit/QML foundation #157.
 - [ ] Pro: sidebar #158, header/composer #159, messages #160.
 - [ ] Pro: activity #161, notices #162, questions/details #163.
@@ -64,3 +64,7 @@ Terminal implementation: kit find field/actions and 75–200% persisted interfac
 Terminal layer: PR #209. Lite shell layer: `feat/ui-stack-lite-shell` on `feat/ui-stack-terminal`; activity rail, first-use welcome, optional editor breadcrumb above the viewport. Lite app and all 16 Lite test targets pass; offscreen startup succeeds. Native acceptance remains deferred.
 
 Lite shell: PR #210 on #209. The next layer replaces pane/find controls, Quick Open with CommandPalette, Markdown mode switching with SegmentedControl, Settings navigation/theme cards/zoom/field rows/footer and core message dialogs with kit composition. It keeps real search, selection, draft/reset and document operations. Further Lite work: model-backed row recipes/Git decorations and mutations, Markdown recipe typography, remaining zoom geometry.
+
+Lite controls: PR #211. The model layer `feat/ui-stack-lite-models` adds virtualized recipe rows/Git decorations, inline creation with collision protection, serialized stage/unstage/commit-index commands, recipe Markdown/diff rendering and shared TerminalTab ownership for embedded multi-tab sessions. Tests cover literal paths, unborn index, untracked-file preservation, inline creation/cancel and independent PTY sessions. Native comparisons remain deferred.
+
+Model layer validation: all 16 Lite targets pass; Source Control rendered offscreen at 224 × 640 with real grouped snapshot data. No full native/theme/zoom acceptance or release work claimed.

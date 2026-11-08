@@ -88,6 +88,7 @@ add_library(ketplus_git STATIC
     src/git/GitParser.cpp
     src/git/GitParser.h
     src/git/GitService.cpp
+    src/git/GitServiceMutations.cpp
     src/git/GitService.h
     src/git/GitTypes.h
 )
@@ -100,6 +101,8 @@ add_library(KetPlusCM::git ALIAS ketplus_git)
 
 add_library(ketplus_workspace STATIC
     src/workspace/ExplorerPanel.cpp
+    src/workspace/ExplorerPanelRows.cpp
+    src/workspace/ExplorerPanelEntry.cpp
     src/workspace/ExplorerPanel.h
     src/workspace/FuzzyMatcher.cpp
     src/workspace/FuzzyMatcher.h
@@ -136,6 +139,8 @@ ketplus_enable_warnings(ketplus_terminal_core)
 add_library(KetPlusCM::terminal_core ALIAS ketplus_terminal_core)
 
 add_library(ketplus_terminal_ui STATIC
+    src/terminal/TerminalTab.cpp
+    src/terminal/TerminalTab.h
     src/terminal/TerminalPanel.cpp
     src/terminal/TerminalPanel.h
     src/terminal/TerminalView.cpp
@@ -234,6 +239,7 @@ add_library(KetPlusCM::index ALIAS ketplus_index)
 
 add_library(ketplus_git_ui STATIC
     src/git/GitChangesPanel.cpp
+    src/git/GitChangesPanelActions.cpp
     src/git/GitChangesPanel.h
     src/git/GitDiffView.cpp
     src/git/GitDiffView.h
@@ -356,8 +362,6 @@ if(APPLE AND KETPLUS_CM_BUILD_APP AND KETPLUS_CM_BUILD_TERMINAL_APP)
     )
 
     add_library(ketplus_terminal_app_ui STATIC
-        src/terminal_app/TerminalTab.cpp
-        src/terminal_app/TerminalTab.h
         src/terminal_app/TerminalWindow.cpp
         src/terminal_app/TerminalWindow.h
     )

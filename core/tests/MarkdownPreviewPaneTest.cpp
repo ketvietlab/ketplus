@@ -1,4 +1,5 @@
 #include "preview/MarkdownPreviewPane.h"
+#include "KetRichRecipes.h"
 #include "preview/MermaidDiagramDialog.h"
 #include "preview/MermaidRenderer.h"
 #include "ui/Theme.h"
@@ -28,6 +29,7 @@ class MarkdownPreviewPaneTest final : public QObject {
     Q_OBJECT
 
   private slots:
+    void initTestCase() { new ketplus::ThemeManager(*qApp, qApp); }
     void rendersMarkdownFromTheLiveBuffer();
     void appliesReadableDocumentTypography();
     void appliesCustomDocumentTypography();
@@ -96,10 +98,10 @@ preview.applyTheme(theme.palette());
     QTRY_VERIFY(browser->toPlainText().contains(QStringLiteral("A paragraph with")));
     QCOMPARE(browser->document()->documentMargin(), 28.0);
     const QString style = browser->document()->defaultStyleSheet();
-    QVERIFY(style.contains(QStringLiteral("font-size: 14px")));
-    QVERIFY(style.contains(QStringLiteral("line-height: 22px")));
-    QVERIFY(style.contains(QStringLiteral("font-size: 26px")));
-    QVERIFY(style.contains(QStringLiteral("font-size: 20px")));
+    QVERIFY(style.contains(QStringLiteral("font-size: 15px")));
+    QVERIFY(style.contains(QStringLiteral("line-height: 26px")));
+    QVERIFY(style.contains(QStringLiteral("font-size: 24px")));
+    QVERIFY(style.contains(QStringLiteral("font-size: 21px")));
     QVERIFY(style.contains(QStringLiteral("border-bottom: 1px solid")));
     QVERIFY(style.contains(QStringLiteral("font-family: \"")));
     QVERIFY(style.contains(QStringLiteral("margin: 0")));
@@ -116,7 +118,8 @@ preview.applyTheme(theme.palette());
         const bool isEmptySpacer = block.text().isEmpty() && currentTable == nullptr;
         table = table != nullptr ? table : currentTable;
         const qreal expectedLineHeight =
-            isHeading ? 24.0 : (isCodeBlock ? 21.0 : (isEmptySpacer ? 60.0 : 22.0));
+            isHeading ? (block.blockFormat().headingLevel() == 1 ? 34.0 : 29.0)
+                      : (isCodeBlock ? 25.0 : (isEmptySpacer ? 60.0 : 26.0));
         QCOMPARE(block.blockFormat().lineHeight(), expectedLineHeight);
         const auto expectedLineHeightType =
             isEmptySpacer ? QTextBlockFormat::ProportionalHeight : QTextBlockFormat::FixedHeight;
@@ -165,8 +168,8 @@ void MarkdownPreviewPaneTest::appliesCustomDocumentTypography() {
     const QString style = browser->document()->defaultStyleSheet();
     QVERIFY(style.contains(QStringLiteral("font-size: 17px")));
     QVERIFY(style.contains(QStringLiteral("line-height: 29px")));
-    QVERIFY(style.contains(QStringLiteral("font-size: 29px")));
-    QVERIFY(style.contains(QStringLiteral("font-size: 23px")));
+    QVERIFY(style.contains(QStringLiteral("font-size: 27px")));
+    QVERIFY(style.contains(QStringLiteral("font-size: 24px")));
 
     for (QTextBlock block = browser->document()->begin(); block.isValid(); block = block.next()) {
         const bool isCodeBlock = block.blockFormat().hasProperty(QTextFormat::BlockCodeLanguage) ||
@@ -174,7 +177,7 @@ void MarkdownPreviewPaneTest::appliesCustomDocumentTypography() {
         const bool isEmptySpacer =
             block.text().isEmpty() && QTextCursor(block).currentTable() == nullptr;
         const qreal expectedLineHeight = block.blockFormat().headingLevel() > 0
-                                             ? 31.0
+                                             ? 38.0
                                              : (isCodeBlock ? 28.0 : (isEmptySpacer ? 60.0 : 29.0));
         QCOMPARE(block.blockFormat().lineHeight(), expectedLineHeight);
         const auto expectedLineHeightType =

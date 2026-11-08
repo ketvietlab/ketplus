@@ -1,8 +1,11 @@
 #include "terminal/PtyProcess.h"
 #include "terminal/TerminalPanel.h"
 #include "terminal/TerminalSession.h"
+#include "terminal/TerminalTab.h"
 #include "terminal/TerminalView.h"
 #include "ui/Theme.h"
+#include <QAbstractButton>
+#include <QTabWidget>
 
 #include "KetTokens.h"
 
@@ -52,6 +55,7 @@ class PtyProcessTest final : public QObject {
     void keepsTerminalFontFamilyUnderTheme();
     void echoesTypedTextBeforeEnter();
     void restoresFocusAfterAnActionMenuCloses();
+    void embeddedTabsKeepIndependentSessions();
     void rendersInputMethodPreedit();
     void coalescesStreamingPaints();
     void controlCInterruptsForegroundCommand();
@@ -442,6 +446,33 @@ void PtyProcessTest::emitsMouseProtocolFromCore() {
 
     session.feedOutput(QByteArray("\x1b[?1000l"));
     QVERIFY(!session.mouseTrackingEnabled());
+}
+
+void PtyProcessTest::embeddedTabsKeepIndependentSessions() {
+    TerminalPanel panel;
+    panel.resize(800, 400);
+    panel.show();
+    panel.start(QDir::tempPath());
+    auto* tabs = panel.findChild<QTabWidget*>(QStringLiteral("terminalPanelTabs"));
+    QVERIFY(tabs);
+    auto* first = qobject_cast<TerminalTab*>(tabs->currentWidget());
+    QVERIFY(first);
+    QTRY_VERIFY_WITH_TIMEOUT(first->isRunning(), 5000);
+    auto* create = panel.findChild<QAbstractButton*>(QStringLiteral("newTerminalTab"));
+    QVERIFY(create);
+    create->click();
+    QCOMPARE(tabs->count(), 2);
+    auto* second = qobject_cast<TerminalTab*>(tabs->currentWidget());
+    QVERIFY(second && first != second);
+    QTRY_VERIFY_WITH_TIMEOUT(second->isRunning(), 5000);
+    QVERIFY(first->isRunning());
+    tabs->setCurrentIndex(0);
+    QCOMPARE(qobject_cast<TerminalTab*>(tabs->currentWidget()), first);
+    const QPointer<TerminalTab> closed = second;
+    tabs->tabCloseRequested(1);
+    QVERIFY(closed.isNull());
+    QCOMPARE(tabs->count(), 1);
+    QVERIFY(first->isRunning());
 }
 
 } // namespace ketplus

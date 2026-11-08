@@ -6,6 +6,7 @@
 #include <QHash>
 #include <QPointer>
 #include <QProcess>
+#include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -40,6 +41,7 @@ class GitParserTest final : public QObject {
 
   private slots:
     void parsesPorcelainV2Status();
+    void stagesLiteralPathsAndCommitsOnlyTheIndex();
     void parsesWorktreeList();
     void discoversWorktreesAndProducesDiffs();
     void diffsSymlinksAsLinks();
@@ -521,3 +523,51 @@ void GitParserTest::refreshesWhenGitRunsOutsideKetPlus() {
 
 QTEST_MAIN(GitParserTest)
 #include "GitParserTest.moc"
+
+void GitParserTest::stagesLiteralPathsAndCommitsOnlyTheIndex() {
+    const QString git = QStandardPaths::findExecutable(QStringLiteral("git"));
+    if (git.isEmpty())
+        QSKIP("git unavailable");
+    QTemporaryDir repo;
+    QVERIFY(repo.isValid());
+    QVERIFY(runGit(git, repo.path(), {"init", "-q"}));
+    QVERIFY(runGit(git, repo.path(), {"config", "user.name", "KetPlus Test"}));
+    QVERIFY(runGit(git, repo.path(), {"config", "user.email", "test@ketplus.invalid"}));
+    QVERIFY(runGit(git, repo.path(), {"config", "commit.gpgsign", "false"}));
+    QVERIFY(QDir().mkpath(repo.filePath("empty-hooks")));
+    QVERIFY(runGit(git, repo.path(), {"config", "core.hooksPath", repo.filePath("empty-hooks")}));
+    for (const QString name : {QStringLiteral("a[1].txt"), QStringLiteral("kept.txt")}) {
+        QFile file(repo.filePath(name));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("content\n");
+    }
+    ketplus::GitService service;
+    QSignalSpy finished(&service, &ketplus::GitService::mutationFinished);
+    service.setWorkspacePath(repo.path());
+    QTRY_COMPARE_WITH_TIMEOUT(service.snapshot().files.size(), 2, 5000);
+    service.stageFile(repo.filePath("../outside.txt"));
+    QCOMPARE(finished.size(), 1);
+    QVERIFY(!finished.takeFirst().at(1).toBool());
+    service.stageFile(repo.filePath("a[1].txt"));
+    QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 5000);
+    QVERIFY2(finished.first().at(1).toBool(), qPrintable(finished.first().at(2).toString()));
+    finished.removeFirst();
+    QTRY_VERIFY_WITH_TIMEOUT(service.snapshot().files.first().hasStagedChange(), 5000);
+    service.unstageFile(repo.filePath("a[1].txt"));
+    QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 5000);
+    QVERIFY2(finished.first().at(1).toBool(), qPrintable(finished.first().at(2).toString()));
+    finished.removeFirst();
+    QVERIFY(QFile::exists(repo.filePath("a[1].txt")));
+    QTRY_VERIFY_WITH_TIMEOUT(!service.snapshot().files.first().hasStagedChange(), 5000);
+    service.stageFile(repo.filePath("a[1].txt"));
+    QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 5000);
+    QVERIFY2(finished.first().at(1).toBool(), qPrintable(finished.first().at(2).toString()));
+    finished.removeFirst();
+    QTRY_VERIFY_WITH_TIMEOUT(service.snapshot().files.first().hasStagedChange(), 5000);
+    service.commitStaged("Commit only the selected file");
+    QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 5000);
+    QVERIFY2(finished.first().at(1).toBool(), qPrintable(finished.first().at(2).toString()));
+    QTRY_COMPARE_WITH_TIMEOUT(service.snapshot().files.size(), 1, 5000);
+    QCOMPARE(service.snapshot().files.first().path, QStringLiteral("kept.txt"));
+    QVERIFY(service.snapshot().files.first().untracked);
+}

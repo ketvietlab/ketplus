@@ -42,11 +42,6 @@ QDir::Filters explorerFilters(const bool showHiddenFiles) {
     return filters;
 }
 
-bool isValidEntryName(const QString& name) {
-    return !name.isEmpty() && name != QStringLiteral(".") && name != QStringLiteral("..") &&
-           !name.contains(QLatin1Char('/')) && !name.contains(QLatin1Char('\\'));
-}
-
 } // namespace
 
 ExplorerPanel::ExplorerPanel(QWidget* parent)
@@ -69,6 +64,7 @@ ExplorerPanel::ExplorerPanel(QWidget* parent)
 
     tree_->setObjectName(QStringLiteral("explorerTree"));
     tree_->setModel(model_);
+    installRowDelegate();
     tree_->setHeaderHidden(true);
     tree_->setAnimated(false);
     tree_->setExpandsOnDoubleClick(false);
@@ -87,13 +83,16 @@ ExplorerPanel::ExplorerPanel(QWidget* parent)
     folderLabel_->setProperty("kvRole", QStringLiteral("sidebarFolder"));
     folderLabel_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     folderLabel_->setContentsMargins(12, 4, 12, 4);
-    auto* collapseButton =
-        new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"chevrons-up")),
-                            tr("Collapse folders"), header);
+    auto* collapseButton = new ket::IconButton(
+        ket::Icons::icon(ket::Icons::codeForLucide(u"chevron-up")), tr("Collapse folders"), header);
     auto* refreshButton = new ket::IconButton(
         ket::Icons::icon(ket::Icons::codeForLucide(u"refresh-cw")), tr("Refresh Explorer"), header);
     auto* closeButton = new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"x")),
                                             tr("Hide Explorer"), header);
+    auto* newFile = new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"plus")),
+                                        tr("New File"), header);
+    connect(newFile, &QAbstractButton::clicked, this, [this] { createEntry(false); });
+    header->actions()->addWidget(newFile);
     header->actions()->addWidget(collapseButton);
     header->actions()->addWidget(refreshButton);
     header->actions()->addWidget(closeButton);
@@ -137,6 +136,8 @@ void ExplorerPanel::setRootPath(const QString& path) {
         return;
     }
 
+    if (entryRow_)
+        entryRow_->hide();
     rootPath_ = root.absoluteFilePath();
     pendingReveal_.clear();
     folderLabel_->setText(root.fileName().isEmpty() ? rootPath_ : root.fileName());
@@ -249,56 +250,6 @@ void ExplorerPanel::showContextMenu(const QPoint& position) {
     connect(refreshAction, &QAction::triggered, this, &ExplorerPanel::refresh);
 
     menu.exec(tree_->viewport()->mapToGlobal(position));
-}
-
-void ExplorerPanel::createEntry(const bool directory) {
-    const QString parentPath = targetDirectory();
-    if (parentPath.isEmpty()) {
-        return;
-    }
-
-    bool accepted = false;
-    const QString title = directory ? QStringLiteral("New Folder") : QStringLiteral("New File");
-    const QString name = QInputDialog::getText(this, title, QStringLiteral("Name:"),
-                                               QLineEdit::Normal, {}, &accepted)
-                             .trimmed();
-    if (!accepted) {
-        return;
-    }
-    if (!isValidEntryName(name)) {
-        message_dialog::warning(this, title, QStringLiteral("Enter a valid name without slashes."));
-        return;
-    }
-
-    const QString path = QDir(parentPath).filePath(name);
-    if (QFileInfo::exists(path)) {
-        message_dialog::warning(this, title,
-                                QStringLiteral("An item with this name already exists."));
-        return;
-    }
-
-    bool created = false;
-    if (directory) {
-        created = QDir(parentPath).mkdir(name);
-    } else {
-        QFile file(path);
-        created = file.open(QIODevice::WriteOnly | QIODevice::NewOnly);
-    }
-    if (!created) {
-        message_dialog::critical(this, title, QStringLiteral("Unable to create %1.").arg(path));
-        return;
-    }
-
-    QTimer::singleShot(100, this, [this, path, directory] {
-        const QModelIndex index = model_->index(path);
-        if (index.isValid()) {
-            tree_->setCurrentIndex(index);
-            tree_->scrollTo(index);
-            if (!directory) {
-                emit fileOpenRequested(path);
-            }
-        }
-    });
 }
 
 void ExplorerPanel::renameSelected() {

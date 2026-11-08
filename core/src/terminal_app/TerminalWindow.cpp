@@ -1,7 +1,7 @@
 #include "terminal_app/TerminalWindow.h"
 
+#include "terminal/TerminalTab.h"
 #include "terminal/TerminalView.h"
-#include "terminal_app/TerminalTab.h"
 #include "ui/Theme.h"
 
 #include "KetAppearance.h"

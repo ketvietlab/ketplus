@@ -385,3 +385,9 @@ boundary. `ClaudeCredentials` owns storage and fixed-endpoint validation;
 `LocalIpcServer` routes authenticated local credential commands without SessionHost
 journaling; `ClaudeAdapter` supplies settings only to its sidecar's new SDK query.
 The desktop composes the native credential form in Settings → Providers.
+
+### Shared model-backed Két UI
+
+Explorer and Source Control render Két row recipes through Qt item delegates, retaining lazy filesystem loading, stable selection and inline rename. Explorer creates entries through an inline Két field and only writes after confirmation. Git mutations live in `GitService`: paths use the same canonical-entry normalization as diff requests, use literal Git pathspecs, serialize operations and suppress stale completion notifications after a workspace switch. Commit acts on the existing index only; it never stages files implicitly.
+
+`terminal/TerminalTab` now owns the shared session/view lifecycle for the standalone Terminal window and the embedded multi-tab `TerminalPanel`. Closing a tab stops only that session; hiding the panel preserves sessions. The shared terminal target exports the tab implementation, so Pro does not depend on the standalone app target.
