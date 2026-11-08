@@ -1072,8 +1072,8 @@ qint64 LocalJournal::appendEvent(const QString& sessionId, const qint64 generati
 
 qint64 LocalJournal::appendEventWithMutation(const QString& sessionId, const qint64 generation,
                                              const QString& type, const QJsonObject& payload,
-                                             QString* error,
-                                             const std::function<bool()>& mutation) {
+                                             QString* error, const std::function<bool()>& mutation,
+                                             bool ownTransaction) {
     const QByteArray encoded = QJsonDocument(payload).toJson(QJsonDocument::Compact);
     if (encoded.size() > protocol::maximumEventPayloadBytes) {
         const QJsonObject item = payload.value(QStringLiteral("item")).toObject();
@@ -1083,7 +1083,7 @@ qint64 LocalJournal::appendEventWithMutation(const QString& sessionId, const qin
             (type == QStringLiteral("item.started") || type == QStringLiteral("item.completed")) &&
             itemType != QStringLiteral("commandExecution") && !eventItemId(payload).isEmpty() &&
             encoded.size() <= 32 * 1024 * 1024;
-        if (!chunkable) {
+        if (!chunkable || !ownTransaction) {
             const QString message =
                 QStringLiteral("Event payload exceeds the local journal limit and cannot be "
                                "represented as a bounded transcript item.");
@@ -1093,7 +1093,7 @@ qint64 LocalJournal::appendEventWithMutation(const QString& sessionId, const qin
             return -1;
         }
     }
-    if (!database_.transaction()) {
+    if (ownTransaction && !database_.transaction()) {
         if (error != nullptr) {
             *error = database_.lastError().text();
         }
@@ -1198,7 +1198,7 @@ qint64 LocalJournal::appendEventWithMutation(const QString& sessionId, const qin
         }
         return -1;
     }
-    if (!database_.commit()) {
+    if (ownTransaction && !database_.commit()) {
         const QString commitError = database_.lastError().text();
         database_.rollback();
         if (error != nullptr)
