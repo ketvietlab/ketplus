@@ -5,6 +5,20 @@ milestone changes state.
 
 ## Implemented
 
+- Reference-based previews use bounded validated ownership and verify blob
+  SHA-256 before decoding the same byte snapshot (ADR 0069). Unknown metadata,
+  linked roots and mismatched bytes remain intact and return unavailable.
+
+- Fork prepares validated media ownership before committing copied history
+  (ADR 0068). Failed preparation rolls back the journal; conflicting destination
+  metadata is preserved. Matching prepared ownership permits retry after a
+  database commit failure; reopen cleanup preserves source-owned images.
+
+- Image publication requires a checked atomic ownership-file update (ADR 0067).
+  Invalid metadata is preserved, repeated hashes are deduplicated and failed
+  writes cannot publish successful new references. Fork-copy and orphan bounds
+  remain separate work.
+
 - Long-lived provider stderr draining has a Codex/Claude/Cursor process regression:
   two 32-MiB floods retain only the newest 1 MiB while stdout round trips and
   subsequent calls continue on the same process. The fixture uses no real CLI.

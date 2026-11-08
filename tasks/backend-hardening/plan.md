@@ -230,7 +230,7 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
 | H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 and cloud #237 merged; transaction recovery #241 merged; cancellation #240 merged; explicit session-delete bounds still open | Audit explicit session deletion and tombstone enumeration / #2739 |
 | H1.2 | In progress | Startup commit failure #250 merged; other migration/read/crash cases remain | Continue remaining failure-path audit / #2739 |
-| H1.4 | In progress | #253/#254 are ancestors of #255; integrated production/test files match 20156fc7; full Pro running on 74804ad8 | Complete combined media gate and send #255 to #7705 / #2739 |
+| H1.4 | In progress | #253/#254 are ancestors of #255; integrated production/test files match 20156fc7; full Pro 104/104 on 74804ad8 | Independent combined #255 review / #7705; integration / #2739 |
 | H1.5–H1.7 | Not started | No claim that #128 backend acceptance is complete | Continue storage acceptance / #2739 |
 | H1.3 | In progress | Delete/ownership #241–243, append #244–245 and fork #246–247 merged; stream recovery #248 merged; replay/activity #249 merged; startup #250 merged | Continue caller atomicity/read failures / #2739 |
 | H2; H3.2–H3.5 | Partially started | H2.3 volatile retry subset #248 merged; broader lifecycle/provider work remains | Drain current #68 queue first / #2739 |
@@ -990,8 +990,11 @@ The relay rollout gate remains external and does not block this provider work.
 - [x] Merge integration `b3af8ed5`; code merges cleanly. Resolve only project-status
   and plan conflicts, retaining both histories. Media production/test files remain
   byte-identical to `20156fc7`; the integrated code head is `74804ad8`.
-- [ ] Complete full Release Pro verification, send one final-head #255 review to
-  #7705, handle findings and merge the verified stack. Parent PRs are included.
+- [x] Full Release Pro build and 104/104 offscreen targets pass on `74804ad8`
+  (456.04 s, two-way parallelism, first run/no retries). Evidence and hashes:
+  `evidence/h1-media-integration-qt.json`.
+- [ ] Independent final-head #255 review by #7705, then handle findings and merge
+  the verified stack. Parent PRs #253/#254 are included.
 - [ ] Remove the pushed linked worktree/build after clean/pushed/usage checks.
 - [ ] Drain existing #272/#273/#274 journal policy/startup/migration fixes next,
   then reconcile all seven original #68 criteria before claiming issue completion.
@@ -1029,8 +1032,8 @@ queue. #85 retains its original rollout gate.
 - [x] Focused 18/18; Release headless affected 4/4 targets (37.67 s): policy 31/31,
   size policy 5/5, retention 124/124, journal space 10 pass / 1 scale opt-in skip.
   Reopen, unchanged bytes/revision/history, repair/save and normal retention pass.
-- [ ] Independent exact-head review and merge. Reviewer dispatch remains held by
-  `chain_limit`; the queued request needs manual activation, not another retry.
+- [ ] Independent exact-head review and merge through combined #274 by #7705;
+  the user reassignment supersedes the historical dispatch hold.
 - [ ] H1.6 remains open. ADR 0046 specifies append-row order within each age phase,
   not global timestamp order; do not claim the plan's oldest-turn wording has
   been globally verified or silently change that contract. The existing size
@@ -1064,6 +1067,8 @@ Evidence: [h1-failed-journal-reuse-qt.json](evidence/h1-failed-journal-reuse-qt.
 - [x] Merge integration `b3af8ed5` and existing #272/#273 into #274; the
   integrated code head is `6347493f`. Resolve plan additions by retaining each
   history. Production/test files match their original package heads byte-for-byte.
-- [ ] Full Release Pro matrix on the combined journal head, then independent
+- [x] Include final #255 head `dae6a297` before the combined Pro matrix; media
+  has passed its own 104/104 gate and is under #7705 review.
+- [ ] Full Release Pro matrix on the combined journal/media head, then independent
   #7705 review and merge. This package does not complete H1.2/H1.6 or #68.
 - [ ] Safe cleanup of the pushed linked worktree/build after all checks.
