@@ -1,4 +1,5 @@
 #include "service/DaemonService.h"
+#include "DaemonCredentialFile.h"
 #include "DaemonPaths.h"
 #include "providers/ClaudeAccountUsage.h"
 #include "providers/ClaudeCredentials.h"
@@ -195,31 +196,9 @@ DaemonConfiguration DaemonService::defaultConfiguration() {
 }
 
 QByteArray DaemonService::loadOrCreateToken() {
-    QFile existing(configuration_.tokenPath);
-    if (existing.exists()) {
-#if defined(Q_OS_UNIX)
-        constexpr QFileDevice::Permissions unsafePermissions =
-            QFileDevice::ReadGroup | QFileDevice::WriteGroup | QFileDevice::ExeGroup |
-            QFileDevice::ReadOther | QFileDevice::WriteOther | QFileDevice::ExeOther;
-        const QFileInfo tokenInfo(configuration_.tokenPath);
-        // A symlink or another account's file is not a credential this daemon created.
-        if (tokenInfo.isSymLink() || !tokenInfo.isFile() || tokenInfo.ownerId() != ::getuid() ||
-            (tokenInfo.permissions() & unsafePermissions) != 0) {
-            error_ = QStringLiteral("The local daemon credential has unsafe permissions.");
-            return {};
-        }
-#endif
-        if (!existing.open(QIODevice::ReadOnly)) {
-            error_ = QStringLiteral("Unable to read the local daemon credential.");
-            return {};
-        }
-        const QByteArray token = existing.readAll().trimmed();
-        if (token.size() < 32) {
-            error_ = QStringLiteral("The local daemon credential is invalid.");
-            return {};
-        }
-        return token;
-    }
+    const QFileInfo existing(configuration_.tokenPath);
+    if (existing.exists() || existing.isSymLink())
+        return remote::readLocalDaemonCredential(configuration_.tokenPath, &error_);
 
     QByteArray random(32, Qt::Uninitialized);
     for (qsizetype offset = 0; offset < random.size(); offset += 4) {

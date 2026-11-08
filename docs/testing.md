@@ -39,7 +39,7 @@ obsolete run. See `docs/release-process.md`.
 | Claude API key | `ketplus_claude_credentials_tests`, `ketplus_claude_credentials_settings_tests`, `ketplus_claude_sidecar_tests`, `ketplus_desktop_daemon_client_tests` | local IPC authentication, memory-backed secret store, fixed endpoint and network failures, SDK credential scope, background rotation, disconnect without credential replay, native form states; no live API or real Keychain |
 | Storage preferences | `ketplus_settings_storage_page_tests`, `ketplus_desktop_daemon_client_tests` | Immediate detail saves and explicit size-target saves, independent revisions, old-daemon capability fallback, read-only loading, conflict/error reload, malformed policy, advisory usage failure, late replies, keyboard/accessibility, narrow/wide native layout; capability negotiation and no reconnect replay; real local-daemon bridge read/apply |
 | Settings composition | `ketplus_settings_integration_tests` | Shared appearance persistence across Pro shell surfaces; Providers page |
-| Atlas process/WebView | `ketplus_atlas_tests` | Atlas process and tab behavior |
+| Atlas process/WebView | `ketplus_atlas_tests` | Atlas process and tab behavior; complete selected-port readiness, malformed/truncated banners, stop-time suppression and repair/restart with a synthetic CLI |
 | Atlas shell integration | `ketplus_atlas_workspace_tests` | Desktop and Atlas composition |
 | Agent Workspace | `ketplus_agent_tests` | transport, sessions, rendering, interaction, history, fork menus |
 | Sidebar attention | `ketplus_conversation_attention_tests` | background blocking/async questions and confirmations, answer/expiry transitions and spinner lifecycle; fake provider only |
@@ -62,6 +62,7 @@ obsolete run. See `docs/release-process.md`.
 | Long-lived provider stderr | `ketplus_provider_stderr_flood_tests` | Codex/Claude/Cursor fake processes each emit two 32-MiB floods with eight mandatory stdout round trips per flood; drain and 1-MiB newest-tail bounds are observed directly, then a normal call succeeds on the same process |
 | Workspace boundary | `ketplus_workspace_tests` | Pro shell with CM explorer behavior |
 | Async question lifetime | `ketplus_async_question_lifetime_tests` | turn expiry, session/generation isolation, late items and stale answers |
+| Local turn acceptance | `ketplus_turn_acceptance_tests` | Raw/projection/state/configuration abort and ignored writes, deferred-FK commit failure, no rejected prompt publication, independent-reader visibility, repair/retry/reopen, duplicate result replay, counter/revision exhaustion, bounded oversized-payload refusal (ADR 0076) |
 | Session/provider deletion | `ketplus_provider_deletion_tests` | Failed commit releases the transaction; ignored tombstone/work/history mutations roll back; retry/reopen preserves history, conversation number, cleanup work and unrelated sessions; shared provider threads and unsupported providers remain protected; query/mid-fetch ownership failures prevent fake-provider deletion, preserve pending work/history and recover after repair/restart; malformed/unknown ownership JSON blocks queued and local deletion for both source and retained sessions |
 | Provider response identity/envelopes | `ketplus_provider_response_id_tests` | Fake-provider handshake barriers, typed id isolation, valid-response recovery, exactly-once callbacks and Codex oversized responses; numeric limits; malformed result/error shape, initialization refusal, outstanding-call isolation, duplicate replies and subsequent recovery; POSIX launcher cases skip on Windows |
 | Provider version probing | `ketplus_provider_version_probe_tests` | Incremental stdout/stderr cap, excessive-output termination, exit status, timeout/EOF, retry/cache, distinct concurrent executables and same-path replacement; local helper only |
@@ -134,11 +135,31 @@ budget/session total/account total and captures `/tmp/ketplus-claude-usage.png`.
 Live organization reporting requires the user's separately configured Admin key; tests
 never use a real key, Keychain item or inference quota.
 
+Atlas tunnel completion (`ketplus_atlas_live_tunnel_tests`, ADR 0084) exercises
+per-frame, half-window and delayed full-window credits against a synthetic
+loopback origin. It requires complete binary response bytes and exactly one EOF
+without a final credit grant. Run the runtime, cloud-privacy and remote-control
+client targets alongside it; no real CLI/provider or relay is required.
+
+Daemon Atlas readiness (`ketplus_atlas_live_runtime_tests`, ADR 0083) includes a
+Unix synthetic Python CLI: wrong/longer port, embedded/partial/truncated banners,
+LF/CRLF/slash/split compatibility, stop-time output and a one-shot start callback
+when the process exits immediately after readiness. Invalid-output repair starts
+a fresh owned runtime. These cases do not opt into a real CLI, renderer or
+provider. Header changes require the full Pro matrix; keep the existing real
+KetAtlas lane opt-in and report its skip separately.
+
 ## Minimum verification
 
 Update-preparation changes run `python3 tests/packaging/test_update_archive_cli.py`
 for invalid notes/version, output collisions and repair/retry using synthetic
 Apple/archive/appcast tools. No signing key or network is used.
+
+Local IPC receive-buffer changes run the lifecycle loopback flood and resume
+regression before/after hello, plus the directly affected protocol, headless,
+credential, upgrade and desktop IPC targets. The fixture uses valid exact-limit
+frames and measures actual unread bytes, rather than only checking a configured
+property; no provider account is required (ADR 0077).
 
 Changes to macOS signing also run `python3 tests/packaging/test_signing_cli.py`.
 These fixtures stub signing/Apple tools and never use a private key or notarization
@@ -156,8 +177,9 @@ reference envelope is consumed without treating the Mac path as a phone file.
 
 The Linux headless lane uses `-DKETPLUS_EDITION=pro -DKETPLUS_BUILD_DESKTOP=OFF`; it runs all daemon
 tests and requires no provider account or display. The new focused targets are
-`ketplus_headless_daemon_tests` (zero-session catalog, local auth, isolated real
-daemon/CLI, SIGTERM), `ketplus_device_authorization_tests` (PKCE, polling,
+`ketplus_headless_daemon_tests` (zero-session catalog, local auth, bounded
+credential admission/preservation/repair at daemon startup and client hello,
+isolated real daemon/CLI, SIGTERM), `ketplus_device_authorization_tests` (PKCE, polling,
 cancellation and expiry) and `ketplus_remote_control_client_tests` (host/client
 E2EE, key-bound pairing, refresh recovery, immutable command retries and signed
 results). The normal full Desktop suite still covers the shared build/interface
@@ -218,7 +240,15 @@ the corresponding Atlas mock first.
   Server tests prove tombstone tables are not read and retain the wire limit.
 - One Pro module: focused target plus its directly affected tests.
 - Shared header or desktop shell: full build and full Pro test suite.
+- Client transport-buffer changes: `ketplus_daemon_client_upgrade_policy_tests`
+  observes unread bytes with dispatch paused before/after hello, then verifies
+  exact-limit pipelined frames and subsequent delivery without reconnect.
 - `core/` change: the Lite suite (`ctest --preset lite-dev`), then the full Pro suite.
+- Git/workspace symlink fixtures use native filesystem symbolic links, including
+  directory and dangling links. `QFile::link()` creates Windows shortcuts and
+  must not substitute for these fixtures. Git fixtures set repository-local
+  `core.symlinks=true`; inability to create a real link fails setup rather than
+  silently skipping the boundary assertion.
 - QML layout or native rendering: offscreen tests plus the relevant native
   screenshot/pixel check documented in `agent-workspace.md`.
 - Performance-sensitive behavior: Release build and the matching script under
@@ -588,7 +618,6 @@ ADR 0061 `SessionForkTest::journalForkPreservesUnsupportedSourceCounters` covers
 negative, fractional, TEXT and BLOB cursor/turn values. It checks exact source
 preservation, no destination, released transaction, fixture repair, retry and
 reopen. Run the combined fork suite and its affected backend matrix.
-
 
 ### Failed journal reuse (ADR 0086)
 

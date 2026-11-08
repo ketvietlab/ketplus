@@ -15,6 +15,33 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
 
+- Daemon Atlas readiness requires a complete line for the owned viewer port and
+  ignores partial/embedded/truncated-prefix or post-stop output (ADR 0083). Start
+  results are delivered once even if the process exits immediately after ready.
+  Synthetic CLI cases and the full Pro suite pass; executable/port trust and
+  wider tunnel/renderer lifetime acceptance remain separate.
+
+- Atlas process readiness requires a complete banner for the current attempt's
+  selected loopback port, including truncation/restart and stop-time guards
+  (ADR 0081). Executable/listener identity and broader lifecycle remain open.
+
+- The local Qt client applies transport backpressure before hello (ADR 0079),
+  limiting unread socket bytes to one maximum frame plus header while preserving
+  valid pipelined events. Broader IPC work/queue/lifetime bounds remain open.
+
+- Local daemon/client credential reads share a 4-KiB raw-file bound (ADR 0078).
+  Unix admission checks the opened descriptor's ownership/type/permissions;
+  unsupported files remain intact and client reconnect can recover after repair.
+
+- Accepted local IPC sockets bound Qt's unread receive buffer to one maximum
+  frame plus header (ADR 0077). Pipelined exact-limit requests resume without
+  loss after dispatch pauses, both before and after authentication.
+
+- Local turn acceptance commits state/configuration and its two/three events
+  together before publication (ADR 0076). Failed queued/configuration/projection/
+  commit writes leave no accepted prompt; repair/retry and independent-reader
+  visibility are covered. Whole-command idempotency/crash recovery remains open.
+
 - Reference-based previews use bounded validated ownership and verify blob
   SHA-256 before decoding the same byte snapshot (ADR 0069). Unknown metadata,
   linked roots and mismatched bytes remain intact and return unavailable.
@@ -70,7 +97,6 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 - Oversized Codex line scanning retains at most 64 routing frames, tracking deeper
   containers with a scalar depth (ADR 0070). Shallow fields after the nested value
   still route correctly; broader provider framing remains under audit.
-
 - Existing media blobs are validated before dedup returns a reference (ADR 0066):
   exact bounded bytes, regular nonsymlink files and owner-only permissions.
   Invalid entries remain intact for repair; reference durability remains open.
@@ -548,7 +574,6 @@ reading column and collapse after 20 lines with a reversible Show more control.
 Collapsed activity rows keep one title line; browser-open rows retain an Open
 action. Composer block line-height matches
 the transcript at 1.75; focused Qt tests cover Vietnamese single-line sizing and composer undo.
-
 
 ## Qt design mock
 

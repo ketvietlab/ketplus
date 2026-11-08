@@ -1,5 +1,8 @@
 name: webrtc-spike
 
+permissions:
+  contents: read
+
 # The WebRTC transport spike (ADR 0024) builds on the daemon's platforms and carries its data
 # channels directly and through a loopback TURN server there. The product build never includes
 # it, so it runs only when a promotion or release changes the spike.
@@ -25,7 +28,9 @@ jobs:
     env:
       KETPLUS_SPIKE_TURN_URL: turn:spike:spike@127.0.0.1:3479
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Install build dependencies and coturn
         run: |
           if [ "$RUNNER_OS" = Linux ]; then

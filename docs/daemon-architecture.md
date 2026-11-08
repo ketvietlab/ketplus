@@ -108,6 +108,18 @@ discovery are tracked by generation/cursor and journal replay fills any gap afte
 the catalog snapshot. Discovery responses from an old connection are discarded.
 The reconciliation lives in `CodexDaemonDiscovery.cpp`; the existing large
 `CodexAppServer.cpp` retains only transport lifecycle and event-dispatch hooks.
+Accepted local IPC sockets cap Qt's unread receive buffer at one maximum frame
+plus the four-byte header (ADR 0077), separately from frame assembly and outbound
+queues. Pausing request dispatch applies transport backpressure without dropping
+valid pipelined requests. This does not bound all per-request or process memory.
+
+Local turn acceptance commits the starting session/configuration, pinned context,
+`user.message`, `turn.queued` and optional `session.configuration_changed` in one
+transaction. Its bounded receipt is read before commit and published afterward;
+failed acceptance cannot retain a rejected prompt (ADR 0076). Existing stream
+recovery is drained first; command-result persistence and provider-side effects
+remain separate transaction boundaries.
+
 Streamed text reaches the journal coalesced: consecutive `assistant.delta` or
 `command.output_delta` notifications for one item are held for at most 150 ms
 (or 16 KiB) and journaled as one event. Any other event, a delta of another
@@ -481,8 +493,16 @@ thread, so they never queue a phone's read.
 
 The daemon process
 runs with umask 077; its state and token directories are owner-only, and the
-token, journal and SQLite WAL/SHM files are 0600. A token file that is a symlink
-or owned by another account is rejected.
+token, journal and SQLite WAL/SHM files are 0600. Both daemon and local client
+limit raw token files to 4096 bytes before trimming, with at least 32 trimmed
+bytes. On Unix, descriptor-based admission rejects symlinks, nonregular files,
+another UID or group/other permissions. Refusal preserves the file for repair;
+ancestor-directory and non-Unix ACL guarantees are not implied (ADR 0078).
+
+The local Qt client's unread socket buffer is capped at one maximum IPC frame
+plus its four-byte header, including the hello phase. Paused dispatch applies
+backpressure; valid pipelined frames resume without loss (ADR 0079). This is not
+a process-wide memory or request-work limit.
 
 Advanced model, effort and execution controls are revision-fenced daemon
 commands backed by the active adapter's advertised capabilities. Encrypted
@@ -698,6 +718,18 @@ remove that history.
 ## Atlas live runtime
 
 `AtlasLiveRuntime` owns only the KetAtlas viewer and optional declared renderer it starts. Version 0.5.2 is required, the viewer is read-only, and framework startup uses the local renderer contract without a shell. Discovery returns opaque project IDs. `atlas.start` fences the selected execution context; reconnect by an existing attachment channel instead retains that runtime's source even after a conversation switches. Back releases the connection with a five-minute idle lease; `atlas.detach` explicitly stops the owned runtime. Existing desktop viewers are not adopted or stopped.
+
+`AtlasLiveTunnel` multiplexes bounded byte streams to registered loopback viewer/renderer ports over a persistent authenticated WebSocket. Each attachment gets a new random key/channel; AES-GCM frames bind channel, direction and exact sequence. The phone uses matching loopback origins and an ephemeral HttpOnly cookie for its native bridge. HTTP, streaming bodies, renderer WebSockets and SSE remain ordinary protocols inside the encrypted byte streams. The relay forwards ciphertext and rechecks grants periodically; it cannot see resource bodies. There is no automatic write replay. Stream EOF is sent when a disconnected origin
+has been fully drained, including drains triggered by WebSocket writes; the
+client need not return additional credit after receiving the complete response
+(ADR 0084).
+
+Daemon readiness requires a complete stdout banner for its current loopback viewer
+port. Partial/embedded/wrong-port and post-stop output cannot publish an
+attachment; the diagnostic tail retains its line-boundary state. The start
+callback is consumed before invocation and cannot run again when the process
+exits immediately after readiness (ADR 0083). Synthetic CLI regressions cover
+these boundaries without starting a real viewer or renderer.
 
 `AtlasLiveTunnel` multiplexes bounded byte streams to registered loopback viewer/renderer ports over a persistent authenticated WebSocket. Each attachment gets a new random key/channel; AES-GCM frames bind channel, direction and exact sequence. The phone uses matching loopback origins and an ephemeral HttpOnly cookie for its native bridge. HTTP, streaming bodies, renderer WebSockets and SSE remain ordinary protocols inside the encrypted byte streams. The relay forwards ciphertext and rechecks grants periodically; it cannot see resource bodies. There is no automatic write replay.
 

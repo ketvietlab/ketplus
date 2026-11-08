@@ -37,6 +37,12 @@ Branch protection: `integration` has no required checks but allows no
 force-push or deletion; `develop` requires `promotion provenance` and the
 `build` jobs, including for administrators; `main` keeps its release rules.
 
+Workflow actions use full upstream commit SHAs (ADR 0080), retaining the previous
+version/ref as a comment. Updating one requires verifying the replacement commit
+in its owning upstream repository. Build, promotion and spike jobs use explicit
+read-only content permissions and do not persist checkout credentials. These
+settings do not replace hosted promotion/release checks or the dependency audit.
+
 ## Versions and tags
 
 Each edition keeps its own version:
