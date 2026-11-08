@@ -485,6 +485,22 @@ void AgentWorkspaceViewTest::sidebarMatchesMockAtEveryZoom() {
         appearance.setZoom(zoom);
         QTRY_COMPARE(sidebar->width(), ket::Appearance::scale(240, zoom));
     }
+    // A dragged width survives zoom changes in both directions.
+    appearance.setZoom(1.0);
+    QTRY_COMPARE(sidebar->width(), 240.0);
+    auto* handle = root->findChild<QQuickItem*>("sidebarResizeHandle");
+    QVERIFY(handle);
+    const auto start = handle->mapToScene(QPointF(3, 100)).toPoint();
+    QTest::mousePress(view.quickView(), Qt::LeftButton, Qt::NoModifier, start);
+    QTest::mouseMove(view.quickView(), start + QPoint(70, 0), 30);
+    QTest::mouseRelease(view.quickView(), Qt::LeftButton, Qt::NoModifier, start + QPoint(70, 0));
+    QTRY_VERIFY(sidebar->width() > 290);
+    const qreal dragged = sidebar->width();
+    appearance.setZoom(1.25);
+    QTRY_COMPARE(sidebar->width(), std::min(ket::Appearance::scale(dragged, 1.25),
+                                            ket::Appearance::scale(320, 1.25)));
+    appearance.setZoom(1.0);
+    QTRY_COMPARE(sidebar->width(), dragged);
     appearance.setZoom(originalZoom);
     // The working bars keep the recipe's success colour, as in the mock.
     QCOMPARE(indicator->property("color").value<QColor>(), QColor(Qt::transparent));
