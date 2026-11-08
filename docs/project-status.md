@@ -5,6 +5,13 @@ milestone changes state.
 
 ## Implemented
 
+- Két UI stack: Lite and Pro use KÉT Sans as the primary interface face, with
+  Inter/platform fallback; fresh editor settings use KÉT Sans Mono Medium at
+  14 px without rewriting saved choices. Interface zoom is published to the
+  kit's Appearance, terminal initial colours resolve tokens, and Mermaid theme
+  resources resolve token placeholders at rendering time. Overall UI acceptance
+  and rollout remain deferred; see `tasks/ui-implementation-stack.md`.
+
 - Existing media blobs are validated before dedup returns a reference (ADR 0066):
   exact bounded bytes, regular nonsymlink files and owner-only permissions.
   Invalid entries remain intact for repair; reference durability remains open.

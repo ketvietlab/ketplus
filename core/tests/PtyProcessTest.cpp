@@ -6,6 +6,7 @@
 
 #include "KetTokens.h"
 
+#include "KetProfile.h"
 #include <QClipboard>
 #include <QDir>
 #include <QEvent>
@@ -45,7 +46,7 @@ class PtyProcessTest final : public QObject {
     void runsInteractiveShellInRequestedDirectory();
     void rendersAnsiOutputThroughVterm();
     void drawsAnsiColoursFromKetTokens();
-    void usesSystemFixedFont();
+    void usesProfileFixedFont();
     void appliesTerminalTypography();
     void appliesTerminalFontFamily();
     void keepsTerminalFontFamilyUnderTheme();
@@ -146,13 +147,13 @@ void PtyProcessTest::drawsAnsiColoursFromKetTokens() {
     }
 }
 
-void PtyProcessTest::usesSystemFixedFont() {
+void PtyProcessTest::usesProfileFixedFont() {
     ThemeManager theme(*qApp);
     TerminalSession session;
     TerminalView terminal(session);
     terminal.ensurePolished();
     QCOMPARE(QFontInfo(terminal.font()).family(),
-             QFontInfo(QFontDatabase::systemFont(QFontDatabase::FixedFont)).family());
+             QFontInfo(QFont(ket::Profile::current().monoFamily())).family());
 }
 
 void PtyProcessTest::appliesTerminalTypography() {

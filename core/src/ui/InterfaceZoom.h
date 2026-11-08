@@ -1,5 +1,7 @@
 #pragma once
 
+#include "KetAppearance.h"
+
 #include <QtGlobal>
 
 namespace ketplus {
@@ -43,15 +45,12 @@ struct InterfaceZoomMetrics final {
         return double(snap(basePixels)) / designedAtPixels;
     }
     [[nodiscard]] static int geometry(const int designedPixels, const int basePixels) {
-        if (designedPixels <= 1)
-            return designedPixels;
-        return qRound(designedPixels * factor(basePixels));
+        return qRound(ket::Appearance::scale(designedPixels, factor(basePixels)));
     }
 
     // Text alone has a minimum readable size.
     [[nodiscard]] static int scale(const int designedPixels, const int basePixels) {
-        return qMax(8,
-                    qRound(designedPixels * (double(snap(basePixels)) / double(designedAtPixels))));
+        return qMax(8, geometry(designedPixels, basePixels));
     }
 };
 

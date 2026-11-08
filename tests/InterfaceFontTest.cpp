@@ -43,7 +43,7 @@ void InterfaceFontTest::resolvedFamilyPrefersEmbeddedKetSans() {
     QCOMPARE(ketplus::InterfaceUiFont::settingsLabel(), QStringLiteral("KÉT Sans"));
     const QString sheet = ketplus::InterfaceUiFont::styleSheetFamilyList();
     QVERIFY(sheet.startsWith(QStringLiteral("\"KET Sans\",")));
-    QVERIFY(sheet.contains(QStringLiteral("\"SF Pro Text\"")));
+    QVERIFY(!sheet.contains(QStringLiteral("SF Pro")));
     QVERIFY(sheet.contains(QStringLiteral("sans-serif")));
 #ifdef Q_OS_MACOS
     if (QGuiApplication::platformName() != QStringLiteral("offscreen")) {

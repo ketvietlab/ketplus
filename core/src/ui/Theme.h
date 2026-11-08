@@ -62,6 +62,10 @@ struct ThemePalette final {
 // sets it on QToolTip so the base QWidget rule does not.
 [[nodiscard]] int tooltipFontPixels();
 
+// Resolve translucent design tokens over the panel for non-alpha consumers (SVG/QSS).
+[[nodiscard]] QString themeTokenColor(const QString& name, bool dark);
+[[nodiscard]] ThemePalette currentThemePalette();
+
 class ThemeManager final : public QObject {
     Q_OBJECT
 
@@ -92,7 +96,7 @@ class ThemeManager final : public QObject {
     void syncAppearance();
     void apply();
     [[nodiscard]] Mode effectiveMode() const noexcept;
-    void loadInterFont();
+    void loadInterfaceFont();
     void setApplicationFont(const QFont& font);
     void restoreTooltipFont();
 

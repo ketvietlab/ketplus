@@ -1,106 +1,117 @@
 # Design system
 
-Proposed extension: [installable themes and VS Code color-theme compatibility](theming.md).
+Két Design System is the visual source for KétPlus. Native applications consume
+its tokens, component recipes and product profile through the public Két Qt kit
+(`ketvietlab/ket-qt`), pinned in `core/cmake/Dependencies.cmake`. The interactive
+design reference is `mockups/qt`; the older HTML Atlas is frozen
+([ADR 0033](decisions/0033-qt-design-mock.md)). A mock demonstrates a design, not
+production implementation or backend support.
 
-KetPlus adapts the Két Design System (`@ketvietlab/design-system`, now in
-`ketsuite/packages/design-system` of ketviet) to a native Qt Widgets and Qt Quick
-application. The colours come from its tokens through the Két Qt kit
-(`ket::Tokens`, at the ket-qt commit `core/cmake/Dependencies.cmake` pins). The goal is visual continuity
-without copying web-specific implementation details.
+## Ownership and source of truth
 
-## Principles
+| Concern | Owner |
+| --- | --- |
+| Semantic colours, control metrics and shared component drawing | Két Qt tokens, recipes and `ket::Profile` |
+| Light, dark, following the system and kit zoom | `ket::Appearance` |
+| Shared settings, legacy palette/QSS adapter and zoom mapping | `core/src/ui` and `core/src/app` |
+| Pro shell layout and typography adapters | `apps/desktop/src/ui` |
+| Agent transcript and conversation composition | `modules/ai` |
+| Proposed installable themes | [theming.md](theming.md); not implemented |
 
-- Dense, operational layout with restrained decoration
-- Neutral canvas and panel surfaces with quiet borders
-- Két Blue for active and focused states: the `accent` tokens for indicators,
-  borders and focus (`color-focus`); `accent-text` for accent-coloured text and
-  icons; and `action-primary-bg` with `action-primary-ink` for filled primary
-  buttons
-- Two-pixel active-tab indicator
-- SF Pro for application chrome when present, then bundled Inter, then the
-  platform UI font; Agent Workspace and QWidget chrome share that resolver.
-  Source/mono text follows the Settings editor font family (Menlo on macOS when
-  unset)
-- Semantic colors shared by application controls and syntax highlighting
+Choose a kit component before composing a custom control. Product composition
+owns placement and behavior; the kit owns its shared visual mechanics. Changes
+needed by Lite and Pro belong in `core/`, with public include paths and exported
+`KetPlusCM::*` targets. Never introduce a Pro dependency into core.
 
-## Implementation
+## Tokens, profile and style
 
-`ThemeManager` builds its light and dark `ThemePalette` from Két DS tokens (a
-translucent token is composited over `panel-bg`, so every role is an opaque
-`#RRGGBB`) and syntax colours from the kit's `ket::syntaxRecipe`. Light, dark and
-following the system go through `ket::Appearance`, which QML (`KetTheme`), the
-kit's style and KétPlus Terminal also read; a mode, a Settings preview and its
-cancel set it, and its theme changes reach the palette. It installs the KétPlus
-`ket::Profile` and the kit's `ket::Style`, which keeps the application and tooltip
-palettes on `ket::Appearance` and draws menus, tooltips, tab bars, select popups,
-progress bars and sliders from Két DS recipes; the stylesheet styles the rest and
-leaves those selectors out. Run the app with `QT_QPA_PLATFORM=offscreen
-KETPLUS_CAPTURE=<file>` (and `KETPLUS_CAPTURE_THEME=light|dark`) to save the window
-for a review without a screen. It applies the stylesheet, and follows the operating system by default. The selected mode
-is persisted through `QSettings` and can be changed from `View > Appearance`.
-The shared Settings dialog also owns interface, editor, terminal, and Markdown
-preview typography. KetPlus Desktop applies one normalized snapshot to both CM
-surfaces and private shell instances, including terminals opened beside Agent
-Workspace. Product chrome scales typography and geometry together at Small
-(12/14), Medium (1), and Large (16/14). Geometry rounds from Medium dimensions;
-zero, one-pixel hairlines and user-resized sidebar widths remain stable. Text
-keeps its separate minimum readable size. QWidget product layouts opt into
-`chrome_geometry` bindings; QML uses `ChromeMetrics.px` with the same zoom factor.
-Both recompute from designed dimensions, including controls created after a
-zoom change. Font sizes already resolved by CM are not scaled a second time.
+`ThemeManager` installs `ket::Profile::ketPlus()` before `ket::Style`. The style
+renders menus, tooltips, tab bars, select popups, progress bars and sliders; the
+legacy application stylesheet leaves those selectors to the kit. A size-only
+`QToolTip` rule prevents the base QWidget font rule from overriding the kit's
+scaled tooltip recipe. The application font overlay preserves that rule.
 
-Saving appearance publishes the normalized snapshot to every live desktop window
-before theme signals fire, then updates their surfaces even for font-family-only
-changes. Open settings forms retain their drafts; unchanged fields merge with the
-latest saved snapshot. Chat monospace fonts refresh on appearance updates.
-See [ADR 0012](decisions/0012-product-chrome-zoom.md).
+Light, dark and system-following mode go through `ket::Appearance`. Existing
+`ThemePalette` consumers receive a compatibility projection of Két tokens.
+Translucent colours are composited over the panel before entering legacy opaque
+QSS/HTML colour fields. Syntax roles come from `ket::syntaxRecipe`, independently
+of chrome colours.
 
-The Agent Workspace maps that palette into QML through semantic properties,
-rather than defining an independent theme. It follows the KetJS density and
-geometry scale: a 216 px navigation rail (the native equivalent of
-`--kv-sidebar-width: 13.5rem`), 30–34 px controls, 5–7 px interactive radii,
-quiet one-pixel borders, Két Blue active/focus states, SF Pro (then Inter) UI
-typography on a collapsed `TypeScale` ladder (micro 10, caption 11, body 12,
-reading 14, title 16, heading 22, display 29 at Medium, plus glyphSmall 16 /
-glyphLarge 34), and Lucide icons. The chat transcript is constrained to 760 px
-and centered when no context panel is open.
+Use semantic roles rather than local palette literals:
 
-Icons are Lucide line icons, 14 px or larger.
-Lucide's 2-unit stroke on a 24-unit grid thins with the icon, so strokes never
-render thinner than 1.5 logical pixels, like Lucide's `absoluteStrokeWidth`;
-icons of 18 px and up keep Lucide's own proportion. Widgets render icons through
-`ui/LucideIcon.h` at the size they are shown. QML icons go through
-`TintedIcon`, which loads the SVGs in `qrc:/agent/icons` via the `lucide` image
-provider to apply the same rule. `TintedIcon` colors by luminance, so those
-SVGs are drawn in white (`stroke="#fff"`); `currentColor` resolves to black in
-Qt SVG and must not be used.
+| Intent | Két tokens |
+| --- | --- |
+| Window, panel and subdued panel | `page-bg`, `panel-bg`, `panel-bg-subtle` |
+| Main, secondary and muted text | `text-main`, `text-secondary`, `text-muted` |
+| Dividers and stronger boundaries | `border-default`, `border-strong` |
+| Active indicators and focus | `accent`, `color-focus` |
+| Accent text and icons | `accent-text` |
+| Filled primary action | `action-primary-bg`, `action-primary-ink` |
+| Outcomes | `success`, `warning`, `danger` |
 
-Agent Workspace has three presentation states:
+A progress ring uses completion semantics; a capacity meter uses pressure
+semantics. Do not reuse a capacity warning colour to mean successful completion.
+Status text or an icon must accompany colour.
 
-- Chat only is the default; no editor or terminal context panel is shown.
-- Opening a file reveals the existing Scintilla editor in the right half.
-- Opening a terminal uses that same contextual right half; it never opens from
-  the bottom while Agent Workspace is active.
+## Fonts and zoom
 
-Each worktree row reports live agent activity, while the transcript, title, and
-composer always belong to the selected worktree. Streaming status is expressed
-with text and color together, so activity does not depend on color alone. The
-selected worktree keeps the Két Blue selection surface whether it is idle or
-running. Running rows use a static green secondary status label (`Agent working...`
-for worktrees and the current status for conversations), without a path suffix,
-shimmer animation, or activity dot. A green dot indicates a successfully completed
-turn observed during this app session, not a new idle, stopped, or failed conversation;
-it is hidden while running again. Worktree auto-scroll follows the selected
-workspace rather than background activity. The composer turns into a stop action
-during an active turn.
+Both editions use bundled KÉT Sans, then Inter and the platform UI fallback.
+New editor/diff settings use KÉT Sans Mono Medium at 14 px; saved font and size
+choices are preserved. Empty terminal family settings use the profile's mono
+family. The product and mock share the profile overrides for code, conversation
+numbers, sidebar weights and the compact composer usage ring.
 
-The QML transcript uses a virtualized `ListView` and the Qt Quick scene graph.
-On macOS, KetPlus explicitly selects Metal before the first Quick window is
-created. The editor itself remains native Scintilla.
+Small, Medium and Large retain their persisted 12, 14 and 16 pixel values and
+geometry factors 12/14, 1 and 16/14. Pro maps legacy values up to 13 to Small and
+values from 15 to Large. Lite retains its existing numeric interface-size setting.
+The shared mapping is exported from `core/src/ui/InterfaceZoom.h`.
 
-Scintilla receives the same surface, selection, focus, and semantic colors. The
-Lexilla themes cover C-family languages, JavaScript/TypeScript, Python, HTML,
-JSON, Markdown, and Rust.
+`ThemeManager` publishes interface pixels / 14 to `ket::Appearance` before
+updating fonts and styles. Kit Widgets and QML `KetTheme.zoom` therefore receive
+the same zoom as the legacy product adapters. `ChromeGeometry` and `TypeScale`
+use the kit's rounding function through the shared mapping: zero and hairlines
+stay fixed; text keeps its 8 pixel readability floor. The legacy QML
+`ChromeMetrics.px` uses the same factor from its token map. Scaled values are
+always recomputed from designed dimensions, never scaled a second time.
 
-The source KetJS tokens remain the visual reference. Native controls may differ
-slightly where macOS, Windows, or Linux conventions improve usability.
+The old `TypeScale` role ladder and sidebar/transcript text bias remain a
+compatibility adapter while those surfaces migrate to kit recipes. Removing
+that ladder is still part of #142; it is not a second approved design system.
+Editor and terminal text sizes and user-resized sidebar widths stay independent
+of interface zoom. Terminal's existing Bigger/Smaller Text actions change
+terminal text, not interface zoom.
+
+## Live updates and persistence
+
+Keep the existing `appearance/theme` and `appearance/interfaceFontSizePixels`
+keys. A Pro appearance save publishes its normalized snapshot to every window
+before synchronous theme signals fire. It reapplies surfaces for font-only
+changes too. Unchanged fields in an open Settings draft merge with the latest
+saved snapshot; edited fields stay in that draft. Monospace families resolve on
+appearance updates rather than per transcript row. See
+[ADR 0012](decisions/0012-product-chrome-zoom.md).
+
+Update tokens and properties on existing surfaces. Do not recreate transcript
+models, conversations, editors or terminal sessions to apply appearance.
+Scintilla/Lexilla use the same surface and syntax roles through their adapters.
+The transcript remains a virtualized Qt Quick view; macOS uses Metal.
+
+## Migration and verification
+
+The application still contains legacy QSS, TypeScale and Lucide consumers.
+The mock uses Két kit components and symbols; a design capture is not evidence
+that every production control has migrated. Terminal defaults and Mermaid configuration now resolve semantic tokens.
+Mermaid resources retain diagram/security settings and token placeholders; the
+renderer resolves colours (including alpha compositing) before invoking Mermaid.
+Legacy per-surface typography remains to be migrated with its UI issue.
+
+For shared theme/zoom changes, run the Lite and Pro suites from
+[testing.md](testing.md), including desktop zoom, settings and font tests.
+Check repeated zoom transitions, theme switching, newly created controls,
+multiple windows, inherited fonts and shown tooltips. Verify native light/dark
+captures in addition to model assertions. The standalone mock has its own build
+and smoke suite in `mockups/qt/README.md`; passing it does not test the product.
+
+For an offscreen Lite review capture, set `KETPLUS_CAPTURE=<file>` and optionally
+`KETPLUS_CAPTURE_THEME=light|dark`. Such captures verify rendering, not installed
+bundle signing, deployment or device behavior.

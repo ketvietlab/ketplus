@@ -98,14 +98,12 @@ Qt application shell
   and typography controls inside the non-modal, full-page Két settings
   workspace, while the hidden public host continues to own preview, validation,
   reset, and save behavior. Private chrome type embeds KÉT Sans 1.1 (the hinted
-  static TTF Light/Regular/Medium/Bold faces), then falls back to SF Pro (named face, or the
-  macOS system UI font), then the bundled Inter face, then the platform UI
-  font; the Pro shell rewrites the live QWidget
+  static TTF Light/Regular/Medium/Bold faces), then falls back to the bundled Inter face and the platform UI font; the Pro shell rewrites the live QWidget
   family after ThemeManager applies, and Agent Workspace reads the same
   `InterfaceUiFont` resolver for `uiFont`. The product sidebar (`ActivityBar`)
   and Agent Workspace transcript text add a +2px bias on TypeScale sizes at
   every Interface zoom step (glyph steps stay unbiased). Transcript mono type uses the
-  Settings editor font family (refreshed on appearance updates; Menlo on macOS when empty). Agent
+  Settings editor font family (refreshed on appearance updates; KÉT Sans Mono when empty). Agent
   Workspace QML sizes come from `TypeScale` named steps (7 text + 2 glyph)
   merged into the theme map and scale with `appearance/interfaceFontSizePixels`
   (Medium = 14). Private QWidget chrome QSS sizes also flow through

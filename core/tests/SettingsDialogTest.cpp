@@ -1,4 +1,5 @@
 #include "app/SettingsDialog.h"
+#include "ui/KetFonts.h"
 #include "ui/Theme.h"
 
 #include <QApplication>
@@ -6,6 +7,7 @@
 #include <QDialogButtonBox>
 #include <QListWidget>
 #include <QPushButton>
+#include <QRawFont>
 #include <QSettings>
 #include <QSpinBox>
 #include <QTemporaryDir>
@@ -41,6 +43,7 @@ class SettingsDialogTest final : public QObject {
 
   private slots:
     void editsAndResetsTypography();
+    void defaultFontResolvesWithoutPlatformFallback();
     void persistsAndNormalizesAppearance();
     void previewsAndCancelsThemeSelection();
     void extensionPagesDriveDirtyState();
@@ -48,6 +51,19 @@ class SettingsDialogTest final : public QObject {
     void ordersAndSelectsRegisteredPagesByStableIdentity();
     void removesDestroyedPageAndFallsBackToGeneral();
 };
+
+void SettingsDialogTest::defaultFontResolvesWithoutPlatformFallback() {
+    ketplus::registerKetFonts();
+    ketplus::ThemeManager theme(*qApp);
+    auto settings = ketplus::EditorSettings::defaults();
+    QCOMPARE(QRawFont::fromFont(settings.font()).familyName(), QStringLiteral("KET Sans Mono"));
+    QCOMPARE(QRawFont::fromFont(settings.font()).styleName(), QStringLiteral("Medium"));
+    settings.fontFamily = QStringLiteral("KÉT Sans Mono");
+    QCOMPARE(settings.normalized().fontFamily, QStringLiteral("KET Sans Mono"));
+    QCOMPARE(QRawFont::fromFont(settings.font()).familyName(), QStringLiteral("KET Sans Mono"));
+    settings.fontFamily = QStringLiteral("Custom mono family");
+    QCOMPARE(settings.normalized().fontFamily, settings.fontFamily);
+}
 
 void SettingsDialogTest::editsAndResetsTypography() {
     auto initial = ketplus::EditorSettings::defaults();
@@ -118,6 +134,8 @@ void SettingsDialogTest::persistsAndNormalizesAppearance() {
     QVERIFY(directory.isValid());
     QSettings storage(directory.filePath(QStringLiteral("settings.ini")), QSettings::IniFormat);
     auto settings = ketplus::AppearanceSettings::defaults();
+    QCOMPARE(settings.editor.fontFamily, QStringLiteral("KET Sans Mono"));
+    QCOMPARE(settings.editor.fontSizePixels, 14);
     settings.interfaceFontSizePixels = 99;
     settings.editor.fontSizePixels = 18;
     settings.editor.lineHeightPixels = 17;
@@ -212,29 +230,29 @@ void SettingsDialogTest::validatesPageRegistrationWithoutTransferringFailedOwner
     QVERIFY(reserved->parent() == nullptr);
     delete reserved;
 
-    auto* mismatch = new TestSettingsPage(QStringLiteral("private/archive"),
-                                          QStringLiteral("Archived"));
+    auto* mismatch =
+        new TestSettingsPage(QStringLiteral("private/archive"), QStringLiteral("Archived"));
     QCOMPARE(dialog.registerPage({{mismatch->id(), QStringLiteral("Other"), {}, 0}, mismatch}),
              ketplus::SettingsRegistrationResult::MetadataMismatch);
     QVERIFY(mismatch->parent() == nullptr);
     delete mismatch;
 
     QWidget owner;
-    auto* parented = new TestSettingsPage(QStringLiteral("private/owned"),
-                                          QStringLiteral("Owned"), &owner);
+    auto* parented =
+        new TestSettingsPage(QStringLiteral("private/owned"), QStringLiteral("Owned"), &owner);
     QCOMPARE(dialog.registerPage({{parented->id(), parented->title(), {}, 0}, parented}),
              ketplus::SettingsRegistrationResult::AlreadyParented);
 
-    auto* page = new TestSettingsPage(QStringLiteral("private/archive"),
-                                      QStringLiteral("Archived"));
+    auto* page =
+        new TestSettingsPage(QStringLiteral("private/archive"), QStringLiteral("Archived"));
     QCOMPARE(dialog.registerPage({{page->id(), page->title(), {}, 10}, page}),
              ketplus::SettingsRegistrationResult::Registered);
     QVERIFY(page->parent() != nullptr);
     QCOMPARE(dialog.registerPage({{page->id(), page->title(), {}, 10}, page}),
              ketplus::SettingsRegistrationResult::PointerAlreadyRegistered);
 
-    auto* duplicate = new TestSettingsPage(QStringLiteral("private/archive"),
-                                           QStringLiteral("Duplicate"));
+    auto* duplicate =
+        new TestSettingsPage(QStringLiteral("private/archive"), QStringLiteral("Duplicate"));
     QCOMPARE(dialog.registerPage({{duplicate->id(), duplicate->title(), {}, 0}, duplicate}),
              ketplus::SettingsRegistrationResult::DuplicateId);
     QVERIFY(duplicate->parent() == nullptr);
@@ -267,7 +285,8 @@ void SettingsDialogTest::ordersAndSelectsRegisteredPagesByStableIdentity() {
 
 void SettingsDialogTest::removesDestroyedPageAndFallsBackToGeneral() {
     ketplus::SettingsDialog dialog(ketplus::EditorSettings::defaults());
-    auto* page = new TestSettingsPage(QStringLiteral("private/archive"), QStringLiteral("Archived"));
+    auto* page =
+        new TestSettingsPage(QStringLiteral("private/archive"), QStringLiteral("Archived"));
     QCOMPARE(dialog.registerPage({{page->id(), page->title(), {}, 0}, page}),
              ketplus::SettingsRegistrationResult::Registered);
     QVERIFY(dialog.selectPage(page->id()));

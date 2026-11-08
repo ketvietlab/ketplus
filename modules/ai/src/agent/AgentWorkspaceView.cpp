@@ -118,11 +118,7 @@ QString monoFontFamily() {
     const QString configured = AppearanceSettings::load().editor.fontFamily.trimmed();
     if (!configured.isEmpty())
         return configured;
-#ifdef Q_OS_MACOS
-    return QStringLiteral("Menlo");
-#else
-    return QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
-#endif
+    return EditorSettings::defaults().fontFamily;
 }
 
 void mergeTypeScaleTokens(QVariantMap& tokens, const int basePixels) {
