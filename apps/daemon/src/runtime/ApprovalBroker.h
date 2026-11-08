@@ -46,6 +46,8 @@ class ApprovalBroker final : public QObject {
     // Forgets pending requests without answering them: their provider process is
     // gone. Only requests of sessions `ofSession` accepts, or all without one.
     void cancelPending(const QString& sessionId, qint64 generation);
+    // #126: true only while a pending request can expire.
+    [[nodiscard]] bool expiryTimerActive() const { return expiryTimer_.isActive(); }
     // Async assistant cards belong to one turn; closing them never answers a provider.
     void expireAssistantQuestions(const QString& sessionId, qint64 generation);
     void abandonPending(const std::function<bool(const QString& sessionId)>& ofSession = {});
@@ -71,6 +73,7 @@ class ApprovalBroker final : public QObject {
     };
 
     void expireRequests();
+    void updateExpiryTimer();
     void rememberResolved(const QString& approvalId, const QString& kind);
 
     QHash<QString, Pending> pending_;

@@ -36,6 +36,8 @@ class RemotePeers final : public QObject {
     void tick();
     void eventsChanged(const QString& sessionId);
     int size() const { return int(peers_.size()); }
+    // #126: the 50 ms tick runs only while a peer is connecting or connected.
+    bool ticking() const { return timer_.isActive(); }
     static bool validGrant(const QJsonObject& grant, const QString& id, const QString& device,
                            int version, qint64 now);
 

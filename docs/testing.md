@@ -251,8 +251,21 @@ inactive) redraws the whole 2× window, measured at 6.3% and 1.6%. The clock
 rate stays unchanged. Also run `--work idle --visibility inactive` and
 `KETPLUS_REDUCED_MOTION=1` when checking stop conditions. The sample must show no
 new frames when its activity and measurement timers have stopped. Record invalid
-attempts and unmeasured states; this fixture alone does not qualify Atlas Widgets,
-daemon expiry/peer timers or every application state.
+attempts and unmeasured states; this fixture alone does not qualify Atlas Widgets
+or every application state.
+
+Automated stop checks cover the rest of #126:
+- the QML scan in `agentQmlUsesBoundedAnimationsAndKitPrimitives` rejects
+  `Animation.Infinite` and any `FrameAnimation` outside the self-stopping
+  allowlist;
+- the transcript measurement timer, row-window growth and wheel glide stop on
+  their own;
+- hidden, minimized (alone or inside a main window) and reduced-motion views hold
+  no clock;
+- in the daemon, the approval expiry timer runs only while a request can expire,
+  and the remote-peer tick only while a peer is connected
+  (`expiryTimerRunsOnlyWhileARequestCanExpire`,
+  `helloEpochSupersedeAndRevocation`).
 
 Browser and SDK wiring changes also run:
 
