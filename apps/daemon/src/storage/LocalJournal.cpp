@@ -169,6 +169,10 @@ bool LocalJournal::initialize() {
                        "session_deletion_work((provider_targets != '[]' OR cloud_acked=0))"),
         QStringLiteral("CREATE INDEX IF NOT EXISTS session_deletion_cloud_pending ON "
                        "session_deletion_work(cloud_acked)"),
+        // Deleted generations whose bulky history still awaits bounded removal.
+        QStringLiteral("CREATE TABLE IF NOT EXISTS session_history_purge ("
+                       "session_id TEXT NOT NULL, generation INTEGER NOT NULL, "
+                       "PRIMARY KEY(session_id, generation))"),
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS cloud_upload_progress ("
             "scope TEXT NOT NULL, session_id TEXT NOT NULL, generation INTEGER NOT NULL, "
@@ -822,13 +826,11 @@ bool LocalJournal::deleteSession(const QString& sessionId, const qint64 generati
             *error = agentError;
         return false;
     }
+    // Per-generation state is removed here; bulky history gets one bounded batch and
+    // a purge marker for the rest (ADR 0093). The commit makes all of it unreachable.
     for (const QString& table :
-         {QStringLiteral("background_tasks"), QStringLiteral("activity_summaries"),
-          QStringLiteral("activity_items"), QStringLiteral("activity_heads"),
-          QStringLiteral("replay_events"), QStringLiteral("replay_projection_state"),
-          QStringLiteral("client_cursors"), QStringLiteral("cloud_events"),
-          QStringLiteral("events"), QStringLiteral("large_event_payloads"),
-          QStringLiteral("large_event_payload_chunks"), QStringLiteral("staged_attachment_chunks"),
+         {QStringLiteral("background_tasks"), QStringLiteral("activity_heads"),
+          QStringLiteral("replay_projection_state"), QStringLiteral("client_cursors"),
           QStringLiteral("staged_attachments"), QStringLiteral("session_contexts")}) {
         QSqlQuery query(database_);
         query.prepare(
@@ -856,6 +858,8 @@ bool LocalJournal::deleteSession(const QString& sessionId, const qint64 generati
             return false;
         }
     }
+    if (!startHistoryPurge(sessionId, generation, error))
+        return false;
     QSqlQuery session(database_);
     session.prepare(QStringLiteral("DELETE FROM sessions WHERE id = ? AND generation = ?"));
     session.addBindValue(sessionId);

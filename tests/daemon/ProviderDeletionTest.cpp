@@ -11,6 +11,7 @@
 #include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QtTest>
+#include <memory>
 
 namespace ketplus::daemon::detail {
 QString sessionTombstonesQuery(bool continuation);
@@ -87,6 +88,8 @@ class ProviderDeletionTest final : public QObject {
                             .arg(chunks)),
                  qPrintable(q.lastError().text()));
         QVERIFY(db.commit());
+        // Checkpoint the fixture so the timing below measures deletion, not setup pages.
+        QVERIFY2(q.exec("PRAGMA wal_checkpoint(TRUNCATE)"), qPrintable(q.lastError().text()));
         q.finish();
         const QJsonObject request{{"protocol_version", 0},
                                   {"message_id", "delete-op"},
@@ -103,8 +106,27 @@ class ProviderDeletionTest final : public QObject {
         QVERIFY2(result.value("ok").toBool(), qPrintable(QJsonDocument(result).toJson()));
         QVERIFY(result.value("applied").toBool());
         QVERIFY(!ticked);
+        // The command commits one bounded batch; the rest is unreachable purge work.
+        QVERIFY2(elapsed < 500, qPrintable(QString::number(elapsed)));
+        QVERIFY(journal.hasPendingHistoryPurge());
+        QCOMPARE(journal.sessions().size(), 1);
+        qint64 slowestPass = 0;
+        int passes = 0;
+        for (;;) {
+            QElapsedTimer pass;
+            pass.start();
+            const auto outcome = journal.purgeDeletedSessionHistory();
+            slowestPass = qMax(slowestPass, pass.elapsed());
+            if (outcome == LocalJournal::HistoryPurge::Idle)
+                break;
+            QCOMPARE(outcome, LocalJournal::HistoryPurge::Progress);
+            QVERIFY(++passes < 100000);
+        }
+        QVERIFY2(slowestPass < 250, qPrintable(QString::number(slowestPass)));
+        QVERIFY(!journal.hasPendingHistoryPurge());
         qInfo() << "delete-characterization rows-per-event-table" << rows << "chunk-bytes"
-                << qint64(chunks) * 65536 << "synchronous-ms" << elapsed;
+                << qint64(chunks) * 65536 << "synchronous-ms" << elapsed << "purge-passes" << passes
+                << "slowest-pass-ms" << slowestPass;
         for (const auto& table : {"events", "replay_events", "large_event_payload_chunks"}) {
             QVERIFY2(
                 q.exec(QString("SELECT count(*) FROM %1 WHERE session_id='deleted'").arg(table)),
@@ -497,6 +519,110 @@ class ProviderDeletionTest final : public QObject {
         QVERIFY(page->next.isEmpty());
         QVERIFY(q.exec("DROP TABLE session_tombstones"));
         QVERIFY(!journal.sessionTombstones());
+    }
+    void deletedHistoryIsPurgedInBoundedPasses() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        auto journal = std::make_unique<LocalJournal>(path);
+        QVERIFY(journal->isOpen());
+        StoredSession stored;
+        stored.id = "deleted";
+        stored.generation = 1;
+        stored.worktreePath = dir.path();
+        stored.adapter = "codex";
+        stored.state = "ready";
+        QVERIFY(journal->upsertSession(stored));
+        stored.id = "unrelated";
+        QVERIFY(journal->upsertSession(stored));
+        QVERIFY(journal->appendEvent(stored.id, 1, "assistant.delta", {{"text", "keep"}}) > 0);
+        const auto unrelatedBefore = journal->eventsAfter(stored.id, 1, 0);
+        const auto connection = [&] {
+            for (const auto& name : QSqlDatabase::connectionNames())
+                if (name.startsWith("ketplus-daemon-") &&
+                    QSqlDatabase::database(name).databaseName() == path)
+                    return QSqlDatabase::database(name);
+            return QSqlDatabase();
+        };
+        auto db = connection();
+        QVERIFY(db.isOpen());
+        QSqlQuery q(db);
+        QVERIFY2(q.exec("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE "
+                        "i<5000) INSERT INTO events(session_id,generation,cursor,event_type,"
+                        "payload,sent_at,turn_sequence) SELECT 'deleted',1,i,'assistant.delta',"
+                        "'{}',datetime('now'),1 FROM n"),
+                 qPrintable(q.lastError().text()));
+        // An ignored purge marker would hide history that the batch left behind.
+        QVERIFY(q.exec("CREATE TRIGGER fail_purge BEFORE INSERT ON session_history_purge "
+                       "BEGIN SELECT RAISE(IGNORE); END"));
+        QString error;
+        QVERIFY(!journal->deleteSession("deleted", 1, "delete-op", 1, &error));
+        QCOMPARE(error, QString("The history cleanup work was not stored."));
+        QCOMPARE(journal->sessions().size(), 2);
+        QVERIFY(journal->sessionTombstone("deleted", 1).sessionId.isEmpty());
+        QVERIFY(q.exec("DROP TRIGGER fail_purge"));
+        QVERIFY2(journal->deleteSession("deleted", 1, "delete-op", 1, &error), qPrintable(error));
+        QCOMPARE(journal->sessions().size(), 1);
+        QVERIFY(journal->hasPendingHistoryPurge());
+        // The tombstone keeps the generation from being restored onto leftover rows,
+        // and retention keeps that tombstone until the purge finishes.
+        stored.id = "deleted";
+        QVERIFY(!journal->upsertSession(stored));
+        QVERIFY(q.exec("UPDATE session_tombstones SET deleted_at='2000-01-01T00:00:00.000Z'"));
+        q.finish();
+        journal.reset();
+        journal = std::make_unique<LocalJournal>(path);
+        QVERIFY(journal->isOpen());
+        QCOMPARE(journal->sessionTombstone("deleted", 1).operationId, QString("delete-op"));
+        QVERIFY(journal->hasPendingHistoryPurge());
+        db = connection();
+        q = QSqlQuery(db);
+        QVERIFY(q.exec("CREATE TRIGGER stall_purge BEFORE DELETE ON events "
+                       "BEGIN SELECT RAISE(IGNORE); END"));
+        QCOMPARE(journal->purgeDeletedSessionHistory(), LocalJournal::HistoryPurge::Failed);
+        QCOMPARE(journal->errorString(), QString("Session history cleanup made no progress."));
+        QVERIFY(journal->hasPendingHistoryPurge());
+        QVERIFY(q.exec("DROP TRIGGER stall_purge"));
+        // The daemon drains the rest one pass per event-loop turn.
+        CodexAdapter adapter(dir.filePath("missing-fixture-provider"));
+        SessionHost host(journal.get(), &adapter);
+        bool ticked = false;
+        QTimer::singleShot(0, &host, [&] { ticked = true; });
+        QTRY_VERIFY(!journal->hasPendingHistoryPurge());
+        QVERIFY(ticked);
+        QVERIFY(q.exec("SELECT count(*) FROM events WHERE session_id='deleted'"));
+        QVERIFY(q.next());
+        QCOMPARE(q.value(0).toLongLong(), 0);
+        q.finish();
+        QCOMPARE(journal->eventsAfter("unrelated", 1, 0), unrelatedBefore);
+        QCOMPARE(journal->purgeDeletedSessionHistory(), LocalJournal::HistoryPurge::Idle);
+        journal.reset();
+        LocalJournal reopened(path);
+        QVERIFY(reopened.isOpen());
+        QVERIFY(reopened.sessionTombstone("deleted", 1).sessionId.isEmpty());
+    }
+    void ignoredPurgeMarkerDeleteFails() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(journal.isOpen());
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == path)
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        QSqlQuery q(db);
+        QVERIFY(q.exec("INSERT INTO session_history_purge VALUES('deleted',1)"));
+        QVERIFY(q.exec("CREATE TRIGGER ignore_marker BEFORE DELETE ON session_history_purge "
+                       "BEGIN SELECT RAISE(IGNORE); END"));
+        // Reporting progress here would reschedule a 0 ms pass forever.
+        QCOMPARE(journal.purgeDeletedSessionHistory(), LocalJournal::HistoryPurge::Failed);
+        QCOMPARE(journal.errorString(), QString("The history cleanup marker was not removed."));
+        QVERIFY(journal.hasPendingHistoryPurge());
+        QVERIFY(q.exec("DROP TRIGGER ignore_marker"));
+        QCOMPARE(journal.purgeDeletedSessionHistory(), LocalJournal::HistoryPurge::Progress);
+        QVERIFY(!journal.hasPendingHistoryPurge());
+        QCOMPARE(journal.purgeDeletedSessionHistory(), LocalJournal::HistoryPurge::Idle);
     }
     void failedSessionDeletionRollsBackAndCanRetry_data() {
         QTest::addColumn<QString>("fault");

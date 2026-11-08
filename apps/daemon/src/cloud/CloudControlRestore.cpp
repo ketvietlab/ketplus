@@ -1,7 +1,7 @@
-#include "cloud/CloudControlClient.h"
-#include "cloud/CloudControlSupport.h"
 #include "atlas/AtlasLiveRuntime.h"
 #include "cloud/CloudControlBatching.h"
+#include "cloud/CloudControlClient.h"
+#include "cloud/CloudControlSupport.h"
 #include "cloud/CloudEventProjection.h"
 #include "cloud/ControlEndpoint.h"
 #include "cloud/WorktreeBranches.h"
@@ -273,12 +273,6 @@ void CloudControlClient::executeRestoreWindow(const QJsonObject& command,
                        QStringLiteral("The restore request boundary is unavailable.")}});
         return;
     }
-    const QJsonObject cached = journal_->commandResult(cacheKey);
-    if (!cached.isEmpty()) {
-        uploadRestoreResponses(command, cached.value(QStringLiteral("responses")).toArray(),
-                               cached.value(QStringLiteral("summary")).toObject());
-        return;
-    }
     const auto sessions = journal_->sessions();
     const auto match = std::find_if(sessions.cbegin(), sessions.cend(), [&](const auto& session) {
         return session.id == command.value(QStringLiteral("sessionId")).toString() &&
@@ -290,6 +284,13 @@ void CloudControlClient::executeRestoreWindow(const QJsonObject& command,
                             {QStringLiteral("error_code"), QStringLiteral("snapshot_changed")},
                             {QStringLiteral("error_message"),
                              QStringLiteral("The local transcript snapshot changed.")}});
+        return;
+    }
+    // A cached page of a since-deleted generation is never uploaded again (ADR 0093).
+    const QJsonObject cached = journal_->commandResult(cacheKey);
+    if (!cached.isEmpty()) {
+        uploadRestoreResponses(command, cached.value(QStringLiteral("responses")).toArray(),
+                               cached.value(QStringLiteral("summary")).toObject());
         return;
     }
 

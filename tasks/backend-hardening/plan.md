@@ -1,6 +1,6 @@
 # Backend hardening execution plan
 
-Updated: 2026-11-08. Owner: conversation #2739. Independent reviewer: #7705 (reassigned by the user on 2026-11-08).
+Updated: 2026-11-08. Owner: conversation #3329 (handed over by #2739 on 2026-11-08). Reviewer: #2739, one consolidated review per package; the owner fixes findings, merges and closes.
 Baseline: integration `90388ea772bf75267e66233ee66566bc0e2e18e8` (PR #212).
 
 This is the durable execution queue for finishing the existing non-UI domain
@@ -228,7 +228,7 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | Item | State | Evidence / remaining work | Next action / owner |
 | --- | --- | --- | --- |
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
-| H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 and cloud #237 merged; transaction recovery #241 merged; cancellation #240 merged; explicit session-delete bounds still open | Audit explicit session deletion and tombstone enumeration / #2739 |
+| H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 and cloud #237 merged; transaction recovery #241 merged; cancellation #240 merged; tombstone pages #280 and live discovery #281 merged; bounded history purge (ADR 0093) in review | Merge ADR 0093, then whole-history fork bounds / #3329 |
 | H1.2 | In progress | #272/#273 integrated into #274 with #255; combined Pro 104/104 at 5a8bca1c | #274 reviewed and merged c3490da5; broader migration/crash gates remain / #2739 |
 | H1.4 | In progress | #253–255 merged via 691d18c4; author Pro104/104 and independent daemon56/56 | Remaining write-admission, filesystem races and bounds / #2739 |
 | H1.5–H1.7 | Not started | No claim that #128 backend acceptance is complete | Continue storage acceptance / #2739 |

@@ -165,6 +165,11 @@ class LocalJournal final {
     bool deleteSession(const QString& sessionId, qint64 generation, const QString& operationId,
                        qint64 lifecycleRevision, QString* error = nullptr,
                        const QJsonArray& providerTargets = {});
+    // One bounded pass over deleted generations' remaining history (ADR 0093). A busy
+    // writer defers the pass; it commits all of its progress or none of it.
+    enum class HistoryPurge { Idle, Progress, Deferred, Failed };
+    HistoryPurge purgeDeletedSessionHistory();
+    [[nodiscard]] bool hasPendingHistoryPurge() const;
     [[nodiscard]] QJsonArray deletionWork(int limit = 64, bool pendingCloudOnly = false,
                                           qint64 afterRow = 0) const;
     [[nodiscard]] std::optional<SessionTombstonePage>
@@ -373,6 +378,12 @@ class LocalJournal final {
     // rows, because commands refused before they ran store no command result to trigger it.
     bool pruneRemoteAudit();
     bool checkpointReclaimedPages();
+    // Inside a transaction: removes one bounded batch of a generation's bulky history and
+    // reports whether any remains. Fails when a statement makes no progress.
+    bool purgeHistoryBatch(const QString& sessionId, qint64 generation, bool* remaining,
+                           QSqlError* error);
+    // Inside deleteSession's transaction: the first batch, then a purge marker if any remains.
+    bool startHistoryPurge(const QString& sessionId, qint64 generation, QString* error);
     // Inside deleteSession's transaction: releases the number and ends undelivered messages.
     bool releaseAgentState(const QString& sessionId, qint64 generation, QString* error);
     bool writeCommandResult(const QString& messageId, const QJsonObject& result, bool replace);

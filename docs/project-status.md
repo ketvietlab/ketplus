@@ -8,12 +8,15 @@ revision-fenced shared transport consumption by Desktop refresh and
 `ketplusctl sessions`. Concurrent mutation/reopen invalidates a cursor; retries
 are capped and CLI history is spooled privately. Legacy catalogs exceeding the bounded
 response return an explicit upgrade error. This is backend/transport work;
-whole-session atomic-delete latency, live-catalog bounds and the remaining #68
-acceptance gates stay open. Incremental discovery now requests only live sessions
+live-catalog bounds and the remaining #68 acceptance gates stay open. Incremental discovery now requests only live sessions
 (ADR 0092), avoiding tombstone walks and repeated deletion signals. Full refresh
 and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Implemented
+
+- Session deletion commits the tombstone, cleanup work and per-generation state
+  with one bounded history batch (ADR 0093). Remaining history is unreachable and
+  drained in bounded event-loop passes; the tombstone outlives the purge marker.
 
 - Daemon Atlas readiness requires a complete line for the owned viewer port and
   ignores partial/embedded/truncated-prefix or post-stop output (ADR 0083). Start
