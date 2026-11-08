@@ -87,5 +87,9 @@ The #280 follow-up adds a revision/reopen fence and covers every built-in
 `session.list` consumer: Desktop refresh, incremental discovery, and CLI. A
 changed catalog restarts at most three times; the CLI spools history privately.
 Concurrent insertion behind the cursor must be observed on restart, even with
-no deletion broadcast. Final-head evidence/review is still required. Delta/since
-refresh work and atomic deletion latency remain separate from this correction.
+no deletion broadcast. Code `96038758` passes full Pro104/104 and scale/bridge/CLI3/3
+(deletion46, bridge30+1 live skip, headless6). Negative controls catch the missing
+fence and old discovery/CLI callers. Independent review/merge remains pending;
+[source and log hashes](evidence/h1-tombstone-snapshot-callers-qt.json) record the
+new evidence. Delta/since refresh work and atomic deletion latency remain
+separate from this correction.

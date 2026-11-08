@@ -996,9 +996,9 @@ The relay rollout gate remains external and does not block this provider work.
 - [x] Independent #7705 PASS at `dae6a297`: protocol199/199, fork44/44,
   preview15/15 and daemon56/56; original-source preview/fork controls fail.
   #255 merged `691d18c4`; GitHub also confirms #253/#254 MERGED.
-- [ ] Remove the pushed linked worktree/build after clean/pushed/usage checks.
-- [ ] Drain existing #272/#273/#274 journal policy/startup/migration fixes next,
-  then reconcile all seven original #68 criteria before claiming issue completion.
+- [x] Removed the pushed media worktree/build after clean/pushed/usage checks.
+- [x] Integrated #272/#273/#274 at `c3490da5`; their author worktree/build and
+  merged branch were removed. Continue the seven original #68 criteria.
   Whole-history bounds, filesystem races, crash recovery and #128 archive policy
   are not closed by this media package.
 
@@ -1127,11 +1127,14 @@ Evidence: [h1-failed-journal-reuse-qt.json](evidence/h1-failed-journal-reuse-qt.
 - [x] Focused initial build and 3/3 targets pass: deletion42+4 scale skips,
   bridge30+1 live skip, headless6. Concurrent behind-cursor, rollback/reopen,
   discovery, retry-cap, legacy wire boundary and CLI30k regressions pass.
-- [x] Negative controls fail as expected: removing the token comparison loses
-  the behind-cursor row; restoring discovery/CLI callers breaks the new regressions.
+- [x] Negative controls fail as expected: removing the token comparison prevents
+  successful restart/reconciliation; restoring discovery/CLI callers breaks the new regressions.
   Restore source and rebuild successfully.
-- [ ] Complete restored scale and full Release Pro at the committed code head;
-  record hashes/evidence, then send the final head to #7705.
+- [x] Restored code `96038758`: full Release Pro104/104 (383.56 s, first run),
+  scale/bridge/CLI3/3 (21.85 s): deletion46/46, bridge30+1 live skip, headless6/6.
+  300k tombstones: 2,344 pages / 1,182 ms; atomic deletion still 1,166 ms.
+  Source/log hashes and controls: `evidence/h1-tombstone-snapshot-callers-qt.json`.
+- [ ] Send the final head to #7705 for independent review.
 - [ ] Independent review, merge and linked-worktree/build cleanup.
 - [ ] Continue the separate atomic whole-session deletion gate and remaining #68
   criteria. Per-page bounds do not establish a bounded total history refresh;
