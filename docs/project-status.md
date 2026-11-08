@@ -39,9 +39,113 @@ milestone changes state.
   resources resolve token placeholders at rendering time. Overall UI acceptance
   and rollout remain deferred; see `tasks/ui-implementation-stack.md`.
 
+- Existing media blobs are validated before dedup returns a reference (ADR 0066):
+  exact bounded bytes, regular nonsymlink files and owner-only permissions.
+  Invalid entries remain intact for repair; reference durability remains open.
+
+- SessionHost preserves failed stream prefixes and orders later provider events
+  behind a bounded retry queue (ADR 0062). Count/byte caps, unsupported oversized
+  payloads, rejected command acceptance and session deletion are covered. The
+  queue is volatile; crash durability and whole-command atomicity remain open.
+
+- Append verifies complete superseded-delta removal and running-activity
+  settlement before committing (ADR 0063). Partial ignored writes roll back;
+  partial indexes restrict settlement checks to running rows in the target turn.
+  Large running turns and initial index construction remain separate bounds work.
+
+- Failed activity-backfill commits now preserve their diagnostic and release the
+  write transaction (ADR 0064). A separate connection can repair and reopen while
+  the failed journal object remains alive; broader startup recovery remains open.
+
+- Media cleanup requires a complete bounded reference catalog before deleting
+  metadata or image bytes (ADR 0065). Unknown shapes, symlinks and read failures
+  preserve shared data; valid/empty catalogs retain existing cleanup behavior.
+  Reference write/copy durability and broader media bounds remain under audit.
+
+- Fork preserves unsupported source cursor/turn values rather than coercing them
+  into copied metadata (ADR 0061). Integer-only projection and nonnegative checks
+  reject the copy before destination writes; repair/retry/reopen are covered.
+
+- Fork checks complete per-table copy counts and its required timestamp in the
+  transaction (ADR 0060). It also refuses a destination claimed during the provider
+  round-trip, preserving existing/self/deleted targets and allowing empty history.
+  Whole-history fork work bounds and broader source validation remain separate.
+
+- Journal append requires each mandatory delivery/replay/activity/blob row and
+  session cursor to be stored before reporting success (ADR 0058). Ignored writes
+  roll back partial changes; commit diagnostics survive rollback. Multirow
+  projection cleanup remains separate hardening work.
+
+- Append validates integer/nonnegative cursor and turn counters before arithmetic
+  and reserves the whole cursor range for a large-item transfer (ADR 0059).
+  Unsupported/exhausted values remain intact for recovery; final valid slots work.
+
+- Provider cleanup also validates the ownership JSON shape before deciding a
+  thread is unreferenced (ADR 0057). Malformed/newer metadata keeps local deletion
+  and queued cleanup pending without rewriting the unsupported value.
+
+- Provider cleanup requires a complete successful ownership-catalog read before
+  deleting a provider thread or accepting a new local deletion (ADR 0056).
+  Query and mid-fetch failures keep queued work pending and local history intact;
+  retries after repair still protect shared threads.
+
+- Current staged-attachment cancellation now bounds candidates and mutation bytes
+  (ADR 0054). Logical cancellation retires the identity until all revisions drain
+  through existing maintenance. Unknown/oversized manifests remain unchanged for
+  recovery; ignored writes, busy writers and commit failures cannot report success.
+
+- Session deletion rolls back and releases its transaction on commit failure;
+  ignored tombstone/work writes and incomplete history deletion fail without
+  committing partial state (ADR 0055). Retry preserves generation/operation fences.
+  Whole-session deletion work bounds remain a separate hardening item.
+
+- Cloud envelope ACK cleanup uses bounded transactional metadata maintenance;
+  invalidation instead removes one exact cache identity before retry (ADR 0053).
+  Receipts commit with a scoped recovery cursor before credential mirroring/raw
+  ACK, preserving retry after storage failure or restart. Regenerated cache cannot
+  inherit an old cursor or receipt; stale account upload callbacks cannot restore progress. Oversized cache
+  invalidation fails closed; legacy unmarked cache and decoding need separate recovery.
+
+- Provider/cloud deletion completion updates only the identified durable work row;
+  completed jobs are reclaimed by bounded metadata maintenance (ADR 0052).
+  Indexed pending pages preserve round-robin order without scanning completed
+  backlog. Ignored updates and malformed provider-target JSON cannot report
+  completion. Per-record JSON limits and explicit deletion remain separate audits.
+
+- Staged attachment expiry now uses bounded transactional manifest/chunk passes
+  and durable cursors (ADR 0051). An expiring identity stays reserved until every
+  old chunk is gone, preventing reuse from adopting stale bytes. Invalid begin
+  requests no longer trigger cleanup; idle maintenance continues unfinished work.
+
+- Command/audit/tombstone/orphan metadata cleanup now runs transactional row/byte
+  bounded passes with durable cursors (ADR 0050). Command/audit caps use accepted
+  write order to preserve newly stored results after wall-clock rollback; idle
+  maintenance resumes unfinished work. Physical caps are eventual, and unsupported
+  oversized rows remain retained for the separate recovery workstream.
+
+- ACK acceptance now commits the client cursor and a durable raw-cleanup queue;
+  physical delivery-event deletion runs in bounded, transactional passes at ACK,
+  reopen and idle maintenance (ADR 0049). Slowest-client/generation fences remain
+  intact. Cleanup preserves a contiguous raw tail: an oversized/unsupported row
+  defers the rest of that generation, and SQLite builds without the required
+  byte-length capability retain queued data for later handling.
+
+- Global large-payload orphan GC now runs bounded transactional passes with durable
+  cursors, generation-wide pending-raw protection and exact replay-transfer lookups
+  (ADR 0048). Idle maintenance continues chunk cleanup across passes. Unsupported
+  oversized legacy blobs/chunks remain retained; other retention sweeps and complete
+  media/archive enforcement remain in the backend hardening plan.
+
+- Bounded large-tool manifests now use existing detail transformers when the
+  hydrated JSON plus manifest fits the shared 1 MiB pass budget. Digest/identity
+  validation and transactional replay/blob cleanup preserve corrupt, shared,
+  unacknowledged and unsupported payloads (ADR 0047). Images, legacy monolithic
+  blobs and larger payloads remain outside this lane.
+
 - The owner-only size-policy backend supports revisioned 1/2/5/10 GB SQLite-page
   targets and warning status (ADR 0046). Recent-detail pressure is opt-in via an
-  explicit policy save until Desktop size controls/rollout are complete. It reclaims
+  explicit policy save. Desktop now exposes a separate Save database target action,
+  allowed targets and warning percentage, compatible with older detail-only daemons. It reclaims
   free pages first and completes bounded expired sweeps before recent detail,
   preserving Forever/off and all existing turn/ACK guards. It is not a hard
   filesystem quota or complete #128 media/archive/storage enforcement.
@@ -50,7 +154,7 @@ milestone changes state.
   excerpt with a visible trim label (ADR 0043), including a one-time upgrade of
   text-only compaction markers. Successful plain structured results now support
   sanitized display-only excerpts sharing the result text budget (ADR 0044).
-  Resource-bearing shapes and large-payload/media retention remain separate work; existing turn/ACK/idle guards are unchanged.
+  Resource-bearing shapes, payloads above the bounded lane and media retention remain separate work; existing turn/ACK/idle guards are unchanged.
 
 - Journal replay-detail retention now also stores explicit file-diff excerpts with
   original line statistics (ADR 0040), following command output (ADR 0038) and tool
@@ -60,11 +164,11 @@ milestone changes state.
   Adjacent redundant tool starts can also be removed without changing transcript
   order or dropping start-only fields; interleaved and incomplete cases remain
   protected (ADR 0041). Local detail-retention preferences now persist with revision
-  checks and explicit IPC capabilities (ADR 0042); size/archive/media policy and
+  checks and explicit IPC capabilities (ADR 0042); archive/media policy and
   the complete Storage page remain pending. The native Storage page now exposes the
   supported detail period and automatic-detail switch, revision-aware immediate saves,
-  reload-on-conflict/error and advisory SQLite page usage; no size/image/archive
-  controls are presented as implemented. Storage also shows advisory SQLite/WAL/SHM
+  reload-on-conflict/error and advisory SQLite page usage; image/archive
+  controls remain pending. Storage also shows advisory SQLite/WAL/SHM
   file lengths and filesystem availability, with a below-5-GB notice on refresh
   (ADR 0045); these are not total application storage or background monitoring.
 

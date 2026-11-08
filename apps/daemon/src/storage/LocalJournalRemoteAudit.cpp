@@ -57,25 +57,6 @@ bool LocalJournal::recordRemoteCommand(const RemoteCommandAudit& entry) {
     return true;
 }
 
-bool LocalJournal::pruneRemoteAudit() {
-    QSqlQuery query(database_);
-    const QStringList statements{
-        QStringLiteral("DELETE FROM remote_command_audit WHERE datetime(recorded_at) < "
-                       "datetime('now', '-%1 days')")
-            .arg(remoteCommandRetentionDays),
-        QStringLiteral("DELETE FROM remote_command_audit WHERE rowid NOT IN (SELECT rowid FROM "
-                       "remote_command_audit ORDER BY recorded_at DESC, rowid DESC LIMIT %1)")
-            .arg(maximumRemoteCommands)};
-    for (const QString& statement : statements) {
-        if (!query.exec(statement)) {
-            setError(query.lastError().text());
-            return false;
-        }
-    }
-    remoteCommandsSincePrune_ = 0;
-    return true;
-}
-
 std::optional<QList<RemoteCommandAudit>> LocalJournal::remoteCommands(const QString& deviceId,
                                                                       const int limit) const {
     QList<RemoteCommandAudit> result;
