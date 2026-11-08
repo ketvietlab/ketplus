@@ -170,6 +170,12 @@ the corresponding Atlas mock first.
   activity backfills, unchanged stored rows, diagnostic preservation, write-lock
   release while the failed object remains alive, repair and reopen.
 
+- Journal migration copy protection (ADR 0087): the journal-space target observes
+  a synthetic 64-MiB copy while SQLite writes under umasks 0022 and 0077. It checks
+  private staging, final POSIX permissions, retained hashes, integrity, bounded
+  stale-artifact cleanup, preservation of unknown entries and repair/retry.
+  POSIX-specific cases skip Windows; this is not Windows ACL or multi-GB evidence.
+
 - Media cleanup changes: temporary reference catalogs exercise malformed data,
   file/directory symlinks, unsupported filenames, per-file/catalog limits, preserved
   shared bytes and metadata, repair/retry and absent/empty-catalog compatibility.

@@ -1,6 +1,6 @@
 # Backend hardening execution plan
 
-Updated: 2026-11-07. Owner: conversation #2739. Independent reviewer: #6212.
+Updated: 2026-11-08. Owner: conversation #2739. Independent reviewer: #6212.
 Baseline: integration `90388ea772bf75267e66233ee66566bc0e2e18e8` (PR #212).
 
 This is the durable execution queue for finishing the existing non-UI domain
@@ -35,10 +35,15 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
    regression; run the required matrix; record the final commit and evidence.
 3. A review finding loops back to the same item. A PASS only unlocks the merge
    gate; it does not complete merge, cleanup, packaging or deployment.
-4. Send one complete exact-head request to #6212. While an item awaits review,
-   continue an independent ready audit. Do not poll the peer or stop with an
-   invitation to continue. If all remaining items depend on an external gate,
-   record its owner and exact missing evidence instead of claiming completion.
+4. Send one complete exact-head request to #6212. Do not poll the peer or bypass
+   a held dispatch. The 2026-11-08 closure audit supersedes the previous rule to
+   start another independent audit while waiting: freeze new audit branches,
+   finish the already-started migration-copy package and drain the existing
+   review queue by issue. Review/merge the #71 fixes and finish that issue's
+   acceptance before starting the next domain; do not wait for all drafts to
+   merge before preparing its closure. Allow at most one new unreviewed package
+   needed for the current issue. Resolve its findings before advancing.
+   Record external gates separately from unperformed work owned by #2739.
 5. After exact-head tests and review pass, merge using the existing authorization.
    Address all P0/P1/P2 findings; do not self-accept a risk to empty the checklist.
    Lower-severity findings are either fixed or explicitly accepted by the user.
@@ -217,6 +222,10 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
   by this plan; missing external verification remains visibly outstanding.
 
 ## Evidence and current queue
+
+The [closure ledger](closure-ledger.md) is the current dispatch order and issue
+disposition. The historical package rows below are evidence, not completion of
+their parent issue. No issue is closed solely because several PRs or tests pass.
 
 | Item | State | Evidence / remaining work | Next action / owner |
 | --- | --- | --- | --- |
@@ -702,3 +711,24 @@ remain explicitly open.
   and cleanup.
 - [ ] Continue reference writes/copies, ancestor/path races, decode and enumeration
   bounds. This package does not complete H1.4 or change retention defaults.
+
+## 2026-11-08 — Private migration copy and closure discipline
+
+- [x] Reproduce the in-progress copy mode gap under umask 0022; umask 0077
+  control passes. Protect the copy and sidecars with private staging, check final
+  permissions, and preserve unsupported artifacts. See ADR 0087 and
+  `evidence/h1-private-migration-copy-qt.json`.
+- [x] Release Pro build and final-source matrix executed: journal-space 19 pass /
+  1 optional scale skip. Full Pro first run 93/96 (636.55 s); the three timeout
+  targets pass on a single isolated sequential retry, 3/3 (26.85 s), with no
+  source changes. No clean-first-run, Windows ACL, mixed-GB or crash claim.
+- [x] Reconcile original acceptance and current state for 21 scoped issues.
+  GitHub confirms 35 merged PRs but zero issue closures on 2026-11-07 local time;
+  `evidence/closure-audit-2026-11-08.json` records the snapshot.
+- [ ] Independent review/integration of the pending migration-copy package.
+- [ ] Safe source-worktree cleanup is verified and reported separately after
+  pushing; do not infer cleanup merely from a passing test or opened PR.
+
+The closure ledger overrides the old parallel-audit dispatch order. New audit
+branches are frozen; finish the existing #71 packet and its complete acceptance
+before moving to another issue. #85 retains its original rollout gate.
