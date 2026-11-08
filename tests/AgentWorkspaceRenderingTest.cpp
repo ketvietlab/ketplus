@@ -158,10 +158,11 @@ void AgentWorkspaceViewTest::selectsModelsInUnifiedPicker() {
     };
     QTest::qWait(100);
     QVERIFY(capture(".dark"));
-    QCOMPARE(qRound(popup->property("x").toDouble() * 2.0 + popup->property("width").toDouble()),
-             qRound(root->width()));
-    QCOMPARE(qRound(popup->property("y").toDouble() * 2.0 + popup->property("height").toDouble()),
-             qRound(root->height()));
+    // Centred on whole pixels: an odd remainder leaves at most one pixel of difference.
+    QVERIFY(qAbs(popup->property("x").toDouble() * 2.0 + popup->property("width").toDouble() -
+                 root->width()) <= 1.0);
+    QVERIFY(qAbs(popup->property("y").toDouble() * 2.0 + popup->property("height").toDouble() -
+                 root->height()) <= 1.0);
     search->setProperty("text", "  LUNA  ");
     QTRY_COMPARE(list->property("count").toInt(), 1);
     QTest::keyClick(view.quickView(), Qt::Key_Down);
@@ -1856,7 +1857,11 @@ void AgentWorkspaceViewTest::pastesImagesAndOpensIndividualFiles() {
     QSignalSpy opened(&view, &ketplus::AgentWorkspaceView::fileDiffRequested);
     for (int index = 0; index < rows.size(); ++index) {
         const auto* row = rows.at(index);
-        QCOMPARE(row->height(), 24.0);
+        const auto* label = row->findChild<QQuickItem*>("changedFileLabel");
+        QVERIFY(label);
+        QVERIFY(row->height() >= label->height());
+        QCOMPARE(row->height(), rows.first()->height());
+        QVERIFY(label->y() >= 0 && label->y() + label->height() <= row->height());
         auto* added = row->findChild<QQuickItem*>("fileAdditions");
         auto* removed = row->findChild<QQuickItem*>("fileDeletions");
         QVERIFY(added && removed);
@@ -1866,7 +1871,7 @@ void AgentWorkspaceViewTest::pastesImagesAndOpensIndividualFiles() {
         QCOMPARE(removed->property("text").toString(), "-" + QString::number(index));
         QVERIFY(removed->mapToItem(row, QPointF(removed->width(), 0)).x() <= row->width() + 1);
         if (index > 0)
-            QCOMPARE(row->y(), rows.at(index - 1)->y() + rows.at(index - 1)->height() + 2);
+            QCOMPARE(row->y(), rows.at(index - 1)->y() + rows.at(index - 1)->height());
         QTest::mouseClick(view.quickView(), Qt::LeftButton, Qt::NoModifier,
                           row->mapToScene(QPointF(30, row->height() / 2)).toPoint());
         QCOMPARE(opened.size(), index + 1);

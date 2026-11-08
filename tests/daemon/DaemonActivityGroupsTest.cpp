@@ -31,6 +31,72 @@ QJsonObject last(LocalJournal& journal, qint64 cursor) {
 class DaemonActivityGroupsTest : public QObject {
     Q_OBJECT
   private slots:
+    void settlementSeeksOnlyRunningItemsInCurrentTurn() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(seed(journal, dir.path()));
+        QVERIFY(journal.appendEvent("session", 1, "item.started", command("running")) > 0);
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == path)
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        QSqlQuery q(db);
+        QVERIFY(
+            q.exec("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<100000) "
+                   "INSERT INTO activity_items SELECT 'session',1,x%2,'old-'||x,1000+x,1000+x,"
+                   "1000+x,'command',CASE WHEN x=2 THEN 1 ELSE 0 END,0 FROM n"));
+        QVERIFY(
+            q.exec("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<100000) "
+                   "INSERT INTO activity_summaries SELECT 'session',1,1000+x,'command',1,"
+                   "CASE WHEN x=2 THEN 1 ELSE 0 END,0,1000+x,x%2 FROM n"));
+        for (const auto& table : {QString("activity_items"), QString("activity_summaries")}) {
+            QSqlQuery plan(db);
+            QVERIFY(plan.prepare(
+                QString("EXPLAIN QUERY PLAN UPDATE %1 SET running=0,last_cursor=? "
+                        "WHERE session_id=? AND generation=? AND turn_sequence=? AND running>0")
+                    .arg(table)));
+            for (const QVariant& value :
+                 QVariantList{qint64(3), QString("session"), qint64(1), qint64(1)})
+                plan.addBindValue(value);
+            QVERIFY(plan.exec());
+            QString details;
+            while (plan.next())
+                details += plan.value(3).toString();
+            QVERIFY2(details.contains(table + "_running_turn"), qPrintable(details));
+            QVERIFY2(details.contains("turn_sequence=?"), qPrintable(details));
+        }
+        QElapsedTimer elapsed;
+        elapsed.start();
+        for (int n = 0; n < 25; ++n)
+            QVERIFY(journal.appendEvent("session", 1, "turn.completed", {{"status", "completed"}}) >
+                    0);
+        qInfo("25 production settlements with 100000 historical rows: %lld ms", elapsed.elapsed());
+        for (const auto& table : {QString("activity_items"), QString("activity_summaries")}) {
+            QVERIFY(q.exec(QString("SELECT count(*) FROM %1 WHERE session_id='session' AND "
+                                   "generation=1 AND turn_sequence=1 AND running>0")
+                               .arg(table)));
+            QVERIFY(q.next());
+            QCOMPARE(q.value(0).toInt(), 0);
+            QVERIFY(q.exec(QString("SELECT count(*) FROM %1 WHERE session_id='session' AND "
+                                   "generation=1 AND turn_sequence=0 AND running>0")
+                               .arg(table)));
+            QVERIFY(q.next());
+            QCOMPARE(q.value(0).toInt(), 1);
+            // Upgrade path must recreate the additive index on an older journal.
+            QVERIFY(q.exec(QString("DROP INDEX %1_running_turn").arg(table)));
+        }
+        q.finish();
+        LocalJournal reopened(path);
+        QVERIFY(reopened.isOpen());
+        QVERIFY(q.exec("SELECT count(*) FROM sqlite_master WHERE type='index' AND name IN "
+                       "('activity_items_running_turn','activity_summaries_running_turn')"));
+        QVERIFY(q.next());
+        QCOMPARE(q.value(0).toInt(), 2);
+    }
+
     void summaryOmitsDetailsAndOutputAdvancesCursor() {
         QTemporaryDir dir;
         LocalJournal journal(dir.filePath("journal.sqlite3"));

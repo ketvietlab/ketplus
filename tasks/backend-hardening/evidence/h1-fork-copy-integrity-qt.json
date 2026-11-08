@@ -1,0 +1,37 @@
+{
+  "scope": "H1.3 fork copy completeness and destination ownership",
+  "base": "67ce6a84906027df64a191017cff9df2f8468e38",
+  "environment": "macOS arm64 Qt6.11.2 Release Pro/headless offscreen; temporary journals and fake Codex",
+  "original_copy_probe": {
+    "failed": 11,
+    "passed": 3,
+    "note": "Deferred commit already passes; includes setup/cleanup"
+  },
+  "unguarded_destination_probe": {
+    "failed": 2,
+    "passed": 3,
+    "note": "Deleted target already refused; includes setup/cleanup"
+  },
+  "pre_race_focused_passed": 23,
+  "initial_affected_targets": 13,
+  "initial_affected_seconds": 84.83,
+  "initial_matrix_note": "Copy-count patch before destination guards and #245 integration; not final acceptance",
+  "race_guard_probe": "passes",
+  "guard_removal_mutation": {
+    "failed": 1,
+    "passed": 2,
+    "note": "Canonical worktree fixture: without destination guard delayed fork incorrectly returns ok; setup/cleanup pass"
+  },
+  "final_matrix": "pending",
+  "not_verified": [
+    "fork source counter types/read validation",
+    "bounded whole-history work",
+    "process interruption",
+    "live journal/provider",
+    "Windows",
+    "multi-GB",
+    "package/install/deploy"
+  ],
+  "harness_correction": "Initial async fixture used a noncanonical source path; another guard masked the defect. Canonicalized source to match production path resolution before accepting mutation evidence.",
+  "final_focused_passed": 24
+}

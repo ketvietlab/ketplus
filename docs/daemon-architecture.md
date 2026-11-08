@@ -114,6 +114,13 @@ Streamed text reaches the journal coalesced: consecutive `assistant.delta` or
 item, and SessionHost teardown journal the held text first, so provider order
 is kept. One event per provider chunk (a word or less) had every reader, above
 all a phone paging the relay, read tens of thousands of events per conversation.
+If append fails, SessionHost retains the prefix and later provider events in a
+bounded FIFO, retries after one second, and yields between deferred entries.
+The queue caps are 128 events / 40 MiB per session and 512 / 80 MiB per host
+(encoded payload plus bookkeeping); rejected commands are not deferred. Deletion
+releases the queue. This is volatile recovery, not a durable crash spool, and
+excess/unsupported events are rejected; see ADR 0062 for the coalescer exception
+and exact limits.
 The journal transactionally maintains a durable compact replay projection. It
 omits command-output deltas that the transcript does not consume and removes
 assistant deltas once a completed item supersedes them; deltas for an incomplete
@@ -282,10 +289,41 @@ signed content. `itemKey` is a public linkage value: it hides the item id
 from casual reading, but the relay knows session and generation and can
 confirm a guessed provider item id. Each session's cloud cursor is registered with the
 journal once per sign-in, not on every upload, and an acknowledgement at or
-behind the stored cursor writes nothing. An acknowledgement checks only the
-large payloads its removed raw events name, finding replay manifests through
-the item index; the retention pass (at open, after a session delete and every
-256 command results) collects any other unreferenced payload.
+behind the stored cursor writes nothing. Advancing ACKs commit a monotonic cursor
+and durable cleanup queue together. Physical raw deletion is eventual: each pass
+visits at most eight queued generations and 128 raw candidates, deletes at most
+1 MiB, and rechecks the slowest client's fence. It only removes a contiguous raw
+prefix; unsupported rows hold the rest of their generation's tail so raw replay
+expiry remains explicit. Reopen/idle maintenance resumes queued work; see [ADR 0049](decisions/0049-bounded-acknowledged-delivery-cleanup.md).
+Global orphan GC runs after advancing ACK cleanup, at open, after a session delete,
+every 256 command results and on idle maintenance. Each transactional pass scans up
+to 32 metadata and 128 chunk candidates, deletes at most 1 MiB, and persists cursors
+for restart/wrap. A generation with pending raw delivery is deferred without a JSON
+backlog scan; retained replay references protect shared payloads. Unreachable chunks
+may wait for later passes. Oversized legacy blobs and malformed rows remain retained;
+see [ADR 0048](decisions/0048-bounded-global-payload-gc.md).
+
+Command results, remote audit, deletion tombstones, orphan client cursors and
+orphan background tasks each have a transactional metadata-retention lane. Per
+table, one pass visits at most 256 age/orphan plus 256 cap candidates and deletes
+at most 256 rows/1 MiB across both scans. Durable rowid cursors resume at reopen or
+idle maintenance. Command/audit caps retain the latest 10,000 accepted writes by
+rowid rather than timestamp, so clock rollback cannot immediately evict a new
+result. Fixed 10,001-entry cutoff discovery avoids backlog sorting. Busy work
+defers; failed deletions/state writes roll back the lane. These are eventual
+physical caps, not a hard storage quota; see [ADR 0050](decisions/0050-bounded-journal-metadata-retention.md).
+
+Cloud envelope cache cleanup has its own 256-candidate/1-MiB maintenance lane.
+Only rows with receipts for their exact sent ciphertext are eligible. An additive
+receipt flag defaults to pending for legacy/new cache; pre-dispatch verification
+resets it for retries. Receipt and a versioned relay/workspace/machine/key-scoped
+recovery cursor commit together before credential mirroring and raw ACK; restart
+repairs these later steps without re-encrypting already accepted events.
+Old account callbacks and old raw cloud cursors cannot authorize a replacement
+cache row's deletion. Invalid envelope recovery removes one exact identity before
+retry, with a 1-MiB stored-column bound and checked transaction. Unsupported or
+legacy unmarked entries remain for separate recovery; see
+[ADR 0053](decisions/0053-bounded-cloud-event-cache-cleanup.md).
 
 Deleted rows return their space to the disk (#128). A new journal is created
 with `auto_vacuum = INCREMENTAL`. An older one moves to it once at daemon start,
@@ -325,6 +363,18 @@ relay. The same `session.media.read` with a worktree-relative `path` instead of
 (no revision fence; symlinks, paths escaping the worktree and files over 16 MB
 are refused). Previews are decoded off the daemon's main thread, scaled to at
 most 1280 px and flattened onto white.
+
+Media cleanup first validates a complete reference catalog: canonical digest
+files, regular nonsymlink entries, at most 4 MiB per file, 16 MiB total and 4,096
+directory entries. Unknown, unreadable or over-budget ownership defers deletion;
+capacity can remain above its limit pending recovery. Valid ownership retains the
+existing eviction order. This guard does not establish reference-write durability
+or a cross-file transaction; see ADR 0065.
+
+Media deduplication checks the existing file type, size, bounded contents and
+owner-only permissions before publishing a blob reference (ADR 0066). Unsupported
+entries are preserved for repair. The store rejects symlinks at its requested
+directory and blob paths; ancestor races and reference durability remain separate.
 
 Codex `fileChange` items are journaled with a worktree-relative `worktreePath`
 on each change, or `outsideWorktree: true` when the file is not beneath the
@@ -418,6 +468,25 @@ commands backed by the active adapter's advertised capabilities. Encrypted
 attachments use bounded, individually durable command chunks and a locally
 validated staging journal; see
 [ADR 0007](decisions/0007-capability-configuration-and-attachment-staging.md).
+
+The 24-hour local staging expiry runs bounded passes at reopen, valid upload begin
+and idle maintenance: at most 32 manifests and 128 chunks share a 1-MiB mutation
+budget. An `expiring` manifest reserves its session/generation/attachment identity
+until every old chunk is removed; reads/commit/new begin cannot adopt that retired
+upload. Begin/read/commit/chunk operations check the 24-hour eligibility directly,
+so an expired ID beyond the sweep window cannot remain usable. Draft quotas count
+only usable manifests, while expired identities remain reserved until cleanup.
+Current and unknown-format parents protect their chunks. Cancellation retains a
+retiring identity and cannot touch a newer manifest revision; remaining mixed
+revisions keep the retirement marker until bounded cleanup finishes. Deletions,
+retirement markers and durable rowid cursors commit together; busy work defers.
+Explicit cancellation reads at most 128 chunk candidates, including other
+revisions, and shares a 1-MiB mutation budget with the manifest. It releases an
+empty identity immediately; otherwise it commits the retirement marker and the
+bounded chunk deletion together. Unsupported/oversized manifests fail unchanged;
+oversized chunks remain reserved for recovery. See
+[ADR 0051](decisions/0051-bounded-staged-attachment-expiry.md) and
+[ADR 0054](decisions/0054-bounded-attachment-cancellation.md) for limits and retries.
 
 Assistant/tool lifecycle payloads larger than 256 KiB use the bounded, versioned
 chunk and terminal-manifest representation in
@@ -584,6 +653,13 @@ generation tombstone and durable deletion work. Live background tasks must first
 stop. Attached Desktop clients receive `session.deleted`; `session.list` also
 returns `deleted_sessions` so reconnecting clients remove stale persisted entries.
 Newer generations are not removed by an older tombstone.
+The tombstone and cleanup-work inserts must each affect one row, and each
+history-table delete must leave no matching row. A failed statement or commit
+rolls back and releases the transaction before returning failure, so retries
+cannot observe uncommitted deletion state. See
+[ADR 0055](decisions/0055-session-delete-transaction-recovery.md). Explicit deletion
+still performs synchronous work proportional to that session's history; bounded
+retirement remains a separate hardening item.
 
 The heartbeat optionally carries `deletions` (session ID, generation, lifecycle
 revision and operation ID). Only an exact `acceptedDeletions` receipt clears cloud
@@ -591,11 +667,30 @@ work. Missing receipts and transport failures retry after restart; absence from 
 session catalog alone never proves deletion. Relay consumers must deploy the
 additive control-v2 contract before relying on Mac-to-phone deletion propagation.
 
+Completion changes only the identified durable work row. Fully completed jobs are
+logically excluded immediately and reclaimed by a separate metadata lane (up to
+256 rows/1 MiB per pass). Pending reads use indexed state/rowid suffix and prefix
+ranges sharing one page limit, so retained completed jobs do not force a backlog
+scan or round-robin sort. Invalid provider-target JSON remains pending; ignored
+completion updates fail. See [ADR 0052](decisions/0052-bounded-completed-deletion-work.md)
+for the contract and the remaining per-record/startup limits.
+
 The same transaction captures current and historical provider thread IDs, including
 handoffs. A bounded background queue calls Codex `thread/delete` or Claude SDK
 `deleteSession`, including Claude transcript copies in previous project directories
 and subagent transcripts. Cleanup failures remain durable for retry. A thread still
-referenced by another retained conversation is preserved. Cursor has no supported
+referenced by another retained conversation is preserved. Ownership checks use a
+complete, fallible catalog read: query or row-fetch errors defer queued cleanup
+and reject new local deletion without removing history. A partially read catalog
+cannot prove that a thread is unreferenced. Work remains durable for a later pass
+or restart after repair; see [ADR 0056](decisions/0056-fail-closed-provider-ownership-reads.md).
+Cleanup additionally requires supported ownership metadata: an object keyed by
+nonempty provider IDs, with object entries containing only string `thread_id`
+and/or string-array `retired_thread_ids`. Malformed or unknown fields defer cleanup
+without normalizing or deleting their stored values. Both the local source and
+retained catalog are checked; see
+[ADR 0057](decisions/0057-preserve-unsupported-provider-ownership.md).
+Cursor has no supported
 thread-deletion API in this integration: an unshared Cursor thread currently rejects
 permanent deletion with `provider_cleanup_unsupported` and retains its conversation.
 This change does not scan or delete already orphaned historical provider sessions.
@@ -653,3 +748,9 @@ then may compact eligible recent detail without bypassing retention guards.
 Forever/off still preserve remaining detail. Unsupported/protected data may leave
 the target unmet. File/WAL and total-application usage are not this page target;
 see [ADR 0046](decisions/0046-journal-size-pressure.md) for scope and remaining work.
+
+Bounded large-tool retention (ADR 0047) applies the existing detail transformers
+to version-1 fragmented payloads within the shared 1 MiB pass budget. It requires
+a fully acknowledged session generation, verifies identity and SHA-256, and
+atomically replaces the replay manifest, cleans unreferenced chunks and advances
+projection revision. Images, legacy blobs and larger payloads remain retained.
