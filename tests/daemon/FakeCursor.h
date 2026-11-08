@@ -128,9 +128,17 @@ for line in sys.stdin:
     if method == 'initialize':
         log('initialize:' + json.dumps(params.get('clientInfo') or {}))
         result = {'protocolVersion': 1,
+                  'agentCapabilities': {'loadSession': True, 'promptCapabilities': {'image': True}},
                   'authMethods': [{'id': 'cursor_login', 'name': 'Cursor login'}]}
-        if os.environ.get('KETPLUS_FAKE_CURSOR_LOAD_SESSION') == '0':
+        capability_mode = os.environ.get('KETPLUS_FAKE_CURSOR_LOAD_SESSION')
+        if capability_mode == '0':
             result['agentCapabilities'] = {'loadSession': False}
+        elif capability_mode == 'missing':
+            result['agentCapabilities'] = {}
+        elif capability_mode == 'absent':
+            del result['agentCapabilities']
+        elif capability_mode == 'wrong-type':
+            result['agentCapabilities'] = {'loadSession': 'true'}
         emit({'jsonrpc': '2.0', 'id': message_id, 'result': result})
     elif method == 'authenticate':
         log('authenticate:' + json.dumps(params))
