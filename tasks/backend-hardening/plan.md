@@ -831,3 +831,31 @@ remain explicitly open.
 - #256 is independently reviewed and merged at `7ceebc34`; earlier dispatch-hold notes above are historical. Reviewer is now #7705.
 - #257 includes the reviewed #259 production/test tree and the documentation clarification in ADR 0073; final matrix and review of this combined head remain required before merge.
 - Keep #71 open for the remaining catalog output, malformed normal frames, request semantics and capability acceptance. No UI implementation, provider quota or deployment.
+
+
+## 2026-11-08 — #71 closure-first integration and catalog output
+
+- [x] #256 merged at `7ceebc34`; #259 merged at `b93394bb` after the
+  doc-only count clarification passed review at `16d8ee70`.
+- [x] #257 integration head `6981197f` passed independent delta review and merged
+  at `d76d0a89`. Author Release headless matrix: 48/50 first pass; two timing
+  failures passed unchanged in a serial 2/2 rerun. This is not a clean first-pass
+  50/50 result. Production/regression code matched the previously reviewed head.
+- [x] #258 integration head `216b2043`: Release headless build and serial
+  **51/51 PASS**, 372.28 s. Production and regression match its previously
+  reviewed head; integration delta review and merge are still required.
+- [x] Reproduce Cursor catalog accumulation and unsuccessful-exit acceptance;
+  implement the owning-path fix in ADR 0088. Final self-hosted CLI fixture:
+  original production **7 pass / 7 fail**; fixed **14/14 PASS**, including
+  interrupting stdout and stderr 64-MiB floods before their completion marker.
+  Evidence: `evidence/h3-cursor-catalog-bounds-qt.json`.
+- [ ] Finish the catalog affected-target matrix, exact-head independent review
+  by #7705, then merge and clean its worktree. This is the sole new unreviewed
+  package for the current issue.
+- [ ] Finish #71 acceptance: normal malformed/binary/invalid-UTF8 frame behavior,
+  capability-to-adapter coverage, and disposition of remaining probe/waiter limits.
+  Existing #260/#261 own response id/envelope work overlapping #74; do not duplicate
+  them. Do not close #71 solely because the first four PRs passed.
+
+Owner #2739 continues this issue; no new domain audit or UI implementation starts.
+The relay rollout gate remains external and does not block this provider work.
