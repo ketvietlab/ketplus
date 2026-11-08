@@ -100,7 +100,7 @@ void markAgentOrigin(QVariantMap& entry, const QJsonArray& agentMessages) {
     bool reviews = true;
     for (const QJsonValue& value : agentMessages) {
         const QJsonObject message = value.toObject();
-        const QString sender = QLatin1Char('#') + message.value("from_number").toString();
+        const QString sender = QStringLiteral("@agent/") + message.value("from_number").toString();
         if (!senders.contains(sender))
             senders.append(sender);
         replies = replies && message.value("kind").toString() == QStringLiteral("reply");
@@ -125,7 +125,7 @@ void markAgentOrigin(QVariantMap& entry, const QJsonArray& agentMessages) {
 QString agentMessageNoticeTitle() { return QStringLiteral("Agent message"); }
 
 QString agentMessageStateText(const QJsonObject& data) {
-    const QString peer = QLatin1Char('#') + data.value("peer_number").toString();
+    const QString peer = QStringLiteral("@agent/") + data.value("peer_number").toString();
     const QString state = data.value("state").toString();
     const QString reason = data.value("reason").toString();
     const bool outgoing = data.value("direction").toString() == QStringLiteral("outgoing");
@@ -208,7 +208,8 @@ QString agentMessageStateText(const QJsonObject& data) {
 QVariantMap agentMessageNotice(const QJsonObject& data, const QString& itemId) {
     // ADR 0067: a review that starts no turn reads like the reviewer's message.
     if (data.value("state").toString() == QStringLiteral("review_recorded")) {
-        QString label = QStringLiteral("Review from #") + data.value("peer_number").toString();
+        QString label =
+            QStringLiteral("Review from @agent/") + data.value("peer_number").toString();
         if (const QString title = data.value("peer_title").toString(); !title.isEmpty())
             label += QStringLiteral(" · ") + title;
         label += data.value("verdict").toString() == QStringLiteral("no_findings")
@@ -461,8 +462,10 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
             // A steer carries its images the way the turn's first message does.
             entry = message("user", data.value("text").toString(), "You", {}, itemId);
             entry.insert("images", mcp_media::messageImages(data.value("images").toArray()));
-            if (type == "turn.steered")
+            if (type == "turn.steered") {
                 entry.insert("eventType", "turn.steered");
+                entry.insert("provider", data.value("provider").toString());
+            }
             if (data.value("origin").toString() == QStringLiteral("agent"))
                 markAgentOrigin(entry, data.value("agent_messages").toArray());
         } else if (type == "assistant.delta") {

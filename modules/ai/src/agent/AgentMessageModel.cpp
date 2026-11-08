@@ -64,6 +64,7 @@ AgentMessageModel::AgentMessageModel(QObject* parent) : QAbstractListModel(paren
                              "messageKey",
                              "category",
                              "eventType",
+                             "provider",
                              "phase",
                              "title",
                              "summary",
@@ -299,8 +300,8 @@ QString AgentMessageModel::resolvePayload(const QString& reference) {
 
 QVariantMap AgentMessageModel::normalized(QVariantMap item) {
     for (const auto* key : {"kind", "body", "meta", "timestamp", "filePath", "subtype", "command",
-                            "category", "eventType", "phase", "title", "summary", "target",
-                            "status", "cwd", "commandDescription", "fileLocation"})
+                            "category", "eventType", "provider", "phase", "title", "summary",
+                            "target", "status", "cwd", "commandDescription", "fileLocation"})
         if (!item.contains(key))
             item.insert(key, QString{});
     if (item.value("category").toString().isEmpty()) {

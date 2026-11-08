@@ -156,6 +156,10 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS "MessageImageGallery.qml"
 )
 set_source_files_properties(
+    src/agent/qml/TranscriptMessageImages.qml
+    PROPERTIES QT_RESOURCE_ALIAS "TranscriptMessageImages.qml"
+)
+set_source_files_properties(
     src/agent/qml/TranscriptRemoteGroup.qml
     PROPERTIES QT_RESOURCE_ALIAS "TranscriptRemoteGroup.qml"
 )
@@ -261,6 +265,7 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
         src/agent/qml/ModelPicker.qml
         src/agent/qml/ModelProviderTabs.qml
         src/agent/qml/MessageImageGallery.qml
+        src/agent/qml/TranscriptMessageImages.qml
         src/agent/qml/TranscriptRemoteGroup.qml
         src/agent/qml/TranscriptNotice.qml
     src/agent/qml/HeldMessageAction.qml

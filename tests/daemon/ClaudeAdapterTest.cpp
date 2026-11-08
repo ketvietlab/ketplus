@@ -361,6 +361,8 @@ class ClaudeAdapterTest final : public QObject {
         QTRY_COMPARE_WITH_TIMEOUT(events(QStringLiteral("turn.steered")).size(), 1, 3000);
         QCOMPARE(events(QStringLiteral("turn.steered")).first()["payload"]["text"].toString(),
                  QStringLiteral("use the other branch"));
+        QCOMPARE(events(QStringLiteral("turn.steered")).first()["payload"]["provider"].toString(),
+                 QStringLiteral("claude"));
         QVERIFY(logText(logPath).contains(
             QStringLiteral("steer:%1:use the other branch").arg(sessionId).toUtf8()));
         // The provider reads the skills a client wrapped around the text; the journal keeps

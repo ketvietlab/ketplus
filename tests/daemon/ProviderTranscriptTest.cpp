@@ -87,13 +87,13 @@ class ProviderTranscriptTest : public QObject {
         QCOMPARE(message.value("kind").toString(), "user");
         QCOMPARE(message.value("timestamp").toString(), "2026-11-01T12:00:00Z");
         QCOMPARE(message.value("subtype").toString(), "agentMessage");
-        QCOMPARE(message.value("meta").toString(), "Message from #1093 · Parser · Claude");
+        QCOMPARE(message.value("meta").toString(), "Message from @agent/1093 · Parser · Claude");
         QCOMPARE(message.value("body").toString(), "Please review");
         const auto notice = rows.last().toMap();
         QCOMPARE(notice.value("subtype").toString(), "heldAgentMessage");
         QCOMPARE(notice.value("sanitizedPayload").toMap().value("messageId").toString(), "m2");
         QCOMPARE(notice.value("title").toString(), agentMessageNoticeTitle());
-        QVERIFY(notice.value("body").toString().contains("#1093"));
+        QVERIFY(notice.value("body").toString().contains("@agent/1093"));
         auto outgoingHeld = held;
         outgoingHeld.insert("direction", "outgoing");
         const auto outgoingRows = daemonWindowMessages(
@@ -105,7 +105,7 @@ class ProviderTranscriptTest : public QObject {
         // A reply is labelled as one; an ordinary user message keeps "You".
         QVariantMap reply = message;
         markAgentOrigin(reply, QJsonArray{QJsonObject{{"kind", "reply"}, {"from_number", "2044"}}});
-        QCOMPARE(reply.value("meta").toString(), "Reply from #2044");
+        QCOMPARE(reply.value("meta").toString(), "Reply from @agent/2044");
         QVariantMap own = message;
         own.insert("subtype", QString{});
         markAgentOrigin(own, {});
@@ -119,24 +119,24 @@ class ProviderTranscriptTest : public QObject {
                                         {"expect_reply", true},
                                         {"peer_number", "1093"},
                                         {"peer_title", "Parser"}}),
-                 "Sent to #1093 · Parser · started a turn · reply requested.");
+                 "Sent to @agent/1093 · Parser · started a turn · reply requested.");
         QCOMPARE(agentMessageStateText(
                      {{"state", "sent"}, {"delivery", "queued"}, {"peer_number", "1093"}}),
-                 "Sent to #1093 · delivered when its turn ends.");
+                 "Sent to @agent/1093 · delivered when its turn ends.");
         QCOMPARE(agentMessageStateText({{"state", "sent"},
                                         {"delivery", "steered"},
                                         {"peer_number", "1093"},
                                         {"peer_title", "Parser"}}),
-                 "Sent to #1093 · Parser · added to its running turn.");
+                 "Sent to @agent/1093 · Parser · added to its running turn.");
         QCOMPARE(agentMessageStateText({{"state", "sent"},
                                         {"kind", "reply"},
                                         {"delivery", "starting"},
                                         {"peer_number", "4821"},
                                         {"peer_title", "Release"}}),
-                 "Replied to #4821 · Release.");
+                 "Replied to @agent/4821 · Release.");
         QCOMPARE(agentMessageStateText(
                      {{"state", "replied"}, {"peer_number", "4821"}, {"peer_title", "Release"}}),
-                 "Sent as the reply to #4821 · Release.");
+                 "Sent as the reply to @agent/4821 · Release.");
     }
 
     // ADR 0067: review requests, skipped reviews and recorded reviews.
@@ -148,7 +148,7 @@ class ProviderTranscriptTest : public QObject {
                                         {"max_rounds", 2},
                                         {"peer_number", "1093"},
                                         {"peer_title", "Reviewer for #4821"}}),
-                 "Asked #1093 · Reviewer for #4821 to review this turn (round 1 of 2).");
+                 "Asked @agent/1093 · Reviewer for #4821 to review this turn (round 1 of 2).");
         QCOMPARE(agentMessageStateText(
                      {{"state", "review_skipped"}, {"kind", "review"}, {"reason", "no_changes"}}),
                  "No review: this turn changed no files.");
@@ -164,7 +164,7 @@ class ProviderTranscriptTest : public QObject {
                                         {"reason", "reviewer_unsupported"},
                                         {"direction", "outgoing"},
                                         {"peer_number", "1093"}}),
-                 "#1093 no longer runs on Claude, so it did not review this turn.");
+                 "@agent/1093 no longer runs on Claude, so it did not review this turn.");
         const auto skipped = agentMessageNotice(
             {{"state", "review_skipped"}, {"kind", "review"}, {"reason", "reviewer_busy"}},
             "notice:7");
@@ -190,7 +190,8 @@ class ProviderTranscriptTest : public QObject {
         const auto review = rows.first().toMap();
         QCOMPARE(review.value("kind").toString(), "user");
         QCOMPARE(review.value("subtype").toString(), "agentMessage");
-        QCOMPARE(review.value("meta").toString(), "Review from #1093 · Reviewer · No findings");
+        QCOMPARE(review.value("meta").toString(),
+                 "Review from @agent/1093 · Reviewer · No findings");
         QCOMPARE(review.value("body").toString(), "Looks fine.\nVerdict: no findings");
         QVERIFY(!review.value("sanitizedPayload").toMap().contains("messageId"));
         QCOMPARE(
@@ -199,13 +200,13 @@ class ProviderTranscriptTest : public QObject {
                 "notice:9")
                 .value("meta")
                 .toString(),
-            "Review from #1093 · Findings");
+            "Review from @agent/1093 · Findings");
 
         // The reviewer's turn names what it was asked for.
         QVariantMap request{{"kind", "user"}};
         markAgentOrigin(request,
                         QJsonArray{QJsonObject{{"kind", "review"}, {"from_number", "4821"}}});
-        QCOMPARE(request.value("meta").toString(), "Review request from #4821");
+        QCOMPARE(request.value("meta").toString(), "Review request from @agent/4821");
     }
 
     void cursorPartialToolUpdatesKeepInputsAndResults() {

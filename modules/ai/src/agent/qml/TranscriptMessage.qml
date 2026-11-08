@@ -57,6 +57,8 @@ Item {
     required property bool running
     required property string category
     required property string eventType
+    // The provider a steer joined, from its journal event; older steers have none.
+    required property string provider
     required property string phase
     required property string title
     required property string summary
@@ -163,7 +165,7 @@ Item {
         }
     }
     width: view.width
-    height: messageSurface.y + messageSurface.height + surfaceInset + (activityRow ? KetTheme.px(3, KetTheme.zoom) : kind === "user" ? KetTheme.px(25, KetTheme.zoom) : copyableMessage ? KetTheme.px(44, KetTheme.zoom) : view.rowSpacing)
+    height: messageSurface.y + messageSurface.height + steerNotice.height + surfaceInset + (activityRow ? KetTheme.px(3, KetTheme.zoom) : kind === "user" ? KetTheme.px(25, KetTheme.zoom) : copyableMessage ? KetTheme.px(44, KetTheme.zoom) : view.rowSpacing)
     // Publish what this row actually is. The geometry model only ever learns a
     // height from the row that laid itself out, so a row it has not seen keeps
     // one fixed constant instead of borrowing another row's size.
@@ -198,6 +200,54 @@ Item {
         visible: text.length > 0
         height: visible ? implicitHeight : 0
     }
+    // The mock's user turn: who sent it and its images sit above the bubble, right-aligned.
+    Column {
+        id: userLead
+        objectName: "userMessageLead"
+        readonly property real gap: visible ? KetTheme.px(6, KetTheme.zoom) : 0
+        visible: kind === "user" && !messageDelegate.activityRow && (messageSurface.agentMessage || imageGallery.imageCount > 0)
+        width: messageSurface.userMaximumWidth
+        height: visible ? implicitHeight : 0
+        x: messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - KetTheme.px(20, KetTheme.zoom)
+        y: messageDelegate.surfaceInset + dayDivider.height
+        spacing: KetTheme.px(6, KetTheme.zoom)
+        Text {
+            id: agentOrigin
+            objectName: "agentMessageOrigin"
+            visible: messageSurface.agentMessage
+            width: parent.width
+            text: visible ? meta : ""
+            horizontalAlignment: Text.AlignRight
+            color: KetTheme.t.textMuted
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+            elide: Text.ElideRight
+            Accessible.name: text
+        }
+        // Reparenting one gallery between the lead and the bubble stops its taps reaching the
+        // thumbnails, so user rows and the rest each declare their own.
+        TranscriptMessageImages {
+            id: imageGallery
+            row: messageDelegate
+            sources: kind === "user" ? messageDelegate.messageImages : []
+            x: parent.width - width
+        }
+    }
+    Text {
+        id: steerNotice
+        objectName: "transcriptSteerNotice"
+        visible: kind === "user" && eventType === "turn.steered"
+        x: messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - KetTheme.px(20, KetTheme.zoom)
+        y: messageSurface.y + messageSurface.height + KetTheme.px(6, KetTheme.zoom)
+        width: Math.min(implicitWidth, messageDelegate.contentColumnWidth - KetTheme.px(40, KetTheme.zoom))
+        height: visible ? implicitHeight + KetTheme.px(6, KetTheme.zoom) : 0
+        text: "Sent while " + (provider ? shell.providerTitle(provider) : "the agent") + " was working · joined the running turn"
+        color: KetTheme.t.textMuted
+        font.family: KetTheme.fontFamily
+        font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+        wrapMode: Text.Wrap
+        horizontalAlignment: Text.AlignRight
+    }
     Rectangle {
         id: messageSurface
         objectName: "messageSurface"
@@ -207,12 +257,15 @@ Item {
         readonly property bool agentMessage: kind === "user" && subtype === "agentMessage"
         readonly property real userMaximumWidth: Math.max(KetTheme.px(160, KetTheme.zoom), Math.min(messageDelegate.contentColumnWidth * userRecipe.maxWidth, messageDelegate.contentColumnWidth - KetTheme.px(63, KetTheme.zoom)))
         x: kind === "user" ? messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - KetTheme.px(20, KetTheme.zoom) : messageDelegate.contentColumnX + KetTheme.px(20, KetTheme.zoom)
-        y: messageDelegate.surfaceInset + dayDivider.height
-        width: kind === "user" ? Math.min(userMaximumWidth, Math.max(Math.ceil(bodyMetrics.advanceWidth) + KetTheme.px(10, KetTheme.zoom), agentMessage ? Math.ceil(agentOriginMetrics.advanceWidth) + KetTheme.px(4, KetTheme.zoom) : 0, imageGallery.bubblePreferredWidth) + horizontalPadding * 2) : messageDelegate.contentColumnWidth - KetTheme.px(40, KetTheme.zoom)
-        height: messageColumn.implicitHeight + (messageDelegate.activityRow ? 0 : kind === "user" ? 2 * userRecipe.paddingBlock : KetTheme.px(16, KetTheme.zoom))
+        y: messageDelegate.surfaceInset + dayDivider.height + userLead.height + (imagesOnly ? 0 : userLead.gap)
+        width: kind === "user" ? Math.min(userMaximumWidth, Math.ceil(bodyMetrics.advanceWidth) + KetTheme.px(10, KetTheme.zoom) + horizontalPadding * 2) : messageDelegate.contentColumnWidth - KetTheme.px(40, KetTheme.zoom)
+        // An images-only prompt keeps no empty bubble under its thumbnails.
+        readonly property bool imagesOnly: userMessage && userLead.visible && messageDelegate.displayBody.trim().length === 0
+        visible: !imagesOnly
+        height: imagesOnly ? 0 : messageColumn.implicitHeight + (messageDelegate.activityRow ? 0 : kind === "user" ? 2 * userRecipe.paddingBlock : KetTheme.px(16, KetTheme.zoom))
         radius: kind === "user" ? userRecipe.radius : kind === "file" ? KetTheme.px(7, KetTheme.zoom) : 0
-        color: agentMessage ? KetTheme.t.surfaceRaised : kind === "user" ? userRecipe.background : kind === "file" ? KetTheme.t.surfaceRaised : "transparent"
-        border.color: agentMessage ? KetTheme.t.accent : kind === "file" ? KetTheme.t.panelBorder : "transparent"
+        color: kind === "user" ? userRecipe.background : kind === "file" ? KetTheme.t.surfaceRaised : "transparent"
+        border.color: kind === "file" ? KetTheme.t.panelBorder : "transparent"
 
         Column {
             id: messageColumn
@@ -222,25 +275,6 @@ Item {
             anchors.rightMargin: messageSurface.horizontalPadding
             anchors.verticalCenter: parent.verticalCenter
             spacing: kind === "file" ? KetTheme.px(4, KetTheme.zoom) : KetTheme.px(7, KetTheme.zoom)
-
-            Text {
-                id: agentOrigin
-                objectName: "agentMessageOrigin"
-                visible: messageSurface.agentMessage
-                width: parent.width
-                text: visible ? meta : ""
-                color: KetTheme.t.accentText
-                font.family: KetTheme.fontFamily
-                font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
-                font.weight: Font.Medium
-                elide: Text.ElideRight
-                Accessible.name: text
-            }
-            TextMetrics {
-                id: agentOriginMetrics
-                text: agentOrigin.text
-                font: agentOrigin.font
-            }
 
             TranscriptNotice {
                 objectName: "transcriptNotice"
@@ -265,16 +299,6 @@ Item {
                         catch (e) { return ""; }
                     }
                 }
-            }
-            Text {
-                objectName: "transcriptSteerNotice"
-                visible: eventType === "turn.steered"
-                width: parent.width
-                text: "Sent while the agent was working · joined the running turn"
-                color: KetTheme.t.textMuted
-                font.family: KetTheme.fontFamily
-                font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
-                wrapMode: Text.Wrap
             }
             Loader {
                 active: messageDelegate.groupLeader
@@ -1124,36 +1148,11 @@ Item {
                 }
             }
 
-            MessageImageGallery {
-                id: imageGallery
-                objectName: "messageImageGallery"
-                readonly property string expansionKey: JSON.stringify(["images", view.cacheScope, messageDelegate.messageKey])
-                function restoreImages() {
-                    const saved = view.activityState(expansionKey);
-                    maximumVisible = saved === undefined ? 3 : saved.imageLimit;
-                }
-                onExpansionKeyChanged: restoreImages()
-                Component.onCompleted: restoreImages()
-                onExpanded: view.rememberActivityState(expansionKey, {
-                    imageLimit: maximumVisible
-                })
-                width: Math.min(parent.width, preferredWidth)
-                sources: messageDelegate.messageImages
-
-                host: messageDelegate.host
-                visible: !messageDelegate.activityRow && imageCount > 0
-                // Thumbnail rows have fixed geometry; adding/removing attachments
-                // still preserves the reading anchor.
-                onHeightChanged: {
-                    if (view.followTail || shell.transcript !== view)
-                        return;
-                    host.scheduleTranscriptRestore();
-                }
-                onImageClicked: function (source) {
-                    preview.imageSource = source;
-                    preview.open();
-                }
+            TranscriptMessageImages {
+                row: messageDelegate
+                sources: kind === "user" ? [] : messageDelegate.messageImages
             }
+
         }
     }
 }

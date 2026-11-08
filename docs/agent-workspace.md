@@ -309,11 +309,13 @@ current-window value.
   its sidebar row and before the header title. Typing `#` in the composer offers
   numbered conversations by number or title; the daemon lists the ones a
   message names for the agent, which contacts them through `ketplus_agents`
-  only when asked. A turn another agent started shows its message as an
-  outlined bubble labelled "Message from #1093 · title · provider" (or "Reply
-  from …"). The sender's transcript adds an "Agent message" note naming the
-  receiver and its delivery ("Sent to #1093 · title · started a turn"), the
-  receiver's adds "Sent as the reply to #4821" when its final answer becomes the
+  only when asked. A turn another agent started shows its message as a
+  user bubble under a muted "Message from @agent/1093 · title · provider" label
+  (or "Reply from …"); a prompt's images lead its bubble and a steer adds "Sent
+  while <provider> was working" below it, naming the provider its `turn.steered`
+  event records (older steers read "the agent"). The sender's transcript adds an "Agent message" note naming the
+  receiver and its delivery ("Sent to @agent/1093 · title · started a turn"), the
+  receiver's adds "Sent as the reply to @agent/4821" when its final answer becomes the
   reply, and held, failed or expired messages appear as the same notes. While a
   turn another conversation started is running, its sidebar row ends with a
   muted "from #4821" and the tooltip names that conversation.

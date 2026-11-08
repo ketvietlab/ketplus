@@ -195,7 +195,7 @@ milestone changes state.
   receive them when the turn ends, or by steering when `urgent`; a final answer
   returns as the reply. Hop, chain and hourly limits hold runaway exchanges for
   the user's next turn, and requests expire after 24 hours. Delivered messages
-  show as labelled agent bubbles, the sender and receiver get "Sent to #N" and
+  show as labelled agent bubbles, the sender and receiver get "Sent to @agent/N" and
   "Sent as the reply" notes, a woken conversation's sidebar row names its sender
   while the turn runs, and `#` in the composer completes numbers that the daemon
   resolves into references for the agent. Verified with fake providers, a
