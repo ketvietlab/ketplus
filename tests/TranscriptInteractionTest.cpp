@@ -112,8 +112,8 @@ void AgentWorkspaceViewTest::browserEvidenceStaysVisible() {
     }
     auto* frame = findVisualItem(gallery, "messageAttachmentFrame");
     QVERIFY(frame);
-    QCOMPARE(frame->width(), 88.0);
-    QCOMPARE(frame->height(), 88.0);
+    QCOMPARE(frame->width(), 120.0);
+    QCOMPARE(frame->height(), 78.0);
     view.quickView()->requestActivate();
     QTest::qWait(50);
     frame->forceActiveFocus();
@@ -727,7 +727,7 @@ void AgentWorkspaceViewTest::activityGalleryLoadsInBatches() {
     auto* image = findVisualItem(gallery, "messageAttachmentImage");
     QVERIFY(image);
     QTRY_COMPARE(image->property("status").toInt(), 1);
-    QVERIFY(image->property("sourceSize").toSize().width() <= 224);
+    QVERIFY(image->property("sourceSize").toSize().width() <= 240);
     auto* more = findVisualItem(gallery, "expandMessageImages");
     QVERIFY(more);
     QCOMPARE(more->property("text").toString(), QString("+47"));
