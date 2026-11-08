@@ -57,6 +57,8 @@ Item {
     required property bool running
     required property string category
     required property string eventType
+    // The provider a steer joined, from its journal event; older steers have none.
+    required property string provider
     required property string phase
     required property string title
     required property string summary
@@ -239,7 +241,7 @@ Item {
         y: messageSurface.y + messageSurface.height + KetTheme.px(6, KetTheme.zoom)
         width: Math.min(implicitWidth, messageDelegate.contentColumnWidth - KetTheme.px(40, KetTheme.zoom))
         height: visible ? implicitHeight + KetTheme.px(6, KetTheme.zoom) : 0
-        text: "Sent while " + shell.providerTitle(shell.selectedProvider) + " was working · joined the running turn"
+        text: "Sent while " + (provider ? shell.providerTitle(provider) : "the agent") + " was working · joined the running turn"
         color: KetTheme.t.textMuted
         font.family: KetTheme.fontFamily
         font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels

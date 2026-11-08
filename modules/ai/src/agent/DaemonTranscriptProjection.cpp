@@ -462,8 +462,10 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
             // A steer carries its images the way the turn's first message does.
             entry = message("user", data.value("text").toString(), "You", {}, itemId);
             entry.insert("images", mcp_media::messageImages(data.value("images").toArray()));
-            if (type == "turn.steered")
+            if (type == "turn.steered") {
                 entry.insert("eventType", "turn.steered");
+                entry.insert("provider", data.value("provider").toString());
+            }
             if (data.value("origin").toString() == QStringLiteral("agent"))
                 markAgentOrigin(entry, data.value("agent_messages").toArray());
         } else if (type == "assistant.delta") {

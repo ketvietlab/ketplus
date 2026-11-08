@@ -1693,6 +1693,10 @@ QJsonObject SessionHost::steer(const QJsonObject& request, CommandCallback outco
                                       : QJsonObject{{QStringLiteral("message"), providerError}};
             if (providerError.isEmpty() && !images.isEmpty())
                 payload.insert(QStringLiteral("images"), images);
+            // The provider that ran the steered turn, so history keeps naming it after the
+            // conversation switches provider.
+            if (providerError.isEmpty())
+                payload.insert(QStringLiteral("provider"), it->stored.adapter);
             if (providerError.isEmpty())
                 for (auto field = agentOrigin.constBegin(); field != agentOrigin.constEnd();
                      ++field)

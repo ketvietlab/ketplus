@@ -916,6 +916,10 @@ void AgentSessionManager::steerPrompt(const QString& worktreePath, const QString
             if (error.isEmpty()) {
                 auto steered = message(QStringLiteral("user"), shown, QStringLiteral("You"));
                 steered.insert("eventType", "turn.steered");
+                // Sessions without a provider option are Codex, as labelProvider reads them.
+                const QString provider =
+                    session->options.value(QStringLiteral("provider")).toString();
+                steered.insert("provider", provider.isEmpty() ? QStringLiteral("codex") : provider);
                 if (!imageSources.isEmpty())
                     steered.insert(QStringLiteral("images"), imageSources);
                 appendMessage(session, steered);

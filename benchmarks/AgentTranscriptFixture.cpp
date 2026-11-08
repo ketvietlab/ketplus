@@ -40,7 +40,9 @@ class Journal {
               QJsonObject{{"type", "agentMessage"}, {"id", id}, {"phase", phase}, {"text", text}}}},
             {}, turn_);
     }
-    void steer(const QString& text) { append("turn.steered", {{"text", text}}, {}, turn_); }
+    void steer(const QString& text) {
+        append("turn.steered", {{"text", text}, {"provider", provider_}}, {}, turn_);
+    }
     void finish(const QString& status) {
         append("turn.completed", {{"status", status}}, {}, turn_);
     }

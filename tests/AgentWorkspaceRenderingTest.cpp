@@ -2308,7 +2308,8 @@ void AgentWorkspaceViewTest::userTurnLeadsWithOriginAndImages() {
                         QVariantMap{{"kind", "user"},
                                     {"body", "Also check dark mode."},
                                     {"messageKey", "steer"},
-                                    {"eventType", "turn.steered"}}},
+                                    {"eventType", "turn.steered"},
+                                    {"provider", "claude"}}},
                        "agent-and-steer");
     const auto shown = [](const auto& self, QQuickItem* item, const QString& name) -> QQuickItem* {
         if (!item->isVisible())
@@ -2337,7 +2338,22 @@ void AgentWorkspaceViewTest::userTurnLeadsWithOriginAndImages() {
             replyBubble->mapToScene(QPointF()).y());
     QVERIFY(steer->mapToScene(QPointF()).y() >=
             steerBubble->mapToScene(QPointF(0, steerBubble->height())).y());
-    QVERIFY(steer->property("text").toString().startsWith("Sent while "));
+    // The note names the provider of the steered turn; choosing another provider for the
+    // next turn leaves history as it was.
+    QCOMPARE(steer->property("text").toString(),
+             QString("Sent while Claude was working · joined the running turn"));
+    QVERIFY(root->setProperty("selectedProvider", "codex"));
+    QCOMPARE(steer->property("text").toString(),
+             QString("Sent while Claude was working · joined the running turn"));
+    // Steers journaled before the provider was recorded stay neutral.
+    view.resetMessages({QVariantMap{{"kind", "user"},
+                                    {"body", "Also check dark mode."},
+                                    {"messageKey", "legacy-steer"},
+                                    {"eventType", "turn.steered"}}},
+                       "legacy-steer");
+    QTRY_VERIFY((steer = shown(shown, activeTranscript, "transcriptSteerNotice")) &&
+                steer->property("text").toString() ==
+                    "Sent while the agent was working · joined the running turn");
 }
 
 void AgentWorkspaceViewTest::transcriptDayDividersUseJournalDates() {

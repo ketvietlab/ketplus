@@ -347,11 +347,15 @@ class DesktopTranscriptWindowTest final : public QObject {
         const auto rows = daemonWindowMessages(
             {{"events",
               QJsonArray{transcriptEvent("user.message", {{"text", "Fix the sidebar"}}, 1),
-                         transcriptEvent("turn.steered", {{"text", "Also update tests"}}, 2),
+                         transcriptEvent("turn.steered",
+                                         {{"text", "Also update tests"}, {"provider", "claude"}},
+                                         2),
                          transcriptEvent("turn.steered", {}, 3)}}});
         QCOMPARE(rows.size(), 2);
         QCOMPARE(rows.first().toMap().value("body").toString(), "Fix the sidebar");
         QCOMPARE(rows.last().toMap().value("body").toString(), "Also update tests");
+        // The steer keeps the provider of the turn it joined.
+        QCOMPARE(rows.last().toMap().value("provider").toString(), "claude");
     }
 
     void restoresSteerImages() {
