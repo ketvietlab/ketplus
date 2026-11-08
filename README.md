@@ -1,7 +1,7 @@
 # KetPlus
 
 <p align="center">
-  <img src="assets/brand/ketplus-mark.png" alt="KetPlus logo" width="144">
+  <img src="assets/brand/ketplus.svg" alt="KetPlus logo" width="144">
 </p>
 
 KetPlus is an early-stage, fast, lightweight, cross-platform text editor for
