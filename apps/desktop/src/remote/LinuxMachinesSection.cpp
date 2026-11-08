@@ -1,4 +1,7 @@
 #include "remote/LinuxMachinesSection.h"
+#include "KetButton.h"
+#include "KetIcons.h"
+#include "KetTextField.h"
 
 #include "KetPlusProductVersion.h"
 #include "control/ControlV2Client.h"
@@ -39,9 +42,9 @@ LinuxMachinesSection::LinuxMachinesSection(QWidget* parent)
     count_->setObjectName(QStringLiteral("linuxMachinesCount"));
     heading->addWidget(count_);
     heading->addStretch();
-    add_ = new QPushButton(tr("Connect Linux machine"), this);
+    add_ = new ket::Button(tr("Connect Linux machine"), ket::ButtonVariant::Secondary, this);
     add_->setObjectName(QStringLiteral("linuxMachinesAdd"));
-    connect(add_, &QPushButton::clicked, this, &LinuxMachinesSection::startPairing);
+    connect(add_, &QAbstractButton::clicked, this, &LinuxMachinesSection::startPairing);
     heading->addWidget(add_);
     outer->addLayout(heading);
     notice_ = new QLabel(this);
@@ -103,8 +106,9 @@ void LinuxMachinesSection::render() {
                                        this);
         description->setWordWrap(true);
         rows_->addWidget(description);
-        auto* signInButton = new QPushButton(tr("Sign in to connect a Linux machine"), this);
-        connect(signInButton, &QPushButton::clicked, this, &LinuxMachinesSection::signIn);
+        auto* signInButton = new ket::Button(tr("Sign in to connect a Linux machine"),
+                                             ket::ButtonVariant::Primary, this);
+        connect(signInButton, &QAbstractButton::clicked, this, &LinuxMachinesSection::signIn);
         rows_->addWidget(signInButton, 0, Qt::AlignLeft);
         return;
     }
@@ -164,7 +168,7 @@ void LinuxMachinesSection::startPairing() {
                                     dialog);
     instructions->setWordWrap(true);
     layout->addWidget(instructions);
-    auto* input = new QLineEdit(dialog);
+    auto* input = new ket::TextField(dialog);
     input->setObjectName(QStringLiteral("linuxPairingLink"));
     input->setAccessibleName(tr("One-time Linux pairing link"));
     input->setEchoMode(QLineEdit::Password);
@@ -189,9 +193,9 @@ void LinuxMachinesSection::startPairing() {
         client_->cancelPairing();
         dialog->reject();
     });
-    connect(match, &QCheckBox::toggled, approve, &QPushButton::setEnabled);
+    connect(match, &QCheckBox::toggled, approve, &QAbstractButton::setEnabled);
     connect(
-        check, &QPushButton::clicked, dialog,
+        check, &QAbstractButton::clicked, dialog,
         [this, input, feedback, match, check, ticketId, dialogGuard] {
             const QUrl link(input->text().trimmed());
             input->clear();
@@ -232,7 +236,7 @@ void LinuxMachinesSection::startPairing() {
                     match->show();
                 });
         });
-    connect(approve, &QPushButton::clicked, dialog,
+    connect(approve, &QAbstractButton::clicked, dialog,
             [this, dialog, feedback, approve, ticketId, dialogGuard] {
                 approve->setEnabled(false);
                 client_->pairingStatus(*ticketId, [this, dialog, feedback, approve,

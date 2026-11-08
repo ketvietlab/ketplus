@@ -15,6 +15,11 @@ milestone changes state.
 
 ## Implemented
 
+- The unreviewed workspaces UI layer consumes kit worktree actions/badges,
+  searchable picker rows and Connections controls. Repository/worktree switching
+  still waits for the existing revisioned acknowledgment. Linux pairing continues
+  through authenticated outbound Relay; this layer does not add SSH setup.
+
 - The unreviewed Pro overlays layer uses kit Quick search and conversation menus.
   Compact conversation window preserves the mounted session/draft and restores
   window geometry. Repository/worktree picker skinning continues in the next

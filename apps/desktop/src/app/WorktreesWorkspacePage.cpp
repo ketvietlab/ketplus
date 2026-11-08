@@ -1,4 +1,7 @@
 #include "app/WorktreesWorkspacePage.h"
+#include "KetBadge.h"
+#include "KetButton.h"
+#include "KetIcons.h"
 #include "ui/ChromeGeometry.h"
 #include "ui/SymbolIcon.h"
 
@@ -96,21 +99,22 @@ WorktreesWorkspacePage::WorktreesWorkspacePage(QWidget* parent) : QWidget(parent
     auto* actionsLayout = new QHBoxLayout(actions);
     chrome_geometry::margins(actionsLayout, 0, 0, 0, 0);
     chrome_geometry::spacing(actionsLayout, 8);
-    pruneButton_ = new QPushButton(tr("Prune worktrees"), actions);
+    pruneButton_ = new ket::Button(tr("Prune worktrees"), ket::ButtonVariant::Secondary, actions);
     pruneButton_->setObjectName(QStringLiteral("worktreesPruneButton"));
     pruneButton_->setAccessibleName(tr("Prune missing worktrees"));
     pruneButton_->setToolTip(tr("Remove Git metadata for worktrees whose folders no longer exist"));
     chrome_geometry::fixedHeight(pruneButton_, 34);
     pruneButton_->setEnabled(false);
-    connect(pruneButton_, &QPushButton::clicked, this, &WorktreesWorkspacePage::pruneRequested);
+    connect(pruneButton_, &QAbstractButton::clicked, this, &WorktreesWorkspacePage::pruneRequested);
     actionsLayout->addWidget(pruneButton_);
 
-    auto* create = new QPushButton(tr("+  Create worktree"), actions);
+    auto* create = new ket::Button(tr("Create worktree"), ket::ButtonVariant::Primary, actions);
+    create->setIcon(ket::Icons::icon(u"plus"));
     create->setObjectName(QStringLiteral("worktreesCreateButton"));
     create->setProperty("kvRole", QStringLiteral("primaryAction"));
     create->setAccessibleName(tr("Create worktree"));
     chrome_geometry::fixedHeight(create, 34);
-    connect(create, &QPushButton::clicked, this, &WorktreesWorkspacePage::createRequested);
+    connect(create, &QAbstractButton::clicked, this, &WorktreesWorkspacePage::createRequested);
     actionsLayout->addWidget(create);
     headingLayout->addWidget(actions, 0, Qt::AlignTop);
     contentLayout->addWidget(heading);
@@ -123,15 +127,16 @@ WorktreesWorkspacePage::WorktreesWorkspacePage(QWidget* parent) : QWidget(parent
     chrome_geometry::spacing(listLayout_, 0);
     contentLayout->addWidget(list);
 
-    auto* archived = new QToolButton(content);
+    auto* archived = new ket::Button(tr("Archived worktrees and conversations"),
+                                     ket::ButtonVariant::Ghost, content);
     archived->setObjectName(QStringLiteral("worktreesArchivedButton"));
     archived->setProperty("kvRole", QStringLiteral("worktreesTextButton"));
     archived->setText(tr("Archived worktrees and conversations"));
-    archived->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+
     chrome_geometry::iconSize(archived, QSize(15, 15));
     chrome_geometry::fixedHeight(archived, 36);
     archived->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
-    connect(archived, &QToolButton::clicked, this, &WorktreesWorkspacePage::archivedRequested);
+    connect(archived, &QAbstractButton::clicked, this, &WorktreesWorkspacePage::archivedRequested);
     contentLayout->addWidget(archived, 0, Qt::AlignLeft);
     contentLayout->addStretch(1);
 
@@ -183,7 +188,7 @@ void WorktreesWorkspacePage::rebuild() {
         const QString path = normalizedPath(worktree.path);
         auto* row = new QWidget(this);
         row->setObjectName(QStringLiteral("worktreesWorkspaceRow"));
-        chrome_geometry::fixedHeight(row, 76);
+        chrome_geometry::fixedHeight(row, 90);
         auto* rowLayout = new QHBoxLayout(row);
         chrome_geometry::margins(rowLayout, 17, 12, 15, 12);
         chrome_geometry::spacing(rowLayout, 13);
@@ -202,10 +207,10 @@ void WorktreesWorkspacePage::rebuild() {
         icon->setPixmap(symbol_icon::pixmap(gitBranchIcon, QColor(textMuted_), icon->size()));
         identityLayout->addWidget(icon, 0, Qt::AlignTop);
 
-        auto* open = new QToolButton(identity);
+        auto* open = new ket::Button({}, ket::ButtonVariant::Ghost, identity);
         open->setObjectName(QStringLiteral("worktreesWorkspaceOpenButton"));
         open->setProperty("kvRole", QStringLiteral("worktreesOpenButton"));
-        open->setToolButtonStyle(Qt::ToolButtonTextOnly);
+
         open->setToolTip(path);
         open->setAccessibleName(worktreeTitle(worktree));
         open->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -222,7 +227,8 @@ void WorktreesWorkspacePage::rebuild() {
         conversations->setAttribute(Qt::WA_TransparentForMouseEvents);
         openLayout->addWidget(name);
         openLayout->addWidget(conversations);
-        connect(open, &QToolButton::clicked, this, [this, path] { emit worktreeRequested(path); });
+        connect(open, &QAbstractButton::clicked, this,
+                [this, path] { emit worktreeRequested(path); });
         identityLayout->addWidget(open, 1);
         rowLayout->addWidget(identity, 1, Qt::AlignVCenter);
 
@@ -234,24 +240,22 @@ void WorktreesWorkspacePage::rebuild() {
         rowLayout->addWidget(activity);
 
         const bool current = path == activePath_;
-        auto* state = new QLabel(current ? (activeDirty_ ? tr("Uncommitted changes") : tr("Clean"))
-                                         : (worktree.locked ? tr("Locked") : tr("Available")),
-                                 row);
+        auto* state = new ket::Badge(
+            current ? (activeDirty_ ? tr("Uncommitted changes") : tr("Clean"))
+                    : (worktree.locked ? tr("Locked") : tr("Available")),
+            current && activeDirty_ ? ket::BadgeTone::Warning : ket::BadgeTone::Neutral, row);
         state->setObjectName(QStringLiteral("worktreesWorkspaceState"));
-        state->setProperty("warning", current && activeDirty_);
-        chrome_geometry::minimumWidth(state, 78);
-        chrome_geometry::fixedHeight(state, 24);
         state->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
-        state->setAlignment(Qt::AlignCenter);
         rowLayout->addWidget(state, 0, Qt::AlignVCenter);
 
-        auto* manage = new QToolButton(row);
+        auto* manage = new ket::Button(tr("Manage"), ket::ButtonVariant::Ghost, row);
         manage->setObjectName(QStringLiteral("worktreesManageButton"));
         manage->setProperty("kvRole", QStringLiteral("worktreesManageButton"));
-        manage->setText(tr("···  Manage"));
+        manage->setIcon(ket::Icons::icon(u"more"));
         manage->setAccessibleName(tr("Manage %1").arg(worktreeTitle(worktree)));
         chrome_geometry::fixedHeight(manage, 30);
-        connect(manage, &QToolButton::clicked, this, [this, path] { emit manageRequested(path); });
+        connect(manage, &QAbstractButton::clicked, this,
+                [this, path] { emit manageRequested(path); });
         rowLayout->addWidget(manage);
 
         listLayout_->addWidget(row);
@@ -285,8 +289,8 @@ void WorktreesWorkspacePage::applyPalette(const ThemePalette& palette,
 QWidget#worktreesWorkspacePage, QWidget#worktreesWorkspaceScrollBody,
 QWidget#worktreesWorkspaceContent { background:%1; color:%3; }
 QScrollArea#worktreesWorkspaceScroll { border:0; background:%1; }
-QLabel#worktreesWorkspaceTitle { color:%3; font-size:{{display}}px; font-weight:620; }
-QLabel#worktreesWorkspaceSubtitle { color:%4; font-size:{{reading}}px; }
+QLabel#worktreesWorkspaceTitle { color:%3; font-size:30px; font-weight:600; }
+QLabel#worktreesWorkspaceSubtitle { color:%4; font-size:14px; }
 QPushButton#worktreesPruneButton { min-width:112px; padding:0 12px; border:1px solid %5;
  border-radius:5px; background:%2; color:%3; font-size:{{caption}}px; font-weight:550; }
 QPushButton#worktreesPruneButton:hover { background:%6; }
@@ -301,8 +305,8 @@ QToolButton[kvRole="worktreesManageButton"] { padding:0 7px; font-size:{{caption
 QToolButton[kvRole="worktreesManageButton"]:hover,
 QToolButton[kvRole="worktreesTextButton"]:hover { background:%6; }
 QToolButton[kvRole="worktreesTextButton"] { padding:0 8px; color:%4; font-size:{{caption}}px; }
-QLabel#worktreesWorkspaceName { color:%3; font-size:{{reading}}px; font-weight:600; }
-QLabel#worktreesWorkspaceMeta, QLabel#worktreesWorkspaceEmpty { color:%4; font-size:{{caption}}px; }
+QLabel#worktreesWorkspaceName { color:%3; font-size:15px; font-weight:500; }
+QLabel#worktreesWorkspaceMeta, QLabel#worktreesWorkspaceEmpty { color:%4; font-size:13px; }
 QLabel#worktreesWorkspaceActivity { color:%4; font-size:{{caption}}px; }
 QLabel#worktreesWorkspaceActivity[running="true"] { color:%7; }
 QLabel#worktreesWorkspaceState { min-height:22px; padding:0 8px; border:1px solid %5;
@@ -313,7 +317,7 @@ QLabel#worktreesWorkspaceState[warning="true"] { border-color:%8; color:%8; }
     setStyleSheet(sheet.arg(pageBackground_, panelBackground_, textMain_, textMuted_, border_,
                             surfaceRaised_, positive_, warning_));
     chrome_geometry::apply(this, interfaceFontSizePixels);
-    if (auto* archived = findChild<QToolButton*>(QStringLiteral("worktreesArchivedButton")))
+    if (auto* archived = findChild<QAbstractButton*>(QStringLiteral("worktreesArchivedButton")))
         archived->setIcon(symbol_icon::pixmap(archiveIcon, QColor(textMuted_), QSize(15, 15)));
     for (auto* icon : findChildren<QLabel*>(QStringLiteral("worktreesWorkspaceIcon")))
         icon->setPixmap(symbol_icon::pixmap(gitBranchIcon, QColor(textMuted_), icon->size()));

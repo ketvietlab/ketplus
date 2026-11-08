@@ -1,4 +1,7 @@
 #include "remote/RemoteConnectionsIntro.h"
+#include "KetButton.h"
+#include "KetIcons.h"
+#include "KetTextField.h"
 #include "ui/ChromeGeometry.h"
 #include "ui/InterfaceZoom.h"
 #include "ui/SymbolIcon.h"
@@ -309,12 +312,12 @@ RemoteConnectionsIntro::RemoteConnectionsIntro(QWidget* parent) : QWidget(parent
     heroText_->setObjectName(QStringLiteral("remoteWelcomeText"));
     copy->addWidget(heroText_);
     chrome_geometry::addSpacing(copy, 28);
-    signIn_ = new QPushButton(QStringLiteral("Sign in"), copy_);
+    signIn_ = new ket::Button(QStringLiteral("Sign in"), ket::ButtonVariant::Primary, copy_);
     signIn_->setObjectName(QStringLiteral("remoteSignInPromptButton"));
     signIn_->setProperty("remotePrimary", true);
     signIn_->setIcon(QIcon(symbol_icon::pixmap(logInIcon, Qt::white, QSize(16, 16))));
     chrome_geometry::iconSize(signIn_, QSize(15, 15));
-    connect(signIn_, &QPushButton::clicked, this, &RemoteConnectionsIntro::signInRequested);
+    connect(signIn_, &QAbstractButton::clicked, this, &RemoteConnectionsIntro::signInRequested);
     copy->addWidget(signIn_, 0, Qt::AlignLeft);
     chrome_geometry::addSpacing(copy, 11);
     copy->addWidget(

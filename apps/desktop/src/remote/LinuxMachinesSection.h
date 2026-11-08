@@ -4,7 +4,7 @@
 #include <QWidget>
 
 class QLabel;
-class QPushButton;
+class QAbstractButton;
 class QVBoxLayout;
 
 namespace ketplus::remote {
@@ -35,7 +35,7 @@ class LinuxMachinesSection final : public QWidget {
     QLabel* count_;
     QLabel* notice_;
     QVBoxLayout* rows_;
-    QPushButton* add_;
+    QAbstractButton* add_;
     QStringList machineIds_;
     bool loading_{false};
 };

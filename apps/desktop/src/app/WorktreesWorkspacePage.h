@@ -8,7 +8,7 @@
 #include <QWidget>
 
 class QVBoxLayout;
-class QPushButton;
+class QAbstractButton;
 
 namespace ketplus {
 
@@ -38,7 +38,7 @@ class WorktreesWorkspacePage final : public QWidget {
     void rebuild();
 
     QVBoxLayout* listLayout_{nullptr};
-    QPushButton* pruneButton_{nullptr};
+    QAbstractButton* pruneButton_{nullptr};
     QVector<GitWorktree> worktrees_;
     QSet<QString> runningPaths_;
     QHash<QString, int> conversationCounts_;
