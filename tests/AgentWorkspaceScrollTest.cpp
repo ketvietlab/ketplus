@@ -745,7 +745,8 @@ void AgentWorkspaceViewTest::imageAttachmentReservesHeight() {
     view.applyTheme(testPalette());
     view.resize(1000, 700);
     QCOMPARE(view.messageImageSize(source), QSize(800, 400));
-    QVERIFY(!view.messageImageSize(QUrl::fromLocalFile(directory.filePath("missing.png"))).isValid());
+    QVERIFY(
+        !view.messageImageSize(QUrl::fromLocalFile(directory.filePath("missing.png"))).isValid());
     view.show();
     auto* root = view.quickView()->rootObject();
     QVERIFY(root);

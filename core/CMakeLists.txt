@@ -240,6 +240,9 @@ add_library(ketplus_settings_ui STATIC
     src/app/AppearanceSettings.h
     src/app/SettingsDialog.cpp
     src/app/SettingsDialogAppearance.cpp
+    src/app/SettingsDialogTypography.cpp
+    src/app/PixelSelect.cpp
+    src/app/PixelSelect.h
     src/app/SettingsDialog.h
 )
 target_link_libraries(ketplus_settings_ui PUBLIC Qt6::Widgets ketplus_editor ketplus_ui)

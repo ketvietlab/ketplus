@@ -9,17 +9,17 @@
 class QAbstractButton;
 class QDialogButtonBox;
 class QComboBox;
-class QLineEdit;
 class QListWidget;
 namespace ket {
 class StepSlider;
-}
-class QSpinBox;
+class ThemeCard;
+} // namespace ket
 class QStackedWidget;
 
 namespace ketplus {
 
 class ThemeManager;
+class PixelSelect;
 class TypographyPreview;
 
 class SettingsPage : public QWidget {
@@ -98,7 +98,6 @@ class SettingsDialog final : public QDialog, public SettingsHost {
 
   private:
     void initialize(const AppearanceSettings& settings);
-    QWidget* createGeneralPage();
     QWidget* createAppearancePage();
     QWidget* createThemeCard();
     QWidget* createTypographyCard();
@@ -122,20 +121,19 @@ class SettingsDialog final : public QDialog, public SettingsHost {
     int selectedThemeMode_{0};
     QListWidget* navigation_{nullptr};
     QStackedWidget* pages_{nullptr};
-    QLineEdit* themeSearch_{nullptr};
     QAbstractButton* followSystem_{nullptr};
-    QListWidget* themeList_{nullptr};
+    QList<ket::ThemeCard*> themeCards_;
     QComboBox* editorFontBox_{nullptr};
     QString editorFontFamily_;
     // Kept as loaded: the dialog has no terminal font picker yet.
     QString terminalFontFamily_;
-    QSpinBox* interfaceFontSizeBox_{nullptr};
-    QSpinBox* editorFontSizeBox_{nullptr};
-    QSpinBox* editorLineHeightBox_{nullptr};
-    QSpinBox* terminalFontSizeBox_{nullptr};
-    QSpinBox* terminalLineHeightBox_{nullptr};
-    QSpinBox* previewFontSizeBox_{nullptr};
-    QSpinBox* previewLineHeightBox_{nullptr};
+    PixelSelect* interfaceFontSizeBox_{nullptr};
+    PixelSelect* editorFontSizeBox_{nullptr};
+    PixelSelect* editorLineHeightBox_{nullptr};
+    PixelSelect* terminalFontSizeBox_{nullptr};
+    PixelSelect* terminalLineHeightBox_{nullptr};
+    PixelSelect* previewFontSizeBox_{nullptr};
+    PixelSelect* previewLineHeightBox_{nullptr};
     TypographyPreview* preview_{nullptr};
     QWidget* buttons_{nullptr};
     ket::StepSlider* zoomStep_{nullptr};

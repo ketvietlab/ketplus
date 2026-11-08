@@ -67,8 +67,8 @@ geometry factors 12/14, 1 and 16/14. Both editions retain numeric Settings value
 from 8 to 24; a named shortcut only changes the value when selected.
 The shared mapping is exported from `core/src/ui/InterfaceZoom.h`.
 
-`ThemeManager` publishes interface pixels / 14 to `ket::Appearance` before
-updating fonts and styles. Kit Widgets and QML `KetTheme.zoom` therefore receive
+`ThemeManager` applies application fonts and styles before publishing interface
+pixels / 14 to `ket::Appearance`, so Qt repolish cannot overwrite kit recipe fonts. Kit Widgets and QML `KetTheme.zoom` therefore receive
 the same zoom as the legacy product adapters. `ChromeGeometry` and `TypeScale`
 use the kit's rounding function through the shared mapping: zero and hairlines
 stay fixed; text keeps its 8 pixel readability floor. The legacy QML
@@ -82,6 +82,19 @@ of interface zoom. Terminal's Bigger/Smaller Text actions change terminal text i
 Its View → Interface Zoom menu persists 75–200% under
 `appearance/interfaceZoom` in the existing Terminal settings domain. Search
 controls use kit fields/buttons and follow that zoom.
+
+## Settings composition
+
+Appearance and Typography are separate sections. Theme choices use `ket::ThemeCard`
+directly, shared by the Lite dialog and Pro workspace. Pro reparents the same
+controls and retains the shared staged Save, Cancel and Reset behavior.
+
+Typography uses `ket::Select`, with a small `PixelSelect` adapter for bounded
+integer preferences. Every supported integer, including saved custom sizes,
+remains selectable; line heights clamp to their font size. The font menu loads
+fixed-pitch families on interaction and preserves a saved custom family.
+The registered code-font family is `KET Sans Mono`. The old display spelling
+`KÉT Sans Mono` normalizes to that family; unrelated user choices are preserved.
 
 ## Live updates and persistence
 

@@ -167,18 +167,9 @@ void RefactorWave1ContractTest::themePreviewRollsBackOnCancel() {
     theme.setMode(ketplus::ThemeManager::Mode::Light);
     ketplus::SettingsDialog dialog(ketplus::AppearanceSettings::defaults(), theme);
 
-    auto* themes = dialog.findChild<QListWidget*>(QStringLiteral("installedThemeList"));
-    QVERIFY(themes != nullptr);
-    QListWidgetItem* darkTheme = nullptr;
-    for (int row = 0; row < themes->count(); ++row) {
-        if (themes->item(row)->data(Qt::UserRole).toInt() ==
-            static_cast<int>(ketplus::ThemeManager::Mode::Dark)) {
-            darkTheme = themes->item(row);
-            break;
-        }
-    }
+    auto* darkTheme = dialog.findChild<QAbstractButton*>(QStringLiteral("darkThemeCard"));
     QVERIFY(darkTheme != nullptr);
-    themes->setCurrentItem(darkTheme);
+    darkTheme->click();
     QVERIFY(theme.palette().dark);
     QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Light);
 

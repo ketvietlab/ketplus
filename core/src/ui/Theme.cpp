@@ -605,35 +605,9 @@ QListWidget#settingsNavigation::item:selected {
     color: transparent;
 }
 
-QScrollArea#appearanceSettingsScroll {
+QScrollArea#appearanceSettingsScroll, QScrollArea#typographySettingsScroll {
     border: 0;
     background: {{pageBackground}};
-}
-
-QListWidget[kvRole="themeList"] {
-    padding: 4px;
-    border: 1px solid {{border}};
-    border-radius: 6px;
-    background: {{panelSubtle}};
-    outline: 0;
-}
-
-QListWidget[kvRole="themeList"]::item {
-    min-height: 38px;
-    padding: 3px 9px;
-    border: 1px solid transparent;
-    border-radius: 5px;
-    color: {{textSecondary}};
-}
-
-QListWidget[kvRole="themeList"]::item:hover {
-    background: {{surfaceHover}};
-}
-
-QListWidget[kvRole="themeList"]::item:selected {
-    border-color: {{accentMuted}};
-    background: {{accentSubtle}};
-    color: {{textMain}};
 }
 
 QLabel[kvRole="settingsEyebrow"] {

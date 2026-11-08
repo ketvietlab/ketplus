@@ -7,6 +7,7 @@
 #include "KetIcons.h"
 #include "KetNavItem.h"
 #include "KetThemeCard.h"
+#include "app/PixelSelect.h"
 #include <QAbstractButton>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -20,7 +21,6 @@
 #include <QRegularExpression>
 #include <QShortcut>
 #include <QSignalBlocker>
-#include <QSpinBox>
 #include <QStackedWidget>
 #include <QVBoxLayout>
 
@@ -36,18 +36,6 @@ QLabel* makeLabel(const QString& text, const QString& role, QWidget* parent) {
     label->setProperty("kvRole", role);
     label->setWordWrap(true);
     return label;
-}
-
-QWidget* makePageHeading(const QString& eyebrow, const QString& title, const QString& description,
-                         QWidget* parent) {
-    auto* heading = new QWidget(parent);
-    auto* layout = new QVBoxLayout(heading);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(5);
-    layout->addWidget(makeLabel(eyebrow, QStringLiteral("settingsEyebrow"), heading));
-    layout->addWidget(makeLabel(title, QStringLiteral("settingsTitle"), heading));
-    layout->addWidget(makeLabel(description, QStringLiteral("settingsDescription"), heading));
-    return heading;
 }
 
 } // namespace
@@ -110,9 +98,9 @@ void SettingsDialog::initialize(const AppearanceSettings& settings) {
 
     pages_ = new QStackedWidget(this);
     pages_->setObjectName(QStringLiteral("settingsPages"));
-    addNavigationPage(QStringLiteral("general"), QStringLiteral("General"), createGeneralPage());
     addNavigationPage(QStringLiteral("appearance"), QStringLiteral("Appearance"),
                       createAppearancePage());
+    addNavigationPage(QStringLiteral("typography"), tr("Typography"), createTypographyCard());
 
     auto* body = new QWidget(this);
     auto* bodyLayout = new QHBoxLayout(body);
@@ -179,28 +167,9 @@ void SettingsDialog::initialize(const AppearanceSettings& settings) {
     });
 
     setAppearanceSettings(initialSettings_);
-    navigation_->setCurrentRow(1);
+    navigation_->setCurrentRow(0);
     updateThemePreview();
     updateDirtyState();
-}
-
-QWidget* SettingsDialog::createGeneralPage() {
-    auto* page = new QWidget(this);
-    auto* layout = new QVBoxLayout(page);
-    layout->setContentsMargins(30, 26, 30, 30);
-    layout->setSpacing(18);
-    layout->addWidget(makePageHeading(
-        QStringLiteral("GENERAL"), QStringLiteral("Application preferences"),
-        QStringLiteral("Shared startup, workspace and update settings will appear here."), page));
-    auto* card = new QFrame(page);
-    card->setProperty("kvRole", QStringLiteral("settingsCard"));
-    auto* cardLayout = new QVBoxLayout(card);
-    cardLayout->setContentsMargins(18, 20, 18, 20);
-    cardLayout->addWidget(makeLabel(QStringLiteral("No general preferences are configurable yet."),
-                                    QStringLiteral("settingsDescription"), card));
-    layout->addWidget(card);
-    layout->addStretch(1);
-    return page;
 }
 
 void SettingsDialog::addNavigationPage(const QString& id, const QString& title, QWidget* page) {
@@ -258,6 +227,7 @@ SettingsRegistrationResult SettingsDialog::registerPage(SettingsPageRegistration
         return SettingsRegistrationResult::InvalidId;
     }
     if (id == QStringLiteral("general") || id == QStringLiteral("appearance") ||
+        id == QStringLiteral("typography") ||
         std::any_of(registeredPages_.cbegin(), registeredPages_.cend(),
                     [&id](const RegisteredPage& value) { return value.descriptor.id == id; })) {
         return SettingsRegistrationResult::DuplicateId;
@@ -398,23 +368,13 @@ void SettingsDialog::updateThemePreview() {
         const QSignalBlocker blocker(followSystem_);
         followSystem_->setChecked(followsSystem);
     }
-    themeList_->setEnabled(!followsSystem && theme_ != nullptr);
-    for (int index = 0; index < themeList_->count(); ++index) {
-        auto* item = themeList_->item(index);
-        const bool selected = item->data(Qt::UserRole).toInt() == selectedThemeMode_;
-        if (auto* card = qobject_cast<ket::ThemeCard*>(themeList_->itemWidget(item)))
-            card->setChecked(selected);
-        if (selected) {
-            const QSignalBlocker blocker(themeList_);
-            themeList_->setCurrentItem(item);
-        }
+    followSystem_->setEnabled(theme_ != nullptr);
+    for (auto* card : themeCards_) {
+        card->setEnabled(theme_ != nullptr);
+        card->setChecked(card->property("themeMode").toInt() == selectedThemeMode_);
     }
-    if (theme_ != nullptr) {
+    if (theme_ != nullptr)
         theme_->previewMode(static_cast<ThemeManager::Mode>(selectedThemeMode_));
-    } else {
-        followSystem_->setEnabled(false);
-        themeList_->setEnabled(false);
-    }
 }
 
 void SettingsDialog::selectThemeMode(const int mode) {

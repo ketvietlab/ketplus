@@ -20,6 +20,7 @@
 #include "ui/TypeScale.h"
 #include "update/AppUpdater.h"
 
+#include "app/PixelSelect.h"
 #include <QAbstractButton>
 #include <QButtonGroup>
 #include <QComboBox>
@@ -30,9 +31,7 @@
 #include <QListWidget>
 #include <QScrollArea>
 #include <QSizePolicy>
-#include <QSpinBox>
 #include <QStackedWidget>
-#include <QTimer>
 #include <QVBoxLayout>
 
 namespace ketplus {
@@ -69,13 +68,6 @@ QByteArray navigationIconBody(const QString& id) {
         {QStringLiteral("agent-models"), "sliders-horizontal"},
     };
     return names.value(id, "archive");
-}
-
-ket::ThemeCard* themeCard(const QString& title, const bool dark, QWidget* parent) {
-    auto* card = new ket::ThemeCard(title, dark ? ket::Theme::Dark : ket::Theme::Light, parent);
-    card->setObjectName(dark ? QStringLiteral("settingsDarkThemeCard")
-                             : QStringLiteral("settingsLightThemeCard"));
-    return card;
 }
 
 QFrame* divider(QWidget* parent) {
@@ -185,7 +177,6 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
 
     auto* publicNavigation = dialog_->findChild<QListWidget*>(QStringLiteral("settingsNavigation"));
     auto* publicPages = dialog_->findChild<QStackedWidget*>(QStringLiteral("settingsPages"));
-    auto* themeList = dialog_->findChild<QListWidget*>(QStringLiteral("installedThemeList"));
     auto* followSystem = dialog_->findChild<QAbstractButton*>(QStringLiteral("followSystemTheme"));
 
     auto* body = new QWidget(content);
@@ -243,12 +234,12 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     auto* themesLayout = new QHBoxLayout(themes);
     chrome_geometry::margins(themesLayout, 0, 0, 0, 0);
     chrome_geometry::spacing(themesLayout, 14);
-    auto* lightCard = themeCard(tr("Light"), false, themes);
-    auto* darkCard = themeCard(tr("Dark"), true, themes);
-    auto* themeGroup = new QButtonGroup(themes);
-    themeGroup->setExclusive(true);
-    themeGroup->addButton(lightCard, static_cast<int>(ThemeManager::Mode::Light));
-    themeGroup->addButton(darkCard, static_cast<int>(ThemeManager::Mode::Dark));
+    auto* lightCard = dialog_->findChild<ket::ThemeCard*>(QStringLiteral("lightThemeCard"));
+    auto* darkCard = dialog_->findChild<ket::ThemeCard*>(QStringLiteral("darkThemeCard"));
+    for (auto* card : {lightCard, darkCard}) {
+        card->setParent(themes);
+        card->show();
+    }
     themesLayout->addWidget(lightCard);
     themesLayout->addWidget(darkCard);
     themesLayout->addStretch(1);
@@ -332,13 +323,19 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     fieldsLayout->setColumnMinimumWidth(0, 145);
     fieldsLayout->setColumnStretch(1, 1);
     auto* editorFont = dialog_->findChild<QComboBox*>(QStringLiteral("editorFontFamily"));
-    auto* interfaceSize = dialog_->findChild<QSpinBox*>(QStringLiteral("interfaceFontSize"));
-    auto* editorSize = dialog_->findChild<QSpinBox*>(QStringLiteral("editorFontSize"));
-    auto* editorLine = dialog_->findChild<QSpinBox*>(QStringLiteral("editorLineHeight"));
-    auto* terminalSize = dialog_->findChild<QSpinBox*>(QStringLiteral("terminalFontSize"));
-    auto* terminalLine = dialog_->findChild<QSpinBox*>(QStringLiteral("terminalLineHeight"));
-    auto* previewSize = dialog_->findChild<QSpinBox*>(QStringLiteral("previewFontSize"));
-    auto* previewLine = dialog_->findChild<QSpinBox*>(QStringLiteral("previewLineHeight"));
+    auto* interfaceSize =
+        dialog_->findChild<ketplus::PixelSelect*>(QStringLiteral("interfaceFontSize"));
+    auto* editorSize = dialog_->findChild<ketplus::PixelSelect*>(QStringLiteral("editorFontSize"));
+    auto* editorLine =
+        dialog_->findChild<ketplus::PixelSelect*>(QStringLiteral("editorLineHeight"));
+    auto* terminalSize =
+        dialog_->findChild<ketplus::PixelSelect*>(QStringLiteral("terminalFontSize"));
+    auto* terminalLine =
+        dialog_->findChild<ketplus::PixelSelect*>(QStringLiteral("terminalLineHeight"));
+    auto* previewSize =
+        dialog_->findChild<ketplus::PixelSelect*>(QStringLiteral("previewFontSize"));
+    auto* previewLine =
+        dialog_->findChild<ketplus::PixelSelect*>(QStringLiteral("previewLineHeight"));
     const QList<QWidget*> publicControls = {editorFont,   interfaceSize, editorSize,  editorLine,
                                             terminalSize, terminalLine,  previewSize, previewLine};
     for (QWidget* control : publicControls) {
@@ -389,11 +386,12 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
                     interfaceSize->setValue(values[index]);
             });
     if (interfaceSize)
-        connect(interfaceSize, &QSpinBox::valueChanged, this, [this, syncZoom](int pixels) {
-            syncZoom();
-            if (!palette_.pageBackground.isEmpty())
-                applyPalette(palette_, pixels);
-        });
+        connect(interfaceSize, &ketplus::PixelSelect::valueChanged, this,
+                [this, syncZoom](int pixels) {
+                    syncZoom();
+                    if (!palette_.pageBackground.isEmpty())
+                        applyPalette(palette_, pixels);
+                });
     syncZoom();
     auto* interfaceSizeCopy = new QWidget(fields);
     auto* interfaceSizeCopyLayout = new QVBoxLayout(interfaceSizeCopy);
@@ -450,22 +448,9 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     fieldsLayout->addWidget(conversationWidth, 6, 1);
     typographyLayout->addWidget(fields);
     chrome_geometry::addSpacing(typographyLayout, 24);
-    auto* sample = new QFrame(typography);
-    sample->setObjectName(QStringLiteral("settingsTypographySample"));
-    auto* sampleLayout = new QVBoxLayout(sample);
-    chrome_geometry::margins(sampleLayout, 20, 18, 20, 18);
-    chrome_geometry::spacing(sampleLayout, 10);
-    sampleLayout->addWidget(
-        label(tr("PREVIEW"), QStringLiteral("settingsWorkspaceEyebrow"), sample));
-    sampleLayout->addWidget(label(tr("A space for what you are creating."),
-                                  QStringLiteral("settingsTypographyUiSample"), sample));
-    sampleLayout->addWidget(label(QStringLiteral("const workspace = \"develop\";\n"
-                                                 "agent.continue(workspace);"),
-                                  QStringLiteral("settingsTypographyCodeSample"), sample));
-    sampleLayout->addWidget(label(QStringLiteral("➜ ketplus-desktop git:(develop)"),
-                                  QStringLiteral("settingsTypographyTerminalSample"), sample));
-    sampleLayout->addWidget(label(tr("Good ideas start with a clear workspace."),
-                                  QStringLiteral("settingsTypographyMarkdownSample"), sample));
+    auto* sample = dialog_->findChild<QWidget*>(QStringLiteral("typographyPreview"));
+    sample->setParent(typography);
+    sample->show();
     typographyLayout->addWidget(sample);
     typographyLayout->addStretch(1);
     pages->addWidget(scrollPage(typography, pages));
@@ -513,39 +498,6 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
         settingsFooter->show();
     }
 
-    auto selectPublicTheme = [themeList, followSystem](const int mode) {
-        if (themeList == nullptr)
-            return;
-        if (followSystem != nullptr)
-            followSystem->setChecked(false);
-        for (int index = 0; index < themeList->count(); ++index) {
-            if (themeList->item(index)->data(Qt::UserRole).toInt() == mode) {
-                themeList->setCurrentRow(index);
-                return;
-            }
-        }
-    };
-    connect(lightCard, &QAbstractButton::clicked, this, [selectPublicTheme] {
-        selectPublicTheme(static_cast<int>(ThemeManager::Mode::Light));
-    });
-    connect(darkCard, &QAbstractButton::clicked, this,
-            [selectPublicTheme] { selectPublicTheme(static_cast<int>(ThemeManager::Mode::Dark)); });
-    auto syncThemeCards = [themeList, followSystem, lightCard, darkCard] {
-        const bool system = followSystem != nullptr && followSystem->isChecked();
-        const int mode = themeList == nullptr || themeList->currentItem() == nullptr
-                             ? static_cast<int>(ThemeManager::Mode::System)
-                             : themeList->currentItem()->data(Qt::UserRole).toInt();
-        lightCard->setChecked(!system && mode == static_cast<int>(ThemeManager::Mode::Light));
-        darkCard->setChecked(!system && mode == static_cast<int>(ThemeManager::Mode::Dark));
-    };
-    if (themeList != nullptr)
-        connect(themeList, &QListWidget::currentItemChanged, this,
-                [syncThemeCards](QListWidgetItem*, QListWidgetItem*) { syncThemeCards(); });
-    if (followSystem != nullptr)
-        connect(followSystem, &QAbstractButton::toggled, this,
-                [syncThemeCards](bool) { syncThemeCards(); });
-    syncThemeCards();
-
     connect(navigation, &QListWidget::currentRowChanged, this,
             [this, navigation, pages, updates, computer, storage, settingsFooter](const int row) {
                 for (int index = 0; index < navigation->count(); ++index) {
@@ -581,7 +533,6 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
                 }
             });
     navigation->setCurrentRow(0);
-    QTimer::singleShot(0, navigation, [navigation] { navigation->setCurrentRow(0); });
     connect(dialog_, &QDialog::accepted, this, &SettingsWorkspacePage::saved);
     connect(dialog_, &QDialog::rejected, this, &SettingsWorkspacePage::dismissed);
     dialog_->hide();
@@ -594,9 +545,6 @@ void SettingsWorkspacePage::showSection(const QString& id) {
     for (int row = 0; row < navigation_->count(); ++row) {
         if (navigation_->item(row)->data(Qt::UserRole).toString() == id) {
             navigation_->setCurrentRow(row);
-            // The constructor's deferred reset to the first row must not undo this request.
-            QTimer::singleShot(0, navigation_,
-                               [navigation = navigation_, row] { navigation->setCurrentRow(row); });
             return;
         }
     }
@@ -624,7 +572,7 @@ QListWidget#settingsWorkspaceNavigation { padding:0 20px 0 0; border:0;
 QListWidget#settingsWorkspaceNavigation::item { padding:0; border:0; background:transparent; color:transparent; }
 QFrame#settingsWorkspaceDivider { border:0; background:%5; }
 QFrame#settingsWorkspaceAccent { border:0; background:transparent; }
-QFrame#settingsWorkspacePreview, QFrame#settingsTypographySample {
+QFrame#settingsWorkspacePreview {
  border:1px solid %5; border-radius:7px; background:%6; }
 QLabel#settingsAccentCheck { color:%7; font-size:{{reading}}px; }
 QLabel#settingsAccentTitle { color:%2; font-size:{{body}}px; font-weight:600; }
@@ -635,13 +583,7 @@ QLabel#settingsPreviewMessage { min-height:34px; padding:0 17px; border-top:1px 
  color:%2; background:%6; font-size:{{body}}px; }
 QLabel#storageUsage,
 QLabel#storageStatus, QComboBox#storageDetailDays, QLabel#settingsWorkspaceFieldLabel,
-QComboBox#settingsInterfaceFont, QComboBox#editorFontFamily, QComboBox#computerWorkDisplay,
-QSpinBox#interfaceFontSize, QSpinBox#editorFontSize, QSpinBox#terminalFontSize,
-QSpinBox#previewFontSize { color:%2; font-size:{{reading}}px; }
-QLabel#settingsTypographyUiSample { color:%2; font-size:{{reading}}px; }
-QLabel#settingsTypographyCodeSample, QLabel#settingsTypographyTerminalSample,
-QLabel#settingsTypographyMarkdownSample {
- color:%3; font-family:monospace; font-size:{{reading}}px; }
+QComboBox#computerWorkDisplay { color:%2; font-size:{{reading}}px; }
 QWidget#settingsWorkspaceFooter { padding-top:18px; border-top:1px solid %5;
  background:transparent; }
 QDialog[kvRole="settingsDialog"] { border:0; background:transparent; }

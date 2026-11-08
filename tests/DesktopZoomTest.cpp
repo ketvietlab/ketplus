@@ -13,6 +13,7 @@
 #include "KetProfile.h"
 #include "KetStepSlider.h"
 
+#include "app/PixelSelect.h"
 #include <QAbstractButton>
 #include <QAction>
 #include <QComboBox>
@@ -24,7 +25,6 @@
 #include <QQuickItem>
 #include <QQuickView>
 #include <QSettings>
-#include <QSpinBox>
 #include <QTemporaryDir>
 #include <QToolButton>
 #include <QToolTip>
@@ -240,8 +240,8 @@ class DesktopZoomTest final : public QObject {
         // First window still has a form opened before the font change. Saving a
         // different field must not overwrite the newer font from the other window.
         QTest::qWait(50);
-        first.findChild<QSpinBox*>("editorFontSize")->setValue(17);
-        first.findChild<QSpinBox*>("previewFontSize")->setValue(19);
+        first.findChild<ketplus::PixelSelect*>("editorFontSize")->setValue(17);
+        first.findChild<ketplus::PixelSelect*>("previewFontSize")->setValue(19);
         saveSettings(first);
         QCOMPARE(AppearanceSettings::load().editor.fontFamily, QStringLiteral("Courier New"));
         QCOMPARE(AppearanceSettings::load().preview.fontSizePixels, 19);
