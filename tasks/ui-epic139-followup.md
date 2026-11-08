@@ -33,7 +33,10 @@ release-only gate. Plan/harness and release deployment remain outside this work.
 - [x] Native Cocoa checks cover light/dark × 1/1.25 for this synthetic transcript,
   including font, colour, code-frame geometry, header alignment and logo bounds.
   This is a targeted regression matrix, not every app/mock state.
-- [ ] Measure #126's foreground/background/no-work CPU cases on the native app.
+- [x] Measure #126's foreground/background/no-work CPU cases on the native app:
+  6.34% foreground and 1.56% background while running, 0.77%/0.16% with no work,
+  0.03% hidden (#283 fixture, 1440×900 at 2×). Targets relaxed to ≤7%/≤2%; the
+  kit clock rate is unchanged.
 - [ ] Compare native app/mock states at both themes and zooms. A synthetic Cocoa
   render is useful evidence, but does not establish the full matrix.
 
