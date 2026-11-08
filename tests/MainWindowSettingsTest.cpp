@@ -12,9 +12,11 @@
 #include "preview/MarkdownPreviewPane.h"
 #include "terminal/TerminalView.h"
 #include "ui/Theme.h"
+#include "ui/TypeScale.h"
 #include "update/AppUpdater.h"
 #include "workspace/ActivityBar.h"
 
+#include <QAbstractButton>
 #include <QAction>
 #include <QApplication>
 #include <QCheckBox>
@@ -430,7 +432,7 @@ void MainWindowSettingsTest::appliesSavedAppearanceToPublicAndPrivateSurfaces() 
         window.findChild<QSpinBox*>(QStringLiteral("terminalLineHeight"))->setValue(30);
         window.findChild<QSpinBox*>(QStringLiteral("previewFontSize"))->setValue(19);
         window.findChild<QSpinBox*>(QStringLiteral("previewLineHeight"))->setValue(31);
-        window.findChild<QCheckBox*>(QStringLiteral("followSystemTheme"))->setChecked(false);
+        window.findChild<QAbstractButton*>(QStringLiteral("followSystemTheme"))->setChecked(false);
         auto* themes = dialog->findChild<QListWidget*>(QStringLiteral("installedThemeList"));
         for (int index = 0; index < themes->count(); ++index) {
             if (themes->item(index)->data(Qt::UserRole).toInt() ==
@@ -439,7 +441,7 @@ void MainWindowSettingsTest::appliesSavedAppearanceToPublicAndPrivateSurfaces() 
                 break;
             }
         }
-        for (auto* button : window.findChildren<QPushButton*>()) {
+        for (auto* button : window.findChildren<QAbstractButton*>()) {
             if (button->property("kvRole") == QStringLiteral("primaryAction")) {
                 saved = true;
                 button->click();
@@ -563,8 +565,13 @@ void MainWindowSettingsTest::settingsAndWorktreesUseWorkspacePages() {
     QVERIFY(darkTheme != nullptr);
     QVERIFY(settingsTitle != nullptr);
     QVERIFY(sectionTitle != nullptr);
-    QCOMPARE(settingsTitle->font().pixelSize(), 29);
-    QCOMPARE(sectionTitle->font().pixelSize(), 22);
+    // Titles follow the Két profile roles behind TypeScale's Display/Heading steps.
+    QCOMPARE(settingsTitle->font().pixelSize(),
+             ketplus::TypeScale::pixels(ketplus::TypeStep::Display,
+                                        ketplus::InterfaceZoomMetrics::mediumPixels));
+    QCOMPARE(sectionTitle->font().pixelSize(),
+             ketplus::TypeScale::pixels(ketplus::TypeStep::Heading,
+                                        ketplus::InterfaceZoomMetrics::mediumPixels));
     QVERIFY(settingsPage->findChild<QFrame*>(QStringLiteral("settingsWorkspacePreview")) !=
             nullptr);
     QVERIFY(!window.findChild<QLineEdit*>(QStringLiteral("themeSearch"))->isVisible());
@@ -617,8 +624,8 @@ void MainWindowSettingsTest::conversationWidthFollowsOnlyTheAgentWorkspace() {
         return settingsPage->findChild<QToolButton*>(
             QStringLiteral("agentConversationWidth%1").arg(pixels));
     };
-    const auto saveButton = [&settingsPage]() -> QPushButton* {
-        for (auto* button : settingsPage->findChildren<QPushButton*>()) {
+    const auto saveButton = [&settingsPage]() -> QAbstractButton* {
+        for (auto* button : settingsPage->findChildren<QAbstractButton*>()) {
             if (button->property("kvRole") == QStringLiteral("primaryAction"))
                 return button;
         }
@@ -679,7 +686,7 @@ void MainWindowSettingsTest::conversationWidthFollowsOnlyTheAgentWorkspace() {
 
     // Reset defaults covers the width too; going back to the default leaves
     // nothing behind in the settings file.
-    for (auto* button : settingsPage->findChildren<QPushButton*>()) {
+    for (auto* button : settingsPage->findChildren<QAbstractButton*>()) {
         if (button->property("kvRole") == QStringLiteral("settingsReset"))
             button->click();
     }
