@@ -1252,6 +1252,12 @@ void AgentWorkspaceViewTest::composerPlaceholderTracksCaret() {
         QTest::qWait(30);
         QVERIFY(view.quickView()->grabWindow().save(capture));
     }
+    // As in the mock: a new conversation asks what to build; later turns name the provider.
+    QTRY_COMPARE(placeholder->property("text").toString(),
+                 QStringLiteral("Describe what you want to build…"));
+    view.resetMessages({QVariantMap{{"kind", "user"}, {"messageKey", "first"}, {"body", "Hi"}}},
+                       "placeholder");
+    QTRY_COMPARE(placeholder->property("text").toString(), QStringLiteral("Message Codex…"));
 }
 
 void AgentWorkspaceViewTest::composerFormattingSettles() {
