@@ -2,11 +2,13 @@
 // probe is involved during the measured interval. See run-agent-idle.py.
 #include "KetAppearance.h"
 #include "agent/AgentWorkspaceView.h"
+#include "agent/CodexAppServer.h"
 #include "ui/Theme.h"
 
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QElapsedTimer>
+#include <QHash>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QQuickItem>
@@ -91,18 +93,20 @@ int main(int argc, char** argv) {
     QCommandLineParser parser;
     parser.addHelpOption();
     parser.addOptions({{"work", "running or idle", "state", "running"},
-                       {"visibility", "active, inactive or hidden", "state", "active"},
+                       {"visibility", "active, inactive, hidden or minimized", "state", "active"},
                        {"seconds", "Measured interval (10–60 seconds)", "seconds", "12"},
                        {"capture", "Optional native PNG before measurement", "path"},
                        {"theme", "system, light or dark", "theme", "system"},
-                       {"zoom", "Interface zoom (1–1.5)", "zoom", "1"}});
+                       {"zoom", "Interface zoom (1–1.5)", "zoom", "1"},
+                       {"open", "mode, model or limits: a composer panel, for captures", "panel"}});
     parser.process(app);
     const auto work = parser.value("work");
     const auto visibility = parser.value("visibility");
     bool validSeconds = false;
     const int seconds = parser.value("seconds").toInt(&validSeconds);
     if ((work != "running" && work != "idle") ||
-        (visibility != "active" && visibility != "inactive" && visibility != "hidden") ||
+        (visibility != "active" && visibility != "inactive" && visibility != "hidden" &&
+         visibility != "minimized") ||
         !validSeconds || seconds < 10 || seconds > 60) {
         report({{"event", "error"}, {"reason", "Invalid workload, visibility or duration"}});
         return 2;
@@ -113,6 +117,14 @@ int main(int argc, char** argv) {
     if ((themeName != "system" && themeName != "light" && themeName != "dark") || !validZoom ||
         zoom < 1 || zoom > 1.5) {
         report({{"event", "error"}, {"reason", "Invalid theme or zoom"}});
+        return 2;
+    }
+    // The composer button that opens each panel, as in the mock's --open.
+    const QHash<QString, QString> panelButtons{
+        {"mode", "permissionButton"}, {"model", "modelButton"}, {"limits", "usageLimitsButton"}};
+    const auto panel = parser.value("open");
+    if (!panel.isEmpty() && !panelButtons.contains(panel)) {
+        report({{"event", "error"}, {"reason", "Invalid panel"}});
         return 2;
     }
     ketplus::ThemeManager theme(app);
@@ -137,6 +149,35 @@ int main(int argc, char** argv) {
                                          {"started", true},
                                          {"status", work == "running" ? "Working" : "Done"}});
     view.setConversations(conversations);
+    // A fixed catalog, so the model panel opens without a provider. Re-sent on request.
+    QVariantList efforts;
+    for (const char* effort : {"low", "medium", "high", "xhigh", "max"})
+        efforts.append(QVariantMap{{"reasoningEffort", effort}, {"description", effort}});
+    const auto model = [&efforts](const QString& provider, const QString& id, const QString& name,
+                                  const QString& description, bool isDefault) {
+        return QVariantMap{
+            {"provider", provider},
+            {"id", id},
+            {"model", id},
+            {"displayName", name},
+            {"description", description},
+            {"isDefault", isDefault},
+            {"modelContextWindow", 500000},
+            {"defaultReasoningEffort", "medium"},
+            {"supportedReasoningEfforts", efforts},
+            {"permissions", ketplus::CodexAppServer::permissionProfilesFor(provider)},
+            {"defaultPermission", "workspace-write"}};
+    };
+    const QVariantList catalog{
+        model("claude", "default", "Default (recommended)",
+              "Sonnet 5.5 · Efficient for routine tasks", true),
+        model("claude", "opus", "Opus 5.5", "For complex work and everyday tasks", false),
+        model("claude", "fable", "Fable 5.1", "For your toughest challenges", false),
+        model("codex", "astra", "GPT-6-Astra", "Available through Codex", true),
+        model("codex", "luna", "GPT-5.6-Luna", "Available through Codex", false)};
+    view.setModels(catalog);
+    QObject::connect(&view, &ketplus::AgentWorkspaceView::modelsRequested, &view,
+                     [&view, catalog] { view.setModels(catalog); });
     view.resetMessages({QVariantMap{{"kind", "user"},
                                     {"messageKey", "prompt"},
                                     {"body", "Inspect the repository and run the focused checks."}},
@@ -151,12 +192,29 @@ int main(int argc, char** argv) {
     view.activateWindow();
     view.quickView()->requestActivate();
     const auto expected = [&] {
-        return visibility == "hidden"
-                   ? !view.isVisible()
-                   : view.isVisible() && !view.isMinimized() && stateName() == visibility;
+        if (visibility == "hidden")
+            return !view.isVisible();
+        if (visibility == "minimized")
+            return view.isMinimized();
+        return view.isVisible() && !view.isMinimized() && stateName() == visibility;
     };
     if (visibility == "hidden")
         QTimer::singleShot(1000, &view, &QWidget::hide);
+    if (visibility == "minimized")
+        QTimer::singleShot(1000, &view, &QWidget::showMinimized);
+    // Captures show the mock's Claude Opus 5.5 conversation; CPU samples keep the default.
+    if (!panel.isEmpty())
+        view.setConversationConfiguration({{"provider", "claude"},
+                                           {"model", "opus"},
+                                           {"effort", "medium"},
+                                           {"permission", "workspace-write"},
+                                           {"compactWindowSupported", true}});
+    if (!panel.isEmpty())
+        QTimer::singleShot(1000, &view, [&] {
+            auto* button = findItem(view.quickView()->rootObject(), panelButtons.value(panel));
+            if (!button || !QMetaObject::invokeMethod(button, "clicked"))
+                report({{"event", "error"}, {"reason", "Panel button not found"}});
+        });
     report({{"event", "ready"},
             {"pid", qint64(app.applicationPid())},
             {"work", work},
@@ -218,7 +276,7 @@ int main(int argc, char** argv) {
                            qFuzzyCompare(view.quickView()->devicePixelRatio(), 2.0) &&
                            view.size() == QSize(1440, 900) && visibleRows == 3 && !timerRunning &&
                            clockHeld == (work == "running" && visibility != "hidden" &&
-                                         view.workingMotionEnabled());
+                                         visibility != "minimized" && view.workingMotionEnabled());
         return QJsonObject{{"fixtureValid", valid},
                            {"platform", app.platformName()},
                            {"renderer", metal ? "metal" : "other"},

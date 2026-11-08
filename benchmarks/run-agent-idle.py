@@ -48,7 +48,7 @@ def main():
     parser.add_argument("build", type=Path)
     parser.add_argument("output", type=Path)
     parser.add_argument("--work", choices=("running", "idle"), default="running")
-    parser.add_argument("--visibility", choices=("active", "inactive", "hidden"), default="active")
+    parser.add_argument("--visibility", choices=("active", "inactive", "hidden", "minimized"), default="active")
     parser.add_argument("--capture", action="store_true")
     parser.add_argument("--timeout", type=int, default=150,
                         help="Wall-clock limit for the whole run in seconds")
