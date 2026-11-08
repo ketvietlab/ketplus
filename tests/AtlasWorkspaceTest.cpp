@@ -435,11 +435,14 @@ class AtlasWorkspaceTest final : public QObject {
         auto* chat = builder.chatView();
         auto* back = builder.findChild<QAbstractButton*>("atlasBackToConversation");
         QVERIFY(back);
+        QVERIFY(!back->isEnabled());
+        builder.setConversationId(QStringLiteral("atlas-conversation"));
+        QVERIFY(back->isEnabled());
         QSignalSpy backRequested(&builder, &ketplus::AtlasBuilderTab::conversationRequested);
         back->click();
         QCOMPARE(backRequested.count(), 1);
         QCOMPARE(backRequested.first().at(0).toString(), workspace.path());
-        QCOMPARE(backRequested.first().at(1).toString(), builder.conversationId());
+        QCOMPARE(backRequested.first().at(1).toString(), QStringLiteral("atlas-conversation"));
         auto* collapse = builder.findChild<QAbstractButton*>("atlasBuilderChatCollapse");
         auto* ai = builder.findChild<QAbstractButton*>("atlasBuilderAiButton");
         auto* prompt = chat->quickView()->rootObject()->findChild<QObject*>("agentPrompt");
