@@ -9,6 +9,12 @@ milestone changes state.
 
 ## Implemented
 
+- Pro header/composer now compose kit buttons, model-search field, usage ring,
+  meters and composer/attachment recipes. The header stays 44 px, with number,
+  compact title and filterable supplied tags. The input retains IME/draft/steering
+  behavior and a caret-aligned placeholder. This is implementation work in the
+  unreviewed UI stack; automatic reviewer assignment is not provided by this layer.
+
 - Pro sidebar uses kit navigation, repository groups, two-line conversation rows,
   tag filtering and update pills. Storage pressure warnings consume the local
   daemon's existing size-status contract. Waiting-for-reply and tags render only

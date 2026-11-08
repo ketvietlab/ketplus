@@ -1,5 +1,6 @@
 #include "AgentWorkspaceViewTest.h"
 #include "KetAppearance.h"
+#include "KetProfile.h"
 #include "KetRecipes.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
@@ -1018,6 +1019,48 @@ void AgentWorkspaceViewTest::streamingResponseStaysAnchoredAboveRunStatus() {
                             .arg(responseBottom)));
 }
 
+void AgentWorkspaceViewTest::composerPlaceholderTracksCaret() {
+    ketplus::ThemeManager theme(*qApp);
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(theme.palette());
+    view.setProductSidebarVisible(false);
+    view.setAgentAvailable(true);
+    view.setSessionState("Polish the workspace", "Ready", false);
+    view.setConversations(
+        {QVariantMap{{"id", "ui"},
+                     {"active", true},
+                     {"number", "42"},
+                     {"tags", QVariantList{QVariantMap{{"label", "UI"}, {"color", "#3377cc"}}}}}});
+    view.resize(1000, 700);
+    view.show();
+    auto* root = view.quickView()->rootObject();
+    QVERIFY(root);
+    auto* input = root->findChild<QQuickItem*>("agentPrompt");
+    auto* placeholder = root->findChild<QQuickItem*>("composerPlaceholder");
+    QVERIFY(input && placeholder);
+    auto* tag = root->findChild<QQuickItem*>("conversationTag_UI");
+    QSignalSpy filtered(&view, &ketplus::AgentWorkspaceView::tagFilterRequested);
+    QTRY_VERIFY((tag = findVisualItem(root, "conversationTag_UI")));
+    QVERIFY(QMetaObject::invokeMethod(tag, "clicked"));
+    QCOMPARE(filtered.count(), 1);
+    QCOMPARE(filtered.first().first().toString(), QStringLiteral("UI"));
+    QTRY_VERIFY(placeholder->isVisible());
+    QTest::qWait(30);
+    QRectF caret;
+    QVERIFY(QMetaObject::invokeMethod(input, "positionToRectangle", Q_RETURN_ARG(QRectF, caret),
+                                      Q_ARG(int, 0)));
+    QTRY_VERIFY(qAbs(placeholder->y() - caret.y()) < 0.5);
+    input->setProperty("text", "Draft");
+    QTRY_VERIFY(!placeholder->isVisible());
+    input->setProperty("text", "");
+    QTRY_VERIFY(placeholder->isVisible());
+    const auto capture = qEnvironmentVariable("KETPLUS_COMPOSER_CORE_CAPTURE");
+    if (!capture.isEmpty()) {
+        QTest::qWait(30);
+        QVERIFY(view.quickView()->grabWindow().save(capture));
+    }
+}
+
 void AgentWorkspaceViewTest::composerFormattingSettles() {
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());
@@ -1032,12 +1075,14 @@ void AgentWorkspaceViewTest::composerFormattingSettles() {
     const auto verifyHeight = [&](qreal size) {
         for (auto block = document->begin(); block.isValid(); block = block.next()) {
             QCOMPARE(block.blockFormat().lineHeightType(), QTextBlockFormat::FixedHeight);
-            QCOMPARE(block.blockFormat().lineHeight(), size * 1.45);
+            QCOMPARE(block.blockFormat().lineHeight(),
+                     qFloor(size * ket::Profile::current().composerLineHeight));
         }
     };
 
     prompt->setProperty("text", QStringLiteral("First line\nSecond line"));
-    QTRY_COMPARE(document->lastBlock().blockFormat().lineHeight(), pixelSize * 1.45);
+    QTRY_COMPARE(document->lastBlock().blockFormat().lineHeight(),
+                 qFloor(pixelSize * ket::Profile::current().composerLineHeight));
     verifyHeight(pixelSize);
     QSignalSpy documentChanges(document, &QTextDocument::contentsChanged);
     QSignalSpy textChanges(prompt, SIGNAL(textChanged()));
@@ -1071,7 +1116,8 @@ void AgentWorkspaceViewTest::composerFormattingSettles() {
     QTextCursor cursor(document);
     cursor.movePosition(QTextCursor::End);
     cursor.insertText(QStringLiteral("\nThird line"));
-    QTRY_COMPARE(document->lastBlock().blockFormat().lineHeight(), pixelSize * 1.45);
+    QTRY_COMPARE(document->lastBlock().blockFormat().lineHeight(),
+                 qFloor(pixelSize * ket::Profile::current().composerLineHeight));
     verifyHeight(pixelSize);
     document->undo();
     QTRY_COMPARE(document->toPlainText(), QStringLiteral("First line\nSecond line"));
@@ -1079,7 +1125,8 @@ void AgentWorkspaceViewTest::composerFormattingSettles() {
     auto font = prompt->property("font").value<QFont>();
     font.setPixelSize(static_cast<int>(pixelSize) + 2);
     prompt->setProperty("font", font);
-    QTRY_COMPARE(document->firstBlock().blockFormat().lineHeight(), font.pixelSize() * 1.45);
+    QTRY_COMPARE(document->firstBlock().blockFormat().lineHeight(),
+                 qFloor(font.pixelSize() * ket::Profile::current().composerLineHeight));
     verifyHeight(font.pixelSize());
     documentChanges.clear();
     textChanges.clear();
@@ -1949,7 +1996,7 @@ void AgentWorkspaceViewTest::userBubbleFitsShortTextAndWrapsLongText() {
     QVERIFY(composer);
     const auto font = prompt->property("font").value<QFont>();
     QTRY_COMPARE(composer->textDocument()->begin().blockFormat().lineHeight(),
-                 font.pixelSize() * 1.45);
+                 qFloor(font.pixelSize() * ket::Profile::current().composerLineHeight));
     auto* document = composer->textDocument();
     document->clearUndoRedoStacks();
     QTextCursor edit(document);

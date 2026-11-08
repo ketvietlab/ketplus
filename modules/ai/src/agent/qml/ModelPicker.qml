@@ -1,5 +1,6 @@
 import "ChromeMetrics.js" as Metrics
 import QtQuick
+import Ket as Kit
 import QtQuick.Controls
 import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
@@ -7,6 +8,7 @@ import QtQuick.Layouts
 Basic.Popup {
     id: picker
     objectName: "modelPopup"
+    readonly property var look: Kit.KetTheme.dialogRecipe(Kit.KetTheme.dark, Kit.KetTheme.zoom)
 
     required property var tokens
     required property Item viewport
@@ -110,8 +112,8 @@ Basic.Popup {
     }
     width: Math.min(Metrics.px(500, tokens), viewport.width - Metrics.px(32, tokens))
     height: Math.min(settingsBody.implicitHeight + Metrics.px(116, tokens) + 2, viewport.height - Metrics.px(32, tokens))
-    x: Math.round((viewport.width - width) / 2)
-    y: Math.round((viewport.height - height) / 2)
+    x: (viewport.width - width) / 2
+    y: (viewport.height - height) / 2
     padding: 0
     focus: true
     modal: true
@@ -151,12 +153,12 @@ Basic.Popup {
     onSelectedModelChanged: syncCurrentModel()
     onClosed: anchorItem.forceActiveFocus()
 
-    Overlay.modal: Rectangle { color: picker.tokens.overlay || "#66000000" }
+    Overlay.modal: Rectangle { color: picker.look.backdrop }
     background: Rectangle {
-        radius: Metrics.px(10, tokens)
-        color: picker.tokens.surfaceRaised
+        radius: picker.look.radius
+        color: picker.look.background
         border.width: 1
-        border.color: picker.tokens.borderStrong
+        border.color: picker.look.border
     }
 
     function chooseDraft(model) {
@@ -203,8 +205,8 @@ Basic.Popup {
                 text: qsTr("Model & context")
                 color: picker.tokens.textMain
                 font.family: picker.tokens.uiFont
-                font.pixelSize: picker.tokens.title
-                font.weight: Font.DemiBold
+                font.pixelSize: picker.look.titlePixels
+                font.weight: picker.look.titleWeight
             }
             Basic.ToolButton {
                 id: closeButton
@@ -338,73 +340,33 @@ Basic.Popup {
             elide: Text.ElideRight
         }
 
-        Rectangle {
+        RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: Metrics.px(36, tokens)
-            Layout.leftMargin: Metrics.px(22, tokens)
-            Layout.rightMargin: Metrics.px(22, tokens)
+            Layout.leftMargin: picker.look.paddingInline
+            Layout.rightMargin: picker.look.paddingInline
             Layout.topMargin: Metrics.px(14, tokens)
             Layout.bottomMargin: Metrics.px(12, tokens)
-            radius: Metrics.px(5, tokens)
-            color: picker.tokens.interactiveBackground
-            border.width: 1
-            border.color: modelSearch.activeFocus ? picker.tokens.focus : picker.tokens.borderStrong
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: Metrics.px(10, tokens)
-                anchors.rightMargin: Metrics.px(6, tokens)
-                spacing: Metrics.px(8, tokens)
-                TintedIcon {
-                    Layout.preferredWidth: Metrics.px(15, tokens)
-                    Layout.preferredHeight: Metrics.px(15, tokens)
-                    source: "qrc:/agent/icons/search.svg"
-                    color: picker.tokens.textMuted
+            Kit.KetTextField {
+                id: modelSearch
+                objectName: "modelSearch"
+                Layout.fillWidth: true
+                leadingIcon: Kit.KetTheme.iconForLucide("search")
+                placeholderText: "Search models…"
+                Accessible.name: "Search models"
+                Keys.onDownPressed: {
+                    if (modelList.count > 0) {
+                        modelList.currentIndex = Math.max(0, modelList.currentIndex)
+                        modelList.forceActiveFocus()
+                    }
                 }
-                Basic.TextField {
-                    id: modelSearch
-                    objectName: "modelSearch"
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    placeholderText: "Search models..."
-                    placeholderTextColor: picker.tokens.textMuted
-                    color: picker.tokens.textMain
-                    font.family: picker.tokens.uiFont
-                    font.pixelSize: picker.tokens.body
-                    padding: 0
-                    selectByMouse: true
-                    background: Item {}
-                    Accessible.name: "Search Codex models"
-                    Keys.onDownPressed: {
-                        if (modelList.count > 0) {
-                            modelList.currentIndex = Math.max(0, modelList.currentIndex)
-                            modelList.forceActiveFocus()
-                        }
-                    }
-                    onAccepted: picker.chooseCurrentModel()
-                }
-                Basic.ToolButton {
-                    id: clearSearch
-                    objectName: "clearModelSearchButton"
-                    Layout.preferredWidth: Metrics.px(26, tokens)
-                    Layout.preferredHeight: Metrics.px(26, tokens)
-                    visible: modelSearch.text.length > 0
-                    padding: Metrics.px(7, tokens)
-                    contentItem: TintedIcon {
-                        source: "qrc:/agent/icons/plus.svg"
-                        rotation: 45
-                        color: picker.tokens.textMuted
-                    }
-                    background: Rectangle {
-                        radius: Metrics.px(5, tokens)
-                        color: clearSearch.hovered ? picker.tokens.surfaceHover : "transparent"
-                    }
-                    onClicked: {
-                        modelSearch.clear()
-                        modelSearch.forceActiveFocus()
-                    }
-                    Accessible.name: "Clear model search"
-                }
+                onAccepted: picker.chooseCurrentModel()
+            }
+            Kit.KetIconButton {
+                objectName: "clearModelSearchButton"
+                iconName: Kit.KetTheme.iconForLucide("x")
+                text: "Clear model search"
+                visible: modelSearch.text.length > 0
+                onClicked: { modelSearch.clear(); modelSearch.forceActiveFocus() }
             }
         }
 

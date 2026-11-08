@@ -1,5 +1,6 @@
 import "ChromeMetrics.js" as Metrics
 import QtQuick
+import Ket as Kit
 import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
 
@@ -9,6 +10,13 @@ Item {
     objectName: "agentWorkspaceHeader"
     implicitHeight: Metrics.px(44, workspace.t)
 
+    readonly property var selectedConversation: {
+        for (const conversation of agentHost.conversations || [])
+            if (conversation.active) return conversation
+        return ({})
+    }
+    readonly property var tags: (selectedConversation.tags || []).map(tag =>
+        typeof tag === "string" ? {label: tag, color: Kit.KetTheme.t.accent} : tag)
     readonly property var selectedWorktree: {
         for (let candidate of agentHost.worktrees) {
             if (candidate.selected) return candidate
@@ -59,13 +67,14 @@ Item {
             Layout.maximumWidth: Math.max(0, Math.min(header.maximumTitleWidth, titleRow.width - conversationStatusBadge.width
                                              - Math.min(scopeChip.implicitWidth, 80)
                                              - (conversationNumber.visible ? conversationNumber.implicitWidth + titleRow.spacing : 0)
+                                             - (conversationTags.visible ? conversationTags.implicitWidth + titleRow.spacing : 0)
                                              - titleRow.spacing * 2))
             text: agentHost.sessionTitle
             color: workspace.t.textMain
             elide: Text.ElideRight
             font.family: workspace.t.uiFont
-            font.pixelSize: workspace.t.title
-            font.weight: Font.DemiBold
+            font.pixelSize: workspace.t.reading
+            font.weight: Font.Medium
             Accessible.role: Accessible.Heading
             Accessible.name: text
         }
@@ -87,7 +96,7 @@ Item {
                                                 : workspace.t.textMuted
                 font.family: workspace.t.uiFont
                 font.pixelSize: workspace.t.micro
-                font.weight: Font.DemiBold
+                font.weight: Font.Medium
                 elide: Text.ElideRight
             }
             Accessible.role: Accessible.StaticText
@@ -148,9 +157,24 @@ Item {
             Accessible.name: "Choose Files and Source Control worktree"
             Accessible.onPressAction: agentHost.requestExecutionWorktree()
         }
-        Item {
-            Layout.fillWidth: true
+        Row {
+            id: conversationTags
+            visible: header.tags.length > 0 && header.width > Metrics.px(760, workspace.t)
+            spacing: Metrics.px(4, workspace.t)
+            Repeater {
+                model: header.tags.slice(0, 2)
+                Kit.KetTag {
+                    required property var modelData
+                    objectName: "conversationTag_" + modelData.label
+                    text: modelData.label
+                    tagColor: modelData.color || Kit.KetTheme.t.accent
+                    maxWidth: Metrics.px(100, workspace.t)
+                    filterable: true
+                    onClicked: agentHost.requestTagFilter(text)
+                }
+            }
         }
+        Item { Layout.fillWidth: true }
     }
 
     Row {
@@ -160,107 +184,38 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         spacing: Metrics.px(2, workspace.t)
 
-        Basic.ToolButton {
+        Kit.KetIconButton {
             id: atlasButton
             objectName: "headerAtlasButton"
-            width: Metrics.px(28, workspace.t)
-            height: Metrics.px(28, workspace.t)
-            padding: Metrics.px(7, workspace.t)
+            controlSize: Kit.KetTheme.ControlSize.Small
+            iconName: Kit.KetTheme.iconForLucide("network")
+            text: agentHost.atlasRunningCount > 0 ? "Atlases, " + agentHost.atlasRunningCount + " running across worktrees" : "Atlases"
             onClicked: agentHost.requestProductNavigation("atlas")
-            contentItem: TintedIcon {
-                source: "qrc:/agent/icons/network.svg"
-                color: workspace.t.textSecondary
-            }
-            background: Rectangle {
-                radius: Metrics.px(5, workspace.t)
-                color: atlasButton.hovered ? workspace.t.surfaceHover : "transparent"
-                border.color: atlasButton.visualFocus ? workspace.t.focus : "transparent"
-            }
             Text {
                 objectName: "headerAtlasRunningBadge"
                 visible: agentHost.atlasRunningCount > 0
                 anchors.right: parent.right
-                anchors.rightMargin: -Metrics.px(4, workspace.t)
                 anchors.top: parent.top
-                anchors.topMargin: -Metrics.px(4, workspace.t)
-                text: agentHost.atlasRunningCount > 9 ? "9+" : String(agentHost.atlasRunningCount)
-                color: "#ffffff"
-                font.family: workspace.t.uiFont
+                text: agentHost.atlasRunningCount
+                color: Kit.KetTheme.t.accent
                 font.pixelSize: workspace.t.micro
-                font.weight: Font.DemiBold
-                horizontalAlignment: Text.AlignHCenter
-                width: Math.max(implicitWidth + Metrics.px(6, workspace.t), Metrics.px(14, workspace.t))
-                height: Metrics.px(14, workspace.t)
-                Rectangle {
-                    anchors.fill: parent
-                    z: -1
-                    radius: height / 2
-                    color: workspace.t.accent
-                }
-            }
-            Accessible.name: agentHost.atlasRunningCount > 0
-                             ? "Atlases, " + agentHost.atlasRunningCount + " running across worktrees"
-                             : "Atlases"
-            KetToolTip {
-                tokens: workspace.t
-                visible: atlasButton.hovered
-                text: "Atlases"
             }
         }
-
-        Basic.ToolButton {
-            id: newConversationButton
+        Kit.KetIconButton {
             objectName: "headerNewConversationButton"
             visible: !agentHost.compactMode
-            width: Metrics.px(28, workspace.t)
-            height: Metrics.px(28, workspace.t)
-            padding: Metrics.px(7, workspace.t)
+            controlSize: Kit.KetTheme.ControlSize.Small
+            iconName: Kit.KetTheme.iconForLucide("square-pen")
+            text: "New conversation"
             onClicked: agentHost.requestNewSession()
-            contentItem: TintedIcon {
-                source: "qrc:/agent/icons/square-pen.svg"
-                color: workspace.t.textSecondary
-            }
-            background: Rectangle {
-                anchors.centerIn: parent
-                width: Metrics.px(28, workspace.t)
-                height: Metrics.px(28, workspace.t)
-                radius: Metrics.px(5, workspace.t)
-                color: newConversationButton.hovered ? workspace.t.surfaceHover : "transparent"
-                border.color: newConversationButton.visualFocus ? workspace.t.focus : "transparent"
-            }
-            Accessible.name: "New conversation"
-            KetToolTip {
-                tokens: workspace.t
-                visible: newConversationButton.hovered
-                text: "New conversation"
-            }
         }
-        Basic.ToolButton {
-            id: terminalButton
+        Kit.KetIconButton {
             objectName: "headerTerminalButton"
             visible: !agentHost.compactMode
-            width: Metrics.px(28, workspace.t)
-            height: Metrics.px(28, workspace.t)
-            padding: Metrics.px(7, workspace.t)
+            controlSize: Kit.KetTheme.ControlSize.Small
+            iconName: Kit.KetTheme.iconForLucide("square-terminal")
+            text: "Open terminal"
             onClicked: agentHost.requestTerminal()
-            contentItem: TintedIcon {
-                source: "qrc:/agent/icons/square-terminal.svg"
-                color: workspace.t.textSecondary
-            }
-            background: Rectangle {
-                anchors.centerIn: parent
-                width: Metrics.px(28, workspace.t)
-                height: Metrics.px(28, workspace.t)
-                radius: Metrics.px(5, workspace.t)
-                color: terminalButton.hovered ? workspace.t.surfaceHover : "transparent"
-                border.color: terminalButton.visualFocus ? workspace.t.focus : "transparent"
-            }
-            Accessible.name: "Open terminal"
-            KetToolTip {
-                tokens: workspace.t
-                visible: terminalButton.hovered
-                text: "Open terminal"
-            }
         }
     }
 

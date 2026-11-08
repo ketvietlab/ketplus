@@ -123,3 +123,17 @@ and smoke suite in `mockups/qt/README.md`; passing it does not test the product.
 For an offscreen Lite review capture, set `KETPLUS_CAPTURE=<file>` and optionally
 `KETPLUS_CAPTURE_THEME=light|dark`. Such captures verify rendering, not installed
 bundle signing, deployment or device behavior.
+
+## Conversation composer composition
+
+The Pro composer is split from the workspace/session controller. Its card,
+attachments, text line box and send/stop action consume the kit recipes; footer
+buttons, header actions, model search and the usage ring use kit controls. The
+product retains its input document to preserve IME handling, clipboard image
+paste, attachment-only submissions, draft persistence and steering acknowledgement
+semantics. A caret-aligned placeholder follows document formatting without
+saving a draft on formatting-only changes. Empty running drafts show Stop;
+nonempty drafts or attachments show Send guidance in the same action position.
+Model/permission selection still uses the existing revisioned configuration path.
+Header tags dispatch a filter to the native sidebar; unavailable metadata is not
+invented. Automatic reviewer orchestration remains a separate #120 dependency.
