@@ -1,3 +1,4 @@
+#include "KetSegmentedControl.h"
 #include "app/MainWindow.h"
 #include "editor/EditorWidget.h"
 #include "terminal/TerminalPanel.h"
@@ -50,9 +51,11 @@ class DesktopDocumentModesTest final : public QObject {
                 preview = action;
         QVERIFY(preview);
         QVERIFY(preview->isChecked());
-        auto* source = editor->findChild<QToolButton*>("markdownMode-source");
-        QVERIFY(source);
-        source->click();
+        auto* modes = editor->findChild<ket::SegmentedControl*>();
+        QVERIFY(modes && modes->isVisible());
+        QTest::mouseClick(modes, Qt::LeftButton, Qt::NoModifier,
+                          QPoint(3 * modes->width() / 4, modes->height() / 2));
+        QCOMPARE(modes->currentIndex(), 1);
         QVERIFY(!editor->isMarkdownPreviewVisible());
         QVERIFY(!preview->isChecked());
         preview->trigger();
@@ -105,7 +108,7 @@ class DesktopDocumentModesTest final : public QObject {
     void exportedTerminalIncludesNewControls() {
         ketplus::TerminalPanel terminal;
         QStringList controls;
-        for (auto* button : terminal.findChildren<QToolButton*>())
+        for (auto* button : terminal.findChildren<QAbstractButton*>())
             controls.append(button->accessibleName());
         QVERIFY(controls.contains("Find in terminal"));
         QVERIFY(controls.contains("Clear terminal scrollback"));

@@ -614,10 +614,11 @@ Item {
                 KetSelect { width: parent.width; model: ["7 days", "30 days", "90 days", "Forever"]; currentIndex: 1 }
             }
             SettingRow {
-                label: "Journal size limit"
-                help: "Past the limit, KetPlus trims the oldest detail first. Running turns and the latest 20 turns of every conversation are never trimmed."
+                label: "Database size target"
+                help: "Save explicitly to enable earlier detail trimming while idle. This soft SQLite-page target excludes media; protected content can remain above it. Forever and automatic-off preserve detail."
                 KetSelect { width: parent.width; model: ["1 GB", "2 GB", "5 GB", "10 GB", "No limit"]; currentIndex: 2 }
             }
+            Help { text: "Warning threshold: 80%. Save database target explicitly; opening Settings never enables it." }
             SettingRow {
                 label: "Generated images"
                 help: "After the detail period, keep the full image, a 512 px preview, or only its caption."
@@ -630,7 +631,7 @@ Item {
             }
             KetCheckbox { text: "Warn me when the journal passes " + storagePage.info.warnPercent + "% of its limit"; checked: true }
             KetCheckbox { text: "Trim older detail automatically while idle"; checked: true }
-            Help { text: "The native Storage page currently supports the detail period and automatic detail trimming. Size limits, images, archive expiry and the remaining controls here are a design preview." }
+            Help { text: "The native Storage page currently supports the detail period and automatic detail trimming. The database target requires an explicit save; images, archive expiry and remaining controls are a design preview." }
 
             Divider {}
             SubHeading { text: "Largest conversations" }

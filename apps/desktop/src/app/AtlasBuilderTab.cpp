@@ -109,6 +109,9 @@ AtlasBuilderTab::AtlasBuilderTab(AtlasIndex* index, const QString& workspaceRoot
     auto* back = new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"arrow-left")),
                                      tr("Back to the conversation"), toolbar_);
     back->setObjectName(QStringLiteral("atlasBackToConversation"));
+    // Back has nowhere to go until a conversation is bound to this builder.
+    back->setEnabled(false);
+    back_ = back;
     toolbarLayout->addWidget(back);
     connect(back, &QAbstractButton::clicked, this,
             [this] { emit conversationRequested(workspaceRoot_, conversationId_); });
@@ -313,6 +316,7 @@ QVariantMap AtlasBuilderTab::promptContext() const {
 
 void AtlasBuilderTab::setConversationId(const QString& conversationId) {
     conversationId_ = conversationId;
+    back_->setEnabled(!conversationId_.isEmpty());
 }
 
 void AtlasBuilderTab::openExistingAtlas(const AtlasDescriptor& descriptor) {
