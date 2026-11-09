@@ -1,5 +1,6 @@
 #include "agent/DaemonTranscriptProjection.h"
 #include "agent/AgentMessageFormatter.h"
+#include "agent/DaemonAgentNotes.h"
 #include "agent/DaemonTranscriptNotices.h"
 #include "agent/McpToolResultMedia.h"
 #include "agent/TranscriptActivityGroups.h"
@@ -135,20 +136,17 @@ void markAgentOrigin(QVariantMap& entry, const QJsonArray& agentMessages) {
     if (agentMessages.isEmpty())
         return;
     QStringList senders;
-    bool replies = true;
     bool reviews = true;
     for (const QJsonValue& value : agentMessages) {
         const QJsonObject message = value.toObject();
         const QString sender = QStringLiteral("@agent/") + message.value("from_number").toString();
         if (!senders.contains(sender))
             senders.append(sender);
-        replies = replies && message.value("kind").toString() == QStringLiteral("reply");
         reviews = reviews && message.value("kind").toString() == QStringLiteral("review");
     }
     const QJsonObject first = agentMessages.first().toObject();
-    QString label = (replies   ? QStringLiteral("Reply from ")
-                     : reviews ? QStringLiteral("Review request from ")
-                               : QStringLiteral("Message from ")) +
+    // As the mock's "From @agent/8941 · DS Icon · Claude"; the sender's note says it replied.
+    QString label = (reviews ? QStringLiteral("Review request from ") : QStringLiteral("From ")) +
                     senders.join(QStringLiteral(", "));
     if (senders.size() == 1) {
         if (const QString title = first.value("from_title").toString(); !title.isEmpty())
@@ -385,6 +383,8 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
     QVariantList result;
     QHash<QString, int> indexes;
     QHash<QString, QString> settledQuestions;
+    // Each sent agent message's note, by message id: its later states update it.
+    QHash<QString, int> agentNotes;
     QHash<QString, QVariantMap> questionAnswers;
     QSet<QString> partial;
     const auto identity = daemonMessageKey;
@@ -540,7 +540,15 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
             entry = providerNoticeMessage(data.value("message").toString(), itemId,
                                           providerRuntimeNoticeTitle());
         } else if (type == "agent_message.state") {
-            entry = agentMessageNotice(data, itemId);
+            entry = agentNote(data, itemId);
+            const auto noteId = entry.value("agentMessageId").toString();
+            if (agentNotes.contains(noteId)) {
+                const int note = agentNotes.value(noteId);
+                result[note] = mergedAgentNote(result.at(note).toMap(), entry);
+                continue;
+            }
+            if (entry.isEmpty())
+                entry = agentMessageNotice(data, itemId);
         } else if (type == "user.message" || type == "turn.steered") {
             // A steer carries its images the way the turn's first message does.
             entry = message("user", data.value("text").toString(), "You", {}, itemId);
@@ -549,8 +557,14 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
                 entry.insert("eventType", "turn.steered");
                 entry.insert("provider", data.value("provider").toString());
             }
-            if (data.value("origin").toString() == QStringLiteral("agent"))
+            if (data.value("origin").toString() == QStringLiteral("agent")) {
                 markAgentOrigin(entry, data.value("agent_messages").toArray());
+                // The reply answers a note above it, which now reads Replied.
+                for (const auto& id : agentRepliesTo(data.value("agent_messages").toArray()))
+                    if (agentNotes.contains(id))
+                        result[agentNotes.value(id)] =
+                            repliedAgentNote(result.at(agentNotes.value(id)).toMap());
+            }
         } else if (type == "assistant.delta") {
             entry = existing < 0 ? message("assistant", {}, "Codex · streaming", {}, itemId)
                                  : result.at(existing).toMap();
@@ -630,6 +644,8 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
         labelProvider(entry, data.value("provider").toString());
         if (existing < 0) {
             indexes.insert(key, result.size());
+            if (entry.value("subtype") == "agentNote")
+                agentNotes.insert(entry.value("agentMessageId").toString(), result.size());
             result.append(entry);
             const auto separator = itemId.lastIndexOf(QLatin1Char('-'));
             if (entry.value("kind") == "assistant" && itemId.startsWith(QStringLiteral("msg_")) &&

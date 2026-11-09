@@ -6,6 +6,7 @@
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/CodexAppServer.h"
+#include "agent/DaemonAgentNotes.h"
 #include "agent/FileMentions.h"
 #include "agent/MermaidLabelContrast.h"
 #include "agent/ProviderRuntimeStatus.h"
@@ -443,6 +444,54 @@ for line in sys.stdin:
                                {{"decision", "Accept"}});
         QCOMPARE(errors.size(), 1);
     }
+    // A sent agent message is one live note: its expiry and its reply update it in place.
+    const auto noteRows = [&] {
+        QVariantList notes;
+        for (const auto& row : manager.messages(path))
+            if (row.toMap().value("subtype") == "agentNote")
+                notes.append(row);
+        return notes;
+    };
+    const auto notice = [&](const QString& itemId, const QJsonObject& data) {
+        appServer.notificationReceived(
+            "daemon/providerNotice",
+            {{"threadId", "question-thread"},
+             {"itemId", itemId},
+             {"presentation",
+              QJsonObject::fromVariantMap(ketplus::agent_message::agentNote(data, itemId))}});
+    };
+    notice("notice:sent", {{"message_id", "live-q"},
+                           {"kind", "request"},
+                           {"state", "sent"},
+                           {"expect_reply", true},
+                           {"direction", "outgoing"},
+                           {"peer_number", "8941"},
+                           {"peer_title", "DS Icon"},
+                           {"peer_provider", "claude"},
+                           {"text", "Is it fine?"}});
+    QCOMPARE(noteRows().size(), 1);
+    QCOMPARE(noteRows().first().toMap().value("meta").toString(),
+             "DS Icon · Claude · Sent · reply requested");
+    notice("notice:held", {{"message_id", "live-q"},
+                           {"kind", "request"},
+                           {"state", "held"},
+                           {"direction", "outgoing"},
+                           {"peer_number", "8941"}});
+    QCOMPARE(noteRows().size(), 1);
+    QCOMPARE(noteRows().first().toMap().value("meta").toString(),
+             "DS Icon · Claude · Held until the turn ends");
+    appServer.notificationReceived(
+        "daemon/userMessage", {{"threadId", "question-thread"},
+                               {"itemId", "user:live-reply"},
+                               {"text", "Yes"},
+                               {"agentMessages", QJsonArray{QJsonObject{{"message_id", "live-r"},
+                                                                        {"kind", "reply"},
+                                                                        {"reply_to", "live-q"},
+                                                                        {"from_number", "8941"},
+                                                                        {"body", "Yes"}}}}});
+    QCOMPARE(noteRows().size(), 1);
+    QCOMPARE(noteRows().first().toMap().value("meta").toString(), "DS Icon · Claude · Replied");
+    QCOMPARE(noteRows().first().toMap().value("body").toString(), "Is it fine?");
 }
 
 void AgentWorkspaceViewTest::sidebarDividerRemainsResizable() {

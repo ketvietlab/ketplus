@@ -3,6 +3,7 @@
 
 #include "agent/CodexAppServer.h"
 #include "agent/CodexRateLimits.h"
+#include "agent/DaemonAgentNotes.h"
 #include "agent/DaemonTranscriptProjection.h"
 #include <QDateTime>
 
@@ -32,6 +33,17 @@ namespace ketplus {
 using namespace agent_message;
 
 namespace {
+// The row of a sent agent message's note, or -1.
+int agentNoteRow(const QVector<QVariantMap>& messages, const QString& messageId) {
+    if (messageId.isEmpty())
+        return -1;
+    for (int index = messages.size() - 1; index >= 0; --index) {
+        const auto& entry = messages.at(index);
+        if (entry.value("subtype") == "agentNote" && entry.value("agentMessageId") == messageId)
+            return index;
+    }
+    return -1;
+}
 
 QString stableOptionId(const QString& questionId, const int index, const QString& label) {
     return QStringLiteral("option_%1")
@@ -433,6 +445,14 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
                 entry.insert("summary", detail);
             }
         }
+        // A later state of a sent message updates its note, as the journal's projection does.
+        if (const int note =
+                agentNoteRow(session->messages, entry.value("agentMessageId").toString());
+            note >= 0) {
+            updateMessage(session, note,
+                          agent_message::mergedAgentNote(session->messages.at(note), entry));
+            return;
+        }
         if (!entry.contains("turnId") && !session->turnId.isEmpty())
             entry.insert(QStringLiteral("turnId"), session->turnId);
         session->messageIndexByItem.insert(itemId, appendMessage(session, entry));
@@ -463,6 +483,12 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
                 break;
             }
         }
+        // A reply marks the note of the message it answers.
+        for (const auto& id :
+             agent_message::agentRepliesTo(params.value("agentMessages").toArray()))
+            if (const int note = agentNoteRow(session->messages, id); note >= 0)
+                updateMessage(session, note,
+                              agent_message::repliedAgentNote(session->messages.at(note)));
         if (match < 0) {
             handleItem(session,
                        {{QStringLiteral("id"), itemId},

@@ -319,10 +319,19 @@ Item {
                     onClicked: host.requestProductNavigation("source-control")
                 }
             }
+            TranscriptAgentNote {
+                width: parent.width
+                visible: messageDelegate.subtype === "agentNote"
+                height: visible ? implicitHeight : 0
+                label: messageDelegate.title
+                details: messageDelegate.meta
+                message: messageDelegate.displayBody
+                state: messageDelegate.status
+            }
             TranscriptNotice {
                 objectName: "transcriptNotice"
                 width: parent.width
-                visible: messageDelegate.noticeRow
+                visible: messageDelegate.noticeRow && messageDelegate.subtype !== "agentNote"
                 height: visible ? implicitHeight : 0
 
                 title: messageDelegate.title || (kind === "error" ? "Agent error" : meta || "Conversation update")

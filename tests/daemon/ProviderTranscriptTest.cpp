@@ -1,4 +1,5 @@
 #include "FakeCodex.h"
+#include "agent/DaemonAgentNotes.h"
 #include "agent/DaemonTranscriptNotices.h"
 #include "agent/DaemonTranscriptProjection.h"
 #include "cloud/CloudEventProjection.h"
@@ -561,7 +562,7 @@ class ProviderTranscriptTest : public QObject {
         QCOMPARE(message.value("kind").toString(), "user");
         QCOMPARE(message.value("timestamp").toString(), "2026-11-01T12:00:00Z");
         QCOMPARE(message.value("subtype").toString(), "agentMessage");
-        QCOMPARE(message.value("meta").toString(), "Message from @agent/1093 · Parser · Claude");
+        QCOMPARE(message.value("meta").toString(), "From @agent/1093 · Parser · Claude");
         QCOMPARE(message.value("body").toString(), "Please review");
         const auto notice = rows.last().toMap();
         QCOMPARE(notice.value("subtype").toString(), "heldAgentMessage");
@@ -575,15 +576,113 @@ class ProviderTranscriptTest : public QObject {
                                                {"cursor", 5},
                                                {"payload", outgoingHeld}}}}});
         QCOMPARE(outgoingRows.size(), 1);
-        QCOMPARE(outgoingRows.first().toMap().value("subtype").toString(), "notice");
-        // A reply is labelled as one; an ordinary user message keeps "You".
+        // A message this conversation sent is the mock's note.
+        QCOMPARE(outgoingRows.first().toMap().value("subtype").toString(), "agentNote");
+        QCOMPARE(outgoingRows.first().toMap().value("title").toString(), "Message to @agent/1093");
+        QCOMPARE(outgoingRows.first().toMap().value("meta").toString(), "Held until the turn ends");
+        // As the mock's "From @agent/…"; an ordinary user message keeps "You".
         QVariantMap reply = message;
         markAgentOrigin(reply, QJsonArray{QJsonObject{{"kind", "reply"}, {"from_number", "2044"}}});
-        QCOMPARE(reply.value("meta").toString(), "Reply from @agent/2044");
+        QCOMPARE(reply.value("meta").toString(), "From @agent/2044");
         QVariantMap own = message;
         own.insert("subtype", QString{});
         markAgentOrigin(own, {});
         QCOMPARE(own.value("subtype").toString(), QString{});
+    }
+
+    // One note follows a sent message through its states and its reply, as the mock's.
+    void sentAgentMessagesAreOneNote() {
+        QJsonArray events;
+        qint64 cursor = 0;
+        const auto add = [&](qint64 turn, const QString& type, const QJsonObject& payload) {
+            events.append(QJsonObject{{"cursor", ++cursor},
+                                      {"turn_sequence", turn},
+                                      {"event_type", type},
+                                      {"payload", payload}});
+        };
+        const QJsonObject sent{
+            {"message_id", "q1"},        {"kind", "request"},
+            {"state", "sent"},           {"delivery", "starting"},
+            {"expect_reply", true},      {"direction", "outgoing"},
+            {"peer_number", "8941"},     {"peer_title", "DS Icon"},
+            {"peer_provider", "claude"}, {"text", "Is the <stepped> spinner fine?"}};
+        add(1, "agent_message.state", sent);
+        const auto rowsOf = [&] { return daemonWindowMessages({{"events", events}}); };
+        auto rows = rowsOf();
+        QCOMPARE(rows.size(), 1);
+        auto note = rows.first().toMap();
+        QCOMPARE(note.value("subtype").toString(), "agentNote");
+        QCOMPARE(note.value("title").toString(), "Message to @agent/8941");
+        QCOMPARE(note.value("meta").toString(), "DS Icon · Claude · Sent · reply requested");
+        QCOMPARE(note.value("body").toString(), "Is the <stepped> spinner fine?");
+        // The reply, a turn later, marks the same note replied.
+        add(2, "user.message",
+            {{"text", "Yes"},
+             {"origin", "agent"},
+             {"agent_messages", QJsonArray{QJsonObject{{"message_id", "r1"},
+                                                       {"kind", "reply"},
+                                                       {"reply_to", "q1"},
+                                                       {"from_number", "8941"},
+                                                       {"from_title", "DS Icon"},
+                                                       {"from_provider", "claude"},
+                                                       {"body", "Yes"}}}}});
+        rows = rowsOf();
+        QCOMPARE(rows.size(), 2);
+        QCOMPARE(rows.first().toMap().value("meta").toString(), "DS Icon · Claude · Replied");
+        QCOMPARE(rows.last().toMap().value("meta").toString(),
+                 "From @agent/8941 · DS Icon · Claude");
+        // A later state of another message stays its own note; an expiry updates its own.
+        auto other = sent;
+        other.insert("message_id", "q2");
+        other.insert("delivery", "queued");
+        other.insert("expect_reply", false);
+        add(2, "agent_message.state", other);
+        add(3, "agent_message.state",
+            {{"message_id", "q2"},
+             {"kind", "request"},
+             {"state", "expired"},
+             {"reason", "no_reply_in_time"},
+             {"direction", "outgoing"},
+             {"peer_number", "8941"}});
+        rows = rowsOf();
+        QCOMPARE(rows.size(), 3);
+        QCOMPARE(rows.last().toMap().value("meta").toString(), "DS Icon · Claude · Expired");
+        QCOMPARE(rows.last().toMap().value("body").toString(), "Is the <stepped> spinner fine?");
+        // A replied note keeps saying so whatever the request does next.
+        QCOMPARE(mergedAgentNote(rows.first().toMap(), agentNote({{"message_id", "q1"},
+                                                                  {"state", "expired"},
+                                                                  {"direction", "outgoing"},
+                                                                  {"peer_number", "8941"}},
+                                                                 "n"))
+                     .value("meta")
+                     .toString(),
+                 "DS Icon · Claude · Replied");
+        // The replier's own answer reads as sent; reviews keep their wording.
+        QCOMPARE(agentNote({{"message_id", "r1"},
+                            {"kind", "reply"},
+                            {"state", "replied"},
+                            {"direction", "outgoing"},
+                            {"peer_number", "4821"},
+                            {"peer_title", "Release"}},
+                           "n")
+                     .value("title")
+                     .toString(),
+                 "Reply to @agent/4821");
+        QVERIFY(agentNote({{"message_id", "v1"},
+                           {"kind", "review"},
+                           {"state", "sent"},
+                           {"direction", "outgoing"}},
+                          "n")
+                    .isEmpty());
+        QCOMPARE(agentNote({{"message_id", "q3"},
+                            {"state", "sent"},
+                            {"delivery", "queued"},
+                            {"direction", "outgoing"},
+                            {"peer_number", "1"}},
+                           "n")
+                     .value("meta")
+                     .toString(),
+                 "Sent · delivered when its turn ends");
     }
 
     void agentMessageNoticesNameTheConversationAndDelivery() {

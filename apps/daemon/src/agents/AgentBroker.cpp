@@ -275,8 +275,14 @@ QJsonObject AgentBroker::send(const AgentConversation& caller, const QJsonObject
                              : message.urgent && receiver->steerable ? QStringLiteral("steering")
                                                                      : QStringLiteral("queued");
     // The sender's transcript names the receiver in words; its tool row is provider-specific.
+    // The note shows the start of what was sent, as the mock's.
+    constexpr qsizetype noteCharacters = 500;
+    const QString excerpt = text.size() > noteCharacters
+                                ? text.left(noteCharacters).trimmed() + QStringLiteral("…")
+                                : text;
     host_->appendAgentNotice(caller.sessionId, caller.generation,
                              {{QStringLiteral("message_id"), message.id},
+                              {QStringLiteral("text"), excerpt},
                               {QStringLiteral("kind"), message.kind},
                               {QStringLiteral("state"), QStringLiteral("sent")},
                               {QStringLiteral("delivery"), delivery},
