@@ -1,6 +1,7 @@
 #include "CodexLaunchReloader.h"
 #include "ipc/LocalIpcServer.h"
 #include "protocol/DaemonProtocol.h"
+#include "providers/ClaudeAdapter.h"
 #include "providers/CodexAdapter.h"
 #include "providers/ProviderLineReader.h"
 #include "runtime/SessionHost.h"
@@ -235,6 +236,51 @@ class DaemonLifecycleTest final : public QObject {
         QCOMPARE(aba.value(QStringLiteral("error_code")).toString(),
                  QStringLiteral("lifecycle_revision_conflict"));
         QVERIFY(!journal.upsertSession(idle));
+    }
+
+    void deletionWaitsForBackgroundTasksToStop() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
+        QVERIFY(journal.isOpen());
+        StoredSession session;
+        session.id = QStringLiteral("background");
+        session.worktreePath = directory.path();
+        session.adapter = QStringLiteral("claude");
+        session.state = QStringLiteral("idle");
+        QVERIFY(journal.upsertSession(session));
+        CodexAdapter codex(QStringLiteral("/missing-codex-for-background-delete"));
+        ClaudeAdapter claude(QStringLiteral("/missing-claude-for-background-delete"));
+        SessionHost host(&journal, &codex, &claude);
+        const auto tasks = [&](const QString& status) {
+            emit claude.canonicalEvent(
+                session.id, QStringLiteral("tasks.changed"),
+                {{QStringLiteral("tasks"),
+                  QJsonArray{QJsonObject{{QStringLiteral("task_id"), QStringLiteral("shell-1")},
+                                         {QStringLiteral("kind"), QStringLiteral("shell")},
+                                         {QStringLiteral("status"), status}}}}});
+        };
+        const auto remove = [&](const QString& messageId) {
+            return host.handleCommand(request(QStringLiteral("session.delete"), messageId, {},
+                                              session.id, session.generation),
+                                      QStringLiteral("desktop-test"));
+        };
+
+        // The turn is over but a shell it started still runs in the worktree; deleting the
+        // conversation would orphan the process and its output.
+        for (const QString& status : {QStringLiteral("running"), QStringLiteral("stopping")}) {
+            tasks(status);
+            const QJsonObject refused = remove(QStringLiteral("delete-") + status);
+            QCOMPARE(refused.value(QStringLiteral("error_code")).toString(),
+                     QStringLiteral("session_busy"));
+            QCOMPARE(journal.sessions().size(), 1);
+        }
+
+        tasks(QStringLiteral("stopped"));
+        const QJsonObject deleted = remove(QStringLiteral("delete-stopped"));
+        QVERIFY2(deleted.value(QStringLiteral("ok")).toBool(),
+                 qPrintable(QJsonDocument(deleted).toJson(QJsonDocument::Compact)));
+        QVERIFY(journal.sessions().isEmpty());
     }
 
     void deletionTombstoneSurvivesRestartAndFencesABA() {
