@@ -421,13 +421,11 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
         if (params.value("presentation").isObject()) {
             entry = params.value("presentation").toObject().toVariantMap();
             if (entry.value("subtype") == "turnEnd") {
-                // The same line a reloaded window projects from the journal.
+                // The same line a reloaded window projects from the journal: the daemon
+                // times and sizes the turn, the session supplies its running cost.
                 agent_message::TurnFacts turn;
-                if (session->lastTurnStartedAt > 0)
-                    turn.durationMs =
-                        QDateTime::currentMSecsSinceEpoch() - session->lastTurnStartedAt;
-                if (session->contextLimitTokens > 0)
-                    turn.contextTokens = session->contextUsedTokens;
+                turn.durationMs = entry.value("durationMs", -1).toLongLong();
+                turn.contextTokens = entry.value("contextTokens", -1).toLongLong();
                 const auto detail = agent_message::turnEndText(
                     turn, QJsonObject::fromVariantMap(session->sessionUsage));
                 entry.insert("body", detail);

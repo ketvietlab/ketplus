@@ -386,6 +386,64 @@ class DesktopTranscriptCatchupTest final : public QObject {
         QVERIFY(!desktop.historyState(path).value("hasNewer").toBool());
         QVERIFY(desktop.historyState(path).value("error").toString().isEmpty());
     }
+
+    // A turn end delivered late reads as the journal timed it, not as the desktop received it.
+    void lateTurnEndUsesTheJournalTimes() {
+        Environment env;
+        QVERIFY(writeToken(env.directory));
+        const QString path = QFileInfo(env.directory.path()).canonicalFilePath();
+        rememberConversation(path, "a");
+        FakeDaemon daemon(env.directory.filePath("daemon.sock"), [&](const QString& type,
+                                                                     const QJsonObject&) {
+            if (type == "session.list")
+                return QJsonObject{{"transcript_window_version", 1},
+                                   {"sessions", QJsonArray{QJsonObject{{"session_id", "a"},
+                                                                       {"worktree_path", path},
+                                                                       {"session_generation", 1},
+                                                                       {"state", "running"},
+                                                                       {"last_event_cursor", 1}}}}};
+            if (type != "session.transcript_window")
+                return QJsonObject{};
+            return QJsonObject{{"transcript_window_version", 1},
+                               {"session_id", "a"},
+                               {"session_generation", 1},
+                               {"events", QJsonArray{windowEvent("a", "user.message",
+                                                                 {{"text", "earlier"}}, 1, 1)}},
+                               {"before_cursor", 1},
+                               {"has_more_before", false},
+                               {"snapshot_cursor", 1},
+                               {"projection_revision", 1},
+                               {"current_turn_sequence", 1},
+                               {"state", "running"}};
+        });
+        QVERIFY(daemon.listening);
+        CodexAppServer server;
+        AgentSessionManager desktop(&server);
+        desktop.activate(path);
+        QTRY_COMPARE_WITH_TIMEOUT(desktop.messages(path).size(), 1, 5000);
+        const QDateTime start = QDateTime::currentDateTimeUtc().addSecs(-3600);
+        const auto sent = [&](QJsonObject event, int seconds) {
+            event.insert("sent_at", start.addSecs(seconds).toString(Qt::ISODateWithMs));
+            return event;
+        };
+        daemon.push(sent(liveEvent("a", "user.message", {{"text", "Fix the spinner"}}, 2, 2), 0));
+        daemon.push(sent(
+            liveEvent("a", "usage.context",
+                      {{"tokenUsage", QJsonObject{{"last", QJsonObject{{"totalTokens", 141200}}},
+                                                  {"modelContextWindow", 200000}}}},
+                      3, 2),
+            200));
+        daemon.push(sent(liveEvent("a", "turn.completed", {{"status", "completed"}}, 4, 2), 380));
+        const auto turnEnd = [&] {
+            for (const auto& row : desktop.messages(path)) {
+                const auto entry = row.toMap();
+                if (entry.value("subtype") == "turnEnd")
+                    return entry.value("body").toString();
+            }
+            return QString();
+        };
+        QTRY_COMPARE_WITH_TIMEOUT(turnEnd(), QString::fromUtf8("6m 20s · 141k context"), 5000);
+    }
 };
 
 QTEST_GUILESS_MAIN(DesktopTranscriptCatchupTest)

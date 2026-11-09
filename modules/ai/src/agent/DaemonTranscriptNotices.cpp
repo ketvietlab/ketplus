@@ -11,6 +11,19 @@ QString sessionEstimateText(const QJsonObject& usage) {
     // The SDK reports a cumulative session estimate, never a per-turn charge.
     return QStringLiteral("Session estimate: $%1 USD").arg(cost.toDouble(), 0, 'f', 4);
 }
+bool daemonTurnStarts(const QString& type) {
+    return type == "user.message" || type == "turn.started";
+}
+
+qint64 daemonContextTokens(const QJsonObject& data) {
+    return data.value("tokenUsage")
+        .toObject()
+        .value("last")
+        .toObject()
+        .value("totalTokens")
+        .toInteger(-1);
+}
+
 QString turnEndText(const TurnFacts& turn, const QJsonObject& usage) {
     QStringList parts;
     if (turn.durationMs >= 0) {

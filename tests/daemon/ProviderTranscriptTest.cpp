@@ -92,6 +92,26 @@ class ProviderTranscriptTest : public QObject {
         QCOMPARE(rows.last().toMap().value("subtype").toString(), "turnEnd");
         QCOMPARE(rows.last().toMap().value("body").toString(),
                  QString::fromUtf8("6m 20s · 141k context · $2.08 session"));
+        // A page that starts mid-turn has no start to time the turn from.
+        const auto endOf = [](const QJsonArray& page) {
+            return daemonWindowMessages({{"events", page}}).last().toMap().value("body").toString();
+        };
+        QCOMPARE(endOf({events[1], events[2], events[3]}),
+                 QString::fromUtf8("141k context · $2.08 session"));
+        QCOMPARE(endOf({events[3]}), "");
+        // The next turn reported no usage: the previous turn's context is not its own.
+        QJsonArray next = events;
+        next.append(QJsonObject{{"cursor", 5},
+                                {"turn_sequence", 2},
+                                {"event_type", "user.message"},
+                                {"payload", QJsonObject{{"text", "Try Codex"}}},
+                                {"sent_at", at(400)}});
+        next.append(QJsonObject{{"cursor", 6},
+                                {"turn_sequence", 2},
+                                {"event_type", "turn.completed"},
+                                {"payload", QJsonObject{{"status", "failed"}}},
+                                {"sent_at", at(412)}});
+        QCOMPARE(endOf(next), QString::fromUtf8("12s · $2.08 session"));
 
         TurnFacts turn;
         QVERIFY(turnEndText(turn, {}).isEmpty());
