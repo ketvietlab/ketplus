@@ -1699,6 +1699,11 @@ void CursorAdapter::failPending(const QString& reason) {
     const auto queued = std::exchange(queued_, {});
     for (const QueuedCall& call : queued)
         call.callback({}, reason);
+    // The next process numbers its requests from the start again; an answer to one of them
+    // must not take the shape of an unanswered request this process left behind.
+    questionOptionsByRequest_.clear();
+    permissionOptionsByRequest_.clear();
+    planRequests_.clear();
     startingSessions_.clear();
     browserSessions_.clear();
     agentSessions_.clear();
