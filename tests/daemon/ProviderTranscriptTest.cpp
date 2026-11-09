@@ -7,6 +7,7 @@
 #include "runtime/ApprovalBroker.h"
 #include "runtime/SessionHost.h"
 #include "storage/LocalJournal.h"
+#include <QJsonDocument>
 #include <QTemporaryDir>
 #include <QTimeZone>
 #include <QtTest>
@@ -218,6 +219,79 @@ class ProviderTranscriptTest : public QObject {
         QCOMPARE(edits.at(4).value("operation").toString(), "Deleted");
         QCOMPARE(edits.at(5).value("operation").toString(), "Moved");
         QCOMPARE(edits.at(5).value("destination").toString(), "b.cpp");
+    }
+    // Claude edits count only what they changed, keep their exact path, and a failed edit
+    // keeps its error instead of line counts.
+    void claudeEditsCountOnlyWhatTheyChanged() {
+        const auto rowFor = [](const QJsonObject& item) {
+            QJsonObject completed = item;
+            completed.insert("type", "dynamicToolCall");
+            completed.insert("id", "e1");
+            if (!completed.contains("status"))
+                completed.insert("status", "completed");
+            const QJsonArray events{QJsonObject{
+                {"cursor", 1},
+                {"turn_sequence", 1},
+                {"event_type", "item.completed"},
+                {"payload",
+                 QJsonObject{{"provider", "claude"}, {"item_id", "e1"}, {"item", completed}}}}};
+            return daemonWindowMessages({{"events", events}}).last().toMap();
+        };
+        const auto stats = [](const QVariantMap& row) {
+            return row.value("fileChanges").toList().first().toMap();
+        };
+        const auto edit = [](const QJsonObject& arguments) {
+            return QJsonObject{{"tool", "Edit"}, {"arguments", arguments}};
+        };
+        // A final newline ends a line rather than adding one.
+        const auto trailing = stats(rowFor(
+            edit({{"file_path", "a.cpp"}, {"old_string", "a\n"}, {"new_string", "b\nc\n"}})));
+        QVERIFY(trailing.value("known").toBool());
+        QCOMPARE(trailing.value("added").toInt(), 2);
+        QCOMPARE(trailing.value("removed").toInt(), 1);
+        // replace_all may replace many times: the counts are unknown, not "+1 −1".
+        QVERIFY(!stats(rowFor(edit({{"file_path", "a.cpp"},
+                                    {"old_string", "a"},
+                                    {"new_string", "b"},
+                                    {"replace_all", true}})))
+                     .value("known")
+                     .toBool());
+        QVERIFY(
+            !stats(
+                 rowFor({{"tool", "MultiEdit"},
+                         {"arguments",
+                          QJsonObject{{"file_path", "a.cpp"},
+                                      {"edits", QJsonArray{QJsonObject{{"old_string", "x"},
+                                                                       {"new_string", "y"}},
+                                                           QJsonObject{{"old_string", "a"},
+                                                                       {"new_string", "b"},
+                                                                       {"replace_all", true}}}}}}}))
+                 .value("known")
+                 .toBool());
+        // The path opens and diffs the file, so it is kept exactly.
+        QCOMPARE(stats(rowFor(edit({{"file_path", "/tmp/two  spaces.cpp"},
+                                    {"old_string", "a"},
+                                    {"new_string", "b"}})))
+                     .value("path")
+                     .toString(),
+                 QStringLiteral("/tmp/two  spaces.cpp"));
+        // A failed edit changed nothing: it keeps its error and has no line counts.
+        const auto failed = rowFor(
+            {{"tool", "Edit"},
+             {"status", "failed"},
+             {"arguments",
+              QJsonObject{{"file_path", "a.cpp"}, {"old_string", "a"}, {"new_string", "b"}}},
+             {"result", QJsonObject{{"isError", true},
+                                    {"content", QJsonArray{QJsonObject{
+                                                    {"type", "text"},
+                                                    {"text", "Old string not found in file"}}}}}}});
+        QVERIFY(failed.value("subtype").toString() != "fileChange");
+        QVERIFY(failed.value("fileChanges").toList().isEmpty());
+        QCOMPARE(failed.value("status").toString(), "failed");
+        // The expanded step renders this payload, error included.
+        QVERIFY(QJsonDocument(QJsonObject::fromVariantMap(failed.value("sanitizedPayload").toMap()))
+                    .toJson()
+                    .contains("Old string not found in file"));
     }
     void turnEndReportsDurationContextAndSessionCost() {
         const auto at = [](int seconds) {

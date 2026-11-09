@@ -3,6 +3,8 @@
 #include <QJsonArray>
 #include <QStringList>
 #include <QUrl>
+#include <algorithm>
+#include <utility>
 
 namespace ketplus::agent_message {
 namespace {
@@ -35,17 +37,25 @@ QString pageText(const QString& url) {
 QString lines(const QString& text, QChar mark) {
     if (text.isEmpty())
         return {};
+    QStringList split = text.split(QLatin1Char('\n'));
+    // A final newline ends the last line; it does not start another.
+    if (text.endsWith(QLatin1Char('\n')))
+        split.removeLast();
     QStringList marked;
-    for (const auto& line : text.split(QLatin1Char('\n')))
+    for (const auto& line : std::as_const(split))
         marked.append(mark + line);
     return marked.join(QLatin1Char('\n'));
 }
 
-// One hunk per replacement, so the shared statistics count its lines.
-QString replacementHunk(const QJsonObject& edit) {
+// A replacement made once reads as one hunk, so the shared statistics count its lines.
+// `replace_all` may replace any number of times: without the hunk header the lines show
+// but the counts stay unknown.
+QString replacementHunk(const QJsonObject& edit, bool counted = true) {
     const QString removed = lines(edit.value(QStringLiteral("old_string")).toString(), u'-');
     const QString added = lines(edit.value(QStringLiteral("new_string")).toString(), u'+');
-    QStringList hunk{QStringLiteral("@@ -1 +1 @@")};
+    QStringList hunk;
+    if (counted && !edit.value(QStringLiteral("replace_all")).toBool())
+        hunk.append(QStringLiteral("@@ -1 +1 @@"));
     if (!removed.isEmpty())
         hunk.append(removed);
     if (!added.isEmpty())
@@ -58,10 +68,17 @@ QString replacementHunk(const QJsonObject& edit) {
 QJsonObject claudeFileChangeItem(const QJsonObject& item) {
     if (item.value(QStringLiteral("type")).toString() != QStringLiteral("dynamicToolCall"))
         return {};
+    // A failed edit changed nothing: it stays a tool step with its error, not line counts.
+    if (item.value(QStringLiteral("status")).toString() == QStringLiteral("failed") ||
+        item.value(QStringLiteral("result")).toObject().value(QStringLiteral("isError")).toBool())
+        return {};
     const QString tool = item.value(QStringLiteral("tool")).toString();
     const QJsonObject arguments = toolArguments(item);
-    const QString path = firstString(arguments, {"file_path", "path"});
+    // A filesystem path is kept exactly: it opens, diffs and checks the file.
+    QString path = arguments.value(QStringLiteral("file_path")).toString();
     if (path.isEmpty())
+        path = arguments.value(QStringLiteral("path")).toString();
+    if (path.trimmed().isEmpty())
         return {};
     QJsonObject change{{QStringLiteral("path"), path}};
     if (tool == QStringLiteral("Write")) {
@@ -72,9 +89,14 @@ QJsonObject claudeFileChangeItem(const QJsonObject& item) {
         change.insert(QStringLiteral("kind"), QJsonObject{{QStringLiteral("type"), "update"}});
         change.insert(QStringLiteral("diff"), replacementHunk(arguments));
     } else if (tool == QStringLiteral("MultiEdit")) {
+        // One uncounted replacement leaves the whole file's counts unknown.
+        const QJsonArray edits = arguments.value(QStringLiteral("edits")).toArray();
+        const bool counted = std::none_of(edits.begin(), edits.end(), [](const QJsonValue& edit) {
+            return edit.toObject().value(QStringLiteral("replace_all")).toBool();
+        });
         QStringList hunks;
-        for (const auto& edit : arguments.value(QStringLiteral("edits")).toArray())
-            hunks.append(replacementHunk(edit.toObject()));
+        for (const auto& edit : edits)
+            hunks.append(replacementHunk(edit.toObject(), counted));
         change.insert(QStringLiteral("kind"), QJsonObject{{QStringLiteral("type"), "update"}});
         change.insert(QStringLiteral("diff"), hunks.join(QLatin1Char('\n')));
     } else {
