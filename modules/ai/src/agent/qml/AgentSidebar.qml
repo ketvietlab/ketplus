@@ -72,7 +72,10 @@ Rectangle {
                 tags: modelData.tags || []
                 status: modelData.needsInput ? Kit.KetTheme.ConversationStatus.NeedsInput : modelData.awaitingReply ? Kit.KetTheme.ConversationStatus.AwaitingReply : modelData.running ? Kit.KetTheme.ConversationStatus.Working : /fail|error|disconnect|missing/i.test(modelData.status || "") ? Kit.KetTheme.ConversationStatus.Error : /stop/i.test(modelData.status || "") ? Kit.KetTheme.ConversationStatus.Stopped : modelData.started ? Kit.KetTheme.ConversationStatus.Completed : Kit.KetTheme.ConversationStatus.NotStarted
                 statusLabel: modelData.status || Kit.KetTheme.conversationStatusLabel(status)
-                readonly property bool animationAllowed: agentHost.motionEnabled && !agentHost.restoringHistory && workspace.visible && workspace.Window.active && workspace.Window.visibility !== Window.Minimized && visible && y + height >= conversationList.contentY && y <= conversationList.contentY + conversationList.height
+                // The Working indicator's policy (docs/design-system.md): spin unless reduced motion,
+                // restoring, hidden, minimized or scrolled away. Behind another app the kit clock
+                // slows to 4 steps a second rather than stopping.
+                readonly property bool animationAllowed: agentHost.workingMotionEnabled && !agentHost.restoringHistory && workspace.visible && workspace.Window.visibility !== Window.Minimized && workspace.Window.visibility !== Window.Hidden && visible && y + height >= conversationList.contentY && y <= conversationList.contentY + conversationList.height
                 // Preserve the host's motion/visibility policy while sharing the kit clock.
                 function syncClock() {
                     const active = spins && animationAllowed;
