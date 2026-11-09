@@ -19,6 +19,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/LocalJournalDeletion.cpp
     src/runtime/SessionHostDeletion.cpp
     src/storage/LocalJournalTasks.cpp
+    src/storage/LocalJournalArchive.cpp
     src/cloud/CloudControlCredentials.cpp
     src/cloud/MachineChallenge.cpp
     src/cloud/CloudControlClient.cpp
@@ -99,6 +100,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/SessionHostEphemeralReads.cpp
     src/runtime/SessionHostFork.cpp
     src/runtime/SessionHostTasks.cpp
+    src/runtime/SessionHostArchive.cpp
     src/runtime/SessionHostProviderInput.cpp
     src/runtime/SessionHostProviderRuntime.cpp
     src/runtime/SessionHostQuestions.cpp
