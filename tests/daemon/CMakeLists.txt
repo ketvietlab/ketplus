@@ -74,6 +74,12 @@ ketplus_add_daemon_test(ketplus_daemon_journal_space_tests JournalSpaceTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_journal_startup_tests JournalStartupTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_journal_migration_recovery_tests
     JournalMigrationRecoveryTest.cpp)
+# Reads SQLite's own statement counters through the driver's handle; needs the same SQLite.
+find_package(SQLite3)
+if(TARGET SQLite::SQLite3)
+    ketplus_add_daemon_test(ketplus_daemon_journal_query_audit_tests JournalQueryAuditTest.cpp)
+    target_link_libraries(ketplus_daemon_journal_query_audit_tests PRIVATE SQLite::SQLite3)
+endif()
 ketplus_add_daemon_test(ketplus_daemon_machine_challenge_tests MachineChallengeTest.cpp)
 target_sources(ketplus_daemon_machine_challenge_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 target_compile_definitions(ketplus_daemon_machine_challenge_tests PRIVATE

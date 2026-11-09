@@ -329,14 +329,18 @@ QJsonObject LocalJournal::activityGroupPage(const QString& session, qint64 gener
         return failure("unknown_group", "Activity is still being indexed.");
     bool groupRunning = false;
     QSqlQuery exists(database_);
-    exists.prepare("SELECT SUM(running),COUNT(*) FROM activity_summaries WHERE session_id=? AND "
-                   "generation=? AND group_cursor=?");
+    exists.prepare("SELECT SUM(running),COUNT(*),MAX(last_cursor) FROM activity_summaries WHERE "
+                   "session_id=? AND generation=? AND group_cursor=?");
     exists.addBindValue(session);
     exists.addBindValue(generation);
     exists.addBindValue(group);
     if (!exists.exec() || !exists.next() || exists.value(1).toInt() == 0)
         return failure("unknown_group", "This activity group is not retained.");
     groupRunning = exists.value(0).toInt() > 0;
+    // A group's events lie between its first item and its summary's last change, so the read
+    // seeks that span instead of the session's whole history before `after`.
+    const qint64 lower = qMax(after, group - 1);
+    const qint64 upper = qMin(snapshot, exists.value(2).toLongLong());
     QSqlQuery rows(database_);
     rows.prepare("SELECT r.cursor,r.turn_sequence,r.event_type,r.payload,r.sent_at FROM "
                  "replay_events r JOIN activity_items a ON a.session_id=r.session_id AND "
@@ -344,8 +348,7 @@ QJsonObject LocalJournal::activityGroupPage(const QString& session, qint64 gener
                  "a.item_id=r.item_id WHERE r.session_id=? AND r.generation=? AND a.group_cursor=? "
                  "AND r.event_type IN ('item.started','item.completed','command.output_delta') AND "
                  "r.cursor>? AND r.cursor<=? ORDER BY r.cursor LIMIT ?");
-    for (const QVariant& value :
-         QVariantList{session, generation, group, after, snapshot, limit + 1})
+    for (const QVariant& value : QVariantList{session, generation, group, lower, upper, limit + 1})
         rows.addBindValue(value);
     if (!rows.exec())
         return failure("journal_error", rows.lastError().text());

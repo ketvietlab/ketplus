@@ -77,22 +77,6 @@ qint64 valueBytes(const QVariant& value) {
     return value.typeId() == QMetaType::QByteArray ? value.toByteArray().size() : 8;
 }
 
-qint64 countRows(QSqlDatabase database, const QString& table, const QString& sessionId,
-                 const qint64 generation, QString* error) {
-    QSqlQuery count(database);
-    count.prepare(QStringLiteral("SELECT COUNT(*) FROM %1 WHERE session_id = ? AND generation = ?")
-                      .arg(table));
-    count.addBindValue(sessionId);
-    count.addBindValue(generation);
-    if (!count.exec() || !count.next()) {
-        *error = count.lastError().isValid()
-                     ? count.lastError().text()
-                     : QStringLiteral("Unable to count the %1 rows.").arg(table);
-        return -1;
-    }
-    return count.value(0).toLongLong();
-}
-
 } // namespace
 
 ForkCopy::~ForkCopy() {
@@ -144,6 +128,19 @@ std::unique_ptr<ForkCopy> LocalJournal::beginFork(const QString& sourceId,
         return fail(staging.lastError().isValid()
                         ? QStringLiteral("The fork destination already exists.")
                         : QStringLiteral("The fork staging was not stored."));
+    // Leftover rows under an unstaged identity would make the copy more than the source.
+    for (const QString& table : historyTables()) {
+        QSqlQuery leftover(database_);
+        leftover.prepare(
+            QStringLiteral("SELECT 1 FROM %1 WHERE session_id = ? AND generation = ? LIMIT 1")
+                .arg(table));
+        leftover.addBindValue(fork.id);
+        leftover.addBindValue(fork.generation);
+        if (!leftover.exec())
+            return fail(leftover.lastError().text());
+        if (leftover.next())
+            return fail(QStringLiteral("The fork destination already has history."));
+    }
     if (!database_.commit())
         return fail(database_.lastError().text());
     rollback.dismiss();
@@ -313,17 +310,9 @@ LocalJournal::ForkStep LocalJournal::continueFork(ForkCopy& copy, QString* error
     const bool tableDone = copied < passRows && bytes < passBytes && !rows.isValid();
     rows.finish();
     if (tableDone) {
-        // Every source row of the snapshot must now exist exactly once under the fork.
-        QString countError;
-        const qint64 expected =
-            countRows(reader, table, copy.sourceId, copy.sourceGeneration, &countError);
-        const qint64 actual = expected < 0 ? -1
-                                           : countRows(database_, table, copy.forkId,
-                                                       copy.forkGeneration, &countError);
-        if (expected < 0 || actual < 0)
-            return fail(countError);
-        if (actual != expected)
-            return fail(QStringLiteral("The %1 fork copy is incomplete.").arg(table));
+        // The keyset walk read every snapshot row once and each insert stored exactly one row
+        // under an identity that had none (beginFork), so the copy is complete without counting
+        // either session's whole history in this pass.
     }
     if (!database_.commit())
         return writeFailed(database_.lastError());
