@@ -145,6 +145,21 @@ class TranscriptActivityGroupsTest final : public QObject {
             QStringLiteral("Ran a command, used node_repl, used a subagent, waited (1 failed)"));
         QCOMPARE(summary({family("codeSearch", 2), family("fileSearch", 1), family("read", 1)}),
                  QStringLiteral("Searched code 2 times, searched files, read a file"));
+        // Totals only when every file is listed and counted.
+        const QJsonObject four{{"path", "a"}, {"added", 4}, {"known", true}};
+        QCOMPARE(
+            summary({family("edit", 2)},
+                    {{"files_total", 2},
+                     {"files", QJsonArray{four, QJsonObject{{"path", "b"}, {"known", false}}}}}),
+            QStringLiteral("Edited 2 files"));
+        QCOMPARE(summary({family("edit", 51)}, {{"files_total", 51}, {"files", QJsonArray{four}}}),
+                 QStringLiteral("Edited 51 files"));
+        QList<QVariantMap> local{fileChange("e1", 4, 0), fileChange("e2", 1, 0)};
+        auto unknown = local.at(1).value("fileChanges").toList().first().toMap();
+        unknown.insert("path", "b.cpp");
+        unknown.insert("known", false);
+        local[1].insert("fileChanges", QVariantList{unknown});
+        QCOMPARE(activityGroupSummary(local, 0, 2), QStringLiteral("Edited 2 files"));
         QCOMPARE(summary({family("webSearch", 1), family("search", 2)}),
                  QStringLiteral("Searched the web, searched 2 times"));
     }

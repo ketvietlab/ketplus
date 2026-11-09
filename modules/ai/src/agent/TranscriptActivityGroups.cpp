@@ -99,6 +99,8 @@ QString activityGroupSummary(const QList<QVariantMap>& rows, const qsizetype fir
     // Spawning, messaging and waiting on one agent are steps on the same subagent.
     QSet<QString> subagents;
     int unnamedSubagents = 0;
+    // A total that leaves out a file's unknown counts would read as exact.
+    bool statsUnknown = false;
     for (qsizetype index = first; index < first + count && index < rows.size(); ++index) {
         const QVariantMap& row = rows.at(index);
         const QString subtype = row.value(QStringLiteral("subtype")).toString();
@@ -113,8 +115,10 @@ QString activityGroupSummary(const QList<QVariantMap>& rows, const qsizetype fir
             tally.add(QStringLiteral("edit"), changes.isEmpty() ? 1 : int(changes.size()));
             for (const QVariant& value : changes) {
                 const QVariantMap change = value.toMap();
-                if (!change.value(QStringLiteral("known")).toBool())
+                if (!change.value(QStringLiteral("known")).toBool()) {
+                    statsUnknown = true;
                     continue;
+                }
                 tally.statsKnown = true;
                 tally.added += change.value(QStringLiteral("added")).toInt();
                 tally.removed += change.value(QStringLiteral("removed")).toInt();
@@ -164,6 +168,7 @@ QString activityGroupSummary(const QList<QVariantMap>& rows, const qsizetype fir
         }
     }
     tally.subagents = int(subagents.size()) + unnamedSubagents;
+    tally.statsKnown = tally.statsKnown && !statsUnknown;
     return activityTallySummary(tally);
 }
 

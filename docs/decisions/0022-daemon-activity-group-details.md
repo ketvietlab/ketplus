@@ -47,14 +47,14 @@ read the same. Families are:
 - `command`, `edit` and `webSearch`;
 - `read`, `codeSearch` and `fileSearch` for tool reads and searches;
 - `browser` for KetPlus browser steps;
-- `tool:<server>` for other tool calls, with the server name cut at 64 characters,
-  or `tool` when the call names no server;
+- `tool:<server>` for KetPlus's own text-only servers (`ketplus_agents`);
 - `subagent` for a spawned subagent and `subagent.step` for later messages and
   waits on one;
 - `wait`.
 
-Skills, plans, tool discovery, wake-ups, web page reads, image views and
-screenshots still break the run. Summary `families` are listed in the order the
+Other tool calls still break the run. A family is fixed by the item's first
+event, before its result shows whether it returns images, and some tools carry
+data a summary drops: Claude's `Write`/`Edit` would lose their changed files. Summary `families` are listed in the order the
 group first used them. Groups indexed earlier keep their families: their
 `search` covers web, code and file searches alike, so Desktop words it as "searched",
 and their other tool calls stay outside. `browser_capture`, `visual_compare` and browser

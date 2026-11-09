@@ -4,7 +4,6 @@
 
 #include <QJsonArray>
 #include <QJsonDocument>
-#include <QSet>
 #include <QSqlError>
 #include <QSqlQuery>
 
@@ -14,9 +13,6 @@ QString itemId(const QJsonObject& payload) {
     return payload.value("item_id").toString(
         payload.value("item").toObject().value("id").toString());
 }
-
-// A server name past this length is cut; the family key is stored per item and per group.
-constexpr int kServerNameLimit = 64;
 
 QString family(const QJsonObject& payload) {
     const auto item = payload.value("item").toObject();
@@ -55,21 +51,12 @@ QString family(const QJsonObject& payload) {
             return "subagent";
         if (operation == "websearch")
             return "webSearch";
-        // Steps the Desktop keeps visible on their own (skills, plans, tool discovery, wake-ups,
-        // web pages, images and screenshots) break the run, as they do in a local transcript.
-        static const QSet<QString> standalone{
-            "monitor",  "wake",       "resume_agent", "schedulewakeup",
-            "skill",    "load_skill", "toolsearch",   "search_tools",
-            "taskstop", "stop_task",  "update_plan",  "enterplanmode",
-            "webfetch", "fetch_url",  "find_in_page", "open_page"};
-        const auto haystack =
-            (server + ' ' + item.value("namespace").toString() + ' ' + tool).toLower();
-        if (standalone.contains(operation) || haystack.contains("view_image") ||
-            (haystack.contains("browser") && haystack.contains("screenshot")))
-            return {};
-        // Other tool calls group by the server that ran them: "Used node_repl".
-        return server.isEmpty() ? QStringLiteral("tool")
-                                : QStringLiteral("tool:") + server.left(kServerNameLimit);
+        // A family is fixed when the item starts, before its result shows whether it returns
+        // images, and other tools (Claude's edits among them) carry data a group summary
+        // drops. So only KetPlus's own text-only servers group by name: "Used ketplus_agents".
+        // Every other tool call keeps its own row.
+        if (server == "ketplus_agents")
+            return QStringLiteral("tool:") + server;
     }
     return {};
 }

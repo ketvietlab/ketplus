@@ -308,11 +308,13 @@ QVariantMap daemonActivityGroupMessage(const QJsonObject& data, qint64 turn) {
             tally.add(QStringLiteral("tool"), count);
         }
     }
+    // Totals only when every file is listed and counted, as the changed-files card shows them.
+    tally.statsKnown =
+        !files.isEmpty() && data.value("files_total").toInt(int(files.size())) == files.size();
     for (const auto& value : files) {
         const auto file = value.toObject();
         if (!file.value("known").toBool(true))
-            continue;
-        tally.statsKnown = true;
+            tally.statsKnown = false;
         tally.added += file.value("added").toInt();
         tally.removed += file.value("removed").toInt();
     }
