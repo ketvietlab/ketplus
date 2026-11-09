@@ -32,6 +32,11 @@ image (`McpMediaStore::encodePreview`: at most the requested side, at most
   its destructor, because the journal outlives the host.
 - Previews are content-addressed, so identical pictures share one file, and
   they are released with their session like any other media.
+- Each detail pass decodes at most one image for a preview, whether it is
+  inline or in the large lane. Decoding costs the same whatever the stored size:
+  a 65 KB PNG can describe 64 megapixels. A second image that needs a preview
+  ends the pass, and the next pass takes it. Caption-only compaction keeps its
+  existing limits.
 - Eligibility, the one-image-per-pass large lane and every other rule of
   ADR 0098 are unchanged.
 
@@ -42,6 +47,8 @@ image (`McpMediaStore::encodePreview`: at most the requested side, at most
 - If the detail pass's transaction fails after a preview is stored, the preview
   stays referenced by its session until the session is deleted. It is never
   shown, and the next pass stores the same content-addressed file again.
+- `retained_bytes` counts the reference kept in the journal; the JPEG's own
+  size is in the block's `bytes` and is accounted for by the media store.
 - The "caption only" choice is currently made by leaving the writer unset. The
   user setting belongs to Settings → Storage in the new-UI stream.
 - Not covered yet: previews for the inline images in older `mcpToolCall` and

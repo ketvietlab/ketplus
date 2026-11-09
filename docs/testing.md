@@ -718,5 +718,6 @@ Run `ketplus_daemon_detail_compactor_tests` and `ketplus_daemon_usage_retention_
 `image-preview-v1` marker and idempotence. `generatedImageWithoutAPreviewKeepsItsCaption`
 covers the caption-only fallback and that malformed base64 never reaches the encoder.
 `generatedImagesKeepAPreview` runs a real `SessionHost` on a journal seeded with a
-1024×768 PNG and expects a 512 px JPEG media reference on each eligible turn. No
+1024×768 PNG. It expects one preview after the first pass (one decode per pass) and a
+512 px JPEG media reference on each eligible turn after the sweep. No
 installed journal or live provider is used.

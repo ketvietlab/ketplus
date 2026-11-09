@@ -357,8 +357,14 @@ class JournalUsageRetentionTest final : public QObject {
         QBuffer buffer(&png);
         QVERIFY(buffer.open(QIODevice::WriteOnly) && picture.save(&buffer, "PNG"));
         QVERIFY(seed(journal, path, true, 24, QString::fromLatin1(png.toBase64()), false, true));
-        QVERIFY(sweep(journal) > 0);
         Database database(path);
+        // These PNGs are small enough to be inline, yet each preview decodes the full picture:
+        // a pass decodes one and leaves the rest for the next passes.
+        QVERIFY(journal.pruneReplayDetails(cutoff(), 256).has_value());
+        QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE json_extract("
+                                 "payload,'$.item.compacted.policy')='image-preview-v1'"),
+                 1);
+        QVERIFY(sweep(journal) > 0);
         QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE json_extract("
                                  "payload,'$.item.compacted.policy')='image-preview-v1'"),
                  4);
