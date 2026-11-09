@@ -2,6 +2,7 @@
 #include "agent/AgentMessageFormatter.h"
 #include "agent/AgentMessageModel.h"
 #include "agent/AgentWorkspaceView.h"
+#include "agent/TranscriptNormalizer.h"
 
 #include <QJsonArray>
 #include <QQuickView>
@@ -111,7 +112,14 @@ void AgentWorkspaceViewTest::fileStepsOpenTheirDiffInline() {
     QVERIFY(QMetaObject::invokeMethod(more, "clicked"));
     QCOMPARE(viewer.count(), 1);
     QCOMPARE(viewer.constLast().constFirst().toString(), QStringLiteral("/worktree/src/Long.txt"));
-    QVERIFY(!findVisualItem(diffs.at(0), "transcriptFullDiff")->isVisible());
+    // A whole diff still offers the viewer.
+    auto* viewerButton = findVisualItem(diffs.at(0), "transcriptFullDiff");
+    QVERIFY(viewerButton->isVisible());
+    QCOMPARE(viewerButton->property("text").toString(), QStringLiteral("Open in the diff viewer"));
+    QVERIFY(QMetaObject::invokeMethod(viewerButton, "clicked"));
+    QCOMPARE(viewer.count(), 2);
+    QCOMPARE(viewer.constLast().constFirst().toString(),
+             QStringLiteral("/worktree/src/Edited.cpp"));
 
     // Clicking again closes it; the open diffs stay with the row.
     QVERIFY(QMetaObject::invokeMethod(steps.at(0), "clicked"));
@@ -130,4 +138,43 @@ void AgentWorkspaceViewTest::fileStepsOpenTheirDiffInline() {
     QCOMPARE(lineKinds(visibleItems(single, "transcriptFileDiff").constFirst()),
              (QStringList{"hunk", "remove", "add"}));
     QVERIFY(visibleItems(single, "changedFileRow").isEmpty());
+    // Without the card, its line keeps the file actions.
+    auto* header = findVisibleItem(single, "transcriptActivityHeader");
+    QVERIFY(header);
+    QTest::mouseClick(view.quickView(), Qt::RightButton, Qt::NoModifier,
+                      header->mapToScene(QPointF(30, header->height() / 2)).toPoint());
+    auto* menu = single->findChild<QObject*>("changedFileContextMenu");
+    QVERIFY(menu);
+    QTRY_VERIFY(menu->property("visible").toBool());
+    QVERIFY(menu->findChild<QObject*>("copyChangedFilePathAction")->property("enabled").toBool());
+    QVERIFY(menu->findChild<QObject*>("openChangedFileAction"));
+    QMetaObject::invokeMethod(menu, "close");
+}
+
+void AgentWorkspaceViewTest::claudeEditOpensItsDiffInline() {
+    // Claude's Edit, through the normalizer and the model as a session delivers it.
+    const QJsonObject item{{"id", "claude-edit"},
+                           {"type", "dynamicToolCall"},
+                           {"tool", "Edit"},
+                           {"status", "completed"},
+                           {"arguments", QJsonObject{{"file_path", "/worktree/src/Claude.cpp"},
+                                                     {"old_string", "before"},
+                                                     {"new_string", "after"}}}};
+    auto row = ketplus::ActivityNormalizer::normalize(item, ketplus::TranscriptPhase::Completed)
+                   .toVariantMap();
+    row.insert("messageKey", "claude-edit");
+    row.insert("turnId", "claude-turn");
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(1100, 900);
+    view.show();
+    view.resetMessages({row}, "claude-inline-diff");
+    auto* root = view.quickView()->rootObject();
+    QQuickItem* edit = nullptr;
+    QTRY_VERIFY((edit = findVisibleItem(root, "transcriptActivityRow")) != nullptr);
+    QCOMPARE(edit->property("subtype").toString(), QStringLiteral("fileChange"));
+    QVERIFY(QMetaObject::invokeMethod(edit, "toggleDetails"));
+    QTRY_VERIFY(!visibleItems(edit, "transcriptFileDiff").isEmpty());
+    QCOMPARE(lineKinds(visibleItems(edit, "transcriptFileDiff").constFirst()),
+             (QStringList{"hunk", "remove", "add"}));
 }

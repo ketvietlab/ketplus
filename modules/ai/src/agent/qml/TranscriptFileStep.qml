@@ -11,7 +11,8 @@ Kit.KetActivityRow {
     required property var host
     property bool open: false
     readonly property bool hasDiff: file.hasDiff === true
-    signal toggled
+    // Not `toggled`, which the button already declares.
+    signal diffToggled
 
     readonly property string targetPath: file.destination || file.path || ""
     readonly property bool missing: {
@@ -34,7 +35,7 @@ Kit.KetActivityRow {
     Accessible.description: hasDiff ? (open ? "Collapse diff" : "Expand diff") : ""
     onClicked: {
         if (hasDiff)
-            toggled();
+            diffToggled();
         else if (!missing)
             host.requestFileDiff(targetPath);
     }

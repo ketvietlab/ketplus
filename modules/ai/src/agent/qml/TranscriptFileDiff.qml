@@ -4,7 +4,7 @@ import Ket as Kit
 
 // A file's changes under its open step, as the mock's expanded edit draws them with the kit's
 // diff lines. A created or deleted file's diff is its content. The lines are bounded, so a
-// large rewrite never builds thousands of rows; the full diff opens in the diff viewer.
+// large rewrite never builds thousands of rows; the diff viewer is always a click away.
 Column {
     id: fileDiff
     required property string diff
@@ -39,8 +39,7 @@ Column {
         objectName: "transcriptFullDiff"
         variant: Kit.KetTheme.ButtonVariant.Ghost
         controlSize: Kit.KetTheme.ControlSize.Small
-        visible: fileDiff.allLines.length > fileDiff.lineLimit
-        text: (fileDiff.allLines.length - fileDiff.lineLimit) + " more lines · Open the full diff"
+        text: fileDiff.allLines.length > fileDiff.lineLimit ? (fileDiff.allLines.length - fileDiff.lineLimit) + " more lines · Open the full diff" : "Open in the diff viewer"
         Accessible.name: text
         padding: KetTheme.px(6, KetTheme.zoom)
         contentItem: Text {

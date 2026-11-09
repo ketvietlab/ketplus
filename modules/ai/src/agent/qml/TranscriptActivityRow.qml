@@ -115,6 +115,7 @@ Column {
     readonly property bool browserActivity: subtype === "ketplusBrowser"
     // Inside an open group a multi-file edit lists each file as its own step, as the mock does.
     readonly property bool fileSteps: compact && subtype === "fileChange" && files.length > 1
+    readonly property string singleFilePath: subtype === "fileChange" && files.length === 1 ? String(files[0].destination || files[0].path || "") : ""
     // The mock's image step: its path or size on the title line, the image when open.
     readonly property bool imageStep: subtype === "imageView" || subtype === "imageGeneration"
     readonly property bool browserOpenAction: /^https?:\/\//.test(target) &&
@@ -215,6 +216,22 @@ Column {
         visible: !root.fileSteps
         activity: root
         width: parent.width
+        // A one-file edit keeps the card's file actions on its line.
+        MouseArea {
+            anchors.fill: parent
+            enabled: root.singleFilePath.length > 0
+            acceptedButtons: Qt.RightButton
+            onClicked: singleFileMenu.popup()
+        }
+    }
+    TranscriptFileMenu {
+        id: singleFileMenu
+        host: root.host
+        targetPath: root.singleFilePath
+        missing: {
+            root.host.pathStateRevision;
+            return root.host.pathMissing(root.singleFilePath);
+        }
     }
     Repeater {
         model: root.fileSteps ? root.files : []
@@ -230,7 +247,7 @@ Column {
                 host: root.host
                 width: parent.width
                 open: fileEntry.open
-                onToggled: root.toggleFileDiff(fileEntry.path)
+                onDiffToggled: root.toggleFileDiff(fileEntry.path)
             }
             TranscriptFileDiff {
                 x: root.contentInset
