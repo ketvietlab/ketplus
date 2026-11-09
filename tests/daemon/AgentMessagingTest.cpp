@@ -358,6 +358,56 @@ class AgentMessagingTest final : public QObject {
         QVERIFY(send(sender, 101).value("ok").toBool());
     }
 
+    // Escaping counts: 16 KiB of control characters serializes to about 192 KiB in user.message.
+    void encodedSizeDecidesWhatIsAccepted() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const QString sender = fixture.start("claude", "sender");
+        const QString receiver = fixture.start("claude", "receiver");
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(sender, "turn.completed"), 1, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.completed"), 1, 5000);
+        // Within 32 KiB of text but too large once encoded: refused, never accepted and failed.
+        const QJsonObject refused = fixture.agents(
+            sender, "agents.send",
+            {{"to", fixture.number(receiver)}, {"text", QString(32 * 1024, QChar(1))}});
+        QCOMPARE(refused.value("error_code").toString(), "message_too_large");
+        QVERIFY(fixture.journal->agentMessagesTo(receiver, 1, {"queued", "failed"}).isEmpty());
+        const QJsonObject sent = fixture.agents(
+            sender, "agents.send",
+            {{"to", fixture.number(receiver)}, {"text", QString(16 * 1024, QChar(1))}});
+        QVERIFY(sent.value("ok").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(
+            fixture.journal->agentMessagesTo(receiver, 1, {"delivered"}).size(), 1, 5000);
+        QVERIFY(fixture.journal->agentMessagesTo(receiver, 1, {"failed"}).isEmpty());
+    }
+
+    // The sender's title is in every message's header and entry, so it counts too.
+    void senderTitleCountsTowardsTheTurnBudget() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const QString sender = fixture.start("claude", "sender");
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(sender, "turn.completed"), 1, 5000);
+        QVERIFY(fixture.host
+                    ->handleCommand(
+                        request("session.rename", {{"title", QString(4096, QChar(1))}}, sender, 1),
+                        "desktop-test")
+                    .value("ok")
+                    .toBool());
+        const QString receiver = fixture.start("claude", "slow-start");
+        QVERIFY(!receiver.isEmpty());
+        for (int index = 0; index < AgentBroker::maximumUndeliveredPerSender; ++index)
+            QVERIFY(fixture
+                        .agents(sender, "agents.send",
+                                {{"to", fixture.number(receiver)}, {"text", QString(4096, 'x')}})
+                        .value("ok")
+                        .toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(
+            fixture.journal->agentMessagesTo(receiver, 1, {"queued", "held"}).isEmpty(), 20000);
+        QCOMPARE(fixture.journal->agentMessagesTo(receiver, 1, {"delivered"}).size(),
+                 AgentBroker::maximumUndeliveredPerSender);
+        QVERIFY(fixture.journal->agentMessagesTo(receiver, 1, {"failed"}).isEmpty());
+    }
+
     // A conversation another conversation woke names its sender while the turn runs.
     void automaticTurnsNameTheirSenderWhileTheyRun() {
         Fixture fixture;
