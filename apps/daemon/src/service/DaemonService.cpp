@@ -31,6 +31,7 @@
 #include <unistd.h>
 #endif
 #if defined(Q_OS_MACOS)
+#include <cerrno>
 #include <sys/acl.h>
 #endif
 
@@ -49,11 +50,16 @@ bool restrictDirectory(const QString& path) {
 #if defined(Q_OS_MACOS)
 // An access-control entry such as "everyone allow read", inherited from a parent directory,
 // grants what the owner-only mode bits deny. Daemon state must carry none.
+// An ACL that cannot be read (for example behind "deny readsecurity") counts as present: the
+// owner can still replace it, and a credential under it is not known to be private.
 bool hasExtendedAcl(const QString& path) {
     const QByteArray native = QFile::encodeName(path);
+    errno = 0;
     acl_t acl = acl_get_link_np(native.constData(), ACL_TYPE_EXTENDED);
-    if (acl == nullptr)
-        return false;
+    if (acl == nullptr) {
+        const int error = errno;
+        return error != ENOENT && error != EOPNOTSUPP;
+    }
     acl_entry_t entry = nullptr;
     const bool any = acl_get_entry(acl, ACL_FIRST_ENTRY, &entry) == 0;
     acl_free(acl);
@@ -135,17 +141,14 @@ bool DaemonService::start() {
     }
 #endif
 #if defined(Q_OS_MACOS)
-    // Before anything is created here, so new files inherit no entries.
-    if (!removeExtendedAcl(stateInfo.absolutePath()) ||
-        !removeExtendedAcl(tokenInfo.absolutePath())) {
+    // Before anything is created here, so new files inherit no entries. A linked directory is
+    // handled at its target, which is where new files take their entries from.
+    if (!removeExtendedAcl(QFileInfo(stateInfo.absolutePath()).canonicalFilePath()) ||
+        !removeExtendedAcl(QFileInfo(tokenInfo.absolutePath()).canonicalFilePath())) {
         error_ = QStringLiteral("Unable to remove access-control entries from the daemon state.");
         return false;
     }
 #endif
-    const QByteArray token = loadOrCreateToken();
-    if (token.isEmpty()) {
-        return false;
-    }
     // One daemon per journal: the startup compaction below replaces the file, which must not
     // happen under another daemon's open connection. A daemon being replaced may still be
     // closing.
@@ -153,6 +156,11 @@ bool DaemonService::start() {
     if (!journalLock_->tryLock(5'000)) {
         error_ = QStringLiteral("Another KetPlus Daemon uses this journal.");
         journalLock_.reset();
+        return false;
+    }
+    // Only the daemon that owns the journal may replace the credential a running one serves.
+    const QByteArray token = loadOrCreateToken();
+    if (token.isEmpty()) {
         return false;
     }
     compactJournal();
@@ -273,9 +281,8 @@ QByteArray DaemonService::loadOrCreateToken() {
 #if defined(Q_OS_MACOS)
     // A credential that carried an entry granting others access may already be known to them:
     // replace it rather than trust it. Desktop reads the file again on every connection.
-    if (const QFileInfo exposed(configuration_.tokenPath);
-        exposed.isFile() && !exposed.isSymLink() && hasExtendedAcl(configuration_.tokenPath) &&
-        !QFile::remove(configuration_.tokenPath)) {
+    // Not even its type is checked: a denied "readsecurity" makes stat fail too.
+    if (hasExtendedAcl(configuration_.tokenPath) && !QFile::remove(configuration_.tokenPath)) {
         error_ = QStringLiteral("Unable to replace the exposed local daemon credential.");
         return {};
     }
