@@ -567,19 +567,38 @@ void AgentWorkspaceViewTest::animatesRunningConversationStatus() {
         return findVisualItem(root, QStringLiteral("conversationRow_animated"));
     };
     QTRY_VERIFY(row());
+    // A working row spins on the shared clock like the transcript's Working indicator; the
+    // decorative motion switch (motionEnabled) does not stop it.
     QVERIFY(!view.motionEnabled());
-    QTRY_VERIFY(!row()->property("holdsClock").toBool());
+    QVERIFY(view.workingMotionEnabled());
+    QTRY_VERIFY(row()->property("holdsClock").toBool());
     conversation["status"] = "Reasoning";
     view.setConversations({conversation});
-    QTRY_VERIFY(row() && !row()->property("holdsClock").toBool());
+    QTRY_VERIFY(row() && row()->property("holdsClock").toBool());
     view.hide();
     QTRY_VERIFY(!row()->property("holdsClock").toBool());
     view.show();
-    QTRY_VERIFY(!row()->property("holdsClock").toBool());
+    QTRY_VERIFY(row()->property("holdsClock").toBool());
     conversation["running"] = false;
     conversation["status"] = "Ready";
     view.setConversations({conversation});
     QTRY_VERIFY(row() && !row()->property("holdsClock").toBool());
+
+    // Reduced motion keeps the icon still.
+    qputenv("KETPLUS_REDUCED_MOTION", "1");
+    ketplus::AgentWorkspaceView reduced;
+    qunsetenv("KETPLUS_REDUCED_MOTION");
+    reduced.applyTheme(testPalette());
+    reduced.resize(1000, 700);
+    conversation["running"] = true;
+    conversation["status"] = "Working";
+    reduced.setConversations({conversation});
+    reduced.show();
+    QQuickItem* still = nullptr;
+    QTRY_VERIFY((still = findVisualItem(reduced.quickView()->rootObject(),
+                                        QStringLiteral("conversationRow_animated"))));
+    QTest::qWait(50);
+    QVERIFY(!still->property("holdsClock").toBool());
 }
 
 void AgentWorkspaceViewTest::restoresConversationScrollPosition() {
