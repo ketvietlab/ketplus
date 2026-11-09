@@ -345,6 +345,14 @@ void SessionHost::beginTurn(const QString& sessionId, const qint64 generation,
         });
 }
 
+void SessionHost::abandonTurnApprovals(const QString& sessionId) {
+    // The provider stops waiting for a turn's approvals and questions when the turn ends. An
+    // answer given afterwards would go to a request it has forgotten, so they expire before the
+    // completion is published and a late answer is refused.
+    forgetProviderRoutes(
+        approvals_->abandonPending([&sessionId](const QString& id) { return id == sessionId; }));
+}
+
 void SessionHost::failTurnStart(Session& session, const QString& message) {
     session.startingTurn = false;
     // A Stop pressed while this turn was starting belongs to it; kept, it would interrupt the

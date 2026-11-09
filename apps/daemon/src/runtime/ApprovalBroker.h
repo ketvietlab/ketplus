@@ -41,14 +41,14 @@ class ApprovalBroker final : public QObject {
                                              const QJsonObject& resolution);
     [[nodiscard]] QJsonObject pendingPage(const QString& sessionId, qint64 generation,
                                           const QString& afterId = {}) const;
-    // The provider process exited. Its JSON-RPC request ids are reused by the next process, so
-    // pending approvals expire without ever being answered to any provider.
-    // Forgets pending requests without answering them: their provider process is
-    // gone. Only requests of sessions `ofSession` accepts, or all without one.
     void cancelPending(const QString& sessionId, qint64 generation);
     // Async assistant cards belong to one turn; closing them never answers a provider.
     void expireAssistantQuestions(const QString& sessionId, qint64 generation);
-    void abandonPending(const std::function<bool(const QString& sessionId)>& ofSession = {});
+    // Expires pending requests without answering them: their provider process is gone or no
+    // longer waits for them. Only requests of sessions `ofSession` accepts, or all without one.
+    // Returns their provider request ids.
+    QList<QJsonValue>
+    abandonPending(const std::function<bool(const QString& sessionId)>& ofSession = {});
 
   signals:
     void requested(const QString& approvalId, const QString& sessionId, qint64 generation,

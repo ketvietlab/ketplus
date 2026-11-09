@@ -278,6 +278,10 @@ class SessionHost final : public QObject, private AgentHostPort {
     void declineProviderRequest(Session& session, const QJsonValue& requestId,
                                 const QString& method, const QString& reason,
                                 const QString& serverName);
+    // A turn ended: its pending approvals and questions expire without a provider answer.
+    void abandonTurnApprovals(const QString& sessionId);
+    // Drops the Codex routes of requests that were abandoned without an answer.
+    void forgetProviderRoutes(const QList<QJsonValue>& requestIds);
     // A turn that never started: clears the start and any Stop pressed meanwhile, then fails.
     void failTurnStart(Session& session, const QString& message);
     void providerStopped(const QString& adapterName, const QString& reason);

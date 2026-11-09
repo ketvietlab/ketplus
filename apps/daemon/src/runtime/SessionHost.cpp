@@ -2064,6 +2064,7 @@ void SessionHost::handleProviderNotification(const QString& method, const QJsonO
             return;
         }
         session->completedTurnId = completedTurnId;
+        abandonTurnApprovals(session->stored.id);
         session->stored.turnId.clear();
         session->stored.state = turn.value(QStringLiteral("status")).toString();
         if (session->stored.state.isEmpty() ||
@@ -2173,13 +2174,28 @@ void SessionHost::refreshProviderTitle(const QString& sessionId, const qint64 ge
 
 void SessionHost::handleProviderRequest(const QJsonValue& requestId, const QString& method,
                                         const QJsonObject& params) {
-    pendingProviderByRequest_.insert(requestKey(requestId), QStringLiteral("codex"));
     Session* session = sessionForThread(threadIdFrom(params));
     if (session == nullptr) {
-        pendingProviderByRequest_.remove(requestKey(requestId));
         adapter_->respond(requestId, codex_requests::declinedResult(method));
         return;
     }
+    // A request naming a turn that already ended would outlive the sweep at its completion and
+    // be answered during the next turn. A request without a turn id is the current turn's.
+    if (const QString turnId = params.value(QStringLiteral("turnId")).toString();
+        !turnId.isEmpty() &&
+        (turnId == session->completedTurnId ||
+         (!session->stored.turnId.isEmpty() && turnId != session->stored.turnId))) {
+        declineProviderRequest(*session, requestId, method, QStringLiteral("stale_turn"),
+                               params.value(QStringLiteral("serverName")).toString());
+        return;
+    }
+    // Only a request the broker holds is answered through routeProviderResponse/Error.
+    const auto admit = [this, session, &requestId](const QString& kind,
+                                                   const QJsonObject& details) {
+        pendingProviderByRequest_.insert(requestKey(requestId), QStringLiteral("codex"));
+        (void)approvals_->request(session->stored.id, session->stored.generation, requestId, kind,
+                                  details);
+    };
     if (method == QStringLiteral("mcpServer/elicitation/request")) {
         const QString serverName = params.value(QStringLiteral("serverName")).toString();
         if (!codex_requests::isMcpToolApproval(params)) {
@@ -2200,10 +2216,7 @@ void SessionHost::handleProviderRequest(const QJsonValue& requestId, const QStri
             adapter_->respond(requestId, codex_requests::mcpElicitationResult(true));
             return;
         }
-        const QString approvalId = approvals_->request(
-            session->stored.id, session->stored.generation, requestId, QStringLiteral("approval"),
-            codex_requests::mcpToolApprovalDetails(params));
-        Q_UNUSED(approvalId)
+        admit(QStringLiteral("approval"), codex_requests::mcpToolApprovalDetails(params));
         return;
     }
     if (method == QStringLiteral("item/commandExecution/requestApproval") ||
@@ -2218,20 +2231,15 @@ void SessionHost::handleProviderRequest(const QJsonValue& requestId, const QStri
         if (params.contains(QStringLiteral("command"))) {
             details.insert(QStringLiteral("command"), params.value(QStringLiteral("command")));
         }
-        const QString approvalId =
-            approvals_->request(session->stored.id, session->stored.generation, requestId,
-                                QStringLiteral("approval"), details);
-        Q_UNUSED(approvalId)
+        admit(QStringLiteral("approval"), details);
         return;
     }
     if (method == QStringLiteral("item/tool/requestUserInput")) {
-        const QString approvalId = approvals_->request(
-            session->stored.id, session->stored.generation, requestId, QStringLiteral("input"),
-            {{QStringLiteral("item_id"), params.value(QStringLiteral("itemId")).toString()},
-             {QStringLiteral("is_blocking"),
-              params.value(QStringLiteral("isBlocking")).toBool(true)},
-             {QStringLiteral("questions"), params.value(QStringLiteral("questions"))}});
-        Q_UNUSED(approvalId)
+        admit(QStringLiteral("input"),
+              {{QStringLiteral("item_id"), params.value(QStringLiteral("itemId")).toString()},
+               {QStringLiteral("is_blocking"),
+                params.value(QStringLiteral("isBlocking")).toBool(true)},
+               {QStringLiteral("questions"), params.value(QStringLiteral("questions"))}});
         return;
     }
     declineProviderRequest(*session, requestId, method, QStringLiteral("unsupported_request"), {});
@@ -2591,6 +2599,9 @@ void SessionHost::handleCanonicalEvent(const QString& provider, const QString& s
         return;
     }
     if (type == QStringLiteral("turn.completed")) {
+        // A live background task keeps asking after its turn ends; its requests stay.
+        if (!hasLiveBackgroundTasks(*it))
+            abandonTurnApprovals(it->stored.id);
         it->stored.turnId.clear();
         const QString status = payload.value(QStringLiteral("status")).toString();
         it->stored.state =
@@ -2675,6 +2686,15 @@ void SessionHost::routeProviderResponse(const QJsonValue& taggedId, const QJsonO
         return;
     }
     adapter_->respond(requestId, result);
+}
+
+void SessionHost::forgetProviderRoutes(const QList<QJsonValue>& requestIds) {
+    for (const QJsonValue& requestId : requestIds) {
+        QString adapterName;
+        QJsonValue untagged;
+        if (!untagRequestId(requestId, adapterName, untagged))
+            pendingProviderByRequest_.remove(requestKey(requestId));
+    }
 }
 
 void SessionHost::routeProviderError(const QJsonValue& taggedId, const QString& code,
