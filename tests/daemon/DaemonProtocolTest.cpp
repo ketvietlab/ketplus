@@ -2719,6 +2719,34 @@ class DaemonProtocolTest final : public QObject {
                  messageSentAt);
     }
 
+    void serviceRefusesAStateDirectoryItCannotRestrict() {
+#ifdef Q_OS_UNIX
+        // The shared temporary directory is writable but owned by root, so chmod on it fails,
+        // as it would for any state directory owned by someone else.
+        const QString shared =
+            QFileInfo(QStringLiteral("/private/tmp")).isDir() ? "/private/tmp" : "/tmp";
+        const QFileInfo sharedInfo(shared);
+        if (!sharedInfo.isWritable() || sharedInfo.ownerId() == ::getuid())
+            QSKIP("Needs a writable directory owned by another user");
+        QTemporaryDir directory;
+        const QString name = "ketplus-state-" + QUuid::createUuid().toString(QUuid::WithoutBraces);
+        const DaemonConfiguration configuration{
+            shared + '/' + name + ".sqlite3", shared + '/' + name + ".token",
+            directory.filePath("daemon.sock"), QStringLiteral("/nonexistent/ketplus-test-codex")};
+        const auto cleanup = qScopeGuard([&] {
+            for (const auto& suffix :
+                 {".sqlite3", ".sqlite3-wal", ".sqlite3-shm", ".sqlite3.lock", ".token"})
+                QFile::remove(shared + '/' + name + suffix);
+        });
+        DaemonService service(configuration);
+        QVERIFY(!service.start());
+        QVERIFY2(service.errorString().contains("restrict"), qPrintable(service.errorString()));
+        QVERIFY(!QFileInfo::exists(configuration.tokenPath));
+#else
+        QSKIP("POSIX directory ownership");
+#endif
+    }
+
     void serviceCreatesProtectedStateAndRejectsEndpointCollision() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
@@ -2739,6 +2767,11 @@ class DaemonProtocolTest final : public QObject {
         QCOMPARE(QFileInfo(configuration.statePath).permissions() & unsafePermissions,
                  QFileDevice::Permissions{});
         QCOMPARE(QFileInfo(configuration.tokenPath).permissions() & unsafePermissions,
+                 QFileDevice::Permissions{});
+        // Another user's process cannot even open the endpoint (with the daemon's own
+        // UserAccessOption and umask 077, either alone gives this).
+        QVERIFY(QFileInfo::exists(configuration.socketName));
+        QCOMPARE(QFileInfo(configuration.socketName).permissions() & unsafePermissions,
                  QFileDevice::Permissions{});
 #endif
         DaemonService conflicting(configuration);
