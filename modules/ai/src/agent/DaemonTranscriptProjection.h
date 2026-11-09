@@ -28,6 +28,10 @@ QString providerProtocolErrorTitle();
 QString providerRuntimeNoticeTitle();
 // Title of a provider failure's row, live or projected from `runtime.error`.
 QString agentErrorTitle();
+// A failure's row as the mock words it when the provider's message says what happened: its
+// process exited, or the model is at capacity (subtype "modelCapacity", which offers to
+// switch the model). Other failures keep agentErrorTitle() and the message.
+void presentAgentError(QVariantMap& entry, const QString& message);
 QVariantMap providerNoticeMessage(const QString& text, const QString& itemId,
                                   const QString& title = QStringLiteral("Request declined"));
 // ADR 0027: a user row another conversation's agent wrote (`origin: agent`) shows its sender.

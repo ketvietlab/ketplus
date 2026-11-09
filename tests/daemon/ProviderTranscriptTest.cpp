@@ -419,6 +419,51 @@ class ProviderTranscriptTest : public QObject {
         QCOMPARE(row.value("kind").toString(), "error");
         QCOMPARE(row.value("title").toString(), agentErrorTitle());
         QCOMPARE(row.value("body").toString(), "No answer");
+        // The mock titles a failure by what happened when the message says it.
+        const auto failure = [](const QString& message) {
+            return daemonWindowMessages(
+                       {{"events",
+                         QJsonArray{QJsonObject{{"cursor", 1},
+                                                {"turn_sequence", 1},
+                                                {"event_type", "runtime.error"},
+                                                {"payload", QJsonObject{{"message", message}}}}}}})
+                .last()
+                .toMap();
+        };
+        const auto cursor = failure("The Cursor ACP process exited unexpectedly. stderr: boom");
+        QCOMPARE(cursor.value("title").toString(), "Cursor CLI exited");
+        // The adapter's message keeps its stderr tail, which says why.
+        QCOMPARE(cursor.value("body").toString(),
+                 "The Cursor ACP process exited unexpectedly. stderr: boom");
+        QVERIFY(cursor.value("subtype").toString().isEmpty());
+        QCOMPARE(failure("Codex app-server stopped (exit 1, crashed)").value("title").toString(),
+                 "Codex CLI exited");
+        QCOMPARE(failure("The Claude sidecar exited unexpectedly.").value("title").toString(),
+                 "Claude Code exited");
+        for (const auto& message : {QStringLiteral("Selected model is at capacity. Please try a "
+                                                   "different model."),
+                                    QStringLiteral("API Error: 529 {\"type\":\"error\",\"error\":"
+                                                   "{\"type\":\"overloaded_error\","
+                                                   "\"message\":\"Overloaded\"}}"),
+                                    QStringLiteral("Overloaded")}) {
+            const auto busy = failure(message);
+            QCOMPARE(busy.value("title").toString(), "Selected model is at capacity");
+            QCOMPARE(busy.value("subtype").toString(), "modelCapacity");
+            QCOMPARE(busy.value("body").toString(),
+                     "The model could not finish the turn. Try again, or pick another model "
+                     "for this conversation.");
+        }
+        // A failed turn's message can be the agent's own last words: they keep the generic row.
+        const auto words = failure("The database is overloaded; inspect its connection pool next.");
+        QCOMPARE(words.value("title").toString(), agentErrorTitle());
+        QVERIFY(words.value("subtype").toString().isEmpty());
+        QCOMPARE(words.value("body").toString(),
+                 "The database is overloaded; inspect its connection pool next.");
+        QCOMPARE(failure("The cluster is at capacity again.").value("title").toString(),
+                 agentErrorTitle());
+        // Only the adapters' exits: a tool's process exiting is not the provider's.
+        QCOMPARE(failure("The process exited unexpectedly").value("title").toString(),
+                 agentErrorTitle());
     }
     void turnEndReportsDurationContextAndSessionCost() {
         const auto at = [](int seconds) {
