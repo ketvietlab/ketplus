@@ -43,10 +43,21 @@ import json,os,sys
 with open(os.environ["UPDATE_CALLS"], "a") as log: log.write(json.dumps(sys.argv) + "\\n")
 Path(sys.argv[-1]).write_bytes(b"synthetic archive")
 ''')
+        # Like Sparkle 2.10, an existing -o file is the feed to update and must not be empty;
+        # rewriting it in place keeps its mode.
         self.stub("generate_appcast", '''from pathlib import Path
 import json,os,sys
 with open(os.environ["UPDATE_CALLS"], "a") as log: log.write(json.dumps(sys.argv) + "\\n")
-Path(sys.argv[sys.argv.index("-o") + 1]).write_text("synthetic appcast")
+output = Path(sys.argv[sys.argv.index("-o") + 1])
+if output.exists():
+    previous = output.read_text()
+    if not previous:
+        sys.exit("zero length feed")
+    output.write_text(previous + " + synthetic item")
+else:
+    output.write_text("synthetic appcast")
+if os.environ.get("UPDATE_APPCAST_FAIL"):
+    sys.exit("synthetic signing failure")
 ''')
 
     def stub(self, name, body):
@@ -72,6 +83,49 @@ Path(sys.argv[sys.argv.index("-o") + 1]).write_text("synthetic appcast")
         self.assertEqual((self.updates / "KetPlus-0.1.50.zip").read_bytes(), b"synthetic archive")
         self.assertEqual((self.updates / "appcast.xml").read_text(), "synthetic appcast")
         self.assertEqual(len(self.calls.read_text().splitlines()), 2)
+
+    def test_failed_signing_removes_the_partial_release(self):
+        self.updates.mkdir()
+        (self.updates / "appcast.xml").write_text("published appcast")
+        notes = self.root / "notes.md"
+        notes.write_text("Release notes")
+        self.env["UPDATE_APPCAST_FAIL"] = "1"
+        result = self.run_update(("--release-notes", str(notes)))
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertFalse((self.updates / "KetPlus-0.1.50.zip").exists())
+        self.assertFalse((self.updates / "KetPlus-0.1.50.md").exists())
+        self.assertEqual((self.updates / "appcast.xml").read_text(), "published appcast")
+        # The same version can be prepared once signing works.
+        del self.env["UPDATE_APPCAST_FAIL"]
+        result = self.run_update(("--release-notes", str(notes)))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.updates / "KetPlus-0.1.50.zip").is_file())
+        self.assertEqual((self.updates / "appcast.xml").read_text(),
+                         "published appcast + synthetic item")
+        self.assertEqual(sorted(path.name for path in self.root.iterdir()
+                                if path.name.startswith(".ketplus-appcast")), [])
+
+    def test_updated_appcast_keeps_its_mode(self):
+        self.updates.mkdir()
+        published = self.updates / "appcast.xml"
+        published.write_text("published appcast")
+        published.chmod(0o644)
+        result = self.run_update()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(published.read_text(), "published appcast + synthetic item")
+        self.assertEqual(published.stat().st_mode & 0o777, 0o644)
+
+    def test_output_failure_after_the_appcast_keeps_the_release(self):
+        # The status lines are written after appcast.xml is replaced; a closed stdout fails them.
+        result = subprocess.run(
+            ["/bin/bash", "-c", 'exec 1>&-; exec /bin/bash "$@"', "update", str(self.script),
+             "--app", str(self.app), "--updates-dir", str(self.updates),
+             "--download-url-prefix", "https://updates.example.invalid/",
+             "--sparkle-bin", str(self.bin)],
+            env=self.env, capture_output=True, text=True, timeout=10)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.updates / "appcast.xml").read_text(), "synthetic appcast")
+        self.assertTrue((self.updates / "KetPlus-0.1.50.zip").is_file())
 
     def test_accepts_filename_safe_prerelease_version(self):
         self.env["UPDATE_VERSION"] = "1.2.3-beta.1+build_2"
