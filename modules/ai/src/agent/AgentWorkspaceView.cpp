@@ -256,7 +256,10 @@ void AgentWorkspaceView::setActivePath(const QString& path) {
     if (activePath_ == normalized) {
         return;
     }
+    const QString previousExecutionPath = executionPath();
     activePath_ = normalized;
+    if (executionPath() != previousExecutionPath)
+        executionCheckoutChanged();
     // The next conversation's report replaces these; another worktree's tasks never show here.
     setBackgroundTasks({});
     setComposerScope(activePath_);

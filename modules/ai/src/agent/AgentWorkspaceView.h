@@ -45,6 +45,7 @@ class AgentWorkspaceView final : public QWidget {
     Q_PROPERTY(QVariantList worktrees READ worktrees NOTIFY worktreesChanged)
     Q_PROPERTY(QVariantList conversations READ conversations NOTIFY conversationsChanged)
     Q_PROPERTY(QString activePath READ activePath NOTIFY activePathChanged)
+    Q_PROPERTY(int workingChangesRevision READ workingChangesRevision NOTIFY workingChangesChanged)
     Q_PROPERTY(QString repositoryName READ repositoryName WRITE setRepositoryName NOTIFY
                    repositoryNameChanged)
     Q_PROPERTY(QUrl messageBaseUrl READ messageBaseUrl NOTIFY activePathChanged)
@@ -198,8 +199,11 @@ class AgentWorkspaceView final : public QWidget {
         emit modelsChanged();
     }
     void setExecutionBranch(const QString& branch, const QString& path = {}, qint64 revision = 1) {
+        const QString previousPath = executionPath();
         executionBranch_ = branch;
         executionPath_ = path;
+        if (executionPath() != previousPath)
+            executionCheckoutChanged();
         if (!path.isEmpty())
             executionContextSwitched_ = revision > 1;
         emit executionBranchChanged();
@@ -311,6 +315,13 @@ class AgentWorkspaceView final : public QWidget {
                       const QSet<QString>& liveSessionPaths = {},
                       const QSet<QString>& conversationPaths = {});
     void setActivePath(const QString& path);
+    // Source Control's uncommitted files in `root`, relative to it, for the changed-files
+    // card's "Not committed" note.
+    void setWorkingChanges(const QString& root, const QStringList& relativePaths);
+    int workingChangesRevision() const { return workingChangesRevision_; }
+    // Whether any of `paths` (relative to the conversation's checkout, or absolute) has
+    // uncommitted changes there; false while Source Control shows another checkout.
+    Q_INVOKABLE bool hasUncommittedChange(const QStringList& paths) const;
     QString repositoryName() const { return repositoryName_; }
     void setRepositoryName(const QString& name) {
         if (repositoryName_ == name)
@@ -531,6 +542,7 @@ class AgentWorkspaceView final : public QWidget {
     void worktreesChanged();
     void conversationsChanged();
     void activePathChanged();
+    void workingChangesChanged();
     void repositoryNameChanged();
     void repositoryPickerRequested();
     void monoFontFamilyChanged();
@@ -579,6 +591,8 @@ class AgentWorkspaceView final : public QWidget {
     QString executionBranch_;
     QString executionPath_;
     bool executionContextSwitched_{false};
+    // hasUncommittedChange() reads the execution path, which QML cannot track.
+    void executionCheckoutChanged();
     void flushStreamingMessages();
     QTimer* streamUpdateTimer_{nullptr};
     QMap<int, QVariantMap> pendingStreamingMessages_;
@@ -591,6 +605,9 @@ class AgentWorkspaceView final : public QWidget {
     MermaidRenderer* mermaidRenderer_{nullptr};
     ThemePalette mermaidPalette_;
     QSet<QString> mermaidImages_;
+    QString workingChangesRoot_;
+    QSet<QString> workingChanges_;
+    int workingChangesRevision_{0};
     // The diagram source behind each rendered image, for the viewer's dark rendering.
     QHash<QString, QString> mermaidDiagrams_;
     // "messageKey#ordinal" of the Mermaid fences the reader switched to their diagram.

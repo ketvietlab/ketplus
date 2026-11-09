@@ -297,6 +297,8 @@ Item {
                 // A daemon group lists at most 50 files; Review changes shows them all.
                 complete: !turn || turn.complete !== false
                 title: complete ? "" : changes.length + "+ files changed"
+                // As in the mock, while Source Control shows any of the files uncommitted.
+                note: host.workingChangesRevision >= 0 && changes.length > 0 && host.hasUncommittedChange(changes.map(file => String(file.destination || file.path))) ? "Not committed" : ""
                 onFileActivated: index => host.requestFileDiff(String(changes[index].destination || changes[index].path))
                 footer: Kit.KetButton {
                     objectName: "transcriptReviewChanges"
