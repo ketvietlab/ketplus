@@ -176,6 +176,7 @@ set_source_files_properties(src/agent/qml/TranscriptNotice.qml PROPERTIES QT_RES
 set_source_files_properties(src/agent/qml/TranscriptActivityHeader.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptActivityHeader.qml")
 set_source_files_properties(src/agent/qml/TranscriptChangedFiles.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptChangedFiles.qml")
 set_source_files_properties(src/agent/qml/TranscriptFileStep.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptFileStep.qml")
+set_source_files_properties(src/agent/qml/TranscriptFileMenu.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptFileMenu.qml")
 set_source_files_properties(
     src/agent/qml/TranscriptActivityRow.qml
     PROPERTIES QT_RESOURCE_ALIAS "TranscriptActivityRow.qml"
@@ -281,6 +282,7 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
         src/agent/qml/TranscriptActivityRow.qml
         src/agent/qml/TranscriptActivityHeader.qml
         src/agent/qml/TranscriptChangedFiles.qml
+        src/agent/qml/TranscriptFileMenu.qml
         src/agent/qml/TranscriptFileStep.qml
         src/agent/qml/TranscriptCopyButton.qml
         src/agent/qml/TranscriptMermaidSwitch.qml

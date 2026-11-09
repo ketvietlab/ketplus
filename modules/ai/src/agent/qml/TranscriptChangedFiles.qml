@@ -1,6 +1,5 @@
 import Ket
 import QtQuick
-import QtQuick.Controls.Basic as Basic
 import Ket as Kit
 
 // Product file identities and recovery actions over the kit ChangedFiles recipe.
@@ -107,38 +106,11 @@ Rectangle {
                     }
                 }
 
-                Basic.Menu {
+                TranscriptFileMenu {
                     id: fileContextMenu
-                    objectName: "changedFileContextMenu"
-                    padding: KetTheme.px(5, KetTheme.zoom)
-                    margins: 8
-                    font.family: KetTheme.fontFamily
-                    font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
-                    background: Rectangle {
-                        implicitWidth: KetTheme.px(190, KetTheme.zoom)
-                        implicitHeight: KetTheme.px(112, KetTheme.zoom)
-                        color: KetTheme.t.panelBg || KetTheme.t.surfaceRaised
-                        border.color: KetTheme.t.borderStrong || KetTheme.t.panelBorder
-                        border.width: 1
-                        radius: KetTheme.px(7, KetTheme.zoom)
-                    }
-                    Basic.MenuItem {
-                        objectName: "copyChangedFilePathAction"
-                        text: "Copy Path"
-                        onTriggered: activity.host.copyText(activity.host.absoluteFilePath(fileRow.targetPath))
-                    }
-                    Basic.MenuItem {
-                        objectName: "revealChangedFileAction"
-                        text: activity.host.revealFileActionText()
-                        enabled: !fileRow.missing
-                        onTriggered: activity.host.revealFile(fileRow.targetPath)
-                    }
-                    Basic.MenuItem {
-                        objectName: "openChangedFileAction"
-                        text: "Open File"
-                        enabled: !fileRow.missing
-                        onTriggered: activity.host.openRelativeFile(fileRow.targetPath)
-                    }
+                    host: activity.host
+                    targetPath: fileRow.targetPath
+                    missing: fileRow.missing
                 }
                 KetToolTip {
                     objectName: "ketToolTip"
