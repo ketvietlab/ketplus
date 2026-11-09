@@ -2665,6 +2665,11 @@ class DaemonProtocolTest final : public QObject {
                  QFileDevice::Permissions{});
         QCOMPARE(QFileInfo(configuration.tokenPath).permissions() & unsafePermissions,
                  QFileDevice::Permissions{});
+        // Another user's process cannot even open the endpoint (with the daemon's own
+        // UserAccessOption and umask 077, either alone gives this).
+        QVERIFY(QFileInfo::exists(configuration.socketName));
+        QCOMPARE(QFileInfo(configuration.socketName).permissions() & unsafePermissions,
+                 QFileDevice::Permissions{});
 #endif
         DaemonService conflicting(configuration);
         QVERIFY(!conflicting.start());

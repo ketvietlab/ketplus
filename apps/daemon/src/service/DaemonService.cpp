@@ -35,9 +35,9 @@ namespace {
 constexpr QFileDevice::Permissions ownerFile = QFileDevice::ReadOwner | QFileDevice::WriteOwner;
 
 #if defined(Q_OS_UNIX)
-void restrictDirectory(const QString& path) {
-    QFile::setPermissions(path,
-                          QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+bool restrictDirectory(const QString& path) {
+    return QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                                           QFileDevice::ExeOwner);
 }
 #endif
 
@@ -76,8 +76,13 @@ bool DaemonService::start() {
         return false;
     }
 #if defined(Q_OS_UNIX)
-    restrictDirectory(stateInfo.absolutePath());
-    restrictDirectory(tokenInfo.absolutePath());
+    // The journal and the credential live here; a directory others can enter or write is not
+    // a place to keep or replace them.
+    if (!restrictDirectory(stateInfo.absolutePath()) ||
+        !restrictDirectory(tokenInfo.absolutePath())) {
+        error_ = QStringLiteral("Unable to restrict the daemon state directory to its owner.");
+        return false;
+    }
 #endif
     const QByteArray token = loadOrCreateToken();
     if (token.isEmpty()) {

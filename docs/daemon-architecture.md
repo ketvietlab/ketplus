@@ -66,7 +66,8 @@ migration is complete. See [ADR 0015](decisions/0015-conversation-execution-cont
 core target. The local slice includes:
 
 - a user-restricted `QLocalServer` endpoint authenticated by an owner-only local
-  token;
+  token; the daemon refuses to start when it cannot restrict the journal and
+  token directories to their owner;
 - the length-prefixed JSON v0 contract accepted in ADR 0002;
 - provider-neutral session operations and normalized events backed by SQLite
   WAL cursor replay and durable command deduplication;
