@@ -233,3 +233,16 @@ and no callback after the host was destroyed. Not covered: that probe is not in 
 suite, synchronous local preview reads still decode on the caller's thread, phone
 retry after `busy` is unverified, Windows was not run and peak memory was not
 measured.
+
+## Media retirement after an interrupted release
+
+`releaseSession` removes a conversation's reference file before its media, and a
+write publishes media before referencing it. A daemon stopped between the two left
+media that no reference named; only capacity pressure ever removed it, so a deleted
+conversation's images could stay on disk. Startup retention now deletes every
+canonically named media file no remaining reference names, after the existing
+catalog validation (unknown or over-budget ownership still defers all deletion). A
+test leaves both kinds of orphan, media shared with a live session and a foreign
+file; without the sweep the released orphan stays. Startup is the only caller,
+because a write is published before it is referenced. Not covered: an interruption
+while the daemon keeps running (its orphans wait for the next start) and Windows.

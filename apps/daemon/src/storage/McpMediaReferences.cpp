@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QRegularExpression>
 #include <QSaveFile>
 
 #include <algorithm>
@@ -246,11 +247,19 @@ void McpMediaStore::retainSessions(const QSet<QString>& sessionIds) {
             released.unite(entry.value());
         }
     }
-    for (const QString& hash : std::as_const(released)) {
-        if (retained.contains(hash))
+    // Media no live session references is deleted too, not only what these files named: a
+    // daemon stopped between removing a reference file and its media, or between writing media
+    // and referencing it, left files no reference names. Only canonical names are touched.
+    static const QRegularExpression canonical(QStringLiteral("^[0-9a-f]{64}\\.(png|jpg)$"));
+    const QFileInfoList media =
+        QDir(directory_)
+            .entryInfoList({QStringLiteral("*.png"), QStringLiteral("*.jpg")},
+                           QDir::Files | QDir::System | QDir::Hidden);
+    for (const QFileInfo& file : media) {
+        if (file.isSymLink() || !canonical.match(file.fileName()).hasMatch() ||
+            retained.contains(file.completeBaseName()))
             continue;
-        QFile::remove(QDir(directory_).filePath(hash + QStringLiteral(".png")));
-        QFile::remove(QDir(directory_).filePath(hash + QStringLiteral(".jpg")));
+        QFile::remove(file.absoluteFilePath());
     }
 }
 

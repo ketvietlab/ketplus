@@ -59,7 +59,9 @@ class McpMediaStore final {
     // Drops the session's references and deletes media no other session references.
     void releaseSession(const QString& sessionId);
     // Releases every reference file whose session is not in sessionIds (sessions removed while
-    // the daemon was not running, or by a journal path that bypassed releaseSession).
+    // the daemon was not running, or by a journal path that bypassed releaseSession), then
+    // deletes every media file no remaining reference names. Call it only before media is
+    // written: a write is published before it is referenced.
     void retainSessions(const QSet<QString>& sessionIds);
     // Evicts oldest unreferenced media first, then (with a warning) oldest referenced media,
     // until the store fits its capacity.
