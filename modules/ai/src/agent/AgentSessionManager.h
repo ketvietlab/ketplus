@@ -294,6 +294,8 @@ class AgentSessionManager final : public QObject {
         QVariantList prefix;
         bool appended{false};
         QList<QPair<int, QVariantMap>> updates;
+        // Outstanding requests the journal shows were already decided or expired.
+        QSet<QString> settledPending;
     };
     static PreparedDaemonWindow
     prepareDaemonWindow(const QVariantList& batchMessages, const QVector<QVariantMap>& basis,

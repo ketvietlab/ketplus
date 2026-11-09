@@ -669,11 +669,27 @@ AgentSessionManager::PreparedDaemonWindow AgentSessionManager::prepareDaemonWind
     for (const auto& message : basis)
         current.append(message);
     if (initial) {
-        // Keep actual outstanding requests; historical approval events were
-        // deliberately excluded by the pure projection.
-        for (const auto& message : basis)
-            if (pendingQuestionKeys.contains(message.value("messageKey").toString()))
+        // Keep actual outstanding requests. The projection holds a settled approval's note,
+        // and a hidden half of one still waiting; the card joins it, and a receipt the
+        // journal holds settles it instead.
+        QHash<QString, int> projectedKeys;
+        for (int index = 0; index < projected.size(); ++index)
+            projectedKeys.insert(projected.at(index).toMap().value("messageKey").toString(), index);
+        for (const auto& message : basis) {
+            const auto key = message.value("messageKey").toString();
+            if (!pendingQuestionKeys.contains(key))
+                continue;
+            const int index = projectedKeys.value(key, -1);
+            if (index < 0 || message.value("subtype") != "approval") {
                 projected.append(message);
+                continue;
+            }
+            const auto joined =
+                agent_message::joinedApprovalRows(projected.at(index).toMap(), message);
+            if (!joined.value("running").toBool())
+                prepared.settledPending.insert(key);
+            projected[index] = joined;
+        }
         // The daemon starts dispatching buffered live events after returning
         // the page, while this projection still runs on a worker. Only overlay
         // rows whose event cursor is newer than the page's snapshot; an older
@@ -769,6 +785,15 @@ void AgentSessionManager::applyDaemonHistoryBatch(const SessionPtr& session,
                                                   const PreparedDaemonWindow& prepared) {
     session->historyLoading = false;
     session->historyRefreshingLatest = false;
+    // The journal decided these while the cards waited; they take no answer now.
+    bool settledCards = false;
+    for (const auto& key : prepared.settledPending)
+        settledCards = session->pendingQuestionRequests.remove(key) > 0 || settledCards;
+    if (settledCards && session->pendingQuestionRequests.isEmpty())
+        updateState(session,
+                    session->turnId.isEmpty() ? QStringLiteral("Ready")
+                                              : QStringLiteral("Working…"),
+                    !session->turnId.isEmpty());
     const bool initial = batch.initial;
     const bool newer = batch.newer;
     const QString& next = batch.next;

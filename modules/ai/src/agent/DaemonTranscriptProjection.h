@@ -34,6 +34,10 @@ QString approvalToolLabel(const QJsonObject& details);
 // An approval's end: "approved", "denied" or "expired"; "resolved" when the journal predates
 // the decision.
 QString approvalOutcome(const QString& eventType, const QJsonObject& data);
+// One approval from two rows with its key: a request and its receipt from different pages, or
+// a pending card and the receipt that settled it. The receipt wins; the request keeps its
+// tool and command. A row without them stays hidden until its request is read.
+QVariantMap joinedApprovalRows(const QVariantMap& older, const QVariantMap& newer);
 QVariantMap providerNoticeMessage(const QString& text, const QString& itemId,
                                   const QString& title = QStringLiteral("Request declined"));
 // ADR 0027: a user row another conversation's agent wrote (`origin: agent`) shows its sender.

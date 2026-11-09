@@ -106,6 +106,30 @@ QString approvalToolLabel(const QJsonObject& details) {
     return QStringLiteral("Tool");
 }
 
+QVariantMap joinedApprovalRows(const QVariantMap& older, const QVariantMap& newer) {
+    const auto settled = [](const QVariantMap& row) {
+        const auto status = row.value("status").toString();
+        return status == "approved" || status == "denied" || status == "expired" ||
+               status == "resolved";
+    };
+    // The request names the tool and command; a live card has its buttons.
+    const auto detailed = [](const QVariantMap& row) {
+        return !row.value("target").toString().isEmpty() ||
+               !row.value("command").toString().isEmpty();
+    };
+    if (!settled(older) && !settled(newer)) {
+        if (newer.value("running").toBool() || !older.value("running").toBool())
+            return detailed(newer) || !detailed(older) ? newer : older;
+        return older;
+    }
+    // The receipt is authoritative: a decided approval is never a pending card again.
+    auto joined = detailed(newer) || !detailed(older) ? newer : older;
+    joined.insert("status", settled(newer) ? newer.value("status") : older.value("status"));
+    joined.insert("running", false);
+    joined.insert("presentationHidden", !detailed(joined));
+    return joined;
+}
+
 QString approvalOutcome(const QString& eventType, const QJsonObject& data) {
     if (eventType.endsWith(QStringLiteral(".expired")))
         return QStringLiteral("expired");
@@ -382,6 +406,7 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
     QHash<QString, int> indexes;
     QHash<QString, QString> settledQuestions;
     QHash<QString, QString> settledApprovals;
+    QSet<QString> requestedApprovals;
     QHash<QString, QVariantMap> questionAnswers;
     QSet<QString> partial;
     const auto identity = daemonMessageKey;
@@ -410,6 +435,10 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
                                     approvalOutcome(type, data));
             continue;
         }
+        if (type == "approval.requested" &&
+            event.value("payload").toObject().value("kind") != "input")
+            requestedApprovals.insert(
+                event.value("payload").toObject().value("approval_id").toString());
         if (type != "question.answered" && type != "question.expired")
             continue;
         const auto data = event.value("payload").toObject();
@@ -473,13 +502,15 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
             settledQuestions.contains(data.value("approval_id").toString()) &&
             data.value("questions").isArray();
         // A settled approval stays in the history, as the mock's Approved line. A pending one
-        // arrives live, with its buttons.
-        const bool settledApproval =
-            type == "approval.requested" && data.value("kind") != "input" &&
-            settledApprovals.contains(data.value("approval_id").toString());
-        if (settledApproval)
-            itemId = QStringLiteral("approval:%1").arg(data.value("approval_id").toString());
-        if (type == "approval.requested" && !settledQuestion && !settledApproval)
+        // arrives live, with its buttons. A page holding only the request or only its receipt
+        // keeps a hidden half that mergeDaemonHistory joins with the other page's.
+        const QString approvalId = data.value("approval_id").toString();
+        const bool approvalRequest = type == "approval.requested" && data.value("kind") != "input";
+        const bool approvalReceipt = (type == "approval.resolved" || type == "approval.expired") &&
+                                     !requestedApprovals.contains(approvalId);
+        if (approvalRequest || approvalReceipt)
+            itemId = QStringLiteral("approval:%1").arg(approvalId);
+        if (type == "approval.requested" && !settledQuestion && !approvalRequest)
             continue;
         const bool answerReceipt = type == "question.answered" && data.value("questions").isArray();
         if (settledQuestion || answerReceipt) {
@@ -507,14 +538,18 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
             entry = notice;
         } else if (type == "activity.group.summary") {
             entry = daemonActivityGroupMessage(data, sequence);
-        } else if (settledApproval) {
-            entry =
-                message("tool", data.value("reason").toString(), "Agent · approval", {}, itemId);
+        } else if (approvalRequest || approvalReceipt) {
+            entry = message("tool", approvalRequest ? data.value("reason").toString() : QString{},
+                            "Agent · approval", {}, itemId);
             entry.insert("subtype", "approval");
-            entry.insert("command", data.value("command").toString());
-            entry.insert("target", approvalToolLabel(data));
+            if (approvalRequest) {
+                entry.insert("command", data.value("command").toString());
+                entry.insert("target", approvalToolLabel(data));
+            }
             entry.insert("running", false);
-            entry.insert("status", settledApprovals.value(data.value("approval_id").toString()));
+            entry.insert("status", settledApprovals.value(approvalId, QStringLiteral("requested")));
+            entry.insert("presentationHidden",
+                         !approvalRequest || !settledApprovals.contains(approvalId));
         } else if (type == "approval.requested" || answerReceipt) {
             entry = message("tool", {}, "Codex · question ended", {}, itemId);
             entry.insert("subtype", "question");
@@ -674,6 +709,10 @@ QVariantList mergeDaemonHistory(const QVariantList& older, const QVariantList& n
             continue;
         }
         const auto prefix = result.at(index).toMap();
+        if (prefix.value("subtype") == "approval" && entry.value("subtype") == "approval") {
+            result[index] = joinedApprovalRows(prefix, entry);
+            continue;
+        }
         if (entry.value("partialOutput").toBool()) {
             auto details = entry.value("details").toMap();
             details.insert("output", (prefix.value("details").toMap().value("output").toString() +

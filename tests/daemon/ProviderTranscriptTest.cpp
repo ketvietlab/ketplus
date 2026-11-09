@@ -433,10 +433,11 @@ class ProviderTranscriptTest : public QObject {
         QHash<QString, QVariantMap> approvals;
         for (const auto& value : rows) {
             const auto row = value.toMap();
-            if (row.value("subtype") == "approval")
+            if (row.value("subtype") == "approval" && !row.value("presentationHidden").toBool())
                 approvals.insert(row.value("itemId").toString(), row);
         }
         QCOMPARE(approvals.size(), 4);
+        // The pending one is a hidden half, for a later page's receipt to settle.
         QVERIFY(!approvals.contains("approval:a5"));
         const auto check = [&](const QString& id, const QString& tool, const QString& status) {
             const auto row = approvals.value(QStringLiteral("approval:") + id);
@@ -452,6 +453,34 @@ class ProviderTranscriptTest : public QObject {
         check("a2", "ketplus_browser.browser_open", "expired");
         check("a3", "Cursor tool", "denied");
         check("a4", "Claude tool", "resolved");
+        // A request and its receipt read in different pages are still one note.
+        const auto page = [](const QString& type, const QJsonObject& payload, qint64 cursor) {
+            return daemonWindowMessages(
+                {{"events", QJsonArray{QJsonObject{{"cursor", cursor},
+                                                   {"turn_sequence", 1},
+                                                   {"event_type", type},
+                                                   {"payload", payload}}}}});
+        };
+        const auto older = page("approval.requested",
+                                {{"approval_id", "p1"},
+                                 {"kind", "approval"},
+                                 {"request_type", "command"},
+                                 {"command", "make"}},
+                                1);
+        const auto newer =
+            page("approval.resolved",
+                 {{"approval_id", "p1"}, {"answers", QJsonObject{{"decision", "decline"}}}}, 2);
+        QCOMPARE(older.size(), 1);
+        QVERIFY(older.first().toMap().value("presentationHidden").toBool());
+        QCOMPARE(newer.size(), 1);
+        QVERIFY(newer.first().toMap().value("presentationHidden").toBool());
+        const auto joined = mergeDaemonHistory(older, newer);
+        QCOMPARE(joined.size(), 1);
+        const auto note = joined.first().toMap();
+        QCOMPARE(note.value("status").toString(), "denied");
+        QCOMPARE(note.value("target").toString(), "Command");
+        QCOMPARE(note.value("command").toString(), "make");
+        QVERIFY(!note.value("presentationHidden").toBool());
         QCOMPARE(approvalToolLabel({{"request_type", "file_change"}}), "File change");
         QCOMPARE(approvalToolLabel({{"request_type", "mcp_tool_call"}, {"server_name", "docs"}}),
                  "docs tool");
