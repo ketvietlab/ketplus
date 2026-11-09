@@ -544,10 +544,17 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
                         existing < 0
                             ? -1
                             : result.at(existing).toMap().value("startedAt", -1).toLongLong();
-                    if (type == "item.started")
+                    // Both ends are kept: a later page or live event may bring the other one,
+                    // and mergeDaemonHistory() times the thought then.
+                    if (type == "item.started") {
                         entry.insert("startedAt", sentAt.toMSecsSinceEpoch());
-                    else if (startedAt >= 0)
-                        entry.insert("durationMs", sentAt.toMSecsSinceEpoch() - startedAt);
+                    } else {
+                        entry.insert("completedAt", sentAt.toMSecsSinceEpoch());
+                        if (startedAt >= 0) {
+                            entry.insert("startedAt", startedAt);
+                            entry.insert("durationMs", sentAt.toMSecsSinceEpoch() - startedAt);
+                        }
+                    }
                 }
             } else {
                 QSet<QString> seen;
@@ -629,6 +636,14 @@ QVariantList mergeDaemonHistory(const QVariantList& older, const QVariantList& n
             entry.insert("partialBody", prefix.value("partialBody", false));
             if (!entry.value("partialBody").toBool())
                 entry.insert("meta", prefix.value("meta"));
+        }
+        // A thought's start and completion can arrive in different pages or live events.
+        if (!entry.contains("startedAt") && prefix.contains("startedAt")) {
+            entry.insert("startedAt", prefix.value("startedAt"));
+            const auto duration = entry.value("durationMs");
+            if (entry.contains("completedAt") && (!duration.isValid() || duration.isNull()))
+                entry.insert("durationMs", entry.value("completedAt").toLongLong() -
+                                               prefix.value("startedAt").toLongLong());
         }
         // A newer completion is authoritative, not another text fragment.
         result[index] = entry;
