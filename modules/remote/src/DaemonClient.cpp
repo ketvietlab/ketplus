@@ -44,9 +44,9 @@ bool mergesWhileQueued(const QString& type) {
     return reads.contains(type);
 }
 
-// Requests that are safe to send again when the connection dropped before their answer: reads,
-// and writes the daemon applies once however often they arrive. Anything else in flight may
-// already have happened, so its caller is told instead of having it repeated.
+// Reads that are safe to send again when the connection dropped before their answer. A write in
+// flight may already have happened, and the daemon's result cache is not written atomically with
+// it, so its caller is told instead of having it repeated.
 bool replaysAfterDisconnect(const QString& type) {
     static const QSet<QString> replayable{QStringLiteral("session.list"),
                                           QStringLiteral("session.attach"),
@@ -62,9 +62,6 @@ bool replaysAfterDisconnect(const QString& type) {
                                           QStringLiteral("session.output.read"),
                                           QStringLiteral("session.media.read"),
                                           QStringLiteral("session.task.output"),
-                                          QStringLiteral("session.mark_seen"),
-                                          QStringLiteral("session.rename"),
-                                          QStringLiteral("session.interrupt"),
                                           QStringLiteral("provider.models"),
                                           QStringLiteral("provider.rate_limits"),
                                           QStringLiteral("provider.runtime_status"),

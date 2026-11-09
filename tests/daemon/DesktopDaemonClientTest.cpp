@@ -948,9 +948,12 @@ class DesktopDaemonClientTest final : public QObject {
         remote::DaemonClient client;
         QTRY_VERIFY(client.isReady());
         // The daemon may already have acted on these when the connection drops; sending them
-        // again would start a second turn, steer twice or answer an approval twice.
-        const QStringList writes{"session.start_turn", "session.steer", "approval.resolve",
-                                 "question.answer",    "session.fork",  "remote.pairing.approve"};
+        // again would start a second turn, steer twice, answer an approval twice, overwrite
+        // another client's rename, mark newer events seen or interrupt a later turn.
+        const QStringList writes{
+            "session.start_turn", "session.steer",     "approval.resolve",
+            "question.answer",    "session.fork",      "remote.pairing.approve",
+            "session.rename",     "session.mark_seen", "session.interrupt"};
         QStringList failed;
         for (const auto& type : writes)
             client.call(type, {}, "s", 1,
