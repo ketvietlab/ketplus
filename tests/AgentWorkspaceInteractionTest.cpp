@@ -945,7 +945,7 @@ void AgentWorkspaceViewTest::backgroundTaskBar() {
     view.setBackgroundTasks({shell, agent});
     QTRY_VERIFY(bar->isVisible());
     QTRY_COMPARE(bar->property("headline").toString(),
-                 QStringLiteral("Turn finished · 2 tasks running in background"));
+                 QStringLiteral("Turn finished · 2 background tasks"));
     QTRY_VERIFY(findVisualItem(bar, QStringLiteral("backgroundTask_build")));
     QVERIFY(findVisualItem(bar, QStringLiteral("backgroundTask_review")));
 
@@ -963,8 +963,20 @@ void AgentWorkspaceViewTest::backgroundTaskBar() {
     // The output pane shows the read tail, ignores answers for a task it no longer shows,
     // and closes when its task leaves the report.
     QSignalSpy reads(&view, &ketplus::AgentWorkspaceView::backgroundTaskOutputRequested);
+    // The row itself opens its output, as the mock's current row; there is no Output button.
+    auto* buildRow = findVisualItem(bar, QStringLiteral("backgroundTaskCard_build"));
+    QVERIFY(buildRow);
+    auto* reviewRow = findVisualItem(bar, QStringLiteral("backgroundTaskCard_review"));
+    QVERIFY(reviewRow);
+    // Wait for the strip's layout: the rows stack once it is polished.
+    QTRY_VERIFY(reviewRow->mapToScene(QPointF()).y() > buildRow->mapToScene(QPointF()).y());
+    const QPoint rowCenter =
+        buildRow->mapToScene(QPointF(buildRow->width() / 2, buildRow->height() / 2)).toPoint();
+    QTest::mouseClick(view.quickView(), Qt::LeftButton, {}, rowCenter);
+    QTRY_COMPARE(reads.count(), 1);
+    QCOMPARE(reads.constFirst().at(0).toString(), QStringLiteral("build"));
     view.requestBackgroundTaskOutput(QStringLiteral("build"));
-    QCOMPARE(reads.count(), 1);
+    QCOMPARE(reads.count(), 2);
     QVERIFY(view.backgroundTaskOutput().value("loading").toBool());
     view.acceptBackgroundTaskResult(QStringLiteral("review"), QStringLiteral("output"),
                                     {{"output", "wrong"}});
