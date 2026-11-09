@@ -88,7 +88,9 @@ void ClaudeCredentials::handle(const QString& operation, const QJsonObject& payl
     }
     QString error;
     auto config = load(&error);
-    if (!error.isEmpty()) {
+    // Removing replaces the entry without its old contents, so an unreadable or invalid entry,
+    // which fails every Claude turn closed, can still be cleared from Settings.
+    if (!error.isEmpty() && operation != "remove") {
         reply({}, error);
         return;
     }

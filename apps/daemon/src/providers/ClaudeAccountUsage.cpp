@@ -59,7 +59,8 @@ void ClaudeAccountUsage::handle(const QString& operation, const QJsonObject& pay
                                 ClaudeCredentials::Reply reply) {
     QString error;
     auto config = load(&error);
-    if (!error.isEmpty()) {
+    // Removing replaces the entry without its old contents, so an unreadable one can be cleared.
+    if (!error.isEmpty() && operation != "remove") {
         reply({}, error);
         return;
     }
