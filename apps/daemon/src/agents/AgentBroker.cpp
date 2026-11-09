@@ -5,6 +5,7 @@
 
 #include <QDateTime>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QUuid>
@@ -50,6 +51,21 @@ QString truncatedUtf8(const QString& text, const qsizetype maximumBytes) {
     while (!result.isEmpty() && result.toUtf8().size() > maximumBytes)
         result.chop(qMax<qsizetype>(1, result.size() / 16));
     return result;
+}
+
+// The oldest messages that fit one turn's input, at least one; the rest wait for the next turn.
+void keepOneTurnOfMessages(QList<AgentMessageRecord>& messages) {
+    qsizetype bytes = 0;
+    for (qsizetype i = 0; i < messages.size(); ++i) {
+        // The body as JSON, escapes included, plus its header and metadata.
+        bytes +=
+            QJsonDocument(QJsonArray{messages.at(i).body}).toJson(QJsonDocument::Compact).size() +
+            1024;
+        if (i > 0 && bytes > AgentBroker::maximumDeliveryBytes) {
+            messages.resize(i);
+            return;
+        }
+    }
 }
 
 QJsonObject originJson(const QList<AgentMessageRecord>& messages) {
@@ -209,6 +225,14 @@ QJsonObject AgentBroker::send(const AgentConversation& caller, const QJsonObject
     if (!receiver || receiver->generation != target->second)
         return failure(QStringLiteral("unknown_number"),
                        QStringLiteral("No conversation on this computer has number #%1.").arg(to));
+    // A looping sender would otherwise fill the journal and the receiver's next turn.
+    if (journal_->undeliveredAgentMessages(caller.sessionId, caller.generation, receiver->sessionId,
+                                           receiver->generation) >= maximumUndeliveredPerSender)
+        return failure(QStringLiteral("receiver_backlog"),
+                       QStringLiteral("#%1 has not received your last %2 messages yet. Wait for "
+                                      "it to take them before sending more.")
+                           .arg(to)
+                           .arg(maximumUndeliveredPerSender));
 
     AgentMessageRecord message;
     message.id = newId();
@@ -341,6 +365,7 @@ void AgentBroker::deliverTo(const QString& sessionId) {
                 urgent.append(message);
         if (urgent.isEmpty() || !receiver->steerable)
             return;
+        keepOneTurnOfMessages(urgent);
         if (!host_
                  ->steerAgentTurn(sessionId, receiver->generation,
                                   agent_messaging::deliveryText(urgent), originJson(urgent))
@@ -375,6 +400,7 @@ void AgentBroker::deliverTo(const QString& sessionId) {
     }
     if (deliverable.isEmpty())
         return;
+    keepOneTurnOfMessages(deliverable);
     TurnOrigin origin;
     origin.automatic = true;
     origin.sender = {{QStringLiteral("number"), deliverable.first().fromNumber},
@@ -418,6 +444,8 @@ QString AgentBroker::takeForUserTurn(const QString& sessionId, const qint64 gene
         sessionId, generation, {QStringLiteral("queued"), QStringLiteral("held")});
     if (pending.isEmpty())
         return {};
+    // Messages left over are delivered when this turn ends.
+    keepOneTurnOfMessages(pending);
     // Called once the turn's user.message is journaled, which opened this turn sequence.
     const qint64 turn = host_->agentTurnSequence(sessionId);
     for (AgentMessageRecord& message : pending) {

@@ -60,6 +60,11 @@ class AgentBroker final : public QObject {
     static constexpr int maximumAutomaticHop = 6;
     static constexpr int maximumChainTurns = 30;
     static constexpr int maximumHourlyTurns = 20;
+    // A sender waits for the receiver to take its messages.
+    static constexpr int maximumUndeliveredPerSender = 20;
+    // One turn's user.message carries each body twice (prompt and agent_messages), so a turn
+    // takes at most this many encoded bytes to stay inside the journal's event limit.
+    static constexpr qsizetype maximumDeliveryBytes = 96 * 1024;
     static constexpr int requestLifetimeHours = 24;
     static constexpr int expiryCheckMs = 5 * 60 * 1000;
 

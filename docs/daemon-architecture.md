@@ -870,7 +870,8 @@ aliases, five digits once half are held, 30-day quarantine after deletion) and
 `agent_messages`. `AgentBroker` mints a capability token per conversation
 generation, answers `agents.whoami/list/send/inbox`, delivers queued messages
 when a receiver becomes idle (or steers an `urgent` one), turns a final answer
-into the reply and applies the hop, chain and hourly limits. `SessionHost`
+into the reply and applies the hop, chain and hourly limits, the per-sender
+backlog and the per-turn delivery budget. `SessionHost`
 implements its narrow `AgentHostPort` in `SessionHostAgents.cpp`: an agent turn
 journals `user.message` with `origin: "agent"`, and `agent_message.state`
 reports a message the conversation sent (`sent`, with its delivery) or answered

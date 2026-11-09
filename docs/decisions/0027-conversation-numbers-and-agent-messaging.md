@@ -110,6 +110,14 @@ are mandatory:
 - Over a limit, the message is `held`. Both conversations show a notice card,
   and held messages are delivered with the receiver's next user-started turn.
 - A conversation cannot message itself.
+- A sender with 20 undelivered (`queued` or `held`) messages to one receiver
+  gets `receiver_backlog` until the receiver takes some. Other senders are not
+  affected.
+- One turn takes the oldest queued messages that fit 96 KiB, counting each
+  body as encoded JSON plus 1 KiB. A turn always takes at least one message.
+  The rest wait for the next turn. The turn's `user.message` carries each body
+  twice, so a larger batch would exceed the 256 KiB journal event limit and
+  fail every message in it.
 
 ### Sender identity and trust
 
