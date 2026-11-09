@@ -86,6 +86,8 @@ class FakeDaemon final : public QObject {
     }
 
     QJsonArray capabilities;
+    // Reported in the hello answer when set; an older version makes Desktop ask to replace it.
+    QString daemonVersion;
     bool listening{false};
     int connections{0};
     QPointer<QLocalSocket> current;
@@ -109,9 +111,12 @@ class FakeDaemon final : public QObject {
             buffer.remove(0, 4 + static_cast<qsizetype>(size));
             if (request.value(QStringLiteral("message_type")).toString() ==
                 QStringLiteral("daemon.hello")) {
-                answer(request, {{QStringLiteral("ok"), true},
-                                 {QStringLiteral("protocol_minor"), 1},
-                                 {QStringLiteral("capabilities"), capabilities}});
+                QJsonObject hello{{QStringLiteral("ok"), true},
+                                  {QStringLiteral("protocol_minor"), 1},
+                                  {QStringLiteral("capabilities"), capabilities}};
+                if (!daemonVersion.isEmpty())
+                    hello.insert(QStringLiteral("daemon_version"), daemonVersion);
+                answer(request, hello);
                 if (afterHello)
                     afterHello(socket);
                 continue;
@@ -935,6 +940,116 @@ class DesktopDaemonClientTest final : public QObject {
             QCOMPARE(request.value("message_type").toString(), "session.attach");
     }
 
+    void sentWritesAreFailedNotReplayedAfterDisconnect() {
+        QTemporaryDir directory;
+        FakeDaemon daemon(useFakeDaemon(directory));
+        const auto restore = qScopeGuard(stopUsingFakeDaemon);
+        QVERIFY(daemon.listening);
+        remote::DaemonClient client;
+        QTRY_VERIFY(client.isReady());
+        // The daemon may already have acted on these when the connection drops; sending them
+        // again would start a second turn, steer twice, answer an approval twice, overwrite
+        // another client's rename, mark newer events seen or interrupt a later turn.
+        const QStringList writes{
+            "session.start_turn", "session.steer",     "approval.resolve",
+            "question.answer",    "session.fork",      "remote.pairing.approve",
+            "session.rename",     "session.mark_seen", "session.interrupt"};
+        QStringList failed;
+        for (const auto& type : writes)
+            client.call(type, {}, "s", 1,
+                        [&failed, type](const QJsonObject&, const QString& error) {
+                            if (error.contains("disconnected"))
+                                failed.append(type);
+                        });
+        client.call("session.attach", {}, "s", 1, {});
+        QTRY_COMPARE(daemon.requests.size(), writes.size() + 1);
+        daemon.requests.clear();
+        daemon.current->disconnectFromServer();
+        QTRY_COMPARE(failed.size(), writes.size());
+        QTRY_COMPARE(daemon.requests.size(), 1);
+        QTRY_VERIFY(client.isReady());
+        QCOMPARE(daemon.requests.first().value("message_type").toString(), "session.attach");
+        // A write that was still waiting to be sent goes out once the client is ready again.
+        daemon.current->disconnectFromServer();
+        QTRY_VERIFY(!client.isReady());
+        bool answered = false;
+        client.call("session.start_turn", {}, "s", 1,
+                    [&answered](const QJsonObject&, const QString&) { answered = true; });
+        QTRY_VERIFY(client.isReady());
+        QTRY_VERIFY(
+            std::any_of(daemon.requests.cbegin(), daemon.requests.cend(), [](const auto& r) {
+                return r.value("message_type").toString() == "session.start_turn";
+            }));
+        QVERIFY(!answered);
+    }
+
+    void dropsTheConnectionOnAnOversizedOrMalformedDaemonFrame_data() {
+        QTest::addColumn<QByteArray>("frame");
+        // One byte over the 1 MiB limit; only the header is sent, the payload is never read.
+        QTest::newRow("oversized") << QByteArray::fromHex("00100001");
+        QTest::newRow("zero length") << QByteArray::fromHex("00000000");
+        QTest::newRow("not json") << QByteArray::fromHex("00000003") + QByteArray("{x}");
+        QTest::newRow("not an object") << QByteArray::fromHex("00000002") + QByteArray("[]");
+    }
+
+    void dropsTheConnectionOnAnOversizedOrMalformedDaemonFrame() {
+        QFETCH(QByteArray, frame);
+        QTemporaryDir directory;
+        FakeDaemon daemon(useFakeDaemon(directory));
+        const auto restore = qScopeGuard(stopUsingFakeDaemon);
+        QVERIFY(daemon.listening);
+        daemon.afterHello = [&](QLocalSocket* socket) {
+            if (daemon.connections == 1) {
+                socket->write(frame);
+                socket->flush();
+            }
+        };
+        remote::DaemonClient client;
+        QString failure;
+        client.call("session.start_turn", {}, "s", 1,
+                    [&failure](const QJsonObject&, const QString& error) { failure = error; });
+        // The client drops the bad connection, fails the write it had sent and connects again.
+        QTRY_COMPARE(daemon.connections, 2);
+        QTRY_VERIFY(failure.contains("disconnected"));
+        QTRY_VERIFY(client.isReady());
+    }
+
+    void replacesAnOlderDaemonOnceAndKeepsItWhenItRefuses() {
+        QTemporaryDir directory;
+        FakeDaemon daemon(useFakeDaemon(directory));
+        const auto restore = qScopeGuard(stopUsingFakeDaemon);
+        QVERIFY(daemon.listening);
+        daemon.daemonVersion = "0.0.1";
+        remote::DaemonClient client;
+        const auto upgrades = [&daemon] {
+            return std::count_if(
+                daemon.requests.cbegin(), daemon.requests.cend(), [](const auto& r) {
+                    return r.value("message_type").toString() == "daemon.prepare_upgrade";
+                });
+        };
+        QTest::qWait(500);
+        if (upgrades() == 0 && client.isReady())
+            QSKIP("Built without KETPLUS_AUTO_UPGRADE_DAEMON");
+        QTRY_COMPARE(upgrades(), 1);
+        // Desktop waits for the old daemon's answer before it uses the connection.
+        QVERIFY(!client.isReady());
+        // The old daemon exits before answering, as it does once it agreed to be replaced.
+        daemon.current->disconnectFromServer();
+        QTRY_COMPARE(daemon.connections, 2);
+        // The next daemon (still old here) is not asked again, and is used as it is.
+        QTRY_VERIFY(client.isReady());
+        QTest::qWait(200);
+        QCOMPARE(upgrades(), 1);
+
+        // A daemon that refuses, because it owns a turn, keeps serving this Desktop.
+        remote::DaemonClient second;
+        QTRY_COMPARE(upgrades(), 2);
+        QVERIFY(!second.isReady());
+        daemon.answer(daemon.requests.last(), {{"ok", false}, {"error_code", "session_busy"}});
+        QTRY_VERIFY(second.isReady());
+        QCOMPARE(upgrades(), 2);
+    }
+
     void storageNeverStartsDirectProvider() {
         QTemporaryDir directory;
         const auto executable = directory.filePath("fake-codex");
@@ -1110,17 +1225,27 @@ class DesktopDaemonClientTest final : public QObject {
         QCOMPARE(firstSent.at(1).value(QStringLiteral("payload")).toObject(),
                  QJsonObject({{QStringLiteral("after_id"), 5}}));
 
-        // The daemon drops the connection with all of them unanswered: they are sent again first,
-        // in the order they were made, with the same ids.
+        // The daemon drops the connection with all of them unanswered: the reads are sent again
+        // first, in the order they were made, with the same ids. The two writes fail instead,
+        // and the window fills with calls that were still waiting.
+        QList<QJsonObject> sentReads;
+        for (const QJsonObject& request : firstSent) {
+            if (request.value(QStringLiteral("message_type")).toString() !=
+                QStringLiteral("session.mark_seen"))
+                sentReads.append(request);
+        }
+        QCOMPARE(sentReads.size(), window - 2);
         daemon.requests.clear();
         daemon.current->disconnectFromServer();
         QTRY_COMPARE_WITH_TIMEOUT(daemon.requests.size(), window, 3000);
         QTest::qWait(200);
         QCOMPARE(daemon.requests.size(), window);
-        for (int index = 0; index < window; ++index) {
+        for (int index = 0; index < sentReads.size(); ++index) {
             QCOMPARE(daemon.requests.at(index).value(QStringLiteral("message_id")),
-                     firstSent.at(index).value(QStringLiteral("message_id")));
+                     sentReads.at(index).value(QStringLiteral("message_id")));
         }
+        QVERIFY(answered.contains(QStringLiteral("seen-1!Daemon disconnected before confirming the "
+                                                 "request. Check its result before retrying.")));
 
         // Each answer lets one more call out, until every call has been sent once.
         daemon.onRequest = [&daemon](const QJsonObject& request) {
@@ -1131,12 +1256,12 @@ class DesktopDaemonClientTest final : public QObject {
         for (const QJsonObject& request : QList<QJsonObject>(daemon.requests))
             daemon.onRequest(request);
         QTRY_COMPARE_WITH_TIMEOUT(answered.size(), 5 + 1 + 2 + 24, 3000);
-        QCOMPARE(daemon.requests.size(), distinct);
+        QCOMPARE(daemon.requests.size(), distinct - 2);
         for (int index = 0; index < 5; ++index) {
             QVERIFY(answered.contains(
                 QStringLiteral("approvals-%1=session.pending_approvals").arg(index)));
         }
-        QVERIFY(answered.contains(QStringLiteral("seen-1=session.mark_seen")));
+        QVERIFY(!answered.contains(QStringLiteral("seen-1=session.mark_seen")));
     }
 
     void forksConversationThroughDaemon() {
