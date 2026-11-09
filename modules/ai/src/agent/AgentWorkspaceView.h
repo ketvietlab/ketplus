@@ -400,6 +400,15 @@ class AgentWorkspaceView final : public QWidget {
     // until that check lands; pathStateRevision changes only when an answer flips.
     Q_INVOKABLE bool pathMissing(const QString& path);
     Q_INVOKABLE void copyText(const QString& text);
+    // The image viewer's host tools (AgentWorkspaceImages.cpp). `source` is a viewer item's
+    // URL and `rotation` the viewer's turn in degrees.
+    Q_INVOKABLE QString imageCaption(const QUrl& source) const;
+    Q_INVOKABLE bool copyImage(const QUrl& source, int rotation);
+    // The saved path, or empty when the image could not be written.
+    Q_INVOKABLE QString saveImageToDownloads(const QUrl& source);
+    Q_INVOKABLE bool printImage(const QUrl& source, int rotation, const QString& title);
+    // The viewer's Fullscreen tool turns the top-level window, not the embedded Quick one.
+    Q_INVOKABLE void toggleWindowFullScreen();
     Q_INVOKABLE void copySelectedText(QString text);
     Q_INVOKABLE QString composerDraft(const QString& scope) const;
     Q_INVOKABLE void saveComposerDraft(const QString& scope, const QString& text) const;

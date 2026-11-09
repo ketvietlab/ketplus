@@ -31,7 +31,7 @@ MessageImageGallery {
         row.host.scheduleTranscriptRestore();
     }
     onImageClicked: function (source) {
-        row.preview.imageSource = source;
-        row.preview.open();
+        const all = sources.map(image => image.toString());
+        row.preview.showImages(all, Math.max(0, all.indexOf(source.toString())));
     }
 }

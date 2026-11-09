@@ -175,10 +175,16 @@ source/diagram geometry remain product responsibilities.
 
 User bubbles use UserMessageRecipe. Attachment previews are 120 × 78 logical
 pixels; generated images use a 360 × 225 preview, with fixed aspect geometry
-before decoding. The lightbox opens the original image. Day dividers use the
-journal's `sent_at` carried as presentation `timestamp` on user messages, including
-live echoes. Missing or invalid timestamps do not create invented dates. Labels
-use the viewer's local date and remain part of the row's measured height.
+before decoding. A user's thumbnails sit above the bubble, right-aligned. Clicking
+one opens KetLightbox on the row's images with the mock's tools: zoom, rotate,
+copy, download, print and fullscreen. Captions are file names. The host copies
+the turned image, saves the original file to Downloads, prints through
+`ket::printImage` and turns the top-level window fullscreen. Mermaid diagrams
+still open their vector viewer. Day dividers use the journal's `sent_at` carried
+as presentation `timestamp` on user messages, including live echoes. Missing or
+invalid timestamps do not create invented dates. Labels read "Today",
+"Yesterday" or "Thursday, 24 September" (plus the year when it differs), use the
+viewer's local date and remain part of the row's measured height.
 
 Activity headers use KetActivityRow with product content for file-link versus
 expansion hit targets and multiline command summaries. Group headers consume

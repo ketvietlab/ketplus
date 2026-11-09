@@ -2356,6 +2356,81 @@ void AgentWorkspaceViewTest::userTurnLeadsWithOriginAndImages() {
                     "Sent while the agent was working · joined the running turn");
 }
 
+void AgentWorkspaceViewTest::imageViewerOpensTheRowsImages() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 900);
+    view.show();
+    QTemporaryDir images;
+    QStringList sources;
+    for (const auto& [name, colour] :
+         {std::pair{"first.png", Qt::green}, std::pair{"second.png", Qt::blue}}) {
+        QImage sample(240, 156, QImage::Format_RGB32);
+        sample.fill(colour);
+        QVERIFY(sample.save(images.filePath(name)));
+        sources.append(QUrl::fromLocalFile(images.filePath(name)).toString());
+    }
+    view.resetMessages({QVariantMap{{"kind", "user"},
+                                    {"body", "Compare these."},
+                                    {"messageKey", "pair"},
+                                    {"images", sources}}},
+                       "viewer");
+    auto* root = view.quickView()->rootObject();
+    auto* transcript = root->findChild<QQuickItem*>(QStringLiteral("agentTranscript"));
+    QVERIFY(transcript);
+    QList<QQuickItem*> frames;
+    QTRY_VERIFY(([&] {
+        frames.clear();
+        const auto collect = [&](const auto& self, QQuickItem* item) -> void {
+            if (item->objectName() == "messageAttachmentFrame" && item->isVisible())
+                frames.append(item);
+            for (auto* child : item->childItems())
+                self(self, child);
+        };
+        collect(collect, transcript);
+        return frames.size() == 2;
+    })());
+    QTest::qWait(150);
+    // The second thumbnail opens the Két lightbox on it, with its neighbour one step away.
+    QTest::mouseClick(view.quickView(), Qt::LeftButton, Qt::NoModifier,
+                      frames.at(1)->mapToScene(QPointF(20, 20)).toPoint());
+    auto* viewer = root->findChild<QObject*>(QStringLiteral("imagePreview"));
+    QVERIFY(viewer);
+    QTRY_VERIFY(viewer->property("visible").toBool());
+    QCOMPARE(viewer->property("count").toInt(), 2);
+    QCOMPARE(viewer->property("currentIndex").toInt(), 1);
+    QCOMPARE(viewer->property("imageSource").toUrl().toString(), sources.at(1));
+    QCOMPARE(viewer->property("item").toMap().value("caption").toString(), QString("second.png"));
+    // The mock's tools: zoom, rotate, copy, download, print and fullscreen.
+    QCOMPARE(viewer->property("tools").toInt(), 0xff);
+    // Copy puts the picture on the clipboard and says so.
+    QGuiApplication::clipboard()->clear();
+    QVERIFY(QMetaObject::invokeMethod(viewer, "trigger", Q_ARG(QVariant, 0x10))); // Copy
+    QTRY_VERIFY(!QGuiApplication::clipboard()->image().isNull());
+    QCOMPARE(QGuiApplication::clipboard()->image().pixelColor(5, 5), QColor(Qt::blue));
+    auto* toast = root->findChild<QObject*>(QStringLiteral("imageToast"));
+    QVERIFY(toast);
+    QCOMPARE(toast->property("text").toString(), QString("Copied the image"));
+    // Fullscreen turns the top-level window, not the Quick window inside it.
+    QVERIFY(QMetaObject::invokeMethod(viewer, "trigger", Q_ARG(QVariant, 0x40)));
+    QVERIFY(view.window()->windowState().testFlag(Qt::WindowFullScreen));
+    QVERIFY(QMetaObject::invokeMethod(viewer, "trigger", Q_ARG(QVariant, 0x40)));
+    QVERIFY(!view.window()->windowState().testFlag(Qt::WindowFullScreen));
+    // A narrow pane keeps every tool reachable: what does not fit moves into More.
+    QVERIFY(viewer->property("overflowTools").toList().isEmpty());
+    ket::Appearance::instance().setZoom(1.5);
+    view.resize(420, 700);
+    QTRY_VERIFY(!viewer->property("overflowTools").toList().isEmpty());
+    auto* more = qvariant_cast<QQuickItem*>(viewer->property("moreButton"));
+    QVERIFY(more && more->isVisible());
+    QVERIFY(more->mapToScene(QPointF()).x() >= 0);
+    QCOMPARE(viewer->property("shownToolCount").toInt() +
+                 viewer->property("overflowTools").toList().size(),
+             8);
+    ket::Appearance::instance().setZoom(1.0);
+    QVERIFY(QMetaObject::invokeMethod(viewer, "close"));
+}
+
 void AgentWorkspaceViewTest::transcriptDayDividersUseJournalDates() {
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());

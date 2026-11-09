@@ -62,6 +62,7 @@ add_library(ketplus_ai STATIC
     src/agent/TranscriptTableStyle.cpp
     src/agent/TranscriptTableStyle.h
     src/agent/AgentWorkspaceMedia.cpp
+    src/agent/AgentWorkspaceImages.cpp
     src/agent/AgentWorkspaceMentions.cpp
     src/agent/AgentWorkspaceRenderCache.cpp
     src/agent/AgentWorkspaceSkills.cpp
@@ -97,6 +98,7 @@ target_link_libraries(ketplus_ai
         Qt6::QuickControls2
         KetQt::Quick
         KetQt::QuickPlugin
+        KetQt::Widgets
         Qt6::Sql
         Qt6::Widgets
         ketplus_browser_tools

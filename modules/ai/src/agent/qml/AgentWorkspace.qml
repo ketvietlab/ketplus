@@ -535,35 +535,40 @@ Item {
         }
     }
 
-    Basic.Popup {
+    // The image viewer over the whole window, as the mock opens a capture or an image file.
+    Kit.KetLightbox {
         id: imagePreview
         objectName: "imagePreview"
-        parent: Overlay.overlay
-        anchors.centerIn: parent
-        width: Math.min(KetTheme.px(1100, KetTheme.zoom), root.width - KetTheme.px(32, KetTheme.zoom))
-        height: Math.min(KetTheme.px(850, KetTheme.zoom), root.height - KetTheme.px(32, KetTheme.zoom))
-        modal: true
-        focus: true
-        padding: KetTheme.px(16, KetTheme.zoom)
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        background: Rectangle { color: KetTheme.t.surfaceRaised; radius: KetTheme.px(8, KetTheme.zoom) }
-        property url imageSource
-        Image {
-            objectName: "imagePreviewContent"
-            anchors.fill: parent
-            anchors.topMargin: KetTheme.px(32, KetTheme.zoom)
-            source: imagePreview.imageSource
-            fillMode: Image.PreserveAspectFit
-            autoTransform: true
+        tools: Kit.KetTheme.LightboxTool.ZoomOut | Kit.KetTheme.LightboxTool.ZoomLevel
+               | Kit.KetTheme.LightboxTool.ZoomIn | Kit.KetTheme.LightboxTool.Rotate
+               | Kit.KetTheme.LightboxTool.Copy | Kit.KetTheme.LightboxTool.Download
+               | Kit.KetTheme.LightboxTool.Print | Kit.KetTheme.LightboxTool.Fullscreen
+        readonly property url imageSource: item ? item.source : ""
+        // Opens image URLs at `index`; each is captioned with its file name.
+        function showImages(sources, index) {
+            items = (sources || []).map(source => ({
+                source: source.toString(),
+                caption: agentHost.imageCaption(source)
+            }));
+            openAt(index || 0);
         }
-        Kit.KetIconButton {
-            id: closeImageButton
-            anchors.top: parent.top
-            anchors.right: parent.right
-            iconName: Kit.KetTheme.iconForLucide("x")
-            text: "Close image"
-            onClicked: imagePreview.close()
+        onToolTriggered: tool => {
+            if (!item)
+                return;
+            if (tool === Kit.KetTheme.LightboxTool.Copy)
+                imageToast.show(agentHost.copyImage(item.source, rotationAngle) ? "Copied the image" : "The image could not be copied");
+            else if (tool === Kit.KetTheme.LightboxTool.Download) {
+                const saved = agentHost.saveImageToDownloads(item.source);
+                imageToast.show(saved ? "Saved " + saved.split("/").pop() + " to Downloads" : "The image could not be saved");
+            } else if (tool === Kit.KetTheme.LightboxTool.Print)
+                agentHost.printImage(item.source, rotationAngle, item.caption);
+            else if (tool === Kit.KetTheme.LightboxTool.Fullscreen)
+                agentHost.toggleWindowFullScreen();
         }
+    }
+    Kit.KetToast {
+        id: imageToast
+        objectName: "imageToast"
     }
 
     function openTranscriptFind() {

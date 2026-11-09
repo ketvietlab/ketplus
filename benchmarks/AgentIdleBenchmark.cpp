@@ -101,7 +101,8 @@ int main(int argc, char** argv) {
          {"capture", "Optional native PNG before measurement", "path"},
          {"theme", "system, light or dark", "theme", "system"},
          {"zoom", "Interface zoom (1–1.5)", "zoom", "1"},
-         {"open", "mode, model or limits (a composer panel) or welcome, for captures", "panel"},
+         {"open", "mode, model or limits (a composer panel), welcome or viewer, for captures",
+          "panel"},
          {"transcript", "claude, codex or cursor: the mock's workspace/<provider> messages",
           "provider"},
          {"scroll", "With --transcript: 0 shows the top, 1 the end, like the mock's --scroll",
@@ -132,7 +133,7 @@ int main(int argc, char** argv) {
     const auto panel = parser.value("open");
     // `welcome` opens no panel: the conversation has no messages, like the mock's welcome state.
     const bool welcome = panel == "welcome";
-    if (!panel.isEmpty() && !welcome && !panelButtons.contains(panel)) {
+    if (!panel.isEmpty() && !welcome && panel != "viewer" && !panelButtons.contains(panel)) {
         report({{"event", "error"}, {"reason", "Invalid panel"}});
         return 2;
     }
@@ -287,7 +288,19 @@ int main(int argc, char** argv) {
             list->setProperty("contentY", list->property("originY").toDouble() +
                                               qBound(0.0, fraction, 1.0) * qMax(0.0, range));
         });
-    if (!panel.isEmpty() && !welcome)
+    // The mock's image viewer on the Claude prompt's capture.
+    if (panel == "viewer")
+        QTimer::singleShot(1000, &view, [&view] {
+            auto* viewer = view.quickView()->rootObject()->findChild<QObject*>("imagePreview");
+            const QString shot =
+                QUrl::fromLocalFile(QStringLiteral(KETPLUS_MOCK_ASSETS "/screenshot-sidebar.png"))
+                    .toString();
+            if (!viewer ||
+                !QMetaObject::invokeMethod(viewer, "showImages",
+                                           Q_ARG(QVariant, QVariantList{shot}), Q_ARG(QVariant, 0)))
+                report({{"event", "error"}, {"reason", "Image viewer not found"}});
+        });
+    else if (!panel.isEmpty() && !welcome && panel != "viewer")
         QTimer::singleShot(1000, &view, [&] {
             auto* button = findItem(view.quickView()->rootObject(), panelButtons.value(panel));
             if (!button || !QMetaObject::invokeMethod(button, "clicked"))
@@ -427,7 +440,9 @@ int main(int argc, char** argv) {
     });
     readiness.start();
     QObject::connect(&readinessDeadline, &QTimer::timeout, &app, [&] {
-        report({{"event", "error"}, {"reason", "Timed out waiting for stable window state"}});
+        report({{"event", "error"},
+                {"reason", "Timed out waiting for stable window state"},
+                {"fixture", fixture()}});
         app.exit(2);
     });
     readinessDeadline.start(60000);
