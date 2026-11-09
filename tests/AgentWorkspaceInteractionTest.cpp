@@ -138,6 +138,11 @@ for line in sys.stdin:
     };
     itemEvent("item/completed", "manual", "reason", "reasoning");
     QCOMPARE(manager.status(path), QStringLiteral("Compacting context…"));
+    // The reasoning reads as a "Thought" step after the compaction row.
+    QCOMPARE(manager.messages(path).size(), 3);
+    QCOMPARE(manager.messages(path).last().toMap().value("title").toString(),
+             QStringLiteral("Thought"));
+    const auto compactionRow = [&] { return manager.messages(path).at(1).toMap(); };
     itemEvent("item/completed", "stale-turn", "c1", "contextCompaction");
     QCOMPARE(manager.status(path), QStringLiteral("Compacting context…"));
     manager.steerPrompt(path, "/compact");
@@ -148,11 +153,10 @@ for line in sys.stdin:
     itemEvent("item/completed", "manual", "c1", "contextCompaction");
     QCOMPARE(manager.status(path), QStringLiteral("Ready"));
     manager.selectConversation(path, original);
-    QCOMPARE(manager.messages(path).last().toMap().value("body").toString(),
-             QStringLiteral("Context compacted"));
+    QCOMPARE(compactionRow().value("body").toString(), QStringLiteral("Context compacted"));
     QVERIFY(manager.isRunning(path));
     itemEvent("item/started", "manual", "c1", "contextCompaction");
-    QCOMPARE(manager.messages(path).size(), 2);
+    QCOMPARE(manager.messages(path).size(), 3);
     QCOMPARE(manager.status(path), QStringLiteral("Working…"));
     if (!capture.isEmpty()) {
         view.resetMessages(manager.messages(path));
@@ -164,7 +168,7 @@ for line in sys.stdin:
                            {"turn", QJsonObject{{"id", "manual"}, {"status", "completed"}}}});
     QVERIFY(!manager.isRunning(path));
     itemEvent("item/started", "manual", "late", "contextCompaction");
-    QCOMPARE(manager.messages(path).size(), 2);
+    QCOMPARE(manager.messages(path).size(), 3);
 
     manager.submitPrompt(path, "/compact");
     QTRY_COMPARE(manager.status(path), QStringLiteral("Error"));
