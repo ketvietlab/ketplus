@@ -153,6 +153,7 @@ endif()
 
 qt_add_executable(ketplus_atlas_tunnel_fixture AtlasTunnelFixture.cpp)
 target_link_libraries(ketplus_atlas_tunnel_fixture PRIVATE ketplus_daemon_core)
+ketplus_enable_warnings(ketplus_atlas_tunnel_fixture)
 ketplus_add_daemon_test(ketplus_codex_items_tests CodexItemsTest.cpp)
 
 ketplus_add_daemon_test(ketplus_daemon_peer_transport_tests PeerTransportTest.cpp)

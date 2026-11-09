@@ -28,9 +28,9 @@ class MetricsArtifactTest final : public QObject {
         auto duplicate = rows();
         duplicate[8] = duplicate[7];
         QCOMPARE(r03::metricsStatus(0, required_, duplicate), "partial");
-        for (const QJsonObject bad : {QJsonObject{{"scenario", "unknown"}, {"sample", 2}},
-                                      QJsonObject{{"scenario", "giant-turn"}, {"sample", 0.5}},
-                                      QJsonObject{{"scenario", "giant-turn"}, {"sample", "2"}}}) {
+        for (const QJsonObject& bad : {QJsonObject{{"scenario", "unknown"}, {"sample", 2}},
+                                       QJsonObject{{"scenario", "giant-turn"}, {"sample", 0.5}},
+                                       QJsonObject{{"scenario", "giant-turn"}, {"sample", "2"}}}) {
             auto invalid = rows();
             invalid[8] = bad;
             QCOMPARE(r03::metricsStatus(0, required_, invalid), "partial");
