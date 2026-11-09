@@ -406,6 +406,65 @@ class TurnAcceptanceTest final : public QObject {
         QVERIFY(turn("third", "hello").value("ok").toBool());
         QTRY_COMPARE_WITH_TIMEOUT(stored().state, QString("ready"), 5000);
     }
+    void deltaAfterItsItemCompletedIsDropped() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite3");
+        const auto executable = dir.filePath("fake-codex");
+        QVERIFY(writeFakeCodex(executable, dir.filePath("provider.log")));
+        LocalJournal journal(path);
+        StoredSession seed;
+        seed.id = "late-delta";
+        seed.generation = 1;
+        seed.worktreePath = dir.path();
+        seed.adapter = "codex";
+        seed.state = "idle";
+        QVERIFY(journal.upsertSession(seed));
+        CodexAdapter adapter(executable);
+        SessionHost host(&journal, &adapter);
+        const auto stop = qScopeGuard([&] { adapter.stop(); });
+        auto submitted = request("hang", seed.id);
+        submitted.insert("payload", QJsonObject{{"prompt", "hang"}, {"client_message_id", "hang"}});
+        QVERIFY(host.handleCommand(submitted, "desktop-test").value("ok").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(journal.sessions().first().state, QString("running"), 5000);
+        const QString thread = journal.sessions().first().threadId;
+        const auto notify = [&](const QString& method, QJsonObject params) {
+            params.insert("threadId", thread);
+            emit adapter.notificationReceived(method, params);
+        };
+        const auto item = [](const QString& id, const QString& type, const QString& status) {
+            return QJsonObject{{"item", QJsonObject{{"id", id},
+                                                    {"type", type},
+                                                    {"text", status == "completed" ? "Hello" : ""},
+                                                    {"status", status}}}};
+        };
+        const auto deltas = [&journal, &seed] {
+            QStringList found;
+            for (const auto& value : journal.eventsAfter(seed.id, 1, 0)) {
+                const auto event = value.toObject();
+                const auto type = event.value("event_type").toString();
+                if (type == "assistant.delta" || type == "command.output_delta")
+                    found.append(event.value("payload").toObject().value("delta").toString());
+            }
+            return found;
+        };
+        notify("item/started", item("a1", "agentMessage", "inProgress"));
+        notify("item/agentMessage/delta", {{"itemId", "a1"}, {"delta", "Hello"}});
+        notify("item/completed", item("a1", "agentMessage", "completed"));
+        notify("item/agentMessage/delta", {{"itemId", "a1"}, {"delta", " late"}});
+        notify("item/started", item("c1", "commandExecution", "inProgress"));
+        notify("item/completed", item("c1", "commandExecution", "completed"));
+        notify("item/commandExecution/outputDelta", {{"itemId", "c1"}, {"delta", "late output"}});
+        // An item started again under the same id streams again.
+        notify("item/started", item("a1", "agentMessage", "inProgress"));
+        notify("item/agentMessage/delta", {{"itemId", "a1"}, {"delta", "again"}});
+        QTRY_COMPARE_WITH_TIMEOUT(deltas(), QStringList({"Hello", "again"}), 3000);
+        QTest::qWait(300);
+        QCOMPARE(deltas(), QStringList({"Hello", "again"}));
+        // A new provider process may reuse item ids, even without an item.started first.
+        emit adapter.stopped("provider exited");
+        notify("item/commandExecution/outputDelta", {{"itemId", "c1"}, {"delta", "new process"}});
+        QTRY_COMPARE_WITH_TIMEOUT(deltas(), QStringList({"Hello", "again", "new process"}), 3000);
+    }
 };
 QTEST_GUILESS_MAIN(TurnAcceptanceTest)
 #include "TurnAcceptanceTest.moc"

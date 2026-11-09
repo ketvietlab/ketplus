@@ -12,6 +12,7 @@ constexpr qsizetype maximumDeferredEventsTotal = 512;
 constexpr qsizetype maximumDeferredBytesPerSession = 40 * 1024 * 1024;
 constexpr qsizetype maximumDeferredBytesTotal = 80 * 1024 * 1024;
 constexpr int journalRetryMs = 1000;
+constexpr qsizetype maximumCompletedItems = 512;
 
 bool isStreamDelta(const QString& type) {
     return type == QStringLiteral("assistant.delta") ||
@@ -141,6 +142,22 @@ bool SessionHost::appendEvent(Session& session, const QString& type, const QJson
         (void)deferJournalEvent(target, type, payload, error);
         return false; // Retained is not the same as committed.
     };
+    const QString itemId = payload.value(QStringLiteral("item_id")).toString();
+    if (!itemId.isEmpty()) {
+        // A provider stream is ordered, but a delta that arrives after its item completed (a
+        // retried notification, or the tail of a previous turn) would extend text that is
+        // already final, live and in every replay. The completed item is authoritative.
+        if (isStreamDelta(type) && session.completedItems.contains(itemId))
+            return true;
+        if (type == QStringLiteral("item.started") && session.completedItems.remove(itemId))
+            session.completedItemOrder.removeOne(itemId);
+        if (type == QStringLiteral("item.completed") && !session.completedItems.contains(itemId)) {
+            session.completedItems.insert(itemId);
+            session.completedItemOrder.append(itemId);
+            if (session.completedItemOrder.size() > maximumCompletedItems)
+                session.completedItems.remove(session.completedItemOrder.takeFirst());
+        }
+    }
     if (!session.deferredJournal.isEmpty())
         return retain(session);
     if (!isStreamDelta(type)) {

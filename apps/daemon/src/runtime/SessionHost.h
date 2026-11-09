@@ -116,6 +116,11 @@ class SessionHost final : public QObject, private AgentHostPort {
         // completion for it, or a late turn/started, must not end or restart the turn that runs
         // now. Cleared when the process stops or reloads, since the next one may reuse ids.
         QString completedTurnId;
+        // Items whose completion is journaled, oldest first and bounded. A stream delta for one
+        // of them would be appended to final text. Cleared with completedTurnId, since a new
+        // provider process may reuse item ids; an item.started with the same id reopens it.
+        QSet<QString> completedItems;
+        QList<QString> completedItemOrder;
         QStringList materializedAttachments;
         QStringList stagedAttachmentIds;
         // The provider's latest background task snapshot (tasks.changed, REPLACE semantics).
