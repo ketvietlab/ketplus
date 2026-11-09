@@ -25,6 +25,11 @@ void AgentWorkspaceView::setWorkingChanges(const QString& root, const QStringLis
     emit workingChangesChanged();
 }
 
+void AgentWorkspaceView::executionCheckoutChanged() {
+    ++workingChangesRevision_;
+    emit workingChangesChanged();
+}
+
 bool AgentWorkspaceView::hasUncommittedChange(const QStringList& paths) const {
     if (workingChangesRoot_.isEmpty() || workingChangesRoot_ != checkoutPath(executionPath()))
         return false;

@@ -2655,6 +2655,20 @@ void AgentWorkspaceViewTest::turnEndListsTheTurnsChangedFiles() {
     view.setWorkingChanges(elsewhere.path(), {"modules/ai/src/agent/qml/SpinClock.qml"});
     QTest::qWait(50);
     QCOMPARE(card->property("note").toString(), QString());
+    // Moving the conversation between checkouts re-evaluates the same snapshot.
+    view.setWorkingChanges(checkout.path(), {"modules/ai/src/agent/qml/SpinClock.qml"});
+    QTRY_COMPARE(card->property("note").toString(), QStringLiteral("Not committed"));
+    view.setExecutionBranch("other", elsewhere.path(), 2);
+    QTRY_COMPARE(card->property("note").toString(), QString());
+    view.setExecutionBranch("main", checkout.path(), 3);
+    QTRY_COMPARE(card->property("note").toString(), QStringLiteral("Not committed"));
+    view.setExecutionBranch({}, {}, 4);
+    view.setActivePath(elsewhere.path());
+    QTRY_COMPARE(card->property("note").toString(), QString());
+    view.setActivePath(checkout.path());
+    QTRY_COMPARE(card->property("note").toString(), QStringLiteral("Not committed"));
+    view.setWorkingChanges(checkout.path(), {});
+    QTRY_COMPARE(card->property("note").toString(), QString());
     // A group's update keeps the row count and the delegate; the card follows its files.
     const QPointer<QQuickItem> shown(card);
     auto updated = QVariantMap{{"messageKey", "g"},

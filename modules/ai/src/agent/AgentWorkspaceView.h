@@ -199,8 +199,11 @@ class AgentWorkspaceView final : public QWidget {
         emit modelsChanged();
     }
     void setExecutionBranch(const QString& branch, const QString& path = {}, qint64 revision = 1) {
+        const QString previousPath = executionPath();
         executionBranch_ = branch;
         executionPath_ = path;
+        if (executionPath() != previousPath)
+            executionCheckoutChanged();
         if (!path.isEmpty())
             executionContextSwitched_ = revision > 1;
         emit executionBranchChanged();
@@ -588,6 +591,8 @@ class AgentWorkspaceView final : public QWidget {
     QString executionBranch_;
     QString executionPath_;
     bool executionContextSwitched_{false};
+    // hasUncommittedChange() reads the execution path, which QML cannot track.
+    void executionCheckoutChanged();
     void flushStreamingMessages();
     QTimer* streamUpdateTimer_{nullptr};
     QMap<int, QVariantMap> pendingStreamingMessages_;
