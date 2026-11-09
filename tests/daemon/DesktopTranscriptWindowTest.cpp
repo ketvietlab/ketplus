@@ -305,7 +305,7 @@ class DesktopTranscriptWindowTest final : public QObject {
         QCOMPARE(note.value("subtype").toString(), "notice");
         QVERIFY(note.value("body").toString().contains("docs MCP server"));
         QVERIFY(rows.last().toMap().value("body").toString().contains("item/tool/call"));
-        QVERIFY(!transcriptText(rows).contains("Turn failed"));
+        QVERIFY(!transcriptText(rows).contains("The provider stopped with an error"));
     }
 
     void protocolErrorRestoresAsNoticeAndUnknownItemAsGenericRow() {
@@ -340,7 +340,7 @@ class DesktopTranscriptWindowTest final : public QObject {
         const auto unknown = rows.last().toMap();
         QCOMPARE(unknown.value("eventType").toString(), "unknown");
         QCOMPARE(unknown.value("title").toString(), "Used futureItem");
-        QVERIFY(!transcriptText(rows).contains("Turn failed"));
+        QVERIFY(!transcriptText(rows).contains("The provider stopped with an error"));
     }
 
     void restoresSteerTextButKeepsEmptySteersAsMetadata() {
