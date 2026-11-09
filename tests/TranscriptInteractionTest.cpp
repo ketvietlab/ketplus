@@ -245,9 +245,11 @@ void AgentWorkspaceViewTest::browserStepsCollapseAroundEvidence() {
     QCOMPARE(model->get(1).value("messageKey").toString(), "capture");
     QCOMPARE(model->get(2).value("messageKey").toString(), "compare");
     QCOMPARE(model->sourceCount(), rows.size());
-    QVERIFY(view.transcriptCopyText().contains("observe"));
-    QVERIFY(view.transcriptCopyText().contains("inspect"));
-    QCOMPARE(model->findMatches("observe", 10).size(), 0);
+    // Page steps collapse into the open step's group, titled as the mock's browser steps.
+    QCOMPARE(model->get(0).value("groupSummary").toString(),
+             QStringLiteral("Used ketplus_browser · 5 steps"));
+    QVERIFY(view.transcriptCopyText().contains("Observed the page"));
+    QVERIFY(view.transcriptCopyText().contains("Inspected the page"));
     auto* root = view.quickView()->rootObject();
     const auto galleries = [&]() {
         const auto count = [](auto&& self, QQuickItem* parent) -> int {
@@ -262,14 +264,16 @@ void AgentWorkspaceViewTest::browserStepsCollapseAroundEvidence() {
         return count(count, root);
     };
     QTRY_COMPARE(galleries(), 2);
-    auto* browserOpen = findVisualItem(root, "transcriptBrowserOpen");
-    QVERIFY(browserOpen && browserOpen->isVisible());
-    QCOMPARE(browserOpen->property("text").toString(), QStringLiteral("Open"));
-    auto* openRow = findVisualItem(root, "transcriptActivityRow");
-    QVERIFY(openRow);
-    QVERIFY(!findVisualItem(openRow, "transcriptActivityTarget")->isVisible());
-    // Hidden housekeeping cannot return when groups are toggled; evidence stays visible.
+    // Session housekeeping stays hidden when the group opens; evidence stays visible.
     model->setGroupExpanded("open", true);
+    QTRY_COMPARE(model->rowCount(), 7);
+    for (int row = 0; row < model->rowCount(); ++row)
+        QVERIFY(model->get(row).value("messageKey").toString() != "browser_close_page");
+    QTRY_VERIFY(findVisibleItem(root, "transcriptBrowserOpen"));
+    auto* browserOpen = findVisibleItem(root, "transcriptBrowserOpen");
+    QCOMPARE(browserOpen->property("text").toString(), QStringLiteral("Open"));
+    QTRY_COMPARE(galleries(), 2);
+    model->setGroupExpanded("open", false);
     QTRY_COMPARE(model->rowCount(), 3);
     QTRY_COMPARE(galleries(), 2);
     const QString capturePrefix = qEnvironmentVariable("KETPLUS_BROWSER_GROUP_CAPTURE");
@@ -659,10 +663,10 @@ void AgentWorkspaceViewTest::activityOperationSemantics() {
                                                             {"mimeType", "image/png"}}}}}}};
         const auto running = ketplus::agent_message::activityMessage(capture, false);
         QCOMPARE(running.value("eventType").toString(), QStringLiteral("browser.screenshot"));
-        QCOMPARE(running.value("title").toString(), QStringLiteral("Using browser · capture"));
+        QCOMPARE(running.value("title").toString(), QStringLiteral("Capturing"));
         QVERIFY(running.value("images").toList().isEmpty());
         const auto done = ketplus::agent_message::activityMessage(capture, true);
-        QCOMPARE(done.value("title").toString(), QStringLiteral("Used browser · capture"));
+        QCOMPARE(done.value("title").toString(), QStringLiteral("Captured"));
         QCOMPARE(done.value("status").toString(), QStringLiteral("completed"));
         QCOMPARE(done.value("summary").toString(), QStringLiteral("fullPage=false"));
         const auto images = done.value("images").toList();

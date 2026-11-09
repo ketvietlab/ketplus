@@ -209,4 +209,17 @@ inline QQuickItem* findVisualItem(QQuickItem* item, const QString& name) {
     return nullptr;
 }
 
+// Pooled delegates keep hidden copies; only a visible item is on screen.
+inline QQuickItem* findVisibleItem(QQuickItem* item, const QString& name) {
+    if (!item->isVisible())
+        return nullptr;
+    if (item->objectName() == name)
+        return item;
+    for (auto* child : item->childItems()) {
+        if (auto* match = findVisibleItem(child, name))
+            return match;
+    }
+    return nullptr;
+}
+
 } // namespace agent_workspace_test

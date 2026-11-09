@@ -126,7 +126,7 @@ class DesktopActivityGroupsTest : public QObject {
         desktop.copyConversation(canonical);
         QTRY_COMPARE(copied.size(), 1);
         const auto exported = copied.first().at(2).toString();
-        QVERIFY(exported.contains("observe"));
+        QVERIFY(exported.contains("Observed the page"));
         QVERIFY(!view.messageModel()->groupExpanded(key));
         // An explicitly opted-out client still sees raw lifecycle events on the same daemon.
         bool replied = false;
