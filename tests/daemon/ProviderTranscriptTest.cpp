@@ -732,6 +732,7 @@ class ProviderTranscriptTest : public QObject {
         QTest::addColumn<QString>("state");
         QTest::addColumn<QString>("reason");
         QTest::addColumn<QString>("meta");
+        QTest::newRow("delivered") << "delivered" << "" << "Delivered";
         QTest::newRow("held") << "held" << "hop_limit" << "Held · waiting for approval there";
         QTest::newRow("no reply") << "failed" << "no_reply" << "Delivered · no reply";
         QTest::newRow("turn stopped")
