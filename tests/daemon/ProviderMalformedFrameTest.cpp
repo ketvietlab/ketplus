@@ -95,14 +95,17 @@ class ProviderMalformedFrameTest final : public QObject {
     // second stop or count as a second crash.
     void oversizedFrameStopsOnce_data() {
         QTest::addColumn<QString>("provider");
+        QTest::addColumn<QString>("phase");
         for (const QString& provider : {"claude", "cursor"})
-            QTest::newRow(qPrintable(provider)) << provider;
+            for (const QString& phase : {"init", "call"})
+                QTest::newRow(qPrintable(provider + '-' + phase)) << provider << phase;
     }
     void oversizedFrameStopsOnce() {
 #ifdef Q_OS_WIN
         QSKIP("The fixture uses POSIX executable symlink launchers.");
 #else
         QFETCH(QString, provider);
+        QFETCH(QString, phase);
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString executable = directory.filePath("fake-" + provider);
@@ -112,7 +115,7 @@ class ProviderMalformedFrameTest final : public QObject {
             return file.open(QIODevice::WriteOnly | QIODevice::Truncate) &&
                    file.write(value) == value.size();
         };
-        QVERIFY(setMode("call:oversized"));
+        QVERIFY(setMode((phase + ":oversized").toUtf8()));
         std::unique_ptr<ProviderAdapter> adapter;
         if (provider == "claude")
             adapter = std::make_unique<ClaudeAdapter>(executable);
