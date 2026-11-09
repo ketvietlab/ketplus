@@ -2087,6 +2087,15 @@ void SessionHost::handleProviderNotification(const QString& method, const QJsonO
         return;
     }
     if (method == QStringLiteral("error")) {
+        // A final error ends the turn even when turn/completed never follows, so its approvals
+        // end with it, before the error is published, and later requests for it are declined.
+        // A retried error, or one naming an earlier turn, leaves the running turn alone.
+        const QString turnId = params.value(QStringLiteral("turnId")).toString();
+        if (!params.value(QStringLiteral("willRetry")).toBool() &&
+            (turnId.isEmpty() || turnId == session->stored.turnId)) {
+            session->failedTurnId = session->stored.turnId;
+            abandonTurnApprovals(session->stored.id);
+        }
         const QJsonObject providerError = params.value(QStringLiteral("error")).toObject();
         appendProviderEvent(
             *session, QStringLiteral("runtime.error"),
@@ -2097,12 +2106,6 @@ void SessionHost::handleProviderNotification(const QString& method, const QJsonO
             QFile::remove(path);
         for (const QString& id : std::exchange(session->stagedAttachmentIds, {}))
             (void)journal_->cancelAttachment(session->stored.id, session->stored.generation, id, 1);
-        // A final error ends the turn even when turn/completed never follows, so its approvals
-        // end with it. An error naming an earlier turn leaves the running turn's approvals alone.
-        const QString turnId = params.value(QStringLiteral("turnId")).toString();
-        if (!params.value(QStringLiteral("willRetry")).toBool() &&
-            (turnId.isEmpty() || turnId == session->stored.turnId))
-            abandonTurnApprovals(session->stored.id);
     }
 }
 
@@ -2188,11 +2191,14 @@ void SessionHost::handleProviderRequest(const QJsonValue& requestId, const QStri
         return;
     }
     // A request naming a turn that already ended would outlive the sweep at its completion and
-    // be answered during the next turn. A request without a turn id is the current turn's.
+    // be answered during the next turn. A request without a turn id is the current turn's, which
+    // a final error may have ended.
     if (const QString turnId = params.value(QStringLiteral("turnId")).toString();
-        !turnId.isEmpty() &&
-        (turnId == session->completedTurnId ||
-         (!session->stored.turnId.isEmpty() && turnId != session->stored.turnId))) {
+        (!session->failedTurnId.isEmpty() &&
+         (turnId.isEmpty() ? session->stored.turnId : turnId) == session->failedTurnId) ||
+        (!turnId.isEmpty() &&
+         (turnId == session->completedTurnId ||
+          (!session->stored.turnId.isEmpty() && turnId != session->stored.turnId)))) {
         declineProviderRequest(*session, requestId, method, QStringLiteral("stale_turn"),
                                params.value(QStringLiteral("serverName")).toString());
         return;

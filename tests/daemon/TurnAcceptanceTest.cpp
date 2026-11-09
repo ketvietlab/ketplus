@@ -819,17 +819,66 @@ class TurnAcceptanceTest final : public QObject {
         error(active.turnId, true);
         error("earlier-turn", false);
         QCOMPARE(pending().size(), qsizetype(1));
-        // The final error ends the turn without turn/completed; its approval ends with it.
+        // The final error ends the turn without turn/completed; its approval ends with it, so
+        // a client answering as soon as it hears of the error is refused.
+        QJsonObject atError;
+        const auto boundary =
+            connect(&host, &SessionHost::eventReady, &host, [&](const QJsonObject& event) {
+                if (event.value("event_type") == "runtime.error" && atError.isEmpty())
+                    atError = command("approval.resolve", "at-error",
+                                      {{"approval_id", approvalId},
+                                       {"resolution", QJsonObject{{"decision", "accept"}}}});
+            });
         error(active.turnId, false);
+        disconnect(boundary);
+        QVERIFY(!atError.isEmpty());
+        QVERIFY2(!atError.value("ok").toBool(), qPrintable(QJsonDocument(atError).toJson()));
         QCOMPARE(pending().size(), qsizetype(0));
         const auto late = command(
             "approval.resolve", "late",
             {{"approval_id", approvalId}, {"resolution", QJsonObject{{"decision", "accept"}}}});
         QVERIFY2(!late.value("ok").toBool(), qPrintable(QJsonDocument(late).toJson()));
+        // A request for the failed turn that arrives afterwards, with or without its turn id,
+        // is declined instead of offered.
+        const auto declines = [&] {
+            int count = 0;
+            for (const QJsonValue& event : journal.eventsAfter(seed.id, 1, 0))
+                if (event.toObject().value("event_type") == "provider.request_declined" &&
+                    event.toObject().value("payload").toObject().value("reason") == "stale_turn")
+                    ++count;
+            return count;
+        };
+        for (const QString& turnId : {active.turnId, QString()}) {
+            emit adapter.requestReceived("after-error-" + turnId,
+                                         "item/commandExecution/requestApproval",
+                                         {{"threadId", active.threadId},
+                                          {"turnId", turnId},
+                                          {"itemId", "after-error-" + turnId},
+                                          {"command", "echo"}});
+            QCOMPARE(pending().size(), qsizetype(0));
+        }
+        QCOMPARE(declines(), 2);
         QTest::qWait(100);
         QFile log(providerLog);
         QVERIFY(log.open(QIODevice::ReadOnly));
         QVERIFY(!log.readAll().contains("approval:accept"));
+        // The turn that follows is not fenced.
+        emit adapter.notificationReceived(
+            "turn/completed", {{"threadId", active.threadId},
+                               {"turn", QJsonObject{{"id", active.turnId}, {"status", "failed"}}}});
+        QVERIFY(command("session.start_turn", "next-turn",
+                        {{"prompt", "hang"}, {"client_message_id", "next-turn"}})
+                    .value("ok")
+                    .toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(journal.sessions().first().state, QString("running"), 5000);
+        const auto next = journal.sessions().first();
+        QVERIFY(!next.turnId.isEmpty() && next.turnId != active.turnId);
+        emit adapter.requestReceived("next-turn-request", "item/commandExecution/requestApproval",
+                                     {{"threadId", next.threadId},
+                                      {"turnId", next.turnId},
+                                      {"itemId", "next-turn-command"},
+                                      {"command", "echo"}});
+        QCOMPARE(pending().size(), qsizetype(1));
     }
 
     void approvalsEndWithTheirTurn() {
