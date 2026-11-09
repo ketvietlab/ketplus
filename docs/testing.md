@@ -252,6 +252,10 @@ the corresponding Atlas mock first.
   schema definitions and table contents (worktree catalog without its clock) as
   an uninterrupted migration. The child opens only `LocalJournal`; startup
   compaction has its own interruption tests in `ketplus_daemon_journal_space_tests`.
+- Media reads: `ketplus_daemon_lifecycle_tests` sends 24 deferred previews at
+  once and expects 8 `busy` answers and 16 previews, then a free slot again;
+  `ketplus_daemon_protocol_tests` gives a viewed-image path that is a FIFO and
+  fails if reading it blocks for 2 s.
 - Journal query audit: `ketplus_daemon_journal_query_audit_tests` traces every
   statement of 25 journal operations (append, transcript reads, activity pages,
   large-event fragments, fork including its snapshot reader, delete and purge,

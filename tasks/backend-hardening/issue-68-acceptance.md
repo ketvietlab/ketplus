@@ -213,3 +213,23 @@ restoring the unbounded group read each fail the audit; removing the leftover
 check fails the new fork test. Limits: opening the journal is outside the trace
 (see the startup characterization); statement counters do not bound bytes, memory
 or total work per operation; media files need their own evidence.
+
+## Media reads and viewed-image sources
+
+Phone previews ran on the global thread pool without a queue bound; each decode can
+hold a 64-megapixel image (about 256 MiB), one per core at once. They now run on a
+two-thread pool with at most 16 reads waiting or running, and further reads answer
+`busy`. A burst of 24 gives 8 `busy` and 16 previews; without the bound it gives 0
+`busy`. Viewed or generated image paths were checked with a stat and then opened,
+and `QFile::open` blocks on a FIFO without a writer (confirmed with a probe). They
+are now opened with `O_NONBLOCK` and kept only if `fstat` shows a regular file; a
+FIFO path returns `source_unavailable` at once, and a blocking open fails that test.
+A test that swapped the path between a file and a FIFO 40k times did not hit the
+old race, so it was not kept; the FIFO test does not prove every replacement race
+closed. The non-Unix fallback opens the same name (review of #313 found it unnamed);
+on macOS, forcing the fallback passes the viewed-image tests. An independent
+semaphore probe (#2739) saw at most two decodes at once, 16 accepted and 8 `busy`,
+and no callback after the host was destroyed. Not covered: that probe is not in the
+suite, synchronous local preview reads still decode on the caller's thread, phone
+retry after `busy` is unverified, Windows was not run and peak memory was not
+measured.

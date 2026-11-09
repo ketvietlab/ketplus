@@ -296,6 +296,7 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAda
     : QObject(parent), catalogCache_(this), journal_(journal), adapter_(adapter),
       approvals_(new ApprovalBroker(this)),
       mediaStore_(McpMediaStore::directoryForJournal(journal->databasePath())) {
+    mediaReads_.setMaxThreadCount(mediaReadThreads);
     deltaFlush_.setSingleShot(true);
     deltaFlush_.setInterval(deltaCoalesceMs);
     connect(&deltaFlush_, &QTimer::timeout, this, &SessionHost::flushDeltas);

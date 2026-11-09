@@ -12,6 +12,12 @@
 
 #include <utility>
 
+#ifdef Q_OS_UNIX
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
 namespace ketplus::daemon {
 namespace {
 
@@ -66,6 +72,30 @@ QSize imageSize(const QString& extension, const QByteArray& bytes) {
     return {};
 }
 
+// Opens `path` only if what is opened is a regular file. The check is made on the opened
+// descriptor, without blocking: a path swapped for a FIFO after a stat must not hang the daemon.
+bool openRegularFile(const QString& path, QFile* file, qint64* size) {
+    // Both branches open this name; the Unix one only through its checked descriptor.
+    file->setFileName(path);
+#ifdef Q_OS_UNIX
+    const int fd = ::open(QFile::encodeName(path).constData(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+    if (fd < 0)
+        return false;
+    struct stat status{};
+    if (::fstat(fd, &status) != 0 || !S_ISREG(status.st_mode) ||
+        !file->open(fd, QIODevice::ReadOnly, QFileDevice::AutoCloseHandle)) {
+        ::close(fd);
+        return false;
+    }
+    *size = status.st_size;
+    return true;
+#else
+    const QFileInfo info(path);
+    *size = info.size();
+    return info.isFile() && file->open(QIODevice::ReadOnly);
+#endif
+}
+
 QJsonObject omitted(const QString& type, const QString& reason) {
     return {{QStringLiteral("type"), type},
             {QStringLiteral("omitted"), true},
@@ -103,14 +133,14 @@ QJsonObject McpMediaStore::externalizeItem(const QJsonObject& item, const QStrin
         if (!path.isEmpty() && !QDir::isAbsolutePath(path) && !worktree.isEmpty())
             path = QDir(worktree).absoluteFilePath(path);
         QJsonObject block = omitted(QStringLiteral("image"), QStringLiteral("source_unavailable"));
-        const QFileInfo info(path);
-        QFile source(path);
+        QFile source;
+        qint64 size = 0;
         // Only regular local files, bounded before and during the read. The provider already
         // viewed/generated this file; remote readers still need the journal's session grant.
-        if (QDir::isAbsolutePath(path) && info.isFile()) {
-            if (info.size() > maximumImageBytes) {
+        if (QDir::isAbsolutePath(path) && openRegularFile(path, &source, &size)) {
+            if (size > maximumImageBytes) {
                 block = omitted(QStringLiteral("image"), QStringLiteral("too_large"));
-            } else if (source.open(QIODevice::ReadOnly)) {
+            } else {
                 const QByteArray bytes = source.read(maximumImageBytes + 1);
                 const QString mime = bytes.startsWith("\x89PNG\r\n\x1a\n")
                                          ? QStringLiteral("image/png")

@@ -13,6 +13,7 @@
 
 #include <QCryptographicHash>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -26,12 +27,18 @@
 #include <QSqlRecord>
 #include <QStandardPaths>
 #include <QTemporaryDir>
+#include <QThread>
 #include <QUuid>
 #include <QtTest>
 #include <limits>
 #ifdef Q_OS_UNIX
+#include <atomic>
 #include <csignal>
+#include <fcntl.h>
 #include <sys/resource.h>
+#include <sys/stat.h>
+#include <thread>
+#include <unistd.h>
 #endif
 
 using namespace ketplus::daemon;
@@ -483,6 +490,50 @@ class DaemonProtocolTest final : public QObject {
         source.close();
         QCOMPARE(result(source.fileName()).value("reason").toString(), "too_large");
         QVERIFY(!QFileInfo::exists(store.directory()));
+    }
+
+    void localImageFifoIsRejectedWithoutBlocking() {
+#ifdef Q_OS_UNIX
+        // A viewed path that is (or became, after any earlier check) a FIFO nobody writes.
+        // The store opens before it checks the type, so the open itself must not block.
+        QTemporaryDir directory;
+        McpMediaStore store(directory.filePath("media"));
+        const QString path = directory.filePath("shot.png");
+        QCOMPARE(::mkfifo(QFile::encodeName(path).constData(), 0600), 0);
+        std::atomic<bool> finished{false};
+        QString reason;
+        std::thread reader([&] {
+            reason = store.externalizeItem({{"type", "imageView"},
+                                            { "path",
+                                              path }},
+                                           "session")
+                         .value("result")
+                         .toObject()
+                         .value("content")
+                         .toArray()
+                         .first()
+                         .toObject()
+                         .value("reason")
+                         .toString();
+            finished = true;
+        });
+        QElapsedTimer waited;
+        waited.start();
+        while (!finished && waited.elapsed() < 2000)
+            QThread::msleep(10);
+        const bool blocked = !finished;
+        if (blocked) {
+            // Release the blocked open before reporting it.
+            const int writer = ::open(QFile::encodeName(path).constData(), O_WRONLY | O_NONBLOCK);
+            if (writer >= 0)
+                ::close(writer);
+        }
+        reader.join();
+        QVERIFY2(!blocked, "Reading a viewed image blocked on a FIFO");
+        QCOMPARE(reason, QString("source_unavailable"));
+#else
+        QSKIP("FIFOs are POSIX-only");
+#endif
     }
 
     void mediaOwnershipCommitFailurePreservesPreviousFile() {

@@ -384,8 +384,11 @@ references (`session.media.read`) on demand; neither result is stored on the
 relay. The same `session.media.read` with a worktree-relative `path` instead of
 `media_ref` previews an image from the session's worktree as it is on disk now
 (no revision fence; symlinks, paths escaping the worktree and files over 16 MB
-are refused). Previews are decoded off the daemon's main thread, scaled to at
-most 1280 px and flattened onto white.
+are refused). Previews are decoded off the daemon's main thread, on a pool of
+two threads with at most 16 reads waiting or running; a read beyond that answers
+`busy` at once. They are scaled to at most 1280 px and flattened onto white.
+A provider's viewed or generated image is opened without blocking and kept only if
+the opened file is regular, so a path replaced by a FIFO cannot stall the daemon.
 
 Media cleanup first validates a complete reference catalog: canonical digest
 files, regular nonsymlink entries, at most 4 MiB per file, 16 MiB total and 4,096
