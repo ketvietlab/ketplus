@@ -60,6 +60,12 @@ class AgentBroker final : public QObject {
     static constexpr int maximumAutomaticHop = 6;
     static constexpr int maximumChainTurns = 30;
     static constexpr int maximumHourlyTurns = 20;
+    // A sender waits for the receiver to take its messages.
+    static constexpr int maximumUndeliveredPerSender = 20;
+    // One turn's user.message carries each message twice (prompt block and agent_messages
+    // entry). A turn takes at most this many serialized bytes of them, leaving room for the
+    // rest of the event inside the journal's 256 KiB limit.
+    static constexpr qsizetype maximumDeliveryBytes = 240 * 1024;
     static constexpr int requestLifetimeHours = 24;
     static constexpr int expiryCheckMs = 5 * 60 * 1000;
 
@@ -115,6 +121,8 @@ class AgentBroker final : public QObject {
     void deliverTo(const QString& sessionId);
     void finishTurn(const QString& sessionId, qint64 generation, const QString& status);
     void expireOverdue();
+    // Keeps the oldest messages that fit one turn; one that never fits is marked failed.
+    void keepOneTurn(QList<AgentMessageRecord>& messages);
     void markState(AgentMessageRecord& message, const QString& state, const QString& reason = {});
     void notice(const AgentMessageRecord& message, const QString& state, const QString& reason);
     [[nodiscard]] static QJsonObject messageJson(const AgentMessageRecord& message);

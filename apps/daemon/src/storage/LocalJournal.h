@@ -406,6 +406,9 @@ class LocalJournal final {
     [[nodiscard]] int automaticAgentTurnsInChain(const QString& chainId) const;
     [[nodiscard]] int automaticAgentTurnsSince(const QString& sessionId, qint64 generation,
                                                const QDateTime& since) const;
+    // Messages one sender has queued or held for one receiver that it has not received yet.
+    [[nodiscard]] int undeliveredAgentMessages(const QString& fromSession, qint64 fromGeneration,
+                                               const QString& toSession, qint64 toGeneration) const;
     [[nodiscard]] QList<AgentMessageRecord> overdueAgentRequests(const QDateTime& now) const;
     [[nodiscard]] QStringList sessionsWithQueuedAgentMessages() const;
 

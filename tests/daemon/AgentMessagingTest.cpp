@@ -303,6 +303,111 @@ class AgentMessagingTest final : public QObject {
                  "auto");
     }
 
+    void queuedMessagesAreBoundedPerSenderAndTurn() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const QString sender = fixture.start("claude", "sender");
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(sender, "turn.completed"), 1, 5000);
+        const QString receiver = fixture.start("claude", "slow-start");
+        QVERIFY(!receiver.isEmpty());
+        const QString other = fixture.start("claude", "other");
+        QVERIFY(!other.isEmpty());
+        const auto send = [&](const QString& from, const int index) {
+            return fixture.agents(from, "agents.send",
+                                  {{"to", fixture.number(receiver)},
+                                   {"text", QString::number(index) + QString(20 * 1024, 'x')}});
+        };
+        // A sender looping on a busy receiver is stopped once it has a full backlog there.
+        for (int index = 0; index < AgentBroker::maximumUndeliveredPerSender; ++index)
+            QVERIFY(send(sender, index).value("ok").toBool());
+        QCOMPARE(send(sender, 99).value("error_code").toString(), "receiver_backlog");
+        // The backlog is the sender's own: another conversation can still reach the receiver.
+        QVERIFY(send(other, 100).value("ok").toBool());
+
+        // Each turn takes only what fits its input; the rest arrive in the turns that follow.
+        // The fake provider echoes each large prompt as many events: read every page.
+        const auto userMessages = [&] {
+            QList<QJsonObject> result;
+            for (qint64 cursor = 0;;) {
+                const QJsonArray page = fixture.journal->eventsAfter(receiver, 1, cursor);
+                if (page.isEmpty())
+                    return result;
+                for (const QJsonValue& value : page)
+                    if (value.toObject().value("event_type").toString() == "user.message")
+                        result.append(value.toObject().value("payload").toObject());
+                cursor = page.last().toObject().value("cursor").toInteger();
+            }
+        };
+        const auto delivered = [&] {
+            qsizetype total = 0;
+            for (const QJsonObject& turn : userMessages())
+                total += turn.value("agent_messages").toArray().size();
+            return total;
+        };
+        QTRY_COMPARE_WITH_TIMEOUT(delivered(), AgentBroker::maximumUndeliveredPerSender + 1, 20000);
+        const QList<QJsonObject> turns = userMessages();
+        QVERIFY(turns.size() >= 4);
+        for (const QJsonObject& turn : turns) {
+            qsizetype bytes = 0;
+            for (const QJsonValue& message : turn.value("agent_messages").toArray())
+                bytes += message.toObject().value("body").toString().toUtf8().size();
+            QVERIFY2(bytes <= AgentBroker::maximumDeliveryBytes,
+                     qPrintable(QString::number(bytes)));
+        }
+        QVERIFY(fixture.journal->agentMessagesTo(receiver, 1, {"failed"}).isEmpty());
+        QVERIFY(send(sender, 101).value("ok").toBool());
+    }
+
+    // Escaping counts: 16 KiB of control characters serializes to about 192 KiB in user.message.
+    void encodedSizeDecidesWhatIsAccepted() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const QString sender = fixture.start("claude", "sender");
+        const QString receiver = fixture.start("claude", "receiver");
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(sender, "turn.completed"), 1, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.completed"), 1, 5000);
+        // Within 32 KiB of text but too large once encoded: refused, never accepted and failed.
+        const QJsonObject refused = fixture.agents(
+            sender, "agents.send",
+            {{"to", fixture.number(receiver)}, {"text", QString(32 * 1024, QChar(1))}});
+        QCOMPARE(refused.value("error_code").toString(), "message_too_large");
+        QVERIFY(fixture.journal->agentMessagesTo(receiver, 1, {"queued", "failed"}).isEmpty());
+        const QJsonObject sent = fixture.agents(
+            sender, "agents.send",
+            {{"to", fixture.number(receiver)}, {"text", QString(16 * 1024, QChar(1))}});
+        QVERIFY(sent.value("ok").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(
+            fixture.journal->agentMessagesTo(receiver, 1, {"delivered"}).size(), 1, 5000);
+        QVERIFY(fixture.journal->agentMessagesTo(receiver, 1, {"failed"}).isEmpty());
+    }
+
+    // The sender's title is in every message's header and entry, so it counts too.
+    void senderTitleCountsTowardsTheTurnBudget() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const QString sender = fixture.start("claude", "sender");
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(sender, "turn.completed"), 1, 5000);
+        QVERIFY(fixture.host
+                    ->handleCommand(
+                        request("session.rename", {{"title", QString(4096, QChar(1))}}, sender, 1),
+                        "desktop-test")
+                    .value("ok")
+                    .toBool());
+        const QString receiver = fixture.start("claude", "slow-start");
+        QVERIFY(!receiver.isEmpty());
+        for (int index = 0; index < AgentBroker::maximumUndeliveredPerSender; ++index)
+            QVERIFY(fixture
+                        .agents(sender, "agents.send",
+                                {{"to", fixture.number(receiver)}, {"text", QString(4096, 'x')}})
+                        .value("ok")
+                        .toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(
+            fixture.journal->agentMessagesTo(receiver, 1, {"queued", "held"}).isEmpty(), 20000);
+        QCOMPARE(fixture.journal->agentMessagesTo(receiver, 1, {"delivered"}).size(),
+                 AgentBroker::maximumUndeliveredPerSender);
+        QVERIFY(fixture.journal->agentMessagesTo(receiver, 1, {"failed"}).isEmpty());
+    }
+
     // A conversation another conversation woke names its sender while the turn runs.
     void automaticTurnsNameTheirSenderWhileTheyRun() {
         Fixture fixture;
