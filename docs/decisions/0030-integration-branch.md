@@ -24,6 +24,10 @@ CI and a batch gate on promotion into `develop`.
   `.github/scripts/check-develop-promotion.sh`: `develop` must be an ancestor of
   the head, or the previous promotion's merge commit with the same tree as the
   integration commit it merged. A change made only on `develop` is refused.
+  The job runs on `pull_request_target`, so the workflow and script come from
+  `develop`, not from the pull request. The head is fetched as git data and never
+  executed, the token is read-only and no secret is used; a pull request cannot
+  rewrite the check that guards it.
 - Promotions are merged with a merge commit, never squashed or rebased.
 - `build.yml` and `webrtc-spike.yml` run on pull requests into `develop` and
   `main` and on pushes to `main`, and `build.yml` can also be started by hand.

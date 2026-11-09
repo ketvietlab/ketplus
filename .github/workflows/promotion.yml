@@ -3,8 +3,12 @@ name: promotion
 # Feature and fix pull requests target integration, which has no CI. A pull
 # request into develop promotes the integration tip as a batch and must come
 # from integration itself; the build workflow verifies the same head.
+#
+# pull_request_target runs this file and the policy script from develop, so a
+# pull request cannot rewrite the check that guards it. The head is fetched only
+# as git data and never executed; no secret is used and the token is read-only.
 on:
-  pull_request:
+  pull_request_target:
     branches: [develop]
     types: [opened, synchronize, reopened, ready_for_review]
 
@@ -24,10 +28,16 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
       - name: Check the promotion policy
         run: bash .github/scripts/check-develop-promotion.test.sh
+      - name: Fetch the promotion head as data
+        env:
+          PULL_NUMBER: ${{ github.event.pull_request.number }}
+        run: >-
+          git fetch --no-tags --quiet origin
+          "+refs/pull/${PULL_NUMBER}/head:refs/remotes/promotion/head"
       - name: Require the integration tip
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}

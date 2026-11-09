@@ -23,8 +23,9 @@ fail() {
   fail "Promotion must come from $REPOSITORY, not $HEAD_REPOSITORY"
 [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ && "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] ||
   fail 'Promotion commits must be full SHAs'
-[[ "$(git rev-parse HEAD)" == "$HEAD_SHA" ]] ||
-  fail 'The checkout is not the promotion head'
+# The policy runs from develop's checkout; the head is only inspected as data.
+git cat-file -e "$HEAD_SHA^{commit}" 2>/dev/null ||
+  fail 'The promotion head was not fetched'
 
 if ! git merge-base --is-ancestor "$BASE_SHA" "$HEAD_SHA"; then
   previous="$(git rev-parse --verify --quiet "$BASE_SHA^2")" ||
