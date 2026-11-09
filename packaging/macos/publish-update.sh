@@ -92,8 +92,9 @@ if [[ -n "$release_notes" ]]; then
         fail "$notes_destination already exists; refusing to overwrite release notes"
 fi
 
-# A failed run removes what it created, so the same version can be prepared again, and leaves
-# the published appcast.xml as it was.
+# A run that fails before the new appcast.xml is in place removes what it created, so the same
+# version can be prepared again, and leaves the published appcast.xml as it was. Once the new
+# appcast is installed, the archive and notes it references stay even if a later step fails.
 created=()
 appcast_staging=""
 remove_partial_release() {
@@ -104,7 +105,7 @@ remove_partial_release() {
             rm -f -- "$path"
         done
     fi
-    [[ -z "$appcast_staging" ]] || rm -f -- "$appcast_staging"
+    [[ -z "$appcast_staging" ]] || rm -rf -- "$appcast_staging"
     return $status
 }
 trap remove_partial_release EXIT
@@ -122,14 +123,22 @@ key_arguments=()
 if [[ -n "$key_file" ]]; then
     key_arguments=(--ed-key-file "$key_file")
 fi
-appcast_staging="$(mktemp "${TMPDIR:-/tmp}/ketplus-appcast.XXXXXX")"
+# generate_appcast reads an existing -o file as the feed to update, so the staged copy starts as
+# the published feed (with its mode), or does not exist for a first release. The staging
+# directory sits next to the updates directory, outside the archives Sparkle scans, and on the
+# same filesystem, so installing the new feed is a rename.
+updates_parent="$(cd "$updates_dir/.." && pwd -P)"
+appcast_staging="$(mktemp -d "$updates_parent/.ketplus-appcast.XXXXXX")"
+if [[ -e "$updates_dir/appcast.xml" ]]; then
+    cp -p -- "$updates_dir/appcast.xml" "$appcast_staging/appcast.xml"
+fi
 "$sparkle_bin/generate_appcast" "${key_arguments[@]+"${key_arguments[@]}"}" \
     --download-url-prefix "$download_prefix" \
     --embed-release-notes \
-    -o "$appcast_staging" \
+    -o "$appcast_staging/appcast.xml" \
     "$updates_dir"
-mv -f -- "$appcast_staging" "$updates_dir/appcast.xml"
-appcast_staging=""
+mv -f -- "$appcast_staging/appcast.xml" "$updates_dir/appcast.xml"
+created=()
 
 echo "Prepared KetPlus $version in $updates_dir"
 echo "The installed app reads $feed; upload appcast.xml and the archive only after approval."
