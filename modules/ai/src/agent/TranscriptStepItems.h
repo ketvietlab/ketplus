@@ -26,5 +26,10 @@ struct CommandStep {
 // Codex web steps: "Searched the web: query", "Opened a page: url" or
 // "Found in page: “pattern” on url".
 [[nodiscard]] QString webStepTitle(const QJsonObject& item, bool completed);
+// The KetPlus browser's steps as the mock titles them: "Opened: localhost:5173/settings",
+// "Clicked: “Save”", "Waited for: text “Working”" or "Observed the page: Storage · 42 nodes".
+// `operation` is the step's browser operation (open, act, wait…); empty for an unknown one.
+[[nodiscard]] QString browserStepTitle(const QString& operation, const QJsonObject& item,
+                                       bool completed);
 
 } // namespace ketplus::agent_message

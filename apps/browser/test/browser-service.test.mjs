@@ -201,6 +201,8 @@ test("summary observations stay within the byte budget and full detail returns e
     action: { type: "hover", target: { nodeRef: node.ref } },
   });
   assert.ok(acted);
+  // The result names the node it reached, as the snapshot did.
+  assert.deepEqual(acted.target, { role: node.role, name: node.name.slice(0, 120) });
 
   const full = await service.observe({ ...target, maxNodes: 1000, detail: "full" });
   assert.equal(full.detail, undefined);

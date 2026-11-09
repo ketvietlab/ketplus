@@ -749,6 +749,8 @@ export class BrowserService {
         outcome: "applied",
         sessionId,
         pageId,
+        // The node acted on, as the snapshot named it, so a transcript can say what was clicked.
+        ...(fingerprint ? { target: { role: fingerprint.role ?? null, name: clip(fingerprint.name ?? "", 120) } } : {}),
         url: safeUrl(page.url()),
         documentRevision: record.documentRevision,
         // What the action committed: a new document, a same-document change (pushState, history

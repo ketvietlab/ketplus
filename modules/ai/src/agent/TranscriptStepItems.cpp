@@ -1,6 +1,8 @@
 #include "agent/TranscriptStepItems.h"
 
+#include <QHash>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QStringList>
 #include <QUrl>
 #include <algorithm>
@@ -23,7 +25,7 @@ QString firstString(const QJsonObject& object, std::initializer_list<const char*
     return {};
 }
 
-// A page as the mock writes it: host and path, without the scheme or a trailing slash.
+// A page as the mock writes it: host, port and path, without the scheme or a trailing slash.
 QString pageText(const QString& url) {
     const QUrl parsed(url);
     if (!parsed.isValid() || parsed.host().isEmpty())
@@ -31,7 +33,95 @@ QString pageText(const QString& url) {
     QString path = parsed.path();
     if (path == QLatin1String("/"))
         path.clear();
-    return parsed.host() + path;
+    const QString port = parsed.port() > 0 ? QStringLiteral(":%1").arg(parsed.port()) : QString{};
+    return parsed.host() + port + path;
+}
+
+// A browser tool's own result: the MCP structured content, else the JSON of its text block.
+QJsonObject browserResult(const QJsonObject& item) {
+    const QJsonObject result = item.value(QStringLiteral("result")).toObject();
+    const QJsonObject structured = result.value(QStringLiteral("structuredContent")).toObject();
+    if (!structured.isEmpty())
+        return structured;
+    const QJsonArray content = result.value(QStringLiteral("content")).toArray();
+    if (content.isEmpty())
+        return {};
+    const QJsonObject block = content.first().toObject();
+    if (block.value(QStringLiteral("type")).toString() != QStringLiteral("text"))
+        return {};
+    return QJsonDocument::fromJson(block.value(QStringLiteral("text")).toString().toUtf8())
+        .object();
+}
+
+struct Verb {
+    const char* done;
+    const char* doing;
+};
+
+QString browserActTitle(const QJsonObject& action, const QJsonObject& result,
+                        const bool completed) {
+    static const QHash<QString, Verb> verbs{
+        {QStringLiteral("click"), {"Clicked", "Clicking"}},
+        {QStringLiteral("fill"), {"Filled in", "Filling in"}},
+        {QStringLiteral("press"), {"Pressed a key", "Pressing a key"}},
+        {QStringLiteral("hover"), {"Hovered", "Hovering"}},
+        {QStringLiteral("select"), {"Selected", "Selecting"}},
+        {QStringLiteral("scroll"), {"Scrolled", "Scrolling"}},
+        {QStringLiteral("navigate"), {"Opened", "Opening"}},
+        {QStringLiteral("reload"), {"Reloaded the page", "Reloading the page"}}};
+    const QString type = action.value(QStringLiteral("type")).toString();
+    Verb verb = verbs.value(type, {"Acted on the page", "Acting on the page"});
+    if (type == QStringLiteral("check"))
+        verb = action.value(QStringLiteral("checked")).toBool(true)
+                   ? Verb{"Checked", "Checking"}
+                   : Verb{"Unchecked", "Unchecking"};
+    else if (type == QStringLiteral("history"))
+        verb = action.value(QStringLiteral("direction")).toString() == QStringLiteral("forward")
+                   ? Verb{"Went forward", "Going forward"}
+                   : Verb{"Went back", "Going back"};
+    // The node the action reached, by its accessible name; never the value typed into it, nor
+    // the key pressed, which the sanitizer withholds as it would any field named "key".
+    QString subject;
+    if (type == QStringLiteral("navigate"))
+        subject = pageText(firstString(action, {"url"}));
+    else if (const QString name =
+                 firstString(result.value(QStringLiteral("target")).toObject(), {"name"});
+             !name.isEmpty())
+        subject = QStringLiteral("“%1”").arg(name);
+    const QString title = QString::fromUtf8(completed ? verb.done : verb.doing);
+    return subject.isEmpty() ? title : title + QStringLiteral(": ") + subject;
+}
+
+QString browserWaitSubject(const QJsonObject& condition) {
+    const QString type = condition.value(QStringLiteral("type")).toString();
+    if (type == QStringLiteral("text")) {
+        const QString text = firstString(condition, {"text"});
+        const bool gone =
+            condition.value(QStringLiteral("state")).toString() == QStringLiteral("hidden") ||
+            condition.value(QStringLiteral("state")).toString() == QStringLiteral("detached");
+        return text.isEmpty() ? QString{}
+                              : QStringLiteral("text “%1”%2")
+                                    .arg(text, gone ? QStringLiteral(" to go") : QString{});
+    }
+    if (type == QStringLiteral("url")) {
+        const QString url = pageText(firstString(condition, {"equals", "startsWith"}));
+        return url.isEmpty() ? QStringLiteral("the URL") : QStringLiteral("URL ") + url;
+    }
+    if (type == QStringLiteral("load"))
+        return QStringLiteral("the page to load");
+    if (type == QStringLiteral("settled"))
+        return QStringLiteral("the page to settle");
+    return {};
+}
+
+// "0.4% of pixels differ": the share is kept, however small, so a near match never reads as 0.
+QString mismatchText(const double ratio) {
+    const double percent = ratio * 100.0;
+    if (percent <= 0.0)
+        return QStringLiteral("no pixels differ");
+    if (percent < 0.1)
+        return QStringLiteral("under 0.1% of pixels differ");
+    return QStringLiteral("%1% of pixels differ").arg(QString::number(percent, 'f', 1));
 }
 
 QString lines(const QString& text, QChar mark) {
@@ -214,6 +304,54 @@ QString webStepTitle(const QJsonObject& item, const bool completed) {
             subject = firstString(item, {"query"});
     }
     return subject.isEmpty() ? title : title + QStringLiteral(": ") + subject;
+}
+
+QString browserStepTitle(const QString& operation, const QJsonObject& item, const bool completed) {
+    const QJsonObject arguments = toolArguments(item);
+    const QJsonObject result = completed ? browserResult(item) : QJsonObject{};
+    const auto titled = [completed](const char* done, const char* doing, const QString& subject) {
+        const QString title = QString::fromUtf8(completed ? done : doing);
+        return subject.isEmpty() ? title : title + QStringLiteral(": ") + subject;
+    };
+    if (operation == QStringLiteral("open")) {
+        const QString page = pageText(firstString(arguments, {"url"}));
+        return page.isEmpty() ? titled("Opened a page", "Opening a page", {})
+                              : titled("Opened", "Opening", page);
+    }
+    if (operation == QStringLiteral("act"))
+        return browserActTitle(arguments.value(QStringLiteral("action")).toObject(), result,
+                               completed);
+    if (operation == QStringLiteral("wait"))
+        return titled("Waited for", "Waiting for",
+                      browserWaitSubject(arguments.value(QStringLiteral("condition")).toObject()));
+    if (operation == QStringLiteral("observe")) {
+        // The mock's "Storage · 4 meters": the page's title, then how much of it was read.
+        QStringList parts;
+        if (const QString page =
+                firstString(result.value(QStringLiteral("page")).toObject(), {"title"});
+            !page.isEmpty())
+            parts.append(page);
+        if (const QJsonValue nodes = result.value(QStringLiteral("visibleNodeCount"));
+            nodes.isDouble())
+            parts.append(nodes.toInt() == 1 ? QStringLiteral("1 node")
+                                            : QStringLiteral("%1 nodes").arg(nodes.toInt()));
+        return titled("Observed the page", "Observing the page", parts.join(QStringLiteral(" · ")));
+    }
+    if (operation == QStringLiteral("compare")) {
+        const QJsonValue ratio = result.value(QStringLiteral("raster"))
+                                     .toObject()
+                                     .value(QStringLiteral("mismatchRatio"));
+        return titled("Compared with the reference", "Comparing with the reference",
+                      ratio.isDouble() ? mismatchText(ratio.toDouble()) : QString{});
+    }
+    static const QHash<QString, Verb> steps{
+        {QStringLiteral("screenshot"), {"Captured", "Capturing"}},
+        {QStringLiteral("logs"), {"Read the console", "Reading the console"}},
+        {QStringLiteral("network"), {"Read the network log", "Reading the network log"}},
+        {QStringLiteral("inspect"), {"Inspected the page", "Inspecting the page"}}};
+    if (const auto found = steps.constFind(operation); found != steps.cend())
+        return titled(found->done, found->doing, {});
+    return {};
 }
 
 } // namespace ketplus::agent_message
