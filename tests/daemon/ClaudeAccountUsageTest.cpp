@@ -105,6 +105,31 @@ class ClaudeAccountUsageTest : public QObject {
         usage.handle("refresh", {}, reply);
         QCOMPARE(network.requests.size(), 3);
     }
+    void removeClearsAnUnreadableAdminEntry() {
+        QByteArray stored = "{broken";
+        ClaudeCredentials::Storage storage{[&](QString*) { return stored; },
+                                           [&](const QByteArray& b, QString*) {
+                                               stored = b;
+                                               return true;
+                                           },
+                                           "memory"};
+        Network network;
+        ClaudeAccountUsage usage(storage, nullptr, &network);
+        QJsonObject result;
+        QString error;
+        const auto reply = [&](const QJsonObject& r, const QString& e) {
+            result = r;
+            error = e;
+        };
+        usage.handle("status", {}, reply);
+        QVERIFY(!error.isEmpty());
+        usage.handle("remove", {}, reply);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QVERIFY(!result.value("configured").toBool());
+        usage.handle("status", {}, reply);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QVERIFY(network.requests.isEmpty());
+    }
     void malformedPartialAndRotatedReportsNeverBecomeTotals() {
         QByteArray stored;
         ClaudeCredentials::Storage storage{[&](QString*) { return stored; },
