@@ -1307,6 +1307,9 @@ AgentSessionManager::SessionPtr AgentSessionManager::ensureSession(const QString
             session->title = stored.value(QStringLiteral("title"), session->title).toString();
             session->customTitle = stored.value(QStringLiteral("customTitle")).toBool();
             session->archived = stored.value(QStringLiteral("archived")).toBool();
+            // Archived before Desktop sent archive state: the daemon has never been told.
+            session->archiveUnsent =
+                stored.value(QStringLiteral("archiveUnsent"), session->archived).toBool();
             session->ownsWorktree = stored.value(QStringLiteral("ownsWorktree")).toBool();
             session->listed =
                 stored.value(QStringLiteral("listed")).toBool() || session->ownsWorktree;
@@ -1481,7 +1484,7 @@ void AgentSessionManager::handleDaemonSession(const QJsonObject& stored) {
     }
     SessionPtr session = sessionForThread(sessionId);
     // A conversation first seen here takes the daemon's archive state, for example after local
-    // settings were reset; afterwards this desktop's state wins.
+    // settings were reset.
     const bool discovered = !session;
     const bool archivedByDaemon = stored.contains(QStringLiteral("archived_at"));
     if (!session) {
@@ -1549,8 +1552,8 @@ void AgentSessionManager::handleDaemonSession(const QJsonObject& stored) {
         session->copyMessages.clear();
     }
     session->daemonGeneration = generation;
-    if (!discovered && session->archived != archivedByDaemon)
-        syncArchived(session);
+    if (!discovered)
+        applyDaemonArchiveState(session, archivedByDaemon);
     session->lastEventCursor = qMax(session->lastEventCursor,
                                     stored.value(QStringLiteral("last_event_cursor")).toInteger());
     session->lastSeenCursor =

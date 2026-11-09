@@ -8,6 +8,52 @@
 
 class DesktopSessionDiscoveryTest final : public QObject {
     Q_OBJECT
+
+    static QString archivedAt(const QString& journalPath, const QString& id) {
+        const auto name = "archive-probe";
+        QString value = "<missing>";
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(journalPath);
+            if (db.open()) {
+                QSqlQuery q(db);
+                q.prepare("SELECT archived_at FROM sessions WHERE id=?");
+                q.addBindValue(id);
+                if (q.exec() && q.next())
+                    value = q.value(0).toString();
+            }
+        }
+        QSqlDatabase::removeDatabase(name);
+        return value;
+    }
+
+    static bool isArchived(const AgentSessionManager& desktop, const QString& id) {
+        for (const auto& value : desktop.archivedConversations())
+            if (value.toMap().value("id") == id)
+                return true;
+        return false;
+    }
+
+    // "target" and "kept" in the journal and in this desktop's settings, already in agreement.
+    static void seedArchiveJournal(const QString& journalPath, const QString& path, bool archived) {
+        LocalJournal journal(journalPath);
+        for (const auto* id : {"target", "kept"})
+            QVERIFY(journal.upsertSession(
+                {id, path, "codex", {}, {}, "ready", 1, 0, 0, QString::fromLatin1(id)}));
+        if (archived)
+            QVERIFY(journal.setSessionArchived(
+                "target", 1,
+                QDateTime::currentDateTimeUtc().addDays(-31).toString(Qt::ISODateWithMs)));
+        const auto row = [](const char* id, bool value) {
+            return QVariantMap{{"id", id}, {"threadId", id}, {"title", id}, {"archived", value}};
+        };
+        QSettings().setValue(persistedKey(path),
+                             QVariantMap{{"path", path},
+                                         {"activeId", "kept"},
+                                         {"conversations", QVariantList{row("target", archived),
+                                                                        row("kept", false)}}});
+    }
+
   private slots:
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
 
@@ -138,21 +184,7 @@ class DesktopSessionDiscoveryTest final : public QObject {
                         {"conversations", QVariantList{conversation("archived-here", true),
                                                        conversation("kept", false)}}});
         const auto archivedAt = [&](const QString& id) {
-            const auto name = "archive-probe";
-            QString value = "<missing>";
-            {
-                auto db = QSqlDatabase::addDatabase("QSQLITE", name);
-                db.setDatabaseName(journalPath);
-                if (db.open()) {
-                    QSqlQuery q(db);
-                    q.prepare("SELECT archived_at FROM sessions WHERE id=?");
-                    q.addBindValue(id);
-                    if (q.exec() && q.next())
-                        value = q.value(0).toString();
-                }
-            }
-            QSqlDatabase::removeDatabase(name);
-            return value;
+            return DesktopSessionDiscoveryTest::archivedAt(journalPath, id);
         };
         const auto archivedIds = [](const QVariantList& values) {
             QStringList ids;
@@ -187,6 +219,104 @@ class DesktopSessionDiscoveryTest final : public QObject {
         desktop.archiveConversationsForWorktree(path);
         QTRY_VERIFY_WITH_TIMEOUT(!archivedAt("archived-here").isEmpty(), 5000);
         QCOMPARE(archivedAt("archived-elsewhere"), QString("2026-01-01T00:00:00.000Z"));
+    }
+
+    void anotherDesktopsArchiveIsNotUndone_data() {
+        QTest::addColumn<bool>("archived");
+        QTest::newRow("archive") << false;
+        QTest::newRow("restore") << true;
+    }
+
+    void anotherDesktopsArchiveIsNotUndone() {
+        QFETCH(bool, archived);
+        Environment env;
+        QVERIFY(env.directory.isValid());
+        const auto path = QFileInfo(env.directory.path()).canonicalFilePath();
+        const auto executable = env.directory.filePath("fake-codex");
+        QVERIFY(writeFakeCodex(executable, env.directory.filePath("provider.log")));
+        const auto journalPath = env.directory.filePath("journal.sqlite3");
+        seedArchiveJournal(journalPath, path, archived);
+        DaemonService service({journalPath, env.directory.filePath("local.token"),
+                               env.directory.filePath("daemon.sock"), executable,
+                               env.directory.filePath("missing-claude"),
+                               env.directory.filePath("missing-cursor")});
+        QVERIFY2(service.start(), qPrintable(service.errorString()));
+        CodexAppServer serverA;
+        CodexAppServer serverB;
+        AgentSessionManager a(&serverA);
+        AgentSessionManager b(&serverB);
+        a.activate(path);
+        b.activate(path);
+        QTRY_VERIFY(serverA.isReady() && serverB.isReady());
+        QTRY_VERIFY(!serverA.isRestoring() && !serverB.isRestoring());
+        QTRY_COMPARE(archivedAt(journalPath, "target").isEmpty(), !archived);
+        if (archived)
+            QVERIFY(a.restoreConversation(path, "target"));
+        else
+            QVERIFY(a.archiveConversation(path, "target"));
+        QTRY_COMPARE(archivedAt(journalPath, "target").isEmpty(), archived);
+        // B made no change of its own; its full catalog refresh adopts A's state.
+        auto* client = serverB.findChild<remote::DaemonClient*>();
+        QVERIFY(client);
+        int listed = 0;
+        connect(&serverB, &CodexAppServer::daemonSessionDiscovered, &serverB,
+                [&](const QJsonObject& value) {
+                    if (value.value("session_id") == "target")
+                        ++listed;
+                });
+        emit client->readyChanged(false);
+        emit client->readyChanged(true);
+        QTRY_VERIFY(listed > 0);
+        bool barrier = false;
+        client->call("session.list", {}, {}, -1,
+                     [&](const QJsonObject&, const QString&) { barrier = true; });
+        QTRY_VERIFY(barrier);
+        QCOMPARE(archivedAt(journalPath, "target").isEmpty(), archived);
+        QCOMPARE(isArchived(b, "target"), !archived);
+    }
+
+    void failedRestoreKeepsTheConversationArchived() {
+        Environment env;
+        QVERIFY(env.directory.isValid());
+        const auto path = QFileInfo(env.directory.path()).canonicalFilePath();
+        const auto executable = env.directory.filePath("fake-codex");
+        QVERIFY(writeFakeCodex(executable, env.directory.filePath("provider.log")));
+        const auto journalPath = env.directory.filePath("journal.sqlite3");
+        seedArchiveJournal(journalPath, path, true);
+        DaemonService service({journalPath, env.directory.filePath("local.token"),
+                               env.directory.filePath("daemon.sock"), executable,
+                               env.directory.filePath("missing-claude"),
+                               env.directory.filePath("missing-cursor")});
+        QVERIFY2(service.start(), qPrintable(service.errorString()));
+        CodexAppServer server;
+        AgentSessionManager desktop(&server);
+        QSignalSpy errors(&desktop, &AgentSessionManager::errorOccurred);
+        desktop.activate(path);
+        QTRY_VERIFY(server.isReady());
+        QTRY_VERIFY(!server.isRestoring());
+        QTRY_VERIFY(isArchived(desktop, "target"));
+        const auto sql = [&](const QString& statement) {
+            const auto name = "archive-trigger";
+            bool ok = false;
+            {
+                auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+                db.setDatabaseName(journalPath);
+                ok = db.open() && QSqlQuery(db).exec(statement);
+            }
+            QSqlDatabase::removeDatabase(name);
+            return ok;
+        };
+        QVERIFY(sql("CREATE TRIGGER reject_restore BEFORE UPDATE OF archived_at ON sessions "
+                    "WHEN NEW.archived_at='' BEGIN SELECT RAISE(ABORT,'rejected'); END"));
+        QVERIFY(desktop.restoreConversation(path, "target"));
+        QTRY_COMPARE(errors.count(), 1);
+        QVERIFY(errors.first().first().toString().contains("not restored"));
+        QVERIFY(isArchived(desktop, "target"));
+        QVERIFY(!archivedAt(journalPath, "target").isEmpty());
+        QVERIFY(sql("DROP TRIGGER reject_restore"));
+        QVERIFY(desktop.restoreConversation(path, "target"));
+        QTRY_VERIFY(!isArchived(desktop, "target"));
+        QCOMPARE(archivedAt(journalPath, "target"), QString());
     }
 
     void discoversPhoneConversation_data() {

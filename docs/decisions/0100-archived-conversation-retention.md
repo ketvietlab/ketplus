@@ -30,17 +30,22 @@ the history, could not tell an archived conversation from a visible one, so
     and tombstone apply. A conversation with a running turn or background task
     is skipped and retried later without blocking the next one.
   - An unreadable `archived_at` never counts as old.
-- Desktop owns the archive state and sends it with `session.set_archived` when
-  a conversation is archived, restored, or archived with its worktree. When a
-  catalog entry disagrees with the local state, Desktop sends its state again,
-  so conversations archived before this release are pushed once on the first
-  connection. Their 30 days start at that push, so no one loses history on
-  upgrade.
+- Desktop sends `session.set_archived` when a conversation is archived or
+  archived with its worktree, and marks the change unsent until the daemon
+  confirms it. A catalog refresh sends an unsent change again; otherwise the
+  daemon's state wins, so another client's archive or restore is not undone by
+  an older local copy.
+  - Conversations archived before this release are unsent, so they are pushed
+    once on the first connection. Their 30 days start at that push, so no one
+    loses history on upgrade.
+  - Restoring waits for the daemon: the conversation stays archived until
+    `session.set_archived` succeeds, and a failure is reported. Only a
+    conversation the daemon does not know (or a daemon without
+    `session.archive/1`) is restored locally, marked unsent.
   - A conversation Desktop sees for the first time (for example after its
-    settings were reset) takes the daemon's state instead, keeping the
-    original `archived_at`. It is not selected.
-  - Only one request per conversation is in flight; a failed request is
-    retried by the next catalog refresh.
+    settings were reset) takes the daemon's state, keeping the original
+    `archived_at`. It is not selected.
+  - Only one request per conversation is in flight.
 
 ## Consequences
 

@@ -81,6 +81,9 @@ class CodexAppServer final : public QObject {
     void executionWorktreeCommand(const QString& sessionId, const QString& type,
                                   const QJsonObject& payload, ResponseCallback callback);
     [[nodiscard]] qint64 daemonSessionCursor(const QString& sessionId, qint64 generation) const;
+    [[nodiscard]] bool hasDaemonSession(const QString& sessionId) const {
+        return daemonSessions_.contains(sessionId);
+    }
     void markDaemonSessionSeen(const QString& sessionId, qint64 cursor, ResponseCallback callback);
     void setDaemonSessionArchived(const QString& sessionId, bool archived,
                                   ResponseCallback callback);

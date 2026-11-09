@@ -30,7 +30,7 @@ obsolete run. See `docs/release-process.md`.
 | Area | Build/test target | Primary coverage |
 | --- | --- | --- |
 | Desktop search and routing | `ketplus_spotlight_tests` | Spotlight file/Atlas search and repository routing |
-| Live conversation discovery | `ketplus_desktop_session_discovery_tests` | Another client creates a session through a real local daemon/fake provider; catalog races, event coalescing, cross-workspace visibility and stable selection with a scripted daemon; archive, restore and worktree archive reach the daemon, earlier local archive state is pushed once, and a newly seen conversation keeps the daemon's archive time (ADR 0100) |
+| Live conversation discovery | `ketplus_desktop_session_discovery_tests` | Another client creates a session through a real local daemon/fake provider; catalog races, event coalescing, cross-workspace visibility and stable selection with a scripted daemon; archive, restore and worktree archive reach the daemon, earlier local archive state is pushed once, a newly seen conversation keeps the daemon's archive time, a second desktop's refresh adopts the first one's archive or restore, and a rejected restore stays archived with an error (ADR 0100) |
 | Transcript file activation | `ketplus_transcript_file_opening_tests` | Text/source-line editor routing, MIME/content classification, external media/PDF/app handoff, encoded paths, symlinks and missing files; platform opens intercepted without launching apps |
 | Repository navigation cache | `ketplus_repository_metadata_tests` | SQLite persistence, invalidation, unavailable cache |
 | Conversation-owned worktrees | `ketplus_conversation_worktree_tests` | SQLite path map, hide/remove, turn-delta capture |

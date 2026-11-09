@@ -30,6 +30,8 @@ struct AgentSessionManager::Session final {
     bool agentTurnReply{false};
     bool customTitle{false};
     bool archived{false};
+    // An archive or restore made here that the daemon has not confirmed (ADR 0100).
+    bool archiveUnsent{false};
     bool archiveSyncPending{false};
     bool ownsWorktree{false};
     bool listed{false};
