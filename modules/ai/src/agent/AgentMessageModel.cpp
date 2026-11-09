@@ -325,14 +325,11 @@ QVariantMap AgentMessageModel::normalized(QVariantMap item) {
                                      ? QStringLiteral("assistant.final")
                                      : QStringLiteral("activity.generic"));
     }
-    // Keep every tool event in sourceItems_ for copy/export, while the transcript
-    // presents only browser visits and visual evidence.
-    if (item.value("subtype").toString() == QStringLiteral("ketplusBrowser")) {
-        const QString event = item.value("eventType").toString();
-        item.insert("presentationHidden", event != QStringLiteral("browser.open") &&
-                                              event != QStringLiteral("browser.screenshot") &&
-                                              event != QStringLiteral("browser.compare"));
-    }
+    // Keep every tool event in sourceItems_ for copy/export. As in the mock, the transcript
+    // shows the browser's page steps, not its session housekeeping.
+    if (item.value("subtype").toString() == QStringLiteral("ketplusBrowser"))
+        item.insert("presentationHidden",
+                    item.value("eventType").toString() == QStringLiteral("browser.session"));
     if (item.value("subtype").toString().isEmpty() &&
         item.value("kind").toString() == QStringLiteral("file")) {
         item.insert("subtype", QStringLiteral("fileChange"));

@@ -355,10 +355,35 @@ QVariantMap ketplusBrowserMessage(const QJsonObject& item, const bool completed)
     const QJsonObject arguments = item.value(QStringLiteral("arguments")).toObject();
     const QString url = TranscriptSanitizer::url(arguments.value(QStringLiteral("url")).toString());
     const QString summary = mcp_media::argumentSummary(arguments);
-    const QString title = QStringLiteral("%1 browser · %2")
-                              .arg(completed ? QStringLiteral("Used") : QStringLiteral("Using"),
-                                   sanitizedText(label)) +
-                          retainedTextSuffix(item);
+    // Titled as the mock's browser steps: "Opened localhost:5173/settings", "Observed the page".
+    static const QHash<QString, QStringList> steps{
+        {QStringLiteral("observe"), {"Observed the page", "Observing the page"}},
+        {QStringLiteral("screenshot"), {"Captured", "Capturing"}},
+        {QStringLiteral("act"), {"Acted on the page", "Acting on the page"}},
+        {QStringLiteral("wait"), {"Waited for the page", "Waiting for the page"}},
+        {QStringLiteral("logs"), {"Read the console", "Reading the console"}},
+        {QStringLiteral("network"), {"Read the network log", "Reading the network log"}},
+        {QStringLiteral("inspect"), {"Inspected the page", "Inspecting the page"}},
+        {QStringLiteral("compare"), {"Compared captures", "Comparing captures"}}};
+    QString title;
+    if (operation == QStringLiteral("open")) {
+        const QUrl page(url);
+        const QString shown =
+            page.host().isEmpty()
+                ? QString{}
+                : page.host() +
+                      (page.port() > 0 ? QStringLiteral(":%1").arg(page.port()) : QString{}) +
+                      (page.path() == QStringLiteral("/") ? QString{} : page.path());
+        title = (completed ? QStringLiteral("Opened") : QStringLiteral("Opening")) +
+                (shown.isEmpty() ? QStringLiteral(" a page") : QStringLiteral(" ") + shown);
+    } else if (const auto found = steps.constFind(operation); found != steps.cend()) {
+        title = found->at(completed ? 0 : 1);
+    } else {
+        title = QStringLiteral("%1 ketplus_browser · %2")
+                    .arg(completed ? QStringLiteral("Used") : QStringLiteral("Using"),
+                         sanitizedText(label));
+    }
+    title += retainedTextSuffix(item);
     const QJsonValue safePayload = sanitizedJson(item);
     auto entry = message(QStringLiteral("tool"), summary, QStringLiteral("Browser"), {},
                          item.value(QStringLiteral("id")).toString());
@@ -727,6 +752,10 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
         title += retainedTextSuffix(item);
         auto entry = message(QStringLiteral("tool"), url, QStringLiteral("Activity"), {}, id);
         entry.insert(QStringLiteral("subtype"), subtype);
+        // The MCP server, for the group line's "Used node_repl, ketplus_agents".
+        if (type == QStringLiteral("mcpToolCall"))
+            entry.insert(QStringLiteral("server"),
+                         sanitizedText(item.value(QStringLiteral("server")).toString()));
         entry.insert(QStringLiteral("running"), !completed);
         entry.insert(QStringLiteral("fileLocation"), readLocation);
         entry.insert(QStringLiteral("details"), safePayload.toObject().toVariantMap());

@@ -267,8 +267,33 @@ class TranscriptActivityGroupsTest final : public QObject {
         QCOMPARE(rows.at(0).value("groupRole").toString(), QStringLiteral("leader"));
         QCOMPARE(rows.at(0).value("groupSize").toInt(), 6);
         QCOMPARE(rows.at(0).value("groupSummary").toString(),
-                 QStringLiteral("Ran 2 commands, used the browser, searched the web, read a "
+                 QStringLiteral("Ran 2 commands, used ketplus_browser, searched the web, read a "
                                 "file, used a tool"));
+    }
+
+    // As in the mock, MCP tool calls, image steps, waits and subagents stay in the group, and
+    // its line names the servers used: "Used ketplus_browser, node_repl · 5 steps".
+    void toolServersImagesAndWaitsCollapseIntoTheGroup() {
+        const auto served = [](const QString& key, const QString& subtype, const QString& server) {
+            auto row = activity(key, subtype);
+            row.insert("details", QVariantMap{{"server", server}});
+            return row;
+        };
+        QList<QVariantMap> rows{served("b1", "ketplusBrowser", "ketplus_browser"),
+                                served("b2", "ketplusBrowser", "ketplus_browser"),
+                                served("m1", "integration", "node_repl"),
+                                served("m2", "integration", "node_repl"),
+                                activity("w1", "webSearch"),
+                                activity("v1", "imageView"),
+                                activity("i1", "imageGeneration"),
+                                activity("z1", "wait"),
+                                activity("a1", "collaboration")};
+        assignActivityGroups(rows);
+        QCOMPARE(rows.at(0).value("groupRole").toString(), QStringLiteral("leader"));
+        QCOMPARE(rows.at(0).value("groupSize").toInt(), 9);
+        QCOMPARE(rows.at(0).value("groupSummary").toString(),
+                 QStringLiteral("Used ketplus_browser, node_repl, searched the web, "
+                                "viewed an image, generated an image, waited, used a subagent"));
     }
 
     void evidenceAndUnknownRowsRemainIndividuallyVisible() {
@@ -301,7 +326,7 @@ class TranscriptActivityGroupsTest final : public QObject {
             QList<QVariantMap> rows{activity("before", "ketplusBrowser"), step,
                                     activity("after", "ketplusBrowser")};
             assignActivityGroups(rows);
-            QCOMPARE(rows.at(0).value("groupSummary").toString(), "Used the browser");
+            QCOMPARE(rows.at(0).value("groupSummary").toString(), "Used ketplus_browser · 3 steps");
             QCOMPARE(rows.at(0).value("groupSize").toInt(), 3);
             QCOMPARE(rows.at(1).value("groupRole").toString(), "member");
             QCOMPARE(rows.at(0).value("groupRunning").toBool(), !completed);
