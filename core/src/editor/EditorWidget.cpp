@@ -418,6 +418,7 @@ void EditorWidget::configureLexerForPath(const QString& filePath) {
         foldingEnabled_ = false;
         applyViewOptions();
         send(message(Scintilla::Message::Colourise), 0, -1);
+        emit presentationChanged();
         return;
     }
 
@@ -435,6 +436,7 @@ void EditorWidget::configureLexerForPath(const QString& filePath) {
     send(message(Scintilla::Message::Colourise), 0, -1);
     embeddedStyleDirty_ = true;
     updateEmbeddedStyleHighlight();
+    emit presentationChanged();
 }
 
 void EditorWidget::setEditorSettings(const EditorSettings& settings) {
