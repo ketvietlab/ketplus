@@ -38,9 +38,9 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 4. Send one complete exact-head request to #7705. Do not poll the peer or bypass
    a held dispatch. The 2026-11-08 closure audit supersedes the previous rule to
    start another independent audit while waiting: freeze new audit branches,
-   drain the existing review queue by issue. Issue #71 is now closed; the
-   current issue is #68 (journal and media). Integrate/review its existing media,
-   policy and migration packages before opening another domain. Do not wait for
+   drain the existing review queue by issue. Issues #71 and #68 are closed
+   (#68 limits and the ACL follow-up #323 are in its dossier); the current issue
+   is #65 (daemon IPC). Do not wait for
    all drafts to merge before preparing closure. Allow at most one new unreviewed package
    needed for the current issue. Resolve its findings before advancing.
    Record external gates separately from unperformed work owned by #2739.
@@ -229,11 +229,11 @@ next ready item. Do not close a mixed UI/backend issue on backend evidence alone
 | --- | --- | --- | --- |
 | H0 | Complete | integration inventory; #212 merge/review and inherited limits reconciled | None |
 | H1.1 | In progress | Global GC #220, ACK #223, metadata #228, staged expiry #230 and deletion work #235 and cloud #237 merged; transaction recovery #241 merged; cancellation #240 merged; tombstone pages #280 and live discovery #281 merged; bounded history purge #284 (ADR 0093) merged; staged fork copy #287 (ADR 0094) merged; journal format #289 (ADR 0095) merged; startup backfills once #292 (ADR 0096) merged; activity backfill after open #293 (ADR 0097) merged; migration full-disk/kill recovery tests in review | Merge them, then query plans and media gates / #3329 |
-| H1.2 | In progress | #272/#273 integrated into #274 with #255; combined Pro 104/104 at 5a8bca1c | #274 reviewed and merged c3490da5; broader migration/crash gates remain / #2739 |
-| H1.4 | In progress | #253–255 merged via 691d18c4; author Pro104/104 and independent daemon56/56 | Remaining write-admission, filesystem races and bounds / #2739 |
+| H1.2 | Complete | Migrations ADR 0095–0097 and recovery #307; #68 closed with Pro 108/108 and Lite 16/16 at 22f66367 | None; limits in the #68 dossier |
+| H1.4 | Complete for #68 | #253–255, #313, #316, #321 merged | Inherited ACLs #323 accepted/deferred / #3329 |
 | H1.5–H1.7 | Not started | No claim that #128 backend acceptance is complete | Continue storage acceptance / #2739 |
 | H1.3 | In progress | Delete/ownership #241–243, append #244–245 and fork #246–247 merged; stream recovery #248 merged; replay/activity #249 merged; startup #250 merged | Continue caller atomicity/read failures / #2739 |
-| H2; H3.2–H3.5 | Partially started | H2.3 volatile retry subset #248 merged; broader lifecycle/provider work remains | Drain current #68 queue first / #2739 |
+| H2; H3.2–H3.5 | Partially started | H2.3 volatile retry subset #248 merged; broader lifecycle/provider work remains | Continue with #65 / #3329 |
 | H3.1 / #71 | Complete | #277 merged b3af8ed5; author Pro103/103 and independent daemon55/55; all five criteria accepted | None |
 | H4.1–H4.3 | Not started | Existing remote fixes are not a full #85 closure | Audit local transport/privacy with fixtures / #2739 |
 | H4.4 | Waiting, external | Relay code merged; no deployment/readiness evidence supplied | Relay release operator, unassigned; #2739 tracks gate |
