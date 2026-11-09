@@ -61,7 +61,8 @@ observations are whitelisted in memory and do not enter the transcript journal.
 The macOS backend uses Security.framework directly, with a dedicated Keychain service
 and no shell arguments containing secrets. Locked, denied or corrupt storage fails
 closed. Remove is the exception for corrupt or invalid entries: it overwrites the API
-or Admin entry with a disabled, keyless configuration without reading it, so a broken
+or Admin entry with a disabled, keyless configuration without requiring a successful
+read, so a broken
 entry that fails every Claude turn can be cleared from Settings. A locked or denied
 keychain still refuses. Background reads do not open a hidden authorization dialog. A stable signed
 daemon identity must retain access across app replacement; if access fails, Settings
