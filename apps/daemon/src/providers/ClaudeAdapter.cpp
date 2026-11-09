@@ -447,8 +447,12 @@ void ClaudeAdapter::consumeStdout() {
                 while (process_->bytesAvailable() > 0)
                     if (process_->read(readChunkBytes).isEmpty())
                         break;
+                noteUnexpectedStop();
                 failPending(reason);
                 emit stopped(reason);
+                // This stop is published; the exit that follows must not publish another or
+                // count as a second crash.
+                stopping_ = true;
                 process_->kill();
                 return;
             }
