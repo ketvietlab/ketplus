@@ -2084,6 +2084,7 @@ void SessionHost::handleProviderNotification(const QString& method, const QJsonO
         closeTurnBrowserSessions(*session);
         refreshProviderTitle(session->stored.id, session->stored.generation);
         followRecreatedWorktree(*session);
+        abandonTurnApprovals(session->stored.id);
         return;
     }
     if (method == QStringLiteral("error")) {
@@ -2607,6 +2608,7 @@ void SessionHost::handleCanonicalEvent(const QString& provider, const QString& s
         for (const QString& id : std::exchange(it->stagedAttachmentIds, {}))
             (void)journal_->cancelAttachment(it->stored.id, it->stored.generation, id, 1);
         followRecreatedWorktree(*it);
+        abandonTurnApprovals(it->stored.id);
         return;
     }
     if (type == QStringLiteral("runtime.error")) {

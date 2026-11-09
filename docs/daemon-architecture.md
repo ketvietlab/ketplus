@@ -217,6 +217,10 @@ returns a newest-three-turn **upper bound**, further limited to 128 events and
 prefixes, and a durable compaction revision fence. A stale continuation returns
 `snapshot_changed`, never a silently incomplete historical snapshot. Current
 lifecycle and pending approvals are delivered separately from historical events.
+A turn's pending approvals and questions expire when the turn ends (`turn.completed`
+from any provider), without an answer to the provider, which no longer waits for them;
+a later `approval.resolve` or `question.answer` is refused. A provider stop or
+interrupt already ended them.
 
 `session.transcript_window` also pages **forward** inside the same fenced snapshot:
 `after_cursor` (exclusive event cursor, mutually exclusive with `before_cursor`, rejected for
