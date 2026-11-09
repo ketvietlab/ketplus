@@ -24,8 +24,10 @@ CI and a batch gate on promotion into `develop`.
   `.github/scripts/check-develop-promotion.sh`: `develop` must be an ancestor of
   the head, or the previous promotion's merge commit with the same tree as the
   integration commit it merged. A change made only on `develop` is refused.
-  The job runs on `pull_request_target`, so the workflow and script come from
-  `develop`, not from the pull request. The head is fetched as git data and never
+  The job runs on `pull_request_target`, which GitHub sources from the default
+  branch, so the workflow and script come from `develop` (the default branch),
+  not from the pull request. Moving the default branch away from `develop` would
+  need this design revisited. The head is fetched as git data and never
   executed, the token is read-only and no secret is used; a pull request cannot
   rewrite the check that guards it.
 - Promotions are merged with a merge commit, never squashed or rebased.
@@ -44,7 +46,9 @@ CI and a batch gate on promotion into `develop`.
   area is the only check before merge, so pull requests must say what was run.
 - Required checks on `develop` must name `promotion provenance` and the `build`
   jobs; `integration` needs no required checks but keeps force-push and deletion
-  disabled.
+  disabled. The check only blocks a merge once a repository owner configures that
+  rule. As of 2026-11-09 `develop` has no branch protection or ruleset, so
+  promotion provenance is reported but not yet enforced.
 
 ## Alternatives considered
 
