@@ -1,21 +1,21 @@
 # Issue 68 acceptance dossier
 
-Owner: #3329 (from #2739). Reviewer: #2739, single pass. Updated: 2026-11-08.
+Owner: #3329 (from #2739). Reviewer: #2739, single pass. Updated: 2026-11-09.
 Original issue: https://github.com/ketvietlab/ketplus/issues/68
 
-This maps the original seven criteria to evidence and remaining work. It is not
-an issue-level PASS. Pending packages must pass review and integration before
-counting as merged fixes. No UI, live journal, provider quota or deployment work.
+This maps the original seven criteria to evidence. All seven are accepted and the
+issue is closed; the limits below and the ACL follow-up #323 stay open. The
+sections after the table keep the history of each gate.
 
-| Original criterion | Available evidence | Remaining acceptance / owner |
+| Original criterion | Evidence | Accepted limits / follow-up |
 | --- | --- | --- |
-| Forward-only, idempotent migrations; newer-daemon journal safety | Startup transaction failures #250; #273 closes failed storage objects; #274 protects migration staging (merged `c3490da5`) | Newer format refused unchanged (ADR 0095); legacy backfills once (ADR 0096); activity backfill after open (ADR 0097); full disk and killed migration verified without a production change / #3329 |
-| Transactions, crash consistency and surfaced errors | Append/delete/fork/replay fixes #241–250; #254 (merged through #255) prepares media ownership before journal commit | Cross-file interruption and broader read/commit failure coverage; do not infer power-loss atomicity from callback order / #2739 |
-| Bounded/indexed reads on large journals | GC #220, ACK #223, metadata #228, staging #230, deletion queue #235, cloud cache #237, cancellation #240; #272 bounds stored policy JSON (merged through #274) | Statement audit of 25 operations (100k-event session, 200k events in 2,000 others, large results with orphans) passes after two bounded-read fixes; bytes, memory and media files need their own evidence / #3329 |
-| Retention and deletion remove rows/media | Transactional cleanup and retention tests above; media cleanup/dedup #251–252 | Physical media/blob retirement, shared-reference preservation and steady-state acceptance; #128 archive behavior is not implied / #2739 |
-| Media paths, limits, permissions, orphan cleanup | #251–252 plus merged publication/fork/preview #253–255; merged private migration staging #274 | Ancestor/replacement races, decode/concurrency bounds, write-admission/orphan recovery and platform permissions / #2739 |
-| Note natural splits for oversized LocalJournal.cpp | At combined journal code 6347493f it is 1,462 lines. Natural responsibilities listed below; current constructor fix is two net lines | Record this inventory in review; any actual extraction must preserve behavior and has its own validation / #2739 |
-| Tests for the above | Each merged fix links focused fault/regression evidence; current combined media and journal matrices are separate gates | Independent final-head reviews and missing acceptance scenarios above; no whole-issue PASS until reconciled / #2739, #7705 |
+| Forward-only, idempotent migrations; newer-daemon journal safety | Format marker ADR 0095; one-time backfills ADR 0096; activity backfill after open ADR 0097 (#293); full-disk and killed-migration recovery #307 | Kills are timed, not placed in each step; power loss is not covered |
+| Transactions, crash consistency and surfaced errors | Append/delete/fork/replay #241–250; startup #250, #273, #274; bounded passes ADR 0093/0094/0097; journal+media ordering #254/#255 and #316 | Power-loss atomicity is not claimed |
+| Bounded/indexed reads on large journals | Statement audit of 25 operations with two fixes #308; per-pass row/byte bounds ADR 0093/0094/0097 | Statement counters do not bound bytes, memory or total work |
+| Retention and deletion remove rows/media | Bounded history purge ADR 0093; large-payload GC audited in #308; orphan media retired at startup #316 | Orphans from an interruption while running wait for the next start; #128 archive behavior is separate |
+| Media paths, limits, permissions, orphan cleanup | #251–255, #274; decode pool and non-blocking open #313; root/regular-file guards #316; state directory chmod failure refused #321 | Windows, every replacement race and peak memory are not claimed; inherited ACLs #323 (accepted, deferred, owner #3329) |
+| Note natural splits for oversized LocalJournal.cpp | Inventory below (1,518 lines at `23fcd8ae`) | Any extraction is its own change |
+| Tests for the above | Each fix has a regression and a negative control; Release Pro 108/108 and Lite 16/16 at integration `22f66367` | Hosted CI was not run |
 
 ## Existing package order
 
