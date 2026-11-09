@@ -1138,6 +1138,38 @@ Item {
         captureTranscriptWheelPosition()
     }
 
+    // The failed turn Retry sends again: the latest error after the last prompt, while the
+    // conversation is idle. A prompt with images or from another agent is not resent, since
+    // Retry could not send it as it was, and neither while the composer holds attachments,
+    // which a send would carry along.
+    readonly property var retryableFailure: {
+        const model = agentHost.messageModel
+        if (!model || model.count < 0 || agentHost.sessionRunning || !agentHost.agentAvailable || agentHost.attachments.length > 0)
+            return null
+        let errorKey = ""
+        for (let i = model.sourceCount() - 1; i >= 0; --i) {
+            const row = model.source(i)
+            if (row.kind === "error") {
+                if (errorKey.length === 0)
+                    errorKey = String(row.messageKey || "")
+                continue
+            }
+            if (row.kind !== "user")
+                continue
+            const text = String(row.body || "").trim()
+            const resendable = text.length > 0 && (row.images || []).length === 0 && row.subtype !== "agentMessage"
+            return errorKey.length > 0 && resendable ? {key: errorKey, prompt: text} : null
+        }
+        return null
+    }
+    function retryFailedTurn() {
+        const failure = retryableFailure
+        if (!failure)
+            return
+        agentHost.submitConfiguredPrompt(failure.prompt, {model: selectedModel, effort: selectedEffort, permission: permission, provider: selectedProvider})
+        revealLatestAfterSubmit()
+    }
+
     function submitCurrentPrompt() {
         if (!agentHost.agentAvailable || agentHost.steeringPending)
             return

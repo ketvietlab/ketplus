@@ -545,7 +545,9 @@ summary stays neutral. Provider items map to the mock's step titles: Codex comma
 read as Read, Searched code or Listed files; Codex web actions as Opened a page or Found in
 page; Claude Write, Edit and MultiEdit as file changes with line counts; MCP tools as
 "Used server: tool". Browser-open rows retain an Open
-action. Composer block line-height matches
+action. A provider failure reads as the kit's danger banner; on the latest failed turn,
+while the conversation is idle, Retry sends that turn's prompt again as a new turn (not for
+a prompt with images, one from another agent, or while the composer holds attachments). Composer block line-height matches
 the transcript at 1.75; focused Qt tests cover Vietnamese single-line sizing and composer undo.
 
 

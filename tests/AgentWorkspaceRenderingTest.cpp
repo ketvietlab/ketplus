@@ -2586,6 +2586,51 @@ void AgentWorkspaceViewTest::transcriptNoticesUseRuntimeState() {
     }
 }
 
+// The mock's workspace/error: Retry on the latest failure sends its prompt again, only while
+// the conversation is idle and only for the turn that failed last.
+void AgentWorkspaceViewTest::retryResendsTheLatestFailedPrompt() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.setAgentAvailable(true);
+    view.resize(900, 700);
+    view.show();
+    const QVariantMap prompt{{"messageKey", "u1"}, {"kind", "user"}, {"body", "Profile it"}};
+    const QVariantMap failure{{"messageKey", "e1"},
+                              {"kind", "error"},
+                              {"category", "system"},
+                              {"title", "The provider stopped with an error"},
+                              {"body", "No answer"}};
+    view.resetMessages({prompt, failure}, "retry");
+    auto* root = view.quickView()->rootObject();
+    const auto action = [&]() -> QQuickItem* {
+        auto* item = findVisualItem(root, "transcriptNoticeAction");
+        return item && item->isVisible() ? item : nullptr;
+    };
+    QQuickItem* retry = nullptr;
+    QTRY_VERIFY((retry = action()));
+    QCOMPARE(retry->property("text").toString(), QStringLiteral("Retry"));
+    QSignalSpy sent(&view, &ketplus::AgentWorkspaceView::configuredPromptSubmitted);
+    QVERIFY(QMetaObject::invokeMethod(retry, "clicked"));
+    QCOMPARE(sent.count(), 1);
+    QCOMPARE(sent.first().at(0).toString(), QStringLiteral("Profile it"));
+    // Not while a turn runs, nor once a newer prompt follows the failure.
+    view.setSessionState("Retry", "Working", true);
+    QTRY_VERIFY(!action());
+    view.setSessionState("Retry", "Ready", false);
+    QTRY_VERIFY(action());
+    view.resetMessages(
+        {prompt, failure, QVariantMap{{"messageKey", "u2"}, {"kind", "user"}, {"body", "Next"}}},
+        "retry");
+    QTRY_VERIFY(!action());
+    // A prompt with images could not be sent as it was.
+    auto withImage = prompt;
+    withImage.insert("images", QVariantList{"file:///tmp/shot.png"});
+    view.resetMessages({withImage, failure}, "retry");
+    QTRY_VERIFY(findVisualItem(root, "transcriptNoticeTitle"));
+    QTest::qWait(50);
+    QVERIFY(!action());
+}
+
 void AgentWorkspaceViewTest::markdownTableAfterCodeKeepsHeaderCells() {
     for (const auto& header : {QString("Surface"), QString{}}) {
         QTextDocument document;
