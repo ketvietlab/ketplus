@@ -507,8 +507,9 @@ workspace/generation isolation and encrypted-history redaction tests.
 
 The standalone `tests/daemon/cloud-privacy` and `tests/daemon/characterization`
 projects take the daemon's sources from `apps/daemon/sources.cmake` (the journal's
-`src/storage` sources for characterization). This means a daemon source split
-cannot leave them unbuildable. They apply `ketplus_enable_warnings`, as do the
+`src/storage` sources for characterization), so a split of those sources reaches them
+without a hand-kept list. New include paths, dependencies or platform libraries still
+have to be added to each lane. They apply `ketplus_enable_warnings`, as do the
 in-tree test targets, including `ketplus_atlas_tunnel_fixture`.
 `r03_characterization` needs `R03_FIXTURES` to name a materialized v3 workload
 directory. Without it, `initTestCase` fails.
