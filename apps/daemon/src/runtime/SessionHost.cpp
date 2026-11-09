@@ -17,6 +17,7 @@
 #include "CodexServerRequests.h"
 #include "ComputerToolLaunch.h"
 
+#include <QBuffer>
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
@@ -297,6 +298,20 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAda
       approvals_(new ApprovalBroker(this)),
       mediaStore_(McpMediaStore::directoryForJournal(journal->databasePath())) {
     mediaReads_.setMaxThreadCount(mediaReadThreads);
+    // A generated image whose inline pixels history retention drops keeps a 512 px preview.
+    journal_->setImagePreviewWriter([this](const QByteArray& image, const QString& sessionId) {
+        QBuffer source;
+        source.setData(image);
+        if (!source.open(QIODevice::ReadOnly))
+            return QJsonObject();
+        const auto preview = McpMediaStore::encodePreview(&source, 512);
+        if (!preview.value("ok").toBool())
+            return QJsonObject();
+        const auto jpeg =
+            QByteArray::fromBase64(preview.value("data").toString().toLatin1(),
+                                   QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
+        return mediaStore_.storeImage(jpeg, "image/jpeg", sessionId);
+    });
     deltaFlush_.setSingleShot(true);
     deltaFlush_.setInterval(deltaCoalesceMs);
     connect(&deltaFlush_, &QTimer::timeout, this, &SessionHost::flushDeltas);

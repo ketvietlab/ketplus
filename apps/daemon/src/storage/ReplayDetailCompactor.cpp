@@ -330,17 +330,37 @@ static std::optional<QJsonObject> withoutInlineImages(const QJsonObject& origina
 
 // Older Codex builds journaled the generated pixels inline as a base64 `result` string.
 // Clients never draw it (they show `savedPath` or a media reference), so it goes; the
-// prompt, path and status stay.
+// prompt, path and status stay. With a preview, `result` becomes the media reference a newer
+// build would have journaled, so the row keeps a small picture after the saved file is gone.
 std::optional<QJsonObject> compactGeneratedImage(const QJsonObject& original,
-                                                 const QDateTime& cutoff) {
+                                                 const QDateTime& cutoff,
+                                                 const ImagePreview& preview) {
     const auto pixels = original.value("result");
     if (!cutoff.isValid() || cutoff > QDateTime::currentDateTimeUtc() ||
         original.contains("compacted") || !pixels.isString() || pixels.toString().isEmpty())
         return std::nullopt;
+    const auto originalBytes = pixels.toString().toUtf8().size();
     auto item = original;
     item.remove("result");
-    item.insert("compacted",
-                marker(cutoff, "image-pixels-v1", pixels.toString().toUtf8().size(), 0));
+    if (preview) {
+        auto encoded = pixels.toString().toLatin1();
+        // Some builds wrote a data URL rather than bare base64.
+        if (encoded.startsWith("data:")) {
+            const auto comma = encoded.indexOf(',');
+            encoded = comma < 0 ? QByteArray() : encoded.mid(comma + 1);
+        }
+        const auto decoded =
+            QByteArray::fromBase64Encoding(encoded, QByteArray::AbortOnBase64DecodingErrors);
+        const auto block = decoded ? preview(*decoded) : QJsonObject();
+        if (!block.isEmpty()) {
+            item.insert("result", QJsonObject{{"content", QJsonArray{block}}});
+            item.insert("compacted",
+                        marker(cutoff, "image-preview-v1", originalBytes,
+                               QJsonDocument(block).toJson(QJsonDocument::Compact).size()));
+            return item;
+        }
+    }
+    item.insert("compacted", marker(cutoff, "image-pixels-v1", originalBytes, 0));
     return item;
 }
 
@@ -390,9 +410,10 @@ static std::optional<QJsonObject> compactToolDetail(const QJsonObject& original,
     return item;
 }
 std::optional<QJsonObject> compactCompletedReplayItem(const QJsonObject& original,
-                                                      const QDateTime& cutoff) {
+                                                      const QDateTime& cutoff,
+                                                      const ImagePreview& preview) {
     if (original.value("type") == "imageGeneration")
-        return compactGeneratedImage(original, cutoff);
+        return compactGeneratedImage(original, cutoff, preview);
     const auto detail = compactToolDetail(original, cutoff);
     if (const auto images = withoutInlineImages(detail.value_or(original), cutoff))
         return images;

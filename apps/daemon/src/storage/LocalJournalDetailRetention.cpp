@@ -441,7 +441,12 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
             }
             auto payload = QJsonDocument::fromJson(bytes).object();
             const auto item = compactCompletedReplayItem(
-                payload.value(QStringLiteral("item")).toObject(), olderThan);
+                payload.value(QStringLiteral("item")).toObject(), olderThan,
+                imagePreview_
+                    ? ImagePreview([this, session = row.session](const QByteArray& image) {
+                          return imagePreview_(image, session);
+                      })
+                    : ImagePreview());
             if (!item)
                 continue;
             payload.insert(QStringLiteral("item"), *item);
