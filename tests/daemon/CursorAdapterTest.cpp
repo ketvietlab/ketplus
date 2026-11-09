@@ -529,6 +529,47 @@ class CursorAdapterTest final : public QObject {
         adapter.stop();
     }
 
+    // A request the exited process left unanswered must not shape the answer to a request with
+    // the same id from the next process, which numbers its requests from the start again.
+    void requestsOfAnExitedProcessAreForgotten() {
+        QTemporaryDir directory;
+        const auto cursor = directory.filePath("fake-cursor");
+        const auto logPath = directory.filePath("cursor.log");
+        QVERIFY(writeFakeCursor(cursor, logPath));
+        LocalJournal journal(directory.filePath("journal.sqlite3"));
+        CodexAdapter codex("/missing-codex");
+        CursorAdapter adapter(cursor);
+        SessionHost host(&journal, &codex, nullptr, &adapter);
+        const auto sessionId = startCursor(host, directory.path(), "question-then-exit");
+        QVERIFY(!sessionId.isEmpty());
+        const auto events = eventsOf(journal, sessionId);
+        QTRY_COMPARE_WITH_TIMEOUT(events("turn.completed").size(), 1, 5000);
+        const auto next =
+            host.handleCommand(request("session.start_turn", "after-exit",
+                                       {{"prompt", "approval-reused-id"}}, sessionId, 1),
+                               "desktop-test");
+        QVERIFY2(next.value("ok").toBool(), qPrintable(QJsonDocument(next).toJson()));
+        // The exited process's question was requested first; the new approval follows it.
+        QTRY_COMPARE_WITH_TIMEOUT(events("approval.requested").size(), 2, 10000);
+        const auto card = events("approval.requested").last()["payload"].toObject();
+        QVERIFY(card.value("kind").toString() != "input");
+        const auto resolved =
+            host.handleCommand(request("approval.resolve", "resolve",
+                                       {{"approval_id", card.value("approval_id")},
+                                        {"resolution", QJsonObject{{"decision", "accept"}}}},
+                                       sessionId, 1),
+                               "desktop-test");
+        QVERIFY2(resolved.value("ok").toBool(), qPrintable(QJsonDocument(resolved).toJson()));
+        QTRY_VERIFY_WITH_TIMEOUT(logText(logPath).contains("permission:"), 5000);
+        QByteArray answer;
+        for (const QByteArray& line : logText(logPath).split('\n'))
+            if (line.startsWith("permission:"))
+                answer = line;
+        QVERIFY2(answer.contains("allow-once"), answer.constData());
+        QTRY_COMPARE_WITH_TIMEOUT(events("turn.completed").size(), 2, 5000);
+        adapter.stop();
+    }
+
     void stopWhilePermissionIsPending() {
         QTemporaryDir directory;
         const auto cursor = directory.filePath("fake-cursor");
