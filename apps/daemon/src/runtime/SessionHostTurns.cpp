@@ -105,44 +105,33 @@ void SessionHost::prepareTurn(const QString& sessionId, const qint64 generation,
             params.insert(QStringLiteral("model"), model);
         }
         addCodexAgentTools(*it, params, context_harness::codexCompactConfig(compactWindow));
-        adapter_->call(QStringLiteral("thread/start"), params,
-                       [this, sessionId, generation, input, options,
-                        compactWindow](const QJsonObject& result, const QString& providerError) {
-                           auto current = sessions_.find(sessionId);
-                           if (current == sessions_.end() ||
-                               current->stored.generation != generation) {
-                               return;
-                           }
-                           if (!providerError.isEmpty()) {
-                               current->startingTurn = false;
-                               releaseTurnAttachments(*current);
-                               current->stored.state = QStringLiteral("failed");
-                               journal_->upsertSession(current->stored);
-                               appendEvent(*current, QStringLiteral("runtime.error"),
-                                           {{QStringLiteral("message"), providerError}});
-                               return;
-                           }
-                           current->stored.threadId = result.value(QStringLiteral("thread"))
-                                                          .toObject()
-                                                          .value(QStringLiteral("id"))
-                                                          .toString();
-                           if (current->stored.threadId.isEmpty()) {
-                               current->startingTurn = false;
-                               releaseTurnAttachments(*current);
-                               current->stored.state = QStringLiteral("failed");
-                               journal_->upsertSession(current->stored);
-                               appendEvent(*current, QStringLiteral("runtime.error"),
-                                           {{QStringLiteral("message"),
-                                             QStringLiteral("Codex returned no thread id.")}});
-                               return;
-                           }
-                           current->attachedToProvider = true;
-                           current->providerCompactWindow = compactWindow;
-                           sessionsByThread_.insert(current->stored.threadId, sessionId);
-                           journal_->upsertSession(current->stored);
-                           syncProviderTitle(*current);
-                           beginTurn(sessionId, generation, input, options);
-                       });
+        adapter_->call(
+            QStringLiteral("thread/start"), params,
+            [this, sessionId, generation, input, options,
+             compactWindow](const QJsonObject& result, const QString& providerError) {
+                auto current = sessions_.find(sessionId);
+                if (current == sessions_.end() || current->stored.generation != generation) {
+                    return;
+                }
+                if (!providerError.isEmpty()) {
+                    failTurnStart(*current, providerError);
+                    return;
+                }
+                current->stored.threadId = result.value(QStringLiteral("thread"))
+                                               .toObject()
+                                               .value(QStringLiteral("id"))
+                                               .toString();
+                if (current->stored.threadId.isEmpty()) {
+                    failTurnStart(*current, QStringLiteral("Codex returned no thread id."));
+                    return;
+                }
+                current->attachedToProvider = true;
+                current->providerCompactWindow = compactWindow;
+                sessionsByThread_.insert(current->stored.threadId, sessionId);
+                journal_->upsertSession(current->stored);
+                syncProviderTitle(*current);
+                beginTurn(sessionId, generation, input, options);
+            });
         return;
     }
     if (it->attachedToProvider && it->providerCompactWindow == compactWindow) {
@@ -164,12 +153,7 @@ void SessionHost::prepareTurn(const QString& sessionId, const qint64 generation,
                            return;
                        }
                        if (!providerError.isEmpty()) {
-                           current->startingTurn = false;
-                           releaseTurnAttachments(*current);
-                           current->stored.state = QStringLiteral("failed");
-                           journal_->upsertSession(current->stored);
-                           appendEvent(*current, QStringLiteral("runtime.error"),
-                                       {{QStringLiteral("message"), providerError}});
+                           failTurnStart(*current, providerError);
                            return;
                        }
                        current->attachedToProvider = true;
@@ -188,12 +172,7 @@ void SessionHost::beginClaudeTurn(const QString& sessionId, const qint64 generat
     }
     const QString prompt = promptText(input);
     if (prompt.isEmpty()) {
-        it->startingTurn = false;
-        releaseTurnAttachments(*it);
-        it->stored.state = QStringLiteral("failed");
-        journal_->upsertSession(it->stored);
-        appendEvent(*it, QStringLiteral("runtime.error"),
-                    {{QStringLiteral("message"), QStringLiteral("Claude turn has no prompt.")}});
+        failTurnStart(*it, QStringLiteral("Claude turn has no prompt."));
         return;
     }
     QJsonObject params{{QStringLiteral("sessionId"), sessionId},
@@ -230,11 +209,7 @@ void SessionHost::beginClaudeTurn(const QString& sessionId, const qint64 generat
             }
             current->startingTurn = false;
             if (!providerError.isEmpty()) {
-                releaseTurnAttachments(*current);
-                current->stored.state = QStringLiteral("failed");
-                journal_->upsertSession(current->stored);
-                appendEvent(*current, QStringLiteral("runtime.error"),
-                            {{QStringLiteral("message"), providerError}});
+                failTurnStart(*current, providerError);
                 return;
             }
             const QString threadId = result.value(QStringLiteral("thread"))
@@ -267,12 +242,7 @@ void SessionHost::beginCursorTurn(const QString& sessionId, const qint64 generat
         return;
     const QString prompt = promptText(input);
     if (prompt.isEmpty()) {
-        it->startingTurn = false;
-        releaseTurnAttachments(*it);
-        it->stored.state = QStringLiteral("failed");
-        journal_->upsertSession(it->stored);
-        appendEvent(*it, QStringLiteral("runtime.error"),
-                    {{QStringLiteral("message"), QStringLiteral("Cursor turn has no prompt.")}});
+        failTurnStart(*it, QStringLiteral("Cursor turn has no prompt."));
         return;
     }
     QJsonObject params{{QStringLiteral("sessionId"), sessionId},
@@ -301,11 +271,7 @@ void SessionHost::beginCursorTurn(const QString& sessionId, const qint64 generat
                 return;
             current->startingTurn = false;
             if (!providerError.isEmpty()) {
-                releaseTurnAttachments(*current);
-                current->stored.state = QStringLiteral("failed");
-                journal_->upsertSession(current->stored);
-                appendEvent(*current, QStringLiteral("runtime.error"),
-                            {{QStringLiteral("message"), providerError}});
+                failTurnStart(*current, providerError);
                 return;
             }
             const QString threadId = result.value(QStringLiteral("thread"))
@@ -357,11 +323,7 @@ void SessionHost::beginTurn(const QString& sessionId, const qint64 generation,
             }
             current->startingTurn = false;
             if (!providerError.isEmpty()) {
-                releaseTurnAttachments(*current);
-                current->stored.state = QStringLiteral("failed");
-                journal_->upsertSession(current->stored);
-                appendEvent(*current, QStringLiteral("runtime.error"),
-                            {{QStringLiteral("message"), providerError}});
+                failTurnStart(*current, providerError);
                 return;
             }
             // turn/completed or a provider exit can arrive before this reply. Only a turn that is
@@ -375,6 +337,17 @@ void SessionHost::beginTurn(const QString& sessionId, const qint64 generation,
             current->stored.state = QStringLiteral("running");
             journal_->upsertSession(current->stored);
         });
+}
+
+void SessionHost::failTurnStart(Session& session, const QString& message) {
+    session.startingTurn = false;
+    // A Stop pressed while this turn was starting belongs to it; kept, it would interrupt the
+    // next turn as soon as it starts and keep the worktree switch unavailable until then.
+    session.interruptPending = false;
+    releaseTurnAttachments(session);
+    session.stored.state = QStringLiteral("failed");
+    journal_->upsertSession(session.stored);
+    appendEvent(session, QStringLiteral("runtime.error"), {{QStringLiteral("message"), message}});
 }
 
 void SessionHost::providerStopped(const QString& adapterName, const QString& reason) {
@@ -400,6 +373,7 @@ void SessionHost::providerStopped(const QString& adapterName, const QString& rea
         }
         session.attachedToProvider = false;
         session.startingTurn = false;
+        session.interruptPending = false;
         // The provider thread and its turn are gone: clear the turn and release its attachments,
         // as turn/completed would, so interrupts and attachment quotas do not stay stuck.
         session.stored.turnId.clear();
