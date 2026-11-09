@@ -325,7 +325,8 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         width: Math.min(implicitWidth, parent.width - groupChevron.width - KetTheme.px(36, KetTheme.zoom))
                         text: messageDelegate.groupSummary + (messageDelegate.groupRunning ? " · Running" : "")
-                        color: messageDelegate.groupFailed > 0 ? KetTheme.t.danger : messageDelegate.groupRecipe.text
+                        // A failure shows on its own step, as in the mock; the summary stays quiet.
+                        color: messageDelegate.groupRecipe.text
                         font.family: KetTheme.fontFamily
                         font.pixelSize: messageDelegate.groupRecipe.fontPixels
                         font.weight: Font.Normal
@@ -339,9 +340,8 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         width: KetTheme.px(14, KetTheme.zoom)
                         height: width
-                        name: KetTheme.iconForLucide("chevron-right")
+                        name: KetTheme.iconForLucide(messageDelegate.groupExpanded ? "chevron-up" : "chevron-down")
                         color: KetTheme.t.textMuted
-                        rotation: messageDelegate.groupExpanded ? 90 : 0
                         box: KetTheme.px(14, KetTheme.zoom)
                     }
                     HoverHandler {

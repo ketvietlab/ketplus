@@ -184,6 +184,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void approvalCardStaysOutsideCommandGroup();
     void groupExpansionSurvivesPagingAndIsPruned();
     void expandedGroupHangsUnderRail();
+    void activityStepsReadAsTheMock();
     void findIgnoresUnrelatedHistoryStateUpdates();
     void findGoesToLastResultWhenAnchorTrimmed();
     void findResultsRefreshOnModelChanges();

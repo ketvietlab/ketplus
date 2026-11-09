@@ -440,17 +440,17 @@ void AgentWorkspaceViewTest::expandedGroupHangsUnderRail() {
     QVERIFY(chevron);
     QVERIFY(chevron->x() > summary->x() + summary->width() - 0.5);
     QVERIFY(chevron->x() < summary->x() + summary->width() + 8);
-    QCOMPARE(chevron->rotation(), 0.0);
+    QCOMPARE(chevron->property("name").toString(), QStringLiteral("chevron-down"));
     QVERIFY(delegateAt(transcript, 1));
     auto* collapsedRail = findVisualItem(delegateAt(transcript, 1), "transcriptGroupRail");
     QVERIFY(collapsedRail && !collapsedRail->isVisible());
 
-    // Expanded: every member sits right of the rail and draws no icon of its own.
+    // Expanded: every member sits right of the rail with its kind's icon, as in the mock.
     QVERIFY(QMetaObject::invokeMethod(transcript, "setGroupExpanded", Q_ARG(QVariant, "c1"),
                                       Q_ARG(QVariant, true)));
     QTRY_COMPARE(view.messageModel()->count(), 4);
     QTRY_VERIFY((chevron = findVisualItem(root, "transcriptGroupChevron")) &&
-                chevron->rotation() == 90.0);
+                chevron->property("name").toString() == QStringLiteral("chevron-up"));
     for (int index = 1; index <= 3; ++index) {
         QQuickItem* row = nullptr;
         QTRY_VERIFY((row = delegateAt(transcript, index)) != nullptr);
@@ -463,8 +463,66 @@ void AgentWorkspaceViewTest::expandedGroupHangsUnderRail() {
                  qPrintable(QStringLiteral("title at %1, rail at %2").arg(titleX).arg(rail->x())));
         auto* header = findVisualItem(row, "transcriptActivityHeader");
         QVERIFY(header);
-        QCOMPARE(title->mapToItem(header, QPointF()).x(), 0.0);
+        QVERIFY(title->mapToItem(header, QPointF()).x() > 0.0);
     }
+}
+
+// The mock's step line (TranscriptActivityItem.qml): a short title, then what the step acted
+// on; a failure under it; a quiet group summary.
+void AgentWorkspaceViewTest::activityStepsReadAsTheMock() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 640);
+    view.show();
+    auto* root = view.quickView()->rootObject();
+    auto* transcript = root->findChild<QQuickItem*>("agentTranscript");
+    QVERIFY(transcript);
+    QVariantMap read = readRow("r", "Read: modules/ai/src/agent/qml/AgentSidebar.qml");
+    read["command"] = QString();
+    QVariantMap measure = readRow("m", "top -l 4");
+    measure["subtype"] = "command";
+    measure["commandDescription"] = "Measure idle CPU";
+    QVariantMap tests = readRow("t", "ctest -R sidebar");
+    tests["subtype"] = "command";
+    tests["status"] = "failed";
+    tests["exitCode"] = 8;
+    tests["durationMs"] = 12400;
+    // A failure leaves the summary's colour as it is without one.
+    QVariantMap passed = tests;
+    passed["status"] = "completed";
+    view.resetMessages({textRow("u", "user", "Go"), read, measure, passed}, "workspace:quiet");
+    QQuickItem* summary = nullptr;
+    QTRY_VERIFY((summary = findVisualItem(root, "transcriptGroupSummary")) != nullptr);
+    const QColor quiet = summary->property("color").value<QColor>();
+    view.resetMessages({textRow("u", "user", "Go"), read, measure, tests}, "workspace:steps");
+    QTRY_VERIFY((summary = findVisualItem(root, "transcriptGroupSummary")) != nullptr &&
+                summary->property("text").toString().contains("failed"));
+    QCOMPARE(summary->property("color").value<QColor>(), quiet);
+
+    QVERIFY(QMetaObject::invokeMethod(transcript, "setGroupExpanded", Q_ARG(QVariant, "r"),
+                                      Q_ARG(QVariant, true)));
+    QTRY_COMPARE(view.messageModel()->count(), 4);
+    const auto line = [&](int index) {
+        QQuickItem* row = delegateAt(transcript, index);
+        const auto text = [&](const char* name) {
+            auto* item = row ? findVisualItem(row, name) : nullptr;
+            return item && item->isVisible() ? item->property("text").toString() : QString();
+        };
+        return QStringList{text("transcriptActivityTitle"), text("transcriptActivityDetail"),
+                           text("transcriptActivityStatus")};
+    };
+    QTRY_COMPARE(line(1), (QStringList{"Read", "modules/ai/src/agent/qml/AgentSidebar.qml", ""}));
+    QTRY_COMPARE(line(2), (QStringList{"Measure idle CPU", "top -l 4", ""}));
+    QTRY_COMPARE(line(3),
+                 (QStringList{"Ran", "ctest -R sidebar", "Failed · exit code 8 · 12.4 s"}));
+    // Seconds round before minutes split, so 119.6 s never reads "1m 60s".
+    tests["durationMs"] = 119600;
+    view.resetMessages({textRow("u", "user", "Go"), read, measure, tests}, "workspace:minutes");
+    QTRY_VERIFY(findVisualItem(root, "transcriptGroupSummary") != nullptr);
+    QVERIFY(QMetaObject::invokeMethod(transcript, "setGroupExpanded", Q_ARG(QVariant, "r"),
+                                      Q_ARG(QVariant, true)));
+    QTRY_COMPARE(view.messageModel()->count(), 4);
+    QTRY_COMPARE(line(3).last(), QStringLiteral("Failed · exit code 8 · 2m 00s"));
 }
 
 void AgentWorkspaceViewTest::activityGroupCopyIncludesMembers() {
@@ -547,7 +605,8 @@ void AgentWorkspaceViewTest::copiesMessageSourcesAndCodeBlocks() {
     auto* answerButton = childNamed(delegateAt(transcript, 3), "copyMessageButton");
     QCOMPARE(answerButton->findChild<QObject*>("ketToolTip")->property("text").toString(),
              QStringLiteral("Copy response"));
-    if (const auto capture = qEnvironmentVariable("KETPLUS_ANSWER_COPY_CAPTURE"); !capture.isEmpty()) {
+    if (const auto capture = qEnvironmentVariable("KETPLUS_ANSWER_COPY_CAPTURE");
+        !capture.isEmpty()) {
         QTest::qWait(150);
         QVERIFY(view.quickView()->grabWindow().save(capture));
     }

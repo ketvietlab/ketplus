@@ -18,7 +18,7 @@ Kit.KetActivityRow {
         id: titleMetrics
         font: activityTitle.font
     }
-    readonly property real titleTop: activity.expanded ? 0 : Math.max(0, (height - activityTitle.implicitHeight) / 2)
+    readonly property real titleTop: Math.max(0, (height - activityTitle.implicitHeight) / 2)
     readonly property real firstLineCenter: titleTop + titleMetrics.height / 2
     Rectangle {
         anchors.fill: parent
@@ -29,41 +29,56 @@ Kit.KetActivityRow {
 
     KetIcon {
         id: activityIcon
-        visible: !activity.compact
-        width: activity.compact ? 0 : activityHeader.recipe.iconSize
+        width: activityHeader.recipe.iconSize
         height: activityHeader.recipe.iconSize
         anchors.left: parent.left
-        anchors.leftMargin: activity.compact ? 0 : activityHeader.recipe.paddingInline
+        anchors.leftMargin: activityHeader.recipe.paddingInline
         y: Math.round(activityHeader.firstLineCenter - height / 2)
-        name: KetTheme.iconForLucide((activity.iconSource()).toString().split("/").pop().replace(/\.svg$/, ""))
-        color: activity.running ? KetTheme.t.accentText : KetTheme.t.textMuted
-        box: activity.compact ? 0 : activityHeader.recipe.iconSize
+        name: activity.status === "failed" ? KetTheme.iconForLucide("circle-x") : KetTheme.iconForLucide((activity.iconSource()).toString().split("/").pop().replace(/\.svg$/, ""))
+        color: activity.running ? KetTheme.t.accentText : activityHeader.recipe.text
+        box: activityHeader.recipe.iconSize
     }
 
     Text {
         id: activityTitle
         objectName: "transcriptActivityTitle"
         anchors.left: activityIcon.right
-        anchors.leftMargin: activity.compact ? 0 : activityHeader.recipe.spacing
-        anchors.right: browserOpen.left
-        anchors.rightMargin: KetTheme.px(8, KetTheme.zoom)
+        anchors.leftMargin: activityHeader.recipe.spacing
         y: activityHeader.titleTop
-        // Middle elision only applies to a single line, so a collapsed
-        // multi-line command folds onto one; a command is never markup.
-        text: activity.expanded && activity.subtype === "command" && !activity.describedCommand ? (activity.running ? "Running command" : "Ran command") + (activity.status === "failed" ? " · Failed" : activity.status === "interrupted" ? " · Interrupted" : "") : activity.expanded ? activity.displayTitle : activity.displayTitle.replace(/\s*\n\s*/g, " ")
+        width: Math.min(implicitWidth, browserOpen.x - x - KetTheme.px(8, KetTheme.zoom))
+        // One line, as the mock's step: the title, then what it acted on beside it.
+        text: activity.headline
         textFormat: Text.PlainText
-        color: activity.status === "failed" ? KetTheme.t.danger : titleHover.hovered && activity.opensFile ? KetTheme.t.accentText : KetTheme.t.textSecondary
+        color: titleHover.hovered && activity.opensFile ? KetTheme.t.accentText : activityHeader.recipe.text
         font.underline: titleHover.hovered && activity.opensFile
-        font.family: activity.subtype === "command" && !activity.describedCommand ? agentHost.monoFontFamily : KetTheme.fontFamily
+        font.family: KetTheme.fontFamily
         font.pixelSize: activityHeader.recipe.fontPixels
         font.weight: Font.Normal
-        wrapMode: activity.expanded ? Text.WrapAnywhere : Text.NoWrap
-        elide: activity.expanded ? Text.ElideNone : Text.ElideMiddle
-        maximumLineCount: activity.expanded ? 100000 : 1
+        elide: Text.ElideRight
+        maximumLineCount: 1
         HoverHandler {
             id: titleHover
             cursorShape: activity.opensFile ? Qt.PointingHandCursor : Qt.ArrowCursor
         }
+    }
+
+    Text {
+        id: activityDetail
+        objectName: "transcriptActivityDetail"
+        anchors.left: activityTitle.right
+        anchors.leftMargin: visible ? activityHeader.recipe.spacing : 0
+        anchors.right: browserOpen.left
+        anchors.rightMargin: KetTheme.px(8, KetTheme.zoom)
+        anchors.baseline: activityTitle.baseline
+        visible: text.length > 0
+        // A command or a path is never markup; the middle keeps both of its ends.
+        text: activity.headDetail
+        textFormat: Text.PlainText
+        color: activityHeader.recipe.detail
+        font.family: KetTheme.fontFamily
+        font.pixelSize: activityHeader.recipe.detailPixels
+        elide: Text.ElideMiddle
+        maximumLineCount: 1
     }
 
     Kit.KetIcon {
@@ -73,9 +88,9 @@ Kit.KetActivityRow {
         y: Math.round(activityHeader.firstLineCenter - height / 2)
         width: activity.hasDetails ? KetTheme.px(18, KetTheme.zoom) : 0
         visible: activity.hasDetails
-        name: activity.expanded ? "chevron-down" : "chevron-right"
+        name: activity.expanded ? "chevron-up" : "chevron-down"
         box: activityHeader.recipe.chevronSize
-        color: KetTheme.t.textMuted
+        color: activityHeader.recipe.text
     }
 
     Kit.KetButton {
@@ -109,7 +124,7 @@ Kit.KetActivityRow {
     Rectangle {
         id: runningShine
         objectName: "toolActivityShine"
-        visible: activity.running && !activity.compact
+        visible: activity.running
         anchors.verticalCenter: activityIcon.verticalCenter
         width: KetTheme.px(4, KetTheme.zoom)
         height: KetTheme.px(4, KetTheme.zoom)
