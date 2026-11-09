@@ -331,6 +331,13 @@ void MainWindow::showDiff(const QString& filePath, const GitDiffMode mode, const
 
 void MainWindow::updateGitSnapshot(const GitSnapshot& snapshot) {
     gitSnapshot_ = snapshot;
+    if (agentWorkspace_) {
+        QStringList uncommitted;
+        for (const auto& file : snapshot.files)
+            if (!file.ignored)
+                uncommitted.append(file.path);
+        agentWorkspace_->setWorkingChanges(snapshot.repositoryRoot, uncommitted);
+    }
     if (explorer_) {
         QHash<QString, QString> statuses;
         for (const auto& file : snapshot.files)

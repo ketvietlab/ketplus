@@ -14,19 +14,78 @@ Rectangle {
     property string actionText
     signal actionTriggered()
     readonly property bool failed: status === "failed"
-    readonly property bool lineOnly: subtype === "event" || subtype === "turnEnd"
+    // The mock's event: its text on a divider line, the detail centred under it.
+    readonly property bool eventLine: subtype === "event"
+    // The mock's reconnect: one quiet line after an indicator.
+    readonly property bool reconnecting: subtype === "reconnecting"
+    readonly property bool lineOnly: eventLine || reconnecting || subtype === "turnEnd"
     // The mock's turn end: one quiet line, its status in bold and the details after it.
     readonly property bool turnEnd: subtype === "turnEnd"
     readonly property string turnLabel: failed ? "Failed" : status === "completed" ? "Completed" : "Stopped"
     readonly property var recipe: Kit.KetTheme.bannerRecipe(KetTheme.dark, KetTheme.zoom, failed ? Kit.KetTheme.BannerTone.Danger : Kit.KetTheme.BannerTone.Info)
-    implicitHeight: content.implicitHeight + 2 * recipe.paddingBlock
+    implicitHeight: eventLine ? eventColumn.implicitHeight : reconnecting ? reconnectRow.implicitHeight : content.implicitHeight + 2 * recipe.paddingBlock
     radius: lineOnly ? 0 : recipe.radius
     color: lineOnly ? "transparent" : recipe.background
     border.color: lineOnly ? "transparent" : recipe.border
     Accessible.role: failed ? Accessible.AlertMessage : Accessible.StaticText
     Accessible.name: title + (message.length ? ". " + message : "")
+    Column {
+        id: eventColumn
+        objectName: "transcriptEventLine"
+        visible: notice.eventLine
+        width: parent.width
+        spacing: KetTheme.px(4, KetTheme.zoom)
+        Kit.KetDayDivider {
+            objectName: "transcriptEventDivider"
+            width: parent.width
+            text: notice.title
+        }
+        Text {
+            objectName: "transcriptEventDetail"
+            visible: notice.message.length > 0
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
+            text: notice.message
+            textFormat: Text.PlainText
+            elide: Text.ElideRight
+            color: KetTheme.t.textMuted
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.px(12, KetTheme.zoom)
+        }
+    }
+    Row {
+        id: reconnectRow
+        objectName: "transcriptReconnectLine"
+        visible: notice.reconnecting
+        width: parent.width
+        spacing: KetTheme.px(8, KetTheme.zoom)
+        // Still, as in the mock: a journal row must not hold the shared animation clock.
+        Kit.KetActivityIndicator {
+            id: reconnectIndicator
+            // Centred on the first line when a long message wraps.
+            y: Math.max(0, (reconnectMetrics.height - height) / 2)
+            color: KetTheme.t.warning
+            previewTime: 0
+        }
+        Text {
+            id: reconnectText
+            objectName: "transcriptReconnectText"
+            width: reconnectRow.width - reconnectIndicator.width - reconnectRow.spacing
+            text: notice.message.length > 0 ? notice.message : notice.title
+            textFormat: Text.PlainText
+            wrapMode: Text.Wrap
+            color: KetTheme.t.textSecondary
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.px(13, KetTheme.zoom)
+            FontMetrics {
+                id: reconnectMetrics
+                font: reconnectText.font
+            }
+        }
+    }
     RowLayout {
         id: content
+        visible: !notice.eventLine && !notice.reconnecting
         x: notice.turnEnd ? 0 : notice.recipe.paddingInline
         y: notice.recipe.paddingBlock
         width: parent.width - 2 * x
