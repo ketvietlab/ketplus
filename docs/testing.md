@@ -243,6 +243,12 @@ the corresponding Atlas mock first.
   with `KETPLUS_RUN_STARTUP_BACKLOG_TESTS=1`; the first open, an append to a
   marked session, each activity backfill pass and the second open must each stay
   under 250 ms.
+- Journal migration recovery: `ketplus_daemon_journal_migration_recovery_tests`
+  migrates a pre-format journal (100k rows) on a nearly full 256-MiB disk image
+  (macOS `hdiutil`; skipped without it) and kills a child process at six points
+  of the migration. The open must report the full disk, leave an intact journal
+  without the format marker, and finish on the next open with the same contents
+  as an uninterrupted migration.
 - Journal format (ADR 0095): `ketplus_daemon_journal_space_tests` refuses a newer
   journal in both startup compaction and `LocalJournal` with byte-identical file
   contents, including a newer format only in an uncheckpointed WAL (written by

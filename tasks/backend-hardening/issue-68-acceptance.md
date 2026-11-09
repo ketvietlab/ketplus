@@ -9,7 +9,7 @@ counting as merged fixes. No UI, live journal, provider quota or deployment work
 
 | Original criterion | Available evidence | Remaining acceptance / owner |
 | --- | --- | --- |
-| Forward-only, idempotent migrations; newer-daemon journal safety | Startup transaction failures #250; #273 closes failed storage objects; #274 protects migration staging (merged `c3490da5`) | Newer format refused unchanged (ADR 0095); legacy backfills once (ADR 0096); activity backfill after open (ADR 0097); interruption/low-space remain / #3329 |
+| Forward-only, idempotent migrations; newer-daemon journal safety | Startup transaction failures #250; #273 closes failed storage objects; #274 protects migration staging (merged `c3490da5`) | Newer format refused unchanged (ADR 0095); legacy backfills once (ADR 0096); activity backfill after open (ADR 0097); full disk and killed migration verified without a production change / #3329 |
 | Transactions, crash consistency and surfaced errors | Append/delete/fork/replay fixes #241–250; #254 (merged through #255) prepares media ownership before journal commit | Cross-file interruption and broader read/commit failure coverage; do not infer power-loss atomicity from callback order / #2739 |
 | Bounded/indexed reads on large journals | GC #220, ACK #223, metadata #228, staging #230, deletion queue #235, cloud cache #237, cancellation #240; #272 bounds stored policy JSON (merged through #274) | Explicit session-delete and whole-history fork work; actual query plans and representative payload mix / #2739 |
 | Retention and deletion remove rows/media | Transactional cleanup and retention tests above; media cleanup/dedup #251–252 | Physical media/blob retirement, shared-reference preservation and steady-state acceptance; #128 archive behavior is not implied / #2739 |
@@ -166,4 +166,17 @@ indexed. The same fixture opens in 31 ms the first time; the slowest pass is
 10 ms. With 300k rows in one session an append takes under 1 ms and the slowest
 pass 34 ms. Drained rows match live indexing. Negative controls for event
 deferral, the group-page gate, the byte budget, `BEGIN IMMEDIATE` and the marker
-row check each fail their test. Remaining: low space and interruption.
+row check each fail their test.
+
+## Migration interruption and low space
+
+Opening a pre-format journal runs idempotent steps (`CREATE ... IF NOT EXISTS`,
+column checks, backfills in their own transactions) and stamps the format last.
+A recovery test now shows that this order holds. With 256 KiB left on a disk
+image, the open fails with SQLite's full-disk error, the journal passes
+`integrity_check`, keeps format 0 and unchanged events, and the next open with
+space produces the same contents as an uninterrupted migration. Killing a child
+process at six points of a 0.4–0.5 s migration (3–4 of them after some steps
+committed) always reopens to those same contents. Stamping the format first
+fails both tests. No production change was needed. Cross-file interruption
+(journal plus media) stays under the transaction criterion.
