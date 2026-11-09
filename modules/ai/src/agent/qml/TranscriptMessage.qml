@@ -996,8 +996,12 @@ Item {
                         if (source.toString().length > 0) {
                             if (source.toString() === "qrc:/agent/mermaid-placeholder.svg")
                                 return;
-                            if (host.openMermaidImage(source))
+                            // A diagram opens in the image viewer, as in the mock.
+                            const diagram = host.mermaidViewerImage(source);
+                            if (diagram.source) {
+                                preview.showItems([diagram], 0);
                                 return;
+                            }
                             preview.showImages([source], 0);
                             return;
                         }

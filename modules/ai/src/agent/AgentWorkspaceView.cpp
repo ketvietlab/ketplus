@@ -2,7 +2,6 @@
 #include "KetAppearance.h"
 #include "KetTokens.h"
 #include "agent/AgentMessageFormatter.h"
-#include "preview/MermaidDiagramDialog.h"
 #include "preview/MermaidRenderer.h"
 #include <QProcess>
 #include <QProcessEnvironment>

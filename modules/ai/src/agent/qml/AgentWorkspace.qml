@@ -552,6 +552,11 @@ Item {
             }));
             openAt(index || 0);
         }
+        // Opens items that carry their own caption: [{ source, caption }].
+        function showItems(list, index) {
+            items = list || [];
+            openAt(index || 0);
+        }
         onToolTriggered: tool => {
             if (!item)
                 return;

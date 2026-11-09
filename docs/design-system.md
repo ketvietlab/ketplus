@@ -180,8 +180,13 @@ before decoding. A user's thumbnails sit above the bubble, right-aligned. Clicki
 one opens KetLightbox on the row's images with the mock's tools: zoom, rotate,
 copy, download, print and fullscreen. Captions are file names. The host copies
 the turned image, saves the original file to Downloads, prints through
-`ket::printImage` and turns the top-level window fullscreen. Mermaid diagrams
-still open their vector viewer. Day dividers use the journal's `sent_at` carried
+`ket::printImage` and turns the top-level window fullscreen. A Mermaid diagram
+opens in the same viewer, captioned "Mermaid diagram", as in the mock. The viewer
+is dark in both themes, so it shows the dark rendering; in a light theme it is
+requested on open, and until it is ready the light one sits on a white ground. The
+viewer gets a raster at a whole multiple of the diagram's size, named `@Nx`, so it
+reads 100% at the diagram's own size and stays sharp when zoomed. Lite's Markdown
+preview keeps its vector dialog. Day dividers use the journal's `sent_at` carried
 as presentation `timestamp` on user messages, including live echoes. Missing or
 invalid timestamps do not create invented dates. Labels read "Today",
 "Yesterday" or "Thursday, 24 September" (plus the year when it differs), use the

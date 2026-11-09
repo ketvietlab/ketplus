@@ -8,7 +8,6 @@
 #include "agent/TranscriptFileLinks.h"
 #include "agent/TranscriptSyntax.h"
 #include "agent/TranscriptTableStyle.h"
-#include "preview/MermaidDiagramDialog.h"
 #include "preview/MermaidRenderer.h"
 #include <QProcess>
 #include <QProcessEnvironment>
@@ -33,6 +32,7 @@
 #include <QMessageBox>
 #include <QMetaObject>
 #include <QMimeData>
+#include <QPainter>
 #include <QQmlContext>
 #include <QQuickItem>
 #include <QQuickTextDocument>
@@ -430,20 +430,19 @@ QString AgentWorkspaceView::renderChatMarkdown(const QString& source, const QStr
             i = end;
             continue;
         }
-        const auto diagram = lines.mid(i + 1, end - i - 1).join('\n');
+        const auto diagram =
+            agent_message::withReadableMermaidLabels(lines.mid(i + 1, end - i - 1).join('\n'));
         const bool installing =
             mermaidInstaller_ && mermaidInstaller_->state() != QProcess::NotRunning;
-        const auto result =
-            installing
-                ? MermaidRenderer::Result{}
-                // Vector: the renderer writes labels as SVG text Qt draws.
-                : mermaidRenderer_->request(agent_message::withReadableMermaidLabels(diagram),
-                                            mermaidPalette_.dark);
+        const auto result = installing ? MermaidRenderer::Result{}
+                                       // Vector: the renderer writes labels as SVG text Qt draws.
+                                       : mermaidRenderer_->request(diagram, mermaidPalette_.dark);
         bool image = true;
         if (result.state == MermaidRenderer::State::Ready &&
             QImageReader(result.filePath).canRead()) {
             const auto url = QUrl::fromLocalFile(result.filePath).toString(QUrl::FullyEncoded);
             mermaidImages_.insert(QUrl::fromLocalFile(result.filePath).toString());
+            mermaidDiagrams_.insert(QUrl::fromLocalFile(result.filePath).toString(), diagram);
             output.append(QStringLiteral("\n![Mermaid diagram](<%1>)\n").arg(url));
         } else if (result.state == MermaidRenderer::State::Pending) {
             output.append(
@@ -466,16 +465,56 @@ QString AgentWorkspaceView::renderChatMarkdown(const QString& source, const QStr
     return output.join('\n');
 }
 
-bool AgentWorkspaceView::openMermaidImage(const QUrl& url) {
-    if (!mermaidImages_.contains(url.toString()))
-        return false;
-    auto* dialog = new MermaidDiagramDialog(url.toLocalFile(), mermaidPalette_, this);
-    // Seed the full-screen size before the shared viewer's queued initial Fit.
-    // Window-manager full-screen transitions can otherwise arrive after that Fit.
-    dialog->setScreen(screen());
-    dialog->resize(screen()->size());
-    dialog->showFullScreen();
-    return true;
+QVariantMap AgentWorkspaceView::mermaidViewerImage(const QUrl& url) {
+    const auto diagram = mermaidDiagrams_.constFind(url.toString());
+    if (diagram == mermaidDiagrams_.cend())
+        return {};
+    // The viewer is dark in both themes, so it shows the dark rendering, asked for here in a
+    // light theme; until that is ready the light one is shown on its own white ground.
+    QString svg = url.toLocalFile();
+    bool dark = mermaidPalette_.dark;
+    if (!dark && mermaidRenderer_ && mermaidRenderer_->isAvailable()) {
+        const auto result = mermaidRenderer_->request(*diagram, true);
+        if (result.state == MermaidRenderer::State::Ready &&
+            QImageReader(result.filePath).canRead()) {
+            svg = result.filePath;
+            dark = true;
+        }
+    }
+    QImageReader reader(svg);
+    const QSize natural = reader.size();
+    if (!natural.isValid())
+        return {};
+    const QScreen* target = screen() ? screen() : QGuiApplication::primaryScreen();
+    const qreal density = target ? target->devicePixelRatio() : 1.0;
+    const QSize screenSize = target ? target->size() : QSize(1440, 900);
+    const qreal longSide =
+        qMin<qreal>(8192, 2 * density * qMax(screenSize.width(), screenSize.height()));
+    // A whole multiple of the diagram's own size, named @Nx so the viewer measures its zoom
+    // against the diagram rather than against the larger raster.
+    const int naturalLong = qMax(natural.width(), natural.height());
+    const int factor =
+        std::max(1, std::min({int(std::ceil(longSide / naturalLong)), 8192 / naturalLong, 9}));
+    const QSize size = natural * factor;
+    const QString png = svg + QStringLiteral("-viewer@%1x.png").arg(factor);
+    if (!QFileInfo::exists(png)) {
+        reader.setScaledSize(size);
+        QImage image = reader.read();
+        if (image.isNull())
+            return {};
+        if (!dark) {
+            QImage ground(image.size(), QImage::Format_ARGB32_Premultiplied);
+            ground.fill(Qt::white);
+            QPainter painter(&ground);
+            painter.drawImage(0, 0, image);
+            painter.end();
+            image = ground;
+        }
+        if (!image.save(png))
+            return {};
+    }
+    return {{QStringLiteral("source"), QUrl::fromLocalFile(png)},
+            {QStringLiteral("caption"), QStringLiteral("Mermaid diagram")}};
 }
 
 QUrl AgentWorkspaceView::messageImageAt(QObject* document, int position) const {

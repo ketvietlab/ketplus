@@ -162,7 +162,10 @@ class AgentWorkspaceView final : public QWidget {
     // Where each Mermaid block of a rendered message sits, source or diagram, so the transcript
     // can frame it and offer the switch; and which source fence each code frame belongs to.
     Q_INVOKABLE QVariantMap mermaidLayout(QObject* document, const QString& messageKey) const;
-    Q_INVOKABLE bool openMermaidImage(const QUrl& url);
+    // The image viewer's item for a rendered diagram, as the mock opens one: { source, caption },
+    // or empty for any other image. The viewer scales its image, so the source is a raster large
+    // enough to stay sharp at twice the screen; it is the dark rendering once there is one.
+    Q_INVOKABLE QVariantMap mermaidViewerImage(const QUrl& url);
     Q_INVOKABLE void installMermaid();
     bool mermaidInstalling() const;
     QString mermaidInstallError() const { return mermaidInstallError_; }
@@ -588,6 +591,8 @@ class AgentWorkspaceView final : public QWidget {
     MermaidRenderer* mermaidRenderer_{nullptr};
     ThemePalette mermaidPalette_;
     QSet<QString> mermaidImages_;
+    // The diagram source behind each rendered image, for the viewer's dark rendering.
+    QHash<QString, QString> mermaidDiagrams_;
     // "messageKey#ordinal" of the Mermaid fences the reader switched to their diagram.
     QSet<QString> mermaidRendered_;
     // What each fence of a message turned into the last time it was rendered: kept as source
