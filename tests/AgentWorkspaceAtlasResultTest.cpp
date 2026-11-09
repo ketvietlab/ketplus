@@ -92,8 +92,16 @@ void AgentWorkspaceViewTest::atlasResultCardFencesChangedWorktrees() {
     auto* root = view.quickView()->rootObject();
     QTRY_VERIFY(findVisualItem(root, "atlasResultCard"));
     auto* card = findVisualItem(root, "atlasResultCard");
+    // The mock's card: a validated preview, named by its bundle and size.
+    QStringList texts;
+    for (auto* item : card->findChildren<QQuickItem*>())
+        if (item->isVisible() && item->property("text").isValid())
+            texts.append(item->property("text").toString());
+    QVERIFY(texts.contains("Validated preview available"));
+    QVERIFY(texts.contains(QString::fromUtf8("sample.ketatlas · 4 screens · 2 flows")));
     auto* edit = findVisualItem(card, "editAtlasResultButton");
     QVERIFY(edit && edit->isVisible());
+    QCOMPARE(edit->property("iconName").toString(), "edit");
     QVERIFY(edit->width() <= card->width());
     QVERIFY(QMetaObject::invokeMethod(edit, "clicked"));
     QCOMPARE(opened.size(), 1);
