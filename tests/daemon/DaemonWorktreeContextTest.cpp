@@ -612,6 +612,20 @@ class DaemonWorktreeContextTest final : public QObject {
                     event.value("payload").toObject().value("context_revision").toInteger());
         }
         QCOMPARE(contexts, (QList<qint64>{1, 2, 3}));
+        // Each move names the branch and the folder it went to, never the folder's path.
+        QStringList folders;
+        for (const auto& entry : f.journal->eventsAfter("conversation", 1, 0, 100)) {
+            const auto event = entry.toObject();
+            if (event.value("event_type") != "conversation.context_changed")
+                continue;
+            const auto payload = event.value("payload").toObject();
+            QVERIFY(!payload.value("branch").toString().isEmpty());
+            QVERIFY(!payload.value("branch").toString().startsWith("refs/"));
+            folders.append(payload.value("worktree_name").toString());
+            const auto encoded = QJsonDocument(payload).toJson(QJsonDocument::Compact);
+            QVERIFY(!encoded.contains(encodedPath(f.a)) && !encoded.contains(encodedPath(f.b)));
+        }
+        QCOMPARE(folders, (QStringList{QFileInfo(f.b).fileName(), QFileInfo(f.a).fileName()}));
     }
 
     void newProviderEventsKeepTheirOriginAcrossSwitchAndRestart() {

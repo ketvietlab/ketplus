@@ -44,6 +44,9 @@ function renderer(subtype) {
 function icon(row) {
     if (row.subtype === "fileChange" && row.files.length === 1)
         return fileIcons[row.files[0].operation] || "pencil"
+    // A listing is a file search the formatter titles "Listed files"; the mock draws it as a list.
+    if (row.subtype === "fileSearch" && /^List(ed|ing) files\b/.test(row.title))
+        return "list"
     return renderer(row.subtype).icon
 }
 
