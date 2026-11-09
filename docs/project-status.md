@@ -538,7 +538,10 @@ outside this visual alignment and would increase the scroll/streaming regression
 Desktop outgoing messages use a darker primary surface (1.35 darkening factor) with white text, content-sized width,
 12-point horizontal padding and no visual author row. They cap at 80% of the
 reading column and collapse after 20 lines with a reversible Show more control.
-Collapsed activity rows keep one title line; browser-open rows retain an Open
+Activity rows read as the mock's steps: one line with a short title ("Read", "Ran" or a
+command's description) and what the step acted on beside it, every grouped step keeps its
+kind's icon, and a failure adds a line with its exit code and duration while the group
+summary stays neutral. Browser-open rows retain an Open
 action. Composer block line-height matches
 the transcript at 1.75; focused Qt tests cover Vietnamese single-line sizing and composer undo.
 

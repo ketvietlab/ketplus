@@ -464,7 +464,14 @@ void AgentWorkspaceViewTest::transcriptRendererInteractionMatrix() {
     QTRY_VERIFY(row->property("expanded").toBool());
     auto* title = findVisualItem(row, "transcriptActivityTitle");
     QVERIFY(title);
-    QCOMPARE(title->property("text").toString(), QStringLiteral("Ran command · Failed"));
+    // The mock's step line: "Ran" and the command beside it, the failure on its own line.
+    QCOMPARE(title->property("text").toString(), QStringLiteral("Ran"));
+    auto* detail = findVisualItem(row, "transcriptActivityDetail");
+    QVERIFY(detail);
+    QCOMPARE(detail->property("text").toString(), exactCommand);
+    auto* status = findVisualItem(row, "transcriptActivityStatus");
+    QVERIFY(status && status->isVisible());
+    QCOMPARE(status->property("text").toString(), QStringLiteral("Failed · exit code 1 · 42 ms"));
     auto* accessible = QAccessible::queryAccessibleInterface(row);
     QVERIFY(accessible);
     QCOMPARE(accessible->role(), QAccessible::Button);

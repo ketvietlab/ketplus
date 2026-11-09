@@ -97,13 +97,39 @@ Column {
         ? (files[0].operation || "Edited") + " " + String(files[0].destination || files[0].path || "file").split(/[\\/]/).pop() + (files[0].diffTrimmed ? " · Diff trimmed" : "")
         : ""
     readonly property string displayTitle: (singleFileTitle.length > 0 ? singleFileTitle : describedCommand ? commandDescription : title.length > 0 ? title : (running ? "Working" : "Activity")) + (status === "failed" ? " · Failed" : status === "interrupted" ? " · Interrupted" : "")
+    // The mock's step line: a short title, then what the step acted on ("Read" and its path,
+    // a command's description and the command, or "Ran" and an undescribed command).
+    readonly property var titleParts: {
+        if (subtype === "command" && command.length > 0)
+            return [describedCommand ? commandDescription : running ? "Running" : "Ran", command.replace(/\s*\n\s*/g, " ")];
+        const text = singleFileTitle.length > 0 ? singleFileTitle : title.length > 0 ? title : (running ? "Working" : "Activity");
+        const split = text.indexOf(": ");
+        return split > 0 ? [text.slice(0, split), text.slice(split + 2).replace(/\s*\n\s*/g, " ")] : [text, ""];
+    }
+    readonly property string headline: titleParts[0]
+    readonly property string headDetail: titleParts[1]
+    // What the title cannot carry: a failure with its exit code and duration, or an interruption.
+    readonly property string statusLine: {
+        if (status === "interrupted")
+            return "Interrupted";
+        if (status !== "failed")
+            return "";
+        const known = value => value !== undefined && value !== null && value !== "";
+        const code = Number(exitCode);
+        const ms = Number(durationMs);
+        const tenths = Math.round(ms / 100) / 10;
+        const seconds = Math.round(ms / 1000);
+        const duration = ms < 1000 ? Math.round(ms) + " ms" : tenths < 60 ? tenths.toFixed(1) + " s" : Math.floor(seconds / 60) + "m " + String(seconds % 60).padStart(2, "0") + "s";
+        return "Failed" + (known(exitCode) && !isNaN(code) && code !== 0 ? " · exit code " + code : "")
+            + (known(durationMs) && ms > 0 ? " · " + duration : "");
+    }
 
     signal imageClicked(url source)
-    // Inside an expanded group: no icon and a shorter header, so members read as a plain
-    // list under the group's rail.
+    // Inside an expanded group: members read as a list under the group's rail, each with its
+    // kind's icon as in the mock.
     property bool compact: false
     // Where the title starts; details and images line up under it.
-    readonly property real contentInset: compact ? 0 : KetTheme.px(25, KetTheme.zoom)
+    readonly property real contentInset: KetTheme.px(25, KetTheme.zoom)
 
     function parseObject(text) {
         try {
@@ -142,6 +168,18 @@ Column {
     spacing: KetTheme.px(7, KetTheme.zoom)
 
     TranscriptActivityHeader { activity: root; width: parent.width }
+
+    Text {
+        objectName: "transcriptActivityStatus"
+        visible: root.statusLine.length > 0
+        x: root.contentInset
+        width: parent.width - x
+        text: root.statusLine
+        color: root.status === "failed" ? KetTheme.t.danger : KetTheme.t.textMuted
+        font.family: KetTheme.fontFamily
+        font.pixelSize: KetTheme.px(12, KetTheme.zoom)
+        elide: Text.ElideRight
+    }
 
     Row {
         objectName: "transcriptActivityTarget"
