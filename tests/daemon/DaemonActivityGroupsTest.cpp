@@ -223,9 +223,42 @@ class DaemonActivityGroupsTest : public QObject {
                 journal.activitySummaryEvent(last(journal, cursor)).value("event_type").toString(),
                 "item.completed");
         }
-        // A skill stays visible on its own, as in a local transcript.
+        // After those, Codex's read and listing commands, skills and fetches form one group.
+        const auto actions = [](const QString& id, const QString& kind) {
+            return QJsonObject{
+                {"item", QJsonObject{{"id", id},
+                                     {"type", "commandExecution"},
+                                     {"status", "completed"},
+                                     {"commandActions", QJsonArray{QJsonObject{{"type", kind}}}}}}};
+        };
+        qint64 next = 0;
+        auto twoFolders = actions("ls-two", "listFiles");
+        auto body = twoFolders.value("item").toObject();
+        body.insert("commandActions",
+                    QJsonArray{QJsonObject{{"type", "listFiles"}, {"path", "src"}},
+                               QJsonObject{{"type", "listFiles"}, {"path", "tests"}}});
+        twoFolders.insert("item", body);
+        for (const auto& step :
+             {actions("cat", "read"), actions("ls", "listFiles"), twoFolders, twoFolders,
+              actions("rg", "search"), item("skill", "dynamicToolCall", "Skill"),
+              item("fetch", "dynamicToolCall", "WebFetch")}) {
+            const auto cursor = journal.appendEvent("session", 1, "item.completed", step);
+            QVERIFY(cursor > 0);
+            if (!next)
+                next = cursor;
+        }
+        const auto grown =
+            journal.activitySummaryEvent(last(journal, next)).value("payload").toObject();
+        QStringList added;
+        for (const auto& value : grown.value("families").toArray())
+            added.append(value.toObject().value("family").toString());
+        // The repeated completion of the two-folder listing counts once, and only once a step.
+        QCOMPARE(added, (QStringList{"read", "list", "list:2", "codeSearch", "skill", "webFetch"}));
+        QCOMPARE(grown.value("count").toInt(), 6);
+
+        // A plan stays visible on its own, as in a local transcript.
         const auto skill = journal.appendEvent("session", 1, "item.completed",
-                                               item("skill", "dynamicToolCall", "Skill"));
+                                               item("plan", "dynamicToolCall", "EnterPlanMode"));
         QCOMPARE(journal.activitySummaryEvent(last(journal, skill)).value("event_type").toString(),
                  "item.completed");
     }

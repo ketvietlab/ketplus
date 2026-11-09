@@ -17,8 +17,23 @@ QString itemId(const QJsonObject& payload) {
 QString family(const QJsonObject& payload) {
     const auto item = payload.value("item").toObject();
     const auto type = item.value("type").toString(payload.value("item_type").toString());
-    if (type == "commandExecution")
-        return "command";
+    // Codex's read, search and listing commands read as the steps they are, as Desktop titles
+    // them: one kind of action throughout, or a command.
+    if (type == "commandExecution") {
+        const auto actions = item.value("commandActions").toArray();
+        QString kind =
+            actions.isEmpty() ? QString() : actions.first().toObject().value("type").toString();
+        for (const auto& action : actions) {
+            if (action.toObject().value("type").toString() != kind)
+                kind.clear();
+        }
+        // A command listing several folders says how many in its key ("list:2"), so the
+        // group's step count stays one per item while the line reads "listed 2 folders".
+        if (kind == "listFiles")
+            return actions.size() > 1 ? QStringLiteral("list:%1").arg(actions.size())
+                                      : QStringLiteral("list");
+        return kind == "read" ? "read" : kind == "search" ? "codeSearch" : "command";
+    }
     if (type == "fileChange")
         return "edit";
     if (type == "webSearch")
@@ -54,6 +69,17 @@ QString family(const QJsonObject& payload) {
             return "subagent";
         if (operation == "websearch")
             return "webSearch";
+        // Text-only steps the transcript also groups: "loaded tools, used a skill".
+        if (operation == "webfetch" || operation == "fetch_url")
+            return "webFetch";
+        if (operation == "toolsearch" || operation == "search_tools")
+            return "toolsLoaded";
+        if (operation == "skill" || operation == "load_skill")
+            return "skill";
+        if (operation == "taskstop" || operation == "stop_task")
+            return "taskStopped";
+        if (operation == "monitor")
+            return "wait";
         // A family is fixed when the item starts, before its result shows whether it returns
         // images, and other tools (Claude's edits among them) carry data a group summary
         // drops. So only KetPlus's own text-only servers group by name: "Used ketplus_agents".

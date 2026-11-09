@@ -118,7 +118,8 @@ QVariantMap TranscriptEvent::toVariantMap() const {
             {QStringLiteral("images"), images},
             {QStringLiteral("fileChanges"), fileChanges},
             {QStringLiteral("questions"), questions},
-            {QStringLiteral("questionAnswers"), questionAnswers}};
+            {QStringLiteral("questionAnswers"), questionAnswers},
+            {QStringLiteral("activityFacts"), activityFacts}};
 }
 
 TranscriptEvent TranscriptEvent::fromVariantMap(const QVariantMap& presentation,
@@ -151,6 +152,7 @@ TranscriptEvent TranscriptEvent::fromVariantMap(const QVariantMap& presentation,
     event.fileChanges = presentation.value(QStringLiteral("fileChanges")).toList();
     event.questions = presentation.value(QStringLiteral("questions")).toList();
     event.questionAnswers = presentation.value(QStringLiteral("questionAnswers")).toMap();
+    event.activityFacts = presentation.value(QStringLiteral("activityFacts")).toMap();
     return event;
 }
 
