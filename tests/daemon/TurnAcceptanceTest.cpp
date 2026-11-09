@@ -16,6 +16,9 @@
 
 #include <algorithm>
 #include <limits>
+#ifdef Q_OS_MACOS
+#include <malloc/malloc.h>
+#endif
 
 using namespace ketplus::daemon;
 
@@ -464,6 +467,57 @@ class TurnAcceptanceTest final : public QObject {
         emit adapter.stopped("provider exited");
         notify("item/commandExecution/outputDelta", {{"itemId", "c1"}, {"delta", "new process"}});
         QTRY_COMPARE_WITH_TIMEOUT(deltas(), QStringList({"Hello", "again", "new process"}), 3000);
+    }
+    void completedItemsAreRememberedInBoundedMemory() {
+#ifdef Q_OS_MACOS
+        QTemporaryDir dir;
+        const auto executable = dir.filePath("fake-codex");
+        QVERIFY(writeFakeCodex(executable, dir.filePath("provider.log")));
+        LocalJournal journal(dir.filePath("journal.sqlite3"));
+        StoredSession seed;
+        seed.id = "long-item-ids";
+        seed.generation = 1;
+        seed.worktreePath = dir.path();
+        seed.adapter = "codex";
+        seed.state = "idle";
+        QVERIFY(journal.upsertSession(seed));
+        CodexAdapter adapter(executable);
+        SessionHost host(&journal, &adapter);
+        const auto stop = qScopeGuard([&] { adapter.stop(); });
+        auto submitted = request("hang", seed.id);
+        submitted.insert("payload", QJsonObject{{"prompt", "hang"}, {"client_message_id", "hang"}});
+        QVERIFY(host.handleCommand(submitted, "desktop-test").value("ok").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(journal.sessions().first().state, QString("running"), 5000);
+        const QString thread = journal.sessions().first().threadId;
+        const auto heap = [] {
+            malloc_statistics_t stats{};
+            malloc_zone_statistics(nullptr, &stats);
+            return qint64(stats.size_in_use);
+        };
+        const auto complete = [&](const QString& id) {
+            emit adapter.notificationReceived("item/completed", {{"threadId", thread},
+                                                                 { "item",
+                                                                   QJsonObject {
+                                                                       {"id", id},
+                                                                       {"type", "agentMessage"},
+                                                                       {"text", "done"},
+                                                                       {"status", "completed"}
+                                                                   } }});
+        };
+        // 512 ids of 4 KiB the journal accepts, then 128 of 64 KiB it rejects and queues until
+        // its recovery budget is full. Only the remembered set is released by a provider stop.
+        for (int n = 0; n < 512; ++n)
+            complete(QString(4 * 1024, QChar('a')) + QString::number(n));
+        for (int n = 0; n < 128; ++n)
+            complete(QString(64 * 1024, QChar('b')) + QString::number(n));
+        const qint64 remembered = heap();
+        emit adapter.stopped("provider exited");
+        const qint64 released = remembered - heap();
+        QVERIFY2(released < 1024 * 1024,
+                 qPrintable(QStringLiteral("completed items held %1 bytes").arg(released)));
+#else
+        QSKIP("malloc zone statistics are macOS only");
+#endif
     }
 };
 QTEST_GUILESS_MAIN(TurnAcceptanceTest)
