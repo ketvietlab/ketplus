@@ -50,6 +50,9 @@ struct StoredSession final {
     qint64 contextRevision{1};
     // Requested native auto-compaction window. Zero inherits provider configuration.
     qint64 compactWindow{0};
+    // UTC ISO time the conversation was archived, empty when it is not. Written only by
+    // setSessionArchived; upsertSession leaves it as it is.
+    QString archivedAt;
 };
 
 // One command a paired device sent this Mac through the relay that could change something
@@ -230,6 +233,8 @@ class LocalJournal final {
     // failure, including errors after some rows have already been fetched.
     [[nodiscard]] std::optional<QList<StoredSession>> readSessions() const;
     [[nodiscard]] QList<StoredSession> sessions() const;
+    // Records or clears (empty archivedAt) the time this generation was archived.
+    bool setSessionArchived(const QString& sessionId, qint64 generation, const QString& archivedAt);
     // The id of every session, or nullopt when they could not all be read. sessions() returns
     // an empty list on a failed read, which must not pass for every session being deleted.
     [[nodiscard]] std::optional<QSet<QString>> sessionIds() const;

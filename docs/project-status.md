@@ -226,6 +226,11 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   tool results become placeholders that keep their slot (ADR 0099). Previews of
   compacted images remain #128 work.
 
+- The daemon records when a conversation is archived (`session.set_archived`,
+  `archived_at`). It deletes conversations archived for more than 30 days, one
+  per idle pass, through `session.delete` (ADR 0100). Desktop's push of its
+  local archive state and the Storage setting are still to come.
+
 - The owner-only size-policy backend supports revisioned 1/2/5/10 GB SQLite-page
   targets and warning status (ADR 0046). Recent-detail pressure is opt-in via an
   explicit policy save. Desktop now exposes a separate Save database target action,

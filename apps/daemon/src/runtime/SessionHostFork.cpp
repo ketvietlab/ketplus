@@ -149,6 +149,9 @@ void SessionHost::storeFork(const QString& sourceId, const qint64 sourceGenerati
     // Other providers' threads stay with the source; switching the fork to one of them starts a
     // new thread from the handoff transcript instead of sharing the source's.
     fork.stored.providerThreads = QStringLiteral("{}");
+    // A fork is a new conversation: it is not archived and does not inherit the source's
+    // archive time, which would delete it with the source (ADR 0100).
+    fork.stored.archivedAt.clear();
     fork.stored.title = source->stored.title.isEmpty()
                             ? QStringLiteral("Fork")
                             : source->stored.title + QStringLiteral(" (fork)");

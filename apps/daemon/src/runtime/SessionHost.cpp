@@ -539,6 +539,8 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& request, const QString
         result = renameSession(request);
     } else if (type == QStringLiteral("session.mark_seen")) {
         result = markSessionSeen(request);
+    } else if (type == QStringLiteral("session.set_archived")) {
+        result = setSessionArchived(request);
     } else if (type == QStringLiteral("session.delete")) {
         result = deleteSession(request);
     } else if (type == QStringLiteral("session.output.read") ||
@@ -2467,6 +2469,7 @@ bool SessionHost::isMutating(const QString& messageType) {
            messageType == QStringLiteral("session.start_turn") ||
            messageType == QStringLiteral("session.rename") ||
            messageType == QStringLiteral("session.mark_seen") ||
+           messageType == QStringLiteral("session.set_archived") ||
            messageType == QStringLiteral("session.delete") ||
            messageType == QStringLiteral("session.steer") ||
            messageType == QStringLiteral("session.interrupt") ||

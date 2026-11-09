@@ -84,6 +84,10 @@ core target. The local slice includes:
 - durable sidebar read markers through `session.mark_seen` (`last_seen_cursor` in
   the journal; `session.list` exposes both `last_event_cursor` and
   `last_seen_cursor` so Desktop can restore unread completed conversations);
+- archiving through `session.set_archived` (`archived_at` in the journal and in
+  `session.list`, feature `session.archive/1`). The idle pass deletes one
+  conversation archived for more than 30 days per pass, through `session.delete`
+  and its guards ([ADR 0100](decisions/0100-archived-conversation-retention.md));
 - idle conversation forks through `session.fork` (ADR 0016): the provider forks
   its native thread (Codex `thread/fork`, Claude SDK `forkSession`), then the
   journal copies the source generation's transcript from one read snapshot in

@@ -63,6 +63,11 @@ class SessionHost final : public QObject, private AgentHostPort {
     // validating their advertised snapshot head in one journal read transaction.
     [[nodiscard]] QJsonObject restoreTranscriptWindow(const QJsonObject& request) const;
     [[nodiscard]] bool hasActiveSessions() const;
+    // Archived conversations keep their history this long, then are deleted (#128).
+    static constexpr int archivedHistoryDays = 30;
+    // Deletes at most one conversation archived before now minus archivedHistoryDays, through
+    // the same guards as session.delete. Returns whether one was deleted.
+    bool expireArchivedSessions(const QDateTime& now);
     [[nodiscard]] QJsonObject configuration(const QJsonObject& request,
                                             const QJsonArray& providerModels) const;
     // The settings a conversation started from the phone begins with, and what it can choose
@@ -214,6 +219,7 @@ class SessionHost final : public QObject, private AgentHostPort {
                                                   const QString& messageId);
     [[nodiscard]] QJsonObject renameSession(const QJsonObject& request);
     [[nodiscard]] QJsonObject markSessionSeen(const QJsonObject& request);
+    [[nodiscard]] QJsonObject setSessionArchived(const QJsonObject& request);
     [[nodiscard]] QJsonObject deleteSession(const QJsonObject& request);
     // With `outcome`, returns an empty object and answers through it once the provider has
     // replied; without it, answers "accepted" as soon as the text is handed to the provider.

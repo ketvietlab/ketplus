@@ -262,7 +262,8 @@ void DaemonService::reclaimJournalSpace() {
         qWarning("journal: retention maintenance failed: %s", qPrintable(journal_->errorString()));
     journal_->reclaimFreePages(reclaimBatchPages);
     const auto changed = journal_->pruneConfiguredReplayDetails(QDateTime::currentDateTimeUtc());
-    if (changed && *changed > 0)
+    const bool expired = host_ && host_->expireArchivedSessions(QDateTime::currentDateTimeUtc());
+    if ((changed && *changed > 0) || expired)
         journal_->reclaimFreePages(reclaimBatchPages);
 }
 
