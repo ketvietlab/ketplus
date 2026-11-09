@@ -582,6 +582,33 @@ class DaemonProtocolTest final : public QObject {
         QVERIFY(!QFileInfo::exists(file(released)));
         QVERIFY(!QFileInfo::exists(written));
         QVERIFY(QFileInfo::exists(foreign.fileName()));
+#ifdef Q_OS_UNIX
+        // A special file with a canonical name is not media and stays.
+        const QString special =
+            QDir(store.directory()).filePath(QString(64, QChar('f')) + QStringLiteral(".png"));
+        QCOMPARE(::mkfifo(QFile::encodeName(special).constData(), 0600), 0);
+        store.retainSessions({"b"});
+        QVERIFY(QFileInfo::exists(special));
+        QVERIFY(QFileInfo::exists(file(onlyB)));
+#endif
+    }
+
+    void startupRetainDoesNotFollowALinkedMediaRoot() {
+        // The store's directory is a link to another directory that looks like a store.
+        QTemporaryDir directory;
+        const QString elsewhere = directory.filePath("elsewhere");
+        QVERIFY(QDir().mkpath(elsewhere + "/refs"));
+        const QString victim = elsewhere + '/' + QString(64, QChar('e')) + ".png";
+        QFile file(victim);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("\x89PNG\r\n\x1a\n");
+        file.close();
+        const QString media = directory.filePath("media");
+        QVERIFY(QFile::link(elsewhere, media));
+        McpMediaStore store(media);
+        store.retainSessions({});
+        store.releaseSession("any");
+        QVERIFY(QFileInfo::exists(victim));
     }
 
     void mediaOwnershipCommitFailurePreservesPreviousFile() {

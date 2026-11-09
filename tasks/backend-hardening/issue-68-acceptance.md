@@ -243,6 +243,10 @@ conversation's images could stay on disk. Startup retention now deletes every
 canonically named media file no remaining reference names, after the existing
 catalog validation (unknown or over-budget ownership still defers all deletion). A
 test leaves both kinds of orphan, media shared with a live session and a foreign
-file; without the sweep the released orphan stays. Startup is the only caller,
+file; without the sweep the released orphan stays. Review of #316 found the sweep
+followed a media root that is a link and deleted FIFOs with a canonical name; both
+release and retention now refuse a linked or non-directory root before changing
+anything, and the sweep deletes only regular files. Each guard's removal fails its
+regression. Startup is the only caller,
 because a write is published before it is referenced. Not covered: an interruption
 while the daemon keeps running (its orphans wait for the next start) and Windows.

@@ -208,6 +208,10 @@ bool McpMediaStore::reference(const QString& sessionId, const QStringList& hashe
 }
 
 void McpMediaStore::releaseSession(const QString& sessionId) {
+    // Deletion follows only a real store directory, never a link to another one.
+    const QFileInfo root(directory_);
+    if (!root.isDir() || root.isSymLink())
+        return;
     const QString refs = refsPath(sessionId);
     const auto catalog = readReferenceCatalog(QFileInfo(refs).absolutePath());
     if (!catalog)
@@ -229,6 +233,11 @@ void McpMediaStore::releaseSession(const QString& sessionId) {
 }
 
 void McpMediaStore::retainSessions(const QSet<QString>& sessionIds) {
+    // Checked before any reference or media file changes: the sweep below deletes whatever
+    // the root holds, so it must not follow a link to another directory.
+    const QFileInfo root(directory_);
+    if (!root.isDir() || root.isSymLink())
+        return;
     const QDir refsDirectory(QDir(directory_).filePath(QStringLiteral("refs")));
     const auto catalog = readReferenceCatalog(refsDirectory.path());
     if (!catalog)
@@ -256,7 +265,8 @@ void McpMediaStore::retainSessions(const QSet<QString>& sessionIds) {
             .entryInfoList({QStringLiteral("*.png"), QStringLiteral("*.jpg")},
                            QDir::Files | QDir::System | QDir::Hidden);
     for (const QFileInfo& file : media) {
-        if (file.isSymLink() || !canonical.match(file.fileName()).hasMatch() ||
+        // Only regular files: a FIFO, socket or device with a canonical name is not media.
+        if (file.isSymLink() || !file.isFile() || !canonical.match(file.fileName()).hasMatch() ||
             retained.contains(file.completeBaseName()))
             continue;
         QFile::remove(file.absoluteFilePath());
