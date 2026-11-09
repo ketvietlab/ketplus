@@ -253,12 +253,15 @@ the corresponding Atlas mock first.
   an uninterrupted migration. The child opens only `LocalJournal`; startup
   compaction has its own interruption tests in `ketplus_daemon_journal_space_tests`.
 - Journal query audit: `ketplus_daemon_journal_query_audit_tests` traces every
-  statement of 24 journal operations on one conversation (append, transcript reads,
-  activity pages, fork, delete and purge, backfill, retention and garbage passes)
-  next to 2,000 other sessions with 200k events. It fails a statement with more than
-  5,000 full-scan steps, an automatic index or 200k VM steps. It reads SQLite's
-  counters through the driver handle, so it is built only when CMake finds SQLite3
-  and skips when the driver uses a different SQLite build.
+  statement of 25 journal operations (append, transcript reads, activity pages,
+  large-event fragments, fork including its snapshot reader, delete and purge,
+  backfill, retention and garbage passes) on a conversation with 100k events of its
+  own, next to 2,000 other sessions with 200k events and a conversation whose large
+  tool results include three orphans. It fails a statement with more than 5,000
+  full-scan steps, an automatic index or 200k VM steps. It reads SQLite's counters
+  through the driver handle, so it is built only when CMake finds SQLite3 and skips
+  when the driver uses a different SQLite build. Statement counts do not bound bytes,
+  memory or the total work of an operation; media files are outside it.
 - Journal format (ADR 0095): `ketplus_daemon_journal_space_tests` refuses a newer
   journal in both startup compaction and `LocalJournal` with byte-identical file
   contents, including a newer format only in an uncheckpointed WAL (written by

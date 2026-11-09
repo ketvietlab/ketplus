@@ -529,6 +529,24 @@ class SessionForkTest final : public QObject {
         QCOMPARE(q.value(0).toString(), QString("7B22FF22"));
         QCOMPARE(q.value(1).toString(), QString("text"));
     }
+    void forkRefusesAnIdentityWithLeftoverHistory() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        StoredSession source{"source", dir.path(), "codex", {}, {}, "ready", 1, 0, 0, {}};
+        LocalJournal journal(path);
+        QVERIFY(journal.upsertSession(source));
+        QVERIFY(seedEvents(journalConnection(path), "source", 1, 10));
+        // Rows under an identity with no session would otherwise join the copy unnoticed.
+        QVERIFY(seedEvents(journalConnection(path), "fork", 1, 1));
+        StoredSession copy = source;
+        copy.id = "fork";
+        QString error;
+        QVERIFY(!journal.beginFork("source", 1, copy, &error));
+        QCOMPARE(error, QString("The fork destination already has history."));
+        QSqlQuery q(journalConnection(path));
+        QVERIFY(q.exec("SELECT COUNT(*) FROM session_fork_staging") && q.next());
+        QCOMPARE(q.value(0).toInt(), 0);
+    }
     void interruptedForkBecomesPurgeWork() {
         QTemporaryDir dir;
         const auto path = dir.filePath("journal.sqlite");

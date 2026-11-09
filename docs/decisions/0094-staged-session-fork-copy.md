@@ -19,6 +19,9 @@ payloads before their chunks, so orphan GC never meets a staged payload or
 chunk without its parent. TEXT travels as its stored bytes and is cast back, so
 malformed UTF-8 is copied exactly as `INSERT ... SELECT` did. Each insert must
 affect one row and each finished table must match the snapshot's row count.
+(Amended in #308: the row counts read both sessions' whole history in one pass. `beginFork`
+instead refuses an identity that already has rows in any copied table, so one stored row per
+snapshot row already makes the copy complete.)
 
 `finishFork` removes the staging row, stores the session, sets its start time
 and runs the media-ownership preparation (ADR 0068) in one transaction. Until

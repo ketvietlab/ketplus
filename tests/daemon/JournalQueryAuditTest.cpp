@@ -22,27 +22,38 @@ namespace {
 constexpr int backgroundSessions = 2000;
 constexpr int backgroundRows = 200000;
 constexpr int tombstones = 20000;
+// History of the conversation in use, so reads must also stay bounded inside one session.
+constexpr int hotBacklogRows = 100000;
 // A walk over a few percent of the history is a scan, not a seek.
 constexpr int maximumFullScanSteps = 5000;
 constexpr int maximumVmSteps = 200000;
 
 struct Statement {
     QString sql;
+    bool otherConnection{false};
     int fullScanSteps{0};
     int autoIndexes{0};
     int vmSteps{0};
 };
 
-int recordStatement(unsigned type, void* context, void* statement, void*) {
-    if (type != SQLITE_TRACE_PROFILE)
-        return 0;
+// Statements of the operation being audited, on any connection; null between operations.
+QList<Statement>* recording = nullptr;
+sqlite3* mainConnection = nullptr;
+
+int recordStatement(unsigned type, void*, void* statement, void*) {
     auto* stmt = static_cast<sqlite3_stmt*>(statement);
-    static_cast<QList<Statement>*>(context)->append(
-        {QString::fromUtf8(sqlite3_sql(stmt)).simplified(),
-         sqlite3_stmt_status(stmt, SQLITE_STMTSTATUS_FULLSCAN_STEP, 1),
-         sqlite3_stmt_status(stmt, SQLITE_STMTSTATUS_AUTOINDEX, 1),
-         sqlite3_stmt_status(stmt, SQLITE_STMTSTATUS_VM_STEP, 1)});
+    const int fullScan = sqlite3_stmt_status(stmt, SQLITE_STMTSTATUS_FULLSCAN_STEP, 1);
+    const int autoIndexes = sqlite3_stmt_status(stmt, SQLITE_STMTSTATUS_AUTOINDEX, 1);
+    const int vmSteps = sqlite3_stmt_status(stmt, SQLITE_STMTSTATUS_VM_STEP, 1);
+    if (type == SQLITE_TRACE_PROFILE && recording)
+        recording->append({QString::fromUtf8(sqlite3_sql(stmt)).simplified(),
+                           sqlite3_db_handle(stmt) != mainConnection, fullScan, autoIndexes,
+                           vmSteps});
     return 0;
+}
+
+sqlite3* sqliteHandle(const QSqlDatabase& db) {
+    return *static_cast<sqlite3* const*>(db.driver()->handle().data());
 }
 
 QSqlDatabase journalConnection(const QString& path) {
@@ -72,19 +83,21 @@ class JournalQueryAuditTest final : public QObject {
         const QVariant handle = db_.driver()->handle();
         if (qstrcmp(handle.typeName(), "sqlite3*") != 0)
             QSKIP("The SQL driver does not expose its sqlite3 handle");
-        sqlite_ = *static_cast<sqlite3* const*>(handle.data());
         QSqlQuery source(db_);
         QVERIFY(source.exec("SELECT sqlite_source_id()") && source.next());
         // Calling into the handle is only safe with the same SQLite the driver uses.
         if (source.value(0).toString() != QString::fromUtf8(sqlite3_sourceid()))
             QSKIP("The SQL driver bundles a different SQLite build");
+        mainConnection = sqliteHandle(db_);
+        sqlite3_trace_v2(mainConnection, SQLITE_TRACE_PROFILE, recordStatement, nullptr);
+        traced_ = true;
         writeBackground();
         writeHotSession();
     }
 
     void cleanupTestCase() {
-        if (sqlite_)
-            sqlite3_trace_v2(sqlite_, 0, nullptr, nullptr);
+        if (traced_)
+            sqlite3_trace_v2(mainConnection, 0, nullptr, nullptr);
         db_ = {};
         journal_.reset();
     }
@@ -108,11 +121,12 @@ class JournalQueryAuditTest final : public QObject {
                                  "sessions",
                                  "deletion-work",
                                  "tombstone-page",
+                                 "payload-garbage",
+                                 "large-event-fragment",
                                  "fork",
                                  "delete-and-purge",
                                  "activity-backfill",
                                  "retention",
-                                 "payload-garbage",
                                  "acknowledged-events",
                                  "disk-usage"})
             QTest::newRow(name) << QString(name);
@@ -123,23 +137,29 @@ class JournalQueryAuditTest final : public QObject {
         const auto run = operations().value(operation);
         QVERIFY(run);
         QList<Statement> statements;
-        sqlite3_trace_v2(sqlite_, SQLITE_TRACE_PROFILE, recordStatement, &statements);
+        recording = &statements;
         run();
-        sqlite3_trace_v2(sqlite_, 0, nullptr, nullptr);
+        recording = nullptr;
         QStringList violations;
         int vmSteps = 0;
         for (const auto& statement : std::as_const(statements)) {
             vmSteps += statement.vmSteps;
             if (statement.fullScanSteps > maximumFullScanSteps || statement.autoIndexes > 0 ||
                 statement.vmSteps > maximumVmSteps)
-                violations.append(QString("scan %1 autoindex %2 vm %3: %4")
+                violations.append(QString("%1scan %2 autoindex %3 vm %4: %5")
+                                      .arg(statement.otherConnection ? "other connection: " : "")
                                       .arg(statement.fullScanSteps)
                                       .arg(statement.autoIndexes)
                                       .arg(statement.vmSteps)
                                       .arg(statement.sql.left(240)));
         }
-        qInfo().noquote() << operation << "statements" << statements.size() << "vm-steps"
-                          << vmSteps;
+        const auto others = std::count_if(statements.cbegin(), statements.cend(),
+                                          [](const Statement& s) { return s.otherConnection; });
+        qInfo().noquote() << operation << "statements" << statements.size() << "on-other" << others
+                          << "vm-steps" << vmSteps;
+        // The fork reads its source through its own snapshot connection.
+        if (operation == "fork")
+            QVERIFY(others > 0);
         QVERIFY2(!statements.isEmpty(), "The operation ran no statement on the journal");
         QVERIFY2(violations.isEmpty(), qPrintable("\n" + violations.join('\n')));
     }
@@ -150,70 +170,124 @@ class JournalQueryAuditTest final : public QObject {
         QVERIFY2(q.exec(sql), qPrintable(q.lastError().text() + ": " + sql.left(120)));
     }
 
-    // Many other conversations with a representative mix of prompts, deltas and tool items.
-    void writeBackground() {
-        const QString session = QString("'b'||(1+i%%1)").arg(backgroundSessions);
-        const QString type =
-            "CASE i%10 WHEN 0 THEN 'user.message' WHEN 1 THEN 'turn.started' WHEN 2 THEN "
-            "'item.started' WHEN 3 THEN 'command.output_delta' WHEN 4 THEN 'item.completed' "
-            "WHEN 9 THEN 'turn.completed' ELSE 'assistant.delta' END";
-        const QString item = "'i'||(i/10)";
+    // `count` rows of prompts, deltas and command items, numbered per session from 1.
+    void insertHistory(const QString& session, const QString& cursor, int count) {
+        const QString key = "(" + cursor + ")";
+        const QString type = "CASE " + key +
+                             "%10 WHEN 1 THEN 'user.message' WHEN 2 THEN 'turn.started' WHEN 3 "
+                             "THEN 'item.started' WHEN 4 THEN 'command.output_delta' WHEN 5 THEN "
+                             "'item.completed' WHEN 0 THEN 'turn.completed' ELSE "
+                             "'assistant.delta' END";
+        const QString item = "'i'||(" + key + "/10)";
         const QString payload =
-            "CASE i%10 WHEN 0 THEN json_object('text','prompt '||i) WHEN 2 THEN "
-            "json_object('item_id'," +
-            item + ",'item',json_object('id'," + item +
-            ",'type','commandExecution','command','make')) WHEN 3 THEN json_object('item_id'," +
-            item + ",'delta',printf('%.200c','o')) WHEN 4 THEN json_object('item_id'," + item +
+            "CASE " + key + "%10 WHEN 1 THEN json_object('text','prompt '||i) WHEN 3 THEN " +
+            "json_object('item_id'," + item + ",'item',json_object('id'," + item +
+            ",'type','commandExecution','command','make')) WHEN 4 THEN json_object('item_id'," +
+            item + ",'delta',printf('%.200c','o')) WHEN 5 THEN json_object('item_id'," + item +
             ",'item',json_object('id'," + item +
             ",'type','commandExecution','status','completed')) "
             "ELSE json_object('text',printf('%.80c','a')) END";
-        const QString columns = session + ",1,i," + type + "," + payload +
-                                ",strftime('%Y-%m-%dT%H:%M:%fZ','now'),1+i/(10*" +
-                                QString::number(backgroundSessions) + ")";
+        const QString columns = session + ",1," + key + "," + type + "," + payload +
+                                ",strftime('%Y-%m-%dT%H:%M:%fZ','now'),1+(" + key + "-1)/10";
+        exec(sqlRange(count) +
+             "INSERT INTO events(session_id,generation,cursor,event_type,payload,sent_at,"
+             "turn_sequence) SELECT " +
+             columns + " FROM n");
+        exec(sqlRange(count) +
+             "INSERT INTO replay_events(session_id,generation,cursor,event_type,payload,sent_at,"
+             "turn_sequence,item_id) SELECT " +
+             columns + "," + item + " FROM n");
+    }
+
+    // Settles counters, projection and activity heads of sessions written by insertHistory.
+    void settleHistory(const QString& where) {
+        exec("UPDATE sessions SET last_cursor=(SELECT MAX(cursor) FROM events e WHERE "
+             "e.session_id=sessions.id),current_turn_sequence=(SELECT MAX(turn_sequence) FROM "
+             "events e WHERE e.session_id=sessions.id) WHERE " +
+             where);
+        exec("INSERT INTO replay_projection_state(session_id,generation,first_cursor,last_cursor) "
+             "SELECT id,1,1,last_cursor FROM sessions WHERE " +
+             where);
+        exec("INSERT INTO activity_heads SELECT id,1,current_turn_sequence,0,last_cursor FROM "
+             "sessions WHERE " +
+             where);
+    }
+
+    // Many other conversations, each with its own short history.
+    void writeBackground() {
         exec("BEGIN");
         exec(sqlRange(backgroundSessions) +
              "INSERT INTO sessions(id,worktree_path,adapter,thread_id,turn_id,state,generation,"
              "last_cursor) SELECT 'b'||i,'/tmp/w'||(i%20),'codex','','','ready',1,0 FROM n");
-        exec(sqlRange(backgroundRows) +
-             "INSERT INTO events(session_id,generation,cursor,event_type,payload,sent_at,"
-             "turn_sequence) SELECT " +
-             columns + " FROM n");
-        exec(sqlRange(backgroundRows) +
-             "INSERT INTO replay_events(session_id,generation,cursor,event_type,payload,sent_at,"
-             "turn_sequence,item_id) SELECT " +
-             columns + "," + item + " FROM n");
-        exec("UPDATE sessions SET last_cursor=(SELECT MAX(cursor) FROM events e WHERE "
-             "e.session_id=sessions.id),current_turn_sequence=(SELECT MAX(turn_sequence) FROM "
-             "events e WHERE e.session_id=sessions.id) WHERE id LIKE 'b%'");
-        exec("INSERT INTO replay_projection_state(session_id,generation,first_cursor,last_cursor) "
-             "SELECT id,1,1,last_cursor FROM sessions WHERE id LIKE 'b%'");
-        exec("INSERT INTO activity_heads SELECT id,1,current_turn_sequence,0,last_cursor FROM "
-             "sessions WHERE id LIKE 'b%'");
+        insertHistory(QString("'b'||(1+i%%1)").arg(backgroundSessions),
+                      QString("1+(i-1)/%1").arg(backgroundSessions), backgroundRows);
+        settleHistory("id LIKE 'b%'");
         exec(sqlRange(tombstones) + "INSERT INTO session_tombstones SELECT 'gone'||i,1,1,'op'||i,"
                                     "strftime('%Y-%m-%dT%H:%M:%fZ','now') FROM n");
         exec("COMMIT");
-        exec("ANALYZE");
     }
 
-    // The conversation in use, written through the journal like a real one.
+    // The conversation in use: a long history, then recent turns written through the journal,
+    // including command output large enough to be stored as large events.
     void writeHotSession() {
         QVERIFY(journal_->upsertSession({"hot", dir_.path(), "codex", {}, {}, "ready"}));
+        exec("BEGIN");
+        insertHistory("'hot'", "i", hotBacklogRows);
+        settleHistory("id='hot'");
+        exec("COMMIT");
+        exec("ANALYZE");
         for (int turn = 1; turn <= 30; ++turn) {
             QVERIFY(journal_->appendEvent("hot", 1, "user.message", {{"text", "go"}}) > 0);
             QVERIFY(journal_->appendEvent("hot", 1, "turn.started", {}) > 0);
             for (int n = 0; n < 4; ++n) {
                 const QString id = QString("c%1-%2").arg(turn).arg(n);
-                const QJsonObject item{{"id", id}, {"type", "commandExecution"}};
+                QJsonObject item{{"id", id}, {"type", "commandExecution"}};
                 QVERIFY(journal_->appendEvent("hot", 1, "item.started",
                                               {{"item_id", id}, {"item", item}}) > 0);
                 QVERIFY(journal_->appendEvent("hot", 1, "command.output_delta",
                                               {{"item_id", id}, {"delta", "line\n"}}) > 0);
-                QVERIFY(journal_->appendEvent("hot", 1, "item.completed",
-                                              {{"item_id", id}, {"item", item}}) > 0);
+                QString error;
+                QVERIFY2(journal_->appendEvent("hot", 1, "item.completed",
+                                               {{"item_id", id}, {"item", item}}, &error) > 0,
+                         qPrintable(error));
             }
             QVERIFY(journal_->appendEvent("hot", 1, "assistant.delta", {{"text", "done"}}) > 0);
             QVERIFY(journal_->appendEvent("hot", 1, "turn.completed", {{"status", "completed"}}) >
                     0);
+        }
+        writeLargeResults();
+        exec("UPDATE journal_gc_state SET payload_row=0,chunk_row=0");
+    }
+
+    // Tool results large enough to be stored as large events, in a conversation whose raw
+    // events were already acknowledged and pruned. Three lose their transcript rows, as
+    // pruned history leaves them, so the garbage pass must look each one up.
+    void writeLargeResults() {
+        QVERIFY(journal_->upsertSession({"media", dir_.path(), "codex", {}, {}, "ready"}));
+        const QString large(300 * 1024, QChar('L'));
+        for (int n = 0; n < 6; ++n) {
+            QVERIFY(journal_->appendEvent("media", 1, "user.message", {{"text", "fetch"}}) > 0);
+            const QString id = QString("r%1").arg(n);
+            const QJsonObject result{
+                {"id", id}, {"type", "mcpToolCall"}, {"tool", "fetch"}, {"result", large}};
+            QString error;
+            QVERIFY2(journal_->appendEvent("media", 1, "item.completed",
+                                           {{"item_id", id}, {"item", result}}, &error) > 0,
+                     qPrintable(error));
+        }
+        exec("DELETE FROM events WHERE session_id='media'");
+        QSqlQuery q(db_);
+        QVERIFY(q.exec("SELECT transfer_id FROM large_event_payloads ORDER BY rowid"));
+        QStringList transfers;
+        while (q.next())
+            transfers.append(q.value(0).toString());
+        QCOMPARE(transfers.size(), 6);
+        transferId_ = transfers.constLast();
+        for (const auto& transfer : transfers.mid(0, 3)) {
+            QVERIFY(q.prepare("DELETE FROM replay_events WHERE session_id='media' AND "
+                              "json_extract(payload,'$.large_event.transfer_id')=?"));
+            q.addBindValue(transfer);
+            QVERIFY2(q.exec(), qPrintable(q.lastError().text()));
         }
     }
 
@@ -280,7 +354,17 @@ class JournalQueryAuditTest final : public QObject {
              [&j] {
                  StoredSession copy{"hot-copy", "/tmp", "codex", {}, {}, "ready"};
                  QString error;
-                 QVERIFY2(j.forkSession("hot", 1, copy, &error), qPrintable(error));
+                 auto staged = j.beginFork("hot", 1, copy, &error);
+                 QVERIFY2(staged, qPrintable(error));
+                 // The copy reads its source through its own snapshot connection.
+                 sqlite3* reader = sqliteHandle(QSqlDatabase::database(staged->readerName, false));
+                 sqlite3_trace_v2(reader, SQLITE_TRACE_PROFILE, recordStatement, nullptr);
+                 auto step = LocalJournal::ForkStep::Progress;
+                 while (step == LocalJournal::ForkStep::Progress)
+                     step = j.continueFork(*staged, &error);
+                 sqlite3_trace_v2(reader, 0, nullptr, nullptr);
+                 QCOMPARE(step, LocalJournal::ForkStep::Copied);
+                 QVERIFY2(j.finishFork(*staged, copy, &error), qPrintable(error));
              }},
             {"delete-and-purge",
              [&j] {
@@ -297,7 +381,18 @@ class JournalQueryAuditTest final : public QObject {
                  QCOMPARE(j.backfillActivityGroups(), LocalJournal::ActivityBackfill::Progress);
              }},
             {"retention", [&j] { QVERIFY(j.pruneRetention()); }},
-            {"payload-garbage", [&j] { QVERIFY(j.pruneLargePayloadGarbage()); }},
+            {"payload-garbage",
+             [this, &j] {
+                 QVERIFY(j.pruneLargePayloadGarbage());
+                 QSqlQuery q(db_);
+                 QVERIFY(q.exec("SELECT COUNT(*) FROM large_event_payloads") && q.next());
+                 // The pass looked the orphans up and removed them.
+                 QCOMPARE(q.value(0).toInt(), 3);
+             }},
+            {"large-event-fragment",
+             [this, &j] {
+                 QVERIFY(j.largeEventFragment("media", 1, transferId_, 0).errorCode.isEmpty());
+             }},
             {"acknowledged-events", [&j] { QVERIFY(j.pruneAcknowledgedEvents()); }},
             {"disk-usage", [&j] { QVERIFY(j.diskUsage().has_value()); }},
         };
@@ -307,7 +402,8 @@ class JournalQueryAuditTest final : public QObject {
     QString path_;
     std::unique_ptr<LocalJournal> journal_;
     QSqlDatabase db_;
-    sqlite3* sqlite_{nullptr};
+    QString transferId_;
+    bool traced_{false};
 };
 
 QTEST_GUILESS_MAIN(JournalQueryAuditTest)

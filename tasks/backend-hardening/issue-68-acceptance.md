@@ -11,7 +11,7 @@ counting as merged fixes. No UI, live journal, provider quota or deployment work
 | --- | --- | --- |
 | Forward-only, idempotent migrations; newer-daemon journal safety | Startup transaction failures #250; #273 closes failed storage objects; #274 protects migration staging (merged `c3490da5`) | Newer format refused unchanged (ADR 0095); legacy backfills once (ADR 0096); activity backfill after open (ADR 0097); full disk and killed migration verified without a production change / #3329 |
 | Transactions, crash consistency and surfaced errors | Append/delete/fork/replay fixes #241–250; #254 (merged through #255) prepares media ownership before journal commit | Cross-file interruption and broader read/commit failure coverage; do not infer power-loss atomicity from callback order / #2739 |
-| Bounded/indexed reads on large journals | GC #220, ACK #223, metadata #228, staging #230, deletion queue #235, cloud cache #237, cancellation #240; #272 bounds stored policy JSON (merged through #274) | Statement audit of 24 operations next to 200k events in 2,000 sessions passes; large-event chunks and media rows are not in that fixture / #3329 |
+| Bounded/indexed reads on large journals | GC #220, ACK #223, metadata #228, staging #230, deletion queue #235, cloud cache #237, cancellation #240; #272 bounds stored policy JSON (merged through #274) | Statement audit of 25 operations (100k-event session, 200k events in 2,000 others, large results with orphans) passes after two bounded-read fixes; bytes, memory and media files need their own evidence / #3329 |
 | Retention and deletion remove rows/media | Transactional cleanup and retention tests above; media cleanup/dedup #251–252 | Physical media/blob retirement, shared-reference preservation and steady-state acceptance; #128 archive behavior is not implied / #2739 |
 | Media paths, limits, permissions, orphan cleanup | #251–252 plus merged publication/fork/preview #253–255; merged private migration staging #274 | Ancestor/replacement races, decode/concurrency bounds, write-admission/orphan recovery and platform permissions / #2739 |
 | Note natural splits for oversized LocalJournal.cpp | At combined journal code 6347493f it is 1,462 lines. Natural responsibilities listed below; current constructor fix is two net lines | Record this inventory in review; any actual extraction must preserve behavior and has its own validation / #2739 |
@@ -190,11 +190,26 @@ loss and journal-plus-media interruption are not covered.
 
 ## Query audit on a large journal
 
-`JournalQueryAuditTest` traces each statement the journal connection runs for 24
-operations on one conversation of 1,200 events, next to 2,000 other sessions with
-200k raw and replay rows and 20k tombstones. Every statement stays under 5,000
-full-scan steps and 200k VM steps without automatic indexes; the largest operation
-(fork) runs 77k VM steps over 1,065 statements, and the session list 46k for 2,000
-sessions. Defeating the `events` key in `eventsAfter` makes `events-after` and
-`turn-start` fail at about 1.2M VM steps. Opening the journal is outside the trace
-and covered by the startup characterization (ADR 0096/0097).
+`JournalQueryAuditTest` traces each statement of 25 operations, on the journal
+connection and on the fork's snapshot reader. The conversation in use has 100k
+events of its own and recent turns written through the journal; 2,000 other
+sessions hold 200k raw and replay rows, there are 20k tombstones, and a third
+conversation holds six large tool results whose raw rows were pruned, three of
+them orphaned. A statement fails above 5,000 full-scan steps or 200k VM steps, or
+with an automatic index. The garbage pass must remove exactly the three orphans.
+
+The audit found two history-sized reads, both fixed:
+- `session.activity_group_page` walked every replay row of the session before
+  `after_cursor` (1.18M VM steps). It now reads only between the group's first item
+  and its summary's last change (461 VM steps).
+- Each finished fork table ran `COUNT(*)` over the source and the fork (about 300k
+  VM steps each for 100k rows), in one pass. `beginFork` now refuses an identity
+  with leftover rows instead, so one stored row per snapshot row proves the copy.
+  Wall time of the opt-in fork characterization did not change measurably (slowest
+  pass 24–47 ms either way).
+
+Controls: defeating the key in `eventsAfter`, in the fork's reader select, and
+restoring the unbounded group read each fail the audit; removing the leftover
+check fails the new fork test. Limits: opening the journal is outside the trace
+(see the startup characterization); statement counters do not bound bytes, memory
+or total work per operation; media files need their own evidence.
