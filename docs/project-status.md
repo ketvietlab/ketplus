@@ -228,8 +228,9 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 - The daemon records when a conversation is archived (`session.set_archived`,
   `archived_at`). It deletes conversations archived for more than 30 days, one
-  per idle pass, through `session.delete` (ADR 0100). Desktop's push of its
-  local archive state and the Storage setting are still to come.
+  per idle pass, through `session.delete` (ADR 0100). Desktop sends archive,
+  restore and worktree archive to the daemon and pushes earlier local archive
+  state once; the Storage setting is still to come.
 
 - The owner-only size-policy backend supports revisioned 1/2/5/10 GB SQLite-page
   targets and warning status (ADR 0046). Recent-detail pressure is opt-in via an
@@ -468,8 +469,9 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   device authorization and a durable zero-session workspace catalog. A Qt
   Control v2 client backend is available, but remote Desktop UI/composition
   remains deferred. See `linux-headless-daemon.md` for coverage and acceptance.
-- Conversation and linked-worktree visibility can be archived locally without
-  deleting history or stopping an active turn. Archived items are restored only
+- Conversation and linked-worktree visibility can be archived without
+  deleting history or stopping an active turn. The daemon deletes a
+  conversation 30 days after it was archived (ADR 0100). Archived items are restored only
   from Settings; active archived conversations retain an explicit Stop action.
 - Conversation fork (ADR 0016): "Fork this conversation" in the conversation
   name and transcript right-click menus copies an idle Codex or Claude
