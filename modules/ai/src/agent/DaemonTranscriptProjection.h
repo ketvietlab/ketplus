@@ -38,6 +38,10 @@ QString approvalOutcome(const QString& eventType, const QJsonObject& data);
 // a pending card and the receipt that settled it. The receipt wins; the request keeps its
 // tool and command. A row without them stays hidden until its request is read.
 QVariantMap joinedApprovalRows(const QVariantMap& older, const QVariantMap& newer);
+// A failure's row as the mock words it when the provider's message says what happened: its
+// process exited, or the model is at capacity (subtype "modelCapacity", which offers to
+// switch the model). Other failures keep agentErrorTitle() and the message.
+void presentAgentError(QVariantMap& entry, const QString& message);
 QVariantMap providerNoticeMessage(const QString& text, const QString& itemId,
                                   const QString& title = QStringLiteral("Request declined"));
 // ADR 0027: a user row another conversation's agent wrote (`origin: agent`) shows its sender.

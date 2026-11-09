@@ -8,6 +8,7 @@
 #include <QDateTime>
 #include <QHash>
 #include <QJsonArray>
+#include <QRegularExpression>
 #include <QSet>
 #include <algorithm>
 
@@ -137,6 +138,39 @@ QString approvalOutcome(const QString& eventType, const QJsonObject& data) {
     return decision == "accept"    ? QStringLiteral("approved")
            : decision == "decline" ? QStringLiteral("denied")
                                    : QStringLiteral("resolved");
+}
+
+void presentAgentError(QVariantMap& entry, const QString& message) {
+    entry.insert(QStringLiteral("title"), agentErrorTitle());
+    // The adapters' own words when a provider process ends under a turn.
+    static const QList<QPair<QRegularExpression, QString>> exits{
+        {QRegularExpression(QStringLiteral("^Codex app-server stopped \\(exit")),
+         QStringLiteral("Codex CLI exited")},
+        {QRegularExpression(QStringLiteral("^The Cursor ACP process exited unexpectedly")),
+         QStringLiteral("Cursor CLI exited")},
+        {QRegularExpression(QStringLiteral("^The Claude sidecar exited unexpectedly")),
+         QStringLiteral("Claude Code exited")}};
+    for (const auto& [pattern, title] : exits) {
+        if (pattern.match(message).hasMatch()) {
+            entry.insert(QStringLiteral("title"), title);
+            return;
+        }
+    }
+    // Only the providers' own overload errors: Codex's "Selected model is at capacity" and
+    // Anthropic's 529 overloaded_error. A message is also the agent's last words when a turn
+    // fails otherwise, so a word such as "overloaded" in it says nothing.
+    static const QRegularExpression capacity(
+        QStringLiteral("^Selected model is at capacity\\b|^API Error: "
+                       "529\\b|\\boverloaded_error\\b|^Overloaded\\.?$"));
+    if (capacity.match(message).hasMatch()) {
+        entry.insert(QStringLiteral("title"), QStringLiteral("Selected model is at capacity"));
+        entry.insert(QStringLiteral("subtype"), QStringLiteral("modelCapacity"));
+        const QString text = QStringLiteral(
+            "The model could not finish the turn. Try again, or pick another model for this "
+            "conversation.");
+        entry.insert(QStringLiteral("body"), text);
+        entry.insert(QStringLiteral("summary"), text);
+    }
 }
 
 QVariantMap providerNoticeMessage(const QString& text, const QString& itemId,
@@ -567,8 +601,8 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
             entry.insert("status", settledQuestions.value(data.value("approval_id").toString()));
         } else if (type == "runtime.error") {
             entry = message("error", data.value("message").toString(), "Agent · error", {}, itemId);
-            // The same title a live failure gives its row, as the mock's danger banner.
-            entry.insert("title", agentErrorTitle());
+            // Worded as a live failure's row, as the mock's danger banner.
+            presentAgentError(entry, data.value("message").toString());
             entry.insert("category", "system");
             entry.insert("status", "failed");
         } else if (type == "command.output_delta") {

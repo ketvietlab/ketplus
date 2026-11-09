@@ -428,6 +428,7 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
                 agent_message::TurnFacts turn;
                 turn.durationMs = entry.value("durationMs", -1).toLongLong();
                 turn.contextTokens = entry.value("contextTokens", -1).toLongLong();
+                turn.stoppedByUser = entry.value("stoppedByUser").toBool();
                 const auto detail = agent_message::turnEndText(
                     turn, QJsonObject::fromVariantMap(session->sessionUsage));
                 entry.insert("body", detail);

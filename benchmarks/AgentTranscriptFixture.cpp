@@ -80,11 +80,10 @@ class Journal {
                    turn_);
     }
     // Ends the turn `seconds` after its prompt, as the mock's turn line reads.
-    void finish(const QString& status, int seconds, const QJsonObject& trimmed = {}) {
-        QJsonObject data{{"status", status}};
-        if (!trimmed.isEmpty())
-            data.insert("detail_trimmed", trimmed);
-        append("turn.completed", data, turnStart_.addSecs(seconds), turn_);
+    // `extra` carries the end's other fields, such as detail_trimmed or a Stop's reason.
+    void finish(const QString& status, int seconds, QJsonObject extra = {}) {
+        extra.insert("status", status);
+        append("turn.completed", extra, turnStart_.addSecs(seconds), turn_);
     }
     QVariantList rows() const {
         QVariantList rows = agent_message::daemonWindowMessages({{"events", events_}});
@@ -146,9 +145,11 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
                      "Profile why the sidebar keeps the CPU busy when nothing happens.");
         journal.usage(141000, 2.08);
         // The mock's old turn: history retention has reduced its detail.
-        journal.finish(
-            "completed", 380,
-            {{"commands", 38}, {"tool_results", 12}, {"bytes", 1258291}, {"older_than_days", 30}});
+        journal.finish("completed", 380,
+                       {{"detail_trimmed", QJsonObject{{"commands", 38},
+                                                       {"tool_results", 12},
+                                                       {"bytes", 1258291},
+                                                       {"older_than_days", 30}}}});
         journal.user(today,
                      "The sidebar spinner still looks choppy. Check it against this capture and "
                      "fix it.");
@@ -255,10 +256,8 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
                       "A staging tenant is created in **two steps**:\n\n1. `POST /tenants` in the "
                       "gateway validates the slug.\n2. `createTenant()` provisions the schema and "
                       "seeds the admin user.");
-        journal.event(
-            "runtime.error",
-            {{"message", "The agent process ended with code 1 before the turn completed."},
-             {"will_retry", false}});
+        journal.event("runtime.error", {{"message", "The Cursor ACP process exited unexpectedly."},
+                                        {"will_retry", false}});
         journal.finish("failed", 151);
     } else {
         journal.event(
@@ -374,8 +373,7 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
                        "A flat storage gauge icon in the Két style, 2 px strokes, no frame."}});
         journal.event("runtime.error", {{"message", "Reconnecting… 2/5"}, {"will_retry", true}});
         journal.event("runtime.error",
-                      {{"message", "Codex could not finish the turn. Try again, or pick another "
-                                   "model for this conversation."},
+                      {{"message", "Selected model is at capacity. Please try a different model."},
                        {"will_retry", false}});
         journal.event("session.configuration_changed",
                       {{"effective", QJsonObject{{"model", "GPT-5.6 Luna"}, {"effort", "Medium"}}},
@@ -387,7 +385,8 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
                       "The daemon now reports `journal.size` in `session.list` and warns past "
                       "**80%** of the limit. Still to do:");
         journal.usage(96000, -1);
-        journal.finish("interrupted", 68);
+        // The mock's Stop from the composer.
+        journal.finish("interrupted", 68, {{"reason", "user"}});
     }
     QVariantList rows = journal.rows();
     // The mock's first Claude prompt today carries a capture; journal media needs a store, so

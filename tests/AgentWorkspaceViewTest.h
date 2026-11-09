@@ -42,6 +42,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void fileStepsOpenTheirDiffInline();
     void claudeEditOpensItsDiffInline();
     void settledApprovalsReadAsTheirOutcome();
+    void capacityErrorOffersAnotherModel();
     void trimmedTurnOpensStorageSettings();
     void activityOperationSemantics();
     void semanticCommandLabelsStayExpandable();

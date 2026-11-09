@@ -540,14 +540,22 @@ class DesktopTranscriptCatchupTest final : public QObject {
             200));
         daemon.push(sent(liveEvent("a", "turn.completed", {{"status", "completed"}}, 4, 2), 380));
         const auto turnEnd = [&] {
+            QString last;
             for (const auto& row : desktop.messages(path)) {
                 const auto entry = row.toMap();
                 if (entry.value("subtype") == "turnEnd")
-                    return entry.value("body").toString();
+                    last = entry.value("body").toString();
             }
-            return QString();
+            return last;
         };
         QTRY_COMPARE_WITH_TIMEOUT(turnEnd(), QString::fromUtf8("6m 20s · 141k context"), 5000);
+        // A live end the user stopped keeps saying so when it is worded with the session cost.
+        daemon.push(
+            sent(liveEvent("a", "user.message", {{"text", "Then the sidebar"}}, 5, 3), 400));
+        daemon.push(sent(
+            liveEvent("a", "turn.completed", {{"status", "interrupted"}, {"reason", "user"}}, 6, 3),
+            468));
+        QTRY_COMPARE_WITH_TIMEOUT(turnEnd(), QString::fromUtf8("1m 08s · stopped by you"), 5000);
     }
 };
 
