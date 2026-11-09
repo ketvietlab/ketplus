@@ -1,9 +1,18 @@
 #include "index/SymbolIndex.h"
 
+#include <QDeadlineTimer>
 #include <QDir>
 #include <QFile>
 #include <QTemporaryDir>
 #include <QtTest>
+
+#include <thread>
+
+#if defined(Q_OS_UNIX)
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 namespace {
 
@@ -28,6 +37,7 @@ class SymbolIndexTest final : public QObject {
     void dropsTheLeastRecentlyUsedWorkspaceOverBudget();
     void dropsIdleWorkspaces();
     void followsAFileThatChangedOnDisk();
+    void keepsAFileSavedDuringTheFirstBuild();
 };
 
 void SymbolIndexTest::followsAFileThatChangedOnDisk() {
@@ -168,6 +178,51 @@ void SymbolIndexTest::dropsIdleWorkspaces() {
     index.clear();
     QCOMPARE(index.workspaceCount(), 0);
     QCOMPARE(index.memoryBytes(), 0);
+}
+
+void SymbolIndexTest::keepsAFileSavedDuringTheFirstBuild() {
+#if defined(Q_OS_UNIX)
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QDir root(directory.path());
+    const QString saved = root.filePath(QStringLiteral("a.cpp"));
+    QVERIFY(writeFile(saved, "class Before {};\n"));
+    // Reading the FIFO blocks the build after it has read a.cpp, until the test writes to it.
+    const QByteArray gate = QFile::encodeName(root.filePath(QStringLiteral("b.cpp")));
+    QCOMPARE(::mkfifo(gate.constData(), 0600), 0);
+
+    ketplus::SymbolIndex index;
+    std::thread build([&] {
+        index.indexWorkspace(root.absolutePath(),
+                             listOf({QStringLiteral("a.cpp"), QStringLiteral("b.cpp")}));
+    });
+    // A non-blocking writer opens only once the build is waiting on the FIFO. Opened once: a
+    // second writer left open would keep the build from ever reading end of file.
+    int writer = -1;
+    QDeadlineTimer deadline(5000);
+    while ((writer = ::open(gate.constData(), O_WRONLY | O_NONBLOCK)) < 0 && !deadline.hasExpired())
+        QTest::qWait(10);
+    if (writer < 0) {
+        // Unblock the build so the thread can be joined.
+        writer = ::open(gate.constData(), O_WRONLY);
+        ::close(writer);
+        build.join();
+        QFAIL("the build never reached the FIFO");
+    }
+    QVERIFY(writeFile(saved, "class After {};\n"));
+    index.reindexFile(root.absolutePath(), QStringLiteral("a.cpp"));
+    const QByteArray gated("class Gate {};\n");
+    QCOMPARE(::write(writer, gated.constData(), static_cast<size_t>(gated.size())),
+             static_cast<ssize_t>(gated.size()));
+    ::close(writer);
+    build.join();
+
+    QCOMPARE(index.lookup(root.absolutePath(), QStringLiteral("After")).size(), 1);
+    QVERIFY(index.lookup(root.absolutePath(), QStringLiteral("Before")).isEmpty());
+    QCOMPARE(index.lookup(root.absolutePath(), QStringLiteral("Gate")).size(), 1);
+#else
+    QSKIP("Uses a FIFO to pause the build.");
+#endif
 }
 
 QTEST_MAIN(SymbolIndexTest)

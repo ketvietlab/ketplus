@@ -44,7 +44,8 @@ class SymbolIndex final {
     void indexWorkspace(const QString& root, const WorkspaceFileList& files,
                         const std::atomic_bool* cancelled = nullptr);
     [[nodiscard]] bool hasWorkspace(const QString& root) const;
-    // Re-reads one file, so a lookup after a save does not point at a line that has moved.
+    // Re-reads one file, so a lookup after a save does not point at a line that has moved. A
+    // file saved while its workspace is first being built is re-read once the build publishes.
     void reindexFile(const QString& root, const QString& relativePath);
     // Declarations of `name` in `root`, marking that workspace as recently used.
     [[nodiscard]] QList<SymbolHit> lookup(const QString& root, const QString& name);
@@ -85,6 +86,8 @@ class SymbolIndex final {
     // Symbol name to the blobs that declare it.
     QHash<QString, QList<QByteArray>> names_;
     QHash<QString, Workspace> workspaces_;
+    // Roots being built for the first time, with the files saved meanwhile.
+    QHash<QString, QStringList> savedDuringBuild_;
     qint64 budgetBytes_;
     qint64 totalBytes_{0};
     quint64 useSequence_{0};
