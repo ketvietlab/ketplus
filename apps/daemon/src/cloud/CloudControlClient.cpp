@@ -334,9 +334,30 @@ void CloudControlClient::stopAtlasRuntimes(
     }
 }
 
+void CloudControlClient::revokeAtlasAccess(const QString& device) {
+    if (device.isEmpty()) {
+        ++atlasMachineEpoch_;
+        stopAtlasRuntimes([](const QObject&) { return true; });
+        return;
+    }
+    ++atlasDeviceEpochs_[device];
+    stopAtlasRuntimes(
+        [&](const QObject& runtime) { return runtime.property("device").toString() == device; });
+}
+
+CloudControlClient::AtlasAccessFence
+CloudControlClient::atlasAccessFence(const QString& device) const {
+    return {atlasMachineEpoch_, atlasDeviceEpochs_.value(device)};
+}
+
+bool CloudControlClient::atlasAccessCurrent(const QString& device,
+                                            const AtlasAccessFence& fence) const {
+    return fence.machine == atlasMachineEpoch_ && fence.device == atlasDeviceEpochs_.value(device);
+}
+
 void CloudControlClient::signOut(LocalCallback callback) {
     signaling_->configure({}, {}, 1, false);
-    stopAtlasRuntimes([](const QObject&) { return true; });
+    revokeAtlasAccess();
     ++accountEpoch_;
     dropBrowserSignIn();
     signInError_.clear();

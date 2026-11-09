@@ -45,14 +45,11 @@ void CloudControlClient::initializePeerTransport() {
         signaling_->configure({}, {}, 1, false);
         daemonToken_.clear();
         // A revoked machine keeps no Atlas tunnel open for any device.
-        stopAtlasRuntimes([](const QObject&) { return true; });
+        revokeAtlasAccess();
     });
     // Revoking a device here or on another client closes the Atlas it was viewing.
-    connect(signaling_, &transport::Signaling::deviceRevoked, this, [this](const QString& device) {
-        stopAtlasRuntimes([&](const QObject& runtime) {
-            return runtime.property("device").toString() == device;
-        });
-    });
+    connect(signaling_, &transport::Signaling::deviceRevoked, this,
+            [this](const QString& device) { revokeAtlasAccess(device); });
     connect(&wakeups_, &RelayWakeups::message, signaling_, &transport::Signaling::receive);
     connect(signaling_, &transport::Signaling::outgoing, this, [this](const QJsonObject& message) {
         if (!wakeups_.send(message) && message.value("type") != "signal.end")

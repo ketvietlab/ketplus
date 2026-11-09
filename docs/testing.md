@@ -142,8 +142,10 @@ without a final credit grant. Run the runtime, cloud-privacy and remote-control
 client targets alongside it; no real CLI/provider or relay is required.
 
 `ketplus_atlas_access_tests` checks that a live Atlas runtime stops when its device is revoked
-or its conversation generation is deleted, and that other devices, conversations and
-generations keep theirs.
+or its conversation generation is deleted, with and without negotiated peer transport, and
+that other devices, conversations and generations keep theirs. It also checks that a device or
+machine revocation moves the access fence an in-flight `atlas.start` checks before it creates a
+runtime.
 
 Daemon Atlas readiness (`ketplus_atlas_live_runtime_tests`, ADR 0083) includes a
 Unix synthetic Python CLI: wrong/longer port, embedded/partial/truncated banners,

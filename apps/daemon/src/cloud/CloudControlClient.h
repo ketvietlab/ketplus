@@ -150,6 +150,17 @@ class CloudControlClient final : public QObject {
     void pruneSessionCredentials();
     // Stops the Atlas runtimes, and with them their tunnels, that `matches` selects.
     void stopAtlasRuntimes(const std::function<bool(const QObject& runtime)>& matches);
+    // Ends Atlas access for one device, or for every device when `device` is empty: running
+    // runtimes stop, and an atlas.start still scanning for them creates none (#105).
+    void revokeAtlasAccess(const QString& device = {});
+    // What an atlas.start captures before its scan and checks before creating a runtime.
+    struct AtlasAccessFence final {
+        quint64 machine{0};
+        quint64 device{0};
+    };
+    [[nodiscard]] AtlasAccessFence atlasAccessFence(const QString& device) const;
+    [[nodiscard]] bool atlasAccessCurrent(const QString& device,
+                                          const AtlasAccessFence& fence) const;
     [[nodiscard]] static QJsonArray
     sessionSnapshots(const QList<StoredSession>& stored, const QString& workspaceId,
                      const QString& machineId, const QByteArray& pathIdSalt,
@@ -251,6 +262,9 @@ class CloudControlClient final : public QObject {
     RemoteWorktreeQuota worktreeQuota_;
     int machineKeyVersion_{1};
     quint64 accountEpoch_{0};
+    // Raised by revokeAtlasAccess, for the machine and for each revoked device.
+    quint64 atlasMachineEpoch_{0};
+    QHash<QString, quint64> atlasDeviceEpochs_;
     QThreadPool workspaceFilesPool_;
     // Heartbeats hash every worktree; on their own thread they never queue a phone's read.
     QThreadPool heartbeatPool_;

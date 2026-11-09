@@ -504,20 +504,24 @@ void CloudControlClient::executeCommand(const QJsonObject& command) {
                     }
                     const auto source = *found;
                     const auto accountEpoch = accountEpoch_;
+                    const auto access = atlasAccessFence(device);
                     const QPointer<CloudControlClient> guard(this);
                     workspaceFilesPool_.start([guard, command, payload, kind, source, device,
-                                               accountEpoch]() {
+                                               accountEpoch, access]() {
                         const auto projects = AtlasIndex::scan(source.worktreePath);
                         if (!guard)
                             return;
                         QMetaObject::invokeMethod(
                             guard,
-                            [guard, command, payload, kind, source, device, projects,
-                             accountEpoch] {
+                            [guard, command, payload, kind, source, device, projects, accountEpoch,
+                             access] {
                                 if (!guard)
                                     return;
                                 guard->workspaceFilesPending_.fetch_sub(1);
                                 if (guard->accountEpoch_ != accountEpoch)
+                                    return;
+                                // The device or machine was revoked during the scan.
+                                if (!guard->atlasAccessCurrent(device, access))
                                     return;
                                 for (auto* runtime : guard->findChildren<AtlasLiveRuntime*>()) {
                                     if (runtime->property("command").toString() !=

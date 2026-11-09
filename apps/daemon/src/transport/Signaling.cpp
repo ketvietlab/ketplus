@@ -77,10 +77,11 @@ bool Signaling::verify(const QByteArray& bytes, const QByteArray& key,
 }
 
 void Signaling::receive(const QJsonObject& message) {
-    if (!enabled_)
-        return;
     const auto type = message.value("type").toString();
     const auto id = message.value("connectionId").toString();
+    // A revocation ends the device's access whether or not peer transport is negotiated.
+    if (!enabled_ && type != "device.revoked")
+        return;
     if (type == "device.revoked") {
         const auto device = message.value("deviceId").toString();
         peers_->revoke(device);
