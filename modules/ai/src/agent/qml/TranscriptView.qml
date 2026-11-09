@@ -2087,43 +2087,7 @@ Flickable {
         // real gutter above it so a one-line command delegate
         // can never paint beneath the footer while its implicit
         // layout is settling during a streamed model update.
-        height: host.sessionRunning ? KetTheme.px(62, KetTheme.zoom) : (transcript.messageModel.count > 0 ? KetTheme.px(48, KetTheme.zoom) : 0)
-
-        Basic.ToolButton {
-            id: copyConversationButton
-            objectName: "copyConversationButton"
-            // Keep conversation export on the right, separate from the answer copy action.
-            x: parent.width - Math.max(KetTheme.px(20, KetTheme.zoom), (parent.width - shell.conversationColumnWidth) / 2) - width
-            anchors.top: parent.top
-            anchors.topMargin: host.sessionRunning ? KetTheme.px(6, KetTheme.zoom) : -KetTheme.px(4, KetTheme.zoom)
-            z: 1
-            width: KetTheme.px(44, KetTheme.zoom)
-            height: KetTheme.px(44, KetTheme.zoom)
-            padding: KetTheme.px(13, KetTheme.zoom)
-            visible: transcript.messageModel.count > 0
-            contentItem: Item {
-                implicitWidth: KetTheme.px(16, KetTheme.zoom)
-                implicitHeight: implicitWidth
-                KetIcon {
-                    anchors.centerIn: parent
-                    box: Math.min(parent.width, parent.height)
-                    name: KetTheme.iconForLucide(host.historyState.copying ? "square" : "copy")
-                    color: KetTheme.t.textMuted
-                }
-            }
-            background: Rectangle {
-                color: parent.hovered ? KetTheme.t.surfaceHover : "transparent"
-                radius: KetTheme.px(5, KetTheme.zoom)
-            }
-            readonly property string label: host.historyState.copying ? "Cancel copying" : host.sessionRunning ? "Copy loaded conversation" : "Copy conversation"
-            onClicked: host.historyState.copying ? host.cancelConversationCopy() : host.sessionRunning ? host.copyText(shell.conversationCopyText()) : host.copyConversation(shell.conversationCopyText())
-            Accessible.name: label
-            KetToolTip {
-                objectName: "ketToolTip"
-                visible: copyConversationButton.hovered
-                text: copyConversationButton.label
-            }
-        }
+        height: host.sessionRunning ? KetTheme.px(62, KetTheme.zoom) : 0
 
         AgentRunStatus {
             workspace: shell

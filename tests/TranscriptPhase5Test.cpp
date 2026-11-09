@@ -561,8 +561,10 @@ void AgentWorkspaceViewTest::copiesMessageSourcesAndCodeBlocks() {
     QVERIFY(QMetaObject::invokeMethod(transcript, "positionViewAtBeginning"));
     QTRY_VERIFY(delegateAt(transcript, 3));
 
-    // Copy chrome is created lazily: nothing until a row is hovered or keyboard-focused.
+    // Copy chrome is created lazily: nothing until a row is hovered or keyboard-focused,
+    // except the turn's answer, which always offers Copy answer under it, as in the mock.
     QVERIFY(!childNamed(delegateAt(transcript, 0), "copyMessageButton"));
+    QTRY_VERIFY(childNamed(delegateAt(transcript, 3), "copyMessageButton"));
     QVERIFY(!childNamed(delegateAt(transcript, 1), "copyCodeBlockButton"));
     QVERIFY(!childNamed(delegateAt(transcript, 2), "copyActivityButton"));
     view.quickView()->requestActivate();
@@ -604,7 +606,7 @@ void AgentWorkspaceViewTest::copiesMessageSourcesAndCodeBlocks() {
     QTRY_VERIFY(childNamed(delegateAt(transcript, 3), "copyMessageButton"));
     auto* answerButton = childNamed(delegateAt(transcript, 3), "copyMessageButton");
     QCOMPARE(answerButton->findChild<QObject*>("ketToolTip")->property("text").toString(),
-             QStringLiteral("Copy response"));
+             QStringLiteral("Copy answer"));
     if (const auto capture = qEnvironmentVariable("KETPLUS_ANSWER_COPY_CAPTURE");
         !capture.isEmpty()) {
         QTest::qWait(150);
@@ -614,9 +616,10 @@ void AgentWorkspaceViewTest::copiesMessageSourcesAndCodeBlocks() {
     // The Markdown source, not the rendered text.
     QCOMPARE(QGuiApplication::clipboard()->text(), answer + QStringLiteral("\n\nBuilt it."));
 
-    // Like the rest of the row chrome, it leaves with the hover or focus.
+    // Unlike the rest of the row chrome, it stays when the hover or focus leaves.
     transcript->setProperty("keyboardIndex", 0);
-    QTRY_VERIFY(!childNamed(delegateAt(transcript, 3), "copyMessageButton"));
+    QTest::qWait(50);
+    QVERIFY(childNamed(delegateAt(transcript, 3), "copyMessageButton"));
 }
 
 void AgentWorkspaceViewTest::listCodeBlocksStayInTheirItem() {

@@ -30,15 +30,16 @@ Rectangle {
         x: notice.turnEnd ? 0 : notice.recipe.paddingInline
         y: notice.recipe.paddingBlock
         width: parent.width - 2 * x
-        spacing: notice.recipe.spacing
+        // The turn's end is the mock's status line: a 14 px icon 8 px before its label.
+        spacing: notice.turnEnd ? KetTheme.px(8, KetTheme.zoom) : notice.recipe.spacing
         Kit.KetIcon {
             Layout.alignment: Qt.AlignTop
-            Layout.topMargin: notice.turnEnd ? Math.max(0, (turnLine.lineHeight - notice.recipe.iconSize) / 2) : 0
+            Layout.topMargin: notice.turnEnd ? Math.max(0, (turnLine.lineHeight - box) / 2) : 0
             objectName: "transcriptNoticeIcon"
             // A failure reads as the kit's danger banner, its turn end as the mock's
             // circle-x; the other notices keep their own symbol.
             name: notice.failed && !notice.lineOnly ? notice.recipe.icon : Kit.KetTheme.iconForLucide(notice.turnEnd ? (notice.status === "completed" ? "circle-check" : notice.failed ? "circle-x" : "circle-stop") : notice.subtype === "reconnecting" ? "refresh-cw" : notice.subtype === "compaction" ? "archive" : "info")
-            box: notice.recipe.iconSize
+            box: notice.turnEnd ? KetTheme.px(14, KetTheme.zoom) : notice.recipe.iconSize
             color: notice.failed ? (notice.lineOnly ? KetTheme.t.danger : notice.recipe.text) : notice.turnEnd && notice.status === "completed" ? KetTheme.t.success : KetTheme.t.textMuted
         }
         Text {
