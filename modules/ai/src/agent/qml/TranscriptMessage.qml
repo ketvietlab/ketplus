@@ -288,7 +288,7 @@ Item {
                 status: kind === "error" ? "failed" : messageDelegate.status
                 subtype: messageDelegate.subtype
                 actionText: kind === "error" && shell.retryableFailure && shell.retryableFailure.key === messageDelegate.messageKey ? "Retry" : ""
-                onActionTriggered: shell.retryFailedTurn()
+                onActionTriggered: shell.retryFailedTurn(messageDelegate.messageKey)
             }
             Loader {
                 active: messageDelegate.subtype === "heldAgentMessage"

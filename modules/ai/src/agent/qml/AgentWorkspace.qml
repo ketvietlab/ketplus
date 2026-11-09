@@ -1138,23 +1138,27 @@ Item {
         captureTranscriptWheelPosition()
     }
 
-    // The failed turn Retry sends again: the latest error after the last prompt, while the
-    // conversation is idle. A prompt with images or from another agent is not resent, since
-    // Retry could not send it as it was, and neither while the composer holds attachments,
-    // which a send would carry along.
-    readonly property var retryableFailure: {
+    // The failed turn Retry sends again: the latest turn, when it failed and the conversation
+    // is idle, with the prompt that opened it. Steers belong to that turn and are not its
+    // prompt. A prompt with images or from another agent is not resent, since Retry could not
+    // send it as it was, and neither while the composer holds attachments, which a send would
+    // carry along, nor while older history is shown instead of the latest turn.
+    function findRetryableFailure() {
         const model = agentHost.messageModel
-        if (!model || model.count < 0 || agentHost.sessionRunning || !agentHost.agentAvailable || agentHost.attachments.length > 0)
+        if (!model || agentHost.sessionRunning || !agentHost.agentAvailable || agentHost.attachments.length > 0 || agentHost.historyState.hasNewer)
             return null
         let errorKey = ""
         for (let i = model.sourceCount() - 1; i >= 0; --i) {
             const row = model.source(i)
+            // A turn that ended other than failed needs no retry, whatever errors it showed.
+            if (row.subtype === "turnEnd" && row.status !== "failed")
+                return null
             if (row.kind === "error") {
                 if (errorKey.length === 0)
                     errorKey = String(row.messageKey || "")
                 continue
             }
-            if (row.kind !== "user")
+            if (row.kind !== "user" || row.eventType === "turn.steered")
                 continue
             const text = String(row.body || "").trim()
             const resendable = text.length > 0 && (row.images || []).length === 0 && row.subtype !== "agentMessage"
@@ -1162,9 +1166,24 @@ Item {
         }
         return null
     }
-    function retryFailedTurn() {
-        const failure = retryableFailure
-        if (!failure)
+    // Row updates keep the count, so the source's changes drive the binding as well.
+    property int transcriptSourceRevision: 0
+    Connections {
+        target: agentHost.messageModel
+        function onDataChanged() { root.transcriptSourceRevision++ }
+        function onRowsInserted() { root.transcriptSourceRevision++ }
+        function onRowsRemoved() { root.transcriptSourceRevision++ }
+        function onModelReset() { root.transcriptSourceRevision++ }
+        function onCountChanged() { root.transcriptSourceRevision++ }
+    }
+    readonly property var retryableFailure: {
+        transcriptSourceRevision
+        return findRetryableFailure()
+    }
+    // Checked again when clicked: the shown banner may be a moment out of date.
+    function retryFailedTurn(key) {
+        const failure = findRetryableFailure()
+        if (!failure || failure.key !== key)
             return
         agentHost.submitConfiguredPrompt(failure.prompt, {model: selectedModel, effort: selectedEffort, permission: permission, provider: selectedProvider})
         revealLatestAfterSubmit()

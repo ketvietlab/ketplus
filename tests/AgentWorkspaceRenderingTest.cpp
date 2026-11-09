@@ -11,6 +11,7 @@
 #include "agent/TranscriptTableStyle.h"
 #include "ui/Theme.h"
 #include <QScopeGuard>
+#include <functional>
 
 #include <QAbstractItemModelTester>
 #include <QAbstractTextDocumentLayout>
@@ -2602,10 +2603,18 @@ void AgentWorkspaceViewTest::retryResendsTheLatestFailedPrompt() {
                               {"body", "No answer"}};
     view.resetMessages({prompt, failure}, "retry");
     auto* root = view.quickView()->rootObject();
-    const auto action = [&]() -> QQuickItem* {
-        auto* item = findVisualItem(root, "transcriptNoticeAction");
-        return item && item->isVisible() ? item : nullptr;
+    // Rebuilt transcripts may leave a hidden, pooled notice before the shown one.
+    std::function<QQuickItem*(QQuickItem*)> shownAction = [&](QQuickItem* item) -> QQuickItem* {
+        if (!item->isVisible())
+            return nullptr;
+        if (item->objectName() == QLatin1String("transcriptNoticeAction"))
+            return item;
+        for (auto* child : item->childItems())
+            if (auto* match = shownAction(child))
+                return match;
+        return nullptr;
     };
+    const auto action = [&] { return shownAction(root); };
     QQuickItem* retry = nullptr;
     QTRY_VERIFY((retry = action()));
     QCOMPARE(retry->property("text").toString(), QStringLiteral("Retry"));
@@ -2629,6 +2638,37 @@ void AgentWorkspaceViewTest::retryResendsTheLatestFailedPrompt() {
     QTRY_VERIFY(findVisualItem(root, "transcriptNoticeTitle"));
     QTest::qWait(50);
     QVERIFY(!action());
+    // An update that keeps the row count still counts: an image arriving on the prompt.
+    view.resetMessages({prompt, failure}, "retry");
+    QTRY_VERIFY(action());
+    view.updateMessage(0, withImage);
+    QTRY_VERIFY(!action());
+    // Not while older history is shown instead of the latest turn.
+    view.resetMessages({prompt, failure}, "retry");
+    QTRY_VERIFY(action());
+    view.setHistoryState({{"hasNewer", true}});
+    QTRY_VERIFY(!action());
+    view.setHistoryState({});
+    QTRY_VERIFY(action());
+    // A turn that completed despite an error needs no retry.
+    const QVariantMap completed{{"messageKey", "t1"},
+                                {"kind", "system"},
+                                {"subtype", "turnEnd"},
+                                {"status", "completed"},
+                                {"title", "Turn completed"}};
+    view.resetMessages({prompt, failure, completed}, "retry");
+    QTRY_VERIFY(findVisualItem(root, "transcriptNoticeTitle"));
+    QTest::qWait(50);
+    QVERIFY(!action());
+    // A steer belongs to the failed turn; Retry resends the prompt that opened it.
+    const QVariantMap steer{
+        {"messageKey", "s1"}, {"kind", "user"}, {"eventType", "turn.steered"}, {"body", "Also X"}};
+    view.resetMessages({prompt, steer, failure}, "retry");
+    QTRY_VERIFY((retry = action()));
+    sent.clear();
+    QVERIFY(QMetaObject::invokeMethod(retry, "clicked"));
+    QCOMPARE(sent.count(), 1);
+    QCOMPARE(sent.first().at(0).toString(), QStringLiteral("Profile it"));
 }
 
 void AgentWorkspaceViewTest::markdownTableAfterCodeKeepsHeaderCells() {
