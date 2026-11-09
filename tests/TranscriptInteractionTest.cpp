@@ -7,6 +7,8 @@
 #include <QAccessible>
 #include <QBuffer>
 #include <QClipboard>
+#include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QImage>
 #include <QJsonDocument>
@@ -202,6 +204,116 @@ void AgentWorkspaceViewTest::fileChangesStayCompactInsideExpandedGroup() {
     QVERIFY(QMetaObject::invokeMethod(rows.at(0), "toggleDetails"));
     QTRY_VERIFY(findVisualItem(rows.at(0), "transcriptActivityDetails")->isVisible());
     QVERIFY(!findVisualItem(rows.at(1), "transcriptActivityDetails")->isVisible());
+
+    // One edit of several files lists each file as its own step, as the mock does.
+    QTemporaryDir files;
+    QVERIFY(files.isValid());
+    const QString deep = QStringLiteral("src/a-rather-long-module-directory/with-nested-feature-"
+                                        "folders/and-one-more-level-of-depth");
+    QVERIFY(QDir(files.path()).mkpath(deep));
+    const QString edited = files.filePath(deep + "/Edited.cpp");
+    const QString created = files.filePath("src/New.h");
+    for (const auto& path : {edited, created}) {
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+    }
+    auto several = ketplus::agent_message::fileChangeMessage(
+        {{"id", "several"},
+         {"type", "fileChange"},
+         {"status", "completed"},
+         {"changes",
+          QJsonArray{QJsonObject{{"path", edited},
+                                 {"kind", QJsonObject{{"type", "update"}}},
+                                 {"diff", "@@ -1 +1,2 @@\n-a\n+b\n+c\n"}},
+                     QJsonObject{{"path", created}, {"kind", QJsonObject{{"type", "add"}}}},
+                     QJsonObject{{"path", files.filePath("src/Old.cpp")},
+                                 {"kind", QJsonObject{{"type", "delete"}}}}}}},
+        true);
+    several.insert("messageKey", "several");
+    several.insert("turnId", "edit-turn");
+    ketplus::AgentWorkspaceView listing;
+    listing.applyTheme(testPalette());
+    listing.resize(800, 700);
+    listing.show();
+    listing.resetMessages({edit("single", files.filePath("README.md")), several}, "several-edits");
+    auto* listed = listing.messageModel();
+    QTRY_COMPARE(listed->count(), 1);
+    listed->setGroupExpanded(listed->get(0).value("groupKey").toString(), true);
+    QTRY_COMPARE(listed->count(), 2);
+    root = listing.quickView()->rootObject();
+    QList<QQuickItem*> steps;
+    const auto collectSteps = [&](const auto& self, QQuickItem* item) -> void {
+        if (!item->isVisible())
+            return;
+        if (item->objectName() == "transcriptFileStep")
+            steps.append(item);
+        for (auto* child : item->childItems())
+            self(self, child);
+    };
+    QTRY_VERIFY(([&] {
+        steps.clear();
+        collectSteps(collectSteps, root);
+        return steps.size() == 3;
+    })());
+    // The single-file edit keeps its one header line.
+    QVERIFY(findVisualItem(root, "transcriptActivityHeader"));
+    QCOMPARE(steps.at(0)->property("text").toString(), QStringLiteral("Edited"));
+    QVERIFY(steps.at(0)->property("detail").toString().contains("Edited.cpp"));
+    QVERIFY(steps.at(0)->property("detail").toString().contains("+2 −1"));
+    QCOMPARE(steps.at(1)->property("text").toString(), QStringLiteral("Created"));
+    QCOMPARE(steps.at(2)->property("text").toString(), QStringLiteral("Deleted"));
+    QCOMPARE(steps.at(2)->property("iconName").toString(), QStringLiteral("trash"));
+    QTRY_VERIFY(steps.at(2)->property("missing").toBool());
+    QVERIFY(!steps.at(0)->property("missing").toBool());
+
+    // A long path elides inside its step instead of running past it.
+    auto* detail = findVisualItem(steps.at(0), "transcriptFileStepDetail");
+    QVERIFY(detail);
+    QCOMPARE(detail->property("text").toString(), steps.at(0)->property("detail").toString());
+    QVERIFY(detail->property("truncated").toBool());
+    QVERIFY(detail->mapToItem(steps.at(0), QPointF(detail->width(), 0)).x() <=
+            steps.at(0)->width());
+
+    QSignalSpy diffs(&listing, &ketplus::AgentWorkspaceView::fileDiffRequested);
+    QVERIFY(QMetaObject::invokeMethod(steps.at(0), "clicked"));
+    QCOMPARE(diffs.size(), 1);
+
+    // Each step keeps the card's file actions; a missing file can still be copied.
+    const auto menuOf = [&](QQuickItem* fileStep) {
+        QTest::mouseClick(listing.quickView(), Qt::RightButton, Qt::NoModifier,
+                          fileStep->mapToScene(QPointF(30, fileStep->height() / 2)).toPoint());
+        auto* menu = fileStep->findChild<QObject*>("changedFileContextMenu");
+        return menu;
+    };
+    auto* deletedMenu = menuOf(steps.at(2));
+    QVERIFY(deletedMenu);
+    QTRY_VERIFY(deletedMenu->property("visible").toBool());
+    auto* copyAction = deletedMenu->findChild<QObject*>("copyChangedFilePathAction");
+    QVERIFY(copyAction && copyAction->property("enabled").toBool());
+    QVERIFY(
+        !deletedMenu->findChild<QObject*>("revealChangedFileAction")->property("enabled").toBool());
+    QVERIFY(
+        !deletedMenu->findChild<QObject*>("openChangedFileAction")->property("enabled").toBool());
+    QGuiApplication::clipboard()->clear();
+    QVERIFY(QMetaObject::invokeMethod(copyAction, "triggered"));
+    QVERIFY(QGuiApplication::clipboard()->text().endsWith(QStringLiteral("/src/Old.cpp")));
+    QMetaObject::invokeMethod(deletedMenu, "close");
+    QTRY_VERIFY(!deletedMenu->property("visible").toBool());
+    QCOMPARE(diffs.size(), 1);
+
+    auto* editedMenu = menuOf(steps.at(0));
+    QVERIFY(editedMenu);
+    QTRY_VERIFY(editedMenu->property("visible").toBool());
+    QVERIFY(
+        editedMenu->findChild<QObject*>("revealChangedFileAction")->property("enabled").toBool());
+    auto* openAction = editedMenu->findChild<QObject*>("openChangedFileAction");
+    QVERIFY(openAction->property("enabled").toBool());
+    QSignalSpy openedFile(&listing, &ketplus::AgentWorkspaceView::fileOpenRequested);
+    QVERIFY(QMetaObject::invokeMethod(openAction, "triggered"));
+    QCOMPARE(openedFile.count(), 1);
+    QMetaObject::invokeMethod(editedMenu, "close");
+    // The right button opens the menu, not the diff.
+    QCOMPARE(diffs.size(), 1);
 }
 
 void AgentWorkspaceViewTest::browserStepsCollapseAroundEvidence() {
