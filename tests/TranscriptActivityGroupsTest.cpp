@@ -1,5 +1,6 @@
 #include "agent/TranscriptActivityGroups.h"
 #include "agent/AgentMessageFormatter.h"
+#include "agent/AgentMessageModel.h"
 #include "agent/DaemonTranscriptProjection.h"
 #include "agent/TranscriptTurnFiles.h"
 
@@ -324,7 +325,7 @@ class TranscriptActivityGroupsTest final : public QObject {
     void toolServersImagesAndWaitsCollapseIntoTheGroup() {
         const auto served = [](const QString& key, const QString& subtype, const QString& server) {
             auto row = activity(key, subtype);
-            row.insert("details", QVariantMap{{"server", server}});
+            row.insert("activityFacts", QVariantMap{{"server", server}});
             return row;
         };
         QList<QVariantMap> rows{served("b1", "ketplusBrowser", "ketplus_browser"),
@@ -348,9 +349,7 @@ class TranscriptActivityGroupsTest final : public QObject {
         // "Thought, explored 4 files, listed 1 folder" and "Searched the web, loaded tools, used
         // a skill": reads explore, Codex listings list folders, and text-only steps group.
         auto listing = activity("l1", "fileSearch");
-        listing.insert("details",
-                       QVariantMap{{"actions", QVariantList{QVariantMap{{"type", "listFiles"},
-                                                                        {"path", "src"}}}}});
+        listing.insert("activityFacts", QVariantMap{{"listedFolders", 1}});
         QList<QVariantMap> rows{
             activity("r1", "fileRead"),  activity("r2", "fileRead"), listing,
             activity("w1", "webSearch"), activity("f1", "webFetch"), activity("t1", "toolsLoaded"),
@@ -371,6 +370,46 @@ class TranscriptActivityGroupsTest final : public QObject {
                      .value("groupSummary")
                      .toString(),
                  QStringLiteral("Explored 4 files, listed 2 folders, used a skill"));
+    }
+
+    void summaryFactsSurviveTheProjectionAndTheModel() {
+        // Rows reach the grouping after the projection and the model moved details out; the
+        // server, the agents and the listing must still read in the group line.
+        const auto completed = [](qint64 cursor, const QJsonObject& item) {
+            return QJsonObject{
+                {"cursor", cursor},
+                {"turn_sequence", 1},
+                {"event_type", "item.completed"},
+                {"payload", QJsonObject{{"item_id", item.value("id")}, {"item", item}}}};
+        };
+        const QJsonArray events{
+            completed(1, {{"id", "repl"},
+                          {"type", "mcpToolCall"},
+                          {"server", "node_repl"},
+                          {"tool", "js"},
+                          {"status", "completed"}}),
+            completed(2, {{"id", "spawn"},
+                          {"type", "collabAgentToolCall"},
+                          {"tool", "spawnAgent"},
+                          {"receiverThreadIds", QJsonArray{"agent-1"}},
+                          {"status", "completed"}}),
+            completed(3, {{"id", "wait"},
+                          {"type", "collabAgentToolCall"},
+                          {"tool", "wait"},
+                          {"receiverThreadIds", QJsonArray{"agent-1"}},
+                          {"status", "completed"}}),
+            completed(4, {{"id", "ls"},
+                          {"type", "commandExecution"},
+                          {"command", "ls src"},
+                          {"exitCode", 0},
+                          {"status", "completed"},
+                          {"commandActions",
+                           QJsonArray{QJsonObject{{"type", "listFiles"}, {"path", "src"}}}}})};
+        ketplus::AgentMessageModel model;
+        model.reset(daemonWindowMessages({{"events", events}}));
+        QCOMPARE(model.get(0).value("groupSize").toInt(), 4);
+        QCOMPARE(model.get(0).value("groupSummary").toString(),
+                 QStringLiteral("Used node_repl, used a subagent, listed 1 folder"));
     }
 
     void thoughtsCollapseWithTheirSteps() {

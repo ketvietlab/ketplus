@@ -572,10 +572,20 @@ QVariantMap commandMessage(const QJsonObject& item, const bool completed) {
     // What the agent said the command is for, read before the command itself.
     entry.insert(QStringLiteral("commandDescription"),
                  sanitizedText(item.value(QStringLiteral("description")).toString().simplified()));
-    if (item.value(QStringLiteral("commandActions")).isArray())
-        details.insert(
-            QStringLiteral("actions"),
-            sanitizedJson(item.value(QStringLiteral("commandActions"))).toArray().toVariantList());
+    if (item.value(QStringLiteral("commandActions")).isArray()) {
+        const QJsonArray actions = item.value(QStringLiteral("commandActions")).toArray();
+        details.insert(QStringLiteral("actions"), sanitizedJson(actions).toArray().toVariantList());
+        // A listing's folders, for the group line's "listed 1 folder".
+        const bool listing =
+            !actions.isEmpty() &&
+            std::all_of(actions.begin(), actions.end(), [](const QJsonValue& action) {
+                return action.toObject().value(QStringLiteral("type")).toString() ==
+                       QStringLiteral("listFiles");
+            });
+        if (listing)
+            entry.insert(QStringLiteral("activityFacts"),
+                         QVariantMap{{QStringLiteral("listedFolders"), int(actions.size())}});
+    }
     entry.insert(QStringLiteral("exitCode"), item.value(QStringLiteral("exitCode")).toVariant());
     entry.insert(QStringLiteral("durationMs"),
                  item.value(QStringLiteral("durationMs")).toVariant());
@@ -754,8 +764,10 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
         entry.insert(QStringLiteral("subtype"), subtype);
         // The MCP server, for the group line's "Used node_repl, ketplus_agents".
         if (type == QStringLiteral("mcpToolCall"))
-            entry.insert(QStringLiteral("server"),
-                         sanitizedText(item.value(QStringLiteral("server")).toString()));
+            entry.insert(
+                QStringLiteral("activityFacts"),
+                QVariantMap{{QStringLiteral("server"),
+                             sanitizedText(item.value(QStringLiteral("server")).toString())}});
         entry.insert(QStringLiteral("running"), !completed);
         entry.insert(QStringLiteral("fileLocation"), readLocation);
         entry.insert(QStringLiteral("details"), safePayload.toObject().toVariantMap());
@@ -802,6 +814,12 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
         entry.insert(QStringLiteral("subtype"), collaborationCall ? QStringLiteral("collaboration")
                                                                   : QStringLiteral("subAgent"));
         entry.insert(QStringLiteral("running"), !completed);
+        // The agents it addressed, so the group line counts each subagent once.
+        QVariantList receivers;
+        for (const QJsonValue& receiver : item.value(QStringLiteral("receiverThreadIds")).toArray())
+            receivers.append(sanitizedText(receiver.toString()));
+        entry.insert(QStringLiteral("activityFacts"),
+                     QVariantMap{{QStringLiteral("receivers"), receivers}});
         entry.insert(QStringLiteral("details"), sanitizedJson(item).toObject().toVariantMap());
         entry.insert(QStringLiteral("sanitizedPayload"),
                      sanitizedJson(item).toObject().toVariantMap());

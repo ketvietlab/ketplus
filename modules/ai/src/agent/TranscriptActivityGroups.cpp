@@ -107,6 +107,7 @@ QString activityGroupSummary(const QList<QVariantMap>& rows, const qsizetype fir
     for (qsizetype index = first; index < first + count && index < rows.size(); ++index) {
         const QVariantMap& row = rows.at(index);
         const QString subtype = row.value(QStringLiteral("subtype")).toString();
+        const QVariantMap facts = row.value(QStringLiteral("activityFacts")).toMap();
         if (row.value(QStringLiteral("status")).toString() == QStringLiteral("failed"))
             ++tally.failed;
         if (subtype == QStringLiteral("command")) {
@@ -132,29 +133,15 @@ QString activityGroupSummary(const QList<QVariantMap>& rows, const qsizetype fir
             tally.add(QStringLiteral("codeSearch"), 1);
         } else if (subtype == QStringLiteral("fileSearch")) {
             // Codex's listFiles actions read as the mock's "listed 1 folder".
-            const QVariantList actions = row.value(QStringLiteral("details"))
-                                             .toMap()
-                                             .value(QStringLiteral("actions"))
-                                             .toList();
-            const bool listing =
-                !actions.isEmpty() &&
-                std::all_of(actions.cbegin(), actions.cend(), [](const QVariant& action) {
-                    return action.toMap().value(QStringLiteral("type")).toString() ==
-                           QStringLiteral("listFiles");
-                });
-            if (listing)
-                tally.add(QStringLiteral("list"), int(actions.size()));
+            const int folders = facts.value(QStringLiteral("listedFolders")).toInt();
+            if (folders > 0)
+                tally.add(QStringLiteral("list"), folders);
             else
                 tally.add(QStringLiteral("fileSearch"), 1);
         } else if (subtype.startsWith(QStringLiteral("browser")) ||
                    subtype == QStringLiteral("ketplusBrowser") ||
                    subtype == QStringLiteral("integration")) {
-            QString server = row.value(QStringLiteral("server")).toString();
-            if (server.isEmpty())
-                server = row.value(QStringLiteral("details"))
-                             .toMap()
-                             .value(QStringLiteral("server"))
-                             .toString();
+            QString server = facts.value(QStringLiteral("server")).toString();
             // KetPlus's own browser always goes by its server's name, as in the mock.
             if (subtype == QStringLiteral("ketplusBrowser"))
                 server = QStringLiteral("ketplus_browser");
@@ -164,10 +151,7 @@ QString activityGroupSummary(const QList<QVariantMap>& rows, const qsizetype fir
         } else if (subtype == QStringLiteral("collaboration") ||
                    subtype == QStringLiteral("subAgent")) {
             tally.add(QStringLiteral("subagent"), 1);
-            const QVariantList receivers = row.value(QStringLiteral("details"))
-                                               .toMap()
-                                               .value(QStringLiteral("receiverThreadIds"))
-                                               .toList();
+            const QVariantList receivers = facts.value(QStringLiteral("receivers")).toList();
             for (const QVariant& receiver : receivers) {
                 if (!receiver.toString().isEmpty())
                     subagents.insert(receiver.toString());
