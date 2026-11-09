@@ -93,7 +93,7 @@ bool drainAcknowledged(LocalJournal& journal, Database& database) {
 }
 
 bool seed(LocalJournal& journal, const QString& path, bool acknowledge = true, int turns = 24,
-          const QString& output = {}, bool largeTool = false) {
+          const QString& output = {}, bool largeTool = false, bool generatedImage = false) {
     StoredSession session;
     session.id = "session";
     session.worktreePath = "synthetic";
@@ -137,7 +137,19 @@ bool seed(LocalJournal& journal, const QString& path, bool acknowledge = true, i
                     {"tool", "large-result"},
                     {"result", QJsonObject{{"content", content}}}};
         }
-        if (!append("item.started", {{"item", item}}) ||
+        QJsonObject started = item;
+        if (generatedImage) {
+            // Older Codex builds journaled the generated PNG inline as base64.
+            started = {{"id", QString("item-%1").arg(turn)},
+                       {"type", "imageGeneration"},
+                       {"status", "inProgress"}};
+            item = started;
+            item.insert("status", "completed");
+            item.insert("revisedPrompt", QString("kite-%1").arg(turn));
+            item.insert("savedPath", QString("/synthetic/kite-%1.png").arg(turn));
+            item.insert("result", output);
+        }
+        if (!append("item.started", {{"item", started}}) ||
             !append("item.completed", {{"item", item}}) || !append("turn.completed", {}))
             return false;
     }
@@ -270,6 +282,58 @@ class JournalUsageRetentionTest final : public QObject {
                 << "16-row retention pass ms" << elapsed << plan;
         QVERIFY2(elapsed < 1000, "Retention stalled on same-item replay backlog");
     }
+    void generatedImagesLoseTheirPixelsOnePerPass() {
+        QTemporaryDir directory;
+        const auto path = directory.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        // Above the shared 1 MiB lane, as a legacy inline PNG of about 1.1 MB would be.
+        QVERIFY(seed(journal, path, true, 24, QString(1500 * 1024, 'A'), false, true));
+        Database database(path);
+        const auto payloads = database.scalar("SELECT count(*) FROM large_event_payloads");
+        QCOMPARE(payloads, 24);
+        const auto before = allReplay(journal);
+        QVERIFY(journal.pruneReplayDetails(cutoff(), 256).has_value());
+        QCOMPARE(database.scalar("SELECT count(*) FROM large_event_payloads"), payloads - 1);
+        QVERIFY(sweep(journal) > 0);
+        // Only the four turns older than the latest twenty lose their pixels.
+        QCOMPARE(database.scalar("SELECT count(*) FROM large_event_payloads"), payloads - 4);
+        QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE json_extract("
+                                 "payload,'$.item.compacted.policy')='image-pixels-v1'"),
+                 4);
+        const auto after = allReplay(journal);
+        for (const auto& value : after) {
+            const auto event = value.toObject();
+            const auto turn = event.value("turn_sequence").toInteger();
+            if (event.value("event_type") != "item.completed")
+                continue;
+            const auto item = event.value("payload").toObject().value("item").toObject();
+            if (turn > 4) {
+                QVERIFY(before.contains(value));
+                continue;
+            }
+            QVERIFY(!item.contains("result"));
+            QCOMPARE(item.value("revisedPrompt").toString(), QString("kite-%1").arg(turn));
+            QCOMPARE(item.value("savedPath").toString(),
+                     QString("/synthetic/kite-%1.png").arg(turn));
+            QCOMPARE(item.value("status").toString(), QString("completed"));
+        }
+        // Rows only change; none go, apart from the intermediate usage samples.
+        QCOMPARE(withoutUsage(after).size(), withoutUsage(before).size());
+    }
+
+    void generatedImagesWaitForAcknowledgement() {
+        QTemporaryDir directory;
+        const auto path = directory.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(seed(journal, path, false, 24, QString(1500 * 1024, 'A'), false, true));
+        Database database(path);
+        QVERIFY(sweep(journal) >= 0);
+        QCOMPARE(database.scalar("SELECT count(*) FROM large_event_payloads"), 24);
+        QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE json_extract("
+                                 "payload,'$.item.compacted.policy')='image-pixels-v1'"),
+                 0);
+    }
+
     void boundedLargePayloadsCompactAtomically_data() {
         QTest::addColumn<bool>("revisionFailure");
         QTest::newRow("blob-delete") << false;

@@ -111,10 +111,11 @@ std::optional<QByteArray> boundedLargePayload(const QSqlDatabase& database, cons
     chunks.prepare(
         "SELECT chunk_offset,CASE WHEN length(CAST(payload AS BLOB))<=131072 "
         "THEN CAST(payload AS BLOB) ELSE NULL END FROM large_event_payload_chunks "
-        "WHERE session_id=? AND generation=? AND transfer_id=? ORDER BY chunk_offset LIMIT 9");
+        "WHERE session_id=? AND generation=? AND transfer_id=? ORDER BY chunk_offset LIMIT ?");
     chunks.addBindValue(session);
     chunks.addBindValue(generation);
     chunks.addBindValue(ref.value("transfer_id").toString());
+    chunks.addBindValue(ref.value("chunk_count").toInteger() + 1); // one extra detects surplus
     if (!chunks.exec()) {
         *error = chunks.lastError().text();
         return std::nullopt;
@@ -141,6 +142,9 @@ std::optional<QByteArray> boundedLargePayload(const QSqlDatabase& database, cons
         return std::nullopt;
     return bytes;
 }
+
+// A generated image is read whole to drop its inline pixels; larger ones stay.
+constexpr qint64 maximumImagePayloadBytes = 16 * 1024 * 1024;
 
 struct Row {
     qint64 rowid;
@@ -224,6 +228,17 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
         "e.generation=r.generation) "
         "AND json_extract(r.payload,'$.item_type') IN "
         "('commandExecution','mcpToolCall','dynamicToolCall','reasoning','fileChange')");
+    // Generated images are larger than the shared lane allows: one per pass, read whole.
+    QSqlQuery imageCandidate(database_);
+    imageCandidate.prepare(
+        "SELECT r.payload,p.total_bytes FROM replay_events r JOIN large_event_payloads p ON "
+        "p.session_id=r.session_id AND p.generation=r.generation AND p.item_id=r.item_id AND "
+        "p.transfer_id=json_extract(r.payload,'$.large_event.transfer_id') WHERE " +
+        turnEligible +
+        "AND p.total_bytes>0 AND p.total_bytes<=? AND length(CAST(r.payload AS BLOB))<=16384 "
+        "AND NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id=r.session_id AND "
+        "e.generation=r.generation) "
+        "AND json_extract(r.payload,'$.item_type')='imageGeneration'");
     QSqlQuery remove(database_);
     remove.prepare(
         QStringLiteral("DELETE FROM replay_events AS r WHERE ") + eligible +
@@ -238,7 +253,8 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
         QStringLiteral(
             "AND length(CAST(r.payload AS BLOB)) <= 1048576 "
             "AND json_extract(r.payload,'$.item.type') IN "
-            "('commandExecution','mcpToolCall','dynamicToolCall','reasoning','fileChange') "
+            "('commandExecution','mcpToolCall','dynamicToolCall','reasoning','fileChange',"
+            "'imageGeneration') "
             "AND (json_type(r.payload,'$.item.compacted') IS NULL OR "
             "(json_extract(r.payload,'$.item.compacted.policy')='tool-result-text-v1' "
             "AND json_type(r.payload,'$.item.compacted.arguments') IS NULL "
@@ -273,6 +289,7 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
     QSqlQuery update(database_);
     update.prepare(QStringLiteral("UPDATE replay_events SET payload = ? WHERE rowid = ?"));
     qint64 parsedBytes = 0;
+    bool imageRead = false;
     qsizetype processed = 0;
     QSet<QPair<QString, qint64>> changed;
     qint64 removed = 0;
@@ -315,6 +332,7 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
                 return fail(candidate.lastError().text());
             QByteArray bytes;
             QString transfer;
+            bool imageBytes = false; // counted against the per-pass image allowance instead
             if (candidate.next()) {
                 bytes = candidate.value(0).toByteArray();
                 candidate.finish();
@@ -326,21 +344,40 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
                 largeCandidate.bindValue(1, olderThan.toUTC().toString(Qt::ISODateWithMs));
                 if (!largeCandidate.exec())
                     return fail(largeCandidate.lastError().text());
+                QSqlQuery* lane = &largeCandidate;
                 if (!largeCandidate.next()) {
                     if (largeCandidate.lastError().isValid())
                         return fail(largeCandidate.lastError().text());
                     largeCandidate.finish();
-                    continue;
+                    imageCandidate.bindValue(0, row.rowid);
+                    imageCandidate.bindValue(1, olderThan.toUTC().toString(Qt::ISODateWithMs));
+                    imageCandidate.bindValue(2, maximumImagePayloadBytes);
+                    if (!imageCandidate.exec())
+                        return fail(imageCandidate.lastError().text());
+                    if (!imageCandidate.next()) {
+                        if (imageCandidate.lastError().isValid())
+                            return fail(imageCandidate.lastError().text());
+                        imageCandidate.finish();
+                        continue;
+                    }
+                    lane = &imageCandidate;
                 }
-                const auto manifestBytes = largeCandidate.value(0).toByteArray();
-                const auto total = largeCandidate.value(1).toLongLong();
-                largeCandidate.finish();
+                const bool image = lane == &imageCandidate;
+                const auto manifestBytes = lane->value(0).toByteArray();
+                const auto total = lane->value(1).toLongLong();
+                lane->finish();
                 const auto cost = manifestBytes.size() + total;
-                if (cost > 1024 * 1024)
-                    continue; // never stall on an individually oversized item
-                if (parsedBytes + cost > 1024 * 1024)
-                    break;
-                parsedBytes += manifestBytes.size();
+                if (image) {
+                    if (imageRead)
+                        break; // the next pass takes it
+                    imageRead = true;
+                } else {
+                    if (cost > 1024 * 1024)
+                        continue; // never stall on an individually oversized item
+                    if (parsedBytes + cost > 1024 * 1024)
+                        break;
+                    parsedBytes += manifestBytes.size();
+                }
                 const auto manifest = QJsonDocument::fromJson(manifestBytes).object();
                 QString readError;
                 const auto hydrated = boundedLargePayload(database_, row.session, row.generation,
@@ -348,15 +385,19 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
                 if (!readError.isEmpty())
                     return fail(readError);
                 if (!hydrated) {
-                    parsedBytes += total;
+                    if (!image)
+                        parsedBytes += total;
                     continue;
                 }
                 bytes = *hydrated;
                 transfer = manifest.value("large_event").toObject().value("transfer_id").toString();
+                imageBytes = image;
             }
-            if (parsedBytes + bytes.size() > 1024 * 1024)
-                break; // leave this candidate for the next batch
-            parsedBytes += bytes.size();
+            if (!imageBytes) {
+                if (parsedBytes + bytes.size() > 1024 * 1024)
+                    break; // leave this candidate for the next batch
+                parsedBytes += bytes.size();
+            }
             auto payload = QJsonDocument::fromJson(bytes).object();
             const auto item = compactCompletedReplayItem(
                 payload.value(QStringLiteral("item")).toObject(), olderThan);

@@ -507,6 +507,35 @@ class ReplayDetailCompactorTest final : public QObject {
         QVERIFY(!compactCompletedReplayItem(tool(), {}));
         QVERIFY(!compactCompletedReplayItem(tool(), QDateTime::currentDateTimeUtc().addDays(1)));
     }
+    void generatedImageLosesOnlyItsInlinePixels() {
+        const QJsonObject legacy{{"id", "image-1"},
+                                 {"type", "imageGeneration"},
+                                 {"status", "completed"},
+                                 {"revisedPrompt", "a red kite over the sea"},
+                                 {"savedPath", "/synthetic/kite.png"},
+                                 {"result", QString(4096, 'A')}};
+        const auto item = compactCompletedReplayItem(legacy, cutoff());
+        QVERIFY(item);
+        QVERIFY(!item->contains("result"));
+        for (const char* kept : {"id", "type", "status", "revisedPrompt", "savedPath"})
+            QCOMPARE(item->value(kept), legacy.value(kept));
+        const auto marker = item->value("compacted").toObject();
+        QCOMPARE(marker.value("policy").toString(), QString("image-pixels-v1"));
+        QCOMPARE(marker.value("original_bytes").toInteger(), 4096);
+        QCOMPARE(marker.value("retained_bytes").toInteger(), 0);
+        // Idempotent, and nothing else is touched.
+        QVERIFY(!compactCompletedReplayItem(*item, cutoff()));
+        auto referenced = legacy;
+        referenced.insert("result",
+                          QJsonObject{{"content", QJsonArray{QJsonObject{{"type", "image"},
+                                                                         {"media_ref", "m"}}}}});
+        QVERIFY(!compactCompletedReplayItem(referenced, cutoff()));
+        auto noPixels = legacy;
+        noPixels.remove("result");
+        QVERIFY(!compactCompletedReplayItem(noPixels, cutoff()));
+        QVERIFY(!compactCompletedReplayItem(legacy, QDateTime()));
+        QVERIFY(!compactCompletedReplayItem(legacy, QDateTime::currentDateTimeUtc().addDays(1)));
+    }
 };
 QTEST_GUILESS_MAIN(ReplayDetailCompactorTest)
 #include "ReplayDetailCompactorTest.moc"
