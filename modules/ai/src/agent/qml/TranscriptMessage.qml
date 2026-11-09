@@ -317,8 +317,10 @@ Item {
                 message: messageDelegate.displayBody
                 status: kind === "error" ? "failed" : messageDelegate.status
                 subtype: messageDelegate.subtype
-                actionText: kind === "error" && shell.retryableFailure && shell.retryableFailure.key === messageDelegate.messageKey ? "Retry" : ""
-                onActionTriggered: shell.retryFailedTurn(messageDelegate.messageKey)
+                // As in the mock, a model at capacity offers another model instead of the same one.
+                readonly property bool capacity: messageDelegate.subtype === "modelCapacity"
+                actionText: kind === "error" && shell.retryableFailure && shell.retryableFailure.key === messageDelegate.messageKey ? (capacity ? "Switch model" : "Retry") : ""
+                onActionTriggered: capacity ? shell.openModelPicker() : shell.retryFailedTurn(messageDelegate.messageKey)
             }
             Loader {
                 active: messageDelegate.subtype === "heldAgentMessage"
