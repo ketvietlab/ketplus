@@ -2,6 +2,7 @@
 #include "storage/LocalJournal.h"
 #include "storage/ReplayDetailCompactor.h"
 #include <QCryptographicHash>
+#include <QDateTime>
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -416,5 +417,49 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
     else
         detailRetentionScanRow_ = rows.size() < maximumRows ? 0 : rows.last().rowid;
     return removed;
+}
+QJsonObject LocalJournal::turnDetailTrimmed(const QString& sessionId, qint64 generation,
+                                            qint64 turnSequence) const {
+    // Read from the compaction markers retention left on the turn's completions, so the count
+    // always matches what the replay still holds.
+    QSqlQuery query(database_);
+    query.prepare(QStringLiteral(
+        "SELECT json_extract(payload,'$.item.type'),"
+        "json_extract(payload,'$.item.compacted.original_bytes'),"
+        "json_extract(payload,'$.item.compacted.retained_bytes'),"
+        "json_extract(payload,'$.item.compacted.at'),json_extract(payload,'$.item.compacted.cutoff'"
+        ") "
+        "FROM replay_events WHERE session_id=? AND generation=? AND turn_sequence=? AND "
+        "event_type='item.completed' AND json_type(payload,'$.item.compacted')='object'"));
+    query.addBindValue(sessionId);
+    query.addBindValue(generation);
+    query.addBindValue(turnSequence);
+    if (!query.exec())
+        return {};
+    int commands = 0, diffs = 0, tools = 0, thoughts = 0;
+    qint64 bytes = 0, days = 0;
+    while (query.next()) {
+        const auto type = query.value(0).toString();
+        commands += type == QStringLiteral("commandExecution");
+        diffs += type == QStringLiteral("fileChange");
+        tools += type == QStringLiteral("mcpToolCall") || type == QStringLiteral("dynamicToolCall");
+        thoughts += type == QStringLiteral("reasoning");
+        bytes += qMax<qint64>(0, query.value(1).toLongLong() - query.value(2).toLongLong());
+        // The retention age in force: the cutoff is that many days before the compaction.
+        const auto at = QDateTime::fromString(query.value(3).toString(), Qt::ISODateWithMs);
+        const auto cutoff = QDateTime::fromString(query.value(4).toString(), Qt::ISODateWithMs);
+        if (days == 0 && at.isValid() && cutoff.isValid() && cutoff < at)
+            days = qRound64(double(cutoff.secsTo(at)) / 86400.0);
+    }
+    if (commands + diffs + tools + thoughts == 0)
+        return {};
+    QJsonObject trimmed{{"commands", commands},
+                        {"diffs", diffs},
+                        {"tool_results", tools},
+                        {"thoughts", thoughts},
+                        {"bytes", bytes}};
+    if (days > 0)
+        trimmed.insert("older_than_days", days);
+    return trimmed;
 }
 } // namespace ketplus::daemon

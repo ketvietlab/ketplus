@@ -365,7 +365,7 @@ void MainWindow::ensureAgentWorkspace() {
     connect(agentWorkspace_, &AgentWorkspaceView::tagFilterRequested, activityBar_,
             &ActivityBar::setTagFilter);
     connect(agentWorkspace_, &AgentWorkspaceView::settingsRequested, this,
-            &MainWindow::showSettings);
+            &MainWindow::showSettingsSection);
     connect(agentWorkspace_, &AgentWorkspaceView::productNavigationRequested, this,
             [this](const QString& destination) {
                 if (destination == QStringLiteral("search"))

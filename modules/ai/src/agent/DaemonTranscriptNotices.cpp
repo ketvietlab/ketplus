@@ -11,6 +11,42 @@ QString providerName(const QString& provider) {
         return QStringLiteral("another provider");
     return provider.left(1).toUpper() + provider.mid(1);
 }
+// What retention reduced in a turn, as the mock's note: "This turn is older than 30 days:
+// 38 commands and 12 tool results were reduced to their summaries (1.2 MB)."
+QString trimmedDetailText(const QJsonObject& trimmed) {
+    QStringList kinds;
+    qint64 total = 0;
+    const auto count = [&](const char* key, const char* one, const char* many) {
+        const auto value = trimmed.value(QLatin1String(key)).toInteger();
+        if (value <= 0)
+            return;
+        total += value;
+        kinds.append(value == 1 ? QStringLiteral("1 ") + QLatin1String(one)
+                                : QStringLiteral("%1 ").arg(value) + QLatin1String(many));
+    };
+    count("commands", "command", "commands");
+    count("diffs", "file diff", "file diffs");
+    count("tool_results", "tool result", "tool results");
+    count("thoughts", "thought", "thoughts");
+    if (kinds.isEmpty())
+        return {};
+    QString list = kinds.takeLast();
+    if (!kinds.isEmpty())
+        list = kinds.join(QStringLiteral(", ")) + QStringLiteral(" and ") + list;
+    const auto days = trimmed.value("older_than_days").toInteger();
+    QString text = days > 0 ? QStringLiteral("This turn is older than %1 %2: ")
+                                  .arg(days)
+                                  .arg(days == 1 ? QStringLiteral("day") : QStringLiteral("days"))
+                            : QStringLiteral("To save space, ");
+    text += list + (total == 1 ? QStringLiteral(" was reduced to its summary")
+                               : QStringLiteral(" were reduced to their summaries"));
+    const auto bytes = trimmed.value("bytes").toInteger();
+    if (bytes >= 1024 * 1024)
+        text += QStringLiteral(" (%1 MB)").arg(double(bytes) / (1024 * 1024), 0, 'f', 1);
+    else if (bytes >= 1024)
+        text += QStringLiteral(" (%1 KB)").arg((bytes + 512) / 1024);
+    return text + QLatin1Char('.');
+}
 } // namespace
 
 QString sessionEstimateText(const QJsonObject& usage) {
@@ -57,7 +93,7 @@ QString turnEndText(const TurnFacts& turn, const QJsonObject& usage) {
 }
 QVariantMap daemonEventNotice(const QString& type, const QJsonObject& data, const QString& itemId,
                               const QJsonObject& usage, const TurnFacts& turn) {
-    QString title, detail, subtype = "event";
+    QString title, detail, trimmed, subtype = "event";
     QString status = "completed";
     // As the mock words its events (TranscriptFixtures.qml).
     if (type == "session.provider_changed") {
@@ -111,6 +147,7 @@ QVariantMap daemonEventNotice(const QString& type, const QJsonObject& data, cons
         else
             return {}; // Do not invent success for an unknown provider state.
         detail = turnEndText(turn, usage);
+        trimmed = trimmedDetailText(data.value("detail_trimmed").toObject());
     } else if (type == "runtime.error" &&
                (data.value("will_retry").toBool() || data.value("willRetry").toBool())) {
         title = "Reconnecting";
@@ -123,6 +160,8 @@ QVariantMap daemonEventNotice(const QString& type, const QJsonObject& data, cons
     entry.insert("subtype", subtype);
     entry.insert("eventType", type);
     entry.insert("status", status);
+    if (!trimmed.isEmpty())
+        entry.insert("trimmedDetail", trimmed);
     return entry;
 }
 } // namespace ketplus::agent_message

@@ -766,6 +766,38 @@ class JournalUsageRetentionTest final : public QObject {
         QCOMPARE(withoutUsage(allReplay(journal)), before);
     }
 
+    void turnEndSaysWhatRetentionTrimmed() {
+        QTemporaryDir directory;
+        const QString path = directory.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(seed(journal, path, true, 24, QString(50000, QLatin1Char('x'))));
+        const auto turnEnd = [&journal](qint64 turn) {
+            for (const auto& value : allReplay(journal)) {
+                const auto event = value.toObject();
+                if (event.value("event_type") == "turn.completed" &&
+                    event.value("turn_sequence").toInteger() == turn)
+                    return journal.activitySummaryEvent(event)
+                        .value("payload")
+                        .toObject()
+                        .value("detail_trimmed")
+                        .toObject();
+            }
+            return QJsonObject{};
+        };
+        // Nothing is trimmed yet, so no turn claims it was.
+        QVERIFY(turnEnd(1).isEmpty());
+        QVERIFY(sweep(journal) > 0);
+        const auto trimmed = turnEnd(1);
+        QCOMPARE(trimmed.value("commands").toInt(), 1);
+        QCOMPARE(trimmed.value("diffs").toInt(), 0);
+        QCOMPARE(trimmed.value("tool_results").toInt(), 0);
+        // Retention keeps the output's first 4 KB and last 16 KB.
+        QCOMPARE(trimmed.value("bytes").toInteger(), 50000 - 20 * 1024);
+        QCOMPARE(trimmed.value("older_than_days").toInt(), 30);
+        // The recent turns keep their detail.
+        QVERIFY(turnEnd(24).isEmpty());
+    }
+
     void structuredRetentionUsesTurnGuards_data() {
         QTest::addColumn<QString>("previous");
         QTest::addColumn<QString>("guard");

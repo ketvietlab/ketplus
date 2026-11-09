@@ -390,7 +390,10 @@ class AgentWorkspaceView final : public QWidget {
     Q_INVOKABLE void selectWorktree(const QString& path);
     Q_INVOKABLE void openRelativeFile(const QString& path);
     Q_INVOKABLE void requestTerminal();
-    Q_INVOKABLE void requestSettings() { emit settingsRequested(); }
+    // A section such as "storage" opens on it; none opens Settings where it was.
+    Q_INVOKABLE void requestSettings(const QString& section = {}) {
+        emit settingsRequested(section);
+    }
     Q_INVOKABLE void requestTagFilter(const QString& tag) { emit tagFilterRequested(tag); }
     Q_INVOKABLE void requestProductNavigation(const QString& destination) {
         if (!destination.isEmpty())
@@ -567,7 +570,7 @@ class AgentWorkspaceView final : public QWidget {
     void fileOpenRequested(const QString& relativePath);
     void fileDiffRequested(const QString& relativePath);
     void terminalRequested();
-    void settingsRequested();
+    void settingsRequested(const QString& section);
     void productNavigationRequested(const QString& destination);
     void atlasRunningCountChanged();
     void addWorktreeRequested();

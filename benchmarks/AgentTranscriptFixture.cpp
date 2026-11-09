@@ -80,8 +80,11 @@ class Journal {
                    turn_);
     }
     // Ends the turn `seconds` after its prompt, as the mock's turn line reads.
-    void finish(const QString& status, int seconds) {
-        append("turn.completed", {{"status", status}}, turnStart_.addSecs(seconds), turn_);
+    void finish(const QString& status, int seconds, const QJsonObject& trimmed = {}) {
+        QJsonObject data{{"status", status}};
+        if (!trimmed.isEmpty())
+            data.insert("detail_trimmed", trimmed);
+        append("turn.completed", data, turnStart_.addSecs(seconds), turn_);
     }
     QVariantList rows() const {
         QVariantList rows = agent_message::daemonWindowMessages({{"events", events_}});
@@ -142,7 +145,10 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
         journal.user(QDateTime(QDate(now.date().year(), 9, 24), QTime(9, 12)),
                      "Profile why the sidebar keeps the CPU busy when nothing happens.");
         journal.usage(141000, 2.08);
-        journal.finish("completed", 380);
+        // The mock's old turn: history retention has reduced its detail.
+        journal.finish(
+            "completed", 380,
+            {{"commands", 38}, {"tool_results", 12}, {"bytes", 1258291}, {"older_than_days", 30}});
         journal.user(today,
                      "The sidebar spinner still looks choppy. Check it against this capture and "
                      "fix it.");

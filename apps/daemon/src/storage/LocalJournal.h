@@ -228,6 +228,10 @@ class LocalJournal final {
                           int eventLimit = 128) const;
     // Summary projection and bounded, revision-fenced on-demand group events.
     [[nodiscard]] QJsonObject activitySummaryEvent(const QJsonObject& event) const;
+    // What detail retention reduced in one turn: counts by kind and the bytes it freed. Empty
+    // when the turn still holds all of its detail.
+    [[nodiscard]] QJsonObject turnDetailTrimmed(const QString& sessionId, qint64 generation,
+                                                qint64 turnSequence) const;
     [[nodiscard]] QJsonObject activityGroupPage(const QString& sessionId, qint64 generation,
                                                 const QJsonObject& params) const;
     static constexpr int maximumTranscriptWindowTurns = 20;

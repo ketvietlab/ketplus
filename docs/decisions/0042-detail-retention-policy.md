@@ -65,3 +65,13 @@ acceptance follows from these APIs or this Settings page.
 
 ADR 0045 adds optional, separately labelled file lengths and filesystem availability
 to these responses without changing policy validation or mutation semantics.
+
+A turn whose detail retention reduced reports it on its end. For clients that read
+activity groups, the daemon adds `detail_trimmed` to a projected `turn.completed`
+payload. Its fields are the counts of compacted commands, file diffs, tool results and
+thoughts, the bytes the compaction freed, and `older_than_days` from the marker's
+`at` − `cutoff`. The daemon reads these from the `$.item.compacted` markers the
+turn's completions still hold, so they always describe the stored replay. The
+journal row is never rewritten, and a turn with no marker carries no field. Desktop
+words it as the mock's "Detail trimmed" note above the turn end, with a Storage
+settings button that opens this page.
