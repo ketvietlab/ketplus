@@ -43,7 +43,11 @@ Qt application shell
   `TerminalView` and `TerminalPanel` own painting, selection, clipboard, search,
   and panel actions. `KetPlusCM::terminal` remains a compatibility target for
   the complete UI. `PtyProcess` isolates platform process creation so a ConPTY
-  backend can be added without changing the session or UI contracts.
+  backend can be added without changing the session or UI contracts. Its PTY
+  master is close-on-exec, so other shells and child processes never hold
+  another terminal open. Stopping sends the shell SIGHUP. A shell that has not
+  exited yet is then reaped off the UI thread, and killed after 2 s if it
+  ignores the hangup, so a closed terminal leaves no zombie behind.
 - `src/terminal_app` is the macOS-only standalone application shell. It owns
   windows, tabs, native menu actions, Finder open requests, and LaunchServices
   metadata, while reusing `terminal_core` and `terminal_ui` unchanged. The

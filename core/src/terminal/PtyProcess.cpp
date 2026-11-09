@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <cstring>
+#include <thread>
 
 #if defined(Q_OS_UNIX)
 #include <fcntl.h>
@@ -43,6 +44,23 @@ QString findShell() {
     }
     return {};
 }
+
+#if defined(Q_OS_UNIX)
+// A shell that has not exited by the time its terminal closes is reaped off the UI thread, and
+// killed if it ignores the hangup, so a closed terminal leaves no zombie or stray shell behind.
+void reapLater(const pid_t child) {
+    std::thread([child] {
+        for (int attempt = 0; attempt < 40; ++attempt) {
+            if (::waitpid(child, nullptr, WNOHANG) != 0)
+                return;
+            ::usleep(50 * 1000);
+        }
+        ::kill(child, SIGKILL);
+        while (::waitpid(child, nullptr, 0) < 0 && errno == EINTR) {
+        }
+    }).detach();
+}
+#endif
 
 QString systemError(const char* operation) {
     return QStringLiteral("%1: %2")
@@ -118,6 +136,8 @@ bool PtyProcess::start(const QString& workingDirectory, const int rows, const in
         _exit(127);
     }
 
+    // Without this, every later shell and child process holds this terminal's master open.
+    ::fcntl(master, F_SETFD, FD_CLOEXEC);
     masterFileDescriptor_ = master;
     childProcessId_ = static_cast<qint64>(child);
     const int flags = ::fcntl(masterFileDescriptor_, F_GETFL, 0);
@@ -172,9 +192,10 @@ void PtyProcess::resizeTerminal(const int rows, const int columns) {
 void PtyProcess::stop() {
 #if defined(Q_OS_UNIX)
     if (childProcessId_ > 0) {
-        ::kill(static_cast<pid_t>(childProcessId_), SIGHUP);
-        int status = 0;
-        ::waitpid(static_cast<pid_t>(childProcessId_), &status, WNOHANG);
+        const auto child = static_cast<pid_t>(childProcessId_);
+        ::kill(child, SIGHUP);
+        if (::waitpid(child, nullptr, WNOHANG) == 0)
+            reapLater(child);
     }
 #endif
     childTimer_->stop();

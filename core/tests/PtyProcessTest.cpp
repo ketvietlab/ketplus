@@ -14,11 +14,20 @@
 #include <QInputMethodEvent>
 #include <QLabel>
 #include <QLineEdit>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTest>
 #include <QVBoxLayout>
 
 #include <cmath>
+
+#if defined(Q_OS_UNIX)
+#include <cerrno>
+#include <csignal>
+#include <cstdlib>
+#include <fcntl.h>
+#include <sys/resource.h>
+#endif
 
 namespace ketplus {
 namespace {
@@ -43,6 +52,9 @@ class PtyProcessTest final : public QObject {
 
   private slots:
     void runsInteractiveShellInRequestedDirectory();
+    void stoppedShellIsReaped_data();
+    void stoppedShellIsReaped();
+    void masterIsNotInherited();
     void rendersAnsiOutputThroughVterm();
     void drawsAnsiColoursFromKetTokens();
     void usesSystemFixedFont();
@@ -76,6 +88,65 @@ void PtyProcessTest::runsInteractiveShellInRequestedDirectory() {
     QTRY_VERIFY_WITH_TIMEOUT(!exitSpy.isEmpty(), 10000);
     QVERIFY2(output.contains("__KETPLUS_PTY__"), output.constData());
     QVERIFY2(output.contains(QDir::tempPath().toUtf8()), output.constData());
+#else
+    QSKIP("The first PTY backend targets macOS and Linux.");
+#endif
+}
+
+void PtyProcessTest::stoppedShellIsReaped_data() {
+    QTest::addColumn<QByteArray>("setup");
+    QTest::newRow("hangup") << QByteArray();
+    QTest::newRow("ignores hangup") << QByteArray("trap '' HUP; ");
+}
+
+void PtyProcessTest::stoppedShellIsReaped() {
+#if defined(Q_OS_UNIX)
+    QFETCH(QByteArray, setup);
+    PtyProcess process;
+    QByteArray output;
+    connect(&process, &PtyProcess::outputReceived, this,
+            [&output](const QByteArray& bytes) { output.append(bytes); });
+    QVERIFY(process.start(QDir::tempPath(), 24, 80));
+    process.send(setup + "printf '__KETPLUS_PID_%s__\\n' \"$$\"\n");
+    static const QRegularExpression pidLine(QStringLiteral("__KETPLUS_PID_([0-9]+)__"));
+    QTRY_VERIFY_WITH_TIMEOUT(pidLine.match(QString::fromUtf8(output)).hasMatch(), 10000);
+    const auto child =
+        static_cast<pid_t>(pidLine.match(QString::fromUtf8(output)).captured(1).toLongLong());
+    QVERIFY(child > 0);
+    process.stop();
+    // A zombie still answers kill(pid, 0); only a reaped child is gone.
+    QTRY_VERIFY_WITH_TIMEOUT(::kill(child, 0) != 0 && errno == ESRCH, 5000);
+#else
+    QSKIP("The first PTY backend targets macOS and Linux.");
+#endif
+}
+
+void PtyProcessTest::masterIsNotInherited() {
+#if defined(Q_OS_UNIX)
+    const auto masters = [] {
+        QList<int> found;
+        rlimit limit{};
+        const int last = ::getrlimit(RLIMIT_NOFILE, &limit) == 0 && limit.rlim_cur < 4096
+                             ? static_cast<int>(limit.rlim_cur)
+                             : 4096;
+        for (int fd = 3; fd < last; ++fd) {
+            if (::fcntl(fd, F_GETFD) >= 0 && ::ptsname(fd) != nullptr)
+                found.append(fd);
+        }
+        return found;
+    };
+    const auto before = masters();
+    PtyProcess process;
+    QVERIFY(process.start(QDir::tempPath(), 24, 80));
+    const auto after = masters();
+    QList<int> opened;
+    for (const int fd : after) {
+        if (!before.contains(fd))
+            opened.append(fd);
+    }
+    QCOMPARE(opened.size(), 1);
+    QVERIFY(::fcntl(opened.first(), F_GETFD) & FD_CLOEXEC);
+    process.stop();
 #else
     QSKIP("The first PTY backend targets macOS and Linux.");
 #endif
