@@ -1225,17 +1225,27 @@ class DesktopDaemonClientTest final : public QObject {
         QCOMPARE(firstSent.at(1).value(QStringLiteral("payload")).toObject(),
                  QJsonObject({{QStringLiteral("after_id"), 5}}));
 
-        // The daemon drops the connection with all of them unanswered: they are sent again first,
-        // in the order they were made, with the same ids.
+        // The daemon drops the connection with all of them unanswered: the reads are sent again
+        // first, in the order they were made, with the same ids. The two writes fail instead,
+        // and the window fills with calls that were still waiting.
+        QList<QJsonObject> sentReads;
+        for (const QJsonObject& request : firstSent) {
+            if (request.value(QStringLiteral("message_type")).toString() !=
+                QStringLiteral("session.mark_seen"))
+                sentReads.append(request);
+        }
+        QCOMPARE(sentReads.size(), window - 2);
         daemon.requests.clear();
         daemon.current->disconnectFromServer();
         QTRY_COMPARE_WITH_TIMEOUT(daemon.requests.size(), window, 3000);
         QTest::qWait(200);
         QCOMPARE(daemon.requests.size(), window);
-        for (int index = 0; index < window; ++index) {
+        for (int index = 0; index < sentReads.size(); ++index) {
             QCOMPARE(daemon.requests.at(index).value(QStringLiteral("message_id")),
-                     firstSent.at(index).value(QStringLiteral("message_id")));
+                     sentReads.at(index).value(QStringLiteral("message_id")));
         }
+        QVERIFY(answered.contains(QStringLiteral("seen-1!Daemon disconnected before confirming the "
+                                                 "request. Check its result before retrying.")));
 
         // Each answer lets one more call out, until every call has been sent once.
         daemon.onRequest = [&daemon](const QJsonObject& request) {
@@ -1246,12 +1256,12 @@ class DesktopDaemonClientTest final : public QObject {
         for (const QJsonObject& request : QList<QJsonObject>(daemon.requests))
             daemon.onRequest(request);
         QTRY_COMPARE_WITH_TIMEOUT(answered.size(), 5 + 1 + 2 + 24, 3000);
-        QCOMPARE(daemon.requests.size(), distinct);
+        QCOMPARE(daemon.requests.size(), distinct - 2);
         for (int index = 0; index < 5; ++index) {
             QVERIFY(answered.contains(
                 QStringLiteral("approvals-%1=session.pending_approvals").arg(index)));
         }
-        QVERIFY(answered.contains(QStringLiteral("seen-1=session.mark_seen")));
+        QVERIFY(!answered.contains(QStringLiteral("seen-1=session.mark_seen")));
     }
 
     void forksConversationThroughDaemon() {
