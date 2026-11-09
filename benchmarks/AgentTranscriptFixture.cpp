@@ -52,6 +52,10 @@ class Journal {
         append("item.completed", {{"provider", provider_}, {"item_id", id}, {"item", completed}},
                {}, turn_);
     }
+    // Any other journal event of the running turn, such as a runtime error.
+    void event(const QString& type, const QJsonObject& payload) {
+        append(type, payload, {}, turn_);
+    }
     void steer(const QString& text) {
         append("turn.steered", {{"text", text}, {"provider", provider_}}, {}, turn_);
     }
@@ -112,6 +116,17 @@ QJsonObject fromAgent(const QString& number, const QString& title, const QString
 QVariantList transcriptFixture(const QString& provider, const QString& assets) {
     const QDateTime now = QDateTime::currentDateTime();
     const QDateTime today = now.addSecs(-20 * 60);
+    // The mock's workspace/error: a turn the provider stopped answering.
+    if (provider == "error") {
+        Journal journal("codex");
+        journal.user(now.addSecs(-90), "Profile the editor startup on a cold cache.");
+        journal.event("runtime.error",
+                      {{"message", "Codex did not answer for 60 seconds. Your message and the "
+                                   "work so far are kept."},
+                       {"will_retry", false}});
+        journal.finish("failed", 75);
+        return journal.rows();
+    }
     Journal journal(provider);
     if (provider == "claude") {
         journal.user(QDateTime(QDate(now.date().year(), 9, 24), QTime(9, 12)),

@@ -231,7 +231,9 @@ active conversation is the mock's Claude Opus 5.5 conversation with its fixed ca
 usage (context, session cost and tokens, and three plan limits); runs without `--open`
 keep the default CPU workload. `--transcript=claude`, `codex` or `cursor` replaces the
 messages with the message rows of the mock's `workspace/<provider>` transcript, projected
-from synthetic journal events through `daemonWindowMessages`, and `--scroll=0` to `1`
+from synthetic journal events through `daemonWindowMessages` (`--transcript=error` is the
+mock's `workspace/error`: a prompt, a `runtime.error` and the failed turn end), and
+`--scroll=0` to `1`
 positions the transcript like the mock's `--scroll`; `--expand-groups` opens every
 activity group first. `--display=secondary` (or a screen index) places the window like
 the mock's `--display`, so review windows stay off the main screen, and `--hold` keeps

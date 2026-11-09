@@ -2549,6 +2549,36 @@ void AgentWorkspaceViewTest::transcriptNoticesUseRuntimeState() {
     QTRY_VERIFY((turnEnd = visibleTurnEnd(visibleTurnEnd, root)));
     QCOMPARE(turnEnd->property("text").toString(),
              QString("<b>Completed</b>&nbsp;&nbsp;6m 20s · 141k context · &lt;$2.08> session"));
+    // A failure reads as the kit's danger banner: its symbol and text colour, spanning the
+    // reading column like the turn end beside it.
+    const auto danger =
+        ket::bannerRecipe(ket::BannerTone::Danger, ket::Appearance::instance().theme());
+    const auto failedNotice = [](const auto& self, QQuickItem* item) -> QQuickItem* {
+        if (!item->isVisible())
+            return nullptr;
+        if (item->objectName() == "transcriptNotice" &&
+            item->property("status").toString() == "failed" &&
+            item->property("subtype").toString() != "turnEnd")
+            return item;
+        for (auto* child : item->childItems())
+            if (auto* match = self(self, child))
+                return match;
+        return nullptr;
+    };
+    QQuickItem* failure = failedNotice(failedNotice, root);
+    QVERIFY(failure);
+    auto* icon = findVisualItem(failure, "transcriptNoticeIcon");
+    QVERIFY(icon);
+    QCOMPARE(icon->property("name").toString(), danger.icon);
+    QCOMPARE(icon->property("color").value<QColor>(), danger.text);
+    QCOMPARE(findVisualItem(failure, "transcriptNoticeBody")->property("color").value<QColor>(),
+             danger.text);
+    QQuickItem* turnNotice = turnEnd;
+    while (turnNotice && turnNotice->objectName() != "transcriptNotice")
+        turnNotice = turnNotice->parentItem();
+    QVERIFY(turnNotice);
+    QCOMPARE(failure->mapToScene(QPointF()).x(), turnNotice->mapToScene(QPointF()).x());
+    QCOMPARE(failure->width(), turnNotice->width());
     const auto capture = qEnvironmentVariable("KETPLUS_NOTICE_CAPTURE");
     if (!capture.isEmpty()) {
         QTest::qWait(80);

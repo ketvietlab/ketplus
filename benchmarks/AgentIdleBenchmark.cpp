@@ -105,7 +105,7 @@ int main(int argc, char** argv) {
          {"open",
           "mode, model or limits (a composer panel), welcome, viewer or tasks, for captures",
           "panel"},
-         {"transcript", "claude, codex or cursor: the mock's workspace/<provider> messages",
+         {"transcript", "claude, codex, cursor or error: the mock's workspace/<state> messages",
           "provider"},
          {"scroll", "With --transcript: 0 shows the top, 1 the end, like the mock's --scroll",
           "fraction"},
@@ -145,13 +145,15 @@ int main(int argc, char** argv) {
     }
     const auto transcript = parser.value("transcript");
     if (!transcript.isEmpty() && transcript != "claude" && transcript != "codex" &&
-        transcript != "cursor") {
+        transcript != "cursor" && transcript != "error") {
         report({{"event", "error"}, {"reason", "Invalid transcript"}});
         return 2;
     }
     // Captures show a mock conversation; CPU samples keep the default workload.
     const bool capture = !panel.isEmpty() || !transcript.isEmpty();
-    const QString captureProvider = transcript.isEmpty() ? QStringLiteral("claude") : transcript;
+    // workspace/error is the mock's Claude conversation whose provider stopped answering.
+    const QString captureProvider =
+        transcript.isEmpty() || transcript == "error" ? QStringLiteral("claude") : transcript;
     ketplus::ThemeManager theme(app);
     // Applied before the view exists, like a saved appearance, for app/mock captures.
     auto& appearance = ket::Appearance::instance();

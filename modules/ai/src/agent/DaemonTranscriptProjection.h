@@ -26,6 +26,8 @@ QString providerProtocolErrorText(const QJsonObject& data);
 QString providerProtocolErrorTitle();
 // Title of the note for a `provider.runtime` event (an untested or unreadable CLI version).
 QString providerRuntimeNoticeTitle();
+// Title of a provider failure's row, live or projected from `runtime.error`.
+QString agentErrorTitle();
 QVariantMap providerNoticeMessage(const QString& text, const QString& itemId,
                                   const QString& title = QStringLiteral("Request declined"));
 // ADR 0027: a user row another conversation's agent wrote (`origin: agent`) shows its sender.

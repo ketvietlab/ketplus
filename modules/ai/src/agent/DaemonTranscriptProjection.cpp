@@ -81,6 +81,8 @@ QString providerProtocolErrorTitle() { return QStringLiteral("Protocol error"); 
 
 QString providerRuntimeNoticeTitle() { return QStringLiteral("Provider version"); }
 
+QString agentErrorTitle() { return QStringLiteral("The provider stopped with an error"); }
+
 QVariantMap providerNoticeMessage(const QString& text, const QString& itemId,
                                   const QString& title) {
     auto entry = message(QStringLiteral("tool"), text, QStringLiteral("Codex · ") + title.toLower(),
@@ -448,6 +450,8 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
             entry.insert("status", settledQuestions.value(data.value("approval_id").toString()));
         } else if (type == "runtime.error") {
             entry = message("error", data.value("message").toString(), "Agent · error", {}, itemId);
+            // The same title a live failure gives its row, as the mock's danger banner.
+            entry.insert("title", agentErrorTitle());
             entry.insert("category", "system");
             entry.insert("status", "failed");
         } else if (type == "command.output_delta") {

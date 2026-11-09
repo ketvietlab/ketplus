@@ -293,6 +293,17 @@ class ProviderTranscriptTest : public QObject {
                     .toJson()
                     .contains("Old string not found in file"));
     }
+    // A journaled failure titles its row as a live one does, the mock's danger banner.
+    void runtimeErrorRowsShareTheLiveTitle() {
+        const QJsonArray events{QJsonObject{{"cursor", 1},
+                                            {"turn_sequence", 1},
+                                            {"event_type", "runtime.error"},
+                                            {"payload", QJsonObject{{"message", "No answer"}}}}};
+        const auto row = daemonWindowMessages({{"events", events}}).last().toMap();
+        QCOMPARE(row.value("kind").toString(), "error");
+        QCOMPARE(row.value("title").toString(), agentErrorTitle());
+        QCOMPARE(row.value("body").toString(), "No answer");
+    }
     void turnEndReportsDurationContextAndSessionCost() {
         const auto at = [](int seconds) {
             return QDateTime(QDate(2026, 11, 9), QTime(1, 0), QTimeZone::UTC)

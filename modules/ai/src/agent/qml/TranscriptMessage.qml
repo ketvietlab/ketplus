@@ -251,7 +251,8 @@ Item {
     Rectangle {
         id: messageSurface
         objectName: "messageSurface"
-        readonly property int horizontalPadding: messageDelegate.activityRow || kind === "assistant" ? 0 : (kind === "user" ? userRecipe.paddingInline : KetTheme.px(18, KetTheme.zoom))
+        // Banners and turn ends span the reading column, as the mock's KetBanner does.
+        readonly property int horizontalPadding: messageDelegate.activityRow || kind === "assistant" || messageDelegate.noticeRow ? 0 : (kind === "user" ? userRecipe.paddingInline : KetTheme.px(18, KetTheme.zoom))
         readonly property bool userMessage: kind === "user"
         // ADR 0027: another conversation's agent wrote this turn's opening message.
         readonly property bool agentMessage: kind === "user" && subtype === "agentMessage"

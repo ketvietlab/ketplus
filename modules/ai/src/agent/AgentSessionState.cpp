@@ -2,6 +2,7 @@
 
 #include "agent/CodexAppServer.h"
 #include "agent/CodexRateLimits.h"
+#include "agent/DaemonTranscriptProjection.h"
 
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -297,7 +298,7 @@ void AgentSessionManager::recordSessionError(const SessionPtr& session, const QS
                                              const bool notify) {
     const QString detail = error.isEmpty() ? QStringLiteral("Unknown Codex error") : error;
     auto entry = message(QStringLiteral("error"), detail, QStringLiteral("Error"));
-    entry.insert(QStringLiteral("title"), QStringLiteral("Turn failed"));
+    entry.insert(QStringLiteral("title"), agent_message::agentErrorTitle());
     entry.insert(QStringLiteral("summary"), detail);
     appendMessage(session, entry);
     if (notify)
