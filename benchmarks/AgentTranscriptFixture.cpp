@@ -197,6 +197,8 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
                      fromAgent("8941", "DS Icon", "claude",
                                "20 steps a second reads as smooth at 14 px. Keep 4 behind "
                                "another app."));
+        // The mock's compaction between the reply and the steer.
+        journal.tool({{"type", "contextCompaction"}});
         journal.steer("Also check dark mode before you finish.");
         // The mock's edits: AgentSidebar.qml +3 −1 and a new SpinClock.qml of 48 lines.
         journal.tool({{"type", "dynamicToolCall"},

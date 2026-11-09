@@ -44,6 +44,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void settledApprovalsReadAsTheirOutcome();
     void capacityErrorOffersAnotherModel();
     void trimmedTurnOpensStorageSettings();
+    void compactionReadsAsAnEventLine();
     void activityOperationSemantics();
     void semanticCommandLabelsStayExpandable();
     void longCommandTitleStaysInsideColumn();

@@ -15,7 +15,7 @@ Rectangle {
     signal actionTriggered()
     readonly property bool failed: status === "failed"
     // The mock's event: its text on a divider line, the detail centred under it.
-    readonly property bool eventLine: subtype === "event"
+    readonly property bool eventLine: subtype === "event" || subtype === "compaction"
     // The mock's reconnect: one quiet line after an indicator.
     readonly property bool reconnecting: subtype === "reconnecting"
     readonly property bool lineOnly: eventLine || reconnecting || subtype === "turnEnd"
