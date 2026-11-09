@@ -14,13 +14,15 @@ the history, could not tell an archived conversation from a visible one, so
 
 - The journal stores `sessions.archived_at`: a UTC ISO time, `''` when the
   conversation is not archived. `upsertSession` never writes it; only
-  `setSessionArchived` does. A fork therefore starts unarchived.
+  `setSessionArchived` does.
 - `session.set_archived` with `{archived: true|false}` (mutating, deduplicated
-  by `message_id`, local or relay) sets or clears it.
+  by `message_id`) sets or clears it. Only local clients can send it; the
+  cloud relay does not route it until phones can archive.
   - Archiving an already archived conversation keeps the first time, so the
     period counts from when it was hidden.
   - `session.list` reports `archived_at` for archived conversations. Daemons
     that support this advertise the `session.archive/1` feature.
+- A fork starts unarchived: it never inherits the source's `archived_at`.
 - Retention: an archived conversation is deleted once it has been archived for
   30 days (`SessionHost::archivedHistoryDays`).
   - The idle maintenance pass (`DaemonService::reclaimJournalSpace`, which

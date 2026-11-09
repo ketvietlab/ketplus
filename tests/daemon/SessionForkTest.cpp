@@ -11,6 +11,7 @@
 #include "FakeCodex.h"
 
 #include <QCryptographicHash>
+#include <QDateTime>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
@@ -125,6 +126,46 @@ class SessionForkTest final : public QObject {
     Q_OBJECT
 
   private slots:
+    void forkOfAnArchivedConversationIsNotArchived() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto executable = dir.filePath("fake-codex");
+        QVERIFY(writeFakeCodex(executable, dir.filePath("codex.log")));
+        LocalJournal journal(dir.filePath("journal.sqlite"));
+        StoredSession source;
+        source.id = "source";
+        source.worktreePath = dir.path();
+        source.adapter = "codex";
+        source.threadId = "source-thread";
+        source.state = "ready";
+        QVERIFY(journal.upsertSession(source));
+        const auto now = QDateTime::currentDateTimeUtc();
+        QVERIFY(
+            journal.setSessionArchived("source", 1, now.addDays(-40).toString(Qt::ISODateWithMs)));
+        CodexAdapter adapter(executable);
+        SessionHost host(&journal, &adapter);
+        const auto result = fork(host, "fork-archived", "source", {{"fork_session_id", "target"}});
+        QVERIFY2(result.value("ok").toBool(), qPrintable(text(result)));
+        QCOMPARE(storedSession(journal, "target").archivedAt, QString());
+        const auto catalog =
+            host.handleCommand(request("session.list", "list-archived"), "desktop-test");
+        bool listed = false;
+        for (const auto& value : catalog.value("sessions").toArray()) {
+            const auto row = value.toObject();
+            if (row.value("session_id") == "target") {
+                listed = true;
+                QVERIFY(!row.contains("archived_at"));
+            }
+        }
+        QVERIFY(listed);
+        // The source is due; the fork must survive every later pass.
+        QVERIFY(host.expireArchivedSessions(now));
+        QVERIFY(!host.expireArchivedSessions(now));
+        QVERIFY(storedSession(journal, "source").id.isEmpty());
+        QCOMPARE(storedSession(journal, "target").id, QString("target"));
+        adapter.stop();
+    }
+
     void forkRequiresMediaOwnershipBeforeJournalCommit_data() {
         QTest::addColumn<QString>("fault");
         for (const auto* value :
