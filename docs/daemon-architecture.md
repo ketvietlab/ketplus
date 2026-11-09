@@ -97,9 +97,13 @@ core target. The local slice includes:
 - daemon-owned model discovery and rate-limit queries used by Desktop settings.
 
 Desktop uses this endpoint through `modules/remote`. It discovers existing
-sessions, attaches and replays ordered journal events, retries in-flight commands
-with the same idempotency key after disconnect, and starts a detached daemon if
-no endpoint exists. It keeps at most sixteen requests in flight and sends the rest
+sessions, attaches and replays ordered journal events, and starts a detached daemon
+if no endpoint exists. The daemon does not deduplicate requests by `message_id`, so
+after a disconnect Desktop sends again only in-flight reads and writes that apply once
+however often they arrive (rename, mark seen, interrupt). Other in-flight writes
+(start turn, steer, approval and question answers, fork, delete, pairing, remote
+account and storage operations) fail with "check the result before retrying";
+requests that were still waiting are sent after the reconnect. It keeps at most sixteen requests in flight and sends the rest
 as answers arrive; identical reads (`session.list`, `session.pending_approvals`,
 provider and remote status queries) waiting to be sent are merged into one.
 Reconnects back off from 100 ms to 5 s, and the backoff resets only after a

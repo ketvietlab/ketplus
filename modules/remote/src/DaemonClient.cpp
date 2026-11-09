@@ -44,6 +44,37 @@ bool mergesWhileQueued(const QString& type) {
     return reads.contains(type);
 }
 
+// Requests that are safe to send again when the connection dropped before their answer: reads,
+// and writes the daemon applies once however often they arrive. Anything else in flight may
+// already have happened, so its caller is told instead of having it repeated.
+bool replaysAfterDisconnect(const QString& type) {
+    static const QSet<QString> replayable{QStringLiteral("session.list"),
+                                          QStringLiteral("session.attach"),
+                                          QStringLiteral("session.events_after"),
+                                          QStringLiteral("session.transcript_page"),
+                                          QStringLiteral("session.transcript_window"),
+                                          QStringLiteral("session.transcript_large_event"),
+                                          QStringLiteral("session.activity_group_page"),
+                                          QStringLiteral("session.pending_approvals"),
+                                          QStringLiteral("session.configuration.read"),
+                                          QStringLiteral("session.worktrees"),
+                                          QStringLiteral("session.resource.resolve"),
+                                          QStringLiteral("session.output.read"),
+                                          QStringLiteral("session.media.read"),
+                                          QStringLiteral("session.task.output"),
+                                          QStringLiteral("session.mark_seen"),
+                                          QStringLiteral("session.rename"),
+                                          QStringLiteral("session.interrupt"),
+                                          QStringLiteral("provider.models"),
+                                          QStringLiteral("provider.rate_limits"),
+                                          QStringLiteral("provider.runtime_status"),
+                                          QStringLiteral("remote.status"),
+                                          QStringLiteral("remote.devices"),
+                                          QStringLiteral("remote.pairing.status"),
+                                          QStringLiteral("remote.audit")};
+    return replayable.contains(type);
+}
+
 } // namespace
 
 DaemonClient::DaemonClient(QObject* parent)
@@ -79,8 +110,12 @@ DaemonClient::DaemonClient(QObject* parent)
                     call.callback(
                         {}, QStringLiteral("Daemon disconnected. Check the saved credential state "
                                            "before retrying."));
-            } else if (call.type != QStringLiteral("daemon.hello")) {
+            } else if (replaysAfterDisconnect(call.type)) {
                 interrupted.append(std::move(call));
+            } else if (call.type != QStringLiteral("daemon.hello") &&
+                       call.type != QStringLiteral("daemon.prepare_upgrade") && call.callback) {
+                call.callback({}, QStringLiteral("Daemon disconnected before confirming the "
+                                                 "request. Check its result before retrying."));
             }
         }
         std::sort(interrupted.begin(), interrupted.end(),

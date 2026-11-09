@@ -12,12 +12,15 @@
 #include "storage/McpMediaStore.h"
 
 #include <QCryptographicHash>
+#include <QDateTime>
 #include <QDir>
+#include <QDirIterator>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QLocalSocket>
 #include <QProcess>
 #include <QScopeGuard>
 #include <QSignalSpy>
@@ -2745,6 +2748,35 @@ class DaemonProtocolTest final : public QObject {
 #else
         QSKIP("POSIX directory ownership");
 #endif
+    }
+
+    void runningServiceKeepsItsLocksWhenTheyAge() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const DaemonConfiguration configuration{
+            directory.filePath("state/journal.sqlite3"), directory.filePath("state/local.token"),
+            directory.filePath("daemon.sock"), QStringLiteral("/nonexistent/ketplus-test-codex")};
+        DaemonService service(configuration);
+        QVERIFY2(service.start(), qPrintable(service.errorString()));
+        // A daemon that has run for an hour: its lock files were written at startup.
+        int aged = 0;
+        QDirIterator locks(directory.path(), {"*.lock"}, QDir::Files | QDir::Hidden,
+                           QDirIterator::Subdirectories);
+        while (locks.hasNext()) {
+            QFile lock(locks.next());
+            QVERIFY(lock.open(QIODevice::ReadWrite));
+            QVERIFY(lock.setFileTime(QDateTime::currentDateTime().addSecs(-3600),
+                                     QFileDevice::FileModificationTime));
+            ++aged;
+        }
+        QCOMPARE(aged, 2);
+        DaemonService second(configuration);
+        QVERIFY(!second.start());
+        QVERIFY2(second.errorString().contains("Another KetPlus Daemon"),
+                 qPrintable(second.errorString()));
+        QLocalSocket client;
+        client.connectToServer(configuration.socketName);
+        QVERIFY(client.waitForConnected(2'000));
     }
 
     void serviceCreatesProtectedStateAndRejectsEndpointCollision() {
