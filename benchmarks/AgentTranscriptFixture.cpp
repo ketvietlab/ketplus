@@ -247,10 +247,8 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
                       "A staging tenant is created in **two steps**:\n\n1. `POST /tenants` in the "
                       "gateway validates the slug.\n2. `createTenant()` provisions the schema and "
                       "seeds the admin user.");
-        journal.event(
-            "runtime.error",
-            {{"message", "The agent process ended with code 1 before the turn completed."},
-             {"will_retry", false}});
+        journal.event("runtime.error", {{"message", "The Cursor ACP process exited unexpectedly."},
+                                        {"will_retry", false}});
         journal.finish("failed", 151);
     } else {
         journal.event(
@@ -366,8 +364,7 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
                        "A flat storage gauge icon in the Két style, 2 px strokes, no frame."}});
         journal.event("runtime.error", {{"message", "Reconnecting… 2/5"}, {"will_retry", true}});
         journal.event("runtime.error",
-                      {{"message", "Codex could not finish the turn. Try again, or pick another "
-                                   "model for this conversation."},
+                      {{"message", "Selected model is at capacity. Please try a different model."},
                        {"will_retry", false}});
         journal.event("session.configuration_changed",
                       {{"effective", QJsonObject{{"model", "GPT-5.6 Luna"}, {"effort", "Medium"}}},

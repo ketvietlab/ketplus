@@ -298,8 +298,8 @@ void AgentSessionManager::recordSessionError(const SessionPtr& session, const QS
                                              const bool notify) {
     const QString detail = error.isEmpty() ? QStringLiteral("Unknown Codex error") : error;
     auto entry = message(QStringLiteral("error"), detail, QStringLiteral("Error"));
-    entry.insert(QStringLiteral("title"), agent_message::agentErrorTitle());
     entry.insert(QStringLiteral("summary"), detail);
+    agent_message::presentAgentError(entry, detail);
     appendMessage(session, entry);
     if (notify)
         emit errorOccurred(detail);
