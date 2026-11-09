@@ -1379,6 +1379,7 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
         return error(QStringLiteral("journal_error"), appendError);
     }
     it->startingTurn = true;
+    it->stopRequested = false;
     const StoredSession before = it->stored;
     if (localClient && options.contains("permission")) {
         const auto permission = options.value("permission").toString();
@@ -1798,6 +1799,8 @@ QJsonObject SessionHost::interrupt(const QJsonObject& request) {
     }
     const QString sessionId = session->stored.id;
     const qint64 generation = session->stored.generation;
+    session->stopRequested = session->startingTurn || !session->stored.turnId.isEmpty() ||
+                             session->stored.state == QStringLiteral("running");
     QTimer::singleShot(0, approvals_, [this, sessionId, generation] {
         approvals_->cancelPending(sessionId, generation);
     });
@@ -2127,7 +2130,7 @@ void SessionHost::handleProviderNotification(const QString& method, const QJsonO
         journal_->upsertSession(session->stored);
         appendProviderEvent(
             *session, QStringLiteral("turn.completed"),
-            {{QStringLiteral("status"), turn.value(QStringLiteral("status")).toString()}});
+            turnCompletion(*session, turn.value(QStringLiteral("status")).toString()));
         for (const QString& path : std::exchange(session->materializedAttachments, {}))
             QFile::remove(path);
         for (const QString& id : std::exchange(session->stagedAttachmentIds, {}))
@@ -2652,9 +2655,7 @@ void SessionHost::handleCanonicalEvent(const QString& provider, const QString& s
         it->stored.state =
             status == QStringLiteral("failed") ? QStringLiteral("failed") : QStringLiteral("ready");
         journal_->upsertSession(it->stored);
-        appendEvent(
-            *it, QStringLiteral("turn.completed"),
-            {{QStringLiteral("status"), payload.value(QStringLiteral("status")).toString()}});
+        appendEvent(*it, QStringLiteral("turn.completed"), turnCompletion(*it, status));
         for (const QString& path : std::exchange(it->materializedAttachments, {}))
             QFile::remove(path);
         for (const QString& id : std::exchange(it->stagedAttachmentIds, {}))

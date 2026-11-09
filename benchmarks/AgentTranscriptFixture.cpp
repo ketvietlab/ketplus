@@ -80,11 +80,10 @@ class Journal {
                    turn_);
     }
     // Ends the turn `seconds` after its prompt, as the mock's turn line reads.
-    void finish(const QString& status, int seconds, const QJsonObject& trimmed = {}) {
-        QJsonObject data{{"status", status}};
-        if (!trimmed.isEmpty())
-            data.insert("detail_trimmed", trimmed);
-        append("turn.completed", data, turnStart_.addSecs(seconds), turn_);
+    // `extra` carries the end's other fields, such as detail_trimmed or a Stop's reason.
+    void finish(const QString& status, int seconds, QJsonObject extra = {}) {
+        extra.insert("status", status);
+        append("turn.completed", extra, turnStart_.addSecs(seconds), turn_);
     }
     QVariantList rows() const {
         QVariantList rows = agent_message::daemonWindowMessages({{"events", events_}});
@@ -146,9 +145,11 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
                      "Profile why the sidebar keeps the CPU busy when nothing happens.");
         journal.usage(141000, 2.08);
         // The mock's old turn: history retention has reduced its detail.
-        journal.finish(
-            "completed", 380,
-            {{"commands", 38}, {"tool_results", 12}, {"bytes", 1258291}, {"older_than_days", 30}});
+        journal.finish("completed", 380,
+                       {{"detail_trimmed", QJsonObject{{"commands", 38},
+                                                       {"tool_results", 12},
+                                                       {"bytes", 1258291},
+                                                       {"older_than_days", 30}}}});
         journal.user(today,
                      "The sidebar spinner still looks choppy. Check it against this capture and "
                      "fix it.");
@@ -376,7 +377,8 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
                       "The daemon now reports `journal.size` in `session.list` and warns past "
                       "**80%** of the limit. Still to do:");
         journal.usage(96000, -1);
-        journal.finish("interrupted", 68);
+        // The mock's Stop from the composer.
+        journal.finish("interrupted", 68, {{"reason", "user"}});
     }
     QVariantList rows = journal.rows();
     // The mock's first Claude prompt today carries a capture; journal media needs a store, so

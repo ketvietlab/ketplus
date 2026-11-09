@@ -443,4 +443,13 @@ void SessionHost::providerReloaded(const QString& reason) {
     }
 }
 
+QJsonObject SessionHost::turnCompletion(Session& session, const QString& status) {
+    QJsonObject completed{{QStringLiteral("status"), status}};
+    // Only an interrupted end is the Stop's; a turn that finished first keeps its own status.
+    if (std::exchange(session.stopRequested, false) &&
+        (status == QStringLiteral("interrupted") || status == QStringLiteral("stopped")))
+        completed.insert(QStringLiteral("reason"), QStringLiteral("user"));
+    return completed;
+}
+
 } // namespace ketplus::daemon

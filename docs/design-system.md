@@ -208,7 +208,10 @@ example "6m 20s · 141k context · $2.08 session". The duration runs from the
 turn's first journal time to its `turn.completed`. A live receipt uses the
 turn's start instead. The context is the latest `usage.context`. The cost is
 labelled "session" because Claude SDK accounting is cumulative. A part without
-evidence on the page is left out. Retryable errors show reconnecting without changing the running lifecycle.
+evidence on the page is left out. A turn ended by a client's Stop (desktop, phone or
+cloud `session.interrupt`) carries `reason: "user"` on its interrupted
+`turn.completed`, and reads "… · stopped by you"; other interrupted ends (daemon
+restart, fork snapshot) stay neutral. Retryable errors show reconnecting without changing the running lifecycle.
 Older retained-output/diff/text markers stay visible. Unsupported queue actions
 are not shown; queued status follows the daemon state.
 

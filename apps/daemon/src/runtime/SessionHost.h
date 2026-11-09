@@ -110,6 +110,8 @@ class SessionHost final : public QObject, private AgentHostPort {
         // A Stop can arrive while an adapter is still creating its provider-native session.
         // Keep it until that adapter has actually started the prompt.
         bool interruptPending{false};
+        // A client's Stop is ending this turn, so its interrupted end says so.
+        bool stopRequested{false};
         QStringList materializedAttachments;
         QStringList stagedAttachmentIds;
         // The provider's latest background task snapshot (tasks.changed, REPLACE semantics).
@@ -201,6 +203,8 @@ class SessionHost final : public QObject, private AgentHostPort {
     [[nodiscard]] QJsonObject steer(const QJsonObject& request, CommandCallback outcome = {},
                                     bool localClient = true, const QJsonObject& agentOrigin = {});
     [[nodiscard]] QJsonObject interrupt(const QJsonObject& request);
+    // A turn.completed payload; it takes the session's pending Stop.
+    [[nodiscard]] static QJsonObject turnCompletion(Session& session, const QString& status);
     [[nodiscard]] QJsonObject resolveApproval(const QJsonObject& request);
     [[nodiscard]] QJsonObject applyConfiguration(const QJsonObject& request, bool localClient);
     [[nodiscard]] QJsonObject applyExecutionPolicy(const QJsonObject& request);

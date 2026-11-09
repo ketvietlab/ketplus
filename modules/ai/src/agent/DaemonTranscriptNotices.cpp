@@ -90,11 +90,14 @@ QString turnEndText(const TurnFacts& turn, const QJsonObject& usage) {
     const auto cost = usage.value("estimatedCostUsd");
     if (cost.isDouble() && std::isfinite(cost.toDouble()) && cost.toDouble() >= 0)
         parts.append(QStringLiteral("$%1 session").arg(cost.toDouble(), 0, 'f', 2));
+    if (turn.stoppedByUser)
+        parts.append(QStringLiteral("stopped by you"));
     return parts.join(QStringLiteral(" · "));
 }
 QVariantMap daemonEventNotice(const QString& type, const QJsonObject& data, const QString& itemId,
                               const QJsonObject& usage, const TurnFacts& turn) {
     QString title, detail, trimmed, subtype = "event";
+    TurnFacts facts = turn;
     QString status = "completed";
     // As the mock words its events (TranscriptFixtures.qml).
     if (type == "session.provider_changed") {
@@ -163,7 +166,9 @@ QVariantMap daemonEventNotice(const QString& type, const QJsonObject& data, cons
             title = "Turn completed";
         else
             return {}; // Do not invent success for an unknown provider state.
-        detail = turnEndText(turn, usage);
+        facts.stoppedByUser =
+            title == "Turn stopped" && data.value("reason").toString() == QLatin1String("user");
+        detail = turnEndText(facts, usage);
         trimmed = trimmedDetailText(data.value("detail_trimmed").toObject());
     } else if (type == "runtime.error" &&
                (data.value("will_retry").toBool() || data.value("willRetry").toBool())) {
@@ -177,6 +182,9 @@ QVariantMap daemonEventNotice(const QString& type, const QJsonObject& data, cons
     entry.insert("subtype", subtype);
     entry.insert("eventType", type);
     entry.insert("status", status);
+    // A live end is worded again once the session's cost is known; it keeps the Stop.
+    if (facts.stoppedByUser)
+        entry.insert("stoppedByUser", true);
     if (!trimmed.isEmpty())
         entry.insert("trimmedDetail", trimmed);
     return entry;
