@@ -2586,6 +2586,75 @@ void AgentWorkspaceViewTest::transcriptNoticesUseRuntimeState() {
     }
 }
 
+// The mock's changed-files card closes a turn that edited files: one row per file with its
+// counts, a row opens its diff and Review changes opens Source Control.
+void AgentWorkspaceViewTest::turnEndListsTheTurnsChangedFiles() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.setAgentAvailable(true);
+    view.resize(900, 700);
+    view.show();
+    const auto change = [](const QString& path, int added, int removed, const QString& operation) {
+        return QVariantMap{{"path", path},   {"destination", ""},  {"operation", operation},
+                           {"added", added}, {"removed", removed}, {"known", true}};
+    };
+    view.resetMessages(
+        {QVariantMap{{"messageKey", "u"}, {"kind", "user"}, {"body", "Fix it"}, {"turnId", "t"}},
+         QVariantMap{
+             {"messageKey", "g"},
+             {"kind", "tool"},
+             {"subtype", "daemonGroup"},
+             {"turnId", "t"},
+             {"groupRole", "leader"},
+             {"groupKey", "g"},
+             {"groupSummary", "Edited 2 files"},
+             {"groupSize", 2},
+             {"groupFiles",
+              QVariantList{change("modules/ai/src/agent/qml/AgentSidebar.qml", 3, 1, "Edited"),
+                           change("modules/ai/src/agent/qml/SpinClock.qml", 48, 0, "Created")}}},
+         QVariantMap{{"messageKey", "end"},
+                     {"kind", "tool"},
+                     {"category", "system"},
+                     {"subtype", "turnEnd"},
+                     {"turnId", "t"},
+                     {"title", "Turn completed"},
+                     {"body", "4m 12s"},
+                     {"status", "completed"}}},
+        "changes");
+    auto* root = view.quickView()->rootObject();
+    QQuickItem* card = nullptr;
+    QTRY_VERIFY((card = findVisualItem(root, "transcriptTurnChanges")) && card->isVisible());
+    const QVariantList files = card->property("files").toList();
+    QCOMPARE(files.size(), 2);
+    QCOMPARE(files.at(0).toMap().value("name").toString(), QStringLiteral("AgentSidebar.qml"));
+    QCOMPARE(files.at(0).toMap().value("path").toString(),
+             QStringLiteral("modules/ai/src/agent/qml"));
+    QCOMPARE(files.at(1).toMap().value("added").toInt(), 48);
+    QSignalSpy diffs(&view, &ketplus::AgentWorkspaceView::fileDiffRequested);
+    QVERIFY(QMetaObject::invokeMethod(card, "fileActivated", Q_ARG(int, 1)));
+    QCOMPARE(diffs.count(), 1);
+    QCOMPARE(diffs.first().at(0).toString(),
+             QStringLiteral("modules/ai/src/agent/qml/SpinClock.qml"));
+    QSignalSpy navigation(&view, &ketplus::AgentWorkspaceView::productNavigationRequested);
+    auto* review = findVisualItem(card, "transcriptReviewChanges");
+    QVERIFY(review);
+    QVERIFY(QMetaObject::invokeMethod(review, "clicked"));
+    QCOMPARE(navigation.count(), 1);
+    QCOMPARE(navigation.first().at(0).toString(), QStringLiteral("source-control"));
+    // A turn without edits has no card.
+    view.resetMessages(
+        {QVariantMap{{"messageKey", "u"}, {"kind", "user"}, {"body", "Hi"}, {"turnId", "t"}},
+         QVariantMap{{"messageKey", "end"},
+                     {"kind", "tool"},
+                     {"category", "system"},
+                     {"subtype", "turnEnd"},
+                     {"turnId", "t"},
+                     {"status", "completed"}}},
+        "changes");
+    QTRY_VERIFY(!findVisualItem(root, "transcriptTurnChanges") ||
+                !findVisualItem(root, "transcriptTurnChanges")->isVisible());
+}
+
 void AgentWorkspaceViewTest::markdownTableAfterCodeKeepsHeaderCells() {
     for (const auto& header : {QString("Surface"), QString{}}) {
         QTextDocument document;

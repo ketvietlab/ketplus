@@ -4,6 +4,7 @@
 #include <QDir>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QStringList>
 #include <QUrl>
 
 namespace ketplus::benchmark {
@@ -181,6 +182,27 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
                                "20 steps a second reads as smooth at 14 px. Keep 4 behind "
                                "another app."));
         journal.steer("Also check dark mode before you finish.");
+        // The mock's edits: AgentSidebar.qml +3 −1 and a new SpinClock.qml of 48 lines.
+        journal.tool({{"type", "dynamicToolCall"},
+                      {"tool", "Edit"},
+                      {"arguments",
+                       QJsonObject{{"file_path", "modules/ai/src/agent/qml/AgentSidebar.qml"},
+                                   {"old_string", "    RotationAnimation on rotation {}"},
+                                   {"new_string", "    rotation: 360 * (KetTheme.animationClock % "
+                                                  "spinMs) / spinMs\n    Component.onCompleted: "
+                                                  "KetTheme.holdAnimationClock(true)\n    "
+                                                  "Component.onDestruction: "
+                                                  "KetTheme.holdAnimationClock(false)"}}},
+                      {"result", text("The file was updated.")}});
+        QStringList spinClock;
+        for (int line = 1; line <= 48; ++line)
+            spinClock.append(QStringLiteral("// SpinClock line %1").arg(line));
+        journal.tool(
+            {{"type", "dynamicToolCall"},
+             {"tool", "Write"},
+             {"arguments", QJsonObject{{"file_path", "modules/ai/src/agent/qml/SpinClock.qml"},
+                                       {"content", spinClock.join('\n')}}},
+             {"result", text("The file was created.")}});
         journal.agent("final_answer", QString::fromUtf8(claudeAnswer));
         journal.usage(182000, 3.32);
         journal.finish("completed", 252);

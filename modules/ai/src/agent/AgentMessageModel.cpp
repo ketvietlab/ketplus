@@ -6,6 +6,7 @@
 #include "agent/AgentMessageFormatter.h"
 #include "agent/TranscriptActivityGroups.h"
 #include "agent/TranscriptTrace.h"
+#include "agent/TranscriptTurnFiles.h"
 
 #include <QCryptographicHash>
 #include <QJsonDocument>
@@ -190,6 +191,11 @@ int AgentMessageModel::groupLeaderIndex(const int row) const {
     if (item.value(QStringLiteral("groupRole")).toString().isEmpty())
         return -1;
     return indexes_.value(item.value(agent_message::activityGroupLeaderKeyName()).toString(), -1);
+}
+QVariantList AgentMessageModel::turnFiles(const int row) const {
+    if (row < 0 || row >= count())
+        return {};
+    return agent_message::turnChangedFiles(items_, visible_.at(row));
 }
 QStringList AgentMessageModel::activityGroupKeys() const {
     QStringList keys;

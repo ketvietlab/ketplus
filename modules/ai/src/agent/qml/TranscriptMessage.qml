@@ -277,6 +277,27 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             spacing: kind === "file" ? KetTheme.px(4, KetTheme.zoom) : KetTheme.px(7, KetTheme.zoom)
 
+            // The mock's changed-files card closes a turn that edited files, above its end.
+            Kit.KetChangedFiles {
+                id: turnChanges
+                objectName: "transcriptTurnChanges"
+                readonly property var changes: messageDelegate.subtype === "turnEnd" && view.messageModel ? view.messageModel.turnFiles(messageDelegate.index) : []
+                width: parent.width
+                visible: changes.length > 0
+                height: visible ? implicitHeight : 0
+                files: changes.map(file => {
+                    const shown = String(file.destination || file.path)
+                    const split = Math.max(shown.lastIndexOf("/"), shown.lastIndexOf("\\"))
+                    return {name: shown.slice(split + 1), path: split > 0 ? shown.slice(0, split) : "", added: file.added || 0, removed: file.removed || 0}
+                })
+                onFileActivated: index => host.requestFileDiff(String(changes[index].destination || changes[index].path))
+                footer: Kit.KetButton {
+                    objectName: "transcriptReviewChanges"
+                    text: "Review changes"
+                    controlSize: Kit.KetTheme.ControlSize.Small
+                    onClicked: host.requestProductNavigation("source-control")
+                }
+            }
             TranscriptNotice {
                 objectName: "transcriptNotice"
                 width: parent.width

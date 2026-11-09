@@ -43,6 +43,8 @@ class AgentMessageModel final : public QAbstractListModel {
     Q_INVOKABLE QVariantList findMatches(const QString& query, int limit = 1000) const;
     // Row of the leader of the activity group containing `row` (-1 when ungrouped). O(1).
     Q_INVOKABLE int groupLeaderIndex(int row) const;
+    // The files the turn ending at visible `row` changed, for its changed-files card.
+    Q_INVOKABLE QVariantList turnFiles(int row) const;
     // Stable keys of the activity groups currently loaded.
     Q_INVOKABLE QStringList activityGroupKeys() const;
     Q_INVOKABLE int sourceCount() const { return int(sourceItems_.size()); }
