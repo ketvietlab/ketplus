@@ -230,7 +230,10 @@ usage (context, session cost and tokens, and three plan limits); runs without `-
 keep the default CPU workload. `--transcript=claude`, `codex` or `cursor` replaces the
 messages with the message rows of the mock's `workspace/<provider>` transcript, projected
 from synthetic journal events through `daemonWindowMessages`, and `--scroll=0` to `1`
-positions the transcript like the mock's `--scroll`.
+positions the transcript like the mock's `--scroll`. Under `QT_QPA_PLATFORM=offscreen` a
+`--capture` run only saves the window and exits. It is not a CPU measurement, but it
+lets a locked or headless Mac compare against the mock's offscreen `--screenshot`, both
+at 1×.
 
 Use an Apple Silicon Mac with a 2× display. The macOS app bundle lets computer use
 identify the fixture separately from the installed app. After `ready`, focus the

@@ -253,7 +253,12 @@ int main(int argc, char** argv) {
     view.raise();
     view.activateWindow();
     view.quickView()->requestActivate();
+    // Offscreen (QT_QPA_PLATFORM=offscreen) only captures. It has no application state or CPU
+    // fixture to qualify, so a locked or headless Mac can still compare the window with the mock.
+    const bool offscreenCapture = app.platformName() == "offscreen" && parser.isSet("capture");
     const auto expected = [&] {
+        if (offscreenCapture)
+            return view.isVisible();
         if (visibility == "hidden")
             return !view.isVisible();
         if (visibility == "minimized")
@@ -381,6 +386,11 @@ int main(int argc, char** argv) {
                 return;
             }
             view.setProperty("captured", true);
+            if (offscreenCapture) {
+                report({{"event", "captured"}, {"path", capture}});
+                app.exit(0);
+                return;
+            }
             stable.restart();
             return;
         }
