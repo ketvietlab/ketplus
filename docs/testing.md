@@ -261,11 +261,16 @@ beside the running transcript, so a running sample reports three
 `sidebarClockHolders`. The desktop shell draws its sidebar with Widgets
 `ket::ConversationRow`, which this fixture does not measure.
 
-The #126 targets are ≤7% foreground, ≤2% background and approximately zero
-with no running work. They were relaxed from 5%/1% on 2026-11-08 after the
-native measurement: each tick of the kit's shared clock (20 Hz active, 4 Hz
-inactive) redraws the whole 2× window, measured at 6.3% and 1.6%. The clock
-rate stays unchanged. On 2026-11-09, `feat/new-ui` 3a9117b8 with kit d476382 measured:
+The #126 targets are ≤7% running in front or behind another app, and
+approximately zero with no running work or when hidden or minimized. They were
+relaxed from 5%/1% on 2026-11-08 after the native measurement, because each tick
+of the kit's shared clock redraws the whole 2× window. On 2026-11-09 the
+background target moved from ≤2% to ≤7%: the kit (ad86196) now keeps 20 Hz behind
+other apps instead of 4 Hz, which stuttered visibly on a watched secondary display.
+On that DELL display at 1× (so `fixtureValid` false), with three working sidebar
+rows and the transcript, running behind another app measured 3.4–6.6% over three
+runs, up from about 1.6%. A qualified 2× sample at the new rate is still to be
+recorded. Earlier, at 4 Hz behind, `feat/new-ui` 3a9117b8 with kit d476382 measured:
 - running in front 2.1–5.3% over three runs;
 - running behind another app 0.5–1.0%;
 - no work 0.2%;
