@@ -11,7 +11,7 @@ counting as merged fixes. No UI, live journal, provider quota or deployment work
 | --- | --- | --- |
 | Forward-only, idempotent migrations; newer-daemon journal safety | Startup transaction failures #250; #273 closes failed storage objects; #274 protects migration staging (merged `c3490da5`) | Newer format refused unchanged (ADR 0095); legacy backfills once (ADR 0096); activity backfill after open (ADR 0097); interruption/low-space remain / #3329 |
 | Transactions, crash consistency and surfaced errors | Append/delete/fork/replay fixes #241–250; #254 (merged through #255) prepares media ownership before journal commit | Cross-file interruption and broader read/commit failure coverage; do not infer power-loss atomicity from callback order / #2739 |
-| Bounded/indexed reads on large journals | GC #220, ACK #223, metadata #228, staging #230, deletion queue #235, cloud cache #237, cancellation #240; #272 bounds stored policy JSON (merged through #274) | Explicit session-delete and whole-history fork work; actual query plans and representative payload mix / #2739 |
+| Bounded/indexed reads on large journals | GC #220, ACK #223, metadata #228, staging #230, deletion queue #235, cloud cache #237, cancellation #240; #272 bounds stored policy JSON (merged through #274) | Statement audit of 24 operations next to 200k events in 2,000 sessions passes; large-event chunks and media rows are not in that fixture / #3329 |
 | Retention and deletion remove rows/media | Transactional cleanup and retention tests above; media cleanup/dedup #251–252 | Physical media/blob retirement, shared-reference preservation and steady-state acceptance; #128 archive behavior is not implied / #2739 |
 | Media paths, limits, permissions, orphan cleanup | #251–252 plus merged publication/fork/preview #253–255; merged private migration staging #274 | Ancestor/replacement races, decode/concurrency bounds, write-admission/orphan recovery and platform permissions / #2739 |
 | Note natural splits for oversized LocalJournal.cpp | At combined journal code 6347493f it is 1,462 lines. Natural responsibilities listed below; current constructor fix is two net lines | Record this inventory in review; any actual extraction must preserve behavior and has its own validation / #2739 |
@@ -167,3 +167,14 @@ indexed. The same fixture opens in 31 ms the first time; the slowest pass is
 pass 34 ms. Drained rows match live indexing. Negative controls for event
 deferral, the group-page gate, the byte budget, `BEGIN IMMEDIATE` and the marker
 row check each fail their test. Remaining: low space and interruption.
+
+## Query audit on a large journal
+
+`JournalQueryAuditTest` traces each statement the journal connection runs for 24
+operations on one conversation of 1,200 events, next to 2,000 other sessions with
+200k raw and replay rows and 20k tombstones. Every statement stays under 5,000
+full-scan steps and 200k VM steps without automatic indexes; the largest operation
+(fork) runs 77k VM steps over 1,065 statements, and the session list 46k for 2,000
+sessions. Defeating the `events` key in `eventsAfter` makes `events-after` and
+`turn-start` fail at about 1.2M VM steps. Opening the journal is outside the trace
+and covered by the startup characterization (ADR 0096/0097).

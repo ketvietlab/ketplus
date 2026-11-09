@@ -243,6 +243,13 @@ the corresponding Atlas mock first.
   with `KETPLUS_RUN_STARTUP_BACKLOG_TESTS=1`; the first open, an append to a
   marked session, each activity backfill pass and the second open must each stay
   under 250 ms.
+- Journal query audit: `ketplus_daemon_journal_query_audit_tests` traces every
+  statement of 24 journal operations on one conversation (append, transcript reads,
+  activity pages, fork, delete and purge, backfill, retention and garbage passes)
+  next to 2,000 other sessions with 200k events. It fails a statement with more than
+  5,000 full-scan steps, an automatic index or 200k VM steps. It reads SQLite's
+  counters through the driver handle, so it is built only when CMake finds SQLite3
+  and skips when the driver uses a different SQLite build.
 - Journal format (ADR 0095): `ketplus_daemon_journal_space_tests` refuses a newer
   journal in both startup compaction and `LocalJournal` with byte-identical file
   contents, including a newer format only in an uncheckpointed WAL (written by
