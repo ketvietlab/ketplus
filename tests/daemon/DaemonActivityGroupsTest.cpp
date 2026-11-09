@@ -281,6 +281,119 @@ class DaemonActivityGroupsTest : public QObject {
         QCOMPARE(bounded.value("files").toArray().size(), 50);
         QCOMPARE(bounded.value("files_total").toInt(), 62);
     }
+    // A path's later changes decide its operation; a file created and deleted again drops out.
+    void editSummaryMergesEachPathsOperations() {
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite3"));
+        QVERIFY(seed(journal, dir.path()));
+        auto moved = change("src/mv.cpp", "update", "@@ -1 +1 @@\n+m");
+        moved.insert("kind", QJsonObject{{"type", "update"}, {"move_path", "src/moved.cpp"}});
+        QVERIFY(journal.appendEvent(
+                    "session", 1, "item.completed",
+                    fileChange("one", {change("src/new.cpp", "add", "a"),
+                                       change("src/old.cpp", "update", "@@ -1 +1 @@\n+o"),
+                                       change("src/tmp.cpp", "add", "t"),
+                                       change("src/mv.cpp", "update", "@@ -1 +1 @@\n+e")})) > 0);
+        const auto cursor = journal.appendEvent(
+            "session", 1, "item.completed",
+            fileChange("two", {change("src/new.cpp", "update", "@@ -1 +1 @@\n+b"),
+                               change("src/old.cpp", "delete", "o"),
+                               change("src/tmp.cpp", "delete", "t"), moved}));
+        QVERIFY(cursor > 0);
+        const auto summary =
+            journal.activitySummaryEvent(last(journal, cursor)).value("payload").toObject();
+        QCOMPARE(summary.value("files_total").toInt(), 3);
+        QHash<QString, QJsonObject> byPath;
+        for (const auto& value : summary.value("files").toArray())
+            byPath.insert(value.toObject().value("path").toString(), value.toObject());
+        QCOMPARE(byPath.size(), 3);
+        QCOMPARE(byPath.value("src/new.cpp").value("operation").toString(), "Created");
+        QCOMPARE(byPath.value("src/old.cpp").value("operation").toString(), "Deleted");
+        QCOMPARE(byPath.value("src/mv.cpp").value("operation").toString(), "Moved");
+        QCOMPARE(byPath.value("src/mv.cpp").value("destination").toString(), "src/moved.cpp");
+        QVERIFY(!byPath.contains("src/tmp.cpp"));
+    }
+    // The files keep their order when a completion arrives again or the session is forked.
+    void editSummaryOrderSurvivesRedeliveryAndFork() {
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite3"));
+        QVERIFY(seed(journal, dir.path()));
+        const auto one = fileChange("one", {change("src/a.cpp", "update", "@@ -1 +1 @@\n+a")});
+        QVERIFY(journal.appendEvent("session", 1, "item.started", one) > 0);
+        QVERIFY(journal.appendEvent("session", 1, "item.completed", one) > 0);
+        const auto two = journal.appendEvent(
+            "session", 1, "item.completed",
+            fileChange("two", {change("src/b.cpp", "update", "@@ -1 +1 @@\n+b")}));
+        QVERIFY(two > 0);
+        const auto paths = [&](const QString& session, qint64 cursor) {
+            QStringList listed;
+            const auto event = journal.eventsAfter(session, 1, cursor - 1, 1).first().toObject();
+            for (const auto& value : journal.activitySummaryEvent(event)
+                                         .value("payload")
+                                         .toObject()
+                                         .value("files")
+                                         .toArray())
+                listed.append(value.toObject().value("path").toString());
+            return listed;
+        };
+        const QStringList expected{"src/a.cpp", "src/b.cpp"};
+        QCOMPARE(paths("session", two), expected);
+        const auto again = journal.appendEvent("session", 1, "item.completed", one);
+        QVERIFY(again > 0);
+        QCOMPARE(paths("session", again), expected);
+        StoredSession fork{"fork", dir.path(), "codex", {}, {}, "ready"};
+        QVERIFY(journal.forkSession("session", 1, fork));
+        QCOMPARE(paths("fork", again), expected);
+    }
+    // A backfill that did not finish runs again on the next open.
+    void interruptedFilesBackfillRunsAgain() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite3");
+        qint64 cursor;
+        {
+            LocalJournal journal(path);
+            QVERIFY(seed(journal, dir.path()));
+            cursor = journal.appendEvent(
+                "session", 1, "item.completed",
+                fileChange("one", {change("src/a.cpp", "update", "@@ -1 +1 @@\n+b")}));
+            QVERIFY(cursor > 0);
+            QVERIFY(journal.appendEvent("session", 1, "item.completed",
+                                        command("two", "completed")) > 0);
+        }
+        const auto connection = QStringLiteral("activity-files-interrupt-fixture");
+        const auto exec = [&](const QStringList& statements) {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", connection);
+            db.setDatabaseName(path);
+            bool ok = db.open();
+            for (const auto& sql : statements) {
+                QSqlQuery query(db);
+                ok = ok && query.exec(sql);
+            }
+            db.close();
+            return ok;
+        };
+        // An old journal with one event left to index, whose indexing fails this time.
+        QVERIFY(exec({"DROP TABLE activity_files",
+                      QString("UPDATE activity_heads SET indexed_cursor=%1").arg(cursor),
+                      "CREATE TRIGGER interrupt BEFORE UPDATE ON activity_heads BEGIN SELECT "
+                      "RAISE(ABORT,'interrupted'); END"}));
+        QSqlDatabase::removeDatabase(connection);
+        {
+            LocalJournal journal(path);
+            QVERIFY(!journal.isOpen());
+        }
+        QVERIFY(exec({"DROP TRIGGER interrupt"}));
+        QSqlDatabase::removeDatabase(connection);
+        LocalJournal journal(path);
+        QVERIFY(journal.isOpen());
+        const auto files = journal.activitySummaryEvent(last(journal, cursor))
+                               .value("payload")
+                               .toObject()
+                               .value("files")
+                               .toArray();
+        QCOMPARE(files.size(), 1);
+        QCOMPARE(files.first().toObject().value("path").toString(), "src/a.cpp");
+    }
     // A journal indexed before activity_files existed lists its groups' files once.
     void existingJournalBackfillsChangedFiles() {
         QTemporaryDir dir;

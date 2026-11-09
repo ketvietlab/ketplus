@@ -407,7 +407,8 @@ class LocalJournal final {
                               QString* error);
     // Replaces the files one completed fileChange item changed in its activity group.
     bool recordActivityFiles(const QString& sessionId, qint64 generation, qint64 group,
-                             const QString& itemId, const QJsonObject& fileChange, QString* error);
+                             const QString& itemId, qint64 itemCursor,
+                             const QJsonObject& fileChange, QString* error);
     void setError(const QString& error) const;
 
     QString connectionName_;

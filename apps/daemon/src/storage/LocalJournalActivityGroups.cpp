@@ -53,6 +53,21 @@ QString fileOperation(const QJsonObject& change) {
     return type == "add" ? "Created" : type == "delete" ? "Deleted" : "Edited";
 }
 
+// A path's operation over the group, from the earlier one and the next change: a later move or
+// delete wins, a created file stays created through later edits, a file created and then
+// deleted is unchanged, and one deleted and then created again was edited.
+QString mergedFileOperation(const QString& earlier, const QString& next) {
+    if (next == "Deleted")
+        return earlier == "Created" ? "Unchanged" : "Deleted";
+    if (next == "Moved")
+        return next;
+    if (earlier == "Unchanged")
+        return next;
+    if (earlier == "Deleted")
+        return "Edited";
+    return earlier;
+}
+
 QJsonObject failure(const QString& code, const QString& message) {
     return {{"ok", false}, {"error_code", code}, {"error_message", message}};
 }
@@ -60,7 +75,8 @@ QJsonObject failure(const QString& code, const QString& message) {
 
 bool LocalJournal::initializeActivityGroups() {
     QSqlQuery query(database_);
-    // A journal indexed before activity_files existed lists its groups' files once.
+    // A journal indexed before activity_files existed lists its groups' files once. The table
+    // is created in the backfill's transaction, so an interrupted backfill runs again.
     bool backfillFiles = false;
     if (query.exec("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN "
                    "('activity_heads','activity_files')") &&
@@ -84,12 +100,6 @@ bool LocalJournal::initializeActivityGroups() {
           "activity_items(session_id,generation,turn_sequence) WHERE running>0",
           "CREATE INDEX IF NOT EXISTS activity_summaries_running_turn ON "
           "activity_summaries(session_id,generation,turn_sequence) WHERE running>0",
-          // The files a group's edits changed, for the summary's changed-files list.
-          "CREATE TABLE IF NOT EXISTS activity_files (session_id TEXT NOT NULL, generation "
-          "INTEGER NOT NULL, group_cursor INTEGER NOT NULL, item_id TEXT NOT NULL, path TEXT NOT "
-          "NULL, destination TEXT NOT NULL, operation TEXT NOT NULL, added INTEGER NOT NULL, "
-          "removed INTEGER NOT NULL, known INTEGER NOT NULL, PRIMARY "
-          "KEY(session_id,generation,group_cursor,item_id,path))",
           "CREATE TABLE IF NOT EXISTS activity_heads (session_id TEXT NOT NULL, generation INTEGER "
           "NOT NULL, turn_sequence INTEGER NOT NULL, group_cursor INTEGER NOT NULL, indexed_cursor "
           "INTEGER NOT NULL, PRIMARY KEY(session_id,generation))"}) {
@@ -101,6 +111,19 @@ bool LocalJournal::initializeActivityGroups() {
     // Upgrade old journals once, streaming retained events rather than materializing history.
     if (!database_.transaction()) {
         setError(database_.lastError().text());
+        return false;
+    }
+    // The files a group's edits changed, for the summary's changed-files list, in the order of
+    // the items' first events and then of each item's changes.
+    if (!query.exec(QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS activity_files (session_id TEXT NOT NULL, generation "
+            "INTEGER NOT NULL, group_cursor INTEGER NOT NULL, item_id TEXT NOT NULL, item_cursor "
+            "INTEGER NOT NULL, position INTEGER NOT NULL, path TEXT NOT NULL, destination TEXT NOT "
+            "NULL, operation TEXT NOT NULL, added INTEGER NOT NULL, removed INTEGER NOT NULL, "
+            "known INTEGER NOT NULL, PRIMARY KEY(session_id,generation,group_cursor,item_id,"
+            "path))"))) {
+        setError(query.lastError().text());
+        database_.rollback();
         return false;
     }
     QSqlQuery sessions(database_);
@@ -118,6 +141,7 @@ bool LocalJournal::initializeActivityGroups() {
     sessions.finish();
     for (const auto& session : pending) {
         QSqlQuery rows(database_);
+        rows.setForwardOnly(true);
         rows.prepare("SELECT cursor,turn_sequence,event_type,payload FROM replay_events WHERE "
                      "session_id=? AND generation=? AND cursor>? ORDER BY cursor");
         for (const auto& value : session)
@@ -142,7 +166,9 @@ bool LocalJournal::initializeActivityGroups() {
     }
     if (backfillFiles) {
         QSqlQuery edits(database_);
-        if (!edits.exec("SELECT a.session_id,a.generation,a.group_cursor,a.item_id,r.payload FROM "
+        edits.setForwardOnly(true);
+        if (!edits.exec("SELECT a.session_id,a.generation,a.group_cursor,a.item_id,a.first_cursor,"
+                        "r.payload FROM "
                         "activity_items a JOIN replay_events r ON r.session_id=a.session_id AND "
                         "r.generation=a.generation AND r.cursor=a.last_cursor WHERE "
                         "a.family='edit' AND a.group_cursor>0 AND "
@@ -151,17 +177,15 @@ bool LocalJournal::initializeActivityGroups() {
             database_.rollback();
             return false;
         }
-        QList<QVariantList> rows;
-        while (edits.next())
-            rows.append(
-                {edits.value(0), edits.value(1), edits.value(2), edits.value(3), edits.value(4)});
-        edits.finish();
-        for (const auto& row : rows) {
+        // One completed edit's payload at a time, rather than every edit in the journal.
+        while (edits.next()) {
             QString error;
-            const auto payload = QJsonDocument::fromJson(row.at(4).toString().toUtf8()).object();
-            if (!recordActivityFiles(row.at(0).toString(), row.at(1).toLongLong(),
-                                     row.at(2).toLongLong(), row.at(3).toString(),
-                                     payload.value("item").toObject(), &error)) {
+            const auto payload =
+                QJsonDocument::fromJson(edits.value(5).toString().toUtf8()).object();
+            if (!recordActivityFiles(edits.value(0).toString(), edits.value(1).toLongLong(),
+                                     edits.value(2).toLongLong(), edits.value(3).toString(),
+                                     edits.value(4).toLongLong(), payload.value("item").toObject(),
+                                     &error)) {
                 setError(error);
                 database_.rollback();
                 return false;
@@ -178,8 +202,8 @@ bool LocalJournal::initializeActivityGroups() {
 }
 
 bool LocalJournal::recordActivityFiles(const QString& session, qint64 generation, qint64 group,
-                                       const QString& item, const QJsonObject& fileChange,
-                                       QString* error) {
+                                       const QString& item, qint64 itemCursor,
+                                       const QJsonObject& fileChange, QString* error) {
     const auto exec = [&](QSqlQuery& query) {
         if (query.exec())
             return true;
@@ -197,8 +221,9 @@ bool LocalJournal::recordActivityFiles(const QString& session, qint64 generation
     // A failed change changed nothing.
     if (fileChange.value("status").toString() == "failed")
         return true;
-    for (const auto& value : fileChange.value("changes").toArray()) {
-        const auto change = value.toObject();
+    const auto changes = fileChange.value("changes").toArray();
+    for (qsizetype position = 0; position < changes.size(); ++position) {
+        const auto change = changes.at(position).toObject();
         const QString path = change.value("path").toString();
         if (path.isEmpty())
             continue;
@@ -209,9 +234,9 @@ bool LocalJournal::recordActivityFiles(const QString& session, qint64 generation
         if (destination.isNull())
             destination = QStringLiteral("");
         QSqlQuery insert(database_);
-        insert.prepare("INSERT OR REPLACE INTO activity_files VALUES(?,?,?,?,?,?,?,?,?,?)");
+        insert.prepare("INSERT OR REPLACE INTO activity_files VALUES(?,?,?,?,?,?,?,?,?,?,?,?)");
         for (const QVariant& bound :
-             QVariantList{session, generation, group, item, path, destination,
+             QVariantList{session, generation, group, item, itemCursor, position, path, destination,
                           fileOperation(change), stats.added, stats.removed, stats.known ? 1 : 0})
             insert.addBindValue(bound);
         if (!exec(insert))
@@ -248,7 +273,8 @@ bool LocalJournal::updateActivityGroups(const QString& session, qint64 generatio
     if ((lifecycle || type == "command.output_delta") && !id.isEmpty()) {
         QSqlQuery existing(database_);
         existing.prepare(
-            "SELECT group_cursor,family,running,failed FROM activity_items WHERE session_id=? AND "
+            "SELECT group_cursor,family,running,failed,first_cursor FROM activity_items WHERE "
+            "session_id=? AND "
             "generation=? AND turn_sequence=? AND item_id=?");
         existing.addBindValue(session);
         existing.addBindValue(generation);
@@ -296,7 +322,8 @@ bool LocalJournal::updateActivityGroups(const QString& session, qint64 generatio
                 return false;
         }
         if (lifecycle && type == "item.completed" && kind == "edit" && group > 0 &&
-            !recordActivityFiles(session, generation, group, id, item, error))
+            !recordActivityFiles(session, generation, group, id,
+                                 known ? existing.value(4).toLongLong() : cursor, item, error))
             return false;
         if (group > 0) {
             QSqlQuery aggregate(database_);
@@ -395,7 +422,8 @@ QJsonObject LocalJournal::activitySummaryEvent(const QJsonObject& event) const {
     // The files the group's edits changed, merged by path in the order first changed.
     QSqlQuery changed(database_);
     changed.prepare("SELECT path,destination,operation,added,removed,known FROM activity_files "
-                    "WHERE session_id=? AND generation=? AND group_cursor=? ORDER BY rowid");
+                    "WHERE session_id=? AND generation=? AND group_cursor=? ORDER BY "
+                    "item_cursor,item_id,position");
     changed.addBindValue(event.value("session_id").toString());
     changed.addBindValue(event.value("session_generation").toInteger());
     changed.addBindValue(group);
@@ -404,25 +432,32 @@ QJsonObject LocalJournal::activitySummaryEvent(const QJsonObject& event) const {
     if (changed.exec()) {
         while (changed.next()) {
             const QString path = changed.value(0).toString();
+            const QString operation = changed.value(2).toString();
             const auto found = byPath.constFind(path);
             if (found == byPath.cend()) {
                 byPath.insert(path, files.size());
                 files.append({{"path", path},
                               {"destination", changed.value(1).toString()},
-                              {"operation", changed.value(2).toString()},
+                              {"operation", operation},
                               {"added", changed.value(3).toInt()},
                               {"removed", changed.value(4).toInt()},
                               {"known", changed.value(5).toInt() != 0}});
                 continue;
             }
             QJsonObject& file = files[*found];
+            const QString merged =
+                mergedFileOperation(file.value("operation").toString(), operation);
+            file.insert("operation", merged);
+            // Only a move has a destination, its latest one.
+            if (operation == "Moved" || merged != "Moved")
+                file.insert("destination", merged == "Moved" ? changed.value(1).toString() : "");
             file.insert("added", file.value("added").toInt() + changed.value(3).toInt());
             file.insert("removed", file.value("removed").toInt() + changed.value(4).toInt());
             file.insert("known", file.value("known").toBool() && changed.value(5).toInt() != 0);
-            if (!changed.value(1).toString().isEmpty())
-                file.insert("destination", changed.value(1).toString());
         }
     }
+    // A file created and deleted again within the group changed nothing.
+    files.removeIf([](const QJsonObject& file) { return file.value("operation") == "Unchanged"; });
     QJsonArray listed;
     for (qsizetype i = 0; i < files.size() && i < kSummaryFileLimit; ++i)
         listed.append(files.at(i));
