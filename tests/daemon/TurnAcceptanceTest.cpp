@@ -772,6 +772,66 @@ class TurnAcceptanceTest final : public QObject {
         QVERIFY(!prompts().last().contains("[KetPlus handoff]"));
         QCOMPARE(eventCount(journal.eventsAfter(seed.id, 1, 0), "session.provider_changed"), 1);
     }
+    void finalErrorEndsItsApprovals() {
+        QTemporaryDir dir;
+        const auto executable = dir.filePath("fake-codex");
+        const auto providerLog = dir.filePath("provider.log");
+        QVERIFY(writeFakeCodex(executable, providerLog));
+        LocalJournal journal(dir.filePath("journal.sqlite3"));
+        StoredSession seed;
+        seed.id = "approval-after-error";
+        seed.generation = 1;
+        seed.worktreePath = dir.path();
+        seed.adapter = "codex";
+        seed.state = "idle";
+        QVERIFY(journal.upsertSession(seed));
+        CodexAdapter adapter(executable);
+        SessionHost host(&journal, &adapter);
+        const auto stop = qScopeGuard([&] { adapter.stop(); });
+        const auto command = [&](const QString& type, const QString& messageId,
+                                 const QJsonObject& payload) {
+            auto submitted = request(messageId, seed.id);
+            submitted.insert("message_type", type);
+            submitted.insert("payload", payload);
+            return host.handleCommand(submitted, "desktop-test");
+        };
+        QVERIFY(command("session.start_turn", "turn",
+                        {{"prompt", "approve"}, {"client_message_id", "turn"}})
+                    .value("ok")
+                    .toBool());
+        const auto pending = [&] {
+            return command("session.pending_approvals", "pending", {})
+                .value("pending_approvals")
+                .toArray();
+        };
+        QTRY_COMPARE_WITH_TIMEOUT(pending().size(), qsizetype(1), 5000);
+        const QString approvalId = pending().first().toObject().value("approval_id").toString();
+        const auto active = journal.sessions().first();
+        QVERIFY(!active.turnId.isEmpty());
+        const auto error = [&](const QString& turnId, bool willRetry) {
+            emit adapter.notificationReceived(
+                "error", {{"threadId", active.threadId},
+                          {"turnId", turnId},
+                          {"willRetry", willRetry},
+                          {"error", QJsonObject{{"message", "stream failed"}}}});
+        };
+        // A retried error and a final error of an earlier turn leave the approval waiting.
+        error(active.turnId, true);
+        error("earlier-turn", false);
+        QCOMPARE(pending().size(), qsizetype(1));
+        // The final error ends the turn without turn/completed; its approval ends with it.
+        error(active.turnId, false);
+        QCOMPARE(pending().size(), qsizetype(0));
+        const auto late = command(
+            "approval.resolve", "late",
+            {{"approval_id", approvalId}, {"resolution", QJsonObject{{"decision", "accept"}}}});
+        QVERIFY2(!late.value("ok").toBool(), qPrintable(QJsonDocument(late).toJson()));
+        QTest::qWait(100);
+        QFile log(providerLog);
+        QVERIFY(log.open(QIODevice::ReadOnly));
+        QVERIFY(!log.readAll().contains("approval:accept"));
+    }
+
     void approvalsEndWithTheirTurn() {
         QTemporaryDir dir;
         const auto executable = dir.filePath("fake-codex");

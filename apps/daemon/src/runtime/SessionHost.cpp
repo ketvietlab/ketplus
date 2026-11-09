@@ -2097,6 +2097,12 @@ void SessionHost::handleProviderNotification(const QString& method, const QJsonO
             QFile::remove(path);
         for (const QString& id : std::exchange(session->stagedAttachmentIds, {}))
             (void)journal_->cancelAttachment(session->stored.id, session->stored.generation, id, 1);
+        // A final error ends the turn even when turn/completed never follows, so its approvals
+        // end with it. An error naming an earlier turn leaves the running turn's approvals alone.
+        const QString turnId = params.value(QStringLiteral("turnId")).toString();
+        if (!params.value(QStringLiteral("willRetry")).toBool() &&
+            (turnId.isEmpty() || turnId == session->stored.turnId))
+            abandonTurnApprovals(session->stored.id);
     }
 }
 
