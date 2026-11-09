@@ -39,6 +39,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void browserStepsCollapseAroundEvidence_data();
     void browserStepsCollapseAroundEvidence();
     void fileChangesStayCompactInsideExpandedGroup();
+    void fileStepsOpenTheirDiffInline();
     void activityOperationSemantics();
     void semanticCommandLabelsStayExpandable();
     void longCommandTitleStaysInsideColumn();

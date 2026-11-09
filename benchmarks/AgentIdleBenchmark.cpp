@@ -109,7 +109,8 @@ int main(int argc, char** argv) {
           "provider"},
          {"scroll", "With --transcript: 0 shows the top, 1 the end, like the mock's --scroll",
           "fraction"},
-         {"expand-groups", "With --transcript: open every activity group, like the mock's"},
+         {"expand-groups",
+          "With --transcript: open every activity group and the first file diff, like the mock's"},
          {"display", "secondary (the first that is not the main one) or a screen index", "screen"},
          {"hold", "Keep the window open for review instead of measuring"}});
     parser.process(app);
@@ -316,6 +317,20 @@ int main(int argc, char** argv) {
                     self(self, child);
             };
             open(open, view.quickView()->rootObject());
+            // The mock opens the first file of a multi-file edit on its diff.
+            QTimer::singleShot(200, &view, [&view] {
+                const auto first = [](const auto& self, QQuickItem* item) -> QQuickItem* {
+                    if (item->objectName() == "transcriptFileStep" &&
+                        item->property("expandable").toBool())
+                        return item;
+                    for (auto* child : item->childItems())
+                        if (auto* found = self(self, child))
+                            return found;
+                    return nullptr;
+                };
+                if (auto* step = first(first, view.quickView()->rootObject()))
+                    QMetaObject::invokeMethod(step, "clicked");
+            });
         });
     if (!transcript.isEmpty() && parser.isSet("scroll"))
         QTimer::singleShot(1000, &view, [&view, fraction = parser.value("scroll").toDouble()] {
