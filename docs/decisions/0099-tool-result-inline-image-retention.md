@@ -41,6 +41,14 @@ inline images.
   `mcpToolCall` and `dynamicToolCall` manifests of at most 16 MiB, but only when
   one of their chunks contains an image block (SQLite `instr`, no hydration).
   Larger text-only results still stay, as ADR 0047 requires.
+- The probe reads chunks, so it counts against a per-pass image-lane budget of
+  32 MiB of chunk bytes whether or not it finds an image. A tool payload needs
+  room to be probed and then read (twice its size); a generated image needs its
+  size once. A candidate that does not fit ends the pass, and the first one
+  always fits. A backlog of text-only results therefore costs at most one or two
+  payloads' worth of probing per pass. Unbudgeted, 512 manifests of an 8 MB text
+  result made one default pass take about 0.9 s; budgeted, a pass stays well
+  under 0.5 s (`textOnlyToolBacklogKeepsPassesShort`).
 - Desktop: `mcp_media::materializeImages` turns a `history_retention` omitted
   block into the same unavailable placeholder used for pruned media. The
   gallery keeps the image's slot instead of silently losing it.

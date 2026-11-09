@@ -145,6 +145,8 @@ std::optional<QByteArray> boundedLargePayload(const QSqlDatabase& database, cons
 
 // A generated image or tool result is read whole to drop its inline pixels; larger ones stay.
 constexpr qint64 maximumImagePayloadBytes = 16 * 1024 * 1024;
+// Chunk bytes the image lane may probe or read in one pass: one tool payload probed and read.
+constexpr qint64 maximumImageLaneBytesPerPass = 2 * maximumImagePayloadBytes;
 
 struct Row {
     qint64 rowid;
@@ -239,14 +241,16 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
         "AND p.total_bytes>0 AND p.total_bytes<=? AND length(CAST(r.payload AS BLOB))<=16384 "
         "AND NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id=r.session_id AND "
         "e.generation=r.generation) "
-        "AND (json_extract(r.payload,'$.item_type')='imageGeneration' OR "
-        // A tool result qualifies only if a chunk holds an image block; larger text-only
-        // results stay outside every lane (ADR 0047).
-        "(json_extract(r.payload,'$.item_type') IN ('mcpToolCall','dynamicToolCall') AND "
-        "EXISTS (SELECT 1 FROM large_event_payload_chunks c WHERE c.session_id=p.session_id "
-        "AND c.generation=p.generation AND c.transfer_id=p.transfer_id AND "
-        "(instr(CAST(c.payload AS BLOB),CAST('\"type\":\"image\"' AS BLOB))>0 OR "
-        "instr(CAST(c.payload AS BLOB),CAST('\"type\":\"inputImage\"' AS BLOB))>0))))");
+        "AND json_extract(r.payload,'$.item_type') IN "
+        "('imageGeneration','mcpToolCall','dynamicToolCall')");
+    // A tool result qualifies only if a chunk holds an image block; larger text-only results
+    // stay outside every lane (ADR 0047). The probe reads the payload's chunks, so it is
+    // charged to the pass's image budget before it runs, whatever it finds.
+    QSqlQuery imageProbe(database_);
+    imageProbe.prepare(
+        "SELECT 1 FROM large_event_payload_chunks WHERE session_id=? AND generation=? AND "
+        "transfer_id=? AND (instr(CAST(payload AS BLOB),CAST('\"type\":\"image\"' AS BLOB))>0 "
+        "OR instr(CAST(payload AS BLOB),CAST('\"type\":\"inputImage\"' AS BLOB))>0) LIMIT 1");
     QSqlQuery remove(database_);
     remove.prepare(
         QStringLiteral("DELETE FROM replay_events AS r WHERE ") + eligible +
@@ -303,6 +307,7 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
     update.prepare(QStringLiteral("UPDATE replay_events SET payload = ? WHERE rowid = ?"));
     qint64 parsedBytes = 0;
     bool imageRead = false;
+    qint64 imageLaneBytes = 0; // chunk bytes probed or read by the image lane this pass
     qsizetype processed = 0;
     QSet<QPair<QString, qint64>> changed;
     qint64 removed = 0;
@@ -381,8 +386,31 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
                 lane->finish();
                 const auto cost = manifestBytes.size() + total;
                 if (image) {
-                    if (imageRead)
+                    const auto manifest = QJsonDocument::fromJson(manifestBytes).object();
+                    const bool tool = manifest.value("item_type") != "imageGeneration";
+                    // A tool payload may be probed and then read: both must fit. The first
+                    // candidate always fits, so every pass makes progress.
+                    if (imageRead ||
+                        imageLaneBytes + (tool ? 2 : 1) * total > maximumImageLaneBytesPerPass)
                         break; // the next pass takes it
+                    if (tool) {
+                        imageLaneBytes += total;
+                        imageProbe.bindValue(0, row.session);
+                        imageProbe.bindValue(1, row.generation);
+                        imageProbe.bindValue(2, manifest.value("large_event")
+                                                    .toObject()
+                                                    .value("transfer_id")
+                                                    .toString());
+                        if (!imageProbe.exec())
+                            return fail(imageProbe.lastError().text());
+                        const bool hasImage = imageProbe.next();
+                        if (imageProbe.lastError().isValid())
+                            return fail(imageProbe.lastError().text());
+                        imageProbe.finish();
+                        if (!hasImage)
+                            continue;
+                    }
+                    imageLaneBytes += total;
                     imageRead = true;
                 } else {
                     if (cost > 1024 * 1024)

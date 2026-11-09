@@ -86,7 +86,7 @@ class Database {
 QDateTime cutoff() { return QDateTime::currentDateTimeUtc().addDays(-30); }
 
 bool drainAcknowledged(LocalJournal& journal, Database& database) {
-    for (int pass = 0; pass < 256 && database.scalar("SELECT count(*) FROM events") > 0; ++pass)
+    for (int pass = 0; pass < 2048 && database.scalar("SELECT count(*) FROM events") > 0; ++pass)
         if (!journal.pruneAcknowledgedEvents())
             return false;
     return database.scalar("SELECT count(*) FROM events") == 0;
@@ -396,6 +396,34 @@ class JournalUsageRetentionTest final : public QObject {
             });
         };
         QCOMPARE(completions(after), completions(before));
+    }
+
+    // Probing text-only tool payloads for images counts against the pass, found or not.
+    void textOnlyToolBacklogKeepsPassesShort() {
+        QTemporaryDir directory;
+        const auto path = directory.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(seed(journal, path, true, 21, QString(8 * 1024 * 1024, 'x'), true));
+        Database database(path);
+        // 512 more manifests of the oldest 8 MB text result, all eligible.
+        QVERIFY(database.exec(
+            "WITH RECURSIVE n(v) AS (VALUES(1) UNION ALL SELECT v+1 FROM n WHERE v<512) "
+            "INSERT INTO replay_events(session_id,generation,cursor,event_type,item_id,payload,"
+            "sent_at,turn_sequence) SELECT r.session_id,r.generation,100000+n.v,r.event_type,"
+            "r.item_id,r.payload,r.sent_at,r.turn_sequence FROM n CROSS JOIN replay_events r "
+            "WHERE r.event_type='item.completed' AND r.turn_sequence=1"));
+        const auto payloads = database.scalar("SELECT count(*) FROM large_event_payloads");
+        qint64 slowest = 0;
+        for (int pass = 0; pass < 8; ++pass) {
+            QElapsedTimer timer;
+            timer.start();
+            QVERIFY(journal.pruneReplayDetails(cutoff()).has_value());
+            slowest = qMax(slowest, timer.elapsed());
+        }
+        qInfo() << "Slowest text-only probe pass ms:" << slowest;
+        QCOMPARE(database.scalar("SELECT count(*) FROM large_event_payloads"), payloads);
+        // Unbudgeted, one default pass probed 128 × 8 MB and took about 0.9-1.9 s.
+        QVERIFY2(slowest < 500, qPrintable(QString("slowest pass %1 ms").arg(slowest)));
     }
 
     void generatedImagesWaitForAcknowledgement() {
