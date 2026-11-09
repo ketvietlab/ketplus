@@ -16,6 +16,9 @@
 
 #include <algorithm>
 #include <limits>
+#ifdef Q_OS_MACOS
+#include <malloc/malloc.h>
+#endif
 
 using namespace ketplus::daemon;
 
@@ -406,6 +409,116 @@ class TurnAcceptanceTest final : public QObject {
         QVERIFY(turn("third", "hello").value("ok").toBool());
         QTRY_COMPARE_WITH_TIMEOUT(stored().state, QString("ready"), 5000);
     }
+    void deltaAfterItsItemCompletedIsDropped() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite3");
+        const auto executable = dir.filePath("fake-codex");
+        QVERIFY(writeFakeCodex(executable, dir.filePath("provider.log")));
+        LocalJournal journal(path);
+        StoredSession seed;
+        seed.id = "late-delta";
+        seed.generation = 1;
+        seed.worktreePath = dir.path();
+        seed.adapter = "codex";
+        seed.state = "idle";
+        QVERIFY(journal.upsertSession(seed));
+        CodexAdapter adapter(executable);
+        SessionHost host(&journal, &adapter);
+        const auto stop = qScopeGuard([&] { adapter.stop(); });
+        auto submitted = request("hang", seed.id);
+        submitted.insert("payload", QJsonObject{{"prompt", "hang"}, {"client_message_id", "hang"}});
+        QVERIFY(host.handleCommand(submitted, "desktop-test").value("ok").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(journal.sessions().first().state, QString("running"), 5000);
+        const QString thread = journal.sessions().first().threadId;
+        const auto notify = [&](const QString& method, QJsonObject params) {
+            params.insert("threadId", thread);
+            emit adapter.notificationReceived(method, params);
+        };
+        const auto item = [](const QString& id, const QString& type, const QString& status) {
+            return QJsonObject{{"item", QJsonObject{{"id", id},
+                                                    {"type", type},
+                                                    {"text", status == "completed" ? "Hello" : ""},
+                                                    {"status", status}}}};
+        };
+        const auto deltas = [&journal, &seed] {
+            QStringList found;
+            for (const auto& value : journal.eventsAfter(seed.id, 1, 0)) {
+                const auto event = value.toObject();
+                const auto type = event.value("event_type").toString();
+                if (type == "assistant.delta" || type == "command.output_delta")
+                    found.append(event.value("payload").toObject().value("delta").toString());
+            }
+            return found;
+        };
+        notify("item/started", item("a1", "agentMessage", "inProgress"));
+        notify("item/agentMessage/delta", {{"itemId", "a1"}, {"delta", "Hello"}});
+        notify("item/completed", item("a1", "agentMessage", "completed"));
+        notify("item/agentMessage/delta", {{"itemId", "a1"}, {"delta", " late"}});
+        notify("item/started", item("c1", "commandExecution", "inProgress"));
+        notify("item/completed", item("c1", "commandExecution", "completed"));
+        notify("item/commandExecution/outputDelta", {{"itemId", "c1"}, {"delta", "late output"}});
+        // An item started again under the same id streams again.
+        notify("item/started", item("a1", "agentMessage", "inProgress"));
+        notify("item/agentMessage/delta", {{"itemId", "a1"}, {"delta", "again"}});
+        QTRY_COMPARE_WITH_TIMEOUT(deltas(), QStringList({"Hello", "again"}), 3000);
+        QTest::qWait(300);
+        QCOMPARE(deltas(), QStringList({"Hello", "again"}));
+        // A new provider process may reuse item ids, even without an item.started first.
+        emit adapter.stopped("provider exited");
+        notify("item/commandExecution/outputDelta", {{"itemId", "c1"}, {"delta", "new process"}});
+        QTRY_COMPARE_WITH_TIMEOUT(deltas(), QStringList({"Hello", "again", "new process"}), 3000);
+    }
+    void completedItemsAreRememberedInBoundedMemory() {
+#ifdef Q_OS_MACOS
+        QTemporaryDir dir;
+        const auto executable = dir.filePath("fake-codex");
+        QVERIFY(writeFakeCodex(executable, dir.filePath("provider.log")));
+        LocalJournal journal(dir.filePath("journal.sqlite3"));
+        StoredSession seed;
+        seed.id = "long-item-ids";
+        seed.generation = 1;
+        seed.worktreePath = dir.path();
+        seed.adapter = "codex";
+        seed.state = "idle";
+        QVERIFY(journal.upsertSession(seed));
+        CodexAdapter adapter(executable);
+        SessionHost host(&journal, &adapter);
+        const auto stop = qScopeGuard([&] { adapter.stop(); });
+        auto submitted = request("hang", seed.id);
+        submitted.insert("payload", QJsonObject{{"prompt", "hang"}, {"client_message_id", "hang"}});
+        QVERIFY(host.handleCommand(submitted, "desktop-test").value("ok").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(journal.sessions().first().state, QString("running"), 5000);
+        const QString thread = journal.sessions().first().threadId;
+        const auto heap = [] {
+            malloc_statistics_t stats{};
+            malloc_zone_statistics(nullptr, &stats);
+            return qint64(stats.size_in_use);
+        };
+        const auto complete = [&](const QString& id) {
+            emit adapter.notificationReceived("item/completed", {{"threadId", thread},
+                                                                 { "item",
+                                                                   QJsonObject {
+                                                                       {"id", id},
+                                                                       {"type", "agentMessage"},
+                                                                       {"text", "done"},
+                                                                       {"status", "completed"}
+                                                                   } }});
+        };
+        // 512 ids of 4 KiB the journal accepts, then 128 of 64 KiB it rejects and queues until
+        // its recovery budget is full. Only the remembered set is released by a provider stop.
+        for (int n = 0; n < 512; ++n)
+            complete(QString(4 * 1024, QChar('a')) + QString::number(n));
+        for (int n = 0; n < 128; ++n)
+            complete(QString(64 * 1024, QChar('b')) + QString::number(n));
+        const qint64 remembered = heap();
+        emit adapter.stopped("provider exited");
+        const qint64 released = remembered - heap();
+        QVERIFY2(released < 1024 * 1024,
+                 qPrintable(QStringLiteral("completed items held %1 bytes").arg(released)));
+#else
+        QSKIP("malloc zone statistics are macOS only");
+#endif
+    }
     void twoClientsActingOnOneSessionSettleOnce() {
         QTemporaryDir dir;
         const auto path = dir.filePath("journal.sqlite3");
@@ -431,12 +544,13 @@ class TurnAcceptanceTest final : public QObject {
             return host.handleCommand(submitted, client);
         };
         const auto history = [&] { return journal.eventsAfter(seed.id, 1, 0); };
-        // Desktop and a phone send a prompt at the same moment: one turn, one prompt.
+        // Desktop and a phone (through the relay) send a prompt at the same moment: one turn, one
+        // prompt.
         QVERIFY(command("desktop", "session.start_turn", "desktop-turn",
                         {{"prompt", "approve"}, {"client_message_id", "desktop-turn"}})
                     .value("ok")
                     .toBool());
-        const auto busy = command("phone", "session.start_turn", "phone-turn",
+        const auto busy = command("cloud-control-v2", "session.start_turn", "phone-turn",
                                   {{"prompt", "hello"}, {"client_message_id", "phone-turn"}});
         QCOMPARE(busy.value("error_code").toString(), QString("session_busy"));
         QCOMPARE(eventCount(history(), "user.message"), 1);
@@ -459,7 +573,7 @@ class TurnAcceptanceTest final : public QObject {
                                   {"resolution", QJsonObject{{"decision", "decline"}}}};
         QVERIFY(
             command("desktop", "approval.resolve", "desktop-answer", accept).value("ok").toBool());
-        QCOMPARE(command("phone", "approval.resolve", "phone-answer", decline)
+        QCOMPARE(command("cloud-control-v2", "approval.resolve", "phone-answer", decline)
                      .value("error_code")
                      .toString(),
                  QString("already_resolved"));
@@ -473,12 +587,12 @@ class TurnAcceptanceTest final : public QObject {
         QVERIFY(command("desktop", "session.mark_seen", "desktop-seen", {{"cursor", last}})
                     .value("ok")
                     .toBool());
-        QVERIFY(command("phone", "session.mark_seen", "phone-seen", {{"cursor", 1}})
+        QVERIFY(command("cloud-control-v2", "session.mark_seen", "phone-seen", {{"cursor", 1}})
                     .value("ok")
                     .toBool());
         QCOMPARE(journal.sessions().first().lastSeenCursor, last);
         // The refused prompt can be sent again once the turn is over.
-        QVERIFY(command("phone", "session.start_turn", "phone-retry",
+        QVERIFY(command("cloud-control-v2", "session.start_turn", "phone-retry",
                         {{"prompt", "hello"}, {"client_message_id", "phone-retry"}})
                     .value("ok")
                     .toBool());
