@@ -243,6 +243,15 @@ the corresponding Atlas mock first.
   with `KETPLUS_RUN_STARTUP_BACKLOG_TESTS=1`; the first open, an append to a
   marked session, each activity backfill pass and the second open must each stay
   under 250 ms.
+- Journal migration recovery: `ketplus_daemon_journal_migration_recovery_tests`
+  migrates a pre-format journal (60k rows in 2,000 sessions, without five later
+  columns, the turn indexes and the activity tables) on a nearly full 256-MiB disk
+  image (macOS `hdiutil`; skipped without it) and kills a child process at six
+  times during the migration. The open must report the full disk, leave an intact
+  journal without the format marker, and finish on the next open with the same
+  schema definitions and table contents (worktree catalog without its clock) as
+  an uninterrupted migration. The child opens only `LocalJournal`; startup
+  compaction has its own interruption tests in `ketplus_daemon_journal_space_tests`.
 - Journal query audit: `ketplus_daemon_journal_query_audit_tests` traces every
   statement of 24 journal operations on one conversation (append, transcript reads,
   activity pages, fork, delete and purge, backfill, retention and garbage passes)

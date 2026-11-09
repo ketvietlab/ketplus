@@ -9,7 +9,7 @@ counting as merged fixes. No UI, live journal, provider quota or deployment work
 
 | Original criterion | Available evidence | Remaining acceptance / owner |
 | --- | --- | --- |
-| Forward-only, idempotent migrations; newer-daemon journal safety | Startup transaction failures #250; #273 closes failed storage objects; #274 protects migration staging (merged `c3490da5`) | Newer format refused unchanged (ADR 0095); legacy backfills once (ADR 0096); activity backfill after open (ADR 0097); interruption/low-space remain / #3329 |
+| Forward-only, idempotent migrations; newer-daemon journal safety | Startup transaction failures #250; #273 closes failed storage objects; #274 protects migration staging (merged `c3490da5`) | Newer format refused unchanged (ADR 0095); legacy backfills once (ADR 0096); activity backfill after open (ADR 0097); full disk and killed migration verified without a production change / #3329 |
 | Transactions, crash consistency and surfaced errors | Append/delete/fork/replay fixes #241–250; #254 (merged through #255) prepares media ownership before journal commit | Cross-file interruption and broader read/commit failure coverage; do not infer power-loss atomicity from callback order / #2739 |
 | Bounded/indexed reads on large journals | GC #220, ACK #223, metadata #228, staging #230, deletion queue #235, cloud cache #237, cancellation #240; #272 bounds stored policy JSON (merged through #274) | Statement audit of 24 operations next to 200k events in 2,000 sessions passes; large-event chunks and media rows are not in that fixture / #3329 |
 | Retention and deletion remove rows/media | Transactional cleanup and retention tests above; media cleanup/dedup #251–252 | Physical media/blob retirement, shared-reference preservation and steady-state acceptance; #128 archive behavior is not implied / #2739 |
@@ -166,7 +166,27 @@ indexed. The same fixture opens in 31 ms the first time; the slowest pass is
 10 ms. With 300k rows in one session an append takes under 1 ms and the slowest
 pass 34 ms. Drained rows match live indexing. Negative controls for event
 deferral, the group-page gate, the byte budget, `BEGIN IMMEDIATE` and the marker
-row check each fail their test. Remaining: low space and interruption.
+row check each fail their test.
+
+## Migration interruption and low space
+
+Opening a pre-format journal runs idempotent steps (`CREATE ... IF NOT EXISTS`,
+column checks, backfills in their own transactions) and stamps the format last.
+A recovery test now shows that this order holds. Its fixture has 60k rows in
+2,000 sessions that number their own cursors, so every session takes the
+turn-number and turn-start backfills; five later columns, the turn indexes and the
+activity tables are removed. With 256 KiB left on a disk image, the open fails with
+SQLite's full-disk error, the journal passes `integrity_check`, keeps format 0 and
+unchanged events, and the next open with space matches an uninterrupted migration
+(schema definitions, nine tables, the worktree catalog without its clock). Killing a
+child process at six times of a 1.6–1.7 s migration (all six after some step had
+committed) always reopens to that result. Stamping the format first, an index of
+the same name on other columns and a wrong catalog repository each fail the test.
+No production change was needed.
+
+Limits: the child opens only `LocalJournal`, not the startup move to incremental
+vacuum (covered by its own tests); kills are timed, not placed in each step; power
+loss and journal-plus-media interruption are not covered.
 
 ## Query audit on a large journal
 

@@ -72,6 +72,8 @@ ketplus_add_daemon_test(ketplus_provider_line_reader_tests ProviderLineReaderTes
 ketplus_add_daemon_test(ketplus_daemon_credential_store_tests CredentialStoreTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_journal_space_tests JournalSpaceTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_journal_startup_tests JournalStartupTest.cpp)
+ketplus_add_daemon_test(ketplus_daemon_journal_migration_recovery_tests
+    JournalMigrationRecoveryTest.cpp)
 # Reads SQLite's own statement counters through the driver's handle; needs the same SQLite.
 find_package(SQLite3)
 if(TARGET SQLite::SQLite3)
