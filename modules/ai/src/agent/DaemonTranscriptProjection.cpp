@@ -4,6 +4,7 @@
 #include "agent/McpToolResultMedia.h"
 #include "agent/TranscriptNormalizer.h"
 
+#include <QDateTime>
 #include <QHash>
 #include <QJsonArray>
 #include <QSet>
@@ -353,6 +354,9 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
                                                                    : QStringLiteral("resolved"));
     }
     QJsonObject sessionUsage;
+    // A turn's first journal time, and the context the latest usage reported, for its end line.
+    QHash<qint64, QDateTime> turnStarts;
+    qint64 contextTokens = -1;
     for (const auto& value : page.value("events").toArray()) {
         const auto event = value.toObject();
         const auto type = event.value("event_type").toString();
@@ -361,8 +365,23 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
         QString itemId = data.value("item_id").toString();
         if (type == "usage.session")
             sessionUsage = data;
+        if (type == "usage.context")
+            contextTokens = data.value("tokenUsage")
+                                .toObject()
+                                .value("last")
+                                .toObject()
+                                .value("totalTokens")
+                                .toInteger(contextTokens);
+        const QDateTime sentAt =
+            QDateTime::fromString(event.value("sent_at").toString(), Qt::ISODateWithMs);
+        if (sentAt.isValid() && !turnStarts.contains(sequence))
+            turnStarts.insert(sequence, sentAt);
+        TurnFacts turn;
+        turn.contextTokens = contextTokens;
+        if (type == "turn.completed" && sentAt.isValid() && turnStarts.contains(sequence))
+            turn.durationMs = turnStarts.value(sequence).msecsTo(sentAt);
         const auto notice = daemonEventNotice(
-            type, data, daemonNoticeItemId(event.value("cursor").toInteger()), sessionUsage);
+            type, data, daemonNoticeItemId(event.value("cursor").toInteger()), sessionUsage, turn);
         QJsonObject item = data.value("item").toObject();
         if (item.isEmpty()) {
             item = data;

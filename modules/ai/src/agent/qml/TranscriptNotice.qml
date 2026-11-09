@@ -12,6 +12,9 @@ Rectangle {
     property string subtype
     readonly property bool failed: status === "failed"
     readonly property bool lineOnly: subtype === "event" || subtype === "turnEnd"
+    // The mock's turn end: one quiet line, its status in bold and the details after it.
+    readonly property bool turnEnd: subtype === "turnEnd"
+    readonly property string turnLabel: failed ? "Failed" : status === "completed" ? "Completed" : "Stopped"
     readonly property var recipe: Kit.KetTheme.bannerRecipe(KetTheme.dark, KetTheme.zoom, failed ? Kit.KetTheme.BannerTone.Danger : Kit.KetTheme.BannerTone.Info)
     implicitHeight: content.implicitHeight + 2 * recipe.paddingBlock
     radius: lineOnly ? 0 : recipe.radius
@@ -21,17 +24,36 @@ Rectangle {
     Accessible.name: title + (message.length ? ". " + message : "")
     RowLayout {
         id: content
-        x: notice.recipe.paddingInline
+        x: notice.turnEnd ? 0 : notice.recipe.paddingInline
         y: notice.recipe.paddingBlock
         width: parent.width - 2 * x
         spacing: notice.recipe.spacing
         Kit.KetIcon {
             Layout.alignment: Qt.AlignTop
-            name: Kit.KetTheme.iconForLucide(notice.failed ? "alert-circle" : notice.subtype === "turnEnd" ? (notice.status === "completed" ? "circle-check" : "circle-stop") : notice.subtype === "reconnecting" ? "refresh-cw" : notice.subtype === "compaction" ? "archive" : "info")
+            Layout.topMargin: notice.turnEnd ? Math.max(0, (turnLine.lineHeight - notice.recipe.iconSize) / 2) : 0
+            name: Kit.KetTheme.iconForLucide(notice.failed ? "alert-circle" : notice.turnEnd ? (notice.status === "completed" ? "circle-check" : "circle-stop") : notice.subtype === "reconnecting" ? "refresh-cw" : notice.subtype === "compaction" ? "archive" : "info")
             box: notice.recipe.iconSize
-            color: notice.failed ? KetTheme.t.danger : KetTheme.t.textMuted
+            color: notice.failed ? KetTheme.t.danger : notice.turnEnd && notice.status === "completed" ? KetTheme.t.success : KetTheme.t.textMuted
+        }
+        Text {
+            id: turnLine
+            objectName: "transcriptTurnEnd"
+            readonly property real lineHeight: fontMetrics.height
+            visible: notice.turnEnd
+            Layout.fillWidth: true
+            text: "<b>" + notice.turnLabel + "</b>" + (notice.message.length ? "&nbsp;&nbsp;" + notice.message.replace(/&/g, "&amp;").replace(/</g, "&lt;") : "")
+            textFormat: Text.StyledText
+            color: KetTheme.t.textSecondary
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.px(13, KetTheme.zoom)
+            wrapMode: Text.Wrap
+            FontMetrics {
+                id: fontMetrics
+                font: turnLine.font
+            }
         }
         ColumnLayout {
+            visible: !notice.turnEnd
             Layout.fillWidth: true
             spacing: notice.recipe.messageGap
             Text {

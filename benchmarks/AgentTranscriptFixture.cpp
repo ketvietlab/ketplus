@@ -29,6 +29,7 @@ class Journal {
         for (auto it = extra.begin(); it != extra.end(); ++it)
             payload.insert(it.key(), it.value());
         append("user.message", payload, at, ++turn_);
+        turnStart_ = at;
     }
     void agent(const QString& phase, const QString& text) {
         const QString id = phase + QString::number(cursor_ + 1);
@@ -43,8 +44,19 @@ class Journal {
     void steer(const QString& text) {
         append("turn.steered", {{"text", text}, {"provider", provider_}}, {}, turn_);
     }
-    void finish(const QString& status) {
-        append("turn.completed", {{"status", status}}, {}, turn_);
+    // The usage the provider reported during the turn: its context and the session estimate.
+    void usage(qint64 contextTokens, double sessionUsd) {
+        append("usage.context",
+               {{"tokenUsage", QJsonObject{{"last", QJsonObject{{"totalTokens", contextTokens}}},
+                                           {"modelContextWindow", 200000}}}},
+               {}, turn_);
+        if (sessionUsd >= 0)
+            append("usage.session", {{"mode", "api_key"}, {"estimatedCostUsd", sessionUsd}}, {},
+                   turn_);
+    }
+    // Ends the turn `seconds` after its prompt, as the mock's turn line reads.
+    void finish(const QString& status, int seconds) {
+        append("turn.completed", {{"status", status}}, turnStart_.addSecs(seconds), turn_);
     }
     QVariantList rows() const {
         QVariantList rows = agent_message::daemonWindowMessages({{"events", events_}});
@@ -70,6 +82,7 @@ class Journal {
     QJsonArray events_;
     qint64 cursor_ = 0;
     qint64 turn_ = 0;
+    QDateTime turnStart_;
 };
 
 QJsonObject fromAgent(const QString& number, const QString& title, const QString& provider,
@@ -92,7 +105,8 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
     if (provider == "claude") {
         journal.user(QDateTime(QDate(now.date().year(), 9, 24), QTime(9, 12)),
                      "Profile why the sidebar keeps the CPU busy when nothing happens.");
-        journal.finish("completed");
+        journal.usage(141000, 2.08);
+        journal.finish("completed", 380);
         journal.user(today,
                      "The sidebar spinner still looks choppy. Check it against this capture and "
                      "fix it.");
@@ -106,14 +120,15 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
                                "another app."));
         journal.steer("Also check dark mode before you finish.");
         journal.agent("final_answer", QString::fromUtf8(claudeAnswer));
-        journal.finish("completed");
+        journal.usage(182000, 3.32);
+        journal.finish("completed", 252);
     } else if (provider == "cursor") {
         journal.user(today, "Find where the staging tenant gets created and summarise the flow.");
         journal.agent("final_answer",
                       "A staging tenant is created in **two steps**:\n\n1. `POST /tenants` in the "
                       "gateway validates the slug.\n2. `createTenant()` provisions the schema and "
                       "seeds the admin user.");
-        journal.finish("completed");
+        journal.finish("failed", 151);
     } else {
         journal.user(today, "Add a journal size warning to the daemon status and the sidebar.");
         journal.agent("commentary",
@@ -122,7 +137,8 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
         journal.agent("final_answer",
                       "The daemon now reports `journal.size` in `session.list` and warns past "
                       "**80%** of the limit. Still to do:");
-        journal.finish("interrupted");
+        journal.usage(96000, -1);
+        journal.finish("interrupted", 68);
     }
     QVariantList rows = journal.rows();
     // The mock's first Claude prompt today carries a capture; journal media needs a store, so

@@ -4,6 +4,7 @@
 #include "agent/CodexAppServer.h"
 #include "agent/CodexRateLimits.h"
 #include "agent/DaemonTranscriptProjection.h"
+#include <QDateTime>
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -420,10 +421,17 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
         if (params.value("presentation").isObject()) {
             entry = params.value("presentation").toObject().toVariantMap();
             if (entry.value("subtype") == "turnEnd") {
-                const auto estimate = agent_message::sessionEstimateText(
-                    QJsonObject::fromVariantMap(session->sessionUsage));
-                entry.insert("body", estimate);
-                entry.insert("summary", estimate);
+                // The same line a reloaded window projects from the journal.
+                agent_message::TurnFacts turn;
+                if (session->lastTurnStartedAt > 0)
+                    turn.durationMs =
+                        QDateTime::currentMSecsSinceEpoch() - session->lastTurnStartedAt;
+                if (session->contextLimitTokens > 0)
+                    turn.contextTokens = session->contextUsedTokens;
+                const auto detail = agent_message::turnEndText(
+                    turn, QJsonObject::fromVariantMap(session->sessionUsage));
+                entry.insert("body", detail);
+                entry.insert("summary", detail);
             }
         }
         if (!entry.contains("turnId") && !session->turnId.isEmpty())
