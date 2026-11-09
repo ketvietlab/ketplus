@@ -1166,18 +1166,10 @@ Item {
         }
         return null
     }
-    // Row updates keep the count, so the source's changes drive the binding as well.
-    property int transcriptSourceRevision: 0
-    Connections {
-        target: agentHost.messageModel
-        function onDataChanged() { root.transcriptSourceRevision++ }
-        function onRowsInserted() { root.transcriptSourceRevision++ }
-        function onRowsRemoved() { root.transcriptSourceRevision++ }
-        function onModelReset() { root.transcriptSourceRevision++ }
-        function onCountChanged() { root.transcriptSourceRevision++ }
-    }
+    // The source's revision also follows row updates that keep the count.
     readonly property var retryableFailure: {
-        transcriptSourceRevision
+        if (agentHost.messageModel)
+            agentHost.messageModel.sourceRevision
         return findRetryableFailure()
     }
     // Checked again when clicked: the shown banner may be a moment out of date.

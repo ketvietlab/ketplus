@@ -6,7 +6,9 @@
 
 namespace ketplus::agent_message {
 
-QVariantList turnChangedFiles(const QList<QVariantMap>& rows, const qsizetype end) {
+QVariantList turnChangedFiles(const QList<QVariantMap>& rows, const qsizetype end, bool* complete) {
+    if (complete)
+        *complete = true;
     if (end < 0 || end >= rows.size())
         return {};
     const QString turn = rows.at(end).value(QStringLiteral("turnId")).toString();
@@ -14,7 +16,8 @@ QVariantList turnChangedFiles(const QList<QVariantMap>& rows, const qsizetype en
     qsizetype first = end;
     while (first > 0) {
         const QVariantMap& previous = rows.at(first - 1);
-        if (previous.value(QStringLiteral("kind")) == QStringLiteral("user"))
+        if (previous.value(QStringLiteral("kind")) == QStringLiteral("user") &&
+            previous.value(QStringLiteral("eventType")) != QStringLiteral("turn.steered"))
             break;
         const QString previousTurn = previous.value(QStringLiteral("turnId")).toString();
         if (!turn.isEmpty() && !previousTurn.isEmpty() && previousTurn != turn)
@@ -59,8 +62,12 @@ QVariantList turnChangedFiles(const QList<QVariantMap>& rows, const qsizetype en
             for (const QVariant& change : item.value(QStringLiteral("fileChanges")).toList())
                 add(change.toMap());
         } else if (subtype == QStringLiteral("daemonGroup")) {
-            for (const QVariant& change : item.value(QStringLiteral("groupFiles")).toList())
+            const QVariantList listed = item.value(QStringLiteral("groupFiles")).toList();
+            for (const QVariant& change : listed)
                 add(change.toMap());
+            if (complete && item.value(QStringLiteral("groupFilesTotal"), listed.size()).toInt() >
+                                listed.size())
+                *complete = false;
         }
     }
     return files;

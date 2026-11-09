@@ -10,6 +10,7 @@
 #include "agent/CodexAppServer.h"
 #include "agent/TranscriptTableStyle.h"
 #include "ui/Theme.h"
+#include <QPointer>
 #include <QScopeGuard>
 #include <functional>
 
@@ -2642,6 +2643,33 @@ void AgentWorkspaceViewTest::turnEndListsTheTurnsChangedFiles() {
     QVERIFY(QMetaObject::invokeMethod(review, "clicked"));
     QCOMPARE(navigation.count(), 1);
     QCOMPARE(navigation.first().at(0).toString(), QStringLiteral("source-control"));
+    QVERIFY(card->property("countsKnown").toBool());
+    QVERIFY(card->property("complete").toBool());
+    // A group's update keeps the row count and the delegate; the card follows its files.
+    const QPointer<QQuickItem> shown(card);
+    auto updated = QVariantMap{{"messageKey", "g"},
+                               {"kind", "tool"},
+                               {"subtype", "daemonGroup"},
+                               {"turnId", "t"},
+                               {"groupRole", "leader"},
+                               {"groupKey", "g"},
+                               {"groupSummary", "Edited 2 files"},
+                               {"groupSize", 2}};
+    auto unknown = change("modules/ai/src/agent/qml/SpinClock.qml", 0, 0, "Created");
+    unknown.insert("known", false);
+    updated.insert(
+        "groupFiles",
+        QVariantList{change("modules/ai/src/agent/qml/AgentSidebar.qml", 8, 1, "Edited"), unknown});
+    updated.insert("groupFilesTotal", 60);
+    view.updateMessage(1, updated);
+    QTRY_COMPARE(card->property("files").toList().at(0).toMap().value("added").toInt(), 8);
+    QCOMPARE(shown.data(), card);
+    // Counts it could not tell are not shown as numbers, and a list the daemon cut short
+    // says so instead of reading as complete.
+    QVERIFY(!card->property("files").toList().at(1).toMap().value("known").toBool());
+    QVERIFY(!card->property("countsKnown").toBool());
+    QVERIFY(!card->property("complete").toBool());
+    QCOMPARE(card->property("title").toString(), QStringLiteral("2+ files changed"));
     // A turn without edits has no card.
     view.resetMessages(
         {QVariantMap{{"messageKey", "u"}, {"kind", "user"}, {"body", "Hi"}, {"turnId", "t"}},
@@ -2655,7 +2683,6 @@ void AgentWorkspaceViewTest::turnEndListsTheTurnsChangedFiles() {
     QTRY_VERIFY(!findVisualItem(root, "transcriptTurnChanges") ||
                 !findVisualItem(root, "transcriptTurnChanges")->isVisible());
 }
-
 
 // The mock's workspace/error: Retry on the latest failure sends its prompt again, only while
 // the conversation is idle and only for the turn that failed last.

@@ -82,6 +82,40 @@ class TranscriptActivityGroupsTest final : public QObject {
             3);
         QCOMPARE(group.value("groupFiles").toList().size(), 1);
         QCOMPARE(group.value("groupFiles").toList().first().toMap().value("added").toInt(), 2);
+        QCOMPARE(group.value("groupFilesTotal").toInt(), 1);
+        // A steer stays in the turn it steers: the changes before and after it both count.
+        const QList<QVariantMap> steered{
+            {{"kind", "user"}, {"turnId", "t3"}},
+            {{"subtype", "fileChange"},
+             {"turnId", "t3"},
+             {"fileChanges", QVariantList{stats("before.cpp", 1, 0)}}},
+            {{"kind", "user"}, {"eventType", "turn.steered"}, {"turnId", "t3"}},
+            {{"subtype", "fileChange"},
+             {"turnId", "t3"},
+             {"fileChanges", QVariantList{stats("after.cpp", 2, 0)}}},
+            {{"subtype", "turnEnd"}, {"turnId", "t3"}}};
+        bool complete = false;
+        const QVariantList both = turnChangedFiles(steered, steered.size() - 1, &complete);
+        QCOMPARE(both.size(), 2);
+        QCOMPARE(both.at(0).toMap().value("path").toString(), QStringLiteral("before.cpp"));
+        QVERIFY(complete);
+        // A group that listed only some of its files leaves the turn's list incomplete.
+        const auto bounded = daemonActivityGroupMessage(
+            {{"item_id", "activity-group:8"},
+             {"group_id", "8"},
+             {"count", 1},
+             {"families", QJsonArray{QJsonObject{{"family", "edit"}, {"count", 60}}}},
+             {"files", QJsonArray{QJsonObject{{"path", "gen/0.cpp"}, {"added", 1}}}},
+             {"files_total", 60}},
+            3);
+        QCOMPARE(bounded.value("groupFilesTotal").toInt(), 60);
+        auto truncated = steered;
+        truncated.insert(4, {{"subtype", "daemonGroup"},
+                             {"turnId", "t3"},
+                             {"groupFiles", bounded.value("groupFiles")},
+                             {"groupFilesTotal", 60}});
+        QCOMPARE(turnChangedFiles(truncated, truncated.size() - 1, &complete).size(), 3);
+        QVERIFY(!complete);
     }
     void groupsConsecutiveActivityWithinATurn() {
         QList<QVariantMap> rows{text("user", "user"),       activity("c1", "fileRead"),
