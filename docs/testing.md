@@ -252,9 +252,10 @@ it is measured, and checks the fixture conditions again at the end. Compare the 
 initial sample, alongside the fixture's process-CPU and rendered-frame counts.
 Check `fixtureValid` and `valid`: Cocoa/Metal, 1440×900 at 2×, three realized rows,
 stopped transcript measurement, expected activity-clock ownership and stable
-window state are required. The current production policy keeps sidebar indicators
-static; only the running transcript holds the animation clock. This is recorded
-explicitly rather than claiming three animated sidebar spinners were measured.
+window state are required. Working QML sidebar rows hold the animation clock
+beside the running transcript, so a running sample reports three
+`sidebarClockHolders`. The desktop shell draws its sidebar with Widgets
+`ket::ConversationRow`, which this fixture does not measure.
 
 The #126 targets are ≤7% foreground, ≤2% background and approximately zero
 with no running work. They were relaxed from 5%/1% on 2026-11-08 after the
