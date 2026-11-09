@@ -2497,8 +2497,14 @@ void AgentWorkspaceViewTest::transcriptNoticesUseRuntimeState() {
     view.resetMessages({QVariantMap{{"kind", "tool"},
                                     {"category", "system"},
                                     {"subtype", "event"},
-                                    {"title", "Model configuration changed"},
-                                    {"body", "Model A · high"}},
+                                    {"title", "Switched from Claude to Codex"},
+                                    {"body", "The conversation history comes along"}},
+                        QVariantMap{{"kind", "tool"},
+                                    {"category", "system"},
+                                    {"subtype", "reconnecting"},
+                                    {"title", "Reconnecting"},
+                                    {"body", "Reconnecting… 2/5"},
+                                    {"status", "running"}},
                         QVariantMap{{"kind", "error"},
                                     {"category", "system"},
                                     {"title", "Agent error"},
@@ -2531,8 +2537,27 @@ void AgentWorkspaceViewTest::transcriptNoticesUseRuntimeState() {
         visit(visit, root);
         return titles.size();
     };
-    QTRY_COMPARE(collect(), 2);
+    // The event and the reconnect are lines, as in the mock; only the failure is a banner.
+    QTRY_COMPARE(collect(), 1);
     QVERIFY(bodies.contains("<b>Untrusted error text</b>"));
+    // Every notice holds these lines; only the shown one counts.
+    const auto shown = [](const auto& self, QQuickItem* item, const QString& name) -> QQuickItem* {
+        if (!item->isVisible())
+            return nullptr;
+        if (item->objectName() == name)
+            return item;
+        for (auto* child : item->childItems())
+            if (auto* match = self(self, child, name))
+                return match;
+        return nullptr;
+    };
+    auto* eventLine = shown(shown, root, "transcriptEventLine");
+    QVERIFY(eventLine);
+    QCOMPARE(findVisualItem(eventLine, "transcriptEventDivider")->property("text").toString(),
+             QStringLiteral("Switched from Claude to Codex"));
+    QCOMPARE(findVisualItem(eventLine, "transcriptEventDetail")->property("text").toString(),
+             QStringLiteral("The conversation history comes along"));
+    QVERIFY(shown(shown, root, "transcriptReconnectLine"));
     // The mock's turn end: one line, the status in bold and the details as plain text.
     const auto visibleTurnEnd = [](const auto& self, QQuickItem* item) -> QQuickItem* {
         if (!item->isVisible())

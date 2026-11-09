@@ -41,9 +41,13 @@ class ProviderTranscriptTest : public QObject {
                         {"payload", QJsonObject{{"status", "completed"}}}}};
         const auto rows = daemonWindowMessages({{"events", events}});
         QCOMPARE(rows.size(), 4);
-        QCOMPARE(rows[0].toMap().value("title").toString(), "Provider changed");
-        QCOMPARE(rows[1].toMap().value("body").toString(), "test-model · high");
-        QCOMPARE(rows[2].toMap().value("body").toString(), "Context revision 2");
+        // Worded as the mock's events.
+        QCOMPARE(rows[0].toMap().value("title").toString(), "Switched from Codex to Claude");
+        QCOMPARE(rows[0].toMap().value("body").toString(), "The conversation history comes along");
+        QCOMPARE(rows[1].toMap().value("title").toString(), "Model changed to test-model · high");
+        QVERIFY(rows[1].toMap().value("body").toString().isEmpty());
+        QCOMPARE(rows[2].toMap().value("title").toString(), "Moved to another worktree");
+        QVERIFY(rows[2].toMap().value("body").toString().isEmpty());
         QCOMPARE(rows[3].toMap().value("body").toString(), "$0.13 session");
         QCOMPARE(rows[3].toMap().value("messageKey").toString(), "daemon:1:notice:5");
         for (const auto& state : {"failed", "interrupted", "completed"}) {
