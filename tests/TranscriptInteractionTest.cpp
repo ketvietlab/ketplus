@@ -395,7 +395,7 @@ void AgentWorkspaceViewTest::transcriptAtlasLayout() {
     QTRY_COMPARE(transcript->opacity(), 1.0);
     QTRY_COMPARE(view.messageModel()->count(), 3);
     QCOMPARE(view.messageModel()->get(1).value("groupSummary").toString(),
-             QString("Read 3 files, ran a command, searched code, used the browser"));
+             QString("Explored 3 files, ran a command, searched code, used the browser"));
     QVERIFY(view.messageModel()->get(2).value("groupRole").toString().isEmpty());
     const auto capture = qEnvironmentVariable("KETPLUS_ATLAS_TRANSCRIPT_CAPTURE");
     if (!capture.isEmpty()) {

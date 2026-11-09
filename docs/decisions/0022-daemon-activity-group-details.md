@@ -44,12 +44,15 @@ Assistant items, approvals, screenshots and visual comparisons break the run.
 Since 2026-11-09 groups also take the steps a local Desktop group takes, so both
 read the same. Families are:
 - `command`, `edit` and `webSearch`;
-- `read`, `codeSearch` and `fileSearch` for tool reads and searches;
+- `read`, `codeSearch` and `fileSearch` for tool reads and searches, and `read`,
+  `codeSearch` and `list` for Codex commands whose actions are all reads, searches
+  or listings;
+- `webFetch`, `toolsLoaded`, `skill` and `taskStopped` for those text-only tool steps;
 - `browser` for KetPlus browser steps;
 - `tool:<server>` for KetPlus's own text-only servers (`ketplus_agents`);
 - `subagent` for a spawned subagent and `subagent.step` for later messages and
   waits on one;
-- `wait`;
+- `wait`, which includes Claude's `Monitor`;
 - `thought` for reasoning items, which Desktop shows as "Thought · 14 s" without their
   text.
 

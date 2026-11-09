@@ -22,9 +22,9 @@ namespace ketplus::agent_message {
 //   groupFailed   number of failed rows, set on the leader
 [[nodiscard]] bool isGroupableActivity(const QVariantMap& row);
 // What a group's steps did, in first-seen order, so a local run and a daemon summary read
-// the same. Family ids: command, read, edit, search (the web), codeSearch, fileSearch, searched
-// (any search, from older daemon groups), server (tool calls, named by `servers`), subagent,
-// wait, thought, image, generated and tool.
+// the same. Family ids: command, read, list, edit, search (the web), codeSearch, fileSearch,
+// searched (any search, from older daemon groups), webFetch, toolsLoaded, skill, taskStopped,
+// server (tool calls, named by `servers`), subagent, wait, thought, image, generated and tool.
 struct ActivityTally final {
     struct Family final {
         QString id;

@@ -17,8 +17,21 @@ QString itemId(const QJsonObject& payload) {
 QString family(const QJsonObject& payload) {
     const auto item = payload.value("item").toObject();
     const auto type = item.value("type").toString(payload.value("item_type").toString());
-    if (type == "commandExecution")
-        return "command";
+    // Codex's read, search and listing commands read as the steps they are, as Desktop titles
+    // them: one kind of action throughout, or a command.
+    if (type == "commandExecution") {
+        const auto actions = item.value("commandActions").toArray();
+        QString kind =
+            actions.isEmpty() ? QString() : actions.first().toObject().value("type").toString();
+        for (const auto& action : actions) {
+            if (action.toObject().value("type").toString() != kind)
+                kind.clear();
+        }
+        return kind == "read"        ? "read"
+               : kind == "search"    ? "codeSearch"
+               : kind == "listFiles" ? "list"
+                                     : "command";
+    }
     if (type == "fileChange")
         return "edit";
     if (type == "webSearch")
@@ -54,6 +67,17 @@ QString family(const QJsonObject& payload) {
             return "subagent";
         if (operation == "websearch")
             return "webSearch";
+        // Text-only steps the transcript also groups: "loaded tools, used a skill".
+        if (operation == "webfetch" || operation == "fetch_url")
+            return "webFetch";
+        if (operation == "toolsearch" || operation == "search_tools")
+            return "toolsLoaded";
+        if (operation == "skill" || operation == "load_skill")
+            return "skill";
+        if (operation == "taskstop" || operation == "stop_task")
+            return "taskStopped";
+        if (operation == "monitor")
+            return "wait";
         // A family is fixed when the item starts, before its result shows whether it returns
         // images, and other tools (Claude's edits among them) carry data a group summary
         // drops. So only KetPlus's own text-only servers group by name: "Used ketplus_agents".

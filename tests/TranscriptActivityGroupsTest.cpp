@@ -144,7 +144,7 @@ class TranscriptActivityGroupsTest final : public QObject {
                     {{"failed_count", 1}}),
             QStringLiteral("Ran a command, used node_repl, used a subagent, waited (1 failed)"));
         QCOMPARE(summary({family("codeSearch", 2), family("fileSearch", 1), family("read", 1)}),
-                 QStringLiteral("Searched code 2 times, searched files, read a file"));
+                 QStringLiteral("Searched code 2 times, searched files, explored a file"));
         // Totals only when every file is listed and counted.
         const QJsonObject four{{"path", "a"}, {"added", 4}, {"known", true}};
         QCOMPARE(
@@ -176,7 +176,7 @@ class TranscriptActivityGroupsTest final : public QObject {
         QCOMPARE(rows.at(1).value("groupRole").toString(), QStringLiteral("leader"));
         QCOMPARE(rows.at(1).value("groupSize").toInt(), 6);
         QCOMPARE(rows.at(1).value("groupSummary").toString(),
-                 QStringLiteral("Read 5 files, edited a file +1 -1"));
+                 QStringLiteral("Explored 5 files, edited a file +1 -1"));
         QCOMPARE(rows.at(4).value("groupRole").toString(), QStringLiteral("member"));
         QCOMPARE(rows.at(6).value("groupRole").toString(), QStringLiteral("member"));
         QCOMPARE(rows.at(7).value("groupRole").toString(), QString());
@@ -194,7 +194,7 @@ class TranscriptActivityGroupsTest final : public QObject {
         // A single activity row between boundaries stays ungrouped.
         QCOMPARE(rows.at(3).value("groupRole").toString(), QString());
         QCOMPARE(rows.at(4).value("groupRole").toString(), QStringLiteral("leader"));
-        QCOMPARE(rows.at(4).value("groupSummary").toString(), QStringLiteral("Read 2 files"));
+        QCOMPARE(rows.at(4).value("groupSummary").toString(), QStringLiteral("Explored 2 files"));
         // Questions stay visible and are never folded into a group.
         QCOMPARE(rows.at(6).value("groupRole").toString(), QString());
         QCOMPARE(rows.at(7).value("groupRole").toString(), QString());
@@ -223,7 +223,7 @@ class TranscriptActivityGroupsTest final : public QObject {
         assignActivityGroups(rows);
 
         QCOMPARE(rows.at(0).value("groupSummary").toString(),
-                 QStringLiteral("Read 5 files (1 failed)"));
+                 QStringLiteral("Explored 5 files (1 failed)"));
         QCOMPARE(rows.at(0).value("groupFailed").toInt(), 1);
         QVERIFY(rows.at(0).value("groupRunning").toBool());
     }
@@ -237,7 +237,7 @@ class TranscriptActivityGroupsTest final : public QObject {
         const QList<int> changed = assignActivityGroups(rows);
         // The leader's summary and the new member change; the existing member does not.
         QCOMPARE(changed, QList<int>({0, 2}));
-        QCOMPARE(rows.at(0).value("groupSummary").toString(), QStringLiteral("Read 3 files"));
+        QCOMPARE(rows.at(0).value("groupSummary").toString(), QStringLiteral("Explored 3 files"));
     }
 
     void rangedRecomputeTouchesOnlyTheAffectedRun() {
@@ -313,9 +313,10 @@ class TranscriptActivityGroupsTest final : public QObject {
         assignActivityGroups(rows);
         QCOMPARE(rows.at(0).value("groupRole").toString(), QStringLiteral("leader"));
         QCOMPARE(rows.at(0).value("groupSize").toInt(), 6);
-        QCOMPARE(rows.at(0).value("groupSummary").toString(),
-                 QStringLiteral("Ran 2 commands, used ketplus_browser, searched the web, read a "
-                                "file, used a tool"));
+        QCOMPARE(
+            rows.at(0).value("groupSummary").toString(),
+            QStringLiteral("Ran 2 commands, used ketplus_browser, searched the web, explored a "
+                           "file, used a tool"));
     }
 
     // As in the mock, MCP tool calls, image steps, waits and subagents stay in the group, and
@@ -343,6 +344,35 @@ class TranscriptActivityGroupsTest final : public QObject {
                                 "viewed an image, generated an image, waited, used a subagent"));
     }
 
+    void groupsUseTheMocksWording() {
+        // "Thought, explored 4 files, listed 1 folder" and "Searched the web, loaded tools, used
+        // a skill": reads explore, Codex listings list folders, and text-only steps group.
+        auto listing = activity("l1", "fileSearch");
+        listing.insert("details",
+                       QVariantMap{{"actions", QVariantList{QVariantMap{{"type", "listFiles"},
+                                                                        {"path", "src"}}}}});
+        QList<QVariantMap> rows{
+            activity("r1", "fileRead"),  activity("r2", "fileRead"), listing,
+            activity("w1", "webSearch"), activity("f1", "webFetch"), activity("t1", "toolsLoaded"),
+            activity("s1", "skill"),     activity("m1", "monitor"),  activity("x1", "taskStopped")};
+        assignActivityGroups(rows);
+        QCOMPARE(rows.at(0).value("groupSize").toInt(), 9);
+        QCOMPARE(
+            rows.at(0).value("groupSummary").toString(),
+            QStringLiteral("Explored 2 files, listed 1 folder, searched the web, fetched a "
+                           "page, loaded tools, used a skill, waited, stopped a background task"));
+        QCOMPARE(daemonActivityGroupMessage(
+                     {{"item_id", "activity-group:3"},
+                      {"group_id", "3"},
+                      {"families", QJsonArray{QJsonObject{{"family", "read"}, {"count", 4}},
+                                              QJsonObject{{"family", "list"}, {"count", 2}},
+                                              QJsonObject{{"family", "skill"}, {"count", 1}}}}},
+                     1)
+                     .value("groupSummary")
+                     .toString(),
+                 QStringLiteral("Explored 4 files, listed 2 folders, used a skill"));
+    }
+
     void thoughtsCollapseWithTheirSteps() {
         // The mock's "Thought, …": a thought is a step of the group it starts.
         QList<QVariantMap> rows{activity("t1", "thought"), activity("r1", "fileRead"),
@@ -350,7 +380,7 @@ class TranscriptActivityGroupsTest final : public QObject {
         assignActivityGroups(rows);
         QCOMPARE(rows.at(0).value("groupSize").toInt(), 3);
         QCOMPARE(rows.at(0).value("groupSummary").toString(),
-                 QStringLiteral("Thought, read 2 files"));
+                 QStringLiteral("Thought, explored 2 files"));
     }
 
     void subagentsCollapseWithCommands() {

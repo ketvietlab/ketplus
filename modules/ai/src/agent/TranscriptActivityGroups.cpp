@@ -70,6 +70,9 @@ bool isGroupableActivity(const QVariantMap& row) {
         QStringLiteral("generic"),       QStringLiteral("integration"),
         QStringLiteral("imageView"),     QStringLiteral("imageGeneration"),
         QStringLiteral("wait"),          QStringLiteral("thought"),
+        QStringLiteral("webFetch"),      QStringLiteral("toolsLoaded"),
+        QStringLiteral("skill"),         QStringLiteral("taskStopped"),
+        QStringLiteral("monitor"),
     };
     // Browser visits too; evidence rows were kept out above.
     return steps.contains(subtype) || (subtype.startsWith(QStringLiteral("browser")) &&
@@ -128,7 +131,21 @@ QString activityGroupSummary(const QList<QVariantMap>& rows, const qsizetype fir
         } else if (subtype == QStringLiteral("codeSearch")) {
             tally.add(QStringLiteral("codeSearch"), 1);
         } else if (subtype == QStringLiteral("fileSearch")) {
-            tally.add(QStringLiteral("fileSearch"), 1);
+            // Codex's listFiles actions read as the mock's "listed 1 folder".
+            const QVariantList actions = row.value(QStringLiteral("details"))
+                                             .toMap()
+                                             .value(QStringLiteral("actions"))
+                                             .toList();
+            const bool listing =
+                !actions.isEmpty() &&
+                std::all_of(actions.cbegin(), actions.cend(), [](const QVariant& action) {
+                    return action.toMap().value(QStringLiteral("type")).toString() ==
+                           QStringLiteral("listFiles");
+                });
+            if (listing)
+                tally.add(QStringLiteral("list"), int(actions.size()));
+            else
+                tally.add(QStringLiteral("fileSearch"), 1);
         } else if (subtype.startsWith(QStringLiteral("browser")) ||
                    subtype == QStringLiteral("ketplusBrowser") ||
                    subtype == QStringLiteral("integration")) {
@@ -157,8 +174,12 @@ QString activityGroupSummary(const QList<QVariantMap>& rows, const qsizetype fir
             }
             if (receivers.isEmpty())
                 ++unnamedSubagents;
-        } else if (subtype == QStringLiteral("wait")) {
+        } else if (subtype == QStringLiteral("wait") || subtype == QStringLiteral("monitor")) {
             tally.add(QStringLiteral("wait"), 1);
+        } else if (subtype == QStringLiteral("webFetch") ||
+                   subtype == QStringLiteral("toolsLoaded") || subtype == QStringLiteral("skill") ||
+                   subtype == QStringLiteral("taskStopped")) {
+            tally.add(subtype, 1);
         } else if (subtype == QStringLiteral("thought")) {
             tally.add(QStringLiteral("thought"), 1);
         } else if (subtype == QStringLiteral("imageView")) {
@@ -183,8 +204,27 @@ QString activityTallySummary(const ActivityTally& tally) {
             phrase = QStringLiteral("ran %1").arg(
                 counted(family.count, QStringLiteral("command"), QStringLiteral("commands")));
         } else if (family.id == QStringLiteral("read")) {
-            phrase = QStringLiteral("read %1").arg(
-                counted(family.count, QStringLiteral("file"), QStringLiteral("files")));
+            // The mock's word for reads: "Explored 3 files".
+            phrase =
+                QStringLiteral("explored %1")
+                    .arg(counted(family.count, QStringLiteral("file"), QStringLiteral("files")));
+        } else if (family.id == QStringLiteral("list")) {
+            phrase = QStringLiteral("listed %1 folder%2")
+                         .arg(family.count)
+                         .arg(family.count == 1 ? QString() : QStringLiteral("s"));
+        } else if (family.id == QStringLiteral("webFetch")) {
+            phrase =
+                QStringLiteral("fetched %1")
+                    .arg(counted(family.count, QStringLiteral("page"), QStringLiteral("pages")));
+        } else if (family.id == QStringLiteral("toolsLoaded")) {
+            phrase = QStringLiteral("loaded tools");
+        } else if (family.id == QStringLiteral("skill")) {
+            phrase = QStringLiteral("used %1").arg(
+                counted(family.count, QStringLiteral("skill"), QStringLiteral("skills")));
+        } else if (family.id == QStringLiteral("taskStopped")) {
+            phrase = QStringLiteral("stopped %1")
+                         .arg(counted(family.count, QStringLiteral("background task"),
+                                      QStringLiteral("background tasks")));
         } else if (family.id == QStringLiteral("edit")) {
             phrase =
                 QStringLiteral("edited %1")

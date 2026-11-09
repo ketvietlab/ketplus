@@ -133,7 +133,7 @@ void AgentWorkspaceViewTest::activityGroupRolesUpdateIncrementally() {
     QCOMPARE(model.count(), 2);
     QCOMPARE(model.renderedCount(), 3);
     QCOMPARE(roles(&model, 1).value("groupRole").toString(), QStringLiteral("leader"));
-    QCOMPARE(roles(&model, 1).value("groupSummary").toString(), QStringLiteral("Read 2 files"));
+    QCOMPARE(roles(&model, 1).value("groupSummary").toString(), QStringLiteral("Explored 2 files"));
     QCOMPARE(rendered(&model, 2).value("groupRole").toString(), QStringLiteral("member"));
 
     QSignalSpy resets(&model, &QAbstractItemModel::modelReset);
@@ -435,7 +435,7 @@ void AgentWorkspaceViewTest::expandedGroupHangsUnderRail() {
     // Collapsed: one summary line whose chevron follows the text, and no rail.
     QQuickItem* summary = nullptr;
     QTRY_VERIFY((summary = findVisualItem(root, "transcriptGroupSummary")) != nullptr);
-    QCOMPARE(summary->property("text").toString(), QStringLiteral("Read 3 files"));
+    QCOMPARE(summary->property("text").toString(), QStringLiteral("Explored 3 files"));
     auto* chevron = findVisualItem(root, "transcriptGroupChevron");
     QVERIFY(chevron);
     QVERIFY(chevron->x() > summary->x() + summary->width() - 0.5);
@@ -1016,7 +1016,7 @@ void AgentWorkspaceViewTest::messagesExposeAccessibleSemantics() {
     QCOMPARE(accessible(0, "role").toInt(), int(QAccessible::ListItem));
     QCOMPARE(accessible(0, "name").toString(), QStringLiteral("You: Please fix the build"));
     QCOMPARE(accessible(1, "name").toString(), QStringLiteral("Codex: Fixed it."));
-    QCOMPARE(accessible(2, "name").toString(), QStringLiteral("Read 2 files (1 failed)"));
+    QCOMPARE(accessible(2, "name").toString(), QStringLiteral("Explored 2 files (1 failed)"));
     QCOMPARE(accessible(2, "description").toString(),
              QStringLiteral("collapsed, completed, 1 failed"));
     QCOMPARE(accessible(-1, "role").toInt(), int(QAccessible::List));

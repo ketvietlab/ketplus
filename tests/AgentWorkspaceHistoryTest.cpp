@@ -774,7 +774,7 @@ void AgentWorkspaceViewTest::semanticCommandLabelsStayExpandable() {
     model.reset({readRow, searchRow});
     // The two steps read as one line; each keeps its exact command when expanded.
     QCOMPARE(model.get(0).value("groupSummary").toString(),
-             QStringLiteral("Read a file, searched code"));
+             QStringLiteral("Explored a file, searched code"));
     model.setGroupExpanded(model.get(0).value("groupKey").toString(), true);
     QCOMPARE(model.get(0).value("command").toString(), read.value("command").toString());
     QCOMPARE(model.get(1).value("command").toString(), search.value("command").toString());
