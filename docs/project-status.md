@@ -547,7 +547,9 @@ page; Claude Write, Edit and MultiEdit as file changes with line counts; MCP too
 "Used server: tool". A turn that edited files closes with the mock's changed-files card
 above its end: its file-change rows and its daemon groups' `files` (ADR 0022), merged by path;
 a row opens the file's diff and Review changes opens Source Control. Browser-open rows retain
-an Open action. Composer block line-height matches
+an Open action. A provider failure reads as the kit's danger banner; on the latest failed turn,
+while the conversation is idle, Retry sends that turn's prompt again as a new turn (not for
+a prompt with images, one from another agent, or while the composer holds attachments). Composer block line-height matches
 the transcript at 1.75; focused Qt tests cover Vietnamese single-line sizing and composer undo.
 
 

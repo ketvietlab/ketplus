@@ -11,6 +11,7 @@
 #include "agent/TranscriptTableStyle.h"
 #include "ui/Theme.h"
 #include <QScopeGuard>
+#include <functional>
 
 #include <QAbstractItemModelTester>
 #include <QAbstractTextDocumentLayout>
@@ -2653,6 +2654,91 @@ void AgentWorkspaceViewTest::turnEndListsTheTurnsChangedFiles() {
         "changes");
     QTRY_VERIFY(!findVisualItem(root, "transcriptTurnChanges") ||
                 !findVisualItem(root, "transcriptTurnChanges")->isVisible());
+}
+
+
+// The mock's workspace/error: Retry on the latest failure sends its prompt again, only while
+// the conversation is idle and only for the turn that failed last.
+void AgentWorkspaceViewTest::retryResendsTheLatestFailedPrompt() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.setAgentAvailable(true);
+    view.resize(900, 700);
+    view.show();
+    const QVariantMap prompt{{"messageKey", "u1"}, {"kind", "user"}, {"body", "Profile it"}};
+    const QVariantMap failure{{"messageKey", "e1"},
+                              {"kind", "error"},
+                              {"category", "system"},
+                              {"title", "The provider stopped with an error"},
+                              {"body", "No answer"}};
+    view.resetMessages({prompt, failure}, "retry");
+    auto* root = view.quickView()->rootObject();
+    // Rebuilt transcripts may leave a hidden, pooled notice before the shown one.
+    std::function<QQuickItem*(QQuickItem*)> shownAction = [&](QQuickItem* item) -> QQuickItem* {
+        if (!item->isVisible())
+            return nullptr;
+        if (item->objectName() == QLatin1String("transcriptNoticeAction"))
+            return item;
+        for (auto* child : item->childItems())
+            if (auto* match = shownAction(child))
+                return match;
+        return nullptr;
+    };
+    const auto action = [&] { return shownAction(root); };
+    QQuickItem* retry = nullptr;
+    QTRY_VERIFY((retry = action()));
+    QCOMPARE(retry->property("text").toString(), QStringLiteral("Retry"));
+    QSignalSpy sent(&view, &ketplus::AgentWorkspaceView::configuredPromptSubmitted);
+    QVERIFY(QMetaObject::invokeMethod(retry, "clicked"));
+    QCOMPARE(sent.count(), 1);
+    QCOMPARE(sent.first().at(0).toString(), QStringLiteral("Profile it"));
+    // Not while a turn runs, nor once a newer prompt follows the failure.
+    view.setSessionState("Retry", "Working", true);
+    QTRY_VERIFY(!action());
+    view.setSessionState("Retry", "Ready", false);
+    QTRY_VERIFY(action());
+    view.resetMessages(
+        {prompt, failure, QVariantMap{{"messageKey", "u2"}, {"kind", "user"}, {"body", "Next"}}},
+        "retry");
+    QTRY_VERIFY(!action());
+    // A prompt with images could not be sent as it was.
+    auto withImage = prompt;
+    withImage.insert("images", QVariantList{"file:///tmp/shot.png"});
+    view.resetMessages({withImage, failure}, "retry");
+    QTRY_VERIFY(findVisualItem(root, "transcriptNoticeTitle"));
+    QTest::qWait(50);
+    QVERIFY(!action());
+    // An update that keeps the row count still counts: an image arriving on the prompt.
+    view.resetMessages({prompt, failure}, "retry");
+    QTRY_VERIFY(action());
+    view.updateMessage(0, withImage);
+    QTRY_VERIFY(!action());
+    // Not while older history is shown instead of the latest turn.
+    view.resetMessages({prompt, failure}, "retry");
+    QTRY_VERIFY(action());
+    view.setHistoryState({{"hasNewer", true}});
+    QTRY_VERIFY(!action());
+    view.setHistoryState({});
+    QTRY_VERIFY(action());
+    // A turn that completed despite an error needs no retry.
+    const QVariantMap completed{{"messageKey", "t1"},
+                                {"kind", "system"},
+                                {"subtype", "turnEnd"},
+                                {"status", "completed"},
+                                {"title", "Turn completed"}};
+    view.resetMessages({prompt, failure, completed}, "retry");
+    QTRY_VERIFY(findVisualItem(root, "transcriptNoticeTitle"));
+    QTest::qWait(50);
+    QVERIFY(!action());
+    // A steer belongs to the failed turn; Retry resends the prompt that opened it.
+    const QVariantMap steer{
+        {"messageKey", "s1"}, {"kind", "user"}, {"eventType", "turn.steered"}, {"body", "Also X"}};
+    view.resetMessages({prompt, steer, failure}, "retry");
+    QTRY_VERIFY((retry = action()));
+    sent.clear();
+    QVERIFY(QMetaObject::invokeMethod(retry, "clicked"));
+    QCOMPARE(sent.count(), 1);
+    QCOMPARE(sent.first().at(0).toString(), QStringLiteral("Profile it"));
 }
 
 void AgentWorkspaceViewTest::markdownTableAfterCodeKeepsHeaderCells() {

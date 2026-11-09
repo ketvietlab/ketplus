@@ -809,11 +809,12 @@ bool LocalJournal::deleteSession(const QString& sessionId, const qint64 generati
     for (const QString& table :
          {QStringLiteral("background_tasks"), QStringLiteral("activity_summaries"),
           QStringLiteral("activity_items"), QStringLiteral("activity_heads"),
-          QStringLiteral("replay_events"), QStringLiteral("replay_projection_state"),
-          QStringLiteral("client_cursors"), QStringLiteral("cloud_events"),
-          QStringLiteral("events"), QStringLiteral("large_event_payloads"),
-          QStringLiteral("large_event_payload_chunks"), QStringLiteral("staged_attachment_chunks"),
-          QStringLiteral("staged_attachments"), QStringLiteral("session_contexts")}) {
+          QStringLiteral("activity_files"), QStringLiteral("replay_events"),
+          QStringLiteral("replay_projection_state"), QStringLiteral("client_cursors"),
+          QStringLiteral("cloud_events"), QStringLiteral("events"),
+          QStringLiteral("large_event_payloads"), QStringLiteral("large_event_payload_chunks"),
+          QStringLiteral("staged_attachment_chunks"), QStringLiteral("staged_attachments"),
+          QStringLiteral("session_contexts")}) {
         QSqlQuery query(database_);
         query.prepare(
             QStringLiteral("DELETE FROM %1 WHERE session_id = ? AND generation = ?").arg(table));

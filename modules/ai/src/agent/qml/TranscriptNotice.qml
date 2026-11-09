@@ -10,6 +10,9 @@ Rectangle {
     property string message
     property string status
     property string subtype
+    // A banner's action, as KetBanner's: Retry on the latest failed turn.
+    property string actionText
+    signal actionTriggered()
     readonly property bool failed: status === "failed"
     readonly property bool lineOnly: subtype === "event" || subtype === "turnEnd"
     // The mock's turn end: one quiet line, its status in bold and the details after it.
@@ -85,6 +88,15 @@ Rectangle {
                 selectionColor: KetTheme.t.accentSubtle
                 selectedTextColor: KetTheme.t.accentText
             }
+        }
+        Kit.KetButton {
+            objectName: "transcriptNoticeAction"
+            Layout.alignment: Qt.AlignVCenter
+            visible: notice.actionText.length > 0 && !notice.lineOnly
+            text: notice.actionText
+            iconName: "refresh"
+            controlSize: Kit.KetTheme.ControlSize.Small
+            onClicked: notice.actionTriggered()
         }
     }
 }

@@ -12,11 +12,15 @@ namespace {
 // Tables keyed by (session_id, generation) that make up a session's transcript. Staged
 // attachments, client cursors and cloud rows belong to the source session and are not copied.
 const QStringList& historyTables() {
-    static const QStringList tables{
-        QStringLiteral("activity_summaries"),   QStringLiteral("activity_items"),
-        QStringLiteral("activity_heads"),       QStringLiteral("events"),
-        QStringLiteral("replay_events"),        QStringLiteral("replay_projection_state"),
-        QStringLiteral("large_event_payloads"), QStringLiteral("large_event_payload_chunks")};
+    static const QStringList tables{QStringLiteral("activity_summaries"),
+                                    QStringLiteral("activity_items"),
+                                    QStringLiteral("activity_heads"),
+                                    QStringLiteral("activity_files"),
+                                    QStringLiteral("events"),
+                                    QStringLiteral("replay_events"),
+                                    QStringLiteral("replay_projection_state"),
+                                    QStringLiteral("large_event_payloads"),
+                                    QStringLiteral("large_event_payload_chunks")};
     return tables;
 }
 

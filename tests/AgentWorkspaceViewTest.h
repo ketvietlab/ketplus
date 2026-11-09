@@ -130,6 +130,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void imageViewerOpensTheRowsImages();
     void transcriptNoticesUseRuntimeState();
     void turnEndListsTheTurnsChangedFiles();
+    void retryResendsTheLatestFailedPrompt();
     void opensInlineMarkdownLinks();
     void linksInlineCodeOnceFilesAreListed();
     void userMessageBubbleIgnoresUnavailableImage();
