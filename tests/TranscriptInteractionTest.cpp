@@ -327,6 +327,8 @@ void AgentWorkspaceViewTest::activityIconsFollowTheMock_data() {
     QTest::newRow("command") << "command" << "" << "terminal";
     QTest::newRow("read") << "fileRead" << "" << "file-text";
     QTest::newRow("code search") << "codeSearch" << "" << "search";
+    QTest::newRow("listing") << "fileSearch" << "listing" << "view-list";
+    QTest::newRow("file search") << "fileSearch" << "" << "search";
     QTest::newRow("web search") << "webSearch" << "" << "globe";
     QTest::newRow("web fetch") << "webFetch" << "" << "globe";
     QTest::newRow("browser") << "ketplusBrowser" << "" << "globe";
@@ -353,7 +355,9 @@ void AgentWorkspaceViewTest::activityIconsFollowTheMock() {
     QVariantMap row{{"messageKey", "step"}, {"kind", "tool"},         {"category", "activity"},
                     {"subtype", subtype},   {"title", "Did a thing"}, {"turnId", "icons"},
                     {"status", "completed"}};
-    if (!change.isEmpty()) {
+    if (change == QStringLiteral("listing")) {
+        row.insert("title", "Listed files: src");
+    } else if (!change.isEmpty()) {
         row = ketplus::agent_message::fileChangeMessage(
             {{"id", "step"},
              {"type", "fileChange"},
