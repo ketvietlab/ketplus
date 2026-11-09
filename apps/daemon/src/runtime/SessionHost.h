@@ -268,6 +268,8 @@ class SessionHost final : public QObject, private AgentHostPort {
     void declineProviderRequest(Session& session, const QJsonValue& requestId,
                                 const QString& method, const QString& reason,
                                 const QString& serverName);
+    // A turn that never started: clears the start and any Stop pressed meanwhile, then fails.
+    void failTurnStart(Session& session, const QString& message);
     void providerStopped(const QString& adapterName, const QString& reason);
     // Journals the snapshot as tasks.changed and keeps it for restarts and task commands.
     void recordBackgroundTasks(Session& session, const QJsonArray& tasks);

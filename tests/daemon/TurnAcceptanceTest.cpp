@@ -312,6 +312,45 @@ class TurnAcceptanceTest final : public QObject {
         QCOMPARE(history.at(0).toObject().value("payload").toObject().value("context_revision"),
                  history.at(1).toObject().value("payload").toObject().value("context_revision"));
     }
+    void stopDuringAFailedStartDoesNotReachTheNextTurn() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite3");
+        const auto executable = dir.filePath("fake-codex");
+        const auto providerLog = dir.filePath("provider.log");
+        QVERIFY(writeFakeCodex(executable, providerLog));
+        LocalJournal journal(path);
+        StoredSession seed;
+        seed.id = "stop-while-starting";
+        seed.generation = 1;
+        seed.worktreePath = dir.path();
+        seed.adapter = "codex";
+        seed.state = "idle";
+        QVERIFY(journal.upsertSession(seed));
+        CodexAdapter adapter(executable);
+        SessionHost host(&journal, &adapter);
+        const auto stop = qScopeGuard([&] { adapter.stop(); });
+        const auto state = [&journal] { return journal.sessions().first().state; };
+        const auto turn = [&](const QString& messageId, const QString& prompt) {
+            auto submitted = request(messageId, seed.id);
+            submitted.insert("payload",
+                             QJsonObject{{"prompt", prompt}, {"client_message_id", messageId}});
+            return host.handleCommand(submitted, "desktop-test");
+        };
+        QVERIFY(turn("first", "fail-start").value("ok").toBool());
+        // Stop while the turn is still starting is kept for its turn.started.
+        auto interrupt = request("stop", seed.id);
+        interrupt.insert("message_type", "session.interrupt");
+        interrupt.insert("payload", QJsonObject{});
+        QVERIFY(host.handleCommand(interrupt, "desktop-test").value("ok").toBool());
+        // That turn never starts.
+        QTRY_COMPARE_WITH_TIMEOUT(state(), QString("failed"), 5000);
+        // The next turn runs to its end instead of being stopped as soon as it starts.
+        QVERIFY(turn("second", "hello").value("ok").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(state(), QString("ready"), 5000);
+        QFile log(providerLog);
+        QVERIFY(log.open(QIODevice::ReadOnly));
+        QVERIFY2(!log.readAll().contains("interrupt:"), "the next turn was interrupted");
+    }
 };
 QTEST_GUILESS_MAIN(TurnAcceptanceTest)
 #include "TurnAcceptanceTest.moc"
