@@ -143,7 +143,7 @@ std::optional<QByteArray> boundedLargePayload(const QSqlDatabase& database, cons
     return bytes;
 }
 
-// A generated image is read whole to drop its inline pixels; larger ones stay.
+// A generated image or tool result is read whole to drop its inline pixels; larger ones stay.
 constexpr qint64 maximumImagePayloadBytes = 16 * 1024 * 1024;
 
 struct Row {
@@ -228,7 +228,8 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
         "e.generation=r.generation) "
         "AND json_extract(r.payload,'$.item_type') IN "
         "('commandExecution','mcpToolCall','dynamicToolCall','reasoning','fileChange')");
-    // Generated images are larger than the shared lane allows: one per pass, read whole.
+    // Generated images and tool results with inline images are larger than the shared lane
+    // allows: one per pass, read whole.
     QSqlQuery imageCandidate(database_);
     imageCandidate.prepare(
         "SELECT r.payload,p.total_bytes FROM replay_events r JOIN large_event_payloads p ON "
@@ -238,7 +239,14 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
         "AND p.total_bytes>0 AND p.total_bytes<=? AND length(CAST(r.payload AS BLOB))<=16384 "
         "AND NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id=r.session_id AND "
         "e.generation=r.generation) "
-        "AND json_extract(r.payload,'$.item_type')='imageGeneration'");
+        "AND (json_extract(r.payload,'$.item_type')='imageGeneration' OR "
+        // A tool result qualifies only if a chunk holds an image block; larger text-only
+        // results stay outside every lane (ADR 0047).
+        "(json_extract(r.payload,'$.item_type') IN ('mcpToolCall','dynamicToolCall') AND "
+        "EXISTS (SELECT 1 FROM large_event_payload_chunks c WHERE c.session_id=p.session_id "
+        "AND c.generation=p.generation AND c.transfer_id=p.transfer_id AND "
+        "(instr(CAST(c.payload AS BLOB),CAST('\"type\":\"image\"' AS BLOB))>0 OR "
+        "instr(CAST(c.payload AS BLOB),CAST('\"type\":\"inputImage\"' AS BLOB))>0))))");
     QSqlQuery remove(database_);
     remove.prepare(
         QStringLiteral("DELETE FROM replay_events AS r WHERE ") + eligible +
@@ -265,7 +273,12 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
             "AND json_type(r.payload,'$.item.compacted.structured_result') IS NULL "
             "AND json_type(r.payload,'$.item.result.structuredContent_excerpt') IS NULL "
             "AND length(CAST(json_extract(r.payload,'$.item.result.structuredContent') AS BLOB))"
-            ">5120))"));
+            ">5120) OR "
+            // Already trimmed, but its inline images predate this policy (ADR 0099). A textual
+            // prefilter: the compactor decides and leaves anything else unchanged.
+            "(json_type(r.payload,'$.item.compacted.inline_images') IS NULL "
+            "AND (instr(r.payload,'\"type\":\"image\"')>0 OR "
+            "instr(r.payload,'\"type\":\"inputImage\"')>0)))"));
     QSqlQuery startCandidate(database_);
     // The next retained row must be this item's same-turn completion. Keeping
     // interleaved starts preserves the first-seen ordering used by every reader.
