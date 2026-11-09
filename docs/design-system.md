@@ -126,8 +126,9 @@ from activity/provider data are converted to symbol names at their consuming bou
 Pro links the static Ket QML module/plugin and its resources for offline loading.
 Tooltips use the kit's `KetToolTip` without a local type shadowing it. Working and
 history-loading indicators use the kit clock, releasing holds when hidden,
-minimized, restoring history or when reduced motion is enabled. The working
-indicator follows the kit's reduced clock rate when the application is inactive.
+minimized, restoring history or when reduced motion is enabled. The kit clock keeps
+20 Hz behind another application too: a visible window there is still watched, and the
+earlier 4 Hz made spinners stutter.
 Transcript premeasurement stops after all measurable bodies are exhausted;
 resource-backed bodies wait for their delegates instead of keeping a polling timer alive.
 New rows and layout changes re-arm measurement. Background-task elapsed time and
