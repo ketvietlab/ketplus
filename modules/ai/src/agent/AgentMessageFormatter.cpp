@@ -791,9 +791,12 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
     if (type == QStringLiteral("collabAgentToolCall") ||
         type == QStringLiteral("subAgentActivity")) {
         const bool collaborationCall = type == QStringLiteral("collabAgentToolCall");
-        const QString title = QStringLiteral("%1 %2").arg(
-            completed ? QStringLiteral("Used") : QStringLiteral("Using"),
-            collaborationCall ? QStringLiteral("a collaborator") : QStringLiteral("a sub-agent"));
+        // Named as the mock's "Ran a subagent", like Cursor's Task tool.
+        const QString title = collaborationCall
+                                  ? (completed ? QStringLiteral("Used a collaborator")
+                                               : QStringLiteral("Using a collaborator"))
+                                  : (completed ? QStringLiteral("Ran a subagent")
+                                               : QStringLiteral("Running a subagent"));
         auto entry = message(QStringLiteral("tool"), itemSummary(item),
                              QStringLiteral("Collaboration"), {}, id);
         entry.insert(QStringLiteral("subtype"), collaborationCall ? QStringLiteral("collaboration")

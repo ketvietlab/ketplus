@@ -296,6 +296,16 @@ class TranscriptActivityGroupsTest final : public QObject {
                                 "viewed an image, generated an image, waited, used a subagent"));
     }
 
+    void subagentsCollapseWithCommands() {
+        // The mock's Cursor turn: "Ran 3 commands, used a subagent".
+        QList<QVariantMap> rows{activity("c1", "command"), activity("c2", "command"),
+                                activity("s1", "subAgent"), activity("c3", "command")};
+        assignActivityGroups(rows);
+        QCOMPARE(rows.at(0).value("groupSize").toInt(), 4);
+        QCOMPARE(rows.at(0).value("groupSummary").toString(),
+                 QStringLiteral("Ran 3 commands, used a subagent"));
+    }
+
     void collaborationStepsCountDistinctAgents() {
         // Spawning and waiting on one agent is one subagent, as the formatter's rows carry it.
         const auto step = [](const QString& id, const QString& tool, const QString& receiver) {
