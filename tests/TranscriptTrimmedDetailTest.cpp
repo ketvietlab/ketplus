@@ -1,4 +1,5 @@
 #include "AgentWorkspaceViewTest.h"
+#include "agent/AgentMessageFormatter.h"
 #include "agent/AgentMessageModel.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/DaemonTranscriptNotices.h"
@@ -60,4 +61,24 @@ void AgentWorkspaceViewTest::trimmedTurnOpensStorageSettings() {
     QVERIFY(QMetaObject::invokeMethod(button, "clicked"));
     QCOMPARE(settings.count(), 1);
     QCOMPARE(settings.constFirst().constFirst().toString(), QStringLiteral("storage"));
+}
+
+// The mock's compaction: a divider with its text and what it means under it, not a banner.
+void AgentWorkspaceViewTest::compactionReadsAsAnEventLine() {
+    auto row = ketplus::agent_message::activityMessage(
+        QJsonObject{{"id", "compaction"}, {"type", "contextCompaction"}, {"status", "completed"}},
+        true);
+    row.insert("messageKey", "compaction");
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(1100, 700);
+    view.show();
+    view.resetMessages({row}, "compaction");
+    auto* root = view.quickView()->rootObject();
+    QQuickItem* line = nullptr;
+    QTRY_VERIFY((line = findVisibleItem(root, "transcriptEventLine")) != nullptr);
+    QCOMPARE(findVisualItem(line, "transcriptEventDivider")->property("text").toString(),
+             QStringLiteral("Context compacted"));
+    QCOMPARE(findVisualItem(line, "transcriptEventDetail")->property("text").toString(),
+             QStringLiteral("Older steps are summarised; the conversation continues."));
 }

@@ -837,12 +837,14 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
                          title);
     }
     if (type == QStringLiteral("contextCompaction")) {
+        // As the mock's event line: the divider's text, then what it means under it.
         const QString title =
-            completed ? QStringLiteral("Compacted context") : QStringLiteral("Compacting context");
-        auto entry = message(QStringLiteral("tool"),
-                             completed ? QStringLiteral("Context compacted")
-                                       : QStringLiteral("Compacting context…"),
-                             QStringLiteral("Codex"), {}, id);
+            completed ? QStringLiteral("Context compacted") : QStringLiteral("Compacting context");
+        auto entry = message(
+            QStringLiteral("tool"),
+            completed ? QStringLiteral("Older steps are summarised; the conversation continues.")
+                      : QStringLiteral("Compacting context…"),
+            QStringLiteral("Codex"), {}, id);
         entry.insert(QStringLiteral("subtype"), QStringLiteral("compaction"));
         entry.insert(QStringLiteral("running"), !completed);
         entry.insert(QStringLiteral("sanitizedPayload"),

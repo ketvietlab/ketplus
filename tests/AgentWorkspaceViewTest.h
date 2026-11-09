@@ -43,6 +43,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void claudeEditOpensItsDiffInline();
     void capacityErrorOffersAnotherModel();
     void trimmedTurnOpensStorageSettings();
+    void compactionReadsAsAnEventLine();
     void activityOperationSemantics();
     void semanticCommandLabelsStayExpandable();
     void longCommandTitleStaysInsideColumn();
