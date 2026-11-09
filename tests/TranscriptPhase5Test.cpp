@@ -1314,6 +1314,7 @@ void AgentWorkspaceViewTest::approvalCardStaysOutsideCommandGroup() {
         {"turnId", "turn-1"},
         {"body", "Allow the agent to run the build?"},
         {"command", "cmake --build build/dev"},
+        {"target", "Command"},
         {"running", true},
         {"questionAnswers", QVariantMap{}},
         {"questions",
@@ -1337,13 +1338,75 @@ void AgentWorkspaceViewTest::approvalCardStaysOutsideCommandGroup() {
     QTRY_VERIFY(card->isVisible() && card->height() > 0);
     auto* accept = findVisualItem(card, QStringLiteral("approvalAcceptButton"));
     QVERIFY(accept && accept->isVisible());
-    // The status sits inside the card, right-aligned with its padding.
-    auto* status = findVisualItem(card, QStringLiteral("approvalStatus"));
-    QVERIFY(status);
-    const QRectF bounds = status->mapRectToItem(card, status->boundingRect());
-    QVERIFY2(bounds.right() <= card->width(),
-             qPrintable(
-                 QStringLiteral("status ends at %1 of %2").arg(bounds.right()).arg(card->width())));
+    QCOMPARE(accept->property("text").toString(), QStringLiteral("Allow once"));
+    QCOMPARE(findVisualItem(card, QStringLiteral("approvalDeclineButton"))->property("text"),
+             QVariant(QStringLiteral("Deny")));
+    // As the mock's: what it asks to use, then the whole command in a code block inside the card.
+    auto* pending = findVisualItem(card, QStringLiteral("approvalPendingCard"));
+    QVERIFY(pending && pending->isVisible());
+    QCOMPARE(pending->property("label").toString(), QStringLiteral("Approval needed · Command"));
+    auto* command = findVisualItem(card, QStringLiteral("approvalCommand"));
+    QVERIFY(command && command->isVisible());
+    QCOMPARE(command->property("code").toString(), QStringLiteral("cmake --build build/dev"));
+    const QRectF bounds = command->mapRectToItem(card, command->boundingRect());
+    QVERIFY(bounds.left() >= 0 && bounds.right() <= card->width());
+    QVERIFY(!findVisualItem(card, QStringLiteral("approvalOutcome"))->isVisible());
+
+    // Allow once answers with the Accept option.
+    QSignalSpy answered(card, SIGNAL(decisionSubmitted(QVariant)));
+    QVERIFY(QMetaObject::invokeMethod(accept, "clicked"));
+    QCOMPARE(answered.count(), 1);
+    QCOMPARE(answered.first()
+                 .first()
+                 .toMap()
+                 .value("decision")
+                 .toMap()
+                 .value("option_ids")
+                 .toStringList(),
+             QStringList{"a"});
+}
+
+// A settled approval is one quiet line of how it ended, as the mock's.
+void AgentWorkspaceViewTest::settledApprovalsReadAsTheirOutcome() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 640);
+    view.show();
+    auto* root = view.quickView()->rootObject();
+    const auto settled = [](const QString& key, const QString& status, const QVariantMap& answers) {
+        return QVariantMap{{"messageKey", key},
+                           {"kind", "tool"},
+                           {"category", "activity"},
+                           {"subtype", "approval"},
+                           {"turnId", "turn-1"},
+                           {"body", "Allow it?"},
+                           {"command", "rg -n \"<tenant>\" services"},
+                           {"target", "Cursor tool"},
+                           {"status", status},
+                           {"running", false},
+                           {"questionAnswers", answers},
+                           {"questions", QVariantList{}},
+                           {"filePath", ""}};
+    };
+    const QList<QPair<QVariantMap, QString>> cases{
+        {settled("approved", "approved", {}), "Approved"},
+        {settled("denied", "denied", {}), "Denied"},
+        {settled("expired", "expired", {}), "Approval expired"},
+        {settled("closed", "resolved", {}), "Approval closed"},
+        // Decided here: the receipt's label says how.
+        {settled("declined-here", "resolved", {{"decision", "Decline"}}), "Denied"}};
+    for (const auto& [row, label] : cases) {
+        view.resetMessages({row}, "approval:" + row.value("messageKey").toString());
+        QQuickItem* note = nullptr;
+        QTRY_VERIFY((note = findVisualItem(root, QStringLiteral("approvalOutcome"))) &&
+                    note->isVisible());
+        QVERIFY(!findVisualItem(root, QStringLiteral("approvalPendingCard"))->isVisible());
+        auto* text = findVisualItem(note, QStringLiteral("approvalOutcomeText"));
+        QTRY_COMPARE(text->property("text").toString(),
+                     QStringLiteral("<b>%1</b>&nbsp;&nbsp;Cursor tool · rg -n \"&lt;tenant&gt;\" "
+                                    "services")
+                         .arg(label));
+    }
 }
 
 void AgentWorkspaceViewTest::copiesMouseSelectionWithShortcut() {

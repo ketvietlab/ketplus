@@ -257,6 +257,14 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
                       {"server", "ketplus_browser"},
                       {"tool", "browser_observe"},
                       {"arguments", QJsonObject{{"url", "https://staging-admin.example"}}}});
+        // The mock's approved Cursor tool, settled before the answer.
+        journal.event("approval.requested", {{"approval_id", "cursor-approval"},
+                                             {"kind", "approval"},
+                                             {"request_type", "cursor_tool"},
+                                             {"reason", "Cursor wants to use Shell."},
+                                             {"command", "rg -n \"tenant\" services/gateway"}});
+        journal.event("approval.resolved", {{"approval_id", "cursor-approval"},
+                                            {"answers", QJsonObject{{"decision", "accept"}}}});
         journal.agent("final_answer",
                       "A staging tenant is created in **two steps**:\n\n1. `POST /tenants` in the "
                       "gateway validates the slug.\n2. `createTenant()` provisions the schema and "

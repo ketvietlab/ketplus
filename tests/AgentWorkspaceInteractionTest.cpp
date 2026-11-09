@@ -444,6 +444,26 @@ for line in sys.stdin:
                                {{"decision", "Accept"}});
         QCOMPARE(errors.size(), 1);
     }
+    // An approval names what it asked to use, and another client's decision says how it ended.
+    appServer.userInputRequested(
+        "remote-approval",
+        {{"threadId", "question-thread"},
+         {"itemId", "remote-approval"},
+         {"approvalKind", "approval"},
+         {"approvalReason", "Codex wants network access."},
+         {"approvalCommand", "curl https://example.test"},
+         {"approvalTool", "Command"},
+         {"questions",
+          QJsonArray{QJsonObject{{"id", "decision"},
+                                 {"question", "Allow?"},
+                                 {"options", QJsonArray{QJsonObject{{"label", "Accept"}},
+                                                        QJsonObject{{"label", "Decline"}}}}}}}});
+    QCOMPARE(manager.messages(path).last().toMap().value("target").toString(), "Command");
+    appServer.notificationReceived("userInput/resolved", {{"threadId", "question-thread"},
+                                                          {"requestId", "remote-approval"},
+                                                          {"expired", false},
+                                                          {"outcome", "denied"}});
+    QCOMPARE(manager.messages(path).last().toMap().value("status").toString(), "denied");
     // A sent agent message is one live note: its expiry and its reply update it in place.
     const auto noteRows = [&] {
         QVariantList notes;
@@ -479,7 +499,7 @@ for line in sys.stdin:
                            {"peer_number", "8941"}});
     QCOMPARE(noteRows().size(), 1);
     QCOMPARE(noteRows().first().toMap().value("meta").toString(),
-             "DS Icon · Claude · Held until the turn ends");
+             "DS Icon · Claude · Held · waiting for approval there");
     appServer.notificationReceived(
         "daemon/userMessage", {{"threadId", "question-thread"},
                                {"itemId", "user:live-reply"},

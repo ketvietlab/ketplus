@@ -480,7 +480,10 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
             QStringLiteral("userInput/resolved"),
             {{QStringLiteral("threadId"), sessionId},
              {QStringLiteral("requestId"), approvalId},
-             {QStringLiteral("expired"), type.endsWith(QStringLiteral("expired"))}});
+             {QStringLiteral("expired"), type.endsWith(QStringLiteral("expired"))},
+             {QStringLiteral("outcome"), type.startsWith(QStringLiteral("approval."))
+                                             ? agent_message::approvalOutcome(type, data)
+                                             : QString()}});
         emit notificationReceived("daemon/approvalEnded",
                                   {{"threadId", sessionId}, {"approvalId", approvalId}});
     }
@@ -531,6 +534,7 @@ void CodexAppServer::dispatchDaemonApproval(const QString& sessionId, const QJso
           kind == QStringLiteral("input") ? QString{} : QStringLiteral("approval")},
          {QStringLiteral("approvalReason"), data.value(QStringLiteral("reason"))},
          {QStringLiteral("approvalCommand"), data.value(QStringLiteral("command"))},
+         {QStringLiteral("approvalTool"), agent_message::approvalToolLabel(data)},
          {QStringLiteral("isBlocking"), data.value(QStringLiteral("is_blocking")).toBool(true)},
          {QStringLiteral("questions"), questions}});
 }

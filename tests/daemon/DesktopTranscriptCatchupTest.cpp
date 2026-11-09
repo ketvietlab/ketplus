@@ -5,6 +5,107 @@ class DesktopTranscriptCatchupTest final : public QObject {
   private slots:
     void cleanup() { transcript_paging::setPageCounts({}); }
 
+    // A card that waited while another client decided it becomes that decision when history
+    // is read again, never a second row beside it.
+    void restoredReceiptSettlesAWaitingApprovalCard() {
+        Environment env;
+        QVERIFY(writeToken(env.directory));
+        const QString path = QFileInfo(env.directory.path()).canonicalFilePath();
+        rememberConversation(path, "a");
+        const QJsonObject request{{"approval_id", "a1"},
+                                  {"kind", "approval"},
+                                  {"request_type", "command"},
+                                  {"reason", "Codex wants network access."},
+                                  {"command", "curl https://example.test"},
+                                  {"revision", 1}};
+        bool decided = false;
+        FakeDaemon daemon(
+            env.directory.filePath("daemon.sock"),
+            [&](const QString& type, const QJsonObject& envelope) -> QJsonObject {
+                if (type == "session.list") {
+                    QJsonArray sessions;
+                    for (const auto* id : {"a", "b"})
+                        sessions.append(QJsonObject{{"session_id", id},
+                                                    {"worktree_path", path},
+                                                    {"session_generation", 1},
+                                                    {"state", "running"},
+                                                    {"last_event_cursor", decided ? 4 : 2}});
+                    return {{"transcript_window_version", 1}, {"sessions", sessions}};
+                }
+                if (type != "session.transcript_window")
+                    return {};
+                const auto id = envelope.value("session_id").toString();
+                QJsonArray events{windowEvent(id, "user.message", {{"text", "prompt"}}, 1, 1)};
+                QJsonArray pending;
+                if (id == "a") {
+                    events.append(windowEvent(id, "approval.requested", request, 2, 1));
+                    if (decided)
+                        events.append(
+                            windowEvent(id, "approval.resolved",
+                                        {{"approval_id", "a1"},
+                                         {"answers", QJsonObject{{"decision", "accept"}}}},
+                                        3, 1));
+                    else
+                        pending.append(request);
+                }
+                if (id == "a" && decided)
+                    events.append(windowEvent(
+                        id, "item.completed",
+                        {{"item_id", "thought"},
+                         {"item", QJsonObject{{"id", "thought"}, {"type", "reasoning"}}}},
+                        4, 1));
+                const qint64 head = id == "a" ? (decided ? 4 : 2) : 1;
+                return {{"transcript_window_version", 1},
+                        {"session_id", id},
+                        {"session_generation", 1},
+                        {"events", events},
+                        {"before_cursor", 1},
+                        {"after_cursor", head},
+                        {"snapshot_cursor", head},
+                        {"projection_revision", decided ? 2 : 1},
+                        {"current_turn_sequence", 1},
+                        {"active_turn_id", "turn-1"},
+                        {"state", "running"},
+                        {"has_more_before", false},
+                        {"has_more_after", false},
+                        {"pending_approvals", pending}};
+            });
+        QVERIFY(daemon.listening);
+        CodexAppServer server;
+        AgentSessionManager desktop(&server);
+        desktop.activate(path);
+        const auto approvals = [&] {
+            QVariantList rows;
+            for (const auto& row : desktop.messages(path))
+                if (row.toMap().value("subtype") == "approval")
+                    rows.append(row);
+            return rows;
+        };
+        QTRY_COMPARE(approvals().size(), 1);
+        QTRY_VERIFY(approvals().first().toMap().value("running").toBool());
+        QTRY_COMPARE(desktop.status(path), QStringLiteral("Waiting for your answer…"));
+
+        // Decided on the phone while this client missed the event; history is read again.
+        desktop.selectConversation(path, "b");
+        QTRY_VERIFY(!desktop.historyState(path).value("loading").toBool());
+        decided = true;
+        daemon.push(liveEvent("a", "item.completed",
+                              {{"item_id", "thought"},
+                               {"item", QJsonObject{{"id", "thought"}, {"type", "reasoning"}}}},
+                              4, 1));
+        QTest::qWait(30);
+        desktop.selectConversation(path, "a");
+        QTRY_VERIFY(!desktop.historyState(path).value("loading").toBool());
+        QTRY_COMPARE(approvals().size(), 1);
+        QTRY_VERIFY(!approvals().first().toMap().value("running").toBool());
+        const auto note = approvals().first().toMap();
+        QCOMPARE(note.value("status").toString(), QStringLiteral("approved"));
+        QVERIFY(!note.value("running").toBool());
+        QVERIFY(!note.value("presentationHidden").toBool());
+        QCOMPARE(note.value("command").toString(), QStringLiteral("curl https://example.test"));
+        QVERIFY(desktop.status(path) != QStringLiteral("Waiting for your answer…"));
+    }
+
     void compactionStatusFollowsRetainedWindow_data() {
         QTest::addColumn<bool>("restoredStart");
         QTest::addColumn<bool>("activityDuringRead");

@@ -1189,6 +1189,11 @@ class DaemonLifecycleTest final : public QObject {
                     ? R"(response:other:{"action": "accept", "content": {}})"
                     : R"(response:other:{"action": "decline"})";
             QTRY_VERIFY_WITH_TIMEOUT(logText().contains(expected), 2000);
+            // The journal keeps the decision, so a restored transcript says how it ended.
+            QCOMPARE(events(sessionId, "approval.resolved")
+                         .first()["payload"]["answers"]["decision"]
+                         .toString(),
+                     decision);
             QTRY_COMPARE_WITH_TIMEOUT(events(sessionId, "turn.completed").size(), 1, 2000);
             QCOMPARE(events(sessionId, "runtime.error").size(), 0);
         }

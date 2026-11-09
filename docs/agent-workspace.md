@@ -158,8 +158,13 @@ current-window value.
   error object must not add a second transcript row of `{}`. Cursor ACP
   `cursor/ask_question` requests are blocking: KetPlus presents a structured
   Question card and returns the selected option ids, never acknowledging the
-  request as skipped. Tool/file approvals use a separate compact Approval card;
-  command text remains hidden until the user requests details. Question and
+  request as skipped. Tool/file approvals use the mock's Approval card:
+  "Approval needed · <tool>" (Command, File change, `server.tool`, Claude or
+  Cursor tool), the reason, and the whole command in a code block, with Allow
+  once and Deny. A settled approval is one note: Approved, Denied or Approval
+  expired, then the tool and command. `approval.resolved` records
+  `answers.decision`, so a restored transcript and other clients show how it
+  ended; older journals read "Approval closed". Question and
   Approval rows are never folded into an activity group: one that arrives
   between commands splits the group so the card stays on screen. Both cards
   show the full question text, and an answered card is read-only. Expired unanswered

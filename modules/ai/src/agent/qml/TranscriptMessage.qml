@@ -533,6 +533,8 @@ Item {
                     objectName: "messageApprovalCard"
                     prompt: messageDelegate.body
                     command: messageDelegate.command
+                    tool: messageDelegate.target
+                    status: messageDelegate.status
                     pending: messageDelegate.running
                     answerData: messageDelegate.messageQuestionAnswers
                     questions: messageDelegate.messageQuestions
