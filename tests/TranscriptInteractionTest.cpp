@@ -1056,11 +1056,14 @@ void AgentWorkspaceViewTest::retainedFileDiffNoticeRemainsVisible() {
     QTRY_VERIFY((title = findVisualItem(root, "transcriptActivityTitle")) && title->isVisible());
     auto* row = findVisualItem(root, "transcriptActivityRow");
     QVERIFY(row);
+    auto* detail = findVisualItem(root, "transcriptActivityDetail");
+    QVERIFY(detail);
     for (bool compact : {false, true}) {
         row->setProperty("compact", compact);
-        QTRY_VERIFY(title->property("text").toString().contains("Diff trimmed"));
-        if (compact)
-            QVERIFY(title->property("text").toString().contains("Moved New.cpp"));
+        // The mock's step: "Moved", then both ends with the counts and the trimmed notice.
+        QTRY_COMPARE(title->property("text").toString(), QStringLiteral("Moved"));
+        QCOMPARE(detail->property("text").toString(),
+                 QString::fromUtf8("src/Old.cpp → src/New.cpp  +5000 −4500 · Diff trimmed"));
         QVERIFY(title->width() > 0 && title->height() > 0);
         auto* accessible = QAccessible::queryAccessibleInterface(row);
         QVERIFY(accessible);

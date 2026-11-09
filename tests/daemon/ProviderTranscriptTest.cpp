@@ -58,6 +58,167 @@ class ProviderTranscriptTest : public QObject {
         QCOMPARE(retry.value("status").toString(), "running");
         QVERIFY(daemonEventNotice("runtime.error", {{"message", "Fatal"}}, "error").isEmpty());
     }
+    // Synthetic journal items of every step kind in mockups/qt read as the mock's steps:
+    // a short title, then what the step acted on after ": ".
+    void stepTitlesFollowTheMock() {
+        const auto text = [](const QString& value) {
+            return QJsonObject{
+                {"content", QJsonArray{QJsonObject{{"type", "text"}, {"text", value}}}}};
+        };
+        const auto tool = [&](const QString& name, const QJsonObject& args) {
+            return QJsonObject{{"type", "dynamicToolCall"},
+                               {"tool", name},
+                               {"arguments", args},
+                               {"result", text("ok")}};
+        };
+        const QList<QJsonObject> items{
+            tool("Read", {{"file_path", "a/b.qml"}}),
+            tool("Grep", {{"pattern", "Animation"}, {"path", "modules"}}),
+            tool("Glob", {{"pattern", "**/*.qml"}}),
+            tool("Write", {{"file_path", "a/new.qml"}, {"content", "x\ny"}}),
+            tool("Edit", {{"file_path", "a/b.qml"}, {"old_string", "a"}, {"new_string", "b\nc"}}),
+            tool("WebSearch", {{"query", "qt animation"}}),
+            tool("WebFetch", {{"url", "https://doc.qt.io/x"}, {"prompt", "p"}}),
+            tool("ToolSearch", {{"query", "select:Read"}}),
+            tool("Skill", {{"skill", "ket-atlas"}}),
+            tool("TaskStop", {{"task_id", "t1"}}),
+            tool("Monitor", {{"command", "sleep 1"}}),
+            tool("ScheduleWakeup", {{"delaySeconds", 60}}),
+            tool("Task", {{"description", "Audit icons"}, {"prompt", "p"}}),
+            tool("mcp__ketplus_agents__agents_send", {{"to", "1"}}),
+            QJsonObject{{"type", "mcpToolCall"},
+                        {"server", "node_repl"},
+                        {"tool", "js"},
+                        {"arguments", QJsonObject{}}},
+            QJsonObject{
+                {"type", "commandExecution"},
+                {"command", "sed -n 1,5p a.cpp"},
+                {"commandActions",
+                 QJsonArray{QJsonObject{{"type", "read"}, {"path", "a.cpp"}, {"name", "a.cpp"}}}}},
+            QJsonObject{
+                {"type", "commandExecution"},
+                {"command", "rg foo src"},
+                {"commandActions",
+                 QJsonArray{QJsonObject{{"type", "search"}, {"query", "foo"}, {"path", "src"}}}}},
+            QJsonObject{{"type", "commandExecution"},
+                        {"command", "ls src"},
+                        {"commandActions",
+                         QJsonArray{QJsonObject{{"type", "listFiles"}, {"path", "src"}}}}},
+            QJsonObject{{"type", "fileChange"},
+                        {"changes", QJsonArray{QJsonObject{{"path", "a.cpp"},
+                                                           {"kind", QJsonObject{{"type", "add"}}},
+                                                           {"diff", "+x"}}}}},
+            QJsonObject{
+                {"type", "fileChange"},
+                {"changes", QJsonArray{QJsonObject{{"path", "a.cpp"},
+                                                   {"kind", QJsonObject{{"type", "update"}}},
+                                                   {"diff", "-a\n+b"}}}}},
+            QJsonObject{
+                {"type", "fileChange"},
+                {"changes", QJsonArray{QJsonObject{{"path", "a.cpp"},
+                                                   {"kind", QJsonObject{{"type", "delete"}}}}}}},
+            QJsonObject{{"type", "fileChange"},
+                        {"changes",
+                         QJsonArray{QJsonObject{
+                             {"path", "a.cpp"},
+                             {"kind", QJsonObject{{"type", "update"}, {"move_path", "b.cpp"}}}}}}},
+            QJsonObject{{"type", "webSearch"},
+                        {"query", "qt"},
+                        {"action", QJsonObject{{"type", "search"}, {"query", "qt"}}}},
+            QJsonObject{
+                {"type", "webSearch"},
+                {"query", ""},
+                {"action", QJsonObject{{"type", "openPage"}, {"url", "https://doc.qt.io"}}}},
+            QJsonObject{{"type", "webSearch"},
+                        {"query", ""},
+                        {"action", QJsonObject{{"type", "findInPage"},
+                                               {"url", "https://doc.qt.io"},
+                                               {"pattern", "Timer"}}}},
+            QJsonObject{{"type", "imageView"}, {"path", "/tmp/a.png"}},
+            QJsonObject{{"type", "imageGeneration"}, {"prompt", "a red bird"}, {"result", "abc"}},
+            QJsonObject{
+                {"type", "reasoning"}, {"summary", QJsonArray{}}, {"content", QJsonArray{}}},
+            QJsonObject{{"type", "dynamicToolCall"},
+                        {"tool", "sleep"},
+                        {"arguments", QJsonObject{{"seconds", 5}}}},
+        };
+        QJsonArray events;
+        qint64 cursor = 0;
+        events.append(QJsonObject{{"cursor", ++cursor},
+                                  {"turn_sequence", 1},
+                                  {"event_type", "user.message"},
+                                  {"payload", QJsonObject{{"text", "go"}}}});
+        for (auto item : items) {
+            item.insert("id", QStringLiteral("i%1").arg(cursor));
+            item.insert("status", "completed");
+            events.append(QJsonObject{{"cursor", ++cursor},
+                                      {"turn_sequence", 1},
+                                      {"event_type", "item.completed"},
+                                      {"payload", QJsonObject{{"provider", "claude"},
+                                                              {"item_id", item.value("id")},
+                                                              {"item", item}}}});
+            events.append(QJsonObject{
+                {"cursor", ++cursor},
+                {"turn_sequence", 1},
+                {"event_type", "item.completed"},
+                {"payload",
+                 QJsonObject{{"provider", "codex"},
+                             {"item_id", "x"},
+                             {"item", QJsonObject{{"type", "agentMessage"},
+                                                  {"id", QStringLiteral("m%1").arg(cursor)},
+                                                  {"phase", "commentary"},
+                                                  {"text", "."}}}}}});
+        }
+        QStringList steps;
+        QList<QVariantMap> edits;
+        for (const auto& row : daemonWindowMessages({{"events", events}})) {
+            const auto entry = row.toMap();
+            if (entry.value("subtype").toString().isEmpty())
+                continue; // the prompt and the commentary between steps
+            steps.append(entry.value("subtype").toString() + " | " +
+                         entry.value("title").toString());
+            if (entry.value("subtype") == "fileChange")
+                edits.append(entry.value("fileChanges").toList().first().toMap());
+        }
+        const QStringList expected{"fileRead | Read: a/b.qml",
+                                   "codeSearch | Searched code: Animation",
+                                   "fileSearch | Searched files: **/*.qml",
+                                   "fileChange | Edited 1 file",
+                                   "fileChange | Edited 1 file",
+                                   "webSearch | Searched the web: qt animation",
+                                   "webFetch | Fetched: doc.qt.io/x",
+                                   "toolsLoaded | Loaded tools: Read",
+                                   "skill | Used skill: ket-atlas",
+                                   "taskStopped | Stopped a background task",
+                                   "monitor | Waited",
+                                   "wake | Scheduled wake-up",
+                                   "subAgent | Ran a subagent: Audit icons",
+                                   "integration | Used ketplus_agents: agents_send",
+                                   "integration | Used node_repl: js",
+                                   "fileRead | Read: a.cpp L1–5",
+                                   "codeSearch | Searched code: “foo” in src",
+                                   "fileSearch | Listed files: src",
+                                   "fileChange | Edited 1 file",
+                                   "fileChange | Edited 1 file",
+                                   "fileChange | Edited 1 file",
+                                   "fileChange | Edited 1 file",
+                                   "webSearch | Searched the web: qt",
+                                   "webSearch | Opened a page: doc.qt.io",
+                                   "webSearch | Found in page: “Timer” on doc.qt.io",
+                                   "imageView | Viewed an image",
+                                   "imageGeneration | Generated an image",
+                                   "wait | Waited"};
+        QCOMPARE(steps, expected);
+        // Claude's Write and Edit count their lines as Codex's file changes do.
+        QCOMPARE(edits.at(0).value("operation").toString(), "Created");
+        QCOMPARE(edits.at(0).value("added").toInt(), 2);
+        QCOMPARE(edits.at(1).value("operation").toString(), "Edited");
+        QCOMPARE(edits.at(1).value("added").toInt(), 2);
+        QCOMPARE(edits.at(1).value("removed").toInt(), 1);
+        QCOMPARE(edits.at(4).value("operation").toString(), "Deleted");
+        QCOMPARE(edits.at(5).value("operation").toString(), "Moved");
+        QCOMPARE(edits.at(5).value("destination").toString(), "b.cpp");
+    }
     void turnEndReportsDurationContextAndSessionCost() {
         const auto at = [](int seconds) {
             return QDateTime(QDate(2026, 11, 9), QTime(1, 0), QTimeZone::UTC)

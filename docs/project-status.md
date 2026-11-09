@@ -541,7 +541,10 @@ reading column and collapse after 20 lines with a reversible Show more control.
 Activity rows read as the mock's steps: one line with a short title ("Read", "Ran" or a
 command's description) and what the step acted on beside it, every grouped step keeps its
 kind's icon, and a failure adds a line with its exit code and duration while the group
-summary stays neutral. Browser-open rows retain an Open
+summary stays neutral. Provider items map to the mock's step titles: Codex command actions
+read as Read, Searched code or Listed files; Codex web actions as Opened a page or Found in
+page; Claude Write, Edit and MultiEdit as file changes with line counts; MCP tools as
+"Used server: tool". Browser-open rows retain an Open
 action. Composer block line-height matches
 the transcript at 1.75; focused Qt tests cover Vietnamese single-line sizing and composer undo.
 

@@ -1,6 +1,8 @@
 add_library(ketplus_ai STATIC
     src/agent/AgentMessageFormatter.cpp
     src/agent/AgentMessageFormatter.h
+    src/agent/TranscriptStepItems.cpp
+    src/agent/TranscriptStepItems.h
     src/agent/AgentMessageModel.cpp
     src/agent/AgentMessageModel.h
     src/agent/McpToolResultMedia.cpp
