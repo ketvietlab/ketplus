@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QRegularExpression>
 #include <QSaveFile>
 
 #include <algorithm>
@@ -207,6 +208,10 @@ bool McpMediaStore::reference(const QString& sessionId, const QStringList& hashe
 }
 
 void McpMediaStore::releaseSession(const QString& sessionId) {
+    // Deletion follows only a real store directory, never a link to another one.
+    const QFileInfo root(directory_);
+    if (!root.isDir() || root.isSymLink())
+        return;
     const QString refs = refsPath(sessionId);
     const auto catalog = readReferenceCatalog(QFileInfo(refs).absolutePath());
     if (!catalog)
@@ -228,6 +233,11 @@ void McpMediaStore::releaseSession(const QString& sessionId) {
 }
 
 void McpMediaStore::retainSessions(const QSet<QString>& sessionIds) {
+    // Checked before any reference or media file changes: the sweep below deletes whatever
+    // the root holds, so it must not follow a link to another directory.
+    const QFileInfo root(directory_);
+    if (!root.isDir() || root.isSymLink())
+        return;
     const QDir refsDirectory(QDir(directory_).filePath(QStringLiteral("refs")));
     const auto catalog = readReferenceCatalog(refsDirectory.path());
     if (!catalog)
@@ -246,11 +256,20 @@ void McpMediaStore::retainSessions(const QSet<QString>& sessionIds) {
             released.unite(entry.value());
         }
     }
-    for (const QString& hash : std::as_const(released)) {
-        if (retained.contains(hash))
+    // Media no live session references is deleted too, not only what these files named: a
+    // daemon stopped between removing a reference file and its media, or between writing media
+    // and referencing it, left files no reference names. Only canonical names are touched.
+    static const QRegularExpression canonical(QStringLiteral("^[0-9a-f]{64}\\.(png|jpg)$"));
+    const QFileInfoList media =
+        QDir(directory_)
+            .entryInfoList({QStringLiteral("*.png"), QStringLiteral("*.jpg")},
+                           QDir::Files | QDir::System | QDir::Hidden);
+    for (const QFileInfo& file : media) {
+        // Only regular files: a FIFO, socket or device with a canonical name is not media.
+        if (file.isSymLink() || !file.isFile() || !canonical.match(file.fileName()).hasMatch() ||
+            retained.contains(file.completeBaseName()))
             continue;
-        QFile::remove(QDir(directory_).filePath(hash + QStringLiteral(".png")));
-        QFile::remove(QDir(directory_).filePath(hash + QStringLiteral(".jpg")));
+        QFile::remove(file.absoluteFilePath());
     }
 }
 

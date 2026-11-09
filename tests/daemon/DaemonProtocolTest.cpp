@@ -536,6 +536,81 @@ class DaemonProtocolTest final : public QObject {
 #endif
     }
 
+    void startupRetainDeletesMediaNoReferenceNames() {
+        QTemporaryDir directory;
+        McpMediaStore store(directory.filePath("media"));
+        const auto png = [](char fill) {
+            return QByteArray("\x89PNG\r\n\x1a\n") + QByteArray(32, fill);
+        };
+        const auto file = [&](const QJsonObject& reference) {
+            return QDir(store.directory())
+                .filePath(reference.value("media_ref").toString().mid(7) + ".png");
+        };
+        const auto onlyA = store.storeImage(png('a'), "image/png", "a");
+        const auto shared = store.storeImage(png('s'), "image/png", "a");
+        QVERIFY(!store.storeImage(png('s'), "image/png", "b").isEmpty());
+        const auto onlyB = store.storeImage(png('b'), "image/png", "b");
+        // Stopped after removing a deleted session's reference file, before its media.
+        const auto released = store.storeImage(png('r'), "image/png", "gone");
+        QVERIFY(QFile::remove(
+            QDir(store.directory())
+                .filePath("refs/" +
+                          QCryptographicHash::hash("gone", QCryptographicHash::Sha256).toHex() +
+                          ".refs")));
+        // Stopped after writing media, before referencing it.
+        const QByteArray unreferenced = png('u');
+        const QString written =
+            QDir(store.directory())
+                .filePath(
+                    QCryptographicHash::hash(unreferenced, QCryptographicHash::Sha256).toHex() +
+                    ".png");
+        QFile write(written);
+        QVERIFY(write.open(QIODevice::WriteOnly));
+        write.write(unreferenced);
+        write.close();
+        // Not a name the store writes: left alone.
+        QFile foreign(QDir(store.directory()).filePath("notes.png"));
+        QVERIFY(foreign.open(QIODevice::WriteOnly));
+        foreign.close();
+        for (const auto& path : {file(onlyA), file(shared), file(onlyB), file(released), written})
+            QVERIFY(QFileInfo::exists(path));
+
+        store.retainSessions({"b"});
+        QVERIFY(!QFileInfo::exists(file(onlyA)));
+        QVERIFY(QFileInfo::exists(file(shared))); // still referenced by b
+        QVERIFY(QFileInfo::exists(file(onlyB)));
+        QVERIFY(!QFileInfo::exists(file(released)));
+        QVERIFY(!QFileInfo::exists(written));
+        QVERIFY(QFileInfo::exists(foreign.fileName()));
+#ifdef Q_OS_UNIX
+        // A special file with a canonical name is not media and stays.
+        const QString special =
+            QDir(store.directory()).filePath(QString(64, QChar('f')) + QStringLiteral(".png"));
+        QCOMPARE(::mkfifo(QFile::encodeName(special).constData(), 0600), 0);
+        store.retainSessions({"b"});
+        QVERIFY(QFileInfo::exists(special));
+        QVERIFY(QFileInfo::exists(file(onlyB)));
+#endif
+    }
+
+    void startupRetainDoesNotFollowALinkedMediaRoot() {
+        // The store's directory is a link to another directory that looks like a store.
+        QTemporaryDir directory;
+        const QString elsewhere = directory.filePath("elsewhere");
+        QVERIFY(QDir().mkpath(elsewhere + "/refs"));
+        const QString victim = elsewhere + '/' + QString(64, QChar('e')) + ".png";
+        QFile file(victim);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("\x89PNG\r\n\x1a\n");
+        file.close();
+        const QString media = directory.filePath("media");
+        QVERIFY(QFile::link(elsewhere, media));
+        McpMediaStore store(media);
+        store.retainSessions({});
+        store.releaseSession("any");
+        QVERIFY(QFileInfo::exists(victim));
+    }
+
     void mediaOwnershipCommitFailurePreservesPreviousFile() {
 #ifdef Q_OS_UNIX
         QProcess probe;

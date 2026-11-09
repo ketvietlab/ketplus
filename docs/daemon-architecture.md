@@ -390,7 +390,11 @@ two threads with at most 16 reads waiting or running; a read beyond that answers
 A provider's viewed or generated image is opened without blocking and kept only if
 the opened file is regular, so a path replaced by a FIFO cannot stall the daemon.
 
-Media cleanup first validates a complete reference catalog: canonical digest
+At startup the daemon also deletes every canonically named media file that no
+remaining reference names, so a daemon stopped between removing a deleted
+conversation's references and its media, or between writing media and referencing
+it, leaves nothing behind once it starts again. Media cleanup first validates a
+complete reference catalog: canonical digest
 files, regular nonsymlink entries, at most 4 MiB per file, 16 MiB total and 4,096
 directory entries. Unknown, unreadable or over-budget ownership defers deletion;
 capacity can remain above its limit pending recovery. Valid ownership retains the

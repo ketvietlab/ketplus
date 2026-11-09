@@ -252,6 +252,10 @@ the corresponding Atlas mock first.
   schema definitions and table contents (worktree catalog without its clock) as
   an uninterrupted migration. The child opens only `LocalJournal`; startup
   compaction has its own interruption tests in `ketplus_daemon_journal_space_tests`.
+- Media retirement: `ketplus_daemon_protocol_tests` leaves media behind an
+  interrupted release and an unreferenced write, and expects startup retention to
+  delete both while keeping media a live session shares, a foreign file and a FIFO
+  with a canonical name; a media root that links to another directory is left alone.
 - Media reads: `ketplus_daemon_lifecycle_tests` sends 24 deferred previews at
   once and expects 8 `busy` answers and 16 previews, then a free slot again;
   `ketplus_daemon_protocol_tests` gives a viewed-image path that is a FIFO and
