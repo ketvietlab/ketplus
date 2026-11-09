@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QDateTime>
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -205,6 +206,10 @@ class CodexAppServer final : public QObject {
         bool approvalSyncInFlight{false};
         QSet<QString> settledApprovals;
         QString turnId;
+        // The running turn's journal start and context, for its end line.
+        qint64 turnSequence{-1};
+        QDateTime turnStartedAt;
+        qint64 turnContextTokens{-1};
         bool turnStartInFlight{false};
         bool interruptRequested{false};
     };

@@ -2509,7 +2509,7 @@ void AgentWorkspaceViewTest::transcriptNoticesUseRuntimeState() {
                                     {"category", "system"},
                                     {"subtype", "turnEnd"},
                                     {"title", "Turn completed"},
-                                    {"body", "Session estimate: $0.1250 USD"},
+                                    {"body", "6m 20s · 141k context · <$2.08> session"},
                                     {"status", "completed"}}},
                        "notices");
     auto* root = view.quickView()->rootObject();
@@ -2532,9 +2532,23 @@ void AgentWorkspaceViewTest::transcriptNoticesUseRuntimeState() {
         visit(visit, root);
         return titles.size();
     };
-    QTRY_COMPARE(collect(), 3);
-    QVERIFY(titles.contains("Turn completed"));
+    QTRY_COMPARE(collect(), 2);
     QVERIFY(bodies.contains("<b>Untrusted error text</b>"));
+    // The mock's turn end: one line, the status in bold and the details as plain text.
+    const auto visibleTurnEnd = [](const auto& self, QQuickItem* item) -> QQuickItem* {
+        if (!item->isVisible())
+            return nullptr;
+        if (item->objectName() == "transcriptTurnEnd")
+            return item;
+        for (auto* child : item->childItems())
+            if (auto* match = self(self, child))
+                return match;
+        return nullptr;
+    };
+    QQuickItem* turnEnd = nullptr;
+    QTRY_VERIFY((turnEnd = visibleTurnEnd(visibleTurnEnd, root)));
+    QCOMPARE(turnEnd->property("text").toString(),
+             QString("<b>Completed</b>&nbsp;&nbsp;6m 20s · 141k context · &lt;$2.08> session"));
     const auto capture = qEnvironmentVariable("KETPLUS_NOTICE_CAPTURE");
     if (!capture.isEmpty()) {
         QTest::qWait(80);

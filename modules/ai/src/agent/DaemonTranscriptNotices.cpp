@@ -11,8 +11,43 @@ QString sessionEstimateText(const QJsonObject& usage) {
     // The SDK reports a cumulative session estimate, never a per-turn charge.
     return QStringLiteral("Session estimate: $%1 USD").arg(cost.toDouble(), 0, 'f', 4);
 }
+bool daemonTurnStarts(const QString& type) {
+    return type == "user.message" || type == "turn.started";
+}
+
+qint64 daemonContextTokens(const QJsonObject& data) {
+    return data.value("tokenUsage")
+        .toObject()
+        .value("last")
+        .toObject()
+        .value("totalTokens")
+        .toInteger(-1);
+}
+
+QString turnEndText(const TurnFacts& turn, const QJsonObject& usage) {
+    QStringList parts;
+    if (turn.durationMs >= 0) {
+        const qint64 seconds = (turn.durationMs + 500) / 1000;
+        parts.append(seconds < 60     ? QStringLiteral("%1s").arg(seconds)
+                     : seconds < 3600 ? QStringLiteral("%1m %2s")
+                                            .arg(seconds / 60)
+                                            .arg(seconds % 60, 2, 10, QLatin1Char('0'))
+                                      : QStringLiteral("%1h %2m")
+                                            .arg(seconds / 3600)
+                                            .arg(seconds % 3600 / 60, 2, 10, QLatin1Char('0')));
+    }
+    if (turn.contextTokens > 0)
+        parts.append(turn.contextTokens < 1000
+                         ? QStringLiteral("%1 context").arg(turn.contextTokens)
+                         : QStringLiteral("%1k context").arg((turn.contextTokens + 500) / 1000));
+    // The SDK reports a cumulative session estimate, never a per-turn charge, so it says so.
+    const auto cost = usage.value("estimatedCostUsd");
+    if (cost.isDouble() && std::isfinite(cost.toDouble()) && cost.toDouble() >= 0)
+        parts.append(QStringLiteral("$%1 session").arg(cost.toDouble(), 0, 'f', 2));
+    return parts.join(QStringLiteral(" · "));
+}
 QVariantMap daemonEventNotice(const QString& type, const QJsonObject& data, const QString& itemId,
-                              const QJsonObject& usage) {
+                              const QJsonObject& usage, const TurnFacts& turn) {
     QString title, detail, subtype = "event";
     QString status = "completed";
     if (type == "session.provider_changed") {
@@ -48,7 +83,7 @@ QVariantMap daemonEventNotice(const QString& type, const QJsonObject& data, cons
             title = "Turn completed";
         else
             return {}; // Do not invent success for an unknown provider state.
-        detail = sessionEstimateText(usage);
+        detail = turnEndText(turn, usage);
     } else if (type == "runtime.error" &&
                (data.value("will_retry").toBool() || data.value("willRetry").toBool())) {
         title = "Reconnecting";

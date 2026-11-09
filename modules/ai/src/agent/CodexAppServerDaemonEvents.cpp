@@ -107,9 +107,31 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
     const QJsonObject payload = envelope.value(QStringLiteral("payload")).toObject();
     const QString type = payload.value(QStringLiteral("event_type")).toString();
     const QJsonObject data = payload.value(QStringLiteral("data")).toObject();
+    // Time and size the turn from the daemon's own journal, so a late or replayed end reads
+    // as it does after a reload.
+    const qint64 sequence = envelope.value(QStringLiteral("turn_sequence")).toInteger();
+    const QDateTime sentAt = QDateTime::fromString(
+        envelope.value(QStringLiteral("sent_at")).toString(), Qt::ISODateWithMs);
+    if (agent_message::daemonTurnStarts(type) && sequence != found->turnSequence) {
+        found->turnSequence = sequence;
+        found->turnStartedAt = sentAt;
+        found->turnContextTokens = -1;
+    }
+    if (type == QStringLiteral("usage.context") && sequence == found->turnSequence)
+        found->turnContextTokens = agent_message::daemonContextTokens(data);
     const auto emitNotice = [&] {
-        auto notice =
-            agent_message::daemonEventNotice(type, data, agent_message::daemonNoticeItemId(cursor));
+        agent_message::TurnFacts turn;
+        if (type == QStringLiteral("turn.completed") && sequence == found->turnSequence) {
+            if (found->turnStartedAt.isValid() && sentAt.isValid())
+                turn.durationMs = found->turnStartedAt.msecsTo(sentAt);
+            turn.contextTokens = found->turnContextTokens;
+        }
+        auto notice = agent_message::daemonEventNotice(
+            type, data, agent_message::daemonNoticeItemId(cursor), {}, turn);
+        if (turn.durationMs >= 0)
+            notice.insert(QStringLiteral("durationMs"), turn.durationMs);
+        if (turn.contextTokens >= 0)
+            notice.insert(QStringLiteral("contextTokens"), turn.contextTokens);
         if (notice.isEmpty())
             return;
         if (daemonHasTranscriptWindow_ &&

@@ -194,9 +194,13 @@ card cannot replace those identities. Detail bodies remain loaded on expansion.
 
 System notices use a shared plain-text, selectable presentation. Known journal
 provider/model/context/fork/rename events and turn-end receipts share live/replay
-projection and stable message keys. Receipt cost is labelled `Session estimate`
-because Claude SDK accounting is cumulative; a page without usage evidence omits
-it. Retryable errors show reconnecting without changing the running lifecycle.
+projection and stable message keys. A turn end reads as the mock's quiet line: a
+status icon, a bold "Completed", "Stopped" or "Failed", then the details, for
+example "6m 20s · 141k context · $2.08 session". The duration runs from the
+turn's first journal time to its `turn.completed`. A live receipt uses the
+turn's start instead. The context is the latest `usage.context`. The cost is
+labelled "session" because Claude SDK accounting is cumulative. A part without
+evidence on the page is left out. Retryable errors show reconnecting without changing the running lifecycle.
 Older retained-output/diff/text markers stay visible. Unsupported queue actions
 are not shown; queued status follows the daemon state.
 

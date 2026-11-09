@@ -8,6 +8,7 @@
 #include "runtime/SessionHost.h"
 #include "storage/LocalJournal.h"
 #include <QTemporaryDir>
+#include <QTimeZone>
 #include <QtTest>
 using namespace ketplus::daemon;
 using namespace ketplus::agent_message;
@@ -42,7 +43,7 @@ class ProviderTranscriptTest : public QObject {
         QCOMPARE(rows[0].toMap().value("title").toString(), "Provider changed");
         QCOMPARE(rows[1].toMap().value("body").toString(), "test-model · high");
         QCOMPARE(rows[2].toMap().value("body").toString(), "Context revision 2");
-        QCOMPARE(rows[3].toMap().value("body").toString(), "Session estimate: $0.1250 USD");
+        QCOMPARE(rows[3].toMap().value("body").toString(), "$0.13 session");
         QCOMPARE(rows[3].toMap().value("messageKey").toString(), "daemon:1:notice:5");
         for (const auto& state : {"failed", "interrupted", "completed"}) {
             const auto note = daemonEventNotice("turn.completed", {{"status", state}}, "receipt");
@@ -56,6 +57,72 @@ class ProviderTranscriptTest : public QObject {
         QCOMPARE(retry.value("subtype").toString(), "reconnecting");
         QCOMPARE(retry.value("status").toString(), "running");
         QVERIFY(daemonEventNotice("runtime.error", {{"message", "Fatal"}}, "error").isEmpty());
+    }
+    void turnEndReportsDurationContextAndSessionCost() {
+        const auto at = [](int seconds) {
+            return QDateTime(QDate(2026, 11, 9), QTime(1, 0), QTimeZone::UTC)
+                .addSecs(seconds)
+                .toString(Qt::ISODateWithMs);
+        };
+        const QJsonArray events{
+            QJsonObject{{"cursor", 1},
+                        {"turn_sequence", 1},
+                        {"event_type", "user.message"},
+                        {"payload", QJsonObject{{"text", "Fix the spinner"}}},
+                        {"sent_at", at(0)}},
+            QJsonObject{
+                {"cursor", 2},
+                {"turn_sequence", 1},
+                {"event_type", "usage.context"},
+                {"payload", QJsonObject{{"tokenUsage",
+                                         QJsonObject{{"last", QJsonObject{{"totalTokens", 141200}}},
+                                                     {"modelContextWindow", 200000}}}}},
+                {"sent_at", at(200)}},
+            QJsonObject{{"cursor", 3},
+                        {"turn_sequence", 1},
+                        {"event_type", "usage.session"},
+                        {"payload", QJsonObject{{"estimatedCostUsd", 2.0812}}},
+                        {"sent_at", at(370)}},
+            QJsonObject{{"cursor", 4},
+                        {"turn_sequence", 1},
+                        {"event_type", "turn.completed"},
+                        {"payload", QJsonObject{{"status", "completed"}}},
+                        {"sent_at", at(380)}}};
+        const auto rows = daemonWindowMessages({{"events", events}});
+        QCOMPARE(rows.last().toMap().value("subtype").toString(), "turnEnd");
+        QCOMPARE(rows.last().toMap().value("body").toString(),
+                 QString::fromUtf8("6m 20s · 141k context · $2.08 session"));
+        // A page that starts mid-turn has no start to time the turn from.
+        const auto endOf = [](const QJsonArray& page) {
+            return daemonWindowMessages({{"events", page}}).last().toMap().value("body").toString();
+        };
+        QCOMPARE(endOf({events[1], events[2], events[3]}),
+                 QString::fromUtf8("141k context · $2.08 session"));
+        QCOMPARE(endOf({events[3]}), "");
+        // The next turn reported no usage: the previous turn's context is not its own.
+        QJsonArray next = events;
+        next.append(QJsonObject{{"cursor", 5},
+                                {"turn_sequence", 2},
+                                {"event_type", "user.message"},
+                                {"payload", QJsonObject{{"text", "Try Codex"}}},
+                                {"sent_at", at(400)}});
+        next.append(QJsonObject{{"cursor", 6},
+                                {"turn_sequence", 2},
+                                {"event_type", "turn.completed"},
+                                {"payload", QJsonObject{{"status", "failed"}}},
+                                {"sent_at", at(412)}});
+        QCOMPARE(endOf(next), QString::fromUtf8("12s · $2.08 session"));
+
+        TurnFacts turn;
+        QVERIFY(turnEndText(turn, {}).isEmpty());
+        turn.durationMs = 44'600;
+        QCOMPARE(turnEndText(turn, {}), "45s");
+        turn.durationMs = 3'900'000;
+        turn.contextTokens = 800;
+        QCOMPARE(turnEndText(turn, {}), QString::fromUtf8("1h 05m · 800 context"));
+        turn.durationMs = 68'000;
+        turn.contextTokens = -1;
+        QCOMPARE(turnEndText(turn, {{"estimatedCostUsd", -1}}), "1m 08s");
     }
     void agentMessagesShowTheirSenderAndHeldNotices() {
         const QJsonObject origin{

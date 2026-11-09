@@ -4,6 +4,7 @@
 #include "agent/McpToolResultMedia.h"
 #include "agent/TranscriptNormalizer.h"
 
+#include <QDateTime>
 #include <QHash>
 #include <QJsonArray>
 #include <QSet>
@@ -353,6 +354,10 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
                                                                    : QStringLiteral("resolved"));
     }
     QJsonObject sessionUsage;
+    // A turn's start and the context its own usage reported, for its end line. A page that
+    // begins mid-turn has no start, so that turn's line omits the duration.
+    QHash<qint64, QDateTime> turnStarts;
+    QHash<qint64, qint64> turnContext;
     for (const auto& value : page.value("events").toArray()) {
         const auto event = value.toObject();
         const auto type = event.value("event_type").toString();
@@ -361,8 +366,18 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
         QString itemId = data.value("item_id").toString();
         if (type == "usage.session")
             sessionUsage = data;
+        if (type == "usage.context")
+            turnContext.insert(sequence, daemonContextTokens(data));
+        const QDateTime sentAt =
+            QDateTime::fromString(event.value("sent_at").toString(), Qt::ISODateWithMs);
+        if (daemonTurnStarts(type) && sentAt.isValid() && !turnStarts.contains(sequence))
+            turnStarts.insert(sequence, sentAt);
+        TurnFacts turn;
+        turn.contextTokens = turnContext.value(sequence, -1);
+        if (type == "turn.completed" && sentAt.isValid() && turnStarts.contains(sequence))
+            turn.durationMs = turnStarts.value(sequence).msecsTo(sentAt);
         const auto notice = daemonEventNotice(
-            type, data, daemonNoticeItemId(event.value("cursor").toInteger()), sessionUsage);
+            type, data, daemonNoticeItemId(event.value("cursor").toInteger()), sessionUsage, turn);
         QJsonObject item = data.value("item").toObject();
         if (item.isEmpty()) {
             item = data;
