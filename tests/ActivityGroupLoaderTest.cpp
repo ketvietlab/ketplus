@@ -50,6 +50,28 @@ class ActivityGroupLoaderTest : public QObject {
         QCOMPARE(rows.size(), 2);
         QVERIFY(!rows.first().toMap().value("running").toBool());
     }
+    void aStepLeavingTheGroupReloadsItsDetails() {
+        QList<ActivityGroupLoader::Reply> replies;
+        QList<QJsonObject> requests;
+        ActivityGroupLoader loader([&](const QString&, const QJsonObject& params, auto reply) {
+            requests.append(params);
+            replies.append(reply);
+        });
+        loader.setOpen("session", "2", 3, true);
+        replies.takeFirst()(page(3, {activityEvent(2, "one"), activityEvent(3, "shot")}), {});
+        QTRY_COMPARE(loader.details("session", "2").value("groupItems").toList().size(), 2);
+        // The same watermark with a newer membership still drops "shot" and reads again.
+        loader.updateSummary("session", "2", 3, 5);
+        QTRY_COMPARE(requests.size(), 2);
+        QCOMPARE(requests.last().value("after_cursor").toInteger(), 0);
+        QVERIFY(loader.details("session", "2").value("groupItems").toList().isEmpty());
+        replies.takeFirst()(page(5, {activityEvent(2, "one")}), {});
+        QTRY_COMPARE(loader.details("session", "2").value("groupItems").toList().size(), 1);
+        // A summary that repeats the membership changes nothing.
+        loader.updateSummary("session", "2", 5, 5);
+        QTest::qWait(10);
+        QCOMPARE(requests.size(), 2);
+    }
     void collapseFencesReplyAndReopenWaitsForTheInflightRequest() {
         QList<ActivityGroupLoader::Reply> replies;
         int calls = 0;

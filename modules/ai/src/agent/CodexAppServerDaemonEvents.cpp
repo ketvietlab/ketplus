@@ -356,6 +356,13 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
                                    {"summary", data}});
         return;
     }
+    // A step that left its group when it returned images: the group's line drops it first,
+    // then the step shows on its own.
+    if (const auto left = data.value("left_activity_group").toObject(); !left.isEmpty())
+        emit notificationReceived("daemon/activityGroup",
+                                  {{"threadId", sessionId},
+                                   {"turnSequence", envelope.value("turn_sequence")},
+                                   {"summary", left}});
     if (type == QStringLiteral("assistant.delta")) {
         emit notificationReceived(
             QStringLiteral("item/agentMessage/delta"),

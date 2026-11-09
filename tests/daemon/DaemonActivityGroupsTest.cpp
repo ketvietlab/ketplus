@@ -213,10 +213,18 @@ class DaemonActivityGroupsTest : public QObject {
                                 .arg(value.toObject().value("count").toInt()));
         QCOMPARE(families, (QStringList{"command=1", "tool:ketplus_agents=2", "browser=1",
                                         "subagent=1", "subagent.step=1", "wait=1"}));
-        // Other tools keep their own rows: their results may hold images, or carry edits the
-        // summary would drop (Claude's Write).
-        for (const auto& standalone : {item("capture", "mcpToolCall", "capture", "screen_tools"),
-                                       item("write", "dynamicToolCall", "Write"),
+        // Any server's text step joins the open group: "Used screen_tools", as Claude names it.
+        const auto joined =
+            journal.appendEvent("session", 1, "item.completed",
+                                item("screen", "dynamicToolCall", "mcp__screen_tools__describe"));
+        const auto widened =
+            journal.activitySummaryEvent(last(journal, joined)).value("payload").toObject();
+        QCOMPARE(widened.value("count").toInt(), 8);
+        QCOMPARE(widened.value("families").toArray().last().toObject().value("family").toString(),
+                 "tool:screen_tools");
+        // A tool without a server keeps its own row, as it may carry edits the summary would
+        // drop (Claude's Write), and ends the run; a server's step never opens a group.
+        for (const auto& standalone : {item("write", "dynamicToolCall", "Write"),
                                        item("repl", "mcpToolCall", "js", "node_repl")}) {
             const auto cursor = journal.appendEvent("session", 1, "item.completed", standalone);
             QCOMPARE(
@@ -261,6 +269,115 @@ class DaemonActivityGroupsTest : public QObject {
                                                item("plan", "dynamicToolCall", "EnterPlanMode"));
         QCOMPARE(journal.activitySummaryEvent(last(journal, skill)).value("event_type").toString(),
                  "item.completed");
+    }
+    void serverStepsLeaveTheirGroupWhenTheyReturnImages() {
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite3"));
+        QVERIFY(seed(journal, dir.path()));
+        const auto repl = [](const QString& id, const QString& status, bool image = false) {
+            QJsonObject body{{"id", id},
+                             {"type", "mcpToolCall"},
+                             {"server", "node_repl"},
+                             {"tool", "js"},
+                             {"status", status}};
+            if (image)
+                body.insert(
+                    "result",
+                    QJsonObject{{"content", QJsonArray{QJsonObject{{"type", "image"},
+                                                                   {"data", "iVBORw0KGgo="},
+                                                                   {"mimeType", "image/png"}}}}});
+            return QJsonObject{{"item", body}};
+        };
+        const auto families = [](const QJsonObject& summary) {
+            QStringList parts;
+            for (const auto& value : summary.value("families").toArray())
+                parts.append(QStringLiteral("%1=%2")
+                                 .arg(value.toObject().value("family").toString())
+                                 .arg(value.toObject().value("count").toInt()));
+            return parts;
+        };
+        const auto build =
+            journal.appendEvent("session", 1, "item.completed", command("build", "completed"));
+        const auto group = journal.activitySummaryEvent(last(journal, build))
+                               .value("payload")
+                               .toObject()
+                               .value("group_id")
+                               .toString();
+        QVERIFY(!group.isEmpty());
+        const auto started =
+            journal.appendEvent("session", 1, "item.started", repl("shot", "inProgress"));
+        const auto running =
+            journal.activitySummaryEvent(last(journal, started)).value("payload").toObject();
+        QCOMPARE(running.value("group_id").toString(), group);
+        QCOMPARE(running.value("running_count").toInt(), 1);
+        QVERIFY(journal.appendEvent("session", 1, "item.completed", repl("text", "completed")) > 0);
+
+        // Its images make it evidence: it comes as itself, with the group's line without it.
+        const auto shot =
+            journal.appendEvent("session", 1, "item.completed", repl("shot", "completed", true));
+        const auto left = journal.activitySummaryEvent(last(journal, shot));
+        QCOMPARE(left.value("event_type").toString(), "item.completed");
+        const auto refreshed =
+            left.value("payload").toObject().value("left_activity_group").toObject();
+        QCOMPARE(refreshed.value("group_id").toString(), group);
+        QCOMPARE(refreshed.value("count").toInt(), 2);
+        QCOMPARE(refreshed.value("running_count").toInt(), 0);
+        QCOMPARE(families(refreshed), (QStringList{"command=1", "tool:node_repl=1"}));
+        QCOMPARE(refreshed.value("revision").toInteger(), shot);
+        QCOMPARE(refreshed.value("membership_cursor").toInteger(), shot);
+        // A repeated start or completion of the departed step leaves the group as it is.
+        QVERIFY(journal.appendEvent("session", 1, "item.started", repl("shot", "inProgress")) > 0);
+        const auto repeated =
+            journal.appendEvent("session", 1, "item.completed", repl("shot", "completed", true));
+        const auto settled = journal.activitySummaryEvent(last(journal, repeated))
+                                 .value("payload")
+                                 .toObject()
+                                 .value("left_activity_group")
+                                 .toObject();
+        QCOMPARE(settled.value("count").toInt(), 2);
+        QCOMPARE(settled.value("running_count").toInt(), 0);
+        QCOMPARE(families(settled), (QStringList{"command=1", "tool:node_repl=1"}));
+        QCOMPARE(settled.value("membership_cursor").toInteger(), shot);
+        // History reads it on its own too, and the group's page no longer lists it.
+        QCOMPARE(journal.activitySummaryEvent(last(journal, started)).value("event_type"),
+                 "item.started");
+        const auto page = journal.activityGroupPage("session", 1, {{"group_id", group}});
+        QVERIFY(page.value("ok").toBool());
+        QStringList members;
+        for (const auto& value : page.value("events").toArray())
+            members.append(value.toObject()
+                               .value("payload")
+                               .toObject()
+                               .value("item")
+                               .toObject()
+                               .value("id")
+                               .toString());
+        QVERIFY(members.contains("text"));
+        QVERIFY(!members.contains("shot"));
+
+        // The evidence ended the run: the next step starts another group.
+        const auto after = journal.appendEvent("session", 1, "item.started", command("after"));
+        const auto next =
+            journal.activitySummaryEvent(last(journal, after)).value("payload").toObject();
+        QVERIFY(next.value("group_id").toString() != group);
+        // Its only server step leaving keeps the watermark at the eviction, not before it.
+        QVERIFY(journal.appendEvent("session", 1, "item.started", repl("lone", "inProgress")) > 0);
+        const auto lone =
+            journal.appendEvent("session", 1, "item.completed", repl("lone", "completed", true));
+        const auto emptied = journal.activitySummaryEvent(last(journal, lone))
+                                 .value("payload")
+                                 .toObject()
+                                 .value("left_activity_group")
+                                 .toObject();
+        QCOMPARE(families(emptied), (QStringList{"command=1"}));
+        QCOMPARE(emptied.value("count").toInt(), 1);
+        QCOMPARE(emptied.value("revision").toInteger(), lone);
+        // A step that completes with images without having started never joins.
+        const auto direct =
+            journal.appendEvent("session", 1, "item.completed", repl("direct", "completed", true));
+        const auto alone = journal.activitySummaryEvent(last(journal, direct));
+        QCOMPARE(alone.value("event_type").toString(), "item.completed");
+        QVERIFY(!alone.value("payload").toObject().contains("left_activity_group"));
     }
     void evidenceAndMessagesBreakGroupsAndLateCompletionKeepsIdentity() {
         QTemporaryDir dir;

@@ -402,6 +402,10 @@ class LocalJournal final {
     bool pruneUnreferencedLargePayloads(const QString& sessionId, qint64 generation,
                                         const QStringList& transferIds);
     bool initializeActivityGroups();
+    // The group an event's item belongs to (0 for none), and whether it has left it.
+    [[nodiscard]] std::pair<qint64, bool> activityMembership(const QJsonObject& event,
+                                                             const QString& itemId) const;
+    [[nodiscard]] QJsonObject activityGroupSummary(const QJsonObject& event, qint64 group) const;
     bool updateActivityGroups(const QString& sessionId, qint64 generation, qint64 cursor,
                               qint64 turnSequence, const QString& type, const QJsonObject& payload,
                               QString* error);

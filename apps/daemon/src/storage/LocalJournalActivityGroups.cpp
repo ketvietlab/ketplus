@@ -6,6 +6,7 @@
 #include <QJsonDocument>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <algorithm>
 
 namespace ketplus::daemon {
 namespace {
@@ -47,10 +48,14 @@ QString family(const QJsonObject& payload) {
     if (type == "subAgentActivity")
         return "subagent";
     if (type == "mcpToolCall" || type == "dynamicToolCall") {
-        const auto tool = item.value("tool").toString();
-        const auto server = item.value("server").toString();
+        const auto named = item.value("tool").toString();
+        auto server = item.value("server").toString();
+        // Claude names an MCP tool `mcp__server__tool`.
+        if (server.isEmpty() && named.startsWith(QStringLiteral("mcp__")))
+            server = named.section(QStringLiteral("__"), 1, 1);
+        const auto tool = named.section(QStringLiteral("__"), -1);
         // Evidence stays outside groups, including while running.
-        if (tool == "browser_capture" || tool == "visual_compare" ||
+        if (tool == "browser_capture" || tool.startsWith(QStringLiteral("visual_compare")) ||
             item.value("arguments").toObject().value("includeScreenshot").toBool())
             return {};
         if (server.contains("ketplus_browser") && tool.startsWith("browser_"))
@@ -80,15 +85,30 @@ QString family(const QJsonObject& payload) {
             return "taskStopped";
         if (operation == "monitor")
             return "wait";
-        // A family is fixed when the item starts, before its result shows whether it returns
-        // images, and other tools (Claude's edits among them) carry data a group summary
-        // drops. So only KetPlus's own text-only servers group by name: "Used ketplus_agents".
-        // Every other tool call keeps its own row.
-        if (server == "ketplus_agents")
+        // Any other MCP server's step reads as "Used node_repl". Its family is fixed when it
+        // starts, before its result shows images; one that returns images leaves its group
+        // again (updateActivityGroups). A tool without a server, Claude's edits among them,
+        // carries data a group summary drops and keeps its own row.
+        if (!server.isEmpty())
             return QStringLiteral("tool:") + server;
     }
     return {};
 }
+
+// A tool step whose family names only its server: any MCP tool, whose result may be evidence.
+bool serverStep(const QString& family) { return family.startsWith(QStringLiteral("tool:")); }
+
+// Images in a tool's result are evidence, which the transcript shows outside groups.
+bool returnsImages(const QJsonObject& item) {
+    const auto content = item.value("result").toObject().value("content").toArray();
+    return std::any_of(content.cbegin(), content.cend(), [](const QJsonValue& block) {
+        return block.toObject().value("type").toString() == QStringLiteral("image");
+    });
+}
+
+// An item that left its group keeps the group's cursor under this family, so the group's
+// summary can still be sent once more without it.
+constexpr auto kEvictedFamily = "evicted";
 
 // At most this many files ride on a group summary; `files_total` counts them all.
 constexpr int kSummaryFileLimit = 50;
@@ -335,6 +355,18 @@ bool LocalJournal::updateActivityGroups(const QString& session, qint64 generatio
         QString kind = known       ? existing.value(1).toString()
                        : lifecycle ? family(payload)
                                    : QString{};
+        // A server's step joins an open group but never opens one, so taking it out again
+        // never leaves a group empty. Completed with images, it is evidence from the start.
+        if (!known && serverStep(kind) &&
+            (head == 0 || (type == "item.completed" && returnsImages(item))))
+            kind.clear();
+        // Completed with images after joining: it leaves the group, and the run ends there,
+        // as evidence ends a local group.
+        const bool evicted =
+            known && type == "item.completed" && serverStep(kind) && returnsImages(item);
+        // An item that left its group stays out of it: a repeated start or completion changes
+        // neither the group's counts nor its membership.
+        const bool departed = known && kind == QLatin1String(kEvictedFamily);
         const qint64 group = known            ? existing.value(0).toLongLong()
                              : kind.isEmpty() ? 0
                              : head > 0       ? head
@@ -348,7 +380,7 @@ bool LocalJournal::updateActivityGroups(const QString& session, qint64 generatio
                                            item.value("exitCode").toInt() != 0 ||
                                            item.value("result").toObject().value("isError").toBool()
                                      : wasFailed;
-        if (lifecycle) {
+        if (lifecycle && !departed) {
             QSqlQuery upsert(database_);
             upsert.prepare(
                 "INSERT INTO activity_items VALUES(?,?,?,?,?,?,?,?,?,?) ON "
@@ -360,7 +392,7 @@ bool LocalJournal::updateActivityGroups(const QString& session, qint64 generatio
                 upsert.addBindValue(value);
             if (!exec(upsert, true))
                 return false;
-        } else if (known) {
+        } else if (known && !departed) {
             QSqlQuery update(database_);
             update.prepare("UPDATE activity_items SET last_cursor=? WHERE session_id=? AND "
                            "generation=? AND turn_sequence=? AND item_id=?");
@@ -369,21 +401,39 @@ bool LocalJournal::updateActivityGroups(const QString& session, qint64 generatio
             if (!exec(update, true))
                 return false;
         }
+        if (evicted) {
+            QSqlQuery leave(database_);
+            leave.prepare("UPDATE activity_items SET family=? WHERE session_id=? AND generation=? "
+                          "AND turn_sequence=? AND item_id=?");
+            for (const QVariant& value :
+                 QVariantList{QString::fromLatin1(kEvictedFamily), session, generation, turn, id})
+                leave.addBindValue(value);
+            if (!exec(leave, true))
+                return false;
+            if (head == group)
+                head = 0;
+        }
         if (lifecycle && type == "item.completed" && kind == "edit" && group > 0 &&
             !recordActivityFiles(session, generation, group, id,
                                  known ? existing.value(4).toLongLong() : cursor, item, error))
             return false;
-        if (group > 0) {
+        if (group > 0 && !departed) {
             QSqlQuery aggregate(database_);
             aggregate.prepare(
                 "INSERT INTO activity_summaries VALUES(?,?,?,?,?,?,?,?,?) ON "
                 "CONFLICT(session_id,generation,group_cursor,family) DO UPDATE SET "
                 "count=count+excluded.count,running=running+excluded.running,failed=failed+"
                 "excluded.failed,last_cursor=MAX(last_cursor,excluded.last_cursor)");
+            // An evicted item takes its step, and whatever it counted as running or failed, out
+            // of the family it joined.
             for (const QVariant& value :
-                 QVariantList{session, generation, group, kind, known ? 0 : 1, running - wasRunning,
-                              failed - wasFailed, cursor, turn})
+                 evicted ? QVariantList{session, generation, group, kind, -1, -wasRunning,
+                                        -wasFailed, cursor, turn}
+                         : QVariantList{session, generation, group, kind, known ? 0 : 1,
+                                        running - wasRunning, failed - wasFailed, cursor, turn})
                 aggregate.addBindValue(value);
+            // An emptied family keeps its row at count 0: its cursor holds the group's
+            // watermark, which must never go back.
             if (!exec(aggregate, true))
                 return false;
         }
@@ -438,16 +488,38 @@ QJsonObject LocalJournal::activitySummaryEvent(const QJsonObject& event) const {
         return event;
     const auto payload = event.value("payload").toObject();
     const QString id = itemId(payload);
+    const auto [group, evicted] = activityMembership(event, id);
+    if (group == 0)
+        return event;
+    if (!evicted)
+        return activityGroupSummary(event, group);
+    // An item that left its group when it completed comes as itself, carrying the group's
+    // summary without it, so a live client refreshes that group's line in the same event.
+    if (type != "item.completed")
+        return event;
+    auto projected = event;
+    auto carried = payload;
+    carried.insert("left_activity_group",
+                   activityGroupSummary(event, group).value("payload").toObject());
+    projected.insert("payload", carried);
+    return projected;
+}
+
+std::pair<qint64, bool> LocalJournal::activityMembership(const QJsonObject& event,
+                                                         const QString& id) const {
     QSqlQuery member(database_);
-    member.prepare("SELECT group_cursor FROM activity_items WHERE session_id=? AND generation=? "
-                   "AND turn_sequence=? AND item_id=?");
+    member.prepare("SELECT group_cursor,family FROM activity_items WHERE session_id=? AND "
+                   "generation=? AND turn_sequence=? AND item_id=?");
     member.addBindValue(event.value("session_id").toString());
     member.addBindValue(event.value("session_generation").toInteger());
     member.addBindValue(event.value("turn_sequence").toInteger());
     member.addBindValue(id);
-    if (!member.exec() || !member.next() || member.value(0).toLongLong() == 0)
-        return event;
-    const auto group = member.value(0).toLongLong();
+    if (!member.exec() || !member.next())
+        return {0, false};
+    return {member.value(0).toLongLong(), member.value(1).toString() == kEvictedFamily};
+}
+
+QJsonObject LocalJournal::activityGroupSummary(const QJsonObject& event, qint64 group) const {
     QSqlQuery summary(database_);
     // Families in the order the group first used them, as a local group words its steps.
     summary.prepare(
@@ -465,12 +537,26 @@ QJsonObject LocalJournal::activitySummaryEvent(const QJsonObject& event) const {
     qint64 watermark = 0;
     while (summary.next()) {
         const int n = summary.value(1).toInt();
+        watermark = qMax(watermark, summary.value(4).toLongLong());
+        // A family whose only steps left the group counts for the watermark alone.
+        if (n <= 0)
+            continue;
         count += n;
         running += summary.value(2).toInt();
         failed += summary.value(3).toInt();
-        watermark = qMax(watermark, summary.value(4).toLongLong());
         families.append(QJsonObject{{"family", summary.value(0).toString()}, {"count", n}});
     }
+    // When a step last left the group: a client holding its details reloads them past it.
+    qint64 membership = 0;
+    QSqlQuery departed(database_);
+    departed.prepare("SELECT MAX(last_cursor) FROM activity_items WHERE session_id=? AND "
+                     "generation=? AND group_cursor=? AND family=?");
+    departed.addBindValue(event.value("session_id").toString());
+    departed.addBindValue(event.value("session_generation").toInteger());
+    departed.addBindValue(group);
+    departed.addBindValue(QString::fromLatin1(kEvictedFamily));
+    if (departed.exec() && departed.next())
+        membership = departed.value(0).toLongLong();
     // The files the group's edits changed, merged by path in the order first changed.
     QSqlQuery changed(database_);
     changed.prepare("SELECT path,destination,operation,added,removed,known FROM activity_files "
@@ -522,6 +608,7 @@ QJsonObject LocalJournal::activitySummaryEvent(const QJsonObject& event) const {
                                             {"failed_count", failed},
                                             {"revision", watermark},
                                             {"last_change_cursor", watermark},
+                                            {"membership_cursor", membership},
                                             {"families", families},
                                             {"files", listed},
                                             {"files_total", int(files.size())}});
@@ -576,7 +663,8 @@ QJsonObject LocalJournal::activityGroupPage(const QString& session, qint64 gener
                  "replay_events r JOIN activity_items a ON a.session_id=r.session_id AND "
                  "a.generation=r.generation AND a.turn_sequence=r.turn_sequence AND "
                  "a.item_id=r.item_id WHERE r.session_id=? AND r.generation=? AND a.group_cursor=? "
-                 "AND r.event_type IN ('item.started','item.completed','command.output_delta') AND "
+                 "AND a.family<>'evicted' AND r.event_type IN "
+                 "('item.started','item.completed','command.output_delta') AND "
                  "r.cursor>? AND r.cursor<=? ORDER BY r.cursor LIMIT ?");
     for (const QVariant& value :
          QVariantList{session, generation, group, after, snapshot, limit + 1})
