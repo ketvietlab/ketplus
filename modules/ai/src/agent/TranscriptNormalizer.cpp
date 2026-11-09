@@ -58,11 +58,17 @@ TranscriptEvent ActivityNormalizer::normalize(const QJsonObject& item,
             presentation.insert(QStringLiteral("title"), QStringLiteral("Update"));
         }
     } else if (rawType == QStringLiteral("reasoning")) {
-        visible = false;
+        // The mock's "Thought · 14 s" step: that the agent thought, never what it thought.
+        const bool completed = lifecycle == TranscriptPhase::Completed;
         presentation = agent_message::message(QStringLiteral("tool"), {}, {}, {}, itemId);
-        presentation.insert(QStringLiteral("category"), QStringLiteral("system"));
+        presentation.insert(QStringLiteral("category"), QStringLiteral("activity"));
         presentation.insert(QStringLiteral("eventType"), QStringLiteral("assistant.reasoning"));
-        presentation.insert(QStringLiteral("subtype"), QStringLiteral("reasoning"));
+        presentation.insert(QStringLiteral("subtype"), QStringLiteral("thought"));
+        presentation.insert(QStringLiteral("title"),
+                            completed ? QStringLiteral("Thought") : QStringLiteral("Thinking"));
+        presentation.insert(QStringLiteral("status"),
+                            completed ? QStringLiteral("completed") : QStringLiteral("running"));
+        presentation.insert(QStringLiteral("running"), !completed);
     } else {
         presentation =
             agent_message::activityMessage(item, lifecycle == TranscriptPhase::Completed);
@@ -83,7 +89,9 @@ TranscriptEvent ActivityNormalizer::normalize(const QJsonObject& item,
              sourceStatus == QStringLiteral("cancelled"))
         event.phase = TranscriptPhase::Interrupted;
     event.visible = visible;
-    event.sanitizedPayload = TranscriptSanitizer::json(item).toObject().toVariantMap();
+    // A thought's text is never part of the transcript, its copy or its details.
+    if (rawType != QStringLiteral("reasoning"))
+        event.sanitizedPayload = TranscriptSanitizer::json(item).toObject().toVariantMap();
     return event;
 }
 

@@ -39,8 +39,7 @@ Groups contain consecutive commands, file changes, web searches and text-only
 KetPlus browser steps in one turn. A first eligible tool already has a stable
 group identity based on its first cursor. A late completion keeps that identity;
 it does not join a newer group across an intervening message or approval.
-Assistant/reasoning items, approvals, screenshots and visual comparisons break
-the run.
+Assistant items, approvals, screenshots and visual comparisons break the run.
 
 Since 2026-11-09 groups also take the steps a local Desktop group takes, so both
 read the same. Families are:
@@ -50,7 +49,9 @@ read the same. Families are:
 - `tool:<server>` for KetPlus's own text-only servers (`ketplus_agents`);
 - `subagent` for a spawned subagent and `subagent.step` for later messages and
   waits on one;
-- `wait`.
+- `wait`;
+- `thought` for reasoning items, which Desktop shows as "Thought · 14 s" without their
+  text.
 
 Other tool calls still break the run. A family is fixed by the item's first
 event, before its result shows whether it returns images, and some tools carry

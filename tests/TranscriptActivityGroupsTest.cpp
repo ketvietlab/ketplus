@@ -343,6 +343,16 @@ class TranscriptActivityGroupsTest final : public QObject {
                                 "viewed an image, generated an image, waited, used a subagent"));
     }
 
+    void thoughtsCollapseWithTheirSteps() {
+        // The mock's "Thought, …": a thought is a step of the group it starts.
+        QList<QVariantMap> rows{activity("t1", "thought"), activity("r1", "fileRead"),
+                                activity("r2", "fileRead")};
+        assignActivityGroups(rows);
+        QCOMPARE(rows.at(0).value("groupSize").toInt(), 3);
+        QCOMPARE(rows.at(0).value("groupSummary").toString(),
+                 QStringLiteral("Thought, read 2 files"));
+    }
+
     void subagentsCollapseWithCommands() {
         // The mock's Cursor turn: "Ran 3 commands, used a subagent".
         QList<QVariantMap> rows{activity("c1", "command"), activity("c2", "command"),

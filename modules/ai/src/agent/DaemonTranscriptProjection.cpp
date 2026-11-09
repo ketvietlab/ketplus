@@ -288,7 +288,7 @@ QVariantMap daemonActivityGroupMessage(const QJsonObject& data, qint64 turn) {
             // A group's edits count the files they changed, as a local group does.
             tally.add(family, files.isEmpty() ? count : data.value("files_total").toInt(count));
         } else if (family == "command" || family == "read" || family == "codeSearch" ||
-                   family == "fileSearch" || family == "wait") {
+                   family == "fileSearch" || family == "wait" || family == "thought") {
             tally.add(family, count);
         } else if (family == "webSearch") {
             tally.add(QStringLiteral("search"), count);
@@ -353,9 +353,6 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
         const auto event = value.toObject();
         const auto data = event.value("payload").toObject();
         const auto item = data.value("item").toObject();
-        if (item.value("type") == "reasoning")
-            hiddenItems.insert(
-                identity(event.value("turn_sequence").toInteger(), item.value("id").toString()));
     }
     for (const auto& value : page.value("partial_items").toArray()) {
         const auto item = value.toObject();
@@ -539,6 +536,17 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
                 if (!activity.visible)
                     continue;
                 entry = activity.toVariantMap();
+                // A thought's duration runs from its start to its completion event.
+                if (item.value("type") == "reasoning" && sentAt.isValid()) {
+                    const qint64 startedAt =
+                        existing < 0
+                            ? -1
+                            : result.at(existing).toMap().value("startedAt", -1).toLongLong();
+                    if (type == "item.started")
+                        entry.insert("startedAt", sentAt.toMSecsSinceEpoch());
+                    else if (startedAt >= 0)
+                        entry.insert("durationMs", sentAt.toMSecsSinceEpoch() - startedAt);
+                }
             } else {
                 QSet<QString> seen;
                 const auto projected =

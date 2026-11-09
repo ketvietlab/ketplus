@@ -752,11 +752,9 @@ void AgentSessionManager::handleItem(const SessionPtr& session, const QJsonObjec
         }
         return;
     }
-    if (type == QStringLiteral("reasoning")) {
+    if (type == QStringLiteral("reasoning"))
         updateState(session, completed ? QStringLiteral("Working…") : QStringLiteral("Reasoning…"),
                     true);
-        return;
-    }
     const auto event = ActivityNormalizer::normalize(
         item, completed ? TranscriptPhase::Completed : TranscriptPhase::Started,
         {session->id, session->transcriptGeneration, session->turnId,
@@ -764,6 +762,18 @@ void AgentSessionManager::handleItem(const SessionPtr& session, const QJsonObjec
                     : session->messages.size(),
          1});
     QVariantMap entry = event.toVariantMap();
+    // A thought's duration runs from when its start arrived to its completion.
+    if (type == QStringLiteral("reasoning")) {
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        const qint64 startedAt =
+            index >= 0
+                ? session->messages.at(index).value(QStringLiteral("startedAt"), -1).toLongLong()
+                : -1;
+        if (!completed)
+            entry.insert(QStringLiteral("startedAt"), now);
+        else if (startedAt >= 0)
+            entry.insert(QStringLiteral("durationMs"), now - startedAt);
+    }
     if (entry.value(QStringLiteral("eventType")).toString() == QStringLiteral("image.view")) {
         if (index >= 0) {
             QVariantMap grouped = session->messages.at(index);

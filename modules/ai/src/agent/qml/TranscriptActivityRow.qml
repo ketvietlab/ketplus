@@ -100,6 +100,11 @@ Column {
     // The mock's step line: a short title, then what the step acted on ("Read" and its path,
     // a command's description and the command, or "Ran" and an undescribed command).
     readonly property var titleParts: {
+        // The mock's "Thought · 14 s"; a thought shows no text.
+        if (subtype === "thought") {
+            const seconds = Math.round(Number(durationMs) / 1000);
+            return [running ? "Thinking" : "Thought", !running && seconds > 0 ? seconds + " s" : ""];
+        }
         if (subtype === "command" && command.length > 0)
             return [describedCommand ? commandDescription : running ? "Running" : "Ran", command.replace(/\s*\n\s*/g, " ")];
         // "Edited" and its path with the line counts; a move names both ends.
