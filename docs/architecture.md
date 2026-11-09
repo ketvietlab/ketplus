@@ -146,7 +146,10 @@ Qt application shell
   CLI is unavailable, `AtlasTab` owns the explicit, user-triggered npm install
   flow and executable picker. The conversation list offers an explicit 0.6.1
   update after a managed-viewer version error. Opening an Atlas never installs
-  software by itself.
+  software by itself. `ketatlas` and `npm` are looked up first in the Settings or
+  `KETPLUS_KETATLAS_CLI` override (`ketatlas` only), then in PATH, then in
+  Homebrew, then in each `~/.nvm` Node version from the newest version number
+  down (`AtlasProcess::toolSearchPaths`).
 - A conversation header opens an Atlas list in the Agent detail tabs. The sidebar
   has no Atlas destination. `ManagedAtlasViewers` launches KetAtlas 0.6.1 in
   managed mode for explicit external-browser viewing, starts the declared native

@@ -15,6 +15,8 @@ class AtlasProcess final : public QObject {
     void stop();
     bool running() const { return process_.state() != QProcess::NotRunning; }
     static QString cliPath();
+    // PATH, then Homebrew, then each nvm Node version from newest to oldest.
+    static QStringList toolSearchPaths();
   signals:
     void ready(const QUrl& url);
     void failed(const QString& message);
