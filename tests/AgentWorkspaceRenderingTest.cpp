@@ -2416,6 +2416,18 @@ void AgentWorkspaceViewTest::imageViewerOpensTheRowsImages() {
     QVERIFY(view.window()->windowState().testFlag(Qt::WindowFullScreen));
     QVERIFY(QMetaObject::invokeMethod(viewer, "trigger", Q_ARG(QVariant, 0x40)));
     QVERIFY(!view.window()->windowState().testFlag(Qt::WindowFullScreen));
+    // A narrow pane keeps every tool reachable: what does not fit moves into More.
+    QVERIFY(viewer->property("overflowTools").toList().isEmpty());
+    ket::Appearance::instance().setZoom(1.5);
+    view.resize(420, 700);
+    QTRY_VERIFY(!viewer->property("overflowTools").toList().isEmpty());
+    auto* more = qvariant_cast<QQuickItem*>(viewer->property("moreButton"));
+    QVERIFY(more && more->isVisible());
+    QVERIFY(more->mapToScene(QPointF()).x() >= 0);
+    QCOMPARE(viewer->property("shownToolCount").toInt() +
+                 viewer->property("overflowTools").toList().size(),
+             8);
+    ket::Appearance::instance().setZoom(1.0);
     QVERIFY(QMetaObject::invokeMethod(viewer, "close"));
 }
 
