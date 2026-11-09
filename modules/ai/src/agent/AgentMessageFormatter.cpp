@@ -11,6 +11,8 @@
 #include "agent/TranscriptPresentationGrouper.h"
 
 #include <QCryptographicHash>
+#include <QImage>
+#include <QImageReader>
 #include <QJsonDocument>
 #include <QRegularExpression>
 #include <QUrl>
@@ -655,6 +657,13 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
         const QString title = completed ? QStringLiteral("Generated an image")
                                         : QStringLiteral("Generating an image");
         const QString resource = images.isEmpty() ? QString{} : images.first().toString();
+        // The mock's "1024 × 1024 · transparent", read from the image's header only.
+        QString size;
+        if (QImageReader reader(QUrl(resource).toLocalFile()); reader.size().isValid()) {
+            size = QStringLiteral("%1 × %2").arg(reader.size().width()).arg(reader.size().height());
+            if (QImage::toPixelFormat(reader.imageFormat()).alphaUsage() == QPixelFormat::UsesAlpha)
+                size += QStringLiteral(" · transparent");
+        }
         auto entry = message(QStringLiteral("tool"), path, QStringLiteral("Image generation"),
                              QUrl(resource).toLocalFile(), id);
         entry.insert(QStringLiteral("subtype"), QStringLiteral("imageGeneration"));
@@ -665,7 +674,7 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
                      sanitizedJson(item).toObject().toVariantMap());
         return canonical(std::move(entry), QStringLiteral("image.generate"),
                          completed ? QStringLiteral("completed") : QStringLiteral("running"), title,
-                         path, resource);
+                         size.isEmpty() ? path : size, resource);
     }
     if (type == QStringLiteral("mcpToolCall") &&
         item.value(QStringLiteral("server")).toString() == QLatin1String(browser_tools::serverName))

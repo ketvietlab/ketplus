@@ -41,11 +41,12 @@ Column {
 
     // A group may contain many edits. Opening the group must not expand every
     // file list and repeat long paths before the reader asks for one edit.
-    property bool expanded: subtype === "imageView" || subtype === "imageGeneration"
+    // An image step opens on its image, as in the mock; without one it has nothing to show.
+    property bool expanded: (subtype === "imageView" || subtype === "imageGeneration") && parseArray(imageSources).length > 0
     property bool commandExpanded: false
     function restoreExpansion() {
         const saved = stateStore.activityState(stateKey);
-        expanded = saved === undefined ? subtype === "imageView" || subtype === "imageGeneration" : saved.expanded;
+        expanded = saved === undefined ? imageStep && images.length > 0 : saved.expanded;
         gallery.maximumVisible = saved === undefined ? 3 : saved.imageLimit;
         saveExpansion();
     }
@@ -90,10 +91,12 @@ Column {
     readonly property bool browserActivity: subtype === "ketplusBrowser"
     // Inside an open group a multi-file edit lists each file as its own step, as the mock does.
     readonly property bool fileSteps: compact && subtype === "fileChange" && files.length > 1
+    // The mock's image step: its path or size on the title line, the image when open.
+    readonly property bool imageStep: subtype === "imageView" || subtype === "imageGeneration"
     readonly property bool browserOpenAction: /^https?:\/\//.test(target) &&
                                                /browser|opened/i.test(displayTitle) &&
                                                /open/i.test(displayTitle)
-    readonly property bool hasDetails: !browserActivity && (subtype === "command" || subtype === "fileChange" || subtype === "imageView" || subtype === "imageGeneration" || target.length > 0 || summary.length > 0 || detailsRef.length > 0 || payloadRef.length > 0 || Object.keys(payload).length > 0)
+    readonly property bool hasDetails: imageStep ? images.length > 0 : !browserActivity && (subtype === "command" || subtype === "fileChange" || target.length > 0 || summary.length > 0 || detailsRef.length > 0 || payloadRef.length > 0 || Object.keys(payload).length > 0)
     readonly property bool describedCommand: command.length > 0 && commandDescription.length > 0
     readonly property string singleFileTitle: compact && subtype === "fileChange" && files.length === 1
         ? (files[0].operation || "Edited") + " " + String(files[0].destination || files[0].path || "file").split(/[\\/]/).pop() + (files[0].diffTrimmed ? " · Diff trimmed" : "")
@@ -102,6 +105,8 @@ Column {
     // The mock's step line: a short title, then what the step acted on ("Read" and its path,
     // a command's description and the command, or "Ran" and an undescribed command).
     readonly property var titleParts: {
+        if (imageStep)
+            return [title.length > 0 ? title : running ? "Working" : "Activity", summary];
         // The mock's "Thought · 14 s"; a thought shows no text.
         if (subtype === "thought") {
             const seconds = Math.round(Number(durationMs) / 1000);
@@ -212,7 +217,7 @@ Column {
         objectName: "transcriptActivityTarget"
         width: parent.width - root.contentInset
         x: root.contentInset
-        visible: root.expanded && !root.browserOpenAction && root.subtype !== "command" && root.subtype !== "fileChange" && !root.describedCommand && root.target.length > 0
+        visible: root.expanded && !root.browserOpenAction && !root.imageStep && root.subtype !== "command" && root.subtype !== "fileChange" && !root.describedCommand && root.target.length > 0
         spacing: KetTheme.px(8, KetTheme.zoom)
         Text {
             width: parent.width - (openTarget.visible ? openTarget.width + parent.spacing : 0)
@@ -387,7 +392,7 @@ Column {
             width: parent.width
             height: visible ? contentHeight : 0
             visible: text.length > 0 && root.subtype !== "fileChange"
-            text: root.expanded ? root.detailText() : ""
+            text: root.expanded && !root.imageStep ? root.detailText() : ""
             textFormat: TextEdit.PlainText
             readOnly: true
             selectByMouse: true
@@ -458,7 +463,7 @@ Column {
             objectName: "copyActivityDetails"
             variant: Kit.KetTheme.ButtonVariant.Ghost
             controlSize: Kit.KetTheme.ControlSize.Small
-            visible: root.subtype !== "fileChange" && (root.command.length > 0 || root.detailText().length > 0)
+            visible: root.subtype !== "fileChange" && !root.imageStep && (root.command.length > 0 || root.detailText().length > 0)
             text: root.subtype === "command" ? "Copy command" : "Copy details"
             Accessible.name: text
             padding: KetTheme.px(6, KetTheme.zoom)

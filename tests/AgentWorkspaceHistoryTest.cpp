@@ -868,7 +868,26 @@ void AgentWorkspaceViewTest::localImageActivityRendersRetainedMediaAfterSourceCl
         QTRY_VERIFY(resource && resource->isVisible());
         QCOMPARE(resource->property("resource").toString(),
                  QUrl::fromLocalFile(retained).toString());
+        // As in the mock: the path, or a generated image's size, on the title line; the open
+        // step shows the image, with no raw text to read or copy.
+        QCOMPARE(row->property("headDetail").toString(),
+                 type == "imageView" ? path : QStringLiteral("6 × 4"));
+        QVERIFY(!findVisualItem(row, "transcriptActivityTarget")->isVisible());
+        QVERIFY(!findVisualItem(row, "transcriptActivityDetailText")->isVisible());
+        QVERIFY(!findVisualItem(row, "copyActivityDetails")->isVisible());
     }
+    // A generation that returned no image has nothing to open.
+    ketplus::AgentWorkspaceView empty;
+    empty.applyTheme(testPalette());
+    empty.resize(900, 640);
+    empty.show();
+    empty.resetMessages({ketplus::agent_message::activityMessage(
+        {{"id", "nothing"}, {"type", "imageGeneration"}, {"revisedPrompt", "a gauge"}}, true)});
+    QQuickItem* generated = nullptr;
+    QTRY_VERIFY((generated = findVisualItem(empty.quickView()->rootObject(),
+                                            "transcriptActivityRow")) != nullptr);
+    QVERIFY(!generated->property("hasDetails").toBool());
+    QVERIFY(!generated->property("expanded").toBool());
 }
 
 void AgentWorkspaceViewTest::normalizesTypedTranscriptCorpus() {
