@@ -46,7 +46,8 @@ read the same. Families are:
 - `command`, `edit` and `webSearch`;
 - `read`, `codeSearch` and `fileSearch` for tool reads and searches, and `read`,
   `codeSearch` and `list` for Codex commands whose actions are all reads, searches
-  or listings;
+  or listings (`list:<n>` for a command that lists `n` folders, so a group counts
+  its steps once and its folders in full);
 - `webFetch`, `toolsLoaded`, `skill` and `taskStopped` for those text-only tool steps;
 - `browser` for KetPlus browser steps;
 - `tool:<server>` for KetPlus's own text-only servers (`ketplus_agents`);

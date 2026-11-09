@@ -232,9 +232,16 @@ class DaemonActivityGroupsTest : public QObject {
                                      {"commandActions", QJsonArray{QJsonObject{{"type", kind}}}}}}};
         };
         qint64 next = 0;
-        for (const auto& step : {actions("cat", "read"), actions("ls", "listFiles"),
-                                 actions("rg", "search"), item("skill", "dynamicToolCall", "Skill"),
-                                 item("fetch", "dynamicToolCall", "WebFetch")}) {
+        auto twoFolders = actions("ls-two", "listFiles");
+        auto body = twoFolders.value("item").toObject();
+        body.insert("commandActions",
+                    QJsonArray{QJsonObject{{"type", "listFiles"}, {"path", "src"}},
+                               QJsonObject{{"type", "listFiles"}, {"path", "tests"}}});
+        twoFolders.insert("item", body);
+        for (const auto& step :
+             {actions("cat", "read"), actions("ls", "listFiles"), twoFolders, twoFolders,
+              actions("rg", "search"), item("skill", "dynamicToolCall", "Skill"),
+              item("fetch", "dynamicToolCall", "WebFetch")}) {
             const auto cursor = journal.appendEvent("session", 1, "item.completed", step);
             QVERIFY(cursor > 0);
             if (!next)
@@ -245,7 +252,10 @@ class DaemonActivityGroupsTest : public QObject {
         QStringList added;
         for (const auto& value : grown.value("families").toArray())
             added.append(value.toObject().value("family").toString());
-        QCOMPARE(added, (QStringList{"read", "list", "codeSearch", "skill", "webFetch"}));
+        // The repeated completion of the two-folder listing counts once, and only once a step.
+        QCOMPARE(added, (QStringList{"read", "list", "list:2", "codeSearch", "skill", "webFetch"}));
+        QCOMPARE(grown.value("count").toInt(), 6);
+
         // A plan stays visible on its own, as in a local transcript.
         const auto skill = journal.appendEvent("session", 1, "item.completed",
                                                item("plan", "dynamicToolCall", "EnterPlanMode"));

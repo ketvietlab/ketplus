@@ -27,10 +27,12 @@ QString family(const QJsonObject& payload) {
             if (action.toObject().value("type").toString() != kind)
                 kind.clear();
         }
-        return kind == "read"        ? "read"
-               : kind == "search"    ? "codeSearch"
-               : kind == "listFiles" ? "list"
-                                     : "command";
+        // A command listing several folders says how many in its key ("list:2"), so the
+        // group's step count stays one per item while the line reads "listed 2 folders".
+        if (kind == "listFiles")
+            return actions.size() > 1 ? QStringLiteral("list:%1").arg(actions.size())
+                                      : QStringLiteral("list");
+        return kind == "read" ? "read" : kind == "search" ? "codeSearch" : "command";
     }
     if (type == "fileChange")
         return "edit";

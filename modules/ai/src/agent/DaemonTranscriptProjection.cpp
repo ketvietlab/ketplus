@@ -9,6 +9,7 @@
 #include <QHash>
 #include <QJsonArray>
 #include <QSet>
+#include <algorithm>
 
 namespace ketplus::agent_message {
 
@@ -287,10 +288,14 @@ QVariantMap daemonActivityGroupMessage(const QJsonObject& data, qint64 turn) {
         if (family == "edit") {
             // A group's edits count the files they changed, as a local group does.
             tally.add(family, files.isEmpty() ? count : data.value("files_total").toInt(count));
-        } else if (family == "command" || family == "read" || family == "list" ||
-                   family == "codeSearch" || family == "fileSearch" || family == "wait" ||
-                   family == "thought" || family == "webFetch" || family == "toolsLoaded" ||
-                   family == "skill" || family == "taskStopped") {
+        } else if (family == "list" || family.startsWith("list:")) {
+            // "list:2" is a command that listed two folders.
+            const int folders = family == "list" ? 1 : std::max(1, family.mid(5).toInt());
+            tally.add(QStringLiteral("list"), count * folders);
+        } else if (family == "command" || family == "read" || family == "codeSearch" ||
+                   family == "fileSearch" || family == "wait" || family == "thought" ||
+                   family == "webFetch" || family == "toolsLoaded" || family == "skill" ||
+                   family == "taskStopped") {
             tally.add(family, count);
         } else if (family == "webSearch") {
             tally.add(QStringLiteral("search"), count);

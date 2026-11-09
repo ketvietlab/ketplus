@@ -370,6 +370,17 @@ class TranscriptActivityGroupsTest final : public QObject {
                      .value("groupSummary")
                      .toString(),
                  QStringLiteral("Explored 4 files, listed 2 folders, used a skill"));
+        // "list:2" is one command that listed two folders: "ls src && ls tests".
+        QCOMPARE(daemonActivityGroupMessage(
+                     {{"item_id", "activity-group:4"},
+                      {"group_id", "4"},
+                      {"families", QJsonArray{QJsonObject{{"family", "list"}, {"count", 1}},
+                                              QJsonObject{{"family", "list:2"}, {"count", 1}},
+                                              QJsonObject{{"family", "command"}, {"count", 1}}}}},
+                     1)
+                     .value("groupSummary")
+                     .toString(),
+                 QStringLiteral("Listed 3 folders, ran a command"));
     }
 
     void summaryFactsSurviveTheProjectionAndTheModel() {
