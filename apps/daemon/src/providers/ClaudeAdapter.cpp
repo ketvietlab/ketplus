@@ -448,7 +448,14 @@ void ClaudeAdapter::consumeStdout() {
                     if (process_->read(readChunkBytes).isEmpty())
                         break;
                 failPending(reason);
-                emit stopped(reason);
+                // A pending initialize has published this stop itself and marked it. Otherwise
+                // publish it here, once: the exit that follows must not publish another or
+                // count as a second crash.
+                if (!stopping_) {
+                    noteUnexpectedStop();
+                    emit stopped(reason);
+                    stopping_ = true;
+                }
                 process_->kill();
                 return;
             }
