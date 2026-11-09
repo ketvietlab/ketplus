@@ -67,7 +67,15 @@ core target. The local slice includes:
 
 - a user-restricted `QLocalServer` endpoint authenticated by an owner-only local
   token; the daemon refuses to start when it cannot restrict the journal and
-  token directories to their owner;
+  token directories to their owner. On macOS it also removes access-control
+  entries, such as an inherited `everyone allow read`, which mode bits do not show:
+  from those directories before creating anything (so new files inherit none),
+  from the journal and its WAL/SHM, and from the media root and every file under it.
+  A linked directory is handled at its target. An ACL that cannot be read counts
+  as present. A token that carried such an entry is replaced rather than trusted,
+  and only after the journal lock is held, so a daemon refused as the second
+  instance never replaces the running one's credential. Linux ACLs and Windows
+  are not handled;
 - the length-prefixed JSON v0 contract accepted in ADR 0002;
 - provider-neutral session operations and normalized events backed by SQLite
   WAL cursor replay and durable command deduplication;

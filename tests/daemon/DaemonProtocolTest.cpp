@@ -34,6 +34,10 @@
 #include <QUuid>
 #include <QtTest>
 #include <limits>
+#ifdef Q_OS_MACOS
+#include <cerrno>
+#include <sys/acl.h>
+#endif
 #ifdef Q_OS_UNIX
 #include <atomic>
 #include <csignal>
@@ -45,6 +49,20 @@
 #endif
 
 using namespace ketplus::daemon;
+
+#ifdef Q_OS_MACOS
+// True when the path carries extended entries; an unreadable ACL counts as having them.
+static bool hasExtendedAclEntries(const QString& path) {
+    errno = 0;
+    acl_t acl = acl_get_link_np(QFile::encodeName(path).constData(), ACL_TYPE_EXTENDED);
+    if (acl == nullptr)
+        return errno != ENOENT;
+    acl_entry_t entry = nullptr;
+    const bool any = acl_get_entry(acl, ACL_FIRST_ENTRY, &entry) == 0;
+    acl_free(acl);
+    return any;
+}
+#endif
 
 class DaemonProtocolTest final : public QObject {
     Q_OBJECT
@@ -2777,6 +2795,179 @@ class DaemonProtocolTest final : public QObject {
         QLocalSocket client;
         client.connectToServer(configuration.socketName);
         QVERIFY(client.waitForConnected(2'000));
+    }
+
+    void serviceRemovesInheritedAccessEntriesFromItsState() {
+#ifdef Q_OS_MACOS
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString state = directory.filePath("state");
+        QVERIFY(QDir().mkpath(state));
+        // Everything created below inherits a grant the owner-only mode bits do not show.
+        QCOMPARE(
+            QProcess::execute("/bin/chmod", {"+a",
+                                             "everyone allow list,search,read,readattr,readextattr,"
+                                             "readsecurity,file_inherit,directory_inherit",
+                                             state}),
+            0);
+        const DaemonConfiguration configuration{state + "/journal.sqlite3", state + "/local.token",
+                                                directory.filePath("daemon.sock"),
+                                                QStringLiteral("/nonexistent/ketplus-test-codex")};
+        const QByteArray exposedToken(43, 'k');
+        QFile token(configuration.tokenPath);
+        QVERIFY(token.open(QIODevice::WriteOnly));
+        QVERIFY(token.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+        QCOMPARE(token.write(exposedToken), exposedToken.size());
+        token.close();
+        const QString media = state + "/media";
+        QVERIFY(QDir().mkpath(media + "/refs"));
+        // A journal from before the fix: SQLite opens an empty file as an empty database.
+        const QStringList written{configuration.statePath, media + "/foreign.bin",
+                                  media + "/refs/session.refs"};
+        for (const auto& path : written) {
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            QVERIFY(file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+            if (path != configuration.statePath)
+                file.write("x");
+        }
+        for (const auto& path :
+             QStringList{configuration.tokenPath, media, media + "/refs"} + written)
+            QVERIFY2(hasExtendedAclEntries(path), qPrintable(path));
+
+        auto service = std::make_unique<DaemonService>(configuration);
+        QVERIFY2(service->start(), qPrintable(service->errorString()));
+        QStringList checked{state, media, media + "/refs", configuration.tokenPath,
+                            configuration.statePath};
+        checked += written;
+        for (const auto& suffix : {"-wal", "-shm"})
+            if (QFileInfo::exists(configuration.statePath + suffix))
+                checked.append(configuration.statePath + suffix);
+        for (const auto& path : checked) {
+            QVERIFY2(QFileInfo::exists(path), qPrintable(path));
+            QVERIFY2(!hasExtendedAclEntries(path), qPrintable(path));
+        }
+        // Files the daemon creates later inherit nothing.
+        QFile later(state + "/later");
+        QVERIFY(later.open(QIODevice::WriteOnly));
+        later.close();
+        QVERIFY(!hasExtendedAclEntries(later.fileName()));
+        // A credential others could read was replaced, not trusted.
+        QVERIFY(token.open(QIODevice::ReadOnly));
+        const QByteArray current = token.readAll().trimmed();
+        QVERIFY(current.size() >= 32);
+        QVERIFY(current != exposedToken);
+        token.close();
+
+        // A journal already in its final format is opened in place, not rewritten, so an
+        // entry added to it later must be removed too.
+        service.reset();
+        QCOMPARE(
+            QProcess::execute("/bin/chmod", {"+a", "everyone allow read", configuration.statePath}),
+            0);
+        QVERIFY(hasExtendedAclEntries(configuration.statePath));
+        DaemonService restarted(configuration);
+        QVERIFY2(restarted.start(), qPrintable(restarted.errorString()));
+        QVERIFY(!hasExtendedAclEntries(configuration.statePath));
+#else
+        QSKIP("macOS access-control entries");
+#endif
+    }
+
+    void rejectedSecondDaemonKeepsTheRunningCredential() {
+#ifdef Q_OS_MACOS
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const DaemonConfiguration configuration{
+            directory.filePath("state/journal.sqlite3"), directory.filePath("state/local.token"),
+            directory.filePath("daemon.sock"), QStringLiteral("/nonexistent/ketplus-test-codex")};
+        DaemonService running(configuration);
+        QVERIFY2(running.start(), qPrintable(running.errorString()));
+        const auto readToken = [&configuration] {
+            QFile file(configuration.tokenPath);
+            return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
+        };
+        const QByteArray served = readToken();
+        QVERIFY(!served.isEmpty());
+        // Even a credential that now looks exposed belongs to the daemon that owns the journal.
+        QCOMPARE(
+            QProcess::execute("/bin/chmod", {"+a", "everyone allow read", configuration.tokenPath}),
+            0);
+        DaemonService second(configuration);
+        QVERIFY(!second.start());
+        QVERIFY2(second.errorString().contains("Another KetPlus Daemon"),
+                 qPrintable(second.errorString()));
+        QCOMPARE(readToken(), served);
+#else
+        QSKIP("macOS access-control entries");
+#endif
+    }
+
+    void linkedStateDirectoryLosesItsInheritableEntries() {
+#ifdef Q_OS_MACOS
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString target = directory.filePath("real");
+        const QString alias = directory.filePath("alias");
+        QVERIFY(QDir().mkpath(target));
+        QVERIFY(QFile::link(target, alias));
+        QCOMPARE(
+            QProcess::execute("/bin/chmod", {"+a",
+                                             "everyone allow list,search,read,readattr,readextattr,"
+                                             "readsecurity,file_inherit,directory_inherit",
+                                             target}),
+            0);
+        QVERIFY(hasExtendedAclEntries(target));
+        const DaemonConfiguration configuration{alias + "/journal.sqlite3", alias + "/local.token",
+                                                directory.filePath("daemon.sock"),
+                                                QStringLiteral("/nonexistent/ketplus-test-codex")};
+        DaemonService service(configuration);
+        QVERIFY2(service.start(), qPrintable(service.errorString()));
+        QVERIFY(!hasExtendedAclEntries(target));
+        QVERIFY(!hasExtendedAclEntries(configuration.tokenPath));
+        QVERIFY(!hasExtendedAclEntries(configuration.statePath));
+#else
+        QSKIP("macOS access-control entries");
+#endif
+    }
+
+    void unreadableAccessEntriesCountAsExposed() {
+#ifdef Q_OS_MACOS
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString state = directory.filePath("state");
+        QVERIFY(QDir().mkpath(state));
+        const DaemonConfiguration configuration{state + "/journal.sqlite3", state + "/local.token",
+                                                directory.filePath("daemon.sock"),
+                                                QStringLiteral("/nonexistent/ketplus-test-codex")};
+        const QByteArray exposed(43, 'k');
+        QFile token(configuration.tokenPath);
+        QVERIFY(token.open(QIODevice::WriteOnly));
+        QVERIFY(token.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+        QCOMPARE(token.write(exposed), exposed.size());
+        token.close();
+        // The grant to others is there, but reading the ACL fails even for the owner.
+        QCOMPARE(
+            QProcess::execute("/bin/chmod", {"+a", "everyone allow read", configuration.tokenPath}),
+            0);
+        QCOMPARE(QProcess::execute("/bin/chmod",
+                                   {"+a", "everyone deny readsecurity", configuration.tokenPath}),
+                 0);
+        const auto cleanup =
+            qScopeGuard([&] { QProcess::execute("/bin/chmod", {"-N", configuration.tokenPath}); });
+        errno = 0;
+        QCOMPARE(acl_get_link_np(QFile::encodeName(configuration.tokenPath).constData(),
+                                 ACL_TYPE_EXTENDED),
+                 acl_t{});
+        QCOMPARE(errno, EACCES);
+        DaemonService service(configuration);
+        QVERIFY2(service.start(), qPrintable(service.errorString()));
+        QVERIFY(token.open(QIODevice::ReadOnly));
+        QVERIFY(token.readAll().trimmed() != exposed);
+        QVERIFY(!hasExtendedAclEntries(configuration.tokenPath));
+#else
+        QSKIP("macOS access-control entries");
+#endif
     }
 
     void serviceCreatesProtectedStateAndRejectsEndpointCollision() {
