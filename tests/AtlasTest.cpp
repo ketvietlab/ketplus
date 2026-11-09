@@ -15,6 +15,7 @@
 #include <QPushButton>
 #include <QScopeGuard>
 #include <QScreen>
+#include <QSettings>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -126,6 +127,36 @@ class AtlasTest final : public QObject {
 #endif
     }
 
+    void newestNodeVersionIsSearchedFirst() {
+        if (QFileInfo::exists("/opt/homebrew/bin/ketatlas") ||
+            QFileInfo::exists("/usr/local/bin/ketatlas"))
+            QSKIP("a system ketatlas is found before nvm");
+        QTemporaryDir home;
+        QVERIFY(home.isValid());
+        for (const auto* version : {"v9.11.2", "v26.7.0", "v26.12.1", "v24.14.1"}) {
+            const auto cli =
+                home.filePath(QString(".nvm/versions/node/%1/bin/ketatlas").arg(version));
+            QVERIFY(QDir().mkpath(QFileInfo(cli).absolutePath()));
+            QVERIFY(write(cli, "#!/bin/sh\n"));
+            QVERIFY(QFile::setPermissions(cli, QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+        }
+        const auto previousHome = qgetenv("HOME");
+        const auto previousPath = qgetenv("PATH");
+        const auto previousCli = qgetenv("KETPLUS_KETATLAS_CLI");
+        const auto restore = qScopeGuard([&] {
+            qputenv("HOME", previousHome);
+            qputenv("PATH", previousPath);
+            previousCli.isNull() ? qunsetenv("KETPLUS_KETATLAS_CLI")
+                                 : qputenv("KETPLUS_KETATLAS_CLI", previousCli);
+        });
+        qputenv("HOME", home.path().toUtf8());
+        qputenv("PATH", home.filePath("empty").toUtf8());
+        qunsetenv("KETPLUS_KETATLAS_CLI");
+        QSettings().remove("atlas/cliPath");
+        QCOMPARE(QFileInfo(ketplus::AtlasProcess::cliPath()).canonicalFilePath(),
+                 QFileInfo(home.filePath(".nvm/versions/node/v26.12.1/bin/ketatlas"))
+                     .canonicalFilePath());
+    }
     void boundsTheWalkOutsideGit() {
         QTemporaryDir root;
         write(root.filePath(".hidden/secret.ketatlas/atlas.json"), config());
