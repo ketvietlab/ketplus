@@ -349,9 +349,9 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
                       {{"message", "Codex could not finish the turn. Try again, or pick another "
                                    "model for this conversation."},
                        {"will_retry", false}});
-        journal.event(
-            "session.configuration_changed",
-            {{"effective", QJsonObject{{"model", "GPT-5.6 Luna"}, {"effort", "Medium"}}}});
+        journal.event("session.configuration_changed",
+                      {{"effective", QJsonObject{{"model", "GPT-5.6 Luna"}, {"effort", "Medium"}}},
+                       {"changed", QJsonArray{"model", "effort"}}});
         journal.event("conversation.context_changed", {{"context_revision", 2}});
         journal.agent("final_answer",
                       "The daemon now reports `journal.size` in `session.list` and warns past "

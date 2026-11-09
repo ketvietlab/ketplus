@@ -4,6 +4,15 @@
 #include <cmath>
 
 namespace ketplus::agent_message {
+namespace {
+// A provider's name as the mock writes it: Claude, Codex, Cursor.
+QString providerName(const QString& provider) {
+    if (provider.isEmpty())
+        return QStringLiteral("another provider");
+    return provider.left(1).toUpper() + provider.mid(1);
+}
+} // namespace
+
 QString sessionEstimateText(const QJsonObject& usage) {
     const auto cost = usage.value("estimatedCostUsd");
     if (!cost.isDouble() || !std::isfinite(cost.toDouble()) || cost.toDouble() < 0)
@@ -50,25 +59,43 @@ QVariantMap daemonEventNotice(const QString& type, const QJsonObject& data, cons
                               const QJsonObject& usage, const TurnFacts& turn) {
     QString title, detail, subtype = "event";
     QString status = "completed";
+    // As the mock words its events (TranscriptFixtures.qml).
     if (type == "session.provider_changed") {
-        title = "Provider changed";
-        detail =
-            data.value("from").toString() + QStringLiteral(" → ") + data.value("to").toString();
+        title = QStringLiteral("Switched from %1 to %2")
+                    .arg(providerName(data.value("from").toString()),
+                         providerName(data.value("to").toString()));
+        detail = "The conversation history comes along";
     } else if (type == "session.configuration_changed") {
-        title = "Model configuration changed";
         const auto effective = data.value("effective").toObject();
-        detail = effective.value("model").toString();
+        QString model = effective.value("model").toString();
         const auto effort = effective.value("effort").toString();
         if (!effort.isEmpty())
-            detail += QStringLiteral(" · ") + effort;
+            model += QStringLiteral(" · ") + effort;
+        // The event also follows permission, mode and context window changes; journals from
+        // before `changed` existed cannot tell them apart, so they stay neutral.
+        const auto changed = data.value("changed").toArray();
+        const auto only = [&changed](const char* setting) {
+            return changed.size() == 1 && changed.first().toString() == QLatin1String(setting);
+        };
+        if (changed.contains(QStringLiteral("model")) || changed.contains(QStringLiteral("effort")))
+            title = model.isEmpty() ? QStringLiteral("Model changed")
+                                    : QStringLiteral("Model changed to ") + model;
+        else if (only("execution_policy"))
+            title = "Permissions changed";
+        else if (only("mode"))
+            title = "Mode changed";
+        else if (only("compact_window"))
+            title = "Context window changed";
+        else
+            title = "Settings changed";
+        if (!data.contains("changed"))
+            detail = model;
     } else if (type == "conversation.context_changed") {
-        title = "Execution worktree changed";
         // The journal intentionally carries revisions, not a machine path.
-        detail =
-            QStringLiteral("Context revision %1").arg(data.value("context_revision").toInteger());
+        title = "Moved to another worktree";
     } else if (type == "session.forked") {
-        title = "Conversation forked";
-        detail = "Inherited conversation history";
+        title = "Forked from another conversation";
+        detail = "Its history comes along";
     } else if (type == "session.renamed") {
         title = "Conversation renamed";
         detail = data.value("title").toString();

@@ -281,6 +281,21 @@ void tagCodexModels(QJsonObject& result) {
     result.insert(QStringLiteral("data"), data);
 }
 
+// The settings a session.configuration_changed event changed, so readers can word it.
+QJsonArray changedSettings(const StoredSession& before, const StoredSession& after) {
+    QJsonArray changed;
+    const auto note = [&changed](const bool differs, const QString& name) {
+        if (differs)
+            changed.append(name);
+    };
+    note(before.model != after.model, QStringLiteral("model"));
+    note(before.effort != after.effort, QStringLiteral("effort"));
+    note(before.executionPolicy != after.executionPolicy, QStringLiteral("execution_policy"));
+    note(before.mode != after.mode, QStringLiteral("mode"));
+    note(before.compactWindow != after.compactWindow, QStringLiteral("compact_window"));
+    return changed;
+}
+
 } // namespace
 
 SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, QObject* parent)
@@ -887,6 +902,7 @@ QJsonObject SessionHost::applyConfiguration(const QJsonObject& request, bool loc
     if (!supported && !desktopSelection)
         return error(QStringLiteral("unsupported_configuration"),
                      QStringLiteral("The selected settings are not supported."));
+    const StoredSession before = session->stored;
     if (desktopSelection && payload.contains("execution_policy")) {
         const QString policy = payload.value("execution_policy").toString();
         if (!QSet<QString>{"ask", "full", "read-only"}.contains(policy) ||
@@ -903,6 +919,7 @@ QJsonObject SessionHost::applyConfiguration(const QJsonObject& request, bool loc
     appendEvent(*session, QStringLiteral("session.configuration_changed"),
                 {{"revision", session->stored.configurationRevision},
                  {"effective", configurationOf(session->stored, {}).value("effective")},
+                 {"changed", changedSettings(before, session->stored)},
                  {"adapter", session->stored.adapter}});
     return configuration(request, mergedCatalog);
 }
@@ -927,6 +944,7 @@ QJsonObject SessionHost::applyExecutionPolicy(const QJsonObject& request) {
          payload.value(QStringLiteral("risk_acknowledged")).toBool() != true))
         return error(QStringLiteral("execution_policy_denied"),
                      QStringLiteral("The requested execution policy was not authorized."));
+    const StoredSession before = session->stored;
     session->stored.executionPolicy = value;
     ++session->stored.configurationRevision;
     if (!journal_->upsertSession(session->stored))
@@ -934,6 +952,7 @@ QJsonObject SessionHost::applyExecutionPolicy(const QJsonObject& request) {
     appendEvent(*session, QStringLiteral("session.configuration_changed"),
                 {{"revision", session->stored.configurationRevision},
                  {"effective", configurationOf(session->stored, {}).value("effective")},
+                 {"changed", changedSettings(before, session->stored)},
                  {"adapter", session->stored.adapter}});
     return ok({{QStringLiteral("revision"), session->stored.configurationRevision},
                {QStringLiteral("execution_policy"), value}});
@@ -954,6 +973,7 @@ QJsonObject SessionHost::applyMode(const QJsonObject& request) {
         !QSet<QString>{QStringLiteral("default")}.contains(value))
         return error(QStringLiteral("stale_or_unsupported_mode"),
                      QStringLiteral("The selected mode is no longer available."));
+    const StoredSession before = session->stored;
     session->stored.mode = value;
     ++session->stored.configurationRevision;
     if (!journal_->upsertSession(session->stored))
@@ -961,6 +981,7 @@ QJsonObject SessionHost::applyMode(const QJsonObject& request) {
     appendEvent(*session, QStringLiteral("session.configuration_changed"),
                 {{"revision", session->stored.configurationRevision},
                  {"effective", configurationOf(session->stored, {}).value("effective")},
+                 {"changed", changedSettings(before, session->stored)},
                  {"adapter", session->stored.adapter}});
     return ok({{QStringLiteral("revision"), session->stored.configurationRevision},
                {QStringLiteral("mode"), value}});
@@ -1358,10 +1379,7 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
         return error(QStringLiteral("journal_error"), appendError);
     }
     it->startingTurn = true;
-    const auto previousModel = it->stored.model;
-    const auto previousEffort = it->stored.effort;
-    const auto previousPolicy = it->stored.executionPolicy;
-    const auto previousCompactWindow = it->stored.compactWindow;
+    const StoredSession before = it->stored;
     if (localClient && options.contains("permission")) {
         const auto permission = options.value("permission").toString();
         it->stored.executionPolicy = permission == "danger-full-access" ? "full"
@@ -1373,15 +1391,14 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
     if (!options.value(QStringLiteral("effort")).toString().isEmpty())
         it->stored.effort = options.value(QStringLiteral("effort")).toString();
     it->stored.compactWindow = compactWindow;
-    if (previousModel != it->stored.model || previousEffort != it->stored.effort ||
-        previousPolicy != it->stored.executionPolicy ||
-        previousCompactWindow != it->stored.compactWindow) {
+    if (!changedSettings(before, it->stored).isEmpty()) {
         ++it->stored.configurationRevision;
         if (!journal_->upsertSession(it->stored))
             return error("journal_error", journal_->errorString());
         appendEvent(*it, "session.configuration_changed",
                     {{"revision", it->stored.configurationRevision},
                      {"effective", configurationOf(it->stored, {}).value("effective")},
+                     {"changed", changedSettings(before, it->stored)},
                      {"adapter", it->stored.adapter}});
     }
     QJsonObject turnOptions = options;

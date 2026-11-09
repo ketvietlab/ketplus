@@ -2497,8 +2497,17 @@ void AgentWorkspaceViewTest::transcriptNoticesUseRuntimeState() {
     view.resetMessages({QVariantMap{{"kind", "tool"},
                                     {"category", "system"},
                                     {"subtype", "event"},
-                                    {"title", "Model configuration changed"},
-                                    {"body", "Model A · high"}},
+                                    {"title", "Switched from Claude to Codex"},
+                                    {"body", "The conversation history comes along"}},
+                        QVariantMap{{"kind", "tool"},
+                                    {"category", "system"},
+                                    {"subtype", "reconnecting"},
+                                    {"title", "Reconnecting"},
+                                    {"body", "Reconnecting… 2/5 · the daemon closed the "
+                                             "connection to wss://relay.example.test/v1/"
+                                             "sessions/0123456789abcdef0123456789abcdef while "
+                                             "the turn was streaming its answer"},
+                                    {"status", "running"}},
                         QVariantMap{{"kind", "error"},
                                     {"category", "system"},
                                     {"title", "Agent error"},
@@ -2531,8 +2540,48 @@ void AgentWorkspaceViewTest::transcriptNoticesUseRuntimeState() {
         visit(visit, root);
         return titles.size();
     };
-    QTRY_COMPARE(collect(), 2);
+    // The event and the reconnect are lines, as in the mock; only the failure is a banner.
+    QTRY_COMPARE(collect(), 1);
     QVERIFY(bodies.contains("<b>Untrusted error text</b>"));
+    // Every notice holds these lines; only the shown one counts.
+    const auto shown = [](const auto& self, QQuickItem* item, const QString& name) -> QQuickItem* {
+        if (!item->isVisible())
+            return nullptr;
+        if (item->objectName() == name)
+            return item;
+        for (auto* child : item->childItems())
+            if (auto* match = self(self, child, name))
+                return match;
+        return nullptr;
+    };
+    auto* eventLine = shown(shown, root, "transcriptEventLine");
+    QVERIFY(eventLine);
+    QCOMPARE(findVisualItem(eventLine, "transcriptEventDivider")->property("text").toString(),
+             QStringLiteral("Switched from Claude to Codex"));
+    QCOMPARE(findVisualItem(eventLine, "transcriptEventDetail")->property("text").toString(),
+             QStringLiteral("The conversation history comes along"));
+    // A long reconnect message wraps inside its row instead of running past the pane.
+    for (const int width : {900, 420}) {
+        view.resize(width, 900);
+        QTRY_COMPARE(view.quickView()->width(), width);
+        QQuickItem* line = nullptr;
+        QQuickItem* text = nullptr;
+        const auto fits = [&] {
+            line = shown(shown, root, "transcriptReconnectLine");
+            text = line ? findVisualItem(line, "transcriptReconnectText") : nullptr;
+            if (!text)
+                return false;
+            auto* pane = line->parentItem();
+            const auto scene = [](QQuickItem* item) {
+                return item->mapRectToScene(QRectF(0, 0, item->width(), item->height()));
+            };
+            return pane->width() < width && scene(text).right() <= scene(pane).right() + 0.5;
+        };
+        QTRY_VERIFY(fits());
+        QVERIFY(text->property("lineCount").toInt() > 1);
+        QVERIFY(text->property("contentWidth").toReal() <= text->width() + 0.5);
+    }
+    view.resize(900, 900);
     // The mock's turn end: one line, the status in bold and the details as plain text.
     const auto visibleTurnEnd = [](const auto& self, QQuickItem* item) -> QQuickItem* {
         if (!item->isVisible())
