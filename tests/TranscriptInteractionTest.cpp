@@ -447,6 +447,19 @@ void AgentWorkspaceViewTest::browserStepsReadAsTheMock_data() {
                                                  {"visibleNodeCount", 142}})
                                      .toJson(QJsonDocument::Compact))}}}}}
         << "Observed the page: Storage · 142 nodes" << "Observing the page";
+    // A secret spelled with JSON escapes inside the text block is withheld as in the object.
+    QTest::newRow("escaped secret")
+        << "browser_act" << act({{"type", "click"}, {"target", QJsonObject{{"nodeRef", "n4"}}}})
+        << QJsonObject{{"content",
+                        QJsonArray{QJsonObject{{"type", "text"},
+                                               {"text", "{\"target\":{\"role\":\"button\",\"name\":"
+                                                        "\"token\\u003dSYNTHETIC_SECRET\"}}"}}}}}
+        << "Clicked: “token=[redacted]”" << "Clicking";
+    QTest::newRow("plain secret") << "browser_act"
+                                  << act({{"type", "click"},
+                                          {"target", QJsonObject{{"nodeRef", "n4"}}}})
+                                  << target("token=SYNTHETIC_SECRET")
+                                  << "Clicked: “token=[redacted]”" << "Clicking";
     QTest::newRow("compare") << "visual_compare" << QJsonObject{}
                              << QJsonObject{{"structuredContent",
                                              QJsonObject{{"raster",
@@ -475,6 +488,7 @@ void AgentWorkspaceViewTest::browserStepsReadAsTheMock() {
     QCOMPARE(done.value("title").toString(), completed);
     QVERIFY(!done.value("title").toString().contains("hidden"));
     QVERIFY(!done.value("title").toString().contains("typed-value"));
+    QVERIFY(!done.value("title").toString().contains("SYNTHETIC_SECRET"));
     QCOMPARE(ketplus::agent_message::activityMessage(item, false).value("title").toString(),
              running);
 }

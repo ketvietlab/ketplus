@@ -1,5 +1,7 @@
 #include "agent/TranscriptStepItems.h"
 
+#include "agent/TranscriptSanitizer.h"
+
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -38,6 +40,8 @@ QString pageText(const QString& url) {
 }
 
 // A browser tool's own result: the MCP structured content, else the JSON of its text block.
+// The text was sanitized as a string; its JSON escapes can spell what that missed, so the
+// parsed object is sanitized again before any title reads it.
 QJsonObject browserResult(const QJsonObject& item) {
     const QJsonObject result = item.value(QStringLiteral("result")).toObject();
     const QJsonObject structured = result.value(QStringLiteral("structuredContent")).toObject();
@@ -49,8 +53,10 @@ QJsonObject browserResult(const QJsonObject& item) {
     const QJsonObject block = content.first().toObject();
     if (block.value(QStringLiteral("type")).toString() != QStringLiteral("text"))
         return {};
-    return QJsonDocument::fromJson(block.value(QStringLiteral("text")).toString().toUtf8())
-        .object();
+    return TranscriptSanitizer::json(
+               QJsonDocument::fromJson(block.value(QStringLiteral("text")).toString().toUtf8())
+                   .object())
+        .toObject();
 }
 
 struct Verb {
