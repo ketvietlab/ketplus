@@ -231,8 +231,37 @@ class ProviderTranscriptTest : public QObject {
                                    "webSearch | Found in page: “Timer” on doc.qt.io",
                                    "imageView | Viewed an image",
                                    "imageGeneration | Generated an image",
+                                   "thought | Thought",
                                    "wait | Waited"};
         QCOMPARE(steps, expected);
+        // A thought is timed from its start to its completion, as the mock's "Thought · 14 s".
+        const QJsonObject thought{{"id", "r1"}, {"type", "reasoning"}, {"text", "secret plan"}};
+        const auto lifecycle = [&thought](qint64 cursor, const char* type, const char* at) {
+            return QJsonObject{{"cursor", cursor},
+                               {"turn_sequence", 2},
+                               {"event_type", type},
+                               {"sent_at", at},
+                               {"payload", QJsonObject{{"item_id", "r1"}, {"item", thought}}}};
+        };
+        const auto timed = daemonWindowMessages(
+            {{"events", QJsonArray{lifecycle(1, "item.started", "2026-11-09T08:00:00.000Z"),
+                                   lifecycle(2, "item.completed", "2026-11-09T08:00:14.000Z")}}});
+        QCOMPARE(timed.size(), 1);
+        QCOMPARE(timed.first().toMap().value("title").toString(), "Thought");
+        QCOMPARE(timed.first().toMap().value("durationMs").toLongLong(), 14000);
+        QVERIFY(!QJsonDocument::fromVariant(timed).toJson().contains("secret plan"));
+        // Start and completion in two responses (an open group's next page, or live events):
+        // the merge keeps the start and times the thought.
+        const auto started = daemonWindowMessages(
+            {{"events", QJsonArray{lifecycle(1, "item.started", "2026-11-09T08:00:00.000Z")}}});
+        QVERIFY(started.first().toMap().value("running").toBool());
+        const auto merged = mergeDaemonHistory(
+            started,
+            daemonWindowMessages({{"events", QJsonArray{lifecycle(2, "item.completed",
+                                                                  "2026-11-09T08:00:14.000Z")}}}));
+        QCOMPARE(merged.size(), 1);
+        QCOMPARE(merged.first().toMap().value("title").toString(), "Thought");
+        QCOMPARE(merged.first().toMap().value("durationMs").toLongLong(), 14000);
         // Claude's Write and Edit count their lines as Codex's file changes do.
         QCOMPARE(edits.at(0).value("operation").toString(), "Created");
         QCOMPARE(edits.at(0).value("added").toInt(), 2);

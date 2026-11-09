@@ -24,7 +24,7 @@ namespace ketplus::agent_message {
 // What a group's steps did, in first-seen order, so a local run and a daemon summary read
 // the same. Family ids: command, read, edit, search (the web), codeSearch, fileSearch, searched
 // (any search, from older daemon groups), server (tool calls, named by `servers`), subagent,
-// wait, image, generated and tool.
+// wait, thought, image, generated and tool.
 struct ActivityTally final {
     struct Family final {
         QString id;

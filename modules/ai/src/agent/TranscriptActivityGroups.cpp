@@ -57,10 +57,10 @@ bool isGroupableActivity(const QVariantMap& row) {
     if (eventType == QStringLiteral("browser.screenshot") ||
         eventType == QStringLiteral("browser.compare"))
         return false;
-    // Questions need an answer, compaction marks a context boundary, and reasoning and
-    // notices are read rather than skimmed; all of them stay visible. Every tool step
-    // collapses, as in the mock: consecutive reads, edits, commands, searches, MCP tool
-    // calls, image steps and waits between two messages read as one line.
+    // Questions need an answer, compaction marks a context boundary, and notices are read
+    // rather than skimmed; all of them stay visible. Every step collapses, as in the mock:
+    // consecutive thoughts, reads, edits, commands, searches, MCP tool calls, image steps and
+    // waits between two messages read as one line.
     static const QSet<QString> steps{
         QStringLiteral("fileRead"),      QStringLiteral("fileChange"),
         QStringLiteral("command"),       QStringLiteral("codeSearch"),
@@ -69,7 +69,7 @@ bool isGroupableActivity(const QVariantMap& row) {
         QStringLiteral("collaboration"), QStringLiteral("subAgent"),
         QStringLiteral("generic"),       QStringLiteral("integration"),
         QStringLiteral("imageView"),     QStringLiteral("imageGeneration"),
-        QStringLiteral("wait"),
+        QStringLiteral("wait"),          QStringLiteral("thought"),
     };
     // Browser visits too; evidence rows were kept out above.
     return steps.contains(subtype) || (subtype.startsWith(QStringLiteral("browser")) &&
@@ -159,6 +159,8 @@ QString activityGroupSummary(const QList<QVariantMap>& rows, const qsizetype fir
                 ++unnamedSubagents;
         } else if (subtype == QStringLiteral("wait")) {
             tally.add(QStringLiteral("wait"), 1);
+        } else if (subtype == QStringLiteral("thought")) {
+            tally.add(QStringLiteral("thought"), 1);
         } else if (subtype == QStringLiteral("imageView")) {
             tally.add(QStringLiteral("image"), 1);
         } else if (subtype == QStringLiteral("imageGeneration")) {
@@ -218,6 +220,8 @@ QString activityTallySummary(const ActivityTally& tally) {
                 counted(count, QStringLiteral("subagent"), QStringLiteral("subagents"), "a"));
         } else if (family.id == QStringLiteral("wait")) {
             phrase = QStringLiteral("waited");
+        } else if (family.id == QStringLiteral("thought")) {
+            phrase = QStringLiteral("thought");
         } else if (family.id == QStringLiteral("image")) {
             phrase = QStringLiteral("viewed %1")
                          .arg(counted(family.count, QStringLiteral("image"),

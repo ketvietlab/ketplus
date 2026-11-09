@@ -53,6 +53,15 @@ class Journal {
         append("item.completed", {{"provider", provider_}, {"item_id", id}, {"item", completed}},
                {}, turn_);
     }
+    // A reasoning item that started a second after the prompt and took `seconds`.
+    void thought(int seconds) {
+        const QString id = QStringLiteral("reasoning%1").arg(cursor_ + 1);
+        const QJsonObject item{{"type", "reasoning"}, {"id", id}};
+        append("item.started", {{"provider", provider_}, {"item_id", id}, {"item", item}},
+               turnStart_.addSecs(1), turn_);
+        append("item.completed", {{"provider", provider_}, {"item_id", id}, {"item", item}},
+               turnStart_.addSecs(1 + seconds), turn_);
+    }
     // Any other journal event of the running turn, such as a runtime error.
     void event(const QString& type, const QJsonObject& payload) {
         append(type, payload, {}, turn_);
@@ -240,9 +249,7 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
             {{"from", "claude"}, {"to", "codex"}, {"model", "GPT-5.6 Luna"}, {"effort", "High"}});
         journal.user(today, "Add a journal size warning to the daemon status and the sidebar.");
         // The mock's first group: a thought, two reads, a search and a listing.
-        journal.tool({{"type", "reasoning"},
-                      {"summary", QJsonArray{"Plan the storage check"}},
-                      {"durationMs", 14000}});
+        journal.thought(14);
         const auto action = [](const QJsonObject& value) {
             return QJsonObject{{"type", "commandExecution"},
                                {"command", value.value("command")},

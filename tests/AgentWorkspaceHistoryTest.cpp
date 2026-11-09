@@ -954,7 +954,12 @@ void AgentWorkspaceViewTest::normalizesTypedTranscriptCorpus() {
         QJsonObject{{"id", "reasoning"}, {"type", "reasoning"}, {"text", "Hidden"}},
         TranscriptPhase::Completed, context);
     QCOMPARE(reasoning.eventType, QStringLiteral("assistant.reasoning"));
-    QVERIFY(!reasoning.visible);
+    // The mock's "Thought" step: it shows that the agent thought, never what it thought.
+    QVERIFY(reasoning.visible);
+    const QVariantMap thought = reasoning.toVariantMap();
+    QCOMPARE(thought.value("title").toString(), QStringLiteral("Thought"));
+    QCOMPARE(thought.value("subtype").toString(), QStringLiteral("thought"));
+    QVERIFY(!QString::fromUtf8(QJsonDocument::fromVariant(thought).toJson()).contains("Hidden"));
 
     const auto registered = ActivityNormalizer::registeredRawTypes();
     for (const auto& [item, expectedType] : corpus) {

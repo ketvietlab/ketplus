@@ -99,8 +99,12 @@ class DesktopTranscriptCatchupTest final : public QObject {
                                          {{"threadId", "a"}, {"item", reasoning}});
         QCOMPARE(desktop.status(path), QStringLiteral("Working…"));
         QVERIFY(desktop.isRunning(path));
+        // The reasoning reads as a "Thought" step; the compaction stays one row.
+        QCOMPARE(desktop.messages(path).size(), 3);
+        QCOMPARE(desktop.messages(path).last().toMap().value("title").toString(),
+                 QStringLiteral("Thought"));
         emit server.notificationReceived("item/completed", {{"threadId", "a"}, {"item", compact}});
-        QCOMPARE(desktop.messages(path).size(), 2);
+        QCOMPARE(desktop.messages(path).size(), 3);
         QCOMPARE(desktop.status(path), QStringLiteral("Working…"));
 
         const auto compactEvent = [&](const QString& method, const QString& id) {

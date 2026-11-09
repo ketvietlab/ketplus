@@ -23,6 +23,9 @@ QString family(const QJsonObject& payload) {
         return "edit";
     if (type == "webSearch")
         return "webSearch";
+    // A thought is a step without text in the transcript: "Thought · 14 s".
+    if (type == "reasoning")
+        return "thought";
     // A subagent counts once, when it is spawned; later messages and waits are its steps.
     if (type == "collabAgentToolCall")
         return item.value("tool").toString() == "spawnAgent" ? "subagent" : "subagent.step";
