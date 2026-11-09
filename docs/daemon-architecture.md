@@ -218,9 +218,15 @@ prefixes, and a durable compaction revision fence. A stale continuation returns
 `snapshot_changed`, never a silently incomplete historical snapshot. Current
 lifecycle and pending approvals are delivered separately from historical events.
 A turn's pending approvals and questions expire when the turn ends (`turn.completed`
-from any provider), without an answer to the provider, which no longer waits for them;
-a later `approval.resolve` or `question.answer` is refused. A provider stop or
-interrupt already ended them.
+from any provider), without an answer to the provider, which no longer waits for them.
+They become unanswerable before the completion is published: a client that answers as
+soon as it sees `turn.completed`, or any time later, is refused. A Claude or Cursor
+session whose background task is still running keeps its requests, since that task may
+still be waiting. A Codex request that names a turn other than the running one (an ended
+turn's, arriving after its sweep) is declined with `provider.request_declined` reason
+`stale_turn`; a request without a turn id belongs to the current turn. A provider stop or
+interrupt already ended them. Requests abandoned this way also release their response
+routes.
 
 `session.transcript_window` also pages **forward** inside the same fenced snapshot:
 `after_cursor` (exclusive event cursor, mutually exclusive with `before_cursor`, rejected for

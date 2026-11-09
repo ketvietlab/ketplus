@@ -808,11 +808,24 @@ class TurnAcceptanceTest final : public QObject {
         const QString approvalId = pending().first().toObject().value("approval_id").toString();
         QVERIFY(!approvalId.isEmpty());
         const auto active = journal.sessions().first();
+        // A client that hears of the completion answers at once; the turn is already over.
+        QJsonObject atCompletion;
+        const auto boundary =
+            connect(&host, &SessionHost::eventReady, &host, [&](const QJsonObject& event) {
+                if (event.value("event_type") == "turn.completed" && atCompletion.isEmpty())
+                    atCompletion = command("approval.resolve", "at-completion",
+                                           {{"approval_id", approvalId},
+                                            {"resolution", QJsonObject{{"decision", "accept"}}}});
+            });
         // The provider ends the turn without waiting for the answer (it failed or gave up).
         emit adapter.notificationReceived(
             "turn/completed", {{"threadId", active.threadId},
                                {"turn", QJsonObject{{"id", active.turnId}, {"status", "failed"}}}});
+        disconnect(boundary);
         QCOMPARE(journal.sessions().first().state, QString("failed"));
+        QVERIFY(!atCompletion.isEmpty());
+        QVERIFY2(!atCompletion.value("ok").toBool(),
+                 qPrintable(QJsonDocument(atCompletion).toJson()));
         // Its approval ended with it: nobody is offered it, and a late answer is refused.
         QTRY_COMPARE_WITH_TIMEOUT(pending().size(), qsizetype(0), 2000);
         const auto late = command(
@@ -822,6 +835,33 @@ class TurnAcceptanceTest final : public QObject {
         QFile log(providerLog);
         QVERIFY(log.open(QIODevice::ReadOnly));
         QVERIFY(!log.readAll().contains("approval:accept"));
+
+        // During the next turn, a request naming the ended turn is declined, not offered.
+        QVERIFY(command("session.start_turn", "next-turn",
+                        {{"prompt", "hang"}, {"client_message_id", "next-turn"}})
+                    .value("ok")
+                    .toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(journal.sessions().first().state, QString("running"), 5000);
+        const auto next = journal.sessions().first();
+        QVERIFY(!next.turnId.isEmpty() && next.turnId != active.turnId);
+        const auto commandRequest = [&](const QString& turnId) {
+            return QJsonObject{{"threadId", next.threadId},
+                               {"turnId", turnId},
+                               {"itemId", "command-" + turnId},
+                               {"command", "echo"}};
+        };
+        emit adapter.requestReceived("old-turn-request", "item/commandExecution/requestApproval",
+                                     commandRequest(active.turnId));
+        QCOMPARE(pending().size(), qsizetype(0));
+        QJsonObject declined;
+        for (const QJsonValue& event : journal.eventsAfter(seed.id, 1, 0))
+            if (event.toObject().value("event_type") == "provider.request_declined")
+                declined = event.toObject().value("payload").toObject();
+        QCOMPARE(declined.value("reason").toString(), QString("stale_turn"));
+        // The running turn's own request is offered as before.
+        emit adapter.requestReceived("next-turn-request", "item/commandExecution/requestApproval",
+                                     commandRequest(next.turnId));
+        QCOMPARE(pending().size(), qsizetype(1));
     }
     void claudeApprovalsEndWithTheirTurn() {
         QTemporaryDir dir;
@@ -864,13 +904,72 @@ class TurnAcceptanceTest final : public QObject {
         };
         QTRY_COMPARE_WITH_TIMEOUT(pending().size(), qsizetype(1), 5000);
         const QString approvalId = pending().first().toObject().value("approval_id").toString();
+        QJsonObject atCompletion;
+        const auto boundary =
+            connect(&host, &SessionHost::eventReady, &host, [&](const QJsonObject& event) {
+                if (event.value("event_type") == "turn.completed" && atCompletion.isEmpty())
+                    atCompletion = command("approval.resolve", "at-completion",
+                                           {{"approval_id", approvalId},
+                                            {"resolution", QJsonObject{{"decision", "accept"}}}});
+            });
         emit claude.canonicalEvent(seed.id, "turn.completed", {{"status", "failed"}});
+        disconnect(boundary);
+        QVERIFY(!atCompletion.isEmpty());
+        QVERIFY(!atCompletion.value("ok").toBool());
         QTRY_COMPARE_WITH_TIMEOUT(pending().size(), qsizetype(0), 2000);
         QVERIFY(!command("approval.resolve", "late",
                          {{"approval_id", approvalId},
                           {"resolution", QJsonObject{{"decision", "accept"}}}})
                      .value("ok")
                      .toBool());
+    }
+    void claudeBackgroundTaskKeepsItsApprovals() {
+        QTemporaryDir dir;
+        const auto codexPath = dir.filePath("fake-codex");
+        const auto claudePath = dir.filePath("fake-claude");
+        QVERIFY(writeFakeCodex(codexPath, dir.filePath("codex.log")));
+        QVERIFY(writeFakeClaude(claudePath, dir.filePath("claude.log")));
+        LocalJournal journal(dir.filePath("journal.sqlite3"));
+        StoredSession seed;
+        seed.id = "claude-background-approval";
+        seed.generation = 1;
+        seed.worktreePath = dir.path();
+        seed.adapter = "claude";
+        seed.state = "idle";
+        QVERIFY(journal.upsertSession(seed));
+        CodexAdapter codex(codexPath);
+        ClaudeAdapter claude(claudePath);
+        SessionHost host(&journal, &codex, &claude);
+        const auto stop = qScopeGuard([&] {
+            codex.stop();
+            claude.stop();
+        });
+        const auto command = [&](const QString& type, const QString& messageId,
+                                 const QJsonObject& payload) {
+            auto submitted = request(messageId, seed.id);
+            submitted.insert("message_type", type);
+            submitted.insert("payload", payload);
+            return host.handleCommand(submitted, "desktop-test");
+        };
+        QVERIFY(command("session.start_turn", "turn",
+                        {{"prompt", "needs-approval"},
+                         {"client_message_id", "turn"},
+                         {"options", QJsonObject{{"provider", "claude"}}}})
+                    .value("ok")
+                    .toBool());
+        const auto pending = [&] {
+            return command("session.pending_approvals", "pending", {})
+                .value("pending_approvals")
+                .toArray();
+        };
+        QTRY_COMPARE_WITH_TIMEOUT(pending().size(), qsizetype(1), 5000);
+        // A background task outlives its turn and may still be waiting for this answer.
+        emit claude.canonicalEvent(
+            seed.id, "tasks.changed",
+            {{"tasks", QJsonArray{QJsonObject{
+                           {"task_id", "shell-1"}, {"kind", "shell"}, {"status", "running"}}}}});
+        emit claude.canonicalEvent(seed.id, "turn.completed", {{"status", "completed"}});
+        QCOMPARE(pending().size(), qsizetype(1));
     }
 };
 QTEST_GUILESS_MAIN(TurnAcceptanceTest)
