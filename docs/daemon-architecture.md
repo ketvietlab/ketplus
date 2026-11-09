@@ -228,7 +228,11 @@ prefixes, and a durable compaction revision fence. A stale continuation returns
 `snapshot_changed`, never a silently incomplete historical snapshot. Current
 lifecycle and pending approvals are delivered separately from historical events.
 A turn's pending approvals and questions expire when the turn ends (`turn.completed`
-from any provider), without an answer to the provider, which no longer waits for them.
+from any provider, or a Codex `error` with `willRetry: false` for the running turn,
+which may not be followed by `turn/completed`), without an answer to the provider,
+which no longer waits for them. After such an error, a request for that turn (or
+without a turn id while it is still current) is declined as `stale_turn` until the
+provider process stops or reloads.
 They become unanswerable before the completion is published: a client that answers as
 soon as it sees `turn.completed`, or any time later, is refused. A Claude or Cursor
 session whose background task is still running keeps its requests, since that task may
