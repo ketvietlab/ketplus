@@ -1214,31 +1214,43 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
         return failure;
     // A provider handoff starts a fresh native context, including on A -> B -> A. Only the
     // current conversation transcript carries context forward; retired threads are cleanup refs.
+    // The note that points the new provider at the transcript is delivered only with an
+    // accepted turn: handoffFrom stays set until then, so a turn rejected after the switch
+    // hands off again on the next attempt instead of starting the new provider blind.
+    QString handoffTranscript;
     if (it->stored.adapter != adapter) {
+        const QString previousAdapter = it->stored.adapter;
+        const QString previousThread = it->stored.threadId;
+        const QString previousThreads = it->stored.providerThreads;
+        const bool previousAttached = it->attachedToProvider;
         const auto failHandoff = [&](const QString& reason) {
+            // Nothing was journaled: the conversation stays with its previous provider.
+            it->stored.adapter = previousAdapter;
+            it->stored.threadId = previousThread;
+            it->stored.providerThreads = previousThreads;
+            it->attachedToProvider = previousAttached;
+            if (!previousThread.isEmpty())
+                sessionsByThread_.insert(previousThread, sessionId);
             for (const QString& heldPath : std::exchange(it->materializedAttachments, {}))
                 QFile::remove(heldPath);
             for (const QString& id : std::exchange(it->stagedAttachmentIds, {}))
                 (void)journal_->cancelAttachment(sessionId, it->stored.generation, id, 1);
             return error(QStringLiteral("handoff_failed"), reason);
         };
-        const QString previousAdapter = it->stored.adapter;
         QJsonObject threads = QJsonDocument::fromJson(it->stored.providerThreads.toUtf8()).object();
         provider_handoff::rememberThread(threads, previousAdapter, it->stored.threadId);
         QString writeError;
-        const QString transcriptPath = provider_handoff::writeTranscript(
+        handoffTranscript = provider_handoff::writeTranscript(
             handoffDirectory(sessionId),
             provider_handoff::renderTranscript(
                 provider_handoff::journalEvents(*journal_, sessionId, it->stored.generation)),
             &writeError);
-        if (transcriptPath.isEmpty())
+        if (handoffTranscript.isEmpty())
             return failHandoff(writeError);
         if (!it->stored.threadId.isEmpty())
             sessionsByThread_.remove(it->stored.threadId);
         it->stored.adapter = adapter;
         it->stored.threadId.clear();
-        if (!it->stored.threadId.isEmpty())
-            sessionsByThread_.insert(it->stored.threadId, sessionId);
         it->stored.providerThreads =
             QString::fromUtf8(QJsonDocument(threads).toJson(QJsonDocument::Compact));
         it->attachedToProvider = false;
@@ -1248,24 +1260,23 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
                 {{QStringLiteral("from"), previousAdapter}, {QStringLiteral("to"), adapter}},
                 &changeError))
             return failHandoff(changeError);
+        it->handoffFrom = previousAdapter;
+    }
+    if (!it->handoffFrom.isEmpty() && it->stored.adapter == adapter) {
+        if (handoffTranscript.isEmpty()) {
+            QString writeError;
+            handoffTranscript = provider_handoff::writeTranscript(
+                handoffDirectory(sessionId),
+                provider_handoff::renderTranscript(
+                    provider_handoff::journalEvents(*journal_, sessionId, it->stored.generation)),
+                &writeError);
+            if (handoffTranscript.isEmpty())
+                return error(QStringLiteral("handoff_failed"), writeError);
+        }
         input.prepend(
             QJsonObject{{QStringLiteral("type"), QStringLiteral("text")},
                         {QStringLiteral("text"),
-                         provider_handoff::handoffNote(previousAdapter, transcriptPath, 0)}});
-    }
-    if (!it->handoffFrom.isEmpty() && it->stored.adapter == adapter) {
-        QString writeError;
-        const QString transcriptPath = provider_handoff::writeTranscript(
-            handoffDirectory(sessionId),
-            provider_handoff::renderTranscript(
-                provider_handoff::journalEvents(*journal_, sessionId, it->stored.generation)),
-            &writeError);
-        if (transcriptPath.isEmpty())
-            return error(QStringLiteral("handoff_failed"), writeError);
-        input.prepend(QJsonObject{{QStringLiteral("type"), QStringLiteral("text")},
-                                  {QStringLiteral("text"),
-                                   provider_handoff::handoffNote(std::exchange(it->handoffFrom, {}),
-                                                                 transcriptPath, 0)}});
+                         provider_handoff::handoffNote(it->handoffFrom, handoffTranscript, 0)}});
     }
     const StoredSession previous = it->stored;
     it->stored.state = QStringLiteral("starting");
@@ -1327,6 +1338,7 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
         releaseTurnAttachments(*it);
         return error("journal_error", appendError);
     }
+    it->handoffFrom.clear();
     it->startingTurn = true;
     QJsonObject turnOptions = options;
     turnOptions.insert(QStringLiteral("provider"), it->stored.adapter);
