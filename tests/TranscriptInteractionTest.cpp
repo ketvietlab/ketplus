@@ -661,6 +661,11 @@ void AgentWorkspaceViewTest::activityOperationSemantics() {
                                                 QJsonObject{{"type", "image"},
                                                             {"data", "not base64!"},
                                                             {"mimeType", "image/png"}}}}}}};
+        const QJsonObject subagent{{"id", "sub"}, {"type", "subAgentActivity"}};
+        QCOMPARE(ketplus::agent_message::activityMessage(subagent, true).value("title").toString(),
+                 QStringLiteral("Ran a subagent"));
+        QCOMPARE(ketplus::agent_message::activityMessage(subagent, false).value("title").toString(),
+                 QStringLiteral("Running a subagent"));
         const auto running = ketplus::agent_message::activityMessage(capture, false);
         QCOMPARE(running.value("eventType").toString(), QStringLiteral("browser.screenshot"));
         QCOMPARE(running.value("title").toString(), QStringLiteral("Capturing"));

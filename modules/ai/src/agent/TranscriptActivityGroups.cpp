@@ -62,13 +62,14 @@ bool isGroupableActivity(const QVariantMap& row) {
     // collapses, as in the mock: consecutive reads, edits, commands, searches, MCP tool
     // calls, image steps and waits between two messages read as one line.
     static const QSet<QString> steps{
-        QStringLiteral("fileRead"),        QStringLiteral("fileChange"),
-        QStringLiteral("command"),         QStringLiteral("codeSearch"),
-        QStringLiteral("fileSearch"),      QStringLiteral("webSearch"),
-        QStringLiteral("browser"),         QStringLiteral("ketplusBrowser"),
-        QStringLiteral("collaboration"),   QStringLiteral("generic"),
-        QStringLiteral("integration"),     QStringLiteral("imageView"),
-        QStringLiteral("imageGeneration"), QStringLiteral("wait"),
+        QStringLiteral("fileRead"),      QStringLiteral("fileChange"),
+        QStringLiteral("command"),       QStringLiteral("codeSearch"),
+        QStringLiteral("fileSearch"),    QStringLiteral("webSearch"),
+        QStringLiteral("browser"),       QStringLiteral("ketplusBrowser"),
+        QStringLiteral("collaboration"), QStringLiteral("subAgent"),
+        QStringLiteral("generic"),       QStringLiteral("integration"),
+        QStringLiteral("imageView"),     QStringLiteral("imageGeneration"),
+        QStringLiteral("wait"),
     };
     // Browser visits too; evidence rows were kept out above.
     return steps.contains(subtype) || (subtype.startsWith(QStringLiteral("browser")) &&
@@ -143,7 +144,8 @@ QString activityGroupSummary(const QList<QVariantMap>& rows, const qsizetype fir
             ++serverSteps;
             if (!server.isEmpty() && !servers.contains(server))
                 servers.append(server);
-        } else if (subtype == QStringLiteral("collaboration")) {
+        } else if (subtype == QStringLiteral("collaboration") ||
+                   subtype == QStringLiteral("subAgent")) {
             add(QStringLiteral("subagent"), 1);
         } else if (subtype == QStringLiteral("wait")) {
             add(QStringLiteral("wait"), 1);
