@@ -176,8 +176,9 @@ Column {
         if (hasDetails)
             setExpanded(!expanded);
     }
-    function iconSource() {
-        return "qrc:/agent/icons/" + Renderers.renderer(subtype).icon + ".svg";
+    // The kit icon of the step's kind.
+    function iconName() {
+        return KetTheme.iconForLucide(Renderers.icon(root));
     }
     function detailText() {
         return Renderers.detail(root);

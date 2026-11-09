@@ -32,6 +32,8 @@ class AgentWorkspaceViewTest final : public QObject {
     void activityGalleryLoadsInBatches();
     void browserEvidenceStaysVisible_data();
     void browserEvidenceStaysVisible();
+    void activityIconsFollowTheMock_data();
+    void activityIconsFollowTheMock();
     void browserStepsReadAsTheMock_data();
     void browserStepsReadAsTheMock();
     void browserStepsCollapseAroundEvidence_data();

@@ -316,6 +316,63 @@ void AgentWorkspaceViewTest::fileChangesStayCompactInsideExpandedGroup() {
     QCOMPARE(diffs.size(), 1);
 }
 
+void AgentWorkspaceViewTest::activityIconsFollowTheMock_data() {
+    QTest::addColumn<QString>("subtype");
+    QTest::addColumn<QString>("change");
+    QTest::addColumn<QString>("icon");
+    // mockups/qt TranscriptActivityItem.qml: command terminal, read file-text, web and browser
+    // globe, mcp package, generate and thinking sparkles, tool sliders, skill layers, agent send.
+    QTest::newRow("command") << "command" << "" << "terminal";
+    QTest::newRow("read") << "fileRead" << "" << "file-text";
+    QTest::newRow("code search") << "codeSearch" << "" << "search";
+    QTest::newRow("web search") << "webSearch" << "" << "globe";
+    QTest::newRow("web fetch") << "webFetch" << "" << "globe";
+    QTest::newRow("browser") << "ketplusBrowser" << "" << "globe";
+    QTest::newRow("generated image") << "imageGeneration" << "" << "sparkles";
+    QTest::newRow("reasoning") << "reasoning" << "" << "sparkles";
+    QTest::newRow("plan") << "plan" << "" << "map";
+    QTest::newRow("monitor") << "monitor" << "" << "clock";
+    QTest::newRow("skill") << "skill" << "" << "layers";
+    QTest::newRow("tools loaded") << "toolsLoaded" << "" << "sliders";
+    QTest::newRow("task stopped") << "taskStopped" << "" << "terminal";
+    QTest::newRow("message to an agent") << "collaboration" << "" << "send";
+    QTest::newRow("subagent") << "subAgent" << "" << "bot";
+    QTest::newRow("mcp") << "integration" << "" << "package";
+    QTest::newRow("unknown") << "somethingNew" << "" << "sliders";
+    QTest::newRow("edited") << "fileChange" << "update" << "edit";
+    QTest::newRow("created") << "fileChange" << "add" << "file-code";
+    QTest::newRow("deleted") << "fileChange" << "delete" << "trash";
+}
+
+void AgentWorkspaceViewTest::activityIconsFollowTheMock() {
+    QFETCH(QString, subtype);
+    QFETCH(QString, change);
+    QFETCH(QString, icon);
+    QVariantMap row{{"messageKey", "step"}, {"kind", "tool"},         {"category", "activity"},
+                    {"subtype", subtype},   {"title", "Did a thing"}, {"turnId", "icons"},
+                    {"status", "completed"}};
+    if (!change.isEmpty()) {
+        row = ketplus::agent_message::fileChangeMessage(
+            {{"id", "step"},
+             {"type", "fileChange"},
+             {"status", "completed"},
+             {"changes", QJsonArray{QJsonObject{{"path", "/worktree/src/File.cpp"},
+                                                {"kind", QJsonObject{{"type", change}}}}}}},
+            true);
+        row.insert("messageKey", "step");
+        row.insert("turnId", "icons");
+    }
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 640);
+    view.show();
+    view.resetMessages({row}, "icons:" + subtype + change);
+    auto* root = view.quickView()->rootObject();
+    QQuickItem* drawn = nullptr;
+    QTRY_VERIFY((drawn = findVisibleItem(root, "transcriptActivityIcon")) != nullptr);
+    QCOMPARE(drawn->property("name").toString(), icon);
+}
+
 void AgentWorkspaceViewTest::browserStepsReadAsTheMock_data() {
     QTest::addColumn<QString>("tool");
     QTest::addColumn<QJsonObject>("arguments");
