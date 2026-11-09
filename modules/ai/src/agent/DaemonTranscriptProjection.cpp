@@ -539,8 +539,11 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
         // arrives live, with its buttons. A page holding only the request or only its receipt
         // keeps a hidden half that mergeDaemonHistory joins with the other page's.
         const QString approvalId = data.value("approval_id").toString();
-        const bool approvalRequest = type == "approval.requested" && data.value("kind") != "input";
+        // An approval without an id cannot be joined or answered, so it stays out.
+        const bool approvalRequest =
+            type == "approval.requested" && data.value("kind") != "input" && !approvalId.isEmpty();
         const bool approvalReceipt = (type == "approval.resolved" || type == "approval.expired") &&
+                                     !approvalId.isEmpty() &&
                                      !requestedApprovals.contains(approvalId);
         if (approvalRequest || approvalReceipt)
             itemId = QStringLiteral("approval:%1").arg(approvalId);
