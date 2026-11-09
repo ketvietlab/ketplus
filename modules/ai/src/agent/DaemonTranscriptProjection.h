@@ -28,6 +28,12 @@ QString providerProtocolErrorTitle();
 QString providerRuntimeNoticeTitle();
 // Title of a provider failure's row, live or projected from `runtime.error`.
 QString agentErrorTitle();
+// What an approval asks to use, as the mock's "Approval needed · <tool>": Command, File
+// change, an MCP server's tool, or the Claude or Cursor tool.
+QString approvalToolLabel(const QJsonObject& details);
+// An approval's end: "approved", "denied" or "expired"; "resolved" when the journal predates
+// the decision.
+QString approvalOutcome(const QString& eventType, const QJsonObject& data);
 QVariantMap providerNoticeMessage(const QString& text, const QString& itemId,
                                   const QString& title = QStringLiteral("Request declined"));
 // ADR 0027: a user row another conversation's agent wrote (`origin: agent`) shows its sender.

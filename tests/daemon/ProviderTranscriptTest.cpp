@@ -391,6 +391,72 @@ class ProviderTranscriptTest : public QObject {
                     .toJson()
                     .contains("Old string not found in file"));
     }
+    // Settled approvals stay in a restored transcript as the mock's notes, named by what they
+    // asked to use; a pending one is left to the live request with its buttons.
+    void settledApprovalsRestoreWithTheirTool() {
+        QJsonArray events;
+        qint64 cursor = 0;
+        const auto add = [&](const QString& type, const QJsonObject& payload) {
+            events.append(QJsonObject{{"cursor", ++cursor},
+                                      {"turn_sequence", 1},
+                                      {"event_type", type},
+                                      {"payload", payload}});
+        };
+        add("approval.requested", {{"approval_id", "a1"},
+                                   {"kind", "approval"},
+                                   {"request_type", "command"},
+                                   {"reason", "Codex wants network access."},
+                                   {"command", "curl https://example.test"}});
+        add("approval.resolved",
+            {{"approval_id", "a1"}, {"answers", QJsonObject{{"decision", "accept"}}}});
+        add("approval.requested", {{"approval_id", "a2"},
+                                   {"kind", "approval"},
+                                   {"request_type", "mcp_tool_call"},
+                                   {"server_name", "ketplus_browser"},
+                                   {"tool_title", "browser_open"}});
+        add("approval.expired", {{"approval_id", "a2"}});
+        add("approval.requested", {{"approval_id", "a3"},
+                                   {"kind", "approval"},
+                                   {"request_type", "cursor_tool"},
+                                   {"command", "rg -n tenant services/gateway"}});
+        add("approval.resolved",
+            {{"approval_id", "a3"}, {"answers", QJsonObject{{"decision", "decline"}}}});
+        // From a journal that predates the decision.
+        add("approval.requested", {{"approval_id", "a4"},
+                                   {"kind", "approval"},
+                                   {"request_type", "claude_tool"},
+                                   {"command", "Bash: make"}});
+        add("approval.resolved", {{"approval_id", "a4"}});
+        add("approval.requested",
+            {{"approval_id", "a5"}, {"kind", "approval"}, {"request_type", "command"}});
+        const auto rows = daemonWindowMessages({{"events", events}});
+        QHash<QString, QVariantMap> approvals;
+        for (const auto& value : rows) {
+            const auto row = value.toMap();
+            if (row.value("subtype") == "approval")
+                approvals.insert(row.value("itemId").toString(), row);
+        }
+        QCOMPARE(approvals.size(), 4);
+        QVERIFY(!approvals.contains("approval:a5"));
+        const auto check = [&](const QString& id, const QString& tool, const QString& status) {
+            const auto row = approvals.value(QStringLiteral("approval:") + id);
+            QCOMPARE(row.value("target").toString(), tool);
+            QCOMPARE(row.value("status").toString(), status);
+            QVERIFY(!row.value("running").toBool());
+        };
+        check("a1", "Command", "approved");
+        QCOMPARE(approvals.value("approval:a1").value("command").toString(),
+                 "curl https://example.test");
+        QCOMPARE(approvals.value("approval:a1").value("body").toString(),
+                 "Codex wants network access.");
+        check("a2", "ketplus_browser.browser_open", "expired");
+        check("a3", "Cursor tool", "denied");
+        check("a4", "Claude tool", "resolved");
+        QCOMPARE(approvalToolLabel({{"request_type", "file_change"}}), "File change");
+        QCOMPARE(approvalToolLabel({{"request_type", "mcp_tool_call"}, {"server_name", "docs"}}),
+                 "docs tool");
+        QCOMPARE(approvalToolLabel({}), "Tool");
+    }
     // A journaled failure titles its row as a live one does, the mock's danger banner.
     void runtimeErrorRowsShareTheLiveTitle() {
         const QJsonArray events{QJsonObject{{"cursor", 1},

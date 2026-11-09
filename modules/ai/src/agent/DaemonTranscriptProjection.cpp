@@ -85,6 +85,36 @@ QString providerRuntimeNoticeTitle() { return QStringLiteral("Provider version")
 
 QString agentErrorTitle() { return QStringLiteral("The provider stopped with an error"); }
 
+QString approvalToolLabel(const QJsonObject& details) {
+    const QString type = details.value("request_type").toString();
+    if (type == "command")
+        return QStringLiteral("Command");
+    if (type == "file_change")
+        return QStringLiteral("File change");
+    if (type == "mcp_tool_call") {
+        const QString server = details.value("server_name").toString();
+        const QString tool = details.value("tool_title").toString();
+        if (!server.isEmpty() && !tool.isEmpty())
+            return server + QLatin1Char('.') + tool;
+        if (!server.isEmpty() || !tool.isEmpty())
+            return (server.isEmpty() ? tool : server) + QStringLiteral(" tool");
+    }
+    if (type == "claude_tool")
+        return QStringLiteral("Claude tool");
+    if (type == "cursor_tool")
+        return QStringLiteral("Cursor tool");
+    return QStringLiteral("Tool");
+}
+
+QString approvalOutcome(const QString& eventType, const QJsonObject& data) {
+    if (eventType.endsWith(QStringLiteral(".expired")))
+        return QStringLiteral("expired");
+    const QString decision = data.value("answers").toObject().value("decision").toString();
+    return decision == "accept"    ? QStringLiteral("approved")
+           : decision == "decline" ? QStringLiteral("denied")
+                                   : QStringLiteral("resolved");
+}
+
 QVariantMap providerNoticeMessage(const QString& text, const QString& itemId,
                                   const QString& title) {
     auto entry = message(QStringLiteral("tool"), text, QStringLiteral("Codex · ") + title.toLower(),
@@ -351,6 +381,7 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
     QVariantList result;
     QHash<QString, int> indexes;
     QHash<QString, QString> settledQuestions;
+    QHash<QString, QString> settledApprovals;
     QHash<QString, QVariantMap> questionAnswers;
     QSet<QString> partial;
     const auto identity = daemonMessageKey;
@@ -373,6 +404,12 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
     for (const auto& value : page.value("events").toArray()) {
         const auto event = value.toObject();
         const auto type = event.value("event_type").toString();
+        if (type == "approval.resolved" || type == "approval.expired") {
+            const auto data = event.value("payload").toObject();
+            settledApprovals.insert(data.value("approval_id").toString(),
+                                    approvalOutcome(type, data));
+            continue;
+        }
         if (type != "question.answered" && type != "question.expired")
             continue;
         const auto data = event.value("payload").toObject();
@@ -435,7 +472,14 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
             type == "approval.requested" && data.value("kind") == "input" &&
             settledQuestions.contains(data.value("approval_id").toString()) &&
             data.value("questions").isArray();
-        if (type == "approval.requested" && !settledQuestion)
+        // A settled approval stays in the history, as the mock's Approved line. A pending one
+        // arrives live, with its buttons.
+        const bool settledApproval =
+            type == "approval.requested" && data.value("kind") != "input" &&
+            settledApprovals.contains(data.value("approval_id").toString());
+        if (settledApproval)
+            itemId = QStringLiteral("approval:%1").arg(data.value("approval_id").toString());
+        if (type == "approval.requested" && !settledQuestion && !settledApproval)
             continue;
         const bool answerReceipt = type == "question.answered" && data.value("questions").isArray();
         if (settledQuestion || answerReceipt) {
@@ -463,6 +507,14 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
             entry = notice;
         } else if (type == "activity.group.summary") {
             entry = daemonActivityGroupMessage(data, sequence);
+        } else if (settledApproval) {
+            entry =
+                message("tool", data.value("reason").toString(), "Agent · approval", {}, itemId);
+            entry.insert("subtype", "approval");
+            entry.insert("command", data.value("command").toString());
+            entry.insert("target", approvalToolLabel(data));
+            entry.insert("running", false);
+            entry.insert("status", settledApprovals.value(data.value("approval_id").toString()));
         } else if (type == "approval.requested" || answerReceipt) {
             entry = message("tool", {}, "Codex · question ended", {}, itemId);
             entry.insert("subtype", "question");

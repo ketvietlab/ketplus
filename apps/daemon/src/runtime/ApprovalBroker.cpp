@@ -340,13 +340,20 @@ ApprovalResolution ApprovalBroker::resolve(const QString& approvalId, const QStr
     if (pending.kind == QStringLiteral("input")) {
         providerResult.insert(QStringLiteral("answers"),
                               resolution.value(QStringLiteral("answers")).toObject());
-    } else {
-        providerResult = approvalProviderResult(
-            pending.details,
-            resolution.value(QStringLiteral("decision")).toString() == QStringLiteral("accept"));
+        emit providerResolutionReady(pending.providerRequestId, providerResult);
+        return {true, {}, {}, QStringLiteral("accepted")};
     }
+    const bool accepted =
+        resolution.value(QStringLiteral("decision")).toString() == QStringLiteral("accept");
+    providerResult = approvalProviderResult(pending.details, accepted);
     emit providerResolutionReady(pending.providerRequestId, providerResult);
-    return {true, {}, {}, QStringLiteral("accepted")};
+    // The journal keeps the decision, so every client shows the approval as approved or denied.
+    return {true,
+            {},
+            {},
+            QStringLiteral("accepted"),
+            {{QStringLiteral("decision"),
+              accepted ? QStringLiteral("accept") : QStringLiteral("decline")}}};
 }
 
 void ApprovalBroker::expireRequests() {
