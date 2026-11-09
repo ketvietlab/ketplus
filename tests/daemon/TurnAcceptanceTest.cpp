@@ -406,6 +406,84 @@ class TurnAcceptanceTest final : public QObject {
         QVERIFY(turn("third", "hello").value("ok").toBool());
         QTRY_COMPARE_WITH_TIMEOUT(stored().state, QString("ready"), 5000);
     }
+    void twoClientsActingOnOneSessionSettleOnce() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite3");
+        const auto executable = dir.filePath("fake-codex");
+        const auto providerLog = dir.filePath("provider.log");
+        QVERIFY(writeFakeCodex(executable, providerLog));
+        LocalJournal journal(path);
+        StoredSession seed;
+        seed.id = "two-clients";
+        seed.generation = 1;
+        seed.worktreePath = dir.path();
+        seed.adapter = "codex";
+        seed.state = "idle";
+        QVERIFY(journal.upsertSession(seed));
+        CodexAdapter adapter(executable);
+        SessionHost host(&journal, &adapter);
+        const auto stop = qScopeGuard([&] { adapter.stop(); });
+        const auto command = [&](const QString& client, const QString& type,
+                                 const QString& messageId, const QJsonObject& payload) {
+            auto submitted = request(messageId, seed.id);
+            submitted.insert("message_type", type);
+            submitted.insert("payload", payload);
+            return host.handleCommand(submitted, client);
+        };
+        const auto history = [&] { return journal.eventsAfter(seed.id, 1, 0); };
+        // Desktop and a phone send a prompt at the same moment: one turn, one prompt.
+        QVERIFY(command("desktop", "session.start_turn", "desktop-turn",
+                        {{"prompt", "approve"}, {"client_message_id", "desktop-turn"}})
+                    .value("ok")
+                    .toBool());
+        const auto busy = command("phone", "session.start_turn", "phone-turn",
+                                  {{"prompt", "hello"}, {"client_message_id", "phone-turn"}});
+        QCOMPARE(busy.value("error_code").toString(), QString("session_busy"));
+        QCOMPARE(eventCount(history(), "user.message"), 1);
+        // Both answer the one approval: the first answer wins, the second is refused.
+        QString approvalId;
+        QTRY_VERIFY_WITH_TIMEOUT(
+            [&] {
+                for (const auto& value : history()) {
+                    const auto event = value.toObject();
+                    if (event.value("event_type") == "approval.requested")
+                        approvalId =
+                            event.value("payload").toObject().value("approval_id").toString();
+                }
+                return !approvalId.isEmpty();
+            }(),
+            5000);
+        const QJsonObject accept{{"approval_id", approvalId},
+                                 {"resolution", QJsonObject{{"decision", "accept"}}}};
+        const QJsonObject decline{{"approval_id", approvalId},
+                                  {"resolution", QJsonObject{{"decision", "decline"}}}};
+        QVERIFY(
+            command("desktop", "approval.resolve", "desktop-answer", accept).value("ok").toBool());
+        QCOMPARE(command("phone", "approval.resolve", "phone-answer", decline)
+                     .value("error_code")
+                     .toString(),
+                 QString("already_resolved"));
+        QTRY_COMPARE_WITH_TIMEOUT(journal.sessions().first().state, QString("ready"), 5000);
+        QFile log(providerLog);
+        QVERIFY(log.open(QIODevice::ReadOnly));
+        QCOMPARE(log.readAll().count("approval:"), 1);
+        QCOMPARE(eventCount(history(), "approval.resolved"), 1);
+        // Read markers only move forward, whichever client reports last.
+        const qint64 last = journal.sessions().first().lastCursor;
+        QVERIFY(command("desktop", "session.mark_seen", "desktop-seen", {{"cursor", last}})
+                    .value("ok")
+                    .toBool());
+        QVERIFY(command("phone", "session.mark_seen", "phone-seen", {{"cursor", 1}})
+                    .value("ok")
+                    .toBool());
+        QCOMPARE(journal.sessions().first().lastSeenCursor, last);
+        // The refused prompt can be sent again once the turn is over.
+        QVERIFY(command("phone", "session.start_turn", "phone-retry",
+                        {{"prompt", "hello"}, {"client_message_id", "phone-retry"}})
+                    .value("ok")
+                    .toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(eventCount(history(), "turn.completed"), 2, 5000);
+    }
 };
 QTEST_GUILESS_MAIN(TurnAcceptanceTest)
 #include "TurnAcceptanceTest.moc"
