@@ -27,6 +27,7 @@ QString trimmedDetailText(const QJsonObject& trimmed) {
     count("commands", "command", "commands");
     count("diffs", "file diff", "file diffs");
     count("tool_results", "tool result", "tool results");
+    count("tool_inputs", "tool input", "tool inputs");
     count("thoughts", "thought", "thoughts");
     if (kinds.isEmpty())
         return {};

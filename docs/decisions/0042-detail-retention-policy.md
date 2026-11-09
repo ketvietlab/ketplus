@@ -68,9 +68,11 @@ to these responses without changing policy validation or mutation semantics.
 
 A turn whose detail retention reduced reports it on its end. For clients that read
 activity groups, the daemon adds `detail_trimmed` to a projected `turn.completed`
-payload. Its fields are the counts of compacted commands, file diffs, tool results and
-thoughts, the bytes the compaction freed, and `older_than_days` from the marker's
-`at` − `cutoff`. The daemon reads these from the `$.item.compacted` markers the
+payload. Its fields are the counts of compacted commands, diffed files, tool results
+(text or structured), tool inputs (arguments) and thoughts, the bytes the compaction
+freed, and `older_than_days` from the marker's `at` − `cutoff`. A tool's bytes add its
+text marker and its separate `arguments` and `structured_result` markers; an item
+marker that only copies one of those is not counted twice. The daemon reads these from the `$.item.compacted` markers the
 turn's completions still hold, so they always describe the stored replay. The
 journal row is never rewritten, and a turn with no marker carries no field. Desktop
 words it as the mock's "Detail trimmed" note above the turn end, with a Storage

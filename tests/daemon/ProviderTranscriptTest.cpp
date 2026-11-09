@@ -95,6 +95,9 @@ class ProviderTranscriptTest : public QObject {
                           {"older_than_days", 7}}),
                  "This turn is older than 7 days: 2 commands, 1 file diff and 3 thoughts were "
                  "reduced to their summaries (29 KB).");
+        QCOMPARE(trimmed({{"tool_inputs", 1}, {"bytes", 6000}, {"older_than_days", 30}}),
+                 "This turn is older than 30 days: 1 tool input was reduced to its summary "
+                 "(6 KB).");
         QCOMPARE(trimmed({{"diffs", 1}, {"bytes", 100}}),
                  "To save space, 1 file diff was reduced to its summary.");
         QVERIFY(trimmed({{"commands", 0}, {"bytes", 0}}).isEmpty());
