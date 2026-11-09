@@ -152,7 +152,8 @@ KetAtlas lane opt-in and report its skip separately.
 ## Minimum verification
 
 Update-preparation changes run `python3 tests/packaging/test_update_archive_cli.py`
-for invalid notes/version, output collisions and repair/retry using synthetic
+for invalid notes/version, output collisions, cleanup after a failed signing step
+and repair/retry using synthetic
 Apple/archive/appcast tools. No signing key or network is used.
 
 Local IPC receive-buffer changes run the lifecycle loopback flood and resume

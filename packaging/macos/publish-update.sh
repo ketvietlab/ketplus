@@ -92,10 +92,29 @@ if [[ -n "$release_notes" ]]; then
         fail "$notes_destination already exists; refusing to overwrite release notes"
 fi
 
+# A failed run removes what it created, so the same version can be prepared again, and leaves
+# the published appcast.xml as it was.
+created=()
+appcast_staging=""
+remove_partial_release() {
+    local status=$?
+    if [[ $status -ne 0 ]]; then
+        local path
+        for path in ${created[@]+"${created[@]}"}; do
+            rm -f -- "$path"
+        done
+    fi
+    [[ -z "$appcast_staging" ]] || rm -f -- "$appcast_staging"
+    return $status
+}
+trap remove_partial_release EXIT
+
 # Validate notes and destination collisions before creating any release artifact.
 mkdir -p "$updates_dir"
+created+=("$archive")
 /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
 if [[ -n "$notes_destination" ]]; then
+    created+=("$notes_destination")
     cp "$release_notes" "$notes_destination"
 fi
 
@@ -103,11 +122,14 @@ key_arguments=()
 if [[ -n "$key_file" ]]; then
     key_arguments=(--ed-key-file "$key_file")
 fi
+appcast_staging="$(mktemp "${TMPDIR:-/tmp}/ketplus-appcast.XXXXXX")"
 "$sparkle_bin/generate_appcast" "${key_arguments[@]+"${key_arguments[@]}"}" \
     --download-url-prefix "$download_prefix" \
     --embed-release-notes \
-    -o "$updates_dir/appcast.xml" \
+    -o "$appcast_staging" \
     "$updates_dir"
+mv -f -- "$appcast_staging" "$updates_dir/appcast.xml"
+appcast_staging=""
 
 echo "Prepared KetPlus $version in $updates_dir"
 echo "The installed app reads $feed; upload appcast.xml and the archive only after approval."
