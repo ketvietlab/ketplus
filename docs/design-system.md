@@ -183,9 +183,11 @@ the turned image, saves the original file to Downloads, prints through
 `ket::printImage` and turns the top-level window fullscreen. A Mermaid diagram
 opens in the same viewer, captioned "Mermaid diagram", as in the mock. The viewer
 is dark in both themes, so it shows the dark rendering; in a light theme it is
-requested on open, and until it is ready the light one sits on a white ground. The
-viewer gets a raster at a whole multiple of the diagram's size, named `@Nx`, so it
-reads 100% at the diagram's own size and stays sharp when zoomed. Lite's Markdown
+requested on open, and until it is ready the light one sits on a white ground; an
+open viewer takes the dark rendering once it is drawn. The viewer gets a raster at a
+whole multiple of the diagram's size, named `@Nx`, so it reads 100% at the
+diagram's own size and stays sharp when zoomed. Rasters stop at 8192 px; a larger
+diagram is scaled down to that, and its 100% is the cap's size. Lite's Markdown
 preview keeps its vector dialog. Day dividers use the journal's `sent_at` carried
 as presentation `timestamp` on user messages, including live echoes. Missing or
 invalid timestamps do not create invented dates. Labels read "Today",

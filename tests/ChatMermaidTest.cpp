@@ -86,6 +86,8 @@ class ChatMermaidTest final : public QObject {
         QTest::newRow("wide") << 3200 << 400;
         QTest::newRow("tall") << 400 << 3200;
         QTest::newRow("compact") << 320 << 160;
+        // Beyond the viewer's raster cap.
+        QTest::newRow("huge") << 9000 << 400;
     }
 
     void rendersIntoChatAndOpensDiagram() {
@@ -116,6 +118,8 @@ class ChatMermaidTest final : public QObject {
         view.resize(1100, 800);
         ketplus::ThemeManager theme(*qApp);
         auto palette = theme.palette();
+        // Light first: the viewer then waits for the dark rendering while it is open.
+        palette.dark = false;
         view.applyTheme(palette);
         view.show();
         const auto unique = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -156,15 +160,6 @@ class ChatMermaidTest final : public QObject {
         QVERIFY(match.hasMatch());
         QCOMPARE(QImageReader(QUrl(match.captured(1)).toLocalFile()).format(), QByteArray("svg"));
         // As in the mock, a click on the diagram opens it in the image viewer.
-        const auto viewer = view.mermaidViewerImage(QUrl(match.captured(1)));
-        QCOMPARE(viewer.value("caption").toString(), QStringLiteral("Mermaid diagram"));
-        const QImage large(viewer.value("source").toUrl().toLocalFile());
-        // Large enough to stay sharp when the viewer fits it to the screen and zooms in.
-        const QSize screen = view.quickView()->screen()->size();
-        QVERIFY(qMax(large.width(), large.height()) >= qMax(screen.width(), screen.height()));
-        QCOMPARE(qreal(large.width()) / large.height(), qreal(diagramWidth) / diagramHeight);
-        if (!palette.dark)
-            QCOMPARE(large.pixelColor(0, 0).alpha(), 255);
         auto* root = view.quickView()->rootObject();
         // The viewer is a popup, not an item of the visual tree.
         auto* lightbox = root->property("imageViewer").value<QObject*>();
@@ -179,12 +174,33 @@ class ChatMermaidTest final : public QObject {
         const QPoint centre = inWindow.center().toPoint();
         QTest::mouseClick(view.quickView(), Qt::LeftButton, {}, centre);
         QTRY_VERIFY(lightbox->property("opened").toBool());
-        QVariant shown = lightbox->property("item");
-        if (shown.metaType() == QMetaType::fromType<QJSValue>())
-            shown = shown.value<QJSValue>().toVariant();
-        const auto item = shown.toMap();
-        QCOMPARE(item.value("caption").toString(), QStringLiteral("Mermaid diagram"));
-        QCOMPARE(item.value("source").toString(), viewer.value("source").toUrl().toString());
+        const auto shownItem = [lightbox] {
+            QVariant shown = lightbox->property("item");
+            if (shown.metaType() == QMetaType::fromType<QJSValue>())
+                shown = shown.value<QJSValue>().toVariant();
+            return shown.toMap();
+        };
+        const auto first = shownItem();
+        QCOMPARE(first.value("caption").toString(), QStringLiteral("Mermaid diagram"));
+        QCOMPARE(first.value("diagram").toUrl(), QUrl(match.captured(1)));
+        // Until the dark rendering is drawn, the light one sits on an opaque white ground.
+        const QImage light(QUrl(first.value("source").toString()).toLocalFile());
+        QCOMPARE(light.pixelColor(0, 0).alpha(), 255);
+        // The open viewer takes the dark rendering once it is ready, for the same diagram.
+        QTRY_VERIFY(shownItem().value("source") != first.value("source"));
+        QCOMPARE(shownItem().value("diagram").toUrl(), QUrl(match.captured(1)));
+        QVERIFY(lightbox->property("opened").toBool());
+        const auto viewer = view.mermaidViewerImage(QUrl(match.captured(1)));
+        QCOMPARE(shownItem().value("source").toString(), viewer.value("source").toUrl().toString());
+        const QImage large(viewer.value("source").toUrl().toLocalFile());
+        // Large enough to stay sharp when the viewer fits it to the screen and zooms in, and
+        // never beyond the 8192 px cap however large the diagram.
+        const QSize screen = view.quickView()->screen()->size();
+        const int longest = qMax(large.width(), large.height());
+        QVERIFY(longest >= qMin(8192, qMax(screen.width(), screen.height())));
+        QVERIFY(longest <= 8192);
+        QVERIFY(qAbs(qreal(large.width()) / large.height() - qreal(diagramWidth) / diagramHeight) <
+                0.01 * diagramWidth / diagramHeight);
         const auto viewerCapture = qEnvironmentVariable("KETPLUS_MERMAID_VIEWER_CAPTURE");
         if (!viewerCapture.isEmpty() && diagramWidth == 320) {
             QTest::qWait(300);

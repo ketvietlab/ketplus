@@ -488,15 +488,24 @@ QVariantMap AgentWorkspaceView::mermaidViewerImage(const QUrl& url) {
     const QScreen* target = screen() ? screen() : QGuiApplication::primaryScreen();
     const qreal density = target ? target->devicePixelRatio() : 1.0;
     const QSize screenSize = target ? target->size() : QSize(1440, 900);
+    constexpr int kMaximumRaster = 8192;
     const qreal longSide =
-        qMin<qreal>(8192, 2 * density * qMax(screenSize.width(), screenSize.height()));
-    // A whole multiple of the diagram's own size, named @Nx so the viewer measures its zoom
-    // against the diagram rather than against the larger raster.
+        qMin<qreal>(kMaximumRaster, 2 * density * qMax(screenSize.width(), screenSize.height()));
     const int naturalLong = qMax(natural.width(), natural.height());
-    const int factor =
-        std::max(1, std::min({int(std::ceil(longSide / naturalLong)), 8192 / naturalLong, 9}));
-    const QSize size = natural * factor;
-    const QString png = svg + QStringLiteral("-viewer@%1x.png").arg(factor);
+    QSize size;
+    QString png;
+    if (naturalLong > kMaximumRaster) {
+        // Larger than the cap: scaled down to it, so the viewer's 100% is the cap's size.
+        size = QSizeF(natural).scaled(kMaximumRaster, kMaximumRaster, Qt::KeepAspectRatio).toSize();
+        png = svg + QStringLiteral("-viewer-%1.png").arg(kMaximumRaster);
+    } else {
+        // A whole multiple of the diagram's own size, named @Nx so the viewer measures its
+        // zoom against the diagram rather than against the larger raster.
+        const int factor = std::max(
+            1, std::min({int(std::ceil(longSide / naturalLong)), kMaximumRaster / naturalLong, 9}));
+        size = natural * factor;
+        png = svg + QStringLiteral("-viewer@%1x.png").arg(factor);
+    }
     if (!QFileInfo::exists(png)) {
         reader.setScaledSize(size);
         QImage image = reader.read();
@@ -513,8 +522,11 @@ QVariantMap AgentWorkspaceView::mermaidViewerImage(const QUrl& url) {
         if (!image.save(png))
             return {};
     }
+    // `diagram` names the transcript's image, so an open viewer can take the dark rendering
+    // once it is ready.
     return {{QStringLiteral("source"), QUrl::fromLocalFile(png)},
-            {QStringLiteral("caption"), QStringLiteral("Mermaid diagram")}};
+            {QStringLiteral("caption"), QStringLiteral("Mermaid diagram")},
+            {QStringLiteral("diagram"), url}};
 }
 
 QUrl AgentWorkspaceView::messageImageAt(QObject* document, int position) const {
