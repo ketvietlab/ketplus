@@ -3,6 +3,7 @@
 #include "agent/AgentMessageFormatter.h"
 #include "agent/DaemonTranscriptProjection.h"
 #include "agent/McpToolResultMedia.h"
+#include "agent/TranscriptStepItems.h"
 
 #include <QRegularExpression>
 #include <QUrl>
@@ -90,8 +91,12 @@ TranscriptEvent ActivityNormalizer::normalize(const QJsonObject& item,
         event.phase = TranscriptPhase::Interrupted;
     event.visible = visible;
     // A thought's text is never part of the transcript, its copy or its details.
-    if (rawType != QStringLiteral("reasoning"))
-        event.sanitizedPayload = TranscriptSanitizer::json(item).toObject().toVariantMap();
+    // A Claude edit keeps the fileChange it reads as, so its diff opens as a Codex edit's does.
+    if (rawType != QStringLiteral("reasoning")) {
+        const QJsonObject edit = agent_message::claudeFileChangeItem(item);
+        event.sanitizedPayload =
+            TranscriptSanitizer::json(edit.isEmpty() ? item : edit).toObject().toVariantMap();
+    }
     return event;
 }
 

@@ -228,6 +228,7 @@ QVariantMap fileChangeMessage(const QJsonObject& item, bool completed) {
                         {"known", known},
                         {"operation", operation},
                         {"destination", destination},
+                        {"hasDiff", !change.value(QStringLiteral("diff")).toString().isEmpty()},
                         {"diffTrimmed",
                          change.value("compacted").toObject().value("policy") == "file-diff-v1"}});
     }

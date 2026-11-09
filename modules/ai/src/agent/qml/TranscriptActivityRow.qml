@@ -44,18 +44,39 @@ Column {
     // An image step opens on its image, as in the mock; without one it has nothing to show.
     property bool expanded: (subtype === "imageView" || subtype === "imageGeneration") && parseArray(imageSources).length > 0
     property bool commandExpanded: false
+    // The file steps whose diff is open, by path; kept with the row's other state.
+    property var openFiles: ({})
     function restoreExpansion() {
         const saved = stateStore.activityState(stateKey);
         expanded = saved === undefined ? imageStep && images.length > 0 : saved.expanded;
         gallery.maximumVisible = saved === undefined ? 3 : saved.imageLimit;
+        openFiles = saved === undefined || !saved.openFiles ? {} : saved.openFiles;
         saveExpansion();
     }
     function saveExpansion() {
         stateStore.rememberActivityState(stateKey, {
             expanded: expanded,
             imageLimit: gallery.maximumVisible,
-            status: status
+            status: status,
+            openFiles: openFiles
         });
+    }
+    function toggleFileDiff(path) {
+        const next = Object.assign({}, openFiles);
+        if (next[path])
+            delete next[path];
+        else
+            next[path] = true;
+        stateStore.followTail = false;
+        stateStore.runAnchoredMutation(() => openFiles = next);
+        saveExpansion();
+    }
+    // One file's diff from the item, read only when it is shown: a large payload stays behind
+    // its reference until then.
+    function changeDiff(path) {
+        const source = payloadRef.length > 0 ? host.resolveTranscriptPayload(payloadRef) : payloadData;
+        const change = (parseObject(source).changes || []).find(entry => String(entry.path || "") === path);
+        return change ? String(change.diff || "") : "";
     }
     function setExpanded(value) {
         if (!hasDetails)
@@ -65,7 +86,10 @@ Column {
             commandExpanded = false;
         saveExpansion();
     }
-    onMessageKeyChanged: commandExpanded = false
+    onMessageKeyChanged: {
+        commandExpanded = false;
+        openFiles = {};
+    }
     onStateKeyChanged: restoreTimer.restart()
     Component.onCompleted: restoreTimer.restart()
     onStatusChanged: restoreTimer.restart()
@@ -91,6 +115,7 @@ Column {
     readonly property bool browserActivity: subtype === "ketplusBrowser"
     // Inside an open group a multi-file edit lists each file as its own step, as the mock does.
     readonly property bool fileSteps: compact && subtype === "fileChange" && files.length > 1
+    readonly property string singleFilePath: subtype === "fileChange" && files.length === 1 ? String(files[0].destination || files[0].path || "") : ""
     // The mock's image step: its path or size on the title line, the image when open.
     readonly property bool imageStep: subtype === "imageView" || subtype === "imageGeneration"
     readonly property bool browserOpenAction: /^https?:\/\//.test(target) &&
@@ -191,14 +216,47 @@ Column {
         visible: !root.fileSteps
         activity: root
         width: parent.width
+        // A one-file edit keeps the card's file actions on its line.
+        MouseArea {
+            anchors.fill: parent
+            enabled: root.singleFilePath.length > 0
+            acceptedButtons: Qt.RightButton
+            onClicked: singleFileMenu.popup()
+        }
+    }
+    TranscriptFileMenu {
+        id: singleFileMenu
+        host: root.host
+        targetPath: root.singleFilePath
+        missing: {
+            root.host.pathStateRevision;
+            return root.host.pathMissing(root.singleFilePath);
+        }
     }
     Repeater {
         model: root.fileSteps ? root.files : []
-        delegate: TranscriptFileStep {
+        delegate: Column {
+            id: fileEntry
             required property var modelData
-            file: modelData
-            host: root.host
+            readonly property string path: String(modelData.path || "")
+            readonly property bool open: root.openFiles[path] === true
             width: root.width
+            spacing: root.spacing
+            TranscriptFileStep {
+                file: fileEntry.modelData
+                host: root.host
+                width: parent.width
+                open: fileEntry.open
+                onDiffToggled: root.toggleFileDiff(fileEntry.path)
+            }
+            TranscriptFileDiff {
+                x: root.contentInset
+                width: parent.width - x
+                diff: fileEntry.open ? root.changeDiff(fileEntry.path) : ""
+                operation: String(fileEntry.modelData.operation || "")
+                path: String(fileEntry.modelData.destination || fileEntry.path)
+                host: root.host
+            }
         }
     }
 
@@ -452,10 +510,19 @@ Column {
             }
         }
 
+        // A one-file edit opens on its diff, as the mock's step; the card lists several files.
+        TranscriptFileDiff {
+            id: singleFileDiff
+            width: parent.width
+            diff: root.expanded && root.subtype === "fileChange" && root.files.length === 1 ? root.changeDiff(String(root.files[0].path || "")) : ""
+            operation: root.files.length === 1 ? String(root.files[0].operation || "") : ""
+            path: root.files.length === 1 ? String(root.files[0].destination || root.files[0].path || "") : ""
+            host: root.host
+        }
         TranscriptChangedFiles {
             activity: root
             width: parent.width
-            visible: root.subtype === "fileChange" && !root.fileSteps && root.files.length > 0
+            visible: root.subtype === "fileChange" && !root.fileSteps && root.files.length > 0 && !singleFileDiff.visible
             height: visible ? implicitHeight : 0
         }
 

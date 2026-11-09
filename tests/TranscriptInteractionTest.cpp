@@ -274,9 +274,11 @@ void AgentWorkspaceViewTest::fileChangesStayCompactInsideExpandedGroup() {
     QVERIFY(detail->mapToItem(steps.at(0), QPointF(detail->width(), 0)).x() <=
             steps.at(0)->width());
 
+    // A step without a diff opens the file's diff in the viewer.
     QSignalSpy diffs(&listing, &ketplus::AgentWorkspaceView::fileDiffRequested);
-    QVERIFY(QMetaObject::invokeMethod(steps.at(0), "clicked"));
+    QVERIFY(QMetaObject::invokeMethod(steps.at(1), "clicked"));
     QCOMPARE(diffs.size(), 1);
+    QCOMPARE(diffs.constFirst().constFirst().toString(), created);
 
     // Each step keeps the card's file actions; a missing file can still be copied.
     const auto menuOf = [&](QQuickItem* fileStep) {
