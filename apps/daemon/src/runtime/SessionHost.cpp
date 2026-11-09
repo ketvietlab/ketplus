@@ -1472,12 +1472,9 @@ QJsonObject SessionHost::deleteSession(const QJsonObject& request) {
                      QStringLiteral("Stop the active turn before deleting this conversation."));
     }
     const QString threadId = session->stored.threadId;
-    for (const auto& task : std::as_const(session->backgroundTasks)) {
-        const auto status = task.toObject().value("status").toString();
-        if (status == "running" || status == "stopping")
-            return error("session_busy",
-                         "Stop background tasks before deleting this conversation.");
-    }
+    if (hasLiveBackgroundTasks(*session))
+        return error(QStringLiteral("session_busy"),
+                     QStringLiteral("Stop background tasks before deleting this conversation."));
     const auto targets = providerCleanupTargets(session->stored);
     if (!targets)
         return error(QStringLiteral("journal_error"),
