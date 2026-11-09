@@ -22,22 +22,41 @@ QString family(const QJsonObject& payload) {
     if (type == "fileChange")
         return "edit";
     if (type == "webSearch")
-        return "search";
+        return "webSearch";
+    // A subagent counts once, when it is spawned; later messages and waits are its steps.
+    if (type == "collabAgentToolCall")
+        return item.value("tool").toString() == "spawnAgent" ? "subagent" : "subagent.step";
+    if (type == "subAgentActivity")
+        return "subagent";
     if (type == "mcpToolCall" || type == "dynamicToolCall") {
         const auto tool = item.value("tool").toString();
-        // Evidence and unknown MCP results stay outside groups, including while running.
+        const auto server = item.value("server").toString();
+        // Evidence stays outside groups, including while running.
         if (tool == "browser_capture" || tool == "visual_compare" ||
             item.value("arguments").toObject().value("includeScreenshot").toBool())
             return {};
-        if (item.value("server").toString().contains("ketplus_browser") &&
-            tool.startsWith("browser_"))
+        if (server.contains("ketplus_browser") && tool.startsWith("browser_"))
             return "browser";
-        const auto operation = tool.toLower().section(QStringLiteral("__"), -1);
+        const auto operation =
+            tool.toLower().section(QStringLiteral("__"), -1).section(QLatin1Char('.'), -1);
         if (operation == "read_file" || operation == "read")
             return "read";
-        if (operation == "search_files" || operation == "glob" || operation == "search_code" ||
-            operation == "grep")
-            return "search";
+        if (operation == "search_files" || operation == "glob")
+            return "fileSearch";
+        if (operation == "search_code" || operation == "grep")
+            return "codeSearch";
+        if (operation == "wait" || operation == "sleep")
+            return "wait";
+        if (operation == "agent" || operation == "task" || operation == "spawn_agent")
+            return "subagent";
+        if (operation == "websearch")
+            return "webSearch";
+        // A family is fixed when the item starts, before its result shows whether it returns
+        // images, and other tools (Claude's edits among them) carry data a group summary
+        // drops. So only KetPlus's own text-only servers group by name: "Used ketplus_agents".
+        // Every other tool call keeps its own row.
+        if (server == "ketplus_agents")
+            return QStringLiteral("tool:") + server;
     }
     return {};
 }
@@ -401,8 +420,12 @@ QJsonObject LocalJournal::activitySummaryEvent(const QJsonObject& event) const {
         return event;
     const auto group = member.value(0).toLongLong();
     QSqlQuery summary(database_);
-    summary.prepare("SELECT family,count,running,failed,last_cursor FROM activity_summaries WHERE "
-                    "session_id=? AND generation=? AND group_cursor=? ORDER BY family");
+    // Families in the order the group first used them, as a local group words its steps.
+    summary.prepare(
+        "SELECT family,count,running,failed,last_cursor FROM activity_summaries s WHERE "
+        "session_id=? AND generation=? AND group_cursor=? ORDER BY (SELECT MIN(first_cursor) "
+        "FROM activity_items i WHERE i.session_id=s.session_id AND i.generation=s.generation AND "
+        "i.group_cursor=s.group_cursor AND i.family=s.family),family");
     summary.addBindValue(event.value("session_id").toString());
     summary.addBindValue(event.value("session_generation").toInteger());
     summary.addBindValue(group);

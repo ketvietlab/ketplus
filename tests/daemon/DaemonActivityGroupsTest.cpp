@@ -176,6 +176,59 @@ class DaemonActivityGroupsTest : public QObject {
                      .toInt(),
                  5);
     }
+    void toolServersWaitsAndSubagentsJoinTheGroupInFirstUseOrder() {
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite3"));
+        QVERIFY(seed(journal, dir.path()));
+        const auto item = [](const QString& id, const QString& type, const QString& tool,
+                             const QString& server = {}) {
+            QJsonObject body{{"id", id}, {"type", type}, {"tool", tool}, {"status", "completed"}};
+            if (!server.isEmpty())
+                body.insert("server", server);
+            return QJsonObject{{"item", body}};
+        };
+        const QList<QJsonObject> steps{
+            command("build", "completed"),
+            item("agents-1", "mcpToolCall", "agents_list", "ketplus_agents"),
+            browser("observe", "browser_observe"),
+            item("agents-2", "mcpToolCall", "agents_send", "ketplus_agents"),
+            item("spawn", "collabAgentToolCall", "spawnAgent"),
+            item("wait-agent", "collabAgentToolCall", "wait"),
+            item("sleep", "dynamicToolCall", "wait"),
+        };
+        qint64 first = 0;
+        for (const auto& step : steps) {
+            const auto cursor = journal.appendEvent("session", 1, "item.completed", step);
+            QVERIFY(cursor > 0);
+            if (!first)
+                first = cursor;
+        }
+        const auto summary =
+            journal.activitySummaryEvent(last(journal, first)).value("payload").toObject();
+        QCOMPARE(summary.value("count").toInt(), 7);
+        QStringList families;
+        for (const auto& value : summary.value("families").toArray())
+            families.append(QStringLiteral("%1=%2")
+                                .arg(value.toObject().value("family").toString())
+                                .arg(value.toObject().value("count").toInt()));
+        QCOMPARE(families, (QStringList{"command=1", "tool:ketplus_agents=2", "browser=1",
+                                        "subagent=1", "subagent.step=1", "wait=1"}));
+        // Other tools keep their own rows: their results may hold images, or carry edits the
+        // summary would drop (Claude's Write).
+        for (const auto& standalone : {item("capture", "mcpToolCall", "capture", "screen_tools"),
+                                       item("write", "dynamicToolCall", "Write"),
+                                       item("repl", "mcpToolCall", "js", "node_repl")}) {
+            const auto cursor = journal.appendEvent("session", 1, "item.completed", standalone);
+            QCOMPARE(
+                journal.activitySummaryEvent(last(journal, cursor)).value("event_type").toString(),
+                "item.completed");
+        }
+        // A skill stays visible on its own, as in a local transcript.
+        const auto skill = journal.appendEvent("session", 1, "item.completed",
+                                               item("skill", "dynamicToolCall", "Skill"));
+        QCOMPARE(journal.activitySummaryEvent(last(journal, skill)).value("event_type").toString(),
+                 "item.completed");
+    }
     void evidenceAndMessagesBreakGroupsAndLateCompletionKeepsIdentity() {
         QTemporaryDir dir;
         LocalJournal journal(dir.filePath("journal.sqlite3"));
