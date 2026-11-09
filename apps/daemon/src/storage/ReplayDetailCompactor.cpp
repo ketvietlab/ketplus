@@ -268,8 +268,26 @@ bool plainData(const QJsonValue& value, int depth = 0) {
 }
 } // namespace
 
+// Older Codex builds journaled the generated pixels inline as a base64 `result` string.
+// Clients never draw it (they show `savedPath` or a media reference), so it goes; the
+// prompt, path and status stay.
+std::optional<QJsonObject> compactGeneratedImage(const QJsonObject& original,
+                                                 const QDateTime& cutoff) {
+    const auto pixels = original.value("result");
+    if (!cutoff.isValid() || cutoff > QDateTime::currentDateTimeUtc() ||
+        original.contains("compacted") || !pixels.isString() || pixels.toString().isEmpty())
+        return std::nullopt;
+    auto item = original;
+    item.remove("result");
+    item.insert("compacted",
+                marker(cutoff, "image-pixels-v1", pixels.toString().toUtf8().size(), 0));
+    return item;
+}
+
 std::optional<QJsonObject> compactCompletedReplayItem(const QJsonObject& original,
                                                       const QDateTime& cutoff) {
+    if (original.value("type") == "imageGeneration")
+        return compactGeneratedImage(original, cutoff);
     const auto earlier = compactArguments(original, cutoff);
     auto item = earlier.value_or(original);
     auto info = item.value("compacted").toObject();
