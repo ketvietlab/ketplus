@@ -225,6 +225,11 @@ and `QFile::open` blocks on a FIFO without a writer (confirmed with a probe). Th
 are now opened with `O_NONBLOCK` and kept only if `fstat` shows a regular file; a
 FIFO path returns `source_unavailable` at once, and a blocking open fails that test.
 A test that swapped the path between a file and a FIFO 40k times did not hit the
-old race, so it was not kept. Not covered: the decode thread count is not measured
-by a test, synchronous local preview reads still decode on the caller's thread,
-and peak memory was not measured.
+old race, so it was not kept; the FIFO test does not prove every replacement race
+closed. The non-Unix fallback opens the same name (review of #313 found it unnamed);
+on macOS, forcing the fallback passes the viewed-image tests. An independent
+semaphore probe (#2739) saw at most two decodes at once, 16 accepted and 8 `busy`,
+and no callback after the host was destroyed. Not covered: that probe is not in the
+suite, synchronous local preview reads still decode on the caller's thread, phone
+retry after `busy` is unverified, Windows was not run and peak memory was not
+measured.

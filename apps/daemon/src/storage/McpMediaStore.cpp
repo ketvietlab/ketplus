@@ -75,6 +75,8 @@ QSize imageSize(const QString& extension, const QByteArray& bytes) {
 // Opens `path` only if what is opened is a regular file. The check is made on the opened
 // descriptor, without blocking: a path swapped for a FIFO after a stat must not hang the daemon.
 bool openRegularFile(const QString& path, QFile* file, qint64* size) {
+    // Both branches open this name; the Unix one only through its checked descriptor.
+    file->setFileName(path);
 #ifdef Q_OS_UNIX
     const int fd = ::open(QFile::encodeName(path).constData(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
     if (fd < 0)

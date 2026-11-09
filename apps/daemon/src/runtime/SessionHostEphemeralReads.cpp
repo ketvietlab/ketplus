@@ -80,7 +80,8 @@ void SessionHost::mediaReadDeferred(const QJsonObject& request, CommandCallback 
 }
 
 void SessionHost::startMediaRead(std::function<QJsonObject()> work, CommandCallback done) {
-    // Beyond the queue the phone retries; waiting decodes would only hold more memory.
+    // Beyond the queue the caller gets busy at once; waiting decodes would only hold more
+    // memory.
     if (mediaReadsInFlight_ >= maximumMediaReads) {
         done({{"ok", false}, {"error_code", "busy"}});
         return;
