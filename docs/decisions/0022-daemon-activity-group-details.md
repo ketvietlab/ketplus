@@ -14,7 +14,23 @@ For an opted-in connection, live `session.event` and the ordinary local replay,
 transcript-page and transcript-window responses replace eligible tool events with
 `activity.group.summary`. A summary carries `group_id`, `item_id`, `count`,
 `families`, `running_count`, `failed_count`, `revision` and `last_change_cursor`.
-It contains no command, arguments, stdout or tool-result body. Every retained
+It contains no command, arguments, stdout or tool-result body.
+
+Since 2026-11-09 a summary also carries `files`, so the Desktop can show a turn's changed-files
+card without opening its groups. `files` lists the files the group's completed `fileChange`
+items changed: `path`, `destination` (a move's target, otherwise empty), `operation`
+(`Created`, `Edited`, `Deleted` or `Moved`), `added`, `removed` and `known`. A file is merged
+by path in the order first changed, ordered by each item's first journal cursor and then by
+its changes, so a completion delivered again or a fork lists the same files in the same
+order. Counts are known only when every change to it was counted. A later move or delete
+decides a path's operation; a created file stays `Created` through later edits; a file
+created and then deleted within the group is left out; one deleted and created again is
+`Edited`. At most 50 files are listed; `files_total` counts them all. Failed changes are
+left out, and no diff text is included. The rows live in `activity_files`, written in the
+same transaction as the canonical event, and are copied by fork and removed with the session
+generation. A journal indexed before this table existed lists its groups' files once, from
+the completion events it retained, streamed one at a time; the table is created in that
+backfill's transaction, so an interrupted backfill runs again on the next open. Clients that predate the field ignore it. Every retained
 output/status change advances the watermark even when the count stays equal.
 Summary metadata describes the current group head; the envelope cursor remains
 the original durable event cursor for existing replay/window fencing.
