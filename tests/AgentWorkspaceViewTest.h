@@ -127,6 +127,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void formatsStreamingText();
     void transcriptDayDividersUseJournalDates();
     void userTurnLeadsWithOriginAndImages();
+    void imageViewerOpensTheRowsImages();
     void transcriptNoticesUseRuntimeState();
     void opensInlineMarkdownLinks();
     void linksInlineCodeOnceFilesAreListed();

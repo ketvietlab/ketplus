@@ -25,8 +25,7 @@ Rectangle {
     function previewAttachment() {
         if (!modelData.image || !modelData.url)
             return;
-        imagePreview.imageSource = modelData.url;
-        imagePreview.open();
+        imagePreview.showImages([modelData.url], 0);
     }
     HoverHandler {
         id: attachmentChipHover

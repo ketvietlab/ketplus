@@ -402,8 +402,9 @@ Item {
                         running: messageDelegate.running
                         compact: messageDelegate.groupNested
                         onImageClicked: function (source) {
-                            preview.imageSource = source;
-                            preview.open();
+                            const all = images.map(image => String(image));
+                            const index = all.indexOf(source.toString());
+                            preview.showImages(index < 0 ? [source] : all, Math.max(0, index));
                         }
                     }
                 }
@@ -968,8 +969,7 @@ Item {
                                 return;
                             if (host.openMermaidImage(source))
                                 return;
-                            preview.imageSource = source;
-                            preview.open();
+                            preview.showImages([source], 0);
                             return;
                         }
                         const link = host.messageLinkAt(bodyText.textDocument, position);
