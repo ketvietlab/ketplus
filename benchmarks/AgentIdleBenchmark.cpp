@@ -102,7 +102,8 @@ int main(int argc, char** argv) {
          {"capture", "Optional native PNG before measurement", "path"},
          {"theme", "system, light or dark", "theme", "system"},
          {"zoom", "Interface zoom (1–1.5)", "zoom", "1"},
-         {"open", "mode, model or limits (a composer panel), welcome or viewer, for captures",
+         {"open",
+          "mode, model or limits (a composer panel), welcome, viewer or tasks, for captures",
           "panel"},
          {"transcript", "claude, codex or cursor: the mock's workspace/<provider> messages",
           "provider"},
@@ -137,7 +138,8 @@ int main(int argc, char** argv) {
     const auto panel = parser.value("open");
     // `welcome` opens no panel: the conversation has no messages, like the mock's welcome state.
     const bool welcome = panel == "welcome";
-    if (!panel.isEmpty() && !welcome && panel != "viewer" && !panelButtons.contains(panel)) {
+    if (!panel.isEmpty() && !welcome && panel != "viewer" && panel != "tasks" &&
+        !panelButtons.contains(panel)) {
         report({{"event", "error"}, {"reason", "Invalid panel"}});
         return 2;
     }
@@ -323,6 +325,32 @@ int main(int argc, char** argv) {
             list->setProperty("contentY", list->property("originY").toDouble() +
                                               qBound(0.0, fraction, 1.0) * qMax(0.0, range));
         });
+    // The mock's background tasks (Fixtures.backgroundTasks), as the daemon reports them.
+    if (panel == "tasks") {
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        view.setBackgroundTasks({QVariantMap{{"task_id", "dev"},
+                                             {"kind", "shell"},
+                                             {"title", "npm run dev"},
+                                             {"command", "npm run dev"},
+                                             {"status", "running"},
+                                             {"started_at", now - 134'000}},
+                                 QVariantMap{{"task_id", "review"},
+                                             {"kind", "agent"},
+                                             {"title", "Review the diff"},
+                                             {"status", "completed"},
+                                             {"started_at", now - 60'000},
+                                             {"ended_at", now - 12'000},
+                                             {"duration_ms", 48'000}},
+                                 QVariantMap{{"task_id", "ctest"},
+                                             {"kind", "shell"},
+                                             {"title", "ctest --test-dir build"},
+                                             {"command", "ctest --test-dir build"},
+                                             {"status", "failed"},
+                                             {"error", "2 tests failed"},
+                                             {"started_at", now - 30'000},
+                                             {"ended_at", now - 20'000},
+                                             {"duration_ms", 9'800}}});
+    }
     // The mock's image viewer on the Claude prompt's capture.
     if (panel == "viewer")
         QTimer::singleShot(1000, &view, [&view] {
@@ -335,7 +363,7 @@ int main(int argc, char** argv) {
                                            Q_ARG(QVariant, QVariantList{shot}), Q_ARG(QVariant, 0)))
                 report({{"event", "error"}, {"reason", "Image viewer not found"}});
         });
-    else if (!panel.isEmpty() && !welcome && panel != "viewer")
+    else if (!panel.isEmpty() && !welcome && panel != "tasks")
         QTimer::singleShot(1000, &view, [&] {
             auto* button = findItem(view.quickView()->rootObject(), panelButtons.value(panel));
             if (!button || !QMetaObject::invokeMethod(button, "clicked"))

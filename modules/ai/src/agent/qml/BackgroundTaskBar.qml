@@ -71,15 +71,14 @@ Rectangle {
             agentHost.requestBackgroundTaskOutput(task.task_id);
     }
     readonly property var openedTask: tasks.find(task => task.task_id === pane.taskId)
-    readonly property string headline: offline ? plural(liveCount, "background task") + " · last known" : liveCount > 0 ? (agentHost.sessionRunning ? "" : "Turn finished · ") + plural(liveCount, "task") + " running in background" : "Background tasks finished"
+    // The kit's toggle (`.bg-toggle`) counts every task; the rows show which still run.
+    readonly property string headline: offline ? plural(liveCount, "background task") + " · last known" : liveCount > 0 ? (agentHost.sessionRunning ? "" : "Turn finished · ") + plural(tasks.length, "background task") : "Background tasks finished"
 
     objectName: "backgroundTaskBar"
     visible: tasks.length > 0
-    implicitHeight: visible ? column.implicitHeight + KetTheme.px(12, KetTheme.zoom) : 0
-    radius: KetTheme.px(12, KetTheme.zoom)
-    color: KetTheme.t.surfaceRaised
-    border.width: 1
-    border.color: KetTheme.t.panelBorder
+    implicitHeight: visible ? column.implicitHeight : 0
+    // The mock's strip has no panel of its own: the toggle, then one row per task.
+    color: "transparent"
     Accessible.role: Accessible.Grouping
     Accessible.name: "Background tasks"
 
@@ -104,38 +103,51 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        anchors.margins: KetTheme.px(6, KetTheme.zoom)
-        spacing: KetTheme.px(2, KetTheme.zoom)
+        spacing: bar.barRecipe.rowGap
 
         AbstractButton {
+            id: toggle
             objectName: "backgroundTaskBarHeader"
-            Layout.fillWidth: true
-            implicitHeight: bar.barRecipe.height
+            readonly property var recipe: KetTheme.taskBarRecipe(KetTheme.dark, KetTheme.zoom, hovered, down, enabled, visualFocus)
+            Layout.maximumWidth: parent.width
+            hoverEnabled: true
+            opacity: recipe.opacity
+            leftPadding: recipe.paddingInline
+            rightPadding: recipe.paddingInline
+            implicitWidth: leftPadding + rightPadding + toggleContent.implicitWidth
+            implicitHeight: recipe.height
             Accessible.name: bar.headline + (bar.collapsed ? ", collapsed" : ", expanded")
             onClicked: bar.collapsed = !bar.collapsed
-            contentItem: RowLayout {
-                spacing: KetTheme.px(6, KetTheme.zoom)
+            contentItem: Row {
+                id: toggleContent
+                spacing: toggle.recipe.spacing
                 KetIcon {
-                    Layout.leftMargin: KetTheme.px(4, KetTheme.zoom)
-                    Layout.preferredWidth: KetTheme.px(14, KetTheme.zoom)
-                    Layout.preferredHeight: KetTheme.px(14, KetTheme.zoom)
-                    name: KetTheme.iconForLucide(bar.collapsed ? "chevron-right" : "chevron-down")
-                    color: KetTheme.t.textMuted
-                    box: KetTheme.px(14, KetTheme.zoom)
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: bar.liveCount > 0 ? "loading" : KetTheme.iconForLucide("circle-check")
+                    box: toggle.recipe.iconSize
+                    color: toggle.recipe.text
                 }
                 Text {
-                    Layout.fillWidth: true
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.min(implicitWidth, toggle.Layout.maximumWidth - toggle.leftPadding - toggle.rightPadding - 2 * toggle.recipe.spacing - toggle.recipe.iconSize - toggle.recipe.chevronSize)
                     text: bar.headline
-                    color: KetTheme.t.textSecondary
+                    color: toggle.recipe.text
                     font.family: KetTheme.fontFamily
-                    font.pixelSize: bar.barRecipe.fontPixels
-                    font.weight: Font.Normal
+                    font.pixelSize: toggle.recipe.fontPixels
                     elide: Text.ElideRight
+                }
+                KetIcon {
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: bar.collapsed ? "chevron-up" : "chevron-down"
+                    box: toggle.recipe.chevronSize
+                    color: toggle.recipe.text
                 }
             }
             background: Rectangle {
-                radius: KetTheme.px(7, KetTheme.zoom)
-                color: parent.hovered ? KetTheme.t.surfaceHover : "transparent"
+                radius: toggle.recipe.radius
+                color: toggle.recipe.background
+                border.width: toggle.recipe.focusRing.a > 0 ? 2 : 0
+                border.color: toggle.recipe.focusRing
             }
         }
 
@@ -148,11 +160,49 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: KetTheme.px(4, KetTheme.zoom)
                 objectName: "backgroundTask_" + modelData.task_id
-                RowLayout {
-                    Layout.fillWidth: true
-                    KetTaskRow {
+                KetTaskRow {
+                        id: taskRow
                         objectName: "backgroundTaskCard_" + row.modelData.task_id
                         Layout.fillWidth: true
+                        // A row opens its output or the subagent's progress, as the mock's
+                        // current row; Stop and Dismiss stay on top of it.
+                        readonly property string openLabel: (bar.pane.taskId === row.modelData.task_id ? "Hide " : "Show ") + (row.modelData.kind === "agent" ? "progress" : "output")
+                        activeFocusOnTab: true
+                        Accessible.role: Accessible.Button
+                        Accessible.name: row.modelData.title + ", " + bar.meta(row.modelData)
+                        Accessible.description: openLabel
+                        Accessible.onPressAction: bar.openTask(row.modelData)
+                        // Only the row's own focus opens it: Return or Space on Stop or
+                        // Dismiss reaches here too and must keep that button's meaning.
+                        function activateFromKeys(event) {
+                            if (!taskRow.activeFocus) {
+                                event.accepted = false;
+                                return;
+                            }
+                            bar.openTask(row.modelData);
+                        }
+                        Keys.onReturnPressed: event => activateFromKeys(event)
+                        Keys.onSpacePressed: event => activateFromKeys(event)
+                        // The keyboard focus ring sits outside the row, apart from the
+                        // `current` border that marks the open output.
+                        Rectangle {
+                            objectName: "backgroundTaskFocusRing"
+                            anchors.fill: parent
+                            anchors.margins: -2
+                            z: 1
+                            visible: taskRow.activeFocus
+                            radius: taskRow.radius + 2
+                            color: "transparent"
+                            border.width: 2
+                            border.color: KetTheme.t.focusBorder
+                        }
+                        MouseArea {
+                            objectName: "backgroundTaskOpen"
+                            anchors.fill: parent
+                            z: -1
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: bar.openTask(row.modelData)
+                        }
                         enabled: !bar.offline || !bar.live(row.modelData)
                         title: row.modelData.title
                         meta: bar.meta(row.modelData)
@@ -176,13 +226,6 @@ Rectangle {
                             // Updating the model can destroy this delegate immediately.
                             bar.dismissedTasks = bar.dismissedTasks.concat([key]);
                         }
-                    }
-                    KetButton {
-                        text: bar.pane.taskId === row.modelData.task_id ? "Hide" : row.modelData.kind === "agent" ? "Progress" : "Output"
-                        variant: KetTheme.ButtonVariant.Ghost
-                        controlSize: KetTheme.ControlSize.Small
-                        onClicked: bar.openTask(row.modelData)
-                    }
                 }
                 Text {
                     visible: row.confirming

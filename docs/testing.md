@@ -225,7 +225,8 @@ python3 benchmarks/run-agent-idle.py build/release /tmp/idle-minimized --visibil
 held clock. For captures, the fixture binary also accepts `--open=mode`, `model` or
 `limits` to open that composer panel first, like the mock's `--open`, or `--open=welcome`
 for an empty conversation like the mock's `workspace/welcome`. `--open=viewer` opens the
-image viewer on the mock's sidebar capture. With `--open`, the
+image viewer on the mock's sidebar capture, and `--open=tasks` shows the mock's three
+background tasks (running, completed and failed) like its `workspace/running` strip. With `--open`, the
 active conversation is the mock's Claude Opus 5.5 conversation with its fixed catalog and
 usage (context, session cost and tokens, and three plan limits); runs without `--open`
 keep the default CPU workload. `--transcript=claude`, `codex` or `cursor` replaces the
