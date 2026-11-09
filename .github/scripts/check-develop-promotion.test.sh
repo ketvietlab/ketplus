@@ -37,6 +37,20 @@ check pass develop integration
 check fail develop integration feature/x
 check fail develop integration integration someone/ketplus
 
+# The policy runs from develop's checkout and judges the head only as data.
+git checkout --quiet --detach develop
+BASE_SHA="$(git rev-parse develop)" HEAD_SHA="$(git rev-parse integration)" \
+  HEAD_BRANCH=integration HEAD_REPOSITORY=ketvietlab/ketplus REPOSITORY=ketvietlab/ketplus \
+  PROMOTION_SKIP_TIP_CHECK=1 bash "$script" 2>/dev/null ||
+  { printf 'expected pass from a develop checkout\n' >&2; exit 1; }
+# A head that was never fetched is refused.
+if BASE_SHA="$(git rev-parse develop)" HEAD_SHA=0123456789abcdef0123456789abcdef01234567 \
+  HEAD_BRANCH=integration HEAD_REPOSITORY=ketvietlab/ketplus REPOSITORY=ketvietlab/ketplus \
+  PROMOTION_SKIP_TIP_CHECK=1 bash "$script" 2>/dev/null; then
+  printf 'expected fail for a missing head\n' >&2
+  exit 1
+fi
+
 # The previous promotion merged integration into develop with a merge commit.
 git switch --quiet develop
 git merge --quiet --no-ff --no-edit integration
