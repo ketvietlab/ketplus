@@ -28,6 +28,16 @@ QString providerProtocolErrorTitle();
 QString providerRuntimeNoticeTitle();
 // Title of a provider failure's row, live or projected from `runtime.error`.
 QString agentErrorTitle();
+// What an approval asks to use, as the mock's "Approval needed · <tool>": Command, File
+// change, an MCP server's tool, or the Claude or Cursor tool.
+QString approvalToolLabel(const QJsonObject& details);
+// An approval's end: "approved", "denied" or "expired"; "resolved" when the journal predates
+// the decision.
+QString approvalOutcome(const QString& eventType, const QJsonObject& data);
+// One approval from two rows with its key: a request and its receipt from different pages, or
+// a pending card and the receipt that settled it. The receipt wins; the request keeps its
+// tool and command. A row without them stays hidden until its request is read.
+QVariantMap joinedApprovalRows(const QVariantMap& older, const QVariantMap& newer);
 // A failure's row as the mock words it when the provider's message says what happened: its
 // process exited, or the model is at capacity (subtype "modelCapacity", which offers to
 // switch the model). Other failures keep agentErrorTitle() and the message.

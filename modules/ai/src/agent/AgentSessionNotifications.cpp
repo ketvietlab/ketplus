@@ -154,6 +154,8 @@ void AgentSessionManager::handleUserInputRequest(const QJsonValue& requestId,
                      params.value(QStringLiteral("approvalReason")).toString());
         entry.insert(QStringLiteral("command"),
                      params.value(QStringLiteral("approvalCommand")).toString());
+        entry.insert(QStringLiteral("target"),
+                     params.value(QStringLiteral("approvalTool")).toString());
     }
     const int index = appendMessage(session, entry);
     session->messageIndexByItem.insert(itemId, index);
@@ -541,9 +543,13 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
             if (entry.value(QStringLiteral("messageKey")).toString() != key)
                 continue;
             entry.insert(QStringLiteral("running"), false);
-            entry.insert(QStringLiteral("status"), params.value(QStringLiteral("expired")).toBool()
-                                                       ? QStringLiteral("expired")
-                                                       : QStringLiteral("resolved"));
+            // An approval knows how it ended, even when another client decided it.
+            const QString outcome = params.value(QStringLiteral("outcome")).toString();
+            entry.insert(QStringLiteral("status"),
+                         !outcome.isEmpty() ? outcome
+                         : params.value(QStringLiteral("expired")).toBool()
+                             ? QStringLiteral("expired")
+                             : QStringLiteral("resolved"));
             entry.insert(QStringLiteral("meta"), QStringLiteral("Question no longer pending"));
             updateMessage(session, index, entry);
             break;
