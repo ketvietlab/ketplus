@@ -52,7 +52,7 @@ obsolete run. See `docs/release-process.md`.
 | Open activity group loader | `ketplus_activity_group_loader_tests` | single in-flight request, coalescing, upserts, close/reopen fencing, snapshot restart, explicit retry |
 | Desktop activity group IPC/UI | `ketplus_desktop_activity_groups_tests` | authenticated summary transport, native Qt expansion, live append while open, collapse, full export and explicit raw read |
 | Local transcript storage window | `ketplus_daemon_transcript_window_tests` | indexed bounded seeks, giant turns, snapshot/compaction fencing, current approvals |
-| Desktop transcript windows | `ketplus_desktop_transcript_window_tests` | selected-only hydration, older pages/export, cache eviction, pure event projection, provider notices and unknown item rows |
+| Desktop transcript windows | `ketplus_desktop_transcript_window_tests` | selected-only hydration, older pages/export, cache eviction, pure event projection, provider notices and unknown item rows; large-event reassembly refuses a transfer split into more than 4,096 fragments while exact retries, conflicts and gaps keep their results |
 | Conversation navigation | `ketplus_desktop_transcript_navigation_tests` | bounded initial read-ahead and cancellation before idle publication |
 | Transcript catch-up | `ketplus_desktop_transcript_catchup_tests` | retained reader on return, revision refresh, cancellation, live buffering, overflow and retries |
 | Transcript row window | `ketplus_transcript_window_model_tests` | delegate retention and reentrant range changes during history reset |

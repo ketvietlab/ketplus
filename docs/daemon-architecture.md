@@ -584,7 +584,9 @@ oversized chunks remain reserved for recovery. See
 Assistant/tool lifecycle payloads larger than 256 KiB use the bounded, versioned
 chunk and terminal-manifest representation in
 [ADR 0006](decisions/0006-bounded-large-transcript-events.md). Local Desktop
-reassembles them losslessly through bounded fragment requests; every opaque cloud
+reassembles them losslessly through bounded fragment requests. A transfer may arrive in at
+most 4,096 in-order fragments, so its bookkeeping stays bounded however the sender splits it
+(the daemon sends whole 96 KiB chunks); every opaque cloud
 event remains below the existing cap. Mobile must implement the ADR handoff and
 an authenticated cold-fragment fetch before claiming cold large-item coverage.
 
