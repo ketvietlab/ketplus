@@ -548,7 +548,8 @@ page; Claude Write, Edit and MultiEdit as file changes with line counts; MCP too
 above its end: its file-change rows and its daemon groups' `files` (ADR 0022), merged by path;
 a row opens the file's diff and Review changes opens Source Control. A steer stays in its turn,
 counts the daemon could not tell show no numbers, and a list a group cut short (50 files) reads
-"N+ files changed" without totals. Browser-open rows retain
+"N+ files changed" without totals. Its footer reads "Not committed", as in the mock, while
+Source Control shows one of the files uncommitted in the conversation's checkout. Browser-open rows retain
 an Open action. A provider failure reads as the kit's danger banner; on the latest failed turn,
 while the conversation is idle, Retry sends that turn's prompt again as a new turn (not for
 a prompt with images, one from another agent, or while the composer holds attachments). Composer block line-height matches

@@ -2642,6 +2642,33 @@ void AgentWorkspaceViewTest::turnEndListsTheTurnsChangedFiles() {
     QCOMPARE(navigation.first().at(0).toString(), QStringLiteral("source-control"));
     QVERIFY(card->property("countsKnown").toBool());
     QVERIFY(card->property("complete").toBool());
+    // "Not committed", as in the mock, while Source Control shows one of the files uncommitted
+    // in this conversation's checkout; nothing once committed or for another checkout.
+    QTemporaryDir checkout;
+    view.setActivePath(checkout.path());
+    QCOMPARE(card->property("note").toString(), QString());
+    view.setWorkingChanges(checkout.path(), {"modules/ai/src/agent/qml/SpinClock.qml"});
+    QTRY_COMPARE(card->property("note").toString(), QStringLiteral("Not committed"));
+    view.setWorkingChanges(checkout.path(), {"README.md"});
+    QTRY_COMPARE(card->property("note").toString(), QString());
+    QTemporaryDir elsewhere;
+    view.setWorkingChanges(elsewhere.path(), {"modules/ai/src/agent/qml/SpinClock.qml"});
+    QTest::qWait(50);
+    QCOMPARE(card->property("note").toString(), QString());
+    // Moving the conversation between checkouts re-evaluates the same snapshot.
+    view.setWorkingChanges(checkout.path(), {"modules/ai/src/agent/qml/SpinClock.qml"});
+    QTRY_COMPARE(card->property("note").toString(), QStringLiteral("Not committed"));
+    view.setExecutionBranch("other", elsewhere.path(), 2);
+    QTRY_COMPARE(card->property("note").toString(), QString());
+    view.setExecutionBranch("main", checkout.path(), 3);
+    QTRY_COMPARE(card->property("note").toString(), QStringLiteral("Not committed"));
+    view.setExecutionBranch({}, {}, 4);
+    view.setActivePath(elsewhere.path());
+    QTRY_COMPARE(card->property("note").toString(), QString());
+    view.setActivePath(checkout.path());
+    QTRY_COMPARE(card->property("note").toString(), QStringLiteral("Not committed"));
+    view.setWorkingChanges(checkout.path(), {});
+    QTRY_COMPARE(card->property("note").toString(), QString());
     // A group's update keeps the row count and the delegate; the card follows its files.
     const QPointer<QQuickItem> shown(card);
     auto updated = QVariantMap{{"messageKey", "g"},
