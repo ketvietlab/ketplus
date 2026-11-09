@@ -154,7 +154,9 @@ for line in sys.stdin:
     itemEvent("item/completed", "manual", "c1", "contextCompaction");
     QCOMPARE(manager.status(path), QStringLiteral("Ready"));
     manager.selectConversation(path, original);
-    QCOMPARE(compactionRow().value("body").toString(), QStringLiteral("Context compacted"));
+    QCOMPARE(compactionRow().value("title").toString(), QStringLiteral("Context compacted"));
+    QCOMPARE(compactionRow().value("body").toString(),
+             QStringLiteral("Older steps are summarised; the conversation continues."));
     QVERIFY(manager.isRunning(path));
     itemEvent("item/started", "manual", "c1", "contextCompaction");
     QCOMPARE(manager.messages(path).size(), 3);
@@ -187,13 +189,13 @@ for line in sys.stdin:
                            {"turn", QJsonObject{{"id", "automatic"}, {"status", "interrupted"}}}});
     QCOMPARE(manager.status(path), QStringLiteral("Stopped"));
     QVERIFY(!manager.messages(path).last().toMap().value("running").toBool());
-    QVERIFY(manager.messages(path).last().toMap().value("body").toString() != "Context compacted");
+    QVERIFY(manager.messages(path).last().toMap().value("title").toString() != "Context compacted");
 
     ketplus::CodexAppServer restoredServer(serverPath);
     ketplus::AgentSessionManager restored(&restoredServer);
     restored.activate(path);
     QTRY_COMPARE(restored.messages(path).size(), 1);
-    QCOMPARE(restored.messages(path).first().toMap().value("body").toString(),
+    QCOMPARE(restored.messages(path).first().toMap().value("title").toString(),
              QStringLiteral("Context compacted"));
 }
 

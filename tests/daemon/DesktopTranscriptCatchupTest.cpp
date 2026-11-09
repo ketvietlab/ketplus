@@ -189,7 +189,7 @@ class DesktopTranscriptCatchupTest final : public QObject {
         QTest::qWait(30);
         desktop.selectConversation(path, "a");
         QTRY_VERIFY(!desktop.historyState(path).value("loading").toBool());
-        QTRY_COMPARE(desktop.messages(path).last().toMap().value("body").toString(),
+        QTRY_COMPARE(desktop.messages(path).last().toMap().value("title").toString(),
                      QStringLiteral("Context compacted"));
         QCOMPARE(desktop.messages(path).size(), 2);
         QCOMPARE(desktop.status(path), QStringLiteral("Working…"));
