@@ -177,7 +177,10 @@ command output to its first 4 KiB and last 16 KiB on UTF-8 boundaries, with an e
 notice and `item.compacted` metadata. Messages remain unchanged. A generated image
 journaled inline by an older Codex build loses only its base64 `result` (policy
 `image-pixels-v1`, one large payload of at most 16 MiB per pass); its prompt and saved
-path stay ([ADR 0098](decisions/0098-generated-image-pixel-retention.md)).
+path stay ([ADR 0098](decisions/0098-generated-image-pixel-retention.md)). Inline base64
+images in older tool results become `omitted` blocks with reason `history_retention`
+that keep their position (policy `tool-inline-images-v1`). Desktop shows them as
+unavailable placeholders ([ADR 0099](decisions/0099-tool-result-inline-image-retention.md)).
 Redundant tool starts are removed only when the immediately following retained
 event is their same-turn completion and preserves start data (except lifecycle
 status and empty known progress placeholders); interleaved/partial/large cases

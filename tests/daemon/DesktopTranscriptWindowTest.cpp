@@ -237,6 +237,24 @@ class DesktopTranscriptWindowTest final : public QObject {
         QVERIFY(placeholders.first().toString().startsWith(
             QLatin1String(mcp_media::unavailableSourcePrefix)));
         QVERIFY(QUrl(placeholders.first().toString()).toLocalFile().isEmpty());
+
+        // Pixels removed by history retention (ADR 0099) keep their slot the same way.
+        QJsonObject retained = journaled;
+        retained.insert(
+            "result",
+            QJsonObject{{"content", QJsonArray{QJsonObject{{"type", "image"},
+                                                           {"omitted", true},
+                                                           {"reason", "history_retention"}}}}});
+        const auto trimmed = daemonWindowMessages(
+            {{"events",
+              QJsonArray{transcriptEvent(
+                  "item.completed",
+                  {{"item_id", "capture"}, {"item_type", "mcpToolCall"}, {"item", retained}},
+                  1)}}});
+        const QVariantList keptSlots = trimmed.first().toMap().value("images").toList();
+        QCOMPARE(keptSlots.size(), 1);
+        QVERIFY(keptSlots.first().toString().startsWith(
+            QLatin1String(mcp_media::unavailableSourcePrefix)));
     }
 
     void projectionMergesPartialItemsAndOutputWithoutApprovalSideEffects() {

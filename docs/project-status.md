@@ -222,8 +222,9 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 - Generated images that older Codex builds journaled inline lose only their unused
   base64 pixels once eligible, one large payload of at most 16 MiB per idle pass,
-  keeping prompt and saved path (ADR 0098). Previews and pixels inside older MCP
-  results remain #128 work.
+  keeping prompt and saved path (ADR 0098). Inline images in older MCP and dynamic
+  tool results become placeholders that keep their slot (ADR 0099). Previews of
+  compacted images remain #128 work.
 
 - The owner-only size-policy backend supports revisioned 1/2/5/10 GB SQLite-page
   targets and warning status (ADR 0046). Recent-detail pressure is opt-in via an

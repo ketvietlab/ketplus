@@ -116,6 +116,13 @@ QVariantList materializeImages(const QJsonObject& result, const QString& targetD
         const QJsonObject block = value.toObject();
         if (block.value(QStringLiteral("type")).toString() != QStringLiteral("image"))
             continue;
+        // History retention removed the pixels (ADR 0099): keep the slot, like pruned media.
+        if (block.value(QStringLiteral("omitted")).toBool() &&
+            block.value(QStringLiteral("reason")).toString() ==
+                QStringLiteral("history_retention")) {
+            images.append(QLatin1String(unavailableSourcePrefix) + QString::number(images.size()));
+            continue;
+        }
         if (block.contains(QStringLiteral("media_ref"))) {
             QString url = resolveMediaRef(block, mediaDirectory);
             // Pruned or unreadable media keeps its slot so the gallery shows a placeholder.

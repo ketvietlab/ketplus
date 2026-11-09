@@ -268,6 +268,66 @@ bool plainData(const QJsonValue& value, int depth = 0) {
 }
 } // namespace
 
+// Tool results journaled before media externalization carry base64 image blocks. Past
+// the full-detail period they become omitted blocks that keep their place, so the
+// transcript shows where an image was. Text, arguments and other blocks are untouched.
+static std::optional<QJsonObject> withoutInlineImages(const QJsonObject& original,
+                                                      const QDateTime& cutoff) {
+    const auto type = original.value("type").toString();
+    const auto status = original.value("status").toString();
+    auto info = original.value("compacted").toObject();
+    const auto policy = info.value("policy").toString();
+    if (!cutoff.isValid() || cutoff > QDateTime::currentDateTimeUtc() ||
+        (type != "mcpToolCall" && type != "dynamicToolCall") ||
+        (status != "completed" && status != "failed") || info.contains("inline_images") ||
+        (original.contains("compacted") && policy != "tool-result-text-v1" &&
+         policy != "tool-arguments-v1" && policy != "tool-structured-result-v1"))
+        return std::nullopt;
+    qint64 removed = 0;
+    const auto strip = [&removed](const QJsonArray& blocks, const QString& imageType,
+                                  const QString& field, bool dataUrlOnly) {
+        QJsonArray result;
+        for (const auto& value : blocks) {
+            const auto block = value.toObject();
+            const auto data = block.value(field);
+            // A media reference is the current form; such a block is never stripped.
+            if (block.value("type") != imageType || block.contains("media_ref") ||
+                !data.isString() || data.toString().isEmpty() ||
+                (dataUrlOnly && !data.toString().startsWith(QStringLiteral("data:")))) {
+                result.append(value);
+                continue;
+            }
+            removed += data.toString().toUtf8().size();
+            QJsonObject omitted{{"type", imageType},
+                                {"omitted", true},
+                                {"reason", "history_retention"},
+                                {"original_bytes", data.toString().toUtf8().size()}};
+            if (block.value("mimeType").isString())
+                omitted.insert("mimeType", block.value("mimeType"));
+            result.append(omitted);
+        }
+        return result;
+    };
+    auto item = original;
+    if (auto result = item.value("result").toObject(); result.value("content").isArray()) {
+        result.insert("content", strip(result.value("content").toArray(), QStringLiteral("image"),
+                                       QStringLiteral("data"), false));
+        item.insert("result", result);
+    }
+    if (item.value("contentItems").isArray())
+        item.insert("contentItems",
+                    strip(item.value("contentItems").toArray(), QStringLiteral("inputImage"),
+                          QStringLiteral("imageUrl"), true));
+    if (removed == 0)
+        return std::nullopt;
+    const auto details = marker(cutoff, "tool-inline-images-v1", removed, 0);
+    if (info.isEmpty())
+        info = details;
+    info.insert("inline_images", details);
+    item.insert("compacted", info);
+    return item;
+}
+
 // Older Codex builds journaled the generated pixels inline as a base64 `result` string.
 // Clients never draw it (they show `savedPath` or a media reference), so it goes; the
 // prompt, path and status stay.
@@ -284,10 +344,8 @@ std::optional<QJsonObject> compactGeneratedImage(const QJsonObject& original,
     return item;
 }
 
-std::optional<QJsonObject> compactCompletedReplayItem(const QJsonObject& original,
-                                                      const QDateTime& cutoff) {
-    if (original.value("type") == "imageGeneration")
-        return compactGeneratedImage(original, cutoff);
+static std::optional<QJsonObject> compactToolDetail(const QJsonObject& original,
+                                                    const QDateTime& cutoff) {
     const auto earlier = compactArguments(original, cutoff);
     auto item = earlier.value_or(original);
     auto info = item.value("compacted").toObject();
@@ -330,5 +388,14 @@ std::optional<QJsonObject> compactCompletedReplayItem(const QJsonObject& origina
     item.insert("result", result);
     item.insert("compacted", info);
     return item;
+}
+std::optional<QJsonObject> compactCompletedReplayItem(const QJsonObject& original,
+                                                      const QDateTime& cutoff) {
+    if (original.value("type") == "imageGeneration")
+        return compactGeneratedImage(original, cutoff);
+    const auto detail = compactToolDetail(original, cutoff);
+    if (const auto images = withoutInlineImages(detail.value_or(original), cutoff))
+        return images;
+    return detail;
 }
 } // namespace ketplus::daemon
