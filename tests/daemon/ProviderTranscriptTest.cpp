@@ -7,6 +7,7 @@
 #include "runtime/ApprovalBroker.h"
 #include "runtime/SessionHost.h"
 #include "storage/LocalJournal.h"
+#include <QJsonDocument>
 #include <QTemporaryDir>
 #include <QTimeZone>
 #include <QtTest>
@@ -57,6 +58,240 @@ class ProviderTranscriptTest : public QObject {
         QCOMPARE(retry.value("subtype").toString(), "reconnecting");
         QCOMPARE(retry.value("status").toString(), "running");
         QVERIFY(daemonEventNotice("runtime.error", {{"message", "Fatal"}}, "error").isEmpty());
+    }
+    // Synthetic journal items of every step kind in mockups/qt read as the mock's steps:
+    // a short title, then what the step acted on after ": ".
+    void stepTitlesFollowTheMock() {
+        const auto text = [](const QString& value) {
+            return QJsonObject{
+                {"content", QJsonArray{QJsonObject{{"type", "text"}, {"text", value}}}}};
+        };
+        const auto tool = [&](const QString& name, const QJsonObject& args) {
+            return QJsonObject{{"type", "dynamicToolCall"},
+                               {"tool", name},
+                               {"arguments", args},
+                               {"result", text("ok")}};
+        };
+        const QList<QJsonObject> items{
+            tool("Read", {{"file_path", "a/b.qml"}}),
+            tool("Grep", {{"pattern", "Animation"}, {"path", "modules"}}),
+            tool("Glob", {{"pattern", "**/*.qml"}}),
+            tool("Write", {{"file_path", "a/new.qml"}, {"content", "x\ny"}}),
+            tool("Edit", {{"file_path", "a/b.qml"}, {"old_string", "a"}, {"new_string", "b\nc"}}),
+            tool("WebSearch", {{"query", "qt animation"}}),
+            tool("WebFetch", {{"url", "https://doc.qt.io/x"}, {"prompt", "p"}}),
+            tool("ToolSearch", {{"query", "select:Read"}}),
+            tool("Skill", {{"skill", "ket-atlas"}}),
+            tool("TaskStop", {{"task_id", "t1"}}),
+            tool("Monitor", {{"command", "sleep 1"}}),
+            tool("ScheduleWakeup", {{"delaySeconds", 60}}),
+            tool("Task", {{"description", "Audit icons"}, {"prompt", "p"}}),
+            tool("mcp__ketplus_agents__agents_send", {{"to", "1"}}),
+            QJsonObject{{"type", "mcpToolCall"},
+                        {"server", "node_repl"},
+                        {"tool", "js"},
+                        {"arguments", QJsonObject{}}},
+            QJsonObject{
+                {"type", "commandExecution"},
+                {"command", "sed -n 1,5p a.cpp"},
+                {"commandActions",
+                 QJsonArray{QJsonObject{{"type", "read"}, {"path", "a.cpp"}, {"name", "a.cpp"}}}}},
+            QJsonObject{
+                {"type", "commandExecution"},
+                {"command", "rg foo src"},
+                {"commandActions",
+                 QJsonArray{QJsonObject{{"type", "search"}, {"query", "foo"}, {"path", "src"}}}}},
+            QJsonObject{{"type", "commandExecution"},
+                        {"command", "ls src"},
+                        {"commandActions",
+                         QJsonArray{QJsonObject{{"type", "listFiles"}, {"path", "src"}}}}},
+            QJsonObject{{"type", "fileChange"},
+                        {"changes", QJsonArray{QJsonObject{{"path", "a.cpp"},
+                                                           {"kind", QJsonObject{{"type", "add"}}},
+                                                           {"diff", "+x"}}}}},
+            QJsonObject{
+                {"type", "fileChange"},
+                {"changes", QJsonArray{QJsonObject{{"path", "a.cpp"},
+                                                   {"kind", QJsonObject{{"type", "update"}}},
+                                                   {"diff", "-a\n+b"}}}}},
+            QJsonObject{
+                {"type", "fileChange"},
+                {"changes", QJsonArray{QJsonObject{{"path", "a.cpp"},
+                                                   {"kind", QJsonObject{{"type", "delete"}}}}}}},
+            QJsonObject{{"type", "fileChange"},
+                        {"changes",
+                         QJsonArray{QJsonObject{
+                             {"path", "a.cpp"},
+                             {"kind", QJsonObject{{"type", "update"}, {"move_path", "b.cpp"}}}}}}},
+            QJsonObject{{"type", "webSearch"},
+                        {"query", "qt"},
+                        {"action", QJsonObject{{"type", "search"}, {"query", "qt"}}}},
+            QJsonObject{
+                {"type", "webSearch"},
+                {"query", ""},
+                {"action", QJsonObject{{"type", "openPage"}, {"url", "https://doc.qt.io"}}}},
+            QJsonObject{{"type", "webSearch"},
+                        {"query", ""},
+                        {"action", QJsonObject{{"type", "findInPage"},
+                                               {"url", "https://doc.qt.io"},
+                                               {"pattern", "Timer"}}}},
+            QJsonObject{{"type", "imageView"}, {"path", "/tmp/a.png"}},
+            QJsonObject{{"type", "imageGeneration"}, {"prompt", "a red bird"}, {"result", "abc"}},
+            QJsonObject{
+                {"type", "reasoning"}, {"summary", QJsonArray{}}, {"content", QJsonArray{}}},
+            QJsonObject{{"type", "dynamicToolCall"},
+                        {"tool", "sleep"},
+                        {"arguments", QJsonObject{{"seconds", 5}}}},
+        };
+        QJsonArray events;
+        qint64 cursor = 0;
+        events.append(QJsonObject{{"cursor", ++cursor},
+                                  {"turn_sequence", 1},
+                                  {"event_type", "user.message"},
+                                  {"payload", QJsonObject{{"text", "go"}}}});
+        for (auto item : items) {
+            item.insert("id", QStringLiteral("i%1").arg(cursor));
+            item.insert("status", "completed");
+            events.append(QJsonObject{{"cursor", ++cursor},
+                                      {"turn_sequence", 1},
+                                      {"event_type", "item.completed"},
+                                      {"payload", QJsonObject{{"provider", "claude"},
+                                                              {"item_id", item.value("id")},
+                                                              {"item", item}}}});
+            events.append(QJsonObject{
+                {"cursor", ++cursor},
+                {"turn_sequence", 1},
+                {"event_type", "item.completed"},
+                {"payload",
+                 QJsonObject{{"provider", "codex"},
+                             {"item_id", "x"},
+                             {"item", QJsonObject{{"type", "agentMessage"},
+                                                  {"id", QStringLiteral("m%1").arg(cursor)},
+                                                  {"phase", "commentary"},
+                                                  {"text", "."}}}}}});
+        }
+        QStringList steps;
+        QList<QVariantMap> edits;
+        for (const auto& row : daemonWindowMessages({{"events", events}})) {
+            const auto entry = row.toMap();
+            if (entry.value("subtype").toString().isEmpty())
+                continue; // the prompt and the commentary between steps
+            steps.append(entry.value("subtype").toString() + " | " +
+                         entry.value("title").toString());
+            if (entry.value("subtype") == "fileChange")
+                edits.append(entry.value("fileChanges").toList().first().toMap());
+        }
+        const QStringList expected{"fileRead | Read: a/b.qml",
+                                   "codeSearch | Searched code: Animation",
+                                   "fileSearch | Searched files: **/*.qml",
+                                   "fileChange | Edited 1 file",
+                                   "fileChange | Edited 1 file",
+                                   "webSearch | Searched the web: qt animation",
+                                   "webFetch | Fetched: doc.qt.io/x",
+                                   "toolsLoaded | Loaded tools: Read",
+                                   "skill | Used skill: ket-atlas",
+                                   "taskStopped | Stopped a background task",
+                                   "monitor | Waited",
+                                   "wake | Scheduled wake-up",
+                                   "subAgent | Ran a subagent: Audit icons",
+                                   "integration | Used ketplus_agents: agents_send",
+                                   "integration | Used node_repl: js",
+                                   "fileRead | Read: a.cpp L1–5",
+                                   "codeSearch | Searched code: “foo” in src",
+                                   "fileSearch | Listed files: src",
+                                   "fileChange | Edited 1 file",
+                                   "fileChange | Edited 1 file",
+                                   "fileChange | Edited 1 file",
+                                   "fileChange | Edited 1 file",
+                                   "webSearch | Searched the web: qt",
+                                   "webSearch | Opened a page: doc.qt.io",
+                                   "webSearch | Found in page: “Timer” on doc.qt.io",
+                                   "imageView | Viewed an image",
+                                   "imageGeneration | Generated an image",
+                                   "wait | Waited"};
+        QCOMPARE(steps, expected);
+        // Claude's Write and Edit count their lines as Codex's file changes do.
+        QCOMPARE(edits.at(0).value("operation").toString(), "Created");
+        QCOMPARE(edits.at(0).value("added").toInt(), 2);
+        QCOMPARE(edits.at(1).value("operation").toString(), "Edited");
+        QCOMPARE(edits.at(1).value("added").toInt(), 2);
+        QCOMPARE(edits.at(1).value("removed").toInt(), 1);
+        QCOMPARE(edits.at(4).value("operation").toString(), "Deleted");
+        QCOMPARE(edits.at(5).value("operation").toString(), "Moved");
+        QCOMPARE(edits.at(5).value("destination").toString(), "b.cpp");
+    }
+    // Claude edits count only what they changed, keep their exact path, and a failed edit
+    // keeps its error instead of line counts.
+    void claudeEditsCountOnlyWhatTheyChanged() {
+        const auto rowFor = [](const QJsonObject& item) {
+            QJsonObject completed = item;
+            completed.insert("type", "dynamicToolCall");
+            completed.insert("id", "e1");
+            if (!completed.contains("status"))
+                completed.insert("status", "completed");
+            const QJsonArray events{QJsonObject{
+                {"cursor", 1},
+                {"turn_sequence", 1},
+                {"event_type", "item.completed"},
+                {"payload",
+                 QJsonObject{{"provider", "claude"}, {"item_id", "e1"}, {"item", completed}}}}};
+            return daemonWindowMessages({{"events", events}}).last().toMap();
+        };
+        const auto stats = [](const QVariantMap& row) {
+            return row.value("fileChanges").toList().first().toMap();
+        };
+        const auto edit = [](const QJsonObject& arguments) {
+            return QJsonObject{{"tool", "Edit"}, {"arguments", arguments}};
+        };
+        // A final newline ends a line rather than adding one.
+        const auto trailing = stats(rowFor(
+            edit({{"file_path", "a.cpp"}, {"old_string", "a\n"}, {"new_string", "b\nc\n"}})));
+        QVERIFY(trailing.value("known").toBool());
+        QCOMPARE(trailing.value("added").toInt(), 2);
+        QCOMPARE(trailing.value("removed").toInt(), 1);
+        // replace_all may replace many times: the counts are unknown, not "+1 −1".
+        QVERIFY(!stats(rowFor(edit({{"file_path", "a.cpp"},
+                                    {"old_string", "a"},
+                                    {"new_string", "b"},
+                                    {"replace_all", true}})))
+                     .value("known")
+                     .toBool());
+        QVERIFY(
+            !stats(
+                 rowFor({{"tool", "MultiEdit"},
+                         {"arguments",
+                          QJsonObject{{"file_path", "a.cpp"},
+                                      {"edits", QJsonArray{QJsonObject{{"old_string", "x"},
+                                                                       {"new_string", "y"}},
+                                                           QJsonObject{{"old_string", "a"},
+                                                                       {"new_string", "b"},
+                                                                       {"replace_all", true}}}}}}}))
+                 .value("known")
+                 .toBool());
+        // The path opens and diffs the file, so it is kept exactly.
+        QCOMPARE(stats(rowFor(edit({{"file_path", "/tmp/two  spaces.cpp"},
+                                    {"old_string", "a"},
+                                    {"new_string", "b"}})))
+                     .value("path")
+                     .toString(),
+                 QStringLiteral("/tmp/two  spaces.cpp"));
+        // A failed edit changed nothing: it keeps its error and has no line counts.
+        const auto failed = rowFor(
+            {{"tool", "Edit"},
+             {"status", "failed"},
+             {"arguments",
+              QJsonObject{{"file_path", "a.cpp"}, {"old_string", "a"}, {"new_string", "b"}}},
+             {"result", QJsonObject{{"isError", true},
+                                    {"content", QJsonArray{QJsonObject{
+                                                    {"type", "text"},
+                                                    {"text", "Old string not found in file"}}}}}}});
+        QVERIFY(failed.value("subtype").toString() != "fileChange");
+        QVERIFY(failed.value("fileChanges").toList().isEmpty());
+        QCOMPARE(failed.value("status").toString(), "failed");
+        // The expanded step renders this payload, error included.
+        QVERIFY(QJsonDocument(QJsonObject::fromVariantMap(failed.value("sanitizedPayload").toMap()))
+                    .toJson()
+                    .contains("Old string not found in file"));
     }
     void turnEndReportsDurationContextAndSessionCost() {
         const auto at = [](int seconds) {

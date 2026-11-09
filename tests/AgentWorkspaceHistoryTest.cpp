@@ -729,7 +729,7 @@ void AgentWorkspaceViewTest::semanticCommandLabelsStayExpandable() {
             {"status", "completed"}},
         true);
     QCOMPARE(read.value("subtype").toString(), QStringLiteral("fileRead"));
-    QCOMPARE(read.value("title").toString(), QStringLiteral("Read CursorAdapter.cpp L1–240"));
+    QCOMPARE(read.value("title").toString(), QStringLiteral("Read: CursorAdapter.cpp L1–240"));
     QVERIFY(read.value("target").toString().isEmpty());
     QCOMPARE(read.value("command").toString(),
              QStringLiteral("/bin/zsh -lc \"sed -n '1,240p' modules/ai/src/CursorAdapter.cpp\""));
@@ -764,7 +764,7 @@ void AgentWorkspaceViewTest::semanticCommandLabelsStayExpandable() {
     QCOMPARE(search.value("subtype").toString(), QStringLiteral("codeSearch"));
     QVERIFY(search.value("fileLocation").toString().isEmpty());
     QCOMPARE(search.value("title").toString(),
-             QStringLiteral("Searched “stopRequested” in AgentWorkspaceTest.cpp"));
+             QStringLiteral("Searched code: “stopRequested” in AgentWorkspaceTest.cpp"));
 
     ketplus::AgentMessageModel model;
     QVariantMap readRow = read;

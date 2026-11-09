@@ -3,6 +3,7 @@
 #include "agent/McpToolResultMedia.h"
 #include "agent/TranscriptFileLocation.h"
 #include "agent/TranscriptNormalizer.h"
+#include "agent/TranscriptStepItems.h"
 #include <cmath>
 
 #include "CodexBrowserTools.h"
@@ -66,13 +67,8 @@ QVariantMap canonical(QVariantMap entry, const QString& eventType, const QString
 }
 
 QString toolTitle(const QJsonObject& item, const bool completed) {
-    const QString tool = item.value(QStringLiteral("tool")).toString();
-    const QString server = item.value(QStringLiteral("server")).toString();
-    const QString operation = tool.isEmpty() ? item.value(QStringLiteral("type")).toString() : tool;
-    const QString subject =
-        server.isEmpty() ? operation : server + QStringLiteral(" · ") + operation;
     return QStringLiteral("%1 %2").arg(completed ? QStringLiteral("Used") : QStringLiteral("Using"),
-                                       subject);
+                                       mcpToolSubject(item));
 }
 
 QString normalizedToolName(const QJsonObject& item) {
@@ -387,8 +383,7 @@ QVariantMap ketplusBrowserMessage(const QJsonObject& item, const bool completed)
 
 QVariantMap webSearchMessage(const QJsonObject& item, bool completed) {
     const QString query = sanitizedText(itemSummary(item));
-    const QString title =
-        completed ? QStringLiteral("Searched the web") : QStringLiteral("Searching the web");
+    const QString title = webStepTitle(sanitizedJson(item).toObject(), completed);
     auto entry = message(QStringLiteral("tool"), query,
                          completed ? QStringLiteral("Search web · completed")
                                    : QStringLiteral("Search web · running"),
@@ -474,7 +469,7 @@ CommandPresentation commandPresentation(const QString& command) {
                 match.captured(2).isEmpty()
                     ? QStringLiteral("L%1").arg(match.captured(1))
                     : QStringLiteral("L%1–%2").arg(match.captured(1), match.captured(2));
-            const QString title = QStringLiteral("Read %1 %2").arg(path, range);
+            const QString title = QStringLiteral("Read: %1 %2").arg(path, range);
             return {QStringLiteral("fileRead"), title, QStringLiteral("Reading %1").arg(path),
                     pathOperand(match.captured(3)), match.captured(1).toInt()};
         }
@@ -485,7 +480,7 @@ CommandPresentation commandPresentation(const QString& command) {
     if (const auto match = reader.match(command); match.hasMatch()) {
         const QString path = concisePath(match.captured(1));
         if (!path.isEmpty()) {
-            const QString title = QStringLiteral("Read %1").arg(path);
+            const QString title = QStringLiteral("Read: %1").arg(path);
             return {QStringLiteral("fileRead"), title, QStringLiteral("Reading %1").arg(path),
                     pathOperand(match.captured(1))};
         }
@@ -497,7 +492,7 @@ CommandPresentation commandPresentation(const QString& command) {
         const QString query = match.captured(1).simplified().left(48);
         const QString path = concisePath(match.captured(2));
         if (!query.isEmpty() && !path.isEmpty()) {
-            const QString title = QStringLiteral("Searched “%1” in %2").arg(query, path);
+            const QString title = QStringLiteral("Searched code: “%1” in %2").arg(query, path);
             return {QStringLiteral("codeSearch"), title, QStringLiteral("Searching %1").arg(path)};
         }
     }
@@ -561,6 +556,15 @@ QVariantMap commandMessage(const QJsonObject& item, const bool completed) {
                  item.value(QStringLiteral("durationMs")).toVariant());
     entry.insert(QStringLiteral("details"), details);
     entry.insert(QStringLiteral("sanitizedPayload"), sanitizedJson(item).toObject().toVariantMap());
+    // Codex says what a command did; its reading wins over parsing the command line.
+    // A command line the parser already read (a sed range, say) keeps its finer title.
+    if (const auto step = commandActionStep(sanitizedJson(item).toObject());
+        !step.subtype.isEmpty() &&
+        entry.value(QStringLiteral("subtype")) == QStringLiteral("command")) {
+        const bool running = entry.value(QStringLiteral("running")).toBool();
+        entry.insert(QStringLiteral("subtype"), step.subtype);
+        entry.insert(QStringLiteral("title"), running ? step.runningTitle : step.completedTitle);
+    }
     return entry;
 }
 
@@ -582,6 +586,8 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
         return commandMessage(item, completed);
     if (type == QStringLiteral("fileChange"))
         return fileChangeMessage(item, completed);
+    if (const auto edit = claudeFileChangeItem(item); !edit.isEmpty())
+        return fileChangeMessage(edit, completed);
     if (type == QStringLiteral("webSearch"))
         return webSearchMessage(item, completed);
     if (type == QStringLiteral("imageView")) {
@@ -641,17 +647,17 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
         QString readLocation;
         static const QHash<QString, QStringList> stepLabels{
             {"wait", {"Waited", "Waiting"}},
-            {"monitor", {"Checked activity", "Monitoring"}},
+            {"monitor", {"Waited", "Waiting"}},
             {"wake", {"Resumed agent", "Resuming agent"}},
-            {"skill", {"Loaded skill", "Loading skill"}},
+            {"skill", {"Used skill", "Using skill"}},
             {"toolsLoaded", {"Loaded tools", "Finding tools"}},
-            {"taskStopped", {"Stopped task", "Stopping task"}},
-            {"subAgent", {"Used subagent", "Running subagent"}},
+            {"taskStopped", {"Stopped a background task", "Stopping a background task"}},
+            {"subAgent", {"Ran a subagent", "Running a subagent"}},
             {"plan", {"Updated plan", "Updating plan"}},
-            {"webFetch", {"Fetched page", "Fetching page"}},
-            {"webSearch", {"Searched web", "Searching web"}},
-            {"webFind", {"Searched page", "Searching page"}},
-            {"webOpen", {"Opened page", "Opening page"}}};
+            {"webFetch", {"Fetched", "Fetching"}},
+            {"webSearch", {"Searched the web", "Searching the web"}},
+            {"webFind", {"Found in page", "Finding in page"}},
+            {"webOpen", {"Opened a page", "Opening a page"}}};
         if (const auto labels = stepLabels.constFind(subtype); labels != stepLabels.cend()) {
             title = labels->at(completed ? 0 : 1);
             const auto operation = normalizedToolName(item);
@@ -661,6 +667,9 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
             else if (operation == QStringLiteral("enterplanmode"))
                 title = completed ? QStringLiteral("Entered plan mode")
                                   : QStringLiteral("Entering plan mode");
+            else if (const auto subject = stepSubject(subtype, safePayload.toObject());
+                     !subject.isEmpty())
+                title += QStringLiteral(": ") + subject;
             eventType = QStringLiteral("activity.") + subtype;
         }
         if (subtype.startsWith(QStringLiteral("browser"))) {

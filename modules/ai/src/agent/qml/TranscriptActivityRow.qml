@@ -102,6 +102,13 @@ Column {
     readonly property var titleParts: {
         if (subtype === "command" && command.length > 0)
             return [describedCommand ? commandDescription : running ? "Running" : "Ran", command.replace(/\s*\n\s*/g, " ")];
+        // "Edited" and its path with the line counts; a move names both ends.
+        if (subtype === "fileChange" && files.length === 1) {
+            const file = files[0];
+            const where = file.destination ? String(file.path || "") + " → " + file.destination : String(file.path || "file");
+            const counts = file.known ? [file.added > 0 ? "+" + file.added : "", file.removed > 0 ? "−" + file.removed : ""].filter(part => part.length > 0).join(" ") : "";
+            return [file.operation || "Edited", where + (counts.length > 0 ? "  " + counts : "") + (file.diffTrimmed ? " · Diff trimmed" : "")];
+        }
         const text = singleFileTitle.length > 0 ? singleFileTitle : title.length > 0 ? title : (running ? "Working" : "Activity");
         const split = text.indexOf(": ");
         return split > 0 ? [text.slice(0, split), text.slice(split + 2).replace(/\s*\n\s*/g, " ")] : [text, ""];

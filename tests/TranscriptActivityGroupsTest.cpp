@@ -293,10 +293,10 @@ class TranscriptActivityGroupsTest final : public QObject {
             << "ps -o pid -p $(pgrep -f daemon | head -1) 2>&1" << "command" << QString();
         QTest::newRow("file after a count flag")
             << "head -8 modules/ai/src/agent/AgentSessionHistory.cpp" << "fileRead"
-            << "Read AgentSessionHistory.cpp";
+            << "Read: AgentSessionHistory.cpp";
         QTest::newRow("file after a valued flag")
-            << "head -n 20 src/main.cpp" << "fileRead" << "Read main.cpp";
-        QTest::newRow("file with no flag") << "cat /tmp/out.txt" << "fileRead" << "Read out.txt";
+            << "head -n 20 src/main.cpp" << "fileRead" << "Read: main.cpp";
+        QTest::newRow("file with no flag") << "cat /tmp/out.txt" << "fileRead" << "Read: out.txt";
     }
 
     void readerTitlesNeedAFileOperandRatherThanAFlag() {
