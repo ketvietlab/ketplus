@@ -579,7 +579,8 @@ class ProviderTranscriptTest : public QObject {
         // A message this conversation sent is the mock's note.
         QCOMPARE(outgoingRows.first().toMap().value("subtype").toString(), "agentNote");
         QCOMPARE(outgoingRows.first().toMap().value("title").toString(), "Message to @agent/1093");
-        QCOMPARE(outgoingRows.first().toMap().value("meta").toString(), "Held until the turn ends");
+        QCOMPARE(outgoingRows.first().toMap().value("meta").toString(),
+                 "Held · waiting for approval there");
         // As the mock's "From @agent/…"; an ordinary user message keeps "You".
         QVariantMap reply = message;
         markAgentOrigin(reply, QJsonArray{QJsonObject{{"kind", "reply"}, {"from_number", "2044"}}});
@@ -683,6 +684,77 @@ class ProviderTranscriptTest : public QObject {
                      .value("meta")
                      .toString(),
                  "Sent · delivered when its turn ends");
+    }
+
+    void agentNotesJoinAcrossPages() {
+        const auto page = [](qint64 first, const QList<QPair<QString, QJsonObject>>& items) {
+            QJsonArray events;
+            qint64 cursor = first;
+            for (const auto& [type, payload] : items)
+                events.append(QJsonObject{{"cursor", cursor},
+                                          {"turn_sequence", cursor},
+                                          {"event_type", type},
+                                          {"payload", payload}});
+            return daemonWindowMessages({{"events", events}});
+        };
+        const QJsonObject sent{
+            {"message_id", "q1"},    {"kind", "request"},       {"state", "sent"},
+            {"delivery", "queued"},  {"expect_reply", true},    {"direction", "outgoing"},
+            {"peer_number", "8941"}, {"peer_title", "DS Icon"}, {"text", "Is it fine?"}};
+        const auto older = page(1, {{"agent_message.state", sent}});
+        const auto newer = page(5, {{"agent_message.state",
+                                     {{"message_id", "q1"},
+                                      {"kind", "request"},
+                                      {"state", "delivered"},
+                                      {"direction", "outgoing"},
+                                      {"peer_number", "8941"}}}});
+        auto rows = mergeDaemonHistory(older, newer);
+        // One note in the later state, with the message only the first page knew.
+        QCOMPARE(rows.size(), 1);
+        QCOMPARE(rows.first().toMap().value("meta").toString(), "DS Icon · Delivered");
+        QCOMPARE(rows.first().toMap().value("body").toString(), "Is it fine?");
+        // A reply in a later page marks it.
+        const auto reply =
+            page(9, {{"user.message",
+                      {{"text", "Yes"},
+                       {"origin", "agent"},
+                       {"agent_messages", QJsonArray{QJsonObject{{"message_id", "r1"},
+                                                                 {"kind", "reply"},
+                                                                 {"reply_to", "q1"},
+                                                                 {"from_number", "8941"},
+                                                                 {"body", "Yes"}}}}}}});
+        rows = mergeDaemonHistory(rows, reply);
+        QCOMPARE(rows.size(), 2);
+        QCOMPARE(rows.first().toMap().value("meta").toString(), "DS Icon · Replied");
+    }
+
+    void agentNotesNameWhatHappened_data() {
+        QTest::addColumn<QString>("state");
+        QTest::addColumn<QString>("reason");
+        QTest::addColumn<QString>("meta");
+        QTest::newRow("held") << "held" << "hop_limit" << "Held · waiting for approval there";
+        QTest::newRow("no reply") << "failed" << "no_reply" << "Delivered · no reply";
+        QTest::newRow("turn stopped")
+            << "failed" << "turn_interrupted" << "Delivered · stopped before replying";
+        QTest::newRow("undelivered") << "failed" << "session_closed" << "Not delivered";
+    }
+
+    void agentNotesNameWhatHappened() {
+        QFETCH(QString, state);
+        QFETCH(QString, reason);
+        QFETCH(QString, meta);
+        const auto queued = agentNote({{"message_id", "q1"},
+                                       {"state", "sent"},
+                                       {"delivery", "queued"},
+                                       {"direction", "outgoing"},
+                                       {"peer_number", "1"}},
+                                      "n");
+        const auto later = agentNote(
+            {{"message_id", "q1"}, {"state", state}, {"reason", reason}, {"direction", "outgoing"}},
+            "n");
+        QCOMPARE(later.value("meta").toString(), meta);
+        // A later state drops the queued hint it no longer describes.
+        QCOMPARE(mergedAgentNote(queued, later).value("meta").toString(), meta);
     }
 
     void agentMessageNoticesNameTheConversationAndDelivery() {

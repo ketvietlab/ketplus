@@ -37,7 +37,8 @@ DaemonDisplayState daemonDisplayState(const QString& state) {
 }
 
 QString daemonMessageKey(const qint64 turnSequence, const QString& itemId) {
-    if (itemId.startsWith("approval:"))
+    // An approval and a sent agent message's note follow their id across turns and pages.
+    if (itemId.startsWith("approval:") || itemId.startsWith(agentNoteItemPrefix))
         return QStringLiteral("daemon:%1").arg(itemId);
     return QStringLiteral("daemon:%1:%2").arg(turnSequence).arg(itemId);
 }
@@ -383,8 +384,6 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
     QVariantList result;
     QHash<QString, int> indexes;
     QHash<QString, QString> settledQuestions;
-    // Each sent agent message's note, by message id: its later states update it.
-    QHash<QString, int> agentNotes;
     QHash<QString, QVariantMap> questionAnswers;
     QSet<QString> partial;
     const auto identity = daemonMessageKey;
@@ -460,6 +459,8 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
         if (type == "provider.request_declined" || type == "provider.runtime" ||
             type == "provider.protocol_error" || type == "agent_message.state")
             itemId = daemonNoticeItemId(event.value("cursor").toInteger());
+        if (type == "agent_message.state" && !agentNoteItemId(data).isEmpty())
+            itemId = agentNoteItemId(data);
         // Steer text is journaled by current daemons; older empty steers stay metadata.
         if (type == "turn.steered")
             itemId = data.value("text").toString().isEmpty()
@@ -541,10 +542,9 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
                                           providerRuntimeNoticeTitle());
         } else if (type == "agent_message.state") {
             entry = agentNote(data, itemId);
-            const auto noteId = entry.value("agentMessageId").toString();
-            if (agentNotes.contains(noteId)) {
-                const int note = agentNotes.value(noteId);
-                result[note] = mergedAgentNote(result.at(note).toMap(), entry);
+            // A later state of the message updates its note where it first appeared.
+            if (!entry.isEmpty() && existing >= 0) {
+                result[existing] = mergedAgentNote(result.at(existing).toMap(), entry);
                 continue;
             }
             if (entry.isEmpty())
@@ -559,11 +559,13 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
             }
             if (data.value("origin").toString() == QStringLiteral("agent")) {
                 markAgentOrigin(entry, data.value("agent_messages").toArray());
-                // The reply answers a note above it, which now reads Replied.
-                for (const auto& id : agentRepliesTo(data.value("agent_messages").toArray()))
-                    if (agentNotes.contains(id))
-                        result[agentNotes.value(id)] =
-                            repliedAgentNote(result.at(agentNotes.value(id)).toMap());
+                // The reply answers a note above it, which now reads Replied; a note in
+                // another page is marked when the pages merge.
+                const auto answered = agentRepliesTo(data.value("agent_messages").toArray());
+                entry.insert("agentRepliesTo", answered);
+                for (const auto& id : answered)
+                    if (const int note = indexes.value(agentNoteKey(id), -1); note >= 0)
+                        result[note] = repliedAgentNote(result.at(note).toMap());
             }
         } else if (type == "assistant.delta") {
             entry = existing < 0 ? message("assistant", {}, "Codex · streaming", {}, itemId)
@@ -644,8 +646,6 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
         labelProvider(entry, data.value("provider").toString());
         if (existing < 0) {
             indexes.insert(key, result.size());
-            if (entry.value("subtype") == "agentNote")
-                agentNotes.insert(entry.value("agentMessageId").toString(), result.size());
             result.append(entry);
             const auto separator = itemId.lastIndexOf(QLatin1Char('-'));
             if (entry.value("kind") == "assistant" && itemId.startsWith(QStringLiteral("msg_")) &&
@@ -666,12 +666,21 @@ QVariantList mergeDaemonHistory(const QVariantList& older, const QVariantList& n
         auto entry = value.toMap();
         const auto key = entry.value("messageKey").toString();
         const int index = indexes.value(key, -1);
+        // A reply in this page answers a sent message's note in the other.
+        for (const auto& id : entry.value("agentRepliesTo").toStringList())
+            if (const int note = indexes.value(agentNoteKey(id), -1); note >= 0)
+                result[note] = repliedAgentNote(result.at(note).toMap());
         if (index < 0) {
             indexes.insert(key, result.size());
             result.append(entry);
             continue;
         }
         const auto prefix = result.at(index).toMap();
+        // Two pages' states of one sent message: the later one, with what only the first knew.
+        if (prefix.value("subtype") == "agentNote" && entry.value("subtype") == "agentNote") {
+            result[index] = mergedAgentNote(prefix, entry);
+            continue;
+        }
         if (entry.value("partialOutput").toBool()) {
             auto details = entry.value("details").toMap();
             details.insert("output", (prefix.value("details").toMap().value("output").toString() +

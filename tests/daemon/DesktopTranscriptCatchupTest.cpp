@@ -456,6 +456,66 @@ class DesktopTranscriptCatchupTest final : public QObject {
             468));
         QTRY_COMPARE_WITH_TIMEOUT(turnEnd(), QString::fromUtf8("1m 08s · stopped by you"), 5000);
     }
+
+    // A sent message's live states update one note, as a reloaded window shows it.
+    void liveAgentMessageStatesUpdateOneNote() {
+        Environment env;
+        QVERIFY(writeToken(env.directory));
+        const QString path = QFileInfo(env.directory.path()).canonicalFilePath();
+        rememberConversation(path, "a");
+        FakeDaemon daemon(env.directory.filePath("daemon.sock"), [&](const QString& type,
+                                                                     const QJsonObject&) {
+            if (type == "session.list")
+                return QJsonObject{{"transcript_window_version", 1},
+                                   {"sessions", QJsonArray{QJsonObject{{"session_id", "a"},
+                                                                       {"worktree_path", path},
+                                                                       {"session_generation", 1},
+                                                                       {"state", "running"},
+                                                                       {"last_event_cursor", 1}}}}};
+            if (type != "session.transcript_window")
+                return QJsonObject{};
+            return QJsonObject{{"transcript_window_version", 1},
+                               {"session_id", "a"},
+                               {"session_generation", 1},
+                               {"events", QJsonArray{windowEvent("a", "user.message",
+                                                                 {{"text", "earlier"}}, 1, 1)}},
+                               {"before_cursor", 1},
+                               {"has_more_before", false},
+                               {"snapshot_cursor", 1},
+                               {"projection_revision", 1},
+                               {"current_turn_sequence", 1},
+                               {"state", "running"}};
+        });
+        QVERIFY(daemon.listening);
+        CodexAppServer server;
+        AgentSessionManager desktop(&server);
+        desktop.activate(path);
+        QTRY_COMPARE_WITH_TIMEOUT(desktop.messages(path).size(), 1, 5000);
+        const QJsonObject sent{
+            {"message_id", "q1"},    {"kind", "request"},       {"state", "sent"},
+            {"delivery", "queued"},  {"expect_reply", true},    {"direction", "outgoing"},
+            {"peer_number", "8941"}, {"peer_title", "DS Icon"}, {"text", "Is it fine?"}};
+        daemon.push(liveEvent("a", "agent_message.state", sent, 2, 1));
+        const auto notes = [&] {
+            QStringList found;
+            for (const auto& row : desktop.messages(path))
+                if (row.toMap().value("subtype") == "agentNote")
+                    found.append(row.toMap().value("meta").toString());
+            return found;
+        };
+        QTRY_COMPARE_WITH_TIMEOUT(
+            notes(), QStringList{"DS Icon · Sent · delivered when its turn ends · reply requested"},
+            5000);
+        daemon.push(liveEvent("a", "agent_message.state",
+                              {{"message_id", "q1"},
+                               {"kind", "request"},
+                               {"state", "failed"},
+                               {"reason", "no_reply"},
+                               {"direction", "outgoing"},
+                               {"peer_number", "8941"}},
+                              3, 1));
+        QTRY_COMPARE_WITH_TIMEOUT(notes(), QStringList{"DS Icon · Delivered · no reply"}, 5000);
+    }
 };
 
 QTEST_GUILESS_MAIN(DesktopTranscriptCatchupTest)
