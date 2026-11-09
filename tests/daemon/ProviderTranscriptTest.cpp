@@ -94,6 +94,33 @@ class ProviderTranscriptTest : public QObject {
             QVERIFY(note.value("body").toString().isEmpty());
         }
         QVERIFY(daemonEventNotice("turn.completed", {{"status", "unknown"}}, "receipt").isEmpty());
+        // What retention reduced in the turn reads as the mock's note.
+        const auto trimmed = [](const QJsonObject& detail) {
+            return daemonEventNotice("turn.completed",
+                                     {{"status", "completed"}, {"detail_trimmed", detail}}, "t")
+                .value("trimmedDetail")
+                .toString();
+        };
+        QCOMPARE(trimmed({{"commands", 38},
+                          {"tool_results", 12},
+                          {"bytes", 1258291},
+                          {"older_than_days", 30}}),
+                 "This turn is older than 30 days: 38 commands and 12 tool results were reduced "
+                 "to their summaries (1.2 MB).");
+        QCOMPARE(trimmed({{"commands", 2},
+                          {"diffs", 1},
+                          {"thoughts", 3},
+                          {"bytes", 30000},
+                          {"older_than_days", 7}}),
+                 "This turn is older than 7 days: 2 commands, 1 file diff and 3 thoughts were "
+                 "reduced to their summaries (29 KB).");
+        QCOMPARE(trimmed({{"tool_inputs", 1}, {"bytes", 6000}, {"older_than_days", 30}}),
+                 "This turn is older than 30 days: 1 tool input was reduced to its summary "
+                 "(6 KB).");
+        QCOMPARE(trimmed({{"diffs", 1}, {"bytes", 100}}),
+                 "To save space, 1 file diff was reduced to its summary.");
+        QVERIFY(trimmed({{"commands", 0}, {"bytes", 0}}).isEmpty());
+        QVERIFY(trimmed({}).isEmpty());
         QVERIFY(sessionEstimateText({{"estimatedCostUsd", -1}}).isEmpty());
         const auto retry = daemonEventNotice(
             "runtime.error", {{"will_retry", true}, {"message", "Network interrupted"}}, "retry");

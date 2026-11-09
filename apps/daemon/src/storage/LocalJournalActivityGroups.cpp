@@ -483,6 +483,19 @@ bool LocalJournal::updateActivityGroups(const QString& session, qint64 generatio
 
 QJsonObject LocalJournal::activitySummaryEvent(const QJsonObject& event) const {
     const auto type = event.value("event_type").toString();
+    // A turn's end says what retention trimmed from it, which its summary rows cannot show.
+    if (type == "turn.completed") {
+        const auto trimmed = turnDetailTrimmed(event.value("session_id").toString(),
+                                               event.value("session_generation").toInteger(),
+                                               event.value("turn_sequence").toInteger());
+        if (trimmed.isEmpty())
+            return event;
+        auto projected = event;
+        auto payload = event.value("payload").toObject();
+        payload.insert("detail_trimmed", trimmed);
+        projected.insert("payload", payload);
+        return projected;
+    }
     if (type != "item.started" && type != "item.completed" && type != "command.output_delta" &&
         type != "transcript.large_chunk")
         return event;

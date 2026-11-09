@@ -67,6 +67,8 @@ Item {
     required property string cwd
     required property string commandDescription
     required property string fileLocation
+    // What history retention reduced in the turn this row ends.
+    required property string trimmedDetail
     required property var exitCode
     required property var durationMs
     required property string detailsData
@@ -282,6 +284,13 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             spacing: kind === "file" ? KetTheme.px(4, KetTheme.zoom) : KetTheme.px(7, KetTheme.zoom)
 
+            TranscriptTrimmedDetail {
+                width: parent.width
+                visible: messageDelegate.subtype === "turnEnd" && messageDelegate.trimmedDetail.length > 0
+                height: visible ? implicitHeight : 0
+                message: messageDelegate.trimmedDetail
+                host: messageDelegate.host
+            }
             // The mock's changed-files card closes a turn that edited files, above its end.
             Kit.KetChangedFiles {
                 id: turnChanges

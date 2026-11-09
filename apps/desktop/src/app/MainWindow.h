@@ -230,6 +230,8 @@ class MainWindow final : public QMainWindow {
     void showSettings();
     void setupSidebarStorage();
     void showUpdateSettings();
+    // Opens Settings on a section; an empty id keeps the section it shows.
+    void showSettingsSection(const QString& id);
     // Opens Sparkle's check (and any pending update); without a configured feed, Settings →
     // Updates.
     void checkForUpdates();

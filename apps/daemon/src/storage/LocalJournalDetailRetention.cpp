@@ -2,6 +2,7 @@
 #include "storage/LocalJournal.h"
 #include "storage/ReplayDetailCompactor.h"
 #include <QCryptographicHash>
+#include <QDateTime>
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -416,5 +417,71 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
     else
         detailRetentionScanRow_ = rows.size() < maximumRows ? 0 : rows.last().rowid;
     return removed;
+}
+QJsonObject LocalJournal::turnDetailTrimmed(const QString& sessionId, qint64 generation,
+                                            qint64 turnSequence) const {
+    // Read from the compaction markers retention left on the turn's completions, so the count
+    // always matches what the replay still holds. A diff counts each file it trimmed.
+    QSqlQuery query(database_);
+    query.prepare(QStringLiteral(
+        "SELECT json_extract(payload,'$.item.type'),json_extract(payload,'$.item.compacted'),"
+        "(SELECT count(*) FROM json_each(payload,'$.item.changes') "
+        "WHERE json_type(value,'$.compacted')='object') "
+        "FROM replay_events WHERE session_id=? AND generation=? AND turn_sequence=? AND "
+        "event_type='item.completed' AND json_type(payload,'$.item.compacted')='object'"));
+    query.addBindValue(sessionId);
+    query.addBindValue(generation);
+    query.addBindValue(turnSequence);
+    if (!query.exec())
+        return {};
+    const auto freed = [](const QJsonObject& marker) {
+        return qMax<qint64>(0, marker.value("original_bytes").toInteger() -
+                                   marker.value("retained_bytes").toInteger());
+    };
+    qint64 commands = 0, diffs = 0, results = 0, inputs = 0, thoughts = 0, bytes = 0, days = 0;
+    while (query.next()) {
+        const auto type = query.value(0).toString();
+        const auto marker = QJsonDocument::fromJson(query.value(1).toByteArray()).object();
+        const auto policy = marker.value("policy").toString();
+        if (type == QStringLiteral("commandExecution") && policy == "command-output-v1") {
+            ++commands;
+            bytes += freed(marker);
+        } else if (type == QStringLiteral("fileChange") && policy == "file-diff-v1") {
+            diffs += query.value(2).toLongLong();
+            bytes += freed(marker); // the item's marker sums its files
+        } else if (type == QStringLiteral("reasoning") && policy == "reasoning-content-v1") {
+            ++thoughts;
+            bytes += freed(marker);
+        } else if (type == QStringLiteral("mcpToolCall") ||
+                   type == QStringLiteral("dynamicToolCall")) {
+            // The item's marker is the result text's, or a copy of the one part it trimmed;
+            // the arguments and the structured result keep their own.
+            const auto structured = marker.value("structured_result").toObject();
+            const auto arguments = marker.value("arguments").toObject();
+            const bool text = policy == "tool-result-text-v1";
+            if (text)
+                bytes += freed(marker);
+            if (!structured.isEmpty())
+                bytes += freed(structured);
+            if (!arguments.isEmpty())
+                bytes += freed(arguments);
+            results += text || !structured.isEmpty();
+            inputs += !arguments.isEmpty();
+        } else
+            continue; // a policy this count does not know yet
+        // The retention age in force: the cutoff is that many days before the compaction.
+        const auto at = QDateTime::fromString(marker.value("at").toString(), Qt::ISODateWithMs);
+        const auto cutoff =
+            QDateTime::fromString(marker.value("cutoff").toString(), Qt::ISODateWithMs);
+        if (days == 0 && at.isValid() && cutoff.isValid() && cutoff < at)
+            days = qRound64(double(cutoff.secsTo(at)) / 86400.0);
+    }
+    if (commands + diffs + results + inputs + thoughts == 0)
+        return {};
+    QJsonObject trimmed{{"commands", commands},  {"diffs", diffs},       {"tool_results", results},
+                        {"tool_inputs", inputs}, {"thoughts", thoughts}, {"bytes", bytes}};
+    if (days > 0)
+        trimmed.insert("older_than_days", days);
+    return trimmed;
 }
 } // namespace ketplus::daemon

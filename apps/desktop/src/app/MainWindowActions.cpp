@@ -658,10 +658,13 @@ void MainWindow::createActions() {
     });
 }
 
-void MainWindow::showUpdateSettings() {
-    showSettings();
-    if (settingsWorkspace_ != nullptr)
-        settingsWorkspace_->showSection(QStringLiteral("updates"));
+void MainWindow::showUpdateSettings() { showSettingsSection(QStringLiteral("updates")); }
+
+void MainWindow::showSettingsSection(const QString& id) {
+    if (!settingsWorkspaceMode_ || settingsWorkspace_ == nullptr)
+        showSettings();
+    if (settingsWorkspace_ != nullptr && !id.isEmpty())
+        settingsWorkspace_->showSection(id);
 }
 
 void MainWindow::checkForUpdates() {
