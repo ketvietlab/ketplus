@@ -2,6 +2,7 @@
 #include "agent/AgentMessageFormatter.h"
 #include "agent/DaemonTranscriptNotices.h"
 #include "agent/McpToolResultMedia.h"
+#include "agent/TranscriptActivityGroups.h"
 #include "agent/TranscriptNormalizer.h"
 
 #include <QDateTime>
@@ -276,24 +277,46 @@ QString claudeSnapshotTwin(const QHash<QString, QStringList>& claudeTextRows,
 QVariantMap daemonActivityGroupMessage(const QJsonObject& data, qint64 turn) {
     const auto id = data.value("item_id").toString();
     auto row = message("tool", {}, "Agent", {}, id);
-    QStringList labels;
-    const auto families = data.value("families").toArray();
-    for (const auto& value : families) {
+    // Worded as the local groups (TranscriptActivityGroups), from the daemon's family counts.
+    const auto files = data.value("files").toArray();
+    ActivityTally tally;
+    for (const auto& value : data.value("families").toArray()) {
         const auto part = value.toObject();
         const auto family = part.value("family").toString();
         const auto count = part.value("count").toInt();
-        if (family == "browser")
-            labels.append(families.size() == 1 ? "Used the browser" : "used the browser");
-        else if (family == "command")
-            labels.append(QStringLiteral("Ran %1 command%2").arg(count).arg(count == 1 ? "" : "s"));
-        else if (family == "edit")
-            labels.append(QStringLiteral("Edited %1 file%2").arg(count).arg(count == 1 ? "" : "s"));
-        else if (family == "read")
-            labels.append(QStringLiteral("Read %1 file%2").arg(count).arg(count == 1 ? "" : "s"));
-        else
-            labels.append(
-                QStringLiteral("Searched %1 time%2").arg(count).arg(count == 1 ? "" : "s"));
+        if (family == "edit") {
+            // A group's edits count the files they changed, as a local group does.
+            tally.add(family, files.isEmpty() ? count : data.value("files_total").toInt(count));
+        } else if (family == "command" || family == "read" || family == "codeSearch" ||
+                   family == "fileSearch" || family == "wait") {
+            tally.add(family, count);
+        } else if (family == "webSearch") {
+            tally.add(QStringLiteral("search"), count);
+        } else if (family == "search") {
+            // Indexed before 2026-11-09: web, code and file searches alike.
+            tally.add(QStringLiteral("searched"), count);
+        } else if (family == "browser") {
+            tally.addServer(QStringLiteral("ketplus_browser"), count);
+        } else if (family.startsWith("tool:")) {
+            tally.addServer(family.mid(5), count);
+        } else if (family == "subagent") {
+            tally.add(family, count);
+            tally.subagents += count;
+        } else if (family == "subagent.step") {
+            tally.add(QStringLiteral("subagent"), count);
+        } else {
+            tally.add(QStringLiteral("tool"), count);
+        }
     }
+    for (const auto& value : files) {
+        const auto file = value.toObject();
+        if (!file.value("known").toBool(true))
+            continue;
+        tally.statsKnown = true;
+        tally.added += file.value("added").toInt();
+        tally.removed += file.value("removed").toInt();
+    }
+    tally.failed = data.value("failed_count").toInt();
     row.insert("category", "activity");
     row.insert("subtype", "daemonGroup");
     row.insert("turnId", daemonTurnId(turn));
@@ -303,15 +326,11 @@ QVariantMap daemonActivityGroupMessage(const QJsonObject& data, qint64 turn) {
     row.insert("groupKey", row.value("messageKey"));
     row.insert("groupLeaderKey", row.value("messageKey"));
     row.insert("groupRole", "leader");
-    auto label = labels.join(", ");
-    if (data.value("failed_count").toInt() > 0)
-        label += QStringLiteral(" (%1 failed)").arg(data.value("failed_count").toInt());
-    row.insert("groupSummary", label);
+    row.insert("groupSummary", activityTallySummary(tally));
     row.insert("groupSize", data.value("count").toInt());
     row.insert("groupRunning", data.value("running_count").toInt() > 0);
     row.insert("groupFailed", data.value("failed_count").toInt());
     // ADR 0022: the files the group's edits changed, for the turn's changed-files card.
-    const auto files = data.value("files").toArray();
     row.insert("groupFiles", files.toVariantList());
     row.insert("groupFilesTotal", data.value("files_total").toInt(int(files.size())));
     row.insert("running", false);

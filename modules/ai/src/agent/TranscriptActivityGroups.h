@@ -21,6 +21,28 @@ namespace ketplus::agent_message {
 //   groupRunning  whether any row in the group is still running, set on every row of the group
 //   groupFailed   number of failed rows, set on the leader
 [[nodiscard]] bool isGroupableActivity(const QVariantMap& row);
+// What a group's steps did, in first-seen order, so a local run and a daemon summary read
+// the same. Family ids: command, read, edit, search (the web), codeSearch, fileSearch, searched
+// (any search, from older daemon groups), server (tool calls, named by `servers`), subagent,
+// wait, image, generated and tool.
+struct ActivityTally final {
+    struct Family final {
+        QString id;
+        int count{0};
+    };
+    QList<Family> families;
+    QStringList servers;
+    int serverSteps{0};
+    int subagents{0};
+    int added{0};
+    int removed{0};
+    bool statsKnown{false};
+    int failed{0};
+    void add(const QString& id, int amount);
+    void addServer(const QString& server, int steps);
+};
+// "Ran 3 commands, read 2 files, edited a file +1 -1 (1 failed)".
+[[nodiscard]] QString activityTallySummary(const ActivityTally& tally);
 [[nodiscard]] QString activityGroupSummary(const QList<QVariantMap>& rows, qsizetype first,
                                            qsizetype count);
 // Recomputes group roles for every row and returns the indexes whose group roles changed.

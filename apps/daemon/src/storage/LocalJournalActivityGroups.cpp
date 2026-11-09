@@ -4,6 +4,7 @@
 
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QSet>
 #include <QSqlError>
 #include <QSqlQuery>
 
@@ -14,6 +15,9 @@ QString itemId(const QJsonObject& payload) {
         payload.value("item").toObject().value("id").toString());
 }
 
+// A server name past this length is cut; the family key is stored per item and per group.
+constexpr int kServerNameLimit = 64;
+
 QString family(const QJsonObject& payload) {
     const auto item = payload.value("item").toObject();
     const auto type = item.value("type").toString(payload.value("item_type").toString());
@@ -22,22 +26,50 @@ QString family(const QJsonObject& payload) {
     if (type == "fileChange")
         return "edit";
     if (type == "webSearch")
-        return "search";
+        return "webSearch";
+    // A subagent counts once, when it is spawned; later messages and waits are its steps.
+    if (type == "collabAgentToolCall")
+        return item.value("tool").toString() == "spawnAgent" ? "subagent" : "subagent.step";
+    if (type == "subAgentActivity")
+        return "subagent";
     if (type == "mcpToolCall" || type == "dynamicToolCall") {
         const auto tool = item.value("tool").toString();
-        // Evidence and unknown MCP results stay outside groups, including while running.
+        const auto server = item.value("server").toString();
+        // Evidence stays outside groups, including while running.
         if (tool == "browser_capture" || tool == "visual_compare" ||
             item.value("arguments").toObject().value("includeScreenshot").toBool())
             return {};
-        if (item.value("server").toString().contains("ketplus_browser") &&
-            tool.startsWith("browser_"))
+        if (server.contains("ketplus_browser") && tool.startsWith("browser_"))
             return "browser";
-        const auto operation = tool.toLower().section(QStringLiteral("__"), -1);
+        const auto operation =
+            tool.toLower().section(QStringLiteral("__"), -1).section(QLatin1Char('.'), -1);
         if (operation == "read_file" || operation == "read")
             return "read";
-        if (operation == "search_files" || operation == "glob" || operation == "search_code" ||
-            operation == "grep")
-            return "search";
+        if (operation == "search_files" || operation == "glob")
+            return "fileSearch";
+        if (operation == "search_code" || operation == "grep")
+            return "codeSearch";
+        if (operation == "wait" || operation == "sleep")
+            return "wait";
+        if (operation == "agent" || operation == "task" || operation == "spawn_agent")
+            return "subagent";
+        if (operation == "websearch")
+            return "webSearch";
+        // Steps the Desktop keeps visible on their own (skills, plans, tool discovery, wake-ups,
+        // web pages, images and screenshots) break the run, as they do in a local transcript.
+        static const QSet<QString> standalone{
+            "monitor",  "wake",       "resume_agent", "schedulewakeup",
+            "skill",    "load_skill", "toolsearch",   "search_tools",
+            "taskstop", "stop_task",  "update_plan",  "enterplanmode",
+            "webfetch", "fetch_url",  "find_in_page", "open_page"};
+        const auto haystack =
+            (server + ' ' + item.value("namespace").toString() + ' ' + tool).toLower();
+        if (standalone.contains(operation) || haystack.contains("view_image") ||
+            (haystack.contains("browser") && haystack.contains("screenshot")))
+            return {};
+        // Other tool calls group by the server that ran them: "Used node_repl".
+        return server.isEmpty() ? QStringLiteral("tool")
+                                : QStringLiteral("tool:") + server.left(kServerNameLimit);
     }
     return {};
 }
@@ -401,8 +433,12 @@ QJsonObject LocalJournal::activitySummaryEvent(const QJsonObject& event) const {
         return event;
     const auto group = member.value(0).toLongLong();
     QSqlQuery summary(database_);
-    summary.prepare("SELECT family,count,running,failed,last_cursor FROM activity_summaries WHERE "
-                    "session_id=? AND generation=? AND group_cursor=? ORDER BY family");
+    // Families in the order the group first used them, as a local group words its steps.
+    summary.prepare(
+        "SELECT family,count,running,failed,last_cursor FROM activity_summaries s WHERE "
+        "session_id=? AND generation=? AND group_cursor=? ORDER BY (SELECT MIN(first_cursor) "
+        "FROM activity_items i WHERE i.session_id=s.session_id AND i.generation=s.generation AND "
+        "i.group_cursor=s.group_cursor AND i.family=s.family),family");
     summary.addBindValue(event.value("session_id").toString());
     summary.addBindValue(event.value("session_generation").toInteger());
     summary.addBindValue(group);

@@ -117,6 +117,38 @@ class TranscriptActivityGroupsTest final : public QObject {
         QCOMPARE(turnChangedFiles(truncated, truncated.size() - 1, &complete).size(), 3);
         QVERIFY(!complete);
     }
+    void daemonGroupsReadAsLocalGroups() {
+        const auto summary = [](const QJsonArray& families, const QJsonObject& extra = {}) {
+            QJsonObject data{
+                {"item_id", "activity-group:9"}, {"group_id", "9"}, {"families", families}};
+            for (auto it = extra.begin(); it != extra.end(); ++it)
+                data.insert(it.key(), it.value());
+            return daemonActivityGroupMessage(data, 1).value("groupSummary").toString();
+        };
+        const auto family = [](const QString& name, int count) {
+            return QJsonObject{{"family", name}, {"count", count}};
+        };
+        QCOMPARE(
+            summary({family("command", 2), family("edit", 1)},
+                    {{"files_total", 2},
+                     {"files",
+                      QJsonArray{
+                          QJsonObject{{"path", "a"}, {"added", 4}, {"removed", 1}, {"known", true}},
+                          QJsonObject{{"path", "b"}, {"added", 1}, {"known", true}}}}}),
+            QStringLiteral("Ran 2 commands, edited 2 files +5 -1"));
+        QCOMPARE(summary({family("browser", 3), family("tool:node_repl", 2)}),
+                 QStringLiteral("Used ketplus_browser, node_repl · 5 steps"));
+        QCOMPARE(
+            summary({family("command", 1), family("tool:node_repl", 1), family("subagent", 1),
+                     family("subagent.step", 2), family("wait", 1)},
+                    {{"failed_count", 1}}),
+            QStringLiteral("Ran a command, used node_repl, used a subagent, waited (1 failed)"));
+        QCOMPARE(summary({family("codeSearch", 2), family("fileSearch", 1), family("read", 1)}),
+                 QStringLiteral("Searched code 2 times, searched files, read a file"));
+        QCOMPARE(summary({family("webSearch", 1), family("search", 2)}),
+                 QStringLiteral("Searched the web, searched 2 times"));
+    }
+
     void groupsConsecutiveActivityWithinATurn() {
         QList<QVariantMap> rows{text("user", "user"),       activity("c1", "fileRead"),
                                 activity("r1", "fileRead"), activity("c2", "fileRead"),

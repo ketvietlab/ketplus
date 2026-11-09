@@ -76,59 +76,55 @@ bool isGroupableActivity(const QVariantMap& row) {
                                        subtype != QStringLiteral("browserScreenshot"));
 }
 
+void ActivityTally::add(const QString& id, const int amount) {
+    for (Family& family : families) {
+        if (family.id == id) {
+            family.count += amount;
+            return;
+        }
+    }
+    families.append({id, amount});
+}
+
+void ActivityTally::addServer(const QString& server, const int steps) {
+    add(QStringLiteral("server"), steps);
+    serverSteps += steps;
+    if (!server.isEmpty() && !servers.contains(server))
+        servers.append(server);
+}
+
 QString activityGroupSummary(const QList<QVariantMap>& rows, const qsizetype first,
                              const qsizetype count) {
-    struct Family final {
-        QString id;
-        int count{0};
-    };
-    QList<Family> families;
-    const auto add = [&families](const QString& id, const int amount) {
-        for (Family& family : families) {
-            if (family.id == id) {
-                family.count += amount;
-                return;
-            }
-        }
-        families.append({id, amount});
-    };
-    // The servers the group's tool calls used, named as the mock's "Used ketplus_browser,
-    // node_repl · 5 steps".
-    QStringList servers;
-    int serverSteps = 0;
+    ActivityTally tally;
     // Spawning, messaging and waiting on one agent are steps on the same subagent.
     QSet<QString> subagents;
     int unnamedSubagents = 0;
-    int added = 0;
-    int removed = 0;
-    bool statsKnown = false;
-    int failed = 0;
     for (qsizetype index = first; index < first + count && index < rows.size(); ++index) {
         const QVariantMap& row = rows.at(index);
         const QString subtype = row.value(QStringLiteral("subtype")).toString();
         if (row.value(QStringLiteral("status")).toString() == QStringLiteral("failed"))
-            ++failed;
+            ++tally.failed;
         if (subtype == QStringLiteral("command")) {
-            add(QStringLiteral("command"), 1);
+            tally.add(QStringLiteral("command"), 1);
         } else if (subtype == QStringLiteral("fileRead")) {
-            add(QStringLiteral("read"), 1);
+            tally.add(QStringLiteral("read"), 1);
         } else if (subtype == QStringLiteral("fileChange")) {
             const QVariantList changes = row.value(QStringLiteral("fileChanges")).toList();
-            add(QStringLiteral("edit"), changes.isEmpty() ? 1 : int(changes.size()));
+            tally.add(QStringLiteral("edit"), changes.isEmpty() ? 1 : int(changes.size()));
             for (const QVariant& value : changes) {
                 const QVariantMap change = value.toMap();
                 if (!change.value(QStringLiteral("known")).toBool())
                     continue;
-                statsKnown = true;
-                added += change.value(QStringLiteral("added")).toInt();
-                removed += change.value(QStringLiteral("removed")).toInt();
+                tally.statsKnown = true;
+                tally.added += change.value(QStringLiteral("added")).toInt();
+                tally.removed += change.value(QStringLiteral("removed")).toInt();
             }
         } else if (subtype == QStringLiteral("webSearch")) {
-            add(QStringLiteral("search"), 1);
+            tally.add(QStringLiteral("search"), 1);
         } else if (subtype == QStringLiteral("codeSearch")) {
-            add(QStringLiteral("codeSearch"), 1);
+            tally.add(QStringLiteral("codeSearch"), 1);
         } else if (subtype == QStringLiteral("fileSearch")) {
-            add(QStringLiteral("fileSearch"), 1);
+            tally.add(QStringLiteral("fileSearch"), 1);
         } else if (subtype.startsWith(QStringLiteral("browser")) ||
                    subtype == QStringLiteral("ketplusBrowser") ||
                    subtype == QStringLiteral("integration")) {
@@ -143,13 +139,10 @@ QString activityGroupSummary(const QList<QVariantMap>& rows, const qsizetype fir
                 server = QStringLiteral("ketplus_browser");
             else if (server.isEmpty() && subtype != QStringLiteral("integration"))
                 server = QStringLiteral("the browser");
-            add(QStringLiteral("server"), 1);
-            ++serverSteps;
-            if (!server.isEmpty() && !servers.contains(server))
-                servers.append(server);
+            tally.addServer(server, 1);
         } else if (subtype == QStringLiteral("collaboration") ||
                    subtype == QStringLiteral("subAgent")) {
-            add(QStringLiteral("subagent"), 1);
+            tally.add(QStringLiteral("subagent"), 1);
             const QVariantList receivers = row.value(QStringLiteral("details"))
                                                .toMap()
                                                .value(QStringLiteral("receiverThreadIds"))
@@ -161,17 +154,23 @@ QString activityGroupSummary(const QList<QVariantMap>& rows, const qsizetype fir
             if (receivers.isEmpty())
                 ++unnamedSubagents;
         } else if (subtype == QStringLiteral("wait")) {
-            add(QStringLiteral("wait"), 1);
+            tally.add(QStringLiteral("wait"), 1);
         } else if (subtype == QStringLiteral("imageView")) {
-            add(QStringLiteral("image"), 1);
+            tally.add(QStringLiteral("image"), 1);
         } else if (subtype == QStringLiteral("imageGeneration")) {
-            add(QStringLiteral("generated"), 1);
+            tally.add(QStringLiteral("generated"), 1);
         } else {
-            add(QStringLiteral("tool"), 1);
+            tally.add(QStringLiteral("tool"), 1);
         }
     }
+    tally.subagents = int(subagents.size()) + unnamedSubagents;
+    return activityTallySummary(tally);
+}
+
+QString activityTallySummary(const ActivityTally& tally) {
+    const auto& families = tally.families;
     QStringList phrases;
-    for (const Family& family : families) {
+    for (const ActivityTally::Family& family : families) {
         QString phrase;
         if (family.id == QStringLiteral("command")) {
             phrase = QStringLiteral("ran %1").arg(
@@ -183,12 +182,15 @@ QString activityGroupSummary(const QList<QVariantMap>& rows, const qsizetype fir
             phrase =
                 QStringLiteral("edited %1")
                     .arg(counted(family.count, QStringLiteral("file"), QStringLiteral("files")));
-            if (statsKnown)
-                phrase += QStringLiteral(" +%1 -%2").arg(added).arg(removed);
+            if (tally.statsKnown)
+                phrase += QStringLiteral(" +%1 -%2").arg(tally.added).arg(tally.removed);
         } else if (family.id == QStringLiteral("search")) {
             phrase = family.count == 1
                          ? QStringLiteral("searched the web")
                          : QStringLiteral("searched the web %1 times").arg(family.count);
+        } else if (family.id == QStringLiteral("searched")) {
+            phrase = family.count == 1 ? QStringLiteral("searched")
+                                       : QStringLiteral("searched %1 times").arg(family.count);
         } else if (family.id == QStringLiteral("codeSearch")) {
             phrase = family.count == 1 ? QStringLiteral("searched code")
                                        : QStringLiteral("searched code %1 times").arg(family.count);
@@ -197,15 +199,16 @@ QString activityGroupSummary(const QList<QVariantMap>& rows, const qsizetype fir
                          ? QStringLiteral("searched files")
                          : QStringLiteral("searched files %1 times").arg(family.count);
         } else if (family.id == QStringLiteral("server")) {
-            phrase = servers.isEmpty()
+            phrase = tally.servers.isEmpty()
                          ? QStringLiteral("used %1").arg(counted(
                                family.count, QStringLiteral("tool"), QStringLiteral("tools")))
-                         : QStringLiteral("used ") + servers.join(QStringLiteral(", "));
+                         : QStringLiteral("used ") + tally.servers.join(QStringLiteral(", "));
             // Only a group of tool calls alone counts its steps; a mixed line stays a list.
-            if (families.size() == 1 && !servers.isEmpty() && serverSteps > servers.size())
-                phrase += QStringLiteral(" · %1 steps").arg(serverSteps);
+            if (families.size() == 1 && !tally.servers.isEmpty() &&
+                tally.serverSteps > tally.servers.size())
+                phrase += QStringLiteral(" · %1 steps").arg(tally.serverSteps);
         } else if (family.id == QStringLiteral("subagent")) {
-            const int count = std::max<int>(1, subagents.size() + unnamedSubagents);
+            const int count = std::max(1, tally.subagents);
             phrase = QStringLiteral("used %1").arg(
                 counted(count, QStringLiteral("subagent"), QStringLiteral("subagents"), "a"));
         } else if (family.id == QStringLiteral("wait")) {
@@ -227,8 +230,8 @@ QString activityGroupSummary(const QList<QVariantMap>& rows, const qsizetype fir
     QString summary = phrases.join(QStringLiteral(", "));
     if (!summary.isEmpty())
         summary[0] = summary.at(0).toUpper();
-    if (failed > 0)
-        summary += QStringLiteral(" (%1 failed)").arg(failed);
+    if (tally.failed > 0)
+        summary += QStringLiteral(" (%1 failed)").arg(tally.failed);
     return summary;
 }
 
