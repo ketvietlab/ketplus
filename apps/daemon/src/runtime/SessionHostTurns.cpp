@@ -366,6 +366,8 @@ void SessionHost::providerStopped(const QString& adapterName, const QString& rea
     for (Session& session : sessions_) {
         if (session.stored.adapter != adapterName)
             continue;
+        // Turn ids are per provider process; the next process may reuse them.
+        session.completedTurnId.clear();
         endBackgroundTasks(session, QStringLiteral("worker_restart"));
         if (!session.attachedToProvider && !session.startingTurn &&
             session.stored.turnId.isEmpty()) {
@@ -400,8 +402,10 @@ void SessionHost::providerReloaded(const QString& reason) {
         }
     }
     for (Session& session : sessions_) {
-        if (session.stored.adapter == QStringLiteral("codex"))
+        if (session.stored.adapter == QStringLiteral("codex")) {
             session.attachedToProvider = false;
+            session.completedTurnId.clear();
+        }
     }
 }
 

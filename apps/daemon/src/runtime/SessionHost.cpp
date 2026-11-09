@@ -1968,8 +1968,16 @@ void SessionHost::handleProviderNotification(const QString& method, const QJsonO
         return;
     }
     if (method == QStringLiteral("turn/started")) {
-        session->stored.turnId =
+        const QString startedTurnId =
             params.value(QStringLiteral("turn")).toObject().value(QStringLiteral("id")).toString();
+        // Its completion already arrived: the turn is over, not running, and a Stop kept for
+        // it has nothing left to stop.
+        if (!startedTurnId.isEmpty() && startedTurnId == session->completedTurnId) {
+            session->startingTurn = false;
+            session->interruptPending = false;
+            return;
+        }
+        session->stored.turnId = startedTurnId;
         session->stored.state = QStringLiteral("running");
         session->startingTurn = false;
         journal_->upsertSession(session->stored);
@@ -2037,6 +2045,16 @@ void SessionHost::handleProviderNotification(const QString& method, const QJsonO
     }
     if (method == QStringLiteral("turn/completed")) {
         const QJsonObject turn = params.value(QStringLiteral("turn")).toObject();
+        // A late or repeated completion of another turn does not end the active one, nor
+        // release its attachments, browser sessions or worktree. A completion that arrives
+        // before turn/started (no active id yet) is still this turn's.
+        const QString completedTurnId = turn.value(QStringLiteral("id")).toString();
+        if (!completedTurnId.isEmpty() &&
+            ((!session->stored.turnId.isEmpty() && completedTurnId != session->stored.turnId) ||
+             completedTurnId == session->completedTurnId)) {
+            return;
+        }
+        session->completedTurnId = completedTurnId;
         session->stored.turnId.clear();
         session->stored.state = turn.value(QStringLiteral("status")).toString();
         if (session->stored.state.isEmpty() ||

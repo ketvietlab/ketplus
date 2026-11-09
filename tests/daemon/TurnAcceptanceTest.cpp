@@ -351,6 +351,61 @@ class TurnAcceptanceTest final : public QObject {
         QVERIFY(log.open(QIODevice::ReadOnly));
         QVERIFY2(!log.readAll().contains("interrupt:"), "the next turn was interrupted");
     }
+    void staleCompletionDoesNotEndTheActiveTurn() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite3");
+        const auto executable = dir.filePath("fake-codex");
+        QVERIFY(writeFakeCodex(executable, dir.filePath("provider.log")));
+        LocalJournal journal(path);
+        StoredSession seed;
+        seed.id = "stale-completion";
+        seed.generation = 1;
+        seed.worktreePath = dir.path();
+        seed.adapter = "codex";
+        seed.state = "idle";
+        QVERIFY(journal.upsertSession(seed));
+        CodexAdapter adapter(executable);
+        SessionHost host(&journal, &adapter);
+        const auto stop = qScopeGuard([&] { adapter.stop(); });
+        const auto stored = [&journal] { return journal.sessions().first(); };
+        const auto turn = [&](const QString& messageId, const QString& prompt) {
+            auto submitted = request(messageId, seed.id);
+            submitted.insert("payload",
+                             QJsonObject{{"prompt", prompt}, {"client_message_id", messageId}});
+            return host.handleCommand(submitted, "desktop-test");
+        };
+        QVERIFY(turn("first", "hello").value("ok").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(stored().state, QString("ready"), 5000);
+        QVERIFY(turn("second", "hang").value("ok").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(stored().state, QString("running"), 5000);
+        const auto active = stored();
+        QCOMPARE(active.turnId, QString("turn-2"));
+        const auto completed = [&](const QString& turnId) {
+            emit adapter.notificationReceived(
+                "turn/completed", {{"threadId", active.threadId},
+                                   {"turn", QJsonObject{{"id", turnId}, {"status", "completed"}}}});
+        };
+        // A late or repeated completion of an earlier turn leaves the second one running.
+        completed("turn-1");
+        completed("turn-0");
+        QCOMPARE(stored().state, QString("running"));
+        QCOMPARE(stored().turnId, QString("turn-2"));
+        // Its own completion ends it; a repeat and a late turn/started do not change that.
+        completed("turn-2");
+        QCOMPARE(stored().state, QString("ready"));
+        QVERIFY(stored().turnId.isEmpty());
+        completed("turn-2");
+        emit adapter.notificationReceived(
+            "turn/started",
+            {{"threadId", active.threadId}, {"turn", QJsonObject{{"id", "turn-2"}}}});
+        QCOMPARE(stored().state, QString("ready"));
+        QVERIFY(stored().turnId.isEmpty());
+        // Only the two real completions are in the history.
+        QCOMPARE(eventCount(journal.eventsAfter(seed.id, 1, 0), "turn.completed"), 2);
+        // The session still takes the next turn.
+        QVERIFY(turn("third", "hello").value("ok").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(stored().state, QString("ready"), 5000);
+    }
 };
 QTEST_GUILESS_MAIN(TurnAcceptanceTest)
 #include "TurnAcceptanceTest.moc"

@@ -112,6 +112,10 @@ class SessionHost final : public QObject, private AgentHostPort {
         // A Stop can arrive while an adapter is still creating its provider-native session.
         // Keep it until that adapter has actually started the prompt.
         bool interruptPending{false};
+        // The provider turn that last completed in the current provider process. A repeated
+        // completion for it, or a late turn/started, must not end or restart the turn that runs
+        // now. Cleared when the process stops or reloads, since the next one may reuse ids.
+        QString completedTurnId;
         QStringList materializedAttachments;
         QStringList stagedAttachmentIds;
         // The provider's latest background task snapshot (tasks.changed, REPLACE semantics).
