@@ -250,6 +250,18 @@ class ProviderTranscriptTest : public QObject {
         QCOMPARE(timed.first().toMap().value("title").toString(), "Thought");
         QCOMPARE(timed.first().toMap().value("durationMs").toLongLong(), 14000);
         QVERIFY(!QJsonDocument::fromVariant(timed).toJson().contains("secret plan"));
+        // Start and completion in two responses (an open group's next page, or live events):
+        // the merge keeps the start and times the thought.
+        const auto started = daemonWindowMessages(
+            {{"events", QJsonArray{lifecycle(1, "item.started", "2026-11-09T08:00:00.000Z")}}});
+        QVERIFY(started.first().toMap().value("running").toBool());
+        const auto merged = mergeDaemonHistory(
+            started,
+            daemonWindowMessages({{"events", QJsonArray{lifecycle(2, "item.completed",
+                                                                  "2026-11-09T08:00:14.000Z")}}}));
+        QCOMPARE(merged.size(), 1);
+        QCOMPARE(merged.first().toMap().value("title").toString(), "Thought");
+        QCOMPARE(merged.first().toMap().value("durationMs").toLongLong(), 14000);
         // Claude's Write and Edit count their lines as Codex's file changes do.
         QCOMPARE(edits.at(0).value("operation").toString(), "Created");
         QCOMPARE(edits.at(0).value("added").toInt(), 2);
