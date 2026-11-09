@@ -32,7 +32,9 @@ class LargeEventReassembler final {
     qint64 revision_{0};
     qint64 nextOffset_{0};
     QByteArray bytes_;
-    QHash<qint64, QByteArray> accepted_;
+    // Accepted fragment lengths by offset; their bytes are only in bytes_, so a retried
+    // fragment is compared there instead of keeping a second copy of the transfer.
+    QHash<qint64, qsizetype> accepted_;
     bool valid_{false};
     bool complete_{false};
 };

@@ -164,6 +164,9 @@ class DesktopTranscriptWindowTest final : public QObject {
                                                                   QByteArray::OmitTrailingEquals)));
         QVERIFY(!assembler.accept(conflict, &error));
         QVERIFY(error.contains("Conflicting duplicate"));
+        // A retried fragment of another length at the same offset conflicts too.
+        QVERIFY(!assembler.accept(fragment(0, first.first(1024)), &error));
+        QVERIFY(error.contains("Conflicting duplicate"));
         QVERIFY(!assembler.accept(fragment(assembler.nextOffset() + 1, QByteArray("gap")), &error));
         QVERIFY(error.contains("gap or reordering"));
         while (!assembler.isComplete()) {

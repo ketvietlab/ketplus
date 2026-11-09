@@ -76,7 +76,8 @@ bool LargeEventReassembler::accept(const QJsonObject& fragment, QString* error) 
     }
     const auto duplicate = accepted_.constFind(offset);
     if (duplicate != accepted_.constEnd()) {
-        if (duplicate.value() != data) {
+        if (duplicate.value() != data.size() ||
+            QByteArrayView(bytes_).sliced(offset, data.size()) != data) {
             return fail(QStringLiteral("Conflicting duplicate large-event fragment."));
         }
         return true;
@@ -84,7 +85,7 @@ bool LargeEventReassembler::accept(const QJsonObject& fragment, QString* error) 
     if (offset != nextOffset_) {
         return fail(QStringLiteral("Large-event fragment gap or reordering."));
     }
-    accepted_.insert(offset, data);
+    accepted_.insert(offset, data.size());
     bytes_.append(data);
     nextOffset_ = next;
     complete_ = terminal;
