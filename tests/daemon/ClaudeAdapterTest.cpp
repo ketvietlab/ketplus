@@ -330,6 +330,18 @@ class ClaudeAdapterTest final : public QObject {
         // The client's Stop ended it, which the transcript words as "stopped by you".
         QCOMPARE(events(QStringLiteral("turn.completed")).first()["payload"]["reason"].toString(),
                  QStringLiteral("user"));
+        // The Stop does not carry over: the conversation's next turn ends without a reason.
+        const QJsonObject next = host.handleCommand(
+            request(QStringLiteral("session.start_turn"), QStringLiteral("next"),
+                    {{QStringLiteral("prompt"), QStringLiteral("plain")}}, sessionId, 1),
+            QStringLiteral("desktop-test"));
+        QVERIFY2(next.value(QStringLiteral("ok")).toBool(),
+                 qPrintable(QJsonDocument(next).toJson(QJsonDocument::Compact)));
+        QTRY_COMPARE_WITH_TIMEOUT(events(QStringLiteral("turn.completed")).size(), 2, 3000);
+        QVERIFY(!events(QStringLiteral("turn.completed"))
+                     .at(1)["payload"]
+                     .toObject()
+                     .contains(QStringLiteral("reason")));
         // A turn that ends on its own carries no reason.
         const QString plain = startClaude(host, directory.path(), "plain");
         const auto plainEvents = eventsOf(journal, plain);

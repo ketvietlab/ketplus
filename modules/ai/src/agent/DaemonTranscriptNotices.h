@@ -7,6 +7,8 @@ namespace ketplus::agent_message {
 struct TurnFacts {
     qint64 durationMs = -1;
     qint64 contextTokens = -1;
+    // The user's Stop ended it (`reason: "user"`), as the mock's "stopped by you".
+    bool stoppedByUser = false;
 };
 QVariantMap daemonEventNotice(const QString& type, const QJsonObject& data, const QString& itemId,
                               const QJsonObject& usage = {}, const TurnFacts& turn = {});
