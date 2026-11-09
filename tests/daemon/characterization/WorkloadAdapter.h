@@ -51,7 +51,7 @@ inline NormalizedEvent adapt(const QJsonObject& event) {
     }
     QJsonObject normalized{
         {"item_id", item.value("id")}, {"item_type", item.value("type")}, {"item", item}};
-    for (const QString key : {QString("text"), QString("command"), QString("status")})
+    for (const QString& key : {QString("text"), QString("command"), QString("status")})
         if (item.contains(key))
             normalized.insert(key, item.value(key));
     return {type, normalized};

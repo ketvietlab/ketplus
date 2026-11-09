@@ -505,6 +505,14 @@ another attached Desktop client. The standalone Release cloud-privacy lane check
 heartbeat deletion receipts and retry; the KetPlus deployment owns relay tombstone,
 workspace/generation isolation and encrypted-history redaction tests.
 
+The standalone `tests/daemon/cloud-privacy` and `tests/daemon/characterization`
+projects take the daemon's sources from `apps/daemon/sources.cmake` (the journal's
+`src/storage` sources for characterization). This means a daemon source split
+cannot leave them unbuildable. They apply `ketplus_enable_warnings`, as do the
+in-tree test targets, including `ketplus_atlas_tunnel_fixture`.
+`r03_characterization` needs `R03_FIXTURES` to name a materialized v3 workload
+directory. Without it, `initTestCase` fails.
+
 `ketplus_context_harness_tests` checks active/attaching turns retain submitted
 settings. Model-picker and iOS model-apply tests check that future defaults remain
 writable. No provider-account or quota-consuming test is required for these fixes.
