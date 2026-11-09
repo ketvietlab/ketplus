@@ -102,9 +102,12 @@ void presentAgentError(QVariantMap& entry, const QString& message) {
             return;
         }
     }
-    // Codex says "Selected model is at capacity"; Anthropic's API says "Overloaded".
-    static const QRegularExpression capacity(QStringLiteral("\\bat capacity\\b|\\boverloaded\\b"),
-                                             QRegularExpression::CaseInsensitiveOption);
+    // Only the providers' own overload errors: Codex's "Selected model is at capacity" and
+    // Anthropic's 529 overloaded_error. A message is also the agent's last words when a turn
+    // fails otherwise, so a word such as "overloaded" in it says nothing.
+    static const QRegularExpression capacity(
+        QStringLiteral("^Selected model is at capacity\\b|^API Error: "
+                       "529\\b|\\boverloaded_error\\b|^Overloaded\\.?$"));
     if (capacity.match(message).hasMatch()) {
         entry.insert(QStringLiteral("title"), QStringLiteral("Selected model is at capacity"));
         entry.insert(QStringLiteral("subtype"), QStringLiteral("modelCapacity"));

@@ -378,7 +378,10 @@ class ProviderTranscriptTest : public QObject {
                  "Claude Code exited");
         for (const auto& message : {QStringLiteral("Selected model is at capacity. Please try a "
                                                    "different model."),
-                                    QStringLiteral("API Error: 529 Overloaded")}) {
+                                    QStringLiteral("API Error: 529 {\"type\":\"error\",\"error\":"
+                                                   "{\"type\":\"overloaded_error\","
+                                                   "\"message\":\"Overloaded\"}}"),
+                                    QStringLiteral("Overloaded")}) {
             const auto busy = failure(message);
             QCOMPARE(busy.value("title").toString(), "Selected model is at capacity");
             QCOMPARE(busy.value("subtype").toString(), "modelCapacity");
@@ -386,6 +389,14 @@ class ProviderTranscriptTest : public QObject {
                      "The model could not finish the turn. Try again, or pick another model "
                      "for this conversation.");
         }
+        // A failed turn's message can be the agent's own last words: they keep the generic row.
+        const auto words = failure("The database is overloaded; inspect its connection pool next.");
+        QCOMPARE(words.value("title").toString(), agentErrorTitle());
+        QVERIFY(words.value("subtype").toString().isEmpty());
+        QCOMPARE(words.value("body").toString(),
+                 "The database is overloaded; inspect its connection pool next.");
+        QCOMPARE(failure("The cluster is at capacity again.").value("title").toString(),
+                 agentErrorTitle());
         // Only the adapters' exits: a tool's process exiting is not the provider's.
         QCOMPARE(failure("The process exited unexpectedly").value("title").toString(),
                  agentErrorTitle());
