@@ -1,12 +1,10 @@
 #include "agent/AgentWorkspaceView.h"
-#include "preview/MermaidDiagramDialog.h"
 #include "preview/MermaidRenderer.h"
 #include <QAbstractTextDocumentLayout>
 #include <QDir>
 #include <QFile>
-#include <QGraphicsSvgItem>
-#include <QGraphicsView>
 #include <QImageReader>
+#include <QJSValue>
 #include <QProcess>
 #include <QQuickItem>
 #include <QQuickTextDocument>
@@ -74,7 +72,6 @@ class ChatMermaidTest final : public QObject {
                  incomplete + "\n```\n\nAfter");
         view.setMermaidMode("m", 0, false);
         QVERIFY(!view.renderChatMarkdown(incomplete + "\n```", "m").contains("placeholder"));
-        QVERIFY(!view.openMermaidImage(QUrl::fromLocalFile("/tmp/unregistered.svg")));
     }
 
     // The switch's button for one side, found by its object name.
@@ -89,6 +86,8 @@ class ChatMermaidTest final : public QObject {
         QTest::newRow("wide") << 3200 << 400;
         QTest::newRow("tall") << 400 << 3200;
         QTest::newRow("compact") << 320 << 160;
+        // Beyond the viewer's raster cap.
+        QTest::newRow("huge") << 9000 << 400;
     }
 
     void rendersIntoChatAndOpensDiagram() {
@@ -119,6 +118,8 @@ class ChatMermaidTest final : public QObject {
         view.resize(1100, 800);
         ketplus::ThemeManager theme(*qApp);
         auto palette = theme.palette();
+        // Light first: the viewer then waits for the dark rendering while it is open.
+        palette.dark = false;
         view.applyTheme(palette);
         view.show();
         const auto unique = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -158,34 +159,56 @@ class ChatMermaidTest final : public QObject {
         const auto match = QRegularExpression("<([^>]+)>").match(rendered);
         QVERIFY(match.hasMatch());
         QCOMPARE(QImageReader(QUrl(match.captured(1)).toLocalFile()).format(), QByteArray("svg"));
-        QVERIFY(view.openMermaidImage(QUrl(match.captured(1))));
-        auto* dialog = view.findChild<ketplus::MermaidDiagramDialog*>();
-        QVERIFY(dialog);
-        auto* diagramView = dialog->findChild<QGraphicsView*>(QStringLiteral("mermaidDiagramView"));
-        QVERIFY(diagramView);
-        QTRY_VERIFY(dialog->isFullScreen());
-        QVERIFY(!diagramView->scene()->items().isEmpty());
-        const auto fitted = [&] {
-            const auto bounds =
-                diagramView
-                    ->mapFromScene(diagramView->scene()->items().constFirst()->sceneBoundingRect())
-                    .boundingRect();
-            const auto padded =
-                diagramView->scene()->items().constFirst()->sceneBoundingRect().adjusted(-24, -24,
-                                                                                         24, 24);
-            const qreal expectedScale =
-                qMin((diagramView->viewport()->width() - 4) / padded.width(),
-                     (diagramView->viewport()->height() - 4) / padded.height());
-            return diagramView->viewport()->rect().adjusted(-2, -2, 2, 2).contains(bounds) &&
-                   qAbs(diagramView->transform().m11() - expectedScale) < expectedScale * 0.02;
+        // As in the mock, a click on the diagram opens it in the image viewer.
+        auto* root = view.quickView()->rootObject();
+        // The viewer is a popup, not an item of the visual tree.
+        auto* lightbox = root->property("imageViewer").value<QObject*>();
+        QVERIFY(lightbox);
+        QQuickItem* frame = nullptr;
+        QTRY_VERIFY((frame = findItem(body, "mermaidDiagramFrame")) && frame->isVisible() &&
+                    frame->height() > 40);
+        // The middle of the diagram's part inside the window, even when it is taller than that.
+        const QRectF inWindow = frame->mapRectToScene(frame->boundingRect())
+                                    .intersected(QRectF(QPointF(), view.quickView()->size()));
+        QVERIFY(inWindow.height() > 40);
+        const QPoint centre = inWindow.center().toPoint();
+        QTest::mouseClick(view.quickView(), Qt::LeftButton, {}, centre);
+        QTRY_VERIFY(lightbox->property("opened").toBool());
+        const auto shownItem = [lightbox] {
+            QVariant shown = lightbox->property("item");
+            if (shown.metaType() == QMetaType::fromType<QJSValue>())
+                shown = shown.value<QJSValue>().toVariant();
+            return shown.toMap();
         };
-        QTRY_VERIFY(fitted());
+        const auto first = shownItem();
+        QCOMPARE(first.value("caption").toString(), QStringLiteral("Mermaid diagram"));
+        QCOMPARE(first.value("diagram").toUrl(), QUrl(match.captured(1)));
+        // Until the dark rendering is drawn, the light one sits on an opaque white ground.
+        const QImage light(QUrl(first.value("source").toString()).toLocalFile());
+        QCOMPARE(light.pixelColor(0, 0).alpha(), 255);
+        // The open viewer takes the dark rendering once it is ready, for the same diagram.
+        QTRY_VERIFY(shownItem().value("source") != first.value("source"));
+        QCOMPARE(shownItem().value("diagram").toUrl(), QUrl(match.captured(1)));
+        QVERIFY(lightbox->property("opened").toBool());
+        const auto viewer = view.mermaidViewerImage(QUrl(match.captured(1)));
+        QCOMPARE(shownItem().value("source").toString(), viewer.value("source").toUrl().toString());
+        const QImage large(viewer.value("source").toUrl().toLocalFile());
+        // Large enough to stay sharp when the viewer fits it to the screen and zooms in, and
+        // never beyond the 8192 px cap however large the diagram.
+        const QSize screen = view.quickView()->screen()->size();
+        const int longest = qMax(large.width(), large.height());
+        QVERIFY(longest >= qMin(8192, qMax(screen.width(), screen.height())));
+        QVERIFY(longest <= 8192);
+        QVERIFY(qAbs(qreal(large.width()) / large.height() - qreal(diagramWidth) / diagramHeight) <
+                0.01 * diagramWidth / diagramHeight);
         const auto viewerCapture = qEnvironmentVariable("KETPLUS_MERMAID_VIEWER_CAPTURE");
-        if (!viewerCapture.isEmpty() && diagramWidth == 320)
-            QVERIFY(dialog->grab().save(viewerCapture));
-        QVERIFY(dynamic_cast<QGraphicsSvgItem*>(diagramView->scene()->items().constFirst()) !=
-                nullptr);
-        dialog->close();
+        if (!viewerCapture.isEmpty() && diagramWidth == 320) {
+            QTest::qWait(300);
+            QVERIFY(view.quickView()->grabWindow().save(viewerCapture));
+        }
+        QVERIFY(QMetaObject::invokeMethod(lightbox, "close"));
+        QTRY_VERIFY(!lightbox->property("opened").toBool());
+        QVERIFY(view.mermaidViewerImage(QUrl::fromLocalFile("/tmp/unregistered.svg")).isEmpty());
         const auto capture = qEnvironmentVariable("KETPLUS_CHAT_MERMAID_CAPTURE");
         if (!capture.isEmpty()) {
             QTest::qWait(150);
@@ -194,10 +217,11 @@ class ChatMermaidTest final : public QObject {
         const auto before = changed.count();
         palette.dark = !palette.dark;
         view.applyTheme(palette);
-        QTRY_VERIFY(changed.count() >= before + 2);
-        const auto dark = view.renderChatMarkdown(markdown, "diagram-answer");
-        QVERIFY(dark.contains("![Mermaid diagram]"));
-        QVERIFY(dark != rendered);
+        // Ready at once when the viewer already asked for the dark rendering, else once drawn.
+        QTRY_VERIFY(changed.count() > before);
+        QTRY_VERIFY(
+            view.renderChatMarkdown(markdown, "diagram-answer").contains("![Mermaid diagram]"));
+        QVERIFY(view.renderChatMarkdown(markdown, "diagram-answer") != rendered);
         const QString two = markdown + "\n\n~~~MERMAID\nflowchart TD\nX --> Y\n~~~";
         // The second diagram is a different block: still source until it is switched.
         QCOMPARE(view.renderChatMarkdown(two, "diagram-answer").count("![Mermaid diagram]"), 1);

@@ -552,6 +552,24 @@ Item {
             }));
             openAt(index || 0);
         }
+        // Opens items that carry their own caption: [{ source, caption }].
+        function showItems(list, index) {
+            items = list || [];
+            openAt(index || 0);
+        }
+        // A Mermaid diagram opened before its dark rendering was ready takes it once drawn,
+        // while the viewer still shows that diagram.
+        function refreshMermaid() {
+            const shown = item;
+            if (!opened || !shown || !shown.diagram)
+                return;
+            const next = agentHost.mermaidViewerImage(shown.diagram);
+            if (!next.source || String(next.source) === String(shown.source))
+                return;
+            const list = items.slice();
+            list[currentIndex] = next;
+            items = list;
+        }
         onToolTriggered: tool => {
             if (!item)
                 return;
@@ -565,6 +583,10 @@ Item {
             else if (tool === Kit.KetTheme.LightboxTool.Fullscreen)
                 agentHost.toggleWindowFullScreen();
         }
+    }
+    Connections {
+        target: agentHost
+        function onMermaidChanged() { imagePreview.refreshMermaid() }
     }
     Kit.KetToast {
         id: imageToast
