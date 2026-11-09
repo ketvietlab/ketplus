@@ -746,9 +746,9 @@ not be used as the history source. Read all projected pages using their returned
 cursor: delta compaction leaves cursor gaps and byte limits can shorten a page.
 Each provider still resumes its own thread; the handoff note points to the
 transcript for turns handled by other providers. Client acknowledgments do not
-remove that history. The note is delivered only with an accepted turn: when the
-prompt after a journaled switch is rejected (for example a journal error), the next
-attempt hands off again. A switch whose `session.provider_changed` event cannot be
+remove that history. The note counts as delivered only once the provider accepts
+that turn's `turn/start`: when the prompt after a journaled switch is rejected by the
+journal or by the provider, the next attempt hands off again. A switch whose `session.provider_changed` event cannot be
 journaled is rolled back, and the conversation stays with its previous provider and
 thread. The pending note is kept in memory only, so a daemon restart in between
 loses it.

@@ -1214,9 +1214,10 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
         return failure;
     // A provider handoff starts a fresh native context, including on A -> B -> A. Only the
     // current conversation transcript carries context forward; retired threads are cleanup refs.
-    // The note that points the new provider at the transcript is delivered only with an
-    // accepted turn: handoffFrom stays set until then, so a turn rejected after the switch
-    // hands off again on the next attempt instead of starting the new provider blind.
+    // The note that points the new provider at the transcript is delivered only with a turn
+    // the provider accepted: handoffFrom stays set until its turn/start succeeds, so a turn
+    // rejected by the journal or the provider hands off again on the next attempt instead of
+    // starting the new provider blind.
     QString handoffTranscript;
     if (it->stored.adapter != adapter) {
         const QString previousAdapter = it->stored.adapter;
@@ -1338,7 +1339,6 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
         releaseTurnAttachments(*it);
         return error("journal_error", appendError);
     }
-    it->handoffFrom.clear();
     it->startingTurn = true;
     QJsonObject turnOptions = options;
     turnOptions.insert(QStringLiteral("provider"), it->stored.adapter);
