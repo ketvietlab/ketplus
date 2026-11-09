@@ -172,8 +172,30 @@ Rectangle {
                         Accessible.name: row.modelData.title + ", " + bar.meta(row.modelData)
                         Accessible.description: openLabel
                         Accessible.onPressAction: bar.openTask(row.modelData)
-                        Keys.onReturnPressed: bar.openTask(row.modelData)
-                        Keys.onSpacePressed: bar.openTask(row.modelData)
+                        // Only the row's own focus opens it: Return or Space on Stop or
+                        // Dismiss reaches here too and must keep that button's meaning.
+                        function activateFromKeys(event) {
+                            if (!taskRow.activeFocus) {
+                                event.accepted = false;
+                                return;
+                            }
+                            bar.openTask(row.modelData);
+                        }
+                        Keys.onReturnPressed: event => activateFromKeys(event)
+                        Keys.onSpacePressed: event => activateFromKeys(event)
+                        // The keyboard focus ring sits outside the row, apart from the
+                        // `current` border that marks the open output.
+                        Rectangle {
+                            objectName: "backgroundTaskFocusRing"
+                            anchors.fill: parent
+                            anchors.margins: -2
+                            z: 1
+                            visible: taskRow.activeFocus
+                            radius: taskRow.radius + 2
+                            color: "transparent"
+                            border.width: 2
+                            border.color: KetTheme.t.focusBorder
+                        }
                         MouseArea {
                             objectName: "backgroundTaskOpen"
                             anchors.fill: parent

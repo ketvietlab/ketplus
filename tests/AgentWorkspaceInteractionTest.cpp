@@ -975,8 +975,39 @@ void AgentWorkspaceViewTest::backgroundTaskBar() {
     QTest::mouseClick(view.quickView(), Qt::LeftButton, {}, rowCenter);
     QTRY_COMPARE(reads.count(), 1);
     QCOMPARE(reads.constFirst().at(0).toString(), QStringLiteral("build"));
-    view.requestBackgroundTaskOutput(QStringLiteral("build"));
+    // Keys: Return on the row opens it; on Stop it keeps Stop's meaning and Space asks to
+    // stop. The row shows a focus ring of its own, apart from the open output's border.
+    view.quickView()->requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(view.quickView()));
+    const auto actionOf = [](QQuickItem* card) -> QQuickItem* {
+        for (auto* child : card->childItems())
+            if (child->property("iconName").isValid())
+                return child;
+        return nullptr;
+    };
+    auto* ring = findVisualItem(buildRow, QStringLiteral("backgroundTaskFocusRing"));
+    QVERIFY(ring);
+    QVERIFY(!ring->isVisible());
+    view.closeBackgroundTaskOutput();
+    buildRow->forceActiveFocus(Qt::TabFocusReason);
+    QTRY_VERIFY(ring->isVisible());
+    QTest::keyClick(view.quickView(), Qt::Key_Return);
+    QTRY_COMPARE(reads.count(), 2);
+    QCOMPARE(reads.last().at(0).toString(), QStringLiteral("build"));
+    view.closeBackgroundTaskOutput();
+    auto* stop = actionOf(buildRow);
+    QVERIFY(stop);
+    stop->forceActiveFocus(Qt::TabFocusReason);
+    QVERIFY(!ring->isVisible());
+    QTest::keyClick(view.quickView(), Qt::Key_Return);
+    QTest::qWait(50);
     QCOMPARE(reads.count(), 2);
+    QTest::keyClick(view.quickView(), Qt::Key_Space);
+    QTRY_COMPARE(bar->property("confirmingStop").toString(), QStringLiteral("build"));
+    QCOMPARE(reads.count(), 2);
+    bar->setProperty("confirmingStop", QString());
+    view.requestBackgroundTaskOutput(QStringLiteral("build"));
+    QCOMPARE(reads.count(), 3);
     QVERIFY(view.backgroundTaskOutput().value("loading").toBool());
     view.acceptBackgroundTaskResult(QStringLiteral("review"), QStringLiteral("output"),
                                     {{"output", "wrong"}});
@@ -1011,7 +1042,16 @@ void AgentWorkspaceViewTest::backgroundTaskBar() {
     view.setBackgroundTasks({finished});
     QQuickItem* taskCard = nullptr;
     QTRY_VERIFY((taskCard = findVisualItem(bar, "backgroundTaskCard_build")));
-    QVERIFY(QMetaObject::invokeMethod(taskCard, "dismissRequested"));
+    // Return on Dismiss neither opens the output nor dismisses; Space dismisses.
+    QQuickItem* dismiss = nullptr;
+    QTRY_VERIFY((dismiss = actionOf(taskCard)) && dismiss->isVisible());
+    const int readsBeforeDismiss = reads.count();
+    dismiss->forceActiveFocus(Qt::TabFocusReason);
+    QTest::keyClick(view.quickView(), Qt::Key_Return);
+    QTest::qWait(50);
+    QCOMPARE(reads.count(), readsBeforeDismiss);
+    QVERIFY(bar->isVisible());
+    QTest::keyClick(view.quickView(), Qt::Key_Space);
     QTRY_VERIFY(!bar->isVisible());
     QCOMPARE(view.backgroundTasks().size(), 1);
     view.setBackgroundTasks({shell});
