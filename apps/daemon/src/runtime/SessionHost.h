@@ -15,6 +15,7 @@
 #include <QSet>
 #include <QString>
 #include <QTemporaryDir>
+#include <QThreadPool>
 #include <QTimer>
 
 #include <functional>
@@ -354,6 +355,14 @@ class SessionHost final : public QObject, private AgentHostPort {
     AgentBroker* agents_{nullptr};
     QString agentSocket_;
     QString agentExecutable_;
+    // Previews decode on their own small pool and queue: one decode may hold a 64-megapixel
+    // image, and a phone asks for a screen of previews at once (#68).
+    static constexpr int mediaReadThreads = 2;
+    static constexpr int maximumMediaReads = 16;
+    void startMediaRead(std::function<QJsonObject()> work, CommandCallback done);
+    int mediaReadsInFlight_{0};
+    // Last member: its destructor waits for running decodes before anything else goes away.
+    QThreadPool mediaReads_;
 };
 
 } // namespace ketplus::daemon

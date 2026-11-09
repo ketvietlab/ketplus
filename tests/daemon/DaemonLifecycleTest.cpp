@@ -1457,6 +1457,30 @@ class DaemonLifecycleTest final : public QObject {
         QTRY_VERIFY(!deferred.isEmpty());
         QCOMPARE(answeredOn, QThread::currentThread());
         QCOMPARE(deferred, preview);
+        // A burst beyond the bounded queue is refused at once instead of holding more decodes.
+        QStringList answers;
+        for (int n = 0; n < 24; ++n)
+            host.handleCommandDeferred(
+                request(QStringLiteral("session.media.read"), QStringLiteral("burst-%1").arg(n),
+                        {{QStringLiteral("media_ref"), reference}}, sessionId, 1),
+                QStringLiteral("cloud-control-v2"), [&](const QJsonObject& result) {
+                    answers.append(result.value(QStringLiteral("ok")).toBool()
+                                       ? QStringLiteral("ok")
+                                       : result.value(QStringLiteral("error_code")).toString());
+                });
+        QCOMPARE(answers.count(QStringLiteral("busy")), 8);
+        QTRY_COMPARE(answers.size(), 24);
+        QCOMPARE(answers.count(QStringLiteral("ok")), 16);
+        // Answered reads free their place in the queue.
+        deferred = {};
+        host.handleCommandDeferred(
+            request(QStringLiteral("session.media.read"), QStringLiteral("after-burst"),
+                    {{QStringLiteral("media_ref"), reference}, {QStringLiteral("thumbnail"), true}},
+                    sessionId, 1),
+            QStringLiteral("cloud-control-v2"),
+            [&](const QJsonObject& result) { deferred = result; });
+        QTRY_VERIFY(!deferred.isEmpty());
+        QCOMPARE(deferred, preview);
         adapter.stop();
     }
 
