@@ -12,9 +12,11 @@
 #include "runtime/SessionHost.h"
 #include "storage/JournalSpace.h"
 #include "storage/LocalJournal.h"
+#include "storage/McpMediaStore.h"
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QLockFile>
@@ -28,6 +30,9 @@
 #if defined(Q_OS_UNIX)
 #include <unistd.h>
 #endif
+#if defined(Q_OS_MACOS)
+#include <sys/acl.h>
+#endif
 
 namespace ketplus::daemon {
 namespace {
@@ -38,6 +43,51 @@ constexpr QFileDevice::Permissions ownerFile = QFileDevice::ReadOwner | QFileDev
 bool restrictDirectory(const QString& path) {
     return QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
                                            QFileDevice::ExeOwner);
+}
+#endif
+
+#if defined(Q_OS_MACOS)
+// An access-control entry such as "everyone allow read", inherited from a parent directory,
+// grants what the owner-only mode bits deny. Daemon state must carry none.
+bool hasExtendedAcl(const QString& path) {
+    const QByteArray native = QFile::encodeName(path);
+    acl_t acl = acl_get_link_np(native.constData(), ACL_TYPE_EXTENDED);
+    if (acl == nullptr)
+        return false;
+    acl_entry_t entry = nullptr;
+    const bool any = acl_get_entry(acl, ACL_FIRST_ENTRY, &entry) == 0;
+    acl_free(acl);
+    return any;
+}
+
+bool removeExtendedAcl(const QString& path) {
+    if (!hasExtendedAcl(path))
+        return true;
+    acl_t empty = acl_init(0);
+    if (empty == nullptr)
+        return false;
+    const bool removed =
+        acl_set_link_np(QFile::encodeName(path).constData(), ACL_TYPE_EXTENDED, empty) == 0;
+    acl_free(empty);
+    return removed && !hasExtendedAcl(path);
+}
+
+// Media and its references were written before the state directory lost its inheritable
+// entries, so each one may still carry them. Links are neither followed nor descended.
+bool removeExtendedAclsBelow(const QString& directory) {
+    const QFileInfo root(directory);
+    if (root.isSymLink() || !root.isDir())
+        return true;
+    if (!removeExtendedAcl(directory))
+        return false;
+    QDirIterator entries(directory,
+                         QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot,
+                         QDirIterator::Subdirectories);
+    while (entries.hasNext()) {
+        if (!removeExtendedAcl(entries.next()))
+            return false;
+    }
+    return true;
 }
 #endif
 
@@ -84,6 +134,14 @@ bool DaemonService::start() {
         return false;
     }
 #endif
+#if defined(Q_OS_MACOS)
+    // Before anything is created here, so new files inherit no entries.
+    if (!removeExtendedAcl(stateInfo.absolutePath()) ||
+        !removeExtendedAcl(tokenInfo.absolutePath())) {
+        error_ = QStringLiteral("Unable to remove access-control entries from the daemon state.");
+        return false;
+    }
+#endif
     const QByteArray token = loadOrCreateToken();
     if (token.isEmpty()) {
         return false;
@@ -115,6 +173,17 @@ bool DaemonService::start() {
             error_ = QStringLiteral("Unable to protect the local daemon journal.");
             return false;
         }
+    }
+#endif
+#if defined(Q_OS_MACOS)
+    bool journalAclRemoved = removeExtendedAcl(configuration_.statePath);
+    for (const QString& suffix : {QStringLiteral("-wal"), QStringLiteral("-shm")})
+        journalAclRemoved =
+            journalAclRemoved && removeExtendedAcl(configuration_.statePath + suffix);
+    if (!journalAclRemoved ||
+        !removeExtendedAclsBelow(McpMediaStore::directoryForJournal(configuration_.statePath))) {
+        error_ = QStringLiteral("Unable to remove access-control entries from the daemon state.");
+        return false;
     }
 #endif
     adapter_ = std::make_unique<CodexAdapter>(configuration_.codexExecutable);
@@ -201,6 +270,16 @@ DaemonConfiguration DaemonService::defaultConfiguration() {
 }
 
 QByteArray DaemonService::loadOrCreateToken() {
+#if defined(Q_OS_MACOS)
+    // A credential that carried an entry granting others access may already be known to them:
+    // replace it rather than trust it. Desktop reads the file again on every connection.
+    if (const QFileInfo exposed(configuration_.tokenPath);
+        exposed.isFile() && !exposed.isSymLink() && hasExtendedAcl(configuration_.tokenPath) &&
+        !QFile::remove(configuration_.tokenPath)) {
+        error_ = QStringLiteral("Unable to replace the exposed local daemon credential.");
+        return {};
+    }
+#endif
     const QFileInfo existing(configuration_.tokenPath);
     if (existing.exists() || existing.isSymLink())
         return remote::readLocalDaemonCredential(configuration_.tokenPath, &error_);

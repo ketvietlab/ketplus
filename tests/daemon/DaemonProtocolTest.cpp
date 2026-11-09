@@ -34,6 +34,9 @@
 #include <QUuid>
 #include <QtTest>
 #include <limits>
+#ifdef Q_OS_MACOS
+#include <sys/acl.h>
+#endif
 #ifdef Q_OS_UNIX
 #include <atomic>
 #include <csignal>
@@ -2777,6 +2780,92 @@ class DaemonProtocolTest final : public QObject {
         QLocalSocket client;
         client.connectToServer(configuration.socketName);
         QVERIFY(client.waitForConnected(2'000));
+    }
+
+    void serviceRemovesInheritedAccessEntriesFromItsState() {
+#ifdef Q_OS_MACOS
+        const auto hasAcl = [](const QString& path) {
+            acl_t acl = acl_get_link_np(QFile::encodeName(path).constData(), ACL_TYPE_EXTENDED);
+            if (acl == nullptr)
+                return false;
+            acl_entry_t entry = nullptr;
+            const bool any = acl_get_entry(acl, ACL_FIRST_ENTRY, &entry) == 0;
+            acl_free(acl);
+            return any;
+        };
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString state = directory.filePath("state");
+        QVERIFY(QDir().mkpath(state));
+        // Everything created below inherits a grant the owner-only mode bits do not show.
+        QCOMPARE(
+            QProcess::execute("/bin/chmod", {"+a",
+                                             "everyone allow list,search,read,readattr,readextattr,"
+                                             "readsecurity,file_inherit,directory_inherit",
+                                             state}),
+            0);
+        const DaemonConfiguration configuration{state + "/journal.sqlite3", state + "/local.token",
+                                                directory.filePath("daemon.sock"),
+                                                QStringLiteral("/nonexistent/ketplus-test-codex")};
+        const QByteArray exposedToken(43, 'k');
+        QFile token(configuration.tokenPath);
+        QVERIFY(token.open(QIODevice::WriteOnly));
+        QVERIFY(token.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+        QCOMPARE(token.write(exposedToken), exposedToken.size());
+        token.close();
+        const QString media = state + "/media";
+        QVERIFY(QDir().mkpath(media + "/refs"));
+        // A journal from before the fix: SQLite opens an empty file as an empty database.
+        const QStringList written{configuration.statePath, media + "/foreign.bin",
+                                  media + "/refs/session.refs"};
+        for (const auto& path : written) {
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            QVERIFY(file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+            if (path != configuration.statePath)
+                file.write("x");
+        }
+        for (const auto& path :
+             QStringList{configuration.tokenPath, media, media + "/refs"} + written)
+            QVERIFY2(hasAcl(path), qPrintable(path));
+
+        auto service = std::make_unique<DaemonService>(configuration);
+        QVERIFY2(service->start(), qPrintable(service->errorString()));
+        QStringList checked{state, media, media + "/refs", configuration.tokenPath,
+                            configuration.statePath};
+        checked += written;
+        for (const auto& suffix : {"-wal", "-shm"})
+            if (QFileInfo::exists(configuration.statePath + suffix))
+                checked.append(configuration.statePath + suffix);
+        for (const auto& path : checked) {
+            QVERIFY2(QFileInfo::exists(path), qPrintable(path));
+            QVERIFY2(!hasAcl(path), qPrintable(path));
+        }
+        // Files the daemon creates later inherit nothing.
+        QFile later(state + "/later");
+        QVERIFY(later.open(QIODevice::WriteOnly));
+        later.close();
+        QVERIFY(!hasAcl(later.fileName()));
+        // A credential others could read was replaced, not trusted.
+        QVERIFY(token.open(QIODevice::ReadOnly));
+        const QByteArray current = token.readAll().trimmed();
+        QVERIFY(current.size() >= 32);
+        QVERIFY(current != exposedToken);
+        token.close();
+
+        // A journal already in its final format is opened in place, not rewritten, so an
+        // entry added to it later must be removed too.
+        service.reset();
+        QCOMPARE(
+            QProcess::execute("/bin/chmod", {"+a", "everyone allow read", configuration.statePath}),
+            0);
+        QVERIFY(hasAcl(configuration.statePath));
+        DaemonService restarted(configuration);
+        QVERIFY2(restarted.start(), qPrintable(restarted.errorString()));
+        QVERIFY(!hasAcl(configuration.statePath));
+#else
+        QSKIP("macOS access-control entries");
+#endif
     }
 
     void serviceCreatesProtectedStateAndRejectsEndpointCollision() {
