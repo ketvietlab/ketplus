@@ -1,5 +1,7 @@
 #include "agent/TranscriptActivityGroups.h"
 #include "agent/AgentMessageFormatter.h"
+#include "agent/DaemonTranscriptProjection.h"
+#include "agent/TranscriptTurnFiles.h"
 
 #include <QtTest>
 
@@ -36,6 +38,85 @@ class TranscriptActivityGroupsTest final : public QObject {
     Q_OBJECT
 
   private slots:
+    // The turn's changed files: its file-change rows and its daemon groups' files, merged by
+    // path in the order first changed, never another turn's and never a failed change.
+    void turnFilesGatherOnlyThisTurnsChanges() {
+        using namespace ketplus::agent_message;
+        const auto stats = [](const QString& path, int added, int removed,
+                              const QString& operation = "Edited", bool known = true) {
+            return QVariantMap{{"path", path},   {"destination", ""},  {"operation", operation},
+                               {"added", added}, {"removed", removed}, {"known", known}};
+        };
+        const QList<QVariantMap> rows{
+            {{"kind", "user"}, {"turnId", "t1"}},
+            {{"subtype", "fileChange"},
+             {"turnId", "t1"},
+             {"fileChanges", QVariantList{stats("old.cpp", 1, 0)}}},
+            {{"subtype", "turnEnd"}, {"turnId", "t1"}},
+            {{"kind", "user"}, {"turnId", "t2"}},
+            {{"subtype", "fileChange"},
+             {"turnId", "t2"},
+             {"fileChanges", QVariantList{stats("src/a.cpp", 1, 0)}}},
+            {{"subtype", "daemonGroup"},
+             {"turnId", "t2"},
+             {"groupFiles", QVariantList{stats("src/a.cpp", 2, 1, "Edited", false),
+                                         stats("src/b.cpp", 4, 0, "Created")}}},
+            {{"subtype", "fileChange"},
+             {"turnId", "t2"},
+             {"status", "failed"},
+             {"fileChanges", QVariantList{stats("src/c.cpp", 9, 9)}}},
+            {{"subtype", "turnEnd"}, {"turnId", "t2"}}};
+        const QVariantList files = turnChangedFiles(rows, rows.size() - 1);
+        QCOMPARE(files.size(), 2);
+        QCOMPARE(files.at(0).toMap(), stats("src/a.cpp", 3, 1, "Edited", false));
+        QCOMPARE(files.at(1).toMap(), stats("src/b.cpp", 4, 0, "Created"));
+        QCOMPARE(turnChangedFiles(rows, 2).size(), 1);
+        QVERIFY(turnChangedFiles(rows, 99).isEmpty());
+        // ADR 0022: a daemon group row carries its summary's files.
+        const auto group = daemonActivityGroupMessage(
+            {{"item_id", "activity-group:7"},
+             {"group_id", "7"},
+             {"count", 1},
+             {"families", QJsonArray{QJsonObject{{"family", "edit"}, {"count", 1}}}},
+             {"files", QJsonArray{QJsonObject{{"path", "src/a.cpp"}, {"added", 2}}}}},
+            3);
+        QCOMPARE(group.value("groupFiles").toList().size(), 1);
+        QCOMPARE(group.value("groupFiles").toList().first().toMap().value("added").toInt(), 2);
+        QCOMPARE(group.value("groupFilesTotal").toInt(), 1);
+        // A steer stays in the turn it steers: the changes before and after it both count.
+        const QList<QVariantMap> steered{
+            {{"kind", "user"}, {"turnId", "t3"}},
+            {{"subtype", "fileChange"},
+             {"turnId", "t3"},
+             {"fileChanges", QVariantList{stats("before.cpp", 1, 0)}}},
+            {{"kind", "user"}, {"eventType", "turn.steered"}, {"turnId", "t3"}},
+            {{"subtype", "fileChange"},
+             {"turnId", "t3"},
+             {"fileChanges", QVariantList{stats("after.cpp", 2, 0)}}},
+            {{"subtype", "turnEnd"}, {"turnId", "t3"}}};
+        bool complete = false;
+        const QVariantList both = turnChangedFiles(steered, steered.size() - 1, &complete);
+        QCOMPARE(both.size(), 2);
+        QCOMPARE(both.at(0).toMap().value("path").toString(), QStringLiteral("before.cpp"));
+        QVERIFY(complete);
+        // A group that listed only some of its files leaves the turn's list incomplete.
+        const auto bounded = daemonActivityGroupMessage(
+            {{"item_id", "activity-group:8"},
+             {"group_id", "8"},
+             {"count", 1},
+             {"families", QJsonArray{QJsonObject{{"family", "edit"}, {"count", 60}}}},
+             {"files", QJsonArray{QJsonObject{{"path", "gen/0.cpp"}, {"added", 1}}}},
+             {"files_total", 60}},
+            3);
+        QCOMPARE(bounded.value("groupFilesTotal").toInt(), 60);
+        auto truncated = steered;
+        truncated.insert(4, {{"subtype", "daemonGroup"},
+                             {"turnId", "t3"},
+                             {"groupFiles", bounded.value("groupFiles")},
+                             {"groupFilesTotal", 60}});
+        QCOMPARE(turnChangedFiles(truncated, truncated.size() - 1, &complete).size(), 3);
+        QVERIFY(!complete);
+    }
     void groupsConsecutiveActivityWithinATurn() {
         QList<QVariantMap> rows{text("user", "user"),       activity("c1", "fileRead"),
                                 activity("r1", "fileRead"), activity("c2", "fileRead"),

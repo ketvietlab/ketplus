@@ -6,6 +6,7 @@
 #include "agent/AgentMessageFormatter.h"
 #include "agent/TranscriptActivityGroups.h"
 #include "agent/TranscriptTrace.h"
+#include "agent/TranscriptTurnFiles.h"
 
 #include <QCryptographicHash>
 #include <QJsonDocument>
@@ -190,6 +191,13 @@ int AgentMessageModel::groupLeaderIndex(const int row) const {
     if (item.value(QStringLiteral("groupRole")).toString().isEmpty())
         return -1;
     return indexes_.value(item.value(agent_message::activityGroupLeaderKeyName()).toString(), -1);
+}
+QVariantMap AgentMessageModel::turnFiles(const int row) const {
+    if (row < 0 || row >= count())
+        return {};
+    bool complete = true;
+    const QVariantList files = agent_message::turnChangedFiles(items_, visible_.at(row), &complete);
+    return {{QStringLiteral("files"), files}, {QStringLiteral("complete"), complete}};
 }
 QStringList AgentMessageModel::activityGroupKeys() const {
     QStringList keys;
@@ -793,6 +801,7 @@ void AgentMessageModel::regroup(const int first, const int last) {
     }
 }
 void AgentMessageModel::reset(const QVariantList& items) {
+    const auto touched = sourceTouch();
     clearPayloads();
     const quint64 generation = ++materializationGeneration_;
     const bool deferred = needsDeferredMaterialization(items);
@@ -868,6 +877,7 @@ void AgentMessageModel::resetFor(const char* reason, const QVariantList& items) 
     reset(items);
 }
 void AgentMessageModel::append(const QVariantMap& item) {
+    const auto touched = sourceTouch();
     const auto key = item.value("messageKey").toString();
     if (!key.isEmpty()) {
         if (const int index = sourceIndexes_.value(key, -1); index >= 0) {
@@ -892,6 +902,7 @@ void AgentMessageModel::append(const QVariantMap& item) {
     emit countChanged();
 }
 void AgentMessageModel::prepend(const QVariantList& incoming) {
+    const auto touched = sourceTouch();
     QVariantList items;
     QSet<QString> keys;
     for (const auto& value : incoming) {
@@ -996,6 +1007,7 @@ void AgentMessageModel::replaceWindow(const QVariantList& items) {
 }
 
 void AgentMessageModel::replaceWindowRows(const QVariantList& items) {
+    const auto touched = sourceTouch();
     if (sourceItems_.isEmpty() || items.isEmpty()) {
         resetFor("window-empty", items);
         return;
@@ -1110,6 +1122,7 @@ void AgentMessageModel::replaceWindowRows(const QVariantList& items) {
         prepend(items.mid(0, prefixCount));
 }
 void AgentMessageModel::set(int row, const QVariantMap& item) {
+    const auto touched = sourceTouch();
     if (row < 0 || row >= sourceItems_.size())
         return;
     auto updated = item;
@@ -1301,6 +1314,7 @@ void AgentMessageModel::startDeferredWork() {
 
 void AgentMessageModel::finishDeferredReset(const QVariantList& source, QList<QVariantMap> rendered,
                                             const quint64 generation) {
+    const auto touched = sourceTouch();
     deferredWorkerActive_ = false;
     deferredActiveUpdates_.clear();
     publishDeferredMaterialization(source, std::move(rendered), generation);
@@ -1310,6 +1324,7 @@ void AgentMessageModel::finishDeferredReset(const QVariantList& source, QList<QV
 void AgentMessageModel::finishDeferredUpdates(const QMap<int, QVariantMap>& updates,
                                               QMap<int, QList<QVariantMap>> rendered,
                                               const quint64 generation) {
+    const auto touched = sourceTouch();
     deferredActiveUpdates_.clear();
     if (generation == materializationGeneration_) {
         for (auto it = updates.cbegin(); it != updates.cend(); ++it)

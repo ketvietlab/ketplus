@@ -10,6 +10,7 @@
 #include "agent/CodexAppServer.h"
 #include "agent/TranscriptTableStyle.h"
 #include "ui/Theme.h"
+#include <QPointer>
 #include <QScopeGuard>
 #include <functional>
 
@@ -2585,6 +2586,102 @@ void AgentWorkspaceViewTest::transcriptNoticesUseRuntimeState() {
         QTest::qWait(80);
         QVERIFY(view.quickView()->grabWindow().save(capture));
     }
+}
+
+// The mock's changed-files card closes a turn that edited files: one row per file with its
+// counts, a row opens its diff and Review changes opens Source Control.
+void AgentWorkspaceViewTest::turnEndListsTheTurnsChangedFiles() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.setAgentAvailable(true);
+    view.resize(900, 700);
+    view.show();
+    const auto change = [](const QString& path, int added, int removed, const QString& operation) {
+        return QVariantMap{{"path", path},   {"destination", ""},  {"operation", operation},
+                           {"added", added}, {"removed", removed}, {"known", true}};
+    };
+    view.resetMessages(
+        {QVariantMap{{"messageKey", "u"}, {"kind", "user"}, {"body", "Fix it"}, {"turnId", "t"}},
+         QVariantMap{
+             {"messageKey", "g"},
+             {"kind", "tool"},
+             {"subtype", "daemonGroup"},
+             {"turnId", "t"},
+             {"groupRole", "leader"},
+             {"groupKey", "g"},
+             {"groupSummary", "Edited 2 files"},
+             {"groupSize", 2},
+             {"groupFiles",
+              QVariantList{change("modules/ai/src/agent/qml/AgentSidebar.qml", 3, 1, "Edited"),
+                           change("modules/ai/src/agent/qml/SpinClock.qml", 48, 0, "Created")}}},
+         QVariantMap{{"messageKey", "end"},
+                     {"kind", "tool"},
+                     {"category", "system"},
+                     {"subtype", "turnEnd"},
+                     {"turnId", "t"},
+                     {"title", "Turn completed"},
+                     {"body", "4m 12s"},
+                     {"status", "completed"}}},
+        "changes");
+    auto* root = view.quickView()->rootObject();
+    QQuickItem* card = nullptr;
+    QTRY_VERIFY((card = findVisualItem(root, "transcriptTurnChanges")) && card->isVisible());
+    const QVariantList files = card->property("files").toList();
+    QCOMPARE(files.size(), 2);
+    QCOMPARE(files.at(0).toMap().value("name").toString(), QStringLiteral("AgentSidebar.qml"));
+    QCOMPARE(files.at(0).toMap().value("path").toString(),
+             QStringLiteral("modules/ai/src/agent/qml"));
+    QCOMPARE(files.at(1).toMap().value("added").toInt(), 48);
+    QSignalSpy diffs(&view, &ketplus::AgentWorkspaceView::fileDiffRequested);
+    QVERIFY(QMetaObject::invokeMethod(card, "fileActivated", Q_ARG(int, 1)));
+    QCOMPARE(diffs.count(), 1);
+    QCOMPARE(diffs.first().at(0).toString(),
+             QStringLiteral("modules/ai/src/agent/qml/SpinClock.qml"));
+    QSignalSpy navigation(&view, &ketplus::AgentWorkspaceView::productNavigationRequested);
+    auto* review = findVisualItem(card, "transcriptReviewChanges");
+    QVERIFY(review);
+    QVERIFY(QMetaObject::invokeMethod(review, "clicked"));
+    QCOMPARE(navigation.count(), 1);
+    QCOMPARE(navigation.first().at(0).toString(), QStringLiteral("source-control"));
+    QVERIFY(card->property("countsKnown").toBool());
+    QVERIFY(card->property("complete").toBool());
+    // A group's update keeps the row count and the delegate; the card follows its files.
+    const QPointer<QQuickItem> shown(card);
+    auto updated = QVariantMap{{"messageKey", "g"},
+                               {"kind", "tool"},
+                               {"subtype", "daemonGroup"},
+                               {"turnId", "t"},
+                               {"groupRole", "leader"},
+                               {"groupKey", "g"},
+                               {"groupSummary", "Edited 2 files"},
+                               {"groupSize", 2}};
+    auto unknown = change("modules/ai/src/agent/qml/SpinClock.qml", 0, 0, "Created");
+    unknown.insert("known", false);
+    updated.insert(
+        "groupFiles",
+        QVariantList{change("modules/ai/src/agent/qml/AgentSidebar.qml", 8, 1, "Edited"), unknown});
+    updated.insert("groupFilesTotal", 60);
+    view.updateMessage(1, updated);
+    QTRY_COMPARE(card->property("files").toList().at(0).toMap().value("added").toInt(), 8);
+    QCOMPARE(shown.data(), card);
+    // Counts it could not tell are not shown as numbers, and a list the daemon cut short
+    // says so instead of reading as complete.
+    QVERIFY(!card->property("files").toList().at(1).toMap().value("known").toBool());
+    QVERIFY(!card->property("countsKnown").toBool());
+    QVERIFY(!card->property("complete").toBool());
+    QCOMPARE(card->property("title").toString(), QStringLiteral("2+ files changed"));
+    // A turn without edits has no card.
+    view.resetMessages(
+        {QVariantMap{{"messageKey", "u"}, {"kind", "user"}, {"body", "Hi"}, {"turnId", "t"}},
+         QVariantMap{{"messageKey", "end"},
+                     {"kind", "tool"},
+                     {"category", "system"},
+                     {"subtype", "turnEnd"},
+                     {"turnId", "t"},
+                     {"status", "completed"}}},
+        "changes");
+    QTRY_VERIFY(!findVisualItem(root, "transcriptTurnChanges") ||
+                !findVisualItem(root, "transcriptTurnChanges")->isVisible());
 }
 
 // The mock's workspace/error: Retry on the latest failure sends its prompt again, only while

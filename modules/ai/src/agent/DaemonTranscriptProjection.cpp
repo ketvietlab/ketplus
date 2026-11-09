@@ -310,6 +310,10 @@ QVariantMap daemonActivityGroupMessage(const QJsonObject& data, qint64 turn) {
     row.insert("groupSize", data.value("count").toInt());
     row.insert("groupRunning", data.value("running_count").toInt() > 0);
     row.insert("groupFailed", data.value("failed_count").toInt());
+    // ADR 0022: the files the group's edits changed, for the turn's changed-files card.
+    const auto files = data.value("files").toArray();
+    row.insert("groupFiles", files.toVariantList());
+    row.insert("groupFilesTotal", data.value("files_total").toInt(int(files.size())));
     row.insert("running", false);
     return row;
 }
