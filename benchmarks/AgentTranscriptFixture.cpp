@@ -216,7 +216,10 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
         journal.usage(182000, 3.32);
         journal.finish("completed", 252);
     } else if (provider == "cursor") {
-        journal.event("session.forked", {{"source_number", "5208"}, {"source_turn", 14}});
+        journal.event("session.forked", {{"from_conversation_number", "5208"},
+                                         {"through_turn", 14},
+                                         {"provider", "cursor"},
+                                         {"model", "Composer 2"}});
         journal.user(today, "Find where the staging tenant gets created and summarise the flow.");
         journal.tool({{"type", "commandExecution"},
                       {"command", "rg -n \"createTenant\" services"},
@@ -363,7 +366,9 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
         journal.event("session.configuration_changed",
                       {{"effective", QJsonObject{{"model", "GPT-5.6 Luna"}, {"effort", "Medium"}}},
                        {"changed", QJsonArray{"model", "effort"}}});
-        journal.event("conversation.context_changed", {{"context_revision", 2}});
+        journal.event("conversation.context_changed", {{"context_revision", 2},
+                                                       {"branch", "feat/journal-storage"},
+                                                       {"worktree_name", "ketplus-journal"}});
         journal.agent("final_answer",
                       "The daemon now reports `journal.size` in `session.list` and warns past "
                       "**80%** of the limit. Still to do:");

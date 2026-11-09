@@ -91,11 +91,27 @@ QVariantMap daemonEventNotice(const QString& type, const QJsonObject& data, cons
         if (!data.contains("changed"))
             detail = model;
     } else if (type == "conversation.context_changed") {
-        // The journal intentionally carries revisions, not a machine path.
-        title = "Moved to another worktree";
+        // The journal carries the branch and the folder's name, never the machine path.
+        // Journals from before they were recorded only know that the worktree changed.
+        const auto branch = data.value("branch").toString();
+        const auto folder = data.value("worktree_name").toString();
+        title = branch.isEmpty() ? QStringLiteral("Moved to another worktree")
+                                 : QStringLiteral("Moved to worktree ") + branch;
+        if (!folder.isEmpty())
+            detail = QStringLiteral("The agent now works in ") + folder;
     } else if (type == "session.forked") {
-        title = "Forked from another conversation";
-        detail = "Its history comes along";
+        const auto number = data.value("from_conversation_number").toString();
+        const auto turn = data.value("through_turn").toInteger();
+        title = number.isEmpty() ? QStringLiteral("Forked from another conversation")
+                                 : QStringLiteral("Forked from @agent/") + number;
+        if (!number.isEmpty() && turn > 0)
+            title += QStringLiteral(" at turn %1").arg(turn);
+        // The fork's own provider and model, as the mock's "Cursor · Composer 2".
+        const auto provider = data.value("provider").toString();
+        const auto model = data.value("model").toString();
+        detail = provider.isEmpty()
+                     ? QStringLiteral("Its history comes along")
+                     : providerName(provider) + (model.isEmpty() ? QString{} : " · " + model);
     } else if (type == "session.renamed") {
         title = "Conversation renamed";
         detail = data.value("title").toString();
