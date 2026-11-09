@@ -71,8 +71,25 @@ QVariantMap daemonEventNotice(const QString& type, const QJsonObject& data, cons
         const auto effort = effective.value("effort").toString();
         if (!effort.isEmpty())
             model += QStringLiteral(" · ") + effort;
-        title = model.isEmpty() ? QStringLiteral("Model changed")
-                                : QStringLiteral("Model changed to ") + model;
+        // The event also follows permission, mode and context window changes; journals from
+        // before `changed` existed cannot tell them apart, so they stay neutral.
+        const auto changed = data.value("changed").toArray();
+        const auto only = [&changed](const char* setting) {
+            return changed.size() == 1 && changed.first().toString() == QLatin1String(setting);
+        };
+        if (changed.contains(QStringLiteral("model")) || changed.contains(QStringLiteral("effort")))
+            title = model.isEmpty() ? QStringLiteral("Model changed")
+                                    : QStringLiteral("Model changed to ") + model;
+        else if (only("execution_policy"))
+            title = "Permissions changed";
+        else if (only("mode"))
+            title = "Mode changed";
+        else if (only("compact_window"))
+            title = "Context window changed";
+        else
+            title = "Settings changed";
+        if (!data.contains("changed"))
+            detail = model;
     } else if (type == "conversation.context_changed") {
         // The journal intentionally carries revisions, not a machine path.
         title = "Moved to another worktree";

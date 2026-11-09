@@ -57,19 +57,30 @@ Rectangle {
         id: reconnectRow
         objectName: "transcriptReconnectLine"
         visible: notice.reconnecting
+        width: parent.width
         spacing: KetTheme.px(8, KetTheme.zoom)
         // Still, as in the mock: a journal row must not hold the shared animation clock.
         Kit.KetActivityIndicator {
-            anchors.verticalCenter: parent.verticalCenter
+            id: reconnectIndicator
+            // Centred on the first line when a long message wraps.
+            y: Math.max(0, (reconnectMetrics.height - height) / 2)
             color: KetTheme.t.warning
             previewTime: 0
         }
         Text {
+            id: reconnectText
+            objectName: "transcriptReconnectText"
+            width: reconnectRow.width - reconnectIndicator.width - reconnectRow.spacing
             text: notice.message.length > 0 ? notice.message : notice.title
             textFormat: Text.PlainText
+            wrapMode: Text.Wrap
             color: KetTheme.t.textSecondary
             font.family: KetTheme.fontFamily
             font.pixelSize: KetTheme.px(13, KetTheme.zoom)
+            FontMetrics {
+                id: reconnectMetrics
+                font: reconnectText.font
+            }
         }
     }
     RowLayout {

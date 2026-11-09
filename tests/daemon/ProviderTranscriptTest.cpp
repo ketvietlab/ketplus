@@ -26,7 +26,8 @@ class ProviderTranscriptTest : public QObject {
                         {"turn_sequence", 1},
                         {"event_type", "session.configuration_changed"},
                         {"payload", QJsonObject{{"effective", QJsonObject{{"model", "test-model"},
-                                                                          {"effort", "high"}}}}}},
+                                                                          {"effort", "high"}}},
+                                                {"changed", QJsonArray{"model"}}}}},
             QJsonObject{{"cursor", 3},
                         {"turn_sequence", 1},
                         {"event_type", "conversation.context_changed"},
@@ -50,6 +51,24 @@ class ProviderTranscriptTest : public QObject {
         QVERIFY(rows[2].toMap().value("body").toString().isEmpty());
         QCOMPARE(rows[3].toMap().value("body").toString(), "$0.13 session");
         QCOMPARE(rows[3].toMap().value("messageKey").toString(), "daemon:1:notice:5");
+        // Permission, mode and window changes keep their own wording; older journals stay neutral.
+        const QJsonObject effective{{"model", "same-model"}, {"effort", "high"}};
+        const auto configured = [&effective](const QJsonArray& changed) {
+            QJsonObject data{{"effective", effective}};
+            if (!changed.isEmpty())
+                data.insert("changed", changed);
+            return daemonEventNotice("session.configuration_changed", data, "c");
+        };
+        QCOMPARE(configured({"execution_policy"}).value("title").toString(), "Permissions changed");
+        QCOMPARE(configured({"mode"}).value("title").toString(), "Mode changed");
+        QCOMPARE(configured({"compact_window"}).value("title").toString(),
+                 "Context window changed");
+        QCOMPARE(configured({"mode", "execution_policy"}).value("title").toString(),
+                 "Settings changed");
+        QCOMPARE(configured({"effort"}).value("title").toString(),
+                 "Model changed to same-model · high");
+        QCOMPARE(configured({}).value("title").toString(), "Settings changed");
+        QCOMPARE(configured({}).value("body").toString(), "same-model · high");
         for (const auto& state : {"failed", "interrupted", "completed"}) {
             const auto note = daemonEventNotice("turn.completed", {{"status", state}}, "receipt");
             QCOMPARE(note.value("status").toString(), QString::fromLatin1(state));

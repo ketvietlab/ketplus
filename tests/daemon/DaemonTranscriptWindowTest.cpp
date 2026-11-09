@@ -673,6 +673,21 @@ class DaemonTranscriptWindowTest final : public QObject {
         QVERIFY(host.handleCommand(apply, "desktop").value("ok").toBool());
         QCOMPARE(host.handleCommand(read, "desktop").value("revision").toInteger(), 2);
         QVERIFY(journal.commandResult("synthetic-request").isEmpty());
+        // The event names what changed, so the transcript does not call it a model change.
+        QJsonObject policy = request("session.execution_policy.apply",
+                                     {{"execution_policy", "read-only"}, {"expected_revision", 2}});
+        policy.insert("message_id", "apply-read-only");
+        QVERIFY(host.handleCommand(policy, "desktop").value("ok").toBool());
+        const auto events =
+            host.handleCommand(request("session.events_after", {{"after_cursor", 0}}), "desktop")
+                .value("events")
+                .toArray();
+        QJsonObject changed;
+        for (const auto& event : events) {
+            if (event.toObject().value("event_type").toString() == "session.configuration_changed")
+                changed = event.toObject().value("payload").toObject();
+        }
+        QCOMPARE(changed.value("changed").toArray(), QJsonArray{"execution_policy"});
     }
 
     void replayAfterPrunedCursorReportsExplicitGap() {
