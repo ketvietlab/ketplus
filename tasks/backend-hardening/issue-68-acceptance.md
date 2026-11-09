@@ -172,11 +172,18 @@ row check each fail their test.
 
 Opening a pre-format journal runs idempotent steps (`CREATE ... IF NOT EXISTS`,
 column checks, backfills in their own transactions) and stamps the format last.
-A recovery test now shows that this order holds. With 256 KiB left on a disk
-image, the open fails with SQLite's full-disk error, the journal passes
-`integrity_check`, keeps format 0 and unchanged events, and the next open with
-space produces the same contents as an uninterrupted migration. Killing a child
-process at six points of a 0.4–0.5 s migration (3–4 of them after some steps
-committed) always reopens to those same contents. Stamping the format first
-fails both tests. No production change was needed. Cross-file interruption
-(journal plus media) stays under the transaction criterion.
+A recovery test now shows that this order holds. Its fixture has 60k rows in
+2,000 sessions that number their own cursors, so every session takes the
+turn-number and turn-start backfills; five later columns, the turn indexes and the
+activity tables are removed. With 256 KiB left on a disk image, the open fails with
+SQLite's full-disk error, the journal passes `integrity_check`, keeps format 0 and
+unchanged events, and the next open with space matches an uninterrupted migration
+(schema definitions, nine tables, the worktree catalog without its clock). Killing a
+child process at six times of a 1.6–1.7 s migration (all six after some step had
+committed) always reopens to that result. Stamping the format first, an index of
+the same name on other columns and a wrong catalog repository each fail the test.
+No production change was needed.
+
+Limits: the child opens only `LocalJournal`, not the startup move to incremental
+vacuum (covered by its own tests); kills are timed, not placed in each step; power
+loss and journal-plus-media interruption are not covered.

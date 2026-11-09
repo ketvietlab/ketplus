@@ -33,7 +33,9 @@ QSqlDatabase journalConnection(const QString& path) {
     return {};
 }
 
-// A journal written before the format marker, activity index and turn indexes existed.
+// A journal written before the format marker, the activity index, the turn indexes and several
+// columns existed. Each session numbers its own cursors from 1, as a real journal does, so the
+// turn-number backfill applies to every session.
 bool writeLegacyJournal(const QString& path, int rows, int sessions) {
     LocalJournal journal(path);
     if (!journal.isOpen())
@@ -46,25 +48,29 @@ bool writeLegacyJournal(const QString& path, int rows, int sessions) {
             .arg(count);
     };
     const QString session = QString("'s'||(1+i%%1)").arg(sessions);
-    // Every tenth event starts a turn, so the turn-number and turn-start backfills have work.
-    const QString type = "CASE WHEN i%10=1 THEN 'user.message' ELSE 'item.started' END";
-    const QString payload = "CASE WHEN i%10=1 THEN json_object('text','prompt '||i) ELSE "
+    const QString cursor = QString("(1+(i-1)/%1)").arg(sessions);
+    // Every tenth event of a session starts a turn, so the turn backfills have work.
+    const QString type =
+        "CASE WHEN " + cursor + "%10=1 THEN 'user.message' ELSE 'item.started' END";
+    const QString payload = "CASE WHEN " + cursor +
+                            "%10=1 THEN json_object('text','prompt '||i) ELSE "
                             "json_object('item_id','t'||i,'item',json_object('id','t'||i,'type',"
                             "'commandExecution','command',printf('%.120c','x'))) END";
     const QString sentAt = "strftime('%Y-%m-%dT%H:%M:%fZ','2026-01-01',printf('+%d seconds',i))";
     const QStringList statements{
         "BEGIN",
-        n(sessions) + "INSERT INTO sessions(id,worktree_path,adapter,thread_id,turn_id,state,"
-                      "generation,last_cursor) SELECT 's'||i,'/tmp','codex','','','ready',1,0 "
-                      "FROM n",
+        n(sessions) +
+            "INSERT INTO sessions(id,worktree_path,adapter,thread_id,turn_id,state,"
+            "generation,last_cursor) SELECT 's'||i,'/tmp/w'||(i%7),'codex','','','ready',1,0 "
+            "FROM n",
         n(rows) +
             "INSERT INTO events(session_id,generation,cursor,event_type,payload,sent_at) "
             "SELECT " +
-            session + ",1,i," + type + "," + payload + "," + sentAt + " FROM n",
+            session + ",1," + cursor + "," + type + "," + payload + "," + sentAt + " FROM n",
         n(rows) +
             "INSERT INTO replay_events(session_id,generation,cursor,event_type,item_id,"
             "payload,sent_at) SELECT " +
-            session + ",1,i," + type + ",'t'||i," + payload + "," + sentAt + " FROM n",
+            session + ",1," + cursor + "," + type + ",'t'||i," + payload + "," + sentAt + " FROM n",
         "UPDATE sessions SET last_cursor=(SELECT MAX(cursor) FROM events e WHERE "
         "e.session_id=sessions.id)",
         "INSERT INTO replay_projection_state(session_id,generation,first_cursor,last_cursor) "
@@ -77,7 +83,14 @@ bool writeLegacyJournal(const QString& path, int rows, int sessions) {
         "DROP TABLE activity_summaries",
         "DROP TABLE activity_heads",
         "DROP TABLE activity_backfill",
+        "DELETE FROM worktree_catalog",
         "COMMIT",
+        // Columns later releases added; the migration adds them back.
+        "ALTER TABLE sessions DROP COLUMN last_turn_started_at",
+        "ALTER TABLE sessions DROP COLUMN last_seen_cursor",
+        "ALTER TABLE replay_projection_state DROP COLUMN revision",
+        "ALTER TABLE worktree_catalog DROP COLUMN repository_path",
+        "ALTER TABLE cloud_events DROP COLUMN upload_acked",
         "PRAGMA user_version=0",
         "PRAGMA wal_checkpoint(TRUNCATE)",
     };
@@ -103,22 +116,37 @@ QVariantMap contents(const QString& path) {
         result.insert("integrity", q.next() ? q.value(0) : QVariant());
         q.exec("PRAGMA user_version");
         result.insert("format", q.next() ? q.value(0) : QVariant());
+        // Definitions, not only names: an index of the same name on other columns differs.
         QStringList schema;
-        q.exec("SELECT type||' '||name FROM sqlite_master ORDER BY 1");
+        if (!q.exec("SELECT type||' '||name||' '||COALESCE(sql,'') FROM sqlite_master ORDER BY 1"))
+            schema.append("query failed: " + q.lastError().text());
         while (q.next())
             schema.append(q.value(0).toString());
         result.insert("schema", schema);
-        for (const auto& table :
-             {"sessions", "events", "replay_events", "replay_projection_state", "activity_items",
-              "activity_summaries", "activity_heads", "activity_backfill"}) {
+        const QList<QPair<QString, QString>> tables{
+            {"sessions", "SELECT * FROM sessions ORDER BY 1"},
+            {"events", "SELECT * FROM events ORDER BY 1,2,3"},
+            {"replay_events", "SELECT * FROM replay_events ORDER BY 1,2,3"},
+            {"replay_projection_state", "SELECT * FROM replay_projection_state ORDER BY 1,2"},
+            {"activity_items", "SELECT * FROM activity_items ORDER BY 1,2,3,4"},
+            {"activity_summaries", "SELECT * FROM activity_summaries ORDER BY 1,2,3,4"},
+            {"activity_heads", "SELECT * FROM activity_heads ORDER BY 1,2"},
+            {"activity_backfill", "SELECT * FROM activity_backfill ORDER BY 1,2"},
+            // updated_at is the clock at migration time.
+            {"worktree_catalog", "SELECT path,catalog_revision,lifecycle_revision,"
+                                 "repository_path FROM worktree_catalog ORDER BY 1"},
+        };
+        for (const auto& [table, select] : tables) {
             QCryptographicHash hash(QCryptographicHash::Sha256);
             qint64 count = 0;
-            if (q.exec(QString("SELECT * FROM %1 ORDER BY 1,2,3").arg(table))) {
-                while (q.next()) {
-                    ++count;
-                    for (int i = 0; i < q.record().count(); ++i)
-                        hash.addData(q.value(i).toString().toUtf8() + '\x1f');
-                }
+            if (!q.exec(select)) {
+                result.insert(table, "query failed: " + q.lastError().text());
+                continue;
+            }
+            while (q.next()) {
+                ++count;
+                for (int i = 0; i < q.record().count(); ++i)
+                    hash.addData(q.value(i).toString().toUtf8() + '\x1f');
             }
             result.insert(table, QString("%1 %2").arg(count).arg(hash.result().toHex()));
         }
@@ -177,7 +205,7 @@ class JournalMigrationRecoveryTest final : public QObject {
 
   private slots:
     void initTestCase() {
-        QVERIFY(writeLegacyJournal(fixtures_.filePath("legacy.sqlite"), 100000, 4000));
+        QVERIFY(writeLegacyJournal(fixtures_.filePath("legacy.sqlite"), 60000, 2000));
         QVERIFY(copyJournal(fixtures_.filePath("legacy.sqlite"),
                             fixtures_.filePath("reference.sqlite")));
         QElapsedTimer timer;
@@ -188,7 +216,23 @@ class JournalMigrationRecoveryTest final : public QObject {
         reference_ = contents(fixtures_.filePath("reference.sqlite"));
         QCOMPARE(reference_.value("integrity").toString(), QString("ok"));
         QCOMPARE(reference_.value("format").toInt(), journal_format::current);
+        for (auto it = reference_.cbegin(); it != reference_.cend(); ++it)
+            QVERIFY2(!it.value().toString().startsWith("query failed"), qPrintable(it.key()));
         QVERIFY(reference_ != contents(fixtures_.filePath("legacy.sqlite")));
+        // Every session's legacy backfills ran, and the catalog learned its worktrees.
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", "reference-check");
+            db.setDatabaseName(fixtures_.filePath("reference.sqlite"));
+            QVERIFY(db.open());
+            QSqlQuery q(db);
+            QVERIFY(q.exec("SELECT COUNT(*) FROM sessions WHERE current_turn_sequence=0 OR "
+                           "title='' OR last_turn_started_at=''") &&
+                    q.next());
+            QCOMPARE(q.value(0).toInt(), 0);
+            QVERIFY(q.exec("SELECT COUNT(*) FROM worktree_catalog") && q.next());
+            QCOMPARE(q.value(0).toInt(), 7);
+        }
+        QSqlDatabase::removeDatabase("reference-check");
         qInfo() << "uninterrupted migration in a child process:" << migrationMs_ << "ms";
     }
 
