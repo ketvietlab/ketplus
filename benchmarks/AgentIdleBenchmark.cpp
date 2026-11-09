@@ -16,6 +16,7 @@
 #include <QQuickItem>
 #include <QQuickView>
 #include <QSGRendererInterface>
+#include <QScreen>
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QTimer>
@@ -106,7 +107,10 @@ int main(int argc, char** argv) {
          {"transcript", "claude, codex or cursor: the mock's workspace/<provider> messages",
           "provider"},
          {"scroll", "With --transcript: 0 shows the top, 1 the end, like the mock's --scroll",
-          "fraction"}});
+          "fraction"},
+         {"expand-groups", "With --transcript: open every activity group, like the mock's"},
+         {"display", "secondary (the first that is not the main one) or a screen index", "screen"},
+         {"hold", "Keep the window open for review instead of measuring"}});
     parser.process(app);
     const auto work = parser.value("work");
     const auto visibility = parser.value("visibility");
@@ -251,6 +255,26 @@ int main(int argc, char** argv) {
     view.setSessionState("Idle CPU qualification", work == "running" ? "Working" : "Ready",
                          work == "running");
     view.show();
+    // Like the mock's --display: review windows stay off the main screen.
+    if (parser.isSet("display")) {
+        const QList<QScreen*> screens = QGuiApplication::screens();
+        QScreen* target = nullptr;
+        if (parser.value("display") == "secondary") {
+            for (QScreen* candidate : screens)
+                if (candidate != QGuiApplication::primaryScreen() && !target)
+                    target = candidate;
+        } else {
+            bool ok = false;
+            const int index = parser.value("display").toInt(&ok);
+            if (ok && index >= 0 && index < screens.size())
+                target = screens.at(index);
+        }
+        if (target) {
+            view.windowHandle()->setScreen(target);
+            view.move(target->availableGeometry().topLeft() + QPoint(40, 40));
+        }
+        report({{"event", "display"}, {"screen", target ? target->name() : QString()}});
+    }
     view.raise();
     view.activateWindow();
     view.quickView()->requestActivate();
@@ -278,6 +302,17 @@ int main(int argc, char** argv) {
                                            {"effort", "medium"},
                                            {"permission", "workspace-write"},
                                            {"compactWindowSupported", true}});
+    // Before the scroll: an opened group changes the transcript's height.
+    if (!transcript.isEmpty() && parser.isSet("expand-groups"))
+        QTimer::singleShot(600, &view, [&view] {
+            const auto open = [](const auto& self, QQuickItem* item) -> void {
+                if (item->objectName() == "transcriptGroupHeader")
+                    QMetaObject::invokeMethod(item, "clicked");
+                for (auto* child : item->childItems())
+                    self(self, child);
+            };
+            open(open, view.quickView()->rootObject());
+        });
     if (!transcript.isEmpty() && parser.isSet("scroll"))
         QTimer::singleShot(1000, &view, [&view, fraction = parser.value("scroll").toDouble()] {
             auto* list = findItem(view.quickView()->rootObject(), "agentTranscript");
@@ -438,6 +473,9 @@ int main(int argc, char** argv) {
             app.exit(valid ? 0 : 2);
         });
     });
+    // A review window: no qualification, no measurement, open until it is closed.
+    if (parser.isSet("hold"))
+        return app.exec();
     readiness.start();
     QObject::connect(&readinessDeadline, &QTimer::timeout, &app, [&] {
         report({{"event", "error"},

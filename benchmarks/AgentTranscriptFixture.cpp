@@ -41,6 +41,17 @@ class Journal {
               QJsonObject{{"type", "agentMessage"}, {"id", id}, {"phase", phase}, {"text", text}}}},
             {}, turn_);
     }
+    // A completed tool step, shaped as the provider journals it.
+    void tool(const QJsonObject& item) {
+        const QString id = item.value("tool").toString(item.value("type").toString()) +
+                           QString::number(cursor_ + 1);
+        QJsonObject completed = item;
+        completed.insert("id", id);
+        if (!completed.contains("status"))
+            completed.insert("status", "completed");
+        append("item.completed", {{"provider", provider_}, {"item_id", id}, {"item", completed}},
+               {}, turn_);
+    }
     void steer(const QString& text) {
         append("turn.steered", {{"text", text}, {"provider", provider_}}, {}, turn_);
     }
@@ -113,6 +124,42 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
         journal.agent("commentary",
                       "I'll read how the sidebar draws its working rows, then measure the idle "
                       "CPU.");
+        // The mock's first group: Claude's Read, Grep and Bash steps.
+        const auto text = [](const QString& value) {
+            return QJsonObject{
+                {"content", QJsonArray{QJsonObject{{"type", "text"}, {"text", value}}}}};
+        };
+        journal.tool(
+            {{"type", "dynamicToolCall"},
+             {"tool", "Read"},
+             {"path", "modules/ai/src/agent/qml/AgentSidebar.qml"},
+             {"arguments", QJsonObject{{"file_path", "modules/ai/src/agent/qml/AgentSidebar.qml"},
+                                       {"offset", 540},
+                                       {"limit", 61}}},
+             {"result", text("Item {\n    id: row\n}")}});
+        journal.tool(
+            {{"type", "dynamicToolCall"},
+             {"tool", "Grep"},
+             {"arguments", QJsonObject{{"pattern", "Animation.Infinite"}, {"path", "modules/ai"}}},
+             {"result", text("modules/ai/src/agent/qml/AgentRunStatus.qml:33\n"
+                             "modules/ai/src/agent/qml/AgentSidebar.qml:579\n"
+                             "modules/ai/src/agent/qml/BackgroundTaskBar.qml:149")}});
+        journal.tool({{"type", "commandExecution"},
+                      {"tool", "Bash"},
+                      {"command", "top -l 4 -s 2 -pid 41087 -stats pid,cpu"},
+                      {"description", "Measure idle CPU"},
+                      {"aggregatedOutput", "41087  44.3\n41087  47.4\n41087  41.5\n41087  45.0"},
+                      {"exitCode", 0}});
+        journal.tool({{"type", "commandExecution"},
+                      {"tool", "Bash"},
+                      {"command", "ctest --test-dir build -R sidebar"},
+                      {"description", "Run tests"},
+                      {"status", "failed"},
+                      {"exitCode", 8},
+                      {"durationMs", 12400},
+                      {"aggregatedOutput", "1/2 Test #31: sidebar_rows ........   Passed\n"
+                                           "2/2 Test #32: sidebar_spin ........***Failed\n"
+                                           "50% tests passed, 1 tests failed out of 2"}});
         journal.user(today.addSecs(120),
                      "20 steps a second reads as smooth at 14 px. Keep 4 behind another app.",
                      fromAgent("8941", "DS Icon", "claude",
