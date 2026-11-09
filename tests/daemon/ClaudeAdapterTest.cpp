@@ -327,6 +327,17 @@ class ClaudeAdapterTest final : public QObject {
         QTRY_COMPARE_WITH_TIMEOUT(events(QStringLiteral("turn.completed")).size(), 1, 3000);
         QCOMPARE(events(QStringLiteral("turn.completed")).first()["payload"]["status"].toString(),
                  QStringLiteral("interrupted"));
+        // The client's Stop ended it, which the transcript words as "stopped by you".
+        QCOMPARE(events(QStringLiteral("turn.completed")).first()["payload"]["reason"].toString(),
+                 QStringLiteral("user"));
+        // A turn that ends on its own carries no reason.
+        const QString plain = startClaude(host, directory.path(), "plain");
+        const auto plainEvents = eventsOf(journal, plain);
+        QTRY_COMPARE_WITH_TIMEOUT(plainEvents(QStringLiteral("turn.completed")).size(), 1, 3000);
+        QVERIFY(!plainEvents(QStringLiteral("turn.completed"))
+                     .first()["payload"]
+                     .toObject()
+                     .contains(QStringLiteral("reason")));
         const QJsonObject listed =
             host.handleCommand(request(QStringLiteral("session.list"), QStringLiteral("list")),
                                QStringLiteral("desktop-test"));

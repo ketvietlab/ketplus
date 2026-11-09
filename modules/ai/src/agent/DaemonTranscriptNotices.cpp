@@ -164,6 +164,9 @@ QVariantMap daemonEventNotice(const QString& type, const QJsonObject& data, cons
         else
             return {}; // Do not invent success for an unknown provider state.
         detail = turnEndText(turn, usage);
+        // As the mock's end of a turn the user stopped.
+        if (title == "Turn stopped" && data.value("reason").toString() == "user")
+            detail += (detail.isEmpty() ? "" : " · ") + QStringLiteral("stopped by you");
         trimmed = trimmedDetailText(data.value("detail_trimmed").toObject());
     } else if (type == "runtime.error" &&
                (data.value("will_retry").toBool() || data.value("willRetry").toBool())) {

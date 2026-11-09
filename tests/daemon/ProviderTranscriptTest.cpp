@@ -94,6 +94,24 @@ class ProviderTranscriptTest : public QObject {
             QVERIFY(note.value("body").toString().isEmpty());
         }
         QVERIFY(daemonEventNotice("turn.completed", {{"status", "unknown"}}, "receipt").isEmpty());
+        // As the mock's turn the user stopped; only a Stop says "by you".
+        QCOMPARE(daemonEventNotice("turn.completed",
+                                   {{"status", "interrupted"}, {"reason", "user"}}, "receipt")
+                     .value("body")
+                     .toString(),
+                 "stopped by you");
+        QCOMPARE(daemonEventNotice("turn.completed",
+                                   {{"status", "interrupted"}, {"reason", "user"}}, "receipt", {},
+                                   TurnFacts{68000, 96000})
+                     .value("body")
+                     .toString(),
+                 "1m 08s · 96k context · stopped by you");
+        QCOMPARE(daemonEventNotice("turn.completed",
+                                   {{"status", "interrupted"}, {"reason", "fork_snapshot"}},
+                                   "receipt")
+                     .value("body")
+                     .toString(),
+                 "");
         // What retention reduced in the turn reads as the mock's note.
         const auto trimmed = [](const QJsonObject& detail) {
             return daemonEventNotice("turn.completed",
