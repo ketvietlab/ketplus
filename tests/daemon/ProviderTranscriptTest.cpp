@@ -69,12 +69,58 @@ class ProviderTranscriptTest : public QObject {
                  "Model changed to same-model · high");
         QCOMPARE(configured({}).value("title").toString(), "Settings changed");
         QCOMPARE(configured({}).value("body").toString(), "same-model · high");
+        // A move names the branch and the folder; a fork its source, turn, provider and model.
+        const auto moved = daemonEventNotice("conversation.context_changed",
+                                             {{"context_revision", 3},
+                                              {"branch", "feat/journal-storage"},
+                                              {"worktree_name", "ketplus-journal"}},
+                                             "m");
+        QCOMPARE(moved.value("title").toString(), "Moved to worktree feat/journal-storage");
+        QCOMPARE(moved.value("body").toString(), "The agent now works in ketplus-journal");
+        const auto forked = daemonEventNotice("session.forked",
+                                              {{"from_conversation_number", "5208"},
+                                               {"through_turn", 14},
+                                               {"provider", "cursor"},
+                                               {"model", "Composer 2"}},
+                                              "f");
+        QCOMPARE(forked.value("title").toString(), "Forked from @agent/5208 at turn 14");
+        QCOMPARE(forked.value("body").toString(), "Cursor · Composer 2");
+        const auto oldFork = daemonEventNotice("session.forked", {{"from_session_id", "s"}}, "o");
+        QCOMPARE(oldFork.value("title").toString(), "Forked from another conversation");
+        QCOMPARE(oldFork.value("body").toString(), "Its history comes along");
         for (const auto& state : {"failed", "interrupted", "completed"}) {
             const auto note = daemonEventNotice("turn.completed", {{"status", state}}, "receipt");
             QCOMPARE(note.value("status").toString(), QString::fromLatin1(state));
             QVERIFY(note.value("body").toString().isEmpty());
         }
         QVERIFY(daemonEventNotice("turn.completed", {{"status", "unknown"}}, "receipt").isEmpty());
+        // What retention reduced in the turn reads as the mock's note.
+        const auto trimmed = [](const QJsonObject& detail) {
+            return daemonEventNotice("turn.completed",
+                                     {{"status", "completed"}, {"detail_trimmed", detail}}, "t")
+                .value("trimmedDetail")
+                .toString();
+        };
+        QCOMPARE(trimmed({{"commands", 38},
+                          {"tool_results", 12},
+                          {"bytes", 1258291},
+                          {"older_than_days", 30}}),
+                 "This turn is older than 30 days: 38 commands and 12 tool results were reduced "
+                 "to their summaries (1.2 MB).");
+        QCOMPARE(trimmed({{"commands", 2},
+                          {"diffs", 1},
+                          {"thoughts", 3},
+                          {"bytes", 30000},
+                          {"older_than_days", 7}}),
+                 "This turn is older than 7 days: 2 commands, 1 file diff and 3 thoughts were "
+                 "reduced to their summaries (29 KB).");
+        QCOMPARE(trimmed({{"tool_inputs", 1}, {"bytes", 6000}, {"older_than_days", 30}}),
+                 "This turn is older than 30 days: 1 tool input was reduced to its summary "
+                 "(6 KB).");
+        QCOMPARE(trimmed({{"diffs", 1}, {"bytes", 100}}),
+                 "To save space, 1 file diff was reduced to its summary.");
+        QVERIFY(trimmed({{"commands", 0}, {"bytes", 0}}).isEmpty());
+        QVERIFY(trimmed({}).isEmpty());
         QVERIFY(sessionEstimateText({{"estimatedCostUsd", -1}}).isEmpty());
         const auto retry = daemonEventNotice(
             "runtime.error", {{"will_retry", true}, {"message", "Network interrupted"}}, "retry");

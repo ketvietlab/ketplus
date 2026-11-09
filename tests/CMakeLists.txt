@@ -58,6 +58,7 @@ ketplus_add_gui_test(ketplus_agent_tests
     TranscriptInteractionTest.cpp
     TranscriptFileStepsTest.cpp
     TranscriptProviderErrorTest.cpp
+    TranscriptTrimmedDetailTest.cpp
     AgentWorkspaceInteractionTest.cpp
     AgentWorkspaceAtlasResultTest.cpp
     AgentWorkspaceRenderingTest.cpp

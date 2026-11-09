@@ -142,16 +142,26 @@ QJsonObject SessionHost::storeFork(const QString& sourceId, const qint64 sourceG
                                   source->stored.state == QStringLiteral("running") ||
                                   source->stored.state == QStringLiteral("waiting_for_input") ||
                                   source->stored.state == QStringLiteral("stopping");
+    // Read before the insert, which may move the source's entry.
+    const qint64 sourceTurn = source->stored.currentTurnSequence;
     auto it = sessions_.insert(forkId, fork);
     sessionsByThread_.insert(threadId, forkId);
     QString numberError;
     if (journal_->assignConversationNumber(forkId, it->stored.generation, &numberError).isEmpty())
         qWarning("Unable to number conversation %s: %s", qUtf8Printable(forkId),
                  qUtf8Printable(numberError));
-    (void)appendEvent(*it, QStringLiteral("session.forked"),
-                      {{QStringLiteral("from_session_id"), sourceId},
+    // Worded as the mock's "Forked from @agent/5208 at turn 14 · Cursor · Composer 2".
+    QJsonObject forked{{QStringLiteral("from_session_id"), sourceId},
                        {QStringLiteral("from_session_generation"), sourceGeneration},
-                       {QStringLiteral("through_cursor"), throughCursor}});
+                       {QStringLiteral("through_cursor"), throughCursor},
+                       {QStringLiteral("provider"), it->stored.adapter},
+                       {QStringLiteral("model"), it->stored.model}};
+    if (const auto number = journal_->conversationNumber(sourceId, sourceGeneration);
+        !number.isEmpty())
+        forked.insert(QStringLiteral("from_conversation_number"), number);
+    if (sourceTurn > 0)
+        forked.insert(QStringLiteral("through_turn"), sourceTurn);
+    (void)appendEvent(*it, QStringLiteral("session.forked"), forked);
     // Only the copy is settled: inherited running rows and pending questions must not
     // make clients wait on a provider turn that belongs to the source conversation.
     if (copiedActiveTurn)

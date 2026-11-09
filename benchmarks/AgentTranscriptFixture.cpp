@@ -80,8 +80,11 @@ class Journal {
                    turn_);
     }
     // Ends the turn `seconds` after its prompt, as the mock's turn line reads.
-    void finish(const QString& status, int seconds) {
-        append("turn.completed", {{"status", status}}, turnStart_.addSecs(seconds), turn_);
+    void finish(const QString& status, int seconds, const QJsonObject& trimmed = {}) {
+        QJsonObject data{{"status", status}};
+        if (!trimmed.isEmpty())
+            data.insert("detail_trimmed", trimmed);
+        append("turn.completed", data, turnStart_.addSecs(seconds), turn_);
     }
     QVariantList rows() const {
         QVariantList rows = agent_message::daemonWindowMessages({{"events", events_}});
@@ -142,7 +145,10 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
         journal.user(QDateTime(QDate(now.date().year(), 9, 24), QTime(9, 12)),
                      "Profile why the sidebar keeps the CPU busy when nothing happens.");
         journal.usage(141000, 2.08);
-        journal.finish("completed", 380);
+        // The mock's old turn: history retention has reduced its detail.
+        journal.finish(
+            "completed", 380,
+            {{"commands", 38}, {"tool_results", 12}, {"bytes", 1258291}, {"older_than_days", 30}});
         journal.user(today,
                      "The sidebar spinner still looks choppy. Check it against this capture and "
                      "fix it.");
@@ -216,7 +222,10 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
         journal.usage(182000, 3.32);
         journal.finish("completed", 252);
     } else if (provider == "cursor") {
-        journal.event("session.forked", {{"source_number", "5208"}, {"source_turn", 14}});
+        journal.event("session.forked", {{"from_conversation_number", "5208"},
+                                         {"through_turn", 14},
+                                         {"provider", "cursor"},
+                                         {"model", "Composer 2"}});
         journal.user(today, "Find where the staging tenant gets created and summarise the flow.");
         journal.tool({{"type", "commandExecution"},
                       {"command", "rg -n \"createTenant\" services"},
@@ -360,7 +369,9 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
         journal.event("session.configuration_changed",
                       {{"effective", QJsonObject{{"model", "GPT-5.6 Luna"}, {"effort", "Medium"}}},
                        {"changed", QJsonArray{"model", "effort"}}});
-        journal.event("conversation.context_changed", {{"context_revision", 2}});
+        journal.event("conversation.context_changed", {{"context_revision", 2},
+                                                       {"branch", "feat/journal-storage"},
+                                                       {"worktree_name", "ketplus-journal"}});
         journal.agent("final_answer",
                       "The daemon now reports `journal.size` in `session.list` and warns past "
                       "**80%** of the limit. Still to do:");

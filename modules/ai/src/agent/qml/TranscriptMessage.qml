@@ -67,6 +67,8 @@ Item {
     required property string cwd
     required property string commandDescription
     required property string fileLocation
+    // What history retention reduced in the turn this row ends.
+    required property string trimmedDetail
     required property var exitCode
     required property var durationMs
     required property string detailsData
@@ -266,9 +268,12 @@ Item {
         readonly property bool imagesOnly: userMessage && userLead.visible && messageDelegate.displayBody.trim().length === 0
         visible: !imagesOnly
         height: imagesOnly ? 0 : messageColumn.implicitHeight + (messageDelegate.activityRow ? 0 : kind === "user" ? 2 * userRecipe.paddingBlock : KetTheme.px(16, KetTheme.zoom))
-        radius: kind === "user" ? userRecipe.radius : kind === "file" ? KetTheme.px(7, KetTheme.zoom) : 0
-        color: kind === "user" ? userRecipe.background : kind === "file" ? KetTheme.t.surfaceRaised : "transparent"
-        border.color: kind === "file" ? KetTheme.t.panelBorder : "transparent"
+        // A file edit read as an activity step is a line like any other step, as in the mock;
+        // only a standalone file message keeps its raised card.
+        readonly property bool fileCard: kind === "file" && !messageDelegate.activityRow
+        radius: kind === "user" ? userRecipe.radius : fileCard ? KetTheme.px(7, KetTheme.zoom) : 0
+        color: kind === "user" ? userRecipe.background : fileCard ? KetTheme.t.surfaceRaised : "transparent"
+        border.color: fileCard ? KetTheme.t.panelBorder : "transparent"
 
         Column {
             id: messageColumn
@@ -279,6 +284,13 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             spacing: kind === "file" ? KetTheme.px(4, KetTheme.zoom) : KetTheme.px(7, KetTheme.zoom)
 
+            TranscriptTrimmedDetail {
+                width: parent.width
+                visible: messageDelegate.subtype === "turnEnd" && messageDelegate.trimmedDetail.length > 0
+                height: visible ? implicitHeight : 0
+                message: messageDelegate.trimmedDetail
+                host: messageDelegate.host
+            }
             // The mock's changed-files card closes a turn that edited files, above its end.
             Kit.KetChangedFiles {
                 id: turnChanges

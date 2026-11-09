@@ -4,6 +4,7 @@
 #include "agent/AgentWorkspaceView.h"
 #include "agent/TranscriptNormalizer.h"
 
+#include <QColor>
 #include <QJsonArray>
 #include <QQuickView>
 #include <QStringList>
@@ -77,6 +78,17 @@ void AgentWorkspaceViewTest::fileStepsOpenTheirDiffInline() {
     QList<QQuickItem*> steps;
     QTRY_VERIFY((steps = visibleItems(root, "transcriptFileStep")).size() == 4);
     QVERIFY(visibleItems(root, "transcriptFileDiff").isEmpty());
+    // The edit is a line of its group, not a card: no raised surface or border around its files.
+    QQuickItem* surface = steps.at(0);
+    while (surface && surface->objectName() != QStringLiteral("messageSurface"))
+        surface = surface->parentItem();
+    QVERIFY(surface);
+    QCOMPARE(surface->property("color").value<QColor>().alpha(), 0);
+    QCOMPARE(qvariant_cast<QObject*>(surface->property("border"))
+                 ->property("color")
+                 .value<QColor>()
+                 .alpha(),
+             0);
     QVERIFY(steps.at(0)->property("expandable").toBool());
     // A step without a diff has nothing to open below it.
     QVERIFY(!steps.at(3)->property("expandable").toBool());
