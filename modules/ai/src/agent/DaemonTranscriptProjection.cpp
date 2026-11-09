@@ -332,6 +332,7 @@ QVariantMap daemonActivityGroupMessage(const QJsonObject& data, qint64 turn) {
     row.insert("messageKey", daemonMessageKey(turn, id));
     row.insert("daemonGroupId", data.value("group_id").toString());
     row.insert("groupCursor", data.value("last_change_cursor").toInteger());
+    row.insert("groupMembership", data.value("membership_cursor").toInteger());
     row.insert("groupKey", row.value("messageKey"));
     row.insert("groupLeaderKey", row.value("messageKey"));
     row.insert("groupRole", "leader");

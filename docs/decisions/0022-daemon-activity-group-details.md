@@ -68,9 +68,14 @@ again never leaves a group empty. One that completes with images in its result
 (`result.content[].type == "image"`) leaves the group:
 - its `activity_items` row keeps the group's cursor under the family `evicted`;
 - its family's count, and what it counted as running or failed, come off the group's
-  summary, and an emptied family row is deleted;
+  summary. An emptied family keeps its row at count 0 and is not listed; its cursor holds
+  the group's watermark, which never goes back;
+- later starts or completions of that item change neither the counts nor the membership;
 - the group's page no longer lists it, and the run ends there, as evidence ends a local
-  group.
+  group;
+- summaries carry `membership_cursor`, the cursor at which a step last left the group. A
+  client holding the group's details drops them and reads the group again when it
+  advances, because loaded details only ever grow.
 
 A step that completes with images without having started never joins. Its events project
 as themselves. The completion also carries the group's new summary as

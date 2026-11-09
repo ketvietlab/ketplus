@@ -323,7 +323,21 @@ class DaemonActivityGroupsTest : public QObject {
         QCOMPARE(refreshed.value("count").toInt(), 2);
         QCOMPARE(refreshed.value("running_count").toInt(), 0);
         QCOMPARE(families(refreshed), (QStringList{"command=1", "tool:node_repl=1"}));
-        QVERIFY(refreshed.value("revision").toInteger() >= shot);
+        QCOMPARE(refreshed.value("revision").toInteger(), shot);
+        QCOMPARE(refreshed.value("membership_cursor").toInteger(), shot);
+        // A repeated start or completion of the departed step leaves the group as it is.
+        QVERIFY(journal.appendEvent("session", 1, "item.started", repl("shot", "inProgress")) > 0);
+        const auto repeated =
+            journal.appendEvent("session", 1, "item.completed", repl("shot", "completed", true));
+        const auto settled = journal.activitySummaryEvent(last(journal, repeated))
+                                 .value("payload")
+                                 .toObject()
+                                 .value("left_activity_group")
+                                 .toObject();
+        QCOMPARE(settled.value("count").toInt(), 2);
+        QCOMPARE(settled.value("running_count").toInt(), 0);
+        QCOMPARE(families(settled), (QStringList{"command=1", "tool:node_repl=1"}));
+        QCOMPARE(settled.value("membership_cursor").toInteger(), shot);
         // History reads it on its own too, and the group's page no longer lists it.
         QCOMPARE(journal.activitySummaryEvent(last(journal, started)).value("event_type"),
                  "item.started");
@@ -346,6 +360,18 @@ class DaemonActivityGroupsTest : public QObject {
         const auto next =
             journal.activitySummaryEvent(last(journal, after)).value("payload").toObject();
         QVERIFY(next.value("group_id").toString() != group);
+        // Its only server step leaving keeps the watermark at the eviction, not before it.
+        QVERIFY(journal.appendEvent("session", 1, "item.started", repl("lone", "inProgress")) > 0);
+        const auto lone =
+            journal.appendEvent("session", 1, "item.completed", repl("lone", "completed", true));
+        const auto emptied = journal.activitySummaryEvent(last(journal, lone))
+                                 .value("payload")
+                                 .toObject()
+                                 .value("left_activity_group")
+                                 .toObject();
+        QCOMPARE(families(emptied), (QStringList{"command=1"}));
+        QCOMPARE(emptied.value("count").toInt(), 1);
+        QCOMPARE(emptied.value("revision").toInteger(), lone);
         // A step that completes with images without having started never joins.
         const auto direct =
             journal.appendEvent("session", 1, "item.completed", repl("direct", "completed", true));
