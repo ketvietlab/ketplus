@@ -141,6 +141,10 @@ loopback origin. It requires complete binary response bytes and exactly one EOF
 without a final credit grant. Run the runtime, cloud-privacy and remote-control
 client targets alongside it; no real CLI/provider or relay is required.
 
+`ketplus_atlas_access_tests` checks that a live Atlas runtime stops when its device is revoked
+or its conversation generation is deleted, and that other devices, conversations and
+generations keep theirs.
+
 Daemon Atlas readiness (`ketplus_atlas_live_runtime_tests`, ADR 0083) includes a
 Unix synthetic Python CLI: wrong/longer port, embedded/partial/truncated banners,
 LF/CRLF/slash/split compatibility, stop-time output and a one-shot start callback

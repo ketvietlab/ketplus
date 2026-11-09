@@ -87,6 +87,8 @@ void Signaling::receive(const QJsonObject& message) {
         for (const auto& pending : attempts_.keys())
             if (attempts_[pending].offer.value("deviceId") == device)
                 end(pending, "device_revoked");
+        if (!device.isEmpty())
+            emit deviceRevoked(device);
     } else if (type == "signal.offer") {
         offer(message);
     } else if (attempts_.contains(id)) {

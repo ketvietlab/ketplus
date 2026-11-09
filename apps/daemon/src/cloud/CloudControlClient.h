@@ -148,6 +148,8 @@ class CloudControlClient final : public QObject {
     bool clearUploadProgress(QString* error);
     // Removes what the credential file keeps for conversations no longer in the journal (#84).
     void pruneSessionCredentials();
+    // Stops the Atlas runtimes, and with them their tunnels, that `matches` selects.
+    void stopAtlasRuntimes(const std::function<bool(const QObject& runtime)>& matches);
     [[nodiscard]] static QJsonArray
     sessionSnapshots(const QList<StoredSession>& stored, const QString& workspaceId,
                      const QString& machineId, const QByteArray& pathIdSalt,
