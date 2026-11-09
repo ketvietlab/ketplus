@@ -29,7 +29,9 @@ Cursor's ACP has no fork operation.
   row and copies the source generation's `events`, `replay_events`,
   `replay_projection_state` and large-event rows at the same cursors. The fork
   then appends `session.forked` (`from_session_id`, `from_session_generation`,
-  `through_cursor`). Media references are copied so deleting either
+  `through_cursor`, and since 2026-11-09 `from_conversation_number`, `through_turn`,
+  `provider` and `model`, which Desktop words as "Forked from @agent/5208 at turn 14 ·
+  Cursor · Composer 2"). Media references are copied so deleting either
   conversation keeps the other's images.
 - The fork keeps the source's worktree, provider, model, effort, execution
   policy and mode, and is titled "<title> (fork)". It does not keep the

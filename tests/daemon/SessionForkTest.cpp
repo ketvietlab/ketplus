@@ -480,6 +480,15 @@ class SessionForkTest final : public QObject {
                                        .toObject();
         QCOMPARE(marker.value(QStringLiteral("from_session_id")).toString(), sourceId);
         QCOMPARE(marker.value(QStringLiteral("through_cursor")).toInteger(), source.lastCursor);
+        // Enough to word "Forked from @agent/N at turn T · Claude · model".
+        QVERIFY(!marker.value(QStringLiteral("from_conversation_number")).toString().isEmpty());
+        QCOMPARE(marker.value(QStringLiteral("from_conversation_number")).toString(),
+                 journal.conversationNumber(sourceId, source.generation));
+        QCOMPARE(marker.value(QStringLiteral("through_turn")).toInteger(),
+                 source.currentTurnSequence);
+        QVERIFY(source.currentTurnSequence > 0);
+        QCOMPARE(marker.value(QStringLiteral("provider")).toString(), QStringLiteral("claude"));
+        QCOMPARE(marker.value(QStringLiteral("model")).toString(), source.model);
         const StoredSession stored = storedSession(journal, QStringLiteral("fork-session"));
         QCOMPARE(stored.threadId, QStringLiteral("fork-of-claude-thread-1"));
         QCOMPARE(stored.currentTurnSequence, source.currentTurnSequence);
