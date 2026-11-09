@@ -306,6 +306,29 @@ class TranscriptActivityGroupsTest final : public QObject {
                  QStringLiteral("Ran 3 commands, used a subagent"));
     }
 
+    void collaborationStepsCountDistinctAgents() {
+        // Spawning and waiting on one agent is one subagent, as the formatter's rows carry it.
+        const auto step = [](const QString& id, const QString& tool, const QString& receiver) {
+            auto row = activityMessage({{"id", id},
+                                        {"type", "collabAgentToolCall"},
+                                        {"tool", tool},
+                                        {"status", "completed"},
+                                        {"receiverThreadIds", QJsonArray{receiver}}},
+                                       true);
+            row.insert("messageKey", id);
+            row.insert("turnId", "turn-1");
+            return row;
+        };
+        QList<QVariantMap> rows{step("s1", "spawnAgent", "same-agent"),
+                                step("w1", "wait", "same-agent")};
+        assignActivityGroups(rows);
+        QCOMPARE(rows.at(0).value("groupSize").toInt(), 2);
+        QCOMPARE(rows.at(0).value("groupSummary").toString(), QStringLiteral("Used a subagent"));
+        rows.append(step("s2", "spawnAgent", "other-agent"));
+        assignActivityGroups(rows);
+        QCOMPARE(rows.at(0).value("groupSummary").toString(), QStringLiteral("Used 2 subagents"));
+    }
+
     void evidenceAndUnknownRowsRemainIndividuallyVisible() {
         QVariantMap capture = activity("b1", "ketplusBrowser");
         capture.insert("eventType", "browser.screenshot");

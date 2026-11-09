@@ -207,17 +207,152 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
         journal.usage(182000, 3.32);
         journal.finish("completed", 252);
     } else if (provider == "cursor") {
+        journal.event("session.forked", {{"source_number", "5208"}, {"source_turn", 14}});
         journal.user(today, "Find where the staging tenant gets created and summarise the flow.");
+        journal.tool({{"type", "commandExecution"},
+                      {"command", "rg -n \"createTenant\" services"},
+                      {"aggregatedOutput", "services/tenant/src/create.ts:18\n"
+                                           "services/gateway/src/routes/tenant.ts:42"},
+                      {"exitCode", 0}});
+        journal.tool({{"type", "commandExecution"},
+                      {"command", "sed -n 1,80p services/tenant/src/create.ts"},
+                      {"exitCode", 0}});
+        journal.tool({{"type", "collabAgentToolCall"},
+                      {"tool", "Task"},
+                      {"prompt", "Trace the staging tenant flow"},
+                      {"description", "Trace the staging tenant flow"}});
+        journal.tool({{"type", "mcpToolCall"},
+                      {"server", "ketplus_browser"},
+                      {"tool", "browser_observe"},
+                      {"arguments", QJsonObject{{"url", "https://staging-admin.example"}}}});
         journal.agent("final_answer",
                       "A staging tenant is created in **two steps**:\n\n1. `POST /tenants` in the "
                       "gateway validates the slug.\n2. `createTenant()` provisions the schema and "
                       "seeds the admin user.");
+        journal.event(
+            "runtime.error",
+            {{"message", "The agent process ended with code 1 before the turn completed."},
+             {"will_retry", false}});
         journal.finish("failed", 151);
     } else {
+        journal.event(
+            "session.provider_changed",
+            {{"from", "claude"}, {"to", "codex"}, {"model", "GPT-5.6 Luna"}, {"effort", "High"}});
         journal.user(today, "Add a journal size warning to the daemon status and the sidebar.");
+        // The mock's first group: a thought, two reads, a search and a listing.
+        journal.tool({{"type", "reasoning"},
+                      {"summary", QJsonArray{"Plan the storage check"}},
+                      {"durationMs", 14000}});
+        const auto action = [](const QJsonObject& value) {
+            return QJsonObject{{"type", "commandExecution"},
+                               {"command", value.value("command")},
+                               {"commandActions", QJsonArray{value}},
+                               {"exitCode", 0}};
+        };
+        journal.tool(
+            action({{"type", "read"},
+                    {"path", "apps/daemon/src/storage/LocalJournal.cpp"},
+                    {"command", "sed -n 760,860p apps/daemon/src/storage/LocalJournal.cpp"}}));
+        journal.tool(action({{"type", "read"},
+                             {"path", "apps/daemon/src/storage/LocalJournal.h"},
+                             {"command", "sed -n 1,120p apps/daemon/src/storage/LocalJournal.h"}}));
+        journal.tool(action({{"type", "search"},
+                             {"query", "pruneRetention"},
+                             {"path", "apps/daemon"},
+                             {"command", "rg -n pruneRetention apps/daemon"}}));
+        journal.tool(action({{"type", "listFiles"},
+                             {"path", "modules/ai/src/agent/qml"},
+                             {"command", "ls modules/ai/src/agent/qml"}}));
         journal.agent("commentary",
                       "Retention never reclaims free pages. I'll measure the journal before "
                       "changing it.");
+        journal.tool(
+            {{"type", "commandExecution"},
+             {"command",
+              "sqlite3 -readonly journal.sqlite3 \"pragma page_count; pragma freelist_count\""},
+             {"cwd", "~/Library/Application Support/Ketsuite/KetPlus/daemon"},
+             {"aggregatedOutput", "2205637\n1261337"},
+             {"durationMs", 200},
+             {"exitCode", 0}});
+        journal.tool({{"type", "commandExecution"},
+                      {"command", "cmake --build build --target ketplus_daemon"},
+                      {"aggregatedOutput",
+                       "[412/980] Building CXX object apps/daemon/CMakeFiles/…/LocalJournal.cpp.o\n"
+                       "[413/980] Building CXX object apps/daemon/CMakeFiles/…/SessionHost.cpp.o"},
+                      {"durationMs", 38000},
+                      {"exitCode", 0}});
+        // The mock's edits: an update, a new file, a move and a deletion.
+        QStringList budget;
+        for (int line = 1; line <= 41; ++line)
+            budget.append(QStringLiteral("+// JournalBudget line %1").arg(line));
+        QStringList removed;
+        for (int line = 1; line <= 120; ++line)
+            removed.append(QStringLiteral("-// OldRetention line %1").arg(line));
+        QStringList added;
+        for (int line = 1; line <= 64; ++line)
+            added.append(QStringLiteral("+    // free pages %1").arg(line));
+        journal.tool(
+            {{"type", "fileChange"},
+             {"changes",
+              QJsonArray{QJsonObject{{"path", "apps/daemon/src/storage/LocalJournal.cpp"},
+                                     {"kind", QJsonObject{{"type", "update"}}},
+                                     {"diff", "@@ -794,6 +794,66 @@\n-    old();\n-    older();\n" +
+                                                  added.join('\n')}},
+                         QJsonObject{{"path", "apps/daemon/src/storage/JournalBudget.h"},
+                                     {"kind", QJsonObject{{"type", "add"}}},
+                                     {"diff", budget.join('\n')}},
+                         QJsonObject{{"path", "docs/journal.md"},
+                                     {"kind", QJsonObject{{"type", "update"},
+                                                          {"move_path", "docs/daemon-journal.md"}}},
+                                     {"diff", ""}},
+                         QJsonObject{{"path", "apps/daemon/src/storage/OldRetention.cpp"},
+                                     {"kind", QJsonObject{{"type", "delete"}}},
+                                     {"diff", removed.join('\n')}}}}});
+        // The mock's browser and MCP steps.
+        journal.tool(
+            {{"type", "mcpToolCall"},
+             {"server", "ketplus_browser"},
+             {"tool", "browser_open"},
+             {"arguments", QJsonObject{{"url", "http://localhost:5173/settings/storage"}}}});
+        journal.tool({{"type", "mcpToolCall"},
+                      {"server", "ketplus_browser"},
+                      {"tool", "browser_observe"},
+                      {"arguments", QJsonObject{{"detail", "summary"}}}});
+        journal.tool({{"type", "mcpToolCall"},
+                      {"server", "node_repl"},
+                      {"tool", "js"},
+                      {"arguments", QJsonObject{{"code", "format the size table"}}},
+                      {"durationMs", 400}});
+        journal.tool({{"type", "mcpToolCall"},
+                      {"server", "ketplus_agents"},
+                      {"tool", "agents_list"},
+                      {"status", "failed"},
+                      {"error", QJsonObject{{"message", "the daemon closed the connection"}}}});
+        // The mock's web, image and wait steps.
+        journal.tool({{"type", "webSearch"},
+                      {"query", "sqlite incremental_vacuum free pages"},
+                      {"action", QJsonObject{{"type", "search"},
+                                             {"query", "sqlite incremental_vacuum free pages"}}}});
+        journal.tool({{"type", "webSearch"},
+                      {"action", QJsonObject{{"type", "openPage"},
+                                             {"url", "https://sqlite.org/lang_vacuum.html"}}}});
+        journal.tool({{"type", "webSearch"},
+                      {"action", QJsonObject{{"type", "findInPage"},
+                                             {"url", "https://sqlite.org/lang_vacuum.html"},
+                                             {"pattern", "VACUUM INTO"}}}});
+        journal.tool({{"type", "imageView"}, {"path", "docs/assets/storage-mock.png"}});
+        journal.tool({{"type", "imageGeneration"},
+                      {"revisedPrompt",
+                       "A flat storage gauge icon in the Két style, 2 px strokes, no frame."}});
+        journal.event("runtime.error", {{"message", "Reconnecting… 2/5"}, {"will_retry", true}});
+        journal.event("runtime.error",
+                      {{"message", "Codex could not finish the turn. Try again, or pick another "
+                                   "model for this conversation."},
+                       {"will_retry", false}});
+        journal.event("session.configuration_changed",
+                      {{"effective", QJsonObject{{"model", "GPT-5.6 Luna"}, {"effort", "Medium"}}},
+                       {"changed", QJsonArray{"model", "effort"}}});
+        journal.event("conversation.context_changed", {{"context_revision", 2}});
         journal.agent("final_answer",
                       "The daemon now reports `journal.size` in `session.list` and warns past "
                       "**80%** of the limit. Still to do:");

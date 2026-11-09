@@ -54,6 +54,11 @@ Drafts are applied explicitly, with a captured configuration revision; conflicts
 retain the draft and refresh the fence for Retry. Desktop negotiates the minor-1
 capability; mobile recognizes the compact field in the configuration result.
 Older daemons keep ordinary model selection and omit the compact field.
+`session.configuration_changed` events also list `changed`: the settings that
+differ (`model`, `effort`, `execution_policy`, `mode`, `compact_window`). The
+transcript uses it to name a permission or mode change instead of calling it a
+model change. Events from older daemons omit it and read as a neutral
+"Settings changed".
 Automatic cache/payer selection remains planned, and native auto-compaction
 timing remains provider-owned; see [ADR 0021](decisions/0021-economic-compact-window.md).
 

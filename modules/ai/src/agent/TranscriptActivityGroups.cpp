@@ -96,6 +96,9 @@ QString activityGroupSummary(const QList<QVariantMap>& rows, const qsizetype fir
     // node_repl · 5 steps".
     QStringList servers;
     int serverSteps = 0;
+    // Spawning, messaging and waiting on one agent are steps on the same subagent.
+    QSet<QString> subagents;
+    int unnamedSubagents = 0;
     int added = 0;
     int removed = 0;
     bool statsKnown = false;
@@ -147,6 +150,16 @@ QString activityGroupSummary(const QList<QVariantMap>& rows, const qsizetype fir
         } else if (subtype == QStringLiteral("collaboration") ||
                    subtype == QStringLiteral("subAgent")) {
             add(QStringLiteral("subagent"), 1);
+            const QVariantList receivers = row.value(QStringLiteral("details"))
+                                               .toMap()
+                                               .value(QStringLiteral("receiverThreadIds"))
+                                               .toList();
+            for (const QVariant& receiver : receivers) {
+                if (!receiver.toString().isEmpty())
+                    subagents.insert(receiver.toString());
+            }
+            if (receivers.isEmpty())
+                ++unnamedSubagents;
         } else if (subtype == QStringLiteral("wait")) {
             add(QStringLiteral("wait"), 1);
         } else if (subtype == QStringLiteral("imageView")) {
@@ -192,8 +205,9 @@ QString activityGroupSummary(const QList<QVariantMap>& rows, const qsizetype fir
             if (families.size() == 1 && !servers.isEmpty() && serverSteps > servers.size())
                 phrase += QStringLiteral(" · %1 steps").arg(serverSteps);
         } else if (family.id == QStringLiteral("subagent")) {
-            phrase = QStringLiteral("used %1").arg(counted(family.count, QStringLiteral("subagent"),
-                                                           QStringLiteral("subagents"), "a"));
+            const int count = std::max<int>(1, subagents.size() + unnamedSubagents);
+            phrase = QStringLiteral("used %1").arg(
+                counted(count, QStringLiteral("subagent"), QStringLiteral("subagents"), "a"));
         } else if (family.id == QStringLiteral("wait")) {
             phrase = QStringLiteral("waited");
         } else if (family.id == QStringLiteral("image")) {
