@@ -648,7 +648,9 @@ transcript reads then send summary-only group payloads. `session.activity_group_
 reads details only for an opened group, with the existing session/generation
 checks, a consistent SQLite snapshot, exclusive delta cursor and projection
 revision. `raw_activity_details` is an explicit local read option used for
-conversation export. Relay/mobile remain on the legacy projection. See
+conversation export. Sometimes an MCP step that joined a group completes with images. It
+then leaves the group, and its completion carries the group's new summary as
+`left_activity_group`. Relay/mobile remain on the legacy projection. See
 [ADR 0022](decisions/0022-daemon-activity-group-details.md).
 
 ## Permanent deletion propagation and provider cleanup

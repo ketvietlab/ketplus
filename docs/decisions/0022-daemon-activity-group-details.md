@@ -50,17 +50,36 @@ read the same. Families are:
   its steps once and its folders in full);
 - `webFetch`, `toolsLoaded`, `skill` and `taskStopped` for those text-only tool steps;
 - `browser` for KetPlus browser steps;
-- `tool:<server>` for KetPlus's own text-only servers (`ketplus_agents`);
+- `tool:<server>` for any other MCP server's step (`ketplus_agents`, `node_repl`), with
+  Claude's `mcp__server__tool` names read as that server;
 - `subagent` for a spawned subagent and `subagent.step` for later messages and
   waits on one;
 - `wait`, which includes Claude's `Monitor`;
 - `thought` for reasoning items, which Desktop shows as "Thought · 14 s" without their
   text.
 
-Other tool calls still break the run. A family is fixed by the item's first
-event, before its result shows whether it returns images, and some tools carry
-data a summary drops: Claude's `Write`/`Edit` would lose their changed files. Summary `families` are listed in the order the
-group first used them. Groups indexed earlier keep their families: their
+Tool calls without a server still break the run: some carry data a summary drops, and
+Claude's `Write`/`Edit` would lose their changed files.
+
+A family is fixed by the item's first event, before its result shows whether it returns
+images, and images are evidence that Desktop shows outside groups. Since 2026-11-09 a
+`tool:<server>` step therefore joins an open group but never opens one, so taking it out
+again never leaves a group empty. One that completes with images in its result
+(`result.content[].type == "image"`) leaves the group:
+- its `activity_items` row keeps the group's cursor under the family `evicted`;
+- its family's count, and what it counted as running or failed, come off the group's
+  summary, and an emptied family row is deleted;
+- the group's page no longer lists it, and the run ends there, as evidence ends a local
+  group.
+
+A step that completes with images without having started never joins. Its events project
+as themselves. The completion also carries the group's new summary as
+`left_activity_group`, so a live client updates that group's line from the same event. A
+second event cannot do this: it would repeat the cursor, which live clients drop and
+history pages reject. History needs nothing more, because summaries are computed when they
+are read.
+
+Summary `families` are listed in the order the group first used them. Groups indexed earlier keep their families: their
 `search` covers web, code and file searches alike, so Desktop words it as "searched",
 and their other tool calls stay outside. `browser_capture`, `visual_compare` and browser
 observations requesting `includeScreenshot` stay outside even while running.
