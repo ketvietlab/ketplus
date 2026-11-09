@@ -38,6 +38,7 @@ class SymbolIndexTest final : public QObject {
     void dropsIdleWorkspaces();
     void followsAFileThatChangedOnDisk();
     void keepsAFileSavedDuringTheFirstBuild();
+    void anOlderReadDoesNotOverwriteANewerSave();
 };
 
 void SymbolIndexTest::followsAFileThatChangedOnDisk() {
@@ -222,6 +223,62 @@ void SymbolIndexTest::keepsAFileSavedDuringTheFirstBuild() {
     QCOMPARE(index.lookup(root.absolutePath(), QStringLiteral("Gate")).size(), 1);
 #else
     QSKIP("Uses a FIFO to pause the build.");
+#endif
+}
+
+void SymbolIndexTest::anOlderReadDoesNotOverwriteANewerSave() {
+#if defined(Q_OS_UNIX)
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QDir root(directory.path());
+    const QString saved = root.filePath(QStringLiteral("a.cpp"));
+    QVERIFY(writeFile(saved, "class Before {};\n"));
+    const QByteArray gate = QFile::encodeName(root.filePath(QStringLiteral("b.cpp")));
+    QCOMPARE(::mkfifo(gate.constData(), 0600), 0);
+    // Opens the FIFO's writer once its reader waits, which pauses the reading thread there.
+    const auto writerFor = [](const QByteArray& fifo) {
+        int writer = -1;
+        QDeadlineTimer deadline(5000);
+        while ((writer = ::open(fifo.constData(), O_WRONLY | O_NONBLOCK)) < 0 &&
+               !deadline.hasExpired())
+            QTest::qWait(10);
+        return writer;
+    };
+    const auto release = [](int writer, const QByteArray& text) {
+        const bool written = ::write(writer, text.constData(), static_cast<size_t>(text.size())) ==
+                             static_cast<ssize_t>(text.size());
+        ::close(writer);
+        return written;
+    };
+
+    ketplus::SymbolIndex index;
+    std::thread build([&] {
+        index.indexWorkspace(root.absolutePath(),
+                             listOf({QStringLiteral("a.cpp"), QStringLiteral("b.cpp")}));
+    });
+    const int buildGate = writerFor(gate);
+    QVERIFY(buildGate >= 0);
+    // A save during the first build is replayed after it publishes; that replay reads a FIFO
+    // standing in for the old file, so it is still reading when the next save lands.
+    const QByteArray older = QFile::encodeName(saved);
+    QVERIFY(QFile::remove(saved));
+    QCOMPARE(::mkfifo(older.constData(), 0600), 0);
+    index.reindexFile(root.absolutePath(), QStringLiteral("a.cpp"));
+    QVERIFY(release(buildGate, "class Gate {};\n"));
+    const int replay = writerFor(older);
+    QVERIFY(replay >= 0);
+    const QString latest = root.filePath(QStringLiteral("latest.tmp"));
+    QVERIFY(writeFile(latest, "class Latest {};\n"));
+    QCOMPARE(::rename(QFile::encodeName(latest).constData(), older.constData()), 0);
+    index.reindexFile(root.absolutePath(), QStringLiteral("a.cpp"));
+    QCOMPARE(index.lookup(root.absolutePath(), QStringLiteral("Latest")).size(), 1);
+    QVERIFY(release(replay, "class Older {};\n"));
+    build.join();
+
+    QCOMPARE(index.lookup(root.absolutePath(), QStringLiteral("Latest")).size(), 1);
+    QVERIFY(index.lookup(root.absolutePath(), QStringLiteral("Older")).isEmpty());
+#else
+    QSKIP("Uses FIFOs to order the reads.");
 #endif
 }
 

@@ -88,6 +88,9 @@ class SymbolIndex final {
     QHash<QString, Workspace> workspaces_;
     // Roots being built for the first time, with the files saved meanwhile.
     QHash<QString, QStringList> savedDuringBuild_;
+    // "root\npath" to the newest reindexFile read of that file still in flight.
+    QHash<QString, quint64> latestRead_;
+    quint64 readSequence_{0};
     qint64 budgetBytes_;
     qint64 totalBytes_{0};
     quint64 useSequence_{0};
