@@ -30,6 +30,7 @@ struct AgentSessionManager::Session final {
     bool agentTurnReply{false};
     bool customTitle{false};
     bool archived{false};
+    bool archiveSyncPending{false};
     bool ownsWorktree{false};
     bool listed{false};
     QStringList turnWorktreeSnapshot;

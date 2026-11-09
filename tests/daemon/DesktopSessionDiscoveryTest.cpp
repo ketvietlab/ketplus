@@ -112,6 +112,83 @@ class DesktopSessionDiscoveryTest final : public QObject {
         QVERIFY(phoneRow().value("seen").toBool());
     }
 
+    void archiveStateReachesTheDaemon() {
+        Environment env;
+        QVERIFY(env.directory.isValid());
+        const auto path = QFileInfo(env.directory.path()).canonicalFilePath();
+        const auto executable = env.directory.filePath("fake-codex");
+        QVERIFY(writeFakeCodex(executable, env.directory.filePath("provider.log")));
+        const auto journalPath = env.directory.filePath("journal.sqlite3");
+        {
+            LocalJournal journal(journalPath);
+            for (const auto* id : {"archived-here", "kept", "archived-elsewhere"})
+                QVERIFY(journal.upsertSession(
+                    {id, path, "codex", {}, {}, "ready", 1, 0, 0, QString::fromLatin1(id)}));
+            QVERIFY(
+                journal.setSessionArchived("archived-elsewhere", 1, "2026-01-01T00:00:00.000Z"));
+        }
+        // Archived before this desktop told the daemon; the first catalog sends it once.
+        const auto conversation = [](const char* id, bool archived) {
+            return QVariantMap{{"id", id}, {"threadId", id}, {"title", id}, {"archived", archived}};
+        };
+        QSettings().setValue(
+            persistedKey(path),
+            QVariantMap{{"path", path},
+                        {"activeId", "kept"},
+                        {"conversations", QVariantList{conversation("archived-here", true),
+                                                       conversation("kept", false)}}});
+        const auto archivedAt = [&](const QString& id) {
+            const auto name = "archive-probe";
+            QString value = "<missing>";
+            {
+                auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+                db.setDatabaseName(journalPath);
+                if (db.open()) {
+                    QSqlQuery q(db);
+                    q.prepare("SELECT archived_at FROM sessions WHERE id=?");
+                    q.addBindValue(id);
+                    if (q.exec() && q.next())
+                        value = q.value(0).toString();
+                }
+            }
+            QSqlDatabase::removeDatabase(name);
+            return value;
+        };
+        const auto archivedIds = [](const QVariantList& values) {
+            QStringList ids;
+            for (const auto& value : values)
+                ids.append(value.toMap().value("id").toString());
+            ids.sort();
+            return ids;
+        };
+        DaemonService service({journalPath, env.directory.filePath("local.token"),
+                               env.directory.filePath("daemon.sock"), executable,
+                               env.directory.filePath("missing-claude"),
+                               env.directory.filePath("missing-cursor")});
+        QVERIFY2(service.start(), qPrintable(service.errorString()));
+        CodexAppServer server;
+        AgentSessionManager desktop(&server);
+        desktop.activate(path);
+        QTRY_VERIFY(server.isReady());
+        QTRY_VERIFY(!server.isRestoring());
+        QVERIFY(server.hasArchiveSupport());
+        QTRY_VERIFY_WITH_TIMEOUT(!archivedAt("archived-here").isEmpty(), 5000);
+        // A conversation this desktop first sees keeps the daemon's archive state and time.
+        QTRY_COMPARE_WITH_TIMEOUT(archivedIds(desktop.archivedConversations()),
+                                  (QStringList{"archived-elsewhere", "archived-here"}), 5000);
+        QCOMPARE(archivedAt("archived-elsewhere"), QString("2026-01-01T00:00:00.000Z"));
+        QCOMPARE(archivedAt("kept"), QString());
+        QCOMPARE(desktop.activeConversationId(path), QString("kept"));
+
+        QVERIFY(desktop.restoreConversation(path, "archived-here"));
+        QTRY_VERIFY_WITH_TIMEOUT(archivedAt("archived-here").isEmpty(), 5000);
+        QVERIFY(desktop.archiveConversation(path, "kept"));
+        QTRY_VERIFY_WITH_TIMEOUT(!archivedAt("kept").isEmpty(), 5000);
+        desktop.archiveConversationsForWorktree(path);
+        QTRY_VERIFY_WITH_TIMEOUT(!archivedAt("archived-here").isEmpty(), 5000);
+        QCOMPARE(archivedAt("archived-elsewhere"), QString("2026-01-01T00:00:00.000Z"));
+    }
+
     void discoversPhoneConversation_data() {
         QTest::addColumn<bool>("otherWorkspace");
         QTest::addColumn<bool>("duringInitialList");

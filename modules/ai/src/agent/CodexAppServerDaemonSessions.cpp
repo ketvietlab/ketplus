@@ -441,6 +441,21 @@ void CodexAppServer::markDaemonSessionSeen(const QString& sessionId, const qint6
                   std::move(callback));
 }
 
+void CodexAppServer::setDaemonSessionArchived(const QString& sessionId, const bool archived,
+                                              ResponseCallback callback) {
+    if (!hasArchiveSupport() || sessionId.isEmpty()) {
+        callback({}, QStringLiteral("Daemon archiving is unavailable."));
+        return;
+    }
+    const auto found = daemonSessions_.constFind(sessionId);
+    if (found == daemonSessions_.cend()) {
+        callback({}, QStringLiteral("Unknown daemon session."));
+        return;
+    }
+    daemon_->call(QStringLiteral("session.set_archived"), {{QStringLiteral("archived"), archived}},
+                  sessionId, found->generation, std::move(callback));
+}
+
 void CodexAppServer::applyDaemonTombstones(const QJsonArray& tombstones) {
     for (const auto& value : tombstones) {
         const auto deleted = value.toObject();

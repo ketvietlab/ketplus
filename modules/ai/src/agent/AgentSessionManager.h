@@ -345,6 +345,7 @@ class AgentSessionManager final : public QObject {
     void failSession(const SessionPtr& session, const QString& error);
     void recordSessionError(const SessionPtr& session, const QString& error, bool notify);
     void syncConversationTitle(const SessionPtr& session);
+    void syncArchived(const SessionPtr& session);
     void persistWorkspace(const QString& path) const;
     void snapshotTurnWorktrees(const SessionPtr& session);
     void captureTurnWorktrees(const SessionPtr& session);

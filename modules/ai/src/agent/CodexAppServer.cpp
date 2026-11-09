@@ -41,6 +41,10 @@ bool CodexAppServer::hasCompactWindowSupport() const noexcept {
     return daemon_ && daemon_->hasFeature(QStringLiteral("session.compact_window/1"));
 }
 
+bool CodexAppServer::hasArchiveSupport() const noexcept {
+    return daemon_ && daemon_->hasFeature(QStringLiteral("session.archive/1"));
+}
+
 QString CodexAppServer::executable() const { return executable_; }
 
 void CodexAppServer::call(const QString& method, const QJsonObject& params,
