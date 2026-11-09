@@ -1,40 +1,50 @@
 .pragma library
 
-// Rendering families are deliberately independent of provider tool names.
+// Rendering families are deliberately independent of provider tool names. Icons are Lucide
+// names the kit maps (KetTheme.iconForLucide), chosen as mockups/qt's step kinds draw them.
 const families = {
     command: { icon: "square-terminal", family: "command" },
-    fileChange: { icon: "file-code", family: "files" },
-    fileRead: { icon: "file-code", family: "files" },
-    webSearch: { icon: "search", family: "search" },
+    fileChange: { icon: "pencil", family: "files" },
+    fileRead: { icon: "file-text", family: "files" },
+    webSearch: { icon: "globe", family: "search" },
     codeSearch: { icon: "search", family: "search" },
     fileSearch: { icon: "search", family: "search" },
-    ketplusBrowser: { icon: "search", family: "browser" },
-    browserOpen: { icon: "search", family: "browser" },
-    browserNavigate: { icon: "search", family: "browser" },
-    browserClick: { icon: "search", family: "browser" },
-    browserDownload: { icon: "search", family: "browser" },
-    browserScreenshot: { icon: "image", family: "browser" },
+    ketplusBrowser: { icon: "globe", family: "browser" },
+    browserOpen: { icon: "globe", family: "browser" },
+    browserNavigate: { icon: "globe", family: "browser" },
+    browserClick: { icon: "globe", family: "browser" },
+    browserDownload: { icon: "globe", family: "browser" },
+    browserScreenshot: { icon: "globe", family: "browser" },
     imageView: { icon: "image", family: "images" },
-    imageGeneration: { icon: "image", family: "images" },
-    reasoning: { icon: "brain", family: "control" },
+    imageGeneration: { icon: "sparkles", family: "images" },
+    reasoning: { icon: "sparkles", family: "control" },
     thought: { icon: "sparkles", family: "control" },
-    plan: { icon: "list-checks", family: "control" },
+    plan: { icon: "map", family: "control" },
     wait: { icon: "clock", family: "control" },
-    monitor: { icon: "activity", family: "control" },
-    wake: { icon: "play", family: "control" },
-    skill: { icon: "sparkles", family: "control" },
-    toolsLoaded: { icon: "wrench", family: "control" },
-    taskStopped: { icon: "square", family: "control" },
-    collaboration: { icon: "users", family: "control" },
+    monitor: { icon: "clock", family: "control" },
+    wake: { icon: "clock", family: "control" },
+    skill: { icon: "layers", family: "control" },
+    toolsLoaded: { icon: "sliders-horizontal", family: "control" },
+    taskStopped: { icon: "square-terminal", family: "control" },
+    collaboration: { icon: "send", family: "control" },
     subAgent: { icon: "bot", family: "control" },
     webOpen: { icon: "globe", family: "integration" },
-    webFind: { icon: "search", family: "integration" },
-    webFetch: { icon: "download", family: "integration" },
-    integration: { icon: "bot", family: "integration" }
+    webFind: { icon: "globe", family: "integration" },
+    webFetch: { icon: "globe", family: "integration" },
+    integration: { icon: "package", family: "integration" }
 }
 
+// A file step draws what happened to its file, as the mock's edit, create, delete and move.
+const fileIcons = { Edited: "pencil", Created: "file-code", Deleted: "trash-2", Moved: "arrow-right" }
+
 function renderer(subtype) {
-    return families[subtype] || { icon: "bot", family: "generic" }
+    return families[subtype] || { icon: "sliders-horizontal", family: "generic" }
+}
+
+function icon(row) {
+    if (row.subtype === "fileChange" && row.files.length === 1)
+        return fileIcons[row.files[0].operation] || "pencil"
+    return renderer(row.subtype).icon
 }
 
 function resource(row) {

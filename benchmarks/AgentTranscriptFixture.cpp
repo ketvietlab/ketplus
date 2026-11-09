@@ -321,10 +321,14 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
              {"server", "ketplus_browser"},
              {"tool", "browser_open"},
              {"arguments", QJsonObject{{"url", "http://localhost:5173/settings/storage"}}}});
-        journal.tool({{"type", "mcpToolCall"},
-                      {"server", "ketplus_browser"},
-                      {"tool", "browser_observe"},
-                      {"arguments", QJsonObject{{"detail", "summary"}}}});
+        journal.tool(
+            {{"type", "mcpToolCall"},
+             {"server", "ketplus_browser"},
+             {"tool", "browser_observe"},
+             {"arguments", QJsonObject{{"detail", "summary"}}},
+             {"result", QJsonObject{{"structuredContent",
+                                     QJsonObject{{"page", QJsonObject{{"title", "Storage"}}},
+                                                 {"visibleNodeCount", 4}}}}}});
         journal.tool({{"type", "mcpToolCall"},
                       {"server", "node_repl"},
                       {"tool", "js"},

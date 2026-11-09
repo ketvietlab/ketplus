@@ -29,12 +29,13 @@ Kit.KetActivityRow {
 
     KetIcon {
         id: activityIcon
+        objectName: "transcriptActivityIcon"
         width: activityHeader.recipe.iconSize
         height: activityHeader.recipe.iconSize
         anchors.left: parent.left
         anchors.leftMargin: activityHeader.recipe.paddingInline
         y: Math.round(activityHeader.firstLineCenter - height / 2)
-        name: activity.status === "failed" ? KetTheme.iconForLucide("circle-x") : KetTheme.iconForLucide((activity.iconSource()).toString().split("/").pop().replace(/\.svg$/, ""))
+        name: activity.status === "failed" ? KetTheme.iconForLucide("circle-x") : activity.iconName()
         color: activity.running ? KetTheme.t.accentText : activityHeader.recipe.text
         box: activityHeader.recipe.iconSize
     }

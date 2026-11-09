@@ -228,6 +228,7 @@ QVariantMap fileChangeMessage(const QJsonObject& item, bool completed) {
                         {"known", known},
                         {"operation", operation},
                         {"destination", destination},
+                        {"hasDiff", !change.value(QStringLiteral("diff")).toString().isEmpty()},
                         {"diffTrimmed",
                          change.value("compacted").toObject().value("policy") == "file-diff-v1"}});
     }
@@ -357,48 +358,33 @@ QVariantMap ketplusBrowserMessage(const QJsonObject& item, const bool completed)
     const QJsonObject arguments = item.value(QStringLiteral("arguments")).toObject();
     const QString url = TranscriptSanitizer::url(arguments.value(QStringLiteral("url")).toString());
     const QString summary = mcp_media::argumentSummary(arguments);
-    // Titled as the mock's browser steps: "Opened localhost:5173/settings", "Observed the page".
-    static const QHash<QString, QStringList> steps{
-        {QStringLiteral("observe"), {"Observed the page", "Observing the page"}},
-        {QStringLiteral("screenshot"), {"Captured", "Capturing"}},
-        {QStringLiteral("act"), {"Acted on the page", "Acting on the page"}},
-        {QStringLiteral("wait"), {"Waited for the page", "Waiting for the page"}},
-        {QStringLiteral("logs"), {"Read the console", "Reading the console"}},
-        {QStringLiteral("network"), {"Read the network log", "Reading the network log"}},
-        {QStringLiteral("inspect"), {"Inspected the page", "Inspecting the page"}},
-        {QStringLiteral("compare"), {"Compared captures", "Comparing captures"}}};
-    QString title;
-    if (operation == QStringLiteral("open")) {
-        const QUrl page(url);
-        const QString shown =
-            page.host().isEmpty()
-                ? QString{}
-                : page.host() +
-                      (page.port() > 0 ? QStringLiteral(":%1").arg(page.port()) : QString{}) +
-                      (page.path() == QStringLiteral("/") ? QString{} : page.path());
-        title = (completed ? QStringLiteral("Opened") : QStringLiteral("Opening")) +
-                (shown.isEmpty() ? QStringLiteral(" a page") : QStringLiteral(" ") + shown);
-    } else if (const auto found = steps.constFind(operation); found != steps.cend()) {
-        title = found->at(completed ? 0 : 1);
-    } else {
+    const QJsonValue safePayload = sanitizedJson(item);
+    QString title = browserStepTitle(operation, safePayload.toObject(), completed);
+    if (title.isEmpty())
         title = QStringLiteral("%1 ketplus_browser · %2")
                     .arg(completed ? QStringLiteral("Used") : QStringLiteral("Using"),
                          sanitizedText(label));
+    QVariantList images;
+    if (completed)
+        images = mcp_media::materializeImages(item.value(QStringLiteral("result")).toObject());
+    // The mock's "Captured 2 screenshots: 1440 × 900", read from the first image's header.
+    if (operation == QStringLiteral("screenshot") && !images.isEmpty()) {
+        if (images.size() > 1)
+            title += QStringLiteral(" %1 screenshots").arg(images.size());
+        if (QImageReader reader(QUrl(images.first().toString()).toLocalFile());
+            reader.size().isValid())
+            title +=
+                QStringLiteral(": %1 × %2").arg(reader.size().width()).arg(reader.size().height());
     }
     title += retainedTextSuffix(item);
-    const QJsonValue safePayload = sanitizedJson(item);
     auto entry = message(QStringLiteral("tool"), summary, QStringLiteral("Browser"), {},
                          item.value(QStringLiteral("id")).toString());
     entry.insert(QStringLiteral("subtype"), QStringLiteral("ketplusBrowser"));
     entry.insert(QStringLiteral("running"), !completed);
     entry.insert(QStringLiteral("details"), safePayload.toObject().toVariantMap());
     entry.insert(QStringLiteral("sanitizedPayload"), safePayload.toObject().toVariantMap());
-    if (completed) {
-        const QVariantList images =
-            mcp_media::materializeImages(item.value(QStringLiteral("result")).toObject());
-        if (!images.isEmpty())
-            entry.insert(QStringLiteral("images"), images);
-    }
+    if (!images.isEmpty())
+        entry.insert(QStringLiteral("images"), images);
     const bool failed =
         item.value(QStringLiteral("status")).toString() == QStringLiteral("failed") ||
         item.value(QStringLiteral("result")).toObject().value(QStringLiteral("isError")).toBool();
