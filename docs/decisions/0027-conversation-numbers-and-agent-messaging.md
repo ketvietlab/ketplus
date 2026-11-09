@@ -223,13 +223,15 @@ as `ketplus_browser`:
   when the user asks it to. `#1234` can also be an issue or pull-request number,
   so the preamble says references are for contacting conversations on request.
 - Delivered agent messages appear as an outlined bubble labelled
-  "Message from #1093 · title · provider" (or "Reply from …").
+  "From @agent/1093 · title · provider", as the Qt mock draws it (earlier
+  builds wrote "Message from …" or "Reply from …").
 
 ### Transcript and clients
 
 - Delivery is the `user.message` (or `turn.steered`) described above. A new
   `agent_message.state` event tells the sender that a message was sent (`sent`,
-  with the receiver's number and title and the delivery state) or held, failed
+  with the receiver's number, title and provider, the delivery state and a
+  500-character excerpt of the text) or held, failed
   or expired, and tells the receiver that its final answer was sent as the reply
   (`replied`) or that a message is held. The broker emits `sent` and `replied`
   itself, because each provider presents its MCP call differently. Desktop

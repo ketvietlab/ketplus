@@ -1,5 +1,6 @@
 #include "agent/DaemonTranscriptProjection.h"
 #include "agent/AgentMessageFormatter.h"
+#include "agent/DaemonAgentNotes.h"
 #include "agent/DaemonTranscriptNotices.h"
 #include "agent/McpToolResultMedia.h"
 #include "agent/TranscriptActivityGroups.h"
@@ -36,7 +37,8 @@ DaemonDisplayState daemonDisplayState(const QString& state) {
 }
 
 QString daemonMessageKey(const qint64 turnSequence, const QString& itemId) {
-    if (itemId.startsWith("approval:"))
+    // An approval and a sent agent message's note follow their id across turns and pages.
+    if (itemId.startsWith("approval:") || itemId.startsWith(agentNoteItemPrefix))
         return QStringLiteral("daemon:%1").arg(itemId);
     return QStringLiteral("daemon:%1:%2").arg(turnSequence).arg(itemId);
 }
@@ -189,20 +191,17 @@ void markAgentOrigin(QVariantMap& entry, const QJsonArray& agentMessages) {
     if (agentMessages.isEmpty())
         return;
     QStringList senders;
-    bool replies = true;
     bool reviews = true;
     for (const QJsonValue& value : agentMessages) {
         const QJsonObject message = value.toObject();
         const QString sender = QStringLiteral("@agent/") + message.value("from_number").toString();
         if (!senders.contains(sender))
             senders.append(sender);
-        replies = replies && message.value("kind").toString() == QStringLiteral("reply");
         reviews = reviews && message.value("kind").toString() == QStringLiteral("review");
     }
     const QJsonObject first = agentMessages.first().toObject();
-    QString label = (replies   ? QStringLiteral("Reply from ")
-                     : reviews ? QStringLiteral("Review request from ")
-                               : QStringLiteral("Message from ")) +
+    // As the mock's "From @agent/8941 · DS Icon · Claude"; the sender's note says it replied.
+    QString label = (reviews ? QStringLiteral("Review request from ") : QStringLiteral("From ")) +
                     senders.join(QStringLiteral(", "));
     if (senders.size() == 1) {
         if (const QString title = first.value("from_title").toString(); !title.isEmpty())
@@ -526,6 +525,8 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
         if (type == "provider.request_declined" || type == "provider.runtime" ||
             type == "provider.protocol_error" || type == "agent_message.state")
             itemId = daemonNoticeItemId(event.value("cursor").toInteger());
+        if (type == "agent_message.state" && !agentNoteItemId(data).isEmpty())
+            itemId = agentNoteItemId(data);
         // Steer text is journaled by current daemons; older empty steers stay metadata.
         if (type == "turn.steered")
             itemId = data.value("text").toString().isEmpty()
@@ -630,7 +631,14 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
             entry = providerNoticeMessage(data.value("message").toString(), itemId,
                                           providerRuntimeNoticeTitle());
         } else if (type == "agent_message.state") {
-            entry = agentMessageNotice(data, itemId);
+            entry = agentNote(data, itemId);
+            // A later state of the message updates its note where it first appeared.
+            if (!entry.isEmpty() && existing >= 0) {
+                result[existing] = mergedAgentNote(result.at(existing).toMap(), entry);
+                continue;
+            }
+            if (entry.isEmpty())
+                entry = agentMessageNotice(data, itemId);
         } else if (type == "user.message" || type == "turn.steered") {
             // A steer carries its images the way the turn's first message does.
             entry = message("user", data.value("text").toString(), "You", {}, itemId);
@@ -639,8 +647,16 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
                 entry.insert("eventType", "turn.steered");
                 entry.insert("provider", data.value("provider").toString());
             }
-            if (data.value("origin").toString() == QStringLiteral("agent"))
+            if (data.value("origin").toString() == QStringLiteral("agent")) {
                 markAgentOrigin(entry, data.value("agent_messages").toArray());
+                // The reply answers a note above it, which now reads Replied; a note in
+                // another page is marked when the pages merge.
+                const auto answered = agentRepliesTo(data.value("agent_messages").toArray());
+                entry.insert("agentRepliesTo", answered);
+                for (const auto& id : answered)
+                    if (const int note = indexes.value(agentNoteKey(id), -1); note >= 0)
+                        result[note] = repliedAgentNote(result.at(note).toMap());
+            }
         } else if (type == "assistant.delta") {
             entry = existing < 0 ? message("assistant", {}, "Codex · streaming", {}, itemId)
                                  : result.at(existing).toMap();
@@ -740,6 +756,10 @@ QVariantList mergeDaemonHistory(const QVariantList& older, const QVariantList& n
         auto entry = value.toMap();
         const auto key = entry.value("messageKey").toString();
         const int index = indexes.value(key, -1);
+        // A reply in this page answers a sent message's note in the other.
+        for (const auto& id : entry.value("agentRepliesTo").toStringList())
+            if (const int note = indexes.value(agentNoteKey(id), -1); note >= 0)
+                result[note] = repliedAgentNote(result.at(note).toMap());
         if (index < 0) {
             indexes.insert(key, result.size());
             result.append(entry);
@@ -748,6 +768,11 @@ QVariantList mergeDaemonHistory(const QVariantList& older, const QVariantList& n
         const auto prefix = result.at(index).toMap();
         if (prefix.value("subtype") == "approval" && entry.value("subtype") == "approval") {
             result[index] = joinedApprovalRows(prefix, entry);
+            continue;
+        }
+        // Two pages' states of one sent message: the later one, with what only the first knew.
+        if (prefix.value("subtype") == "agentNote" && entry.value("subtype") == "agentNote") {
+            result[index] = mergedAgentNote(prefix, entry);
             continue;
         }
         if (entry.value("partialOutput").toBool()) {

@@ -27,6 +27,8 @@ add_library(ketplus_ai STATIC
     src/agent/AgentSessionHistory.cpp
     src/agent/AgentSessionDaemonHistory.cpp
     src/agent/AgentSessionDaemonCatchup.cpp
+    src/agent/DaemonAgentNotes.cpp
+    src/agent/DaemonAgentNotes.h
     src/agent/DaemonTranscriptNotices.cpp
     src/agent/DaemonTranscriptNotices.h
     src/agent/DaemonTranscriptProjection.cpp
@@ -178,6 +180,7 @@ set_source_files_properties(src/agent/qml/TranscriptChangedFiles.qml PROPERTIES 
 set_source_files_properties(src/agent/qml/TranscriptFileStep.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptFileStep.qml")
 set_source_files_properties(src/agent/qml/TranscriptFileDiff.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptFileDiff.qml")
 set_source_files_properties(src/agent/qml/TranscriptFileMenu.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptFileMenu.qml")
+set_source_files_properties(src/agent/qml/TranscriptAgentNote.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptAgentNote.qml")
 set_source_files_properties(src/agent/qml/TranscriptTrimmedDetail.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptTrimmedDetail.qml")
 set_source_files_properties(
     src/agent/qml/TranscriptActivityRow.qml
@@ -287,6 +290,7 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
         src/agent/qml/TranscriptFileDiff.qml
         src/agent/qml/TranscriptFileMenu.qml
         src/agent/qml/TranscriptFileStep.qml
+        src/agent/qml/TranscriptAgentNote.qml
         src/agent/qml/TranscriptTrimmedDetail.qml
         src/agent/qml/TranscriptCopyButton.qml
         src/agent/qml/TranscriptMermaidSwitch.qml

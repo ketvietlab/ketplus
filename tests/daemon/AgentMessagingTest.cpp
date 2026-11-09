@@ -101,6 +101,21 @@ class AgentMessagingTest final : public QObject {
         QVERIFY(protocol::features(1).contains("agents.messaging/1"));
     }
 
+    void sentNoticeShowsABoundedExcerpt() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const QString sender = fixture.start("claude", "sender");
+        const QString receiver = fixture.start("claude", "receiver");
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(sender, "turn.completed"), 1, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.completed"), 1, 5000);
+        const QJsonObject sent = fixture.agents(
+            sender, "agents.send",
+            {{"to", "#" + fixture.number(receiver)}, {"text", QString(2000, QLatin1Char('x'))}});
+        QVERIFY2(sent.value("ok").toBool(), qPrintable(text(sent)));
+        QCOMPARE(fixture.payloads(sender, "agent_message.state").last().value("text").toString(),
+                 QString(500, QLatin1Char('x')) + QStringLiteral("…"));
+    }
+
     void messageStartsIdleTurnAndFinalAnswerReturnsAsReply() {
         Fixture fixture;
         QVERIFY(fixture.open());
@@ -128,6 +143,8 @@ class AgentMessagingTest final : public QObject {
         QCOMPARE(sentNotice.value("peer_number").toString(), fixture.number(receiver));
         QCOMPARE(sentNotice.value("peer_title").toString(), "receiver");
         QVERIFY(sentNotice.value("expect_reply").toBool());
+        // The sender's note shows what it sent, bounded so a 32 KiB message stays small.
+        QCOMPARE(sentNotice.value("text").toString(), "Please review the parser.");
 
         QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.completed"), 2, 5000);
         const QJsonObject delivered = fixture.payloads(receiver, "user.message").last();

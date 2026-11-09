@@ -117,6 +117,7 @@ QJsonObject fromAgent(const QString& number, const QString& title, const QString
     return {{"origin", "agent"},
             {"agent_messages", QJsonArray{QJsonObject{{"message_id", "m" + number},
                                                       {"kind", "reply"},
+                                                      {"reply_to", "request-" + number},
                                                       {"from_number", number},
                                                       {"from_title", title},
                                                       {"from_provider", provider},
@@ -192,6 +193,18 @@ QVariantList transcriptFixture(const QString& provider, const QString& assets) {
                       {"aggregatedOutput", "1/2 Test #31: sidebar_rows ........   Passed\n"
                                            "2/2 Test #32: sidebar_spin ........***Failed\n"
                                            "50% tests passed, 1 tests failed out of 2"}});
+        // The mock's request to the design conversation, which its reply below answers.
+        journal.event("agent_message.state", {{"message_id", "request-8941"},
+                                              {"kind", "request"},
+                                              {"state", "sent"},
+                                              {"delivery", "starting"},
+                                              {"expect_reply", true},
+                                              {"direction", "outgoing"},
+                                              {"peer_number", "8941"},
+                                              {"peer_title", "DS Icon"},
+                                              {"peer_provider", "claude"},
+                                              {"text", "Is the stepped spinner fine at 20 steps "
+                                                       "a second?"}});
         journal.user(today.addSecs(120),
                      "20 steps a second reads as smooth at 14 px. Keep 4 behind another app.",
                      fromAgent("8941", "DS Icon", "claude",

@@ -1,5 +1,6 @@
 #include "BrowserAgentInstructions.h"
 #include "agent/CodexAppServer.h"
+#include "agent/DaemonAgentNotes.h"
 #include "agent/DaemonTranscriptNotices.h"
 
 #include "agent/DaemonTranscriptProjection.h"
@@ -330,15 +331,18 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
         return;
     }
     if (type == QStringLiteral("agent_message.state")) {
+        // A sent message is one note, as the journal projects it; each state updates it.
+        const QString itemId = agent_message::daemonNoticeItemId(cursor);
+        auto presentation = agent_message::agentNote(data, agent_message::agentNoteItemId(data));
+        if (presentation.isEmpty())
+            presentation = agent_message::agentMessageNotice(data, itemId);
         emit notificationReceived(
             QStringLiteral("daemon/providerNotice"),
             {{QStringLiteral("threadId"), sessionId},
-             {QStringLiteral("itemId"), agent_message::daemonNoticeItemId(cursor)},
+             {QStringLiteral("itemId"), itemId},
              {QStringLiteral("title"), agent_message::agentMessageNoticeTitle()},
              {QStringLiteral("text"), agent_message::agentMessageStateText(data)},
-             {QStringLiteral("presentation"),
-              QJsonObject::fromVariantMap(agent_message::agentMessageNotice(
-                  data, agent_message::daemonNoticeItemId(cursor)))}});
+             {QStringLiteral("presentation"), QJsonObject::fromVariantMap(presentation)}});
         return;
     }
     if (type == QStringLiteral("turn.started")) {
