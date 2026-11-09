@@ -6,7 +6,10 @@
 
 #include "KetTokens.h"
 
+#include <QApplication>
 #include <QClipboard>
+#include <QCoreApplication>
+#include <QDeadlineTimer>
 #include <QDir>
 #include <QEvent>
 #include <QFontDatabase>
@@ -14,11 +17,22 @@
 #include <QInputMethodEvent>
 #include <QLabel>
 #include <QLineEdit>
+#include <QProcess>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTest>
 #include <QVBoxLayout>
 
 #include <cmath>
+#include <cstdio>
+
+#if defined(Q_OS_UNIX)
+#include <cerrno>
+#include <csignal>
+#include <cstdlib>
+#include <fcntl.h>
+#include <sys/resource.h>
+#endif
 
 namespace ketplus {
 namespace {
@@ -43,6 +57,10 @@ class PtyProcessTest final : public QObject {
 
   private slots:
     void runsInteractiveShellInRequestedDirectory();
+    void stoppedShellIsReaped_data();
+    void stoppedShellIsReaped();
+    void exitingRightAfterStopLeavesNoShell();
+    void masterIsNotInherited();
     void rendersAnsiOutputThroughVterm();
     void drawsAnsiColoursFromKetTokens();
     void usesSystemFixedFont();
@@ -76,6 +94,87 @@ void PtyProcessTest::runsInteractiveShellInRequestedDirectory() {
     QTRY_VERIFY_WITH_TIMEOUT(!exitSpy.isEmpty(), 10000);
     QVERIFY2(output.contains("__KETPLUS_PTY__"), output.constData());
     QVERIFY2(output.contains(QDir::tempPath().toUtf8()), output.constData());
+#else
+    QSKIP("The first PTY backend targets macOS and Linux.");
+#endif
+}
+
+void PtyProcessTest::stoppedShellIsReaped_data() {
+    QTest::addColumn<QByteArray>("setup");
+    QTest::newRow("hangup") << QByteArray();
+    QTest::newRow("ignores hangup") << QByteArray("trap '' HUP; ");
+}
+
+void PtyProcessTest::stoppedShellIsReaped() {
+#if defined(Q_OS_UNIX)
+    QFETCH(QByteArray, setup);
+    PtyProcess process;
+    QByteArray output;
+    connect(&process, &PtyProcess::outputReceived, this,
+            [&output](const QByteArray& bytes) { output.append(bytes); });
+    QVERIFY(process.start(QDir::tempPath(), 24, 80));
+    process.send(setup + "printf '__KETPLUS_PID_%s__\\n' \"$$\"\n");
+    static const QRegularExpression pidLine(QStringLiteral("__KETPLUS_PID_([0-9]+)__"));
+    QTRY_VERIFY_WITH_TIMEOUT(pidLine.match(QString::fromUtf8(output)).hasMatch(), 10000);
+    const auto child =
+        static_cast<pid_t>(pidLine.match(QString::fromUtf8(output)).captured(1).toLongLong());
+    QVERIFY(child > 0);
+    process.stop();
+    // A zombie still answers kill(pid, 0); only a reaped child is gone.
+    QTRY_VERIFY_WITH_TIMEOUT(::kill(child, 0) != 0 && errno == ESRCH, 5000);
+#else
+    QSKIP("The first PTY backend targets macOS and Linux.");
+#endif
+}
+
+void PtyProcessTest::exitingRightAfterStopLeavesNoShell() {
+#if defined(Q_OS_UNIX)
+    // The probe (this executable, see main) starts a shell that ignores the hangup, stops it
+    // and returns from main at once; the shell must be gone by the time the probe has exited.
+    QProcess probe;
+    auto environment = QProcessEnvironment::systemEnvironment();
+    environment.insert(QStringLiteral("KETPLUS_PTY_EXIT_PROBE"), QStringLiteral("1"));
+    probe.setProcessEnvironment(environment);
+    probe.start(QCoreApplication::applicationFilePath(), {});
+    QVERIFY(probe.waitForFinished(15000));
+    QCOMPARE(probe.exitCode(), 0);
+    const auto child = static_cast<pid_t>(probe.readAllStandardOutput().trimmed().toLongLong());
+    QVERIFY(child > 0);
+    const bool alive = ::kill(child, 0) == 0;
+    if (alive)
+        ::kill(child, SIGKILL);
+    QVERIFY(!alive);
+#else
+    QSKIP("The first PTY backend targets macOS and Linux.");
+#endif
+}
+
+void PtyProcessTest::masterIsNotInherited() {
+#if defined(Q_OS_UNIX)
+    const auto masters = [] {
+        QList<int> found;
+        rlimit limit{};
+        const int last = ::getrlimit(RLIMIT_NOFILE, &limit) == 0 && limit.rlim_cur < 4096
+                             ? static_cast<int>(limit.rlim_cur)
+                             : 4096;
+        for (int fd = 3; fd < last; ++fd) {
+            if (::fcntl(fd, F_GETFD) >= 0 && ::ptsname(fd) != nullptr)
+                found.append(fd);
+        }
+        return found;
+    };
+    const auto before = masters();
+    PtyProcess process;
+    QVERIFY(process.start(QDir::tempPath(), 24, 80));
+    const auto after = masters();
+    QList<int> opened;
+    for (const int fd : after) {
+        if (!before.contains(fd))
+            opened.append(fd);
+    }
+    QCOMPARE(opened.size(), 1);
+    QVERIFY(::fcntl(opened.first(), F_GETFD) & FD_CLOEXEC);
+    process.stop();
 #else
     QSKIP("The first PTY backend targets macOS and Linux.");
 #endif
@@ -445,6 +544,46 @@ void PtyProcessTest::emitsMouseProtocolFromCore() {
 
 } // namespace ketplus
 
-QTEST_MAIN(ketplus::PtyProcessTest)
+namespace {
+
+#if defined(Q_OS_UNIX)
+// Prints the pid of a shell that ignores SIGHUP, stops it and exits without waiting.
+int runExitProbe(int argc, char** argv) {
+    QCoreApplication application(argc, argv);
+    ketplus::PtyProcess process;
+    QByteArray output;
+    QObject::connect(&process, &ketplus::PtyProcess::outputReceived,
+                     [&output](const QByteArray& bytes) { output.append(bytes); });
+    if (!process.start(QDir::tempPath(), 24, 80))
+        return 1;
+    process.send("trap '' HUP; printf '__KETPLUS_PID_%s__\\n' \"$$\"\n");
+    static const QRegularExpression pidLine(QStringLiteral("__KETPLUS_PID_([0-9]+)__"));
+    QDeadlineTimer deadline(10000);
+    while (!pidLine.match(QString::fromUtf8(output)).hasMatch() && !deadline.hasExpired())
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+    const auto match = pidLine.match(QString::fromUtf8(output));
+    if (!match.hasMatch())
+        return 1;
+    std::printf("%s\n", qPrintable(match.captured(1)));
+    std::fflush(stdout);
+    process.stop();
+    return 0;
+}
+#endif
+
+} // namespace
+
+int main(int argc, char** argv) {
+#if defined(Q_OS_UNIX)
+    if (qEnvironmentVariableIsSet("KETPLUS_PTY_EXIT_PROBE"))
+        return runExitProbe(argc, argv);
+#endif
+    QApplication application(argc, argv);
+    // As QTEST_MAIN sets it, so font metrics match the other GUI tests.
+    application.setAttribute(Qt::AA_Use96Dpi, true);
+    QTEST_SET_MAIN_SOURCE_PATH
+    ketplus::PtyProcessTest test;
+    return QTest::qExec(&test, argc, argv);
+}
 
 #include "PtyProcessTest.moc"
