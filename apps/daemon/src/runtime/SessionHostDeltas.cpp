@@ -1,8 +1,10 @@
 #include "protocol/DaemonProtocol.h"
 #include "runtime/SessionHost.h"
 
+#include <QCryptographicHash>
 #include <QJsonDocument>
 #include <QPointer>
+#include <QScopeGuard>
 #include <limits>
 
 namespace ketplus::daemon {
@@ -12,6 +14,7 @@ constexpr qsizetype maximumDeferredEventsTotal = 512;
 constexpr qsizetype maximumDeferredBytesPerSession = 40 * 1024 * 1024;
 constexpr qsizetype maximumDeferredBytesTotal = 80 * 1024 * 1024;
 constexpr int journalRetryMs = 1000;
+constexpr qsizetype maximumCompletedItems = 512;
 
 bool isStreamDelta(const QString& type) {
     return type == QStringLiteral("assistant.delta") ||
@@ -126,6 +129,9 @@ bool SessionHost::appendEvent(Session& session, const QString& type, const QJson
         auto it = sessions_.find(id);
         return it != sessions_.end() && it->stored.generation == generation ? &*it : nullptr;
     };
+    // Whether the event was committed or queued for retry; one dropped entirely leaves nothing
+    // for clients to see, so it does not mark its item complete.
+    bool kept = false;
     const auto retain = [&](Session& target) {
         if (error && error->isEmpty())
             *error = QStringLiteral("The local journal has events awaiting recovery.");
@@ -138,9 +144,34 @@ bool SessionHost::appendEvent(Session& session, const QString& type, const QJson
             target.pendingDeltaType.clear();
             target.pendingDelta = {};
         }
-        (void)deferJournalEvent(target, type, payload, error);
+        kept = deferJournalEvent(target, type, payload, error);
         return false; // Retained is not the same as committed.
     };
+    // Ids are provider strings of any length; a fixed-size digest bounds what is remembered.
+    const QString itemId = payload.value(QStringLiteral("item_id")).toString();
+    const QByteArray itemKey =
+        itemId.isEmpty() ? QByteArray{}
+                         : QCryptographicHash::hash(itemId.toUtf8(), QCryptographicHash::Sha256);
+    if (!itemKey.isEmpty()) {
+        // A provider stream is ordered, but a delta that arrives after its item completed (a
+        // retried notification, or the tail of a previous turn) would extend text that is
+        // already final, live and in every replay. The completed item is authoritative.
+        if (isStreamDelta(type) && session.completedItems.contains(itemKey))
+            return true;
+        if (type == QStringLiteral("item.started") && session.completedItems.remove(itemKey))
+            session.completedItemOrder.removeOne(itemKey);
+    }
+    const auto rememberCompletion = qScopeGuard([&] {
+        if (!kept || type != QStringLiteral("item.completed") || itemKey.isEmpty())
+            return;
+        auto* target = current();
+        if (target == nullptr || target->completedItems.contains(itemKey))
+            return;
+        target->completedItems.insert(itemKey);
+        target->completedItemOrder.append(itemKey);
+        if (target->completedItemOrder.size() > maximumCompletedItems)
+            target->completedItems.remove(target->completedItemOrder.takeFirst());
+    });
     if (!session.deferredJournal.isEmpty())
         return retain(session);
     if (!isStreamDelta(type)) {
@@ -149,8 +180,10 @@ bool SessionHost::appendEvent(Session& session, const QString& type, const QJson
         auto* active = current();
         if (!active)
             return false;
-        if (journalEvent(*active, type, payload, error))
+        if (journalEvent(*active, type, payload, error)) {
+            kept = true;
             return true;
+        }
         return retain(*active);
     }
     const bool same =

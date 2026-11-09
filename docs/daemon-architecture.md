@@ -142,6 +142,13 @@ Streamed text reaches the journal coalesced: consecutive `assistant.delta` or
 item, and SessionHost teardown journal the held text first, so provider order
 is kept. One event per provider chunk (a word or less) had every reader, above
 all a phone paging the relay, read tens of thousands of events per conversation.
+A delta for an item whose `item.completed` is already journaled is dropped, so a
+retried notification or a previous turn's tail cannot extend final text; an
+`item.started` with the same id reopens the item. The daemon remembers SHA-256
+digests of the last 512 completed items per session (about 32 bytes each, whatever
+the id's length), only for completions it journaled or queued for retry, and forgets
+them when the provider process stops or reloads, because the next process may reuse
+item ids.
 If append fails, SessionHost retains the prefix and later provider events in a
 bounded FIFO, retries after one second, and yields between deferred entries.
 The queue caps are 128 events / 40 MiB per session and 512 / 80 MiB per host
