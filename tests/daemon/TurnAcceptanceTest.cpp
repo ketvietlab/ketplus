@@ -1,5 +1,7 @@
+#include "FakeClaude.h"
 #include "FakeCodex.h"
 #include "protocol/DaemonProtocol.h"
+#include "providers/ClaudeAdapter.h"
 #include "providers/CodexAdapter.h"
 #include "runtime/SessionHost.h"
 #include "storage/LocalJournal.h"
@@ -597,6 +599,178 @@ class TurnAcceptanceTest final : public QObject {
                     .value("ok")
                     .toBool());
         QTRY_COMPARE_WITH_TIMEOUT(eventCount(history(), "turn.completed"), 2, 5000);
+    }
+    void rejectedTurnAfterAProviderSwitchKeepsTheHandoff() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite3");
+        const auto codexPath = dir.filePath("fake-codex");
+        const auto claudePath = dir.filePath("fake-claude");
+        const auto claudeLog = dir.filePath("claude.log");
+        QVERIFY(writeFakeCodex(codexPath, dir.filePath("codex.log")));
+        QVERIFY(writeFakeClaude(claudePath, claudeLog));
+        LocalJournal journal(path);
+        StoredSession seed;
+        seed.id = "handoff-retry";
+        seed.generation = 1;
+        seed.worktreePath = dir.path();
+        seed.adapter = "codex";
+        seed.state = "idle";
+        QVERIFY(journal.upsertSession(seed));
+        CodexAdapter codex(codexPath);
+        ClaudeAdapter claude(claudePath);
+        SessionHost host(&journal, &codex, &claude);
+        const auto stop = qScopeGuard([&] {
+            codex.stop();
+            claude.stop();
+        });
+        const auto turn = [&](const QString& messageId, const QString& prompt,
+                              const QString& provider) {
+            auto submitted = request(messageId, seed.id);
+            submitted.insert("payload",
+                             QJsonObject{{"prompt", prompt},
+                                         {"client_message_id", messageId},
+                                         {"options", QJsonObject{{"provider", provider}}}});
+            return host.handleCommand(submitted, "desktop-test");
+        };
+        QVERIFY(turn("codex-turn", "hello", "codex").value("ok").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(journal.sessions().first().state, QString("ready"), 5000);
+        // The switch to Claude is journaled, then the prompt itself cannot be.
+        auto db = journalConnection(path);
+        QVERIFY(db.isOpen());
+        QSqlQuery q(db);
+        QVERIFY(q.exec("CREATE TRIGGER reject_prompt BEFORE INSERT ON events WHEN "
+                       "NEW.event_type='user.message' BEGIN SELECT RAISE(ABORT,'full'); END"));
+        const auto rejected = turn("claude-rejected", "continue please", "claude");
+        QCOMPARE(rejected.value("error_code").toString(), QString("journal_error"));
+        QVERIFY(q.exec("DROP TRIGGER reject_prompt"));
+        // The retry still tells Claude where the conversation so far is.
+        QVERIFY(turn("claude-retry", "continue please", "claude").value("ok").toBool());
+        // One "turn:" line per Claude turn, with the prompt it was given.
+        const auto prompts = [&claudeLog] {
+            QList<QByteArray> turns;
+            QFile log(claudeLog);
+            if (log.open(QIODevice::ReadOnly))
+                for (const auto& line : log.readAll().split('\n'))
+                    if (line.startsWith("turn:"))
+                        turns.append(line);
+            return turns;
+        };
+        QTRY_COMPARE_WITH_TIMEOUT(prompts().size(), qsizetype(1), 5000);
+        QVERIFY2(prompts().first().contains("[KetPlus handoff]"), prompts().first().constData());
+        QCOMPARE(eventCount(journal.eventsAfter(seed.id, 1, 0), "session.provider_changed"), 1);
+        // Delivered once: the next Claude turn carries no second note.
+        QTRY_COMPARE_WITH_TIMEOUT(journal.sessions().first().state, QString("ready"), 5000);
+        QVERIFY(turn("claude-next", "and more", "claude").value("ok").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(prompts().size(), qsizetype(2), 5000);
+        QVERIFY(!prompts().last().contains("[KetPlus handoff]"));
+    }
+    void failedProviderSwitchStaysWithThePreviousProvider() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite3");
+        const auto codexPath = dir.filePath("fake-codex");
+        const auto claudePath = dir.filePath("fake-claude");
+        QVERIFY(writeFakeCodex(codexPath, dir.filePath("codex.log")));
+        QVERIFY(writeFakeClaude(claudePath, dir.filePath("claude.log")));
+        LocalJournal journal(path);
+        StoredSession seed;
+        seed.id = "switch-rollback";
+        seed.generation = 1;
+        seed.worktreePath = dir.path();
+        seed.adapter = "codex";
+        seed.state = "idle";
+        QVERIFY(journal.upsertSession(seed));
+        CodexAdapter codex(codexPath);
+        ClaudeAdapter claude(claudePath);
+        SessionHost host(&journal, &codex, &claude);
+        const auto stop = qScopeGuard([&] {
+            codex.stop();
+            claude.stop();
+        });
+        const auto turn = [&](const QString& messageId, const QString& provider) {
+            auto submitted = request(messageId, seed.id);
+            submitted.insert("payload",
+                             QJsonObject{{"prompt", "hello"},
+                                         {"client_message_id", messageId},
+                                         {"options", QJsonObject{{"provider", provider}}}});
+            return host.handleCommand(submitted, "desktop-test");
+        };
+        QVERIFY(turn("codex-turn", "codex").value("ok").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(journal.sessions().first().state, QString("ready"), 5000);
+        const QString thread = journal.sessions().first().threadId;
+        QVERIFY(!thread.isEmpty());
+        auto db = journalConnection(path);
+        QVERIFY(db.isOpen());
+        QSqlQuery q(db);
+        QVERIFY(
+            q.exec("CREATE TRIGGER reject_switch BEFORE INSERT ON events WHEN "
+                   "NEW.event_type='session.provider_changed' BEGIN SELECT RAISE(ABORT,'full'); "
+                   "END"));
+        QCOMPARE(turn("claude-rejected", "claude").value("error_code").toString(),
+                 QString("handoff_failed"));
+        QVERIFY(q.exec("DROP TRIGGER reject_switch"));
+        // Nothing was journaled, so the next Codex turn continues the same Codex thread.
+        QVERIFY(turn("codex-again", "codex").value("ok").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(eventCount(journal.eventsAfter(seed.id, 1, 0), "turn.completed"),
+                                  2, 5000);
+        QCOMPARE(eventCount(journal.eventsAfter(seed.id, 1, 0), "session.provider_changed"), 0);
+        QCOMPARE(journal.sessions().first().adapter, QString("codex"));
+        QCOMPARE(journal.sessions().first().threadId, thread);
+    }
+    void providerRejectedStartKeepsTheHandoff() {
+        QTemporaryDir dir;
+        const auto codexPath = dir.filePath("fake-codex");
+        const auto claudePath = dir.filePath("fake-claude");
+        const auto claudeLog = dir.filePath("claude.log");
+        QVERIFY(writeFakeCodex(codexPath, dir.filePath("codex.log")));
+        QVERIFY(writeFakeClaude(claudePath, claudeLog));
+        LocalJournal journal(dir.filePath("journal.sqlite3"));
+        StoredSession seed;
+        seed.id = "handoff-provider-retry";
+        seed.generation = 1;
+        seed.worktreePath = dir.path();
+        seed.adapter = "codex";
+        seed.state = "idle";
+        QVERIFY(journal.upsertSession(seed));
+        CodexAdapter codex(codexPath);
+        ClaudeAdapter claude(claudePath);
+        SessionHost host(&journal, &codex, &claude);
+        const auto stop = qScopeGuard([&] {
+            codex.stop();
+            claude.stop();
+        });
+        const auto turn = [&](const QString& messageId, const QString& prompt,
+                              const QString& provider) {
+            auto submitted = request(messageId, seed.id);
+            submitted.insert("payload",
+                             QJsonObject{{"prompt", prompt},
+                                         {"client_message_id", messageId},
+                                         {"options", QJsonObject{{"provider", provider}}}});
+            return host.handleCommand(submitted, "desktop-test");
+        };
+        const auto prompts = [&claudeLog] {
+            QList<QByteArray> turns;
+            QFile log(claudeLog);
+            if (log.open(QIODevice::ReadOnly))
+                for (const auto& line : log.readAll().split('\n'))
+                    if (line.startsWith("turn:"))
+                        turns.append(line);
+            return turns;
+        };
+        QVERIFY(turn("codex-turn", "hello", "codex").value("ok").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(journal.sessions().first().state, QString("ready"), 5000);
+        // The journal accepts the switch and the prompt, then Claude refuses to start the turn.
+        QVERIFY(turn("claude-refused", "fail-start", "claude").value("ok").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(journal.sessions().first().state, QString("failed"), 5000);
+        QVERIFY(prompts().isEmpty());
+        // The retry still tells Claude where the conversation so far is, once.
+        QVERIFY(turn("claude-retry", "continue please", "claude").value("ok").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(prompts().size(), qsizetype(1), 5000);
+        QVERIFY2(prompts().first().contains("[KetPlus handoff]"), prompts().first().constData());
+        QTRY_COMPARE_WITH_TIMEOUT(journal.sessions().first().state, QString("ready"), 5000);
+        QVERIFY(turn("claude-next", "and more", "claude").value("ok").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(prompts().size(), qsizetype(2), 5000);
+        QVERIFY(!prompts().last().contains("[KetPlus handoff]"));
+        QCOMPARE(eventCount(journal.eventsAfter(seed.id, 1, 0), "session.provider_changed"), 1);
     }
 };
 QTEST_GUILESS_MAIN(TurnAcceptanceTest)
