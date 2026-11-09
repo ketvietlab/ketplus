@@ -1032,11 +1032,9 @@ void AgentWorkspaceViewTest::copiesConversationTranscript() {
              {QStringLiteral("meta"), QStringLiteral("Changed files")},
              {QStringLiteral("filePath"), QString()}}});
     QTest::qWait(100);
-    // The footer button and the transcript's context menu both copy the conversation; while a
-    // turn runs they copy what is loaded.
-    auto* copyButton = root->findChild<QQuickItem*>(QStringLiteral("copyConversationButton"));
-    QVERIFY(copyButton);
-    QVERIFY(copyButton->isVisible());
+    // The transcript's context menu copies the conversation, as the mock has no footer button
+    // for it; while a turn runs it copies what is loaded.
+    QVERIFY(!root->findChild<QQuickItem*>(QStringLiteral("copyConversationButton")));
     auto* menu = root->findChild<QObject*>(QStringLiteral("transcriptContextMenu"));
     QVERIFY(menu);
     auto* copyItem =
@@ -1045,7 +1043,6 @@ void AgentWorkspaceViewTest::copiesConversationTranscript() {
     QCOMPARE(copyItem->property("text").toString(), QStringLiteral("Copy conversation"));
     view.setSessionState(QStringLiteral("Copy test"), QStringLiteral("Working..."), true);
     QTRY_COMPARE(copyItem->property("text").toString(), QStringLiteral("Copy loaded conversation"));
-    QVERIFY(copyButton->isVisible());
     view.setSessionState(QStringLiteral("Copy test"), QStringLiteral("Ready"), false);
     QTRY_COMPARE(copyItem->property("text").toString(), QStringLiteral("Copy conversation"));
     QVariant selectable;

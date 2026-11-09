@@ -102,8 +102,10 @@ Item {
     // keyboard-focused or one of its buttons holds focus; collapsed members never create it.
     property bool chromeFocusHold: false
     readonly property bool chromeActive: (rowHover.hovered || chromeFocusHold || (view.activeFocus && view.keyboardIndex === index))
+    // As in the mock, the turn's answer always offers Copy answer under it; a prompt's copy
+    // comes with the hover or focus.
     Loader {
-        active: (kind === "user" ? messageDelegate.copyableMessage : messageDelegate.turnAnswered) && messageDelegate.chromeActive
+        active: kind === "user" ? messageDelegate.copyableMessage && messageDelegate.chromeActive : messageDelegate.turnAnswered
         z: 2
         width: KetTheme.px(28, KetTheme.zoom)
         height: KetTheme.px(28, KetTheme.zoom)
@@ -112,7 +114,7 @@ Item {
         sourceComponent: TranscriptCopyButton {
             objectName: "copyMessageButton"
 
-            label: kind === "user" ? "Copy message" : "Copy response"
+            label: kind === "user" ? "Copy message" : "Copy answer"
             padding: KetTheme.px(7, KetTheme.zoom)
             idleColor: KetTheme.t.pageBg
             cornerRadius: KetTheme.px(5, KetTheme.zoom)
