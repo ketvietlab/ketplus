@@ -41,6 +41,8 @@ void scheduleFlush(QTimer& timer, int delay) {
 
 SessionHost::~SessionHost() {
     deltaFlush_.stop();
+    // The journal outlives this host and its media store.
+    journal_->setImagePreviewWriter({});
     // Drain accepted in-memory data while storage is available. A failed write
     // stops this session's drain; shutdown must not spin on an unavailable disk.
     const auto ids = sessions_.keys();

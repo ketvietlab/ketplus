@@ -602,6 +602,60 @@ class ReplayDetailCompactorTest final : public QObject {
         QVERIFY(!compactCompletedReplayItem(legacy, QDateTime()));
         QVERIFY(!compactCompletedReplayItem(legacy, QDateTime::currentDateTimeUtc().addDays(1)));
     }
+    void generatedImageKeepsAPreview_data() {
+        QTest::addColumn<QString>("pixels");
+        QTest::newRow("base64") << QString::fromLatin1(QByteArray("png bytes").toBase64());
+        QTest::newRow("data url") << "data:image/png;base64," +
+                                         QString::fromLatin1(QByteArray("png bytes").toBase64());
+    }
+    void generatedImageKeepsAPreview() {
+        QFETCH(QString, pixels);
+        const QJsonObject legacy{{"id", "image-1"},
+                                 {"type", "imageGeneration"},
+                                 {"status", "completed"},
+                                 {"savedPath", "/synthetic/kite.png"},
+                                 {"result", pixels}};
+        const QJsonObject reference{
+            {"type", "image"}, {"media_ref", "media:abc.jpg"}, {"width", 512}, {"height", 384}};
+        QByteArray seen;
+        const auto item =
+            compactCompletedReplayItem(legacy, cutoff(), [&](const QByteArray& image) {
+                seen = image;
+                return reference;
+            });
+        QVERIFY(item);
+        QCOMPARE(seen, QByteArray("png bytes"));
+        QCOMPARE(item->value("result").toObject(),
+                 (QJsonObject{{"content", QJsonArray{reference}}}));
+        QCOMPARE(item->value("savedPath"), legacy.value("savedPath"));
+        const auto marker = item->value("compacted").toObject();
+        QCOMPARE(marker.value("policy").toString(), QString("image-preview-v1"));
+        QCOMPARE(marker.value("original_bytes").toInteger(), pixels.size());
+        QVERIFY(marker.value("retained_bytes").toInteger() > 0);
+        // The reference it now holds is what newer builds journal, so it is left alone.
+        QVERIFY(!compactCompletedReplayItem(*item, cutoff(), [](const QByteArray&) {
+            return QJsonObject{{"media_ref", "again"}};
+        }));
+    }
+    void generatedImageWithoutAPreviewKeepsItsCaption() {
+        const QJsonObject legacy{
+            {"type", "imageGeneration"}, {"savedPath", "/synthetic/kite.png"}, {"result", "AAAA"}};
+        const auto item = compactCompletedReplayItem(
+            legacy, cutoff(), [](const QByteArray&) { return QJsonObject(); });
+        QVERIFY(item);
+        QVERIFY(!item->contains("result"));
+        QCOMPARE(item->value("compacted").toObject().value("policy").toString(),
+                 QString("image-pixels-v1"));
+        // Text that is not base64 is never handed to the preview.
+        bool called = false;
+        auto broken = legacy;
+        broken.insert("result", "not*base64");
+        QVERIFY(compactCompletedReplayItem(broken, cutoff(), [&](const QByteArray&) {
+            called = true;
+            return QJsonObject{{"media_ref", "m"}};
+        }));
+        QVERIFY(!called);
+    }
 };
 QTEST_GUILESS_MAIN(ReplayDetailCompactorTest)
 #include "ReplayDetailCompactorTest.moc"

@@ -1,4 +1,9 @@
+#include "providers/CodexAdapter.h"
+#include "runtime/SessionHost.h"
 #include "storage/LocalJournal.h"
+#include "storage/McpMediaStore.h"
+#include <QBuffer>
+#include <QImage>
 
 #include <QElapsedTimer>
 #include <QJsonDocument>
@@ -338,6 +343,50 @@ class JournalUsageRetentionTest final : public QObject {
         }
         // Rows only change; none go, apart from the intermediate usage samples.
         QCOMPARE(withoutUsage(after).size(), withoutUsage(before).size());
+    }
+
+    void generatedImagesKeepAPreview() {
+        QTemporaryDir directory;
+        const auto path = directory.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        CodexAdapter adapter("/nonexistent/codex");
+        SessionHost host(&journal, &adapter);
+        QImage picture(1024, 768, QImage::Format_RGB32);
+        picture.fill(QColor(200, 40, 40));
+        QByteArray png;
+        QBuffer buffer(&png);
+        QVERIFY(buffer.open(QIODevice::WriteOnly) && picture.save(&buffer, "PNG"));
+        QVERIFY(seed(journal, path, true, 24, QString::fromLatin1(png.toBase64()), false, true));
+        Database database(path);
+        // These PNGs are small enough to be inline, yet each preview decodes the full picture:
+        // a pass decodes one and leaves the rest for the next passes.
+        QVERIFY(journal.pruneReplayDetails(cutoff(), 256).has_value());
+        QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE json_extract("
+                                 "payload,'$.item.compacted.policy')='image-preview-v1'"),
+                 1);
+        QVERIFY(sweep(journal) > 0);
+        QCOMPARE(database.scalar("SELECT count(*) FROM replay_events WHERE json_extract("
+                                 "payload,'$.item.compacted.policy')='image-preview-v1'"),
+                 4);
+        const QDir media(McpMediaStore::directoryForJournal(path));
+        for (const auto& value : allReplay(journal)) {
+            const auto event = value.toObject();
+            const auto item = event.value("payload").toObject().value("item").toObject();
+            if (event.value("event_type") != "item.completed" ||
+                event.value("turn_sequence").toInteger() > 4)
+                continue;
+            const auto block =
+                item.value("result").toObject().value("content").toArray().first().toObject();
+            QCOMPARE(block.value("type").toString(), QString("image"));
+            QVERIFY(qMax(block.value("width").toInt(), block.value("height").toInt()) <= 512);
+            QCOMPARE(block.value("width").toInt(), 512);
+            const auto reference = block.value("media_ref").toString();
+            QVERIFY(reference.startsWith("sha256:"));
+            QCOMPARE(media.entryList({reference.mid(7) + ".*"}, QDir::Files).size(), 1);
+            QCOMPARE(
+                item.value("savedPath").toString(),
+                QString("/synthetic/kite-%1.png").arg(event.value("turn_sequence").toInteger()));
+        }
     }
 
     void toolResultImagesLeaveTheJournal_data() {

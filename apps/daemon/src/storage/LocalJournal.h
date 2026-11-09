@@ -337,6 +337,11 @@ class LocalJournal final {
     // Also trim eligible completed command output to UTF-8 head/tail with an explicit marker.
     // Returns changed rows, or nullopt on error. The scan resumes in the next call.
     std::optional<qint64> pruneReplayDetails(const QDateTime& olderThan, int maximumRows = 128);
+    // Stores a bounded preview of an image the detail pass compacts and returns its media
+    // reference, or an empty object to keep the caption only (#128). Unset means caption only.
+    using ImagePreviewWriter =
+        std::function<QJsonObject(const QByteArray& image, const QString& sessionId)>;
+    void setImagePreviewWriter(ImagePreviewWriter writer) { imagePreview_ = std::move(writer); }
     bool beginAttachment(const QString& sessionId, qint64 generation, const QString& attachmentId,
                          qint64 expectedRevision, const QString& name, const QString& mediaType,
                          qint64 totalBytes, int chunkCount, const QString& digestSha256,
@@ -493,6 +498,7 @@ class LocalJournal final {
     // A reclaim whose checkpoint a reader held back: the file has not shrunk yet.
     bool reclaimCheckpointPending_{false};
     qint64 detailRetentionScanRow_{0};
+    ImagePreviewWriter imagePreview_;
     bool sizePressureRecent_{false};
     bool sizePressureActive_{false};
 };

@@ -307,6 +307,9 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
     update.prepare(QStringLiteral("UPDATE replay_events SET payload = ? WHERE rowid = ?"));
     qint64 parsedBytes = 0;
     bool imageRead = false;
+    // Decoding an image for its preview costs the same whatever its stored size, so one pass
+    // decodes at most one, inline or large (ADR 0101).
+    bool previewDecoded = false;
     qint64 imageLaneBytes = 0; // chunk bytes probed or read by the image lane this pass
     qsizetype processed = 0;
     QSet<QPair<QString, qint64>> changed;
@@ -440,8 +443,22 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
                 parsedBytes += bytes.size();
             }
             auto payload = QJsonDocument::fromJson(bytes).object();
+            const auto original = payload.value(QStringLiteral("item")).toObject();
+            const auto pixels = original.value(QStringLiteral("result"));
+            const bool decodesPreview =
+                imagePreview_ && original.value(QStringLiteral("type")) == "imageGeneration" &&
+                !original.contains(QStringLiteral("compacted")) && pixels.isString() &&
+                !pixels.toString().isEmpty();
+            if (decodesPreview && previewDecoded)
+                break; // the next pass takes it
+            previewDecoded = previewDecoded || decodesPreview;
             const auto item = compactCompletedReplayItem(
-                payload.value(QStringLiteral("item")).toObject(), olderThan);
+                original, olderThan,
+                imagePreview_
+                    ? ImagePreview([this, session = row.session](const QByteArray& image) {
+                          return imagePreview_(image, session);
+                      })
+                    : ImagePreview());
             if (!item)
                 continue;
             payload.insert(QStringLiteral("item"), *item);
