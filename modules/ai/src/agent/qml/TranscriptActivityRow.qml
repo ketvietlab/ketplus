@@ -88,6 +88,8 @@ Column {
     readonly property var images: parseArray(imageSources)
     readonly property string commandOutput: command.length > 0 ? String(details.output || "") : ""
     readonly property bool browserActivity: subtype === "ketplusBrowser"
+    // Inside an open group a multi-file edit lists each file as its own step, as the mock does.
+    readonly property bool fileSteps: compact && subtype === "fileChange" && files.length > 1
     readonly property bool browserOpenAction: /^https?:\/\//.test(target) &&
                                                /browser|opened/i.test(displayTitle) &&
                                                /open/i.test(displayTitle)
@@ -179,7 +181,20 @@ Column {
     width: parent ? parent.width : implicitWidth
     spacing: KetTheme.px(7, KetTheme.zoom)
 
-    TranscriptActivityHeader { activity: root; width: parent.width }
+    TranscriptActivityHeader {
+        visible: !root.fileSteps
+        activity: root
+        width: parent.width
+    }
+    Repeater {
+        model: root.fileSteps ? root.files : []
+        delegate: TranscriptFileStep {
+            required property var modelData
+            file: modelData
+            host: root.host
+            width: root.width
+        }
+    }
 
     Text {
         objectName: "transcriptActivityStatus"
@@ -434,7 +449,7 @@ Column {
         TranscriptChangedFiles {
             activity: root
             width: parent.width
-            visible: root.subtype === "fileChange" && root.files.length > 0
+            visible: root.subtype === "fileChange" && !root.fileSteps && root.files.length > 0
             height: visible ? implicitHeight : 0
         }
 

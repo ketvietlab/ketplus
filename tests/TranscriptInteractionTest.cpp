@@ -202,6 +202,57 @@ void AgentWorkspaceViewTest::fileChangesStayCompactInsideExpandedGroup() {
     QVERIFY(QMetaObject::invokeMethod(rows.at(0), "toggleDetails"));
     QTRY_VERIFY(findVisualItem(rows.at(0), "transcriptActivityDetails")->isVisible());
     QVERIFY(!findVisualItem(rows.at(1), "transcriptActivityDetails")->isVisible());
+
+    // One edit of several files lists each file as its own step, as the mock does.
+    auto several = ketplus::agent_message::fileChangeMessage(
+        {{"id", "several"},
+         {"type", "fileChange"},
+         {"status", "completed"},
+         {"changes", QJsonArray{QJsonObject{{"path", "/worktree/src/Edited.cpp"},
+                                            {"kind", QJsonObject{{"type", "update"}}},
+                                            {"diff", "@@ -1 +1,2 @@\n-a\n+b\n+c\n"}},
+                                QJsonObject{{"path", "/worktree/src/New.h"},
+                                            {"kind", QJsonObject{{"type", "add"}}}},
+                                QJsonObject{{"path", "/worktree/src/Old.cpp"},
+                                            {"kind", QJsonObject{{"type", "delete"}}}}}}},
+        true);
+    several.insert("messageKey", "several");
+    several.insert("turnId", "edit-turn");
+    ketplus::AgentWorkspaceView listing;
+    listing.applyTheme(testPalette());
+    listing.resize(1100, 900);
+    listing.show();
+    listing.resetMessages({edit("single", "/worktree/README.md"), several}, "several-edits");
+    auto* listed = listing.messageModel();
+    QTRY_COMPARE(listed->count(), 1);
+    listed->setGroupExpanded(listed->get(0).value("groupKey").toString(), true);
+    QTRY_COMPARE(listed->count(), 2);
+    root = listing.quickView()->rootObject();
+    QList<QQuickItem*> steps;
+    const auto collectSteps = [&](const auto& self, QQuickItem* item) -> void {
+        if (!item->isVisible())
+            return;
+        if (item->objectName() == "transcriptFileStep")
+            steps.append(item);
+        for (auto* child : item->childItems())
+            self(self, child);
+    };
+    QTRY_VERIFY(([&] {
+        steps.clear();
+        collectSteps(collectSteps, root);
+        return steps.size() == 3;
+    })());
+    // The single-file edit keeps its one header line.
+    QVERIFY(findVisualItem(root, "transcriptActivityHeader"));
+    QCOMPARE(steps.at(0)->property("text").toString(), QStringLiteral("Edited"));
+    QVERIFY(steps.at(0)->property("detail").toString().contains("Edited.cpp"));
+    QVERIFY(steps.at(0)->property("detail").toString().contains("+2 −1"));
+    QCOMPARE(steps.at(1)->property("text").toString(), QStringLiteral("Created"));
+    QCOMPARE(steps.at(2)->property("text").toString(), QStringLiteral("Deleted"));
+    QCOMPARE(steps.at(2)->property("iconName").toString(), QStringLiteral("trash"));
+    QSignalSpy diffs(&listing, &ketplus::AgentWorkspaceView::fileDiffRequested);
+    QVERIFY(QMetaObject::invokeMethod(steps.at(0), "clicked"));
+    QCOMPARE(diffs.size(), 1);
 }
 
 void AgentWorkspaceViewTest::browserStepsCollapseAroundEvidence() {

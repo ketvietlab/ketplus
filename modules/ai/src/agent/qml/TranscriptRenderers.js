@@ -17,6 +17,7 @@ const families = {
     imageView: { icon: "image", family: "images" },
     imageGeneration: { icon: "image", family: "images" },
     reasoning: { icon: "brain", family: "control" },
+    thought: { icon: "sparkles", family: "control" },
     plan: { icon: "list-checks", family: "control" },
     wait: { icon: "clock", family: "control" },
     monitor: { icon: "activity", family: "control" },
