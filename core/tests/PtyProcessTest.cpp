@@ -16,6 +16,7 @@
 #include <QDeadlineTimer>
 #include <QDir>
 #include <QEvent>
+#include <QFile>
 #include <QFontDatabase>
 #include <QFontInfo>
 #include <QInputMethodEvent>
@@ -24,6 +25,7 @@
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QVBoxLayout>
 
@@ -638,6 +640,22 @@ int main(int argc, char** argv) {
 #if defined(Q_OS_UNIX)
     if (qEnvironmentVariableIsSet("KETPLUS_PTY_EXIT_PROBE"))
         return runExitProbe(argc, argv);
+#endif
+#if defined(Q_OS_UNIX)
+    // The shells start as login shells. A runner's own startup files can print, pause or read
+    // the keyboard (zsh's new-user menu does), so the shell gets a home of empty ones.
+    QTemporaryDir home;
+    if (!home.isValid())
+        return 1;
+    for (const char* name :
+         {".zshenv", ".zprofile", ".zshrc", ".zlogin", ".bash_profile", ".bashrc", ".profile"}) {
+        QFile file(home.filePath(QString::fromLatin1(name)));
+        if (!file.open(QIODevice::WriteOnly))
+            return 1;
+    }
+    qputenv("HOME", home.path().toLocal8Bit());
+    for (const char* variable : {"ZDOTDIR", "BASH_ENV", "ENV"})
+        qunsetenv(variable);
 #endif
     QApplication application(argc, argv);
     // As QTEST_MAIN sets it, so font metrics match the other GUI tests.

@@ -326,19 +326,20 @@ void RefactorWave1ContractTest::themeInstallsTheKetStyle() {
     };
     // The label a tooltip shows: the stylesheet's base QWidget size must not reach it.
     const auto shownTooltipPixels = [] {
-        // Windows fades tooltips in, so the label is not visible yet when this reads it.
-        QApplication::setEffectEnabled(Qt::UI_FadeTooltip, false);
-        QApplication::setEffectEnabled(Qt::UI_AnimateTooltip, false);
         QWidget anchor;
         anchor.resize(80, 40);
         anchor.show();
         QToolTip::showText(anchor.mapToGlobal(QPoint(10, 10)), QStringLiteral("Tip"), &anchor);
+        // Windows may keep the label hidden for a window that is not active; its font is
+        // what is checked, so a hidden label counts when no visible one exists.
         int pixels = -1;
+        bool visible = false;
         for (QWidget* widget : QApplication::topLevelWidgets()) {
-            if (widget->inherits("QTipLabel") && widget->isVisible()) {
-                widget->ensurePolished();
-                pixels = QFontInfo(widget->font()).pixelSize();
-            }
+            if (!widget->inherits("QTipLabel") || (visible && !widget->isVisible()))
+                continue;
+            widget->ensurePolished();
+            pixels = QFontInfo(widget->font()).pixelSize();
+            visible = widget->isVisible();
         }
         QToolTip::hideText();
         return pixels;
