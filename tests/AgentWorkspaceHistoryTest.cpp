@@ -1734,7 +1734,8 @@ void AgentWorkspaceViewTest::keepsSteeringDrafts() {
         auto* button = root->findChild<QQuickItem*>(QString::fromLatin1(name));
         QVERIFY(button);
         QVERIFY(button->isEnabled());
-        QVERIFY(button->height() >= 28);
+        // Attach is the mock's Small icon button in the 28 px footer row.
+        QVERIFY(button->height() >= (button->objectName() == "attachButton" ? 24 : 28));
     }
     auto* attachGlyph = root->findChild<QQuickItem*>("attachGlyph");
     QVERIFY(attachGlyph);

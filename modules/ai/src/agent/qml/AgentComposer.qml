@@ -20,7 +20,8 @@ Item {
     property alias modelButton: modelButton
     property alias usageRingButton: usageRingButton
     Layout.fillWidth: true
-    Layout.preferredHeight: composer.height + composerFooter.height + KetTheme.px(18, KetTheme.zoom)
+    // As ket's KetComposer: the focus ring surrounds the card, inside the composer's own box.
+    Layout.preferredHeight: composer.height + 2 * composer.recipe.ringWidth + composerFooter.height + KetTheme.px(18, KetTheme.zoom)
 
     Rectangle {
         id: composer
@@ -29,8 +30,9 @@ Item {
         readonly property bool compactControls: width < 520
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
-        width: Math.min(parent.width - KetTheme.px(40, KetTheme.zoom), root.conversationColumnWidth)
-        height: composerColumn.implicitHeight + 2 * (recipe.padding + recipe.ringWidth + 1)
+        anchors.topMargin: recipe.ringWidth
+        width: Math.min(parent.width - KetTheme.px(48, KetTheme.zoom), root.conversationColumnWidth) - 2 * recipe.ringWidth
+        height: composerColumn.implicitHeight + 2 * (recipe.padding + 1)
         radius: recipe.radius
         color: recipe.background
         border.width: 1
@@ -70,7 +72,7 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            anchors.margins: composer.recipe.padding + composer.recipe.ringWidth + 1
+            anchors.margins: composer.recipe.padding + 1
             spacing: 0
 
             Flow {
@@ -367,17 +369,16 @@ Item {
         anchors.left: composer.left
         anchors.right: composer.right
         anchors.top: composer.bottom
-        anchors.topMargin: KetTheme.px(4, KetTheme.zoom)
-        anchors.leftMargin: KetTheme.px(2, KetTheme.zoom)
-        anchors.rightMargin: KetTheme.px(2, KetTheme.zoom)
+        // Measured from the composer's box, which the ring widens beyond the card.
+        anchors.topMargin: KetTheme.px(4, KetTheme.zoom) + composer.recipe.ringWidth
+        anchors.leftMargin: KetTheme.px(2, KetTheme.zoom) - composer.recipe.ringWidth
+        anchors.rightMargin: KetTheme.px(2, KetTheme.zoom) - composer.recipe.ringWidth
         height: KetTheme.px(28, KetTheme.zoom)
         spacing: KetTheme.px(2, KetTheme.zoom)
 
         Kit.KetIconButton {
             id: attachButton
             objectName: "attachButton"
-            Layout.preferredWidth: composer.recipe.toolbarHeight
-            Layout.preferredHeight: composer.recipe.toolbarHeight
             controlSize: Kit.KetTheme.ControlSize.Small
             glyphSize: composer.recipe.attachIconSize
             iconName: Kit.KetTheme.iconForLucide("plus")
