@@ -7,9 +7,12 @@
 #include <QComboBox>
 #include <QDir>
 #include <QDoubleSpinBox>
+#include <QFontInfo>
 #include <QLabel>
 #include <QLineEdit>
+#include <QSet>
 #include <QSignalSpy>
+#include <QStackedWidget>
 #include <QStandardPaths>
 #include <QtTest>
 
@@ -170,6 +173,51 @@ class ClaudeCredentialsSettingsTest : public QObject {
         auto late = pending;
         delete page;
         late({{"supported", true}}, {});
+    }
+    // The bundled fonts read by their own name, and the preview's code uses the editor font.
+    void settingsNameTheBundledFonts() {
+        ketplus::ThemeManager theme(*qApp);
+        auto* dialog = new ketplus::SettingsDialog(ketplus::AppearanceSettings{}, theme);
+        ketplus::SettingsWorkspacePage page(dialog, [](auto reply) { reply({}, {}); });
+        page.applyPalette(theme.palette());
+        page.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&page));
+        auto* family = page.findChild<QComboBox*>("editorFontFamily");
+        QVERIFY(family);
+        QCOMPARE(family->currentData().toString(), QStringLiteral("KET Sans Mono"));
+        QCOMPARE(family->currentText(), QString::fromUtf8("KÉT Sans Mono"));
+        QCOMPARE(dialog->settings().fontFamily, QStringLiteral("KET Sans Mono"));
+        auto* code = page.findChild<QLabel*>("settingsPreviewCode");
+        QVERIFY(code);
+        QCOMPARE(code->font().family(), QStringLiteral("KET Sans Mono"));
+        QCOMPARE(QFontInfo(code->font()).family(), QStringLiteral("KET Sans Mono"));
+    }
+    // Every section opens a page; with KETPLUS_SETTINGS_CAPTURE_DIR set, each is saved for the
+    // side-by-side with the mock's settings/<state> captures.
+    void everySectionOpensItsPage() {
+        ketplus::ThemeManager theme(*qApp);
+        theme.previewMode(ketplus::ThemeManager::Mode::Light);
+        auto* dialog = new ketplus::SettingsDialog(ketplus::AppearanceSettings{}, theme);
+        ketplus::SettingsWorkspacePage page(dialog, [](auto reply) { reply({}, {}); });
+        page.applyPalette(theme.palette());
+        page.resize(1440, 900);
+        page.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&page));
+        auto* pages = page.findChild<QStackedWidget*>("settingsWorkspacePages");
+        QVERIFY(pages);
+        const auto directory = qEnvironmentVariable("KETPLUS_SETTINGS_CAPTURE_DIR");
+        QSet<QWidget*> seen;
+        for (const auto* id : {"appearance", "typography", "browser", "computer", "providers",
+                               "archived", "storage", "updates"}) {
+            page.showSection(QString::fromLatin1(id));
+            QCoreApplication::processEvents();
+            QVERIFY2(pages->currentWidget(), id);
+            seen.insert(pages->currentWidget());
+            if (!directory.isEmpty())
+                QVERIFY(
+                    page.grab().save(QDir(directory).filePath(QStringLiteral("%1.png").arg(id))));
+        }
+        QVERIFY(seen.size() >= 7);
     }
 };
 QTEST_MAIN(ClaudeCredentialsSettingsTest)

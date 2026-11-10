@@ -8,6 +8,7 @@
 #include "KetNavItem.h"
 #include "KetThemeCard.h"
 #include "app/PixelSelect.h"
+#include "app/SettingsFontNames.h"
 #include <QAbstractButton>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -307,9 +308,9 @@ AppearanceSettings SettingsDialog::appearanceSettings() const {
         .interfaceFontSizePixels = interfaceFontSizeBox_->value(),
         .editor =
             EditorSettings{
-                .fontFamily = editorFontBox_->currentText().isEmpty()
+                .fontFamily = settings_fonts::selectedFamily(editorFontBox_).isEmpty()
                                   ? editorFontFamily_
-                                  : editorFontBox_->currentText(),
+                                  : settings_fonts::selectedFamily(editorFontBox_),
                 .fontSizePixels = editorFontSizeBox_->value(),
                 .lineHeightPixels = editorLineHeightBox_->value(),
             },
@@ -328,11 +329,7 @@ void SettingsDialog::setAppearanceSettings(const AppearanceSettings& settings) {
     const auto value = settings.normalized();
     editorFontFamily_ = value.editor.fontFamily;
     terminalFontFamily_ = value.terminalFontFamily;
-    const int existingFont = editorFontBox_->findText(editorFontFamily_);
-    if (existingFont < 0) {
-        editorFontBox_->addItem(editorFontFamily_);
-    }
-    editorFontBox_->setCurrentText(editorFontFamily_);
+    settings_fonts::selectFamily(editorFontBox_, editorFontFamily_);
     interfaceFontSizeBox_->setValue(value.interfaceFontSizePixels);
     editorFontSizeBox_->setValue(value.editor.fontSizePixels);
     editorLineHeightBox_->setMinimum(

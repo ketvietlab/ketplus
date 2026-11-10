@@ -289,10 +289,20 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     chrome_geometry::spacing(previewLayout, 0);
     previewLayout->addWidget(label(QStringLiteral("  ◇  NavigationRail.qml     README.md"),
                                    QStringLiteral("settingsPreviewTabs"), preview));
-    previewLayout->addWidget(label(QStringLiteral("// Focus on what you are creating.\n"
-                                                  "property string workspace:  \"develop\"\n"
-                                                  "color: theme.accentSubtle"),
-                                   QStringLiteral("settingsPreviewCode"), preview));
+    auto* previewCode = label(QStringLiteral("// Focus on what you are creating.\n"
+                                             "property string workspace:  \"develop\"\n"
+                                             "color: theme.accentSubtle"),
+                              QStringLiteral("settingsPreviewCode"), preview);
+    // The code reads in the editor font, KÉT Sans Mono by default, as it will in the editor.
+    const auto showEditorFont = [previewCode, dialog = dialog_] {
+        QFont font = previewCode->font();
+        font.setFamily(dialog->settings().fontFamily);
+        previewCode->setFont(font);
+    };
+    showEditorFont();
+    if (auto* editorFamily = dialog_->findChild<QComboBox*>(QStringLiteral("editorFontFamily")))
+        connect(editorFamily, &QComboBox::currentTextChanged, previewCode, showEditorFont);
+    previewLayout->addWidget(previewCode);
     previewLayout->addWidget(
         label(QStringLiteral("◆  Ready for your next idea.                         Completed"),
               QStringLiteral("settingsPreviewMessage"), preview));
@@ -578,7 +588,7 @@ QLabel#settingsAccentCheck { color:%7; font-size:{{reading}}px; }
 QLabel#settingsAccentTitle { color:%2; font-size:{{body}}px; font-weight:600; }
 QLabel#settingsPreviewTabs { min-height:32px; padding:0 12px; border-bottom:2px solid %4;
  color:%2; background:%6; font-size:{{micro}}px; }
-QLabel#settingsPreviewCode { padding:14px 17px; color:%3; font-family:monospace; font-size:{{body}}px; }
+QLabel#settingsPreviewCode { padding:14px 17px; color:%3; font-size:{{body}}px; }
 QLabel#settingsPreviewMessage { min-height:34px; padding:0 17px; border-top:1px solid %5;
  color:%2; background:%6; font-size:{{body}}px; }
 QLabel#storageUsage,
