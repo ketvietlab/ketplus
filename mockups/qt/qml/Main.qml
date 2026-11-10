@@ -66,6 +66,24 @@ Basic.ApplicationWindow {
         teams.showTeam(id)
         screen = "teams"
     }
+    // The sidebar's team actions. Each shows the team's page behind its dialog.
+    function newTeam(repositoryName) {
+        screen = "teams"
+        teams.startNewTeam(repositoryName)
+    }
+    function addTeamMember(id, number) {
+        screen = "teams"
+        teams.startAddMember(id, number)
+    }
+    function deleteTeam(id) {
+        screen = "teams"
+        teams.startDelete(id)
+    }
+    function removeTeamMember(id, number) {
+        screen = "teams"
+        teams.startRemove(id, number)
+    }
+    function teamOf(number) { return teamList.find(t => t.members.some(m => m.number === number)) || null }
     property bool compact: false
     property size wideSize: Qt.size(1440, 900)
 
@@ -310,6 +328,8 @@ Basic.ApplicationWindow {
         else if (Mock.initialPanel === "toast")
             // The app-wide toast, for the side by side with the app.
             Qt.callLater(() => notify("Saved the plan"))
+        else if (["repo-menu", "team-menu", "row-menu"].includes(Mock.initialPanel))
+            Qt.callLater(() => sidebar.openMenu(Mock.initialPanel))
         else if (screen === "teams" && Mock.initialPanel)
             Qt.callLater(() => teams.openDialog(Mock.initialPanel))
         else if (["pair", "linux", "signin"].includes(Mock.initialPanel) && screen === "connections")

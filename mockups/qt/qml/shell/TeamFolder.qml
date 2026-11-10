@@ -32,6 +32,8 @@ Column {
                                        reviewer: Fixtures.tag("Reviewer") })
 
     signal contextMenuRequested(var conversation)
+    // The folder's own menu, at `anchor` or at the pointer when it is null.
+    signal menuRequested(var anchor)
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
     function conversation(number) {
@@ -46,6 +48,10 @@ Column {
         height: folder.recipe.height
 
         HoverHandler { id: hover }
+        TapHandler {
+            acceptedButtons: Qt.RightButton
+            onTapped: folder.menuRequested(null)
+        }
 
         Rectangle {
             anchors.fill: parent
@@ -82,7 +88,7 @@ Column {
         Basic.AbstractButton {
             id: name
             x: fold.x + fold.width + folder.recipe.nameGap - 1
-            width: parent.width - x - folder.recipe.paddingEnd - (waiting.visible ? waiting.width + folder.px(6) : 0)
+            width: actions.x - x - folder.px(4)
             height: parent.height
             text: folder.team.name
             Accessible.name: "Team " + folder.team.name
@@ -109,15 +115,45 @@ Column {
             }
         }
 
-        KetBadge {
-            id: waiting
-            visible: folder.team.decisions.length > 0
+        // Add member and the folder's menu show while hovered or focused, as a repository's
+        // New conversation does; the count stays.
+        Row {
+            id: actions
             anchors.right: parent.right
             anchors.rightMargin: folder.recipe.paddingEnd
             anchors.verticalCenter: parent.verticalCenter
-            text: folder.team.decisions.length
-            tone: KetTheme.BadgeTone.Accent
-            Accessible.name: folder.team.decisions.length + " decisions wait for you"
+            spacing: folder.px(2)
+            readonly property bool shown: folder.hot || addButton.visualFocus || menuButton.visualFocus
+
+            KetIconButton {
+                id: addButton
+                visible: actions.shown
+                anchors.verticalCenter: parent.verticalCenter
+                width: folder.recipe.actionSize
+                height: folder.recipe.actionSize
+                controlSize: KetTheme.ControlSize.Small
+                iconName: "plus"
+                text: "Add member"
+                onClicked: folder.window.addTeamMember(folder.team.id, "")
+            }
+            KetIconButton {
+                id: menuButton
+                visible: actions.shown
+                anchors.verticalCenter: parent.verticalCenter
+                width: folder.recipe.actionSize
+                height: folder.recipe.actionSize
+                controlSize: KetTheme.ControlSize.Small
+                iconName: "more"
+                text: "Team actions"
+                onClicked: folder.menuRequested(menuButton)
+            }
+            KetBadge {
+                visible: folder.team.decisions.length > 0
+                anchors.verticalCenter: parent.verticalCenter
+                text: folder.team.decisions.length
+                tone: KetTheme.BadgeTone.Accent
+                Accessible.name: folder.team.decisions.length + " decisions wait for you"
+            }
         }
     }
 

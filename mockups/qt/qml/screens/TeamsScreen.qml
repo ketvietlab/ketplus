@@ -88,7 +88,11 @@ Item {
     // `--open=new-team|add-member|task|handover` opens a dialog for review captures.
     function openDialog(name) {
         if (name === "new-team")
-            newTeamDialog.open()
+            startNewTeam("")
+        else if (name === "delete-team" && team)
+            disbandDialog.open()
+        else if (name === "remove-member" && team)
+            startRemove(team.id, "8215")
         else if (name === "add-member" && team)
             addMemberDialog.open()
         else if (name === "task")
@@ -97,13 +101,40 @@ Item {
             startHandover(tasks.find(t => t.id === "T-3"))
     }
     function openEveryOverlay() {
-        for (const dialog of [newTeamDialog, addMemberDialog, taskDialog, handoverDialog, disbandDialog]) {
+        for (const dialog of [newTeamDialog, addMemberDialog, taskDialog, handoverDialog, disbandDialog, removeDialog]) {
             if (dialog === taskDialog || dialog === handoverDialog)
                 openTask = handover = Fixtures.teams[0].tasks[2]
             dialog.open()
             dialog.close()
         }
         openTask = handover = null
+    }
+
+    // The sidebar's entry points: a repository's New team, and a team folder's Add member,
+    // Delete team and a member row's Remove from team.
+    function startNewTeam(repository) {
+        newTeamDialog.repository = repository || Fixtures.repositories[0].name
+        newTeamDialog.open()
+    }
+    function startAddMember(id, number) {
+        showTeam(id)
+        if (!team)
+            return
+        addMemberDialog.preselect = number || ""
+        addMemberDialog.open()
+    }
+    function startDelete(id) {
+        showTeam(id)
+        if (team)
+            disbandDialog.open()
+    }
+    function startRemove(id, number) {
+        showTeam(id)
+        const who = member(number)
+        if (!who)
+            return
+        removeDialog.who = who
+        removeDialog.open()
     }
 
     // The sidebar's team folder opens its team.
@@ -216,7 +247,7 @@ Item {
         message: "A team gives several conversations one goal. A leader assigns the tasks, each developer owns a part of the code, and a reviewer checks their pull requests."
         actionText: "Create a team"
         actionIcon: "plus"
-        onActionTriggered: newTeamDialog.open()
+        onActionTriggered: screen.startNewTeam("")
     }
 
     Basic.ScrollView {
@@ -565,6 +596,15 @@ Item {
                                     Accessible.name: "Open " + screen.reference(memberRow.modelData.number)
                                     onClicked: screen.openConversation(memberRow.modelData.number)
                                 }
+                                KetIconButton {
+                                    id: memberMore
+                                    iconName: "more"
+                                    text: "Member actions"
+                                    onClicked: {
+                                        memberMenu.who = memberRow.modelData
+                                        memberMenu.popup(memberMore, memberMore.width - memberMenu.width, memberMore.height + screen.px(4))
+                                    }
+                                }
                             }
                         }
                     }
@@ -628,7 +668,8 @@ Item {
 
     KetMenu {
         id: teamMenu
-        KetMenuItem { text: "New team…"; iconName: "plus"; onTriggered: newTeamDialog.open() }
+        KetMenuItem { text: "Add member…"; iconName: "plus"; onTriggered: addMemberDialog.open() }
+        KetMenuItem { text: "New team…"; iconName: "bot"; onTriggered: screen.startNewTeam(screen.team.repository) }
         KetMenuItem {
             text: screen.team && screen.team.paused ? "Resume automatic turns" : "Pause automatic turns"
             description: "Members finish their turn, then wait for you"
@@ -640,7 +681,65 @@ Item {
             }
         }
         KetMenuSeparator {}
-        KetMenuItem { text: "Disband team…"; iconName: "trash"; danger: true; onTriggered: disbandDialog.open() }
+        KetMenuItem { text: "Delete team…"; iconName: "trash"; danger: true; onTriggered: disbandDialog.open() }
+    }
+
+    KetMenu {
+        id: memberMenu
+        property var who: null
+        KetMenuItem { text: "Open conversation"; iconName: "chat"; onTriggered: screen.openConversation(memberMenu.who.number) }
+        KetMenuSeparator {}
+        KetMenuItem {
+            text: "Remove from team…"
+            description: memberMenu.who && memberMenu.who.role === "leader" ? "A team keeps its leader; delete the team instead" : ""
+            iconName: "trash"
+            danger: true
+            enabled: !!memberMenu.who && memberMenu.who.role !== "leader"
+            onTriggered: { removeDialog.who = memberMenu.who; removeDialog.open() }
+        }
+    }
+
+    // Removing a member keeps its conversation; the tasks it owned go back to the leader to assign.
+    KetDialog {
+        id: removeDialog
+        property var who: null
+        readonly property var owned: who ? screen.tasks.filter(t => t.owner === who.number && t.state !== "done") : []
+        title: "Remove " + (who ? screen.reference(who.number) : "") + " from " + (screen.team ? screen.team.name : "") + "?"
+        // KetDialog lays its body out; a column gives the text its width.
+        Column {
+            width: removeDialog.availableWidth
+            Label {
+                width: parent.width
+                text: (removeDialog.who ? "“" + removeDialog.who.title + "” stays as a conversation of the repository, with its worktree and branch. " : "")
+                      + (removeDialog.owned.length > 0
+                         ? screen.count(removeDialog.owned.length, "open task", "open tasks") + " ("
+                           + removeDialog.owned.map(t => t.id).join(", ") + ") become unassigned for the leader to assign again."
+                         : "It owns no open task.")
+                color: KetTheme.t.textSecondary
+                wrapMode: Text.Wrap
+                elide: Text.ElideNone
+                lineHeight: 1.4
+            }
+        }
+        actions: [
+            KetButton { text: "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: removeDialog.reject() },
+            KetButton {
+                text: "Remove"
+                variant: KetTheme.ButtonVariant.Danger
+                onClicked: {
+                    const who = removeDialog.who
+                    screen.change({
+                        members: screen.members.filter(m => m.number !== who.number)
+                            .map(m => m.role !== "reviewer" ? m : Object.assign({}, m, { reviews: (m.reviews || []).filter(l => l !== who.lane) })),
+                        tasks: screen.tasks.map(t => t.owner !== who.number || t.state === "done" ? t : Object.assign({}, t, {
+                            owner: "", state: t.state === "review" ? "review" : "todo",
+                            history: t.history.concat([{ when: "Just now", text: "You removed " + screen.reference(who.number) + " from the team; the task is unassigned" }]) }))
+                    })
+                    removeDialog.accept()
+                    screen.window.notify("Removed " + screen.reference(who.number) + " from " + screen.team.name)
+                }
+            }
+        ]
     }
 
     KetDialog {
@@ -817,6 +916,8 @@ Item {
         // 0 developer, 1 reviewer.
         property int role: 0
         property bool tried: false
+        // A conversation the sidebar's Add to team… chose.
+        property string preselect
         readonly property var free: {
             const taken = screen.members.map(m => m.number)
             const list = []
@@ -828,11 +929,28 @@ Item {
         }
         readonly property var lanes: screen.members.filter(m => m.role === "developer").map(m => m.lane)
         title: "Add a member"
-        onOpened: { tried = false; laneName.text = ""; lanePaths.text = "" }
-        onClosed: role = 0
+        onOpened: {
+            tried = false
+            laneName.text = ""
+            lanePaths.text = ""
+            memberChoice.currentIndex = Math.max(0, free.findIndex(c => c.number === preselect))
+        }
+        onClosed: { role = 0; preselect = "" }
         Column {
             width: addMemberDialog.availableWidth
             spacing: screen.px(14)
+            // From a conversation's Add to a team…: which of the repository's teams it joins.
+            KetFieldRow {
+                visible: addMemberDialog.preselect !== "" && screen.teams.length > 1
+                width: parent.width
+                label: "Team"
+                KetSelect {
+                    width: parent.width
+                    model: screen.teams.map(t => t.name)
+                    currentIndex: screen.teamIndex
+                    onActivated: index => screen.teamIndex = index
+                }
+            }
             KetFieldRow {
                 width: parent.width
                 label: "Conversation"
@@ -912,14 +1030,17 @@ Item {
     KetDialog {
         id: newTeamDialog
         property bool tried: false
+        // The repository whose folder the team joins.
+        property string repository: Fixtures.repositories[0].name
+        readonly property var source: Fixtures.repositories.find(r => r.name === repository) || Fixtures.repositories[0]
         readonly property var free: {
             const taken = []
             for (const t of screen.teams)
                 for (const m of t.members)
                     taken.push(m.number)
-            return Fixtures.repositories[0].conversations.filter(c => !taken.includes(c.number))
+            return source.conversations.filter(c => !taken.includes(c.number))
         }
-        title: "New team"
+        title: "New team in " + repository
         onOpened: { tried = false; teamName.text = ""; teamGoal.text = "" }
         Column {
             width: newTeamDialog.availableWidth
@@ -974,7 +1095,7 @@ Item {
                     const leader = newTeamDialog.free[teamLeader.currentIndex]
                     screen.teams = screen.teams.concat([{
                         id: "team-" + screen.teams.length, name: name, goal: teamGoal.text.trim() || "No goal yet.",
-                        repository: Fixtures.repositories[0].name, branch: teamBranch.currentText, paused: false,
+                        repository: newTeamDialog.repository, branch: teamBranch.currentText, paused: false,
                         members: [{ number: leader.number, title: leader.title, role: "leader",
                                     provider: (leader.provider || "Claude") + " · " + (leader.model || "Opus 5.5"),
                                     lane: "", paths: [], state: "idle", now: "Waiting for its first task list" }],
@@ -990,19 +1111,23 @@ Item {
 
     KetDialog {
         id: disbandDialog
-        title: "Disband " + (screen.team ? screen.team.name : "") + "?"
-        Label {
+        title: "Delete " + (screen.team ? screen.team.name : "") + "?"
+        // KetDialog lays its body out; a column gives the text its width.
+        Column {
             width: disbandDialog.availableWidth
-            text: "The team, its tasks and their history are removed. Every conversation, worktree, branch and pull request stays."
-            color: KetTheme.t.textSecondary
-            wrapMode: Text.Wrap
-            elide: Text.ElideNone
-            lineHeight: 1.4
+            Label {
+                width: parent.width
+                text: "The team, its tasks and their history are removed. Every conversation, worktree, branch and pull request stays."
+                color: KetTheme.t.textSecondary
+                wrapMode: Text.Wrap
+                elide: Text.ElideNone
+                lineHeight: 1.4
+            }
         }
         actions: [
             KetButton { text: "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: disbandDialog.reject() },
             KetButton {
-                text: "Disband"
+                text: "Delete team"
                 variant: KetTheme.ButtonVariant.Danger
                 onClicked: {
                     const name = screen.team.name
@@ -1010,7 +1135,9 @@ Item {
                     screen.teamIndex = 0
                     screen.teams = next
                     disbandDialog.accept()
-                    screen.window.notify("Disbanded " + name)
+                    // Its conversations are back among the repository's own.
+                    screen.window.screen = "workspace"
+                    screen.window.notify("Deleted " + name)
                 }
             }
         ]

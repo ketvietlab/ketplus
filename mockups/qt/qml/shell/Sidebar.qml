@@ -17,6 +17,23 @@ Rectangle {
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
 
+    // `--open=repo-menu|team-menu|row-menu` opens a sidebar menu for review captures.
+    function openMenu(name) {
+        const repository = Fixtures.repositories[0]
+        const team = sidebar.window.teamList[0]
+        if (name === "repo-menu") {
+            repoMenu.repository = repository.name
+            repoMenu.popup(sidebar, px(150), px(300))
+        } else if (name === "team-menu" && team) {
+            teamMenu.team = team
+            teamMenu.popup(sidebar, px(150), px(326))
+        } else if (name === "row-menu") {
+            sidebar.window.repository = repository.name
+            sidebar.window.conversation = repository.conversations.find(c => c.number === "9410")
+            rowMenu.popup(sidebar, px(150), px(480))
+        }
+    }
+
     color: KetTheme.t.sidebarBg
 
     ColumnLayout {
@@ -272,9 +289,18 @@ Rectangle {
                                 next[repo.modelData.name] = expanded
                                 sidebar.expanded = next
                             }
+                            // New: a conversation, or a team (concept).
+                            actionText: "New conversation or team"
                             onActionTriggered: {
-                                sidebar.window.repository = repo.modelData.name
-                                sidebar.window.showScreen("workspace/welcome")
+                                repoMenu.repository = repo.modelData.name
+                                repoMenu.popup()
+                            }
+                            TapHandler {
+                                acceptedButtons: Qt.RightButton
+                                onTapped: {
+                                    repoMenu.repository = repo.modelData.name
+                                    repoMenu.popup()
+                                }
                             }
                         }
 
@@ -292,6 +318,13 @@ Rectangle {
                                 onContextMenuRequested: conversation => {
                                     sidebar.window.conversation = conversation
                                     rowMenu.popup()
+                                }
+                                onMenuRequested: anchor => {
+                                    teamMenu.team = modelData
+                                    if (anchor)
+                                        teamMenu.popup(anchor, 0, anchor.height)
+                                    else
+                                        teamMenu.popup()
                                 }
                             }
                         }
@@ -329,6 +362,7 @@ Rectangle {
                                 TapHandler {
                                     acceptedButtons: Qt.RightButton
                                     onTapped: {
+                                        sidebar.window.repository = repo.modelData.name
                                         sidebar.window.conversation = row.modelData
                                         rowMenu.popup()
                                     }
@@ -456,12 +490,57 @@ Rectangle {
         KetMenuItem { text: "Sign out"; iconName: "log-out"; onTriggered: sidebar.window.notify("Signed out of the demo account") }
     }
 
+    // A repository's New.
+    KetMenu {
+        id: repoMenu
+        property string repository
+        KetMenuItem {
+            text: "New conversation"
+            iconName: "compose"
+            onTriggered: {
+                sidebar.window.repository = repoMenu.repository
+                sidebar.window.showScreen("workspace/welcome")
+            }
+        }
+        KetMenuItem {
+            text: "New team…"
+            description: "A leader, developers and reviewers with one goal"
+            iconName: "bot"
+            onTriggered: sidebar.window.newTeam(repoMenu.repository)
+        }
+    }
+
+    // A team folder's menu.
+    KetMenu {
+        id: teamMenu
+        property var team: null
+        KetMenuItem { text: "Open team"; iconName: "bot"; onTriggered: sidebar.window.openTeam(teamMenu.team.id) }
+        KetMenuItem { text: "Add member…"; iconName: "plus"; onTriggered: sidebar.window.addTeamMember(teamMenu.team.id, "") }
+        KetMenuSeparator {}
+        KetMenuItem { text: "Delete team…"; description: "Its conversations stay"; iconName: "trash"; danger: true; onTriggered: sidebar.window.deleteTeam(teamMenu.team.id) }
+    }
+
     KetMenu {
         id: rowMenu
+        // The conversation's team, and the teams of its repository it could join.
+        readonly property var team: sidebar.window.teamOf(sidebar.window.conversation.number)
+        readonly property bool leads: !!team && team.members.some(m => m.number === sidebar.window.conversation.number && m.role === "leader")
+        readonly property var joinable: sidebar.window.teamList.filter(t => t.repository === sidebar.window.repository)
         KetMenuItem { text: "Rename…"; iconName: "edit"; onTriggered: sidebar.window.renameDialog.open() }
         KetMenuItem { text: "Fork conversation"; iconName: "branch"; onTriggered: sidebar.window.notify("Forked into a new conversation") }
         KetMenuItem { text: "Change worktree…"; iconName: "branch"; onTriggered: sidebar.window.picker.open() }
         KetMenuItem { text: "Copy reference"; iconName: "copy"; shortcut: "@agent/" + sidebar.window.conversation.number; onTriggered: sidebar.window.notify("Copied @agent/" + sidebar.window.conversation.number) }
+        KetMenuItem {
+            text: rowMenu.team ? "Remove from " + rowMenu.team.name + "…" : "Add to a team…"
+            iconName: "bot"
+            enabled: rowMenu.team ? !rowMenu.leads : rowMenu.joinable.length > 0
+            onTriggered: {
+                if (rowMenu.team)
+                    sidebar.window.removeTeamMember(rowMenu.team.id, sidebar.window.conversation.number)
+                else
+                    sidebar.window.addTeamMember(rowMenu.joinable[0].id, sidebar.window.conversation.number)
+            }
+        }
         KetMenuSeparator {}
         KetMenuItem { text: "Archive"; iconName: "archive"; onTriggered: sidebar.window.notify("Conversation archived") }
         KetMenuItem { text: "Delete…"; iconName: "trash"; danger: true; onTriggered: sidebar.window.deleteDialog.open() }
