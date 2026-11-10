@@ -51,6 +51,10 @@ The sign-in probes:
   A source never clears an earlier `expired` or `key_rejected`. Only a turn that
   works clears them.
 
+A reported `signed_out` ends as soon as a probe finds an account, since the user
+signed in after it. Claude has no probe, so its `signed_out` lasts until the next
+query reports a source; the UI therefore never blocks sending on it.
+
 Reported states persist in `provider-readiness.json` beside the journal. The file
 is owner-only and keeps them across daemon restarts. A limit is dropped once
 `resets_at` passes.

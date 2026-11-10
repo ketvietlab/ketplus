@@ -95,10 +95,17 @@ QJsonObject ProviderReadiness::compose(const compat::Runtime& runtime, const Pro
             save();
             observed = observed_.cend();
         }
+        // A reported sign-out ends when the probe finds an account: the user signed in since.
+        if (observed != observed_.cend() && observed->state == QStringLiteral("signed_out") &&
+            probe.state == QStringLiteral("ready")) {
+            observed_.remove(provider);
+            save();
+            observed = observed_.cend();
+        }
         const bool failure =
             observed != observed_.cend() && observed->state != QStringLiteral("ready");
-        // A provider's own report of a failure outranks a probe that still finds an account: an
-        // expired token is still an account.
+        // Any other reported failure outranks a probe that still finds an account: an expired
+        // token or a used-up limit is still an account.
         if (failure)
             state = *observed;
         else if (!probe.state.isEmpty())

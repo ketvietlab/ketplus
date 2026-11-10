@@ -108,6 +108,22 @@ class ProviderReadinessTest final : public QObject {
         QCOMPARE(state(readiness.compose(claude, {}, 100)), QStringLiteral("ready"));
     }
 
+    void aProbeThatFindsAnAccountEndsAReportedSignOut() {
+        ProviderReadiness readiness;
+        const auto codex = runtime("codex", compat::SupportStatus::Supported);
+        readiness.observe(QStringLiteral("codex"), QStringLiteral("signed_out"),
+                          QStringLiteral("Not signed in"));
+        QCOMPARE(state(readiness.compose(codex, {}, 100)), QStringLiteral("signed_out"));
+        // codex login since: the probe wins, and the report is gone for good.
+        QCOMPARE(state(readiness.compose(codex, {QStringLiteral("ready"), {}}, 200)),
+                 QStringLiteral("ready"));
+        QCOMPARE(state(readiness.compose(codex, {}, 300)), QStringLiteral("unknown"));
+        // An expired sign-in still outranks it.
+        readiness.observe(QStringLiteral("codex"), QStringLiteral("expired"));
+        QCOMPARE(state(readiness.compose(codex, {QStringLiteral("ready"), {}}, 400)),
+                 QStringLiteral("expired"));
+    }
+
     void aLimitLastsUntilItResets() {
         ProviderReadiness readiness;
         const auto codex = runtime("codex", compat::SupportStatus::Supported);
