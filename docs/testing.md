@@ -252,6 +252,11 @@ the corresponding Atlas mock first.
   with `KETPLUS_RUN_STARTUP_BACKLOG_TESTS=1`; the first open, an append to a
   marked session, each activity backfill pass and the second open must each stay
   under 250 ms.
+- Activity files backfill (ADR 0102): `ketplus_daemon_activity_groups_tests`
+  checks that a journal indexed before `activity_files` keeps its groups hidden
+  until their files are listed, that a failed pass keeps its marker, that edits
+  completed during the listing are kept, and that forks and deletions carry or
+  remove the marker.
 - Journal migration recovery: `ketplus_daemon_journal_migration_recovery_tests`
   migrates a pre-format journal (60k rows in 2,000 sessions, without five later
   columns, the turn indexes and the activity tables) on a nearly full 256-MiB disk

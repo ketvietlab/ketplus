@@ -691,6 +691,14 @@ class DaemonActivityGroupsTest : public QObject {
                      .toArray()
                      .size(),
                  1);
+        // Deleting a session removes its marker at once, without waiting for a pass.
+        QTemporaryDir other;
+        const auto otherPath = other.filePath("journal.sqlite3");
+        QVERIFY(groupedWithoutFiles(otherPath, other.path()) > 0);
+        LocalJournal deleted(otherPath);
+        QVERIFY(deleted.hasPendingActivityBackfill());
+        QVERIFY(deleted.deleteSession("session", 1));
+        QVERIFY(!deleted.hasPendingActivityBackfill());
     }
     void existingJournalBackfillsOnceWithoutChangingCanonicalEvents() {
         QTemporaryDir dir;

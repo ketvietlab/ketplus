@@ -61,6 +61,8 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 - The activity-index backfill runs after open in bounded passes (ADR 0097), so
   the first open after upgrade no longer indexes the whole history. A session's
   activity appears ungrouped until it is indexed; sessions with new events go first.
+  Groups indexed before `activity_files` existed list their changed files the
+  same way after the index drains (ADR 0102).
 
 - Legacy turn-number, title and turn-start backfills run only for journals below
   format 1 (ADR 0096), so opening a stamped journal no longer rescans history.
