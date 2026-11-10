@@ -23,7 +23,11 @@ Rectangle {
     readonly property bool turnEnd: subtype === "turnEnd"
     readonly property string turnLabel: failed ? "Failed" : status === "completed" ? "Completed" : "Stopped"
     readonly property var recipe: Kit.KetTheme.bannerRecipe(KetTheme.dark, KetTheme.zoom, failed ? Kit.KetTheme.BannerTone.Danger : Kit.KetTheme.BannerTone.Info)
-    implicitHeight: eventLine ? eventColumn.implicitHeight : reconnecting ? reconnectRow.implicitHeight : content.implicitHeight + 2 * recipe.paddingBlock
+    // The turn's end is a bare line in the mock, so it sits closer to its neighbours than
+    // a framed notice does.
+    readonly property real padTop: turnEnd ? Math.max(0, recipe.paddingBlock - KetTheme.px(4, KetTheme.zoom)) : recipe.paddingBlock
+    readonly property real padBottom: turnEnd ? Math.max(0, recipe.paddingBlock - KetTheme.px(9, KetTheme.zoom)) : recipe.paddingBlock
+    implicitHeight: eventLine ? eventColumn.implicitHeight : reconnecting ? reconnectRow.implicitHeight : content.implicitHeight + padTop + padBottom
     radius: lineOnly ? 0 : recipe.radius
     color: lineOnly ? "transparent" : recipe.background
     border.color: lineOnly ? "transparent" : recipe.border
@@ -87,7 +91,7 @@ Rectangle {
         id: content
         visible: !notice.eventLine && !notice.reconnecting
         x: notice.turnEnd ? 0 : notice.recipe.paddingInline
-        y: notice.recipe.paddingBlock
+        y: notice.padTop
         width: parent.width - 2 * x
         // The turn's end is the mock's status line: a 14 px icon 8 px before its label.
         spacing: notice.turnEnd ? KetTheme.px(8, KetTheme.zoom) : notice.recipe.spacing

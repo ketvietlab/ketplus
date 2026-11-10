@@ -46,6 +46,8 @@ Item {
     // and hangs under a rail indented by groupRailInset.
     readonly property bool groupNested: activityRow && groupRole.length > 0 && groupExpanded
     readonly property real groupRailInset: groupRecipe.childrenIndent + groupRecipe.childrenPadding + 1
+    // A day divider is a block of its own in the mock: the request under it keeps its distance.
+    readonly property real dayLead: dayDivider.visible ? dayDivider.height + KetTheme.px(12, KetTheme.zoom) : 0
     readonly property int surfaceInset: activityRow ? 0 : KetTheme.px(4, KetTheme.zoom)
     onYChanged: {
         if (!view.followTail && shell.transcriptWheel.direction !== 0)
@@ -103,6 +105,9 @@ Item {
     // Per-row chrome (copy buttons and their tool tips) exists only while the row is hovered,
     // keyboard-focused or one of its buttons holds focus; collapsed members never create it.
     property bool chromeFocusHold: false
+    // The answer still being written is known by its own row state, not by being last: a
+    // steer or queued message may land under it while its text keeps growing.
+    readonly property bool codeCopyShown: chromeActive || !(host.sessionRunning && kind === "assistant" && meta.endsWith(" · streaming"))
     readonly property bool chromeActive: (rowHover.hovered || chromeFocusHold || (view.activeFocus && view.keyboardIndex === index))
     // As in the mock, the turn's answer always offers Copy answer under it; a prompt's copy
     // comes with the hover or focus.
@@ -169,7 +174,7 @@ Item {
         }
     }
     width: view.width
-    height: messageSurface.y + messageSurface.height + steerNotice.height + surfaceInset + (activityRow ? KetTheme.px(3, KetTheme.zoom) : kind === "user" ? KetTheme.px(25, KetTheme.zoom) : copyableMessage ? KetTheme.px(44, KetTheme.zoom) : view.rowSpacing)
+    height: messageSurface.y + messageSurface.height + steerNotice.height + surfaceInset + (activityRow ? KetTheme.px(3, KetTheme.zoom) : kind === "user" ? KetTheme.px(29, KetTheme.zoom) : copyableMessage ? KetTheme.px(44, KetTheme.zoom) : view.rowSpacing)
     // Publish what this row actually is. The geometry model only ever learns a
     // height from the row that laid itself out, so a row it has not seen keeps
     // one fixed constant instead of borrowing another row's size.
@@ -213,7 +218,7 @@ Item {
         width: messageSurface.userMaximumWidth
         height: visible ? implicitHeight : 0
         x: messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - KetTheme.px(20, KetTheme.zoom)
-        y: messageDelegate.surfaceInset + dayDivider.height
+        y: messageDelegate.surfaceInset + messageDelegate.dayLead
         spacing: KetTheme.px(6, KetTheme.zoom)
         Text {
             id: agentOrigin
@@ -262,7 +267,7 @@ Item {
         readonly property bool agentMessage: kind === "user" && subtype === "agentMessage"
         readonly property real userMaximumWidth: Math.max(KetTheme.px(160, KetTheme.zoom), Math.min(messageDelegate.contentColumnWidth * userRecipe.maxWidth, messageDelegate.contentColumnWidth - KetTheme.px(63, KetTheme.zoom)))
         x: kind === "user" ? messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - KetTheme.px(20, KetTheme.zoom) : messageDelegate.contentColumnX + KetTheme.px(20, KetTheme.zoom)
-        y: messageDelegate.surfaceInset + dayDivider.height + userLead.height + (imagesOnly ? 0 : userLead.gap)
+        y: messageDelegate.surfaceInset + messageDelegate.dayLead + userLead.height + (imagesOnly ? 0 : userLead.gap)
         width: kind === "user" ? Math.min(userMaximumWidth, Math.ceil(bodyMetrics.advanceWidth) + KetTheme.px(10, KetTheme.zoom) + horizontalPadding * 2) : messageDelegate.contentColumnWidth - KetTheme.px(40, KetTheme.zoom)
         // An images-only prompt keeps no empty bubble under its thumbnails.
         readonly property bool imagesOnly: userMessage && userLead.visible && messageDelegate.displayBody.trim().length === 0
@@ -995,10 +1000,11 @@ Item {
                     }
                 }
                 Repeater {
-                    // Fenced code of this block's Markdown source is extracted only once the row
-                    // shows its chrome; buttons appear when it lines up with the rendered code
-                    // frames (indented code blocks do not get one).
-                    model: messageDelegate.chromeActive && kind === "assistant" && bodyText.codeBlocks.length > 0 && (bodyText.codeFencesIdentity ? host.codeBlockSources(body).length === bodyText.codeBlocks.length : bodyText.codeFences.length === bodyText.codeBlocks.length) ? bodyText.codeBlocks : []
+                    // Every code frame carries its Copy button, as the kit's code block does.
+                    // Only the row still being written waits for its chrome, so streaming text
+                    // is not re-scanned for fences on every chunk. Buttons appear when the
+                    // fences line up with the rendered frames (indented code gets none).
+                    model: messageDelegate.codeCopyShown && kind === "assistant" && bodyText.codeBlocks.length > 0 && (bodyText.codeFencesIdentity ? host.codeBlockSources(body).length === bodyText.codeBlocks.length : bodyText.codeFences.length === bodyText.codeBlocks.length) ? bodyText.codeBlocks : []
                     delegate: TranscriptCopyButton {
                         objectName: "copyCodeBlockButton"
                         required property var modelData

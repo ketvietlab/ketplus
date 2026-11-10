@@ -128,6 +128,7 @@ WorktreesWorkspacePage::WorktreesWorkspacePage(QWidget* parent) : QWidget(parent
     chrome_geometry::margins(listLayout_, 0, 0, 0, 0);
     chrome_geometry::spacing(listLayout_, 0);
     contentLayout->addWidget(list);
+    chrome_geometry::addSpacing(contentLayout, 12); // the mock's 24 px, with the button's inset
 
     auto* archived = new ket::Button(tr("Archived worktrees and conversations"),
                                      ket::ButtonVariant::Ghost, content);
@@ -324,8 +325,7 @@ QToolButton[kvRole="worktreesTextButton"]:hover { background:%6; }
 QToolButton[kvRole="worktreesTextButton"] { padding:0 8px; color:%4; font-size:{{caption}}px; }
 QLabel#worktreesWorkspaceName { color:%3; font-size:{{px:15}}px; font-weight:500; }
 QLabel#worktreesWorkspaceMeta, QLabel#worktreesWorkspaceEmpty { color:%4; font-size:{{px:13}}px; }
-QLabel#worktreesWorkspaceActivity { color:%4; font-size:{{caption}}px; }
-QLabel#worktreesWorkspaceActivity[running="true"] { color:%7; }
+QLabel#worktreesWorkspaceActivity { color:%3; font-size:{{px:14}}px; }
 QLabel#worktreesWorkspaceState { min-height:22px; padding:0 8px; border:1px solid %5;
  border-radius:4px; background:%1; color:%4; font-size:{{micro}}px; }
 QLabel#worktreesWorkspaceState[warning="true"] { border-color:%8; color:%8; }

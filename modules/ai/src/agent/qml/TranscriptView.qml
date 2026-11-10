@@ -2018,10 +2018,10 @@ Flickable {
         objectName: "olderHistoryHeader"
         y: 0
         width: transcript.width
-        // Slim, non-blocking edge row: a spinner while a page loads and a
-        // retry control only on error. The slot is reserved while older
-        // history exists so its appearance never shifts the reading rows.
-        height: host.historyState.loading || host.historyState.hasOlder || host.historyState.error ? KetTheme.px(24, KetTheme.zoom) : 0
+        // The mock's padding above the first row. It doubles as the slim, non-blocking
+        // edge row for older history: a spinner while a page loads and a retry control
+        // only on error, so neither ever shifts the reading rows.
+        height: KetTheme.px(24, KetTheme.zoom)
         readonly property bool showRetry: !!host.historyState.error || !!host.historyState.resyncRequired
         Row {
             objectName: "olderHistoryIndicator"
