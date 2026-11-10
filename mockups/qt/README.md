@@ -132,9 +132,9 @@ A concept, not built in the app: several conversations that share one goal. Agen
   is the decisions that wait for the user. A conversation belongs to one team at a time.
 - **Creating and changing a team** starts in the sidebar. A repository's `+` (or a right click)
   offers New conversation and New team…. A new team has a name, a goal and an integration branch
-  and nobody on it: its page asks for a leader first. Add a member starts a new conversation in
-  the team, or takes one of the repository's that belongs to no team, as Leader (while the team
-  has none), Developer or Reviewer. A team folder shows Add member and its menu (Open team,
+  and nobody on it: its page asks for a leader first. Add a member asks for the role first (Leader
+  while the team has none, Developer with its lane, or Reviewer), then who takes it: a new
+  conversation with a chosen agent, or one of the repository's conversations that is on no team. A team folder shows Add member and its menu (Open team,
   Add member…, Delete team…) while hovered or focused, and on a right click; a conversation's menu
   has Add to a team… or Remove from *team*…. The page repeats them: Add member, a member's Remove
   from team… and the team menu's Delete team…. Deleting a team or removing a member keeps the

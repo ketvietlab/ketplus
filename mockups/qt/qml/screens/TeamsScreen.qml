@@ -950,8 +950,10 @@ Item {
         // "leader", "developer" or "reviewer"; "" opens on the role the team needs first.
         property string role
         readonly property var roleChoices: screen.leader ? ["developer", "reviewer"] : ["leader", "developer", "reviewer"]
-        // 0 is a new conversation; the rest are `free`.
-        readonly property var chosen: memberChoice.currentIndex > 0 ? free[memberChoice.currentIndex - 1] : null
+        // Who takes the role: a conversation started for it, or one of `free` moved in.
+        property bool existing: false
+        readonly property var chosen: existing && free.length > 0 ? free[Math.max(0, memberChoice.currentIndex)] : null
+        readonly property var agents: ["Claude · Opus 5.5", "Claude · Fable 5.2", "Codex · GPT-5.6 Luna"]
         property bool tried: false
         // A conversation the sidebar's Add to team… chose.
         property string preselect
@@ -965,14 +967,17 @@ Item {
             return repository ? repository.conversations.filter(c => !taken.includes(c.number)) : []
         }
         readonly property var lanes: screen.members.filter(m => m.role === "developer").map(m => m.lane)
-        title: "Add a member"
+        title: "Add a member to " + (screen.team ? screen.team.name : "")
         onOpened: {
             tried = false
             laneName.text = ""
             lanePaths.text = ""
             if (!roleChoices.includes(role))
                 role = roleChoices[0]
-            memberChoice.currentIndex = free.findIndex(c => c.number === preselect) + 1
+            const index = free.findIndex(c => c.number === preselect)
+            existing = index >= 0
+            memberChoice.currentIndex = Math.max(0, index)
+            agentChoice.currentIndex = 0
         }
         onClosed: { role = ""; preselect = "" }
         Column {
@@ -990,30 +995,22 @@ Item {
                     onActivated: index => screen.teamIndex = index
                 }
             }
+            // First the role, then who takes it.
             KetFieldRow {
                 width: parent.width
-                label: "Conversation"
-                help: addMemberDialog.chosen ? "It leaves the repository's own conversations and shows in the team's folder."
-                                             : "Starts in the team's folder. A conversation belongs to one team at a time."
-                KetSelect {
-                    id: memberChoice
-                    width: parent.width
-                    model: ["New conversation"].concat(addMemberDialog.free.map(c => "@agent/" + c.number + " · " + c.title))
+                label: "Role"
+                help: addMemberDialog.role === "leader"
+                    ? "Reports to you, breaks the goal into tasks, assigns them and orders the merges. It does not write code or review."
+                    : addMemberDialog.role === "developer"
+                    ? "Takes tasks in its lane, works in the task's worktree and opens the pull request."
+                    : addMemberDialog.lanes.length > 0
+                    ? "Reviews " + addMemberDialog.lanes.join(", ") + ". It never reviews its own work and never merges."
+                    : "Reviews every lane once the team has developers. It never merges."
+                KetSegmentedControl {
+                    options: addMemberDialog.roleChoices.map(r => r.charAt(0).toUpperCase() + r.slice(1))
+                    currentIndex: Math.max(0, addMemberDialog.roleChoices.indexOf(addMemberDialog.role))
+                    onActivated: index => addMemberDialog.role = addMemberDialog.roleChoices[index]
                 }
-            }
-            KetSegmentedControl {
-                options: addMemberDialog.roleChoices.map(r => r.charAt(0).toUpperCase() + r.slice(1))
-                currentIndex: Math.max(0, addMemberDialog.roleChoices.indexOf(addMemberDialog.role))
-                onActivated: index => addMemberDialog.role = addMemberDialog.roleChoices[index]
-            }
-            Label {
-                visible: addMemberDialog.role === "leader"
-                width: parent.width
-                text: "The one conversation that reports to you. It breaks the goal into tasks, assigns them and orders the merges; it does not write code or review."
-                color: KetTheme.t.textSecondary
-                wrapMode: Text.Wrap
-                elide: Text.ElideNone
-                lineHeight: 1.35
             }
             KetFieldRow {
                 visible: addMemberDialog.role === "developer"
@@ -1032,15 +1029,44 @@ Item {
                 KetTextField { id: lanePaths; width: parent.width; placeholderText: "apps/desktop/src/onboarding/"; invalid: addMemberDialog.tried && text.trim() === "" }
             }
             Label {
-                visible: addMemberDialog.role === "reviewer"
+                text: "Who takes this role"
+                font.weight: Font.Medium
+            }
+            KetChoice {
                 width: parent.width
-                text: addMemberDialog.lanes.length > 0
-                    ? "Reviews " + addMemberDialog.lanes.join(", ") + " with the team's other reviewers. A reviewer never reviews its own work and never merges."
-                    : "Reviews every lane once the team has developers. A reviewer never merges."
-                color: KetTheme.t.textSecondary
-                wrapMode: Text.Wrap
-                elide: Text.ElideNone
-                lineHeight: 1.35
+                kind: KetTheme.ToggleKind.Radio
+                text: "Start a new conversation"
+                description: "A fresh agent opens in the team's folder and waits for its first " + (addMemberDialog.role === "leader" ? "goal." : addMemberDialog.role === "developer" ? "task." : "review.")
+                checked: !addMemberDialog.existing
+                onClicked: addMemberDialog.existing = false
+            }
+            KetFieldRow {
+                visible: !addMemberDialog.existing
+                width: parent.width
+                label: "Agent"
+                help: addMemberDialog.role === "reviewer" ? "A reviewer from another provider than the developers catches more." : ""
+                KetSelect { id: agentChoice; width: parent.width; model: addMemberDialog.agents }
+            }
+            KetChoice {
+                width: parent.width
+                kind: KetTheme.ToggleKind.Radio
+                enabled: addMemberDialog.free.length > 0
+                text: "Move in an existing conversation"
+                description: addMemberDialog.free.length > 0
+                    ? "One of " + screen.team.repository + "'s conversations that is on no team. It keeps its history and moves into the team's folder."
+                    : "Every conversation in " + (screen.team ? screen.team.repository : "") + " is already on a team."
+                checked: addMemberDialog.existing
+                onClicked: addMemberDialog.existing = true
+            }
+            KetFieldRow {
+                visible: addMemberDialog.existing
+                width: parent.width
+                label: "Conversation"
+                KetSelect {
+                    id: memberChoice
+                    width: parent.width
+                    model: addMemberDialog.free.map(c => "@agent/" + c.number + " · " + c.title)
+                }
             }
             KetBanner {
                 visible: addMemberDialog.role === "developer" && screen.developers >= 3 && screen.reviewers < 2
@@ -1071,7 +1097,8 @@ Item {
                              : developer ? laneName.text.trim() : "Review " + screen.team.name }
                     screen.change({ members: screen.members.concat([{
                         number: chosen.number, title: chosen.title, role: role,
-                        provider: (chosen.provider || "Claude") + " · " + (chosen.model || "Opus 5.5"),
+                        provider: addMemberDialog.chosen ? (chosen.provider || "Claude") + " · " + (chosen.model || "Opus 5.5")
+                                                         : agentChoice.currentText,
                         lane: developer ? laneName.text.trim() : "",
                         paths: developer ? lanePaths.text.split(",").map(p => p.trim()).filter(p => p) : [],
                         reviews: role === "reviewer" ? addMemberDialog.lanes : [],
