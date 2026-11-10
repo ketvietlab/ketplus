@@ -551,7 +551,8 @@ Item {
             onActivated: index => screen.linuxMode = index
         }
         KetFieldRow {
-            width: parent.width
+            // The dialog body is a ColumnLayout: a width binding would let the row overflow.
+            Layout.fillWidth: true
             label: screen.linuxMode === 0 ? "Host" : "Pairing code"
             help: screen.linuxMode === 0 ? "Uses your ~/.ssh/config and agent. KetPlus installs its daemon in ~/.ketplus."
                                          : "Run ketplusctl pair on the machine and type the code it shows."

@@ -13,8 +13,10 @@ class QTimer;
 class QEvent;
 class QVBoxLayout;
 namespace ket {
+class Avatar;
 class Dialog;
-}
+class EmptyState;
+} // namespace ket
 namespace ketplus {
 class LinuxMachinesSection;
 class RemoteActivitySection;
@@ -50,6 +52,7 @@ class RemoteControlView final : public QWidget {
     void applyStatus(const QJsonObject& status);
     void refreshDevices();
     void renderDevices(const QJsonArray& devices);
+    [[nodiscard]] ket::EmptyState* devicesEmptyState();
     void signIn();
     void cancelSignIn();
     void resetSignInButton();
@@ -85,12 +88,12 @@ class RemoteControlView final : public QWidget {
     QLabel* signInNotice_{nullptr};
     QVBoxLayout* devicesLayout_{nullptr};
     QLabel* deviceCount_{nullptr};
-    QLabel* devicesEmpty_{nullptr};
+    ket::EmptyState* devicesEmpty_{nullptr};
     QLabel* overviewDescription_{nullptr};
     QLabel* overviewStatus_{nullptr};
     QAbstractButton* pairButton_{nullptr};
     QAbstractButton* signOutButton_{nullptr};
-    QLabel* accountAvatar_{nullptr};
+    ket::Avatar* accountAvatar_{nullptr};
     QLabel* accountName_{nullptr};
     QLabel* accountMeta_{nullptr};
     bool signOutRequested_{false};

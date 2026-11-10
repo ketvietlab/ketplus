@@ -101,6 +101,9 @@ Item {
         const rows = view.messageModel.count;
         return index + 1 < rows && view.messageModel.get(index + 1).subtype === "turnEnd";
     }
+    // An event line that opens the transcript ("Switched from…", "Forked from…") starts where a
+    // day divider would, right under the top padding.
+    readonly property real firstRowLift: index === 0 && tightNotice && kind !== "error" ? KetTheme.px(8, KetTheme.zoom) : 0
     readonly property bool activityRow: category === "activity" && !noticeRow
     readonly property bool noticeRow: subtype !== "question" && subtype !== "approval" && (category === "system" || subtype === "notice" || subtype === "compaction" || kind === "error")
     readonly property bool commandRow: activityRow && subtype === "command"
@@ -301,7 +304,7 @@ Item {
         readonly property bool agentMessage: kind === "user" && subtype === "agentMessage"
         readonly property real userMaximumWidth: Math.max(KetTheme.px(160, KetTheme.zoom), Math.min(messageDelegate.contentColumnWidth * userRecipe.maxWidth, messageDelegate.contentColumnWidth - KetTheme.px(63, KetTheme.zoom)))
         x: kind === "user" ? messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - KetTheme.px(20, KetTheme.zoom) : messageDelegate.contentColumnX + KetTheme.px(20, KetTheme.zoom)
-        y: messageDelegate.surfaceInset + messageDelegate.dayLead + userLead.height + (imagesOnly ? 0 : userLead.gap)
+        y: messageDelegate.surfaceInset + messageDelegate.dayLead + userLead.height + (imagesOnly ? 0 : userLead.gap) - messageDelegate.firstRowLift
         width: kind === "user" ? Math.min(userMaximumWidth, Math.ceil(bodyMetrics.advanceWidth) + KetTheme.px(10, KetTheme.zoom) + horizontalPadding * 2) : messageDelegate.contentColumnWidth - KetTheme.px(40, KetTheme.zoom)
         // An images-only prompt keeps no empty bubble under its thumbnails.
         readonly property bool imagesOnly: userMessage && userLead.visible && messageDelegate.displayBody.trim().length === 0
@@ -1291,6 +1294,22 @@ Item {
             TranscriptMessageImages {
                 row: messageDelegate
                 sources: kind === "user" ? [] : messageDelegate.messageImages
+            }
+            // The mock's line under a generated image: what it was made from.
+            Text {
+                objectName: "imagePromptLine"
+                visible: messageDelegate.subtype === "imageGeneration" && messageDelegate.commandDescription.length > 0 && messageDelegate.messageImages.length > 0
+                width: parent.width
+                height: visible ? implicitHeight + KetTheme.px(8, KetTheme.zoom) : 0
+                topPadding: KetTheme.px(8, KetTheme.zoom)
+                text: "<b>Prompt</b>&nbsp;&nbsp;" + messageDelegate.commandDescription.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                textFormat: Text.StyledText
+                wrapMode: Text.Wrap
+                maximumLineCount: 3
+                elide: Text.ElideRight
+                color: KetTheme.t.textSecondary
+                font.family: KetTheme.fontFamily
+                font.pixelSize: KetTheme.px(13, KetTheme.zoom)
             }
 
         }

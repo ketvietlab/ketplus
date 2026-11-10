@@ -65,6 +65,7 @@ class AtlasConversationPanel;
 class RemoteControlView;
 class SettingsDialog;
 class SettingsWorkspacePage;
+class WorktreeStateProbe;
 class WorktreesWorkspacePage;
 struct AtlasDescriptor;
 
@@ -264,6 +265,7 @@ class MainWindow final : public QMainWindow {
     void startNewAgentConversation();
     [[nodiscard]] QString primaryWorktreePath() const;
     void showAgentWorktreeContextMenu(const QString& path);
+    void showWorktreeMenu(const QString& path, const QPoint& globalPosition);
     void showAgentConversationContextMenu(const QString& worktreePath,
                                           const QString& conversationId);
     void changeAgentConversationWorktree(const QString& worktreePath,
@@ -414,6 +416,9 @@ class MainWindow final : public QMainWindow {
     QStringList remoteMachineIds_;
     QString selectedMachineId_{QStringLiteral("local")};
     WorktreesWorkspacePage* worktreesWorkspace_{nullptr};
+    WorktreeStateProbe* worktreeStateProbe_{nullptr};
+    // The Create worktree card asked to open Agent Workspace on what it creates.
+    bool openCreatedWorktree_{false};
     SettingsWorkspacePage* settingsWorkspace_{nullptr};
     SettingsDialog* settingsDialog_{nullptr};
     AgentWorktreeCreator* agentWorktreeCreator_{nullptr};

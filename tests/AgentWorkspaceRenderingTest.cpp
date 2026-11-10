@@ -1287,6 +1287,23 @@ void AgentWorkspaceViewTest::composerPlaceholderTracksCaret() {
     QVERIFY(!tagItem("conversationTagItem_UI")->property("checked").toBool());
     QVERIFY(QMetaObject::invokeMethod(tagMenu, "close"));
     QTRY_VERIFY(!tagMenu->property("visible").toBool());
+    // Every tag shows when the header has room, and they leave together when it has not.
+    view.setConversations({QVariantMap{
+        {"id", "ui"},
+        {"active", true},
+        {"number", "42"},
+        {"tagsEditable", true},
+        {"tags", QVariantList{QVariantMap{{"label", "UI"}}, QVariantMap{{"label", "Review"}},
+                              QVariantMap{{"label", "Docs"}}}}}});
+    view.resize(1400, 700);
+    for (const auto* name :
+         {"conversationTag_UI", "conversationTag_Review", "conversationTag_Docs"})
+        QTRY_VERIFY2(findVisibleItem(root, name), name);
+    view.resize(480, 700);
+    for (const auto* name :
+         {"conversationTag_UI", "conversationTag_Review", "conversationTag_Docs"})
+        QTRY_VERIFY2(!findVisibleItem(root, name), name);
+    view.resize(1000, 700);
     // The mock's header actions, in its order and with its symbols.
     const QList<std::pair<const char*, const char*>> actions{
         {"headerCompactWindowButton", "panel-left"},
