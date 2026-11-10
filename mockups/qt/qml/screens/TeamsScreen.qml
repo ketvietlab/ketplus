@@ -1287,23 +1287,21 @@ Item {
             KetFieldRow {
                 width: parent.width
                 label: "Merges tasks"
-                Column {
+                Row {
                     width: parent.width
                     spacing: screen.px(6)
                     KetChoice {
                         id: leaderMerges
-                        width: parent.width
+                        width: (parent.width - parent.spacing) / 2
                         kind: KetTheme.ToggleKind.Radio
                         checked: true
                         text: "The leader"
-                        description: "Once the reviewer passes a task, in the order the tasks depend on"
                         onToggled: if (checked) newTeamDialog.merges = "leader"
                     }
                     KetChoice {
-                        width: parent.width
+                        width: (parent.width - parent.spacing) / 2
                         kind: KetTheme.ToggleKind.Radio
                         text: "Me"
-                        description: "The leader proposes the order; each merge waits for you"
                         onToggled: if (checked) newTeamDialog.merges = "user"
                     }
                 }
