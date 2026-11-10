@@ -52,6 +52,13 @@ Item {
     readonly property int actionCount: (agentHost.compactMode ? 0 : 1) + (agentHost.compactWindow ? 0 : 1) + (agentHost.compactMode || agentHost.compactWindow ? 0 : agentHost.detailsOpen ? 1 : 4)
     readonly property real fullActionsWidth: actionCount * atlasButton.implicitWidth + Math.max(0, actionCount - 1) * headerActions.spacing
     readonly property bool globalActions: agentHost.compactWindow || width - titleRow.anchors.leftMargin - fullActionsWidth - headerActions.anchors.rightMargin - titleRow.anchors.rightMargin >= statusWidth + (scopeChip.visible ? scopeChip.iconWidth + gap : 0) + minimumTitle + (reviewerButton.visible ? collapsedReviewerProbe.implicitWidth + gap : 0) + 2 * gap
+    // "Claude · Opus 5.5": the provider and its default model, when the catalog has it.
+    function reviewerTitle(provider, title) {
+        for (let model of agentHost.models)
+            if (model.provider === provider && model.isDefault)
+                return title + " · " + (model.displayName || model.model)
+        return title
+    }
     readonly property string scopeLabel: (agentHost.repositoryName || "Repository") + " · " + scopeBranch
 
     // One compact row: title, status and a muted scope chip on the left, icon actions right.
@@ -395,12 +402,22 @@ Item {
         Kit.KetMenuSection {
             text: "New review agent"
         }
+        // As the mock, each provider names the model a new reviewer starts with: the
+        // provider's default, which the daemon uses.
         Kit.KetMenuItem {
             objectName: "newClaudeReviewerItem"
-            text: "Claude"
+            text: header.reviewerTitle("claude", "Claude")
             description: "Starts a reviewer in this worktree, read only"
             iconName: "bot"
             onTriggered: agentHost.chooseReviewer("", "claude")
+        }
+        // ADR 0067: Codex cannot be held read only yet, so it is listed but cannot review.
+        Kit.KetMenuItem {
+            objectName: "newCodexReviewerItem"
+            text: header.reviewerTitle("codex", "Codex")
+            description: "Cannot review yet: Codex cannot be held read only"
+            iconName: "bot"
+            enabled: false
         }
         Kit.KetMenuSection {
             text: "Existing conversation"
