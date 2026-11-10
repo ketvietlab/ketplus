@@ -189,42 +189,6 @@ QSplitter::handle:hover {
     background: {{focus}};
 }
 
-QWidget[kvRole="activityBar"] {
-    border-right: 1px solid {{border}};
-    background: {{sidebarBackground}};
-}
-
-QToolButton[kvRole="activityButton"] {
-    min-width: 44px;
-    max-width: 44px;
-    min-height: 42px;
-    max-height: 42px;
-    padding: 0;
-    border: 0;
-    border-left: 2px solid transparent;
-    border-radius: 0;
-    background: transparent;
-    color: {{textMuted}};
-    font-size: 17px;
-    font-weight: 600;
-}
-
-QToolButton[kvRole="activityButton"]:hover {
-    background: {{surfaceHover}};
-    color: {{textMain}};
-}
-
-QToolButton[kvRole="activityButton"]:checked {
-    border-left-color: {{accent}};
-    background: {{panelBackground}};
-    color: {{accentText}};
-}
-
-QToolButton[kvRole="activityButton"]:disabled {
-    background: transparent;
-    color: {{textDisabled}};
-}
-
 QWidget[kvRole="explorer"] {
     background: {{sidebarBackground}};
 }
@@ -238,88 +202,15 @@ QWidget[kvRole="terminalPanel"] {
     background: {{panelSubtle}};
 }
 
-QWidget[kvRole="terminalHeader"] {
-    min-height: 34px;
-    max-height: 34px;
-    border-bottom: 1px solid {{border}};
-    background: {{panelSubtle}};
-}
-
-QLabel[kvRole="terminalHeading"] {
-    color: {{textSecondary}};
-    font-size: 10px;
-    font-weight: 700;
-}
-
-QLabel[kvRole="terminalHeading"][terminalState="running"] {
-    color: {{tabActiveText}};
-}
-
-QLabel[kvRole="terminalHeading"][terminalState="exited"] {
-    color: {{textMuted}};
-}
-
-QLabel[kvRole="terminalPath"] {
-    color: {{textMuted}};
-    font-size: 10px;
-}
-
 QAbstractScrollArea[kvRole="terminalView"] {
     border: 0;
     background: {{panelSubtle}};
     font-family: "{{terminalFontFamily}}";
 }
 
-QToolButton[kvRole="terminalAction"] {
-    min-width: 24px;
-    max-width: 24px;
-    min-height: 24px;
-    max-height: 24px;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: {{textMuted}};
-    font-size: 16px;
-}
-
-QToolButton[kvRole="terminalAction"]:hover {
-    background: {{surfaceHover}};
-    color: {{textMain}};
-}
-
-QWidget[kvRole="previewHeader"] {
-    min-height: 34px;
-    max-height: 34px;
-    border-bottom: 1px solid {{border}};
-    background: {{panelSubtle}};
-}
-
-QLabel[kvRole="previewHeading"] {
-    color: {{textSecondary}};
-    font-size: 11px;
-    font-weight: 700;
-}
-
 QLabel[kvRole="previewHint"] {
     color: {{textMuted}};
     font-size: 11px;
-}
-
-QToolButton[kvRole="previewClose"] {
-    min-width: 24px;
-    max-width: 24px;
-    min-height: 24px;
-    max-height: 24px;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: {{textMuted}};
-    font-size: 17px;
-}
-
-QToolButton[kvRole="previewClose"]:hover {
-    background: {{surfaceHover}};
-    color: {{textMain}};
 }
 
 QLabel[kvRole="previewNotice"] {
@@ -332,18 +223,6 @@ QLabel[kvRole="previewNotice"] {
 
 QLabel[kvRole="previewNotice"][noticeState="error"] {
     color: {{danger}};
-}
-
-QLabel[kvRole="sidebarHeading"] {
-    color: {{textSecondary}};
-    font-size: 11px;
-    font-weight: 700;
-}
-
-QLabel[kvRole="sourceControlHeading"] {
-    color: {{textMain}};
-    font-size: 11px;
-    font-weight: 600;
 }
 
 QLabel[kvRole="gitRepositoryName"] {
@@ -633,42 +512,6 @@ QLabel[kvRole="settingsTitle"] {
 QLabel[kvRole="settingsDescription"] {
     color: {{textSecondary}};
     font-size: 12px;
-}
-
-QFrame[kvRole="settingsCard"] {
-    border: 1px solid {{border}};
-    border-radius: 8px;
-    background: {{panelBackground}};
-}
-
-QLabel[kvRole="settingsFieldLabel"] {
-    min-width: 92px;
-    padding-top: 7px;
-    color: {{textMain}};
-    font-size: 12px;
-    font-weight: 600;
-}
-
-QLabel[kvRole="settingsFieldHelp"] {
-    padding-bottom: 7px;
-    color: {{textMuted}};
-    font-size: 10px;
-}
-
-QLabel[kvRole="settingsAutomaticValue"] {
-    min-height: 30px;
-    border: 1px solid {{border}};
-    border-radius: 5px;
-    background: {{panelSubtle}};
-    color: {{textMuted}};
-    font-size: 10px;
-}
-
-QWidget[kvRole="settingsPreview"] {
-    border: 1px solid {{border}};
-    border-radius: 8px;
-    background: {{panelBackground}};
-    color: {{textMain}};
 }
 
 QPushButton[kvRole="primaryAction"] {
