@@ -9,6 +9,7 @@
 #include <QVector>
 #include <QWidget>
 
+class QAbstractButton;
 class QCheckBox;
 class QComboBox;
 class QLabel;
@@ -42,6 +43,8 @@ class AgentWorktreeDialog final : public QWidget {
     [[nodiscard]] QString baseBranch() const;
     [[nodiscard]] QString selectedWorktreePath() const;
     [[nodiscard]] bool createWorktree() const;
+    // Create worktree only: whether Agent Workspace opens on the new worktree.
+    [[nodiscard]] bool startConversation() const;
     // Conversation layout only: replaces the listed worktrees, keeping the one the
     // reader picked when it is still there.
     void setWorktrees(const QVector<GitWorktree>& worktrees);
@@ -76,6 +79,7 @@ class AgentWorktreeDialog final : public QWidget {
     QComboBox* newWorktreeBase_{nullptr};
     QRadioButton* existingWorktree_{nullptr};
     QRadioButton* newWorktree_{nullptr};
+    QAbstractButton* startConversation_{nullptr};
     QLabel* error_{nullptr};
     QLabel* status_{nullptr};
     // The card's primary action, once presented.

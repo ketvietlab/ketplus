@@ -3,6 +3,7 @@
 #include "app/AgentWorktreeCreator.h"
 #include "app/MainWindow.h"
 #include "app/SettingsWorkspacePage.h"
+#include "app/WorktreeStateProbe.h"
 #include "app/WorktreesWorkspacePage.h"
 #include "editor/EditorWidget.h"
 #include "git/GitChangesPanel.h"
@@ -14,16 +15,19 @@
 #include <QAction>
 #include <QCursor>
 #include <QDateTime>
+#include <QDesktopServices>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QLayout>
 #include <QMenu>
 #include <QMessageBox>
+#include <QProcess>
 #include <QSettings>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QTabWidget>
+#include <QUrl>
 
 #include <algorithm>
 
@@ -74,6 +78,17 @@ void MainWindow::refreshWorktreesWorkspace() {
                                       conversations, !gitSnapshot_.files.isEmpty());
     worktreesWorkspace_->setPruneAvailable(hasPrunableWorktrees &&
                                            !agentWorktreeCreator_->isRunning());
+    // The open worktree's state comes from its Git snapshot; the others are read here.
+    if (worktreesWorkspaceMode_ && worktreeStateProbe_ != nullptr) {
+        const QString active = QFileInfo(workspaceRoot_).canonicalFilePath();
+        QStringList others;
+        for (const GitWorktree& worktree : std::as_const(visible)) {
+            const QString path = QFileInfo(worktree.path).canonicalFilePath();
+            if (!path.isEmpty() && path != active)
+                others.append(path);
+        }
+        worktreeStateProbe_->probe(others);
+    }
 }
 
 void MainWindow::setWorktreesWorkspaceVisible(const bool visible) {
@@ -93,6 +108,11 @@ void MainWindow::setWorktreesWorkspaceVisible(const bool visible) {
         worktreesWorkspace_ = new WorktreesWorkspacePage(workspaceSplit_);
         workspaceSplit_->addWidget(worktreesWorkspace_);
         worktreesWorkspace_->applyPalette(theme_.palette(), theme_.interfaceZoomPercent());
+        worktreeStateProbe_ = new WorktreeStateProbe(worktreesWorkspace_);
+        connect(worktreeStateProbe_, &WorktreeStateProbe::stateKnown, worktreesWorkspace_,
+                &WorktreesWorkspacePage::setWorktreeDirty);
+        connect(worktreeStateProbe_, &WorktreeStateProbe::stateUnknown, worktreesWorkspace_,
+                &WorktreesWorkspacePage::clearWorktreeState);
         connect(worktreesWorkspace_, &WorktreesWorkspacePage::createRequested, this,
                 &MainWindow::createAgentWorktree);
         connect(worktreesWorkspace_, &WorktreesWorkspacePage::pruneRequested, this, [this] {
@@ -108,7 +128,7 @@ void MainWindow::setWorktreesWorkspaceVisible(const bool visible) {
                     setAgentWorkspaceVisible(true);
                 });
         connect(worktreesWorkspace_, &WorktreesWorkspacePage::manageRequested, this,
-                &MainWindow::showAgentWorktreeContextMenu);
+                &MainWindow::showWorktreeMenu);
         connect(worktreesWorkspace_, &WorktreesWorkspacePage::archivedRequested, this,
                 &MainWindow::showSettings);
     }
@@ -162,6 +182,10 @@ QString MainWindow::worktreeRemovalBlocker(const QString& target) const {
 }
 
 void MainWindow::showAgentWorktreeContextMenu(const QString& path) {
+    showWorktreeMenu(path, QCursor::pos());
+}
+
+void MainWindow::showWorktreeMenu(const QString& path, const QPoint& globalPosition) {
     const auto target = QFileInfo(path).canonicalFilePath();
     bool known = false;
     for (const auto& tree : worktrees_)
@@ -174,7 +198,23 @@ void MainWindow::showAgentWorktreeContextMenu(const QString& path) {
                target != QFileInfo(workspaceRoot_).canonicalFilePath() &&
                !agentWorktreeCreator_->isRunning();
     };
+    // The mock's manage menu: where to go with the worktree, then what ends it.
     QMenu menu(this);
+    menu.setObjectName(QStringLiteral("worktreeManageMenu"));
+    auto* converse = menu.addAction(tr("New conversation here"));
+    converse->setObjectName("newConversationInWorktreeAction");
+    converse->setEnabled(agentManager_ != nullptr);
+    auto* openFiles = menu.addAction(tr("Open in Files && Editor"));
+    openFiles->setObjectName("openWorktreeFilesAction");
+#ifdef Q_OS_MACOS
+    auto* reveal = menu.addAction(tr("Reveal in Finder"));
+#else
+    auto* reveal = menu.addAction(tr("Show in file manager"));
+#endif
+    reveal->setObjectName("revealWorktreeAction");
+    reveal->setToolTip(QDir::toNativeSeparators(target));
+    menu.setToolTipsVisible(true);
+    menu.addSeparator();
     auto* archive = menu.addAction(tr("Archive worktree"));
     archive->setObjectName("archiveWorktreeAction");
     archive->setEnabled(target != QFileInfo(workspaceRoot_).canonicalFilePath());
@@ -187,7 +227,27 @@ void MainWindow::showAgentWorktreeContextMenu(const QString& path) {
                               "cannot be deleted."));
         reason->setEnabled(false);
     }
-    QAction* selected = menu.exec(QCursor::pos());
+    QAction* selected = menu.exec(globalPosition);
+    if (selected == converse) {
+        promotedWorktreePath_ = target;
+        switchToWorktree(target);
+        setAgentWorkspaceVisible(true);
+        agentManager_->newSession(target);
+        return;
+    }
+    if (selected == openFiles) {
+        switchToWorktree(target);
+        setExplorerVisible(true);
+        return;
+    }
+    if (selected == reveal) {
+#ifdef Q_OS_MACOS
+        QProcess::startDetached(QStringLiteral("/usr/bin/open"), {QStringLiteral("-R"), target});
+#else
+        QDesktopServices::openUrl(QUrl::fromLocalFile(target));
+#endif
+        return;
+    }
     if (selected == archive) {
         if (archiveWorktree(target)) {
             statusBar()->showMessage(tr("Worktree archived. Restore it from Settings."), 5000);

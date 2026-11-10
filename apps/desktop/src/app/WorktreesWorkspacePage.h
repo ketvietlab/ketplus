@@ -23,6 +23,10 @@ class WorktreesWorkspacePage final : public QWidget {
     void setWorktrees(const QVector<GitWorktree>& worktrees, const QString& activePath,
                       const QSet<QString>& runningPaths,
                       const QHash<QString, int>& conversationCounts, bool activeDirty);
+    // A linked worktree's own Git state, once it has been read.
+    void setWorktreeDirty(const QString& path, bool dirty);
+    // Its Git state could not be read: show none rather than an old answer.
+    void clearWorktreeState(const QString& path);
     void setPruneAvailable(bool available);
     void setPruning(bool pruning);
     void applyPalette(const ThemePalette& palette, int zoomPercent = 100);
@@ -31,7 +35,8 @@ class WorktreesWorkspacePage final : public QWidget {
     void createRequested();
     void pruneRequested();
     void worktreeRequested(const QString& path);
-    void manageRequested(const QString& path);
+    // `menuPosition` is the global point under the row's Manage button.
+    void manageRequested(const QString& path, const QPoint& menuPosition);
     void archivedRequested();
 
   private:
@@ -42,6 +47,7 @@ class WorktreesWorkspacePage final : public QWidget {
     QVector<GitWorktree> worktrees_;
     QSet<QString> runningPaths_;
     QHash<QString, int> conversationCounts_;
+    QHash<QString, bool> dirtyPaths_;
     QString activePath_;
     QString pageBackground_;
     QString panelBackground_;

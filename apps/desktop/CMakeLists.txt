@@ -138,6 +138,8 @@ add_library(ketplus_desktop_shell STATIC
     src/app/SettingsRows.h
     src/app/SettingsWorkspacePage.cpp
     src/app/SettingsWorkspacePage.h
+    src/app/WorktreeStateProbe.cpp
+    src/app/WorktreeStateProbe.h
     src/app/WorktreesWorkspacePage.cpp
     src/app/WorktreesWorkspacePage.h
 )

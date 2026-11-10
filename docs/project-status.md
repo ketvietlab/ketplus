@@ -28,6 +28,16 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   searchable picker rows and Connections controls. Repository/worktree switching
   still waits for the existing revisioned acknowledgment. Linux pairing continues
   through authenticated outbound Relay; this layer does not add SSH setup.
+  The Worktrees page follows the mock: each linked worktree shows its own Git
+  state, read by one read-only `git status` per worktree off the event loop
+  (`WorktreeStateProbe`); Prune appears only while a worktree folder is missing;
+  Manage opens New conversation here, Open in Files & Editor, Reveal in Finder,
+  Archive and Delete; Create worktree offers "Start a conversation in it".
+  Connections follows the mock's signed-in page: a page up to 1000 px wide, one
+  card per phone and per Linux machine, kit badge metrics, inset activity
+  separators and the kit empty state and avatar. Linux machines still connect
+  only through the Relay, so the mock's SSH wording, machine details and
+  Disconnect are not in the app.
 
 - The unreviewed Pro overlays layer uses kit Quick search and conversation menus.
   Compact conversation window preserves the mounted session/draft and restores
