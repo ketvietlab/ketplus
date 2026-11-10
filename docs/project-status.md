@@ -34,9 +34,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   switched from inside the conversation.
   Connections follows the mock's signed-in page: a page up to 1000 px wide, one
   card per phone and per Linux machine, kit badge metrics, inset activity
-  separators and the kit empty state and avatar. Linux machines still connect
-  only through the Relay, so the mock's SSH wording, machine details and
-  Disconnect are not in the app.
+  separators and the kit empty state and avatar. Linux machines connect only
+  through the Relay; on 2026-11-11 the mock dropped its SSH option, machine
+  details and Disconnect, and its phone pairing dialog now follows the app's
+  scan, compare and approve flow (no typed pairing code).
 
 - The unreviewed Pro overlays layer uses kit Quick search and conversation menus.
   Compact conversation window preserves the mounted session/draft and restores
