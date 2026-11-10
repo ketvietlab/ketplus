@@ -3,8 +3,6 @@
 #include "app/AgentWorktreeCreator.h"
 #include "app/MainWindow.h"
 #include "app/SettingsWorkspacePage.h"
-#include "app/WorktreeStateProbe.h"
-#include "app/WorktreesWorkspacePage.h"
 #include "editor/EditorWidget.h"
 #include "git/GitChangesPanel.h"
 #include "git/GitService.h"
@@ -33,9 +31,6 @@
 
 namespace ketplus {
 void MainWindow::hideUtilityWorkspaces() {
-    if (worktreesWorkspace_ != nullptr)
-        worktreesWorkspace_->hide();
-    worktreesWorkspaceMode_ = false;
     if (settingsWorkspace_ != nullptr) {
         auto* page = settingsWorkspace_;
         settingsWorkspace_ = nullptr;
@@ -46,118 +41,6 @@ void MainWindow::hideUtilityWorkspaces() {
     if (settingsWorkspaceMode_)
         theme_.cancelPreview();
     settingsWorkspaceMode_ = false;
-}
-
-void MainWindow::refreshWorktreesWorkspace() {
-    if (worktreesWorkspace_ == nullptr)
-        return;
-    QSet<QString> archivedPaths;
-    for (const QVariant& value : archivedWorktrees()) {
-        const QString path =
-            QFileInfo(value.toMap().value(QStringLiteral("path")).toString()).canonicalFilePath();
-        if (!path.isEmpty())
-            archivedPaths.insert(path);
-    }
-    QVector<GitWorktree> visible;
-    QHash<QString, int> conversations;
-    bool hasPrunableWorktrees = false;
-    for (const GitWorktree& worktree : std::as_const(worktrees_)) {
-        hasPrunableWorktrees =
-            hasPrunableWorktrees ||
-            (!worktree.bare && (worktree.prunable || !QFileInfo(worktree.path).isDir()));
-        const QString path = QFileInfo(worktree.path).canonicalFilePath();
-        if (worktree.bare || worktree.prunable || archivedPaths.contains(path))
-            continue;
-        visible.append(worktree);
-        conversations.insert(
-            path, agentManager_ == nullptr ? 0 : agentManager_->conversations(path).size());
-    }
-    worktreesWorkspace_->setWorktrees(visible, workspaceRoot_,
-                                      agentManager_ == nullptr ? QSet<QString>{}
-                                                               : agentManager_->runningPaths(),
-                                      conversations, !gitSnapshot_.files.isEmpty());
-    worktreesWorkspace_->setPruneAvailable(hasPrunableWorktrees &&
-                                           !agentWorktreeCreator_->isRunning());
-    // The open worktree's state comes from its Git snapshot; the others are read here.
-    if (worktreesWorkspaceMode_ && worktreeStateProbe_ != nullptr) {
-        const QString active = QFileInfo(workspaceRoot_).canonicalFilePath();
-        QStringList others;
-        for (const GitWorktree& worktree : std::as_const(visible)) {
-            const QString path = QFileInfo(worktree.path).canonicalFilePath();
-            if (!path.isEmpty() && path != active)
-                others.append(path);
-        }
-        worktreeStateProbe_->probe(others);
-    }
-}
-
-void MainWindow::setWorktreesWorkspaceVisible(const bool visible) {
-    if (!visible) {
-        if (worktreesWorkspace_ != nullptr)
-            worktreesWorkspace_->hide();
-        worktreesWorkspaceMode_ = false;
-        return;
-    }
-
-    hideUtilityWorkspaces();
-    setRemoteWorkspaceVisible(false);
-    setAtlasWorkspaceVisible(false);
-    setAgentWorkspaceVisible(false);
-    ensureAgentWorkspace();
-    if (worktreesWorkspace_ == nullptr) {
-        worktreesWorkspace_ = new WorktreesWorkspacePage(workspaceSplit_);
-        workspaceSplit_->addWidget(worktreesWorkspace_);
-        worktreesWorkspace_->applyPalette(theme_.palette(), theme_.interfaceZoomPercent());
-        worktreeStateProbe_ = new WorktreeStateProbe(worktreesWorkspace_);
-        connect(worktreeStateProbe_, &WorktreeStateProbe::stateKnown, worktreesWorkspace_,
-                &WorktreesWorkspacePage::setWorktreeDirty);
-        connect(worktreeStateProbe_, &WorktreeStateProbe::stateUnknown, worktreesWorkspace_,
-                &WorktreesWorkspacePage::clearWorktreeState);
-        connect(worktreesWorkspace_, &WorktreesWorkspacePage::createRequested, this,
-                &MainWindow::createAgentWorktree);
-        connect(worktreesWorkspace_, &WorktreesWorkspacePage::pruneRequested, this, [this] {
-            if (agentWorktreeCreator_ == nullptr || agentWorktreeCreator_->isRunning())
-                return;
-            worktreesWorkspace_->setPruning(true);
-            agentWorktreeCreator_->prune(workspaceRoot_);
-        });
-        connect(worktreesWorkspace_, &WorktreesWorkspacePage::worktreeRequested, this,
-                [this](const QString& path) {
-                    promotedWorktreePath_ = QFileInfo(path).canonicalFilePath();
-                    switchToWorktree(path);
-                    setAgentWorkspaceVisible(true);
-                });
-        connect(worktreesWorkspace_, &WorktreesWorkspacePage::manageRequested, this,
-                &MainWindow::showWorktreeMenu);
-        connect(worktreesWorkspace_, &WorktreesWorkspacePage::archivedRequested, this,
-                &MainWindow::showSettings);
-    }
-    if (explorer_ != nullptr)
-        explorer_->hide();
-    if (gitChanges_ != nullptr)
-        gitChanges_->hide();
-    if (terminal_ != nullptr)
-        terminal_->hide();
-    if (agentWorkspace_ != nullptr)
-        agentWorkspace_->hide();
-    if (agentDetailPane_ != nullptr)
-        agentDetailPane_->hide();
-    editorSplit_->hide();
-    worktreesWorkspaceMode_ = true;
-    settingsWorkspaceMode_ = false;
-    worktreesWorkspace_->show();
-    refreshWorktreesWorkspace();
-    setShellMode(ActivityBar::Mode::AgentWorkspace);
-    workspaceSplit_->show();
-    mainSplit_->show();
-    mainSplit_->setMaximumHeight(QWIDGETSIZE_MAX);
-    mainSplit_->parentWidget()->layout()->activate();
-    QList<int> shellSizes(mainSplit_->count(), 0);
-    shellSizes[mainSplit_->indexOf(workspaceSplit_)] = qMax(480, mainSplit_->height());
-    mainSplit_->setSizes(shellSizes);
-    QList<int> sizes(workspaceSplit_->count(), 0);
-    sizes[workspaceSplit_->indexOf(worktreesWorkspace_)] = qMax(800, workspaceSplit_->width());
-    workspaceSplit_->setSizes(sizes);
 }
 
 QString MainWindow::worktreeRemovalBlocker(const QString& target) const {

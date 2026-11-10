@@ -28,11 +28,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   searchable picker rows and Connections controls. Repository/worktree switching
   still waits for the existing revisioned acknowledgment. Linux pairing continues
   through authenticated outbound Relay; this layer does not add SSH setup.
-  The Worktrees page follows the mock: each linked worktree shows its own Git
-  state, read by one read-only `git status` per worktree off the event loop
-  (`WorktreeStateProbe`); Prune appears only while a worktree folder is missing;
-  Manage opens New conversation here, Open in Files & Editor, Reveal in Finder,
-  Archive and Delete; Create worktree offers "Start a conversation in it".
+  There is no Worktrees page (ADR 0111): worktrees are created for a
+  conversation, from New conversation or the repository picker's Create
+  worktree… card ("Start a conversation in it"), and switched from inside the
+  conversation.
   Connections follows the mock's signed-in page: a page up to 1000 px wide, one
   card per phone and per Linux machine, kit badge metrics, inset activity
   separators and the kit empty state and avatar. Linux machines still connect
@@ -565,9 +564,8 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   name and transcript right-click menus copies an idle Codex or Claude
   conversation through the provider's native fork and a journal copy. Cursor
   has no fork operation; forking from an earlier message is not offered yet.
-- The product sidebar opens a dedicated Worktrees workspace with live
-  conversation/activity state, create/manage actions, and the archived-items
-  route. Settings is a full workspace page rather than a modal popup while
+- Worktrees have no workspace of their own (ADR 0111); conversations create
+  and switch them. Settings is a full workspace page rather than a modal popup while
   continuing to reuse the public KetPlus CM settings controls and persistence.
 - Streaming presentation is coalesced, offscreen Markdown work is deferred, and
   an anchored live response can retain its displayed source while the user reads

@@ -6,7 +6,6 @@
 #include "app/MainWindow.h"
 #include "app/RepositoryRouter.h"
 #include "app/SpotlightDialog.h"
-#include "app/WorktreesWorkspacePage.h"
 #include "atlas/AtlasTab.h"
 #include "atlas/ManagedAtlasViewers.h"
 #include "workspace/AtlasIndex.h"
@@ -203,7 +202,8 @@ void MainWindow::ensureAgentWorkspace() {
                 scheduleSidebarRefresh(true);
             },
             agentWorkspace_->executionPath(), roots, currentRepository,
-            [this] { setWorktreesWorkspaceVisible(true); });
+            // Worktrees are made here, for the conversation; there is no Worktrees screen.
+            [this] { createAgentWorktree(); });
     });
     connect(agentWorkspace_, &AgentWorkspaceView::activePathChanged, this,
             [this] { agentWorkspace_->setExecutionBranch({}); });
@@ -423,22 +423,17 @@ void MainWindow::ensureAgentWorkspace() {
                 switchToWorktree(path);
                 if (forConversation && agentManager_ != nullptr)
                     agentManager_->markActiveConversationOwnsWorktree(path);
-                // "Start a conversation in it": leave the Worktrees page for the new worktree.
+                // "Start a conversation in it": open the new worktree's conversation.
                 if (std::exchange(openCreatedWorktree_, false) && !forConversation)
                     setAgentWorkspaceVisible(true);
                 git_->scheduleRefresh(0);
             });
-    connect(agentWorktreeCreator_, &AgentWorktreeCreator::pruned, this, [this] {
-        if (worktreesWorkspace_ != nullptr)
-            worktreesWorkspace_->setPruning(false);
-        git_->scheduleRefresh(0);
-    });
+    connect(agentWorktreeCreator_, &AgentWorktreeCreator::pruned, this,
+            [this] { git_->scheduleRefresh(0); });
     connect(agentWorktreeCreator_, &AgentWorktreeCreator::failed, this,
             [this](const QString& error) {
                 pendingConversationWorktree_ = false;
                 openCreatedWorktree_ = false;
-                if (worktreesWorkspace_ != nullptr)
-                    worktreesWorkspace_->setPruning(false);
                 if (!pendingDeleteConversationPath_.isEmpty() ||
                     !pendingDeleteWorktreePaths_.isEmpty()) {
                     clearPendingWorktreeDeletion();
@@ -617,7 +612,6 @@ void MainWindow::ensureAgentWorkspace() {
             });
     connect(agentManager_, &AgentSessionManager::activityChanged, this, [this] {
         refreshAgentWorktrees();
-        refreshWorktreesWorkspace();
         // A completed agent turn may have created or removed linked worktrees.
         git_->scheduleRefresh(200);
     });

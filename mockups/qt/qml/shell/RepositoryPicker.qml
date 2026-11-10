@@ -82,7 +82,7 @@ KetDialog {
     }
 
     actions: [
-        KetButton { text: "Create worktree…"; iconName: "plus"; variant: KetTheme.ButtonVariant.Ghost; onClicked: { picker.reject(); picker.window.showScreen("worktrees") } },
+        KetButton { text: "Create worktree…"; iconName: "plus"; variant: KetTheme.ButtonVariant.Ghost; onClicked: { picker.reject(); picker.window.createWorktreeDialog.open() } },
         KetButton {
             text: "Use this repository"
             variant: KetTheme.ButtonVariant.Primary

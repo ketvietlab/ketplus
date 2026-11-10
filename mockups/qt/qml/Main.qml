@@ -20,7 +20,7 @@ Basic.ApplicationWindow {
         "workspace/report-running", "workspace/report-details", "workspace/claude",
         "workspace/codex", "workspace/cursor", "workspace/turn-report", "editor", "editor/terminal",
         "editor/markdown", "editor/markdown-source", "editor/samples",
-        "changes", "worktrees", "connections", "connections/no-activity", "connections/signed-out",
+        "changes", "connections", "connections/no-activity", "connections/signed-out",
         "connections/expired", "connections/sign-in", "settings", "settings/typography", "settings/account",
         "settings/browser", "settings/computer", "settings/providers", "settings/archived",
         "settings/updates", "settings/storage", "workspace/storage-warning", "atlas", "mobile-picker", "workspace/compact",
@@ -340,13 +340,12 @@ Basic.ApplicationWindow {
         StackLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            currentIndex: ["workspace", "editor", "changes", "worktrees", "connections", "settings",
+            currentIndex: ["workspace", "editor", "changes", "connections", "settings",
                            "atlas", "mobile-picker"].indexOf(app.screen)
 
             WorkspaceScreen { id: workspace; window: app }
             EditorScreen { window: app }
             SourceControlScreen { window: app }
-            WorktreesScreen { window: app }
             ConnectionsScreen { id: connections; window: app }
             SettingsScreen { window: app }
             AtlasBuilderScreen { window: app }
@@ -405,6 +404,36 @@ Basic.ApplicationWindow {
         ]
     }
 
+    // Worktrees are made where a conversation needs one: Repository & worktree → Create
+    // worktree, or the New conversation card. There is no Worktrees screen.
+    KetDialog {
+        id: createWorktreeDialog
+        title: "Create worktree"
+        KetFieldRow {
+            width: parent.width
+            label: "Branch name"
+            help: "A new folder next to the repository: ketplus-desktop-<name>."
+            KetTextField { id: createWorktreeName; width: parent.width; placeholderText: "feature/settings-search" }
+        }
+        KetFieldRow {
+            width: parent.width
+            label: "Start from"
+            KetSelect { width: parent.width; model: ["develop", "integration", "main"] }
+        }
+        KetChoice { width: parent.width; text: "Start a conversation in it"; description: "Opens Agent Workspace on the new worktree"; checked: true }
+        actions: [
+            KetButton { text: "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: createWorktreeDialog.reject() },
+            KetButton {
+                text: "Create"
+                variant: KetTheme.ButtonVariant.Primary
+                onClicked: {
+                    createWorktreeDialog.accept()
+                    app.notify("Created worktree " + (createWorktreeName.text || "feature/settings-search"))
+                }
+            }
+        ]
+    }
+
     KetDialog {
         id: renameDialog
         title: "Rename conversation"
@@ -456,6 +485,7 @@ Basic.ApplicationWindow {
 
     property alias renameDialog: renameDialog
     property alias deleteDialog: deleteDialog
+    property alias createWorktreeDialog: createWorktreeDialog
     property alias spotlight: spotlight
     property alias picker: picker
 

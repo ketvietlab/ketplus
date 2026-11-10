@@ -69,8 +69,6 @@ class AtlasConversationPanel;
 class RemoteControlView;
 class SettingsDialog;
 class SettingsWorkspacePage;
-class WorktreeStateProbe;
-class WorktreesWorkspacePage;
 struct AtlasDescriptor;
 
 class MainWindow final : public QMainWindow {
@@ -138,10 +136,8 @@ class MainWindow final : public QMainWindow {
     void editAtlasInKetPlus(const AtlasDescriptor& atlas);
     void setAtlasWorkspaceVisible(bool visible);
     void setRemoteWorkspaceVisible(bool visible);
-    void setWorktreesWorkspaceVisible(bool visible);
     void setSettingsWorkspaceVisible(bool visible);
     void hideUtilityWorkspaces();
-    void refreshWorktreesWorkspace();
     void setShellMode(ActivityBar::Mode mode);
     void closeAtlasTab(int index);
     void openAtlas(const AtlasDescriptor& atlas, AtlasTab* picker = nullptr);
@@ -358,7 +354,6 @@ class MainWindow final : public QMainWindow {
     QAction* viewDiffAction_{nullptr};
     QMenu* gitMenu_{nullptr};
     QMenu* worktreeMenu_{nullptr};
-    QAction* manageWorktreesAction_{nullptr};
     QMenu* recentFoldersMenu_{nullptr};
     QMenu* recentFilesMenu_{nullptr};
     QAction* reopenClosedTabAction_{nullptr};
@@ -425,8 +420,6 @@ class MainWindow final : public QMainWindow {
     remote::DaemonClient* accountDaemon_{nullptr};
     QStringList remoteMachineIds_;
     QString selectedMachineId_{QStringLiteral("local")};
-    WorktreesWorkspacePage* worktreesWorkspace_{nullptr};
-    WorktreeStateProbe* worktreeStateProbe_{nullptr};
     // The Create worktree card asked to open Agent Workspace on what it creates.
     bool openCreatedWorktree_{false};
     SettingsWorkspacePage* settingsWorkspace_{nullptr};
@@ -472,7 +465,6 @@ class MainWindow final : public QMainWindow {
     QSet<QString> agentDiffRequests_;
     bool atlasWorkspaceMode_{false};
     bool remoteWorkspaceMode_{false};
-    bool worktreesWorkspaceMode_{false};
     bool settingsWorkspaceMode_{false};
     bool restoringWorkspaceState_{false};
     bool suppressWorkspaceRestore_{false};

@@ -41,7 +41,6 @@ Screens and states (`--screen` / `--state`):
 | `editor` | `terminal` | The terminal below the editor, drawn like `mockups/terminal`, with fixture output |
 | `editor` | `markdown`, `markdown-source`, `samples` | `docs/licensing.md` (bundled from the repository) in Preview or Source, with the floating Preview/Source switch 100 px above the bottom; `samples` opens `design-system.md` with QML, C++, shell and JSON code blocks in syntax colours |
 | `changes` | | Source Control: changes, staged changes, diff |
-| `worktrees` | | Manage worktrees, create dialog, manage menu |
 | `connections` | `no-activity` | This Mac, phones, activity from paired devices (the daemon's remote command audit, #86: done and refused requests, a sender that did not verify) or its empty state, Linux machines (SSH or Relay), pairing dialogs, account. `--open=activity` shows all activity, `--open=device` one phone's details, `--open=device-focus` the same with a truncated row focused from the keyboard |
 | `connections` | `signed-out`, `expired`, `sign-in` | Signed out: the introduction (this Mac and KetPlus Mobile, the three pairing steps), the expired-login banner, the browser sign-in dialog |
 | `settings` | `typography`, `account`, `browser`, `computer`, `providers`, `archived`, `storage`, `updates` | The app's order: Appearance (live theme, follow system, zoom), typography, account, Agent models (opens the model picker), browser, computer use, providers (CLI status, Claude API access, organization usage), archive, storage (journal size by part, retention, size limit and warning, largest conversations, Compact now), updates |
@@ -83,7 +82,9 @@ showing it again opens a new tab. The Lite smoke checks this too.
 | `changes` | | Source Control, as in Pro |
 | `settings` | `typography` | Appearance and Typography only |
 
-App-wide: Quick search (⌘K), the repository and worktree picker, conversation
+There is no Worktrees screen: a worktree is made when a conversation needs one
+(Repository & worktree → Create worktree…, or the New conversation card) and
+switched from the conversation. App-wide: Quick search (⌘K), the repository and worktree picker, conversation
 context menu (rename, fork, change worktree, archive, delete), tag filter
 (click a tag in the header), compact window (⇧⌘M), update notice and toasts.
 

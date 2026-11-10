@@ -492,9 +492,8 @@ current-window value.
   Base worktree list in place, so a worktree made outside KetPlus (another agent
   or a terminal) appears without reopening the folder. The worktree already
   picked stays selected.
-  Git > Switch Worktree > Manage worktrees… opens the Worktrees page, which
-  offers Archive and confirmed deletion for inactive linked worktrees with no
-  running agent. Deletion keeps the branch. Conversation deletion confirms
+  There is no Worktrees page (ADR 0111): a worktree is created for a
+  conversation and switched from inside it. Conversation deletion confirms
   whether to remove linked worktrees and whether to force that removal; Git
   still refuses the primary worktree, and a failed non-forced remove leaves an
   error after the conversation is gone. KetPlus stores the worktrees each
@@ -1016,7 +1015,7 @@ daemon acknowledges. The picker then closes and announces "Next turn:
 <repository> · <branch>". Transcript, conversation identity, draft and an active
 provider turn survive, and the new scope applies from the next turn. A failed switch
 keeps the old scope and shows the error, and Use retries. **Create worktree…** opens
-the Worktrees page. iPhone uses a Repository → Worktree bottom sheet over the
+the Create worktree card in place (ADR 0111). iPhone uses a Repository → Worktree bottom sheet over the
 granted catalog.
 
 
