@@ -330,16 +330,14 @@ void RefactorWave1ContractTest::themeInstallsTheKetStyle() {
         anchor.resize(80, 40);
         anchor.show();
         QToolTip::showText(anchor.mapToGlobal(QPoint(10, 10)), QStringLiteral("Tip"), &anchor);
-        // Windows may keep the label hidden for a window that is not active; its font is
-        // what is checked, so a hidden label counts when no visible one exists.
+        // On Windows the label is parented to the screen's desktop widget, so it is not a
+        // top-level widget there.
         int pixels = -1;
-        bool visible = false;
-        for (QWidget* widget : QApplication::topLevelWidgets()) {
-            if (!widget->inherits("QTipLabel") || (visible && !widget->isVisible()))
-                continue;
-            widget->ensurePolished();
-            pixels = QFontInfo(widget->font()).pixelSize();
-            visible = widget->isVisible();
+        for (QWidget* widget : QApplication::allWidgets()) {
+            if (widget->inherits("QTipLabel") && widget->isVisible()) {
+                widget->ensurePolished();
+                pixels = QFontInfo(widget->font()).pixelSize();
+            }
         }
         QToolTip::hideText();
         return pixels;
