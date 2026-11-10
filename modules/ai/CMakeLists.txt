@@ -185,6 +185,7 @@ set_source_files_properties(
 )
 set_source_files_properties(src/agent/qml/AtlasResultCard.qml PROPERTIES QT_RESOURCE_ALIAS "AtlasResultCard.qml")
 set_source_files_properties(src/agent/qml/HeldMessageAction.qml PROPERTIES QT_RESOURCE_ALIAS "HeldMessageAction.qml")
+set_source_files_properties(src/agent/qml/AgentProviderSetupCard.qml PROPERTIES QT_RESOURCE_ALIAS "AgentProviderSetupCard.qml")
 set_source_files_properties(src/agent/qml/TranscriptNotice.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptNotice.qml")
 set_source_files_properties(src/agent/qml/TranscriptActivityHeader.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptActivityHeader.qml")
 set_source_files_properties(src/agent/qml/TranscriptChangedFiles.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptChangedFiles.qml")
@@ -300,6 +301,7 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
         src/agent/qml/TranscriptRemoteGroup.qml
         src/agent/qml/TranscriptNotice.qml
     src/agent/qml/HeldMessageAction.qml
+    src/agent/qml/AgentProviderSetupCard.qml
     src/agent/qml/AtlasResultCard.qml
         src/agent/qml/TranscriptActivityRow.qml
         src/agent/qml/TranscriptActivityHeader.qml

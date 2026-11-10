@@ -70,6 +70,8 @@ Flickable {
         }
         Grid {
             id: starters
+            // A provider setup guide takes their place above the composer, as in the mock.
+            visible: !emptyState.workspace.providerSetupShown
             // Two columns, as in the mock; one when the workspace is too narrow for both.
             readonly property bool paired: emptyState.column >= KetTheme.px(480, KetTheme.zoom)
             anchors.horizontalCenter: parent.horizontalCenter

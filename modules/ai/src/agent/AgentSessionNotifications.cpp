@@ -1,5 +1,6 @@
 #include "agent/AgentSessionManager.h"
 #include "agent/DaemonTranscriptNotices.h"
+#include "agent/ProviderRuntimeStatus.h"
 #include "agent/ReasoningHeading.h"
 
 #include "agent/CodexAppServer.h"
@@ -685,6 +686,9 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
             updateState(session, QStringLiteral("Stopped"), false);
         } else {
             updateState(session, QStringLiteral("Ready"), false);
+            // ADR 0110: a completed turn clears a failure the provider reported.
+            if (session->completed && providerStatus_->hasSetup(session->daemonAdapter))
+                providerStatus_->refresh();
         }
         session->agentMessagePhaseByItem.clear();
         session->deferredAgentTextByItem.clear();
@@ -696,15 +700,17 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
         return;
     }
     if (method == QStringLiteral("error")) {
-        const QString detail = errorMessage(params.value(QStringLiteral("error")).toObject());
+        const QJsonObject error = params.value(QStringLiteral("error")).toObject();
+        const QString detail = errorMessage(error);
+        const QString code = error.value(QStringLiteral("code")).toString();
         const bool replayed = params.value(QStringLiteral("replayed")).toBool();
         if (replayed || params.value(QStringLiteral("nonFatal")).toBool()) {
             // History replay already restored the session state, and non-fatal failures leave
             // the turn running: keep the transcript row without ending the turn.
-            recordSessionError(session, detail, !replayed);
+            recordSessionError(session, detail, !replayed, code);
             return;
         }
-        failSession(session, detail);
+        failSession(session, detail, code);
     }
 }
 

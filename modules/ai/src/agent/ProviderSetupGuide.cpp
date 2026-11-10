@@ -221,6 +221,9 @@ QVariantMap guide(const QJsonObject& provider, const QJsonObject& turnError, con
         switchTo();
     } else if (setupId == QStringLiteral("claude-signed-out")) {
         value.insert(QStringLiteral("title"), tr("Claude needs a sign-in"));
+        // Only a Claude query tells the daemon about a new sign-in (ADR 0110), so the composer
+        // keeps sending: holding the message would leave nothing to find the sign-in.
+        value.insert(QStringLiteral("blocking"), false);
         value.insert(QStringLiteral("badge"), tr("Not signed in"));
         value.insert(QStringLiteral("reason"),
                      tr("Claude runs from the Agent SDK bundled with KetPlus. It can use your "
@@ -391,6 +394,12 @@ QVariantMap guide(const QJsonObject& provider, const QJsonObject& turnError, con
     }
     // A command the daemon did not report leaves its step as text only.
     value.insert(QStringLiteral("steps"), steps);
+    // The provider cannot start a turn at all: the guide sits above the composer. A failure a
+    // turn reported closes that turn instead.
+    static const QStringList beforeTurn{
+        QStringLiteral("cli-missing"), QStringLiteral("cli-outdated"), QStringLiteral("signed-out"),
+        QStringLiteral("claude-signed-out"), QStringLiteral("sidecar-missing")};
+    value.insert(QStringLiteral("composer"), !fromTurn && beforeTurn.contains(setupId));
     // A row the daemon gave no value for (an older daemon's Supported) is left out.
     QVariantList shown;
     for (const QVariant& entry : value.value(QStringLiteral("rows")).toList())

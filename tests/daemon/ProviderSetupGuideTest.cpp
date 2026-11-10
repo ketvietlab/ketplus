@@ -81,11 +81,27 @@ class ProviderSetupGuideTest final : public QObject {
         QVERIFY(!guide.value("steps").toList().isEmpty());
     }
 
+    // ADR 0110: Claude learns of a sign-in only from a query, so its guide never holds a send.
+    void claudesSignOutDoesNotHoldTheComposer() {
+        const QVariantMap guide = provider_setup::guide(
+            provider("claude", {{"state", "signed_out"}, {"login_command", "claude"}}, "bundled"));
+        QCOMPARE(guide.value("id").toString(), QStringLiteral("claude-signed-out"));
+        QVERIFY(!guide.value("blocking").toBool());
+        QVERIFY(provider_setup::guide(provider("codex", {{"state", "signed_out"}}))
+                    .value("blocking")
+                    .toBool());
+    }
+
     void keepsTheProvidersOwnWords() {
         const QVariantMap guide = provider_setup::guide(provider(
             "claude", {{"state", "expired"}, {"message", "OAuth token has expired"}}, "bundled"));
         QCOMPARE(guide.value("id").toString(), QStringLiteral("expired"));
         QCOMPARE(guide.value("error").toString(), QStringLiteral("OAuth token has expired"));
+        // A failure a turn reported closes the turn, not the composer.
+        QVERIFY(!guide.value("composer").toBool());
+        QVERIFY(provider_setup::guide(provider("codex", {{"state", "signed_out"}}))
+                    .value("composer")
+                    .toBool());
     }
 
     void aLimitSaysWhenItResets() {

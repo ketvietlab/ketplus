@@ -10,7 +10,8 @@ namespace ketplus {
 // `runtime.error`. Settings → Providers, the composer and the transcript show the same guide.
 //
 // The map has the mock's shape (mockups/qt Fixtures.providerSetup):
-//   id, provider, name, title, badge, tone ("danger" | "warning"), blocking, transient,
+//   id, provider, name, title, badge, tone ("danger" | "warning"), blocking, transient, composer
+//   (shown above the composer: the provider cannot start a turn),
 //   reason, summary, error, source, steps [{text, command, turn}], primary, primaryAction,
 //   secondary, secondaryAction, still, ready, rows [[label, value]].
 // Actions: "" checks again, "retry", "settings/<page>", "limits", "model", "switch:<provider>",

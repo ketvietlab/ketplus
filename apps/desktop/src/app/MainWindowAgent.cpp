@@ -234,6 +234,17 @@ void MainWindow::ensureAgentWorkspace() {
             &AgentWorkspaceView::setProviderRuntime);
     agentWorkspace_->setProviderRuntime(agentManager_->providerStatus()->state());
     agentManager_->providerStatus()->refresh();
+    // ADR 0110: the provider setup guide in the conversation.
+    agentWorkspace_->setTurnGuide(
+        [status = agentManager_->providerStatus()](const QString& provider, const QString& code,
+                                                   const QString& message, const QString& model) {
+            return status->turnGuide(provider, code, message, model);
+        });
+    connect(agentWorkspace_, &AgentWorkspaceView::providerRecheckRequested,
+            agentManager_->providerStatus(),
+            [status = agentManager_->providerStatus()] { status->refresh(true); });
+    connect(agentWorkspace_, &AgentWorkspaceView::typeInTerminalRequested, this,
+            &MainWindow::typeInTerminal);
     agentWorkspace_->setClaudeUsageRequester([this](AgentWorkspaceView::UsageReply reply) {
         agentManager_->appServer()->call("provider/claudeCredentials/analytics.refresh", {},
                                          std::move(reply));

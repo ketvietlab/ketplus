@@ -85,7 +85,8 @@ AgentMessageModel::AgentMessageModel(QObject* parent) : QAbstractListModel(paren
                              "partialBody",
                              "bodyPrefixCharacters",
                              "chunkContinuation",
-                             "estimatedBodyLines"})
+                             "estimatedBodyLines",
+                             "errorCode"})
         roles_.insert(++role, name);
     for (const QString& name : agent_message::activityGroupRoleNames()) {
         roles_.insert(++role, name.toUtf8());
@@ -313,10 +314,26 @@ QString AgentMessageModel::resolvePayload(const QString& reference) {
 }
 
 QVariantMap AgentMessageModel::normalized(QVariantMap item) {
-    for (const auto* key :
-         {"kind", "body", "meta", "timestamp", "filePath", "subtype", "command", "category",
-          "eventType", "provider", "phase", "title", "summary", "target", "status", "cwd",
-          "commandDescription", "fileLocation", "trimmedDetail"})
+    for (const auto* key : {"kind",
+                            "body",
+                            "meta",
+                            "timestamp",
+                            "filePath",
+                            "subtype",
+                            "command",
+                            "category",
+                            "eventType",
+                            "provider",
+                            "phase",
+                            "title",
+                            "summary",
+                            "target",
+                            "status",
+                            "cwd",
+                            "commandDescription",
+                            "fileLocation",
+                            "trimmedDetail",
+                            "errorCode"})
         if (!item.contains(key))
             item.insert(key, QString{});
     if (item.value("category").toString().isEmpty()) {

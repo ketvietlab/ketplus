@@ -99,6 +99,20 @@ than the work:
 - A command is copied, or typed into a terminal without Return. KetPlus never
   runs it. The card's Check again sends `recheck: true`; when the same guide comes
   back, it shows the guide's `still` text.
+- In the Agent Workspace, a provider that cannot start a turn (not installed, too
+  old, signed out, or Claude's runtime missing: the guide's `composer`) shows its
+  guide above the composer, and the model button warns. The user can hide the
+  guide; the model button shows it again.
+- A blocking guide holds the message in the composer. The message sends once the
+  same provider is set up. Claude's sign-out does not block, since only a Claude
+  query reports a new sign-in.
+- A coded `runtime.error` row keeps the provider's own words and the code. The
+  failure that ended the latest turn shows the guide (`ProviderRuntimeStatus::
+  turnGuide`, with the commands the daemon last reported) in place of the danger
+  notice. It offers Retry when the turn can be resent. Once the user writes
+  again, the row reads as a notice.
+- A coded error, and a completed turn while a guide is shown, read
+  `provider.runtime_status` again.
 
 ## Consequences
 
