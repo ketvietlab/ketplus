@@ -15,6 +15,7 @@ Rectangle {
     property var showAll: ({})
     // The conversation being dragged to a team's folder, and where the pointer holds it.
     property var dragged: null
+    property string draggedRepository
     property point dragPoint
     property bool dragPreview: false
     readonly property real inset: KetTheme.px(6, KetTheme.zoom)
@@ -22,6 +23,45 @@ Rectangle {
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
 
     // `--open=repo-menu|team-menu|row-menu` opens a sidebar menu for review captures.
+    function developersOf(team) { return team.members.filter(m => m.role === "developer").length }
+    function startDrag(conversation, repository) {
+        draggedRepository = repository
+        dragged = conversation
+    }
+    function finishDrag() {
+        if (dragged && !dragPreview)
+            ghost.Drag.drop()
+        dragged = null
+        dragPreview = false
+    }
+    // Window positions of a conversation's row and a team's folder, for --smoke's pointer drag.
+    function findItem(root, name) {
+        if (root.objectName === name)
+            return root
+        for (const child of root.children) {
+            const found = findItem(child, name)
+            if (found)
+                return found
+        }
+        return null
+    }
+    // Folds the other teams, so the conversations below them are in view.
+    function foldTeamsExcept(team) {
+        for (const t of sidebar.window.teamList) {
+            const folder = findItem(sidebar, "team-" + t.id)
+            if (folder && t.id !== team)
+                folder.expanded = false
+        }
+    }
+    function dragCheckPoints(number, team) {
+        const row = findItem(sidebar, "conversation-" + number)
+        const folder = findItem(sidebar, "team-" + team)
+        if (!row || !folder)
+            return []
+        const from = row.mapToItem(null, row.width / 2, row.height / 2)
+        const to = folder.mapToItem(null, folder.width / 2, px(12))
+        return [Math.round(from.x), Math.round(from.y), Math.round(to.x), Math.round(to.y)]
+    }
     function openMenu(name) {
         const repository = Fixtures.repositories[0]
         const team = sidebar.window.teamList[0]
@@ -33,9 +73,9 @@ Rectangle {
             teamMenu.popup(sidebar, px(150), px(326))
         } else if (name === "drag-member") {
             // A conversation held over the first team's folder.
-            dragged = repository.conversations.find(c => c.number === "9410")
             dragPoint = Qt.point(px(96), px(318))
             dragPreview = true
+            startDrag(repository.conversations.find(c => c.number === "9410"), repository.name)
         } else if (name === "row-menu") {
             sidebar.window.repository = repository.name
             sidebar.window.conversation = repository.conversations.find(c => c.number === "9410")
@@ -280,10 +320,10 @@ Rectangle {
                         readonly property var teams: sidebar.window.teamList.filter(t => t.repository === modelData.name)
                         readonly property var loose: {
                             const taken = []
-                            for (const t of teams)
+                            for (const t of sidebar.window.teamList)
                                 for (const m of t.members)
                                     taken.push(m.number)
-                            return modelData.conversations.filter(c => !taken.includes(c.number))
+                            return sidebar.window.conversationsOf(modelData.name).filter(c => !taken.includes(c.number))
                         }
                         width: parent.width
 
@@ -324,7 +364,7 @@ Rectangle {
                                 width: repo.width - sidebar.inset - x
                                 window: sidebar.window
                                 team: modelData
-                                conversations: repo.modelData.conversations
+                                conversations: sidebar.window.conversationsOf(repo.modelData.name)
                                 dropPreview: sidebar.dragPreview && index === 0
                                 onContextMenuRequested: conversation => {
                                     sidebar.window.conversation = conversation
@@ -350,6 +390,7 @@ Rectangle {
                             KetConversationRow {
                                 id: row
                                 required property var modelData
+                                objectName: "conversation-" + modelData.number
                                 x: sidebar.inset
                                 width: repo.width - 2 * sidebar.inset
                                 text: modelData.title
@@ -374,13 +415,13 @@ Rectangle {
                                 DragHandler {
                                     target: null
                                     enabled: repo.teams.length > 0
+                                    // The drop takes this row out of the list, so the sidebar
+                                    // finishes the drag, not the row.
                                     onActiveChanged: {
-                                        if (active) {
-                                            sidebar.dragged = row.modelData
-                                        } else {
-                                            ghost.Drag.drop()
-                                            sidebar.dragged = null
-                                        }
+                                        if (active)
+                                            sidebar.startDrag(row.modelData, repo.modelData.name)
+                                        else
+                                            sidebar.finishDrag()
                                     }
                                     onCentroidChanged: if (active) sidebar.dragPoint = sidebar.mapFromItem(null, centroid.scenePosition)
                                 }
@@ -540,7 +581,14 @@ Rectangle {
         id: teamMenu
         property var team: null
         KetMenuItem { text: "Open team"; iconName: "bot"; onTriggered: sidebar.window.openTeam(teamMenu.team.id) }
-        KetMenuItem { text: "Add member…"; iconName: "plus"; onTriggered: sidebar.window.addTeamMember(teamMenu.team.id, "") }
+        KetMenuItem {
+            readonly property bool full: !!teamMenu.team && sidebar.developersOf(teamMenu.team) >= Fixtures.mostDevelopers
+            text: "Add member…"
+            description: full ? "A team has at most " + Fixtures.mostDevelopers + " developers" : ""
+            iconName: "plus"
+            enabled: !full
+            onTriggered: sidebar.window.addTeamMember(teamMenu.team.id, "")
+        }
         KetMenuSeparator {}
         KetMenuItem { text: "Delete team…"; description: "Its conversations stay"; iconName: "trash"; danger: true; onTriggered: sidebar.window.deleteTeam(teamMenu.team.id) }
     }
@@ -549,8 +597,9 @@ Rectangle {
         id: rowMenu
         // The conversation's team, and the teams of its repository it could join.
         readonly property var team: sidebar.window.teamOf(sidebar.window.conversation.number)
-        // A team keeps its leader and its reviewer.
+        // A team keeps its leader, its reviewer and at least one developer.
         readonly property bool leads: !!team && team.members.some(m => m.number === sidebar.window.conversation.number && m.role !== "developer")
+        readonly property bool lastDeveloper: !!team && !leads && sidebar.developersOf(team) <= 1
         readonly property var joinable: sidebar.window.teamList.filter(t => t.repository === sidebar.window.repository)
         KetMenuItem { text: "Rename…"; iconName: "edit"; onTriggered: sidebar.window.renameDialog.open() }
         KetMenuItem { text: "Fork conversation"; iconName: "branch"; onTriggered: sidebar.window.notify("Forked into a new conversation") }
@@ -560,8 +609,10 @@ Rectangle {
             visible: !!rowMenu.team
             height: visible ? implicitHeight : 0
             text: rowMenu.team ? "Remove from " + rowMenu.team.name + "…" : ""
+            description: rowMenu.leads ? "A team keeps its leader and its reviewer"
+                       : rowMenu.lastDeveloper ? "A team keeps at least one developer" : ""
             iconName: "bot"
-            enabled: !rowMenu.leads
+            enabled: !rowMenu.leads && !rowMenu.lastDeveloper
             onTriggered: sidebar.window.removeTeamMember(rowMenu.team.id, sidebar.window.conversation.number)
         }
         // One entry for each team of the repository; the conversation joins as a developer.
@@ -572,9 +623,11 @@ Rectangle {
             onObjectRemoved: (index, object) => rowMenu.removeItem(object)
             KetMenuItem {
                 required property var modelData
+                readonly property bool full: sidebar.developersOf(modelData) >= Fixtures.mostDevelopers
                 text: "Add to " + modelData.name
-                description: "Joins as a developer"
+                description: full ? "Already has " + Fixtures.mostDevelopers + " developers" : "Joins as a developer"
                 iconName: "bot"
+                enabled: !full
                 onTriggered: sidebar.window.addTeamMember(modelData.id, sidebar.window.conversation.number)
             }
         }
@@ -597,6 +650,7 @@ Rectangle {
         border.color: KetTheme.t.focusBorder
         opacity: 0.95
         readonly property string number: sidebar.dragged ? sidebar.dragged.number : ""
+        readonly property string repository: sidebar.draggedRepository
         Drag.active: !!sidebar.dragged && !sidebar.dragPreview
         Drag.keys: ["conversation"]
         Drag.source: ghost

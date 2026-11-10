@@ -23,12 +23,13 @@ KÉT Sans archive with `-DKETPLUS_MOCK_KET_SANS_ARCHIVE=<path>/KETSans-1.100.zip
 ## Evidence
 
 ```sh
-KetPlusMock --smoke                                    # every screen, fails on QML warnings
+KetPlusMock --smoke                                    # every screen and the teams checks, fails on QML warnings
 KetPlusMock --edition=lite --smoke                     # the same for KétPlus, and every Search result
 KetPlusMock --edition=lite --smoke --keys              # also chooses View > Search in Files by keyboard
 KetPlusMock --smoke --display=secondary                # on another display, leaving the main one free
 KetPlusMock --edition=lite --chrome=windows --screen=search --screenshot=search.png
 KetPlusMock --screen=workspace --state=running --dark --zoom=1.25 --screenshot=out.png
+KetPlusMock --screen=teams --open=new-team --size=1024x640 --zoom=1.25 --screenshot=out.png
 KetPlusMock --screen=workspace --open=model --screenshot=model.png  # model, mode, limits, reviewer, composer (focused) images (the image viewer), mermaid (diagrams instead of their source) or toast (the app-wide toast, on any screen)
 ```
 
@@ -144,8 +145,14 @@ A concept, not built in the app: several conversations that share one goal. Agen
   Add member…, Delete team…) while hovered or focused, and on a right click; a conversation's menu
   has Add to *team* or Remove from *team*…. The page repeats them: Add member, a member's Remove
   from team… and the team menu's Delete team…. Deleting a team or removing a member keeps the
-  conversations; a removed member's open tasks become unassigned. A team keeps its leader and its
-  reviewer: only a developer can be removed.
+  conversations; a removed member's open tasks become unassigned. A team keeps its leader, its
+  reviewer and at least one developer, and has five developers at most; an action that would break
+  that is disabled and says why. A conversation joins only a team of its own repository. The
+  conversations New team and Add member start are kept beside the fixtures' (`Main.started`), so
+  they outlive their team.
+- **Checks**: `--smoke` drags a conversation onto a team's folder with the pointer, then runs
+  `TeamsScreen.selfCheck`: a removed member and a deleted team leave their conversations, team ids
+  stay unique after a deletion, one to five developers, no join across repositories.
 - **The page** (`qml/screens/TeamsScreen.qml`) answers three questions in order: what waits for
   the user, where every task stands, and who holds what.
 - **Leader**: one conversation that assigns tasks, orders the merges into the team's integration

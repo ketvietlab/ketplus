@@ -36,6 +36,8 @@ QtObject {
     })
     // A member's role in its team (Fixtures.teams): the first tag of its conversation. The team
     // sets it, so it is not among the tags a user adds or removes.
+    // A team has one leader, one reviewer and this many developers at most (and one at least).
+    readonly property int mostDevelopers: 5
     readonly property var roleColors: ({ leader: "#b4436c", developer: "#5b6b7f", reviewer: "#7c5cd6" })
     function roleTag(role) {
         return { label: role.charAt(0).toUpperCase() + role.slice(1), color: roleColors[role] || "#5b6b7f" }
@@ -82,7 +84,13 @@ QtObject {
                   tags: [tag("Performance")], worktree: "develop", transcript: "setup", setup: "expired",
                   provider: "Claude", providerId: "claude", model: "Opus 5.5", effort: "Medium" },
                 { number: "5904", title: "Draft release notes", status: KetTheme.ConversationStatus.Stopped,
-                  tags: [tag("Docs")], worktree: "develop", transcript: "short" }
+                  tags: [tag("Docs")], worktree: "develop", transcript: "short" },
+                // The rest of the Docs refresh team (teams).
+                { number: "5911", title: "Rewrite the build guide", status: KetTheme.ConversationStatus.Completed,
+                  tags: [tag("Docs")], worktree: "docs/1.4", transcript: "short" },
+                { number: "5923", title: "Review the user guide", status: KetTheme.ConversationStatus.Completed,
+                  tags: [tag("Docs"), tag("Review")], worktree: "docs/1.4", transcript: "short",
+                  provider: "Codex", providerId: "codex", model: "GPT-5.6 Sol", effort: "High" }
             ]
         },
         {
@@ -700,7 +708,11 @@ QtObject {
             repository: "ketplus-desktop", branch: "docs/1.4", paused: false,
             members: [
                 { number: "5904", title: "Draft release notes", role: "leader", provider: "Claude · Opus 5.5",
-                  lane: "", paths: [], state: "idle", now: "Waiting for its first task list" }
+                  lane: "", paths: [], state: "idle", now: "Waiting for its first task list" },
+                { number: "5911", title: "Rewrite the build guide", role: "developer", provider: "Claude · Opus 5.5",
+                  lane: "Guides", paths: ["docs/guide/"], state: "idle", now: "No task yet" },
+                { number: "5923", title: "Review the user guide", role: "reviewer", provider: "Codex · GPT-5.6 Sol",
+                  lane: "", paths: [], reviews: ["Guides"], state: "idle", now: "No review yet" }
             ],
             tasks: [], decisions: [], updates: []
         }

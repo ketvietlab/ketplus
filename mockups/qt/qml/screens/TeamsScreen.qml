@@ -50,9 +50,12 @@ Item {
     readonly property int developers: members.filter(m => m.role === "developer").length
     readonly property int reviewers: members.filter(m => m.role === "reviewer").length
     readonly property int doneTasks: tasks.filter(t => t.state === "done").length
-    // Two or three developers keep one reviewer busy; a fourth makes reviews queue.
     // A team has one reviewer; past three developers its reviews queue.
     readonly property bool reviewQueue: developers >= 4
+    // A team has one to Fixtures.mostDevelopers developers.
+    readonly property bool full: developers >= Fixtures.mostDevelopers
+    // New teams count on from here, so a deleted team's id is never given again.
+    property int teamsCreated: 0
     // Hides the secondary columns when the page is narrow.
     readonly property bool wide: content.width >= px(860)
 
@@ -108,7 +111,7 @@ Item {
             startNewTeam("")
             teamName.text = "Onboarding rework"
             teamGoal.text = "Make the first run explain itself."
-            createTeam.clicked()
+            createButton.clicked()
         }
         else if (name === "team-agent") {
             startNewTeam("")
@@ -140,7 +143,8 @@ Item {
         showTeam(id)
         if (!team)
             return
-        addMemberDialog.open()
+        if (!full)
+            addMemberDialog.open()
     }
     function startDelete(id) {
         showTeam(id)
@@ -150,7 +154,7 @@ Item {
     function startRemove(id, number) {
         showTeam(id)
         const who = member(number)
-        if (!who)
+        if (!who || keeps(who) !== "")
             return
         removeDialog.who = who
         removeDialog.open()
@@ -199,45 +203,177 @@ Item {
     }
 
     function openConversation(number) {
-        for (const r of Fixtures.repositories) {
-            const match = r.conversations.find(c => c.number === number)
-            if (match) {
-                const who = member(number)
-                screen.window.openConversation(r.name, who && who.name ? Object.assign({}, match, { title: who.name }) : match)
-                return
-            }
-        }
-        // A conversation Add a member started: new, with nothing sent yet.
-        const who = member(number)
-        const blank = Fixtures.repositories[0].conversations.find(c => c.transcript === "welcome")
-        if (who && blank)
-            screen.window.openConversation(team.repository, Object.assign({}, blank, {
-                number: who.number, title: who.title, tags: [], status: KetTheme.ConversationStatus.NotStarted,
-                provider: who.agent ? who.agent.label : blank.provider, providerId: who.agent ? who.agent.id : blank.providerId,
-                model: who.agent ? who.agent.model : blank.model, effort: who.agent ? who.agent.effort : blank.effort }))
+        const found = window.findConversation(number)
+        if (found)
+            window.openConversation(found.repository, found.conversation)
+    }
+
+    // Every change to a team goes through these, so the dialogs, the sidebar and --smoke's
+    // checks (selfCheck) share the rules: one leader, one reviewer, one to
+    // Fixtures.mostDevelopers developers, and a conversation on one team of its own repository.
+    function developersOf(team) { return team.members.filter(m => m.role === "developer").length }
+    function agentOf(planned) {
+        const provider = Fixtures.providers.find(p => p.id === planned.provider)
+        return { id: planned.provider, label: provider ? provider.label : planned.provider,
+                 model: planned.model, effort: planned.effort }
+    }
+    // A member whose conversation starts now, in `repository`.
+    function newMember(repository, role, name, agent, lane, paths) {
+        const conversation = window.startConversation(repository, name, agent)
+        return { number: conversation.number, title: name, role: role,
+                 provider: agent.label + " · " + agent.model, lane: lane || "", paths: paths || [],
+                 reviews: [], state: "idle",
+                 now: role === "leader" ? "Waiting for the goal" : role === "reviewer" ? "No review yet"
+                    : lane ? "No task yet" : "No lane yet" }
+    }
+    // `plan` is { leader, developer, reviewer }, each { count, provider, model, effort }.
+    function createTeam(repository, name, goal, branch, leaderWrites, plan) {
+        const developers = Math.max(1, Math.min(Fixtures.mostDevelopers, plan.developer.count))
+        const members = [newMember(repository, "leader", "Lead " + name, agentOf(plan.leader))]
+        for (let i = 1; i <= developers; ++i)
+            members.push(newMember(repository, "developer", "Developer " + i, agentOf(plan.developer)))
+        members.push(newMember(repository, "reviewer", "Reviewer", agentOf(plan.reviewer)))
+        let id = ""
+        do {
+            id = "team-" + (++teamsCreated)
+        } while (teams.some(t => t.id === id))
+        teams = teams.concat([{
+            id: id, name: name, goal: goal || "No goal yet.", repository: repository, branch: branch,
+            paused: false, leaderWrites: leaderWrites, members: members, tasks: [], decisions: [], updates: [] }])
+        teamIndex = teams.length - 1
+        filter = ""
+        window.notify("Created " + name + " and started " + members.length + " conversations")
+        return id
+    }
+    // One more developer for the current team, as a new conversation.
+    function addDeveloper(name, lane, paths, agent) {
+        if (!team || full)
+            return ""
+        const member = newMember(team.repository, "developer", name, agent, lane, paths)
+        change({ members: members.concat([member]) })
+        window.notify("Added " + reference(member.number) + " as a developer")
+        return member.number
     }
     // A conversation that exists joins from the sidebar (dropped on the folder, or from its
     // menu), as a developer with no lane yet.
     function join(id, number) {
         const index = teams.findIndex(t => t.id === id)
-        let found = null
-        for (const r of Fixtures.repositories)
-            found = found || r.conversations.find(c => c.number === number)
-        if (index < 0 || !found || teams.some(t => t.members.some(m => m.number === number)))
-            return
+        if (index < 0 || teams.some(t => t.members.some(m => m.number === number)))
+            return false
+        const target = teams[index]
+        const found = window.conversationsOf(target.repository).find(c => c.number === number)
+        if (!found) {
+            window.notify("Only a conversation of " + target.repository + " can join " + target.name)
+            return false
+        }
+        if (developersOf(target) >= Fixtures.mostDevelopers) {
+            window.notify(target.name + " already has " + Fixtures.mostDevelopers + " developers")
+            return false
+        }
         const next = teams.slice()
-        next[index] = Object.assign({}, next[index], { members: next[index].members.concat([{
+        next[index] = Object.assign({}, target, { members: target.members.concat([{
             number: found.number, title: found.title, role: "developer",
             provider: (found.provider || "Claude") + " · " + (found.model || "Opus 5.5"),
             lane: "", paths: [], reviews: [], state: "idle", now: "No lane yet" }]) })
         teams = next
-        window.notify("Added @agent/" + number + " to " + next[index].name + " as a developer")
+        window.notify("Added @agent/" + number + " to " + target.name + " as a developer")
+        return true
     }
-    function addMember(role) {
-        addMemberDialog.role = role
-        addMemberDialog.open()
+    // Why a member of the current team cannot be removed; "" when it can.
+    function keeps(who) {
+        return !who ? "" : who.role !== "developer" ? "A team keeps its leader and its reviewer"
+             : developers <= 1 ? "A team keeps at least one developer" : ""
+    }
+    // The conversation stays, among its repository's own; its open tasks become unassigned.
+    function removeMember(number) {
+        const who = member(number)
+        if (!who || keeps(who) !== "")
+            return false
+        change({
+            members: members.filter(m => m.number !== who.number)
+                .map(m => m.role !== "reviewer" ? m : Object.assign({}, m, { reviews: (m.reviews || []).filter(l => l !== who.lane) })),
+            tasks: tasks.map(t => t.owner !== who.number || t.state === "done" ? t : Object.assign({}, t, {
+                owner: "", state: t.state === "review" ? "review" : "todo",
+                history: t.history.concat([{ when: "Just now", text: "You removed " + reference(who.number) + " from the team; the task is unassigned" }]) }))
+        })
+        window.notify("Removed " + reference(who.number) + " from " + team.name)
+        return true
+    }
+    // Its conversations stay, among their repository's own.
+    function deleteTeam() {
+        const name = team.name
+        const next = teams.filter((t, i) => i !== teamIndex)
+        teamIndex = 0
+        teams = next
+        window.notify("Deleted " + name)
     }
 
+    // --smoke runs these after its pointer drag; each entry of the result is a broken rule.
+    function selfCheck() {
+        const failures = []
+        const check = (ok, text) => { if (!ok) failures.push(text) }
+        const repository = Fixtures.repositories[0].name
+        const other = Fixtures.repositories[1].name
+        const plan = { leader: { count: 1, provider: "codex", model: "GPT-5.6 Sol", effort: "High" },
+                       developer: { count: 2, provider: "claude", model: "Opus 5.5", effort: "Medium" },
+                       reviewer: { count: 1, provider: "codex", model: "GPT-5.6 Luna", effort: "High" } }
+        const loose = number => !teams.some(t => t.members.some(m => m.number === number))
+                                && !!window.findConversation(number)
+
+        // A removed member and a deleted team leave their conversations.
+        const a = createTeam(repository, "Check A", "", "develop", true, plan)
+        const started = team.members.map(m => m.number)
+        check(started.length === 4, "a new team has a leader, two developers and a reviewer")
+        const added = addDeveloper("Check lane", "Check", ["check/"], agentOf(plan.developer))
+        check(removeMember(added) && loose(added), "a removed developer stays as a conversation")
+        // Ids stay unique after a deletion.
+        const b = createTeam(repository, "Check B", "", "develop", true, plan)
+        showTeam(a)
+        deleteTeam()
+        check(started.every(loose), "a deleted team's conversations stay")
+        const c = createTeam(repository, "Check C", "", "develop", true, plan)
+        check(teams.filter(t => t.id === c).length === 1 && b !== c, "team ids are unique after a deletion")
+        // One to five developers.
+        showTeam(c)
+        for (let i = 0; i < Fixtures.mostDevelopers + 2; ++i)
+            addDeveloper("Check " + i, "Check " + i, ["check/"], agentOf(plan.developer))
+        check(developers === Fixtures.mostDevelopers, "a team has at most five developers")
+        check(!join(c, "4822"), "a full team takes no dropped conversation")
+        for (const m of members.slice())
+            removeMember(m.number)
+        check(developers === 1 && !!leader && reviewers === 1, "a team keeps its leader, its reviewer and one developer")
+        // A conversation joins only a team of its own repository.
+        const far = createTeam(other, "Check D", "", "main", true, plan)
+        check(!join(far, "4822"), "a conversation of another repository cannot join")
+        for (const id of [b, c, far]) {
+            showTeam(id)
+            deleteTeam()
+        }
+        showTeam("release")
+        return failures
+    }
+
+    // A dialog's fields: they scroll when the window is too low for all of them, and the
+    // dialog's actions stay in view.
+    component DialogBody: Flickable {
+        id: dialogBody
+        default property alias fields: bodyFields.data
+        readonly property bool scrolls: contentHeight > height + 1
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        implicitHeight: bodyFields.height
+        contentHeight: bodyFields.height
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        Basic.ScrollBar.vertical: Basic.ScrollBar {
+            policy: dialogBody.scrolls ? Basic.ScrollBar.AlwaysOn : Basic.ScrollBar.AlwaysOff
+        }
+        Column {
+            id: bodyFields
+            width: dialogBody.width - (dialogBody.scrolls ? screen.px(14) : 0)
+            spacing: screen.px(14)
+        }
+    }
     component Label: Text {
         color: KetTheme.t.textMain
         font.family: KetTheme.fontFamily
@@ -330,6 +466,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     text: "Add member"
                     iconName: "plus"
+                    enabled: !screen.full
                     onClicked: addMemberDialog.open()
                 }
                 KetIconButton {
@@ -454,10 +591,8 @@ Item {
                 width: parent.width
                 iconName: "view-list"
                 title: "No task yet"
-                message: screen.leader
-                    ? "The leader breaks the goal into tasks, writes what done means for each, then assigns them. Open the leader to start."
-                    : "Tasks come from the team's leader. Add a leader first."
-                actionText: screen.leader ? "Open the leader" : ""
+                message: "The leader breaks the goal into tasks, writes what done means for each, then assigns them. Open the leader to start."
+                actionText: "Open the leader"
                 onActionTriggered: screen.openConversation(screen.leader.number)
             }
             Panel {
@@ -566,22 +701,10 @@ Item {
 
             SectionTitle {
                 title: "Members"
-                count: screen.members.length === 0 ? "" : (screen.leader ? "1 leader · " : "No leader · ")
-                       + screen.count(screen.developers, "developer", "developers") + " · "
-                       + screen.count(screen.reviewers, "reviewer", "reviewers")
-            }
-            KetEmptyState {
-                visible: screen.members.length === 0
-                width: parent.width
-                iconName: "bot"
-                title: "Nobody is on this team yet"
-                message: "Start with the leader: the one conversation that reports to you and assigns the tasks. Then add developers and a reviewer."
-                actionText: "Add a leader"
-                actionIcon: "plus"
-                onActionTriggered: screen.addMember("leader")
+                count: "1 leader · " + screen.count(screen.developers, "developer", "developers")
+                       + (screen.full ? " (the most a team has)" : "") + " · 1 reviewer"
             }
             Panel {
-                visible: screen.members.length > 0
                 height: memberList.implicitHeight
                 Column {
                     id: memberList
@@ -729,7 +852,13 @@ Item {
 
     KetMenu {
         id: teamMenu
-        KetMenuItem { text: "Add member…"; iconName: "plus"; onTriggered: addMemberDialog.open() }
+        KetMenuItem {
+            text: "Add member…"
+            description: screen.full ? "A team has at most " + Fixtures.mostDevelopers + " developers" : ""
+            iconName: "plus"
+            enabled: !screen.full
+            onTriggered: addMemberDialog.open()
+        }
         KetMenuItem { text: "New team…"; iconName: "bot"; onTriggered: screen.startNewTeam(screen.team.repository) }
         KetMenuItem {
             text: screen.team && screen.team.paused ? "Resume automatic turns" : "Pause automatic turns"
@@ -752,10 +881,10 @@ Item {
         KetMenuSeparator {}
         KetMenuItem {
             text: "Remove from team…"
-            description: memberMenu.who && memberMenu.who.role !== "developer" ? "A team keeps its leader and its reviewer" : ""
+            description: screen.keeps(memberMenu.who)
             iconName: "trash"
             danger: true
-            enabled: !!memberMenu.who && memberMenu.who.role === "developer"
+            enabled: !!memberMenu.who && screen.keeps(memberMenu.who) === ""
             onTriggered: { removeDialog.who = memberMenu.who; removeDialog.open() }
         }
     }
@@ -788,16 +917,9 @@ Item {
                 text: "Remove"
                 variant: KetTheme.ButtonVariant.Danger
                 onClicked: {
-                    const who = removeDialog.who
-                    screen.change({
-                        members: screen.members.filter(m => m.number !== who.number)
-                            .map(m => m.role !== "reviewer" ? m : Object.assign({}, m, { reviews: (m.reviews || []).filter(l => l !== who.lane) })),
-                        tasks: screen.tasks.map(t => t.owner !== who.number || t.state === "done" ? t : Object.assign({}, t, {
-                            owner: "", state: t.state === "review" ? "review" : "todo",
-                            history: t.history.concat([{ when: "Just now", text: "You removed " + screen.reference(who.number) + " from the team; the task is unassigned" }]) }))
-                    })
+                    const number = removeDialog.who.number
                     removeDialog.accept()
-                    screen.window.notify("Removed " + screen.reference(who.number) + " from " + screen.team.name)
+                    screen.removeMember(number)
                 }
             }
         ]
@@ -972,13 +1094,10 @@ Item {
         ]
     }
 
+    // One more developer, as a new conversation. A conversation that exists joins from the
+    // sidebar instead: dragged onto the team's folder, or from its own menu.
     KetDialog {
         id: addMemberDialog
-        // "leader", "developer" or "reviewer"; "" opens on the role the team needs first.
-        property string role
-        // A team has one leader and one reviewer, so a team that has both only gains developers.
-        readonly property var roleChoices: (screen.leader ? [] : ["leader"]).concat(["developer"])
-                                           .concat(screen.reviewers > 0 ? [] : ["reviewer"])
         // The new conversation's agent, chosen in the app's own Model & context dialog.
         property string agentProvider: "codex"
         property string agentModel: Fixtures.providerModels.codex[0].name
@@ -987,44 +1106,16 @@ Item {
             const entry = Fixtures.providers.find(p => p.id === agentProvider)
             return entry ? entry.label : agentProvider
         }
-        // What the name field suggests: the lane, or the role in this team.
-        readonly property string suggestedName: role === "leader" ? "Lead " + (screen.team ? screen.team.name : "")
-            : role === "developer" ? (laneName.text.trim() || "Onboarding") : "Review " + (screen.team ? screen.team.name : "")
         property bool tried: false
-        readonly property var lanes: screen.members.filter(m => m.role === "developer" && m.lane).map(m => m.lane)
-        title: "Add a " + (roleChoices.length > 1 ? "member" : "developer") + " to " + (screen.team ? screen.team.name : "")
+        title: "Add a developer to " + (screen.team ? screen.team.name : "")
         onOpened: {
             tried = false
             laneName.text = ""
             lanePaths.text = ""
-            if (!roleChoices.includes(role))
-                role = roleChoices[0]
             memberName.text = ""
         }
-        onClosed: role = ""
-        Column {
-            width: addMemberDialog.availableWidth
-            spacing: screen.px(14)
-            // The role, when the team still lacks its leader or its reviewer.
+        DialogBody {
             KetFieldRow {
-                visible: addMemberDialog.roleChoices.length > 1
-                width: parent.width
-                label: "Role"
-                help: addMemberDialog.role === "leader"
-                    ? "Reports to you, breaks the goal into tasks, assigns them and orders the merges. It does not write code or review."
-                    : addMemberDialog.role === "developer"
-                    ? "Takes tasks in its lane, works in the task's worktree and opens the pull request."
-                    : addMemberDialog.lanes.length > 0
-                    ? "Reviews " + addMemberDialog.lanes.join(", ") + ". It never reviews its own work and never merges."
-                    : "Reviews every lane once the team has developers. It never merges."
-                KetSegmentedControl {
-                    options: addMemberDialog.roleChoices.map(r => r.charAt(0).toUpperCase() + r.slice(1))
-                    currentIndex: Math.max(0, addMemberDialog.roleChoices.indexOf(addMemberDialog.role))
-                    onActivated: index => addMemberDialog.role = addMemberDialog.roleChoices[index]
-                }
-            }
-            KetFieldRow {
-                visible: addMemberDialog.role === "developer"
                 width: parent.width
                 label: "Lane"
                 help: "The part of the code this developer owns."
@@ -1032,20 +1123,16 @@ Item {
                 KetTextField { id: laneName; width: parent.width; placeholderText: "Onboarding"; invalid: addMemberDialog.tried && text.trim() === "" }
             }
             KetFieldRow {
-                visible: addMemberDialog.role === "developer"
                 width: parent.width
                 label: "Paths"
                 help: "Folders separated by commas. An edit outside them is flagged on the task."
                 error: addMemberDialog.tried && lanePaths.text.trim() === "" ? "Give at least one folder." : ""
                 KetTextField { id: lanePaths; width: parent.width; placeholderText: "apps/desktop/src/onboarding/"; invalid: addMemberDialog.tried && text.trim() === "" }
             }
-            // Add a member always starts a conversation. One that exists joins from the sidebar:
-            // dragged onto the team's folder, or from its own menu.
             KetFieldRow {
                 width: parent.width
                 label: "Agent"
-                help: addMemberDialog.role === "reviewer" ? "A reviewer from another provider than the developers catches more."
-                                                          : "The new conversation's provider, model and effort."
+                help: "The new conversation's provider, model and effort."
                 KetButton {
                     width: parent.width
                     text: addMemberDialog.agentLabel + " · " + addMemberDialog.agentModel + " · " + addMemberDialog.agentEffort + "  ▾"
@@ -1061,15 +1148,15 @@ Item {
                 KetTextField {
                     id: memberName
                     width: parent.width
-                    placeholderText: addMemberDialog.suggestedName
+                    placeholderText: laneName.text.trim() || "Onboarding"
                     invalid: addMemberDialog.tried && text.trim() === ""
                 }
             }
             KetBanner {
-                visible: addMemberDialog.role === "developer" && screen.developers >= 3
+                visible: screen.developers >= 3
                 width: parent.width
                 tone: KetTheme.BannerTone.Info
-                title: "A fourth developer"
+                title: screen.developers === 3 ? "A fourth developer" : "Reviews already queue"
                 message: "The team's one reviewer keeps up with two or three developers. Past that, reviews queue."
             }
         }
@@ -1079,29 +1166,15 @@ Item {
                 text: "Add"
                 variant: KetTheme.ButtonVariant.Primary
                 onClicked: {
-                    const role = addMemberDialog.role
-                    const developer = role === "developer"
                     addMemberDialog.tried = true
                     const name = memberName.text.trim()
-                    if (name === "" || (developer && (laneName.text.trim() === "" || lanePaths.text.trim() === "")))
+                    const lane = laneName.text.trim()
+                    if (name === "" || lane === "" || lanePaths.text.trim() === "")
                         return
-                    // A new conversation gets the next free number and a name from its role.
-                    let number = 6101
-                    while (screen.teams.some(t => t.members.some(m => m.number === String(number))))
-                        number += 7
-                    const chosen = { number: String(number) }
-                    screen.change({ members: screen.members.concat([{
-                        number: chosen.number, title: name, name: name, role: role,
-                        provider: addMemberDialog.agentLabel + " · " + addMemberDialog.agentModel,
-                        agent: { id: addMemberDialog.agentProvider, label: addMemberDialog.agentLabel,
-                                 model: addMemberDialog.agentModel, effort: addMemberDialog.agentEffort },
-                        lane: developer ? laneName.text.trim() : "",
-                        paths: developer ? lanePaths.text.split(",").map(p => p.trim()).filter(p => p) : [],
-                        reviews: role === "reviewer" ? addMemberDialog.lanes : [],
-                        state: "idle",
-                        now: role === "leader" ? "Waiting for the goal" : developer ? "No task yet" : "No review yet" }]) })
                     addMemberDialog.accept()
-                    screen.window.notify("Added @agent/" + chosen.number + " as the team's " + role)
+                    screen.addDeveloper(name, lane, lanePaths.text.split(",").map(p => p.trim()).filter(p => p),
+                                        { id: addMemberDialog.agentProvider, label: addMemberDialog.agentLabel,
+                                          model: addMemberDialog.agentModel, effort: addMemberDialog.agentEffort })
                 }
             }
         ]
@@ -1162,9 +1235,7 @@ Item {
         }
         title: "New team in " + repository
         onOpened: { tried = false; teamName.text = ""; teamGoal.text = ""; plan = defaults }
-        Column {
-            width: newTeamDialog.availableWidth
-            spacing: screen.px(14)
+        DialogBody {
             KetFieldRow {
                 width: parent.width
                 label: "Name"
@@ -1262,7 +1333,7 @@ Item {
         actions: [
             KetButton { text: "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: newTeamDialog.reject() },
             KetButton {
-                id: createTeam
+                id: createButton
                 text: "Create with " + newTeamDialog.total + " members"
                 variant: KetTheme.ButtonVariant.Primary
                 onClicked: {
@@ -1270,37 +1341,9 @@ Item {
                     const name = teamName.text.trim()
                     if (name === "")
                         return
-                    // The planned members, each a new conversation with its role's agent.
-                    const members = []
-                    let number = 6101
-                    for (const entry of newTeamDialog.roles) {
-                        const planned = newTeamDialog.plan[entry.role]
-                        const provider = Fixtures.providers.find(p => p.id === planned.provider)
-                        for (let i = 1; i <= planned.count; ++i) {
-                            while (screen.teams.some(t => t.members.some(m => m.number === String(number))))
-                                number += 7
-                            const title = entry.role === "leader" ? "Lead " + name
-                                        : entry.role === "developer" ? "Developer " + i : "Reviewer " + i
-                            members.push({
-                                number: String(number), title: title, name: title, role: entry.role,
-                                provider: (provider ? provider.label : planned.provider) + " · " + planned.model,
-                                agent: { id: planned.provider, label: provider ? provider.label : planned.provider,
-                                         model: planned.model, effort: planned.effort },
-                                lane: "", paths: [], reviews: [], state: "idle",
-                                now: entry.role === "leader" ? "Waiting for the goal"
-                                   : entry.role === "developer" ? "No lane yet" : "No review yet" })
-                            number += 7
-                        }
-                    }
-                    screen.teams = screen.teams.concat([{
-                        id: "team-" + screen.teams.length, name: name, goal: teamGoal.text.trim() || "No goal yet.",
-                        repository: newTeamDialog.repository, branch: teamBranch.currentText, paused: false,
-                        leaderWrites: leaderWrites.checked, members: members,
-                        tasks: [], decisions: [], updates: [] }])
-                    screen.teamIndex = screen.teams.length - 1
-                    screen.filter = ""
                     newTeamDialog.accept()
-                    screen.window.notify("Created " + name + " and started " + members.length + " conversations")
+                    screen.createTeam(newTeamDialog.repository, name, teamGoal.text.trim(), teamBranch.currentText,
+                                      leaderWrites.checked, newTeamDialog.plan)
                 }
             }
         ]
@@ -1327,14 +1370,10 @@ Item {
                 text: "Delete team"
                 variant: KetTheme.ButtonVariant.Danger
                 onClicked: {
-                    const name = screen.team.name
-                    const next = screen.teams.filter((t, i) => i !== screen.teamIndex)
-                    screen.teamIndex = 0
-                    screen.teams = next
                     disbandDialog.accept()
+                    screen.deleteTeam()
                     // Its conversations are back among the repository's own.
                     screen.window.screen = "workspace"
-                    screen.window.notify("Deleted " + name)
                 }
             }
         ]

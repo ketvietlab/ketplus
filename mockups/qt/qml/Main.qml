@@ -92,6 +92,53 @@ Basic.ApplicationWindow {
         teams.showTeam(id)
         teams.openConversation(number)
     }
+    // Conversations the mock started (New team, Add member), by repository, beside the
+    // fixtures' own. They outlive the team that started them.
+    property var started: ({})
+    property int startedCount: 0
+    function conversationsOf(repository) {
+        const fixture = Fixtures.repositories.find(r => r.name === repository)
+        return (fixture ? fixture.conversations : []).concat(started[repository] || [])
+    }
+    function findConversation(number) {
+        for (const r of Fixtures.repositories) {
+            const match = conversationsOf(r.name).find(c => c.number === number)
+            if (match)
+                return { repository: r.name, conversation: match }
+        }
+        return null
+    }
+    // A new conversation with nothing sent yet; `agent` is { id, label, model, effort }.
+    function startConversation(repository, title, agent) {
+        let blank = null
+        for (const r of Fixtures.repositories)
+            blank = blank || r.conversations.find(c => c.transcript === "welcome")
+        let number = ""
+        do {
+            number = String(6101 + 7 * startedCount++)
+        } while (findConversation(number))
+        const conversation = Object.assign({}, blank || {}, {
+            number: number, title: title, tags: [], transcript: "welcome",
+            status: KetTheme.ConversationStatus.NotStarted,
+            provider: agent.label, providerId: agent.id, model: agent.model, effort: agent.effort })
+        const next = Object.assign({}, started)
+        next[repository] = (next[repository] || []).concat([conversation])
+        started = next
+        return conversation
+    }
+    // Run by --smoke after a pointer dragged a conversation onto a team's folder.
+    function prepareTeamDrag() { sidebar.foldTeamsExcept("release") }
+    function teamDragPoints() { return sidebar.dragCheckPoints("9410", "release") }
+    function teamChecks() {
+        const failures = teams.selfCheck()
+        if (sidebar.dragged)
+            failures.push("the dragged conversation is still held after the drop")
+        const joined = teamOf("9410")
+        if (!joined || joined.id !== "release")
+            failures.push("the pointer drag did not add 9410 to Release 1.4")
+        for (const failure of failures)
+            console.warn("QML teams check failed: " + failure)
+    }
     function teamOf(number) { return teamList.find(t => t.members.some(m => m.number === number)) || null }
     property bool compact: false
     property size wideSize: Qt.size(1440, 900)

@@ -13,6 +13,7 @@ import KetPlusMock
 // when the app builds this.
 Column {
     id: folder
+    objectName: "team-" + team.id
 
     required property var window
     required property var team
@@ -22,6 +23,7 @@ Column {
     // A dragged conversation is over the folder (`dropPreview` draws it for a capture).
     property bool dropPreview: false
     readonly property bool dropping: drop.containsDrag || dropPreview
+    readonly property bool full: team.members.filter(m => m.role === "developer").length >= Fixtures.mostDevelopers
     readonly property bool selected: window.screen === "teams" && window.currentTeam === team.id
     readonly property bool hot: hover.hovered || fold.visualFocus || name.visualFocus
     readonly property var recipe: KetTheme.groupHeaderRecipe(
@@ -43,9 +45,8 @@ Column {
     function conversation(number) {
         const who = team.members.find(m => m.number === number)
         const found = conversations.find(c => c.number === number)
-        // Add a member names the conversation; that name replaces its old title.
         if (found)
-            return who && who.name ? Object.assign({}, found, { title: who.name }) : found
+            return found
         return { number: number, title: who ? who.title : "", tags: [], worktree: team.branch,
                  status: KetTheme.ConversationStatus.NotStarted }
     }
@@ -63,6 +64,8 @@ Column {
             id: drop
             anchors.fill: parent
             keys: ["conversation"]
+            // Only a conversation of this repository, and only while the team has room.
+            onEntered: drag => drag.accepted = drag.source.repository === folder.team.repository && !folder.full
             onDropped: drag => folder.window.addTeamMember(folder.team.id, drag.source.number)
         }
         TapHandler {
@@ -152,7 +155,8 @@ Column {
                 height: folder.recipe.actionSize
                 controlSize: KetTheme.ControlSize.Small
                 iconName: "plus"
-                text: "Add member"
+                enabled: !folder.full
+                text: folder.full ? "A team has at most " + Fixtures.mostDevelopers + " developers" : "Add member"
                 onClicked: folder.window.addTeamMember(folder.team.id, "")
             }
             KetIconButton {
