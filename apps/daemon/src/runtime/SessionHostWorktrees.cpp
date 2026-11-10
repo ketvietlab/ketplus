@@ -46,6 +46,9 @@ QByteArray git(const QString& directory, const QStringList& arguments) {
 }
 
 QString commonDirectory(const QString& directory) {
+    // An empty directory would run Git in the daemon's own working directory.
+    if (directory.isEmpty())
+        return {};
     auto output = git(directory, {"rev-parse", "--path-format=absolute", "--git-common-dir"});
     if (output.endsWith('\n'))
         output.chop(1);
@@ -240,8 +243,10 @@ QJsonObject SessionHost::sessionWorktrees(const QJsonObject& request) {
         QFileInfo(common).fileName() == ".git" ? QFileInfo(common).absolutePath() : QString{};
     // Browsing does not enrol a repository: it joins the catalog, which phones see, only
     // once the conversation switches to it.
+    // A conversation whose checkout is gone has no repository to compare with.
+    const auto sessionRoot = requested.isEmpty() ? QString{} : worktreeCatalogRoot(*session);
     const bool ownRepository =
-        requested.isEmpty() || common == commonDirectory(worktreeCatalogRoot(*session));
+        requested.isEmpty() || (!sessionRoot.isEmpty() && common == commonDirectory(sessionRoot));
     for (const auto& value : entries) {
         auto entry = value.toObject();
         const auto path = entry.value("worktree_path").toString();

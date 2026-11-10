@@ -11,6 +11,8 @@
 #include <QScrollBar>
 #include <QtTest>
 
+#include <utility>
+
 class ExecutionWorktreeDialogTest final : public QObject {
     Q_OBJECT
   private slots:
@@ -62,7 +64,7 @@ class ExecutionWorktreeDialogTest final : public QObject {
         // Choosing a worktree switches nothing; Use this repository does, then closes.
         auto* use = dialog->findChild<QAbstractButton*>("useRepositoryButton");
         QVERIFY(use);
-        emit list->itemClicked(list->item(1));
+        list->setCurrentItem(list->item(1));
         QVERIFY(switched.isEmpty());
         QVERIFY(use->isEnabled());
         const QPointer<QDialog> open(dialog);
@@ -146,7 +148,7 @@ class ExecutionWorktreeDialogTest final : public QObject {
         emit repos->itemClicked(repos->item(0));
         QVERIFY(!acknowledgement);
         QCOMPARE(list->item(1)->data(Qt::UserRole).toString(), "/workspace/b-pilot");
-        emit list->itemClicked(list->item(1));
+        list->setCurrentItem(list->item(1));
         use->click();
         QVERIFY(acknowledgement);
         QCOMPARE(mutation.value("worktree_path").toString(), "/workspace/b-pilot");
@@ -182,6 +184,129 @@ class ExecutionWorktreeDialogTest final : public QObject {
         QCOMPARE(toast->text(), QStringLiteral("Next turn: b · feat/pilot"));
         QTRY_VERIFY(open.isNull() || !open->isVisible());
         QVERIFY(!created);
+    }
+    // #405 review: a failed listing, a pending search, the arrow keys and a stale context.
+    void choiceFollowsTheListAndRecoversAStaleContext() {
+        QWidget parent;
+        QList<QJsonObject> switches;
+        QList<QJsonObject> listings;
+        std::function<void(const QJsonObject&, const QString&)> pendingListing;
+        bool offline = false;
+        bool holdListing = false;
+        qint64 revision = 4;
+        bool stale = true;
+        ketplus::showExecutionWorktreeDialog(
+            &parent,
+            [&](const QString& type, const QJsonObject& payload, auto done) {
+                if (type == "session.worktree.switch") {
+                    switches.append(payload);
+                    if (stale) {
+                        stale = false;
+                        revision = 5;
+                        done({{"ok", false},
+                              {"error_code", "stale_context"},
+                              {"error_message", "Refresh the conversation's execution context."}},
+                             {});
+                        return;
+                    }
+                    done({{"ok", true}, {"worktree_path", payload.value("worktree_path")}}, {});
+                    return;
+                }
+                listings.append(payload);
+                if (offline) {
+                    done({}, "Offline");
+                    return;
+                }
+                const auto repository = payload.value("repository_path").toString("/workspace/a");
+                QJsonObject result{
+                    {"ok", true},
+                    {"repository_path", repository},
+                    {"worktree_path", "/workspace/a"},
+                    {"context_revision", revision},
+                    {"switch_supported", true},
+                    {"total", 3},
+                    {"worktrees",
+                     QJsonArray{
+                         QJsonObject{{"branch", "main"}, {"worktree_path", repository}},
+                         QJsonObject{{"branch", "one"}, {"worktree_path", repository + "-1"}},
+                         QJsonObject{{"branch", "two"}, {"worktree_path", repository + "-2"}}}}};
+                if (holdListing) {
+                    pendingListing = [done, result](const QJsonObject&, const QString&) {
+                        done(result, {});
+                    };
+                    return;
+                }
+                done(result, {});
+            },
+            [](const QString&) {}, "/workspace/a", {"/workspace/a", "/workspace/b"},
+            "/workspace/a");
+        auto* dialog = parent.findChild<QDialog*>("executionWorktreeDialog");
+        auto* repos = dialog->findChild<QListWidget*>("executionRepositoryList");
+        auto* list = dialog->findChild<QListWidget*>("executionWorktreeList");
+        auto* use = dialog->findChild<QAbstractButton*>("useRepositoryButton");
+        QCOMPARE(list->count(), 3);
+
+        // A failed listing of b leaves nothing of a to choose.
+        offline = true;
+        emit repos->itemClicked(repos->item(1));
+        QCOMPARE(listings.constLast().value("repository_path").toString(), "/workspace/b");
+        QCOMPARE(list->count(), 0);
+        QVERIFY(!use->isEnabled());
+        use->click();
+        QVERIFY(switches.isEmpty());
+        offline = false;
+
+        // The arrow keys move the current repository and the chosen worktree.
+        repos->setFocus();
+        repos->setCurrentItem(repos->item(1));
+        QTest::keyClick(repos, Qt::Key_Up);
+        QCOMPARE(listings.constLast().contains("repository_path"), false);
+        QCOMPARE(list->count(), 3);
+        list->setFocus();
+        list->setCurrentRow(0);
+        QTest::keyClick(list, Qt::Key_Down);
+        QTest::keyClick(list, Qt::Key_Down);
+        QVERIFY(use->isEnabled());
+
+        // Use waits while a changed search has not answered.
+        holdListing = true;
+        auto* search = dialog->findChild<QLineEdit*>("worktreeSearch");
+        search->setText("t");
+        QVERIFY(!use->isEnabled());
+        QTRY_VERIFY(pendingListing);
+        QVERIFY(!use->isEnabled());
+        holdListing = false;
+        std::exchange(pendingListing, {})({}, {});
+        list->setCurrentRow(2);
+        QVERIFY(use->isEnabled());
+
+        // A failed search leaves no row of the previous query to choose.
+        offline = true;
+        search->setText("tw");
+        QTRY_COMPARE(list->count(), 0);
+        QVERIFY(!use->isEnabled());
+        offline = false;
+        search->setText("t");
+        QTRY_COMPARE(list->count(), 3);
+        list->setCurrentRow(2);
+        QVERIFY(use->isEnabled());
+
+        // A stale context reads the conversation again and keeps the choice; Use then sends
+        // the new revision.
+        use->click();
+        QCOMPARE(switches.size(), 1);
+        QCOMPARE(switches.constLast().value("worktree_path").toString(), "/workspace/a-2");
+        QCOMPARE(switches.constLast().value("expected_context_revision").toInt(), 4);
+        QTRY_COMPARE(list->currentItem() ? list->currentItem()->data(Qt::UserRole).toString()
+                                         : QString(),
+                     QStringLiteral("/workspace/a-2"));
+        QVERIFY(dialog->findChild<QLabel*>("worktreeStatus")
+                    ->text()
+                    .startsWith("The conversation changed elsewhere"));
+        use->click();
+        QCOMPARE(switches.size(), 2);
+        QCOMPARE(switches.constLast().value("expected_context_revision").toInt(), 5);
+        QCOMPARE(switches.constLast().value("worktree_path").toString(), "/workspace/a-2");
     }
     void createWorktreeOpensTheWorktreesPage() {
         QWidget parent;

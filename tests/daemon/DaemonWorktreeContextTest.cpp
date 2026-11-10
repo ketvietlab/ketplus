@@ -10,6 +10,7 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QProcess>
+#include <QScopeGuard>
 #include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QUrl>
@@ -584,6 +585,29 @@ class DaemonWorktreeContextTest final : public QObject {
             f.move(QFileInfo(foreignFeature).canonicalFilePath(), 1, "use").value("ok").toBool());
         QCOMPARE(f.journal->sessions().first().worktreePath,
                  QFileInfo(foreignFeature).canonicalFilePath());
+    }
+    // #405 review: with the conversation's checkout gone, browsing a repository that holds
+    // the daemon's working directory still does not enrol it.
+    void browsingWithAMissingCheckoutDoesNotEnrol() {
+        Fixture f;
+        QVERIFY(f.initialize());
+        auto foreign = f.directory.filePath("foreign");
+        QVERIFY(QDir().mkpath(foreign));
+        QVERIFY(git(foreign, {"init", "-b", "main"}));
+        QVERIFY(git(foreign,
+                    {"-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "-c",
+                     "commit.gpgsign=false", "commit", "--allow-empty", "-m", "fixture"}));
+        foreign = QFileInfo(foreign).canonicalFilePath();
+        // The conversation's checkout is deleted before the daemon ever recorded its repository.
+        QVERIFY(QDir(f.a).removeRecursively());
+        const QString previous = QDir::currentPath();
+        const auto restore = qScopeGuard([&previous] { QDir::setCurrent(previous); });
+        QVERIFY(QDir::setCurrent(foreign));
+        const auto page = f.call("session.worktrees", "gone", {{"repository_path", foreign}});
+        QVERIFY(page.value("ok").toBool());
+        QCOMPARE(page.value("repository_path").toString(), foreign);
+        QVERIFY(!f.journal->worktreeRepositories().values().contains(foreign));
+        QVERIFY(!page.value("repositories").toArray().contains(foreign));
     }
     void switchIsDurableIdempotentAndDoesNotMoveFiles() {
         Fixture f;

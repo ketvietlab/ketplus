@@ -25,6 +25,7 @@
 #include <QTimer>
 #include <QVBoxLayout>
 #include <memory>
+#include <utility>
 
 namespace ketplus {
 namespace {
@@ -198,7 +199,10 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
     struct State {
         int offset{0}, total{0}, epoch{0};
         qint64 revision{0};
-        bool loading{false}, switching{false}, available{false};
+        // pending: the search changed and its page has not arrived yet.
+        bool loading{false}, switching{false}, available{false}, pending{false};
+        // keep: the worktree to choose again after a reload; notice: shown once it lands.
+        QString keep, notice;
         // The conversation's worktree and its repository; the repository whose worktrees
         // are listed; the worktree chosen in that list.
         QString current, repository, listed, chosen;
@@ -234,13 +238,15 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
         }
     };
     auto updateUse = [=] {
-        use->setEnabled(state->available && !state->switching && !state->chosen.isEmpty());
+        use->setEnabled(state->available && !state->switching && !state->loading &&
+                        !state->pending && !state->chosen.isEmpty());
     };
     QPointer<QDialog> guard(dialog);
     auto load = [=] {
         if (state->loading || state->switching)
             return;
         state->loading = true;
+        updateUse();
         const auto epoch = ++state->epoch;
         status->setText("Loading worktrees…");
         if (state->offset == 0)
@@ -254,9 +260,16 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
             if (!guard || state->epoch != epoch)
                 return;
             state->loading = false;
+            state->pending = false;
             if (!error.isEmpty() || !result.value("error_code").toString().isEmpty()) {
                 status->setText(error.isEmpty() ? result.value("error_message").toString() : error);
+                // Rows from another repository or query must not stay choosable.
+                if (state->offset == 0) {
+                    list->clear();
+                    state->chosen.clear();
+                }
                 list->setEnabled(true);
+                updateUse();
                 return;
             }
             // A service from before ADR 0105 ignores repository_path and would list the
@@ -293,9 +306,11 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
                 list->clear();
                 state->chosen.clear();
             }
-            const auto preferred = state->listed == state->repository
+            const auto preferred = !state->keep.isEmpty() ? state->keep
+                                   : state->listed == state->repository
                                        ? state->current
                                        : state->lastWorktrees.value(state->listed);
+            state->keep.clear();
             for (const auto& value : result.value("worktrees").toArray()) {
                 const auto entry = value.toObject();
                 const auto path = entry.value("worktree_path").toString();
@@ -321,7 +336,7 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
             status->setText(!state->available   ? "Switching is unavailable for this provider or "
                                                   "while a request is pending."
                             : state->total == 0 ? "No worktree matches."
-                                                : "");
+                                                : std::exchange(state->notice, {}));
             list->setEnabled(state->available);
             repos->setEnabled(state->available);
             updateUse();
@@ -358,6 +373,18 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
                 if (!guard)
                     return;
                 state->switching = false;
+                // Another window changed the context: read it again, keep this choice, and
+                // let Use send the new revision.
+                if (error.isEmpty() &&
+                    result.value("error_code").toString() == QStringLiteral("stale_context")) {
+                    state->keep = path;
+                    state->notice = "The conversation changed elsewhere. Check the worktree, "
+                                    "then choose Use this repository again.";
+                    list->setEnabled(state->available);
+                    repos->setEnabled(state->available);
+                    reload();
+                    return;
+                }
                 if (!error.isEmpty() || !result.value("ok").toBool()) {
                     status->setText(
                         error.isEmpty()
@@ -388,7 +415,9 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
         ++state->epoch;
         state->offset = state->total = 0;
         state->loading = false;
+        state->pending = true;
         list->setEnabled(false);
+        updateUse();
         debounce->start();
     });
     QObject::connect(repoSearch, &QLineEdit::textChanged, dialog, renderRepos);
@@ -397,18 +426,24 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
         if (root == state->listed || state->switching)
             return;
         state->listed = root;
+        list->clear();
         state->chosen.clear();
-        updateUse();
         reload();
     };
     QObject::connect(repos, &QListWidget::itemClicked, dialog, listRepository);
     QObject::connect(repos, &QListWidget::itemActivated, dialog, listRepository);
+    // Arrow keys move the current repository as a click does.
+    QObject::connect(repos, &QListWidget::currentItemChanged, dialog,
+                     [=](QListWidgetItem* row, QListWidgetItem*) {
+                         if (row != nullptr)
+                             listRepository(row);
+                     });
     QObject::connect(list->verticalScrollBar(), &QScrollBar::valueChanged, dialog, [=](int value) {
         if (value >= list->verticalScrollBar()->maximum() - 100 && state->offset < state->total)
             load();
     });
     const auto choose = [=](QListWidgetItem* row) {
-        state->chosen = row->data(Qt::UserRole).toString();
+        state->chosen = row != nullptr ? row->data(Qt::UserRole).toString() : QString{};
         updateUse();
     };
     const auto confirm = [=] {
@@ -420,7 +455,9 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
             }
         }
     };
-    QObject::connect(list, &QListWidget::itemClicked, dialog, choose);
+    // The current row is the choice, whether a click or the arrow keys moved it.
+    QObject::connect(list, &QListWidget::currentItemChanged, dialog,
+                     [=](QListWidgetItem* row, QListWidgetItem*) { choose(row); });
     QObject::connect(list, &QListWidget::itemActivated, dialog, [=](QListWidgetItem* row) {
         choose(row);
         confirm();
