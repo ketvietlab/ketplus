@@ -113,6 +113,9 @@ target_link_libraries(ketplus_agent_viewport_tests PRIVATE Qt6::Test ketplus_ai)
 ketplus_add_gui_test(ketplus_claude_credentials_settings_tests ClaudeCredentialsSettingsTest.cpp)
 target_link_libraries(ketplus_claude_credentials_settings_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 
+ketplus_add_gui_test(ketplus_working_line_tests WorkingLineTest.cpp)
+target_link_libraries(ketplus_working_line_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+
 ketplus_add_gui_test(ketplus_conversation_menu_tests ConversationMenuTest.cpp)
 target_link_libraries(ketplus_conversation_menu_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 

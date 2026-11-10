@@ -230,6 +230,21 @@ void AgentSessionManager::dismissPendingQuestions(const SessionPtr& session) {
     }
 }
 
+void AgentSessionManager::setWorkingDetail(const SessionPtr& session, const QString& detail) {
+    if (session->workingDetail == detail)
+        return;
+    session->workingDetail = detail;
+    // A background conversation in the same worktree keeps its own detail; the line shows the
+    // active one, which a conversation switch reads again through workingDetail().
+    if (isActiveSession(session))
+        emit workingDetailChanged(session->path, detail);
+}
+
+QString AgentSessionManager::workingDetail(const QString& worktreePath) const {
+    const auto found = sessions_.constFind(normalizedPath(worktreePath));
+    return found != sessions_.cend() && (*found)->running ? (*found)->workingDetail : QString();
+}
+
 void AgentSessionManager::updateState(const SessionPtr& session, const QString& state,
                                       const bool running) {
     ++session->stateSerial;
@@ -238,6 +253,7 @@ void AgentSessionManager::updateState(const SessionPtr& session, const QString& 
         state == QStringLiteral("Canceled"))
         session->completed = false;
     if (!running) {
+        setWorkingDetail(session, {});
         session->pendingInputIds.clear();
         settleActivityGroups(session);
         dismissPendingQuestions(session);

@@ -42,6 +42,8 @@ struct AgentSessionManager::Session final {
     quint64 turnWorktreeGeneration{0};
     bool steeringPending{false};
     QString status{QStringLiteral("Ready")};
+    // The latest reasoning heading of the running turn, for "Working · …" (#385).
+    QString workingDetail;
     QString model;
     QString effort;
     qint64 configurationRevision{0};

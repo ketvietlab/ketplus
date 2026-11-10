@@ -1,5 +1,6 @@
 #include "agent/AgentSessionManager.h"
 #include "agent/DaemonTranscriptNotices.h"
+#include "agent/ReasoningHeading.h"
 
 #include "agent/CodexAppServer.h"
 #include "agent/CodexRateLimits.h"
@@ -594,6 +595,7 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
         session->turnId =
             params.value(QStringLiteral("turn")).toObject().value(QStringLiteral("id")).toString();
         session->loadedTurns.insert(session->turnId);
+        setWorkingDetail(session, {});
         updateState(session, QStringLiteral("Working…"), true);
         if (session->cancelRequested) {
             cancelSession(session);
@@ -785,9 +787,13 @@ void AgentSessionManager::handleItem(const SessionPtr& session, const QJsonObjec
         }
         return;
     }
-    if (type == QStringLiteral("reasoning"))
+    if (type == QStringLiteral("reasoning")) {
+        // The heading stays until a later thought names another one (Codex CLI's status line).
+        if (const QString heading = agent_message::reasoningHeading(item); !heading.isEmpty())
+            setWorkingDetail(session, heading);
         updateState(session, completed ? QStringLiteral("Working…") : QStringLiteral("Reasoning…"),
                     true);
+    }
     const auto event = ActivityNormalizer::normalize(
         item, completed ? TranscriptPhase::Completed : TranscriptPhase::Started,
         {session->id, session->transcriptGeneration, session->turnId,

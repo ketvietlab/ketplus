@@ -200,7 +200,15 @@ current-window value.
 - Changing worktrees swaps the visible session. Turns in other worktrees keep
   running and remain marked in the worktree list.
 - Final answers and public progress commentary stream into existing transcript rows;
-  private reasoning remains hidden. Command activity updates
+  private reasoning remains hidden. The one exception is the running line: while a
+  turn works it reads "Working · <heading>", where the heading is the bold title at
+  the start of the provider's latest reasoning summary, first letter lowercased
+  (#385, as Codex CLI shows it). The summary's body and the reasoning content stay
+  out of the line, the transcript and its copy; the heading clears when the turn
+  ends. Each conversation keeps its own heading and the line shows the selected
+  one, so another conversation in the same worktree never changes it. The heading
+  appears when a reasoning item completes; streaming it from summary deltas is
+  #397. Command activity updates
   its compact receipt without rendering output. The transcript viewport leaves a
   fixed 20 px gap above the composer in idle and streaming states.
   Streaming preserves reading intent: a viewport following the bottom continues

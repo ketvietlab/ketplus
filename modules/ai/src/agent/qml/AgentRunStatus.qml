@@ -8,7 +8,7 @@ Item {
     objectName: "workingIndicator"
     implicitHeight: visible ? KetTheme.px(44, KetTheme.zoom) : 0
     Accessible.role: Accessible.StaticText
-    Accessible.name: agentHost.sessionStatus || "Agent is working"
+    Accessible.name: agentHost.runStatus || "Agent is working"
     readonly property bool animationAllowed: visible && agentHost.sessionRunning
         && agentHost.workingMotionEnabled && !agentHost.restoring
         && Window.window !== null && Window.window.visible
@@ -30,7 +30,7 @@ Item {
         Text {
             objectName: "workingStatusLabel"
             Layout.fillWidth: true
-            text: agentHost.sessionStatus || "Agent is working…"
+            text: agentHost.runStatus || "Agent is working…"
             color: KetTheme.t.textSecondary
             elide: Text.ElideRight
             font.family: KetTheme.fontFamily
