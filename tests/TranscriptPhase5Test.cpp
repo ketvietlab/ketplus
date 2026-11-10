@@ -1365,22 +1365,29 @@ void AgentWorkspaceViewTest::approvalCardStaysOutsideCommandGroup() {
                  .toStringList(),
              QStringList{"a"});
 
-    // From the keyboard: Tab reaches both buttons, and Space on Deny declines.
+    // From the keyboard: Tab from the item before Allow once reaches it, then Deny, and Space on
+    // Deny answers with the Decline option.
     auto* decline = findVisualItem(card, QStringLiteral("approvalDeclineButton"));
-    QVERIFY(accept->property("activeFocusOnTab").toBool());
-    QVERIFY(decline->property("activeFocusOnTab").toBool());
     view.quickView()->requestActivate();
-    decline->forceActiveFocus(Qt::TabFocusReason);
+    QVERIFY(QTest::qWaitForWindowActive(view.quickView()));
+    auto* before = accept->nextItemInFocusChain(false);
+    QVERIFY(before && before != accept);
+    before->forceActiveFocus(Qt::TabFocusReason);
+    QTRY_VERIFY(before->hasActiveFocus());
+    QTest::keyClick(view.quickView(), Qt::Key_Tab);
+    QTRY_VERIFY(accept->hasActiveFocus());
+    QTest::keyClick(view.quickView(), Qt::Key_Tab);
     QTRY_VERIFY(decline->hasActiveFocus());
     QTest::keyClick(view.quickView(), Qt::Key_Space);
     QTRY_COMPARE(answered.count(), 2);
-    QVERIFY(answered.last()
-                .first()
-                .toMap()
-                .value("decision")
-                .toMap()
-                .value("option_ids")
-                .toStringList() != QStringList{"a"});
+    QCOMPARE(answered.last()
+                 .first()
+                 .toMap()
+                 .value("decision")
+                 .toMap()
+                 .value("option_ids")
+                 .toStringList(),
+             QStringList{"d"});
 }
 
 // A settled approval is one quiet line of how it ended, as the mock's.
