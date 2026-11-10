@@ -456,9 +456,12 @@ QWidget* RemoteControlView::createSignInPage() {
     auto* form = new QVBoxLayout(body);
     chrome_geometry::margins(form, 0, 0, 0, 0);
     chrome_geometry::spacing(form, 12);
-    auto* description = label(QStringLiteral("Continue in your browser to sign in with your "
-                                             "KetSuite account. KetPlus never sees your password."),
-                              "description");
+    // Rich text for the mock's 1.4 line height, which a style sheet cannot set on a label.
+    auto* description =
+        label(QStringLiteral("<p style=\"line-height:140%\">Continue in your browser to sign in "
+                             "with your KetSuite account. KetPlus never sees your password.</p>"),
+              "description");
+    description->setTextFormat(Qt::RichText);
     description->setObjectName(QStringLiteral("remoteSignInDescription"));
     form->addWidget(description);
     signInNotice_ = label({}, "noticeText");
