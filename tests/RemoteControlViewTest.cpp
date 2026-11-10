@@ -7,7 +7,9 @@
 #include "ui/Theme.h"
 
 #include "KetAppearance.h"
+#include "KetButton.h"
 #include "KetDialog.h"
+#include "KetEmptyState.h"
 #include "KetRecipes.h"
 
 #include <QAccessible>
@@ -452,7 +454,7 @@ void RemoteControlViewTest::linuxMachineIconsFollowTheTheme() {
     remote::RemoteControlTestAccess::signIn(*section.client_);
     section.machineIds_ = {QStringLiteral("build-box")};
     section.render();
-    // The darkest drawn pixel of the row's terminal icon.
+    // The darkest drawn pixel of the row's terminal icon (an 18 px glyph has no fully opaque one).
     const auto iconInk = [&section] {
         auto* row = section.findChild<QFrame*>(QStringLiteral("linuxMachineRow"));
         QLabel* icon = nullptr;
@@ -466,7 +468,7 @@ void RemoteControlViewTest::linuxMachineIconsFollowTheTheme() {
         for (int y = 0; y < image.height(); ++y)
             for (int x = 0; x < image.width(); ++x) {
                 const QColor pixel = image.pixelColor(x, y);
-                if (pixel.alpha() == 255 && (!ink.isValid() || pixel.lightness() < ink.lightness()))
+                if (pixel.alpha() >= 160 && (!ink.isValid() || pixel.lightness() < ink.lightness()))
                     ink = pixel;
             }
         return ink;
@@ -692,9 +694,11 @@ void RemoteControlViewTest::demoSignInOpensAddDeviceQr() {
     QCOMPARE(overviewDescription->text(), QStringLiteral("Ready for your connected devices"));
     auto* overview = view.findChild<QWidget*>(QStringLiteral("remoteConnectionOverview"));
     QVERIFY(overview && overview->isVisible());
-    auto* emptyDevices = view.findChild<QLabel*>(QStringLiteral("remoteDevicesEmpty"));
+    // The mock's empty Phones & tablets, with the way to start pairing.
+    auto* emptyDevices = view.findChild<ket::EmptyState*>(QStringLiteral("remoteDevicesEmpty"));
     QVERIFY(emptyDevices && emptyDevices->isVisible());
-    QCOMPARE(emptyDevices->text(), QStringLiteral("No devices connected yet."));
+    QCOMPARE(emptyDevices->title(), QStringLiteral("No phone paired"));
+    QVERIFY(emptyDevices->action() && emptyDevices->action()->isEnabled());
     auto* devices = view.findChild<QWidget*>(QStringLiteral("remoteDevicesPanel"));
     QVERIFY(devices);
     QVERIFY(devices->width() >= 650);
@@ -703,7 +707,26 @@ void RemoteControlViewTest::demoSignInOpensAddDeviceQr() {
     // 1280 × 820, for the side by side with `KetPlusMock --screen=connections`.
     if (const auto dir = qEnvironmentVariable("KETPLUS_CONNECTIONS_CAPTURE"); !dir.isEmpty()) {
         const QSize size = view.size();
-        view.resize(1280 - 248, 820);
+        view.resize(1280 - 240, 820);
+        // The mock's page: one paired phone, its activity and one trusted Linux machine.
+        view.renderDevices({QJsonObject{{"id", "phone-1"}, {"displayName", "iPhone 16"}}});
+        view.activity_->setDeviceNames({{"phone-1", "iPhone 16"}, {"tablet-1", "iPad Air"}});
+        const QDateTime now = QDateTime::currentDateTimeUtc();
+        view.activity_->render(
+            {auditEntry("m1", "session.start_turn", "phone-1", "ok", now.addSecs(-120), "s1", true,
+                        "Fix login timeout"),
+             auditEntry("m2", "session.create", "phone-1", "ok", now.addSecs(-18 * 60), "s2", true,
+                        "New worktree feature/offline-cache"),
+             auditEntry("m3", "session.interrupt", "phone-1", "ok", now.addSecs(-3600), "s3", true,
+                        "Refactor sync engine"),
+             auditEntry("m4", "session.create", "phone-1", "worktree_quota_exceeded",
+                        now.addDays(-1), "s4", true, "New worktree experiment/parser"),
+             auditEntry("m5", "session.configuration.apply", "tablet-1", "ok", now.addDays(-3),
+                        "s5", true, "Release notes draft")});
+        remote::RemoteControlTestAccess::signIn(*view.linuxMachines_->client_);
+        view.linuxMachines_->machineIds_ = {QStringLiteral("build-node-01")};
+        view.linuxMachines_->render();
+        QTest::qWait(50);
         for (const auto mode : {ThemeManager::Mode::Light, ThemeManager::Mode::Dark}) {
             appTheme->previewMode(mode);
             QTest::qWait(50);
@@ -714,6 +737,10 @@ void RemoteControlViewTest::demoSignInOpensAddDeviceQr() {
                                                      : QStringLiteral("connections-dark.png")));
         }
         appTheme->cancelPreview();
+        view.renderDevices({});
+        view.activity_->render({});
+        view.linuxMachines_->machineIds_.clear();
+        view.linuxMachines_->render();
         view.resize(size);
     }
 
