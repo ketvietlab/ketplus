@@ -375,6 +375,7 @@ class AgentSessionManager final : public QObject {
     void syncConversationTitle(const SessionPtr& session);
     void syncArchived(const SessionPtr& session);
     [[nodiscard]] QVariantList listedTags(const SessionPtr& session) const;
+    void syncTags(const SessionPtr& session);
     void applyDaemonArchiveState(const SessionPtr& session, bool archivedByDaemon);
     void selectAwayFromArchived(const SessionPtr& session);
     void persistWorkspace(const QString& path) const;

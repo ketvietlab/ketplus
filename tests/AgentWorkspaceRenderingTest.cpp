@@ -1275,6 +1275,18 @@ void AgentWorkspaceViewTest::composerPlaceholderTracksCaret() {
     QVERIFY(tagged.first().at(2).toBool());
     QVERIFY(QMetaObject::invokeMethod(tagMenu, "close"));
     QTRY_VERIFY(!tagMenu->property("visible").toBool());
+    // Another client may have stored the label in another case; it is the same tag.
+    view.setConversations({QVariantMap{{"id", "ui"},
+                                       {"active", true},
+                                       {"number", "42"},
+                                       {"tagsEditable", true},
+                                       {"tags", QVariantList{QVariantMap{{"label", "review"}}}}}});
+    QVERIFY(QMetaObject::invokeMethod(addTag, "clicked"));
+    QTRY_VERIFY(tagMenu->property("visible").toBool());
+    QVERIFY(tagItem("conversationTagItem_Review")->property("checked").toBool());
+    QVERIFY(!tagItem("conversationTagItem_UI")->property("checked").toBool());
+    QVERIFY(QMetaObject::invokeMethod(tagMenu, "close"));
+    QTRY_VERIFY(!tagMenu->property("visible").toBool());
     QTRY_VERIFY(placeholder->isVisible());
     QTest::qWait(30);
     QRectF caret;
