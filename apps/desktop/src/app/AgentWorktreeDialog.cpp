@@ -7,6 +7,7 @@
 #include "KetRecipes.h"
 #include "KetSelect.h"
 #include "KetTextField.h"
+#include "KetTokens.h"
 
 #include "app/AgentWorktreeCreator.h"
 
@@ -463,6 +464,7 @@ void AgentWorktreeDialog::loadLocalBranches(const QString& root) {
         branches->clear();
         if (!result.success) {
             status_->setText(tr("Could not load branches. Check the repository and try again."));
+            status_->show();
             branchesReady_ = true;
             setProperty("localBranchesReady", true);
             updateActions();
@@ -616,6 +618,7 @@ bool AgentWorktreeDialog::createWorktree() const {
 }
 
 AgentConversationDeleteDialog::AgentConversationDeleteDialog(const QStringList& linkedWorktreePaths,
+                                                             const QString& reference,
                                                              QWidget* parent)
     : QWidget(parent),
       deleteLinked_(new QCheckBox(static_cast<int>(linkedWorktreePaths.size()) > 1
@@ -631,12 +634,36 @@ AgentConversationDeleteDialog::AgentConversationDeleteDialog(const QStringList& 
     setObjectName(QStringLiteral("conversationDeleteDialog"));
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
+    // The mock's words; a conversation with its own worktree also offers to remove it.
+    const QString subject = reference.isEmpty() ? tr("This conversation") : reference;
     auto* message = new QLabel(
-        tr("Permanently remove KetPlus' local transcript?\n\nProvider history is not deleted, "
-           "and any encrypted relay suffix remains until its retention expires."),
+        linkedWorktreeCount > 0
+            ? tr("%1 and its transcript are removed from this Mac. Archive keeps a conversation "
+                 "you may need again.")
+                  .arg(subject)
+            : tr("%1 and its transcript are removed from this Mac. Its worktree and files stay. "
+                 "Archive keeps a conversation you may need again.")
+                  .arg(subject),
         this);
+    message->setObjectName(QStringLiteral("conversationDeleteMessage"));
+    message->setTextFormat(Qt::PlainText);
     message->setWordWrap(true);
     layout->addWidget(message);
+    // What stays elsewhere, so "removed" is not read as removed everywhere.
+    auto* retained = new QLabel(tr("Provider history is not deleted, and any encrypted relay "
+                                   "copy remains until its retention expires."),
+                                this);
+    retained->setObjectName(QStringLiteral("conversationDeleteRetained"));
+    retained->setWordWrap(true);
+    const auto mute = [retained] {
+        QPalette palette = retained->palette();
+        palette.setColor(QPalette::WindowText,
+                         ket::Tokens::color(u"text-muted", ket::Appearance::instance().theme()));
+        retained->setPalette(palette);
+    };
+    mute();
+    connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, retained, mute);
+    layout->addWidget(retained);
     deleteLinked_->setObjectName(QStringLiteral("deleteLinkedWorktreeCheck"));
     deleteLinked_->setEnabled(linkedWorktreeCount > 0);
     if (linkedWorktreeCount <= 0)
@@ -647,6 +674,9 @@ AgentConversationDeleteDialog::AgentConversationDeleteDialog(const QStringList& 
                           "are lost. Required when Git refuses a dirty, untracked, or locked "
                           "worktree."));
     layout->addWidget(deleteLinked_);
+    // Nothing to remove: the mock's card, without the worktree choices.
+    deleteLinked_->setVisible(linkedWorktreeCount > 0);
+    force_->setVisible(linkedWorktreeCount > 0);
     if (linkedWorktreeCount > 0) {
         auto* paths = new QLabel(QStringList(linkedWorktreePaths).join(QLatin1Char('\n')), this);
         paths->setObjectName(QStringLiteral("linkedWorktreePaths"));
@@ -692,13 +722,19 @@ void AgentConversationDeleteDialog::updateConfirm() {
 }
 
 ket::Dialog* AgentConversationDeleteDialog::present(QWidget* anchor) {
-    auto* card = new ket::Dialog(tr("Delete conversation"), anchor);
+    auto* card = new ket::Dialog(tr("Delete conversation?"), anchor);
     card->setObjectName(QStringLiteral("conversationDeleteDialogCard"));
-    card->setCardWidth(480);
+    card->setCardWidth(500); // the mock's deleteDialog, as Rename
     connect(card, &ket::Dialog::finished, card, &QObject::deleteLater);
     card->setBody(this);
     auto* cancel = card->addButton(tr("Cancel"), ket::ButtonVariant::Ghost);
     cancel->setObjectName(QStringLiteral("conversationDeleteCancel"));
+    auto* archive = card->addButton(tr("Archive instead"), ket::ButtonVariant::Secondary);
+    archive->setObjectName(QStringLiteral("conversationDeleteArchive"));
+    connect(archive, &QAbstractButton::clicked, card, [this, card] {
+        emit archiveRequested();
+        card->reject();
+    });
     confirm_ = card->addButton(tr("Delete"), ket::ButtonVariant::Danger);
     confirm_->setObjectName(QStringLiteral("conversationDeleteConfirm"));
     updateConfirm();

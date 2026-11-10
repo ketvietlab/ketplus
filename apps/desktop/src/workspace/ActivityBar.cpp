@@ -293,7 +293,8 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     identityButton_ = new QToolButton(this);
     identityButton_->setObjectName(QStringLiteral("productIdentityButton"));
     identityButton_->setProperty("kvRole", QStringLiteral("productIdentity"));
-    identityButton_->setText(tr("KetPlus\nPersonal workspace")); // until setAccount names someone
+    // The button draws no text: a QToolButton centres it, and the mock starts both lines after
+    // the avatar. The labels below carry it, and the button keeps it as its accessible name.
     identityButton_->setToolButtonStyle(Qt::ToolButtonTextOnly);
     chrome_geometry::fixedHeight(identityButton_, 52);
     // The sidebar sets the width; a long account name is elided, never widens it.
@@ -309,11 +310,30 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     identityChevron->setProperty("symbolName", QByteArray(symbols::chevronDown));
     chrome_geometry::fixedSize(identityChevron, 14, 14);
     identityChevron->setAttribute(Qt::WA_TransparentForMouseEvents);
+    identityName_ = new QLabel(identityButton_);
+    identityName_->setObjectName(QStringLiteral("productIdentityName"));
+    identitySubtitle_ = new QLabel(tr("Personal workspace"), identityButton_);
+    identitySubtitle_->setObjectName(QStringLiteral("productIdentitySubtitle"));
+    auto* identityLines = new QVBoxLayout;
+    chrome_geometry::spacing(identityLines, 1);
+    for (auto* line : {identityName_, identitySubtitle_}) {
+        line->setTextFormat(Qt::PlainText); // the name comes from the relay
+        line->setAttribute(Qt::WA_TransparentForMouseEvents);
+        identityLines->addWidget(line);
+    }
+    // The two lines sit together in the middle of the 52 px row.
+    identityLines->insertStretch(0);
+    identityLines->addStretch();
     auto* identityRow = new QHBoxLayout(identityButton_);
     identityRow->setSizeConstraint(QLayout::SetNoConstraint);
-    chrome_geometry::margins(identityRow, 0, 0, 10, 0);
-    identityRow->addStretch();
+    chrome_geometry::margins(identityRow, 43, 0, 10, 0);
+    chrome_geometry::spacing(identityRow, 8);
+    identityRow->addLayout(identityLines, 1);
     identityRow->addWidget(identityChevron);
+    // The name never widens the button; it is elided whenever its label resizes.
+    identityName_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    identityName_->installEventFilter(this);
+    refreshIdentityText();
     // Settings and account entry points live in the user menu instead of the sidebar footer.
     userMenu_ = new QMenu(this);
     userMenu_->setObjectName(QStringLiteral("productUserMenu"));
@@ -394,21 +414,18 @@ void ActivityBar::setAccount(const QString& name) {
 
 void ActivityBar::refreshIdentityText() {
     // A long name ends in "…" before the chevron; the tooltip keeps all of it.
-    QString name = accountName_.isEmpty() ? tr("KetPlus") : accountName_;
-    const auto* chevron =
-        identityButton_->findChild<QLabel*>(QStringLiteral("productIdentityChevron"));
-    const int gap = 8;
-    const int available = identityButton_->width() - identityAvatar_->geometry().right() - gap -
-                          (chevron != nullptr ? chevron->width() + 10 + gap : 0);
-    // Before it is laid out the button has no width yet; its first resize elides.
-    if (identityButton_->isVisible() && available > 0)
-        name = identityButton_->fontMetrics().elidedText(name, Qt::ElideRight, available);
-    name.replace(QLatin1Char('&'), QStringLiteral("&&")); // not a mnemonic
-    identityButton_->setText(name + QLatin1Char('\n') + tr("Personal workspace"));
+    const QString full = accountName_.isEmpty() ? tr("KetPlus") : accountName_;
+    QString name = full;
+    // Before it is laid out the label has no width yet; the button's resize elides again.
+    if (identityButton_->isVisible() && identityName_->width() > 0)
+        name =
+            identityName_->fontMetrics().elidedText(full, Qt::ElideRight, identityName_->width());
+    identityName_->setText(name);
+    identityButton_->setAccessibleName(full + QLatin1Char(' ') + identitySubtitle_->text());
 }
 
 bool ActivityBar::eventFilter(QObject* watched, QEvent* event) {
-    if (watched == identityButton_ &&
+    if ((watched == identityButton_ || watched == identityName_) &&
         (event->type() == QEvent::Resize || event->type() == QEvent::FontChange ||
          event->type() == QEvent::StyleChange))
         refreshIdentityText();
