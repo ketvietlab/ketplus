@@ -149,7 +149,7 @@ jobs:
         # Full Linux Desktop and Windows builds remain deferred; daemon has its own Linux lane.
         os: [macos-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 75
     env:
       SCCACHE_GHA_ENABLED: "true"
 
@@ -187,6 +187,7 @@ jobs:
       - name: Build
         run: cmake --build build
 
-      # The Pro suite takes about 25 minutes one test at a time; the runner has three cores.
+      # One test at a time: the desktop/daemon integration tests time out when they share the
+      # runner's three cores. The suite takes about 30 minutes, hence the job's 75.
       - name: Test
-        run: ctest --test-dir build --output-on-failure --parallel 3
+        run: ctest --test-dir build --output-on-failure
