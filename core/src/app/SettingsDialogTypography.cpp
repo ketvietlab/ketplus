@@ -5,6 +5,7 @@
 #include "KetStepSlider.h"
 #include "app/PixelSelect.h"
 #include "app/SettingsDialog.h"
+#include "app/SettingsFontNames.h"
 #include "ui/Theme.h"
 #include <QAbstractItemView>
 #include <QEvent>
@@ -18,7 +19,34 @@
 
 namespace ketplus {
 
+namespace settings_fonts {
+
+QString label(const QString& family) {
+    if (family.startsWith(QLatin1String("KET Sans")))
+        return QStringLiteral("KÉT") + family.mid(3);
+    return family;
+}
+
+QString selectedFamily(const QComboBox* select) {
+    const QString family = select->currentData().toString();
+    return family.isEmpty() ? select->currentText() : family;
+}
+
+void selectFamily(QComboBox* select, const QString& family) {
+    int index = select->findData(family);
+    if (index < 0)
+        index = select->findText(family);
+    if (index < 0) {
+        select->addItem(label(family), family);
+        index = select->count() - 1;
+    }
+    select->setCurrentIndex(index);
+}
+
+} // namespace settings_fonts
+
 namespace {
+
 class FontListLoader final : public QObject {
   public:
     explicit FontListLoader(ket::Select* select)
@@ -34,7 +62,7 @@ class FontListLoader final : public QObject {
              event->type() == QEvent::KeyPress ||
              (object == view_ && event->type() == QEvent::Show))) {
             loaded_ = true;
-            const QString selected = select_->currentText();
+            const QString selected = settings_fonts::selectedFamily(select_);
             QStringList families;
             for (const auto& family : QFontDatabase::families())
                 if (QFontDatabase::isFixedPitch(family))
@@ -42,10 +70,10 @@ class FontListLoader final : public QObject {
             families.sort(Qt::CaseInsensitive);
             const QSignalBlocker blocker(select_);
             select_->clear();
-            select_->addItems(families);
-            if (!selected.isEmpty() && select_->findText(selected) < 0)
-                select_->addItem(selected);
-            select_->setCurrentText(selected);
+            for (const auto& family : families)
+                select_->addItem(settings_fonts::label(family), family);
+            if (!selected.isEmpty())
+                settings_fonts::selectFamily(select_, selected);
             select_->setProperty("fontListLoaded", true);
         }
         return QObject::eventFilter(object, event);
@@ -239,8 +267,8 @@ QWidget* SettingsDialog::createTypographyCard() {
             updateDirtyState();
         });
     }
-    connect(editorFontBox_, &QComboBox::currentTextChanged, this, [this](const QString& family) {
-        editorFontFamily_ = family;
+    connect(editorFontBox_, &QComboBox::currentTextChanged, this, [this] {
+        editorFontFamily_ = settings_fonts::selectedFamily(editorFontBox_);
         updatePreview();
         updateDirtyState();
     });

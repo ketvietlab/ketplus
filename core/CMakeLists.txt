@@ -244,6 +244,7 @@ add_library(ketplus_settings_ui STATIC
     src/app/PixelSelect.cpp
     src/app/PixelSelect.h
     src/app/SettingsDialog.h
+    src/app/SettingsFontNames.h
 )
 target_link_libraries(ketplus_settings_ui PUBLIC Qt6::Widgets ketplus_editor ketplus_ui)
 target_include_directories(ketplus_settings_ui PUBLIC
