@@ -1,9 +1,12 @@
 // ADR 0112 §7 and open point 2: what starts a turn, the leader's digest, pause and the budget
 // of automatic turns. The coordinator runs on a real journal with a fake runtime and a short
 // quiet period. No provider is started.
+#include "AgentTestFixture.h"
 #include "TeamFakeHost.h"
 #include "storage/LocalJournal.h"
 
+#include <QDir>
+#include <QProcess>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
@@ -212,6 +215,69 @@ class TeamFlowTest final : public QObject {
         QCOMPARE(team().automaticTurns, 2);
         QCOMPARE(team().decisions.first().state, QStringLiteral("withdrawn"));
         QVERIFY(!team().paused);
+    }
+    void theLeadersTurnEndSendsTheWaitingDigestEndToEnd() {
+        agent_test::Fixture fixture;
+        QVERIFY(fixture.open(true));
+        const QString repository = fixture.directory.filePath("shop");
+        QVERIFY(QDir().mkpath(repository));
+        for (const QStringList& arguments :
+             {QStringList{"init", "-q", "-b", "integration"},
+              QStringList{"-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "-q",
+                          "--allow-empty", "-m", "start"}}) {
+            QProcess process;
+            process.setWorkingDirectory(repository);
+            process.start("git", arguments);
+            QVERIFY(process.waitForFinished(15000) && process.exitCode() == 0);
+        }
+        const auto command = [&](const QString& type, const QJsonObject& payload) {
+            return fixture.host->handleCommand(agent_test::request(type, payload), "desktop-test");
+        };
+        const QJsonObject created = command(
+            "team.create",
+            {{"repository", repository},
+             {"name", "Shop"},
+             {"integration_branch", "integration"},
+             {"plan", QJsonObject{{"leader", QJsonObject{{"provider", "claude"}}},
+                                  {"developers", QJsonObject{{"count", 1}, {"provider", "codex"}}},
+                                  {"reviewer", QJsonObject{{"provider", "claude"}}}}}});
+        QVERIFY2(created.value("ok").toBool(), qPrintable(agent_test::text(created)));
+        const QJsonArray members = created.value("team").toObject().value("members").toArray();
+        const QString teamId = created.value("team").toObject().value("id").toString();
+        const QString leader = members.at(0).toObject().value("session_id").toString();
+        const QString developer = members.at(1).toObject().value("session_id").toString();
+        QVERIFY(command("team.task.create", {{"team_id", teamId}, {"title", "Cart"}})
+                    .value("ok")
+                    .toBool());
+        QVERIFY(command("team.task.assign",
+                        {{"team_id", teamId}, {"task_id", "T-1"}, {"owner", developer}})
+                    .value("ok")
+                    .toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.count(developer, "turn.completed") >= 1, 8000);
+        QVERIFY(fixture
+                    .agents(developer, "agents.team_task_update",
+                            {{"task_id", "T-1"}, {"state", "in_progress"}})
+                    .value("ok")
+                    .toBool());
+        // An actionable question waits; the quiet period (20 s) has not passed.
+        QVERIFY(fixture
+                    .agents(developer, "agents.team_task_update",
+                            {{"task_id", "T-1"}, {"state", "blocked"}, {"question", "EUR?"}})
+                    .value("ok")
+                    .toBool());
+        // Any turn of the leader ends with the digest.
+        QVERIFY(fixture.agents(developer, "agents.send", {{"to", "leader"}, {"text", "Hello"}})
+                    .value("ok")
+                    .toBool());
+        const auto digests = [&] {
+            int count = 0;
+            for (const auto& message : fixture.journal->agentMessagesOf(leader, 1, 20))
+                count += message.kind == QStringLiteral("digest") ? 1 : 0;
+            return count;
+        };
+        QTRY_COMPARE_WITH_TIMEOUT(digests(), 1, 10000);
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.count(leader, "turn.completed") >= 2, 10000);
+        QCOMPARE(digests(), 1);
     }
 };
 

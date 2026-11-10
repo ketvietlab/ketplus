@@ -52,13 +52,6 @@ bool SessionHost::journalTurnStart(Session& session, const QJsonObject& prompt,
                                object.value("payload").toObject());
         if (alive.isNull())
             return true;
-        // ADR 0112 §7: the leader's digest waits for the end of its turn.
-        if (const QString type = object.value("event_type").toString();
-            teams_ &&
-            (type == QStringLiteral("turn.completed") || type == QStringLiteral("runtime.stopped")))
-            teams_->memberTurnEnded(id);
-        if (alive.isNull())
-            return true;
     }
     return true;
 }
