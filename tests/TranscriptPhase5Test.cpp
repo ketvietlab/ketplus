@@ -1364,6 +1364,23 @@ void AgentWorkspaceViewTest::approvalCardStaysOutsideCommandGroup() {
                  .value("option_ids")
                  .toStringList(),
              QStringList{"a"});
+
+    // From the keyboard: Tab reaches both buttons, and Space on Deny declines.
+    auto* decline = findVisualItem(card, QStringLiteral("approvalDeclineButton"));
+    QVERIFY(accept->property("activeFocusOnTab").toBool());
+    QVERIFY(decline->property("activeFocusOnTab").toBool());
+    view.quickView()->requestActivate();
+    decline->forceActiveFocus(Qt::TabFocusReason);
+    QTRY_VERIFY(decline->hasActiveFocus());
+    QTest::keyClick(view.quickView(), Qt::Key_Space);
+    QTRY_COMPARE(answered.count(), 2);
+    QVERIFY(answered.last()
+                .first()
+                .toMap()
+                .value("decision")
+                .toMap()
+                .value("option_ids")
+                .toStringList() != QStringList{"a"});
 }
 
 // A settled approval is one quiet line of how it ended, as the mock's.
