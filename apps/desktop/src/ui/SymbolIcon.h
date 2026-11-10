@@ -10,4 +10,6 @@ namespace ketplus::symbol_icon {
 void paint(QPainter& painter, const QByteArray& name, const QColor& color, const QRectF& rect);
 QPixmap pixmap(const QByteArray& name, const QColor& color, const QSize& size,
                qreal devicePixelRatio = 2.0);
+// The kit's primary button text, for an icon drawn on that button in the current theme.
+QColor primaryButtonInk();
 } // namespace ketplus::symbol_icon

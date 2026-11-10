@@ -234,7 +234,8 @@ class EditorWidget final : public ScintillaEditBase {
     std::unique_ptr<Document> document_;
     EditorSettings editorSettings_{EditorSettings::defaults()};
     EditorViewOptions viewOptions_;
-    QString foldMarkerColor_{QStringLiteral("#8B8B8B")};
+    // Until applyTheme() runs, the current theme's muted text.
+    QString foldMarkerColor_{currentThemePalette().textMuted};
     QString lexerName_;
     QString syntaxName_;
     QString syntaxOverride_;

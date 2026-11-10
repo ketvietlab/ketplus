@@ -2,6 +2,7 @@
 #include "KetChoice.h"
 #include "KetSegmentedControl.h"
 #include "KetThemeCard.h"
+#include "KetTokens.h"
 #include "agent/AgentWorkspaceView.h"
 #include "app/AgentConversationWidth.h"
 #include "app/AppearanceSettings.h"
@@ -13,6 +14,8 @@
 #include "app/SettingsWorkspacePage.h"
 #include "app/WorktreesWorkspacePage.h"
 #include "editor/EditorWidget.h"
+#include "git/GitDiffView.h"
+#include "git/GitService.h"
 #include "preview/MarkdownPreviewPane.h"
 #include "terminal/TerminalView.h"
 #include "ui/Theme.h"
@@ -29,6 +32,7 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QTableView>
 #include <QThread>
 
 #include "app/PixelSelect.h"
@@ -114,6 +118,7 @@ class MainWindowSettingsTest final : public QObject {
     void appliesSavedAppearanceToPublicAndPrivateSurfaces();
     void archivedPageStopsRunningTurnAndRestoresInPlace();
     void settingsAndWorktreesUseWorkspacePages();
+    void themeSwitchRecoloursAnOpenDiff();
     void browserPageDefaultsOnAndPersistsChoices();
     void providersPageShowsRuntimeStatus();
     void conversationWidthFollowsOnlyTheAgentWorkspace();
@@ -483,6 +488,52 @@ void MainWindowSettingsTest::appliesSavedAppearanceToPublicAndPrivateSurfaces() 
     QVERIFY(browser != nullptr);
     QTRY_VERIFY(
         browser->document()->defaultStyleSheet().contains(QStringLiteral("font-size: 17px")));
+}
+
+void MainWindowSettingsTest::themeSwitchRecoloursAnOpenDiff() {
+    // #142 / #100: switching the theme recolours an open diff tab without reopening it.
+    QTemporaryDir settingsDirectory;
+    QTemporaryDir workspace;
+    QVERIFY(settingsDirectory.isValid());
+    QVERIFY(workspace.isValid());
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsDirectory.path());
+    QSettings().clear();
+
+    ketplus::ThemeManager theme(*qApp);
+    theme.setMode(ketplus::ThemeManager::Mode::Light);
+    ketplus::MainWindow window(theme);
+    window.show();
+    window.openFolder(workspace.path());
+    auto* git = window.findChild<ketplus::GitService*>();
+    QVERIFY(git != nullptr);
+    const QString file = QDir(workspace.path()).filePath(QStringLiteral("example.cpp"));
+    emit git->diffReady(file, ketplus::GitDiffMode::Unstaged,
+                        QStringLiteral("diff --git a/example.cpp b/example.cpp\n"
+                                       "--- a/example.cpp\n+++ b/example.cpp\n"
+                                       "@@ -1,2 +1,2 @@\n int unchanged = 0;\n"
+                                       "-int value = 1;\n+int value = 2;\n"),
+                        {});
+    ketplus::GitDiffView* diff = nullptr;
+    QTRY_VERIFY((diff = window.findChild<ketplus::GitDiffView*>()) != nullptr);
+    auto* table = diff->findChild<QTableView*>();
+    QVERIFY(table != nullptr && table->model() != nullptr);
+    const auto contextBackground = [table] {
+        auto* model = table->model();
+        for (int row = 0; row < model->rowCount(); ++row) {
+            for (int column = 0; column < model->columnCount(); ++column) {
+                const QModelIndex index = model->index(row, column);
+                if (index.data(Qt::DisplayRole).toString().contains(QStringLiteral("unchanged")))
+                    return index.data(Qt::BackgroundRole).value<QColor>();
+            }
+        }
+        return QColor();
+    };
+    QCOMPARE(contextBackground(), QColor(ket::Tokens::color(u"panel-bg", ket::Theme::Light)));
+    theme.setMode(ketplus::ThemeManager::Mode::Dark);
+    QTRY_COMPARE(contextBackground(), QColor(ket::Tokens::color(u"panel-bg", ket::Theme::Dark)));
+    theme.setMode(ketplus::ThemeManager::Mode::Light);
+    QTRY_COMPARE(contextBackground(), QColor(ket::Tokens::color(u"panel-bg", ket::Theme::Light)));
 }
 
 void MainWindowSettingsTest::settingsAndWorktreesUseWorkspacePages() {

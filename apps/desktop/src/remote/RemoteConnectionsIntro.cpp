@@ -316,7 +316,8 @@ RemoteConnectionsIntro::RemoteConnectionsIntro(QWidget* parent) : QWidget(parent
     signIn_ = new ket::Button(QStringLiteral("Sign in"), ket::ButtonVariant::Primary, copy_);
     signIn_->setObjectName(QStringLiteral("remoteSignInPromptButton"));
     signIn_->setProperty("remotePrimary", true);
-    signIn_->setIcon(QIcon(symbol_icon::pixmap(logInIcon, Qt::white, QSize(16, 16))));
+    signIn_->setIcon(
+        QIcon(symbol_icon::pixmap(logInIcon, symbol_icon::primaryButtonInk(), QSize(16, 16))));
     chrome_geometry::iconSize(signIn_, QSize(15, 15));
     connect(signIn_, &QAbstractButton::clicked, this, &RemoteConnectionsIntro::signInRequested);
     copy->addWidget(signIn_, 0, Qt::AlignLeft);
