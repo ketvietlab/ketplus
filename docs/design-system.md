@@ -229,6 +229,10 @@ restart, fork snapshot) stay neutral. Retryable errors show reconnecting without
 Older retained-output/diff/text markers stay visible. Unsupported queue actions
 are not shown; queued status follows the daemon state.
 
+KétPlus Pro shows its status bar only with the editor. Elsewhere (Agent Workspace,
+Worktrees, Settings) a status-bar message shows as the mock's app-wide `ket::Toast`
+instead (#164).
+
 Settings is a page of the window in both editions (#155): `core/src/app/SettingsWorkspace`
 draws the heading with its `ket::Kbd` shortcut, kit navigation, theme cards, accent
 swatch, segmented choices and form controls, and KétPlus shows it in place of the

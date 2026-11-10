@@ -86,6 +86,10 @@ void SettingsUpdatesPage::refresh() {
     if (!configured) {
         status_->setText(tr("Updates are not configured for this build. Install new versions "
                             "manually; KetPlus does not contact an update server."));
+    } else if (updater_.pendingVersionDownloaded()) {
+        status_->setText(
+            tr("KetPlus %1 is downloaded. Check for Updates to restart and install it.")
+                .arg(updater_.pendingVersion()));
     } else if (!updater_.pendingVersion().isEmpty()) {
         status_->setText(tr("KetPlus %1 is available. Check for Updates to review and install it.")
                              .arg(updater_.pendingVersion()));

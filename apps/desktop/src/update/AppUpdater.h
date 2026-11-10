@@ -42,16 +42,19 @@ class AppUpdater : public QObject {
     // A version a scheduled check found while KetPlus was not in focus. The sidebar shows a
     // reminder until the user opens it with checkForUpdates() or the session ends.
     [[nodiscard]] QString pendingVersion() const { return pendingVersion_; }
+    // The pending version is downloaded, so restarting installs it.
+    [[nodiscard]] bool pendingVersionDownloaded() const { return pendingDownloaded_; }
 
   signals:
     void stateChanged();
     void pendingVersionChanged(const QString& version);
 
   protected:
-    void setPendingVersion(const QString& version);
+    void setPendingVersion(const QString& version, bool downloaded = false);
 
   private:
     QString pendingVersion_;
+    bool pendingDownloaded_{false};
 };
 
 } // namespace ketplus

@@ -30,6 +30,8 @@
 #include "workspace/ExplorerPanel.h"
 #include "workspace/SearchPanel.h"
 
+#include "KetToast.h"
+
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
@@ -196,12 +198,24 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
                     Qt::QueuedConnection);
             });
     connect(activityBar_, &ActivityBar::settingsRequested, this, &MainWindow::showSettings);
+    // The status bar shows only with the editor; elsewhere its messages show as the mock's
+    // app-wide toasts, so the Agent Workspace, Worktrees and Settings still give feedback.
+    connect(statusBar(), &QStatusBar::messageChanged, this, [this](const QString& message) {
+        if (!message.isEmpty() && !statusBar()->isVisible())
+            // Neutral: a status message may be a failure, never shown as a success.
+            ket::Toast::showMessage(this, message, ket::ToastTone::Neutral);
+    });
     connect(activityBar_, &ActivityBar::settingsSectionRequested, this,
             &MainWindow::showSettingsSection);
     connect(activityBar_, &ActivityBar::updatesRequested, this, &MainWindow::checkForUpdates);
+    const auto showPendingUpdate = [this] {
+        auto& updater = AppUpdater::instance();
+        activityBar_->setPendingUpdate(updater.pendingVersion(),
+                                       updater.pendingVersionDownloaded());
+    };
     connect(&AppUpdater::instance(), &AppUpdater::pendingVersionChanged, activityBar_,
-            &ActivityBar::setPendingUpdate);
-    activityBar_->setPendingUpdate(AppUpdater::instance().pendingVersion());
+            showPendingUpdate);
+    showPendingUpdate();
     connect(activityBar_, &ActivityBar::identityRequested, this,
             [this] { setRemoteWorkspaceVisible(true); });
     connect(activityBar_, &ActivityBar::modeRequested, this, [this](const ActivityBar::Mode mode) {

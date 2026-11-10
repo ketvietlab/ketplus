@@ -52,7 +52,8 @@ class ActivityBar final : public QWidget {
     void setRemoteMachineSelected(bool selected);
     // Shows the "Update ready" reminder above the identity button; empty hides it.
     void setStorageStatus(const QVariantMap& result);
-    void setPendingUpdate(const QString& version);
+    // `downloaded` reads "Restart to install"; otherwise the update still needs a review.
+    void setPendingUpdate(const QString& version, bool downloaded = false);
     void applyPalette(const ThemePalette& palette, int zoomPercent = 100);
     [[nodiscard]] Mode mode() const noexcept;
 

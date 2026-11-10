@@ -2,6 +2,7 @@
 #include "KetChoice.h"
 #include "KetSegmentedControl.h"
 #include "KetThemeCard.h"
+#include "KetToast.h"
 #include "KetTokens.h"
 #include "agent/AgentWorkspaceView.h"
 #include "app/AgentConversationWidth.h"
@@ -86,7 +87,9 @@ class FakeAppUpdater final : public ketplus::AppUpdater {
         canCheck_ = canCheck;
         emit stateChanged();
     }
-    void remind(const QString& version) { setPendingVersion(version); }
+    void remind(const QString& version, const bool downloaded = false) {
+        setPendingVersion(version, downloaded);
+    }
 
     int checks_{0};
     QDateTime lastCheck_;
@@ -124,6 +127,7 @@ class MainWindowSettingsTest final : public QObject {
     void conversationWidthFollowsOnlyTheAgentWorkspace();
     void returningAFieldToItsOpeningValueSavesIt();
     void updatesPageAndReminderDriveTheUpdater();
+    void hiddenStatusMessagesShowAsToasts();
     void unconfiguredBuildExplainsUpdatesInsteadOfChecking();
 };
 
@@ -805,6 +809,42 @@ void MainWindowSettingsTest::conversationWidthFollowsOnlyTheAgentWorkspace() {
     QCOMPARE(ketplus::AgentConversationWidth::load(), widePixels);
 }
 
+void MainWindowSettingsTest::hiddenStatusMessagesShowAsToasts() {
+    QTemporaryDir settingsDirectory;
+    QVERIFY(settingsDirectory.isValid());
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsDirectory.path());
+    QSettings().clear();
+    ketplus::ThemeManager theme(*qApp);
+    ketplus::MainWindow window(theme);
+    window.resize(1100, 720);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    const auto toasts = [&window] {
+        QStringList texts;
+        for (auto* toast : window.findChildren<ket::Toast*>()) {
+            texts.append(toast->text());
+            // Status messages include failures, so none reads as a success.
+            if (toast->tone() != ket::ToastTone::Neutral)
+                texts.append(QStringLiteral("not neutral"));
+        }
+        return texts;
+    };
+
+    // In Settings, as in the Agent Workspace, the status bar is hidden, so its message shows
+    // as a toast.
+    window.findChild<QAction*>(QStringLiteral("productSettingsAction"))->trigger();
+    QTRY_VERIFY(!window.statusBar()->isVisible());
+    window.statusBar()->showMessage(QStringLiteral("Saved the plan"), 2000);
+    QVERIFY(toasts().contains(QStringLiteral("Saved the plan")));
+    QVERIFY(!toasts().contains(QStringLiteral("not neutral")));
+
+    // With the status bar on screen, the message stays there.
+    window.statusBar()->show();
+    window.statusBar()->showMessage(QStringLiteral("Replaced 3 matches"), 2000);
+    QVERIFY(!toasts().contains(QStringLiteral("Replaced 3 matches")));
+}
+
 void MainWindowSettingsTest::updatesPageAndReminderDriveTheUpdater() {
     QTemporaryDir settingsDirectory;
     QTemporaryDir workspace;
@@ -846,6 +886,10 @@ void MainWindowSettingsTest::updatesPageAndReminderDriveTheUpdater() {
     updater.remind(QStringLiteral("0.1.18"));
     QVERIFY(!reminder->isHidden());
     QVERIFY(reminder->accessibleDescription().contains(QStringLiteral("KétPlus Pro 0.1.18")));
+    QVERIFY(reminder->accessibleDescription().contains(QStringLiteral("Review and install")));
+    // Downloaded, it reads as the mock's "Restart to install".
+    updater.remind(QStringLiteral("0.1.18"), true);
+    QVERIFY(reminder->accessibleDescription().contains(QStringLiteral("Restart to install")));
     reminder->click();
     QCOMPARE(updater.checks_, 3);
     updater.remind({});
@@ -889,6 +933,8 @@ void MainWindowSettingsTest::updatesPageAndReminderDriveTheUpdater() {
     QVERIFY(!checkNow->isEnabled());
     updater.remind(QStringLiteral("0.1.18"));
     QVERIFY(status->text().contains(QStringLiteral("KetPlus 0.1.18 is available")));
+    updater.remind(QStringLiteral("0.1.18"), true);
+    QVERIFY(status->text().contains(QStringLiteral("KetPlus 0.1.18 is downloaded")));
     updater.remind({});
     updater.lastCheck_ = QDateTime::currentDateTime();
     updater.setCanCheck(true);
