@@ -12,10 +12,12 @@ Item {
     id: screen
 
     required property var window
-    // KétPlus (LiteMain.qml) puts Search beside the editor instead of the explorer, names
-    // itself in the status bar and uses Ctrl on Windows and Linux.
+    // KétPlus (LiteMain.qml) puts Search beside the editor instead of the explorer, has one
+    // status bar (singleStatusBar) and uses Ctrl on Windows and Linux.
     property bool explorerVisible: true
     property string productName: "KétPlus Pro"
+    // KétPlus has one status bar: the branch, then the document's position and format.
+    property bool singleStatusBar: false
     property string quickOpenKey: "⌘ K"
     property var openFolders: Fixtures.explorer.filter(f => f.folder && f.open).map(f => f.name)
     property var tabs: ["NavigationRail.qml", "design-system.md"]
@@ -329,7 +331,7 @@ Item {
 
                 KetStatusBar {
                     Layout.fillWidth: true
-                    visible: screen.current !== ""
+                    visible: screen.current !== "" && !screen.singleStatusBar
                     trailing: [
                         KetStatusItem { text: "Ln " + screen.cursorLine + ", Col 34" },
                         KetStatusItem { text: "Spaces: 4" },
@@ -342,11 +344,27 @@ Item {
 
         KetStatusBar {
             Layout.fillWidth: true
+            visible: !screen.singleStatusBar
             KetStatusItem { text: "Local workspace"; iconName: "success" }
             trailing: [
                 KetStatusItem { text: "UTF-8" },
                 KetStatusItem { text: "LF" },
                 KetStatusItem { text: screen.productName }
+            ]
+        }
+        KetStatusBar {
+            Layout.fillWidth: true
+            visible: screen.singleStatusBar
+            KetStatusItem { text: "develop"; iconName: "branch" }
+            trailing: [
+                KetStatusItem { text: "Ln " + screen.cursorLine + ", Col 34"; visible: screen.current !== "" },
+                KetStatusItem { text: "Spaces: 4"; visible: screen.current !== "" },
+                KetStatusItem {
+                    text: screen.current.endsWith(".md") ? "Markdown" : "QML"
+                    visible: screen.current !== ""
+                },
+                KetStatusItem { text: "UTF-8"; visible: screen.current !== "" },
+                KetStatusItem { text: "LF"; visible: screen.current !== "" }
             ]
         }
     }

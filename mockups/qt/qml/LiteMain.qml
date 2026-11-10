@@ -203,6 +203,7 @@ Basic.ApplicationWindow {
                     window: app
                     explorerVisible: app.screen === "explorer" && app.sidebarOpen
                     productName: "KétPlus"
+                    singleStatusBar: true
                     quickOpenKey: app.modKey + "P"
                 }
                 SourceControlScreen { window: app }
