@@ -42,7 +42,7 @@ Screens and states (`--screen` / `--state`):
 | `editor` | `markdown`, `markdown-source`, `samples` | `docs/licensing.md` (bundled from the repository) in Preview or Source, with the floating Preview/Source switch 100 px above the bottom; `samples` opens `design-system.md` with QML, C++, shell and JSON code blocks in syntax colours |
 | `changes` | | Source Control: changes, staged changes, diff |
 | `worktrees` | | Manage worktrees, create dialog, manage menu |
-| `teams` | `task`, `large`, `empty` | Concept: a team's page (see Teams). `task` opens a task, `large` adds a fourth developer, `empty` has no team. `--open=new-team`, `add-member`, `remove-member`, `delete-team`, `task` or `handover` opens that dialog, and `repo-menu`, `team-menu` or `row-menu` a sidebar menu; `--scroll=1` starts at Members and Updates |
+| `teams` | `task`, `large`, `new`, `empty` | Concept: a team's page (see Teams). `task` opens a task, `large` adds a fourth developer, `new` is a team nobody is on yet, `empty` has no team. `--open=new-team`, `add-member`, `remove-member`, `delete-team`, `task` or `handover` opens that dialog, and `repo-menu`, `team-menu` or `row-menu` a sidebar menu; `--scroll=1` starts at Members and Updates |
 | `connections` | `no-activity` | This Mac, phones, activity from paired devices (the daemon's remote command audit, #86: done and refused requests, a sender that did not verify) or its empty state, Linux machines (SSH or Relay), pairing dialogs, account. `--open=activity` shows all activity, `--open=device` one phone's details, `--open=device-focus` the same with a truncated row focused from the keyboard |
 | `connections` | `signed-out`, `expired`, `sign-in` | Signed out: the introduction (this Mac and KetPlus Mobile, the three pairing steps), the expired-login banner, the browser sign-in dialog |
 | `settings` | `typography`, `account`, `browser`, `computer`, `providers`, `archived`, `storage`, `updates` | The app's order: Appearance (live theme, follow system, zoom), typography, account, Agent models (opens the model picker), browser, computer use, providers (CLI status, Claude API access, organization usage), archive, storage (journal size by part, retention, size limit and warning, largest conversations, Compact now), updates |
@@ -131,7 +131,10 @@ A concept, not built in the app: several conversations that share one goal. Agen
   developers, reviewers), each with its role as its first tag. The icon folds it, the name opens the team's page, and the count
   is the decisions that wait for the user. A conversation belongs to one team at a time.
 - **Creating and changing a team** starts in the sidebar. A repository's `+` (or a right click)
-  offers New conversation and New team…; a team folder shows Add member and its menu (Open team,
+  offers New conversation and New team…. A new team has a name, a goal and an integration branch
+  and nobody on it: its page asks for a leader first. Add a member starts a new conversation in
+  the team, or takes one of the repository's that belongs to no team, as Leader (while the team
+  has none), Developer or Reviewer. A team folder shows Add member and its menu (Open team,
   Add member…, Delete team…) while hovered or focused, and on a right click; a conversation's menu
   has Add to a team… or Remove from *team*…. The page repeats them: Add member, a member's Remove
   from team… and the team menu's Delete team…. Deleting a team or removing a member keeps the

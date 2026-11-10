@@ -36,12 +36,16 @@ Column {
     signal menuRequested(var anchor)
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
+    // A member's conversation; one Add a member started is not among the repository's yet.
     function conversation(number) {
+        const who = team.members.find(m => m.number === number)
         return conversations.find(c => c.number === number)
-            || { number: number, title: "", tags: [], status: KetTheme.ConversationStatus.NotStarted, worktree: "" }
+            || { number: number, title: who ? who.title : "", tags: [], worktree: team.branch,
+                 status: KetTheme.ConversationStatus.NotStarted }
     }
 
-    visible: shown.length > 0
+    // A new team has nobody yet and still shows; a tag filter hides a folder with no match.
+    visible: window.tagFilter === "" || shown.length > 0
 
     Item {
         width: folder.width
@@ -181,12 +185,23 @@ Column {
                 text: row.modelData.role === "developer" ? row.modelData.lane + " · " + row.item.worktree
                                                          : row.item.worktree
             }
-            onClicked: folder.window.openConversation(folder.team.repository, item)
+            onClicked: folder.window.openTeamMember(folder.team.id, item.number)
             TapHandler {
                 acceptedButtons: Qt.RightButton
                 onTapped: folder.contextMenuRequested(row.item)
             }
         }
+    }
+
+    Text {
+        visible: folder.expanded && folder.team.members.length === 0
+        x: folder.indent + folder.px(8)
+        height: folder.px(24)
+        verticalAlignment: Text.AlignVCenter
+        text: "No member yet"
+        color: KetTheme.t.textMuted
+        font.family: KetTheme.fontFamily
+        font.pixelSize: folder.px(12)
     }
 
     // Space before the repository's own conversations.

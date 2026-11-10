@@ -20,7 +20,7 @@ Basic.ApplicationWindow {
         "workspace/report-running", "workspace/report-details", "workspace/claude",
         "workspace/codex", "workspace/cursor", "workspace/turn-report", "editor", "editor/terminal",
         "editor/markdown", "editor/markdown-source", "editor/samples",
-        "changes", "worktrees", "teams", "teams/task", "teams/large", "teams/empty",
+        "changes", "worktrees", "teams", "teams/task", "teams/large", "teams/new", "teams/empty",
         "connections", "connections/no-activity", "connections/signed-out",
         "connections/expired", "connections/sign-in", "settings", "settings/typography", "settings/account",
         "settings/browser", "settings/computer", "settings/providers", "settings/archived",
@@ -82,6 +82,10 @@ Basic.ApplicationWindow {
     function removeTeamMember(id, number) {
         screen = "teams"
         teams.startRemove(id, number)
+    }
+    function openTeamMember(id, number) {
+        teams.showTeam(id)
+        teams.openConversation(number)
     }
     function teamOf(number) { return teamList.find(t => t.members.some(m => m.number === number)) || null }
     property bool compact: false
