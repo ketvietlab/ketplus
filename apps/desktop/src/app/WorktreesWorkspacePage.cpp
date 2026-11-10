@@ -275,8 +275,7 @@ void WorktreesWorkspacePage::rebuild() {
     }
 }
 
-void WorktreesWorkspacePage::applyPalette(const ThemePalette& palette,
-                                          const int interfaceFontSizePixels) {
+void WorktreesWorkspacePage::applyPalette(const ThemePalette& palette, const int zoomPercent) {
     pageBackground_ = palette.pageBackground;
     panelBackground_ = palette.panelBackground;
     textMain_ = palette.textMain;
@@ -313,10 +312,10 @@ QLabel#worktreesWorkspaceState { min-height:22px; padding:0 8px; border:1px soli
  border-radius:4px; background:%1; color:%4; font-size:{{micro}}px; }
 QLabel#worktreesWorkspaceState[warning="true"] { border-color:%8; color:%8; }
 )QSS"),
-                                           interfaceFontSizePixels);
+                                           zoomPercent);
     setStyleSheet(sheet.arg(pageBackground_, panelBackground_, textMain_, textMuted_, border_,
                             surfaceRaised_, positive_, warning_));
-    chrome_geometry::apply(this, interfaceFontSizePixels);
+    chrome_geometry::apply(this, zoomPercent);
     if (auto* archived = findChild<QAbstractButton*>(QStringLiteral("worktreesArchivedButton")))
         archived->setIcon(symbol_icon::pixmap(archiveIcon, QColor(textMuted_), QSize(15, 15)));
     for (auto* icon : findChildren<QLabel*>(QStringLiteral("worktreesWorkspaceIcon")))

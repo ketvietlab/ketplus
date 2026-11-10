@@ -105,7 +105,8 @@ The registered code-font family is `KET Sans Mono`. The old display spelling
 ## Live updates and persistence
 
 Keep the existing `appearance/theme` and `appearance/interfaceFontSizePixels`
-keys. A Pro appearance save publishes its normalized snapshot to every window
+keys; `appearance/interfaceZoomPercent` holds the separate interface zoom, and a
+profile without it migrates from the interface pixels (ADR 0104). A Pro appearance save publishes its normalized snapshot to every window
 before synchronous theme signals fire. It reapplies surfaces for font-only
 changes too. Settings applies each change as it is made (ADR 0103); fields the
 open dialog did not edit merge with the latest saved snapshot. Monospace families resolve on
@@ -218,9 +219,10 @@ are not shown; queued status follows the daemon state.
 Pro Settings keeps its workspace presentation and uses kit navigation, theme
 cards, accent swatch, segmented choices and form controls. The workspace reuses
 the core dialog's Restore defaults footer and Follow system control; every change
-applies at once (ADR 0103). Numeric
-interface sizes outside Small/Medium/Large remain visible as a Custom choice;
-opening Settings never coerces a stored value. Storage, Browser and Computer
+applies at once (ADR 0103). Appearance has the mock's Interface zoom
+(90/100/110/125%) and Typography the Interface font size (13–16 px); the zoom
+scales the chrome and the size sets the application text at that zoom
+(ADR 0104). Storage, Browser and Computer
 preferences retain their existing immediate-save contracts. The sidebar Storage
 action selects that section without rebuilding an already open settings page.
 Provider status and Claude usage remain authoritative runtime data; unavailable

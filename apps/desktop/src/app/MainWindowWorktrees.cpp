@@ -1,9 +1,9 @@
 #include "agent/AgentSessionManager.h"
+#include "agent/AgentWorkspaceView.h"
 #include "app/AgentWorktreeCreator.h"
 #include "app/MainWindow.h"
 #include "app/SettingsWorkspacePage.h"
 #include "app/WorktreesWorkspacePage.h"
-#include "agent/AgentWorkspaceView.h"
 #include "editor/EditorWidget.h"
 #include "git/GitChangesPanel.h"
 #include "git/GitService.h"
@@ -17,12 +17,12 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QMenu>
 #include <QLayout>
+#include <QMenu>
 #include <QMessageBox>
 #include <QSettings>
-#include <QStatusBar>
 #include <QSplitter>
+#include <QStatusBar>
 #include <QTabWidget>
 
 #include <algorithm>
@@ -49,8 +49,8 @@ void MainWindow::refreshWorktreesWorkspace() {
         return;
     QSet<QString> archivedPaths;
     for (const QVariant& value : archivedWorktrees()) {
-        const QString path = QFileInfo(value.toMap().value(QStringLiteral("path")).toString())
-                                 .canonicalFilePath();
+        const QString path =
+            QFileInfo(value.toMap().value(QStringLiteral("path")).toString()).canonicalFilePath();
         if (!path.isEmpty())
             archivedPaths.insert(path);
     }
@@ -58,21 +58,20 @@ void MainWindow::refreshWorktreesWorkspace() {
     QHash<QString, int> conversations;
     bool hasPrunableWorktrees = false;
     for (const GitWorktree& worktree : std::as_const(worktrees_)) {
-        hasPrunableWorktrees = hasPrunableWorktrees ||
-                               (!worktree.bare &&
-                                (worktree.prunable || !QFileInfo(worktree.path).isDir()));
+        hasPrunableWorktrees =
+            hasPrunableWorktrees ||
+            (!worktree.bare && (worktree.prunable || !QFileInfo(worktree.path).isDir()));
         const QString path = QFileInfo(worktree.path).canonicalFilePath();
         if (worktree.bare || worktree.prunable || archivedPaths.contains(path))
             continue;
         visible.append(worktree);
-        conversations.insert(path,
-                             agentManager_ == nullptr ? 0
-                                                      : agentManager_->conversations(path).size());
+        conversations.insert(
+            path, agentManager_ == nullptr ? 0 : agentManager_->conversations(path).size());
     }
-    worktreesWorkspace_->setWorktrees(
-        visible, workspaceRoot_,
-        agentManager_ == nullptr ? QSet<QString>{} : agentManager_->runningPaths(), conversations,
-        !gitSnapshot_.files.isEmpty());
+    worktreesWorkspace_->setWorktrees(visible, workspaceRoot_,
+                                      agentManager_ == nullptr ? QSet<QString>{}
+                                                               : agentManager_->runningPaths(),
+                                      conversations, !gitSnapshot_.files.isEmpty());
     worktreesWorkspace_->setPruneAvailable(hasPrunableWorktrees &&
                                            !agentWorktreeCreator_->isRunning());
 }
@@ -93,7 +92,7 @@ void MainWindow::setWorktreesWorkspaceVisible(const bool visible) {
     if (worktreesWorkspace_ == nullptr) {
         worktreesWorkspace_ = new WorktreesWorkspacePage(workspaceSplit_);
         workspaceSplit_->addWidget(worktreesWorkspace_);
-        worktreesWorkspace_->applyPalette(theme_.palette(), theme_.interfaceFontSizePixels());
+        worktreesWorkspace_->applyPalette(theme_.palette(), theme_.interfaceZoomPercent());
         connect(worktreesWorkspace_, &WorktreesWorkspacePage::createRequested, this,
                 &MainWindow::createAgentWorktree);
         connect(worktreesWorkspace_, &WorktreesWorkspacePage::pruneRequested, this, [this] {

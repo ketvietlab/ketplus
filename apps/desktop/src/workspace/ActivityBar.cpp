@@ -59,7 +59,7 @@ class SidebarResizeHandle final : public QWidget {
         if (event->buttons().testFlag(Qt::LeftButton))
             bar_->setSidebarWidth(startWidth_ + qRound((event->globalPosition().x() - startX_) /
                                                        InterfaceZoomMetrics::factor(
-                                                           chrome_geometry::basePixels(bar_))));
+                                                           chrome_geometry::zoomPercent(bar_))));
     }
     void mouseReleaseEvent(QMouseEvent*) override {
         QSettings().setValue(kWidthSetting, bar_->sidebarWidth());

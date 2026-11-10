@@ -101,7 +101,7 @@ class ConnectionsScene final : public QWidget {
 
     // The narrow scene is as wide as the mock's, or the space it has.
     [[nodiscard]] QSize sizeHint() const override {
-        return {InterfaceZoomMetrics::geometry(500, chrome_geometry::basePixels(this)), height()};
+        return {InterfaceZoomMetrics::geometry(500, chrome_geometry::zoomPercent(this)), height()};
     }
 
     void setNarrow(const bool narrow) {
@@ -112,7 +112,7 @@ class ConnectionsScene final : public QWidget {
 
   protected:
     void paintEvent(QPaintEvent*) override {
-        const double s = InterfaceZoomMetrics::factor(chrome_geometry::basePixels(this));
+        const double s = InterfaceZoomMetrics::factor(chrome_geometry::zoomPercent(this));
         QPainter painter(this);
         painter.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
 
@@ -203,7 +203,7 @@ class ConnectionsScene final : public QWidget {
     // Muted text after a glyph, centred in `area` or from its left edge.
     void caption(QPainter& painter, const QRectF& area, const char* icon, const int iconSize,
                  const QString& value, const Qt::Alignment alignment) const {
-        const int base = chrome_geometry::basePixels(this);
+        const int base = chrome_geometry::zoomPercent(this);
         const double s = InterfaceZoomMetrics::factor(base);
         QFont font = this->font();
         font.setPixelSize(TypeScale::pixels(TypeStep::Caption, base));
@@ -416,7 +416,7 @@ void RemoteConnectionsIntro::changeEvent(QEvent* event) {
 }
 
 void RemoteConnectionsIntro::applyWidth() {
-    const int base = chrome_geometry::basePixels(this);
+    const int base = chrome_geometry::zoomPercent(this);
     const bool narrow = width() < InterfaceZoomMetrics::geometry(narrowWidth, base);
     if (laidOut_ && narrow == narrow_)
         return;

@@ -9,7 +9,7 @@ class QBoxLayout;
 class QAbstractButton;
 
 namespace ketplus::chrome_geometry {
-// Opt-in product geometry, always expressed in Medium logical pixels. These
+// Opt-in product geometry, always expressed in logical pixels at 100% zoom. These
 // bindings never inspect or change the geometry of unregistered CM controls.
 void fixedHeight(QWidget* widget, int height);
 void fixedWidth(QWidget* widget, int width);
@@ -28,6 +28,6 @@ void verticalSpacing(QLayout* layout, int spacing);
 void addSpacing(QBoxLayout* layout, int spacing);
 // New bindings inherit the closest product surface's zoom, including rows
 // created after the user changes zoom. Existing bindings never compound.
-void apply(QWidget* surface, int basePixels);
-int basePixels(const QObject* object);
+void apply(QWidget* surface, int zoomPercent);
+int zoomPercent(const QObject* object);
 } // namespace ketplus::chrome_geometry

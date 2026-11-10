@@ -28,4 +28,5 @@ uses the editor's size and line height, and Markdown is one pixel over the inter
 size, with the former 15/26 line rhythm. Stored `terminal/*` and `preview/*` values
 are still written but no longer read, so an older release that reads them still opens.
 The Typography preview drops its Markdown lines, and the Pro page follows the mock's
-order: Interface font, Interface size, Conversation width, Editor font, Editor font size.
+order: Interface font, Interface font size, Conversation width, Editor font, Editor font size.
+ADR 0104 separates that size from the interface zoom.

@@ -205,7 +205,7 @@ KdsPalette kdsPalette(const bool dark) {
             color(u"danger-border")};
 }
 
-QString remoteStyle(const KdsPalette& p, const int basePixels) {
+QString remoteStyle(const KdsPalette& p, const int zoomPercent) {
     QString css = TypeScale::apply(QStringLiteral(R"QSS(
 QWidget#remoteControlWorkspace, QWidget[remoteRole="page"], QScrollArea[remoteRole="viewport"],
 QScrollArea[remoteRole="viewport"] > QWidget > QWidget { background: @page@; }
@@ -316,7 +316,7 @@ QPushButton[remoteDanger="true"]:hover { border-color:@danger@; background:@dang
 QPushButton:disabled { border-color:@border@; background:@raised@; color:@disabled@; }
 QLabel[remoteRole="qr"] { background:white; border:10px solid white; border-radius:5px; }
 )QSS"),
-                                   basePixels);
+                                   zoomPercent);
     const QList<QPair<QString, QString>> replacements = {{"@page@", p.page},
                                                          {"@panel@", p.panel},
                                                          {"@raised@", p.raised},
@@ -393,17 +393,15 @@ void RemoteControlView::applyDesignSystemStyle() {
     if (applyingDesignSystemStyle_)
         return;
     applyingDesignSystemStyle_ = true;
-    const int basePixels = QApplication::font().pixelSize() > 0
-                               ? QApplication::font().pixelSize()
-                               : InterfaceZoomMetrics::mediumPixels;
+    const int zoomPercent = InterfaceZoomMetrics::current();
     const bool dark = palette().color(QPalette::Window).lightness() < 128;
     const KdsPalette colors = kdsPalette(dark);
-    setStyleSheet(remoteStyle(colors, basePixels));
+    setStyleSheet(remoteStyle(colors, zoomPercent));
     if (intro_)
         intro_->setSceneColors({QColor(colors.accentSubtle), QColor(colors.page),
                                 QColor(colors.border), QColor(colors.strong), QColor(colors.panel),
                                 QColor(colors.muted), dark});
-    chrome_geometry::apply(this, basePixels);
+    chrome_geometry::apply(this, zoomPercent);
     applyingDesignSystemStyle_ = false;
 }
 

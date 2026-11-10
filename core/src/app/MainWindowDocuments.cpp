@@ -943,7 +943,8 @@ void MainWindow::showSettings() {
 void MainWindow::applyAppearanceSettings(const AppearanceSettings& settings) {
     appearanceSettings_ = settings.normalized();
     appearanceSettings_.save();
-    theme_.setInterfaceFontSizePixels(appearanceSettings_.interfaceFontSizePixels);
+    theme_.setInterfaceScale(appearanceSettings_.interfaceFontSizePixels,
+                             appearanceSettings_.interfaceZoomPercent);
 
     auto* activeEditor = currentEditor();
     for (int index = 0; index < tabs_->count(); ++index) {

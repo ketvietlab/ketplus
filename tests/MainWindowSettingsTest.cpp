@@ -1,3 +1,4 @@
+#include "KetAppearance.h"
 #include "KetChoice.h"
 #include "KetSegmentedControl.h"
 #include "KetThemeCard.h"
@@ -453,13 +454,16 @@ void MainWindowSettingsTest::appliesSavedAppearanceToPublicAndPrivateSurfaces() 
     QVERIFY(!embeddedSettings->isModal());
 
     const auto appearance = ketplus::AppearanceSettings::load();
-    QCOMPARE(appearance.interfaceFontSizePixels, 16);
+    QCOMPARE(appearance.interfaceZoomPercent, 110);
+    QCOMPARE(appearance.interfaceFontSizePixels, 14);
     QCOMPARE(appearance.editor.fontSizePixels, 17);
     QCOMPARE(appearance.editor.lineHeightPixels, 29);
-    // Terminal text follows the editor, and Markdown reads a pixel over the interface.
+    // Terminal text follows the editor, and Markdown reads a pixel over the interface at the
+    // zoom: 15 px at 110%.
     QCOMPARE(appearance.terminal, (ketplus::TextTypographySettings{17, 29}));
     QCOMPARE(appearance.preview, (ketplus::TextTypographySettings{17, 29}));
-    QCOMPARE(theme.interfaceFontSizePixels(), 16);
+    QCOMPARE(theme.interfaceZoomPercent(), 110);
+    QCOMPARE(theme.interfaceFontSizePixels(), 14);
     QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Dark);
     QVERIFY(actionWithText(window, QStringLiteral("Dark"))->isChecked());
     QVERIFY(!actionWithText(window, QStringLiteral("System"))->isChecked());
@@ -585,35 +589,45 @@ void MainWindowSettingsTest::settingsAndWorktreesUseWorkspacePages() {
     QCOMPARE(darkTheme->isChecked(), theme.palette().dark);
     followSystem->click();
     QVERIFY(!followSystem->isChecked());
-    settingsNavigation->setCurrentRow(1);
+    // Appearance has the mock's zoom steps (ADR 0104).
     auto* zoom = window.findChild<ket::SegmentedControl*>(QStringLiteral("interfaceZoom"));
     QVERIFY(zoom != nullptr);
     QTRY_VERIFY(zoom->isVisible());
-    QCOMPARE(zoom->options(), QStringList({"Small", "Medium", "Large"}));
+    QCOMPARE(zoom->options(), QStringList({"90%", "100%", "110%", "125%"}));
     QCOMPARE(zoom->currentIndex(), 1);
-    // Opening a saved non-preset size must not silently change it.
-    auto* numericZoom =
+    zoom->setCurrentIndex(2);
+    QCOMPARE(ketplus::AppearanceSettings::load().interfaceZoomPercent, 110);
+    QCOMPARE(theme.interfaceZoomPercent(), 110);
+    // Typography has the interface font size, which leaves the zoom.
+    settingsNavigation->setCurrentRow(1);
+    auto* interfaceSize =
         window.findChild<ketplus::PixelSelect*>(QStringLiteral("interfaceFontSize"));
-    numericZoom->setValue(15);
-    QCOMPARE(zoom->currentIndex(), 3);
-    QCOMPARE(zoom->options().last(), QStringLiteral("Custom (15)"));
-    QCOMPARE(numericZoom->value(), 15);
-    zoom->setCurrentIndex(1);
-    QCOMPARE(numericZoom->value(), 14);
-    QVERIFY(
-        window.findChild<ketplus::PixelSelect*>(QStringLiteral("interfaceFontSize"))->isHidden());
+    QVERIFY(interfaceSize != nullptr);
+    QTRY_VERIFY(interfaceSize->isVisible());
+    QCOMPARE(interfaceSize->minimum(), 13);
+    QCOMPARE(interfaceSize->maximum(), 16);
+    interfaceSize->setValue(16);
+    QCOMPARE(ketplus::AppearanceSettings::load().interfaceFontSizePixels, 16);
+    QCOMPARE(ketplus::AppearanceSettings::load().interfaceZoomPercent, 110);
+    QCOMPARE(theme.interfaceTextPixels(), 18);
+    QCOMPARE(QApplication::font().pixelSize(), 18);
+    QCOMPARE(ket::Appearance::instance().zoom(), 1.1);
+    interfaceSize->setValue(14);
     QVERIFY(settingsPage->findChild<QComboBox*>(QStringLiteral("settingsInterfaceFont")) !=
             nullptr);
     auto* preview = settingsPage->findChild<QWidget*>(QStringLiteral("typographyPreview"));
     QVERIFY(preview && preview->isVisible());
     auto* editorSize =
         settingsPage->findChild<ketplus::PixelSelect*>(QStringLiteral("editorFontSize"));
-    const int previewHeight = preview->minimumHeight();
+    // The sample shows the interface text at the zoom; Restore defaults returns it to 100%.
+    const int zoomedHeight = preview->minimumHeight();
     editorSize->setValue(32);
-    QVERIFY(preview->minimumHeight() > previewHeight);
+    QVERIFY(preview->minimumHeight() > zoomedHeight);
     window.findChild<QAbstractButton*>(QStringLiteral("settingsResetButton"))->click();
     QCOMPARE(editorSize->value(), 14);
-    QCOMPARE(preview->minimumHeight(), previewHeight);
+    QCOMPARE(zoom->currentIndex(), 1);
+    QCOMPARE(ketplus::AppearanceSettings::load().interfaceZoomPercent, 100);
+    QCOMPARE(preview->minimumHeight(), zoomedHeight - 1);
     QCoreApplication::processEvents();
     QCOMPARE(settingsNavigation->currentItem()->data(Qt::UserRole).toString(),
              QStringLiteral("typography"));

@@ -53,7 +53,7 @@ class ActivityBar final : public QWidget {
     // Shows the "Update ready" reminder above the identity button; empty hides it.
     void setStorageStatus(const QVariantMap& result);
     void setPendingUpdate(const QString& version);
-    void applyPalette(const ThemePalette& palette, int interfaceFontSizePixels = 14);
+    void applyPalette(const ThemePalette& palette, int zoomPercent = 100);
     [[nodiscard]] Mode mode() const noexcept;
 
   signals:

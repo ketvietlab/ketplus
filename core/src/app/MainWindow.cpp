@@ -95,7 +95,8 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
       cursorPositionLabel_(new ket::StatusItem(QStringLiteral("Ln 1, Col 1"), {}, this)),
       documentStateLabel_(new ket::StatusItem(QStringLiteral("New"), {}, this)),
       gitButton_(new QToolButton(this)) {
-    theme_.setInterfaceFontSizePixels(appearanceSettings_.interfaceFontSizePixels);
+    theme_.setInterfaceScale(appearanceSettings_.interfaceFontSizePixels,
+                             appearanceSettings_.interfaceZoomPercent);
     setWindowTitle(QStringLiteral("KétPlus"));
     resize(1100, 720);
     setMinimumSize(680, 420);

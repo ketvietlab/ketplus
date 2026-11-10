@@ -87,8 +87,8 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
       documentStateLabel_(new QLabel(QStringLiteral("New"), this)),
       gitButton_(new QToolButton(this)) {
     repositoryLookupPool_.setMaxThreadCount(2);
-    theme_.setInterfaceFontSizePixels(
-        InterfaceZoomMetrics::snap(appearanceSettings_.interfaceFontSizePixels));
+    theme_.setInterfaceScale(appearanceSettings_.interfaceFontSizePixels,
+                             appearanceSettings_.interfaceZoomPercent);
     setWindowTitle(QStringLiteral("KétPlus Pro"));
     atlasIndex_ = new AtlasIndex(this);
     connect(atlasIndex_, &AtlasIndex::changed, this, &MainWindow::populateSpotlight);
@@ -146,7 +146,7 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
 
     git_ = new GitService(this);
     createActions();
-    activityBar_->applyPalette(theme_.palette(), theme_.interfaceFontSizePixels());
+    activityBar_->applyPalette(theme_.palette(), theme_.interfaceZoomPercent());
     connect(activityBar_, &ActivityBar::quickSearchRequested, this, &MainWindow::showSpotlight);
     connect(activityBar_, &ActivityBar::repositoryRequested, this, &MainWindow::chooseFolder);
     connect(activityBar_, &ActivityBar::machineRequested, this, [this](const QString& id) {
@@ -342,14 +342,14 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     });
 
     connect(&theme_, &ThemeManager::themeChanged, this, [this, productSurface] {
-        activityBar_->applyPalette(theme_.palette(), theme_.interfaceFontSizePixels());
+        activityBar_->applyPalette(theme_.palette(), theme_.interfaceZoomPercent());
         productSurface->setStyleSheet(QStringLiteral("QWidget#productSurface { background: %1; }")
                                           .arg(theme_.palette().pageBackground));
         applyThemeToEditors();
         if (worktreesWorkspace_ != nullptr)
-            worktreesWorkspace_->applyPalette(theme_.palette(), theme_.interfaceFontSizePixels());
+            worktreesWorkspace_->applyPalette(theme_.palette(), theme_.interfaceZoomPercent());
         if (settingsWorkspace_ != nullptr)
-            settingsWorkspace_->applyPalette(theme_.palette(), theme_.interfaceFontSizePixels());
+            settingsWorkspace_->applyPalette(theme_.palette(), theme_.interfaceZoomPercent());
     });
     connect(git_, &GitService::snapshotChanged, this, &MainWindow::updateGitSnapshot);
     connect(git_, &GitService::worktreesChanged, this, &MainWindow::updateWorktrees);

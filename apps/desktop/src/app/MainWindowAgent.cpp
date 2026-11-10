@@ -215,7 +215,7 @@ void MainWindow::ensureAgentWorkspace() {
         return agentManager_->transcriptPayload(agentWorkspace_->activePath(), scope, key, kind);
     });
     workspaceSplit_->insertWidget(0, agentWorkspace_);
-    agentWorkspace_->applyTheme(theme_.palette(), appearanceSettings_.interfaceFontSizePixels);
+    agentWorkspace_->applyTheme(theme_.palette(), appearanceSettings_.interfaceZoomPercent);
     agentWorkspace_->setAgentAvailable(agentManager_->isAvailable());
     // ADR 0027: `#` completion lists every numbered conversation on this computer.
     agentWorkspace_->setConversationDirectory(

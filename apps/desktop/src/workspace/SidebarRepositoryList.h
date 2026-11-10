@@ -40,7 +40,7 @@ class SidebarRepositoryList final : public QWidget {
   public:
     explicit SidebarRepositoryList(QWidget* parent = nullptr);
 
-    void applyZoom(int basePixels);
+    void applyZoom(int zoomPercent);
     void setTagFilter(const QString& tag);
     void setRepositories(const QVector<SidebarRepository>& repositories);
 

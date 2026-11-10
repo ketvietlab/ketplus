@@ -287,6 +287,17 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     chrome_geometry::addSpacing(appearanceLayout, 21);
     appearanceLayout->addWidget(divider(appearance));
     chrome_geometry::addSpacing(appearanceLayout, 20);
+    // The mock's zoom steps, from the public dialog; they scale the chrome (ADR 0104).
+    if (auto* zoom = dialog_->findChild<ket::SegmentedControl*>(QStringLiteral("interfaceZoom"))) {
+        appearanceLayout->addWidget(
+            label(tr("Interface zoom"), QStringLiteral("settingsWorkspaceSubheading"), appearance));
+        chrome_geometry::addSpacing(appearanceLayout, 10);
+        zoom->setParent(appearance);
+        appearanceLayout->addWidget(zoom, 0, Qt::AlignLeft);
+        chrome_geometry::addSpacing(appearanceLayout, 21);
+        appearanceLayout->addWidget(divider(appearance));
+        chrome_geometry::addSpacing(appearanceLayout, 20);
+    }
     appearanceLayout->addWidget(
         label(tr("Workspace preview"), QStringLiteral("settingsWorkspaceSubheading"), appearance));
     chrome_geometry::addSpacing(appearanceLayout, 10);
@@ -323,7 +334,8 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     chrome_geometry::horizontalSpacing(fieldsLayout, 20);
     chrome_geometry::verticalSpacing(fieldsLayout, 13);
     fieldsLayout->setColumnMinimumWidth(0, 145);
-    fieldsLayout->setColumnStretch(1, 1);
+    // The labels take the row, so their help reads on one line as in the mock.
+    fieldsLayout->setColumnStretch(0, 1);
     auto* editorFont = dialog_->findChild<QComboBox*>(QStringLiteral("editorFontFamily"));
     auto* interfaceSize =
         dialog_->findChild<ketplus::PixelSelect*>(QStringLiteral("interfaceFontSize"));
@@ -339,57 +351,10 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     }
     if (editorLine != nullptr)
         editorLine->hide();
-    if (interfaceSize != nullptr)
-        interfaceSize->hide();
     auto* interfaceFont = new ket::Select(fields);
     interfaceFont->setObjectName(QStringLiteral("settingsInterfaceFont"));
     interfaceFont->addItem(InterfaceUiFont::settingsLabel());
     fitSelect(interfaceFont);
-    auto* interfaceZoom =
-        new ket::SegmentedControl({tr("Small"), tr("Medium"), tr("Large")}, fields);
-    interfaceZoom->setObjectName(QStringLiteral("interfaceZoom"));
-    interfaceZoom->setExpanding(true);
-    const auto syncZoom = [interfaceSize, interfaceZoom] {
-        const int pixels =
-            interfaceSize ? interfaceSize->value() : InterfaceZoomMetrics::mediumPixels;
-        const QList<int> values{InterfaceZoomMetrics::smallPixels,
-                                InterfaceZoomMetrics::mediumPixels,
-                                InterfaceZoomMetrics::largePixels};
-        auto options = QStringList{tr("Small"), tr("Medium"), tr("Large")};
-        int index = values.indexOf(pixels);
-        if (index < 0) {
-            options.append(tr("Custom (%1)").arg(pixels));
-            index = 3;
-        }
-        const QSignalBlocker blocker(interfaceZoom);
-        interfaceZoom->setOptions(options);
-        interfaceZoom->setCurrentIndex(index);
-    };
-    connect(interfaceZoom, &ket::SegmentedControl::currentChanged, this,
-            [interfaceSize](int index) {
-                const QList<int> values{InterfaceZoomMetrics::smallPixels,
-                                        InterfaceZoomMetrics::mediumPixels,
-                                        InterfaceZoomMetrics::largePixels};
-                if (interfaceSize && index >= 0 && index < values.size())
-                    interfaceSize->setValue(values[index]);
-            });
-    if (interfaceSize)
-        connect(interfaceSize, &ketplus::PixelSelect::valueChanged, this,
-                [this, syncZoom](int pixels) {
-                    syncZoom();
-                    if (!palette_.pageBackground.isEmpty())
-                        applyPalette(palette_, pixels);
-                });
-    syncZoom();
-    auto* interfaceSizeCopy = new QWidget(fields);
-    auto* interfaceSizeCopyLayout = new QVBoxLayout(interfaceSizeCopy);
-    chrome_geometry::margins(interfaceSizeCopyLayout, 0, 0, 0, 0);
-    chrome_geometry::spacing(interfaceSizeCopyLayout, 2);
-    interfaceSizeCopyLayout->addWidget(label(
-        tr("Interface size"), QStringLiteral("settingsWorkspaceFieldLabel"), interfaceSizeCopy));
-    interfaceSizeCopyLayout->addWidget(
-        label(tr("Makes chrome, sidebar, and dialogs larger or smaller."),
-              QStringLiteral("settingsWorkspaceHelp"), interfaceSizeCopy));
     auto* interfaceFontCopy = new QWidget(fields);
     auto* interfaceFontCopyLayout = new QVBoxLayout(interfaceFontCopy);
     chrome_geometry::margins(interfaceFontCopyLayout, 0, 0, 0, 0);
@@ -401,8 +366,9 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
               QStringLiteral("settingsWorkspaceHelp"), interfaceFontCopy));
     fieldsLayout->addWidget(interfaceFontCopy, 0, 0, Qt::AlignTop);
     fieldsLayout->addWidget(interfaceFont, 0, 1, Qt::AlignRight | Qt::AlignTop);
-    fieldsLayout->addWidget(interfaceSizeCopy, 1, 0, Qt::AlignTop);
-    fieldsLayout->addWidget(interfaceZoom, 1, 1);
+    // The text before the zoom; Appearance's Interface zoom scales it with the chrome.
+    if (interfaceSize != nullptr)
+        addField(fieldsLayout, 1, tr("Interface font size"), interfaceSize, fields);
     // The mock's order: the interface rows, Conversation width, then the editor. Terminal text
     // follows the editor and Markdown the interface, so neither has a row (Jay, 2026-11-10).
     addField(fieldsLayout, 3, tr("Editor font"), editorFont, fields);
@@ -548,10 +514,9 @@ void SettingsWorkspacePage::showSection(const QString& id) {
     }
 }
 
-void SettingsWorkspacePage::applyPalette(const ThemePalette& palette,
-                                         const int interfaceFontSizePixels) {
+void SettingsWorkspacePage::applyPalette(const ThemePalette& palette, const int zoomPercent) {
     palette_ = palette;
-    interfaceFontSizePixels_ = InterfaceZoomMetrics::snap(interfaceFontSizePixels);
+    zoomPercent_ = InterfaceZoomMetrics::snap(zoomPercent);
     const QString sheet = TypeScale::apply(QStringLiteral(R"QSS(
 QWidget#settingsWorkspacePage, QWidget#settingsWorkspaceContent,
 QWidget#settingsWorkspaceHeading, QWidget#settingsWorkspaceBody,
@@ -579,10 +544,10 @@ QWidget#settingsWorkspaceFooter { padding-top:18px; border-top:1px solid %4;
  background:transparent; }
 QDialog[kvRole="settingsDialog"] { border:0; background:transparent; }
 )QSS"),
-                                           interfaceFontSizePixels_);
+                                           zoomPercent_);
     setStyleSheet(sheet.arg(palette.pageBackground, palette.textMain, palette.textMuted,
                             palette.border, palette.accentText));
-    chrome_geometry::apply(this, interfaceFontSizePixels);
+    chrome_geometry::apply(this, zoomPercent);
 }
 
 } // namespace ketplus

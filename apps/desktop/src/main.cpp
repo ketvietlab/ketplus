@@ -37,9 +37,9 @@ int main(int argc, char* argv[]) {
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/brand/ketplus-app-icon.png")));
 
     ketplus::ThemeManager theme(app);
-    ketplus::InterfaceUiFont::apply(app, theme.interfaceFontSizePixels());
+    ketplus::InterfaceUiFont::apply(app, theme.interfaceTextPixels());
     QObject::connect(&theme, &ketplus::ThemeManager::themeChanged, &app, [&app, &theme] {
-        ketplus::InterfaceUiFont::apply(app, theme.interfaceFontSizePixels());
+        ketplus::InterfaceUiFont::apply(app, theme.interfaceTextPixels());
     });
     ketplus::RepositoryRouter repositories;
     std::function<ketplus::MainWindow*()> createWindow;

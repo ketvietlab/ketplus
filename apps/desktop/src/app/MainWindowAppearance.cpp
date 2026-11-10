@@ -13,9 +13,7 @@
 
 namespace ketplus {
 void MainWindow::applyAppearanceSettings(const AppearanceSettings& settings) {
-    auto normalized = settings.normalized();
-    normalized.interfaceFontSizePixels =
-        InterfaceZoomMetrics::snap(normalized.interfaceFontSizePixels);
+    const auto normalized = settings.normalized();
     normalized.save();
     QList<MainWindow*> windows;
     for (auto* widget : QApplication::topLevelWidgets()) {
@@ -26,7 +24,7 @@ void MainWindow::applyAppearanceSettings(const AppearanceSettings& settings) {
         }
     }
     // ThemeChanged is synchronous: every window must already have the snapshot.
-    theme_.setInterfaceFontSizePixels(normalized.interfaceFontSizePixels);
+    theme_.setInterfaceScale(normalized.interfaceFontSizePixels, normalized.interfaceZoomPercent);
     for (auto* window : windows)
         window->applyAppearanceToSurfaces();
 }

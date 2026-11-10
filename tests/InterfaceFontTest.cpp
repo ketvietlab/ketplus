@@ -227,11 +227,11 @@ void InterfaceFontTest::typeScaleApplyAndLiteralScalingAreMediumInert() {
         "QLabel { font-size: {{body}}px; } QPushButton { font-size: {{reading}}px; } "
         "QToolButton { font-size: {{title}}px; }");
     const QString medium =
-        ketplus::TypeScale::apply(templateSheet, ketplus::InterfaceZoomMetrics::mediumPixels);
+        ketplus::TypeScale::apply(templateSheet, ketplus::InterfaceZoomMetrics::defaultPercent);
     const auto& p = ket::Profile::current();
-    const auto expected = [&p](int pixels) {
-        const auto px = [pixels](qreal n) {
-            return ketplus::InterfaceZoomMetrics::scale(qRound(n), pixels);
+    const auto expected = [&p](int zoom) {
+        const auto px = [zoom](qreal n) {
+            return ketplus::InterfaceZoomMetrics::scale(qRound(n), zoom);
         };
         return QStringLiteral("QLabel { font-size: %1px; } QPushButton { font-size: %2px; } "
                               "QToolButton { font-size: %3px; }")
@@ -239,20 +239,19 @@ void InterfaceFontTest::typeScaleApplyAndLiteralScalingAreMediumInert() {
             .arg(px(p.readingPixels))
             .arg(px(p.dialogTitlePixels));
     };
-    QCOMPARE(medium, expected(14));
-    QCOMPARE(ketplus::TypeScale::apply(templateSheet, 16), expected(16));
+    QCOMPARE(medium, expected(100));
+    QCOMPARE(ketplus::TypeScale::apply(templateSheet, 125), expected(125));
 
-    QCOMPARE(ketplus::TypeScale::apply(QStringLiteral("QLabel { font-size:{{px:30}}px; }"), 21),
+    QCOMPARE(ketplus::TypeScale::apply(QStringLiteral("QLabel { font-size:{{px:30}}px; }"), 150),
              QStringLiteral("QLabel { font-size:45px; }"));
     // Input samples for scaleLiteralFontSizes — intentional raw literals.
     const QString literals =
         QStringLiteral("QLabel { font-size: 12px; } QPushButton { font-size:14px; }");
-    QCOMPARE(ketplus::TypeScale::scaleLiteralFontSizes(literals,
-                                                       ketplus::InterfaceZoomMetrics::mediumPixels),
+    QCOMPARE(ketplus::TypeScale::scaleLiteralFontSizes(
+                 literals, ketplus::InterfaceZoomMetrics::defaultPercent),
              literals);
-    QCOMPARE(ketplus::TypeScale::scaleLiteralFontSizes(literals,
-                                                       ketplus::InterfaceZoomMetrics::largePixels),
-             QStringLiteral("QLabel { font-size: 14px; } QPushButton { font-size:16px; }"));
+    QCOMPARE(ketplus::TypeScale::scaleLiteralFontSizes(literals, 125),
+             QStringLiteral("QLabel { font-size: 15px; } QPushButton { font-size:18px; }"));
 }
 
 void InterfaceFontTest::rejectsRawFontSizeLiteralsOutsideTypeScale() {

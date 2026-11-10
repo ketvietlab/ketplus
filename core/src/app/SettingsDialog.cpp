@@ -1,11 +1,14 @@
 #include "app/SettingsDialog.h"
 
+#include "ui/InterfaceZoom.h"
+
 #include "ui/Theme.h"
 
 #include "KetAppearance.h"
 #include "KetButton.h"
 #include "KetIcons.h"
 #include "KetNavItem.h"
+#include "KetSegmentedControl.h"
 #include "KetThemeCard.h"
 #include "app/PixelSelect.h"
 #include "app/SettingsFontNames.h"
@@ -287,7 +290,10 @@ void SettingsDialog::rebuildExtensionNavigation() {
 }
 
 AppearanceSettings SettingsDialog::appearanceSettings() const {
+    const auto zoomSteps = InterfaceZoomMetrics::steps();
     return AppearanceSettings{
+        .interfaceZoomPercent =
+            zoomSteps.value(zoomControl_->currentIndex(), InterfaceZoomMetrics::defaultPercent),
         .interfaceFontSizePixels = interfaceFontSizeBox_->value(),
         .editor =
             EditorSettings{
@@ -309,6 +315,8 @@ void SettingsDialog::setAppearanceSettings(const AppearanceSettings& settings) {
     editorFontFamily_ = value.editor.fontFamily;
     terminalFontFamily_ = value.terminalFontFamily;
     settings_fonts::selectFamily(editorFontBox_, editorFontFamily_);
+    zoomControl_->setCurrentIndex(
+        int(InterfaceZoomMetrics::steps().indexOf(value.interfaceZoomPercent)));
     interfaceFontSizeBox_->setValue(value.interfaceFontSizePixels);
     editorFontSizeBox_->setValue(value.editor.fontSizePixels);
     editorLineHeightBox_->setMinimum(

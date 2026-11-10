@@ -900,6 +900,8 @@ void MainWindow::setSettingsWorkspaceVisible(const bool visible) {
             [this, lastRequested](const AppearanceSettings& requested) {
                 const AppearanceSettings& previous = *lastRequested;
                 auto merged = appearanceSettings_;
+                if (requested.interfaceZoomPercent != previous.interfaceZoomPercent)
+                    merged.interfaceZoomPercent = requested.interfaceZoomPercent;
                 if (requested.interfaceFontSizePixels != previous.interfaceFontSizePixels)
                     merged.interfaceFontSizePixels = requested.interfaceFontSizePixels;
                 if (requested.editor.fontFamily != previous.editor.fontFamily)
@@ -949,7 +951,7 @@ void MainWindow::setSettingsWorkspaceVisible(const bool visible) {
         });
     workspaceSplit_->addWidget(settingsWorkspace_);
     workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(settingsWorkspace_), 1);
-    settingsWorkspace_->applyPalette(theme_.palette(), theme_.interfaceFontSizePixels());
+    settingsWorkspace_->applyPalette(theme_.palette(), theme_.interfaceZoomPercent());
     connect(settingsWorkspace_, &SettingsWorkspacePage::saved, this, [this] {
         auto* previous = settingsWorkspace_;
         settingsWorkspace_ = nullptr;
@@ -1046,7 +1048,7 @@ void MainWindow::applyThemeToEditors() {
         }
     }
     if (agentWorkspace_ != nullptr) {
-        agentWorkspace_->applyTheme(theme_.palette(), appearanceSettings_.interfaceFontSizePixels);
+        agentWorkspace_->applyTheme(theme_.palette(), appearanceSettings_.interfaceZoomPercent);
     }
     if (conversationAtlasPanel_ != nullptr)
         conversationAtlasPanel_->applyPalette(QApplication::palette());
@@ -1054,12 +1056,12 @@ void MainWindow::applyThemeToEditors() {
         for (int index = 0; index < atlasTabs_->count(); ++index) {
             if (auto* tab = qobject_cast<AtlasTab*>(atlasTabs_->widget(index))) {
                 tab->applyPalette(QApplication::palette(),
-                                  appearanceSettings_.interfaceFontSizePixels);
+                                  appearanceSettings_.interfaceZoomPercent);
             } else if (auto* builder = qobject_cast<AtlasBuilderTab*>(atlasTabs_->widget(index))) {
                 builder->applyPalette(QApplication::palette(),
-                                      appearanceSettings_.interfaceFontSizePixels);
+                                      appearanceSettings_.interfaceZoomPercent);
                 builder->chatView()->applyTheme(theme_.palette(),
-                                                appearanceSettings_.interfaceFontSizePixels);
+                                                appearanceSettings_.interfaceZoomPercent);
             }
         }
     }
