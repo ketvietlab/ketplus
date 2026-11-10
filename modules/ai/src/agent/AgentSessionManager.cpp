@@ -351,6 +351,8 @@ QVariantList AgentSessionManager::archivedConversations() const {
                 QVariantMap{{QStringLiteral("id"), session->id},
                             {QStringLiteral("path"), path.key()},
                             {QStringLiteral("title"), session->title},
+                            {QStringLiteral("number"), session->number},
+                            {QStringLiteral("archived_at"), session->archivedAt},
                             {QStringLiteral("provider"), listedProvider(session->options)},
                             {QStringLiteral("running"), session->running}});
         }
@@ -1540,6 +1542,8 @@ void AgentSessionManager::handleDaemonSession(const QJsonObject& stored) {
     // settings were reset.
     const bool discovered = !session;
     const bool archivedByDaemon = stored.contains(QStringLiteral("archived_at"));
+    const QDateTime archivedAt = QDateTime::fromString(
+        stored.value(QStringLiteral("archived_at")).toString(), Qt::ISODateWithMs);
     if (!session) {
         auto& conversations = conversationsByPath_[path];
         if (!archivedByDaemon && conversations.size() == 1 &&
@@ -1610,6 +1614,7 @@ void AgentSessionManager::handleDaemonSession(const QJsonObject& stored) {
     session->daemonGeneration = generation;
     if (!discovered)
         applyDaemonArchiveState(session, archivedByDaemon);
+    session->archivedAt = archivedByDaemon ? archivedAt : QDateTime();
     session->lastEventCursor = qMax(session->lastEventCursor,
                                     stored.value(QStringLiteral("last_event_cursor")).toInteger());
     session->lastSeenCursor =

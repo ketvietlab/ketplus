@@ -42,10 +42,16 @@ path that must not trust the download server or the network.
   builds and other platforms use a disabled implementation, and tests install a
   fake.
 - Sparkle's standard windows show release notes, download progress and the
-  install prompt. KetPlus adds Settings → Updates (version, last check, Check
-  for Updates, automatic checks, background downloads), a "Check for Updates…"
+  install prompt. KetPlus adds Settings → Updates, a "Check for Updates…"
   item in the application menu and the sidebar user menu, and a sidebar
-  reminder.
+  reminder. Since #166 the page follows the design mock. It has:
+  - a version card: "Up to date" with the last check, "Available", or "Ready"
+    with Restart now (Sparkle's install prompt) and Later;
+  - one "Download updates automatically" checkbox, which also turns the scheduled
+    check on;
+  - a "Check for updates" button.
+
+  The mock's Channel select is left out, because the feed has a single channel.
 - Automatic checks are on by default (`SUEnableAutomaticChecks`), so Sparkle
   never asks for permission on the second launch. Background downloads are off
   until the user turns them on. KetPlus always asks before relaunching.

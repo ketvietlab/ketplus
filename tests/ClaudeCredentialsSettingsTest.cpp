@@ -11,7 +11,6 @@
 #include <QAbstractButton>
 #include <QComboBox>
 #include <QDir>
-#include <QDoubleSpinBox>
 #include <QFontInfo>
 #include <QLabel>
 #include <QLineEdit>
@@ -165,7 +164,7 @@ class ClaudeCredentialsSettingsTest : public QObject {
         QTRY_COMPARE(operation, QString("status"));
         auto* key = page.findChild<QLineEdit*>("claudeApiKey");
         auto* mode = page.findChild<QComboBox*>("claudeAuthenticationMode");
-        auto* budget = page.findChild<QDoubleSpinBox*>("claudeQueryBudget");
+        auto* budget = page.findChild<QComboBox*>("claudeQueryBudget");
         auto* save = page.findChild<QAbstractButton*>("claudeCredentialsSave");
         auto* check = page.findChild<QAbstractButton*>("claudeCredentialsCheck");
         QVERIFY(key && mode && budget && save && check);
@@ -173,17 +172,21 @@ class ClaudeCredentialsSettingsTest : public QObject {
         QVERIFY(!check->isEnabled());
         mode->setCurrentIndex(1);
         key->setText("sk-ant-ui-fixture");
-        budget->setValue(2.5);
+        QCOMPARE(budget->currentText(), QString("No query limit"));
+        budget->setCurrentIndex(budget->findData(50.0));
         QTest::mouseClick(save, Qt::LeftButton);
         QCOMPARE(operation, "save");
         QCOMPARE(last["key"].toString(), "sk-ant-ui-fixture");
-        QCOMPARE(last["budget_usd"].toDouble(), 2.5);
+        QCOMPARE(last["budget_usd"].toDouble(), 50.0);
         QVERIFY(key->text().isEmpty());
         QVERIFY(!save->isEnabled());
         state["configured"] = true;
         state["enabled"] = true;
         state["budget_usd"] = 2.5;
         pending(state, {});
+        // A saved amount outside the presets is kept and shown in order.
+        QCOMPARE(budget->currentText(), QString("2.50 USD"));
+        QCOMPARE(budget->currentIndex(), 1);
         QVERIFY(check->isEnabled());
         QTest::mouseClick(check, Qt::LeftButton);
         QCOMPARE(operation, "check");

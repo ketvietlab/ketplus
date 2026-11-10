@@ -880,7 +880,7 @@ void MainWindow::setSettingsWorkspaceVisible(const bool visible) {
     QVariantList archived =
         agentManager_ == nullptr ? QVariantList{} : agentManager_->archivedConversations();
     archived.append(archivedWorktrees());
-    settingsDialog_->addPage(new ArchivedSettingsPage(
+    auto* archivedPage = new ArchivedSettingsPage(
         archived,
         [this](const QString& path, const QString& id) {
             return id.isEmpty()
@@ -892,7 +892,17 @@ void MainWindow::setSettingsWorkspaceVisible(const bool visible) {
                 return false;
             return id.isEmpty() ? agentManager_->cancelWorktree(path)
                                 : agentManager_->cancelConversation(path, id);
-        }));
+        },
+        [this](const QString& path, const QString& id) { deleteAgentConversation(path, id); });
+    settingsDialog_->addPage(archivedPage);
+    // A delete confirmed in its dialog, or an archive from another client, updates the cards.
+    if (agentManager_ != nullptr)
+        connect(agentManager_, &AgentSessionManager::conversationsChanged, archivedPage,
+                [this, archivedPage] {
+                    QVariantList current = agentManager_->archivedConversations();
+                    current.append(archivedWorktrees());
+                    archivedPage->setConversations(std::move(current));
+                });
     // Another window may save while this form is open. Each change applies at once, so only
     // the fields this emission changed overwrite; the rest keep the other window's newer values.
     auto lastRequested = std::make_shared<AppearanceSettings>(appearanceSettings_);

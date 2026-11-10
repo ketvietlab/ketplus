@@ -5,7 +5,6 @@
 class QLabel;
 class QLineEdit;
 class QComboBox;
-class QDoubleSpinBox;
 class QAbstractButton;
 
 namespace ketplus {
@@ -23,10 +22,11 @@ class SettingsClaudeCredentials final : public QWidget {
     void request(const QString& operation, const QJsonObject& payload = {});
     void apply(const QJsonObject& status);
     void updateControls();
+    void setBudget(double usd);
     Requester requester_;
     QComboBox* mode_;
     QLineEdit* key_;
-    QDoubleSpinBox* budget_;
+    QComboBox* budget_; // the budget in USD as item data; 0 is no limit
     QLabel* status_;
     QLabel* observation_;
     QAbstractButton* save_;

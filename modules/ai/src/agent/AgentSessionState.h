@@ -35,6 +35,8 @@ struct AgentSessionManager::Session final {
     QStringList tagsWanted;
     bool tagSyncPending{false};
     bool archived{false};
+    // When the daemon recorded the archive (`archived_at`); invalid until the catalog says.
+    QDateTime archivedAt;
     // An archive or restore made here that the daemon has not confirmed (ADR 0100).
     bool archiveUnsent{false};
     bool archiveSyncPending{false};

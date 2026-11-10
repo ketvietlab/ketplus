@@ -2,26 +2,24 @@
 #include "KetButton.h"
 #include "KetSelect.h"
 #include "KetTextField.h"
+#include "app/SettingsRows.h"
 #include <QAbstractButton>
 #include <QComboBox>
-#include <QDoubleSpinBox>
-#include <QGridLayout>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPointer>
 #include <QTimer>
+#include <QVBoxLayout>
 
 namespace ketplus {
 SettingsClaudeCredentials::SettingsClaudeCredentials(Requester requester, QWidget* parent)
     : QWidget(parent), requester_(std::move(requester)) {
     setObjectName(QStringLiteral("claudeCredentials"));
-    auto* grid = new QGridLayout(this);
-    grid->setContentsMargins(0, 0, 0, 0);
-    grid->setHorizontalSpacing(20);
-    grid->setVerticalSpacing(8);
-    grid->setColumnMinimumWidth(0, 145);
-    grid->setColumnStretch(1, 1);
+    auto* column = new QVBoxLayout(this);
+    column->setContentsMargins(0, 0, 0, 0);
+    column->setSpacing(14);
     const auto label = [this](const QString& text, const QString& name) {
         auto* value = new QLabel(text, this);
         value->setObjectName(name);
@@ -29,12 +27,11 @@ SettingsClaudeCredentials::SettingsClaudeCredentials(Requester requester, QWidge
         value->setWordWrap(true);
         return value;
     };
-    grid->addWidget(label(tr("Claude API access"), "settingsWorkspaceSubheading"), 0, 0, 1, 2);
-    grid->addWidget(
+    column->addWidget(label(tr("Claude API access"), "settingsWorkspaceSubheading"));
+    column->addWidget(
         label(tr("Use your own Anthropic API key on this Mac. Paired phones use the same "
                  "configuration. Changes apply to new queries after current work finishes."),
-              "settingsWorkspaceHelp"),
-        1, 0, 1, 2);
+              "settingsWorkspaceHelp"));
     mode_ = new ket::Select(this);
     mode_->setObjectName("claudeAuthenticationMode");
     mode_->addItem(tr("Existing Claude runtime authentication"));
@@ -45,28 +42,24 @@ SettingsClaudeCredentials::SettingsClaudeCredentials(Requester requester, QWidge
     key_->setMaxLength(512);
     key_->setPlaceholderText(tr("Enter a new key; leave blank to keep the saved key"));
     key_->setInputMethodHints(Qt::ImhHiddenText | Qt::ImhNoPredictiveText | Qt::ImhNoAutoUppercase);
-    budget_ = new QDoubleSpinBox(this);
+    // The mock's select of budgets; a saved amount outside the list is added to it.
+    budget_ = new ket::Select(this);
     budget_->setObjectName("claudeQueryBudget");
-    budget_->setRange(0, 10000);
-    budget_->setDecimals(2);
-    budget_->setSuffix(tr(" USD"));
-    budget_->setSpecialValueText(tr("No query limit"));
-    const auto field = [grid, label](int row, const QString& text, QWidget* widget) {
-        auto* name = label(text, "settingsWorkspaceFieldLabel");
-        name->setBuddy(widget);
-        grid->addWidget(name, row, 0);
-        grid->addWidget(widget, row, 1);
+    budget_->addItem(tr("No query limit"), 0.0);
+    for (const double usd : {25.0, 50.0, 100.0, 200.0, 500.0})
+        budget_->addItem(tr("%1 USD").arg(usd, 0, 'f', 2), usd);
+    const auto field = [column, this](const QString& text, QWidget* widget) {
+        column->addWidget(settings_rows::field(text, {}, widget, this));
     };
-    field(2, tr("Authentication"), mode_);
-    field(3, tr("API key"), key_);
-    field(4, tr("Query budget"), budget_);
-    grid->addWidget(label(tr("Stored in macOS Keychain. Usage is billed to the key's Anthropic "
-                             "account. The query budget uses an estimate and can be exceeded; "
-                             "check Anthropic Console for actual charges."),
-                          "settingsWorkspaceHelp"),
-                    5, 0, 1, 2);
+    field(tr("Authentication"), mode_);
+    field(tr("API key"), key_);
+    field(tr("Query budget"), budget_);
+    column->addWidget(label(tr("Stored in macOS Keychain. Usage is billed to the key's Anthropic "
+                               "account. The query budget uses an estimate and can be exceeded; "
+                               "check Anthropic Console for actual charges."),
+                            "settingsWorkspaceHelp"));
     auto* actions = new QWidget(this);
-    auto* buttons = new QGridLayout(actions);
+    auto* buttons = new QHBoxLayout(actions);
     buttons->setContentsMargins(0, 0, 0, 0);
     buttons->setSpacing(8);
     save_ = new ket::Button(tr("Save Claude settings"), ket::ButtonVariant::Primary, actions);
@@ -75,24 +68,23 @@ SettingsClaudeCredentials::SettingsClaudeCredentials(Requester requester, QWidge
     check_->setObjectName("claudeCredentialsCheck");
     remove_ = new ket::Button(tr("Remove key…"), ket::ButtonVariant::GhostDanger, actions);
     remove_->setObjectName("claudeCredentialsRemove");
-    refresh_ = new ket::Button(tr("Refresh"), ket::ButtonVariant::Secondary, actions);
+    refresh_ = new ket::Button(tr("Refresh"), ket::ButtonVariant::Ghost, actions);
     refresh_->setObjectName("claudeCredentialsRefresh");
-    buttons->addWidget(save_, 0, 0);
-    buttons->addWidget(check_, 0, 1);
-    buttons->addWidget(remove_, 1, 0);
-    buttons->addWidget(refresh_, 1, 1);
-    grid->addWidget(actions, 6, 1, Qt::AlignLeft);
+    for (QWidget* button : {save_, check_, remove_, refresh_})
+        buttons->addWidget(button);
+    buttons->addStretch(1);
+    column->addWidget(actions);
     status_ = label(tr("Loading Claude settings…"), "claudeCredentialsStatus");
     status_->setAccessibleName(tr("Claude credential status"));
-    grid->addWidget(status_, 7, 0, 1, 2);
+    column->addWidget(status_);
     observation_ = label({}, "claudeCredentialsObservation");
-    grid->addWidget(observation_, 8, 0, 1, 2);
+    column->addWidget(observation_);
     connect(mode_, &QComboBox::currentIndexChanged, this,
             &SettingsClaudeCredentials::updateControls);
     connect(save_, &QAbstractButton::clicked, this, [this] {
         const QJsonObject payload{{"enabled", mode_->currentIndex() == 1},
                                   {"key", key_->text()},
-                                  {"budget_usd", budget_->value()}};
+                                  {"budget_usd", budget_->currentData().toDouble()}};
         key_->clear();
         request("save", payload);
     });
@@ -115,6 +107,18 @@ SettingsClaudeCredentials::SettingsClaudeCredentials(Requester requester, QWidge
 void SettingsClaudeCredentials::refresh() {
     if (!busy_)
         request("status");
+}
+
+void SettingsClaudeCredentials::setBudget(const double usd) {
+    const double value = qMax(0.0, usd);
+    int index = budget_->findData(value);
+    if (index < 0) {
+        index = 1;
+        while (index < budget_->count() && budget_->itemData(index).toDouble() < value)
+            ++index;
+        budget_->insertItem(index, tr("%1 USD").arg(value, 0, 'f', 2), value);
+    }
+    budget_->setCurrentIndex(index);
 }
 
 void SettingsClaudeCredentials::updateControls() {
@@ -160,7 +164,7 @@ void SettingsClaudeCredentials::apply(const QJsonObject& status) {
     supported_ = status.value("supported").toBool();
     configured_ = status.value("configured").toBool();
     mode_->setCurrentIndex(status.value("enabled").toBool() ? 1 : 0);
-    budget_->setValue(status.value("budget_usd").toDouble());
+    setBudget(status.value("budget_usd").toDouble());
     status_->setText(
         !supported_ ? tr("Saving API keys requires macOS Keychain in this release.")
         : status.value("enabled").toBool() ? tr("Saved API key selected for new queries. Running "
