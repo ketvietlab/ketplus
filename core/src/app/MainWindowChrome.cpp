@@ -37,19 +37,29 @@ class ActivityButton final : public QAbstractButton {
         setToolTip(label);
         setCursor(Qt::PointingHandCursor);
         setAttribute(Qt::WA_Hover);
+        // Checkable, so assistive technology reads the entry on screen as selected.
+        setCheckable(true);
+        sync();
     }
     QSize sizeHint() const override {
         auto& kit = ket::Appearance::instance();
         return {qRound(kit.scaled(48)), qRound(kit.scaled(40))};
     }
+    // The actions are set under signal blockers, so the owner calls this after each change.
+    void sync() {
+        setChecked(selected_());
+        update();
+    }
 
   protected:
+    // `selected` decides; a click only triggers the entry.
+    void nextCheckState() override {}
     void paintEvent(QPaintEvent*) override {
         auto& kit = ket::Appearance::instance();
         const auto theme = kit.theme();
         // Tab focus only, so the ring marks keyboard focus.
         const ket::InteractionState state{underMouse(), isDown(), isEnabled(), hasFocus()};
-        const bool selected = selected_();
+        const bool selected = isChecked();
         const auto nav = ket::navItemRecipe(selected, state, theme);
         const auto button = ket::iconButtonRecipe(ket::ControlSize::Medium, state, theme);
         QPainter painter(this);
@@ -125,7 +135,7 @@ void MainWindow::createChrome() {
             return action->isChecked() && chromePages_->currentWidget() == workspaceSplit_;
         });
         const auto update = [button, action] {
-            button->update();
+            button->sync();
             button->setEnabled(action->isEnabled());
             button->setToolTip(action->text().remove(QLatin1Char('&')) + QStringLiteral(" (") +
                                action->shortcut().toString(QKeySequence::NativeText) + ')');
@@ -184,6 +194,24 @@ void MainWindow::createChrome() {
     corner->setObjectName(QStringLiteral("tabStripCorner"));
     tabs_->setCornerWidget(corner, Qt::TopRightCorner);
     setCentralWidget(shell);
+    // An open side panel keeps its width in logical pixels when the interface zoom changes,
+    // including a width the user dragged; the editor column takes the difference.
+    connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, this,
+            [this, previous = ket::Appearance::instance().zoom()](const qreal zoom) mutable {
+                const qreal factor = zoom / previous;
+                previous = zoom;
+                auto sizes = workspaceSplit_->sizes();
+                const int editor = workspaceSplit_->indexOf(editorColumn_);
+                for (int index = 0; index < sizes.size(); ++index) {
+                    if (index == editor || sizes[index] == 0 ||
+                        workspaceSplit_->widget(index)->isHidden())
+                        continue;
+                    const int width = qRound(sizes[index] * factor);
+                    sizes[editor] = qMax(0, sizes[editor] - (width - sizes[index]));
+                    sizes[index] = width;
+                }
+                workspaceSplit_->setSizes(sizes);
+            });
     connect(statusBar(), &QStatusBar::messageChanged, this, [this](const QString& message) {
         if (!message.isEmpty())
             ket::Toast::showMessage(this, message);
@@ -194,7 +222,7 @@ void MainWindow::refreshActivityBar() {
     if (activityBar_ == nullptr)
         return;
     for (auto* button : activityBar_->findChildren<QAbstractButton*>())
-        button->update();
+        static_cast<ActivityButton*>(button)->sync();
 }
 
 void MainWindow::showEditorSurface() {

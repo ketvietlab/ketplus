@@ -3,6 +3,8 @@
 #include "app/ReviewCapture.h"
 #include "terminal/TerminalPanel.h"
 #include "ui/Theme.h"
+#include "workspace/ExplorerPanel.h"
+#include "workspace/SearchPanel.h"
 
 #include "KetAppearance.h"
 #include "KetChrome.h"
@@ -18,6 +20,7 @@
 #include <QMenuBar>
 #include <QProcess>
 #include <QSettings>
+#include <QSplitter>
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QTabWidget>
@@ -86,6 +89,36 @@ class LiteWindowTest final : public QObject {
         QVERIFY(QDir(workspace_.path()).mkpath(QStringLiteral("docs")));
         write(workspace_.filePath(QStringLiteral("docs/guide.md")), "# Guide\n");
         write(workspace_.filePath(QStringLiteral("main.cpp")), "int main() {}\n");
+    }
+
+    void openingAFolderDropsThePreviousSearch() {
+        QTemporaryDir other;
+        QVERIFY(other.isValid());
+        write(other.filePath(QStringLiteral("notes.md")), "# Guide\n");
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(workspace_.path());
+        viewAction(window, QStringLiteral("Search in Files"))->trigger();
+        auto* search = window.findChild<ketplus::SearchPanel*>();
+        QVERIFY(search != nullptr);
+        ketplus::WorkspaceSearchOptions options;
+        options.query = QStringLiteral("Guide");
+        search->setOptions(options);
+        emit search->searchRequested();
+        QTRY_VERIFY(!search->isSearching());
+        QVERIFY(!search->resultPaths().isEmpty());
+
+        // Finished results: Search stays open, without the old folder's paths.
+        window.openFolder(other.path());
+        QVERIFY(search->isVisibleTo(&window));
+        QVERIFY(search->resultPaths().isEmpty());
+
+        // A search still running: nothing it finds arrives after the folder changed.
+        emit search->searchRequested();
+        window.openFolder(workspace_.path());
+        QVERIFY(!search->isSearching());
+        QTest::qWait(200);
+        QVERIFY(search->resultPaths().isEmpty());
     }
 
     void sidePanelStartsClosedAndItsButtonTogglesIt() {
@@ -159,6 +192,52 @@ class LiteWindowTest final : public QObject {
         QTRY_VERIFY(counter.paints > 0);
         QVERIFY(!marked(explorer));
         QVERIFY(marked(search));
+        // Assistive technology reads the panel on screen as the checked button.
+        QVERIFY(search->isCheckable() && search->isChecked() && !explorer->isChecked());
+        search->click();
+        QVERIFY(!search->isChecked());
+        QVERIFY(!viewAction(window, QStringLiteral("Search in Files"))->isChecked());
+    }
+
+    void sidePanelWidthFollowsTheZoom() {
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.resize(1280, 820);
+        window.openFolder(workspace_.path());
+        viewAction(window, QStringLiteral("Explorer"))->trigger();
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto* explorer = window.findChild<ketplus::ExplorerPanel*>();
+        // A width the user dragged scales with the zoom, too.
+        auto* split = qobject_cast<QSplitter*>(explorer->parentWidget());
+        QVERIFY(split != nullptr);
+        auto sizes = split->sizes();
+        const int panel = split->indexOf(explorer);
+        const int editor =
+            split->indexOf(window.findChild<QWidget*>(QStringLiteral("editorColumn")));
+        sizes[editor] += sizes[panel] - 300;
+        sizes[panel] = 300;
+        split->setSizes(sizes);
+        QCOMPARE(explorer->width(), 300);
+        ket::Appearance::instance().setZoom(1.25);
+        QTRY_COMPARE(explorer->width(), 375);
+        ket::Appearance::instance().setZoom(1.0);
+        QTRY_COMPARE(explorer->width(), 300);
+    }
+
+    void revealOpensACollapsedRoot() {
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(workspace_.path());
+        viewAction(window, QStringLiteral("Explorer"))->trigger();
+        auto* root = window.findChild<ket::FileRow*>(QStringLiteral("explorerRoot"));
+        auto* tree = window.findChild<QTreeView*>(QStringLiteral("explorerTree"));
+        root->click();
+        QVERIFY(!tree->isVisibleTo(&window));
+        auto* explorer = window.findChild<ketplus::ExplorerPanel*>();
+        explorer->revealPath(explorer->rootPath() + QStringLiteral("/docs/guide.md"));
+        QVERIFY(root->isChecked());
+        QVERIFY(tree->isVisibleTo(&window));
     }
 
     void terminalSitsBelowTheEditorOnly() {
@@ -265,6 +344,7 @@ class LiteWindowTest final : public QObject {
         QVERIFY(page != nullptr);
         QCOMPARE(pages->currentWidget(), page);
         QVERIFY(marked(settings));
+        QVERIFY(settings->isChecked());
         QVERIFY(!window.statusBar()->isVisible());
         QVERIFY(page->findChild<ket::Kbd*>(QStringLiteral("settingsWorkspaceShortcut")) != nullptr);
 
