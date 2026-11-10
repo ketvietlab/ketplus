@@ -27,7 +27,6 @@
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
-#include <QInputDialog>
 #include <QKeySequence>
 #include <QLabel>
 #include <QList>
@@ -747,14 +746,13 @@ void MainWindow::goToLine() {
     if (editor == nullptr || editor->isHibernated()) {
         return;
     }
-    bool accepted = false;
-    const int line =
-        QInputDialog::getInt(this, QStringLiteral("Go to Line"),
-                             QStringLiteral("Line number (1–%1):").arg(editor->lineCount()),
-                             editor->currentLine(), 1, editor->lineCount(), 1, &accepted);
-    if (accepted) {
+    const auto line =
+        message_dialog::number(this, QStringLiteral("Go to Line"),
+                               QStringLiteral("Line number (1–%1)").arg(editor->lineCount()),
+                               editor->currentLine(), 1, editor->lineCount(), QStringLiteral("Go"));
+    if (line) {
         pushNavigationLocation(locationOf(editor));
-        editor->goToLine(line);
+        editor->goToLine(*line);
         editor->setFocus();
     }
 }
