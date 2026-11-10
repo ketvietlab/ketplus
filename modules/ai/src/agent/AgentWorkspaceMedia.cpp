@@ -81,6 +81,27 @@ bool sameCodeBlock(const QTextBlock& first, const QTextBlock& second) {
                second.blockFormat().property(QTextFormat::BlockQuoteLevel);
 }
 
+// Qt's Markdown importer colours links from the palette when it parses, so a theme change
+// left them in the old theme's colour. They take the kit's link colour on every format pass.
+void recolourLinks(const QTextBlock& block, const QColor& linkColor) {
+    QList<std::pair<int, int>> stale;
+    for (auto it = block.begin(); !it.atEnd(); ++it) {
+        const auto fragment = it.fragment();
+        const auto format = fragment.charFormat();
+        if (fragment.isValid() && format.isAnchor() && !format.isImageFormat() &&
+            format.foreground().color() != linkColor)
+            stale.append({fragment.position(), fragment.position() + fragment.length()});
+    }
+    QTextCharFormat colour;
+    colour.setForeground(linkColor);
+    for (const auto& [start, end] : std::as_const(stale)) {
+        QTextCursor cursor(block);
+        cursor.setPosition(start);
+        cursor.setPosition(end, QTextCursor::KeepAnchor);
+        cursor.mergeCharFormat(colour);
+    }
+}
+
 // Inline code naming a file in the worktree becomes a link the transcript opens. A span may
 // be split into fragments, so whole runs of code are read before linking.
 void linkFileReferences(const QTextBlock& block, TranscriptFileLinks& links,
@@ -645,10 +666,27 @@ void AgentWorkspaceView::formatMessageDocument(QObject* document, qreal fontPixe
                     continue;
                 textDocument->addResource(QTextDocument::ImageResource, source, image);
             }
+            // An inline photo draws as an 88 px thumbnail. The document keeps it at that size
+            // for this screen, however large the file, rather than the full decode.
+            const qreal thumbnailBound = 88.0 * density;
+            if (!isMermaid && qMax(image.width(), image.height()) > thumbnailBound) {
+                const QSize natural = image.size();
+                image = image.scaled(QSizeF(thumbnailBound, thumbnailBound).toSize(),
+                                     Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                image.setDevicePixelRatio(density);
+                // Whole pixels would round the aspect ratio; the row keeps the file's own.
+                image.setText(QStringLiteral("ketplus-natural-size"),
+                              QStringLiteral("%1x%2").arg(natural.width()).arg(natural.height()));
+                textDocument->addResource(QTextDocument::ImageResource, source, image);
+            }
             const qreal naturalWidth =
                 rasterMermaid ? image.width() / 2.0 : image.deviceIndependentSize().width();
             qreal width = qMin(naturalWidth, qMax(1.0, availableWidth - 2));
-            qreal height = width * image.height() / image.width();
+            const auto natural = image.text(QStringLiteral("ketplus-natural-size")).split(u'x');
+            const qreal aspect = natural.size() == 2 && natural.at(0).toInt() > 0
+                                     ? natural.at(1).toDouble() / natural.at(0).toDouble()
+                                     : qreal(image.height()) / image.width();
+            qreal height = width * aspect;
             if (!isMermaid) {
                 // Inline Markdown photos follow attachment thumbnail bounds too.
                 const qreal scale = qMin(1.0, 88.0 / qMax(width, height));
@@ -712,6 +750,7 @@ void AgentWorkspaceView::formatMessageDocument(QObject* document, qreal fontPixe
                                                                      : recipe.heading3Pixels)
                                             : fontPixelSize;
         styleMessageCharacters(block, textPixelSize, heading, monoFamily, recipe, zoom);
+        recolourLinks(block, linkColor);
         linkFileReferences(block, fileLinks_, linkColor);
         const auto heightType =
             containsImage ? QTextBlockFormat::MinimumHeight : QTextBlockFormat::FixedHeight;

@@ -58,6 +58,7 @@ obsolete run. See `docs/release-process.md`.
 | Transcript row window | `ketplus_transcript_window_model_tests` | delegate retention and reentrant range changes during history reset |
 | Provider limits | `ketplus_rate_limits_tests` | Codex rate-limit parsing and state |
 | Chat Markdown | `ketplus_chat_markdown_tests` | raw HTML escaping, bare HTTP(S) autolinks without changing code/existing links, whole answer visible, URL hover/open and source copy in light/dark transcript delegates |
+| Transcript safety | `ketplus_transcript_safety_tests` | model rich text (inline/reference images, raw `<img>`, `<style>`, `<link>`) makes no network connection, every word stays visible, links re-colour on theme change, a 4000×3000 inline image is kept at thumbnail size, the layout trace records no message text |
 | Chat Mermaid | `ketplus_chat_mermaid_tests` | Markdown and Mermaid integration |
 | Long-lived provider stderr | `ketplus_provider_stderr_flood_tests` | Codex/Claude/Cursor fake processes each emit two 32-MiB floods with eight mandatory stdout round trips per flood; drain and 1-MiB newest-tail bounds are observed directly, then a normal call succeeds on the same process |
 | Workspace boundary | `ketplus_workspace_tests` | Pro shell with CM explorer behavior |

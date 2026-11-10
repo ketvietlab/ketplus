@@ -68,6 +68,8 @@ add_library(ketplus_ai STATIC
     src/agent/MermaidLabelContrast.h
     src/agent/TranscriptFileLinks.cpp
     src/agent/TranscriptFileLinks.h
+    src/agent/TranscriptNetworkPolicy.cpp
+    src/agent/TranscriptNetworkPolicy.h
     src/agent/TranscriptTrace.cpp
     src/agent/TranscriptTrace.h
     src/agent/ChatMarkdown.cpp
@@ -113,6 +115,7 @@ add_library(ketplus_ai STATIC
 )
 target_link_libraries(ketplus_ai
     PUBLIC
+        Qt6::Network
         Qt6::Qml
         Qt6::Quick
         Qt6::QuickControls2
