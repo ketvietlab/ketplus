@@ -1,4 +1,5 @@
 #include "runtime/ProviderReadiness.h"
+#include "runtime/ProviderErrorCode.h"
 
 #include <QFile>
 #include <QJsonObject>
@@ -147,6 +148,73 @@ class ProviderReadinessTest final : public QObject {
         QCOMPARE(result.value(QStringLiteral("since")).toInteger(), since);
         QCOMPARE(result.value(QStringLiteral("message")).toString(),
                  QStringLiteral("Anthropic rejected this API key."));
+    }
+
+    void checkAgainForgetsFailuresButNotAPendingLimit() {
+        ProviderReadiness readiness;
+        const auto claude = runtime("claude", compat::SupportStatus::Bundled);
+        const auto codex = runtime("codex", compat::SupportStatus::Supported);
+        readiness.observe(QStringLiteral("claude"), QStringLiteral("expired"));
+        readiness.observe(QStringLiteral("codex"), QStringLiteral("limit_reached"), {}, 500);
+        readiness.recheck(100);
+        QCOMPARE(state(readiness.compose(claude, {}, 100)), QStringLiteral("unknown"));
+        QCOMPARE(state(readiness.compose(codex, {QStringLiteral("ready"), {}}, 100)),
+                 QStringLiteral("limit_reached"));
+        readiness.recheck(500);
+        QCOMPARE(state(readiness.compose(codex, {QStringLiteral("ready"), {}}, 500)),
+                 QStringLiteral("ready"));
+    }
+
+    void classifiesTurnErrors() {
+        using ketplus::daemon::providerErrorCode;
+        using ketplus::daemon::readinessForErrorCode;
+        const QJsonValue none;
+        // Structured fields decide first.
+        QCOMPARE(providerErrorCode(QStringLiteral("codex"), QStringLiteral("usageLimitExceeded"),
+                                   QStringLiteral("anything")),
+                 QStringLiteral("limit_reached"));
+        QCOMPARE(providerErrorCode(QStringLiteral("codex"),
+                                   QJsonObject{{QStringLiteral("unauthorized"), QJsonObject{}}},
+                                   {}),
+                 QStringLiteral("auth_required"));
+        QCOMPARE(providerErrorCode(QStringLiteral("codex"), QStringLiteral("serverOverloaded"), {}),
+                 QStringLiteral("model_capacity"));
+        // The messages from #170, as the providers wrote them.
+        QCOMPARE(providerErrorCode(QStringLiteral("claude"), none,
+                                   QStringLiteral("Failed to authenticate: OAuth session expired "
+                                                  "and could not be refreshed")),
+                 QStringLiteral("auth_expired"));
+        QCOMPARE(providerErrorCode(QStringLiteral("cursor"), none,
+                                   QStringLiteral("Authentication required")),
+                 QStringLiteral("auth_required"));
+        QCOMPARE(providerErrorCode(QStringLiteral("codex"), none,
+                                   QStringLiteral("You've hit your weekly limit · resets Nov 13 at "
+                                                  "7am")),
+                 QStringLiteral("limit_reached"));
+        QCOMPARE(providerErrorCode(QStringLiteral("codex"), none,
+                                   QStringLiteral("Selected model is at capacity. Please try a "
+                                                  "different model.")),
+                 QStringLiteral("model_capacity"));
+        QCOMPARE(providerErrorCode(QStringLiteral("claude"), none,
+                                   QStringLiteral("Anthropic rejected this API key.")),
+                 QStringLiteral("key_rejected"));
+        QCOMPARE(providerErrorCode(QStringLiteral("cursor"), none,
+                                   QStringLiteral("Cursor blocked this model for the Cursor Agent "
+                                                  "CLI account.")),
+                 QStringLiteral("plan_blocked"));
+        QCOMPARE(providerErrorCode(QStringLiteral("claude"), none,
+                                   QStringLiteral("Claude Agent SDK sidecar was not found.")),
+                 QStringLiteral("provider_unavailable"));
+        // An error about the work itself has no code.
+        QVERIFY(providerErrorCode(QStringLiteral("codex"), none, QStringLiteral("stream failed"))
+                    .isEmpty());
+        QCOMPARE(readinessForErrorCode(QStringLiteral("auth_required")),
+                 QStringLiteral("signed_out"));
+        QCOMPARE(readinessForErrorCode(QStringLiteral("auth_expired")), QStringLiteral("expired"));
+        QCOMPARE(readinessForErrorCode(QStringLiteral("limit_reached")),
+                 QStringLiteral("limit_reached"));
+        QVERIFY(readinessForErrorCode(QStringLiteral("model_capacity")).isEmpty());
+        QVERIFY(readinessForErrorCode(QStringLiteral("plan_blocked")).isEmpty());
     }
 
     void codexProbeReadsTheAccount() {

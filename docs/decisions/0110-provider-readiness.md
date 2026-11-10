@@ -55,8 +55,33 @@ Reported states persist in `provider-readiness.json` beside the journal. The fil
 is owner-only and keeps them across daemon restarts. A limit is dropped once
 `resets_at` passes.
 
-Turn errors gain a `code` in a following change. That change also fills the
-reported states and notifies clients.
+### Turn error codes
+
+`runtime.error` carries a `code` when the error is about the provider rather
+than the work:
+- `auth_required` and `auth_expired`;
+- `key_rejected`;
+- `limit_reached`;
+- `model_capacity` and `plan_blocked`;
+- `provider_unavailable`.
+
+`message` stays verbatim.
+
+- **Classification.** Structured fields decide first: Codex `codexErrorInfo`
+  (`usageLimitExceeded`, `unauthorized`, `serverOverloaded`), kept as
+  `provider_info`. The provider's text is the fallback.
+- **Readiness.**
+  - `auth_required`, `auth_expired`, `key_rejected` and `limit_reached` set the
+    reported state.
+  - A capacity or plan error concerns one model, so the provider stays ready.
+  - A turn that completes clears any reported failure.
+  - For a Codex limit, the reset comes from `account/rateLimits/read`: it is the
+    reset of the window that is used up.
+- **Notification.** Clients learn of the change from the coded `runtime.error`
+  itself and read `provider.runtime_status` again.
+- **Check again.** It sends `provider.runtime_status {recheck: true}`. That forgets
+  reported failures, except a limit that has not reset, and then runs every probe
+  again.
 
 ## Consequences
 

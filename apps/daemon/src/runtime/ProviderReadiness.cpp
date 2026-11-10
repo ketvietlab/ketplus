@@ -46,6 +46,22 @@ void ProviderReadiness::observe(const QString& provider, const QString& state,
     save();
 }
 
+void ProviderReadiness::recheck(const qint64 now) {
+    bool changed = false;
+    for (auto it = observed_.begin(); it != observed_.end();) {
+        const bool waiting = it->state == QStringLiteral("limit_reached") &&
+                             (it->resetsAt == 0 || it->resetsAt > now);
+        if (waiting || it->state == QStringLiteral("ready")) {
+            ++it;
+            continue;
+        }
+        it = observed_.erase(it);
+        changed = true;
+    }
+    if (changed)
+        save();
+}
+
 void ProviderReadiness::observeClaudeSource(const QString& source) {
     // "none": the sidecar found no credential. Any other source answers a query, but an earlier
     // failure (an expired sign-in, a rejected key) stays until a turn works or the user checks.

@@ -31,6 +31,8 @@ class ProviderReadiness final {
     // `message` is the provider's own text, kept verbatim.
     void observe(const QString& provider, const QString& state, const QString& message = {},
                  qint64 resetsAt = 0);
+    // Check again: forgets reported failures, except a limit that has not reset yet.
+    void recheck(qint64 now);
     // Claude's sidecar reports where its credential came from when a query starts.
     void observeClaudeSource(const QString& source);
     // The `readiness` object for `runtime` (provider.runtime_status). `now` is seconds since the

@@ -767,6 +767,9 @@ void SessionHost::handleProviderQuery(
         return;
     }
     if (type == QStringLiteral("provider.runtime_status")) {
+        // Check again (#170): forget reported sign-in failures and read every probe afresh.
+        if (payload.value(QStringLiteral("recheck")).toBool())
+            readiness_.recheck(QDateTime::currentSecsSinceEpoch());
         providerRuntimeStatus(std::move(callback));
         return;
     }
@@ -2174,11 +2177,13 @@ void SessionHost::handleProviderNotification(const QString& method, const QJsonO
             abandonTurnApprovals(session->stored.id);
         }
         const QJsonObject providerError = params.value(QStringLiteral("error")).toObject();
-        appendProviderEvent(
-            *session, QStringLiteral("runtime.error"),
-            {{QStringLiteral("code"), providerError.value(QStringLiteral("code")).toString()},
-             {QStringLiteral("message"),
-              providerError.value(QStringLiteral("message")).toString()}});
+        QJsonObject failure{
+            {QStringLiteral("message"), providerError.value(QStringLiteral("message")).toString()}};
+        // Codex's own reason, which runtime.error's `code` is classified from first (ADR 0110).
+        const QJsonValue info = providerError.value(QStringLiteral("codexErrorInfo"));
+        if (!info.isUndefined() && !info.isNull())
+            failure.insert(QStringLiteral("provider_info"), info);
+        appendProviderEvent(*session, QStringLiteral("runtime.error"), failure);
         for (const QString& path : std::exchange(session->materializedAttachments, {}))
             QFile::remove(path);
         for (const QString& id : std::exchange(session->stagedAttachmentIds, {}))
