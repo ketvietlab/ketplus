@@ -28,6 +28,7 @@
 #include <QAbstractButton>
 #include <QAction>
 #include <QApplication>
+#include <QClipboard>
 #include <QComboBox>
 #include <QDir>
 #include <QElapsedTimer>
@@ -39,6 +40,7 @@
 #include <QThread>
 
 #include "app/PixelSelect.h"
+#include "app/ProviderSetupCard.h"
 #include <QAbstractButton>
 #include <QFrame>
 #include <QLabel>
@@ -127,6 +129,7 @@ class MainWindowSettingsTest final : public QObject {
     void themeSwitchRecoloursAnOpenDiff();
     void browserPageDefaultsOnAndPersistsChoices();
     void providersPageShowsRuntimeStatus();
+    void providersPageGuidesAProviderThatCannotWork();
     void conversationWidthFollowsOnlyTheAgentWorkspace();
     void returningAFieldToItsOpeningValueSavesIt();
     void updatesPageAndReminderDriveTheUpdater();
@@ -153,7 +156,9 @@ void MainWindowSettingsTest::providersPageShowsRuntimeStatus() {
                     {"components", QJsonObject{{"sdk", "0.3.1"}, {"claude_code", "2.1.1"}}}},
         QJsonObject{{"provider", "cursor"}, {"name", "Cursor CLI"}, {"status", "missing"}}};
     int fetches = 0;
-    ketplus::SettingsProvidersPage page([&fetches, providers](auto reply) {
+    QList<bool> rechecks;
+    ketplus::SettingsProvidersPage page([&fetches, &rechecks, providers](bool recheck, auto reply) {
+        rechecks.append(recheck);
         ++fetches;
         reply(providers, {});
     });
@@ -184,14 +189,132 @@ void MainWindowSettingsTest::providersPageShowsRuntimeStatus() {
     page.findChild<QAbstractButton*>(QStringLiteral("providersRecheck"))->click();
     QTRY_COMPARE(refreshed.count(), 2);
     QCOMPARE(fetches, 2);
+    // Opening reads; Check again asks the daemon to probe again (ADR 0110).
+    QCOMPARE(rechecks, (QList<bool>{false, true}));
     // A refresh rebuilds the rows instead of appending to them.
     QCOMPARE(page.findChildren<QWidget*>(QStringLiteral("providerRuntime-codex")).size(), 1);
 
     ketplus::SettingsProvidersPage failing(
-        [](auto reply) { reply({}, QStringLiteral("daemon offline")); });
+        [](bool, auto reply) { reply({}, QStringLiteral("daemon offline")); });
     QTRY_VERIFY(failing.findChild<QLabel*>(QStringLiteral("providersStatus"))
                     ->text()
                     .contains(QStringLiteral("daemon offline")));
+}
+
+void MainWindowSettingsTest::providersPageGuidesAProviderThatCannotWork() {
+    // ADR 0110: readiness decides the guide; the page shows it in place of the version rows.
+    QJsonArray providers{
+        QJsonObject{{"provider", "codex"},
+                    {"name", "Codex CLI"},
+                    {"status", "supported"},
+                    {"version", "0.150.0"},
+                    {"readiness", QJsonObject{{"state", "ready"}, {"account", "dev@example.com"}}}},
+        QJsonObject{{"provider", "claude"},
+                    {"name", "Claude Agent SDK"},
+                    {"status", "bundled"},
+                    {"version", "0.3.1"},
+                    {"readiness", QJsonObject{{"state", "expired"},
+                                              {"message", "OAuth token has expired"},
+                                              {"login_command", "claude"}}}},
+        QJsonObject{{"provider", "cursor"},
+                    {"name", "Cursor CLI"},
+                    {"status", "missing"},
+                    {"readiness",
+                     QJsonObject{{"state", "missing"},
+                                 {"install_command", "curl https://cursor.com/install -fsS | bash"},
+                                 {"login_command", "cursor-agent login"}}}}};
+    QList<bool> rechecks;
+    ketplus::SettingsProvidersPage page([&rechecks, &providers](bool recheck, auto reply) {
+        rechecks.append(recheck);
+        reply(providers, {});
+    });
+    QSignalSpy refreshed(&page, &ketplus::SettingsProvidersPage::refreshed);
+    QTRY_COMPARE(refreshed.count(), 1);
+    QCOMPARE(page.findChild<QLabel*>(QStringLiteral("providersStatus"))->text(),
+             QStringLiteral("2 provider(s) need attention."));
+
+    // A ready provider keeps its rows and has no guide.
+    auto* codex = page.findChild<QWidget*>(QStringLiteral("providerRuntime-codex"));
+    QVERIFY(codex->findChild<ketplus::ProviderSetupCard*>() == nullptr);
+
+    auto* cursor = page.findChild<QWidget*>(QStringLiteral("providerRuntime-cursor"));
+    auto* cursorBadge = cursor->findChild<ket::Badge*>(QStringLiteral("providerRuntimeStatus"));
+    QCOMPARE(cursorBadge->text(), QStringLiteral("Not installed"));
+    QCOMPARE(cursorBadge->property("setupId").toString(), QStringLiteral("cli-missing"));
+    auto* cursorSetup = cursor->findChild<ketplus::ProviderSetupCard*>();
+    QVERIFY(cursorSetup != nullptr);
+    QCOMPARE(cursorSetup->guideId(), QStringLiteral("cli-missing"));
+    QStringList commands;
+    for (auto* label :
+         cursorSetup->findChildren<QLabel*>(QStringLiteral("providerSetupCommandText")))
+        commands << label->text();
+    QVERIFY2(commands.contains(QStringLiteral("curl https://cursor.com/install -fsS | bash")),
+             qPrintable(commands.join(u'|')));
+    QVERIFY(cursorSetup->findChildren<QLabel*>(QStringLiteral("providerSetupStep")).size() >= 2);
+
+    // Copy and Type in Terminal hand the command over; nothing runs it.
+    QSignalSpy copied(cursorSetup, &ketplus::ProviderSetupCard::commandCopied);
+    cursorSetup->findChildren<QAbstractButton*>(QStringLiteral("providerSetupCopy"))
+        .first()
+        ->click();
+    QCOMPARE(copied.count(), 1);
+    QCOMPARE(QApplication::clipboard()->text(), copied.first().first().toString());
+    QSignalSpy typed(&page, &ketplus::SettingsProvidersPage::typeInTerminalRequested);
+    cursorSetup->findChildren<QAbstractButton*>(QStringLiteral("providerSetupTypeInTerminal"))
+        .first()
+        ->click();
+    QCOMPARE(typed.count(), 1);
+    QCOMPARE(typed.first().first().toString(), copied.first().first().toString());
+
+    auto* claude = page.findChild<QWidget*>(QStringLiteral("providerRuntime-claude"));
+    auto* claudeSetup = claude->findChild<ketplus::ProviderSetupCard*>();
+    QVERIFY(claudeSetup != nullptr);
+    QCOMPARE(claudeSetup->guideId(), QStringLiteral("expired"));
+    QCOMPARE(claudeSetup->findChild<QLabel*>(QStringLiteral("providerSetupError"))->text(),
+             QStringLiteral("OAuth token has expired"));
+    QCOMPARE(claudeSetup->findChild<QLabel*>(QStringLiteral("providerSetupError"))->textFormat(),
+             Qt::PlainText);
+
+    if (const auto directory = qEnvironmentVariable("KETPLUS_SETTINGS_CAPTURE_DIR");
+        !directory.isEmpty()) {
+        page.resize(760, 2400);
+        page.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&page));
+        for (const auto mode : {ket::Appearance::Mode::Light, ket::Appearance::Mode::Dark}) {
+            ket::Appearance::instance().setMode(mode);
+            QCoreApplication::processEvents();
+            QVERIFY(page.grab().save(QDir(directory).filePath(
+                QStringLiteral("providers-setup-%1.png")
+                    .arg(mode == ket::Appearance::Mode::Dark ? QStringLiteral("dark")
+                                                             : QStringLiteral("light")))));
+        }
+        ket::Appearance::instance().setMode(ket::Appearance::Mode::Light);
+    }
+
+    // Check again probes; a guide that comes back says it is still failing.
+    QSignalSpy still(&page, &ketplus::SettingsProvidersPage::refreshed);
+    // Only the guide that was checked says so (the mock's cli-missing `still`).
+    auto* checkCursor =
+        cursorSetup->findChild<QAbstractButton*>(QStringLiteral("providerSetupPrimary"));
+    QCOMPARE(checkCursor->text(), QStringLiteral("Check again"));
+    checkCursor->click();
+    QTRY_COMPARE(still.count(), 1);
+    QCOMPARE(rechecks, (QList<bool>{false, true}));
+    cursor = page.findChild<QWidget*>(QStringLiteral("providerRuntime-cursor"));
+    QVERIFY(cursor->findChild<QLabel*>(QStringLiteral("providerSetupStill"))->isVisibleTo(cursor));
+    claude = page.findChild<QWidget*>(QStringLiteral("providerRuntime-claude"));
+    QVERIFY(!claude->findChild<QLabel*>(QStringLiteral("providerSetupStill"))->isVisibleTo(claude));
+
+    // Once the sign-in works, the guide goes away.
+    QJsonObject fixed = providers.at(1).toObject();
+    fixed.insert("readiness", QJsonObject{{"state", "ready"}});
+    providers.replace(1, fixed);
+    page.findChild<QAbstractButton*>(QStringLiteral("providersRecheck"))->click();
+    QTRY_COMPARE(still.count(), 2);
+    claude = page.findChild<QWidget*>(QStringLiteral("providerRuntime-claude"));
+    QVERIFY(claude->findChild<ketplus::ProviderSetupCard*>() == nullptr);
+    QCOMPARE(claude->findChild<ket::Badge*>(QStringLiteral("providerRuntimeStatus"))->text(),
+             QStringLiteral("Ready"));
 }
 
 void MainWindowSettingsTest::browserPageDefaultsOnAndPersistsChoices() {

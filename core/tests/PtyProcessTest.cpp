@@ -61,6 +61,7 @@ class PtyProcessTest final : public QObject {
 
   private slots:
     void runsInteractiveShellInRequestedDirectory();
+    void typedTextWaitsForTheShellAndIsNotRun();
     void stoppedShellIsReaped_data();
     void stoppedShellIsReaped();
     void exitingRightAfterStopLeavesNoShell();
@@ -180,6 +181,25 @@ void PtyProcessTest::masterIsNotInherited() {
     QCOMPARE(opened.size(), 1);
     QVERIFY(::fcntl(opened.first(), F_GETFD) & FD_CLOEXEC);
     process.stop();
+#else
+    QSKIP("The first PTY backend targets macOS and Linux.");
+#endif
+}
+
+void PtyProcessTest::typedTextWaitsForTheShellAndIsNotRun() {
+#if defined(Q_OS_UNIX)
+    // Type in Terminal (#170): the command is typed before the shell starts and left at the
+    // prompt for the user to run with Return.
+    TerminalPanel panel;
+    panel.resize(640, 240);
+    panel.show();
+    panel.start(QDir::tempPath());
+    panel.typeText(QStringLiteral("echo __KETPLUS_TYPED__"));
+    auto* view = panel.findChild<TerminalView*>();
+    QVERIFY(view != nullptr);
+    QTRY_VERIFY_WITH_TIMEOUT(view->visibleText().contains("echo __KETPLUS_TYPED__"), 5000);
+    QTest::qWait(500);
+    QCOMPARE(view->visibleText().count(QStringLiteral("__KETPLUS_TYPED__")), 1);
 #else
     QSKIP("The first PTY backend targets macOS and Linux.");
 #endif

@@ -98,6 +98,11 @@ void TerminalPanel::start(const QString& path) {
         tab->start();
     }
 }
+void TerminalPanel::typeText(const QString& text) {
+    if (auto* tab = currentTab())
+        tab->typeText(text);
+}
+
 void TerminalPanel::focusTerminal() {
     auto* tab = currentTab();
     if (!tab)

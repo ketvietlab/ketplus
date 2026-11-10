@@ -23,6 +23,8 @@ class TerminalPanel final : public QWidget {
     void applyTheme(const ThemePalette& palette);
     void setTypography(int fontSizePixels, int lineHeightPixels, const QString& fontFamily = {});
     [[nodiscard]] bool isSessionRunning() const;
+    // Types `text` into the current tab without running it (TerminalTab::typeText).
+    void typeText(const QString& text);
 
   signals:
     void closeRequested();

@@ -157,6 +157,8 @@ endif()
 if(KETPLUS_BUILD_DESKTOP)
     ketplus_add_daemon_test(ketplus_provider_transcript_tests ProviderTranscriptTest.cpp)
     target_link_libraries(ketplus_provider_transcript_tests PRIVATE ketplus_ai)
+    ketplus_add_daemon_test(ketplus_provider_setup_guide_tests ProviderSetupGuideTest.cpp)
+    target_link_libraries(ketplus_provider_setup_guide_tests PRIVATE ketplus_ai)
 endif()
 
 qt_add_executable(ketplus_atlas_tunnel_fixture AtlasTunnelFixture.cpp)

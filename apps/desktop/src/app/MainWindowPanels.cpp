@@ -388,6 +388,22 @@ bool MainWindow::showAgentDiff(const QString& filePath, const GitDiffMode mode,
     return true;
 }
 
+void MainWindow::typeInTerminal(const QString& command) {
+    // Beside the conversation in Agent Workspace, below the page elsewhere. The command is typed,
+    // never run: the user presses Return.
+    TerminalPanel* panel = nullptr;
+    if (agentWorkspaceMode_) {
+        panel = openAgentTerminalTab();
+    } else {
+        setTerminalVisible(true);
+        panel = terminal_;
+    }
+    if (panel == nullptr)
+        return;
+    panel->typeText(command);
+    panel->focusTerminal();
+}
+
 void MainWindow::setTerminalVisible(const bool visible) {
     if (visible && atlasWorkspaceMode_)
         return;

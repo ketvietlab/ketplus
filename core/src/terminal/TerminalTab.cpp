@@ -47,6 +47,8 @@ TerminalTab::TerminalTab(const QString& workingDirectory, const QString& command
         if (!pendingCommandPath_.isEmpty()) {
             session_.sendBytes(commandForPath(std::exchange(pendingCommandPath_, {})));
         }
+        if (!pendingTypedText_.isEmpty())
+            session_.sendPaste(std::exchange(pendingTypedText_, {}));
     });
     connect(&session_, &TerminalSession::exited, this,
             [this](const int exitCode) { setTitle(QStringLiteral("Exited (%1)").arg(exitCode)); });
@@ -82,6 +84,13 @@ bool TerminalTab::restart() {
 }
 
 void TerminalTab::stop() { session_.stop(); }
+
+void TerminalTab::typeText(const QString& text) {
+    if (session_.isRunning())
+        session_.sendPaste(text);
+    else
+        pendingTypedText_ = text;
+}
 
 void TerminalTab::applyTheme(const ThemePalette& palette) { terminal_->applyTheme(palette); }
 
