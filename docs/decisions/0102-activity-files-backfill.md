@@ -20,8 +20,9 @@ membership. A pass takes the write lock as in ADR 0097. It reads at most 2,048
 grouped items past the marker's `(group_cursor, first_cursor)` keyset in index
 order. The keyset is a row-value comparison, which seeks `activity_items_group`
 to the marker; a separate `group_cursor > 0` bound made late passes walk every
-earlier item (513 ms near the end of 300k items, 29 ms with the seek). For each edit it reads the completed item from `replay_events` and
-records its files, stopping after the item that reaches 1 MiB of payload. It
+earlier item (513 ms near the end of 300k items, 29 ms with the seek). For
+each edit it reads the completed item from `replay_events` and records its
+files, stopping after the item that reaches 1 MiB of payload. It
 then advances the keyset, or deletes the marker when the items are exhausted.
 A marker for a deleted session or an older generation is removed. A pass that
 lists files or deletes the marker increments the session's
