@@ -116,6 +116,7 @@ class MainWindowSettingsTest final : public QObject {
     void browserPageDefaultsOnAndPersistsChoices();
     void providersPageShowsRuntimeStatus();
     void conversationWidthFollowsOnlyTheAgentWorkspace();
+    void returningAFieldToItsOpeningValueSavesIt();
     void updatesPageAndReminderDriveTheUpdater();
     void unconfiguredBuildExplainsUpdatesInsteadOfChecking();
 };
@@ -621,6 +622,39 @@ void MainWindowSettingsTest::settingsAndWorktreesUseWorkspacePages() {
         QCoreApplication::processEvents();
         QVERIFY(window.grab().save(capture + ".dark.png"));
     }
+}
+
+// Changes apply one at a time, so a field taken back to the value it had when Settings
+// opened must be saved too, by a direct edit or by Restore defaults.
+void MainWindowSettingsTest::returningAFieldToItsOpeningValueSavesIt() {
+    QTemporaryDir settingsDirectory;
+    QVERIFY(settingsDirectory.isValid());
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsDirectory.path());
+    QSettings().clear();
+
+    ketplus::ThemeManager theme(*qApp);
+    ketplus::MainWindow window(theme);
+    window.resize(1100, 720);
+    window.show();
+    window.findChild<QAction*>(QStringLiteral("productSettingsAction"))->trigger();
+    ketplus::PixelSelect* size = nullptr;
+    QTRY_VERIFY((size = window.findChild<ketplus::PixelSelect*>(
+                     QStringLiteral("editorFontSize"))) != nullptr);
+    const int opening = size->value();
+    size->setValue(opening + 2);
+    QCOMPARE(ketplus::AppearanceSettings::load().editor.fontSizePixels, opening + 2);
+    size->setValue(opening);
+    QCOMPARE(ketplus::AppearanceSettings::load().editor.fontSizePixels, opening);
+
+    size->setValue(opening + 3);
+    QCOMPARE(ketplus::AppearanceSettings::load().editor.fontSizePixels, opening + 3);
+    for (auto* button : window.findChildren<QAbstractButton*>()) {
+        if (button->property("kvRole") == QStringLiteral("settingsReset"))
+            button->click();
+    }
+    QCOMPARE(ketplus::AppearanceSettings::load().editor.fontSizePixels,
+             ketplus::AppearanceSettings::defaults().editor.fontSizePixels);
 }
 
 void MainWindowSettingsTest::conversationWidthFollowsOnlyTheAgentWorkspace() {

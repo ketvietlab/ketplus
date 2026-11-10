@@ -53,6 +53,7 @@ class SettingsDialogTest final : public QObject {
     void kitLabelsKeepRecipeFontsAcrossThemeChanges();
     void persistsAndNormalizesAppearance();
     void appliesThemeSelectionAtOnce();
+    void reselectsAThemeAnotherWindowChanged();
     void extensionPagesApplyAtOnce();
     void appearanceChangesApplyAtOnce();
     void validatesPageRegistrationWithoutTransferringFailedOwnership();
@@ -250,6 +251,29 @@ void SettingsDialogTest::appliesThemeSelectionAtOnce() {
     QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Dark);
     // The theme is not an appearance field, and opening the dialog saved nothing.
     QCOMPARE(saved, 0);
+}
+
+// Two windows open on Light: after the second picks Dark, the first follows and can pick
+// Light again.
+void SettingsDialogTest::reselectsAThemeAnotherWindowChanged() {
+    ketplus::ThemeManager theme(*qApp);
+    theme.setMode(ketplus::ThemeManager::Mode::Light);
+    ketplus::SettingsDialog first(ketplus::AppearanceSettings::defaults(), theme);
+    ketplus::SettingsDialog second(ketplus::AppearanceSettings::defaults(), theme);
+    auto* firstLight = first.findChild<QAbstractButton*>(QStringLiteral("lightThemeCard"));
+    auto* firstDark = first.findChild<QAbstractButton*>(QStringLiteral("darkThemeCard"));
+    auto* secondDark = second.findChild<QAbstractButton*>(QStringLiteral("darkThemeCard"));
+    QVERIFY(firstLight && firstDark && secondDark);
+    QVERIFY(firstLight->isChecked());
+
+    secondDark->click();
+    QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Dark);
+    QVERIFY(firstDark->isChecked());
+    QVERIFY(!firstLight->isChecked());
+
+    firstLight->click();
+    QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Light);
+    QVERIFY(!theme.palette().dark);
 }
 
 void SettingsDialogTest::extensionPagesApplyAtOnce() {

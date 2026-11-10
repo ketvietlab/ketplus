@@ -121,7 +121,6 @@ class SettingsDialog final : public QDialog, public SettingsHost {
     int selectedThemeMode_{0};
     // What was last applied, so each change emits once.
     AppearanceSettings appliedSettings_;
-    int appliedThemeMode_{0};
     bool ready_{false};
     QListWidget* navigation_{nullptr};
     QStackedWidget* pages_{nullptr};

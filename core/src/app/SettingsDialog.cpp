@@ -145,12 +145,15 @@ void SettingsDialog::initialize(const AppearanceSettings& settings) {
     navigation_->setCurrentRow(0);
     // What the controls show is applied already; later edits apply as they are made.
     appliedSettings_ = appearanceSettings();
-    appliedThemeMode_ = selectedThemeMode_;
     ready_ = true;
     updateThemeCards();
-    // The system can switch appearance while the dialog follows it; only the marks follow.
+    // The system, or another window, can change the theme while this dialog is open; the
+    // selection and its marks follow the mode in use.
     if (theme_ != nullptr)
-        connect(theme_, &ThemeManager::themeChanged, this, &SettingsDialog::updateThemeCards);
+        connect(theme_, &ThemeManager::themeChanged, this, [this] {
+            selectedThemeMode_ = static_cast<int>(theme_->mode());
+            updateThemeCards();
+        });
 }
 
 void SettingsDialog::addNavigationPage(const QString& id, const QString& title, QWidget* page) {
@@ -327,7 +330,8 @@ void SettingsDialog::setAppearanceSettings(const AppearanceSettings& settings) {
 }
 
 void SettingsDialog::applyChanges() {
-    // Applies what changed since the last call: appearance, the theme and extension pages.
+    // Applies what changed since the last call: appearance fields and extension pages. The theme
+    // applies in selectThemeMode(), since another window may have changed it meanwhile.
     if (!ready_)
         return;
     const auto appearance = appearanceSettings();
@@ -335,10 +339,6 @@ void SettingsDialog::applyChanges() {
         appliedSettings_ = appearance;
         emit appearanceSettingsSaved(appearance);
         emit settingsSaved(appearance.editor);
-    }
-    if (theme_ != nullptr && selectedThemeMode_ != appliedThemeMode_) {
-        appliedThemeMode_ = selectedThemeMode_;
-        theme_->setMode(static_cast<ThemeManager::Mode>(selectedThemeMode_));
     }
     for (SettingsPage* page : std::as_const(extensionPages_)) {
         if (page->hasChanges())
@@ -365,7 +365,10 @@ void SettingsDialog::updateThemeCards() {
 }
 
 void SettingsDialog::selectThemeMode(const int mode) {
+    // A choice is explicit: it applies even when it matches what this dialog last chose.
     selectedThemeMode_ = mode;
+    if (theme_ != nullptr)
+        theme_->setMode(static_cast<ThemeManager::Mode>(mode));
     applyChanges();
     updateThemeCards();
 }
