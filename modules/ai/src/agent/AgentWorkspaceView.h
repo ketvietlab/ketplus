@@ -105,6 +105,10 @@ class AgentWorkspaceView final : public QWidget {
     Q_PROPERTY(int fileMentionRevision READ fileMentionRevision NOTIFY fileMentionsChanged)
     Q_PROPERTY(QVariantList attachments READ attachments NOTIFY attachmentsChanged)
     Q_PROPERTY(bool compactMode READ compactMode WRITE setCompactMode NOTIFY compactModeChanged)
+    // What the empty composer asks for in place of its own wording, for example the Atlas
+    // builder's "Ask for a change to <flow>…". Empty keeps the composer's wording.
+    Q_PROPERTY(
+        QString composerHint READ composerHint WRITE setComposerHint NOTIFY composerHintChanged)
     // The details pane is open: its Open content menu replaces the header's openers.
     Q_PROPERTY(bool detailsOpen READ detailsOpen NOTIFY detailsOpenChanged)
     // #429: the labels the header's Add tag menu offers, each as {label, color}.
@@ -408,6 +412,13 @@ class AgentWorkspaceView final : public QWidget {
     [[nodiscard]] bool workingMotionEnabled() const noexcept { return workingMotionEnabled_; }
     [[nodiscard]] QVariantMap presentationState() const;
     [[nodiscard]] bool compactMode() const noexcept { return compactMode_; }
+    [[nodiscard]] QString composerHint() const { return composerHint_; }
+    void setComposerHint(const QString& hint) {
+        if (composerHint_ == hint)
+            return;
+        composerHint_ = hint;
+        emit composerHintChanged();
+    }
     [[nodiscard]] bool productSidebarVisible() const noexcept { return productSidebarVisible_; }
     [[nodiscard]] int conversationWidth() const noexcept { return conversationWidth_; }
     [[nodiscard]] QString conversationModel() const;
@@ -616,6 +627,7 @@ class AgentWorkspaceView final : public QWidget {
     void modelConfigurationFinished(const QString& error);
     void messageModelChanged();
     void compactModeChanged();
+    void composerHintChanged();
     void productSidebarVisibleChanged();
     void compactWindowChanged();
     void detailsOpenChanged();
@@ -783,6 +795,7 @@ class AgentWorkspaceView final : public QWidget {
     bool motionEnabled_{false};
     bool workingMotionEnabled_{!qEnvironmentVariableIsSet("KETPLUS_REDUCED_MOTION")};
     bool compactMode_{false};
+    QString composerHint_;
     bool productSidebarVisible_{true};
     bool compactWindow_{false};
     bool detailsOpen_{false};
