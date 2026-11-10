@@ -188,7 +188,8 @@ AtlasTab::AtlasTab(AtlasIndex* index, QWidget* parent)
       thumbnails_(this) {
     setObjectName("atlasTab");
     setAttribute(Qt::WA_StyledBackground, true);
-    applyPalette(QApplication::palette());
+    // A tab opened after the zoom changed starts at that zoom.
+    applyPalette(QApplication::palette(), InterfaceZoomMetrics::current());
     auto* layout = new QVBoxLayout(this);
     chrome_geometry::margins(layout, 0, 0, 0, 0);
     chrome_geometry::spacing(layout, 0);
