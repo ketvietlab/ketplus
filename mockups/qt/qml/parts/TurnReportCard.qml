@@ -46,9 +46,12 @@ Rectangle {
         return ({ done: "Done", active: "In progress", waiting: "Waiting", blocked: "Blocked",
                   cancelled: "Cancelled" })[status]
     }
+    // A group whose items were all cancelled is cancelled, not waiting.
     function groupStatus(items) {
         const open = counted(items)
-        if (open.length > 0 && open.every(item => item.status === "done"))
+        if (open.length === 0)
+            return "cancelled"
+        if (open.every(item => item.status === "done"))
             return "done"
         if (open.some(item => item.status === "blocked"))
             return "blocked"
@@ -96,10 +99,11 @@ Rectangle {
                 id: badge
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                text: card.running ? "Running" : card.finished === card.total ? "All done"
+                readonly property bool allDone: card.total > 0 && card.finished === card.total
+                text: card.running ? "Running" : allDone ? "All done"
                     : card.needsYou ? "Needs you" : "Turn " + card.report.turn
                 tone: card.running ? KetTheme.BadgeTone.Accent
-                    : card.finished === card.total ? KetTheme.BadgeTone.Success
+                    : allDone ? KetTheme.BadgeTone.Success
                     : card.needsYou ? KetTheme.BadgeTone.Warning : KetTheme.BadgeTone.Neutral
             }
         }
@@ -125,8 +129,8 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: card.px(8)
                 Repeater {
-                    model: [card.finished + "/" + card.total,
-                            Math.round(100 * card.finished / Math.max(1, card.total)) + "%"]
+                    model: card.total === 0 ? ["Nothing counted"]
+                         : [card.finished + "/" + card.total, Math.round(100 * card.finished / card.total) + "%"]
                     Text {
                         required property string modelData
                         text: modelData
@@ -164,31 +168,39 @@ Rectangle {
 
                 // A group: its state, title and count; it opens and closes its items.
                 Rectangle {
+                    id: groupRow
+                    readonly property string state: card.groupStatus(group.modelData.items)
+                    readonly property int counted: card.counted(group.modelData.items).length
                     width: parent.width
                     height: card.px(36)
                     radius: card.px(5)
                     color: groupArea.containsMouse ? KetTheme.t.surfaceHover : "transparent"
-                    border.color: groupArea.activeFocus ? KetTheme.t.focusBorder : "transparent"
+                    border.color: groupRow.activeFocus ? KetTheme.t.focusBorder : "transparent"
                     activeFocusOnTab: true
                     Accessible.role: Accessible.Button
-                    Accessible.name: group.modelData.title + ", " + card.done(group.modelData.items)
-                                     + " of " + card.counted(group.modelData.items).length + " done"
+                    Accessible.name: group.modelData.title + ", " + card.statusLabel(state)
+                                     + (counted > 0 ? ", " + card.done(group.modelData.items) + " of " + counted + " done" : "")
+                    Accessible.description: group.open ? "Expanded" : "Collapsed"
+                    Accessible.onPressAction: groupArea.toggle()
                     Keys.onSpacePressed: groupArea.toggle()
                     Keys.onReturnPressed: groupArea.toggle()
                     Row {
                         x: card.px(6)
+                        width: parent.width - x - groupCount.width - card.px(20)
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: card.px(10)
                         KetIcon { name: group.open ? "chevron-down" : "chevron-right"; box: card.px(14); color: KetTheme.t.textMuted; anchors.verticalCenter: parent.verticalCenter }
                         KetIcon {
-                            readonly property string state: card.groupStatus(group.modelData.items)
-                            name: card.statusIcon(state)
+                            name: card.statusIcon(groupRow.state)
                             box: card.px(16)
-                            color: card.statusColor(state)
+                            color: card.statusColor(groupRow.state)
                             anchors.verticalCenter: parent.verticalCenter
                         }
                         Text {
+                            width: Math.min(implicitWidth, parent.width - card.px(50))
                             anchors.verticalCenter: parent.verticalCenter
+                            id: groupTitle
+                            elide: Text.ElideRight
                             text: group.modelData.title
                             color: KetTheme.t.textMain
                             font.family: KetTheme.fontFamily
@@ -197,15 +209,17 @@ Rectangle {
                         }
                     }
                     Text {
+                        id: groupCount
                         anchors.right: parent.right
                         anchors.rightMargin: card.px(8)
                         anchors.verticalCenter: parent.verticalCenter
-                        text: card.done(group.modelData.items) + "/" + card.counted(group.modelData.items).length
+                        text: groupRow.counted > 0 ? card.done(group.modelData.items) + "/" + groupRow.counted : "Cancelled"
                         color: KetTheme.t.textSecondary
                         font.family: KetTheme.fontFamily
                         font.pixelSize: card.px(13)
                         font.features: { "tnum": 1 }
                     }
+                    KetToolTip { visible: groupArea.containsMouse && groupTitle.truncated; text: group.modelData.title }
                     MouseArea {
                         id: groupArea
                         anchors.fill: parent
@@ -231,15 +245,20 @@ Rectangle {
                         spacing: 0
 
                         Rectangle {
+                            id: itemRow
                             width: parent.width
                             height: card.px(32)
                             radius: card.px(5)
                             color: entry.expanded ? KetTheme.t.panelBgSubtle
                                 : itemArea.containsMouse ? KetTheme.t.surfaceHover : "transparent"
-                            border.color: itemArea.activeFocus ? KetTheme.t.focusBorder : "transparent"
+                            border.color: itemRow.activeFocus ? KetTheme.t.focusBorder : "transparent"
                             activeFocusOnTab: true
                             Accessible.role: Accessible.Button
                             Accessible.name: entry.modelData.title + ", " + card.statusLabel(entry.modelData.status)
+                                             + (entry.modelData.status === "done" || entry.modelData.status === "cancelled"
+                                                ? "" : ", " + entry.modelData.owner)
+                            Accessible.description: entry.expanded ? "Expanded" : "Collapsed"
+                            Accessible.onPressAction: itemArea.toggle()
                             Keys.onSpacePressed: itemArea.toggle()
                             Keys.onReturnPressed: itemArea.toggle()
                             Row {
@@ -256,6 +275,7 @@ Rectangle {
                                 Text {
                                     width: Math.min(implicitWidth, parent.width - card.px(22) - (change.visible ? change.width + card.px(8) : 0))
                                     anchors.verticalCenter: parent.verticalCenter
+                                    id: itemTitle
                                     text: entry.modelData.title
                                     elide: Text.ElideRight
                                     color: entry.modelData.status === "cancelled" ? KetTheme.t.textMuted : KetTheme.t.textMain
@@ -283,6 +303,7 @@ Rectangle {
                                 font.family: KetTheme.fontFamily
                                 font.pixelSize: card.px(12)
                             }
+                            KetToolTip { visible: itemArea.containsMouse && itemTitle.truncated; text: entry.modelData.title }
                             MouseArea {
                                 id: itemArea
                                 anchors.fill: parent
@@ -332,13 +353,13 @@ Rectangle {
                                 spacing: card.px(12)
                                 Text {
                                     width: card.px(72)
-                                    anchors.verticalCenter: parent.verticalCenter
                                     text: "Verified"
                                     color: KetTheme.t.textMuted
                                     font.family: KetTheme.fontFamily
                                     font.pixelSize: card.px(12)
                                 }
-                                Row {
+                                Flow {
+                                    width: parent.width - card.px(84)
                                     spacing: card.px(6)
                                     Repeater {
                                         model: entry.modelData.verified || []
@@ -354,25 +375,38 @@ Rectangle {
 
         Rectangle { width: parent.width; height: 1; color: KetTheme.t.panelBorder }
 
-        // While a turn runs: its live activity. Otherwise the next step and who takes it.
-        Item {
+        // While a turn runs: its live activity. Otherwise the next step and who takes it; in the
+        // transcript it opens the Report tab.
+        Rectangle {
+            id: footer
             readonly property var next: card.allItems.find(item => item.status === "active" || item.status === "blocked")
                                         || card.allItems.find(item => item.status === "waiting")
+            readonly property bool opens: !card.ledger && !card.running
+            readonly property string label: card.running ? card.activity
+                : next ? "Next · " + next.next + " · " + next.owner : "Nothing left to do"
             width: parent.width
-            height: card.px(20)
+            height: card.px(28)
+            radius: card.px(5)
+            color: footerArea.containsMouse ? KetTheme.t.surfaceHover : "transparent"
+            border.color: footer.activeFocus ? KetTheme.t.focusBorder : "transparent"
+            activeFocusOnTab: opens
+            Accessible.role: opens ? Accessible.Button : Accessible.StaticText
+            Accessible.name: opens ? label + ". Open the report" : label
+            Accessible.onPressAction: if (opens) card.openRequested()
+            Keys.onSpacePressed: if (opens) card.openRequested()
+            Keys.onReturnPressed: if (opens) card.openRequested()
             Row {
-                width: parent.width - when.width - card.px(12)
+                x: card.ledger ? 0 : card.px(6)
+                width: parent.width - x - when.width - card.px(20)
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: card.px(8)
                 KetActivityIndicator { visible: card.running; anchors.verticalCenter: parent.verticalCenter }
-                KetIcon { visible: !card.running && !card.ledger; name: "chevron-right"; box: card.px(14); color: KetTheme.t.textMuted; anchors.verticalCenter: parent.verticalCenter }
+                KetIcon { visible: footer.opens; name: "chevron-right"; box: card.px(14); color: KetTheme.t.textMuted; anchors.verticalCenter: parent.verticalCenter }
                 Text {
                     width: parent.width - card.px(24)
                     anchors.verticalCenter: parent.verticalCenter
                     elide: Text.ElideRight
-                    text: card.running ? card.activity
-                        : parent.parent.next ? "Next · " + parent.parent.next.next + " · " + parent.parent.next.owner
-                        : "Nothing left to do"
+                    text: footer.label
                     color: KetTheme.t.textSecondary
                     font.family: KetTheme.fontFamily
                     font.pixelSize: card.px(13)
@@ -381,15 +415,18 @@ Rectangle {
             Text {
                 id: when
                 anchors.right: parent.right
+                anchors.rightMargin: card.ledger ? 0 : card.px(8)
                 anchors.verticalCenter: parent.verticalCenter
-                text: card.running ? "Now" : card.ledger ? "Updated in turn " + card.report.turn : ""
+                text: card.running ? "Now" : card.ledger ? "Updated in turn " + card.report.turn : "Open report"
                 color: KetTheme.t.textMuted
                 font.family: KetTheme.fontFamily
                 font.pixelSize: card.px(12)
             }
             MouseArea {
-                visible: !card.ledger && !card.running
+                id: footerArea
+                visible: footer.opens
                 anchors.fill: parent
+                hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: card.openRequested()
             }

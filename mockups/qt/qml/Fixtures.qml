@@ -114,7 +114,7 @@ QtObject {
                   verified: ["Tests", "Build"] },
                 { key: "pr-401", title: "#401 Mermaid labels meet AA contrast", status: "done", change: "",
                   owner: "Agent", evidence: "The 4.45:1 label now reaches 4.6:1 · sweep regression added · merged",
-                  verified: ["Tests", "Capture"] }
+                  verified: ["Code", "Tests", "Build", "Capture"] }
             ] },
             { title: "Repository picker · #164", items: [
                 { key: "picker-daemon", title: "The daemon lists another repository's worktrees", status: "done",
@@ -132,7 +132,10 @@ QtObject {
                 { key: "issue-402", title: "#402 Retire the compatibility stylesheet", status: "waiting", change: "new",
                   owner: "You", remaining: "Now, or folded into #137–#139", next: "Choose when to do it" },
                 { key: "update-notice", title: "Toasts and the update notice", status: "blocked", change: "",
-                  owner: "You", remaining: "The notice needs approved wording", next: "Approve the notice wording" },
+                  owner: "You", remaining: "The notice needs approved wording", next: "Approve the notice wording" }
+            ] },
+            // Only cancelled items: the group reads Cancelled and adds nothing to the counts.
+            { title: "Dropped", items: [
                 { key: "legacy-picker", title: "Keep the old picker behind a setting", status: "cancelled", change: "",
                   owner: "Agent", evidence: "Replaced by the mock flow in turn 3" }
             ] }
