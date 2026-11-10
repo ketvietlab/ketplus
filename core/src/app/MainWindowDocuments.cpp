@@ -746,10 +746,10 @@ void MainWindow::goToLine() {
     if (editor == nullptr || editor->isHibernated()) {
         return;
     }
-    const auto line = message_dialog::number(
-        this, QStringLiteral("Go to Line"),
-        QStringLiteral("Line number (1–%1)").arg(editor->lineCount()), editor->currentLine(), 1,
-        editor->lineCount(), QStringLiteral("Go"));
+    const auto line =
+        message_dialog::number(this, QStringLiteral("Go to Line"),
+                               QStringLiteral("Line number (1–%1)").arg(editor->lineCount()),
+                               editor->currentLine(), 1, editor->lineCount(), QStringLiteral("Go"));
     if (line) {
         pushNavigationLocation(locationOf(editor));
         editor->goToLine(*line);
