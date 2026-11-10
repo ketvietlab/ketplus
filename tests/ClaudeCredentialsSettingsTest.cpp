@@ -31,26 +31,21 @@ class ClaudeCredentialsSettingsTest : public QObject {
         QCoreApplication::setOrganizationName("KetPlusTests");
         QCoreApplication::setApplicationName("ClaudeCredentialsSettingsTest");
     }
-    // Cancel and Escape put the saved theme back after a card previewed another one.
-    void cancellingRestoresTheSavedTheme() {
-        for (const bool escape : {false, true}) {
-            ketplus::ThemeManager theme(*qApp);
-            theme.setMode(ketplus::ThemeManager::Mode::Light);
-            QVERIFY(!theme.palette().dark);
-            ketplus::SettingsDialog dialog(ketplus::AppearanceSettings{}, theme);
-            auto* dark = dialog.findChild<ket::ThemeCard*>("darkThemeCard");
-            QVERIFY(dark);
-            dark->click();
-            QVERIFY(theme.palette().dark);
-            if (escape) {
-                dialog.show();
-                QTest::keyClick(&dialog, Qt::Key_Escape);
-            } else {
-                dialog.findChild<QAbstractButton*>("settingsCancelButton")->click();
-            }
-            QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Light);
-            QVERIFY2(!theme.palette().dark, escape ? "Escape" : "Cancel");
-        }
+    // A card applies its theme at once; Escape closes without taking it back.
+    void choosingAThemeAppliesIt() {
+        ketplus::ThemeManager theme(*qApp);
+        theme.setMode(ketplus::ThemeManager::Mode::Light);
+        QVERIFY(!theme.palette().dark);
+        ketplus::SettingsDialog dialog(ketplus::AppearanceSettings{}, theme);
+        auto* dark = dialog.findChild<ket::ThemeCard*>("darkThemeCard");
+        QVERIFY(dark);
+        dark->click();
+        QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Dark);
+        dialog.show();
+        QTest::keyClick(&dialog, Qt::Key_Escape);
+        QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Dark);
+        QVERIFY(theme.palette().dark);
+        QVERIFY(dark->isChecked());
     }
     // The workspace preview is drawn at the interface zoom, its badge included.
     void workspacePreviewFollowsTheZoom() {

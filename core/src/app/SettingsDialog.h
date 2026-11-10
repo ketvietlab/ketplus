@@ -104,8 +104,7 @@ class SettingsDialog final : public QDialog, public SettingsHost {
     void addNavigationPage(const QString& id, const QString& title, QWidget* page);
     void setAppearanceSettings(const AppearanceSettings& settings);
     void updatePreview();
-    void updateDirtyState();
-    void updateThemePreview();
+    void applyChanges();
     void updateThemeCards();
     void selectThemeMode(int mode);
     void rebuildExtensionNavigation();
@@ -120,6 +119,9 @@ class SettingsDialog final : public QDialog, public SettingsHost {
     AppearanceSettings initialSettings_;
     int initialThemeMode_{0};
     int selectedThemeMode_{0};
+    // What was last applied, so each change emits once.
+    AppearanceSettings appliedSettings_;
+    bool ready_{false};
     QListWidget* navigation_{nullptr};
     QStackedWidget* pages_{nullptr};
     QAbstractButton* followSystem_{nullptr};
@@ -139,7 +141,6 @@ class SettingsDialog final : public QDialog, public SettingsHost {
     QWidget* buttons_{nullptr};
     ket::StepSlider* zoomStep_{nullptr};
     QAbstractButton* resetButton_{nullptr};
-    QAbstractButton* saveButton_{nullptr};
     QList<SettingsPage*> extensionPages_;
     QList<RegisteredPage> registeredPages_;
     qsizetype nextRegistrationSequence_{0};

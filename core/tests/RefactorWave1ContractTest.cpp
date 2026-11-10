@@ -98,10 +98,10 @@ class RefactorWave1ContractTest final : public QObject {
     Q_OBJECT
 
   private slots:
-    void cancelDoesNotApplyOrPersistExtensionState();
-    void resetBuffersExtensionDefaultsUntilSave();
-    void themePreviewRollsBackOnCancel();
-    void saveCurrentlyAppliesEveryExtensionPage();
+    void extensionChangesApplyAndPersistAtOnce();
+    void restoreDefaultsAppliesAtOnce();
+    void themeChoiceAppliesAndSurvivesClosing();
+    void onlyChangedExtensionPagesApply();
     void currentNativePaletteBaseline();
     void themeFollowsKetAppearance();
     void themeInstallsTheKetStyle();
@@ -109,29 +109,30 @@ class RefactorWave1ContractTest final : public QObject {
     void parserReadsObservedWorktreeFlags();
 };
 
-void RefactorWave1ContractTest::cancelDoesNotApplyOrPersistExtensionState() {
+// Every settings change applies as it is made (Jay, 2026-11-10): there is no draft, Save or
+// Cancel, and closing the dialog keeps what was applied.
+void RefactorWave1ContractTest::extensionChangesApplyAndPersistAtOnce() {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
-    QSettings storage(directory.filePath(QStringLiteral("cancel.ini")), QSettings::IniFormat);
+    QSettings storage(directory.filePath(QStringLiteral("apply.ini")), QSettings::IniFormat);
     storage.setValue(QStringLiteral("extension/value"), 7);
     storage.sync();
 
     ketplus::SettingsDialog dialog(ketplus::AppearanceSettings::defaults().editor);
-    auto* page = new SyntheticSettingsPage(QStringLiteral("synthetic/cancel"),
-                                           QStringLiteral("Synthetic cancel page"), storage,
+    auto* page = new SyntheticSettingsPage(QStringLiteral("synthetic/apply"),
+                                           QStringLiteral("Synthetic apply page"), storage,
                                            QStringLiteral("extension/value"));
     dialog.addPage(page);
+    QCOMPARE(page->applyCount, 0);
     page->setBufferedValue(42);
 
-    auto* cancel = findButton(dialog, QDialogButtonBox::Cancel);
-    QVERIFY(cancel != nullptr);
-    cancel->click();
-
-    QCOMPARE(page->applyCount, 0);
-    QCOMPARE(storage.value(QStringLiteral("extension/value")).toInt(), 7);
+    QCOMPARE(page->applyCount, 1);
+    QCOMPARE(storage.value(QStringLiteral("extension/value")).toInt(), 42);
+    QVERIFY(findButton(dialog, QDialogButtonBox::Cancel) == nullptr);
+    QVERIFY(findButton(dialog, QDialogButtonBox::Save, QStringLiteral("primaryAction")) == nullptr);
 }
 
-void RefactorWave1ContractTest::resetBuffersExtensionDefaultsUntilSave() {
+void RefactorWave1ContractTest::restoreDefaultsAppliesAtOnce() {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
     QSettings storage(directory.filePath(QStringLiteral("reset.ini")), QSettings::IniFormat);
@@ -146,23 +147,16 @@ void RefactorWave1ContractTest::resetBuffersExtensionDefaultsUntilSave() {
 
     auto* reset = findButton(dialog, QDialogButtonBox::NoButton, QStringLiteral("settingsReset"));
     QVERIFY(reset != nullptr);
+    QCOMPARE(reset->text(), QStringLiteral("Restore defaults"));
     reset->click();
 
     QCOMPARE(page->resetCount, 1);
     QCOMPARE(page->bufferedValue(), 3);
-    QCOMPARE(page->applyCount, 0);
-    QCOMPARE(storage.value(QStringLiteral("extension/value")).toInt(), 17);
-
-    auto* save = findButton(dialog, QDialogButtonBox::NoButton, QStringLiteral("primaryAction"));
-    QVERIFY(save != nullptr);
-    QVERIFY(save->isEnabled());
-    save->click();
-
     QCOMPARE(page->applyCount, 1);
     QCOMPARE(storage.value(QStringLiteral("extension/value")).toInt(), 3);
 }
 
-void RefactorWave1ContractTest::themePreviewRollsBackOnCancel() {
+void RefactorWave1ContractTest::themeChoiceAppliesAndSurvivesClosing() {
     ketplus::ThemeManager theme(*qApp);
     theme.setMode(ketplus::ThemeManager::Mode::Light);
     ketplus::SettingsDialog dialog(ketplus::AppearanceSettings::defaults(), theme);
@@ -171,17 +165,15 @@ void RefactorWave1ContractTest::themePreviewRollsBackOnCancel() {
     QVERIFY(darkTheme != nullptr);
     darkTheme->click();
     QVERIFY(theme.palette().dark);
-    QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Light);
+    QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Dark);
 
-    auto* cancel = findButton(dialog, QDialogButtonBox::Cancel);
-    QVERIFY(cancel != nullptr);
-    cancel->click();
-
-    QVERIFY(!theme.palette().dark);
-    QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Light);
+    dialog.show();
+    QTest::keyClick(&dialog, Qt::Key_Escape);
+    QVERIFY(theme.palette().dark);
+    QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Dark);
 }
 
-void RefactorWave1ContractTest::saveCurrentlyAppliesEveryExtensionPage() {
+void RefactorWave1ContractTest::onlyChangedExtensionPagesApply() {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
     QSettings storage(directory.filePath(QStringLiteral("multiple-pages.ini")),
@@ -199,11 +191,9 @@ void RefactorWave1ContractTest::saveCurrentlyAppliesEveryExtensionPage() {
                                                 QStringLiteral("clean/value"));
     dialog.addPage(dirtyPage);
     dialog.addPage(cleanPage);
-    dirtyPage->setBufferedValue(9);
 
     auto* navigation = dialog.findChild<QListWidget*>(QStringLiteral("settingsNavigation"));
     QVERIFY(navigation != nullptr);
-
     QStringList extensionIds;
     for (int row = 0; row < navigation->count(); ++row) {
         const QString id = navigation->item(row)->data(Qt::UserRole).toString();
@@ -214,13 +204,9 @@ void RefactorWave1ContractTest::saveCurrentlyAppliesEveryExtensionPage() {
     QCOMPARE(extensionIds,
              (QStringList{QStringLiteral("synthetic/dirty"), QStringLiteral("synthetic/clean")}));
 
-    auto* save = findButton(dialog, QDialogButtonBox::NoButton, QStringLiteral("primaryAction"));
-    QVERIFY(save != nullptr);
-    QVERIFY(save->isEnabled());
-    save->click();
-
+    dirtyPage->setBufferedValue(9);
     QCOMPARE(dirtyPage->applyCount, 1);
-    QCOMPARE(cleanPage->applyCount, 1);
+    QCOMPARE(cleanPage->applyCount, 0);
     QCOMPARE(storage.value(QStringLiteral("dirty/value")).toInt(), 9);
     QCOMPARE(storage.value(QStringLiteral("clean/value")).toInt(), 2);
 }

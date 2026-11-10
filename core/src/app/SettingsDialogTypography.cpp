@@ -265,20 +265,20 @@ QWidget* SettingsDialog::createTypographyCard() {
                     qMax(TextTypographySettings::minimumLineHeightPixels, box->value()));
             }
             updatePreview();
-            updateDirtyState();
+            applyChanges();
         });
     }
     for (ketplus::PixelSelect* box :
          {editorLineHeightBox_, terminalLineHeightBox_, previewLineHeightBox_}) {
         connect(box, &ketplus::PixelSelect::valueChanged, this, [this] {
             updatePreview();
-            updateDirtyState();
+            applyChanges();
         });
     }
     connect(editorFontBox_, &QComboBox::currentIndexChanged, this, [this] {
         editorFontFamily_ = settings_fonts::selectedFamily(editorFontBox_);
         updatePreview();
-        updateDirtyState();
+        applyChanges();
     });
     return scroll;
 }

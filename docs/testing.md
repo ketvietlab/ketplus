@@ -44,7 +44,7 @@ obsolete run. See `docs/release-process.md`.
 | Agent Workspace | `ketplus_agent_tests` | transport, sessions, rendering, interaction, history, fork menus |
 | Sidebar attention | `ketplus_conversation_attention_tests` | background blocking/async questions and confirmations, answer/expiry transitions and spinner lifecycle; fake provider only |
 | Background attention metadata | `ketplus_conversation_attention_daemon_tests` | real local daemon and fake provider: async question updates the inactive row without hydrating its transcript |
-| Desktop zoom | `ketplus_desktop_zoom_tests` | repeated Small/Medium/Large transitions, QWidget and QML geometry, dynamic rows, elision, multi-window appearance, monospace changes and settings draft merging |
+| Desktop zoom | `ketplus_desktop_zoom_tests` | repeated Small/Medium/Large transitions, QWidget and QML geometry, dynamic rows, elision, multi-window appearance, monospace changes and merging with another window's newer settings |
 | Interface font stack | `ketplus_interface_font_tests` | embedded KÉT Sans weights, Vietnamese glyphs, tabular digits, shared QWidget/QML resolver and editor mono |
 | Streaming presentation | `ketplus_agent_streaming_tests` | delta coalescing, final/stop flush, scope and prepend fencing, scroll/Latest, skill refresh isolation |
 | Transcript viewport | `ketplus_agent_viewport_tests` | offscreen formatting deferral, partial source, source pin while reading, prefix anchors |

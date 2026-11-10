@@ -107,8 +107,8 @@ The registered code-font family is `KET Sans Mono`. The old display spelling
 Keep the existing `appearance/theme` and `appearance/interfaceFontSizePixels`
 keys. A Pro appearance save publishes its normalized snapshot to every window
 before synchronous theme signals fire. It reapplies surfaces for font-only
-changes too. Unchanged fields in an open Settings draft merge with the latest
-saved snapshot; edited fields stay in that draft. Monospace families resolve on
+changes too. Settings applies each change as it is made (ADR 0103); fields the
+open dialog did not edit merge with the latest saved snapshot. Monospace families resolve on
 appearance updates rather than per transcript row. See
 [ADR 0012](decisions/0012-product-chrome-zoom.md).
 
@@ -217,11 +217,12 @@ are not shown; queued status follows the daemon state.
 
 Pro Settings keeps its workspace presentation and uses kit navigation, theme
 cards, accent swatch, segmented choices and form controls. The workspace reuses
-the core dialog's staged Save/Reset footer and Follow system control. Numeric
+the core dialog's Restore defaults footer and Follow system control; every change
+applies at once (ADR 0103). Numeric
 interface sizes outside Small/Medium/Large remain visible as a Custom choice;
 opening Settings never coerces a stored value. Storage, Browser and Computer
 preferences retain their existing immediate-save contracts. The sidebar Storage
-action selects that section without rebuilding an already open settings draft.
+action selects that section without rebuilding an already open settings page.
 Provider status and Claude usage remain authoritative runtime data; unavailable
 limits or credentials are never rendered as configured mock state.
 

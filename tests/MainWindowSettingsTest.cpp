@@ -116,6 +116,7 @@ class MainWindowSettingsTest final : public QObject {
     void browserPageDefaultsOnAndPersistsChoices();
     void providersPageShowsRuntimeStatus();
     void conversationWidthFollowsOnlyTheAgentWorkspace();
+    void returningAFieldToItsOpeningValueSavesIt();
     void updatesPageAndReminderDriveTheUpdater();
     void unconfiguredBuildExplainsUpdatesInsteadOfChecking();
 };
@@ -442,13 +443,10 @@ void MainWindowSettingsTest::appliesSavedAppearanceToPublicAndPrivateSurfaces() 
         window.findChild<ketplus::PixelSelect*>(QStringLiteral("previewLineHeight"))->setValue(31);
         window.findChild<QAbstractButton*>(QStringLiteral("followSystemTheme"))->setChecked(false);
         window.findChild<QAbstractButton*>(QStringLiteral("darkThemeCard"))->click();
-        for (auto* button : window.findChildren<QAbstractButton*>()) {
-            if (button->property("kvRole") == QStringLiteral("primaryAction")) {
-                saved = true;
-                button->click();
-                return;
-            }
-        }
+        // Every change applied as it was made; there is no Save button.
+        QVERIFY(window.findChild<QAbstractButton*>(QStringLiteral("settingsSaveButton")) ==
+                nullptr);
+        saved = true;
     });
     settingsAction->trigger();
     QTRY_VERIFY(saved);
@@ -632,6 +630,39 @@ void MainWindowSettingsTest::settingsAndWorktreesUseWorkspacePages() {
     }
 }
 
+// Changes apply one at a time, so a field taken back to the value it had when Settings
+// opened must be saved too, by a direct edit or by Restore defaults.
+void MainWindowSettingsTest::returningAFieldToItsOpeningValueSavesIt() {
+    QTemporaryDir settingsDirectory;
+    QVERIFY(settingsDirectory.isValid());
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsDirectory.path());
+    QSettings().clear();
+
+    ketplus::ThemeManager theme(*qApp);
+    ketplus::MainWindow window(theme);
+    window.resize(1100, 720);
+    window.show();
+    window.findChild<QAction*>(QStringLiteral("productSettingsAction"))->trigger();
+    ketplus::PixelSelect* size = nullptr;
+    QTRY_VERIFY((size = window.findChild<ketplus::PixelSelect*>(
+                     QStringLiteral("editorFontSize"))) != nullptr);
+    const int opening = size->value();
+    size->setValue(opening + 2);
+    QCOMPARE(ketplus::AppearanceSettings::load().editor.fontSizePixels, opening + 2);
+    size->setValue(opening);
+    QCOMPARE(ketplus::AppearanceSettings::load().editor.fontSizePixels, opening);
+
+    size->setValue(opening + 3);
+    QCOMPARE(ketplus::AppearanceSettings::load().editor.fontSizePixels, opening + 3);
+    for (auto* button : window.findChildren<QAbstractButton*>()) {
+        if (button->property("kvRole") == QStringLiteral("settingsReset"))
+            button->click();
+    }
+    QCOMPARE(ketplus::AppearanceSettings::load().editor.fontSizePixels,
+             ketplus::AppearanceSettings::defaults().editor.fontSizePixels);
+}
+
 void MainWindowSettingsTest::conversationWidthFollowsOnlyTheAgentWorkspace() {
     QTemporaryDir settingsDirectory;
     QTemporaryDir workspace;
@@ -676,21 +707,6 @@ void MainWindowSettingsTest::conversationWidthFollowsOnlyTheAgentWorkspace() {
     const auto selectWidth = [&](int pixels) {
         widthControl()->setCurrentIndex(widthIndex(pixels));
     };
-    const auto saveButton = [&settingsPage]() -> QAbstractButton* {
-        for (auto* button : settingsPage->findChildren<QAbstractButton*>()) {
-            if (button->property("kvRole") == QStringLiteral("primaryAction"))
-                return button;
-        }
-        return nullptr;
-    };
-    const auto save = [&] {
-        auto* page = settingsPage;
-        QVERIFY(saveButton()->isEnabled());
-        saveButton()->click();
-        // Saving rebuilds the settings page from the stored values.
-        QTRY_VERIFY(window.findChild<ketplus::SettingsWorkspacePage*>() != page);
-        openTypography();
-    };
     constexpr int widePixels = 864;
     openTypography();
     const int defaultIndex = widthIndex(ketplus::AgentWorkspaceView::defaultConversationWidth);
@@ -699,41 +715,26 @@ void MainWindowSettingsTest::conversationWidthFollowsOnlyTheAgentWorkspace() {
     QCOMPARE(widthControl()->itemText(0), QString::fromUtf8("Default · 760 px"));
     QTRY_VERIFY(widthControl()->isVisible());
     QCOMPARE(widthControl()->currentIndex(), defaultIndex);
-    QVERIFY(saveButton() != nullptr);
-    QVERIFY(!saveButton()->isEnabled());
-    QVERIFY(saveButton()->isVisible());
-
-    // A width alone is a change to save, and choosing the saved one again is not.
-    selectWidth(widePixels);
-    QCOMPARE(widthControl()->currentIndex(), widthIndex(widePixels));
-    QVERIFY(widthControl()->currentIndex() != defaultIndex);
-    QVERIFY(saveButton()->isEnabled());
     QVERIFY(!QSettings().contains(QStringLiteral("agent/conversationWidth")));
-    QCOMPARE(agent->conversationWidth(), ketplus::AgentWorkspaceView::defaultConversationWidth);
-    selectWidth(ketplus::AgentWorkspaceView::defaultConversationWidth);
-    QVERIFY(!saveButton()->isEnabled());
 
+    // A width applies as it is chosen, to the Agent Workspace only.
     selectWidth(widePixels);
-    save();
     QCOMPARE(QSettings().value(QStringLiteral("agent/conversationWidth")).toInt(), widePixels);
     QCOMPARE(agent->conversationWidth(), widePixels);
     QCOMPARE(atlasChat.conversationWidth(), ketplus::AgentWorkspaceView::defaultConversationWidth);
     QCOMPARE(widthControl()->currentIndex(), widthIndex(widePixels));
-    QVERIFY(!saveButton()->isEnabled());
 
     selectWidth(0);
-    save();
     QCOMPARE(ketplus::AgentConversationWidth::load(), 0);
     QCOMPARE(agent->conversationWidth(), 0);
 
-    // Reset defaults covers the width too; going back to the default leaves
+    // Restore defaults covers the width too; going back to the default leaves
     // nothing behind in the settings file.
     for (auto* button : settingsPage->findChildren<QAbstractButton*>()) {
         if (button->property("kvRole") == QStringLiteral("settingsReset"))
             button->click();
     }
     QCOMPARE(widthControl()->currentIndex(), defaultIndex);
-    save();
     QVERIFY(!QSettings().contains(QStringLiteral("agent/conversationWidth")));
     QCOMPARE(agent->conversationWidth(), ketplus::AgentWorkspaceView::defaultConversationWidth);
 

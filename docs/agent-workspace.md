@@ -388,8 +388,8 @@ current-window value.
   20 px inset from the pane's edges only when the pane is narrower. Settings > Typography >
   Conversation width offers Wide (864 px, close to Claude's wide reading column),
   Extra wide (1200 px) and Full width; a Wide saved as 960 px before it was narrowed
-  still reads as Wide. Like the other Typography fields, the choice is staged until
-  Save changes (and Reset defaults covers it). It is stored in the desktop app's
+  still reads as Wide. Like the other Typography fields, the choice applies as it is
+  made (ADR 0103), and Restore defaults covers it. It is stored in the desktop app's
   `agent/conversationWidth` setting and applies to the AI workspace only; Atlas's
   embedded chat keeps the default column.
 - Changed-file cards show paths from the worktree directory instead of the full

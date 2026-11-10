@@ -52,8 +52,10 @@ class SettingsDialogTest final : public QObject {
     void defaultFontResolvesWithoutPlatformFallback();
     void kitLabelsKeepRecipeFontsAcrossThemeChanges();
     void persistsAndNormalizesAppearance();
-    void previewsAndCancelsThemeSelection();
-    void extensionPagesDriveDirtyState();
+    void appliesThemeSelectionAtOnce();
+    void reselectsAThemeAnotherWindowChanged();
+    void extensionPagesApplyAtOnce();
+    void appearanceChangesApplyAtOnce();
     void validatesPageRegistrationWithoutTransferringFailedOwnership();
     void ordersAndSelectsRegisteredPagesByStableIdentity();
     void removesDestroyedPageAndFallsBackToGeneral();
@@ -226,49 +228,76 @@ void SettingsDialogTest::persistsAndNormalizesAppearance() {
     QCOMPARE(dialog.appearanceSettings().terminalFontFamily, QStringLiteral("KET Sans Mono"));
 }
 
-void SettingsDialogTest::previewsAndCancelsThemeSelection() {
+void SettingsDialogTest::appliesThemeSelectionAtOnce() {
     QCoreApplication::setOrganizationName(QStringLiteral("KetPlusTests"));
     QCoreApplication::setApplicationName(QStringLiteral("SettingsDialogTest"));
     ketplus::ThemeManager theme(*qApp);
     theme.setMode(ketplus::ThemeManager::Mode::Light);
     ketplus::SettingsDialog dialog(ketplus::AppearanceSettings::defaults(), theme);
+    int saved = 0;
+    connect(&dialog, &ketplus::SettingsDialog::appearanceSettingsSaved, &dialog,
+            [&saved](const ketplus::AppearanceSettings&) { ++saved; });
 
     auto* darkTheme = dialog.findChild<QAbstractButton*>(QStringLiteral("darkThemeCard"));
     QVERIFY(darkTheme != nullptr);
     darkTheme->click();
     QVERIFY(theme.palette().dark);
-    QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Light);
-
-    auto* buttons = dialog.findChild<QWidget*>(QStringLiteral("settingsButtons"));
-    QVERIFY(buttons != nullptr);
-    buttons->findChild<QAbstractButton*>(QStringLiteral("settingsCancelButton"))->click();
-    QVERIFY(!theme.palette().dark);
-    QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Light);
+    QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Dark);
+    // There is nothing to save or cancel: closing keeps the chosen theme.
+    QVERIFY(dialog.findChild<QAbstractButton*>(QStringLiteral("settingsSaveButton")) == nullptr);
+    QVERIFY(dialog.findChild<QAbstractButton*>(QStringLiteral("settingsCancelButton")) == nullptr);
+    dialog.show();
+    QTest::keyClick(&dialog, Qt::Key_Escape);
+    QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Dark);
+    // The theme is not an appearance field, and opening the dialog saved nothing.
+    QCOMPARE(saved, 0);
 }
 
-void SettingsDialogTest::extensionPagesDriveDirtyState() {
+// Two windows open on Light: after the second picks Dark, the first follows and can pick
+// Light again.
+void SettingsDialogTest::reselectsAThemeAnotherWindowChanged() {
+    ketplus::ThemeManager theme(*qApp);
+    theme.setMode(ketplus::ThemeManager::Mode::Light);
+    ketplus::SettingsDialog first(ketplus::AppearanceSettings::defaults(), theme);
+    ketplus::SettingsDialog second(ketplus::AppearanceSettings::defaults(), theme);
+    auto* firstLight = first.findChild<QAbstractButton*>(QStringLiteral("lightThemeCard"));
+    auto* firstDark = first.findChild<QAbstractButton*>(QStringLiteral("darkThemeCard"));
+    auto* secondDark = second.findChild<QAbstractButton*>(QStringLiteral("darkThemeCard"));
+    QVERIFY(firstLight && firstDark && secondDark);
+    QVERIFY(firstLight->isChecked());
+
+    secondDark->click();
+    QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Dark);
+    QVERIFY(firstDark->isChecked());
+    QVERIFY(!firstLight->isChecked());
+
+    firstLight->click();
+    QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Light);
+    QVERIFY(!theme.palette().dark);
+}
+
+void SettingsDialogTest::extensionPagesApplyAtOnce() {
     ketplus::SettingsDialog dialog(ketplus::EditorSettings::defaults());
     auto* page = new TestSettingsPage;
     dialog.addPage(page);
-
-    auto* buttons = dialog.findChild<QWidget*>(QStringLiteral("settingsButtons"));
-    QVERIFY(buttons != nullptr);
-    auto* save = buttons->findChild<QAbstractButton*>(QStringLiteral("settingsSaveButton"));
-    if (save == nullptr) {
-        for (auto* button : buttons->findChildren<QAbstractButton*>()) {
-            if (button->property("kvRole") == QStringLiteral("primaryAction")) {
-                save = button;
-                break;
-            }
-        }
-    }
-    QVERIFY(save != nullptr);
-    QVERIFY(!save->isEnabled());
-
+    QCOMPARE(page->applyCount, 0);
     page->markDirty();
-    QVERIFY(save->isEnabled());
-    save->click();
     QCOMPARE(page->applyCount, 1);
+}
+
+void SettingsDialogTest::appearanceChangesApplyAtOnce() {
+    ketplus::SettingsDialog dialog(ketplus::EditorSettings::defaults());
+    QList<ketplus::AppearanceSettings> saved;
+    connect(&dialog, &ketplus::SettingsDialog::appearanceSettingsSaved, &dialog,
+            [&saved](const ketplus::AppearanceSettings& settings) { saved.append(settings); });
+    auto* size = dialog.findChild<ketplus::PixelSelect*>(QStringLiteral("editorFontSize"));
+    QVERIFY(size != nullptr);
+    size->setValue(size->value() + 2);
+    QCOMPARE(saved.size(), 1);
+    QCOMPARE(saved.constLast().editor.fontSizePixels, size->value());
+    // The same value again applies nothing.
+    size->setValue(size->value());
+    QCOMPARE(saved.size(), 1);
 }
 
 void SettingsDialogTest::validatesPageRegistrationWithoutTransferringFailedOwnership() {
