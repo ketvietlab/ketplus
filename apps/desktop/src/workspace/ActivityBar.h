@@ -104,6 +104,8 @@ class ActivityBar final : public QWidget {
     ket::UpdatePill* updateReadyButton_{nullptr};
     QToolButton* identityButton_{nullptr};
     QLabel* identityAvatar_{nullptr};
+    QLabel* identityName_{nullptr};
+    QLabel* identitySubtitle_{nullptr};
     QString accountName_;
     QMenu* userMenu_{nullptr};
     QWidget* resizeHandle_{nullptr};

@@ -133,7 +133,20 @@ void MainWindow::deleteAgentConversation(const QString& worktreePath,
     const bool hasLinkedWorktree = agentManager_->conversationOwnsWorktree(path, id);
     if (hasLinkedWorktree && owned.isEmpty())
         owned = QStringList{path};
-    auto* form = new AgentConversationDeleteDialog(hasLinkedWorktree ? owned : QStringList{});
+    QString reference;
+    for (const QVariant& value : agentManager_->conversations(path)) {
+        const QVariantMap conversation = value.toMap();
+        if (conversation.value(QStringLiteral("id")).toString() == id) {
+            const QString number = conversation.value(QStringLiteral("number")).toString();
+            if (!number.isEmpty())
+                reference = QStringLiteral("@agent/") + number;
+            break;
+        }
+    }
+    auto* form =
+        new AgentConversationDeleteDialog(hasLinkedWorktree ? owned : QStringList{}, reference);
+    connect(form, &AgentConversationDeleteDialog::archiveRequested, this,
+            [this, path, id] { archiveAgentConversation(path, id); });
     connect(form->present(this), &ket::Dialog::accepted, this,
             [this, form, path, id, owned, hasLinkedWorktree] {
                 if (agentManager_ == nullptr)

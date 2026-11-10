@@ -132,31 +132,42 @@ void ExplorerPanelTest::togglesFoldersFromTheTree() {
 void ExplorerPanelTest::identityNamesTheSignedInAccount() {
     ketplus::ActivityBar bar;
     auto* identity = bar.findChild<QToolButton*>(QStringLiteral("productIdentityButton"));
+    auto* name = bar.findChild<QLabel*>(QStringLiteral("productIdentityName"));
+    auto* subtitle = bar.findChild<QLabel*>(QStringLiteral("productIdentitySubtitle"));
     auto* avatar = bar.findChild<QLabel*>(QStringLiteral("productIdentityAvatar"));
-    QVERIFY(identity && avatar);
-    QCOMPARE(identity->text(), QStringLiteral("KetPlus\nPersonal workspace"));
+    QVERIFY(identity && name && subtitle && avatar);
+    QCOMPARE(name->text(), QStringLiteral("KetPlus"));
+    QCOMPARE(subtitle->text(), QStringLiteral("Personal workspace"));
     QCOMPARE(avatar->text(), QStringLiteral("KP"));
-    // remote.status names the account (ADR 0109); an ampersand is not a mnemonic.
+    // The button draws no text of its own: a QToolButton would centre it.
+    QVERIFY(identity->text().isEmpty());
+    // remote.status names the account (ADR 0109); the name is plain text.
     bar.setAccount(QStringLiteral("Minh & Lan"));
-    QCOMPARE(identity->text(), QStringLiteral("Minh && Lan\nPersonal workspace"));
+    QCOMPARE(name->text(), QStringLiteral("Minh & Lan"));
+    QCOMPARE(name->textFormat(), Qt::PlainText);
+    QCOMPARE(identity->accessibleName(), QStringLiteral("Minh & Lan Personal workspace"));
     QCOMPARE(avatar->text(), ket::Avatar::initialsOf(QStringLiteral("Minh & Lan")));
     bar.setAccount(QStringLiteral("Minh Tran"));
     QCOMPARE(avatar->text(), QStringLiteral("MT"));
     QCOMPARE(identity->toolTip(), QStringLiteral("Minh Tran"));
-    // A long name ends in "…" inside the button and never widens the sidebar.
+    // Both lines start after the avatar, as in the mock, not centred in the button.
     bar.resize(ketplus::ActivityBar::kWidth, 600);
     bar.show();
     QVERIFY(QTest::qWaitForWindowExposed(&bar));
+    QTRY_VERIFY(name->width() > 0);
+    QVERIFY(name->x() > avatar->geometry().right());
+    QCOMPARE(subtitle->x(), name->x());
+    QVERIFY(name->x() - avatar->geometry().right() < 16);
+    // A long name ends in "…" inside the button and never widens the sidebar.
     const QString longName(60, QLatin1Char('W'));
     bar.setAccount(longName);
-    const QString firstLine = identity->text().section(QLatin1Char('\n'), 0, 0);
-    QVERIFY2(firstLine.endsWith(QChar(0x2026)), qPrintable(firstLine));
-    QVERIFY(identity->fontMetrics().horizontalAdvance(firstLine) < identity->width());
+    QVERIFY2(name->text().endsWith(QChar(0x2026)), qPrintable(name->text()));
+    QVERIFY(name->fontMetrics().horizontalAdvance(name->text()) <= name->width());
     QCOMPARE(identity->toolTip(), longName);
     QCOMPARE(bar.width(), ketplus::ActivityBar::kWidth);
     // Signing out returns to the product name.
     bar.setAccount({});
-    QCOMPARE(identity->text(), QStringLiteral("KetPlus\nPersonal workspace"));
+    QCOMPARE(name->text(), QStringLiteral("KetPlus"));
     QCOMPARE(avatar->text(), QStringLiteral("KP"));
 }
 
