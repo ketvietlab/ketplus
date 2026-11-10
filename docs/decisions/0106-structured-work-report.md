@@ -90,6 +90,11 @@ cannot count it, filter it or show it anywhere else.
 - **App.** The app renders the turn's last report as a card at the end of the turn and
   shows the whole ledger in the Report document tab. It computes every count and the
   progress itself.
+  - The header's Work report button and the card's footer open the tab. There is one
+    Report tab, and it follows the selected conversation.
+  - The tab reads the stored ledger with `session.work_report.read` and then applies
+    the conversation's `work_report.updated` events. An older ledger version never
+    replaces a newer one, so a slow read cannot undo a live update.
 
 ## Consequences
 

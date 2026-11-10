@@ -2,9 +2,11 @@
 #include "agent/AgentMessageFormatter.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/DaemonTranscriptProjection.h"
+#include "agent/WorkReportPane.h"
 
 #include <QJsonArray>
 #include <QQuickView>
+#include <QSignalSpy>
 #include <QtTest>
 
 using namespace agent_workspace_test;
@@ -119,6 +121,17 @@ void AgentWorkspaceViewTest::turnEndShowsTheTurnsWorkReport() {
     };
     countCards(countCards, root);
     QCOMPARE(cards, 1);
+    // The card's footer and the header's Work report button open the Report tab.
+    QSignalSpy opened(&view, &ketplus::AgentWorkspaceView::workReportRequested);
+    const auto click = [&](QQuickItem* item) {
+        QVERIFY(item != nullptr && item->isVisible());
+        const QPointF center = item->mapToScene(QPointF(item->width() / 2, item->height() / 2));
+        QTest::mouseClick(view.quickView(), Qt::LeftButton, {}, center.toPoint());
+    };
+    click(findVisibleItem(card, "workReportFooter"));
+    QTRY_COMPARE(opened.count(), 1);
+    click(findVisibleItem(root, "headerWorkReportButton"));
+    QTRY_COMPARE(opened.count(), 2);
     const auto capture = qEnvironmentVariable("KETPLUS_WORK_REPORT_CAPTURE");
     if (!capture.isEmpty()) {
         card->setProperty("openItem", "c");
@@ -186,4 +199,70 @@ void AgentWorkspaceViewTest::workReportGroupsAcceptAnyName() {
     QVERIFY(QMetaObject::invokeMethod(card, "groupOpen", Q_RETURN_ARG(QVariant, open),
                                       Q_ARG(QVariant, groups.at(1))));
     QVERIFY(open.toBool());
+}
+
+// ADR 0106: the Report tab shows one conversation's ledger; a late read or another
+// conversation's report never replaces what it shows.
+void AgentWorkspaceViewTest::workReportPaneFollowsItsConversation() {
+    const auto ledger = [](const qint64 version, const QString& status) {
+        return QJsonObject{
+            {"title", "Picker"},
+            {"turn", 3},
+            {"version", version},
+            {"items", QJsonArray{reportItem("a", "PRs", status, 1, 3, {{"evidence", "Merged"}})}}}
+            .toVariantMap();
+    };
+    ketplus::WorkReportPane pane;
+    pane.resize(600, 700);
+    pane.show();
+    auto* root = pane.quickView()->rootObject();
+    QVERIFY(root != nullptr);
+    pane.showConversation("first");
+    QVERIFY(pane.loading());
+    QQuickItem* empty = nullptr;
+    QTRY_VERIFY((empty = findVisibleItem(root, "workReportEmpty")) != nullptr);
+    QVERIFY(empty->property("text").toString().startsWith("Loading"));
+
+    pane.acceptReport("other", ledger(9, "active"), {});
+    QVERIFY(pane.report().isEmpty());
+    pane.acceptReport("first", ledger(2, "done"), {});
+    QVERIFY(!pane.loading());
+    QQuickItem* card = nullptr;
+    QTRY_VERIFY((card = findVisibleItem(root, "workReportLedger")) != nullptr);
+    QVERIFY(card->property("ledger").toBool());
+    QCOMPARE(card->property("finished").toInt(), 1);
+    // The ledger view has no footer link back to itself.
+    QVERIFY(!findVisibleItem(card, "workReportFooter")->property("opens").toBool());
+    if (const auto capture = qEnvironmentVariable("KETPLUS_WORK_REPORT_PANE_CAPTURE");
+        !capture.isEmpty()) {
+        QTest::qWait(120);
+        QVERIFY(pane.quickView()->grabWindow().save(capture));
+    }
+    pane.acceptReport("first", ledger(1, "active"), {});
+    QCOMPARE(pane.report().value("version").toInt(), 2);
+    pane.acceptReport("first", {}, "The daemon is restarting.");
+    QCOMPARE(pane.report().value("version").toInt(), 2);
+    QVERIFY(pane.message().isEmpty());
+
+    // What the user opened or closed stays with that conversation.
+    const QVariantList firstGroups = card->property("groups").toList();
+    QVERIFY(QMetaObject::invokeMethod(card, "toggleGroup", Q_ARG(QVariant, firstGroups.at(0))));
+    card->setProperty("openItem", "a");
+    pane.showConversation("other");
+    pane.acceptReport("other", ledger(1, "active"), {});
+    QTRY_VERIFY((card = findVisibleItem(root, "workReportLedger")) != nullptr);
+    QCOMPARE(card->property("openItem").toString(), QString());
+    QVariant open;
+    QVERIFY(QMetaObject::invokeMethod(card, "groupOpen", Q_RETURN_ARG(QVariant, open),
+                                      Q_ARG(QVariant, card->property("groups").toList().at(0))));
+    QVERIFY(open.toBool());
+
+    pane.showConversation("second");
+    QVERIFY(pane.report().isEmpty());
+    pane.acceptReport("second", {}, {});
+    QTRY_VERIFY((empty = findVisibleItem(root, "workReportEmpty")) != nullptr);
+    QVERIFY(empty->property("text").toString().startsWith("No work report yet"));
+    pane.acceptReport("second", {}, "Update the daemon to see the work report.");
+    QTRY_COMPARE(empty->property("text").toString(),
+                 QStringLiteral("Update the daemon to see the work report."));
 }

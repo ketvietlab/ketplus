@@ -11,6 +11,8 @@ Rectangle {
     id: card
 
     property var report: ({})
+    // In the transcript the footer opens the details pane's Report tab.
+    signal openRequested()
     // The details pane shows the whole ledger without a frame of its own.
     property bool ledger: false
     property string openItem
@@ -395,35 +397,62 @@ Rectangle {
             }
         }
 
-        Rectangle { visible: footer.visible; width: parent.width; height: 1; color: KetTheme.t.panelBorder }
+        Rectangle { width: parent.width; height: 1; color: KetTheme.t.panelBorder }
 
-        // The next step and who takes it.
-        Item {
+        // The next step and who takes it. In the transcript it opens the Report tab.
+        Rectangle {
             id: footer
             readonly property var next: card.items.find(item => (item.status === "active" || item.status === "blocked") && item.next)
                                         || card.items.find(item => item.status === "waiting" && item.next)
-            visible: card.ledger || !!next || (card.total > 0 && card.finished === card.total)
+            readonly property bool opens: !card.ledger
+            readonly property string label: next ? qsTr("Next · %1 · %2").arg(next.next.action).arg(card.owner(next.next.owner))
+                : card.total > 0 && card.finished === card.total ? qsTr("Nothing left to do") : ""
+            objectName: "workReportFooter"
             width: parent.width
-            height: card.px(20)
-            Text {
-                width: parent.width - when.width - card.px(12)
+            height: card.px(opens ? 28 : 20)
+            radius: card.px(5)
+            color: footerArea.containsMouse ? KetTheme.t.surfaceHover : "transparent"
+            border.color: footer.activeFocus ? KetTheme.t.focusBorder : "transparent"
+            activeFocusOnTab: opens
+            Accessible.role: opens ? Accessible.Button : Accessible.StaticText
+            Accessible.name: opens ? (label.length > 0 ? label + ". " : "") + qsTr("Open the report") : label
+            Accessible.onPressAction: if (opens) card.openRequested()
+            Keys.onSpacePressed: if (opens) card.openRequested()
+            Keys.onReturnPressed: if (opens) card.openRequested()
+            Row {
+                x: footer.opens ? card.px(6) : 0
+                width: parent.width - x - when.width - card.px(20)
                 anchors.verticalCenter: parent.verticalCenter
-                elide: Text.ElideRight
-                textFormat: Text.PlainText
-                text: parent.next ? qsTr("Next · %1 · %2").arg(parent.next.next.action).arg(card.owner(parent.next.next.owner))
-                                  : card.total > 0 && card.finished === card.total ? qsTr("Nothing left to do") : ""
-                color: KetTheme.t.textSecondary
-                font.family: KetTheme.fontFamily
-                font.pixelSize: card.px(13)
+                spacing: card.px(8)
+                Kit.KetIcon { visible: footer.opens; name: "chevron-right"; box: card.px(14); color: KetTheme.t.textMuted; anchors.verticalCenter: parent.verticalCenter }
+                Text {
+                    width: parent.width - (footer.opens ? card.px(22) : 0)
+                    anchors.verticalCenter: parent.verticalCenter
+                    elide: Text.ElideRight
+                    textFormat: Text.PlainText
+                    text: footer.label
+                    color: KetTheme.t.textSecondary
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: card.px(13)
+                }
             }
             Text {
                 id: when
                 anchors.right: parent.right
+                anchors.rightMargin: footer.opens ? card.px(8) : 0
                 anchors.verticalCenter: parent.verticalCenter
-                text: card.ledger ? qsTr("Updated in turn %1").arg(card.turn) : ""
+                text: card.ledger ? qsTr("Updated in turn %1").arg(card.turn) : qsTr("Open report")
                 color: KetTheme.t.textMuted
                 font.family: KetTheme.fontFamily
                 font.pixelSize: card.px(12)
+            }
+            MouseArea {
+                id: footerArea
+                visible: footer.opens
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: card.openRequested()
             }
         }
     }

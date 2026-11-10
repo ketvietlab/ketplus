@@ -364,6 +364,7 @@ void MainWindow::ensureAgentWorkspace() {
         }
         openAgentTerminalTab();
     });
+    connectAgentWorkReport();
     connect(agentWorkspace_, &AgentWorkspaceView::tagFilterRequested, activityBar_,
             &ActivityBar::setTagFilter);
     connect(agentWorkspace_, &AgentWorkspaceView::settingsRequested, this,

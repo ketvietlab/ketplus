@@ -288,6 +288,11 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
         emit conversationsChanged(session->path, conversations(session->path));
         return;
     }
+    if (method == "daemon/workReport") {
+        emit workReportChanged(session->path, session->id,
+                               params.value("report").toObject().toVariantMap(), {});
+        return;
+    }
     if (method == "daemon/activityGroup") {
         acceptActivityGroup(session, params);
         return;

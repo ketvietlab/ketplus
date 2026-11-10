@@ -64,6 +64,9 @@ class AgentSessionManager final : public QObject {
     void readReviewer(const QString& worktreePath);
     void setReviewer(const QString& worktreePath, const QString& reviewerNumber,
                      const QString& newProvider);
+    // ADR 0106: reads the active conversation's work report; workReportChanged answers, and
+    // follows the conversation's later reports.
+    void readWorkReport(const QString& worktreePath);
     void stopBackgroundTask(const QString& worktreePath, const QString& taskId);
     void readBackgroundTaskOutput(const QString& worktreePath, const QString& taskId);
 
@@ -173,6 +176,10 @@ class AgentSessionManager final : public QObject {
     // where change tells a failed assignment from a failed read.
     void reviewerResult(const QString& worktreePath, const QString& conversationId,
                         const QVariantMap& result);
+    // report is the daemon ledger, empty before the first report. error is set when it cannot
+    // be read.
+    void workReportChanged(const QString& worktreePath, const QString& conversationId,
+                           const QVariantMap& report, const QString& error);
     void backgroundTaskResult(const QString& worktreePath, const QString& taskId,
                               const QString& action, const QVariantMap& result);
     void activityChanged();
@@ -386,6 +393,7 @@ class AgentSessionManager final : public QObject {
     // tried once more when the daemon finishes restoring.
     void retryReviewerReads();
     QSet<QString> reviewerReadsToRetry_;
+    QSet<QString> workReportReadsToRetry_;
     [[nodiscard]] static QString normalizedPath(const QString& path);
 
     CodexAppServer* server_{nullptr};

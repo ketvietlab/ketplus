@@ -326,6 +326,7 @@ Item {
                 visible: !!turnReport && !!turnReport.items && turnReport.items.length > 0
                 height: visible ? implicitHeight : 0
                 report: visible ? turnReport : ({})
+                onOpenRequested: agentHost.requestWorkReport()
             }
             TranscriptAgentNote {
                 width: parent.width

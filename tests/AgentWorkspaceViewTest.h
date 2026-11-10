@@ -144,6 +144,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void turnEndShowsTheTurnsWorkReport();
     void turnEndReportSurvivesAHistoryPageSplit();
     void workReportGroupsAcceptAnyName();
+    void workReportPaneFollowsItsConversation();
     void retryResendsTheLatestFailedPrompt();
     void opensInlineMarkdownLinks();
     void linksInlineCodeOnceFilesAreListed();
