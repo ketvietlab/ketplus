@@ -342,8 +342,12 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAda
                 [this, name = provider->name()] { catalogCache_.invalidate(name); });
     connect(adapter_, &CodexAdapter::notificationReceived, this,
             [this](const QString& method, const QJsonObject&) {
-                if (method == "account/updated")
+                if (method == "account/updated") {
                     catalogCache_.invalidate("codex");
+                    // The CLI signed in, out or changed account: a sign-in, key or limit
+                    // failure reported for the old account no longer applies.
+                    readiness_.forget(QStringLiteral("codex"));
+                }
             });
     connect(adapter_, &CodexAdapter::reloaded, this, [this] { catalogCache_.invalidate("codex"); });
     if (claude != nullptr)
