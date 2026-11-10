@@ -20,7 +20,8 @@ Basic.ApplicationWindow {
         "workspace/report-running", "workspace/report-details", "workspace/claude",
         "workspace/codex", "workspace/cursor", "workspace/turn-report", "editor", "editor/terminal",
         "editor/markdown", "editor/markdown-source", "editor/samples",
-        "changes", "worktrees", "connections", "connections/no-activity", "connections/signed-out",
+        "changes", "worktrees", "teams", "teams/task", "teams/large", "teams/empty",
+        "connections", "connections/no-activity", "connections/signed-out",
         "connections/expired", "connections/sign-in", "settings", "settings/typography", "settings/account",
         "settings/browser", "settings/computer", "settings/providers", "settings/archived",
         "settings/updates", "settings/storage", "workspace/storage-warning", "atlas", "mobile-picker", "workspace/compact",
@@ -58,6 +59,13 @@ Basic.ApplicationWindow {
     // connections/no-activity.
     property bool remoteActivity: true
     property string tagFilter
+    // Teams (concept): folders in the sidebar; a team's name opens its page (teams).
+    readonly property var teamList: teams.teams
+    readonly property string currentTeam: teams.team ? teams.team.id : ""
+    function openTeam(id) {
+        teams.showTeam(id)
+        screen = "teams"
+    }
     property bool compact: false
     property size wideSize: Qt.size(1440, 900)
 
@@ -228,6 +236,8 @@ Basic.ApplicationWindow {
             if (state === "sign-in")
                 Qt.callLater(connections.openSignIn)
         }
+        if (name === "teams")
+            teams.showState(state)
         if (name === "editor") {
             editorTerminal = state === "terminal"
             editorFile = state.startsWith("markdown") ? "licensing.md"
@@ -257,6 +267,7 @@ Basic.ApplicationWindow {
         deleteDialog.close()
         connections.openActivity("iPhone 16")
         connections.closeActivity()
+        teams.openEveryOverlay()
         toast.show("Smoke test")
     }
 
@@ -299,6 +310,8 @@ Basic.ApplicationWindow {
         else if (Mock.initialPanel === "toast")
             // The app-wide toast, for the side by side with the app.
             Qt.callLater(() => notify("Saved the plan"))
+        else if (screen === "teams" && Mock.initialPanel)
+            Qt.callLater(() => teams.openDialog(Mock.initialPanel))
         else if (["pair", "linux", "signin"].includes(Mock.initialPanel) && screen === "connections")
             Qt.callLater(() => connections.openDialog(Mock.initialPanel))
         else if (Mock.initialPanel && screen === "workspace")
@@ -341,7 +354,7 @@ Basic.ApplicationWindow {
             Layout.fillWidth: true
             Layout.fillHeight: true
             currentIndex: ["workspace", "editor", "changes", "worktrees", "connections", "settings",
-                           "atlas", "mobile-picker"].indexOf(app.screen)
+                           "atlas", "mobile-picker", "teams"].indexOf(app.screen)
 
             WorkspaceScreen { id: workspace; window: app }
             EditorScreen { window: app }
@@ -351,6 +364,7 @@ Basic.ApplicationWindow {
             SettingsScreen { window: app }
             AtlasBuilderScreen { window: app }
             MobilePickerScreen { window: app }
+            TeamsScreen { id: teams; window: app }
         }
     }
 

@@ -128,7 +128,7 @@ Rectangle {
                     checkable: false
                     checked: sidebar.window.screen === modelData.id
                              || (modelData.id === "workspace"
-                                 && ["worktrees", "atlas"].includes(sidebar.window.screen))
+                                 && ["worktrees", "atlas", "teams"].includes(sidebar.window.screen))
                     onClicked: sidebar.window.showScreen(modelData.id)
                 }
             }
@@ -249,6 +249,16 @@ Rectangle {
                         readonly property bool open: sidebar.expanded[modelData.name] !== false
                         readonly property bool all: !!sidebar.showAll[modelData.name]
                         readonly property int limit: 7
+                        // Its teams come first, as folders; a conversation of a team shows there
+                        // and not among the repository's own.
+                        readonly property var teams: sidebar.window.teamList.filter(t => t.repository === modelData.name)
+                        readonly property var loose: {
+                            const taken = []
+                            for (const t of teams)
+                                for (const m of t.members)
+                                    taken.push(m.number)
+                            return modelData.conversations.filter(c => !taken.includes(c.number))
+                        }
                         width: parent.width
 
                         KetGroupHeader {
@@ -269,11 +279,28 @@ Rectangle {
                         }
 
                         Repeater {
+                            model: repo.open ? repo.teams : []
+
+                            TeamFolder {
+                                required property var modelData
+                                x: sidebar.inset
+                                width: repo.width - 2 * sidebar.inset
+                                window: sidebar.window
+                                team: modelData
+                                conversations: repo.modelData.conversations
+                                onContextMenuRequested: conversation => {
+                                    sidebar.window.conversation = conversation
+                                    rowMenu.popup()
+                                }
+                            }
+                        }
+
+                        Repeater {
                             model: !repo.open ? []
                                    : sidebar.window.tagFilter !== ""
-                                     ? repo.modelData.conversations.filter(c => c.tags.some(t => t.label === sidebar.window.tagFilter))
-                                   : repo.all ? repo.modelData.conversations
-                                   : repo.modelData.conversations.slice(0, repo.limit)
+                                     ? repo.loose.filter(c => c.tags.some(t => t.label === sidebar.window.tagFilter))
+                                   : repo.all ? repo.loose
+                                   : repo.loose.slice(0, repo.limit)
 
                             KetConversationRow {
                                 id: row
@@ -310,7 +337,7 @@ Rectangle {
 
                         Basic.AbstractButton {
                             visible: repo.open && !repo.all && sidebar.window.tagFilter === ""
-                                     && repo.modelData.conversations.length > repo.limit
+                                     && repo.loose.length > repo.limit
                             x: sidebar.px(28)
                             height: sidebar.px(28)
                             hoverEnabled: true

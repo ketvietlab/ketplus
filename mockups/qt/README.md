@@ -42,6 +42,7 @@ Screens and states (`--screen` / `--state`):
 | `editor` | `markdown`, `markdown-source`, `samples` | `docs/licensing.md` (bundled from the repository) in Preview or Source, with the floating Preview/Source switch 100 px above the bottom; `samples` opens `design-system.md` with QML, C++, shell and JSON code blocks in syntax colours |
 | `changes` | | Source Control: changes, staged changes, diff |
 | `worktrees` | | Manage worktrees, create dialog, manage menu |
+| `teams` | `task`, `large`, `empty` | Concept: a team's page (see Teams). `task` opens a task, `large` adds a fourth developer, `empty` has no team. `--open=new-team`, `add-member`, `task` or `handover` opens that dialog; `--scroll=1` starts at Members and Updates |
 | `connections` | `no-activity` | This Mac, phones, activity from paired devices (the daemon's remote command audit, #86: done and refused requests, a sender that did not verify) or its empty state, Linux machines (SSH or Relay), pairing dialogs, account. `--open=activity` shows all activity, `--open=device` one phone's details, `--open=device-focus` the same with a truncated row focused from the keyboard |
 | `connections` | `signed-out`, `expired`, `sign-in` | Signed out: the introduction (this Mac and KetPlus Mobile, the three pairing steps), the expired-login banner, the browser sign-in dialog |
 | `settings` | `typography`, `account`, `browser`, `computer`, `providers`, `archived`, `storage`, `updates` | The app's order: Appearance (live theme, follow system, zoom), typography, account, Agent models (opens the model picker), browser, computer use, providers (CLI status, Claude API access, organization usage), archive, storage (journal size by part, retention, size limit and warning, largest conversations, Compact now), updates |
@@ -119,6 +120,36 @@ the steps of an activity group.
 | Reconnecting, turn-ending error | `runtime.error` (`will_retry`) | ✓ | ✓ | ✓ |
 | Turn end: completed, stopped, failed; Claude cost | `turn.completed`, `usage.session` | ✓ | ✓ | ✓ |
 | Detail trimmed by journal compaction | ketvietlab/ketplus#128 | ✓ | – | – |
+
+## Teams
+
+A concept, not built in the app: several conversations that share one goal. Agent messaging
+(ADR 0027) has no owner of a task, no roles and no shared view of the work; a team adds them.
+
+- **In the sidebar** a team is a folder inside its repository (`qml/shell/TeamFolder.qml`), beside
+  the conversations that belong to no team. The folder lists its members' conversations (leader,
+  developers, reviewers), each with its role as its first tag. The icon folds it, the name opens the team's page, and the count
+  is the decisions that wait for the user. A conversation belongs to one team at a time.
+- **The page** (`qml/screens/TeamsScreen.qml`) answers three questions in order: what waits for
+  the user, where every task stands, and who holds what.
+- **Leader**: one conversation that assigns tasks, orders the merges into the team's integration
+  branch and is the only one that reports to the user. It also writes the requirements (the
+  acceptance criteria of each task) unless New team turns that off. It neither codes nor reviews.
+- **Developer**: owns a lane, a named set of path prefixes. An edit outside the lane is flagged on
+  the task ("Outside its lane"); the leader decides who makes that change.
+- **Reviewer**: checks the lanes it is given against the acceptance criteria and never merges. One
+  reviewer keeps up with two or three developers; the page says so at four (`teams/large`).
+- **Task**: one owner, who also holds its worktree; To do, In progress, In review, Blocked or Done;
+  its branch, worktree, pull request and what it depends on. Only the leader changes the
+  acceptance criteria, and a change is recorded in the task's history. Hand over changes the owner,
+  who receives all of that.
+- **Waiting for you**: a question that changes the product waits here with its choices instead of
+  in one conversation. The answer goes to the leader and to the owner of the task it blocks.
+- **Updates**: task changes wake nobody; the leader reads them as one digest when its turn ends.
+
+Not drawn yet: the leader's digest and a task assignment in a transcript, a member's role in the
+conversation header, and a team on the phone. Before the app builds this, ket-qt needs a group
+header whose name activates instead of folding, and Két Symbol a team icon (the mock uses `bot`).
 
 ## Provider setup
 
