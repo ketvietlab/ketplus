@@ -73,10 +73,10 @@ QtObject {
                   tags: [], worktree: "fix-scroll-anchor", transcript: "short" },
                 { number: "3366", title: "Review feature onboarding", status: KetTheme.ConversationStatus.NeedsInput,
                   tags: [tag("Review")], worktree: "feature-onboarding", transcript: "question" },
-                // The reviewer of the Release 1.4 team (Fixtures.teams): another provider than its developers.
+                // The reviewer of the Release 1.4 team (Fixtures.teams). A reviewer runs on Claude.
                 { number: "4583", title: "Review fix scroll anchor", status: KetTheme.ConversationStatus.Working,
                   tags: [tag("Review")], worktree: "fix-scroll-anchor", transcript: "running",
-                  provider: "Codex", providerId: "codex", model: "GPT-5.6 Sol", effort: "High" },
+                  provider: "Claude", providerId: "claude", model: "Opus 5.5", effort: "High" },
                 { number: "6120", title: "Profile the editor startup", status: KetTheme.ConversationStatus.Error,
                   tags: [tag("Performance"), tag("Bug")], worktree: "develop", transcript: "error" },
                 // A turn the provider ended: the guide in the transcript (workspace/setup-expired…).
@@ -90,7 +90,7 @@ QtObject {
                   tags: [tag("Docs")], worktree: "docs/1.4", transcript: "short" },
                 { number: "5923", title: "Review the user guide", status: KetTheme.ConversationStatus.Completed,
                   tags: [tag("Docs"), tag("Review")], worktree: "docs/1.4", transcript: "short",
-                  provider: "Codex", providerId: "codex", model: "GPT-5.6 Sol", effort: "High" }
+                  provider: "Claude", providerId: "claude", model: "Opus 5.5", effort: "High" }
             ]
         },
         {
@@ -604,7 +604,7 @@ QtObject {
         {
             id: "release", name: "Release 1.4",
             goal: "Ship the new navigation, the repository picker and Settings in KétPlus Pro 1.4.",
-            repository: "ketplus-desktop", branch: "release/1.4", paused: false,
+            repository: "ketplus-desktop", branch: "release/1.4", paused: false, merges: "leader",
             members: [
                 { number: "4821", title: "Prepare the release", role: "leader", provider: "Codex · GPT-5.6 Luna",
                   lane: "", paths: [], state: "working", now: "Ordering the merges into release/1.4" },
@@ -614,7 +614,7 @@ QtObject {
                   lane: "Repository picker", paths: ["apps/desktop/src/app/picker/"], state: "working", now: "T-3 · step 3 of 4" },
                 { number: "8215", title: "Follow up on the new UI", role: "developer", provider: "Claude · Opus 5.5",
                   lane: "Settings", paths: ["apps/desktop/src/settings/", "apps/desktop/src/overlays/"], state: "blocked", now: "T-5 waits for your decision" },
-                { number: "4583", title: "Review fix scroll anchor", role: "reviewer", provider: "Codex · GPT-5.6 Sol",
+                { number: "4583", title: "Review fix scroll anchor", role: "reviewer", provider: "Claude · Opus 5.5",
                   lane: "", reviews: ["Navigation", "Repository picker", "Settings"], paths: [], state: "working", now: "Reviewing T-1 · #412" }
             ],
             tasks: [
@@ -705,13 +705,13 @@ QtObject {
         {
             id: "docs", name: "Docs refresh",
             goal: "Bring the user guide in line with 1.4.",
-            repository: "ketplus-desktop", branch: "docs/1.4", paused: false,
+            repository: "ketplus-desktop", branch: "docs/1.4", paused: false, merges: "user",
             members: [
                 { number: "5904", title: "Draft release notes", role: "leader", provider: "Claude · Opus 5.5",
                   lane: "", paths: [], state: "idle", now: "Waiting for its first task list" },
                 { number: "5911", title: "Rewrite the build guide", role: "developer", provider: "Claude · Opus 5.5",
                   lane: "Guides", paths: ["docs/guide/"], state: "idle", now: "No task yet" },
-                { number: "5923", title: "Review the user guide", role: "reviewer", provider: "Codex · GPT-5.6 Sol",
+                { number: "5923", title: "Review the user guide", role: "reviewer", provider: "Claude · Opus 5.5",
                   lane: "", paths: [], reviews: ["Guides"], state: "idle", now: "No review yet" }
             ],
             tasks: [], decisions: [], updates: []

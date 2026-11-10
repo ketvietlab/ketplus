@@ -118,6 +118,12 @@ Item {
             memberAgentDialog.target = "developer"
             memberAgentDialog.open()
         }
+        else if (name === "reviewer-agent") {
+            // The reviewer's picker: Claude only.
+            startNewTeam("")
+            memberAgentDialog.target = "reviewer"
+            memberAgentDialog.open()
+        }
         else if (name === "task")
             showTask("T-3")
         else if (name === "handover")
@@ -227,7 +233,7 @@ Item {
                     : lane ? "No task yet" : "No lane yet" }
     }
     // `plan` is { leader, developer, reviewer }, each { count, provider, model, effort }.
-    function createTeam(repository, name, goal, branch, leaderWrites, plan) {
+    function createTeam(repository, name, goal, branch, leaderWrites, plan, merges) {
         const developers = Math.max(1, Math.min(Fixtures.mostDevelopers, plan.developer.count))
         const members = [newMember(repository, "leader", "Lead " + name, agentOf(plan.leader))]
         for (let i = 1; i <= developers; ++i)
@@ -239,7 +245,8 @@ Item {
         } while (teams.some(t => t.id === id))
         teams = teams.concat([{
             id: id, name: name, goal: goal || "No goal yet.", repository: repository, branch: branch,
-            paused: false, leaderWrites: leaderWrites, members: members, tasks: [], decisions: [], updates: [] }])
+            paused: false, merges: merges || "leader", leaderWrites: leaderWrites, members: members,
+            tasks: [], decisions: [], updates: [] }])
         teamIndex = teams.length - 1
         filter = ""
         window.notify("Created " + name + " and started " + members.length + " conversations")
@@ -314,9 +321,9 @@ Item {
         const check = (ok, text) => { if (!ok) failures.push(text) }
         const repository = Fixtures.repositories[0].name
         const other = Fixtures.repositories[1].name
-        const plan = { leader: { count: 1, provider: "codex", model: "GPT-5.6 Sol", effort: "High" },
-                       developer: { count: 2, provider: "claude", model: "Opus 5.5", effort: "Medium" },
-                       reviewer: { count: 1, provider: "codex", model: "GPT-5.6 Luna", effort: "High" } }
+        const plan = { leader: { count: 1, provider: "claude", model: "Opus 5.5", effort: "High" },
+                       developer: { count: 2, provider: "codex", model: "GPT-5.6 Luna", effort: "Medium" },
+                       reviewer: { count: 1, provider: "claude", model: "Opus 5.5", effort: "High" } }
         const loose = number => !teams.some(t => t.members.some(m => m.number === number))
                                 && !!window.findConversation(number)
 
@@ -324,6 +331,9 @@ Item {
         const a = createTeam(repository, "Check A", "", "develop", true, plan)
         const started = team.members.map(m => m.number)
         check(started.length === 4, "a new team has a leader, two developers and a reviewer")
+        check(team.merges === "leader", "the leader merges a new team's tasks unless the user chose to")
+        change({ merges: "user" })
+        check(team.merges === "user" && team.members.length === 4, "who merges is a setting of the team")
         const added = addDeveloper("Check lane", "Check", ["check/"], agentOf(plan.developer))
         check(removeMember(added) && loose(added), "a removed developer stays as a conversation")
         // Ids stay unique after a deletion.
@@ -490,6 +500,11 @@ Item {
                     spacing: screen.px(6)
                     KetIcon { anchors.verticalCenter: parent.verticalCenter; name: "branch"; box: screen.px(13); color: KetTheme.t.textMuted }
                     Mono { anchors.verticalCenter: parent.verticalCenter; text: screen.team ? screen.team.branch : "" }
+                }
+                Row {
+                    spacing: screen.px(6)
+                    KetIcon { anchors.verticalCenter: parent.verticalCenter; name: "pull-request"; box: screen.px(13); color: KetTheme.t.textMuted }
+                    Label { text: screen.team && screen.team.merges === "user" ? "You merge tasks" : "The leader merges tasks"; color: KetTheme.t.textSecondary }
                 }
                 Label {
                     visible: screen.tasks.length > 0
@@ -870,6 +885,16 @@ Item {
                 screen.window.notify(paused ? "Paused " + screen.team.name : "Resumed " + screen.team.name)
             }
         }
+        KetMenuItem {
+            readonly property bool mine: !!screen.team && screen.team.merges === "user"
+            text: mine ? "Let the leader merge tasks" : "Merge tasks myself"
+            description: mine ? "Once the reviewer passes a task" : "Each reviewed task waits for you"
+            iconName: "pull-request"
+            onTriggered: {
+                screen.change({ merges: mine ? "leader" : "user" })
+                screen.window.notify(mine ? "The leader merges reviewed tasks" : "Reviewed tasks wait for you to merge")
+            }
+        }
         KetMenuSeparator {}
         KetMenuItem { text: "Delete team…"; iconName: "trash"; danger: true; onTriggered: disbandDialog.open() }
     }
@@ -1191,6 +1216,9 @@ Item {
         provider: planned ? planned.provider : addMemberDialog.agentProvider
         model: planned ? planned.model : addMemberDialog.agentModel
         effort: planned ? planned.effort : addMemberDialog.agentEffort
+        // A review must stay read-only, and Claude is the provider that enforces it (ADR 0067).
+        onlyProvider: target === "reviewer" ? "claude" : ""
+        onlyReason: "A team's reviewer runs on Claude, the provider that keeps a review read-only."
         onChosen: (provider, model, effort) => {
             if (target !== "") {
                 newTeamDialog.plan = newTeamDialog.withRole(target, { provider: provider, model: model, effort: effort })
@@ -1209,10 +1237,12 @@ Item {
         property string repository: Fixtures.repositories[0].name
         // The members Create starts: how many of each role, and the agent every one of them uses.
         readonly property var defaults: ({
-            leader: { count: 1, provider: "codex", model: "GPT-5.6 Sol", effort: "High" },
-            developer: { count: 2, provider: "claude", model: "Opus 5.5", effort: "Medium" },
-            reviewer: { count: 1, provider: "codex", model: "GPT-5.6 Luna", effort: "High" } })
+            leader: { count: 1, provider: "claude", model: "Opus 5.5", effort: "High" },
+            developer: { count: 2, provider: "codex", model: "GPT-5.6 Luna", effort: "Medium" },
+            reviewer: { count: 1, provider: "claude", model: "Opus 5.5", effort: "High" } })
         property var plan: defaults
+        // Who merges a reviewed task into the integration branch: "leader" or "user".
+        property string merges: "leader"
         readonly property var roles: [
             { role: "leader", label: "Leader" },
             { role: "developer", label: "Developers" },
@@ -1222,7 +1252,7 @@ Item {
         readonly property int total: plan.leader.count + plan.developer.count + plan.reviewer.count
         readonly property string advice:
             plan.developer.count > 3 ? "One reviewer keeps up with two or three developers; with more, reviews queue."
-            : plan.developer.provider === plan.reviewer.provider ? "A reviewer from another provider than the developers catches more."
+            : plan.developer.provider === plan.reviewer.provider ? "Developers on another provider than the reviewer get a more independent review."
             : ""
         function withRole(role, patch) {
             const next = Object.assign({}, plan)
@@ -1234,7 +1264,7 @@ Item {
             return (entry ? entry.label : plan[role].provider) + " · " + plan[role].model + " · " + plan[role].effort
         }
         title: "New team in " + repository
-        onOpened: { tried = false; teamName.text = ""; teamGoal.text = ""; plan = defaults }
+        onOpened: { tried = false; teamName.text = ""; teamGoal.text = ""; plan = defaults; merges = "leader" }
         DialogBody {
             KetFieldRow {
                 width: parent.width
@@ -1251,8 +1281,20 @@ Item {
             KetFieldRow {
                 width: parent.width
                 label: "Integration branch"
-                help: "Tasks merge here. The leader orders the merges and runs the full tests at the end."
+                help: "Reviewed tasks merge here. Merging this branch onward always stays with you."
                 KetSelect { id: teamBranch; width: parent.width; model: ["develop", "integration", "release/1.4"] }
+            }
+            KetFieldRow {
+                width: parent.width
+                label: "Merges tasks"
+                help: newTeamDialog.merges === "leader"
+                    ? "The leader merges a task once the reviewer passes it, in the order the tasks depend on."
+                    : "The leader proposes the order; each merge waits for you."
+                KetSegmentedControl {
+                    options: ["Leader", "Me"]
+                    currentIndex: newTeamDialog.merges === "leader" ? 0 : 1
+                    onActivated: index => newTeamDialog.merges = index === 0 ? "leader" : "user"
+                }
             }
             // Scaffold: the team's conversations, started with it instead of one by one.
             Column {
@@ -1343,7 +1385,7 @@ Item {
                         return
                     newTeamDialog.accept()
                     screen.createTeam(newTeamDialog.repository, name, teamGoal.text.trim(), teamBranch.currentText,
-                                      leaderWrites.checked, newTeamDialog.plan)
+                                      leaderWrites.checked, newTeamDialog.plan, newTeamDialog.merges)
                 }
             }
         ]
