@@ -293,6 +293,7 @@ Basic.Popup {
             tone: picker.draftSetup && picker.draftSetup.tone === "danger" ? KetTheme.BannerTone.Danger : KetTheme.BannerTone.Warning
             title: picker.draftSetup ? picker.draftSetup.title : ""
             message: !picker.draftSetup ? ""
+                   : picker.providerModels.length === 0 ? picker.draftSetup.name + "'s models appear once it is set up."
                    : picker.draftSetup.blocking ? "You can choose a model now. " + picker.draftSetup.name + " starts turns once it is set up."
                    : picker.draftSetup.summary || picker.draftSetup.reason || ""
             actionText: "Show setup steps"
@@ -731,6 +732,8 @@ Basic.Popup {
                 objectName: "applyModelButton"
                 text: picker.applying ? qsTr("Applying…") : picker.applyError ? qsTr("Retry") : qsTr("Apply")
                 enabled: picker.available && !picker.loading && !picker.applying && !picker.blockedReason && compactControl.valid && picker.draftModel.length > 0
+                         // A tab without models keeps the previous provider's model: nothing to apply.
+                         && picker.providerModels.length > 0
                 implicitHeight: KetTheme.px(34, KetTheme.zoom)
                 horizontalPadding: KetTheme.px(15, KetTheme.zoom)
                 contentItem: Text {

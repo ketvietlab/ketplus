@@ -262,6 +262,12 @@ void AgentWorkspaceViewTest::modelPickerOpensTheProviderSetupGuide() {
     view.resize(1200, 900);
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
+    // A Codex model is chosen; Cursor has none until its CLI is installed.
+    view.setModels({QVariantMap{{"provider", "codex"},
+                                {"model", "astra"},
+                                {"displayName", "GPT-6-Astra"},
+                                {"defaultReasoningEffort", "medium"}}});
+    view.setConversationConfiguration({{"model", "astra"}, {"effort", "medium"}});
     auto* root = view.quickView()->rootObject();
     selectProvider(root, "cursor");
     view.setProviderRuntime(ketplus::ProviderRuntimeStatus::stateFrom(cursorMissing()));
@@ -278,8 +284,14 @@ void AgentWorkspaceViewTest::modelPickerOpensTheProviderSetupGuide() {
     QTRY_VERIFY((banner = picker->findChild<QQuickItem*>("modelPickerSetupBanner")) &&
                 banner->isVisible());
     QCOMPARE(banner->property("title").toString(), QStringLiteral("Cursor CLI isn't installed"));
-    QVERIFY(banner->property("message").toString().contains(
-        QStringLiteral("You can choose a model now. Cursor starts turns once it is set up.")));
+    QCOMPARE(banner->property("message").toString(),
+             QStringLiteral("Cursor's models appear once it is set up."));
+    // The draft still holds the previous provider's model: Apply must not send it as Cursor's.
+    auto* apply = findVisualItem(qvariant_cast<QQuickItem*>(picker->property("contentItem")),
+                                 QStringLiteral("applyModelButton"));
+    QVERIFY(apply);
+    picker->setProperty("draftModel", QStringLiteral("astra")); // as opening from Codex leaves it
+    QVERIFY(!apply->isEnabled());
     auto* empty = picker->findChild<QQuickItem*>("modelPickerEmptyState");
     QVERIFY(empty);
     QCOMPARE(empty->property("text").toString(),
