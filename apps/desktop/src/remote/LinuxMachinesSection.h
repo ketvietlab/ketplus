@@ -19,12 +19,15 @@ class LinuxMachinesSection final : public QWidget {
     explicit LinuxMachinesSection(QWidget* parent = nullptr);
     void activate();
     void beginPairing();
+    // Shows the section's own Connect button, for when the page's Add menu is not shown.
+    void setPairingEntryShown(bool shown);
     [[nodiscard]] QStringList machineIds() const;
 
   signals:
     void machinesChanged(const QStringList& ids, const QStringList& names);
 
   private:
+    friend class RemoteControlViewTest;
     void render();
     void signIn();
     void startPairing();
@@ -35,9 +38,9 @@ class LinuxMachinesSection final : public QWidget {
     QLabel* count_;
     QLabel* notice_;
     QVBoxLayout* rows_;
-    QAbstractButton* add_;
     QStringList machineIds_;
     bool loading_{false};
+    bool pairingEntryShown_{false};
 };
 
 } // namespace ketplus

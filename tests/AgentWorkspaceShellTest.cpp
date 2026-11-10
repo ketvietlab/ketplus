@@ -84,6 +84,50 @@ class AgentWorkspaceShellTest final : public QObject {
                     .filePath(QStringLiteral("conversation-worktrees.sqlite"))
                     .toUtf8());
     }
+    // The mock's three worktrees (`Fixtures.worktrees`). KETPLUS_WORKTREES_CAPTURE=<dir> saves
+    // the page in both themes for the side by side with `KetPlusMock --screen=worktrees`.
+    void worktreesPageListsTheMocksWorktrees() {
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::WorktreesWorkspacePage page;
+        page.resize(1280 - 240, 820);
+        QVector<ketplus::GitWorktree> worktrees;
+        for (const auto& [path, branch] :
+             {std::pair{"/workspace/ketplus-desktop", "develop"},
+              std::pair{"/workspace/ketplus-desktop-onboarding", "feature-onboarding"},
+              std::pair{"/workspace/ketplus-desktop-scroll", "fix-scroll-anchor"}}) {
+            ketplus::GitWorktree worktree;
+            worktree.path = QString::fromLatin1(path);
+            worktree.branch = QString::fromLatin1(branch); // GitParser drops refs/heads/
+            worktree.current = worktrees.isEmpty();
+            worktrees.append(worktree);
+        }
+        page.setWorktrees(worktrees, worktrees.first().path,
+                          {worktrees[0].path, worktrees[1].path, worktrees[2].path},
+                          {{worktrees[0].path, 3}, {worktrees[1].path, 2}, {worktrees[2].path, 2}},
+                          true);
+        page.setPruneAvailable(true);
+        page.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&page));
+        const auto* list = page.findChild<QWidget*>(QStringLiteral("worktreesWorkspaceList"));
+        QVERIFY(list != nullptr);
+        QStringList shown;
+        for (auto* label : list->findChildren<QLabel*>())
+            shown.append(label->text());
+        for (const auto* branch : {"develop", "feature-onboarding", "fix-scroll-anchor"})
+            QVERIFY2(shown.join('\n').contains(QString::fromLatin1(branch)), branch);
+        if (const auto dir = qEnvironmentVariable("KETPLUS_WORKTREES_CAPTURE"); !dir.isEmpty()) {
+            for (const auto mode :
+                 {ketplus::ThemeManager::Mode::Light, ketplus::ThemeManager::Mode::Dark}) {
+                theme.previewMode(mode);
+                page.applyPalette(theme.palette(), theme.interfaceZoomPercent());
+                QTest::qWait(50);
+                page.grab().save(QDir(dir).filePath(mode == ketplus::ThemeManager::Mode::Light
+                                                        ? QStringLiteral("worktrees-light.png")
+                                                        : QStringLiteral("worktrees-dark.png")));
+            }
+        }
+    }
+
     void compactConversationWindowPreservesSessionAndDraft() {
         QTemporaryDir settings;
         QTemporaryDir workspace;

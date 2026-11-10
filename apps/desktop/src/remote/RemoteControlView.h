@@ -70,6 +70,7 @@ class RemoteControlView final : public QWidget {
     QWidget* unlinkedContent_{nullptr};
     RemoteConnectionsIntro* intro_{nullptr};
     QWidget* linkedContent_{nullptr};
+    QWidget* linkedFooter_{nullptr};
     LinuxMachinesSection* linuxMachines_{nullptr};
     RemoteActivitySection* activity_{nullptr};
     QLabel* notice_{nullptr};

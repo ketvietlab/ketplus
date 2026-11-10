@@ -233,8 +233,6 @@ QLabel[remoteRole="introStepTitle"] { color:@text@; font-size:{{body}}px; font-w
 QLabel[remoteRole="introStepNumber"] { color:@muted@; font-family:"@mono@"; font-size:{{body}}px; }
 QFrame[remoteRole="introStepBar"] { border:0; background:@accent@; }
 QLabel[remoteRole="overviewTitle"] { color:@text@; font-size:{{heading}}px; font-weight:600; }
-QLabel#linuxMachinesTitle { color:@text@; font-size:{{title}}px; font-weight:600; }
-QLabel#linuxMachinesCount, QLabel#linuxMachinesFootnote { color:@muted@; font-size:{{caption}}px; }
 QLabel#linuxMachinesNotice { color:@secondary@; font-size:{{body}}px; }
 QLabel#linuxMachinesNotice[remoteTone="danger"] { color:@danger@; }
 QFrame[remoteRole="surface"] { border:1px solid @border@; border-radius:7px; background:@panel@; }
@@ -508,8 +506,13 @@ QWidget* RemoteControlView::createControlPage() {
     pairButton_->setEnabled(false);
     connect(pairButton_, &QAbstractButton::clicked, this, [this] {
         QMenu menu(pairButton_);
-        auto* phone = menu.addAction(tr("Connect phone or tablet"));
-        auto* linux = menu.addAction(tr("Connect Linux machine"));
+        // The mock's Add menu.
+        auto* phone = menu.addAction(tr("Pair a phone or tablet"));
+        phone->setToolTip(tr("Scan a code with the KetPlus App"));
+        // Linux pairing goes through its own account, so only phones wait for this Mac's relay.
+        phone->setEnabled(!offline_ && !requestInFlight_);
+        auto* linux = menu.addAction(tr("Connect a Linux machine"));
+        linux->setToolTip(tr("Through the KetPlus Relay"));
         const auto* chosen = menu.exec(pairButton_->mapToGlobal(QPoint(0, pairButton_->height())));
         if (chosen == phone)
             createPairing();
@@ -609,10 +612,10 @@ QWidget* RemoteControlView::createControlPage() {
     linkedLayout->addWidget(overview);
 
     auto* devicesHeader = new QHBoxLayout;
-    devicesHeader->addWidget(label(QStringLiteral("Your devices"), "sectionTitle"));
+    devicesHeader->addWidget(label(QStringLiteral("Phones & tablets"), "sectionTitle"));
+    devicesHeader->addStretch();
     deviceCount_ = label(QStringLiteral("0 paired"), "sectionCount");
     devicesHeader->addWidget(deviceCount_);
-    devicesHeader->addStretch();
     linkedLayout->addLayout(devicesHeader);
 
     auto* devices = new QFrame;
@@ -631,7 +634,14 @@ QWidget* RemoteControlView::createControlPage() {
     activity_ = new RemoteActivitySection(daemon_, linkedContent_);
     linkedLayout->addWidget(activity_);
 
-    auto* account = new QWidget(linkedContent_);
+    // The account and history close the page, below Linux machines, as in the mock.
+    linkedFooter_ = new QWidget;
+    linkedFooter_->setObjectName(QStringLiteral("remoteLinkedFooter"));
+    auto* footerLayout = new QVBoxLayout(linkedFooter_);
+    chrome_geometry::margins(footerLayout, 0, 0, 0, 0);
+    chrome_geometry::spacing(footerLayout, 0);
+    linkedFooter_->hide();
+    auto* account = new QWidget(linkedFooter_);
     account->setObjectName(QStringLiteral("remoteAccountStrip"));
     auto* accountLayout = new QHBoxLayout(account);
     chrome_geometry::margins(accountLayout, 2, 21, 2, 21);
@@ -641,13 +651,15 @@ QWidget* RemoteControlView::createControlPage() {
     auto* accountCopy = new QVBoxLayout;
     chrome_geometry::spacing(accountCopy, 2);
     accountCopy->addWidget(label(QStringLiteral("An Nguyen"), "accountName"));
-    accountCopy->addWidget(
-        label(QStringLiteral("an@example.test · Personal workspace"), "accountMeta"));
+    auto* accountMeta =
+        label(QStringLiteral("an@example.test · Personal workspace"), "accountMeta");
+    accountMeta->setWordWrap(false); // one line, as the mock
+    accountCopy->addWidget(accountMeta);
     accountLayout->addLayout(accountCopy);
     accountLayout->addStretch();
     accountLayout->addWidget(signOutButton_);
-    linkedLayout->addWidget(account);
-    auto* history = new QWidget(linkedContent_);
+    footerLayout->addWidget(account);
+    auto* history = new QWidget(linkedFooter_);
     auto* historyLayout = new QVBoxLayout(history);
     chrome_geometry::margins(historyLayout, 0, 0, 0, 0);
     chrome_geometry::spacing(historyLayout, 7);
@@ -672,7 +684,7 @@ QWidget* RemoteControlView::createControlPage() {
     historyLayout->addWidget(historyCopy);
     connect(historyButton, &QAbstractButton::clicked, historyCopy,
             [historyCopy] { historyCopy->setVisible(!historyCopy->isVisible()); });
-    linkedLayout->addWidget(history);
+    footerLayout->addWidget(history);
 
     pairingPanel_ = new QFrame;
     pairingPanel_->setObjectName(QStringLiteral("remotePairingPanel"));
@@ -828,12 +840,15 @@ QWidget* RemoteControlView::createControlPage() {
     auto* dialogLayout = new QVBoxLayout(pairingDialog_);
     chrome_geometry::margins(dialogLayout, 0, 0, 0, 0);
     dialogLayout->addWidget(pairingPanel_);
-    linkedLayout->addStretch();
-    bodyLayout->addWidget(linkedContent_, 1);
+    bodyLayout->addWidget(linkedContent_);
     linuxMachines_ = new LinuxMachinesSection(body);
+    // The page's Add menu shows only once this Mac's relay is linked.
+    linuxMachines_->setPairingEntryShown(!configured_);
     connect(linuxMachines_, &LinuxMachinesSection::machinesChanged, this,
             &RemoteControlView::machinesChanged);
     bodyLayout->addWidget(linuxMachines_);
+    bodyLayout->addWidget(linkedFooter_);
+    bodyLayout->addStretch(1);
     auto* bodyHost = new QWidget;
     bodyHost->setProperty("remoteRole", QStringLiteral("page"));
     auto* bodyHostLayout = new QHBoxLayout(bodyHost);
@@ -858,7 +873,7 @@ void RemoteControlView::activate() {
 void RemoteControlView::setBusy(const bool busy) {
     requestInFlight_ = busy;
     signInButton_->setEnabled(!busy);
-    pairButton_->setEnabled(!busy && configured_ && !offline_);
+    pairButton_->setEnabled(configured_);
     signOutButton_->setEnabled(!busy && configured_);
     const QString pairAction = approveButton_->property("pairAction").toString();
     const bool actionable = pairingState_->property("claimReady").toBool() ||
@@ -1003,10 +1018,13 @@ void RemoteControlView::applyStatus(const QJsonObject& status) {
     pageHeader_->setVisible(configured_);
     unlinkedContent_->setVisible(!configured_);
     linkedContent_->setVisible(configured_);
+    linkedFooter_->setVisible(configured_);
     signOutButton_->setVisible(configured_);
     const QString lastError = status.value(QStringLiteral("last_error")).toString();
     offline_ = configured_ && !lastError.isEmpty();
-    pairButton_->setEnabled(configured_ && !offline_ && !requestInFlight_);
+    pairButton_->setEnabled(configured_);
+    if (linuxMachines_)
+        linuxMachines_->setPairingEntryShown(!configured_);
     overviewDescription_->setText(offline_ ? QStringLiteral("Working locally")
                                            : QStringLiteral("Ready for your connected devices"));
     overviewStatus_->setText(offline_ ? QStringLiteral("Offline") : QStringLiteral("Connected"));

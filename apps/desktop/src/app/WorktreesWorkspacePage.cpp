@@ -1,4 +1,5 @@
 #include "app/WorktreesWorkspacePage.h"
+#include "KetAppearance.h"
 #include "KetBadge.h"
 #include "KetButton.h"
 #include "KetIcons.h"
@@ -18,6 +19,7 @@
 #include <QSizePolicy>
 #include <QToolButton>
 #include <QVBoxLayout>
+#include <algorithm>
 
 #include <utility>
 
@@ -182,6 +184,8 @@ void WorktreesWorkspacePage::rebuild() {
 
     int visibleIndex = 0;
     QVector<QWidget*> rows;
+    QVector<QWidget*> identities;
+    int nameColumn = 0;
     for (const GitWorktree& worktree : std::as_const(worktrees_)) {
         if (worktree.bare || worktree.prunable)
             continue;
@@ -230,7 +234,14 @@ void WorktreesWorkspacePage::rebuild() {
         connect(open, &QAbstractButton::clicked, this,
                 [this, path] { emit worktreeRequested(path); });
         identityLayout->addWidget(open, 1);
-        rowLayout->addWidget(identity, 1, Qt::AlignVCenter);
+        // As the mock: the activity and state follow the name's column; Manage ends the row.
+        name->ensurePolished();
+        conversations->ensurePolished();
+        nameColumn = std::max({nameColumn, icon->width() + identityLayout->spacing() +
+                                               std::max(name->sizeHint().width(),
+                                                        conversations->sizeHint().width())});
+        identities.append(identity);
+        rowLayout->addWidget(identity, 0, Qt::AlignVCenter);
 
         auto* activity =
             new QLabel(runningPaths_.contains(path) ? tr("1 working") : tr("0 working"), row);
@@ -247,6 +258,7 @@ void WorktreesWorkspacePage::rebuild() {
         state->setObjectName(QStringLiteral("worktreesWorkspaceState"));
         state->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
         rowLayout->addWidget(state, 0, Qt::AlignVCenter);
+        rowLayout->addStretch(1);
 
         auto* manage = new ket::Button(tr("Manage"), ket::ButtonVariant::Ghost, row);
         manage->setObjectName(QStringLiteral("worktreesManageButton"));
@@ -265,6 +277,12 @@ void WorktreesWorkspacePage::rebuild() {
 
     if (!rows.isEmpty())
         rows.constLast()->setProperty("lastRecord", true);
+    // One column for every row: the widest name with its icon, between 150 and 320 px.
+    const auto& kit = ket::Appearance::instance();
+    const int column = std::clamp(nameColumn + qRound(kit.scaled(8)), qRound(kit.scaled(150)),
+                                  qRound(kit.scaled(320)));
+    for (auto* identity : identities)
+        identity->setFixedWidth(column);
 
     if (visibleIndex == 0) {
         auto* empty = new QLabel(tr("No linked worktrees are available."), this);
