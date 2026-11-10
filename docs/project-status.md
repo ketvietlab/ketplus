@@ -57,6 +57,11 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   `team.decision.answer`, which reaches the leader and the blocked owner once and
   unblocks the task. The leader's first plan waits as "Start these N tasks?", and the
   budget's decision continues or stops the team.
+  Merging (#463): a Ready task whose dependencies are done is offered once — to the
+  leader's digest under `mergePolicy` `leader`, as a "Merge T-n?" decision under
+  `user` — and becomes Done when the integration branch contains its branch
+  (`git merge-base --is-ancestor`, checked after every member's turn and on
+  `team.get`), also for a merge made by hand.
 
 - The unreviewed workspaces UI layer consumes kit worktree actions/badges,
   searchable picker rows and Connections controls. Repository/worktree switching

@@ -277,6 +277,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
                                                           const teams::Task& task) const override;
     [[nodiscard]] std::optional<QStringList> changedPaths(const teams::Team& team,
                                                           const teams::Task& task) const override;
+    [[nodiscard]] std::optional<bool> isMerged(const teams::Team& team,
+                                               const teams::Task& task) const override;
     void teamRequestFinished(const QString& sessionId, const AgentMessageRecord& request,
                              const QString& text, const QString& failure) override;
     QString postTeamMessage(const teams::TeamMessage& message) override;

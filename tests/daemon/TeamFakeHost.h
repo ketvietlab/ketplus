@@ -46,6 +46,10 @@ class FakeHost final : public TeamHostPort {
         const auto it = changed.constFind(task.id);
         return it == changed.cend() ? std::nullopt : std::optional(it.value());
     }
+    std::optional<bool> isMerged(const Team& team, const Task& task) const override {
+        (void)team;
+        return merged.contains(task.id);
+    }
     QString postTeamMessage(const TeamMessage& message) override {
         messages.append(message);
         return {};
@@ -78,6 +82,7 @@ class FakeHost final : public TeamHostPort {
     QSet<QString> dirty;
     QSet<QString> unreadable;
     QHash<QString, QStringList> changed;
+    QSet<QString> merged;
     QList<TeamMessage> messages;
     QList<std::pair<QString, QJsonObject>> notes;
 };

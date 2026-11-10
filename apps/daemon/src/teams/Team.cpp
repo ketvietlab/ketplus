@@ -64,6 +64,7 @@ Task taskFromJson(const QJsonObject& json) {
     task.outsideLane = stringList(json.value(QStringLiteral("outside_lane")));
     task.assignmentHeld = json.value(QStringLiteral("assignment_held")).toBool();
     task.leaderMayMerge = json.value(QStringLiteral("leader_may_merge")).toBool();
+    task.mergeOffered = json.value(QStringLiteral("merge_offered")).toBool();
     for (const auto& value : json.value(QStringLiteral("history")).toArray())
         task.history.append(historyFromJson(value.toObject()));
     return task;
@@ -198,7 +199,8 @@ QJsonObject toJson(const Task& task, const bool withHistory) {
                      {QStringLiteral("round"), task.round},
                      {QStringLiteral("outside_lane"), strings(task.outsideLane)},
                      {QStringLiteral("assignment_held"), task.assignmentHeld},
-                     {QStringLiteral("leader_may_merge"), task.leaderMayMerge}};
+                     {QStringLiteral("leader_may_merge"), task.leaderMayMerge},
+                     {QStringLiteral("merge_offered"), task.mergeOffered}};
     if (withHistory) {
         QJsonArray history;
         for (const HistoryEntry& entry : task.history)

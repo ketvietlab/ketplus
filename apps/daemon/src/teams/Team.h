@@ -26,6 +26,9 @@ inline const QString blocked = QStringLiteral("blocked");
 inline const QString done = QStringLiteral("done");
 } // namespace state
 
+// The choice of a "Merge T-n?" decision that lets the leader merge that task (ADR 0112 §5).
+inline const QString leaderMergesChoice = QStringLiteral("Let the leader merge this one");
+
 inline constexpr int maximumDevelopers = 5;
 inline constexpr int maximumCriteria = 20;
 inline constexpr int defaultReviewRounds = 2;
@@ -80,6 +83,8 @@ struct Task final {
     bool assignmentHeld{false};
     // The user allowed the leader to merge this task under mergePolicy "user".
     bool leaderMayMerge{false};
+    // ADR 0112 §5: the task was offered for merging (ready, its dependencies done), once.
+    bool mergeOffered{false};
     QList<HistoryEntry> history;
 };
 
