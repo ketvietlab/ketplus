@@ -500,6 +500,9 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& request, const QString
         return error("forbidden", "Held-message authorization requires the local Desktop UI.");
     if (type.startsWith("session.reviewer.") && !localClient(clientId))
         return error("forbidden", "Choosing a reviewer requires the local Desktop UI.");
+    // ADR 0112: teams are the user's; agents use the team_* tools instead.
+    if (type.startsWith("team.") && !localClient(clientId))
+        return error("forbidden", "Teams are managed from the local Desktop UI.");
     if (type == "session.work_report.read" && !localClient(clientId))
         return error("forbidden", "The work report is read by the local Desktop UI.");
     if (type.startsWith("storage.") && clientId == "cloud-control-v2")
@@ -593,6 +596,8 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& request, const QString
         result = conversationReviewer(request, type.endsWith(".set"));
     } else if (type == QStringLiteral("session.work_report.read")) {
         result = readWorkReport(request);
+    } else if (type.startsWith(QStringLiteral("team."))) {
+        result = teamCommand(type, request);
     } else if (type == QStringLiteral("session.start_turn")) {
         result = startTurn(request, localClient(clientId));
     } else if (type == QStringLiteral("session.rename")) {
@@ -2559,6 +2564,9 @@ SessionHost::Session* SessionHost::sessionForThread(const QString& threadId) {
 }
 
 bool SessionHost::isMutating(const QString& messageType) {
+    if (messageType.startsWith(QStringLiteral("team.")))
+        return !messageType.endsWith(QStringLiteral(".list")) &&
+               !messageType.endsWith(QStringLiteral(".get"));
     return messageType == QStringLiteral("session.agent_messages.release") ||
            messageType == QStringLiteral("session.reviewer.set") ||
            messageType == QStringLiteral("storage.size.apply") ||

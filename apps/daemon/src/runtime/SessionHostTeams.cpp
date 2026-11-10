@@ -59,6 +59,26 @@ bool SessionHost::onTeam(const QString& sessionId) const {
 void SessionHost::startTeams() {
     teams_ = new teams::TeamCoordinator(journal_, static_cast<teams::TeamHostPort*>(this), this);
     teams_->load();
+    connect(teams_, &teams::TeamCoordinator::teamChanged, this, [this](const QJsonObject& team) {
+        emit teamEvent(QStringLiteral("team.changed"),
+                       {{QStringLiteral("team"), team},
+                        {QStringLiteral("revision"), team.value(QStringLiteral("revision"))}});
+    });
+    connect(teams_, &teams::TeamCoordinator::teamRemoved, this,
+            [this](const QString& teamId, const QString& repository) {
+                emit teamEvent(QStringLiteral("team.removed"),
+                               {{QStringLiteral("team_id"), teamId},
+                                {QStringLiteral("repository"), repository}});
+            });
+}
+
+// teams.tasks/1 arrives with the tasks of #457.
+QJsonObject SessionHost::teamTaskCommand(const QString& type, const QJsonObject& request) {
+    (void)request;
+    return {
+        {QStringLiteral("ok"), false},
+        {QStringLiteral("error_code"), QStringLiteral("unknown_operation")},
+        {QStringLiteral("error_message"), QStringLiteral("Unknown team request %1.").arg(type)}};
 }
 
 } // namespace ketplus::daemon
