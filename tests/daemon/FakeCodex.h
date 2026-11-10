@@ -117,6 +117,12 @@ for line in sys.stdin:
                 finish(thread_id, turn_id)
             threading.Timer(0.6, late_start).start()
             continue
+        if text == 'fail-start':
+            # turn/start fails after a moment, without a turn/started notification.
+            def refuse(message_id=message_id):
+                emit({'id': message_id, 'error': {'code': -32000, 'message': 'start failed'}})
+            threading.Timer(0.3, refuse).start()
+            continue
         if text == 'error-final':
             # A turn that ends with a final error and never sends turn/completed.
             emit({'id': message_id, 'result': {'turn': {'id': turn_id}}})
@@ -236,6 +242,8 @@ for line in sys.stdin:
         log('toolcall:' + json.dumps(message['params'], sort_keys=True))
         emit({'id': message_id, 'result': {'content': []}})
     elif method == 'turn/steer' or method == 'turn/interrupt':
+        if method == 'turn/interrupt':
+            log('interrupt:' + str(message['params'].get('turnId')))
         emit({'id': message_id, 'result': {}})
     elif method is None and message_id in approvals:
         kind, thread_id, turn_id = approvals.pop(message_id)

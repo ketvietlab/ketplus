@@ -71,7 +71,16 @@ migration is complete. See [ADR 0015](decisions/0015-conversation-execution-cont
 core target. The local slice includes:
 
 - a user-restricted `QLocalServer` endpoint authenticated by an owner-only local
-  token;
+  token; the daemon refuses to start when it cannot restrict the journal and
+  token directories to their owner. On macOS it also removes access-control
+  entries, such as an inherited `everyone allow read`, which mode bits do not show:
+  from those directories before creating anything (so new files inherit none),
+  from the journal and its WAL/SHM, and from the media root and every file under it.
+  A linked directory is handled at its target. An ACL that cannot be read counts
+  as present. A token that carried such an entry is replaced rather than trusted,
+  and only after the journal lock is held, so a daemon refused as the second
+  instance never replaces the running one's credential. Linux ACLs and Windows
+  are not handled;
 - the length-prefixed JSON v0 contract accepted in ADR 0002;
 - provider-neutral session operations and normalized events backed by SQLite
   WAL cursor replay and durable command deduplication;
@@ -80,10 +89,16 @@ core target. The local slice includes:
 - durable sidebar read markers through `session.mark_seen` (`last_seen_cursor` in
   the journal; `session.list` exposes both `last_event_cursor` and
   `last_seen_cursor` so Desktop can restore unread completed conversations);
+- archiving through `session.set_archived` (`archived_at` in the journal and in
+  `session.list`, feature `session.archive/1`). The idle pass deletes one
+  conversation archived for more than 30 days per pass, through `session.delete`
+  and its guards ([ADR 0100](decisions/0100-archived-conversation-retention.md));
 - idle conversation forks through `session.fork` (ADR 0016): the provider forks
-  its native thread (Codex `thread/fork`, Claude SDK `forkSession`), then one
-  journal transaction copies the source generation's transcript at the same
-  cursors and the fork appends `session.forked`;
+  its native thread (Codex `thread/fork`, Claude SDK `forkSession`), then the
+  journal copies the source generation's transcript from one read snapshot in
+  bounded event-loop passes at the same cursors, stores the fork in one final
+  transaction and the fork appends `session.forked`
+  ([ADR 0094](decisions/0094-staged-session-fork-copy.md));
 - daemon-owned Codex app-server lifecycle;
 - approval and provider-neutral structured user-input requests with stable
   request/question revisions, generation fencing, strict single/multiple/custom
@@ -99,9 +114,14 @@ core target. The local slice includes:
 - daemon-owned model discovery and rate-limit queries used by Desktop settings.
 
 Desktop uses this endpoint through `modules/remote`. It discovers existing
-sessions, attaches and replays ordered journal events, retries in-flight commands
-with the same idempotency key after disconnect, and starts a detached daemon if
-no endpoint exists. It keeps at most sixteen requests in flight and sends the rest
+sessions, attaches and replays ordered journal events, and starts a detached daemon
+if no endpoint exists. The daemon caches a mutating command's result by `message_id`,
+but writes that entry after the mutation, outside its transaction, and ignores a failed
+write, so a repeated write can run again. After a disconnect Desktop therefore sends
+again only in-flight reads. In-flight writes (start turn, steer, interrupt, rename,
+mark seen, approval and question answers, fork, delete, pairing, remote account and
+storage operations) fail with "check the result before retrying"; requests that were
+still waiting are sent after the reconnect. It keeps at most sixteen requests in flight and sends the rest
 as answers arrive; identical reads (`session.list`, `session.pending_approvals`,
 provider and remote status queries) waiting to be sent are merged into one.
 Reconnects back off from 100 ms to 5 s, and the backoff resets only after a
@@ -113,12 +133,31 @@ discovery are tracked by generation/cursor and journal replay fills any gap afte
 the catalog snapshot. Discovery responses from an old connection are discarded.
 The reconciliation lives in `CodexDaemonDiscovery.cpp`; the existing large
 `CodexAppServer.cpp` retains only transport lifecycle and event-dispatch hooks.
+Accepted local IPC sockets cap Qt's unread receive buffer at one maximum frame
+plus the four-byte header (ADR 0077), separately from frame assembly and outbound
+queues. Pausing request dispatch applies transport backpressure without dropping
+valid pipelined requests. This does not bound all per-request or process memory.
+
+Local turn acceptance commits the starting session/configuration, pinned context,
+`user.message`, `turn.queued` and optional `session.configuration_changed` in one
+transaction. Its bounded receipt is read before commit and published afterward;
+failed acceptance cannot retain a rejected prompt (ADR 0076). Existing stream
+recovery is drained first; command-result persistence and provider-side effects
+remain separate transaction boundaries.
+
 Streamed text reaches the journal coalesced: consecutive `assistant.delta` or
 `command.output_delta` notifications for one item are held for at most 150 ms
 (or 16 KiB) and journaled as one event. Any other event, a delta of another
 item, and SessionHost teardown journal the held text first, so provider order
 is kept. One event per provider chunk (a word or less) had every reader, above
 all a phone paging the relay, read tens of thousands of events per conversation.
+A delta for an item whose `item.completed` is already journaled is dropped, so a
+retried notification or a previous turn's tail cannot extend final text; an
+`item.started` with the same id reopens the item. The daemon remembers SHA-256
+digests of the last 512 completed items per session (about 32 bytes each, whatever
+the id's length), only for completions it journaled or queued for retry, and forgets
+them when the provider process stops or reloads, because the next process may reuse
+item ids.
 If append fails, SessionHost retains the prefix and later provider events in a
 bounded FIFO, retries after one second, and yields between deferred entries.
 The queue caps are 128 events / 40 MiB per session and 512 / 80 MiB per host
@@ -144,7 +183,17 @@ latest 20 actual turns per conversation/generation, any turn with raw events
 still awaiting acknowledgment, any turn containing questions or approvals, and
 sessions outside an explicitly idle state. The same pass trims eligible inline completed
 command output to its first 4 KiB and last 16 KiB on UTF-8 boundaries, with an explicit
-notice and `item.compacted` metadata. Messages and images remain unchanged.
+notice and `item.compacted` metadata. Messages remain unchanged. A generated image
+journaled inline by an older Codex build loses only its base64 `result` (policy
+`image-pixels-v1`, one large payload of at most 16 MiB per pass); its prompt and saved
+path stay ([ADR 0098](decisions/0098-generated-image-pixel-retention.md)). The host
+stores a 512 px JPEG preview of those pixels in the media store, and `result` becomes its
+media reference (policy `image-preview-v1`, [ADR 0101](decisions/0101-compacted-image-previews.md)).
+Without a preview the item keeps its caption only. Inline base64
+images in older tool results become `omitted` blocks with reason `history_retention`
+that keep their position (policy `tool-inline-images-v1`). With the host's preview
+writer, up to four result images per call instead keep a 512 px JPEG media reference in
+their place (ADR 0101). Desktop shows the others as unavailable placeholders ([ADR 0099](decisions/0099-tool-result-inline-image-retention.md)).
 Redundant tool starts are removed only when the immediately following retained
 event is their same-turn completion and preserves start data (except lifecycle
 status and empty known progress placeholders); interleaved/partial/large cases
@@ -187,6 +236,20 @@ returns a newest-three-turn **upper bound**, further limited to 128 events and
 prefixes, and a durable compaction revision fence. A stale continuation returns
 `snapshot_changed`, never a silently incomplete historical snapshot. Current
 lifecycle and pending approvals are delivered separately from historical events.
+A turn's pending approvals and questions expire when the turn ends (`turn.completed`
+from any provider, or a Codex `error` with `willRetry: false` for the running turn,
+which may not be followed by `turn/completed`), without an answer to the provider,
+which no longer waits for them. After such an error, a request for that turn (or
+without a turn id while it is still current) is declined as `stale_turn` until the
+provider process stops or reloads.
+They become unanswerable before the completion is published: a client that answers as
+soon as it sees `turn.completed`, or any time later, is refused. A Claude or Cursor
+session whose background task is still running keeps its requests, since that task may
+still be waiting. A Codex request that names a turn other than the running one (an ended
+turn's, arriving after its sweep) is declined with `provider.request_declined` reason
+`stale_turn`; a request without a turn id belongs to the current turn. A provider stop or
+interrupt already ended them. Requests abandoned this way also release their response
+routes.
 
 `session.transcript_window` also pages **forward** inside the same fenced snapshot:
 `after_cursor` (exclusive event cursor, mutually exclusive with `before_cursor`, rejected for
@@ -330,6 +393,11 @@ retry, with a 1-MiB stored-column bound and checked transaction. Unsupported or
 legacy unmarked entries remain for separate recovery; see
 [ADR 0053](decisions/0053-bounded-cloud-event-cache-cleanup.md).
 
+The journal records its format in `PRAGMA user_version`. A daemon refuses a
+journal newer than its `journal_format::current` before writing anything, and
+startup compaction leaves such a journal untouched
+([ADR 0095](decisions/0095-journal-format-version.md)).
+
 Deleted rows return their space to the disk (#128). A new journal is created
 with `auto_vacuum = INCREMENTAL`. An older one moves to it once at daemon start,
 before the endpoint listens:
@@ -339,13 +407,17 @@ before the endpoint listens:
   connection has the journal open, including a daemon from before the lock, so
   the move waits for the next start and the file is not touched. The lock is
   held until after the rename;
-- it runs `VACUUM INTO <journal>.compact`;
+- it creates an owner-only `<journal>.compact-private` directory and runs
+  `VACUUM INTO` its `journal.sqlite` child (ADR 0087);
 - it checks the copy (`quick_check`, the same schema, incremental vacuum);
-- it syncs the copy and renames it over the original, then syncs the directory.
+- it requires owner-only permissions on the completed copy on POSIX, syncs it
+  and renames it over the original, then syncs the directory.
 
 The move runs only when the free disk exceeds the kept data plus the larger of
 256 MB and 10%. Otherwise it waits for the next start. If a move is interrupted,
-the original stays whole and the copy is removed at the next start. The move
+the original stays whole and recognized staging files are removed at the next
+start. Unsupported entries or permissions are preserved for repair and reported
+as migration failure; cleanup never recursively removes a staging directory. The move
 takes as long as one read of the kept data.
 
 After that, once a minute while no session is active, up to 4,096 free pages
@@ -366,15 +438,40 @@ references (`session.media.read`) on demand; neither result is stored on the
 relay. The same `session.media.read` with a worktree-relative `path` instead of
 `media_ref` previews an image from the session's worktree as it is on disk now
 (no revision fence; symlinks, paths escaping the worktree and files over 16 MB
-are refused). Previews are decoded off the daemon's main thread, scaled to at
-most 1280 px and flattened onto white.
+are refused). Previews are decoded off the daemon's main thread, on a pool of
+two threads with at most 16 reads waiting or running; a read beyond that answers
+`busy` at once. They are scaled to at most 1280 px and flattened onto white.
+A provider's viewed or generated image is opened without blocking and kept only if
+the opened file is regular, so a path replaced by a FIFO cannot stall the daemon.
 
-Media cleanup first validates a complete reference catalog: canonical digest
+At startup the daemon also deletes every canonically named media file that no
+remaining reference names, so a daemon stopped between removing a deleted
+conversation's references and its media, or between writing media and referencing
+it, leaves nothing behind once it starts again. Media cleanup first validates a
+complete reference catalog: canonical digest
 files, regular nonsymlink entries, at most 4 MiB per file, 16 MiB total and 4,096
 directory entries. Unknown, unreadable or over-budget ownership defers deletion;
 capacity can remain above its limit pending recovery. Valid ownership retains the
 existing eviction order. This guard does not establish reference-write durability
 or a cross-file transaction; see ADR 0065.
+
+Reference-based previews share the bounded ownership parser and require canonical
+references and nonsymlink roots (ADR 0069). The daemon verifies the bounded image
+bytes against their SHA-256 and decodes that snapshot through QBuffer; unknown
+ownership or mismatched bytes returns media_unavailable without modifying files.
+
+SessionHost prepares fork media ownership inside the journal before-commit
+phase (ADR 0068). Unknown source metadata or conflicting destination ownership
+fails the final fork transaction; the staged history becomes purge work
+(ADR 0094). Matching ownership supports retry after commit failure;
+extra prepared references can be reclaimed after reopen using the live catalog.
+This is ordering across two stores, not a filesystem/SQLite atomic transaction.
+
+Image attachment and externalization publish new references only after a checked
+ownership-file commit (ADR 0067). The store preserves unsupported metadata and
+writes unique canonical hashes atomically with owner-only permissions; failure
+uses the existing omission path. Blob/ownership/database coordination remains
+separate, and a failed ownership update can leave unreferenced blob bytes.
 
 Media deduplication checks the existing file type, size, bounded contents and
 owner-only permissions before publishing a blob reference (ADR 0066). Unsupported
@@ -465,8 +562,16 @@ thread, so they never queue a phone's read.
 
 The daemon process
 runs with umask 077; its state and token directories are owner-only, and the
-token, journal and SQLite WAL/SHM files are 0600. A token file that is a symlink
-or owned by another account is rejected.
+token, journal and SQLite WAL/SHM files are 0600. Both daemon and local client
+limit raw token files to 4096 bytes before trimming, with at least 32 trimmed
+bytes. On Unix, descriptor-based admission rejects symlinks, nonregular files,
+another UID or group/other permissions. Refusal preserves the file for repair;
+ancestor-directory and non-Unix ACL guarantees are not implied (ADR 0078).
+
+The local Qt client's unread socket buffer is capped at one maximum IPC frame
+plus its four-byte header, including the hello phase. Paused dispatch applies
+backpressure; valid pipelined frames resume without loss (ADR 0079). This is not
+a process-wide memory or request-work limit.
 
 Advanced model, effort and execution controls are revision-fenced daemon
 commands backed by the active adapter's advertised capabilities. Encrypted
@@ -496,7 +601,9 @@ oversized chunks remain reserved for recovery. See
 Assistant/tool lifecycle payloads larger than 256 KiB use the bounded, versioned
 chunk and terminal-manifest representation in
 [ADR 0006](decisions/0006-bounded-large-transcript-events.md). Local Desktop
-reassembles them losslessly through bounded fragment requests; every opaque cloud
+reassembles them losslessly through bounded fragment requests. A transfer may arrive in at
+most 4,096 in-order fragments, so its bookkeeping stays bounded however the sender splits it
+(the daemon sends whole 96 KiB chunks); every opaque cloud
 event remains below the existing cap. Mobile must implement the ADR handoff and
 an authenticated cold-fragment fetch before claiming cold large-item coverage.
 
@@ -587,6 +694,53 @@ and `sign_in_error` when it failed; `remote.sign_in.cancel` and sign-out stop it
 
 ## Lifecycle
 
+ACP v1 `loadSession` and `promptCapabilities.image` are opt-in booleans (ADR 0090).
+An omitted, null or wrong-type field removes that baseline capability; only true
+preserves support. Each process initializes a fresh narrowing state.
+
+Malformed normal-sized stdout frames quarantine the provider generation before it
+is killed (ADR 0089). Buffered suffixes are discarded; the finished path settles
+pending calls with a static diagnostic and uses existing restart backoff. JSON
+control bytes must be escaped inside strings; outside JSON whitespace remains
+allowed. Valid-object RPC schemas and absent-response deadlines remain separate.
+
+Outgoing provider calls use positive integer JSON ids. Response lookup preserves
+that type and numeric value across all three adapters, including Codex oversized
+responses (ADR 0074). Invalid/unrelated ids leave pending calls untouched; incoming
+provider request ids and pending-call timeout policy remain separate.
+
+Matched replies must contain exactly one result (object or explicit null) or error
+(object). Invalid envelopes fail that callback with a static protocol diagnostic;
+initialize uses its existing failure path, while other pending calls survive.
+Provider-specific result schemas remain separate (ADR 0075).
+
+Cursor model discovery reads both channels incrementally with a shared 1-MiB
+budget (ADR 0088). It retains stdout only, kills excess output, and parses only
+successful normal exits. The existing fallback catalog settles failed/timed-out
+requests and the 60-second cache/coalescing behavior remains unchanged.
+
+Provider version probes retain at most 4 KiB of merged output, kill excess output
+and accept banners only after successful normal exit (ADR 0072). Failed probes
+remain Unknown under the existing launch policy and are retried. Only matching
+executable fingerprints share an in-flight result; other checks are deferred and
+revalidated, including a binary replaced while the first probe is running.
+
+Claude/Cursor stdout is read in 64-KiB chunks and checks each raw line, including
+an unfinished suffix, against the existing 16-MiB limit before parse (ADR 0071).
+An over-limit generation is closed/drained before pending callbacks fail and the
+process is killed; later output from it cannot publish another request. Normal
+lines and a fresh process retain their existing behavior.
+
+Oversized Codex metadata decodes bounded JSON strings and refuses literal dotted
+keys as nested paths (ADR 0073). Invalid captured metadata clears routing for that
+line; subsequent lines reset normally. This does not validate the entire discarded
+JSON payload or resolve missing terminal events and pending-request timeouts.
+
+Codex oversized-line scanning keeps at most 64 routing frames and a scalar count
+of deeper containers (ADR 0070). It still extracts shallow fields after the deep
+value and resumes on the next line; clear/reset discards all prior scan state.
+This bounds scanner nesting storage, not aggregate process I/O or event-loop time.
+
 The intended state flow is `registered -> connecting -> online -> draining ->
 stopped`, with a recoverable `offline` state. Session state is separate from
 connection state so a temporary network outage does not kill a local process.
@@ -627,14 +781,31 @@ not be used as the history source. Read all projected pages using their returned
 cursor: delta compaction leaves cursor gaps and byte limits can shorten a page.
 Each provider still resumes its own thread; the handoff note points to the
 transcript for turns handled by other providers. Client acknowledgments do not
-remove that history.
+remove that history. The note counts as delivered only once the provider accepts
+that turn's `turn/start`: when the prompt after a journaled switch is rejected by the
+journal or by the provider, the next attempt hands off again. A switch whose `session.provider_changed` event cannot be
+journaled is rolled back, and the conversation stays with its previous provider and
+thread. The pending note is kept in memory only, so a daemon restart in between
+loses it.
 ### Conversation execution worktree (isolated implementation)
 
 `session.worktrees` returns a searched, touched-first page (20 default, 100 max). `session.worktree.switch` validates an idle Codex session, same Git repository and expected context revision. Remote commands/results are encrypted; the switch target opaque IDs are included in AAD. New catalog targets are published before the page response; switching requests an immediate heartbeat. Stable desktop navigation uses `conversation_navigation`, separate from execution cwd. `conversation_worktree_activity` stores new provider evidence, not inferred ownership or reconstructed history; see ADR 0015 and the execution-worktree test lane.
 
 ## Atlas live runtime
 
-`AtlasLiveRuntime` owns only the KetAtlas viewer and optional declared renderer it starts. Version 0.5.2 is required, the viewer is read-only, and framework startup uses the local renderer contract without a shell. Discovery returns opaque project IDs. `atlas.start` fences the selected execution context; reconnect by an existing attachment channel instead retains that runtime's source even after a conversation switches. Back releases the connection with a five-minute idle lease; `atlas.detach` explicitly stops the owned runtime. Existing desktop viewers are not adopted or stopped.
+`AtlasLiveRuntime` owns only the KetAtlas viewer and optional declared renderer it starts. Version 0.5.2 is required, the viewer is read-only, and framework startup uses the local renderer contract without a shell. Discovery returns opaque project IDs. `atlas.start` fences the selected execution context; reconnect by an existing attachment channel instead retains that runtime's source even after a conversation switches. Back releases the connection with a five-minute idle lease; `atlas.detach` explicitly stops the owned runtime. A runtime and its tunnel also stop when the device that opened it is revoked (here or reported by the relay), when its conversation generation is deleted, when the relay revokes this machine, and on sign-out. A device revocation is handled even when WebRTC peer transport is not negotiated. An `atlas.start` still scanning when its device or the machine is revoked creates no runtime, because it captures an access fence before the scan and checks it before creating the runtime. Existing desktop viewers are not adopted or stopped.
+
+`AtlasLiveTunnel` multiplexes bounded byte streams to registered loopback viewer/renderer ports over a persistent authenticated WebSocket. Each attachment gets a new random key/channel; AES-GCM frames bind channel, direction and exact sequence. The phone uses matching loopback origins and an ephemeral HttpOnly cookie for its native bridge. HTTP, streaming bodies, renderer WebSockets and SSE remain ordinary protocols inside the encrypted byte streams. The relay forwards ciphertext and rechecks grants periodically; it cannot see resource bodies. There is no automatic write replay. Stream EOF is sent when a disconnected origin
+has been fully drained, including drains triggered by WebSocket writes; the
+client need not return additional credit after receiving the complete response
+(ADR 0084).
+
+Daemon readiness requires a complete stdout banner for its current loopback viewer
+port. Partial/embedded/wrong-port and post-stop output cannot publish an
+attachment; the diagnostic tail retains its line-boundary state. The start
+callback is consumed before invocation and cannot run again when the process
+exits immediately after readiness (ADR 0083). Synthetic CLI regressions cover
+these boundaries without starting a real viewer or renderer.
 
 `AtlasLiveTunnel` multiplexes bounded byte streams to registered loopback viewer/renderer ports over a persistent authenticated WebSocket. Each attachment gets a new random key/channel; AES-GCM frames bind channel, direction and exact sequence. The phone uses matching loopback origins and an ephemeral HttpOnly cookie for its native bridge. HTTP, streaming bodies, renderer WebSockets and SSE remain ordinary protocols inside the encrypted byte streams. The relay forwards ciphertext and rechecks grants periodically; it cannot see resource bodies. There is no automatic write replay.
 
@@ -653,15 +824,41 @@ then leaves the group, and its completion carries the group's new summary as
 `left_activity_group`. Relay/mobile remain on the legacy projection. See
 [ADR 0022](decisions/0022-daemon-activity-group-details.md).
 
+Opening a journal only marks sessions whose activity index is behind in
+`activity_backfill`. `SessionHost` drains the markers with passes bounded by rows
+and payload bytes that defer on a busy journal. A new event for a marked session
+is left to the backfill, which then takes that session first. Groups of a marked
+session are not published: its events read ungrouped and its group pages answer
+`unknown_group`; each pass increments the projection revision
+([ADR 0097](decisions/0097-activity-backfill-after-open.md)).
+
 ## Permanent deletion propagation and provider cleanup
 
-An idle `session.delete` transaction removes local history and writes both a
-generation tombstone and durable deletion work. Live background tasks must first
+An idle `session.delete` transaction removes the session and its per-generation
+state, one bounded batch of bulky history and writes a generation tombstone and
+durable deletion work. Remaining history gets a `session_history_purge` marker
+in the same transaction; `SessionHost` drains it one bounded pass per event-loop
+turn, and the tombstone outlives the marker
+([ADR 0093](decisions/0093-bounded-session-history-purge.md)). Live background tasks must first
 stop. Attached Desktop clients receive `session.deleted`; `session.list` also
 returns `deleted_sessions` so reconnecting clients remove stale persisted entries.
 Newer generations are not removed by an older tombstone.
-The tombstone and cleanup-work inserts must each affect one row, and each
-history-table delete must leave no matching row. A failed statement or commit
+Tombstone catalogs support opt-in version-1 keyset pages (128 rows/64 KiB), with
+bounded SQL projections and explicit errors for oversized legacy responses. The
+shared transport reader covers Desktop refresh and `ketplusctl sessions`,
+fences catalog mutations and stale reconnect callbacks, and reads live sessions
+after the walk. A changed catalog restarts at most three times; CLI output uses a
+private temporary spool instead of accumulating tombstones in memory. See
+[ADR 0091](decisions/0091-paged-session-tombstone-catalogs.md); this does not
+bound the live catalog itself.
+Incremental discovery uses `session_catalog_live_only: true` with page version 1
+([ADR 0092](decisions/0092-live-only-session-discovery.md)): one live-catalog
+request, no tombstone query or deletion signals, and the same wire-byte guard.
+Older paged daemons return page one with live sessions; discovery ignores its
+deletion fields. Initial/reconnect reconciliation still walks the full catalog.
+The tombstone, cleanup-work and purge-marker inserts must each affect one row.
+Each per-generation state delete must leave no matching row, and a history batch
+that removes nothing while rows remain fails the deletion. A failed statement or commit
 rolls back and releases the transaction before returning failure, so retries
 cannot observe uncommitted deletion state. See
 [ADR 0055](decisions/0055-session-delete-transaction-recovery.md). Explicit deletion
@@ -710,7 +907,8 @@ aliases, five digits once half are held, 30-day quarantine after deletion) and
 `agent_messages`. `AgentBroker` mints a capability token per conversation
 generation, answers `agents.whoami/list/send/inbox`, delivers queued messages
 when a receiver becomes idle (or steers an `urgent` one), turns a final answer
-into the reply and applies the hop, chain and hourly limits. `SessionHost`
+into the reply and applies the hop, chain and hourly limits, the per-sender
+backlog and the per-turn delivery budget. `SessionHost`
 implements its narrow `AgentHostPort` in `SessionHostAgents.cpp`: an agent turn
 journals `user.message` with `origin: "agent"`, and `agent_message.state`
 reports a message the conversation sent (`sent`, with its delivery) or answered
@@ -758,6 +956,15 @@ scan journal content nor checkpoint it, and failures do not invalidate committed
 policy saves. Media/backups are excluded; absent filesystem data is unknown. See
 [ADR 0045](decisions/0045-journal-file-measurements.md).
 
+### Failed journal initialization
+
+A failed base/activity/agent initialization closes the journal connection before
+construction returns. Later operations on that object cannot turn a cleared
+operation error into a usable journal. Repair the cause separately and open a
+fresh journal; the failed object remains closed. The service's immediate startup
+check and existing rollback behavior remain in place. See
+[ADR 0086](decisions/0086-quarantine-failed-journal-initialization.md) for scope.
+
 ### SQLite-page size pressure
 
 The separate owner-only size policy defaults to a soft 5 decimal GB SQLite-page
@@ -767,6 +974,10 @@ then may compact eligible recent detail without bypassing retention guards.
 Forever/off still preserve remaining detail. Unsupported/protected data may leave
 the target unmet. File/WAL and total-application usage are not this page target;
 see [ADR 0046](decisions/0046-journal-size-pressure.md) for scope and remaining work.
+Both stored policy JSON values are admitted through a 4 KiB SQL projection before
+Qt parses them. Unsupported oversized rows remain intact and disable policy saves
+and configured detail trimming until repaired; see
+[ADR 0085](decisions/0085-bounded-stored-policy-json.md).
 
 Bounded large-tool retention (ADR 0047) applies the existing detail transformers
 to version-1 fragmented payloads within the shared 1 MiB pass budget. It requires

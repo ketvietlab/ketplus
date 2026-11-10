@@ -321,6 +321,20 @@ int LocalJournal::automaticAgentTurnsInChain(const QString& chainId) const {
     return query.exec() && query.next() ? query.value(0).toInt() : 0;
 }
 
+int LocalJournal::undeliveredAgentMessages(const QString& fromSession, const qint64 fromGeneration,
+                                           const QString& toSession,
+                                           const qint64 toGeneration) const {
+    QSqlQuery query(database_);
+    query.prepare(QStringLiteral(
+        "SELECT COUNT(*) FROM agent_messages WHERE to_session = ? AND to_generation = ? AND "
+        "state IN ('queued', 'held') AND from_session = ? AND from_generation = ?"));
+    query.addBindValue(toSession);
+    query.addBindValue(toGeneration);
+    query.addBindValue(fromSession);
+    query.addBindValue(fromGeneration);
+    return query.exec() && query.next() ? query.value(0).toInt() : 0;
+}
+
 int LocalJournal::automaticAgentTurnsSince(const QString& sessionId, const qint64 generation,
                                            const QDateTime& since) const {
     QSqlQuery query(database_);

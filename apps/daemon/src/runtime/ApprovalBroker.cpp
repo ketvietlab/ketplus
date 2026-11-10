@@ -418,7 +418,8 @@ void ApprovalBroker::expireAssistantQuestions(const QString& sessionId, const qi
     }
 }
 
-void ApprovalBroker::abandonPending(const std::function<bool(const QString&)>& ofSession) {
+QList<QJsonValue>
+ApprovalBroker::abandonPending(const std::function<bool(const QString&)>& ofSession) {
     QHash<QString, Pending> abandoned;
     for (auto it = pending_.begin(); it != pending_.end();) {
         if (ofSession && !ofSession(it->sessionId)) {
@@ -429,10 +430,15 @@ void ApprovalBroker::abandonPending(const std::function<bool(const QString&)>& o
         abandoned.insert(it.key(), *it);
         it = pending_.erase(it);
     }
+    QList<QJsonValue> requestIds;
     for (auto it = abandoned.cbegin(); it != abandoned.cend(); ++it) {
         rememberResolved(it.key(), it->kind);
-        emit expired(it.key(), it->sessionId, it->generation, it->kind, it->revision);
+        requestIds.append(it->providerRequestId);
     }
+    // Every request is unanswerable before any subscriber hears of the first expiry.
+    for (auto it = abandoned.cbegin(); it != abandoned.cend(); ++it)
+        emit expired(it.key(), it->sessionId, it->generation, it->kind, it->revision);
+    return requestIds;
 }
 
 void ApprovalBroker::rememberResolved(const QString& approvalId, const QString& kind) {

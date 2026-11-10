@@ -1,0 +1,52 @@
+{
+  "scope": "media existing #68 package integration; not complete issue acceptance",
+  "code_head": "74804ad84b666bec5d8f88375cd0a98778051731",
+  "base": "b3af8ed53f67ff63df666c0a24c84d871afa1618",
+  "environment": "macOS arm64, Release Pro, Qt 6.11.2, offscreen; synthetic journals/fake providers only",
+  "source_sha256": {
+    "apps/daemon/sources.cmake": "49615380ac7daa1a197a64f6cb5e68de082c96ca7de3a8c6241acdcc0dde86ff",
+    "apps/daemon/src/runtime/SessionHostFork.cpp": "555da5e38c3dcd32990208d97a0dca18643ddd7d36791e50eb09fd88514b5376",
+    "apps/daemon/src/storage/LocalJournal.h": "785860689027a04e92284d37df3b8d95b287ef0fa9e166d9c09b83f0c3a57b81",
+    "apps/daemon/src/storage/LocalJournalFork.cpp": "7c47f5efdf0bd16544a5240d03939cb00804524a401493f409b9ed671658892e",
+    "apps/daemon/src/storage/McpMediaPreview.cpp": "01b984fa53420c16f231280e577bf296e4734be56a66a8ebb8ce36683cea2e88",
+    "apps/daemon/src/storage/McpMediaReferences.cpp": "97de02d652e442db258c55dea6dad86256fc79f46af16754cccea7306dffe73c",
+    "apps/daemon/src/storage/McpMediaStore.cpp": "d8f4d43d45faf90e44e34c95f3b5b5c8bd2e25fa8e31e805c074a350a4802169",
+    "apps/daemon/src/storage/McpMediaStore.h": "99692e18b6b8e0e05f4e6515b698bcebd77b681cea1f236b4ba2a645defc9ea8",
+    "tests/daemon/CMakeLists.txt": "e190048ec37c6068961db2eb62514520e65f3a050e0c778c9a09a3ffed4940a1",
+    "tests/daemon/DaemonProtocolTest.cpp": "e6da8048b8b41e2836bc8100613ab2c3151eb1f5808a825df3be9886806ab91a",
+    "tests/daemon/McpMediaPreviewTest.cpp": "164ee8154c766c7e6940cb7e6e30973c18eb9fd04ad3656fd25bd7dbed31e3ee",
+    "tests/daemon/SessionForkTest.cpp": "20e5f04ae4a140046ab9512a40d9484231b8895f96789c845f262f031269aa56"
+  },
+  "format": {
+    "changed_cpp_checked": true,
+    "new_format_drift": false,
+    "note": "DaemonProtocolTest.cpp has the same 55 changed-format lines as integration; no formatting-only edits added"
+  },
+  "full_pro": {
+    "head": "74804ad84b666bec5d8f88375cd0a98778051731",
+    "head_after": "74804ad84b666bec5d8f88375cd0a98778051731",
+    "exit_code": 0,
+    "elapsed_seconds": 456.04,
+    "parallelism": 2,
+    "qpa": "offscreen",
+    "live_opt_in": false,
+    "total": 104,
+    "passed": 104,
+    "failed": 0,
+    "build": "PASS"
+  },
+  "log_sha256": {
+    "-test.log": "ce45e65955114d76d56d5aa44baa96895436497ef28b018cb07e24fb9701f3ab",
+    "-LastTest.log": "30f417e846b80ba5c67de99bd9db21a26d19a593bf9ee2ffb0d0a97a1354d57d"
+  },
+  "not_verified": [
+    "Linux/Windows",
+    "Lite",
+    "real provider",
+    "live journal/media",
+    "ancestor/same-user filesystem replacement races",
+    "all power-loss interruption points",
+    "mixed multi-GB steady state",
+    "packaging/install/deploy"
+  ]
+}

@@ -172,6 +172,9 @@ class DesktopTranscriptWindowTest final : public QObject {
                                                                   QByteArray::OmitTrailingEquals)));
         QVERIFY(!assembler.accept(conflict, &error));
         QVERIFY(error.contains("Conflicting duplicate"));
+        // A retried fragment of another length at the same offset conflicts too.
+        QVERIFY(!assembler.accept(fragment(0, first.first(1024)), &error));
+        QVERIFY(error.contains("Conflicting duplicate"));
         QVERIFY(!assembler.accept(fragment(assembler.nextOffset() + 1, QByteArray("gap")), &error));
         QVERIFY(error.contains("gap or reordering"));
         while (!assembler.isComplete()) {
@@ -184,6 +187,66 @@ class DesktopTranscriptWindowTest final : public QObject {
         QVERIFY(missing.accept(fragment(0, first), &error));
         QVERIFY(missing.payload(&error).isEmpty());
         QVERIFY(error.contains("incomplete"));
+    }
+
+    // A sender splitting a transfer into tiny fragments cannot grow the bookkeeping without
+    // bound (#327): the 4,097th fragment is refused, while retries and conflicts behave as before.
+    void largeEventReassemblyBoundsTheFragmentCount() {
+        const QJsonObject payload{
+            {"item_id", "answer"},
+            {"item_type", "agentMessage"},
+            {"item", QJsonObject{{"id", "answer"},
+                                 {"type", "agentMessage"},
+                                 {"text", QString(16 * 1024, QLatin1Char('x'))}}}};
+        const QByteArray source = QJsonDocument(payload).toJson(QJsonDocument::Compact);
+        const QString digest = QString::fromLatin1(
+            QCryptographicHash::hash(source, QCryptographicHash::Sha256).toHex());
+        const QJsonObject reference{{"version", 1},
+                                    {"transfer_id", "tiny"},
+                                    {"event_type", "item.completed"},
+                                    {"item_id", "answer"},
+                                    {"revision", 7},
+                                    {"encoding", "json-utf8"},
+                                    {"digest_sha256", digest},
+                                    {"total_bytes", source.size()}};
+        const auto fragment = [&](qint64 offset, qint64 size) {
+            const QByteArray data = source.mid(offset, size);
+            const qint64 next = offset + data.size();
+            return QJsonObject{
+                {"large_event_fragment_version", 1},
+                {"transfer_id", "tiny"},
+                {"event_type", "item.completed"},
+                {"item_id", "answer"},
+                {"revision", 7},
+                {"digest_sha256", digest},
+                {"total_bytes", source.size()},
+                {"offset", offset},
+                {"next_offset", next},
+                {"complete", next == source.size()},
+                {"data", QString::fromLatin1(data.toBase64(QByteArray::Base64UrlEncoding |
+                                                           QByteArray::OmitTrailingEquals))}};
+        };
+        QVERIFY(source.size() > 4096);
+        remote::LargeEventReassembler assembler(reference);
+        QString error;
+        for (qint64 offset = 0; offset < 4096; ++offset)
+            QVERIFY2(assembler.accept(fragment(offset, 1), &error), qPrintable(error));
+        // An exact retry of an accepted fragment still succeeds; a conflict and a gap still fail.
+        QVERIFY(assembler.accept(fragment(4095, 1), &error));
+        QVERIFY(!assembler.accept(fragment(4095, 2), &error));
+        QVERIFY(error.contains("Conflicting duplicate"));
+        QVERIFY(!assembler.accept(fragment(4097, 1), &error));
+        QVERIFY(error.contains("gap or reordering"));
+        QVERIFY(!assembler.accept(fragment(4096, 1), &error));
+        QVERIFY(error.contains("too many fragments"));
+        QVERIFY(!assembler.isComplete());
+        QVERIFY(assembler.payload(&error).isEmpty());
+
+        // Whole chunks, as the daemon sends them, are far below the bound.
+        remote::LargeEventReassembler chunked(reference);
+        for (qint64 offset = 0; !chunked.isComplete(); offset = chunked.nextOffset())
+            QVERIFY2(chunked.accept(fragment(offset, 96 * 1024), &error), qPrintable(error));
+        QCOMPARE(chunked.payload(&error), payload);
     }
 
     void daemonMediaRefsRenderAsImagesWithoutInlineBytes() {
@@ -242,6 +305,24 @@ class DesktopTranscriptWindowTest final : public QObject {
         QVERIFY(placeholders.first().toString().startsWith(
             QLatin1String(mcp_media::unavailableSourcePrefix)));
         QVERIFY(QUrl(placeholders.first().toString()).toLocalFile().isEmpty());
+
+        // Pixels removed by history retention (ADR 0099) keep their slot the same way.
+        QJsonObject retained = journaled;
+        retained.insert(
+            "result",
+            QJsonObject{{"content", QJsonArray{QJsonObject{{"type", "image"},
+                                                           {"omitted", true},
+                                                           {"reason", "history_retention"}}}}});
+        const auto trimmed = daemonWindowMessages(
+            {{"events",
+              QJsonArray{transcriptEvent(
+                  "item.completed",
+                  {{"item_id", "capture"}, {"item_type", "mcpToolCall"}, {"item", retained}},
+                  1)}}});
+        const QVariantList keptSlots = trimmed.first().toMap().value("images").toList();
+        QCOMPARE(keptSlots.size(), 1);
+        QVERIFY(keptSlots.first().toString().startsWith(
+            QLatin1String(mcp_media::unavailableSourcePrefix)));
     }
 
     void projectionMergesPartialItemsAndOutputWithoutApprovalSideEffects() {

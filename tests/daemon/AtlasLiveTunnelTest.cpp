@@ -1,6 +1,7 @@
 #include "atlas/AtlasLiveTunnel.h"
 #include <QSignalSpy>
 #include <QTcpServer>
+#include <QTimer>
 #include <QWebSocketServer>
 #include <QtTest>
 using namespace ketplus::daemon;
@@ -25,10 +26,20 @@ class AtlasLiveTunnelTest final : public QObject {
         QVERIFY(!fresh.open(changed, &frame));
         QVERIFY(fresh.open(wire, &frame));
     }
+    void binaryHttpFlowsAcrossCreditWindowsWithoutTruncatingEof_data() {
+        QTest::addColumn<int>("creditBatch");
+        QTest::addColumn<int>("bodySize");
+        QTest::newRow("credit-each-frame") << 1 << 160000;
+        QTest::newRow("credit-half-window") << 32768 << 160000;
+        QTest::newRow("credit-full-window") << 65536 << 160000;
+        QTest::newRow("fits-initial-window") << 65536 << 1600;
+    }
     void binaryHttpFlowsAcrossCreditWindowsWithoutTruncatingEof() {
+        QFETCH(int, creditBatch);
+        QFETCH(int, bodySize);
         QTcpServer origin;
         QVERIFY(origin.listen(QHostAddress::LocalHost, 0));
-        QByteArray body(160000, Qt::Uninitialized);
+        QByteArray body(bodySize, Qt::Uninitialized);
         for (qsizetype i = 0; i < body.size(); ++i)
             body[i] = char(i % 256);
         const QByteArray expected =
@@ -51,9 +62,12 @@ class AtlasLiveTunnelTest final : public QObject {
         AtlasTunnelCodec phone(key, channel, false);
         QWebSocket* peer = nullptr;
         QByteArray received;
+        qint64 consumed = 0;
+        int endCount = 0;
         bool ended = false, verified = true;
         connect(&relay, &QWebSocketServer::newConnection, this, [&] {
             peer = relay.nextPendingConnection();
+            peer->setParent(&relay);
             connect(peer, &QWebSocket::binaryMessageReceived, this, [&](const QByteArray& wire) {
                 AtlasTunnelFrame frame;
                 if (!phone.open(wire, &frame)) {
@@ -67,10 +81,22 @@ class AtlasLiveTunnelTest final : public QObject {
                                     "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n"}));
                 else if (kind == "data") {
                     received += frame.body;
-                    peer->sendBinaryMessage(phone.seal(
-                        {{{"kind", "credit"}, {"stream", 1}, {"bytes", frame.body.size()}}, {}}));
-                } else if (kind == "end")
+                    consumed += frame.body.size();
+                    if (consumed >= creditBatch) {
+                        const auto credit = phone.seal(
+                            {{{"kind", "credit"}, {"stream", 1}, {"bytes", consumed}}, {}});
+                        // Let the origin EOF arrive while the final buffered bytes await credit.
+                        if (creditBatch == 65536)
+                            QTimer::singleShot(100, peer,
+                                               [peer, credit] { peer->sendBinaryMessage(credit); });
+                        else
+                            peer->sendBinaryMessage(credit);
+                        consumed = 0;
+                    }
+                } else if (kind == "end") {
                     ended = true;
+                    ++endCount;
+                }
             });
             peer->sendTextMessage("{\"type\":\"ready\",\"version\":1}");
             peer->sendBinaryMessage(
@@ -80,9 +106,11 @@ class AtlasLiveTunnelTest final : public QObject {
         tunnel.connectRelay(
             QUrl(QString("ws://127.0.0.1:%1/v2/atlas/tunnel").arg(relay.serverPort())),
             "test-only");
+        QTRY_COMPARE_WITH_TIMEOUT(received.size(), expected.size(), 10000);
+        QCOMPARE(received, expected);
         QTRY_VERIFY_WITH_TIMEOUT(ended, 10000);
         QVERIFY(verified);
-        QCOMPARE(received, expected);
+        QCOMPARE(endCount, 1);
         QSignalSpy closed(&tunnel, &AtlasLiveTunnel::closed);
         peer->sendBinaryMessage(phone.seal(
             {{{"kind", "open"}, {"stream", 2}, {"origin", "arbitrary-local-service"}}, {}}));

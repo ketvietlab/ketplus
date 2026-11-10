@@ -15,9 +15,11 @@
 #include <QSet>
 #include <QString>
 #include <QTemporaryDir>
+#include <QThreadPool>
 #include <QTimer>
 
 #include <functional>
+#include <memory>
 
 namespace ketplus::daemon {
 
@@ -61,6 +63,11 @@ class SessionHost final : public QObject, private AgentHostPort {
     // validating their advertised snapshot head in one journal read transaction.
     [[nodiscard]] QJsonObject restoreTranscriptWindow(const QJsonObject& request) const;
     [[nodiscard]] bool hasActiveSessions() const;
+    // Archived conversations keep their history this long, then are deleted (#128).
+    static constexpr int archivedHistoryDays = 30;
+    // Deletes at most one conversation archived before now minus archivedHistoryDays, through
+    // the same guards as session.delete. Returns whether one was deleted.
+    bool expireArchivedSessions(const QDateTime& now);
     [[nodiscard]] QJsonObject configuration(const QJsonObject& request,
                                             const QJsonArray& providerModels) const;
     // The settings a conversation started from the phone begins with, and what it can choose
@@ -112,6 +119,20 @@ class SessionHost final : public QObject, private AgentHostPort {
         bool interruptPending{false};
         // A client's Stop is ending this turn, so its interrupted end says so.
         bool stopRequested{false};
+        // The provider turn that last completed in the current provider process. A repeated
+        // completion for it, or a late turn/started, must not end or restart the turn that runs
+        // now. Cleared when the process stops or reloads, since the next one may reuse ids.
+        QString completedTurnId;
+        // The turn a final provider error ended (Codex `error` with willRetry false), which may
+        // never send turn/completed. Its approvals are closed: a later request for it is declined.
+        // Cleared with completedTurnId.
+        QString failedTurnId;
+        // SHA-256 digests of items whose completion is journaled or queued, oldest first and
+        // bounded. A stream delta for one of them would be appended to final text. Cleared with
+        // completedTurnId, since a new provider process may reuse item ids; an item.started
+        // with the same id reopens it.
+        QSet<QByteArray> completedItems;
+        QList<QByteArray> completedItemOrder;
         QStringList materializedAttachments;
         QStringList stagedAttachmentIds;
         // The provider's latest background task snapshot (tasks.changed, REPLACE semantics).
@@ -147,7 +168,7 @@ class SessionHost final : public QObject, private AgentHostPort {
         bool journalBufferFullReported{false};
     };
 
-    [[nodiscard]] QJsonObject listSessions() const;
+    [[nodiscard]] QJsonObject listSessions(const QJsonObject& payload) const;
     [[nodiscard]] QJsonObject storageRetention(const QString& type, const QJsonObject& payload);
     [[nodiscard]] QJsonObject storageSize(const QString& type, const QJsonObject& payload);
     QJsonObject workspaceCatalog(const QString& type, const QJsonObject& payload);
@@ -178,6 +199,14 @@ class SessionHost final : public QObject, private AgentHostPort {
     void recordWorktreeActivity(Session& session, const QString& type, const QJsonObject& payload,
                                 qint64 cursor);
     void processDeletionWork();
+    // Drives bounded passes over deleted sessions' remaining history (ADR 0093).
+    void scheduleHistoryPurge(int delayMs);
+    void purgeDeletedHistory();
+    bool historyPurgeScheduled_{false};
+    // Drives bounded passes indexing activity behind older history (ADR 0097).
+    void scheduleActivityBackfill(int delayMs);
+    void backfillActivity();
+    bool activityBackfillScheduled_{false};
     [[nodiscard]] std::optional<QJsonArray>
     providerCleanupTargets(const StoredSession& session) const;
     QSet<QString> providerCleanupInFlight_;
@@ -196,6 +225,7 @@ class SessionHost final : public QObject, private AgentHostPort {
                                                   const QString& messageId);
     [[nodiscard]] QJsonObject renameSession(const QJsonObject& request);
     [[nodiscard]] QJsonObject markSessionSeen(const QJsonObject& request);
+    [[nodiscard]] QJsonObject setSessionArchived(const QJsonObject& request);
     [[nodiscard]] QJsonObject deleteSession(const QJsonObject& request);
     // With `outcome`, returns an empty object and answers through it once the provider has
     // replied; without it, answers "accepted" as soon as the text is handed to the provider.
@@ -214,14 +244,20 @@ class SessionHost final : public QObject, private AgentHostPort {
     [[nodiscard]] QJsonObject commitAttachment(const QJsonObject& request);
     [[nodiscard]] QJsonObject cancelAttachment(const QJsonObject& request);
     [[nodiscard]] QJsonObject acknowledge(const QJsonObject& request, const QString& clientId);
-    [[nodiscard]] QJsonObject storeFork(const QString& sourceId, qint64 sourceGeneration,
-                                        const QString& forkId, const QString& threadId);
     [[nodiscard]] QJsonObject heldAgentMessages(const QJsonObject& request, bool release);
     // ADR 0067: the conversation's reviewer, read or replaced by a local client.
     [[nodiscard]] QJsonObject conversationReviewer(const QJsonObject& request, bool apply);
     [[nodiscard]] QJsonObject reviewerJson(const QString& sessionId) const;
     QString startReviewerConversation(const Session& working, const QString& provider,
                                       QString* error);
+    // Copies the source history in bounded event-loop passes (ADR 0094), then answers.
+    struct PendingFork;
+    void storeFork(const QString& sourceId, qint64 sourceGeneration, const QString& forkId,
+                   const QString& threadId, std::function<void(const QJsonObject&)> finish);
+    void advanceFork(const std::shared_ptr<PendingFork>& pending);
+    void completeFork(const std::shared_ptr<PendingFork>& pending);
+    void abandonFork(const std::shared_ptr<PendingFork>& pending, const QJsonObject& failure);
+    QSet<QString> forksInFlight_;
     [[nodiscard]] QJsonObject checkedSession(const QJsonObject& request, Session** session);
     [[nodiscard]] QJsonObject configurationOf(const StoredSession& stored,
                                               const QJsonArray& mergedCatalog) const;
@@ -262,6 +298,12 @@ class SessionHost final : public QObject, private AgentHostPort {
     void declineProviderRequest(Session& session, const QJsonValue& requestId,
                                 const QString& method, const QString& reason,
                                 const QString& serverName);
+    // A turn ended: its pending approvals and questions expire without a provider answer.
+    void abandonTurnApprovals(const QString& sessionId);
+    // Drops the Codex routes of requests that were abandoned without an answer.
+    void forgetProviderRoutes(const QList<QJsonValue>& requestIds);
+    // A turn that never started: clears the start and any Stop pressed meanwhile, then fails.
+    void failTurnStart(Session& session, const QString& message);
     void providerStopped(const QString& adapterName, const QString& reason);
     // Journals the snapshot as tasks.changed and keeps it for restarts and task commands.
     void recordBackgroundTasks(Session& session, const QJsonArray& tasks);
@@ -288,6 +330,8 @@ class SessionHost final : public QObject, private AgentHostPort {
     // the session's held delta so the journal keeps provider order.
     bool appendEvent(Session& session, const QString& type, const QJsonObject& payload,
                      QString* error = nullptr);
+    bool journalTurnStart(Session& session, const QJsonObject& prompt,
+                          const QJsonObject& configuration, QString* error);
     bool journalEvent(Session& session, const QString& type, const QJsonObject& payload,
                       QString* error = nullptr);
     bool flushDelta(Session& session, QString* error = nullptr);
@@ -347,6 +391,14 @@ class SessionHost final : public QObject, private AgentHostPort {
     AgentBroker* agents_{nullptr};
     QString agentSocket_;
     QString agentExecutable_;
+    // Previews decode on their own small pool and queue: one decode may hold a 64-megapixel
+    // image, and a phone asks for a screen of previews at once (#68).
+    static constexpr int mediaReadThreads = 2;
+    static constexpr int maximumMediaReads = 16;
+    void startMediaRead(std::function<QJsonObject()> work, CommandCallback done);
+    int mediaReadsInFlight_{0};
+    // Last member: its destructor waits for running decodes before anything else goes away.
+    QThreadPool mediaReads_;
 };
 
 } // namespace ketplus::daemon

@@ -4,6 +4,9 @@
 #include "ComputerAgentInstructions.h"
 #include "ComputerToolLaunch.h"
 #include "providers/ClaudeCredentials.h"
+#include "providers/ProviderFrameValidation.h"
+#include "providers/ProviderResponseEnvelope.h"
+#include "providers/ProviderResponseId.h"
 #include "runtime/ResponseGuidance.h"
 #include <QRegularExpression>
 
@@ -150,6 +153,15 @@ ClaudeAdapter::ClaudeAdapter(const QString& executable, QObject* parent)
                     return;
                 }
                 noteUnexpectedStop();
+                if (malformedOutput_) {
+                    const QString reason =
+                        QStringLiteral("The Claude sidecar emitted a malformed protocol message.");
+                    failPending(reason);
+                    // Initialization already publishes its own failure; do not emit it twice.
+                    if (!stopping_)
+                        emit stopped(reason);
+                    return;
+                }
                 const QString reason = QStringLiteral("The Claude sidecar exited unexpectedly.");
                 failPending(reason);
                 emit stopped(reason);
@@ -311,6 +323,7 @@ void ClaudeAdapter::ensureStarted() {
             restartTimer_->start(std::max<qint64>(1, restartNotBefore_.remainingTime()));
         return;
     }
+    malformedOutput_ = false;
     stopping_ = false;
     starting_ = true;
     stdoutBuffer_.clear();
@@ -407,21 +420,53 @@ void ClaudeAdapter::sendObject(const QJsonObject& object) {
 }
 
 void ClaudeAdapter::consumeStdout() {
-    stdoutBuffer_.append(process_->readAllStandardOutput());
-    if (stdoutBuffer_.size() > maximumProviderMessageBytes && !stdoutBuffer_.contains('\n')) {
-        const QString reason = QStringLiteral("The Claude sidecar emitted an oversized message.");
-        stdoutBuffer_.clear();
-        failPending(reason);
-        emit stopped(reason);
-        process_->kill();
+    if (malformedOutput_) {
+        process_->setReadChannel(QProcess::StandardOutput);
+        while (process_->bytesAvailable() > 0)
+            if (process_->read(64 * 1024).isEmpty())
+                break;
         return;
     }
-    qsizetype newline = -1;
-    while ((newline = stdoutBuffer_.indexOf('\n')) >= 0) {
-        const QByteArray line = stdoutBuffer_.left(newline).trimmed();
-        stdoutBuffer_.remove(0, newline + 1);
-        if (!line.isEmpty()) {
-            consumeLine(line);
+    constexpr qint64 readChunkBytes = 64 * 1024;
+    process_->setReadChannel(QProcess::StandardOutput);
+    while (process_->bytesAvailable() > 0) {
+        const QByteArray chunk = process_->read(readChunkBytes);
+        if (chunk.isEmpty())
+            return;
+        stdoutBuffer_.append(chunk);
+        while (true) {
+            const qsizetype newline = stdoutBuffer_.indexOf('\n');
+            const qsizetype lineBytes = newline < 0 ? stdoutBuffer_.size() : newline;
+            if (lineBytes > maximumProviderMessageBytes) {
+                const QString reason =
+                    QStringLiteral("The Claude sidecar emitted an oversized message.");
+                stdoutBuffer_.clear();
+                // Quarantine this process generation, including already-buffered output.
+                // Closing a read channel alone leaves its received bytes available.
+                process_->closeReadChannel(QProcess::StandardOutput);
+                while (process_->bytesAvailable() > 0)
+                    if (process_->read(readChunkBytes).isEmpty())
+                        break;
+                failPending(reason);
+                // A pending initialize has published this stop itself and marked it. Otherwise
+                // publish it here, once: the exit that follows must not publish another or
+                // count as a second crash.
+                if (!stopping_) {
+                    noteUnexpectedStop();
+                    emit stopped(reason);
+                    stopping_ = true;
+                }
+                process_->kill();
+                return;
+            }
+            if (newline < 0)
+                break;
+            const QByteArray line = stdoutBuffer_.left(newline).trimmed();
+            stdoutBuffer_.remove(0, newline + 1);
+            if (!line.isEmpty())
+                consumeLine(line);
+            if (malformedOutput_)
+                return;
         }
     }
 }
@@ -429,7 +474,15 @@ void ClaudeAdapter::consumeStdout() {
 void ClaudeAdapter::consumeLine(const QByteArray& line) {
     QJsonParseError parseError;
     const QJsonDocument document = QJsonDocument::fromJson(line, &parseError);
-    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+    if (!providerFrameHasValidControlBytes(line) || parseError.error != QJsonParseError::NoError ||
+        !document.isObject()) {
+        // No reliable call identity survives a broken frame. Quarantine the whole
+        // generation; finished settles pending calls through the existing lifecycle.
+        malformedOutput_ = true;
+        setReady(false);
+        stdoutBuffer_.clear();
+        process_->closeReadChannel(QProcess::StandardOutput);
+        process_->kill();
         return;
     }
     const QJsonObject object = document.object();
@@ -455,12 +508,17 @@ void ClaudeAdapter::consumeLine(const QByteArray& line) {
     if (!object.contains(QStringLiteral("id"))) {
         return;
     }
-    const quint64 id = object.value(QStringLiteral("id")).toVariant().toULongLong();
+    const auto responseId = providerResponseId(object.value(QStringLiteral("id")));
+    if (!responseId)
+        return;
+    const quint64 id = *responseId;
     const auto callback = pending_.take(id);
     if (!callback) {
         return;
     }
-    if (object.contains(QStringLiteral("error"))) {
+    if (!validProviderResponseEnvelope(object)) {
+        callback({}, QStringLiteral("Malformed provider response envelope."));
+    } else if (object.contains(QStringLiteral("error"))) {
         callback({}, errorText(object.value(QStringLiteral("error")).toObject()));
     } else {
         callback(object.value(QStringLiteral("result")).toObject(), {});

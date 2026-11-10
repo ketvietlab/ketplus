@@ -1,12 +1,8 @@
 #include "storage/McpMediaStore.h"
 #include <QBuffer>
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
 #include <QImage>
 #include <QImageReader>
 #include <QPainter>
-#include <QRegularExpression>
 
 namespace ketplus::daemon {
 namespace {
@@ -51,28 +47,4 @@ QJsonObject McpMediaStore::encodePreview(QIODevice* source, int maximumSide) {
                                                        QByteArray::OmitTrailingEquals))}};
 }
 
-QJsonObject McpMediaStore::preview(const QString& sessionId, const QString& reference,
-                                   int maximumSide) const {
-    static const QRegularExpression valid("^sha256:([a-f0-9]{64})$");
-    const auto matched = valid.match(reference);
-    if (!matched.hasMatch())
-        return unavailable();
-    const QString hash = matched.captured(1);
-    QFile refs(refsPath(sessionId));
-    if (!refs.open(QIODevice::ReadOnly) || !refs.readAll().split('\n').contains(hash.toLatin1()))
-        return unavailable();
-    for (const QString& suffix : {QStringLiteral(".png"), QStringLiteral(".jpg")}) {
-        QFile file(QDir(directory_).filePath(hash + suffix));
-        const QFileInfo info(file);
-        if (!info.isFile() || info.isSymLink() || info.size() > maximumImageBytes)
-            continue;
-        if (!file.open(QIODevice::ReadOnly))
-            return unavailable();
-        QJsonObject result = encodePreview(&file, maximumSide);
-        if (result.value("ok").toBool())
-            result.insert("media_ref", reference);
-        return result;
-    }
-    return unavailable();
-}
 } // namespace ketplus::daemon

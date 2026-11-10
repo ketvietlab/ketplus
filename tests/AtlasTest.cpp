@@ -14,7 +14,10 @@
 #include <QListWidget>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <QPushButton>
+#include <QScopeGuard>
 #include <QScreen>
+#include <QSettings>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -75,6 +78,107 @@ class AtlasTest final : public QObject {
         QVERIFY(ketplus::AtlasIndex::readManifest(atlas.path, workspace.path()).path.isEmpty());
         QVERIFY(QFile::remove(atlas.path));
         QVERIFY(ketplus::AtlasIndex::readManifest(atlas.path, workspace.path()).path.isEmpty());
+    }
+    void processReadinessMatchesAttempt_data() {
+        QTest::addColumn<QString>("kind");
+        QTest::addColumn<bool>("valid");
+        for (const auto& kind : {"wrong-port", "invalid-port", "overflow-port", "embedded",
+                                 "partial-longer-port", "truncated-prefix", "stop-banner"})
+            QTest::newRow(kind) << QString(kind) << false;
+        for (const auto& kind : {"wrong-then-right", "lf", "crlf", "slash", "split-valid"})
+            QTest::newRow(kind) << QString(kind) << true;
+    }
+    void processReadinessMatchesAttempt() {
+#ifndef Q_OS_UNIX
+        QSKIP("The synthetic CLI fixture uses a Unix shell.");
+#else
+        QFETCH(QString, kind);
+        QFETCH(bool, valid);
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        const auto atlas = fixture(root.path());
+        const auto cli = root.filePath("fake-atlas");
+        QFile source(QFINDTESTDATA("fixtures/fake-atlas-readiness.sh"));
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        auto script = source.readAll();
+        script.replace("@MODE@", kind.toUtf8());
+        QVERIFY(write(cli, script));
+        QVERIFY(QFile::setPermissions(cli, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                                               QFileDevice::ExeOwner));
+        const auto previous = qgetenv("KETPLUS_KETATLAS_CLI");
+        const auto restore = qScopeGuard([&] {
+            previous.isNull() ? qunsetenv("KETPLUS_KETATLAS_CLI")
+                              : qputenv("KETPLUS_KETATLAS_CLI", previous);
+        });
+        qputenv("KETPLUS_KETATLAS_CLI", cli.toUtf8());
+        ketplus::AtlasProcess process;
+        QSignalSpy ready(&process, &ketplus::AtlasProcess::ready);
+        QSignalSpy failed(&process, &ketplus::AtlasProcess::failed);
+        process.start(atlas);
+        if (kind == "stop-banner") {
+            QTRY_VERIFY_WITH_TIMEOUT(
+                QFileInfo::exists(QDir(atlas.directory).filePath("stop-ready")), 3000);
+            process.stop();
+            QVERIFY(!process.running());
+            QVERIFY(ready.isEmpty());
+            QVERIFY(failed.isEmpty());
+            return;
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(!ready.isEmpty() || !failed.isEmpty(), 3000);
+        QCOMPARE(!ready.isEmpty(), valid);
+        if (!valid) {
+            QCOMPARE(failed.size(), 1);
+            // A truncated prefix from the failed attempt must not poison restart.
+            script.replace("case " + kind.toUtf8() + " in", "case lf in");
+            QVERIFY(write(cli, script));
+            failed.clear();
+            process.start(atlas);
+            QTRY_VERIFY_WITH_TIMEOUT(!ready.isEmpty() || !failed.isEmpty(), 3000);
+        }
+        QCOMPARE(ready.size(), 1);
+        QVERIFY(failed.isEmpty());
+        QFile portFile(QDir(atlas.directory).filePath("attempted-port"));
+        QVERIFY(portFile.open(QIODevice::ReadOnly));
+        const auto expectedPort = portFile.read(16).toInt();
+        QVERIFY(expectedPort > 0 && expectedPort <= 65535);
+        const auto url = ready.first().first().toUrl();
+        QCOMPARE(url.scheme(), QString("http"));
+        QCOMPARE(url.host(), QString("127.0.0.1"));
+        QCOMPARE(url.port(), expectedPort);
+        process.stop();
+        QVERIFY(!process.running());
+#endif
+    }
+
+    void newestNodeVersionIsSearchedFirst() {
+        if (QFileInfo::exists("/opt/homebrew/bin/ketatlas") ||
+            QFileInfo::exists("/usr/local/bin/ketatlas"))
+            QSKIP("a system ketatlas is found before nvm");
+        QTemporaryDir home;
+        QVERIFY(home.isValid());
+        for (const auto* version : {"v9.11.2", "v26.7.0", "v26.12.1", "v24.14.1"}) {
+            const auto cli =
+                home.filePath(QString(".nvm/versions/node/%1/bin/ketatlas").arg(version));
+            QVERIFY(QDir().mkpath(QFileInfo(cli).absolutePath()));
+            QVERIFY(write(cli, "#!/bin/sh\n"));
+            QVERIFY(QFile::setPermissions(cli, QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+        }
+        const auto previousHome = qgetenv("HOME");
+        const auto previousPath = qgetenv("PATH");
+        const auto previousCli = qgetenv("KETPLUS_KETATLAS_CLI");
+        const auto restore = qScopeGuard([&] {
+            qputenv("HOME", previousHome);
+            qputenv("PATH", previousPath);
+            previousCli.isNull() ? qunsetenv("KETPLUS_KETATLAS_CLI")
+                                 : qputenv("KETPLUS_KETATLAS_CLI", previousCli);
+        });
+        qputenv("HOME", home.path().toUtf8());
+        qputenv("PATH", home.filePath("empty").toUtf8());
+        qunsetenv("KETPLUS_KETATLAS_CLI");
+        QSettings().remove("atlas/cliPath");
+        QCOMPARE(QFileInfo(ketplus::AtlasProcess::cliPath()).canonicalFilePath(),
+                 QFileInfo(home.filePath(".nvm/versions/node/v26.12.1/bin/ketatlas"))
+                     .canonicalFilePath());
     }
     void boundsTheWalkOutsideGit() {
         QTemporaryDir root;

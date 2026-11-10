@@ -128,9 +128,17 @@ for line in sys.stdin:
     if method == 'initialize':
         log('initialize:' + json.dumps(params.get('clientInfo') or {}))
         result = {'protocolVersion': 1,
+                  'agentCapabilities': {'loadSession': True, 'promptCapabilities': {'image': True}},
                   'authMethods': [{'id': 'cursor_login', 'name': 'Cursor login'}]}
-        if os.environ.get('KETPLUS_FAKE_CURSOR_LOAD_SESSION') == '0':
+        capability_mode = os.environ.get('KETPLUS_FAKE_CURSOR_LOAD_SESSION')
+        if capability_mode == '0':
             result['agentCapabilities'] = {'loadSession': False}
+        elif capability_mode == 'missing':
+            result['agentCapabilities'] = {}
+        elif capability_mode == 'absent':
+            del result['agentCapabilities']
+        elif capability_mode == 'wrong-type':
+            result['agentCapabilities'] = {'loadSession': 'true'}
         emit({'jsonrpc': '2.0', 'id': message_id, 'result': result})
     elif method == 'authenticate':
         log('authenticate:' + json.dumps(params))
@@ -201,6 +209,21 @@ for line in sys.stdin:
                       'options': [
                           {'optionId': 'custom-allow' if prompt == 'needs-custom-approval' else 'allow-once', 'kind': 'allow_once', 'name': 'Allow once'},
                           {'optionId': 'custom-reject' if prompt == 'needs-custom-approval' else 'reject-once', 'kind': 'reject_once', 'name': 'Reject'}]}})
+        elif prompt == 'question-then-exit':
+            # A fresh agent process numbers its requests from the start again.
+            emit({'jsonrpc': '2.0', 'id': 7, 'method': 'cursor/ask_question',
+                  'params': {'sessionId': session_id, 'toolCallId': 'ask-exit', 'title': 'Need input',
+                             'questions': [{'id': 'scope', 'prompt': 'Which scope?',
+                                            'options': [{'id': 'small', 'label': 'Small'}]}]}})
+            sys.stdout.flush()
+            os._exit(1)
+        elif prompt == 'approval-reused-id':
+            waiting[7] = (message_id, session_id)
+            emit({'jsonrpc': '2.0', 'id': 7, 'method': 'session/request_permission',
+                  'params': {'sessionId': session_id, 'toolCall': {
+                      'toolCallId': 'call-reused', 'title': 'Bash', 'rawInput': {'command': 'ls -la'}},
+                      'options': [{'optionId': 'allow-once', 'kind': 'allow_once', 'name': 'Allow once'},
+                                  {'optionId': 'reject-once', 'kind': 'reject_once', 'name': 'Reject'}]}})
         elif prompt == 'ask-question':
             question_id = 'question-' + str(message_id)
             waiting_questions[question_id] = (message_id, session_id)

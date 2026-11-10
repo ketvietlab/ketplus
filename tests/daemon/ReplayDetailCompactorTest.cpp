@@ -58,6 +58,11 @@ class ReplayDetailCompactorTest final : public QObject {
         QVERIFY(retained.size() <= 4096);
         auto expected = original.value("result").toObject();
         expected.remove("structuredContent");
+        // The inline image block keeps its place without its pixels (ADR 0099).
+        expected.insert("content", QJsonArray{QJsonObject{{"type", "image"},
+                                                          {"omitted", true},
+                                                          {"reason", "history_retention"},
+                                                          {"original_bytes", 10}}});
         QCOMPARE(result, expected);
         auto unchanged = *changed;
         unchanged.remove("result");
@@ -506,6 +511,216 @@ class ReplayDetailCompactorTest final : public QObject {
     void invalidCutoffDoesNotTransform() {
         QVERIFY(!compactCompletedReplayItem(tool(), {}));
         QVERIFY(!compactCompletedReplayItem(tool(), QDateTime::currentDateTimeUtc().addDays(1)));
+    }
+    void toolResultImagesBecomeOmittedBlocks() {
+        const QJsonObject png{{"type", "image"}, {"mimeType", "image/png"}, {"data", "QUJD"}};
+        const QJsonObject referenced{{"type", "image"}, {"media_ref", "m"}};
+        const QJsonObject text{{"type", "text"}, {"text", "short"}};
+        const QJsonObject legacy{
+            {"id", "tool-1"},
+            {"type", "mcpToolCall"},
+            {"status", "completed"},
+            {"server", "browser"},
+            {"tool", "screenshot"},
+            {"result", QJsonObject{{"content", QJsonArray{text, png, referenced}}}}};
+        const auto item = compactCompletedReplayItem(legacy, cutoff());
+        QVERIFY(item);
+        const auto content = item->value("result").toObject().value("content").toArray();
+        QCOMPARE(content.size(), 3);
+        QCOMPARE(content.at(0).toObject(), text);
+        const auto omitted = content.at(1).toObject();
+        QCOMPARE(omitted.value("type").toString(), QString("image"));
+        QVERIFY(omitted.value("omitted").toBool());
+        QCOMPARE(omitted.value("reason").toString(), QString("history_retention"));
+        QCOMPARE(omitted.value("mimeType").toString(), QString("image/png"));
+        QVERIFY(!omitted.contains("data"));
+        QCOMPARE(content.at(2).toObject(), referenced);
+        const auto marker = item->value("compacted").toObject();
+        QCOMPARE(marker.value("policy").toString(), QString("tool-inline-images-v1"));
+        QCOMPARE(marker.value("inline_images").toObject().value("original_bytes").toInteger(), 4);
+        QVERIFY(!compactCompletedReplayItem(*item, cutoff()));
+
+        // A result already trimmed by the text policy keeps that marker and gains this one.
+        auto trimmed = legacy;
+        trimmed.insert("compacted", QJsonObject{{"policy", "tool-result-text-v1"}});
+        const auto upgraded = compactCompletedReplayItem(trimmed, cutoff());
+        QVERIFY(upgraded);
+        QCOMPARE(upgraded->value("compacted").toObject().value("policy").toString(),
+                 QString("tool-result-text-v1"));
+        QVERIFY(upgraded->value("compacted").toObject().contains("inline_images"));
+        // Unknown policies, running calls and invalid cutoffs stay as they are.
+        auto unknown = legacy;
+        unknown.insert("compacted", QJsonObject{{"policy", "future-v9"}});
+        QVERIFY(!compactCompletedReplayItem(unknown, cutoff()));
+        auto running = legacy;
+        running.insert("status", "inProgress");
+        QVERIFY(!compactCompletedReplayItem(running, cutoff()));
+        QVERIFY(!compactCompletedReplayItem(legacy, QDateTime()));
+
+        // Dynamic tools: only data URLs go; a remote URL is a reference, not pixels.
+        const QJsonObject dynamic{
+            {"id", "tool-2"},
+            {"type", "dynamicToolCall"},
+            {"status", "completed"},
+            {"contentItems",
+             QJsonArray{
+                 QJsonObject{{"type", "inputImage"}, {"imageUrl", "data:image/png;base64,QUJD"}},
+                 QJsonObject{{"type", "inputImage"}, {"imageUrl", "https://example.test/a.png"}}}}};
+        const auto stripped = compactCompletedReplayItem(dynamic, cutoff());
+        QVERIFY(stripped);
+        const auto items = stripped->value("contentItems").toArray();
+        QVERIFY(items.at(0).toObject().value("omitted").toBool());
+        QCOMPARE(items.at(1).toObject(), dynamic.value("contentItems").toArray().at(1).toObject());
+    }
+
+    void generatedImageLosesOnlyItsInlinePixels() {
+        const QJsonObject legacy{{"id", "image-1"},
+                                 {"type", "imageGeneration"},
+                                 {"status", "completed"},
+                                 {"revisedPrompt", "a red kite over the sea"},
+                                 {"savedPath", "/synthetic/kite.png"},
+                                 {"result", QString(4096, 'A')}};
+        const auto item = compactCompletedReplayItem(legacy, cutoff());
+        QVERIFY(item);
+        QVERIFY(!item->contains("result"));
+        for (const char* kept : {"id", "type", "status", "revisedPrompt", "savedPath"})
+            QCOMPARE(item->value(kept), legacy.value(kept));
+        const auto marker = item->value("compacted").toObject();
+        QCOMPARE(marker.value("policy").toString(), QString("image-pixels-v1"));
+        QCOMPARE(marker.value("original_bytes").toInteger(), 4096);
+        QCOMPARE(marker.value("retained_bytes").toInteger(), 0);
+        // Idempotent, and nothing else is touched.
+        QVERIFY(!compactCompletedReplayItem(*item, cutoff()));
+        auto referenced = legacy;
+        referenced.insert("result",
+                          QJsonObject{{"content", QJsonArray{QJsonObject{{"type", "image"},
+                                                                         {"media_ref", "m"}}}}});
+        QVERIFY(!compactCompletedReplayItem(referenced, cutoff()));
+        auto noPixels = legacy;
+        noPixels.remove("result");
+        QVERIFY(!compactCompletedReplayItem(noPixels, cutoff()));
+        QVERIFY(!compactCompletedReplayItem(legacy, QDateTime()));
+        QVERIFY(!compactCompletedReplayItem(legacy, QDateTime::currentDateTimeUtc().addDays(1)));
+    }
+    void generatedImageKeepsAPreview_data() {
+        QTest::addColumn<QString>("pixels");
+        QTest::newRow("base64") << QString::fromLatin1(QByteArray("png bytes").toBase64());
+        QTest::newRow("data url") << "data:image/png;base64," +
+                                         QString::fromLatin1(QByteArray("png bytes").toBase64());
+    }
+    void generatedImageKeepsAPreview() {
+        QFETCH(QString, pixels);
+        const QJsonObject legacy{{"id", "image-1"},
+                                 {"type", "imageGeneration"},
+                                 {"status", "completed"},
+                                 {"savedPath", "/synthetic/kite.png"},
+                                 {"result", pixels}};
+        const QJsonObject reference{
+            {"type", "image"}, {"media_ref", "media:abc.jpg"}, {"width", 512}, {"height", 384}};
+        QByteArray seen;
+        const auto item =
+            compactCompletedReplayItem(legacy, cutoff(), [&](const QByteArray& image) {
+                seen = image;
+                return reference;
+            });
+        QVERIFY(item);
+        QCOMPARE(seen, QByteArray("png bytes"));
+        QCOMPARE(item->value("result").toObject(),
+                 (QJsonObject{{"content", QJsonArray{reference}}}));
+        QCOMPARE(item->value("savedPath"), legacy.value("savedPath"));
+        const auto marker = item->value("compacted").toObject();
+        QCOMPARE(marker.value("policy").toString(), QString("image-preview-v1"));
+        QCOMPARE(marker.value("original_bytes").toInteger(), pixels.size());
+        QVERIFY(marker.value("retained_bytes").toInteger() > 0);
+        // The reference it now holds is what newer builds journal, so it is left alone.
+        QVERIFY(!compactCompletedReplayItem(*item, cutoff(), [](const QByteArray&) {
+            return QJsonObject{{"media_ref", "again"}};
+        }));
+    }
+    void generatedImageWithoutAPreviewKeepsItsCaption() {
+        const QJsonObject legacy{
+            {"type", "imageGeneration"}, {"savedPath", "/synthetic/kite.png"}, {"result", "AAAA"}};
+        const auto item = compactCompletedReplayItem(
+            legacy, cutoff(), [](const QByteArray&) { return QJsonObject(); });
+        QVERIFY(item);
+        QVERIFY(!item->contains("result"));
+        QCOMPARE(item->value("compacted").toObject().value("policy").toString(),
+                 QString("image-pixels-v1"));
+        // Text that is not base64 is never handed to the preview.
+        bool called = false;
+        auto broken = legacy;
+        broken.insert("result", "not*base64");
+        QVERIFY(compactCompletedReplayItem(broken, cutoff(), [&](const QByteArray&) {
+            called = true;
+            return QJsonObject{{"media_ref", "m"}};
+        }));
+        QVERIFY(!called);
+    }
+    void toolResultImagesKeepUpToFourPreviews() {
+        QJsonArray content{QJsonObject{{"type", "text"}, {"text", "captured"}}};
+        for (int index = 0; index < 6; ++index)
+            content.append(QJsonObject{
+                {"type", "image"},
+                {"mimeType", "image/png"},
+                {"data",
+                 QString::fromLatin1(QByteArray("png-").append(char('0' + index)).toBase64())}});
+        const QJsonObject call{
+            {"type", "mcpToolCall"},
+            {"status", "completed"},
+            {"result", QJsonObject{{"content", content}}},
+            {"contentItems",
+             QJsonArray{
+                 QJsonObject{{"type", "inputImage"},
+                             {"imageUrl", "data:image/png;base64," +
+                                              QString::fromLatin1(QByteArray("in").toBase64())}}}}};
+        QList<QByteArray> seen;
+        const auto item = compactCompletedReplayItem(call, cutoff(), [&](const QByteArray& image) {
+            seen.append(image);
+            return QJsonObject{{"type", "image"},
+                               {"media_ref", "sha256:" + QString::fromLatin1(image)}};
+        });
+        QVERIFY(item);
+        QCOMPARE(seen, (QList<QByteArray>{"png-0", "png-1", "png-2", "png-3"}));
+        const auto blocks = item->value("result").toObject().value("content").toArray();
+        QCOMPARE(blocks.size(), 7);
+        QCOMPARE(blocks.at(0).toObject().value("text").toString(), QString("captured"));
+        for (int index = 1; index <= 4; ++index)
+            QCOMPARE(blocks.at(index).toObject().value("media_ref").toString(),
+                     QString("sha256:png-%1").arg(index - 1));
+        for (int index = 5; index <= 6; ++index)
+            QCOMPARE(blocks.at(index).toObject().value("reason").toString(),
+                     QString("history_retention"));
+        // Input images are never drawn, so they stay placeholders.
+        QVERIFY(item->value("contentItems").toArray().at(0).toObject().value("omitted").toBool());
+        const auto marker = item->value("compacted").toObject().value("inline_images").toObject();
+        QCOMPARE(marker.value("policy").toString(), QString("tool-inline-images-v1"));
+        QCOMPARE(marker.value("previews").toInt(), 4);
+        QVERIFY(marker.value("retained_bytes").toInteger() > 0);
+        QVERIFY(!compactCompletedReplayItem(*item, cutoff(), [](const QByteArray&) {
+            return QJsonObject{{"media_ref", "again"}};
+        }));
+        // Without a preview every image becomes a placeholder, as before, and a preview that
+        // keeps failing is tried no more than four times.
+        int attempts = 0;
+        const auto plain = compactCompletedReplayItem(call, cutoff(), [&](const QByteArray&) {
+            ++attempts;
+            return QJsonObject();
+        });
+        QCOMPARE(attempts, 4);
+        QVERIFY(plain);
+        QVERIFY(!plain->value("compacted")
+                     .toObject()
+                     .value("inline_images")
+                     .toObject()
+                     .contains("previews"));
+        QVERIFY(plain->value("result")
+                    .toObject()
+                    .value("content")
+                    .toArray()
+                    .at(1)
+                    .toObject()
+                    .value("omitted")
+                    .toBool());
     }
 };
 QTEST_GUILESS_MAIN(ReplayDetailCompactorTest)

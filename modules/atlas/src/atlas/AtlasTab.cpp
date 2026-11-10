@@ -115,15 +115,7 @@ QLabel#atlasLastValidNotice { color:@secondary@; background:@raised@; border-bot
 }
 
 QString npmPath() {
-    auto paths = QProcessEnvironment::systemEnvironment()
-                     .value(QStringLiteral("PATH"))
-                     .split(QDir::listSeparator(), Qt::SkipEmptyParts);
-    paths << QStringLiteral("/opt/homebrew/bin") << QStringLiteral("/usr/local/bin");
-    const QDir versions(QDir::homePath() + QStringLiteral("/.nvm/versions/node"));
-    for (const auto& version :
-         versions.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name | QDir::Reversed))
-        paths.append(versions.filePath(version + QStringLiteral("/bin")));
-    return QStandardPaths::findExecutable(QStringLiteral("npm"), paths);
+    return QStandardPaths::findExecutable(QStringLiteral("npm"), AtlasProcess::toolSearchPaths());
 }
 
 class AtlasCard final : public QStyledItemDelegate {

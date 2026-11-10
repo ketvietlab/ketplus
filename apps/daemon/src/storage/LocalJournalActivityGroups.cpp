@@ -143,8 +143,8 @@ QJsonObject failure(const QString& code, const QString& message) {
 
 bool LocalJournal::initializeActivityGroups() {
     QSqlQuery query(database_);
-    // A journal indexed before activity_files existed lists its groups' files once. The table
-    // is created in the backfill's transaction, so an interrupted backfill runs again.
+    // A journal grouped before activity_files existed lists its groups' files after open. The
+    // table and that work's marker are created together, so neither exists without the other.
     bool backfillFiles = false;
     if (query.exec("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN "
                    "('activity_heads','activity_files')") &&
@@ -176,7 +176,8 @@ bool LocalJournal::initializeActivityGroups() {
             return false;
         }
     }
-    // Upgrade old journals once, streaming retained events rather than materializing history.
+    // activity_files and the marker that lists a grouped journal's files land in one
+    // transaction; the listing itself runs after open in bounded passes (ADR 0097).
     if (!database_.transaction()) {
         setError(database_.lastError().text());
         return false;
@@ -189,81 +190,39 @@ bool LocalJournal::initializeActivityGroups() {
             "INTEGER NOT NULL, position INTEGER NOT NULL, path TEXT NOT NULL, destination TEXT NOT "
             "NULL, operation TEXT NOT NULL, added INTEGER NOT NULL, removed INTEGER NOT NULL, "
             "known INTEGER NOT NULL, PRIMARY KEY(session_id,generation,group_cursor,item_id,"
-            "path))"))) {
+            "path))")) ||
+        // Keyset position of the files listing: the last (group, first cursor) listed.
+        !query.exec(QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS activity_files_backfill (session_id TEXT NOT NULL, "
+            "generation INTEGER NOT NULL, after_group INTEGER NOT NULL DEFAULT 0, after_cursor "
+            "INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(session_id,generation))")) ||
+        (backfillFiles && !query.exec(QStringLiteral(
+                              "INSERT OR IGNORE INTO activity_files_backfill"
+                              "(session_id,generation) SELECT id,generation FROM sessions")))) {
         setError(query.lastError().text());
         database_.rollback();
         return false;
-    }
-    QSqlQuery sessions(database_);
-    if (!sessions.exec(QStringLiteral(
-            "SELECT s.id,s.generation,COALESCE(h.indexed_cursor,0) FROM sessions s LEFT JOIN "
-            "activity_heads h ON h.session_id=s.id AND h.generation=s.generation WHERE "
-            "s.last_cursor>COALESCE(h.indexed_cursor,0)"))) {
-        setError(sessions.lastError().text());
-        database_.rollback();
-        return false;
-    }
-    QList<QVariantList> pending;
-    while (sessions.next())
-        pending.append({sessions.value(0), sessions.value(1), sessions.value(2)});
-    sessions.finish();
-    for (const auto& session : pending) {
-        QSqlQuery rows(database_);
-        rows.setForwardOnly(true);
-        rows.prepare("SELECT cursor,turn_sequence,event_type,payload FROM replay_events WHERE "
-                     "session_id=? AND generation=? AND cursor>? ORDER BY cursor");
-        for (const auto& value : session)
-            rows.addBindValue(value);
-        if (!rows.exec()) {
-            setError(rows.lastError().text());
-            database_.rollback();
-            return false;
-        }
-        while (rows.next()) {
-            QString error;
-            if (!updateActivityGroups(
-                    session.at(0).toString(), session.at(1).toLongLong(),
-                    rows.value(0).toLongLong(), rows.value(1).toLongLong(),
-                    rows.value(2).toString(),
-                    QJsonDocument::fromJson(rows.value(3).toString().toUtf8()).object(), &error)) {
-                setError(error);
-                database_.rollback();
-                return false;
-            }
-        }
-    }
-    if (backfillFiles) {
-        QSqlQuery edits(database_);
-        edits.setForwardOnly(true);
-        if (!edits.exec("SELECT a.session_id,a.generation,a.group_cursor,a.item_id,a.first_cursor,"
-                        "r.payload FROM "
-                        "activity_items a JOIN replay_events r ON r.session_id=a.session_id AND "
-                        "r.generation=a.generation AND r.cursor=a.last_cursor WHERE "
-                        "a.family='edit' AND a.group_cursor>0 AND "
-                        "r.event_type='item.completed'")) {
-            setError(edits.lastError().text());
-            database_.rollback();
-            return false;
-        }
-        // One completed edit's payload at a time, rather than every edit in the journal.
-        while (edits.next()) {
-            QString error;
-            const auto payload =
-                QJsonDocument::fromJson(edits.value(5).toString().toUtf8()).object();
-            if (!recordActivityFiles(edits.value(0).toString(), edits.value(1).toLongLong(),
-                                     edits.value(2).toLongLong(), edits.value(3).toString(),
-                                     edits.value(4).toLongLong(), payload.value("item").toObject(),
-                                     &error)) {
-                setError(error);
-                database_.rollback();
-                return false;
-            }
-        }
     }
     if (!database_.commit()) {
         const QString commitError = database_.lastError().text();
         database_.rollback();
         setError(commitError);
+        return false;
+    }
+    // A session indexed behind its history is caught up in bounded passes after open instead
+    // of blocking startup; sessions with new events go first (ADR 0097).
+    if (!query.exec(QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS activity_backfill (session_id TEXT NOT NULL, generation "
+            "INTEGER NOT NULL, wanted INTEGER NOT NULL DEFAULT 0, "
+            "PRIMARY KEY(session_id,generation))")) ||
+        !query.exec(QStringLiteral("CREATE INDEX IF NOT EXISTS activity_backfill_order ON "
+                                   "activity_backfill(wanted DESC)")) ||
+        !query.exec(QStringLiteral(
+            "INSERT OR IGNORE INTO activity_backfill(session_id,generation) "
+            "SELECT s.id,s.generation FROM sessions s "
+            "LEFT JOIN activity_heads h ON h.session_id=s.id AND h.generation=s.generation "
+            "WHERE s.last_cursor>COALESCE(h.indexed_cursor,0)"))) {
+        setError(query.lastError().text());
         return false;
     }
     return true;
@@ -325,6 +284,14 @@ bool LocalJournal::updateActivityGroups(const QString& session, qint64 generatio
                          : QStringLiteral("Activity projection row was not stored.");
         return false;
     };
+    // A session still being indexed indexes this event later, after every earlier one.
+    if (!activityCatchUp_) {
+        bool deferred = false;
+        if (!deferActivityToBackfill(session, generation, &deferred, error))
+            return false;
+        if (deferred)
+            return true;
+    }
     qint64 head = 0;
     QSqlQuery current(database_);
     current.prepare("SELECT group_cursor,turn_sequence FROM activity_heads WHERE session_id=? AND "
@@ -504,6 +471,13 @@ QJsonObject LocalJournal::activitySummaryEvent(const QJsonObject& event) const {
     const auto [group, evicted] = activityMembership(event, id);
     if (group == 0)
         return event;
+    // A partly indexed group would publish an incomplete count, and one whose files are still
+    // being listed an incomplete changed-files list; stay ungrouped until both are drained.
+    bool pending = true;
+    if (!activityProjectionPending(event.value("session_id").toString(),
+                                   event.value("session_generation").toInteger(), &pending) ||
+        pending)
+        return event;
     if (!evicted)
         return activityGroupSummary(event, group);
     // An item that left its group when it completed comes as itself, carrying the group's
@@ -661,16 +635,27 @@ QJsonObject LocalJournal::activityGroupPage(const QString& session, qint64 gener
         return failure("invalid_page", "Activity cursor is out of range.");
     if (requestedRevision >= 0 && requestedRevision != revision)
         return failure("snapshot_changed", "Activity snapshot changed; reload the group.");
+    // Groups are published only once their session is fully indexed (ADR 0097).
+    bool pending = true;
+    QString pendingError;
+    if (!activityBackfillPending(session, generation, &pending, &pendingError))
+        return failure("journal_error", pendingError);
+    if (pending)
+        return failure("unknown_group", "Activity is still being indexed.");
     bool groupRunning = false;
     QSqlQuery exists(database_);
-    exists.prepare("SELECT SUM(running),COUNT(*) FROM activity_summaries WHERE session_id=? AND "
-                   "generation=? AND group_cursor=?");
+    exists.prepare("SELECT SUM(running),COUNT(*),MAX(last_cursor) FROM activity_summaries WHERE "
+                   "session_id=? AND generation=? AND group_cursor=?");
     exists.addBindValue(session);
     exists.addBindValue(generation);
     exists.addBindValue(group);
     if (!exists.exec() || !exists.next() || exists.value(1).toInt() == 0)
         return failure("unknown_group", "This activity group is not retained.");
     groupRunning = exists.value(0).toInt() > 0;
+    // A group's events lie between its first item and its summary's last change, so the read
+    // seeks that span instead of the session's whole history before `after`.
+    const qint64 lower = qMax(after, group - 1);
+    const qint64 upper = qMin(snapshot, exists.value(2).toLongLong());
     QSqlQuery rows(database_);
     rows.prepare("SELECT r.cursor,r.turn_sequence,r.event_type,r.payload,r.sent_at FROM "
                  "replay_events r JOIN activity_items a ON a.session_id=r.session_id AND "
@@ -679,8 +664,7 @@ QJsonObject LocalJournal::activityGroupPage(const QString& session, qint64 gener
                  "AND a.family<>'evicted' AND r.event_type IN "
                  "('item.started','item.completed','command.output_delta') AND "
                  "r.cursor>? AND r.cursor<=? ORDER BY r.cursor LIMIT ?");
-    for (const QVariant& value :
-         QVariantList{session, generation, group, after, snapshot, limit + 1})
+    for (const QVariant& value : QVariantList{session, generation, group, lower, upper, limit + 1})
         rows.addBindValue(value);
     if (!rows.exec())
         return failure("journal_error", rows.lastError().text());

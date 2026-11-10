@@ -3,6 +3,9 @@
 #include "BrowserToolLaunch.h"
 #include "ComputerAgentInstructions.h"
 #include "providers/CursorToolItem.h"
+#include "providers/ProviderFrameValidation.h"
+#include "providers/ProviderResponseEnvelope.h"
+#include "providers/ProviderResponseId.h"
 #include "providers/compat/ProviderVersionProbe.h"
 #include "runtime/ResponseGuidance.h"
 
@@ -22,6 +25,7 @@
 #include <QUuid>
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 #if defined(Q_OS_WIN)
@@ -34,6 +38,7 @@ namespace {
 constexpr qsizetype maximumProviderMessageBytes = 16 * 1024 * 1024;
 constexpr qsizetype maximumStderrBytes = 1024 * 1024;
 constexpr qsizetype maximumImageBytes = 4 * 1024 * 1024;
+constexpr qsizetype maximumCatalogOutputBytes = 1024 * 1024;
 
 QString errorText(const QJsonObject& error) {
     const QString message = error.value(QStringLiteral("message")).toString();
@@ -431,6 +436,15 @@ CursorAdapter::CursorAdapter(const QString& executable, QObject* parent)
                 return;
             }
             noteUnexpectedStop();
+            if (malformedOutput_) {
+                const QString reason =
+                    QStringLiteral("The Cursor ACP process emitted a malformed protocol message.");
+                failPending(reason);
+                // Initialization already publishes its own failure; do not emit it twice.
+                if (!stopping_)
+                    emit stopped(reason);
+                return;
+            }
             const QString reason =
                 QStringLiteral("The Cursor ACP process exited unexpectedly.%1").arg(stderrTail());
             failPending(reason);
@@ -989,6 +1003,7 @@ void CursorAdapter::ensureStarted() {
         return;
     }
     versionCleared_ = false;
+    malformedOutput_ = false;
     stopping_ = false;
     starting_ = true;
     stdoutBuffer_.clear();
@@ -1164,38 +1179,74 @@ void CursorAdapter::startCatalogProcess() {
         finishCatalog(modelCatalog());
         return;
     }
-    catalogProcess_ = new QProcess(this);
-    catalogProcess_->setProcessChannelMode(QProcess::SeparateChannels);
-    configureHiddenProcess(catalogProcess_);
+    QProcess* process = new QProcess(this);
+    catalogProcess_ = process;
+    process->setProcessChannelMode(QProcess::SeparateChannels);
+    configureHiddenProcess(process);
     QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
     environment.insert(QStringLiteral("NO_COLOR"), QStringLiteral("1"));
     environment.insert(QStringLiteral("TERM"), QStringLiteral("dumb"));
-    catalogProcess_->setProcessEnvironment(environment);
+    process->setProcessEnvironment(environment);
     const ProcessInvocation invocation = listModelsInvocation(executable_);
-    catalogProcess_->setProgram(invocation.program);
-    catalogProcess_->setArguments(invocation.arguments);
-    connect(catalogProcess_, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
-            [this](const int, const QProcess::ExitStatus) {
-                catalogTimer_->stop();
-                QJsonArray models;
-                if (catalogProcess_ != nullptr)
-                    models =
-                        parseModelList(QString::fromUtf8(catalogProcess_->readAllStandardOutput()));
-                if (catalogProcess_ != nullptr)
-                    catalogProcess_->deleteLater();
-                catalogProcess_ = nullptr;
-                finishCatalog(models.isEmpty() ? modelCatalog() : models);
-            });
-    connect(catalogProcess_, &QProcess::errorOccurred, this, [this](const QProcess::ProcessError) {
-        if (catalogProcess_ == nullptr || catalogProcess_->state() != QProcess::NotRunning)
+    process->setProgram(invocation.program);
+    process->setArguments(invocation.arguments);
+    connect(process, &QProcess::started, process, &QProcess::closeWriteChannel);
+    struct Output final {
+        QByteArray stdoutBytes;
+        qsizetype totalBytes{0};
+        bool rejected{false};
+    };
+    const auto output = std::make_shared<Output>();
+    const auto readOutput = [this, process, output](QProcess::ProcessChannel channel) {
+        if (catalogProcess_ != process || output->rejected)
             return;
+        process->setReadChannel(channel);
+        while (process->bytesAvailable() > 0) {
+            const qsizetype remaining = maximumCatalogOutputBytes - output->totalBytes;
+            const QByteArray chunk = process->read(qMin<qsizetype>(64 * 1024, remaining + 1));
+            if (chunk.isEmpty())
+                break;
+            if (chunk.size() > remaining) {
+                output->rejected = true;
+                output->stdoutBytes.clear();
+                process->closeReadChannel(QProcess::StandardOutput);
+                process->closeReadChannel(QProcess::StandardError);
+                process->kill();
+                return;
+            }
+            output->totalBytes += chunk.size();
+            if (channel == QProcess::StandardOutput)
+                output->stdoutBytes.append(chunk);
+        }
+    };
+    const auto complete = [this, process, output](bool successful) {
+        if (catalogProcess_ != process)
+            return;
+        const QJsonArray models = successful && !output->rejected
+                                      ? parseModelList(QString::fromUtf8(output->stdoutBytes))
+                                      : QJsonArray{};
         catalogTimer_->stop();
-        catalogProcess_->deleteLater();
+        process->disconnect(this);
+        process->deleteLater();
         catalogProcess_ = nullptr;
-        finishCatalog(modelCatalog());
+        finishCatalog(models.isEmpty() ? modelCatalog() : models);
+    };
+    connect(process, &QProcess::readyReadStandardOutput, this,
+            [readOutput] { readOutput(QProcess::StandardOutput); });
+    connect(process, &QProcess::readyReadStandardError, this,
+            [readOutput] { readOutput(QProcess::StandardError); });
+    connect(process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
+            [readOutput, complete](int exitCode, QProcess::ExitStatus status) {
+                readOutput(QProcess::StandardOutput);
+                readOutput(QProcess::StandardError);
+                complete(status == QProcess::NormalExit && exitCode == 0);
+            });
+    connect(process, &QProcess::errorOccurred, this, [complete](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart)
+            complete(false);
     });
     catalogTimer_->start(15 * 1000);
-    catalogProcess_->start();
+    process->start();
 }
 
 void CursorAdapter::finishCatalog(const QJsonArray& models) {
@@ -1480,30 +1531,71 @@ void CursorAdapter::sendObject(const QJsonObject& object) {
 }
 
 void CursorAdapter::consumeStdout() {
-    stdoutBuffer_.append(process_->readAllStandardOutput());
-    if (stdoutBuffer_.size() > maximumProviderMessageBytes && !stdoutBuffer_.contains('\n')) {
-        const QString reason =
-            QStringLiteral("The Cursor ACP process emitted an oversized message.");
-        stdoutBuffer_.clear();
-        failPending(reason);
-        emit stopped(reason);
-        process_->kill();
+    if (malformedOutput_) {
+        process_->setReadChannel(QProcess::StandardOutput);
+        while (process_->bytesAvailable() > 0)
+            if (process_->read(64 * 1024).isEmpty())
+                break;
         return;
     }
-    qsizetype newline = -1;
-    while ((newline = stdoutBuffer_.indexOf('\n')) >= 0) {
-        const QByteArray line = stdoutBuffer_.left(newline).trimmed();
-        stdoutBuffer_.remove(0, newline + 1);
-        if (!line.isEmpty())
-            consumeLine(line);
+    constexpr qint64 readChunkBytes = 64 * 1024;
+    process_->setReadChannel(QProcess::StandardOutput);
+    while (process_->bytesAvailable() > 0) {
+        const QByteArray chunk = process_->read(readChunkBytes);
+        if (chunk.isEmpty())
+            return;
+        stdoutBuffer_.append(chunk);
+        while (true) {
+            const qsizetype newline = stdoutBuffer_.indexOf('\n');
+            const qsizetype lineBytes = newline < 0 ? stdoutBuffer_.size() : newline;
+            if (lineBytes > maximumProviderMessageBytes) {
+                const QString reason =
+                    QStringLiteral("The Cursor ACP process emitted an oversized message.");
+                stdoutBuffer_.clear();
+                // Quarantine this process generation, including already-buffered output.
+                // Closing a read channel alone leaves its received bytes available.
+                process_->closeReadChannel(QProcess::StandardOutput);
+                while (process_->bytesAvailable() > 0)
+                    if (process_->read(readChunkBytes).isEmpty())
+                        break;
+                failPending(reason);
+                // A pending initialize has published this stop itself and marked it. Otherwise
+                // publish it here, once: the exit that follows must not publish another or
+                // count as a second crash.
+                if (!stopping_) {
+                    noteUnexpectedStop();
+                    emit stopped(reason);
+                    stopping_ = true;
+                }
+                process_->kill();
+                return;
+            }
+            if (newline < 0)
+                break;
+            const QByteArray line = stdoutBuffer_.left(newline).trimmed();
+            stdoutBuffer_.remove(0, newline + 1);
+            if (!line.isEmpty())
+                consumeLine(line);
+            if (malformedOutput_)
+                return;
+        }
     }
 }
 
 void CursorAdapter::consumeLine(const QByteArray& line) {
     QJsonParseError parseError;
     const QJsonDocument document = QJsonDocument::fromJson(line, &parseError);
-    if (parseError.error != QJsonParseError::NoError || !document.isObject())
+    if (!providerFrameHasValidControlBytes(line) || parseError.error != QJsonParseError::NoError ||
+        !document.isObject()) {
+        // No reliable call identity survives a broken frame. Quarantine the whole
+        // generation; finished settles pending calls through the existing lifecycle.
+        malformedOutput_ = true;
+        setReady(false);
+        stdoutBuffer_.clear();
+        process_->closeReadChannel(QProcess::StandardOutput);
+        process_->kill();
         return;
+    }
     const QJsonObject object = document.object();
     const QString method = object.value(QStringLiteral("method")).toString();
     if (method == QStringLiteral("session/update")) {
@@ -1580,12 +1672,17 @@ void CursorAdapter::consumeLine(const QByteArray& line) {
     }
     if (!object.contains(QStringLiteral("id")))
         return;
-    const quint64 id = object.value(QStringLiteral("id")).toVariant().toULongLong();
+    const auto responseId = providerResponseId(object.value(QStringLiteral("id")));
+    if (!responseId)
+        return;
+    const quint64 id = *responseId;
     const auto callback = pending_.take(id);
     const QString requestMethod = pendingMethods_.take(id);
     if (!callback)
         return;
-    if (object.contains(QStringLiteral("error"))) {
+    if (!validProviderResponseEnvelope(object)) {
+        callback({}, QStringLiteral("Malformed provider response envelope."));
+    } else if (object.contains(QStringLiteral("error"))) {
         const QJsonObject error = object.value(QStringLiteral("error")).toObject();
         if (error.value(QStringLiteral("code")).toInt() == -32601)
             (void)narrowing_.methodNotFound(requestMethod);
@@ -1602,6 +1699,11 @@ void CursorAdapter::failPending(const QString& reason) {
     const auto queued = std::exchange(queued_, {});
     for (const QueuedCall& call : queued)
         call.callback({}, reason);
+    // The next process numbers its requests from the start again; an answer to one of them
+    // must not take the shape of an unanswered request this process left behind.
+    questionOptionsByRequest_.clear();
+    permissionOptionsByRequest_.clear();
+    planRequests_.clear();
     startingSessions_.clear();
     browserSessions_.clear();
     agentSessions_.clear();

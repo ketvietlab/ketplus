@@ -84,7 +84,16 @@ void AtlasLiveTunnel::drain(quint32 id) {
     const auto body = it->socket->read(qMin<qint64>(16384, it->sendCredit));
     if (!body.isEmpty()) {
         it->sendCredit -= body.size();
-        send({{"kind", "data"}, {"stream", int(id)}}, body);
+        if (!send({{"kind", "data"}, {"stream", int(id)}}, body))
+            return;
+    }
+    // WebSocket writes can drain the last bytes after TCP EOF. The peer need not
+    // grant more credit once it has received the complete body.
+    it = streams_.find(id);
+    if (it != streams_.end() && it->socket->state() == QAbstractSocket::UnconnectedState &&
+        it->socket->bytesAvailable() == 0) {
+        send({{"kind", "end"}, {"stream", int(id)}});
+        remove(id);
     }
 }
 void AtlasLiveTunnel::receive(const QByteArray& wire) {

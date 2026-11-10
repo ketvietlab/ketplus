@@ -1,0 +1,58 @@
+{
+  "scope": "H6 test fixture portability only; no production/UI change",
+  "baseline": {
+    "run": "https://github.com/ketvietlab/ketplus/actions/runs/42393055458",
+    "head": "5fa91c0dde3e19edc00ecbe2f764390aa47c77c7",
+    "windows_job": 128464564932,
+    "failures": [
+      "GitParserTest::diffsSymlinksAsLinks",
+      "GitParserTest::diffsFilesBeforeTheFirstCommit",
+      "NavigationTest::listsRepositoryFilesByIgnoreRules"
+    ],
+    "cause": "QFile::link uses Windows shortcuts, not filesystem symbolic links",
+    "qt_documentation": "https://doc.qt.io/qt-6/qfile.html#link"
+  },
+  "fix": "Native file/directory symbolic links with verified type; repository-local core.symlinks=true",
+  "validation_pending": [
+    "independent exact-head review and merge"
+  ],
+  "outside_scope": [
+    "Windows RefactorWave1ContractTest::themeInstallsTheKetStyle tooltip assertion",
+    "real application UI changes",
+    "packaging/deployment/installation",
+    "macOS PtyProcessTest::honorsSynchronizedOutputTransactions paint assertion (TerminalView UI)"
+  ],
+  "validation": {
+    "local_lite_first": "16/16 PASS, 14.96s",
+    "hosted_fixed": {
+      "run": "https://github.com/ketvietlab/ketplus/actions/runs/42393872638",
+      "head": "7834290d",
+      "windows_job": 128466993904,
+      "GitParserTest": "11/11 PASS",
+      "NavigationTest": "12/12 PASS",
+      "Windows_Lite": "14/15 targets PASS; only tooltip/theme target fails",
+      "other_completed": [
+        "browser PASS",
+        "Lite macOS PASS",
+        "Lite Ubuntu PASS"
+      ]
+    },
+    "cleanup_followup": "Remove directory symlink before its temporary target disappears; focused macOS regression 3/3 PASS, target preserved",
+    "final_local": {
+      "source_head": "d55390c5",
+      "Lite": "16/16 PASS, 10.43s",
+      "Pro": "96/96 PASS, 306.16s",
+      "Release_build": "PASS"
+    },
+    "hosted_cleanup": {
+      "run": "https://github.com/ketvietlab/ketplus/actions/runs/42394780036",
+      "head": "d55390c5",
+      "Windows_Git": "11/11 PASS",
+      "Windows_Navigation": "12/12 PASS; no QTemporaryDir cleanup warning",
+      "Windows_Lite": "14/15 targets PASS; tooltip/theme fails",
+      "macOS_Lite": "15/16 targets PASS; TerminalView synchronized-output paint assertion fails (1 paint vs 0)",
+      "other_jobs": "browser, Lite Ubuntu, Linux daemon staging/runtime PASS; Pro macOS 96/96 PASS, 707.59s",
+      "overall": "4/6 jobs PASS; macOS Lite and Windows Lite fail their separate UI assertions"
+    }
+  }
+}

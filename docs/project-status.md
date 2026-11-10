@@ -13,6 +13,15 @@ The UI stack now composes shared pane headers, find controls, Quick Open, Markdo
 This file distinguishes current code from target architecture. Update it when a
 milestone changes state.
 
+Tombstone catalog hardening (ADR 0091) adds bounded, opt-in keyset pages and
+revision-fenced shared transport consumption by Desktop refresh and
+`ketplusctl sessions`. Concurrent mutation/reopen invalidates a cursor; retries
+are capped and CLI history is spooled privately. Legacy catalogs exceeding the bounded
+response return an explicit upgrade error. This is backend/transport work;
+live-catalog bounds and the remaining #68 acceptance gates stay open. Incremental discovery now requests only live sessions
+(ADR 0092), avoiding tombstone walks and repeated deletion signals. Full refresh
+and CLI retain complete reconciliation; older daemon replies remain compatible.
+
 ## Implemented
 
 - The unreviewed workspaces UI layer consumes kit worktree actions/badges,
@@ -49,6 +58,107 @@ milestone changes state.
   resources resolve token placeholders at rendering time. Overall UI acceptance
   and rollout remain deferred; see `tasks/ui-implementation-stack.md`.
 
+- The activity-index backfill runs after open in bounded passes (ADR 0097), so
+  the first open after upgrade no longer indexes the whole history. A session's
+  activity appears ungrouped until it is indexed; sessions with new events go first.
+
+- Legacy turn-number, title and turn-start backfills run only for journals below
+  format 1 (ADR 0096), so opening a stamped journal no longer rescans history.
+
+- The journal records its format in `PRAGMA user_version` (ADR 0095). A daemon
+  refuses, without writing, a journal newer than it supports; startup compaction
+  leaves it untouched. Earlier releases do not read the marker.
+
+- Session fork copies one read snapshot in bounded event-loop passes into an
+  unlisted identity and stores the fork in one final transaction (ADR 0094).
+  Failed, abandoned and interrupted copies become history purge work.
+
+- Session deletion commits the tombstone, cleanup work and per-generation state
+  with one bounded history batch (ADR 0093). Remaining history is unreachable and
+  drained in bounded event-loop passes; the tombstone outlives the purge marker.
+
+- Daemon Atlas readiness requires a complete line for the owned viewer port and
+  ignores partial/embedded/truncated-prefix or post-stop output (ADR 0083). Start
+  results are delivered once even if the process exits immediately after ready.
+  Synthetic CLI cases and the full Pro suite pass; executable/port trust and
+  wider tunnel/renderer lifetime acceptance remain separate.
+
+- Atlas process readiness requires a complete banner for the current attempt's
+  selected loopback port, including truncation/restart and stop-time guards
+  (ADR 0081). Executable/listener identity and broader lifecycle remain open.
+
+- The local Qt client applies transport backpressure before hello (ADR 0079),
+  limiting unread socket bytes to one maximum frame plus header while preserving
+  valid pipelined events. Broader IPC work/queue/lifetime bounds remain open.
+
+- Local daemon/client credential reads share a 4-KiB raw-file bound (ADR 0078).
+  Unix admission checks the opened descriptor's ownership/type/permissions;
+  unsupported files remain intact and client reconnect can recover after repair.
+
+- Accepted local IPC sockets bound Qt's unread receive buffer to one maximum
+  frame plus header (ADR 0077). Pipelined exact-limit requests resume without
+  loss after dispatch pauses, both before and after authentication.
+
+- Local turn acceptance commits state/configuration and its two/three events
+  together before publication (ADR 0076). Failed queued/configuration/projection/
+  commit writes leave no accepted prompt; repair/retry and independent-reader
+  visibility are covered. Whole-command idempotency/crash recovery remains open.
+
+- Reference-based previews use bounded validated ownership and verify blob
+  SHA-256 before decoding the same byte snapshot (ADR 0069). Unknown metadata,
+  linked roots and mismatched bytes remain intact and return unavailable.
+
+- Fork prepares validated media ownership before committing copied history
+  (ADR 0068). Failed preparation rolls back the journal; conflicting destination
+  metadata is preserved. Matching prepared ownership permits retry after a
+  database commit failure; reopen cleanup preserves source-owned images.
+
+- Image publication requires a checked atomic ownership-file update (ADR 0067).
+  Invalid metadata is preserved, repeated hashes are deduplicated and failed
+  writes cannot publish successful new references. Fork-copy and orphan bounds
+  remain separate work.
+
+- Long-lived provider stderr draining has a Codex/Claude/Cursor process regression:
+  two 32-MiB floods retain only the newest 1 MiB while stdout round trips and
+  subsequent calls continue on the same process. The fixture uses no real CLI.
+
+- ACP v1 capability negotiation requires explicit boolean support (ADR 0090).
+  Missing/mistyped loadSession and image flags no longer retain baseline support;
+  Cursor does not issue session/load when it was not advertised.
+
+- Malformed normal-sized provider frames reject their process generation (ADR 0089).
+  Syntax/UTF-8/non-object frames and raw control bytes cannot be followed by a
+  dispatched suffix. Pending calls receive a static error and a fresh process can
+  recover; method schemas and absent-response deadlines remain separate.
+
+- Matched provider responses require one valid result/error envelope (ADR 0075).
+  Malformed replies fail their callback once, without successful initialization,
+  unrelated-call failure or echoing malformed payloads. Null void results and
+  Claude message-only errors stay compatible; method schemas remain separate.
+
+- Provider responses preserve numeric call identity (ADR 0074): strings, booleans
+  and fractional ids cannot consume pending calls in Codex, Claude or Cursor,
+  including Codex oversized responses. Valid replies still complete exactly once.
+
+- Cursor model-catalog subprocesses drain both channels while running and enforce
+  a shared 1-MiB output budget (ADR 0088). Excess output and unsuccessful exits use
+  the existing fallback catalog; successful exact-budget output remains usable.
+
+- Provider version probes bound merged output while reading and require successful
+  exit before accepting a banner (ADR 0072). Concurrent executable generations
+  retain their own result; failed probes remain retryable without a cached version.
+
+- Claude/Cursor stdout enforces the 16-MiB limit per raw line before parsing,
+  including complete lines and partial suffixes after valid lines (ADR 0071).
+  Bounded reads and failure draining preserve valid frames and fresh generations.
+
+- Oversized provider routing uses bounded JSON string decoding and structural
+  path segments (ADR 0073). Invalid captured metadata withholds all routing fields
+  for the line; valid escapes/Unicode and subsequent messages remain usable.
+
+- Oversized Codex line scanning retains at most 64 routing frames, tracking deeper
+  containers with a scalar depth (ADR 0070). Shallow fields after the nested value
+  still route correctly; broader provider framing remains under audit.
 - Existing media blobs are validated before dedup returns a reference (ADR 0066):
   exact bounded bytes, regular nonsymlink files and owner-only permissions.
   Invalid entries remain intact for repair; reference durability remains open.
@@ -63,9 +173,11 @@ milestone changes state.
   partial indexes restrict settlement checks to running rows in the target turn.
   Large running turns and initial index construction remain separate bounds work.
 
-- Failed activity-backfill commits now preserve their diagnostic and release the
-  write transaction (ADR 0064). A separate connection can repair and reopen while
-  the failed journal object remains alive; broader startup recovery remains open.
+- Failed activity-backfill commits preserve their diagnostic and release the
+  write transaction (ADR 0064). Any failed constructor stage also closes the
+  journal connection (ADR 0086): subsequent operations cannot revive or mutate
+  that object. A separate connection can repair and a fresh object reopen while
+  the failed object remains alive; broader startup recovery remains open.
 
 - Media cleanup requires a complete bounded reference catalog before deleting
   metadata or image bytes (ADR 0065). Unknown shapes, symlinks and read failures
@@ -151,6 +263,18 @@ milestone changes state.
   validation and transactional replay/blob cleanup preserve corrupt, shared,
   unacknowledged and unsupported payloads (ADR 0047). Images, legacy monolithic
   blobs and larger payloads remain outside this lane.
+
+- Generated images that older Codex builds journaled inline lose only their unused
+  base64 pixels once eligible, one large payload of at most 16 MiB per idle pass,
+  keeping prompt and saved path (ADR 0098). Inline images in older MCP and dynamic
+  tool results become placeholders that keep their slot (ADR 0099). Previews of
+  compacted images remain #128 work.
+
+- The daemon records when a conversation is archived (`session.set_archived`,
+  `archived_at`). It deletes conversations archived for more than 30 days, one
+  per idle pass, through `session.delete` (ADR 0100). Desktop sends archive,
+  restore and worktree archive to the daemon and pushes earlier local archive
+  state once; the Storage setting is still to come.
 
 - The owner-only size-policy backend supports revisioned 1/2/5/10 GB SQLite-page
   targets and warning status (ADR 0046). Recent-detail pressure is opt-in via an
@@ -406,8 +530,9 @@ milestone changes state.
   device authorization and a durable zero-session workspace catalog. A Qt
   Control v2 client backend is available, but remote Desktop UI/composition
   remains deferred. See `linux-headless-daemon.md` for coverage and acceptance.
-- Conversation and linked-worktree visibility can be archived locally without
-  deleting history or stopping an active turn. Archived items are restored only
+- Conversation and linked-worktree visibility can be archived without
+  deleting history or stopping an active turn. The daemon deletes a
+  conversation 30 days after it was archived (ADR 0100). Archived items are restored only
   from Settings; active archived conversations retain an explicit Stop action.
 - Conversation fork (ADR 0016): "Fork this conversation" in the conversation
   name and transcript right-click menus copies an idle Codex or Claude
@@ -554,7 +679,6 @@ an Open action. A provider failure reads as the kit's danger banner; on the late
 while the conversation is idle, Retry sends that turn's prompt again as a new turn (not for
 a prompt with images, one from another agent, or while the composer holds attachments). Composer block line-height matches
 the transcript at 1.75; focused Qt tests cover Vietnamese single-line sizing and composer undo.
-
 
 ## Qt design mock
 

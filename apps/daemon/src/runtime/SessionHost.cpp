@@ -17,6 +17,7 @@
 #include "CodexServerRequests.h"
 #include "ComputerToolLaunch.h"
 
+#include <QBuffer>
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
@@ -32,6 +33,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <utility>
 
@@ -310,6 +312,21 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAda
     : QObject(parent), catalogCache_(this), journal_(journal), adapter_(adapter),
       approvals_(new ApprovalBroker(this)),
       mediaStore_(McpMediaStore::directoryForJournal(journal->databasePath())) {
+    mediaReads_.setMaxThreadCount(mediaReadThreads);
+    // A generated image whose inline pixels history retention drops keeps a 512 px preview.
+    journal_->setImagePreviewWriter([this](const QByteArray& image, const QString& sessionId) {
+        QBuffer source;
+        source.setData(image);
+        if (!source.open(QIODevice::ReadOnly))
+            return QJsonObject();
+        const auto preview = McpMediaStore::encodePreview(&source, 512);
+        if (!preview.value("ok").toBool())
+            return QJsonObject();
+        const auto jpeg =
+            QByteArray::fromBase64(preview.value("data").toString().toLatin1(),
+                                   QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
+        return mediaStore_.storeImage(jpeg, "image/jpeg", sessionId);
+    });
     deltaFlush_.setSingleShot(true);
     deltaFlush_.setInterval(deltaCoalesceMs);
     connect(&deltaFlush_, &QTimer::timeout, this, &SessionHost::flushDeltas);
@@ -536,7 +553,7 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& request, const QString
     } else if (type.startsWith("storage.retention.")) {
         result = storageRetention(type, request.value("payload").toObject());
     } else if (type == QStringLiteral("session.list")) {
-        result = listSessions();
+        result = listSessions(request);
     } else if (type == QStringLiteral("session.attach") ||
                type == QStringLiteral("session.events_after")) {
         result = eventsAfter(request);
@@ -568,6 +585,8 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& request, const QString
         result = renameSession(request);
     } else if (type == QStringLiteral("session.mark_seen")) {
         result = markSessionSeen(request);
+    } else if (type == QStringLiteral("session.set_archived")) {
+        result = setSessionArchived(request);
     } else if (type == QStringLiteral("session.delete")) {
         result = deleteSession(request);
     } else if (type == QStringLiteral("session.output.read") ||
@@ -737,51 +756,6 @@ void SessionHost::handleProviderQuery(
         return;
     }
     callback({}, QStringLiteral("Unknown provider query."));
-}
-
-QJsonObject SessionHost::listSessions() const {
-    QJsonArray values;
-    const QHash<QString, QString> numbers = journal_->conversationNumbers();
-    const QHash<QString, QJsonObject> agentTurns = agentTurnSenders();
-    for (const Session& session : sessions_) {
-        const StoredSession& stored = session.stored;
-        QJsonObject value{{QStringLiteral("session_id"), stored.id},
-                          {QStringLiteral("session_generation"), stored.generation},
-                          {QStringLiteral("worktree_path"), stored.worktreePath},
-                          {QStringLiteral("context_revision"), stored.contextRevision},
-                          {"configuration_revision", stored.configurationRevision},
-                          {"effective", configurationOf(stored, {}).value("effective")},
-                          {QStringLiteral("conversation_path"), journal_->conversationPath(stored)},
-                          {QStringLiteral("adapter"), stored.adapter},
-                          {QStringLiteral("title"), stored.title},
-                          {QStringLiteral("state"), stored.state},
-                          {QStringLiteral("current_turn_sequence"), stored.currentTurnSequence},
-                          {QStringLiteral("last_event_cursor"), stored.lastCursor},
-                          {QStringLiteral("last_seen_cursor"), stored.lastSeenCursor},
-                          {QStringLiteral("last_turn_started_at"), stored.lastTurnStartedAt}};
-        if (const QString number = numbers.value(stored.id); !number.isEmpty())
-            value.insert(QStringLiteral("number"), number);
-        if (const auto sender = agentTurns.constFind(stored.id); sender != agentTurns.cend())
-            value.insert(QStringLiteral("agent_turn"), *sender);
-        if (!session.backgroundTasks.isEmpty())
-            value.insert(QStringLiteral("background_tasks"), session.backgroundTasks);
-        values.append(value);
-    }
-    return ok({{QStringLiteral("sessions"), values},
-               {QStringLiteral("deleted_sessions"), journal_->sessionTombstones()},
-               {QStringLiteral("worktree_context_version"), 1},
-               {QStringLiteral("transcript_window_version"), 1},
-               {QStringLiteral("transcript_large_event_version"), 1},
-               {QStringLiteral("transcript_large_event_max_bytes"), 32 * 1024 * 1024},
-               {QStringLiteral("transcript_large_event_fragment_bytes"), 128 * 1024},
-               {QStringLiteral("transcript_window_max_events"), 128},
-               {QStringLiteral("transcript_window_max_bytes"), 512 * 1024},
-               {QStringLiteral("transcript_window_max_turns"),
-                LocalJournal::maximumTranscriptWindowTurns},
-               {QStringLiteral("transcript_window_after_cursor"), true},
-               {QStringLiteral("replay_page_max_events"), protocol::maximumReplayEvents},
-               {QStringLiteral("replay_page_max_bytes"),
-                static_cast<qint64>(protocol::maximumReplayPayloadBytes)}});
 }
 
 QJsonObject SessionHost::configuration(const QJsonObject& request,
@@ -1294,31 +1268,44 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
         return failure;
     // A provider handoff starts a fresh native context, including on A -> B -> A. Only the
     // current conversation transcript carries context forward; retired threads are cleanup refs.
+    // The note that points the new provider at the transcript is delivered only with a turn
+    // the provider accepted: handoffFrom stays set until its turn/start succeeds, so a turn
+    // rejected by the journal or the provider hands off again on the next attempt instead of
+    // starting the new provider blind.
+    QString handoffTranscript;
     if (it->stored.adapter != adapter) {
+        const QString previousAdapter = it->stored.adapter;
+        const QString previousThread = it->stored.threadId;
+        const QString previousThreads = it->stored.providerThreads;
+        const bool previousAttached = it->attachedToProvider;
         const auto failHandoff = [&](const QString& reason) {
+            // Nothing was journaled: the conversation stays with its previous provider.
+            it->stored.adapter = previousAdapter;
+            it->stored.threadId = previousThread;
+            it->stored.providerThreads = previousThreads;
+            it->attachedToProvider = previousAttached;
+            if (!previousThread.isEmpty())
+                sessionsByThread_.insert(previousThread, sessionId);
             for (const QString& heldPath : std::exchange(it->materializedAttachments, {}))
                 QFile::remove(heldPath);
             for (const QString& id : std::exchange(it->stagedAttachmentIds, {}))
                 (void)journal_->cancelAttachment(sessionId, it->stored.generation, id, 1);
             return error(QStringLiteral("handoff_failed"), reason);
         };
-        const QString previousAdapter = it->stored.adapter;
         QJsonObject threads = QJsonDocument::fromJson(it->stored.providerThreads.toUtf8()).object();
         provider_handoff::rememberThread(threads, previousAdapter, it->stored.threadId);
         QString writeError;
-        const QString transcriptPath = provider_handoff::writeTranscript(
+        handoffTranscript = provider_handoff::writeTranscript(
             handoffDirectory(sessionId),
             provider_handoff::renderTranscript(
                 provider_handoff::journalEvents(*journal_, sessionId, it->stored.generation)),
             &writeError);
-        if (transcriptPath.isEmpty())
+        if (handoffTranscript.isEmpty())
             return failHandoff(writeError);
         if (!it->stored.threadId.isEmpty())
             sessionsByThread_.remove(it->stored.threadId);
         it->stored.adapter = adapter;
         it->stored.threadId.clear();
-        if (!it->stored.threadId.isEmpty())
-            sessionsByThread_.insert(it->stored.threadId, sessionId);
         it->stored.providerThreads =
             QString::fromUtf8(QJsonDocument(threads).toJson(QJsonDocument::Compact));
         it->attachedToProvider = false;
@@ -1328,35 +1315,26 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
                 {{QStringLiteral("from"), previousAdapter}, {QStringLiteral("to"), adapter}},
                 &changeError))
             return failHandoff(changeError);
+        it->handoffFrom = previousAdapter;
+    }
+    if (!it->handoffFrom.isEmpty() && it->stored.adapter == adapter) {
+        if (handoffTranscript.isEmpty()) {
+            QString writeError;
+            handoffTranscript = provider_handoff::writeTranscript(
+                handoffDirectory(sessionId),
+                provider_handoff::renderTranscript(
+                    provider_handoff::journalEvents(*journal_, sessionId, it->stored.generation)),
+                &writeError);
+            if (handoffTranscript.isEmpty())
+                return error(QStringLiteral("handoff_failed"), writeError);
+        }
         input.prepend(
             QJsonObject{{QStringLiteral("type"), QStringLiteral("text")},
                         {QStringLiteral("text"),
-                         provider_handoff::handoffNote(previousAdapter, transcriptPath, 0)}});
+                         provider_handoff::handoffNote(it->handoffFrom, handoffTranscript, 0)}});
     }
-    if (!it->handoffFrom.isEmpty() && it->stored.adapter == adapter) {
-        QString writeError;
-        const QString transcriptPath = provider_handoff::writeTranscript(
-            handoffDirectory(sessionId),
-            provider_handoff::renderTranscript(
-                provider_handoff::journalEvents(*journal_, sessionId, it->stored.generation)),
-            &writeError);
-        if (transcriptPath.isEmpty())
-            return error(QStringLiteral("handoff_failed"), writeError);
-        input.prepend(QJsonObject{{QStringLiteral("type"), QStringLiteral("text")},
-                                  {QStringLiteral("text"),
-                                   provider_handoff::handoffNote(std::exchange(it->handoffFrom, {}),
-                                                                 transcriptPath, 0)}});
-    }
-    const QString previousState = it->stored.state;
+    const StoredSession previous = it->stored;
     it->stored.state = QStringLiteral("starting");
-    if (!journal_->upsertSession(it->stored)) {
-        it->stored.state = previousState;
-        for (const QString& path : std::exchange(it->materializedAttachments, {}))
-            QFile::remove(path);
-        for (const QString& id : std::exchange(it->stagedAttachmentIds, {}))
-            (void)journal_->cancelAttachment(sessionId, it->stored.generation, id, 1);
-        return error(QStringLiteral("journal_error"), journal_->errorString());
-    }
     QJsonObject userMessage{{QStringLiteral("text"), displayText},
                             {QStringLiteral("command_id"), request.value("message_id")}};
     if (!messageImages.isEmpty())
@@ -1368,40 +1346,54 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
     const QString clientMessageId = payload.value(QStringLiteral("client_message_id")).toString();
     if (!clientMessageId.isEmpty() && clientMessageId.size() <= 128)
         userMessage.insert(QStringLiteral("client_message_id"), clientMessageId);
-    // The turn is only started once its prompt is durable; otherwise a restored transcript would
-    // show provider output with no user message and the client would believe the send succeeded.
-    QString appendError;
-    if (!appendEvent(*it, QStringLiteral("user.message"), userMessage, &appendError) ||
-        !appendEvent(*it, QStringLiteral("turn.queued"), {}, &appendError)) {
-        it->stored.state = previousState;
-        releaseTurnAttachments(*it);
-        (void)journal_->upsertSession(it->stored);
-        return error(QStringLiteral("journal_error"), appendError);
-    }
-    it->startingTurn = true;
-    it->stopRequested = false;
-    const StoredSession before = it->stored;
     if (localClient && options.contains("permission")) {
         const auto permission = options.value("permission").toString();
         it->stored.executionPolicy = permission == "danger-full-access" ? "full"
                                      : permission == "read-only"        ? "read-only"
                                                                         : "ask";
     }
-    if (!options.value(QStringLiteral("model")).toString().isEmpty())
-        it->stored.model = options.value(QStringLiteral("model")).toString();
-    if (!options.value(QStringLiteral("effort")).toString().isEmpty())
-        it->stored.effort = options.value(QStringLiteral("effort")).toString();
+    if (!options.value("model").toString().isEmpty())
+        it->stored.model = options.value("model").toString();
+    if (!options.value("effort").toString().isEmpty())
+        it->stored.effort = options.value("effort").toString();
     it->stored.compactWindow = compactWindow;
-    if (!changedSettings(before, it->stored).isEmpty()) {
-        ++it->stored.configurationRevision;
-        if (!journal_->upsertSession(it->stored))
-            return error("journal_error", journal_->errorString());
-        appendEvent(*it, "session.configuration_changed",
-                    {{"revision", it->stored.configurationRevision},
-                     {"effective", configurationOf(it->stored, {}).value("effective")},
-                     {"changed", changedSettings(before, it->stored)},
-                     {"adapter", it->stored.adapter}});
+    QJsonObject configuration;
+    QString appendError;
+    // The clients word the change from what changed (ADR 0027, "Model changed to …").
+    const QJsonArray changed = changedSettings(previous, it->stored);
+    if (!changed.isEmpty()) {
+        if (it->stored.configurationRevision == std::numeric_limits<qint64>::max()) {
+            appendError = "Session configuration revision is exhausted.";
+        } else {
+            ++it->stored.configurationRevision;
+            configuration = {{"revision", it->stored.configurationRevision},
+                             {"effective", configurationOf(it->stored, {}).value("effective")},
+                             {"changed", changed},
+                             {"adapter", it->stored.adapter}};
+        }
     }
+    const QPointer<SessionHost> acceptingHost(this);
+    const bool accepted =
+        appendError.isEmpty() && journalTurnStart(*it, userMessage, configuration, &appendError);
+    if (acceptingHost.isNull())
+        return error("session_unavailable", "The session host closed during turn acceptance.");
+    it = sessions_.find(sessionId);
+    if (it == sessions_.end() || it->stored.generation != previous.generation)
+        return error("session_unavailable", "The session changed during turn acceptance.");
+    if (!accepted) {
+        // Prior stream flushes can advance counters; restore only the draft
+        // configuration/state, leaving those already accepted stream events intact.
+        it->stored.state = previous.state;
+        it->stored.model = previous.model;
+        it->stored.effort = previous.effort;
+        it->stored.executionPolicy = previous.executionPolicy;
+        it->stored.compactWindow = previous.compactWindow;
+        it->stored.configurationRevision = previous.configurationRevision;
+        releaseTurnAttachments(*it);
+        return error("journal_error", appendError);
+    }
+    it->startingTurn = true;
+    it->stopRequested = false;
     QJsonObject turnOptions = options;
     turnOptions.insert(QStringLiteral("provider"), it->stored.adapter);
     turnOptions.insert(QStringLiteral("model"), it->stored.model);
@@ -1538,12 +1530,9 @@ QJsonObject SessionHost::deleteSession(const QJsonObject& request) {
                      QStringLiteral("Stop the active turn before deleting this conversation."));
     }
     const QString threadId = session->stored.threadId;
-    for (const auto& task : std::as_const(session->backgroundTasks)) {
-        const auto status = task.toObject().value("status").toString();
-        if (status == "running" || status == "stopping")
-            return error("session_busy",
-                         "Stop background tasks before deleting this conversation.");
-    }
+    if (hasLiveBackgroundTasks(*session))
+        return error(QStringLiteral("session_busy"),
+                     QStringLiteral("Stop background tasks before deleting this conversation."));
     const auto targets = providerCleanupTargets(session->stored);
     if (!targets)
         return error(QStringLiteral("journal_error"),
@@ -2052,8 +2041,16 @@ void SessionHost::handleProviderNotification(const QString& method, const QJsonO
         return;
     }
     if (method == QStringLiteral("turn/started")) {
-        session->stored.turnId =
+        const QString startedTurnId =
             params.value(QStringLiteral("turn")).toObject().value(QStringLiteral("id")).toString();
+        // Its completion already arrived: the turn is over, not running, and a Stop kept for
+        // it has nothing left to stop.
+        if (!startedTurnId.isEmpty() && startedTurnId == session->completedTurnId) {
+            session->startingTurn = false;
+            session->interruptPending = false;
+            return;
+        }
+        session->stored.turnId = startedTurnId;
         session->stored.state = QStringLiteral("running");
         session->startingTurn = false;
         journal_->upsertSession(session->stored);
@@ -2121,6 +2118,17 @@ void SessionHost::handleProviderNotification(const QString& method, const QJsonO
     }
     if (method == QStringLiteral("turn/completed")) {
         const QJsonObject turn = params.value(QStringLiteral("turn")).toObject();
+        // A late or repeated completion of another turn does not end the active one, nor
+        // release its attachments, browser sessions or worktree. A completion that arrives
+        // before turn/started (no active id yet) is still this turn's.
+        const QString completedTurnId = turn.value(QStringLiteral("id")).toString();
+        if (!completedTurnId.isEmpty() &&
+            ((!session->stored.turnId.isEmpty() && completedTurnId != session->stored.turnId) ||
+             completedTurnId == session->completedTurnId)) {
+            return;
+        }
+        session->completedTurnId = completedTurnId;
+        abandonTurnApprovals(session->stored.id);
         session->stored.turnId.clear();
         session->stored.state = turn.value(QStringLiteral("status")).toString();
         if (session->stored.state.isEmpty() ||
@@ -2141,6 +2149,15 @@ void SessionHost::handleProviderNotification(const QString& method, const QJsonO
         return;
     }
     if (method == QStringLiteral("error")) {
+        // A final error ends the turn even when turn/completed never follows, so its approvals
+        // end with it, before the error is published, and later requests for it are declined.
+        // A retried error, or one naming an earlier turn, leaves the running turn alone.
+        const QString turnId = params.value(QStringLiteral("turnId")).toString();
+        if (!params.value(QStringLiteral("willRetry")).toBool() &&
+            (turnId.isEmpty() || turnId == session->stored.turnId)) {
+            session->failedTurnId = session->stored.turnId;
+            abandonTurnApprovals(session->stored.id);
+        }
         const QJsonObject providerError = params.value(QStringLiteral("error")).toObject();
         appendProviderEvent(
             *session, QStringLiteral("runtime.error"),
@@ -2230,13 +2247,31 @@ void SessionHost::refreshProviderTitle(const QString& sessionId, const qint64 ge
 
 void SessionHost::handleProviderRequest(const QJsonValue& requestId, const QString& method,
                                         const QJsonObject& params) {
-    pendingProviderByRequest_.insert(requestKey(requestId), QStringLiteral("codex"));
     Session* session = sessionForThread(threadIdFrom(params));
     if (session == nullptr) {
-        pendingProviderByRequest_.remove(requestKey(requestId));
         adapter_->respond(requestId, codex_requests::declinedResult(method));
         return;
     }
+    // A request naming a turn that already ended would outlive the sweep at its completion and
+    // be answered during the next turn. A request without a turn id is the current turn's, which
+    // a final error may have ended.
+    if (const QString turnId = params.value(QStringLiteral("turnId")).toString();
+        (!session->failedTurnId.isEmpty() &&
+         (turnId.isEmpty() ? session->stored.turnId : turnId) == session->failedTurnId) ||
+        (!turnId.isEmpty() &&
+         (turnId == session->completedTurnId ||
+          (!session->stored.turnId.isEmpty() && turnId != session->stored.turnId)))) {
+        declineProviderRequest(*session, requestId, method, QStringLiteral("stale_turn"),
+                               params.value(QStringLiteral("serverName")).toString());
+        return;
+    }
+    // Only a request the broker holds is answered through routeProviderResponse/Error.
+    const auto admit = [this, session, &requestId](const QString& kind,
+                                                   const QJsonObject& details) {
+        pendingProviderByRequest_.insert(requestKey(requestId), QStringLiteral("codex"));
+        (void)approvals_->request(session->stored.id, session->stored.generation, requestId, kind,
+                                  details);
+    };
     if (method == QStringLiteral("mcpServer/elicitation/request")) {
         const QString serverName = params.value(QStringLiteral("serverName")).toString();
         if (!codex_requests::isMcpToolApproval(params)) {
@@ -2257,10 +2292,7 @@ void SessionHost::handleProviderRequest(const QJsonValue& requestId, const QStri
             adapter_->respond(requestId, codex_requests::mcpElicitationResult(true));
             return;
         }
-        const QString approvalId = approvals_->request(
-            session->stored.id, session->stored.generation, requestId, QStringLiteral("approval"),
-            codex_requests::mcpToolApprovalDetails(params));
-        Q_UNUSED(approvalId)
+        admit(QStringLiteral("approval"), codex_requests::mcpToolApprovalDetails(params));
         return;
     }
     if (method == QStringLiteral("item/commandExecution/requestApproval") ||
@@ -2275,20 +2307,15 @@ void SessionHost::handleProviderRequest(const QJsonValue& requestId, const QStri
         if (params.contains(QStringLiteral("command"))) {
             details.insert(QStringLiteral("command"), params.value(QStringLiteral("command")));
         }
-        const QString approvalId =
-            approvals_->request(session->stored.id, session->stored.generation, requestId,
-                                QStringLiteral("approval"), details);
-        Q_UNUSED(approvalId)
+        admit(QStringLiteral("approval"), details);
         return;
     }
     if (method == QStringLiteral("item/tool/requestUserInput")) {
-        const QString approvalId = approvals_->request(
-            session->stored.id, session->stored.generation, requestId, QStringLiteral("input"),
-            {{QStringLiteral("item_id"), params.value(QStringLiteral("itemId")).toString()},
-             {QStringLiteral("is_blocking"),
-              params.value(QStringLiteral("isBlocking")).toBool(true)},
-             {QStringLiteral("questions"), params.value(QStringLiteral("questions"))}});
-        Q_UNUSED(approvalId)
+        admit(QStringLiteral("input"),
+              {{QStringLiteral("item_id"), params.value(QStringLiteral("itemId")).toString()},
+               {QStringLiteral("is_blocking"),
+                params.value(QStringLiteral("isBlocking")).toBool(true)},
+               {QStringLiteral("questions"), params.value(QStringLiteral("questions"))}});
         return;
     }
     declineProviderRequest(*session, requestId, method, QStringLiteral("unsupported_request"), {});
@@ -2518,6 +2545,7 @@ bool SessionHost::isMutating(const QString& messageType) {
            messageType == QStringLiteral("session.start_turn") ||
            messageType == QStringLiteral("session.rename") ||
            messageType == QStringLiteral("session.mark_seen") ||
+           messageType == QStringLiteral("session.set_archived") ||
            messageType == QStringLiteral("session.delete") ||
            messageType == QStringLiteral("session.steer") ||
            messageType == QStringLiteral("session.interrupt") ||
@@ -2650,6 +2678,9 @@ void SessionHost::handleCanonicalEvent(const QString& provider, const QString& s
         return;
     }
     if (type == QStringLiteral("turn.completed")) {
+        // A live background task keeps asking after its turn ends; its requests stay.
+        if (!hasLiveBackgroundTasks(*it))
+            abandonTurnApprovals(it->stored.id);
         it->stored.turnId.clear();
         const QString status = payload.value(QStringLiteral("status")).toString();
         it->stored.state =
@@ -2732,6 +2763,15 @@ void SessionHost::routeProviderResponse(const QJsonValue& taggedId, const QJsonO
         return;
     }
     adapter_->respond(requestId, result);
+}
+
+void SessionHost::forgetProviderRoutes(const QList<QJsonValue>& requestIds) {
+    for (const QJsonValue& requestId : requestIds) {
+        QString adapterName;
+        QJsonValue untagged;
+        if (!untagRequestId(requestId, adapterName, untagged))
+            pendingProviderByRequest_.remove(requestKey(requestId));
+    }
 }
 
 void SessionHost::routeProviderError(const QJsonValue& taggedId, const QString& code,

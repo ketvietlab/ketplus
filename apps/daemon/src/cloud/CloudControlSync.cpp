@@ -1,7 +1,7 @@
-#include "cloud/CloudControlClient.h"
-#include "cloud/CloudControlSupport.h"
 #include "atlas/AtlasLiveRuntime.h"
 #include "cloud/CloudControlBatching.h"
+#include "cloud/CloudControlClient.h"
+#include "cloud/CloudControlSupport.h"
 #include "cloud/CloudEventProjection.h"
 #include "cloud/ControlEndpoint.h"
 #include "cloud/WorktreeBranches.h"
@@ -188,8 +188,14 @@ QByteArray CloudControlClient::eventAssociatedData(const QJsonObject& event,
          content.value(QStringLiteral("senderKeyVersion"))});
 }
 
+bool CloudControlClient::isLiveGeneration(const QString& sessionId, const qint64 generation) const {
+    return generation > 0 && journal_->sessionHead(sessionId).generation == generation;
+}
+
 void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qint64 generation,
                                              qint64 afterCursor) {
+    if (!isLiveGeneration(sessionId, generation))
+        return;
     const QString scope = uploadScope();
     const qint64 durable = journal_->cloudUploadCursor(scope, sessionId, generation);
     if (durable < 0) {
@@ -320,13 +326,19 @@ void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qin
         QJsonObject{{QStringLiteral("machineId"), machineId_}, {QStringLiteral("events"), cloud}},
         daemonToken_, {},
         [this, sessionId, generation, afterCursor, uploadKey, highestSent, cloud, scope,
-         requestEpoch, sent = int(cloud.size())](
-            const int status, const QJsonValue& value, const QString& transportError) {
+         requestEpoch, sent = int(cloud.size())](const int status, const QJsonValue& value,
+                                                 const QString& transportError) {
             eventUploadsInFlight_.remove(uploadKey);
             // This request owns the slot until its callback; stale account replies
             // release that slot but must not mutate progress, receipts or backoff.
             if (requestEpoch != accountEpoch_ || scope != uploadScope())
                 return;
+            // Deleted while in flight: no retry, receipt or progress for its history.
+            if (!isLiveGeneration(sessionId, generation)) {
+                eventUploadLimits_.remove(uploadKey);
+                eventUploadBackoff_.remove(uploadKey);
+                return;
+            }
             // The batch was too large for the relay, or for a proxy or tunnel in front of it that
             // answers in HTML: send half as many events rather than the same refused batch again.
             if (status == 413 && sent > 1) {

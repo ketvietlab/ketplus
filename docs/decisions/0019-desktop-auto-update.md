@@ -30,7 +30,13 @@ path that must not trust the download server or the network.
   passed to CMake. `packaging/macos/publish-update.sh` signs archives with the
   Keychain key from Sparkle's `generate_keys`, or a key file or standard input
   supplied from outside the repository, and refuses a key inside the checkout.
-  It prepares the appcast but does not upload it.
+  It prepares the appcast but does not upload it. A run that fails, for example
+  while signing, removes the archive and release notes it created and leaves the
+  existing `appcast.xml` untouched, so the same version can be prepared again.
+  `generate_appcast` updates a copy of the published feed (keeping its file
+  mode) in a staging directory next to the updates directory, and the copy
+  replaces `appcast.xml` by rename. After that point a failure no longer
+  removes the archive or notes the new feed references.
 - `AppUpdater` is the process-wide interface (`apps/desktop/src/update`). The
   Sparkle implementation wraps `SPUStandardUpdaterController`. Unconfigured
   builds and other platforms use a disabled implementation, and tests install a

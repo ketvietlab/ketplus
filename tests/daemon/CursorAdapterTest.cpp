@@ -143,14 +143,18 @@ class CursorAdapterTest final : public QObject {
 
     void skipsSessionLoadWhenTheAgentCannotLoad_data() {
         QTest::addColumn<bool>("loadSession");
-        QTest::newRow("advertised") << true;
-        QTest::newRow("not advertised") << false;
+        QTest::addColumn<QByteArray>("capabilityMode");
+        QTest::newRow("advertised") << true << QByteArray("1");
+        QTest::newRow("explicit-false") << false << QByteArray("0");
+        QTest::newRow("missing-fields") << false << QByteArray("missing");
+        QTest::newRow("missing-agent") << false << QByteArray("absent");
+        QTest::newRow("wrong-type") << false << QByteArray("wrong-type");
     }
 
     void skipsSessionLoadWhenTheAgentCannotLoad() {
         QFETCH(bool, loadSession);
-        if (!loadSession)
-            qputenv("KETPLUS_FAKE_CURSOR_LOAD_SESSION", "0");
+        QFETCH(QByteArray, capabilityMode);
+        qputenv("KETPLUS_FAKE_CURSOR_LOAD_SESSION", capabilityMode);
         const auto restore = qScopeGuard([] { qunsetenv("KETPLUS_FAKE_CURSOR_LOAD_SESSION"); });
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
@@ -522,6 +526,47 @@ class CursorAdapterTest final : public QObject {
                  qPrintable(QJsonDocument(resolved).toJson(QJsonDocument::Compact)));
         QTRY_VERIFY_WITH_TIMEOUT(logText(logPath).contains(option), 3000);
         QTRY_COMPARE_WITH_TIMEOUT(events(QStringLiteral("turn.completed")).size(), 1, 3000);
+        adapter.stop();
+    }
+
+    // A request the exited process left unanswered must not shape the answer to a request with
+    // the same id from the next process, which numbers its requests from the start again.
+    void requestsOfAnExitedProcessAreForgotten() {
+        QTemporaryDir directory;
+        const auto cursor = directory.filePath("fake-cursor");
+        const auto logPath = directory.filePath("cursor.log");
+        QVERIFY(writeFakeCursor(cursor, logPath));
+        LocalJournal journal(directory.filePath("journal.sqlite3"));
+        CodexAdapter codex("/missing-codex");
+        CursorAdapter adapter(cursor);
+        SessionHost host(&journal, &codex, nullptr, &adapter);
+        const auto sessionId = startCursor(host, directory.path(), "question-then-exit");
+        QVERIFY(!sessionId.isEmpty());
+        const auto events = eventsOf(journal, sessionId);
+        QTRY_COMPARE_WITH_TIMEOUT(events("turn.completed").size(), 1, 5000);
+        const auto next =
+            host.handleCommand(request("session.start_turn", "after-exit",
+                                       {{"prompt", "approval-reused-id"}}, sessionId, 1),
+                               "desktop-test");
+        QVERIFY2(next.value("ok").toBool(), qPrintable(QJsonDocument(next).toJson()));
+        // The exited process's question was requested first; the new approval follows it.
+        QTRY_COMPARE_WITH_TIMEOUT(events("approval.requested").size(), 2, 10000);
+        const auto card = events("approval.requested").last()["payload"].toObject();
+        QVERIFY(card.value("kind").toString() != "input");
+        const auto resolved =
+            host.handleCommand(request("approval.resolve", "resolve",
+                                       {{"approval_id", card.value("approval_id")},
+                                        {"resolution", QJsonObject{{"decision", "accept"}}}},
+                                       sessionId, 1),
+                               "desktop-test");
+        QVERIFY2(resolved.value("ok").toBool(), qPrintable(QJsonDocument(resolved).toJson()));
+        QTRY_VERIFY_WITH_TIMEOUT(logText(logPath).contains("permission:"), 5000);
+        QByteArray answer;
+        for (const QByteArray& line : logText(logPath).split('\n'))
+            if (line.startsWith("permission:"))
+                answer = line;
+        QVERIFY2(answer.contains("allow-once"), answer.constData());
+        QTRY_COMPARE_WITH_TIMEOUT(events("turn.completed").size(), 2, 5000);
         adapter.stop();
     }
 

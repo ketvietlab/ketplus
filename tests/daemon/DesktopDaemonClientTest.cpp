@@ -4,6 +4,10 @@
 #include "agent/CodexRateLimits.h"
 #include "agent/DaemonTranscriptProjection.h"
 #include "agent/ProviderRuntimeStatus.h"
+#include "ipc/LocalIpcServer.h"
+#include "protocol/DaemonProtocol.h"
+#include "providers/CodexAdapter.h"
+#include "runtime/SessionHost.h"
 #include "service/DaemonService.h"
 #include "storage/LocalJournal.h"
 
@@ -24,6 +28,8 @@
 #include <QDir>
 #include <QFile>
 #include <QSettings>
+#include <QSqlDatabase>
+#include <QSqlQuery>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -81,6 +87,8 @@ class FakeDaemon final : public QObject {
     }
 
     QJsonArray capabilities;
+    // Reported in the hello answer when set; an older version makes Desktop ask to replace it.
+    QString daemonVersion;
     bool listening{false};
     int connections{0};
     QPointer<QLocalSocket> current;
@@ -104,9 +112,12 @@ class FakeDaemon final : public QObject {
             buffer.remove(0, 4 + static_cast<qsizetype>(size));
             if (request.value(QStringLiteral("message_type")).toString() ==
                 QStringLiteral("daemon.hello")) {
-                answer(request, {{QStringLiteral("ok"), true},
-                                 {QStringLiteral("protocol_minor"), 1},
-                                 {QStringLiteral("capabilities"), capabilities}});
+                QJsonObject hello{{QStringLiteral("ok"), true},
+                                  {QStringLiteral("protocol_minor"), 1},
+                                  {QStringLiteral("capabilities"), capabilities}};
+                if (!daemonVersion.isEmpty())
+                    hello.insert(QStringLiteral("daemon_version"), daemonVersion);
+                answer(request, hello);
                 if (afterHello)
                     afterHello(socket);
                 continue;
@@ -125,8 +136,12 @@ QString useFakeDaemon(const QTemporaryDir& directory) {
     const QString socket = directory.filePath(QStringLiteral("fake.sock"));
     const QString token = directory.filePath(QStringLiteral("local.token"));
     QFile file(token);
-    if (file.open(QIODevice::WriteOnly))
-        file.write(QByteArray(40, 'k'));
+    if (!file.open(QIODevice::WriteOnly) ||
+        !file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner) ||
+        file.write(QByteArray(40, 'k')) != 40) {
+        QTest::qFail("Unable to prepare the owner-only fixture credential.", __FILE__, __LINE__);
+        return {};
+    }
     qputenv("KETPLUS_DAEMON_SOCKET", socket.toUtf8());
     qputenv("KETPLUS_DAEMON_TOKEN_FILE", token.toUtf8());
     qputenv("KETPLUS_DISABLE_DAEMON_AUTOSTART", "1");
@@ -626,6 +641,312 @@ class DesktopDaemonClientTest final : public QObject {
         QVERIFY(!status->supports(QStringLiteral("codex"), QStringLiteral("threadCompact")));
     }
 
+    void largeTombstoneCatalogCrossesRealIpcInBoundedPages() {
+        QTemporaryDir directory;
+        const auto socket = useFakeDaemon(directory);
+        const auto restore = qScopeGuard(stopUsingFakeDaemon);
+        LocalJournal journal(directory.filePath("journal.sqlite"));
+        QVERIFY(journal.isOpen());
+        CodexAdapter adapter(directory.filePath("missing-fixture-provider"));
+        SessionHost host(&journal, &adapter);
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == journal.databasePath())
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        QSqlQuery query(db);
+        QVERIFY(query.exec("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n "
+                           "WHERE i<30000) INSERT INTO session_tombstones "
+                           "SELECT 'deleted-'||i,1,1,'operation-'||i,datetime('now') FROM n"));
+        query.finish();
+        LocalIpcServer ipc(&host, socket, QByteArray(40, 'k'));
+        QVERIFY2(ipc.listen(), qPrintable(ipc.errorString()));
+        CodexAppServer bridge;
+        QSet<QString> deleted;
+        connect(&bridge, &CodexAppServer::daemonSessionDeleted, &bridge,
+                [&](const QString& id, qint64 generation) {
+                    QCOMPARE(generation, 1);
+                    deleted.insert(id);
+                });
+        QTRY_COMPARE_WITH_TIMEOUT(deleted.size(), 30000, 15000);
+        QTRY_VERIFY(!bridge.isRestoring());
+        QVERIFY(bridge.isReady());
+        QCOMPARE(ipc.connectionCount(), 1);
+    }
+
+    void catalogRestartsForDeletionBehindCursorButDiscoveryReadsOnlyLiveSessions() {
+        QTemporaryDir directory;
+        FakeDaemon daemon(useFakeDaemon(directory));
+        const auto restore = qScopeGuard(stopUsingFakeDaemon);
+        QVERIFY(daemon.listening);
+        LocalJournal journal(directory.filePath("journal.sqlite"));
+        CodexAdapter adapter(directory.filePath("missing-provider"));
+        SessionHost host(&journal, &adapter);
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (QSqlDatabase::database(name).databaseName() == journal.databasePath())
+                db = QSqlDatabase::database(name);
+        QSqlQuery q(db);
+        QVERIFY(q.exec("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n "
+                       "WHERE i<200) INSERT INTO session_tombstones "
+                       "SELECT 'middle-'||i,1,1,'op','now' FROM n"));
+        q.finish();
+        int changed = 0, walks = 0, liveReads = 0;
+        bool injected = false, discover = false;
+        daemon.onRequest = [&](const QJsonObject& request) {
+            if (request.value("message_type") != "session.list") {
+                daemon.answer(request, {{"ok", true}});
+                return;
+            }
+            const auto payload = request.value("payload").toObject();
+            QCOMPARE(payload.value("deleted_sessions_page_version").toInt(), 1);
+            if (payload.value("session_catalog_live_only").toBool())
+                ++liveReads;
+            else if (!payload.contains("deleted_sessions_snapshot"))
+                ++walks;
+            auto result = host.handleCommand(request, "desktop");
+            if (result.value("error_code") == "session_catalog_changed")
+                ++changed;
+            if (discover && result.contains("sessions"))
+                result["sessions"] = QJsonArray{QJsonObject{{"session_id", "fresh"},
+                                                            {"session_generation", 1},
+                                                            {"worktree_path", directory.path()},
+                                                            {"last_event_cursor", 1}}};
+            daemon.answer(request, result);
+            if (!injected) {
+                injected = true;
+                // No broadcast: this models a retained deletion written between catalog pages.
+                QVERIFY(q.exec("INSERT INTO session_tombstones VALUES('aaa',1,1,'op','now')"));
+                q.finish();
+            }
+        };
+        CodexAppServer bridge;
+        QSet<QString> removed;
+        connect(&bridge, &CodexAppServer::daemonSessionDeleted, &bridge,
+                [&](const QString& id, qint64) { removed.insert(id); });
+        QSignalSpy discovered(&bridge, &CodexAppServer::daemonSessionDiscovered);
+        QTRY_COMPARE(removed.size(), 201);
+        QTRY_VERIFY(!bridge.isRestoring());
+        QVERIFY(removed.contains("aaa"));
+        QCOMPARE(changed, 1);
+        QCOMPARE(walks, 2);
+        QSignalSpy repeatedDeletions(&bridge, &CodexAppServer::daemonSessionDeleted);
+        discover = true;
+        daemon.current->write(
+            protocol::encodeFrame({{"message_type", "session.event"},
+                                   {"session_id", "fresh"},
+                                   {"session_generation", 1},
+                                   {"cursor", 1},
+                                   {"payload", QJsonObject{{"event_type", "session.created"}}}}));
+        daemon.current->flush();
+        QTRY_COMPARE(discovered.size(), 1);
+        QCOMPARE(discovered.first().first().toJsonObject().value("session_id").toString(), "fresh");
+        QCOMPARE(walks, 2);
+        QCOMPARE(liveReads, 1);
+        QCOMPARE(repeatedDeletions.size(), 0);
+    }
+
+    void continuouslyChangingCatalogStopsAfterBoundedRetries() {
+        QTemporaryDir directory;
+        FakeDaemon daemon(useFakeDaemon(directory));
+        const auto restore = qScopeGuard(stopUsingFakeDaemon);
+        QVERIFY(daemon.listening);
+        int calls = 0;
+        daemon.onRequest = [&](const QJsonObject& request) {
+            if (request.value("message_type") != "session.list")
+                return;
+            ++calls;
+            daemon.answer(request, {{"ok", false},
+                                    {"error_code", "session_catalog_changed"},
+                                    {"error_message", "Catalog changed."}});
+        };
+        CodexAppServer bridge;
+        QTRY_COMPARE(calls, 4);
+        QTRY_VERIFY(!bridge.isRestoring());
+        QTest::qWait(50);
+        QCOMPARE(calls, 4);
+    }
+
+    void tombstonesArePagedBeforeReadingAFreshLiveCatalog() {
+        QTemporaryDir directory;
+        FakeDaemon daemon(useFakeDaemon(directory));
+        const auto restore = qScopeGuard(stopUsingFakeDaemon);
+        QVERIFY(daemon.listening);
+        const QJsonObject first{{"session_id", "a"}, {"session_generation", 1}};
+        const QJsonObject second{{"session_id", "b"}, {"session_generation", 2}};
+        int pages = 0;
+        daemon.onRequest = [&](const QJsonObject& request) {
+            if (request.value("message_type") != "session.list")
+                return;
+            const auto payload = request.value("payload").toObject();
+            QCOMPARE(payload.value("deleted_sessions_page_version").toInt(), 1);
+            ++pages;
+            if (pages <= 2) {
+                QVERIFY(payload.value("deleted_sessions_only").toBool());
+                if (pages == 1)
+                    QVERIFY(!payload.contains("deleted_sessions_after"));
+                else
+                    QCOMPARE(payload.value("deleted_sessions_after").toObject(), first);
+                daemon.answer(request,
+                              {{"ok", true},
+                               {"deleted_sessions_page_version", 1},
+                               {"deleted_sessions", QJsonArray{pages == 1 ? first : second}},
+                               {"deleted_sessions_snapshot", "fixture-snapshot"},
+                               {"deleted_sessions_next", pages == 1 ? first : QJsonObject{}},
+                               // A catalog obtained before the tombstone walk must not
+                               // resurrect an entry deleted while pages were in flight.
+                               {"sessions", QJsonArray{QJsonObject{{"session_id", "stale"}}}}});
+            } else {
+                QCOMPARE(pages, 3);
+                QVERIFY(!payload.value("deleted_sessions_only").toBool());
+                QVERIFY(!payload.contains("deleted_sessions_after"));
+                daemon.answer(request,
+                              {{"ok", true},
+                               {"deleted_sessions_page_version", 1},
+                               {"deleted_sessions", QJsonArray{first}},
+                               {"deleted_sessions_snapshot", "fixture-snapshot"},
+                               {"deleted_sessions_next", first},
+                               {"transcript_window_version", 1},
+                               {"sessions", QJsonArray{QJsonObject{{"session_id", "live"},
+                                                                   {"session_generation", 3}}}}});
+            }
+        };
+        CodexAppServer bridge;
+        QSignalSpy deleted(&bridge, &CodexAppServer::daemonSessionDeleted);
+        QSignalSpy discovered(&bridge, &CodexAppServer::daemonSessionDiscovered);
+        QTRY_COMPARE(pages, 3);
+        QTRY_COMPARE(discovered.size(), 1);
+        QCOMPARE(discovered.first().first().toJsonObject().value("session_id").toString(), "live");
+        QCOMPARE(deleted.size(), 3); // The fresh catalog's first page is idempotent.
+        QCOMPARE(deleted.at(1).first().toString(), "b");
+        QVERIFY(!bridge.isRestoring());
+    }
+    void malformedTombstoneContinuationStopsWithoutApplyingIt_data() {
+        QTest::addColumn<QString>("fault");
+        for (const auto& name :
+             {"repeated-cursor", "unordered-row", "missing-version", "read-error"})
+            QTest::newRow(name) << QString(name);
+    }
+    void malformedTombstoneContinuationStopsWithoutApplyingIt() {
+        QFETCH(QString, fault);
+        QTemporaryDir directory;
+        FakeDaemon daemon(useFakeDaemon(directory));
+        const auto restore = qScopeGuard(stopUsingFakeDaemon);
+        QVERIFY(daemon.listening);
+        const QJsonObject first{{"session_id", "a"}, {"session_generation", 1}};
+        const QJsonObject second{{"session_id", "b"}, {"session_generation", 1}};
+        int pages = 0;
+        daemon.onRequest = [&](const QJsonObject& request) {
+            if (request.value("message_type") != "session.list")
+                return;
+            ++pages;
+            QVERIFY(pages <= 2);
+            QJsonObject result{{"ok", true},
+                               {"deleted_sessions_page_version", 1},
+                               {"deleted_sessions", QJsonArray{pages == 1 ? first : second}},
+                               {"deleted_sessions_snapshot", "fixture-snapshot"},
+                               {"deleted_sessions_next", pages == 1 ? first : QJsonObject{}}};
+            if (pages == 2) {
+                if (fault == "repeated-cursor")
+                    result["deleted_sessions_next"] = first;
+                else if (fault == "unordered-row")
+                    result["deleted_sessions"] = QJsonArray{first};
+                else if (fault == "missing-version")
+                    result.remove("deleted_sessions_page_version");
+                else
+                    result = {{"ok", false},
+                              {"error_code", "journal_error"},
+                              {"error_message", "fixture read failure"}};
+            }
+            daemon.answer(request, result);
+        };
+        CodexAppServer bridge;
+        QSignalSpy deleted(&bridge, &CodexAppServer::daemonSessionDeleted);
+        QSignalSpy discovered(&bridge, &CodexAppServer::daemonSessionDiscovered);
+        QTRY_COMPARE(pages, 2);
+        QTRY_VERIFY(!bridge.isRestoring());
+        QCOMPARE(deleted.size(), 1);
+        QCOMPARE(discovered.size(), 0);
+        QTest::qWait(20);
+        QCOMPARE(pages, 2);
+    }
+    void reconnectIgnoresThePriorTombstoneWalk() {
+        QTemporaryDir directory;
+        FakeDaemon daemon(useFakeDaemon(directory));
+        const auto restore = qScopeGuard(stopUsingFakeDaemon);
+        QVERIFY(daemon.listening);
+        const QJsonObject first{{"session_id", "a"}, {"session_generation", 1}};
+        const QJsonObject stale{{"session_id", "stale"}, {"session_generation", 1}};
+        const QJsonObject current{{"session_id", "current"}, {"session_generation", 2}};
+        bool interrupted = false;
+        bool replayed = false;
+        bool completed = false;
+        daemon.onRequest = [&](const QJsonObject& request) {
+            if (request.value("message_type") != "session.list")
+                return;
+            const auto payload = request.value("payload").toObject();
+            QJsonObject result{{"ok", true},
+                               {"deleted_sessions_page_version", 1},
+                               {"deleted_sessions_snapshot", "fixture-snapshot"},
+                               {"deleted_sessions_next", QJsonObject{}}};
+            if (daemon.connections == 1) {
+                if (payload.contains("deleted_sessions_after")) {
+                    interrupted = true;
+                    daemon.current->disconnectFromServer();
+                    return;
+                }
+                result["deleted_sessions"] = QJsonArray{first};
+                result["deleted_sessions_next"] = first;
+            } else if (payload.contains("deleted_sessions_after")) {
+                replayed = true;
+                result["deleted_sessions"] = QJsonArray{stale};
+            } else {
+                result["deleted_sessions"] = QJsonArray{current};
+                if (!payload.value("deleted_sessions_only").toBool()) {
+                    result["sessions"] = QJsonArray{};
+                    result["transcript_window_version"] = 1;
+                    completed = true;
+                }
+            }
+            daemon.answer(request, result);
+        };
+        CodexAppServer bridge;
+        QSignalSpy deleted(&bridge, &CodexAppServer::daemonSessionDeleted);
+        QTRY_VERIFY(interrupted);
+        QTRY_VERIFY(replayed);
+        QTRY_VERIFY(completed);
+        QTRY_VERIFY(!bridge.isRestoring());
+        QVERIFY(daemon.connections >= 2);
+        QVERIFY(deleted.size() >= 2);
+        for (const auto& signal : deleted)
+            QVERIFY(signal.first().toString() != "stale");
+    }
+
+    void legacyDaemonCatalogStillRestores() {
+        QTemporaryDir directory;
+        FakeDaemon daemon(useFakeDaemon(directory));
+        const auto restore = qScopeGuard(stopUsingFakeDaemon);
+        QVERIFY(daemon.listening);
+        int pages = 0;
+        daemon.onRequest = [&](const QJsonObject& request) {
+            if (request.value("message_type") != "session.list")
+                return;
+            ++pages;
+            daemon.answer(request,
+                          {{"ok", true},
+                           {"transcript_window_version", 1},
+                           {"deleted_sessions", QJsonArray{QJsonObject{{"session_id", "gone"},
+                                                                       {"session_generation", 1}}}},
+                           {"sessions", QJsonArray{}}});
+        };
+        CodexAppServer bridge;
+        QSignalSpy deleted(&bridge, &CodexAppServer::daemonSessionDeleted);
+        QTRY_COMPARE(deleted.size(), 1);
+        QVERIFY(!bridge.isRestoring());
+        QCOMPARE(pages, 1);
+    }
+
     void storageCapabilitiesAndDisconnectedCallsAreNotReplayed_data() {
         QTest::addColumn<QString>("prefix");
         QTest::newRow("retention") << QString("storage.retention.");
@@ -661,6 +982,116 @@ class DesktopDaemonClientTest final : public QObject {
         QVERIFY(!client.hasCapability(prefix + "read"));
         for (const auto& request : daemon.requests)
             QCOMPARE(request.value("message_type").toString(), "session.attach");
+    }
+
+    void sentWritesAreFailedNotReplayedAfterDisconnect() {
+        QTemporaryDir directory;
+        FakeDaemon daemon(useFakeDaemon(directory));
+        const auto restore = qScopeGuard(stopUsingFakeDaemon);
+        QVERIFY(daemon.listening);
+        remote::DaemonClient client;
+        QTRY_VERIFY(client.isReady());
+        // The daemon may already have acted on these when the connection drops; sending them
+        // again would start a second turn, steer twice, answer an approval twice, overwrite
+        // another client's rename, mark newer events seen or interrupt a later turn.
+        const QStringList writes{
+            "session.start_turn", "session.steer",     "approval.resolve",
+            "question.answer",    "session.fork",      "remote.pairing.approve",
+            "session.rename",     "session.mark_seen", "session.interrupt"};
+        QStringList failed;
+        for (const auto& type : writes)
+            client.call(type, {}, "s", 1,
+                        [&failed, type](const QJsonObject&, const QString& error) {
+                            if (error.contains("disconnected"))
+                                failed.append(type);
+                        });
+        client.call("session.attach", {}, "s", 1, {});
+        QTRY_COMPARE(daemon.requests.size(), writes.size() + 1);
+        daemon.requests.clear();
+        daemon.current->disconnectFromServer();
+        QTRY_COMPARE(failed.size(), writes.size());
+        QTRY_COMPARE(daemon.requests.size(), 1);
+        QTRY_VERIFY(client.isReady());
+        QCOMPARE(daemon.requests.first().value("message_type").toString(), "session.attach");
+        // A write that was still waiting to be sent goes out once the client is ready again.
+        daemon.current->disconnectFromServer();
+        QTRY_VERIFY(!client.isReady());
+        bool answered = false;
+        client.call("session.start_turn", {}, "s", 1,
+                    [&answered](const QJsonObject&, const QString&) { answered = true; });
+        QTRY_VERIFY(client.isReady());
+        QTRY_VERIFY(
+            std::any_of(daemon.requests.cbegin(), daemon.requests.cend(), [](const auto& r) {
+                return r.value("message_type").toString() == "session.start_turn";
+            }));
+        QVERIFY(!answered);
+    }
+
+    void dropsTheConnectionOnAnOversizedOrMalformedDaemonFrame_data() {
+        QTest::addColumn<QByteArray>("frame");
+        // One byte over the 1 MiB limit; only the header is sent, the payload is never read.
+        QTest::newRow("oversized") << QByteArray::fromHex("00100001");
+        QTest::newRow("zero length") << QByteArray::fromHex("00000000");
+        QTest::newRow("not json") << QByteArray::fromHex("00000003") + QByteArray("{x}");
+        QTest::newRow("not an object") << QByteArray::fromHex("00000002") + QByteArray("[]");
+    }
+
+    void dropsTheConnectionOnAnOversizedOrMalformedDaemonFrame() {
+        QFETCH(QByteArray, frame);
+        QTemporaryDir directory;
+        FakeDaemon daemon(useFakeDaemon(directory));
+        const auto restore = qScopeGuard(stopUsingFakeDaemon);
+        QVERIFY(daemon.listening);
+        daemon.afterHello = [&](QLocalSocket* socket) {
+            if (daemon.connections == 1) {
+                socket->write(frame);
+                socket->flush();
+            }
+        };
+        remote::DaemonClient client;
+        QString failure;
+        client.call("session.start_turn", {}, "s", 1,
+                    [&failure](const QJsonObject&, const QString& error) { failure = error; });
+        // The client drops the bad connection, fails the write it had sent and connects again.
+        QTRY_COMPARE(daemon.connections, 2);
+        QTRY_VERIFY(failure.contains("disconnected"));
+        QTRY_VERIFY(client.isReady());
+    }
+
+    void replacesAnOlderDaemonOnceAndKeepsItWhenItRefuses() {
+        QTemporaryDir directory;
+        FakeDaemon daemon(useFakeDaemon(directory));
+        const auto restore = qScopeGuard(stopUsingFakeDaemon);
+        QVERIFY(daemon.listening);
+        daemon.daemonVersion = "0.0.1";
+        remote::DaemonClient client;
+        const auto upgrades = [&daemon] {
+            return std::count_if(
+                daemon.requests.cbegin(), daemon.requests.cend(), [](const auto& r) {
+                    return r.value("message_type").toString() == "daemon.prepare_upgrade";
+                });
+        };
+        QTest::qWait(500);
+        if (upgrades() == 0 && client.isReady())
+            QSKIP("Built without KETPLUS_AUTO_UPGRADE_DAEMON");
+        QTRY_COMPARE(upgrades(), 1);
+        // Desktop waits for the old daemon's answer before it uses the connection.
+        QVERIFY(!client.isReady());
+        // The old daemon exits before answering, as it does once it agreed to be replaced.
+        daemon.current->disconnectFromServer();
+        QTRY_COMPARE(daemon.connections, 2);
+        // The next daemon (still old here) is not asked again, and is used as it is.
+        QTRY_VERIFY(client.isReady());
+        QTest::qWait(200);
+        QCOMPARE(upgrades(), 1);
+
+        // A daemon that refuses, because it owns a turn, keeps serving this Desktop.
+        remote::DaemonClient second;
+        QTRY_COMPARE(upgrades(), 2);
+        QVERIFY(!second.isReady());
+        daemon.answer(daemon.requests.last(), {{"ok", false}, {"error_code", "session_busy"}});
+        QTRY_VERIFY(second.isReady());
+        QCOMPARE(upgrades(), 2);
     }
 
     void storageNeverStartsDirectProvider() {
@@ -838,17 +1269,27 @@ class DesktopDaemonClientTest final : public QObject {
         QCOMPARE(firstSent.at(1).value(QStringLiteral("payload")).toObject(),
                  QJsonObject({{QStringLiteral("after_id"), 5}}));
 
-        // The daemon drops the connection with all of them unanswered: they are sent again first,
-        // in the order they were made, with the same ids.
+        // The daemon drops the connection with all of them unanswered: the reads are sent again
+        // first, in the order they were made, with the same ids. The two writes fail instead,
+        // and the window fills with calls that were still waiting.
+        QList<QJsonObject> sentReads;
+        for (const QJsonObject& request : firstSent) {
+            if (request.value(QStringLiteral("message_type")).toString() !=
+                QStringLiteral("session.mark_seen"))
+                sentReads.append(request);
+        }
+        QCOMPARE(sentReads.size(), window - 2);
         daemon.requests.clear();
         daemon.current->disconnectFromServer();
         QTRY_COMPARE_WITH_TIMEOUT(daemon.requests.size(), window, 3000);
         QTest::qWait(200);
         QCOMPARE(daemon.requests.size(), window);
-        for (int index = 0; index < window; ++index) {
+        for (int index = 0; index < sentReads.size(); ++index) {
             QCOMPARE(daemon.requests.at(index).value(QStringLiteral("message_id")),
-                     firstSent.at(index).value(QStringLiteral("message_id")));
+                     sentReads.at(index).value(QStringLiteral("message_id")));
         }
+        QVERIFY(answered.contains(QStringLiteral("seen-1!Daemon disconnected before confirming the "
+                                                 "request. Check its result before retrying.")));
 
         // Each answer lets one more call out, until every call has been sent once.
         daemon.onRequest = [&daemon](const QJsonObject& request) {
@@ -859,12 +1300,12 @@ class DesktopDaemonClientTest final : public QObject {
         for (const QJsonObject& request : QList<QJsonObject>(daemon.requests))
             daemon.onRequest(request);
         QTRY_COMPARE_WITH_TIMEOUT(answered.size(), 5 + 1 + 2 + 24, 3000);
-        QCOMPARE(daemon.requests.size(), distinct);
+        QCOMPARE(daemon.requests.size(), distinct - 2);
         for (int index = 0; index < 5; ++index) {
             QVERIFY(answered.contains(
                 QStringLiteral("approvals-%1=session.pending_approvals").arg(index)));
         }
-        QVERIFY(answered.contains(QStringLiteral("seen-1=session.mark_seen")));
+        QVERIFY(!answered.contains(QStringLiteral("seen-1=session.mark_seen")));
     }
 
     void forksConversationThroughDaemon() {

@@ -308,16 +308,73 @@ class ProviderCompatibilityTest final : public QObject {
         runtime.capabilities = {QStringLiteral("images"), QStringLiteral("turnSteer")};
         QCOMPARE(narrowing.apply(runtime).capabilities, QStringList{QStringLiteral("images")});
 
-        // ACP omits defaults, so only explicit false narrows.
+        // ACP v1 capabilities default to unsupported when omitted.
         narrowing.reset();
         narrowing.acpInitialized({{"agentCapabilities", QJsonObject{}}});
-        QVERIFY(!narrowing.removed(QStringLiteral("threadResume")));
+        QVERIFY(narrowing.removed(QStringLiteral("threadResume")));
         narrowing.acpInitialized(
             {{"agentCapabilities",
               QJsonObject{{"loadSession", false},
                           {"promptCapabilities", QJsonObject{{"image", false}}}}}});
         QVERIFY(narrowing.removed(QStringLiteral("threadResume")));
         QVERIFY(narrowing.removed(QStringLiteral("images")));
+    }
+
+    void acpRequiresExplicitCapabilitySupport_data() {
+        QTest::addColumn<QJsonObject>("reply");
+        QTest::addColumn<bool>("resume");
+        QTest::addColumn<bool>("images");
+        QTest::newRow("missing-agent") << QJsonObject{} << false << false;
+        const auto add = [](const char* name, const QJsonValue& agent, bool resume, bool images) {
+            QTest::newRow(name) << QJsonObject{{"agentCapabilities", agent}} << resume << images;
+        };
+        add("empty-agent", QJsonObject{}, false, false);
+        add("null-agent", QJsonValue::Null, false, false);
+        add("wrong-type-agent", true, false, false);
+        for (const bool resume : {false, true}) {
+            for (const bool image : {false, true}) {
+                const QByteArray name = QByteArray(resume ? "resume-true" : "resume-false") +
+                                        (image ? "-image-true" : "-image-false");
+                add(name.constData(),
+                    QJsonObject{{"loadSession", resume},
+                                {"promptCapabilities", QJsonObject{{"image", image}}}},
+                    resume, image);
+            }
+        }
+        add("missing-resume", QJsonObject{{"promptCapabilities", QJsonObject{{"image", true}}}},
+            false, true);
+        add("missing-prompt", QJsonObject{{"loadSession", true}}, true, false);
+        add("missing-image",
+            QJsonObject{{"loadSession", true}, {"promptCapabilities", QJsonObject{}}}, true, false);
+        add("wrong-prompt", QJsonObject{{"loadSession", true}, {"promptCapabilities", true}}, true,
+            false);
+        for (const auto& value :
+             {QJsonValue("true"), QJsonValue(1), QJsonValue(QJsonValue::Null)}) {
+            const QByteArray name = "wrong-flags-" + QByteArray::number(value.type());
+            add(name.constData(),
+                QJsonObject{{"loadSession", value},
+                            {"promptCapabilities", QJsonObject{{"image", value}}}},
+                false, false);
+        }
+    }
+
+    void acpRequiresExplicitCapabilitySupport() {
+        QFETCH(QJsonObject, reply);
+        QFETCH(bool, resume);
+        QFETCH(bool, images);
+        compat::CapabilityNarrowing narrowing;
+        narrowing.acpInitialized(reply);
+        QCOMPARE(narrowing.removed(compat::capability::threadResume), !resume);
+        QCOMPARE(narrowing.removed(compat::capability::images), !images);
+        QVERIFY(!narrowing.removed(compat::capability::turnInterrupt));
+        // Each process initialization resets previous negotiation before applying its reply.
+        narrowing.reset();
+        narrowing.acpInitialized(
+            {{"agentCapabilities",
+              QJsonObject{{"loadSession", true},
+                          {"promptCapabilities", QJsonObject{{"image", true}}}}}});
+        QVERIFY(!narrowing.removed(compat::capability::threadResume));
+        QVERIFY(!narrowing.removed(compat::capability::images));
     }
 
     void methodNotFoundNarrowsCodexSteering() {

@@ -1,4 +1,5 @@
 #include "storage/LocalJournal.h"
+#include "storage/JournalFormat.h"
 #include "storage/TranscriptItemSnapshot.h"
 
 #include "protocol/DaemonProtocol.h"
@@ -57,12 +58,21 @@ LocalJournal::LocalJournal(const QString& path)
                           .arg(QUuid::createUuid().toString(QUuid::WithoutBraces))),
       database_(QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName_)) {
     database_.setDatabaseName(path);
+    // Before a writable connection exists: closing one could checkpoint a newer journal's WAL.
+    if (QString format;
+        journal_format::check(path, &format) == journal_format::Status::Unsupported) {
+        setError(format);
+        return;
+    }
     if (!database_.open()) {
         setError(database_.lastError().text());
         return;
     }
-    if (initialize() && initializeActivityGroups())
-        initializeAgents();
+    // Operations reset their own errors. Keep failed startup unusable even if a later
+    // operation clears that diagnostic; recovery requires a freshly initialized journal.
+    if (!acceptsFormat() || !initialize() || !initializeActivityGroups() || !initializeAgents() ||
+        !markFormat())
+        database_.close();
 }
 
 LocalJournal::~LocalJournal() {
@@ -144,6 +154,20 @@ bool LocalJournal::initialize() {
                        "session_id TEXT NOT NULL, generation INTEGER NOT NULL, "
                        "lifecycle_revision INTEGER NOT NULL, operation_id TEXT NOT NULL, "
                        "deleted_at TEXT NOT NULL, PRIMARY KEY(session_id, generation))"),
+        // A mutation token fences keyset walks, including retention and older writers.
+        QStringLiteral("CREATE TABLE IF NOT EXISTS session_tombstone_catalog ("
+                       "id INTEGER PRIMARY KEY CHECK(id=1), revision TEXT NOT NULL)"),
+        QStringLiteral("INSERT OR IGNORE INTO session_tombstone_catalog VALUES "
+                       "(1,lower(hex(randomblob(16))))"),
+        QStringLiteral("CREATE TRIGGER IF NOT EXISTS session_tombstone_insert_revision "
+                       "AFTER INSERT ON session_tombstones BEGIN UPDATE session_tombstone_catalog "
+                       "SET revision=lower(hex(randomblob(16))) WHERE id=1; END"),
+        QStringLiteral("CREATE TRIGGER IF NOT EXISTS session_tombstone_update_revision "
+                       "AFTER UPDATE ON session_tombstones BEGIN UPDATE session_tombstone_catalog "
+                       "SET revision=lower(hex(randomblob(16))) WHERE id=1; END"),
+        QStringLiteral("CREATE TRIGGER IF NOT EXISTS session_tombstone_delete_revision "
+                       "AFTER DELETE ON session_tombstones BEGIN UPDATE session_tombstone_catalog "
+                       "SET revision=lower(hex(randomblob(16))) WHERE id=1; END"),
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS session_deletion_work ("
             "session_id TEXT NOT NULL, generation INTEGER NOT NULL, "
@@ -153,6 +177,15 @@ bool LocalJournal::initialize() {
                        "session_deletion_work((provider_targets != '[]' OR cloud_acked=0))"),
         QStringLiteral("CREATE INDEX IF NOT EXISTS session_deletion_cloud_pending ON "
                        "session_deletion_work(cloud_acked)"),
+        // Deleted generations whose bulky history still awaits bounded removal.
+        QStringLiteral("CREATE TABLE IF NOT EXISTS session_history_purge ("
+                       "session_id TEXT NOT NULL, generation INTEGER NOT NULL, "
+                       "PRIMARY KEY(session_id, generation))"),
+        // Forks still copying history (ADR 0094). Only the daemon owns the journal, so a row
+        // left at open is an interrupted copy: recoverForkStaging makes it purge work.
+        QStringLiteral("CREATE TABLE IF NOT EXISTS session_fork_staging ("
+                       "session_id TEXT NOT NULL, generation INTEGER NOT NULL, "
+                       "PRIMARY KEY(session_id, generation))"),
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS cloud_upload_progress ("
             "scope TEXT NOT NULL, session_id TEXT NOT NULL, generation INTEGER NOT NULL, "
@@ -219,8 +252,8 @@ bool LocalJournal::initialize() {
         }
     }
     return migrateTranscriptSchema() && purgeExpiredAttachments() && backfillTurnSequences() &&
-           backfillReplayProjection() && initializeRemoteAudit() && pruneAcknowledgedEvents() &&
-           pruneRetention();
+           backfillReplayProjection() && initializeRemoteAudit() && recoverForkStaging() &&
+           pruneAcknowledgedEvents() && pruneRetention();
 }
 
 bool LocalJournal::migrateTranscriptSchema() {
@@ -272,6 +305,8 @@ bool LocalJournal::migrateTranscriptSchema() {
                       QStringLiteral("INTEGER NOT NULL DEFAULT 0")) ||
         !ensureColumn(QStringLiteral("sessions"), QStringLiteral("last_turn_started_at"),
                       QStringLiteral("TEXT NOT NULL DEFAULT ''")) ||
+        !ensureColumn(QStringLiteral("sessions"), QStringLiteral("archived_at"),
+                      QStringLiteral("TEXT NOT NULL DEFAULT ''")) ||
         !ensureColumn(QStringLiteral("replay_projection_state"), QStringLiteral("revision"),
                       QStringLiteral("INTEGER NOT NULL DEFAULT 0")) ||
         // The repository a linked worktree belonged to, kept for after the worktree is deleted.
@@ -295,9 +330,11 @@ bool LocalJournal::migrateTranscriptSchema() {
         return false;
     }
     // Conversations from before the column existed take their latest user message's time.
-    // Pruned events may have left it only in the replay projection.
+    // Pruned events may have left it only in the replay projection. Only a journal from before
+    // the format marker can hold one; this scan grows with the history (ADR 0096).
     QSqlQuery turnStarts(database_);
-    if (!turnStarts.exec(QStringLiteral(
+    if (openedFormat_ < 1 &&
+        !turnStarts.exec(QStringLiteral(
             "UPDATE sessions SET last_turn_started_at = max("
             "COALESCE((SELECT MAX(sent_at) FROM events e WHERE e.session_id = sessions.id "
             "AND e.generation = sessions.generation AND e.event_type = 'user.message'), ''), "
@@ -340,6 +377,10 @@ bool LocalJournal::migrateTranscriptSchema() {
 }
 
 bool LocalJournal::backfillTurnSequences() {
+    // Turn numbers and titles predate the format marker; a stamped journal never needs this
+    // per-session scan again, including sessions whose first prompt had no text (ADR 0096).
+    if (openedFormat_ >= 1)
+        return true;
     QSqlQuery sessions(database_);
     if (!sessions.exec(
             QStringLiteral("SELECT s.id, s.generation FROM sessions s WHERE "
@@ -641,6 +682,24 @@ bool LocalJournal::upsertSession(const StoredSession& session) {
         return false;
     }
     const bool isNew = !existing.next();
+    existing.finish();
+    // A new session must not adopt rows that a staged fork or a pending purge still owns.
+    if (isNew) {
+        existing.prepare(QStringLiteral(
+            "SELECT 1 FROM session_fork_staging WHERE session_id = ? AND generation = ? "
+            "UNION ALL SELECT 1 FROM session_history_purge WHERE session_id = ? AND "
+            "generation = ?"));
+        existing.addBindValue(session.id);
+        existing.addBindValue(session.generation);
+        existing.addBindValue(session.id);
+        existing.addBindValue(session.generation);
+        if (!existing.exec() || existing.next() || existing.lastError().isValid()) {
+            setError(existing.lastError().isValid()
+                         ? existing.lastError().text()
+                         : QStringLiteral("This session identity is still being cleaned up."));
+            return false;
+        }
+    }
     QSqlQuery query(database_);
     query.prepare(QStringLiteral(
         "INSERT INTO sessions(id, worktree_path, adapter, thread_id, turn_id, state, "
@@ -806,15 +865,13 @@ bool LocalJournal::deleteSession(const QString& sessionId, const qint64 generati
             *error = agentError;
         return false;
     }
+    // Per-generation state is removed here; bulky history gets one bounded batch and
+    // a purge marker for the rest (ADR 0093). The commit makes all of it unreachable.
     for (const QString& table :
-         {QStringLiteral("background_tasks"), QStringLiteral("activity_summaries"),
-          QStringLiteral("activity_items"), QStringLiteral("activity_heads"),
-          QStringLiteral("activity_files"), QStringLiteral("replay_events"),
+         {QStringLiteral("background_tasks"), QStringLiteral("activity_heads"),
+          QStringLiteral("activity_backfill"), QStringLiteral("activity_files_backfill"),
           QStringLiteral("replay_projection_state"), QStringLiteral("client_cursors"),
-          QStringLiteral("cloud_events"), QStringLiteral("events"),
-          QStringLiteral("large_event_payloads"), QStringLiteral("large_event_payload_chunks"),
-          QStringLiteral("staged_attachment_chunks"), QStringLiteral("staged_attachments"),
-          QStringLiteral("session_contexts")}) {
+          QStringLiteral("staged_attachments"), QStringLiteral("session_contexts")}) {
         QSqlQuery query(database_);
         query.prepare(
             QStringLiteral("DELETE FROM %1 WHERE session_id = ? AND generation = ?").arg(table));
@@ -841,6 +898,8 @@ bool LocalJournal::deleteSession(const QString& sessionId, const qint64 generati
             return false;
         }
     }
+    if (!startHistoryPurge(sessionId, generation, error))
+        return false;
     QSqlQuery session(database_);
     session.prepare(QStringLiteral("DELETE FROM sessions WHERE id = ? AND generation = ?"));
     session.addBindValue(sessionId);
@@ -971,7 +1030,7 @@ std::optional<QList<StoredSession>> LocalJournal::readSessions() const {
             "SELECT id, worktree_path, adapter, thread_id, turn_id, state, generation, "
             "last_cursor, current_turn_sequence, title, configuration_revision, model, effort, "
             "execution_policy, mode, provider_threads, last_seen_cursor, last_turn_started_at, "
-            "context_revision, compact_window "
+            "context_revision, compact_window, archived_at "
             "FROM sessions ORDER BY id"))) {
         setError(query.lastError().text());
         return std::nullopt;
@@ -986,7 +1045,8 @@ std::optional<QList<StoredSession>> LocalJournal::readSessions() const {
                        query.value(12).toString(),   query.value(13).toString(),
                        query.value(14).toString(),   query.value(15).toString(),
                        query.value(16).toLongLong(), query.value(17).toString(),
-                       query.value(18).toLongLong(), query.value(19).toLongLong()});
+                       query.value(18).toLongLong(), query.value(19).toLongLong(),
+                       query.value(20).toString()});
     }
     if (query.lastError().isValid()) {
         setError(query.lastError().text());
@@ -1057,8 +1117,8 @@ qint64 LocalJournal::appendEvent(const QString& sessionId, const qint64 generati
 
 qint64 LocalJournal::appendEventWithMutation(const QString& sessionId, const qint64 generation,
                                              const QString& type, const QJsonObject& payload,
-                                             QString* error,
-                                             const std::function<bool()>& mutation) {
+                                             QString* error, const std::function<bool()>& mutation,
+                                             bool ownTransaction) {
     const QByteArray encoded = QJsonDocument(payload).toJson(QJsonDocument::Compact);
     if (encoded.size() > protocol::maximumEventPayloadBytes) {
         const QJsonObject item = payload.value(QStringLiteral("item")).toObject();
@@ -1068,7 +1128,7 @@ qint64 LocalJournal::appendEventWithMutation(const QString& sessionId, const qin
             (type == QStringLiteral("item.started") || type == QStringLiteral("item.completed")) &&
             itemType != QStringLiteral("commandExecution") && !eventItemId(payload).isEmpty() &&
             encoded.size() <= 32 * 1024 * 1024;
-        if (!chunkable) {
+        if (!chunkable || !ownTransaction) {
             const QString message =
                 QStringLiteral("Event payload exceeds the local journal limit and cannot be "
                                "represented as a bounded transcript item.");
@@ -1078,7 +1138,7 @@ qint64 LocalJournal::appendEventWithMutation(const QString& sessionId, const qin
             return -1;
         }
     }
-    if (!database_.transaction()) {
+    if (ownTransaction && !database_.transaction()) {
         if (error != nullptr) {
             *error = database_.lastError().text();
         }
@@ -1183,7 +1243,7 @@ qint64 LocalJournal::appendEventWithMutation(const QString& sessionId, const qin
         }
         return -1;
     }
-    if (!database_.commit()) {
+    if (ownTransaction && !database_.commit()) {
         const QString commitError = database_.lastError().text();
         database_.rollback();
         if (error != nullptr)

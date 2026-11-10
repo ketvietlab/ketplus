@@ -48,6 +48,7 @@ class CodexAppServer final : public QObject {
     [[nodiscard]] QString executable() const;
     [[nodiscard]] bool usesDaemon() const noexcept { return daemon_ != nullptr; }
     [[nodiscard]] bool hasCompactWindowSupport() const noexcept;
+    [[nodiscard]] bool hasArchiveSupport() const noexcept;
     [[nodiscard]] bool isRestoring() const noexcept { return restoring_; }
     [[nodiscard]] bool hasDaemonTranscriptWindow() const noexcept {
         return daemonHasTranscriptWindow_;
@@ -81,7 +82,12 @@ class CodexAppServer final : public QObject {
     void executionWorktreeCommand(const QString& sessionId, const QString& type,
                                   const QJsonObject& payload, ResponseCallback callback);
     [[nodiscard]] qint64 daemonSessionCursor(const QString& sessionId, qint64 generation) const;
+    [[nodiscard]] bool hasDaemonSession(const QString& sessionId) const {
+        return daemonSessions_.contains(sessionId);
+    }
     void markDaemonSessionSeen(const QString& sessionId, qint64 cursor, ResponseCallback callback);
+    void setDaemonSessionArchived(const QString& sessionId, bool archived,
+                                  ResponseCallback callback);
     [[nodiscard]] bool isDaemonSessionRestoring(const QString& sessionId) const;
     // Whether the session's installed transcript window still receives its live events:
     // nothing invalidated it and no window read or catch-up is replacing it.
@@ -142,6 +148,8 @@ class CodexAppServer final : public QObject {
     void setupDaemonTransport();
     void daemonCall(const QString& method, const QJsonObject& params, ResponseCallback callback);
     void refreshDaemonSessions();
+    void readDaemonSessionCatalogPage(quint64 epoch, ResponseCallback callback);
+    void applyDaemonTombstones(const QJsonArray& tombstones);
     void queueDaemonDiscovery(const QJsonObject& envelope);
     void discoverDaemonSessions();
     void reorderDaemonRestoreQueue();
@@ -177,6 +185,7 @@ class CodexAppServer final : public QObject {
     bool stopping_{false};
     bool restoring_{false};
     bool daemonSessionListInFlight_{false};
+    quint64 daemonSessionListEpoch_{0};
     bool daemonDiscoveryInFlight_{false};
     bool daemonDiscoveryScheduled_{false};
     quint64 daemonDiscoveryEpoch_{0};

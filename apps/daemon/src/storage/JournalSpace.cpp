@@ -1,6 +1,9 @@
 #include "storage/JournalSpace.h"
 
+#include "storage/JournalFormat.h"
+
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QSqlDatabase>
@@ -25,7 +28,18 @@
 namespace ketplus::daemon::journal_space {
 namespace {
 
-QString compactPath(const QString& path) { return path + QStringLiteral(".compact"); }
+QString compactDirectory(const QString& path) {
+    // The VACUUM destination is a literal absolute filename, never a SQLite URI.
+    return QFileInfo(path).absoluteFilePath() + QStringLiteral(".compact-private");
+}
+QString compactPath(const QString& path) {
+    return compactDirectory(path) + QStringLiteral("/journal.sqlite");
+}
+constexpr auto privateDirectory =
+    QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner;
+constexpr auto groupOrOther = QFileDevice::ReadGroup | QFileDevice::WriteGroup |
+                              QFileDevice::ExeGroup | QFileDevice::ReadOther |
+                              QFileDevice::WriteOther | QFileDevice::ExeOther;
 
 // A connection of its own, removed when it goes out of scope.
 class Connection final {
@@ -79,11 +93,44 @@ std::optional<Usage> readUsage(QSqlDatabase& database, QString* error) {
                  autoVacuum->toInt()};
 }
 
-void removeCompactCopy(const QString& path) {
-    const QString compact = compactPath(path);
-    for (const QString& suffix :
-         {QString(), QStringLiteral("-journal"), QStringLiteral("-wal"), QStringLiteral("-shm")})
-        QFile::remove(compact + suffix);
+bool removeCompactCopy(const QString& path) {
+    // Legacy siblings predate private staging. Remove only regular known artifacts.
+    const QStringList suffixes{QString(), "-journal", "-wal", "-shm"};
+    for (const auto& suffix : suffixes) {
+        const QFileInfo legacy(path + ".compact" + suffix);
+        if (!legacy.exists() && !legacy.isSymLink())
+            continue;
+        if (!legacy.isFile() || legacy.isSymLink() || !QFile::remove(legacy.filePath()))
+            return false;
+    }
+    const QFileInfo directory(compactDirectory(path));
+    if (!directory.exists() && !directory.isSymLink())
+        return true;
+    if (!directory.isDir() || directory.isSymLink())
+        return false;
+#if !defined(Q_OS_WIN)
+    if (directory.ownerId() != ::geteuid() || (directory.permissions() & groupOrOther))
+        return false;
+#endif
+    // At most four known files; never recurse or enumerate an unbounded foreign directory.
+    QStringList files;
+    {
+        QDirIterator entries(directory.filePath(),
+                             QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot);
+        while (entries.hasNext()) {
+            entries.next();
+            const auto entry = entries.fileInfo();
+            if (files.size() >= 4 || !entry.isFile() || entry.isSymLink() ||
+                !suffixes.contains(entry.fileName().mid(QStringLiteral("journal.sqlite").size())) ||
+                !entry.fileName().startsWith("journal.sqlite"))
+                return false;
+            files.append(entry.filePath());
+        }
+    }
+    for (const auto& file : files)
+        if (!QFile::remove(file))
+            return false;
+    return QDir().rmdir(directory.filePath());
 }
 
 bool syncFile(const QString& path) {
@@ -121,9 +168,11 @@ bool replaceFile(const QString& source, const QString& target) {
 }
 
 MigrationResult failed(MigrationResult result, const QString& path, const QString& error) {
-    removeCompactCopy(path);
+    const bool removed = removeCompactCopy(path);
     result.outcome = Migration::Failed;
     result.error = error;
+    if (!removed)
+        result.error += QStringLiteral(" Migration artifacts were preserved for repair.");
     return result;
 }
 
@@ -136,8 +185,19 @@ qint64 migrationMargin(const Usage& usage) {
 
 MigrationResult migrateToIncrementalVacuum(const QString& path) {
     MigrationResult result;
+    // Before cleanup or any writable connection: a newer journal and its artifacts stay as found.
+    if (QString format;
+        journal_format::check(path, &format) == journal_format::Status::Unsupported) {
+        result.outcome = Migration::Deferred;
+        result.error = format;
+        return result;
+    }
     // An earlier attempt stopped before its rename: the original is the journal.
-    removeCompactCopy(path);
+    if (!removeCompactCopy(path)) {
+        result.outcome = Migration::Failed;
+        result.error = QStringLiteral("An unsupported or busy migration artifact was preserved.");
+        return result;
+    }
     if (!QFileInfo::exists(path))
         return result;
 
@@ -162,6 +222,15 @@ MigrationResult migrateToIncrementalVacuum(const QString& path) {
         return failed(result, path, first.lastError().text());
     }
     const qint64 tables = first.value(0).toLongLong();
+    first.finish();
+    // A newer daemon's journal is never rewritten; LocalJournal then refuses to open it.
+    if (!first.exec(QStringLiteral("PRAGMA user_version")) || !first.next())
+        return failed(result, path, first.lastError().text());
+    if (const int version = first.value(0).toInt(); !journal_format::supported(version)) {
+        result.outcome = Migration::Deferred;
+        result.error = QStringLiteral("The journal has the unsupported format %1.").arg(version);
+        return result;
+    }
     first.finish();
     const auto before = readUsage(source.database(), &error);
     if (!before)
@@ -190,6 +259,24 @@ MigrationResult migrateToIncrementalVacuum(const QString& path) {
     checkpoint.finish();
     if (QFileInfo(path + QStringLiteral("-wal")).size() > 0)
         return failed(result, path, QStringLiteral("The journal's log was not emptied."));
+
+    // SQLite creates the output itself; keep it and its sidecars private throughout writing.
+    // Some platform SQLite builds reject even an existing empty VACUUM INTO target.
+    if (!QDir().mkdir(compactDirectory(path), privateDirectory)) {
+        result.outcome = Migration::Failed;
+        result.error = QStringLiteral("The private migration directory could not be created.");
+        return result;
+    }
+#if !defined(Q_OS_WIN)
+    const QFileInfo createdDirectory(compactDirectory(path));
+    if (createdDirectory.ownerId() != ::geteuid() ||
+        (createdDirectory.permissions() & groupOrOther)) {
+        QDir().rmdir(compactDirectory(path)); // Empty directory created above; no data was copied.
+        result.outcome = Migration::Failed;
+        result.error = QStringLiteral("The migration directory could not be protected.");
+        return result;
+    }
+#endif
 
     // The copy takes the pending auto_vacuum; the original is not changed.
     QSqlQuery vacuum(source.database());
@@ -223,7 +310,9 @@ MigrationResult migrateToIncrementalVacuum(const QString& path) {
         result.after = *after;
     }
 #if !defined(Q_OS_WIN)
-    QFile::setPermissions(compactPath(path), QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    if (!QFile::setPermissions(compactPath(path), QFileDevice::ReadOwner | QFileDevice::WriteOwner))
+        return failed(result, path,
+                      QStringLiteral("The compacted journal could not be protected."));
 #endif
     if (!syncFile(compactPath(path)))
         return failed(result, path, QStringLiteral("The compacted journal could not be synced."));
@@ -240,6 +329,9 @@ MigrationResult migrateToIncrementalVacuum(const QString& path) {
     if (QFileInfo(path + QStringLiteral("-wal")).size() == 0)
         QFile::remove(path + QStringLiteral("-wal"));
     result.outcome = Migration::Migrated;
+    if (!removeCompactCopy(path))
+        result.error =
+            QStringLiteral("Migration succeeded; staging artifacts were preserved for repair.");
     return result;
 }
 

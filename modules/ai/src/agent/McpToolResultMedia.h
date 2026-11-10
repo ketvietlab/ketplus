@@ -23,8 +23,8 @@ inline constexpr auto unavailableSourcePrefix = "ketplus-media-unavailable:";
 // Decodes bounded PNG/JPEG `image` content blocks from an MCP tool result, stores each once
 // under directory() by content hash and returns file URLs for the transcript image gallery.
 // Daemon `media_ref` blocks resolve to existing files in mediaDirectory (no copy); a ref that
-// cannot be resolved yields an unavailableSourcePrefix placeholder. Oversized or malformed
-// inline blocks and other media types are skipped.
+// cannot be resolved, or a block history retention omitted, yields an unavailableSourcePrefix
+// placeholder. Oversized or malformed inline blocks and other media types are skipped.
 [[nodiscard]] QVariantList
 materializeImages(const QJsonObject& result, const QString& targetDirectory = directory(),
                   const QString& mediaDirectory = daemonMediaDirectory());

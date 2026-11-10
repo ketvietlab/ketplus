@@ -56,6 +56,8 @@ fail() {
 
 plist="$app/Contents/Info.plist"
 version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")"
+[[ "$version" =~ ^[0-9][A-Za-z0-9.+_-]*$ ]] ||
+    fail "CFBundleShortVersionString must be a nonempty filename-safe version starting with a digit"
 feed="$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$plist" 2>/dev/null)" ||
     fail "$app was built without KETPLUS_UPDATE_FEED_URL; it could never install updates"
 [[ -d "$app/Contents/Frameworks/Sparkle.framework" ]] || fail "$app does not embed Sparkle"
@@ -74,27 +76,69 @@ if ! /usr/bin/codesign -dv "$app" 2>&1 | grep -q '^Authority=Developer ID Applic
         "for users. Use this archive for testing only." >&2
 fi
 
-mkdir -p "$updates_dir"
 archive="$updates_dir/KetPlus-$version.zip"
-[[ ! -e "$archive" ]] || fail "$archive already exists; every release needs a new version"
-/usr/bin/ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
+[[ ! -e "$archive" && ! -L "$archive" ]] ||
+    fail "$archive already exists; every release needs a new version"
+notes_destination=""
 if [[ -n "$release_notes" ]]; then
+    [[ -f "$release_notes" && -r "$release_notes" ]] ||
+        fail "release notes must be a readable file: $release_notes"
     case "$release_notes" in
-    *.html) cp "$release_notes" "$updates_dir/KetPlus-$version.html" ;;
-    *.md) cp "$release_notes" "$updates_dir/KetPlus-$version.md" ;;
+    *.html) notes_destination="$updates_dir/KetPlus-$version.html" ;;
+    *.md) notes_destination="$updates_dir/KetPlus-$version.md" ;;
     *) fail "release notes must be .html or .md" ;;
     esac
+    [[ ! -e "$notes_destination" && ! -L "$notes_destination" ]] ||
+        fail "$notes_destination already exists; refusing to overwrite release notes"
+fi
+
+# A run that fails before the new appcast.xml is in place removes what it created, so the same
+# version can be prepared again, and leaves the published appcast.xml as it was. Once the new
+# appcast is installed, the archive and notes it references stay even if a later step fails.
+created=()
+appcast_staging=""
+remove_partial_release() {
+    local status=$?
+    if [[ $status -ne 0 ]]; then
+        local path
+        for path in ${created[@]+"${created[@]}"}; do
+            rm -f -- "$path"
+        done
+    fi
+    [[ -z "$appcast_staging" ]] || rm -rf -- "$appcast_staging"
+    return $status
+}
+trap remove_partial_release EXIT
+
+# Validate notes and destination collisions before creating any release artifact.
+mkdir -p "$updates_dir"
+created+=("$archive")
+/usr/bin/ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
+if [[ -n "$notes_destination" ]]; then
+    created+=("$notes_destination")
+    cp "$release_notes" "$notes_destination"
 fi
 
 key_arguments=()
 if [[ -n "$key_file" ]]; then
     key_arguments=(--ed-key-file "$key_file")
 fi
+# generate_appcast reads an existing -o file as the feed to update, so the staged copy starts as
+# the published feed (with its mode), or does not exist for a first release. The staging
+# directory sits next to the updates directory, outside the archives Sparkle scans, and on the
+# same filesystem, so installing the new feed is a rename.
+updates_parent="$(cd "$updates_dir/.." && pwd -P)"
+appcast_staging="$(mktemp -d "$updates_parent/.ketplus-appcast.XXXXXX")"
+if [[ -e "$updates_dir/appcast.xml" ]]; then
+    cp -p -- "$updates_dir/appcast.xml" "$appcast_staging/appcast.xml"
+fi
 "$sparkle_bin/generate_appcast" "${key_arguments[@]+"${key_arguments[@]}"}" \
     --download-url-prefix "$download_prefix" \
     --embed-release-notes \
-    -o "$updates_dir/appcast.xml" \
+    -o "$appcast_staging/appcast.xml" \
     "$updates_dir"
+mv -f -- "$appcast_staging/appcast.xml" "$updates_dir/appcast.xml"
+created=()
 
 echo "Prepared KetPlus $version in $updates_dir"
 echo "The installed app reads $feed; upload appcast.xml and the archive only after approval."

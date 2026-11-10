@@ -110,6 +110,15 @@ are mandatory:
 - Over a limit, the message is `held`. Both conversations show a notice card,
   and held messages are delivered with the receiver's next user-started turn.
 - A conversation cannot message itself.
+- A sender with 20 undelivered (`queued` or `held`) messages to one receiver
+  gets `receiver_backlog` until the receiver takes some. Other senders are not
+  affected.
+- One turn takes the oldest queued messages whose serialized prompt block and
+  `agent_messages` entry (escapes and sender title included) fit 240 KiB,
+  leaving room for the rest of the 256 KiB journal event. The rest wait for the
+  next turn. `agents.send` refuses with `message_too_large` a message that could
+  never fit on its own; one accepted earlier that does not fit is marked
+  `failed` alone instead of failing its batch.
 
 ### Explicit Desktop release of held messages (#130)
 
@@ -151,8 +160,14 @@ a later phase.
 ### Sender identity and trust
 
 - The daemon mints a random 256-bit capability token per conversation
-  generation for the life of the daemon process and passes it only in the
-  environment of that conversation's `ketplus_agents` MCP server. The server
+  generation for the life of the daemon process and passes it in the
+  environment of that conversation's `ketplus_agents` MCP server. Codex and
+  Cursor receive that configuration over their JSON-RPC connection. The Claude
+  Agent SDK passes `mcpServers` to the CLI as `--mcp-config` JSON, so on macOS
+  the token is visible in that process's arguments to local users. Accepted
+  (#69): another user cannot reach the owner-only socket inside `~/Library`,
+  and a process of the same user can already read the daemon credential. The
+  server
   presents the token in `daemon.hello` as `agent_token`; the daemon derives the
   sender from it, and tool arguments never name the sender. Tokens are not
   journaled, deletion revokes them, and providers are restarted with the daemon.

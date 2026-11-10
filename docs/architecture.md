@@ -119,7 +119,10 @@ Qt application shell
   does not stop the shell. The first implementation retains one session, while
   the planned session registry will retain one or more sessions per worktree.
 - `modules/atlas/src` owns Atlas process/WebView integration and the private
-  `AtlasIndex`. The index scans only the active workspace/worktree for exact
+  `AtlasIndex`. Process readiness accepts only a complete line naming the current
+  attempt's selected loopback port; partial/truncated log suffixes and stop-time
+  output cannot publish a new endpoint (ADR 0081). The index scans only the active
+  workspace/worktree for exact
   `*.ketatlas/atlas.json` bundles; switching worktrees replaces its root rather
   than expanding into linked worktrees. Atlas descriptors retain screen IDs,
   titles, URLs, and resolved local paths for future per-screen audit, while
@@ -134,7 +137,10 @@ Qt application shell
   CLI is unavailable, `AtlasTab` owns the explicit, user-triggered npm install
   flow and executable picker. The conversation list offers an explicit 0.6.1
   update after a managed-viewer version error. Opening an Atlas never installs
-  software by itself.
+  software by itself. `ketatlas` and `npm` are looked up first in the Settings or
+  `KETPLUS_KETATLAS_CLI` override (`ketatlas` only), then in PATH, then in
+  Homebrew, then in each `~/.nvm` Node version from the newest version number
+  down (`AtlasProcess::toolSearchPaths`).
 - A conversation header opens an Atlas list in the Agent detail tabs. The sidebar
   has no Atlas destination. `ManagedAtlasViewers` launches KetAtlas 0.6.1 in
   managed mode for explicit external-browser viewing, starts the declared native

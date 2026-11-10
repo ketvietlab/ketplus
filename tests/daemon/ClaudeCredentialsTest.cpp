@@ -102,6 +102,7 @@ class ClaudeCredentialsTest : public QObject {
         const QByteArray token(32, 'x');
         QFile tokenFile(tokenPath);
         QVERIFY(tokenFile.open(QIODevice::WriteOnly));
+        QVERIFY(tokenFile.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner));
         QCOMPARE(tokenFile.write(token), token.size());
         tokenFile.close();
         const auto oldSocket = qgetenv("KETPLUS_DAEMON_SOCKET");
@@ -298,10 +299,6 @@ class ClaudeCredentialsTest : public QObject {
             QVERIFY(!error.isEmpty());
             QCOMPARE(memory.writes, 0);
         }
-        memory.bytes = "{broken";
-        service.handle("remove", {}, reply);
-        QVERIFY(!error.isEmpty());
-        QCOMPARE(memory.bytes, QByteArray("{broken"));
         for (const QJsonObject config :
              {QJsonObject{{"enabled", true}, {"revision", "a"}, {"budget_usd", 1}},
               QJsonObject{{"enabled", false}, {"revision", "a"}, {"budget_usd", -1}},
@@ -319,6 +316,45 @@ class ClaudeCredentialsTest : public QObject {
         memory.error = "Keychain locked";
         QVERIFY(service.launchConfiguration(&error).isEmpty());
         QCOMPARE(error, "Keychain locked");
+        // Removing a locked entry reports the storage error and changes nothing.
+        memory.bytes = "{broken";
+        service.handle("remove", {}, reply);
+        QCOMPARE(error, "Keychain locked");
+        QCOMPARE(memory.bytes, QByteArray("{broken"));
+        QCOMPARE(memory.writes, 0);
+    }
+
+    // An unreadable or invalid entry fails every Claude turn closed; Remove must still clear it.
+    void removeClearsAnUnreadableEntry() {
+        for (const QByteArray& broken :
+             {QByteArray("{broken"),
+              QJsonDocument(QJsonObject{{"enabled", true}, {"revision", "a"}, {"budget_usd", 1}})
+                  .toJson(),
+              QJsonDocument(QJsonObject{{"enabled", false},
+                                        {"revision", "a"},
+                                        {"budget_usd", 1},
+                                        {"key", "sk-ant-bad\n"}})
+                  .toJson()}) {
+            MemoryStore memory;
+            memory.bytes = broken;
+            ClaudeCredentials service(memory.storage());
+            QString error;
+            QVERIFY(service.launchConfiguration(&error).isEmpty());
+            QVERIFY(!error.isEmpty());
+            QJsonObject result;
+            service.handle("remove", {}, [&](const QJsonObject& r, const QString& e) {
+                result = r;
+                error = e;
+            });
+            QVERIFY2(error.isEmpty(), qPrintable(error));
+            QCOMPARE(memory.writes, 1);
+            QVERIFY(!result.value("configured").toBool());
+            QVERIFY(!memory.bytes.contains("sk-ant"));
+            const auto launch = service.launchConfiguration(&error);
+            QVERIFY2(error.isEmpty(), qPrintable(error));
+            QVERIFY(!launch.value("enabled").toBool());
+            QVERIFY(!launch.contains("key"));
+        }
     }
     void checksOnlyFixedModelsEndpointAndHandlesErrors() {
         MemoryStore memory;

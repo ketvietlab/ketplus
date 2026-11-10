@@ -34,6 +34,7 @@ add_library(ketplus_ai STATIC
     src/agent/DaemonTranscriptProjection.cpp
     src/agent/DaemonTranscriptProjection.h
     src/agent/AgentSessionManager.cpp
+    src/agent/AgentSessionArchive.cpp
     src/agent/AgentSessionReviewers.cpp
     src/agent/AgentSessionConfiguration.cpp
     src/agent/AgentSessionManager.h

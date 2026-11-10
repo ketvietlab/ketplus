@@ -1,10 +1,12 @@
 #include "agents/AgentBroker.h"
 
 #include "agents/AgentInstructions.h"
+#include "protocol/DaemonProtocol.h"
 #include "storage/LocalJournal.h"
 
 #include <QDateTime>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QUuid>
@@ -52,21 +54,25 @@ QString truncatedUtf8(const QString& text, const qsizetype maximumBytes) {
     return result;
 }
 
+QJsonObject originEntry(const AgentMessageRecord& message) {
+    return {{QStringLiteral("message_id"), message.id},
+            {QStringLiteral("kind"), message.kind},
+            {QStringLiteral("chain_id"), message.chainId},
+            {QStringLiteral("hop"), message.hop},
+            {QStringLiteral("from_number"), message.fromNumber},
+            {QStringLiteral("from_title"), message.fromTitle},
+            {QStringLiteral("from_provider"), message.fromProvider},
+            {QStringLiteral("to_number"), message.toNumber},
+            {QStringLiteral("reply_to"), message.replyTo},
+            {QStringLiteral("expect_reply"), message.expectReply},
+            {QStringLiteral("urgent"), message.urgent},
+            {QStringLiteral("body"), message.body}};
+}
+
 QJsonObject originJson(const QList<AgentMessageRecord>& messages) {
     QJsonArray entries;
     for (const AgentMessageRecord& message : messages)
-        entries.append(QJsonObject{{QStringLiteral("message_id"), message.id},
-                                   {QStringLiteral("kind"), message.kind},
-                                   {QStringLiteral("chain_id"), message.chainId},
-                                   {QStringLiteral("hop"), message.hop},
-                                   {QStringLiteral("from_number"), message.fromNumber},
-                                   {QStringLiteral("from_title"), message.fromTitle},
-                                   {QStringLiteral("from_provider"), message.fromProvider},
-                                   {QStringLiteral("to_number"), message.toNumber},
-                                   {QStringLiteral("reply_to"), message.replyTo},
-                                   {QStringLiteral("expect_reply"), message.expectReply},
-                                   {QStringLiteral("urgent"), message.urgent},
-                                   {QStringLiteral("body"), message.body}});
+        entries.append(originEntry(message));
     QJsonObject origin{{QStringLiteral("origin"), QStringLiteral("agent")},
                        {QStringLiteral("agent_messages"), entries}};
     // ADR 0067: the turn reviews another conversation and runs read-only.
@@ -79,6 +85,15 @@ QJsonObject originJson(const QList<AgentMessageRecord>& messages) {
                       messages.first().delivery.mid(QStringLiteral("user_authorized:").size()));
     return origin;
 }
+
+// What one message adds to its turn's user.message: its prompt block and its agent_messages
+// entry, both serialized with their escapes, header and sender title included.
+qsizetype deliveryCost(const AgentMessageRecord& message) {
+    const QJsonArray encoded{agent_messaging::deliveryText({message}), originEntry(message)};
+    return QJsonDocument(encoded).toJson(QJsonDocument::Compact).size();
+}
+
+static_assert(AgentBroker::maximumDeliveryBytes < protocol::maximumEventPayloadBytes);
 
 } // namespace
 
@@ -218,6 +233,14 @@ QJsonObject AgentBroker::send(const AgentConversation& caller, const QJsonObject
     if (!receiver || receiver->generation != target->second)
         return failure(QStringLiteral("unknown_number"),
                        QStringLiteral("No conversation on this computer has number #%1.").arg(to));
+    // A looping sender would otherwise fill the journal and the receiver's next turn.
+    if (journal_->undeliveredAgentMessages(caller.sessionId, caller.generation, receiver->sessionId,
+                                           receiver->generation) >= maximumUndeliveredPerSender)
+        return failure(QStringLiteral("receiver_backlog"),
+                       QStringLiteral("#%1 has not received your last %2 messages yet. Wait for "
+                                      "it to take them before sending more.")
+                           .arg(to)
+                           .arg(maximumUndeliveredPerSender));
 
     AgentMessageRecord message;
     message.id = newId();
@@ -260,6 +283,12 @@ QJsonObject AgentBroker::send(const AgentConversation& caller, const QJsonObject
         message.expiresAt = QDateTime::currentDateTimeUtc()
                                 .addSecs(qint64{requestLifetimeHours} * 3600)
                                 .toString(Qt::ISODateWithMs);
+    // Escapes and the sender's title count: a message that cannot fit a turn on its own would be
+    // accepted and then fail.
+    if (deliveryCost(message) > maximumDeliveryBytes)
+        return failure(QStringLiteral("message_too_large"),
+                       QStringLiteral("This message is too large to deliver once encoded. Shorten "
+                                      "it or remove control characters."));
     // A review's answer follows the verdict policy however it is sent (ADR 0067).
     const bool recorded = replied && recordReviewReply(message, *replied);
     if (!recorded)
@@ -374,6 +403,9 @@ void AgentBroker::deliverTo(const QString& sessionId) {
                 urgent.append(message);
         if (urgent.isEmpty() || !receiver->steerable)
             return;
+        keepOneTurn(urgent);
+        if (urgent.isEmpty())
+            return;
         if (!host_
                  ->steerAgentTurn(sessionId, receiver->generation,
                                   agent_messaging::deliveryText(urgent), originJson(urgent))
@@ -434,6 +466,9 @@ void AgentBroker::deliverTo(const QString& sessionId) {
         markState(message, QStringLiteral("held"), reason);
         notice(message, QStringLiteral("held"), reason);
     }
+    if (deliverable.isEmpty())
+        return;
+    keepOneTurn(deliverable);
     if (deliverable.isEmpty())
         return;
     if (!authorizedBatch.isEmpty()) {
@@ -512,6 +547,10 @@ QString AgentBroker::takeForUserTurn(const QString& sessionId, const qint64 gene
     // A review request runs only in its own read-only turn (ADR 0067), never in the user's.
     pending.removeIf(
         [](const AgentMessageRecord& message) { return message.kind == QStringLiteral("review"); });
+    if (pending.isEmpty())
+        return {};
+    // Messages left over are delivered when this turn ends.
+    keepOneTurn(pending);
     if (pending.isEmpty())
         return {};
     // Called once the turn's user.message is journaled, which opened this turn sequence.
@@ -668,6 +707,25 @@ void AgentBroker::expireOverdue() {
         markState(message, QStringLiteral("expired"), QStringLiteral("no_reply_in_time"));
         notice(message, QStringLiteral("expired"), QStringLiteral("no_reply_in_time"));
     }
+}
+
+void AgentBroker::keepOneTurn(QList<AgentMessageRecord>& messages) {
+    QList<AgentMessageRecord> turn;
+    qsizetype bytes = 0;
+    for (AgentMessageRecord& message : messages) {
+        const qsizetype cost = deliveryCost(message);
+        if (cost > maximumDeliveryBytes) {
+            // Accepted before send measured it this way; it can never fit a turn.
+            markState(message, QStringLiteral("failed"), QStringLiteral("message_too_large"));
+            notice(message, QStringLiteral("failed"), QStringLiteral("message_too_large"));
+            continue;
+        }
+        if (bytes + cost > maximumDeliveryBytes)
+            break;
+        bytes += cost;
+        turn.append(message);
+    }
+    messages = std::move(turn);
 }
 
 void AgentBroker::markState(AgentMessageRecord& message, const QString& state,

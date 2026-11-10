@@ -1,4 +1,5 @@
 #include "git/GitParser.h"
+#include "TestSymlink.h"
 #include "git/GitService.h"
 
 #include <QDir>
@@ -268,8 +269,14 @@ void GitParserTest::diffsSymlinksAsLinks() {
     QVERIFY(write(outside, "outside\n"));
     const QString link = QDir(root).filePath(QStringLiteral("link.txt"));
     const QString outsideLink = QDir(root).filePath(QStringLiteral("outside-link.txt"));
-    QVERIFY(QFile::link(QStringLiteral("sub/target.txt"), link));
-    QVERIFY(QFile::link(outside, outsideLink));
+    const QString firstLinkError =
+        ketplus::test::createSymlink(QStringLiteral("sub/target.txt"), link);
+    QVERIFY2(firstLinkError.isEmpty(), qPrintable(firstLinkError));
+    const QString outsideLinkError = ketplus::test::createSymlink(outside, outsideLink);
+    QVERIFY2(outsideLinkError.isEmpty(), qPrintable(outsideLinkError));
+    QVERIFY(runGit(
+        git, root,
+        {QStringLiteral("config"), QStringLiteral("core.symlinks"), QStringLiteral("true")}));
     QVERIFY(runGit(git, root, {QStringLiteral("add"), QStringLiteral(".")}));
     QVERIFY(runGit(git, root,
                    {QStringLiteral("-c"), QStringLiteral("user.name=KetPlus Test"),
@@ -279,9 +286,12 @@ void GitParserTest::diffsSymlinksAsLinks() {
 
     // Retarget both links and change the old target, so a diff of the target would differ.
     QVERIFY(QFile::remove(link));
-    QVERIFY(QFile::link(QStringLiteral("other.txt"), link));
+    const QString retargetError = ketplus::test::createSymlink(QStringLiteral("other.txt"), link);
+    QVERIFY2(retargetError.isEmpty(), qPrintable(retargetError));
     QVERIFY(QFile::remove(outsideLink));
-    QVERIFY(QFile::link(QStringLiteral("other.txt"), outsideLink));
+    const QString outsideRetargetError =
+        ketplus::test::createSymlink(QStringLiteral("other.txt"), outsideLink);
+    QVERIFY2(outsideRetargetError.isEmpty(), qPrintable(outsideRetargetError));
     QVERIFY(write(QDir(root).filePath(QStringLiteral("sub/target.txt")), "target after\n"));
 
     ketplus::GitService service;
@@ -403,7 +413,12 @@ void GitParserTest::diffsFilesBeforeTheFirstCommit() {
     }
     // A tracked symlink whose target does not exist is still an entry on disk.
     const QString danglingLink = QDir(root).filePath(QStringLiteral("dangling-link"));
-    QVERIFY(QFile::link(QStringLiteral("missing-target"), danglingLink));
+    const QString danglingError =
+        ketplus::test::createSymlink(QStringLiteral("missing-target"), danglingLink);
+    QVERIFY2(danglingError.isEmpty(), qPrintable(danglingError));
+    QVERIFY(runGit(
+        git, root,
+        {QStringLiteral("config"), QStringLiteral("core.symlinks"), QStringLiteral("true")}));
     QVERIFY(runGit(git, root, {QStringLiteral("add"), QStringLiteral(".")}));
     // Staged, then deleted from the working tree: only the index still has it.
     QVERIFY(QFile::remove(removed));
