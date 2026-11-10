@@ -75,7 +75,7 @@ void updateConversation(ket::ConversationRow* row, const QVariantMap& conversati
             color = ket::conversationStatusRecipe(ket::ConversationStatus::Working,
                                                   ket::Appearance::instance().theme())
                         .iconColor;
-        tags.append({text, color});
+        tags.append({text, color, tag.value(QStringLiteral("locked")).toBool()});
     }
     row->setTags(tags);
 }
@@ -93,6 +93,17 @@ QStringList structureOf(const QVector<SidebarRepository>& repositories) {
     for (const SidebarRepository& repository : repositories) {
         // The active repository is state, not structure: switching repositories must not rebuild.
         structure << repository.path << repository.name;
+        for (const SidebarTeam& team : repository.teams) {
+            structure << QStringLiteral("team:") + team.id << team.name;
+            for (const QVariant& value : team.members) {
+                const QVariantMap member = value.toMap();
+                structure << member.value(QStringLiteral("id")).toString()
+                          << member.value(QStringLiteral("title")).toString()
+                          << member.value(QStringLiteral("number")).toString()
+                          << member.value(QStringLiteral("teamRole")).toString()
+                          << runningAgentSender(member);
+            }
+        }
         for (const QVariant& value : repository.conversations) {
             const QVariantMap conversation = value.toMap();
             structure << conversation.value(QStringLiteral("id")).toString()
@@ -188,7 +199,10 @@ void SidebarRepositoryList::setRepositories(const QVector<SidebarRepository>& pr
     sortSidebarRepositories(repositories);
     bool seenChanged = false;
     for (const SidebarRepository& repository : repositories) {
-        for (const QVariant& value : repository.conversations) {
+        QVariantList listed = repository.conversations;
+        for (const SidebarTeam& team : repository.teams)
+            listed += team.members;
+        for (const QVariant& value : std::as_const(listed)) {
             const QVariantMap conversation = value.toMap();
             const QString id = conversation.value(QStringLiteral("id")).toString();
             // Daemon-backed `seen` is authoritative across relaunch; drop stale local marks
@@ -223,6 +237,7 @@ void SidebarRepositoryList::setRepositories(const QVector<SidebarRepository>& pr
     rows_.clear();
     headers_.clear();
     groups_.clear();
+    folders_.clear();
     setUpdatesEnabled(false);
     while (auto* item = layout_->takeAt(0)) {
         delete item->widget();
@@ -253,65 +268,14 @@ void SidebarRepositoryList::setRepositories(const QVector<SidebarRepository>& pr
         create->setObjectName(QStringLiteral("productNewConversationButton"));
         create->setToolTip(tr("New conversation in %1").arg(repository.name));
         connect(header, &ket::GroupHeader::actionTriggered, this,
-                [this, path = repository.path] { emit newConversationRequested(path); });
+                [this, path = repository.path, create] { onRepositoryAction(path, create); });
         headers_.append(header);
         groupLayout->addWidget(header);
+        for (const SidebarTeam& team : repository.teams)
+            groupLayout->addWidget(createTeamFolder(group, repository, team));
 
-        for (const QVariant& value : repository.conversations) {
-            const QVariantMap conversation = value.toMap();
-            const QString id = conversation.value(QStringLiteral("id")).toString();
-            const QString worktreePath = conversation.value(QStringLiteral("path")).toString();
-            QString title = conversation.value(QStringLiteral("title")).toString();
-            if (title.isEmpty())
-                title = tr("New conversation");
-            const bool seen = conversation.value(QStringLiteral("seen")).toBool() ||
-                              seenConversationIds_.contains(id);
-            const bool selected = conversation.value(QStringLiteral("selected")).toBool();
-
-            auto* button = new ket::ConversationRow(title, group);
-            button->setObjectName(QStringLiteral("productConversationButton"));
-            button->setProperty("kvRole", QStringLiteral("productConversation"));
-            button->setProperty("worktreePath", worktreePath);
-            button->setProperty("conversationId", id);
-            button->installEventFilter(this);
-            button->setCheckable(true);
-            button->setChecked(selected);
-            button->setProperty("selectedConversation", selected);
-            button->setContextMenuPolicy(Qt::CustomContextMenu);
-            // The worktree is an attribute of the conversation; name it without a machine path.
-            // ADR 0027: agents and the user call a conversation by this number.
-            const QString number = conversation.value(QStringLiteral("number")).toString();
-            const QString numbered =
-                number.isEmpty() ? title : QLatin1Char('#') + number + QLatin1Char(' ') + title;
-            const QString sender = runningAgentSender(conversation);
-            QString origin;
-            if (!sender.isEmpty()) {
-                const QString senderTitle =
-                    conversation.value(QStringLiteral("agentTurnTitle")).toString();
-                origin = (conversation.value(QStringLiteral("agentTurnReply")).toBool()
-                              ? tr("Reply from #%1")
-                              : tr("Message from #%1"))
-                             .arg(sender) +
-                         (senderTitle.isEmpty() ? QString() : QStringLiteral(" · ") + senderTitle);
-            }
-            button->setToolTip(numbered + QLatin1Char('\n') +
-                               (origin.isEmpty() ? QString() : origin + QLatin1Char('\n')) +
-                               QFileInfo(worktreePath).fileName());
-            button->setAccessibleName(numbered);
-            button->setNumber(number);
-            updateConversation(button, conversation, seen);
-            connect(button, &QAbstractButton::clicked, this, [this, button, worktreePath, id] {
-                markConversationSeen(id);
-                // Selection follows the session manager; the refresh re-checks the row.
-                button->setChecked(button->property("selectedConversation").toBool());
-                emit conversationRequested(worktreePath, id);
-            });
-            connect(button, &QWidget::customContextMenuRequested, this, [this, worktreePath, id] {
-                emit conversationContextMenuRequested(worktreePath, id);
-            });
-            groupLayout->addWidget(button);
-            rows_.append(button);
-        }
+        for (const QVariant& value : repository.conversations)
+            groupLayout->addWidget(createRow(group, value.toMap()));
         if (repository.conversations.size() > kPreviewConversationCount) {
             auto* showMore = new QToolButton(group);
             showMore->setObjectName(QStringLiteral("productShowMoreConversations"));
@@ -331,8 +295,64 @@ void SidebarRepositoryList::setRepositories(const QVector<SidebarRepository>& pr
         groups_.append(group);
         layout_->addWidget(group);
     }
+    updateTeamFolders(repositories);
     applyPresentation();
     setUpdatesEnabled(true);
+}
+
+ket::ConversationRow* SidebarRepositoryList::createRow(QWidget* group,
+                                                       const QVariantMap& conversation) {
+    const QString id = conversation.value(QStringLiteral("id")).toString();
+    const QString worktreePath = conversation.value(QStringLiteral("path")).toString();
+    QString title = conversation.value(QStringLiteral("title")).toString();
+    if (title.isEmpty())
+        title = tr("New conversation");
+    const bool seen =
+        conversation.value(QStringLiteral("seen")).toBool() || seenConversationIds_.contains(id);
+    const bool selected = conversation.value(QStringLiteral("selected")).toBool();
+
+    auto* button = new ket::ConversationRow(title, group);
+    button->setObjectName(QStringLiteral("productConversationButton"));
+    button->setProperty("kvRole", QStringLiteral("productConversation"));
+    button->setProperty("worktreePath", worktreePath);
+    button->setProperty("conversationId", id);
+    button->setProperty("sessionId", conversation.value(QStringLiteral("sessionId")));
+    button->installEventFilter(this);
+    button->setCheckable(true);
+    button->setChecked(selected);
+    button->setProperty("selectedConversation", selected);
+    button->setContextMenuPolicy(Qt::CustomContextMenu);
+    // The worktree is an attribute of the conversation; name it without a machine path.
+    // ADR 0027: agents and the user call a conversation by this number.
+    const QString number = conversation.value(QStringLiteral("number")).toString();
+    const QString numbered =
+        number.isEmpty() ? title : QLatin1Char('#') + number + QLatin1Char(' ') + title;
+    const QString sender = runningAgentSender(conversation);
+    QString origin;
+    if (!sender.isEmpty()) {
+        const QString senderTitle = conversation.value(QStringLiteral("agentTurnTitle")).toString();
+        origin =
+            (conversation.value(QStringLiteral("agentTurnReply")).toBool() ? tr("Reply from #%1")
+                                                                           : tr("Message from #%1"))
+                .arg(sender) +
+            (senderTitle.isEmpty() ? QString() : QStringLiteral(" · ") + senderTitle);
+    }
+    button->setToolTip(numbered + QLatin1Char('\n') +
+                       (origin.isEmpty() ? QString() : origin + QLatin1Char('\n')) +
+                       QFileInfo(worktreePath).fileName());
+    button->setAccessibleName(numbered);
+    button->setNumber(number);
+    updateConversation(button, conversation, seen);
+    connect(button, &QAbstractButton::clicked, this, [this, button, worktreePath, id] {
+        markConversationSeen(id);
+        // Selection follows the session manager; the refresh re-checks the row.
+        button->setChecked(button->property("selectedConversation").toBool());
+        emit conversationRequested(worktreePath, id);
+    });
+    connect(button, &QWidget::customContextMenuRequested, this,
+            [this, worktreePath, id] { emit conversationContextMenuRequested(worktreePath, id); });
+    rows_.append(button);
+    return button;
 }
 
 void SidebarRepositoryList::updateRows(const QVector<SidebarRepository>& repositories) {
@@ -344,7 +364,11 @@ void SidebarRepositoryList::updateRows(const QVector<SidebarRepository>& reposit
     }
     qsizetype row = 0;
     for (const SidebarRepository& repository : repositories) {
-        for (const QVariant& value : repository.conversations) {
+        QVariantList listed;
+        for (const SidebarTeam& team : repository.teams)
+            listed += team.members;
+        listed += repository.conversations;
+        for (const QVariant& value : std::as_const(listed)) {
             if (row >= rows_.size())
                 return;
             const QVariantMap conversation = value.toMap();
@@ -358,6 +382,7 @@ void SidebarRepositoryList::updateRows(const QVector<SidebarRepository>& reposit
             updateConversation(button, conversation, seen);
         }
     }
+    updateTeamFolders(repositories);
 }
 
 void SidebarRepositoryList::markConversationSeen(const QString& conversationId) {
@@ -390,18 +415,15 @@ void SidebarRepositoryList::applyPresentation() {
         QWidget* group = groups_.at(index);
         const SidebarRepository& repository = repositories_.at(index);
         const bool collapsed =
-            !repository.conversations.isEmpty() && collapsedPaths_.contains(repository.path);
+            (!repository.conversations.isEmpty() || !repository.teams.isEmpty()) &&
+            collapsedPaths_.contains(repository.path);
         const bool showAll = showAllPaths_.contains(repository.path);
         const QSet<QString> preview = previewedConversationIds(repository.conversations, showAll);
         int visibleRows = 0;
+        // A team's members are laid out by their folder.
         for (auto* button : group->findChildren<ket::ConversationRow*>(
-                 QStringLiteral("productConversationButton"))) {
-            const auto tags = button->tags();
-            const bool matches =
-                tagFilter_.isEmpty() ||
-                std::any_of(tags.cbegin(), tags.cend(), [this](const ket::ConversationTag& tag) {
-                    return tag.label == tagFilter_;
-                });
+                 QStringLiteral("productConversationButton"), Qt::FindDirectChildrenOnly)) {
+            const bool matches = rowMatchesFilter(button);
             const bool visible = matches && !collapsed &&
                                  (!tagFilter_.isEmpty() ||
                                   preview.contains(button->property("conversationId").toString()));
@@ -425,11 +447,12 @@ void SidebarRepositoryList::applyPresentation() {
         const int extra = moreVisible ? px(kShowMoreHeight) + px(kConversationSpacing) : 0;
         auto* header = qobject_cast<ket::GroupHeader*>(headers_.at(index));
         header->setExpanded(!collapsed);
-        group->setFixedHeight(header->sizeHint().height() +
-                              visibleRows *
-                                  ((rows_.isEmpty() ? 0 : rows_.first()->sizeHint().height()) +
-                                   px(kConversationSpacing)) +
-                              extra);
+        const int rowHeight = rows_.isEmpty() ? 0 : rows_.first()->sizeHint().height();
+        group->setFixedHeight(
+            presentTeamFolders(group, collapsed, rowHeight) + header->sizeHint().height() +
+            visibleRows * ((rows_.isEmpty() ? 0 : rows_.first()->sizeHint().height()) +
+                           px(kConversationSpacing)) +
+            extra);
         height += group->height();
     }
     setFixedHeight(height);
@@ -443,7 +466,8 @@ void SidebarRepositoryList::onRepositoryHeaderClicked(const QString& path) {
             break;
         }
     }
-    if (repository == nullptr || repository->conversations.isEmpty()) {
+    if (repository == nullptr ||
+        (repository->conversations.isEmpty() && repository->teams.isEmpty())) {
         emit repositoryRequested(path);
         return;
     }
@@ -464,6 +488,8 @@ void SidebarRepositoryList::persistCollapsedRepositories() const {
 }
 
 bool SidebarRepositoryList::eventFilter(QObject* watched, QEvent* event) {
+    if (handleDrag(watched, event))
+        return true;
     if (event->type() == QEvent::MouseButtonDblClick) {
         const QString conversationId = watched->property("conversationId").toString();
         if (!conversationId.isEmpty()) {

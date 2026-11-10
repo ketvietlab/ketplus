@@ -413,6 +413,12 @@ void DaemonClient::consumeFrame(const QByteArray& frame) {
         emit eventReceived(envelope);
         return;
     }
+    if (const QString type = envelope.value(QStringLiteral("message_type")).toString();
+        type.startsWith(QStringLiteral("team.")) &&
+        !envelope.contains(QStringLiteral("correlation_id"))) {
+        emit teamEventReceived(type, envelope.value(QStringLiteral("payload")).toObject());
+        return;
+    }
     const QString correlationId = envelope.value(QStringLiteral("correlation_id")).toString();
     const QueuedCall call = pending_.take(correlationId);
     sendQueued();

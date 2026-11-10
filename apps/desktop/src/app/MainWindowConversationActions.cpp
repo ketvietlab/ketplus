@@ -4,6 +4,8 @@
 #include "agent/AgentWorkspaceView.h"
 #include "app/AgentWorktreeDialog.h"
 #include "app/ConversationMenu.h"
+#include "teams/TeamDirectory.h"
+#include "teams/TeamMenus.h"
 
 #include "KetButton.h"
 #include "KetDialog.h"
@@ -70,11 +72,13 @@ void MainWindow::showAgentConversationContextMenu(const QString& worktreePath,
     bool running = false;
     bool forkable = false;
     QString number;
+    QString executionPath = path;
     for (const QVariant& value : agentManager_->conversations(path)) {
         const QVariantMap conversation = value.toMap();
         if (conversation.value(QStringLiteral("id")).toString() != conversationId)
             continue;
         known = true;
+        executionPath = conversation.value(QStringLiteral("executionPath"), path).toString();
         running = conversation.value(QStringLiteral("running")).toBool();
         forkable = conversation.value(QStringLiteral("forkable")).toBool();
         number = conversation.value(QStringLiteral("number")).toString();
@@ -86,7 +90,14 @@ void MainWindow::showAgentConversationContextMenu(const QString& worktreePath,
     QMenu menu(this);
     const QString reference = number.isEmpty() ? QString{} : QStringLiteral("@agent/") + number;
     const auto actions = addConversationMenuActions(menu, forkable, running, reference);
+    // ADR 0112 (#464): join a team of its repository, or leave its team.
+    const QString sessionId = conversationSessionId(path, conversationId);
+    if (teams_ != nullptr && teams_->isAvailable())
+        addConversationTeamActions(menu, teams_->teams(sidebarRepositoryForPath(executionPath)),
+                                   sessionId);
     QAction* selected = menu.exec(QCursor::pos());
+    if (handleConversationTeamAction(selected, sessionId))
+        return;
     if (selected == actions.rename)
         renameAgentConversation(path, conversationId);
     else if (selected == actions.changeWorktree)

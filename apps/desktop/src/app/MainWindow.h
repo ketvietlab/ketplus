@@ -69,6 +69,7 @@ class AtlasConversationPanel;
 class RemoteControlView;
 class SettingsDialog;
 class SettingsWorkspacePage;
+class TeamDirectory;
 struct AtlasDescriptor;
 
 class MainWindow final : public QMainWindow {
@@ -233,6 +234,22 @@ class MainWindow final : public QMainWindow {
     // Names the signed-in account on the sidebar identity button (ADR 0109).
     void setupSidebarAccount();
     [[nodiscard]] remote::DaemonClient* accountDaemon();
+    // ADR 0112 (#464): teams in the sidebar while the daemon advertises teams/1.
+    void setupTeams();
+    // Takes the members of the repository's teams out of `conversations`, into their folders.
+    [[nodiscard]] QVector<SidebarTeam> takeSidebarTeams(const QString& repository,
+                                                        QVariantList& conversations) const;
+    void showTeamMenu(const QString& teamId);
+    void openTeam(const QString& teamId);
+    void joinTeam(const QString& teamId, const QString& sessionId);
+    void leaveTeam(const QString& teamId, const QString& sessionId);
+    void deleteTeam(const QString& teamId);
+    void showNewTeamDialog(const QString& repository);
+    void showAddTeamMemberDialog(const QString& teamId);
+    // The conversation menu's team entries; true when `chosen` was one of them.
+    bool handleConversationTeamAction(QAction* chosen, const QString& sessionId);
+    [[nodiscard]] QString conversationSessionId(const QString& worktreePath,
+                                                const QString& conversationId) const;
     void showUpdateSettings();
     // Opens Settings on a section; an empty id keeps the section it shows.
     void showSettingsSection(const QString& id);
@@ -422,6 +439,7 @@ class MainWindow final : public QMainWindow {
     QTabWidget* atlasTabs_{nullptr};
     RemoteControlView* remoteControl_{nullptr};
     remote::DaemonClient* accountDaemon_{nullptr};
+    TeamDirectory* teams_{nullptr};
     QStringList remoteMachineIds_;
     QString selectedMachineId_{QStringLiteral("local")};
     // The Create worktree card asked to open Agent Workspace on what it creates.

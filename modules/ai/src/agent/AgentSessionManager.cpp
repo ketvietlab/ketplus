@@ -294,6 +294,8 @@ QVariantList AgentSessionManager::conversations(const QString& worktreePath) con
             {QStringLiteral("provider"), listedProvider(session->options)},
             {QStringLiteral("title"), session->title},
             {QStringLiteral("number"), session->number},
+            // The daemon session, which names the conversation on a team (ADR 0112).
+            {QStringLiteral("sessionId"), session->threadId},
             {QStringLiteral("tags"), listedTags(session)},
             {QStringLiteral("tagsEditable"),
              !session->threadId.isEmpty() && server_->hasTagSupport()},

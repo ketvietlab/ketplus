@@ -42,6 +42,8 @@ class DaemonClient final : public QObject {
   signals:
     void readyChanged(bool ready);
     void eventReceived(const QJsonObject& event);
+    // ADR 0112: team.changed and team.removed, sent to every client without a session.
+    void teamEventReceived(const QString& type, const QJsonObject& payload);
     void disconnected(const QString& reason);
 
   private:

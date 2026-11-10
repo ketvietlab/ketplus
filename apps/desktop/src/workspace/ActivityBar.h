@@ -46,6 +46,7 @@ class ActivityBar final : public QWidget {
     void setSourceControlAvailable(bool available);
     void setSourceControlCount(int count);
     void setRepositories(const QVector<SidebarRepository>& repositories);
+    [[nodiscard]] SidebarRepositoryList* repositoryList() const { return repositoryList_; }
     void setTagFilter(const QString& tag);
     void setMachines(const QStringList& machineIds, const QStringList& names,
                      const QString& selectedId);
