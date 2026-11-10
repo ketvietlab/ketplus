@@ -67,6 +67,11 @@ class StatusBarHost final : public QStatusBar {
         connect(this, &QStatusBar::messageChanged, message, [message](const QString& text) {
             message->setText(text.isEmpty() ? tr("Ready") : text);
         });
+        // QStatusBar's own layout is taller than the kit bar; keep the host at the bar's
+        // height so the bar is not drawn at the top of a taller strip.
+        const auto fit = [this] { setFixedHeight(content->maximumHeight()); };
+        connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, this, fit);
+        fit();
     }
     QSize sizeHint() const override { return content->sizeHint(); }
     QSize minimumSizeHint() const override { return content->minimumSizeHint(); }
@@ -88,12 +93,15 @@ class StatusButton final : public QToolButton {
         setPopupMode(QToolButton::InstantPopup);
         setCursor(Qt::PointingHandCursor);
         setAttribute(Qt::WA_Hover);
+        // It paints itself; the app's QToolButton rule (min-height: 32px) would overflow the bar.
+        setStyleSheet(QStringLiteral("QToolButton { min-height: 0; border: 0; padding: 0; }"));
     }
     QSize sizeHint() const override {
         auto& kit = ket::Appearance::instance();
         const auto recipe = ket::statusBarRecipe(kit.theme());
+        // The bar's height less its 1 px top hairline, so the bar centres the button.
         return {QFontMetrics(textFont()).horizontalAdvance(text()) + qRound(kit.scaled(12)),
-                qRound(kit.scaled(recipe.height))};
+                qRound(kit.scaled(recipe.height)) - 1};
     }
     QSize minimumSizeHint() const override { return sizeHint(); }
 
@@ -164,7 +172,7 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     editorSplit_->setHandleWidth(1);
     editorSplit_->addWidget(editorPane);
     // As the mock: the side panel, then the editor column with the terminal below the
-    // editor and the document's status row at the bottom.
+    // editor; one status bar spans the window.
     mainSplit_->setChildrenCollapsible(false);
     mainSplit_->setHandleWidth(1);
     mainSplit_->addWidget(editorSplit_);
@@ -175,9 +183,6 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     columnLayout->setContentsMargins(0, 0, 0, 0);
     columnLayout->setSpacing(0);
     columnLayout->addWidget(mainSplit_, 1);
-    auto* documentStatus = new ket::StatusBar(editorColumn_);
-    documentStatus->setObjectName(QStringLiteral("documentStatusBar"));
-    columnLayout->addWidget(documentStatus);
     workspaceSplit_->setChildrenCollapsible(false);
     workspaceSplit_->setHandleWidth(1);
     workspaceSplit_->addWidget(editorColumn_);
@@ -209,17 +214,17 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     gitButton_->setToolTip(QStringLiteral("Git repository"));
     gitButton_->setAccessibleName(QStringLiteral("Git repository"));
     gitButton_->hide();
-    status->addWidget(gitButton_);
-    status->addItem(QStringLiteral("KétPlus"), {}, ket::StatusBar::Side::Right);
+    // The Lite mock's single bar: the branch with the messages on the left, then the
+    // document's state, position, language, encoding and line endings.
+    status->addWidget(gitButton_, ket::StatusBar::Side::Left);
     for (auto* item : {documentStateLabel_, cursorPositionLabel_})
-        documentStatus->addWidget(item);
-    const auto addStatusButton = [this, documentStatus](QMenu* menu,
-                                                        const QString& accessibleName) {
+        status->addWidget(item);
+    const auto addStatusButton = [this, status](QMenu* menu, const QString& accessibleName) {
         QToolButton* button = new StatusButton(this);
         button->setMenu(menu);
         button->setToolTip(accessibleName);
         button->setAccessibleName(accessibleName);
-        documentStatus->addWidget(button);
+        status->addWidget(button);
         return button;
     };
     format_->addStatusButtons(addStatusButton);

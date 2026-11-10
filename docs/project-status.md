@@ -51,7 +51,7 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   Search, Source Control and Settings. First use opens a folder welcome surface;
   file tabs show a kit breadcrumb outside the Scintilla document viewport. The
   Explorer, activity bar, tab strip, breadcrumb View diff, terminal placement and
-  the two status rows follow the Lite mock (#149); `KETPLUS_CAPTURE_STEPS` drives
+  the single status bar follow the Lite mock (#149); `KETPLUS_CAPTURE_STEPS` drives
   offscreen review captures (`docs/design-system.md`).
 
 - Két UI stack: Lite and Pro use KÉT Sans as the primary interface face, with

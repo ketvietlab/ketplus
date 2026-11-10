@@ -17,6 +17,7 @@
 #include <QMenuBar>
 #include <QProcess>
 #include <QSettings>
+#include <QStatusBar>
 #include <QTabWidget>
 #include <QTemporaryDir>
 #include <QTest>
@@ -147,25 +148,43 @@ class LiteWindowTest final : public QObject {
             !column->isAncestorOf(window.findChild<QTreeView*>(QStringLiteral("explorerTree"))));
     }
 
-    void documentStatusRowAndTabIcons() {
+    void oneStatusBarAndTabIcons() {
         ketplus::ThemeManager theme(*qApp);
         ketplus::MainWindow window(theme);
         window.openFolder(workspace_.path());
         window.openFile(workspace_.filePath(QStringLiteral("main.cpp")));
         window.openFile(workspace_.filePath(QStringLiteral("docs/guide.md")));
 
-        auto* row = window.findChild<ket::StatusBar*>(QStringLiteral("documentStatusBar"));
+        // One status bar, as the Lite mock: nothing else in the editor column.
+        QCOMPARE(window.findChild<QWidget*>(QStringLiteral("editorColumn"))
+                     ->findChildren<ket::StatusBar*>()
+                     .size(),
+                 0);
+        auto* row = window.statusBar()->findChild<ket::StatusBar*>();
         QVERIFY(row != nullptr);
         QStringList items;
         for (auto* item : row->findChildren<ket::StatusItem*>())
             items.append(item->text());
         QVERIFY(items.contains(QStringLiteral("Ln 1, Col 1")));
+        QVERIFY(!items.contains(QStringLiteral("KétPlus")));
         QStringList buttons;
         for (auto* button : row->findChildren<QAbstractButton*>())
-            buttons.append(button->accessibleName());
-        QCOMPARE(buttons,
-                 (QStringList{QStringLiteral("File encoding"), QStringLiteral("Line endings"),
-                              QStringLiteral("Language")}));
+            if (button->isVisibleTo(row))
+                buttons.append(button->accessibleName());
+        QCOMPARE(buttons, (QStringList{QStringLiteral("Language"), QStringLiteral("File encoding"),
+                                       QStringLiteral("Line endings")}));
+
+        // Every item and menu button is centred in the bar, and the host is as tall as it.
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QCOMPARE(window.statusBar()->height(), row->height());
+        const int middle = (row->height() + 1) / 2; // below the 1 px top hairline
+        for (auto* child : row->findChildren<QWidget*>(Qt::FindDirectChildrenOnly)) {
+            if (!child->isVisibleTo(row))
+                continue;
+            QVERIFY2(qAbs(child->geometry().center().y() - middle) <= 1,
+                     qPrintable(child->accessibleName()));
+        }
 
         auto* tabs = window.findChild<QTabWidget*>();
         QVERIFY(tabs->count() >= 2);
