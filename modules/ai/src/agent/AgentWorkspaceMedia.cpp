@@ -1,6 +1,8 @@
 #include "KetAppearance.h"
+
 #include "KetProfile.h"
 #include "KetRichRecipes.h"
+#include "KetTokens.h"
 #include "agent/AgentMessageFormatter.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/ChatMarkdown.h"
@@ -513,7 +515,8 @@ QVariantMap AgentWorkspaceView::mermaidViewerImage(const QUrl& url) {
             return {};
         if (!dark) {
             QImage ground(image.size(), QImage::Format_ARGB32_Premultiplied);
-            ground.fill(Qt::white);
+            // The light theme's panel, as the diagram shows in the transcript.
+            ground.fill(ket::Tokens::color(u"panel-bg", ket::Theme::Light));
             QPainter painter(&ground);
             painter.drawImage(0, 0, image);
             painter.end();

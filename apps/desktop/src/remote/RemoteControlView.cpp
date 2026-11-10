@@ -454,7 +454,7 @@ QWidget* RemoteControlView::createSignInPage() {
     signInButton_ = new ket::Button({}, ket::ButtonVariant::Primary);
     signInButton_->setObjectName(QStringLiteral("remoteSignInButton"));
     signInButton_->setProperty("remotePrimary", true);
-    signInButton_->setIcon(symbolIcon(logInIcon, Qt::white));
+    signInButton_->setIcon(symbolIcon(logInIcon, symbol_icon::primaryButtonInk()));
     chrome_geometry::iconSize(signInButton_, QSize(15, 15));
     resetSignInButton();
     connect(signInButton_, &QAbstractButton::clicked, this, &RemoteControlView::signIn);
@@ -503,7 +503,7 @@ QWidget* RemoteControlView::createControlPage() {
     pairButton_ = new ket::Button(QStringLiteral("Add"), ket::ButtonVariant::Primary);
     pairButton_->setObjectName(QStringLiteral("remotePairButton"));
     pairButton_->setProperty("remotePrimary", true);
-    pairButton_->setIcon(symbolIcon(plusIcon, Qt::white));
+    pairButton_->setIcon(symbolIcon(plusIcon, symbol_icon::primaryButtonInk()));
     chrome_geometry::iconSize(pairButton_, QSize(15, 15));
     pairButton_->setEnabled(false);
     connect(pairButton_, &QAbstractButton::clicked, this, [this] {

@@ -2,6 +2,7 @@
 #include "CodexBrowserTools.h"
 #include "KetAppearance.h"
 #include "KetRecipes.h"
+#include "KetTokens.h"
 #include "agent/AgentMessageModel.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
@@ -694,8 +695,13 @@ void AgentWorkspaceViewTest::mermaidFillsGetReadableLabels() {
                                            "  classDef named fill:pink,color:#000\n"
                                            "  style A stroke:#333");
     const QStringList lines = withReadableMermaidLabels(diagram).split('\n');
-    QCOMPARE(lines.at(2), QStringLiteral("  style B fill:#fdd,stroke:#c33,color:#1f2328"));
-    QCOMPARE(lines.at(3), QStringLiteral("  classDef bad fill:#7a1f1f,color:#f0f3f6"));
+    // Labels take Két DS main text: the light theme's on a light fill, the dark theme's on a
+    // dark one.
+    const QString onLight = ket::Tokens::color(u"text-main", ket::Theme::Light).name();
+    const QString onDark = ket::Tokens::color(u"text-main", ket::Theme::Dark).name();
+    QVERIFY(onLight != onDark);
+    QCOMPARE(lines.at(2), QStringLiteral("  style B fill:#fdd,stroke:#c33,color:") + onLight);
+    QCOMPARE(lines.at(3), QStringLiteral("  classDef bad fill:#7a1f1f,color:") + onDark);
     // An author's own text colour and a style without a fill stay as written.
     QCOMPARE(lines.at(4), QStringLiteral("  classDef named fill:pink,color:#000"));
     QCOMPARE(lines.at(5), QStringLiteral("  style A stroke:#333"));

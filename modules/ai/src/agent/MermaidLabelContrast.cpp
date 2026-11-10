@@ -1,5 +1,7 @@
 #include "agent/MermaidLabelContrast.h"
 
+#include "KetTokens.h"
+
 #include <QColor>
 #include <QRegularExpression>
 #include <QStringList>
@@ -10,8 +12,12 @@ namespace ketplus::agent_message {
 
 namespace {
 
-constexpr auto darkLabel = "#1f2328";
-constexpr auto lightLabel = "#f0f3f6";
+// Két DS main text of the theme whose page suits the fill: light fills take the light
+// theme's dark text, dark fills the dark theme's light text.
+QString labelOn(const bool lightFill) {
+    return ket::Tokens::color(u"text-main", lightFill ? ket::Theme::Light : ket::Theme::Dark)
+        .name();
+}
 
 QString readableLine(const QString& line) {
     static const QRegularExpression styling(
@@ -38,8 +44,7 @@ QString readableLine(const QString& line) {
     QString trimmed = line;
     while (trimmed.endsWith(QLatin1Char(';')) || trimmed.endsWith(QLatin1Char(' ')))
         trimmed.chop(1);
-    return trimmed + QStringLiteral(",color:") +
-           QLatin1StringView(luminance > 0.18 ? darkLabel : lightLabel);
+    return trimmed + QStringLiteral(",color:") + labelOn(luminance > 0.18);
 }
 
 } // namespace

@@ -1,5 +1,7 @@
 #include "ui/SymbolIcon.h"
+#include "KetAppearance.h"
 #include "KetIcons.h"
+#include "KetRecipes.h"
 #include <QPainter>
 namespace ketplus::symbol_icon {
 QPixmap pixmap(const QByteArray& name, const QColor& color, const QSize& size,
@@ -17,5 +19,10 @@ void paint(QPainter& painter, const QByteArray& name, const QColor& color, const
     const auto image = pixmap(name, color, rect.size().toSize(), dpr);
     const QSizeF logical = image.deviceIndependentSize();
     painter.drawPixmap(rect.center() - QPointF(logical.width() / 2, logical.height() / 2), image);
+}
+QColor primaryButtonInk() {
+    return ket::buttonRecipe(ket::ButtonVariant::Primary, ket::ControlSize::Medium, {},
+                             ket::Appearance::instance().theme())
+        .text;
 }
 } // namespace ketplus::symbol_icon
