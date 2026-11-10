@@ -1,9 +1,9 @@
 #include "protocol/DaemonProtocol.h"
 #include "characterization/ProjectionChecks.h"
 #include "cloud/CloudControlBatching.h"
+#include "cloud/CloudEventProjection.h"
 #include "cloud/WorktreeBranches.h"
 #include "cloud/WorktreeRepositories.h"
-#include "cloud/CloudEventProjection.h"
 #include "providers/CodexAdapter.h"
 #include "runtime/ApprovalBroker.h"
 #include "runtime/SessionHost.h"
@@ -12,11 +12,15 @@
 #include "storage/McpMediaStore.h"
 
 #include <QCryptographicHash>
+#include <QDateTime>
 #include <QDir>
+#include <QDirIterator>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QLocalSocket>
 #include <QProcess>
 #include <QScopeGuard>
 #include <QSignalSpy>
@@ -26,11 +30,39 @@
 #include <QSqlRecord>
 #include <QStandardPaths>
 #include <QTemporaryDir>
+#include <QThread>
 #include <QUuid>
 #include <QtTest>
 #include <limits>
+#ifdef Q_OS_MACOS
+#include <cerrno>
+#include <sys/acl.h>
+#endif
+#ifdef Q_OS_UNIX
+#include <atomic>
+#include <csignal>
+#include <fcntl.h>
+#include <sys/resource.h>
+#include <sys/stat.h>
+#include <thread>
+#include <unistd.h>
+#endif
 
 using namespace ketplus::daemon;
+
+#ifdef Q_OS_MACOS
+// True when the path carries extended entries; an unreadable ACL counts as having them.
+static bool hasExtendedAclEntries(const QString& path) {
+    errno = 0;
+    acl_t acl = acl_get_link_np(QFile::encodeName(path).constData(), ACL_TYPE_EXTENDED);
+    if (acl == nullptr)
+        return errno != ENOENT;
+    acl_entry_t entry = nullptr;
+    const bool any = acl_get_entry(acl, ACL_FIRST_ENTRY, &entry) == 0;
+    acl_free(acl);
+    return any;
+}
+#endif
 
 class DaemonProtocolTest final : public QObject {
     Q_OBJECT
@@ -55,13 +87,12 @@ class DaemonProtocolTest final : public QObject {
         CodexAdapter adapter(QStringLiteral("/nonexistent/ketplus-test-codex"));
         SessionHost host(&journal, &adapter);
         const auto entry = [](const QString& provider, const QString& id, const QString& effort) {
-            return QJsonObject{
-                {QStringLiteral("id"), id},
-                {QStringLiteral("label"), id},
-                {QStringLiteral("provider"), provider},
-                {QStringLiteral("efforts"),
-                 QJsonArray{QJsonObject{{QStringLiteral("id"), effort},
-                                        {QStringLiteral("label"), effort}}}}};
+            return QJsonObject{{QStringLiteral("id"), id},
+                               {QStringLiteral("label"), id},
+                               {QStringLiteral("provider"), provider},
+                               {QStringLiteral("efforts"),
+                                QJsonArray{QJsonObject{{QStringLiteral("id"), effort},
+                                                       {QStringLiteral("label"), effort}}}}};
         };
         const QJsonObject codexModel = entry("codex", "shared-model", "medium");
         const QJsonArray merged{codexModel, entry("claude", "claude-model", "high"),
@@ -114,10 +145,11 @@ class DaemonProtocolTest final : public QObject {
             {QStringLiteral("efforts"),
              QJsonArray{QJsonObject{{QStringLiteral("id"), QStringLiteral("high")},
                                     {QStringLiteral("label"), QStringLiteral("High")}}}}};
-        const QJsonArray merged{codexModel, QJsonObject{{QStringLiteral("id"), QStringLiteral("claude-model")},
-                                                        {QStringLiteral("label"), QStringLiteral("Claude model")},
-                                                        {QStringLiteral("provider"), QStringLiteral("claude")},
-                                                        {QStringLiteral("efforts"), QJsonArray{}}}};
+        const QJsonArray merged{
+            codexModel, QJsonObject{{QStringLiteral("id"), QStringLiteral("claude-model")},
+                                    {QStringLiteral("label"), QStringLiteral("Claude model")},
+                                    {QStringLiteral("provider"), QStringLiteral("claude")},
+                                    {QStringLiteral("efforts"), QJsonArray{}}}};
         // Before the first message the phone reads what a new conversation starts with.
         const QJsonObject offered = host.newConversationConfiguration(merged);
         QVERIFY(offered.value(QStringLiteral("ok")).toBool());
@@ -184,7 +216,8 @@ class DaemonProtocolTest final : public QObject {
                 .toObject();
         };
         const QJsonObject chosen = effective(QStringLiteral("full-session"));
-        QCOMPARE(chosen.value(QStringLiteral("execution_policy")).toString(), QStringLiteral("full"));
+        QCOMPARE(chosen.value(QStringLiteral("execution_policy")).toString(),
+                 QStringLiteral("full"));
         QCOMPARE(chosen.value(QStringLiteral("model")).toString(), QStringLiteral("codex-model"));
         QCOMPARE(chosen.value(QStringLiteral("effort")).toString(), QStringLiteral("high"));
         QCOMPARE(effective(QStringLiteral("unacknowledged-session"))
@@ -449,7 +482,7 @@ class DaemonProtocolTest final : public QObject {
             const auto projected = projectEventPayloadForCloud("item.completed", {{"item", item}});
             QCOMPARE(projected.value("item").toObject().value("result"), item.value("result"));
         }
-        store.copySessionReferences("session", "fork");
+        QVERIFY(store.copySessionReferences("session", "fork"));
         store.releaseSession("session");
         QCOMPARE(QDir(store.directory()).entryList({"*.png"}, QDir::Files).size(), 1);
         store.releaseSession("fork");
@@ -478,6 +511,285 @@ class DaemonProtocolTest final : public QObject {
         source.close();
         QCOMPARE(result(source.fileName()).value("reason").toString(), "too_large");
         QVERIFY(!QFileInfo::exists(store.directory()));
+    }
+
+    void localImageFifoIsRejectedWithoutBlocking() {
+#ifdef Q_OS_UNIX
+        // A viewed path that is (or became, after any earlier check) a FIFO nobody writes.
+        // The store opens before it checks the type, so the open itself must not block.
+        QTemporaryDir directory;
+        McpMediaStore store(directory.filePath("media"));
+        const QString path = directory.filePath("shot.png");
+        QCOMPARE(::mkfifo(QFile::encodeName(path).constData(), 0600), 0);
+        std::atomic<bool> finished{false};
+        QString reason;
+        std::thread reader([&] {
+            reason = store.externalizeItem({{"type", "imageView"},
+                                            { "path",
+                                              path }},
+                                           "session")
+                         .value("result")
+                         .toObject()
+                         .value("content")
+                         .toArray()
+                         .first()
+                         .toObject()
+                         .value("reason")
+                         .toString();
+            finished = true;
+        });
+        QElapsedTimer waited;
+        waited.start();
+        while (!finished && waited.elapsed() < 2000)
+            QThread::msleep(10);
+        const bool blocked = !finished;
+        if (blocked) {
+            // Release the blocked open before reporting it.
+            const int writer = ::open(QFile::encodeName(path).constData(), O_WRONLY | O_NONBLOCK);
+            if (writer >= 0)
+                ::close(writer);
+        }
+        reader.join();
+        QVERIFY2(!blocked, "Reading a viewed image blocked on a FIFO");
+        QCOMPARE(reason, QString("source_unavailable"));
+#else
+        QSKIP("FIFOs are POSIX-only");
+#endif
+    }
+
+    void startupRetainDeletesMediaNoReferenceNames() {
+        QTemporaryDir directory;
+        McpMediaStore store(directory.filePath("media"));
+        const auto png = [](char fill) {
+            return QByteArray("\x89PNG\r\n\x1a\n") + QByteArray(32, fill);
+        };
+        const auto file = [&](const QJsonObject& reference) {
+            return QDir(store.directory())
+                .filePath(reference.value("media_ref").toString().mid(7) + ".png");
+        };
+        const auto onlyA = store.storeImage(png('a'), "image/png", "a");
+        const auto shared = store.storeImage(png('s'), "image/png", "a");
+        QVERIFY(!store.storeImage(png('s'), "image/png", "b").isEmpty());
+        const auto onlyB = store.storeImage(png('b'), "image/png", "b");
+        // Stopped after removing a deleted session's reference file, before its media.
+        const auto released = store.storeImage(png('r'), "image/png", "gone");
+        QVERIFY(QFile::remove(
+            QDir(store.directory())
+                .filePath("refs/" +
+                          QCryptographicHash::hash("gone", QCryptographicHash::Sha256).toHex() +
+                          ".refs")));
+        // Stopped after writing media, before referencing it.
+        const QByteArray unreferenced = png('u');
+        const QString written =
+            QDir(store.directory())
+                .filePath(
+                    QCryptographicHash::hash(unreferenced, QCryptographicHash::Sha256).toHex() +
+                    ".png");
+        QFile write(written);
+        QVERIFY(write.open(QIODevice::WriteOnly));
+        write.write(unreferenced);
+        write.close();
+        // Not a name the store writes: left alone.
+        QFile foreign(QDir(store.directory()).filePath("notes.png"));
+        QVERIFY(foreign.open(QIODevice::WriteOnly));
+        foreign.close();
+        for (const auto& path : {file(onlyA), file(shared), file(onlyB), file(released), written})
+            QVERIFY(QFileInfo::exists(path));
+
+        store.retainSessions({"b"});
+        QVERIFY(!QFileInfo::exists(file(onlyA)));
+        QVERIFY(QFileInfo::exists(file(shared))); // still referenced by b
+        QVERIFY(QFileInfo::exists(file(onlyB)));
+        QVERIFY(!QFileInfo::exists(file(released)));
+        QVERIFY(!QFileInfo::exists(written));
+        QVERIFY(QFileInfo::exists(foreign.fileName()));
+#ifdef Q_OS_UNIX
+        // A special file with a canonical name is not media and stays.
+        const QString special =
+            QDir(store.directory()).filePath(QString(64, QChar('f')) + QStringLiteral(".png"));
+        QCOMPARE(::mkfifo(QFile::encodeName(special).constData(), 0600), 0);
+        store.retainSessions({"b"});
+        QVERIFY(QFileInfo::exists(special));
+        QVERIFY(QFileInfo::exists(file(onlyB)));
+#endif
+    }
+
+    void startupRetainDoesNotFollowALinkedMediaRoot() {
+        // The store's directory is a link to another directory that looks like a store.
+        QTemporaryDir directory;
+        const QString elsewhere = directory.filePath("elsewhere");
+        QVERIFY(QDir().mkpath(elsewhere + "/refs"));
+        const QString victim = elsewhere + '/' + QString(64, QChar('e')) + ".png";
+        QFile file(victim);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("\x89PNG\r\n\x1a\n");
+        file.close();
+        const QString media = directory.filePath("media");
+        QVERIFY(QFile::link(elsewhere, media));
+        McpMediaStore store(media);
+        store.retainSessions({});
+        store.releaseSession("any");
+        QVERIFY(QFileInfo::exists(victim));
+    }
+
+    void mediaOwnershipCommitFailurePreservesPreviousFile() {
+#ifdef Q_OS_UNIX
+        QProcess probe;
+        probe.setProcessChannelMode(QProcess::MergedChannels);
+        probe.start(QCoreApplication::applicationFilePath(), {"--media-reference-write-fault"});
+        QVERIFY(probe.waitForStarted());
+        QVERIFY(probe.waitForFinished(30000));
+        const auto output = probe.readAll();
+        QVERIFY2(probe.exitStatus() == QProcess::NormalExit && probe.exitCode() == 0,
+                 qPrintable(QStringLiteral("exit %1: %2")
+                                .arg(probe.exitCode())
+                                .arg(QString::fromUtf8(output))));
+#else
+        QSKIP("The isolated file-size write-failure fixture requires POSIX resource limits.");
+#endif
+    }
+
+    void mediaPublicationRequiresStoredOwnership_data() {
+        QTest::addColumn<QString>("fault");
+        QTest::addColumn<QString>("entry");
+        for (const QString& fault :
+             {QStringLiteral("valid"), QStringLiteral("directory"), QStringLiteral("symlink"),
+              QStringLiteral("dangling"), QStringLiteral("malformed"), QStringLiteral("oversized"),
+              QStringLiteral("unreadable"), QStringLiteral("root-symlink"),
+              QStringLiteral("root-file")})
+            for (const QString& entry :
+                 {QStringLiteral("attachment"), QStringLiteral("inline"), QStringLiteral("local")})
+                QTest::newRow(qPrintable(fault + '-' + entry)) << fault << entry;
+    }
+
+    void mediaPublicationRequiresStoredOwnership() {
+        QFETCH(QString, fault);
+        QFETCH(QString, entry);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto media = directory.filePath("media");
+        const auto refs = media + "/refs";
+        const auto backup = directory.filePath("reference-backup");
+        const auto referencePath =
+            refs + '/' + QCryptographicHash::hash("a", QCryptographicHash::Sha256).toHex() +
+            ".refs";
+        const auto put = [](const QString& path, const QByteArray& bytes) {
+            QFile file(path);
+            return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
+        };
+        const auto oldImage = fakePng(8, 6, 'o');
+        const auto newImage = fakePng(8, 6, 'n');
+        const auto oldHash = QCryptographicHash::hash(oldImage, QCryptographicHash::Sha256).toHex();
+        const auto newHash = QCryptographicHash::hash(newImage, QCryptographicHash::Sha256).toHex();
+        McpMediaStore store(media);
+        QVERIFY(!store.storeImage(oldImage, "image/png", "a").isEmpty());
+        QVERIFY(!store.storeImage(oldImage, "image/png", "b").isEmpty());
+        const auto original = oldHash + '\n';
+        const auto foreign = directory.filePath("foreign.refs");
+        QVERIFY(put(foreign, original));
+        QByteArray damaged;
+        if (fault == "root-symlink" || fault == "root-file") {
+            QVERIFY(QDir().rename(refs, backup));
+            if (fault == "root-symlink")
+                QVERIFY(QFile::link(backup, refs));
+            else
+                QVERIFY(put(refs, "unsupported root"));
+        } else if (fault == "directory" || fault == "symlink" || fault == "dangling") {
+            QVERIFY(QFile::remove(referencePath));
+            if (fault == "directory")
+                QVERIFY(QDir().mkpath(referencePath));
+            else
+                QVERIFY(QFile::link(fault == "symlink" ? foreign : directory.filePath("missing"),
+                                    referencePath));
+        } else if (fault == "malformed" || fault == "oversized") {
+            damaged = fault == "malformed"
+                          ? original + "not-a-digest\n"
+                          : original.repeated(4 * 1024 * 1024 / original.size() + 1);
+            QVERIFY(put(referencePath, damaged));
+        } else if (fault == "unreadable") {
+            QVERIFY(QFile::setPermissions(referencePath, QFileDevice::WriteOwner));
+        }
+        const auto imagePath = directory.filePath("source.png");
+        QVERIFY(put(imagePath, newImage));
+        const auto publish = [&]() {
+            if (entry == "attachment")
+                return QJsonArray{store.storeImage(newImage, "image/png", "a")};
+            QJsonObject item;
+            if (entry == "local") {
+                item = {{"type", "imageView"}, {"path", imagePath}};
+            } else {
+                const auto data = QString::fromLatin1(newImage.toBase64());
+                item = {{"type", "mcpToolCall"},
+                        {"result",
+                         QJsonObject{
+                             {"content",
+                              QJsonArray{
+                                  QJsonObject{{"type", "text"}, {"text", "keep text"}},
+                                  QJsonObject{
+                                      {"type", "image"}, {"mimeType", "image/png"}, {"data", data}},
+                                  QJsonObject{{"type", "resource"},
+                                              {"resource", QJsonObject{{"uri", "synthetic://image"},
+                                                                       {"mimeType", "image/png"},
+                                                                       {"blob", data}}}}}}}}};
+            }
+            return store.externalizeItem(item, "a")
+                .value("result")
+                .toObject()
+                .value("content")
+                .toArray();
+        };
+        const auto first = publish();
+        const int begin = entry == "inline" ? 1 : 0;
+        if (entry == "inline")
+            QCOMPARE(first.first().toObject().value("text").toString(), "keep text");
+        for (int i = begin; i < first.size(); ++i) {
+            const auto block = first[i].toObject();
+            QCOMPARE(block.contains("media_ref"), fault == "valid");
+            if (fault != "valid" && entry != "attachment")
+                QVERIFY(block.value("omitted").toBool());
+        }
+        if (fault != "valid") {
+            if (fault == "root-symlink" || fault == "root-file") {
+                QVERIFY(QFile::remove(refs));
+                QVERIFY(QDir().rename(backup, refs));
+            } else if (fault == "directory") {
+                QVERIFY(QDir().rmdir(referencePath));
+            } else if (fault == "symlink" || fault == "dangling") {
+                QVERIFY(QFile::remove(referencePath));
+            } else if (fault == "unreadable") {
+                QVERIFY(QFile::setPermissions(referencePath,
+                                              QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+            } else {
+                QFile unchanged(referencePath);
+                QVERIFY(unchanged.open(QIODevice::ReadOnly));
+                QCOMPARE(unchanged.readAll(), damaged);
+            }
+            QVERIFY(put(referencePath, original));
+        }
+        for (int retry = 0; retry < 2; ++retry) {
+            const auto result = publish();
+            for (int i = begin; i < result.size(); ++i)
+                QCOMPARE(result[i].toObject().value("media_ref").toString(),
+                         "sha256:" + QString::fromLatin1(newHash));
+        }
+        QFile saved(referencePath);
+        QVERIFY(saved.open(QIODevice::ReadOnly));
+        auto hashes = saved.readAll().split('\n');
+        hashes.removeAll(QByteArray{});
+        QCOMPARE(hashes.size(), 2); // repeated/inline-duplicate publication does not grow metadata
+        QVERIFY(hashes.contains(oldHash));
+        QVERIFY(hashes.contains(newHash));
+        QVERIFY(!(saved.permissions() & (QFileDevice::ReadGroup | QFileDevice::WriteGroup |
+                                         QFileDevice::ReadOther | QFileDevice::WriteOther)));
+        saved.close();
+        QFile outside(foreign);
+        QVERIFY(outside.open(QIODevice::ReadOnly));
+        QCOMPARE(outside.readAll(), original);
+        store.releaseSession("b");
+        QVERIFY(QFileInfo::exists(media + '/' + oldHash + ".png"));
+        QVERIFY(QFileInfo::exists(media + '/' + newHash + ".png"));
+        store.releaseSession("a");
+        QVERIFY(QDir(media).entryList({"*.png"}, QDir::Files).isEmpty());
     }
 
     void mediaDedupRequiresVerifiedStoredBytes_data() {
@@ -976,11 +1288,12 @@ class DaemonProtocolTest final : public QObject {
                        QStringLiteral("item.completed"),
                        {{"item_id", "read-1"},
                         {"item_type", "dynamicToolCall"},
-                        {"item", QJsonObject{{"id", "read-1"},
-                                             {"type", "dynamicToolCall"},
-                                             {"tool", "Read"},
-                                             {"path", path},
-                                             {"arguments", QJsonObject{{"file_path", "/w/" + path}}}}}})
+                        {"item",
+                         QJsonObject{{"id", "read-1"},
+                                     {"type", "dynamicToolCall"},
+                                     {"tool", "Read"},
+                                     {"path", path},
+                                     {"arguments", QJsonObject{{"file_path", "/w/" + path}}}}}})
                 .value("item")
                 .toObject();
         };
@@ -1332,30 +1645,33 @@ class DaemonProtocolTest final : public QObject {
         QVERIFY(git(repository, {"commit", "-q", "--allow-empty", "-m", "first"}));
         QVERIFY(git(repository, {"branch", "main"}));
         QVERIFY(git(repository, {"update-ref", "refs/remotes/origin/release/1.0", "HEAD"}));
-        QVERIFY(git(repository,
-                    {"symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/release/1.0"}));
+        QVERIFY(git(repository, {"symbolic-ref", "refs/remotes/origin/HEAD",
+                                 "refs/remotes/origin/release/1.0"}));
 
         const RepositoryBranches branches = readRepositoryBranches(repository);
         QVERIFY(branches.ok);
         QCOMPARE(branches.local, (QStringList{"develop", "main"}));
         QCOMPARE(branches.remote, QStringList{"origin/release/1.0"});
 
-        const AddedWorktree added =
-            addWorktree(repository, QStringLiteral("feat/phone"), QStringLiteral("origin/release/1.0"));
+        const AddedWorktree added = addWorktree(repository, QStringLiteral("feat/phone"),
+                                                QStringLiteral("origin/release/1.0"));
         QVERIFY2(added.errorCode.isEmpty(), qPrintable(added.message));
         QCOMPARE(added.path, root.filePath(QStringLiteral("app-feat-phone")));
         QCOMPARE(checkoutBranch(added.path), QStringLiteral("feat/phone"));
         QCOMPARE(worktreeRepository(added.path), repository);
         QCOMPARE(repositoryCheckouts(repository), (QStringList{repository, added.path}));
 
-        QCOMPARE(addWorktree(repository, "main", "develop").errorCode, QStringLiteral("branch_exists"));
+        QCOMPARE(addWorktree(repository, "main", "develop").errorCode,
+                 QStringLiteral("branch_exists"));
         QVERIFY(QDir().mkpath(root.filePath(QStringLiteral("app-taken"))));
-        QCOMPARE(addWorktree(repository, "taken", "develop").errorCode, QStringLiteral("worktree_exists"));
+        QCOMPARE(addWorktree(repository, "taken", "develop").errorCode,
+                 QStringLiteral("worktree_exists"));
         QCOMPARE(addWorktree(repository, "fresh", "HEAD~1").errorCode,
                  QStringLiteral("base_branch_not_found"));
         QCOMPARE(addWorktree(repository, "fresh", "--orphan").errorCode,
                  QStringLiteral("base_branch_not_found"));
-        for (const QString& invalid : {"", "has space", "-x", "a..b", "a/", "a.lock", "x/.y", "a:b", "@"})
+        for (const QString& invalid :
+             {"", "has space", "-x", "a..b", "a/", "a.lock", "x/.y", "a:b", "@"})
             QVERIFY2(!validNewBranchName(invalid), qPrintable(invalid));
         QVERIFY(validNewBranchName(QStringLiteral("feat/mobile-ui_2.0")));
         QCOMPARE(addWorktree(repository, "bad name", "develop").errorCode,
@@ -1842,18 +2158,25 @@ class DaemonProtocolTest final : public QObject {
 
     void startupCommitFailurePreservesErrorAndReleasesTransaction_data() {
         QTest::addColumn<QString>("phase");
-        for (const auto& phase : {"turn", "replay", "activity"})
-            QTest::newRow(phase) << QString(phase);
+        QTest::addColumn<QString>("operation");
+        // Activity indexing no longer runs at open (ADR 0097); JournalStartupTest covers it.
+        for (const auto& phase : {"turn", "replay"})
+            for (const auto& operation : {"none", "read-policy", "write-policy", "write-session"}) {
+                const auto name = QString("%1-%2").arg(phase, operation).toLatin1();
+                QTest::newRow(name.constData()) << QString(phase) << QString(operation);
+            }
     }
     void startupCommitFailurePreservesErrorAndReleasesTransaction() {
         QFETCH(QString, phase);
+        QFETCH(QString, operation);
         QTemporaryDir dir;
         const auto path = dir.filePath("journal.sqlite");
         const auto snapshot = [](QSqlDatabase db) {
             QVariantMap result;
             for (const auto& table :
                  {"sessions", "events", "replay_events", "replay_projection_state",
-                  "activity_heads", "activity_items", "activity_summaries", "startup_child"}) {
+                  "activity_heads", "activity_items", "activity_summaries", "startup_child",
+                  "journal_retention_settings", "journal_size_settings"}) {
                 QSqlQuery q(db);
                 if (!q.exec(QString("SELECT * FROM %1 ORDER BY 1,2,3").arg(table))) {
                     QTest::qFail(qPrintable(q.lastError().text()), __FILE__, __LINE__);
@@ -1891,6 +2214,8 @@ class DaemonProtocolTest final : public QObject {
             QVERIFY(q.exec("UPDATE sessions SET title='fixture'"));
             QString mutation;
             if (phase == "turn") {
+                // Turn numbers are backfilled only in a journal from before the format marker.
+                QVERIFY(q.exec("PRAGMA user_version=0"));
                 QVERIFY(q.exec("UPDATE sessions SET current_turn_sequence=0"));
                 QVERIFY(q.exec("UPDATE events SET turn_sequence=0"));
                 mutation = "AFTER UPDATE ON sessions WHEN "
@@ -1914,6 +2239,14 @@ class DaemonProtocolTest final : public QObject {
         QVERIFY2(!failed.isOpen(), "Failed startup must never advertise an initialized journal.");
         QVERIFY2(failed.errorString().contains("FOREIGN KEY", Qt::CaseInsensitive),
                  qPrintable(failed.errorString()));
+        // No public operation may revive or write through an incompletely initialized object.
+        if (operation == "read-policy")
+            QVERIFY(!failed.retentionPolicy());
+        else if (operation == "write-policy")
+            QVERIFY(!failed.setRetentionPolicy({7, true, 0}, 0));
+        else if (operation == "write-session")
+            QVERIFY(!failed.upsertSession({"unexpected", dir.path(), "codex", {}, {}, "ready"}));
+        QVERIFY(!failed.isOpen());
         const auto connection = QString("startup-repair-%1").arg(phase);
         const auto remove = qScopeGuard([&] { QSqlDatabase::removeDatabase(connection); });
         auto repair = QSqlDatabase::addDatabase("QSQLITE", connection);
@@ -1931,6 +2264,51 @@ class DaemonProtocolTest final : public QObject {
         QCOMPARE(reopened.sessionHead("s").cursor, qint64(2));
         QCOMPARE(reopened.eventsAfter("s", 1, 0).size(), 2);
         QCOMPARE(reopened.compactedEventsAfter("s", 1, 0, 10).events.size(), 2);
+    }
+
+    void failedAgentSchemaCannotBeUsedUntilReopened() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto path = dir.filePath("journal.sqlite");
+        {
+            LocalJournal seed(path);
+            QVERIFY(seed.isOpen());
+            QVERIFY(seed.upsertSession({"s", dir.path(), "codex", {}, {}, "ready"}));
+            QCOMPARE(seed.appendEvent("s", 1, "user.message", {{"text", "seed"}}), qint64(1));
+        }
+        const auto connection = QUuid::createUuid().toString();
+        const auto remove = qScopeGuard([&] { QSqlDatabase::removeDatabase(connection); });
+        auto db = QSqlDatabase::addDatabase("QSQLITE", connection);
+        db.setDatabaseName(path);
+        QVERIFY(db.open());
+        QSqlQuery q(db);
+        QVERIFY(q.exec("INSERT INTO conversation_numbers VALUES ('1234','s',1,'synthetic','')"));
+        QVERIFY(q.exec("DROP INDEX conversation_numbers_session"));
+        QVERIFY(q.exec("ALTER TABLE conversation_numbers RENAME COLUMN generation "
+                       "TO unsupported_generation"));
+        LocalJournal failed(path);
+        QVERIFY(!failed.isOpen());
+        QVERIFY2(failed.errorString().contains("generation"), qPrintable(failed.errorString()));
+        QVERIFY(!failed.retentionPolicy());
+        QVERIFY(!failed.setRetentionPolicy({7, true, 0}, 0));
+        QVERIFY(!failed.upsertSession({"unexpected", dir.path(), "codex", {}, {}, "ready"}));
+        QVERIFY(!failed.isOpen());
+        QVERIFY(q.exec("SELECT COUNT(*) FROM sessions"));
+        QVERIFY(q.next());
+        QCOMPARE(q.value(0).toInt(), 1);
+        q.finish();
+        QVERIFY(q.exec("SELECT COUNT(*) FROM journal_retention_settings"));
+        QVERIFY(q.next());
+        QCOMPARE(q.value(0).toInt(), 0);
+        q.finish();
+        QVERIFY(q.exec("ALTER TABLE conversation_numbers RENAME COLUMN unsupported_generation "
+                       "TO generation"));
+        QVERIFY(!failed.isOpen());
+        LocalJournal reopened(path);
+        QVERIFY2(reopened.isOpen(), qPrintable(reopened.errorString()));
+        QCOMPARE(reopened.eventsAfter("s", 1, 0).size(), 1);
+        QCOMPARE(reopened.conversationNumber("s", 1), QString("1234"));
+        QVERIFY(reopened.setRetentionPolicy({7, true, 0}, 0));
     }
 
     void backfillNeverRenumbersPrunedSessions() {
@@ -2349,6 +2727,7 @@ class DaemonProtocolTest final : public QObject {
             QVERIFY(database.open());
             QSqlQuery query(database);
             QVERIFY(query.exec(QStringLiteral("UPDATE sessions SET last_turn_started_at = ''")));
+            QVERIFY(query.exec(QStringLiteral("PRAGMA user_version=0")));
             database.close();
         }
         QSqlDatabase::removeDatabase(connection);
@@ -2359,6 +2738,236 @@ class DaemonProtocolTest final : public QObject {
         // The fork's copied history dates it at the source's last message.
         QCOMPARE(sessionNamed(reopened, QStringLiteral("forked-session")).lastTurnStartedAt,
                  messageSentAt);
+    }
+
+    void serviceRefusesAStateDirectoryItCannotRestrict() {
+#ifdef Q_OS_UNIX
+        // The shared temporary directory is writable but owned by root, so chmod on it fails,
+        // as it would for any state directory owned by someone else.
+        const QString shared =
+            QFileInfo(QStringLiteral("/private/tmp")).isDir() ? "/private/tmp" : "/tmp";
+        const QFileInfo sharedInfo(shared);
+        if (!sharedInfo.isWritable() || sharedInfo.ownerId() == ::getuid())
+            QSKIP("Needs a writable directory owned by another user");
+        QTemporaryDir directory;
+        const QString name = "ketplus-state-" + QUuid::createUuid().toString(QUuid::WithoutBraces);
+        const DaemonConfiguration configuration{
+            shared + '/' + name + ".sqlite3", shared + '/' + name + ".token",
+            directory.filePath("daemon.sock"), QStringLiteral("/nonexistent/ketplus-test-codex")};
+        const auto cleanup = qScopeGuard([&] {
+            for (const auto& suffix :
+                 {".sqlite3", ".sqlite3-wal", ".sqlite3-shm", ".sqlite3.lock", ".token"})
+                QFile::remove(shared + '/' + name + suffix);
+        });
+        DaemonService service(configuration);
+        QVERIFY(!service.start());
+        QVERIFY2(service.errorString().contains("restrict"), qPrintable(service.errorString()));
+        QVERIFY(!QFileInfo::exists(configuration.tokenPath));
+#else
+        QSKIP("POSIX directory ownership");
+#endif
+    }
+
+    void runningServiceKeepsItsLocksWhenTheyAge() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const DaemonConfiguration configuration{
+            directory.filePath("state/journal.sqlite3"), directory.filePath("state/local.token"),
+            directory.filePath("daemon.sock"), QStringLiteral("/nonexistent/ketplus-test-codex")};
+        DaemonService service(configuration);
+        QVERIFY2(service.start(), qPrintable(service.errorString()));
+        // A daemon that has run for an hour: its lock files were written at startup.
+        int aged = 0;
+        QDirIterator locks(directory.path(), {"*.lock"}, QDir::Files | QDir::Hidden,
+                           QDirIterator::Subdirectories);
+        while (locks.hasNext()) {
+            QFile lock(locks.next());
+            QVERIFY(lock.open(QIODevice::ReadWrite));
+            QVERIFY(lock.setFileTime(QDateTime::currentDateTime().addSecs(-3600),
+                                     QFileDevice::FileModificationTime));
+            ++aged;
+        }
+        QCOMPARE(aged, 2);
+        DaemonService second(configuration);
+        QVERIFY(!second.start());
+        QVERIFY2(second.errorString().contains("Another KetPlus Daemon"),
+                 qPrintable(second.errorString()));
+        QLocalSocket client;
+        client.connectToServer(configuration.socketName);
+        QVERIFY(client.waitForConnected(2'000));
+    }
+
+    void serviceRemovesInheritedAccessEntriesFromItsState() {
+#ifdef Q_OS_MACOS
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString state = directory.filePath("state");
+        QVERIFY(QDir().mkpath(state));
+        // Everything created below inherits a grant the owner-only mode bits do not show.
+        QCOMPARE(
+            QProcess::execute("/bin/chmod", {"+a",
+                                             "everyone allow list,search,read,readattr,readextattr,"
+                                             "readsecurity,file_inherit,directory_inherit",
+                                             state}),
+            0);
+        const DaemonConfiguration configuration{state + "/journal.sqlite3", state + "/local.token",
+                                                directory.filePath("daemon.sock"),
+                                                QStringLiteral("/nonexistent/ketplus-test-codex")};
+        const QByteArray exposedToken(43, 'k');
+        QFile token(configuration.tokenPath);
+        QVERIFY(token.open(QIODevice::WriteOnly));
+        QVERIFY(token.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+        QCOMPARE(token.write(exposedToken), exposedToken.size());
+        token.close();
+        const QString media = state + "/media";
+        QVERIFY(QDir().mkpath(media + "/refs"));
+        // A journal from before the fix: SQLite opens an empty file as an empty database.
+        const QStringList written{configuration.statePath, media + "/foreign.bin",
+                                  media + "/refs/session.refs"};
+        for (const auto& path : written) {
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            QVERIFY(file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+            if (path != configuration.statePath)
+                file.write("x");
+        }
+        for (const auto& path :
+             QStringList{configuration.tokenPath, media, media + "/refs"} + written)
+            QVERIFY2(hasExtendedAclEntries(path), qPrintable(path));
+
+        auto service = std::make_unique<DaemonService>(configuration);
+        QVERIFY2(service->start(), qPrintable(service->errorString()));
+        QStringList checked{state, media, media + "/refs", configuration.tokenPath,
+                            configuration.statePath};
+        checked += written;
+        for (const auto& suffix : {"-wal", "-shm"})
+            if (QFileInfo::exists(configuration.statePath + suffix))
+                checked.append(configuration.statePath + suffix);
+        for (const auto& path : checked) {
+            QVERIFY2(QFileInfo::exists(path), qPrintable(path));
+            QVERIFY2(!hasExtendedAclEntries(path), qPrintable(path));
+        }
+        // Files the daemon creates later inherit nothing.
+        QFile later(state + "/later");
+        QVERIFY(later.open(QIODevice::WriteOnly));
+        later.close();
+        QVERIFY(!hasExtendedAclEntries(later.fileName()));
+        // A credential others could read was replaced, not trusted.
+        QVERIFY(token.open(QIODevice::ReadOnly));
+        const QByteArray current = token.readAll().trimmed();
+        QVERIFY(current.size() >= 32);
+        QVERIFY(current != exposedToken);
+        token.close();
+
+        // A journal already in its final format is opened in place, not rewritten, so an
+        // entry added to it later must be removed too.
+        service.reset();
+        QCOMPARE(
+            QProcess::execute("/bin/chmod", {"+a", "everyone allow read", configuration.statePath}),
+            0);
+        QVERIFY(hasExtendedAclEntries(configuration.statePath));
+        DaemonService restarted(configuration);
+        QVERIFY2(restarted.start(), qPrintable(restarted.errorString()));
+        QVERIFY(!hasExtendedAclEntries(configuration.statePath));
+#else
+        QSKIP("macOS access-control entries");
+#endif
+    }
+
+    void rejectedSecondDaemonKeepsTheRunningCredential() {
+#ifdef Q_OS_MACOS
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const DaemonConfiguration configuration{
+            directory.filePath("state/journal.sqlite3"), directory.filePath("state/local.token"),
+            directory.filePath("daemon.sock"), QStringLiteral("/nonexistent/ketplus-test-codex")};
+        DaemonService running(configuration);
+        QVERIFY2(running.start(), qPrintable(running.errorString()));
+        const auto readToken = [&configuration] {
+            QFile file(configuration.tokenPath);
+            return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
+        };
+        const QByteArray served = readToken();
+        QVERIFY(!served.isEmpty());
+        // Even a credential that now looks exposed belongs to the daemon that owns the journal.
+        QCOMPARE(
+            QProcess::execute("/bin/chmod", {"+a", "everyone allow read", configuration.tokenPath}),
+            0);
+        DaemonService second(configuration);
+        QVERIFY(!second.start());
+        QVERIFY2(second.errorString().contains("Another KetPlus Daemon"),
+                 qPrintable(second.errorString()));
+        QCOMPARE(readToken(), served);
+#else
+        QSKIP("macOS access-control entries");
+#endif
+    }
+
+    void linkedStateDirectoryLosesItsInheritableEntries() {
+#ifdef Q_OS_MACOS
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString target = directory.filePath("real");
+        const QString alias = directory.filePath("alias");
+        QVERIFY(QDir().mkpath(target));
+        QVERIFY(QFile::link(target, alias));
+        QCOMPARE(
+            QProcess::execute("/bin/chmod", {"+a",
+                                             "everyone allow list,search,read,readattr,readextattr,"
+                                             "readsecurity,file_inherit,directory_inherit",
+                                             target}),
+            0);
+        QVERIFY(hasExtendedAclEntries(target));
+        const DaemonConfiguration configuration{alias + "/journal.sqlite3", alias + "/local.token",
+                                                directory.filePath("daemon.sock"),
+                                                QStringLiteral("/nonexistent/ketplus-test-codex")};
+        DaemonService service(configuration);
+        QVERIFY2(service.start(), qPrintable(service.errorString()));
+        QVERIFY(!hasExtendedAclEntries(target));
+        QVERIFY(!hasExtendedAclEntries(configuration.tokenPath));
+        QVERIFY(!hasExtendedAclEntries(configuration.statePath));
+#else
+        QSKIP("macOS access-control entries");
+#endif
+    }
+
+    void unreadableAccessEntriesCountAsExposed() {
+#ifdef Q_OS_MACOS
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString state = directory.filePath("state");
+        QVERIFY(QDir().mkpath(state));
+        const DaemonConfiguration configuration{state + "/journal.sqlite3", state + "/local.token",
+                                                directory.filePath("daemon.sock"),
+                                                QStringLiteral("/nonexistent/ketplus-test-codex")};
+        const QByteArray exposed(43, 'k');
+        QFile token(configuration.tokenPath);
+        QVERIFY(token.open(QIODevice::WriteOnly));
+        QVERIFY(token.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+        QCOMPARE(token.write(exposed), exposed.size());
+        token.close();
+        // The grant to others is there, but reading the ACL fails even for the owner.
+        QCOMPARE(
+            QProcess::execute("/bin/chmod", {"+a", "everyone allow read", configuration.tokenPath}),
+            0);
+        QCOMPARE(QProcess::execute("/bin/chmod",
+                                   {"+a", "everyone deny readsecurity", configuration.tokenPath}),
+                 0);
+        const auto cleanup =
+            qScopeGuard([&] { QProcess::execute("/bin/chmod", {"-N", configuration.tokenPath}); });
+        errno = 0;
+        QCOMPARE(acl_get_link_np(QFile::encodeName(configuration.tokenPath).constData(),
+                                 ACL_TYPE_EXTENDED),
+                 acl_t{});
+        QCOMPARE(errno, EACCES);
+        DaemonService service(configuration);
+        QVERIFY2(service.start(), qPrintable(service.errorString()));
+        QVERIFY(token.open(QIODevice::ReadOnly));
+        QVERIFY(token.readAll().trimmed() != exposed);
+        QVERIFY(!hasExtendedAclEntries(configuration.tokenPath));
+#else
+        QSKIP("macOS access-control entries");
+#endif
     }
 
     void serviceCreatesProtectedStateAndRejectsEndpointCollision() {
@@ -2382,6 +2991,11 @@ class DaemonProtocolTest final : public QObject {
                  QFileDevice::Permissions{});
         QCOMPARE(QFileInfo(configuration.tokenPath).permissions() & unsafePermissions,
                  QFileDevice::Permissions{});
+        // Another user's process cannot even open the endpoint (with the daemon's own
+        // UserAccessOption and umask 077, either alone gives this).
+        QVERIFY(QFileInfo::exists(configuration.socketName));
+        QCOMPARE(QFileInfo(configuration.socketName).permissions() & unsafePermissions,
+                 QFileDevice::Permissions{});
 #endif
         DaemonService conflicting(configuration);
         QVERIFY(!conflicting.start());
@@ -2389,5 +3003,69 @@ class DaemonProtocolTest final : public QObject {
     }
 };
 
-QTEST_GUILESS_MAIN(DaemonProtocolTest)
+#ifdef Q_OS_UNIX
+static int mediaReferenceWriteFailureProbe() {
+    QTemporaryDir directory;
+    if (!directory.isValid())
+        return 10;
+    const auto media = directory.filePath("media");
+    McpMediaStore store(media);
+    const auto oldImage = QByteArray::fromHex("89504e470d0a1a0a0000000d494844520000000800000006");
+    auto newImage = oldImage;
+    newImage[newImage.size() - 1] = '\x07';
+    if (store.storeImage(oldImage, "image/png", "a").isEmpty())
+        return 11;
+    const auto refs = media + "/refs/" +
+                      QCryptographicHash::hash("a", QCryptographicHash::Sha256).toHex() + ".refs";
+    const auto read = [&]() {
+        QFile file(refs);
+        return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
+    };
+    const auto original = read();
+    if (original.size() != 65)
+        return 12;
+    struct rlimit previous{};
+    if (getrlimit(RLIMIT_FSIZE, &previous) != 0)
+        return 13;
+    auto limited = previous;
+    limited.rlim_cur = 90; // both 24-byte images fit; the two-hash reference file cannot
+    std::signal(SIGXFSZ, SIG_IGN);
+    if (setrlimit(RLIMIT_FSIZE, &limited) != 0)
+        return 14;
+    const auto restore = qScopeGuard([&] { setrlimit(RLIMIT_FSIZE, &previous); });
+    const auto attachment = store.storeImage(newImage, "image/png", "a");
+    const QJsonObject image{{"type", "image"},
+                            {"mimeType", "image/png"},
+                            {"data", QString::fromLatin1(newImage.toBase64())}};
+    const auto item = store.externalizeItem(
+        {{"type", "mcpToolCall"}, {"result", QJsonObject{{"content", QJsonArray{image}}}}}, "a");
+    const auto block =
+        item.value("result").toObject().value("content").toArray().first().toObject();
+    if (setrlimit(RLIMIT_FSIZE, &previous) != 0)
+        return 15;
+    if (!attachment.isEmpty() || block.contains("media_ref") || !block.value("omitted").toBool()) {
+        qWarning("Reference persistence failure was reported as successful media publication");
+        return 16;
+    }
+    if (read() != original) {
+        qWarning("Failed reference commit modified existing ownership");
+        return 17;
+    }
+    if (store.storeImage(newImage, "image/png", "a").isEmpty() || read().size() != 130)
+        return 18;
+    return 0;
+}
+#endif
+
+int main(int argc, char** argv) {
+    QCoreApplication application(argc, argv);
+    application.setAttribute(Qt::AA_Use96Dpi, true);
+#ifdef Q_OS_UNIX
+    if (application.arguments().contains("--media-reference-write-fault"))
+        return mediaReferenceWriteFailureProbe();
+#endif
+    DaemonProtocolTest test;
+    QTEST_SET_MAIN_SOURCE_PATH
+    return QTest::qExec(&test, argc, argv);
+}
 #include "DaemonProtocolTest.moc"

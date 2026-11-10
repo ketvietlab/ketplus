@@ -7,6 +7,9 @@ namespace ketplus::remote {
 namespace {
 
 constexpr qint64 maximumLargeEventBytes = 32 * 1024 * 1024;
+// The daemon sends whole journal chunks (96 KiB), so a transfer has a few hundred fragments.
+// One bookkeeping entry per fragment stays bounded even if a sender splits it into bytes.
+constexpr qsizetype maximumFragments = 4096;
 
 QString itemIdOf(const QJsonObject& payload) {
     const QString direct = payload.value(QStringLiteral("item_id")).toString();
@@ -76,7 +79,8 @@ bool LargeEventReassembler::accept(const QJsonObject& fragment, QString* error) 
     }
     const auto duplicate = accepted_.constFind(offset);
     if (duplicate != accepted_.constEnd()) {
-        if (duplicate.value() != data) {
+        if (duplicate.value() != data.size() ||
+            QByteArrayView(bytes_).sliced(offset, data.size()) != data) {
             return fail(QStringLiteral("Conflicting duplicate large-event fragment."));
         }
         return true;
@@ -84,7 +88,10 @@ bool LargeEventReassembler::accept(const QJsonObject& fragment, QString* error) 
     if (offset != nextOffset_) {
         return fail(QStringLiteral("Large-event fragment gap or reordering."));
     }
-    accepted_.insert(offset, data);
+    if (accepted_.size() >= maximumFragments) {
+        return fail(QStringLiteral("Large-event transfer has too many fragments."));
+    }
+    accepted_.insert(offset, data.size());
     bytes_.append(data);
     nextOffset_ = next;
     complete_ = terminal;

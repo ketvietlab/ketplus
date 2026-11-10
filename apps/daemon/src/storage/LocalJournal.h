@@ -9,6 +9,7 @@
 #include <QDateTime>
 #include <QHash>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <utility>
 
@@ -18,6 +19,7 @@
 #include <QSet>
 #include <QSqlDatabase>
 #include <QString>
+#include <QVariant>
 
 namespace ketplus::daemon {
 
@@ -49,6 +51,9 @@ struct StoredSession final {
     qint64 contextRevision{1};
     // Requested native auto-compaction window. Zero inherits provider configuration.
     qint64 compactWindow{0};
+    // UTC ISO time the conversation was archived, empty when it is not. Written only by
+    // setSessionArchived; upsertSession leaves it as it is.
+    QString archivedAt;
 };
 
 // One command a paired device sent this Mac through the relay that could change something
@@ -64,6 +69,28 @@ struct RemoteCommandAudit final {
     QString sessionId;
     QString resultCode;
     QDateTime recordedAt;
+};
+
+// One staged fork's read snapshot and copy position. Destroying it releases the snapshot;
+// an unfinished copy is recovered as purge work when the journal next opens.
+struct ForkCopy final {
+    ForkCopy() = default;
+    ForkCopy(const ForkCopy&) = delete;
+    ForkCopy& operator=(const ForkCopy&) = delete;
+    ~ForkCopy();
+    QString readerName;
+    QString sourceId;
+    qint64 sourceGeneration{0};
+    QString forkId;
+    qint64 forkGeneration{1};
+    qint64 lastCursor{0};
+    qint64 currentTurnSequence{0};
+    int table{0};
+    QVariantList after;
+    qint64 copiedRows{0};
+    // The source's activity_files were still being listed when the snapshot was taken.
+    bool filesPending{false};
+    bool settled{false};
 };
 
 struct SessionHead final {
@@ -89,6 +116,11 @@ struct SessionTombstone final {
     qint64 lifecycleRevision{0};
     QString operationId;
     QString deletedAt;
+};
+
+struct SessionTombstonePage final {
+    QJsonArray tombstones;
+    QJsonObject next;
 };
 
 struct EventReplayPage final {
@@ -161,23 +193,51 @@ class LocalJournal final {
     bool deleteSession(const QString& sessionId, qint64 generation, const QString& operationId,
                        qint64 lifecycleRevision, QString* error = nullptr,
                        const QJsonArray& providerTargets = {});
+    // One bounded pass over deleted generations' remaining history (ADR 0093). A busy
+    // writer defers the pass; it commits all of its progress or none of it.
+    // One bounded pass indexing a session's activity behind its history (ADR 0097).
+    enum class ActivityBackfill { Idle, Progress, Deferred, Failed };
+    ActivityBackfill backfillActivityGroups();
+    [[nodiscard]] bool hasPendingActivityBackfill() const;
+    enum class HistoryPurge { Idle, Progress, Deferred, Failed };
+    HistoryPurge purgeDeletedSessionHistory();
+    [[nodiscard]] bool hasPendingHistoryPurge() const;
     [[nodiscard]] QJsonArray deletionWork(int limit = 64, bool pendingCloudOnly = false,
                                           qint64 afterRow = 0) const;
-    [[nodiscard]] QJsonArray sessionTombstones() const;
+    [[nodiscard]] std::optional<SessionTombstonePage>
+    sessionTombstones(const QJsonObject& after = {}, bool legacy = false) const;
+    [[nodiscard]] std::optional<QString> sessionTombstoneSnapshot() const;
     bool completeProviderCleanup(const QString& sessionId, qint64 generation,
                                  const QString& provider, const QString& threadId);
     bool acknowledgeCloudDeletion(const QString& sessionId, qint64 generation,
                                   const QString& operationId);
-    // Stores `fork` as a new session holding a copy of the source generation's transcript, in
-    // one transaction. Fills the fork's cursor counters from the source.
+    // Stores `fork` as a new session holding a copy of the source generation's transcript,
+    // running the staged copy below to completion. Fills the fork's cursor counters from the
+    // source. The optional synchronous preparation must succeed before the session is stored;
+    // its external effects may remain if the subsequent database commit fails. A failure
+    // removes everything it staged before returning.
     bool forkSession(const QString& sourceId, qint64 sourceGeneration, StoredSession& fork,
-                     QString* error = nullptr);
+                     QString* error = nullptr,
+                     const std::function<bool(QString*)>& beforeCommit = {});
+    // A staged fork (ADR 0094) copies history from one read snapshot in bounded passes into
+    // an unlisted identity; finishFork stores the session in one transaction. An abandoned
+    // or interrupted copy becomes history purge work (ADR 0093).
+    enum class ForkStep { Progress, Copied, Deferred, Failed };
+    [[nodiscard]] std::unique_ptr<ForkCopy> beginFork(const QString& sourceId,
+                                                      qint64 sourceGeneration, StoredSession& fork,
+                                                      QString* error);
+    ForkStep continueFork(ForkCopy& copy, QString* error);
+    bool finishFork(ForkCopy& copy, StoredSession& fork, QString* error,
+                    const std::function<bool(QString*)>& beforeCommit = {});
+    bool abandonFork(ForkCopy& copy, QString* error = nullptr);
     [[nodiscard]] SessionTombstone sessionTombstone(const QString& sessionId,
                                                     qint64 generation) const;
     // Ownership-sensitive work must distinguish an empty catalog from any read
     // failure, including errors after some rows have already been fetched.
     [[nodiscard]] std::optional<QList<StoredSession>> readSessions() const;
     [[nodiscard]] QList<StoredSession> sessions() const;
+    // Records or clears (empty archivedAt) the time this generation was archived.
+    bool setSessionArchived(const QString& sessionId, qint64 generation, const QString& archivedAt);
     // The id of every session, or nullopt when they could not all be read. sessions() returns
     // an empty list on a failed read, which must not pass for every session being deleted.
     [[nodiscard]] std::optional<QSet<QString>> sessionIds() const;
@@ -203,6 +263,11 @@ class LocalJournal final {
     [[nodiscard]] qint64 appendEvent(const QString& sessionId, qint64 generation,
                                      const QString& type, const QJsonObject& payload,
                                      QString* error = nullptr);
+    // Persist local turn acceptance before publishing any of its two/three events.
+    [[nodiscard]] QJsonArray appendTurnStart(const StoredSession& session,
+                                             const QJsonObject& prompt,
+                                             const QJsonObject& configuration,
+                                             QString* error = nullptr);
     [[nodiscard]] QJsonArray eventsAfter(const QString& sessionId, qint64 generation, qint64 cursor,
                                          int limit = 500) const;
     // True when the newest turn.started has no turn.completed after it.
@@ -279,6 +344,11 @@ class LocalJournal final {
     // Also trim eligible completed command output to UTF-8 head/tail with an explicit marker.
     // Returns changed rows, or nullopt on error. The scan resumes in the next call.
     std::optional<qint64> pruneReplayDetails(const QDateTime& olderThan, int maximumRows = 128);
+    // Stores a bounded preview of an image the detail pass compacts and returns its media
+    // reference, or an empty object to keep the caption only (#128). Unset means caption only.
+    using ImagePreviewWriter =
+        std::function<QJsonObject(const QByteArray& image, const QString& sessionId)>;
+    void setImagePreviewWriter(ImagePreviewWriter writer) { imagePreview_ = std::move(writer); }
     bool beginAttachment(const QString& sessionId, qint64 generation, const QString& attachmentId,
                          qint64 expectedRevision, const QString& name, const QString& mediaType,
                          qint64 totalBytes, int chunkCount, const QString& digestSha256,
@@ -360,6 +430,9 @@ class LocalJournal final {
     [[nodiscard]] int automaticAgentTurnsInChain(const QString& chainId) const;
     [[nodiscard]] int automaticAgentTurnsSince(const QString& sessionId, qint64 generation,
                                                const QDateTime& since) const;
+    // Messages one sender has queued or held for one receiver that it has not received yet.
+    [[nodiscard]] int undeliveredAgentMessages(const QString& fromSession, qint64 fromGeneration,
+                                               const QString& toSession, qint64 toGeneration) const;
     [[nodiscard]] QList<AgentMessageRecord> overdueAgentRequests(const QDateTime& now) const;
     [[nodiscard]] QStringList sessionsWithQueuedAgentMessages() const;
     // ADR 0067: the conversation that reviews another's finished turns.
@@ -377,13 +450,43 @@ class LocalJournal final {
     // rows, because commands refused before they ran store no command result to trigger it.
     bool pruneRemoteAudit();
     bool checkpointReclaimedPages();
+    // Inside a transaction: removes one bounded batch of a generation's bulky history and
+    // reports whether any remains. Fails when a statement makes no progress.
+    bool purgeHistoryBatch(const QString& sessionId, qint64 generation, bool* remaining,
+                           QSqlError* error);
+    // Inside deleteSession's transaction: the first batch, then a purge marker if any remains.
+    bool startHistoryPurge(const QString& sessionId, qint64 generation, QString* error);
+    // At open: refuses a journal newer than journal_format::current before writing anything,
+    // and records the current format once every migration has succeeded (ADR 0095).
+    bool acceptsFormat();
+    bool markFormat();
+    // Indexes one bounded page of a marked session's replay rows inside the caller's
+    // transaction, and removes the marker once its history is indexed (ADR 0097).
+    bool catchUpActivity(const QString& session, qint64 generation, bool* indexed,
+                         QSqlError* error);
+    bool activityBackfillPending(const QString& session, qint64 generation, bool* pending,
+                                 QString* error) const;
+    // `deferred` when the session is still marked; its event is then indexed by the backfill.
+    // Groups are projected only once both the index and the files listing are drained. Live
+    // events defer only to the index (deferActivityToBackfill): the listing reads its own rows.
+    bool activityProjectionPending(const QString& session, qint64 generation, bool* pending) const;
+    // One bounded pass listing the files of groups indexed before activity_files existed.
+    bool listActivityFiles(const QString& session, qint64 generation, bool* listed,
+                           QSqlError* error);
+    bool deferActivityToBackfill(const QString& session, qint64 generation, bool* deferred,
+                                 QString* error);
+    // At open: turns interrupted fork copies into purge work, or keeps them staged.
+    bool recoverForkStaging();
+    // Removes a staged fork's rows now (synchronous forkSession) or leaves purge work.
+    bool discardForkStaging(ForkCopy& copy, bool immediately, QString* error);
     // Inside deleteSession's transaction: releases the number and ends undelivered messages.
     bool releaseAgentState(const QString& sessionId, qint64 generation, QString* error);
     bool writeCommandResult(const QString& messageId, const QJsonObject& result, bool replace);
     [[nodiscard]] qint64 appendEventWithMutation(const QString& sessionId, qint64 generation,
                                                  const QString& type, const QJsonObject& payload,
                                                  QString* error,
-                                                 const std::function<bool()>& mutation);
+                                                 const std::function<bool()>& mutation,
+                                                 bool ownTransaction = true);
     bool initializeContexts();
     [[nodiscard]] TranscriptWindow transcriptWindowImpl(const QString& sessionId, qint64 generation,
                                                         qint64 beforeCursor, qint64 snapshotCursor,
@@ -420,6 +523,9 @@ class LocalJournal final {
     void setError(const QString& error) const;
 
     QString connectionName_;
+    // PRAGMA user_version as found at open; legacy backfills run only below format 1.
+    int openedFormat_{0};
+    bool activityCatchUp_{false};
     QSqlDatabase database_;
     mutable QString error_;
     int commandResultsSincePrune_{0};
@@ -427,6 +533,7 @@ class LocalJournal final {
     // A reclaim whose checkpoint a reader held back: the file has not shrunk yet.
     bool reclaimCheckpointPending_{false};
     qint64 detailRetentionScanRow_{0};
+    ImagePreviewWriter imagePreview_;
     bool sizePressureRecent_{false};
     bool sizePressureActive_{false};
 };

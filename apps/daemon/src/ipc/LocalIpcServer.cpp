@@ -120,6 +120,9 @@ int LocalIpcServer::connectionCount() const { return static_cast<int>(connection
 
 void LocalIpcServer::acceptConnections() {
     while (QLocalSocket* socket = server_->nextPendingConnection()) {
+        // readClient may pause for outbound backpressure. Bound Qt's unread
+        // transport buffer as well as the application's frame assembler.
+        socket->setReadBufferSize(protocol::maximumFrameBytes + 4);
         if (connections_.size() >= maximumConnections_) {
             // Not tracked: reply once, then let the peer see EOF. A client that never reads
             // cannot hold the slot because the socket is aborted after a short grace period.

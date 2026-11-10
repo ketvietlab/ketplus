@@ -36,6 +36,62 @@ bool seed(LocalJournal& journal, const QString& directory) {
 QJsonObject last(LocalJournal& journal, qint64 cursor) {
     return journal.eventsAfter("session", 1, cursor - 1, 1).first().toObject();
 }
+
+bool sqlite(const QString& path, const QStringList& statements) {
+    const auto connection = QStringLiteral("activity-files-fixture");
+    bool ok = false;
+    {
+        auto db = QSqlDatabase::addDatabase("QSQLITE", connection);
+        db.setDatabaseName(path);
+        ok = db.open();
+        for (const auto& sql : statements) {
+            QSqlQuery query(db);
+            ok = ok && query.exec(sql);
+        }
+        db.close();
+    }
+    QSqlDatabase::removeDatabase(connection);
+    return ok;
+}
+QJsonArray summaryFiles(LocalJournal& journal, qint64 cursor) {
+    return journal.activitySummaryEvent(last(journal, cursor))
+        .value("payload")
+        .toObject()
+        .value("files")
+        .toArray();
+}
+bool drain(LocalJournal& journal) {
+    for (int pass = 0; pass < 64; ++pass) {
+        switch (journal.backfillActivityGroups()) {
+        case LocalJournal::ActivityBackfill::Idle:
+            return true;
+        case LocalJournal::ActivityBackfill::Failed:
+            return false;
+        default:
+            break;
+        }
+    }
+    return false;
+}
+// A journal grouped before activity_files existed: its edit, then a command, then the table
+// dropped as an older daemon left it.
+qint64 groupedWithoutFiles(const QString& path, const QString& root) {
+    qint64 cursor = 0;
+    {
+        LocalJournal journal(path);
+        if (!seed(journal, root))
+            return 0;
+        cursor = journal.appendEvent(
+            "session", 1, "item.completed",
+            fileChange("one", {change("src/a.cpp", "update", "@@ -1 +1 @@\n+b")}));
+        if (cursor <= 0 ||
+            journal.appendEvent("session", 1, "item.completed", command("two", "completed")) <= 0)
+            return 0;
+    }
+    return sqlite(path, {"DROP TABLE activity_files", "DROP TABLE activity_files_backfill"})
+               ? cursor
+               : 0;
+}
 } // namespace
 class DaemonActivityGroupsTest : public QObject {
     Q_OBJECT
@@ -548,90 +604,101 @@ class DaemonActivityGroupsTest : public QObject {
         QVERIFY(journal.forkSession("session", 1, fork));
         QCOMPARE(paths("fork", again), expected);
     }
-    // A backfill that did not finish runs again on the next open.
-    void interruptedFilesBackfillRunsAgain() {
-        QTemporaryDir dir;
-        const auto path = dir.filePath("journal.sqlite3");
-        qint64 cursor;
-        {
-            LocalJournal journal(path);
-            QVERIFY(seed(journal, dir.path()));
-            cursor = journal.appendEvent(
-                "session", 1, "item.completed",
-                fileChange("one", {change("src/a.cpp", "update", "@@ -1 +1 @@\n+b")}));
-            QVERIFY(cursor > 0);
-            QVERIFY(journal.appendEvent("session", 1, "item.completed",
-                                        command("two", "completed")) > 0);
-        }
-        const auto connection = QStringLiteral("activity-files-interrupt-fixture");
-        const auto exec = [&](const QStringList& statements) {
-            auto db = QSqlDatabase::addDatabase("QSQLITE", connection);
-            db.setDatabaseName(path);
-            bool ok = db.open();
-            for (const auto& sql : statements) {
-                QSqlQuery query(db);
-                ok = ok && query.exec(sql);
-            }
-            db.close();
-            return ok;
-        };
-        // An old journal with one event left to index, whose indexing fails this time.
-        QVERIFY(exec({"DROP TABLE activity_files",
-                      QString("UPDATE activity_heads SET indexed_cursor=%1").arg(cursor),
-                      "CREATE TRIGGER interrupt BEFORE UPDATE ON activity_heads BEGIN SELECT "
-                      "RAISE(ABORT,'interrupted'); END"}));
-        QSqlDatabase::removeDatabase(connection);
-        {
-            LocalJournal journal(path);
-            QVERIFY(!journal.isOpen());
-        }
-        QVERIFY(exec({"DROP TRIGGER interrupt"}));
-        QSqlDatabase::removeDatabase(connection);
-        LocalJournal journal(path);
-        QVERIFY(journal.isOpen());
-        const auto files = journal.activitySummaryEvent(last(journal, cursor))
-                               .value("payload")
-                               .toObject()
-                               .value("files")
-                               .toArray();
-        QCOMPARE(files.size(), 1);
-        QCOMPARE(files.first().toObject().value("path").toString(), "src/a.cpp");
-    }
-    // A journal indexed before activity_files existed lists its groups' files once.
+    // Open does not read edit payloads: the listing runs after it, and the group stays
+    // unpublished until it is done (ADR 0097).
     void existingJournalBackfillsChangedFiles() {
         QTemporaryDir dir;
         const auto path = dir.filePath("journal.sqlite3");
-        qint64 cursor;
+        const qint64 cursor = groupedWithoutFiles(path, dir.path());
+        QVERIFY(cursor > 0);
         {
-            LocalJournal journal(path);
-            QVERIFY(seed(journal, dir.path()));
-            cursor = journal.appendEvent(
-                "session", 1, "item.completed",
-                fileChange("one", {change("src/a.cpp", "update", "@@ -1 +1 @@\n+b")}));
-            QVERIFY(cursor > 0);
-        }
-        const auto connection = QStringLiteral("activity-files-backfill-fixture");
-        {
-            auto db = QSqlDatabase::addDatabase("QSQLITE", connection);
-            db.setDatabaseName(path);
-            QVERIFY(db.open());
-            QSqlQuery query(db);
-            QVERIFY(query.exec("DROP TABLE activity_files"));
-            db.close();
-        }
-        QSqlDatabase::removeDatabase(connection);
-        for (int pass = 0; pass < 2; ++pass) {
             LocalJournal journal(path);
             QVERIFY(journal.isOpen());
-            const auto files = journal.activitySummaryEvent(last(journal, cursor))
-                                   .value("payload")
-                                   .toObject()
-                                   .value("files")
-                                   .toArray();
+            QVERIFY(journal.hasPendingActivityBackfill());
+            // Unpublished until listed: the edit comes as itself, not as its group.
+            QCOMPARE(
+                journal.activitySummaryEvent(last(journal, cursor)).value("event_type").toString(),
+                "item.completed");
+            QVERIFY(drain(journal));
+            QVERIFY(!journal.hasPendingActivityBackfill());
+            const auto files = summaryFiles(journal, cursor);
             QCOMPARE(files.size(), 1);
             QCOMPARE(files.first().toObject().value("path").toString(), "src/a.cpp");
             QCOMPARE(files.first().toObject().value("added").toInt(), 1);
         }
+        // Once: a reopen has nothing left to list.
+        LocalJournal journal(path);
+        QVERIFY(!journal.hasPendingActivityBackfill());
+        QCOMPARE(summaryFiles(journal, cursor).size(), 1);
+    }
+    // A listing pass that fails keeps its marker, and the next start finishes it.
+    void interruptedFilesBackfillRunsAgain() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite3");
+        const qint64 cursor = groupedWithoutFiles(path, dir.path());
+        QVERIFY(cursor > 0);
+        {
+            LocalJournal journal(path);
+            QVERIFY(journal.isOpen());
+            QVERIFY(sqlite(path, {"CREATE TRIGGER interrupt BEFORE INSERT ON activity_files BEGIN "
+                                  "SELECT RAISE(ABORT,'interrupted'); END"}));
+            QCOMPARE(journal.backfillActivityGroups(), LocalJournal::ActivityBackfill::Failed);
+            QVERIFY(journal.hasPendingActivityBackfill());
+        }
+        QVERIFY(sqlite(path, {"DROP TRIGGER interrupt"}));
+        LocalJournal journal(path);
+        QVERIFY(journal.hasPendingActivityBackfill());
+        QVERIFY(drain(journal));
+        QCOMPARE(summaryFiles(journal, cursor).size(), 1);
+    }
+    // An edit completed while the listing is pending is recorded live and kept by the pass.
+    void editsDuringTheListingAreKept() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite3");
+        const qint64 cursor = groupedWithoutFiles(path, dir.path());
+        QVERIFY(cursor > 0);
+        LocalJournal journal(path);
+        const auto later = journal.appendEvent(
+            "session", 1, "item.completed",
+            fileChange("three", {change("src/c.cpp", "update", "@@ -1 +1 @@\n+c")}));
+        QVERIFY(later > 0);
+        QVERIFY(summaryFiles(journal, later).isEmpty());
+        QVERIFY(drain(journal));
+        QStringList paths;
+        for (const auto& file : summaryFiles(journal, later))
+            paths.append(file.toObject().value("path").toString());
+        QCOMPARE(paths, (QStringList{"src/a.cpp", "src/c.cpp"}));
+    }
+    // A fork of a session whose files are pending lists its own copy, and a deleted session's
+    // listing ends with it.
+    void forksAndDeletionsFollowTheListing() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite3");
+        const qint64 cursor = groupedWithoutFiles(path, dir.path());
+        QVERIFY(cursor > 0);
+        LocalJournal journal(path);
+        StoredSession fork{"fork", dir.path(), "codex", {}, {}, "ready"};
+        QVERIFY(journal.forkSession("session", 1, fork));
+        QVERIFY(journal.deleteSession("session", 1));
+        QVERIFY(drain(journal));
+        QVERIFY(!journal.hasPendingActivityBackfill());
+        const auto forked = journal.eventsAfter("fork", fork.generation, cursor - 1, 1);
+        QCOMPARE(forked.size(), 1);
+        QCOMPARE(journal.activitySummaryEvent(forked.first().toObject())
+                     .value("payload")
+                     .toObject()
+                     .value("files")
+                     .toArray()
+                     .size(),
+                 1);
+        // Deleting a session removes its marker at once, without waiting for a pass.
+        QTemporaryDir other;
+        const auto otherPath = other.filePath("journal.sqlite3");
+        QVERIFY(groupedWithoutFiles(otherPath, other.path()) > 0);
+        LocalJournal deleted(otherPath);
+        QVERIFY(deleted.hasPendingActivityBackfill());
+        QVERIFY(deleted.deleteSession("session", 1));
+        QVERIFY(!deleted.hasPendingActivityBackfill());
     }
     void existingJournalBackfillsOnceWithoutChangingCanonicalEvents() {
         QTemporaryDir dir;
@@ -658,6 +725,11 @@ class DaemonActivityGroupsTest : public QObject {
         for (int pass = 0; pass < 2; ++pass) {
             LocalJournal journal(path);
             QVERIFY(journal.isOpen());
+            // Indexing runs in bounded passes after open (ADR 0097), once.
+            QCOMPARE(journal.hasPendingActivityBackfill(), pass == 0);
+            while (journal.backfillActivityGroups() == LocalJournal::ActivityBackfill::Progress) {
+            }
+            QVERIFY(!journal.hasPendingActivityBackfill());
             const auto summary =
                 journal.activitySummaryEvent(last(journal, first)).value("payload").toObject();
             QCOMPARE(summary.value("count").toInt(), 1);

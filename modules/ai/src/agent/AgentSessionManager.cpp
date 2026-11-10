@@ -1208,46 +1208,6 @@ void AgentSessionManager::renameConversation(const QString& worktreePath,
     }
 }
 
-bool AgentSessionManager::archiveConversation(const QString& worktreePath,
-                                              const QString& conversationId) {
-    const SessionPtr current = ensureSession(worktreePath);
-    if (!current || conversationId.isEmpty()) {
-        return false;
-    }
-    auto& values = conversationsByPath_[current->path];
-    const auto found =
-        std::find_if(values.begin(), values.end(), [&conversationId](const SessionPtr& value) {
-            return value->id == conversationId;
-        });
-    if (found == values.end() || (*found)->archived) {
-        return false;
-    }
-    (*found)->archived = true;
-    if (sessions_.value(current->path) == *found && !(*found)->running) {
-        const auto replacement =
-            std::find_if(values.rbegin(), values.rend(),
-                         [](const SessionPtr& value) { return !value->archived; });
-        if (replacement == values.rend()) {
-            auto fresh = std::make_shared<Session>();
-            fresh->path = current->path;
-            values.append(fresh);
-            sessions_.insert(current->path, fresh);
-        } else {
-            sessions_.insert(current->path, *replacement);
-        }
-        const SessionPtr selected = sessions_.value(current->path);
-        emit messagesReset(current->path, messages(current->path));
-        emit sessionStateChanged(current->path, selected->title, selected->status,
-                                 selected->running);
-        emitConfiguration(selected);
-        emitHistoryState(selected);
-    }
-    persistWorkspace(current->path);
-    emit conversationsChanged(current->path, conversations(current->path));
-    emit activityChanged();
-    return true;
-}
-
 bool AgentSessionManager::cancelConversation(const QString& worktreePath,
                                              const QString& conversationId) {
     const QString path = normalizedPath(worktreePath);
@@ -1270,23 +1230,6 @@ bool AgentSessionManager::cancelWorktree(const QString& worktreePath) {
         }
     }
     return canceled;
-}
-
-void AgentSessionManager::archiveConversationsForWorktree(const QString& worktreePath) {
-    const QString path = normalizedPath(worktreePath);
-    (void)ensureSession(path);
-    bool changed = false;
-    for (const SessionPtr& session : conversationsByPath_.value(path)) {
-        if (!session->archived) {
-            session->archived = true;
-            changed = true;
-        }
-    }
-    if (changed) {
-        persistWorkspace(path);
-        emit conversationsChanged(path, conversations(path));
-        emit activityChanged();
-    }
 }
 
 void AgentSessionManager::forgetDeletedConversation(const SessionPtr& target) {
@@ -1365,25 +1308,6 @@ bool AgentSessionManager::deleteConversation(const QString& worktreePath,
     return true;
 }
 
-bool AgentSessionManager::restoreConversation(const QString& worktreePath,
-                                              const QString& conversationId) {
-    if (!QFileInfo(worktreePath).isDir())
-        return false;
-    const QString path = normalizedPath(worktreePath);
-    (void)ensureSession(path);
-    for (const SessionPtr& session : conversationsByPath_.value(path)) {
-        if (session->id != conversationId || !session->archived) {
-            continue;
-        }
-        session->archived = false;
-        persistWorkspace(path);
-        emit conversationsChanged(path, conversations(path));
-        emit activityChanged();
-        return true;
-    }
-    return false;
-}
-
 void AgentSessionManager::syncConversationTitle(const SessionPtr& session) {
     if (!session || session->threadId.isEmpty() || !server_->usesDaemon()) {
         return;
@@ -1428,6 +1352,9 @@ AgentSessionManager::SessionPtr AgentSessionManager::ensureSession(const QString
             session->title = stored.value(QStringLiteral("title"), session->title).toString();
             session->customTitle = stored.value(QStringLiteral("customTitle")).toBool();
             session->archived = stored.value(QStringLiteral("archived")).toBool();
+            // Archived before Desktop sent archive state: the daemon has never been told.
+            session->archiveUnsent =
+                stored.value(QStringLiteral("archiveUnsent"), session->archived).toBool();
             session->ownsWorktree = stored.value(QStringLiteral("ownsWorktree")).toBool();
             session->listed =
                 stored.value(QStringLiteral("listed")).toBool() || session->ownsWorktree;
@@ -1601,9 +1528,14 @@ void AgentSessionManager::handleDaemonSession(const QJsonObject& stored) {
         (void)ensureSession(path);
     }
     SessionPtr session = sessionForThread(sessionId);
+    // A conversation first seen here takes the daemon's archive state, for example after local
+    // settings were reset.
+    const bool discovered = !session;
+    const bool archivedByDaemon = stored.contains(QStringLiteral("archived_at"));
     if (!session) {
         auto& conversations = conversationsByPath_[path];
-        if (conversations.size() == 1 && conversations.first()->threadId.isEmpty() &&
+        if (!archivedByDaemon && conversations.size() == 1 &&
+            conversations.first()->threadId.isEmpty() &&
             conversations.first()->messages.isEmpty()) {
             session = conversations.first();
             session->id = sessionId;
@@ -1614,8 +1546,10 @@ void AgentSessionManager::handleDaemonSession(const QJsonObject& stored) {
             conversations.append(session);
         }
         session->threadId = sessionId;
+        session->archived = archivedByDaemon;
         sessionsByThread_.insert(sessionId, session);
-        if (!sessions_.contains(path) || sessions_.value(path)->threadId.isEmpty()) {
+        if (!archivedByDaemon &&
+            (!sessions_.contains(path) || sessions_.value(path)->threadId.isEmpty())) {
             sessions_.insert(path, session);
         }
     }
@@ -1663,6 +1597,8 @@ void AgentSessionManager::handleDaemonSession(const QJsonObject& stored) {
         session->copyMessages.clear();
     }
     session->daemonGeneration = generation;
+    if (!discovered)
+        applyDaemonArchiveState(session, archivedByDaemon);
     session->lastEventCursor = qMax(session->lastEventCursor,
                                     stored.value(QStringLiteral("last_event_cursor")).toInteger());
     session->lastSeenCursor =

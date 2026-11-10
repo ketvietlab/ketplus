@@ -174,6 +174,8 @@ class EditorWidget final : public ScintillaEditBase {
     void dirtyStateChanged(bool dirty);
     void cursorPositionChanged(int line, int column);
     void editorStateChanged();
+    // The lexer or large-file mode was chosen again, so a view sharing this document follows.
+    void presentationChanged();
     void contextMenuRequested(const QPoint& position);
 
   protected:

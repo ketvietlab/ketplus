@@ -167,8 +167,16 @@ CloudControlClient::CloudControlClient(LocalJournal* journal, SessionHost* host,
         // Phones read a conversation's state from the heartbeat. A turn that starts or ends
         // must not wait up to 15s for the next one, or they keep showing it as it was.
         const QString type = event.value(QStringLiteral("event_type")).toString();
-        if (type == QStringLiteral("session.deleted"))
+        if (type == QStringLiteral("session.deleted")) {
             pruneSessionCredentials();
+            // An Atlas opened for the deleted conversation closes with it.
+            const QString session = event.value(QStringLiteral("session_id")).toString();
+            const qint64 generation = event.value(QStringLiteral("session_generation")).toInteger();
+            stopAtlasRuntimes([&](const QObject& runtime) {
+                return runtime.property("session").toString() == session &&
+                       runtime.property("generation").toLongLong() == generation;
+            });
+        }
         if (type == QStringLiteral("turn.started") || type == QStringLiteral("turn.completed"))
             stateSyncTimer_.start(300);
     });
@@ -316,12 +324,40 @@ void CloudControlClient::request(const QByteArray& method, const QString& path,
     });
 }
 
-void CloudControlClient::signOut(LocalCallback callback) {
-    signaling_->configure({}, {}, 1, false);
+void CloudControlClient::stopAtlasRuntimes(
+    const std::function<bool(const QObject& runtime)>& matches) {
     for (auto* runtime : findChildren<AtlasLiveRuntime*>()) {
+        if (!matches(*runtime))
+            continue;
         runtime->stop();
         runtime->deleteLater();
     }
+}
+
+void CloudControlClient::revokeAtlasAccess(const QString& device) {
+    if (device.isEmpty()) {
+        ++atlasMachineEpoch_;
+        stopAtlasRuntimes([](const QObject&) { return true; });
+        return;
+    }
+    ++atlasDeviceEpochs_[device];
+    stopAtlasRuntimes(
+        [&](const QObject& runtime) { return runtime.property("device").toString() == device; });
+}
+
+CloudControlClient::AtlasAccessFence
+CloudControlClient::atlasAccessFence(const QString& device) const {
+    return {atlasMachineEpoch_, atlasDeviceEpochs_.value(device)};
+}
+
+bool CloudControlClient::atlasAccessCurrent(const QString& device,
+                                            const AtlasAccessFence& fence) const {
+    return fence.machine == atlasMachineEpoch_ && fence.device == atlasDeviceEpochs_.value(device);
+}
+
+void CloudControlClient::signOut(LocalCallback callback) {
+    signaling_->configure({}, {}, 1, false);
+    revokeAtlasAccess();
     ++accountEpoch_;
     dropBrowserSignIn();
     signInError_.clear();

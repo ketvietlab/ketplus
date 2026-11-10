@@ -56,12 +56,18 @@ void SymbolIndex::indexWorkspace(const QString& root, const WorkspaceFileList& f
     }
     const QDir directory(root);
     Workspace built;
+    {
+        const QMutexLocker locker(&mutex_);
+        if (!workspaces_.contains(root))
+            savedDuringBuild_.insert(root, {});
+    }
 
     for (const QString& relativePath : files.relativePaths) {
         if (cancelled != nullptr && cancelled->load()) {
             // Nothing is published, so a cancelled build leaves the old workspace in place.
             const QMutexLocker locker(&mutex_);
             releaseWorkspace(built);
+            savedDuringBuild_.remove(root);
             return;
         }
         if (hasBinaryFileSuffix(relativePath)) {
@@ -85,26 +91,42 @@ void SymbolIndex::indexWorkspace(const QString& root, const WorkspaceFileList& f
         }
     }
 
-    const QMutexLocker locker(&mutex_);
-    built.lastUsedMs = QDateTime::currentMSecsSinceEpoch();
-    built.lastUsedSequence = ++useSequence_;
-    if (auto previous = workspaces_.find(root); previous != workspaces_.end()) {
-        releaseWorkspace(*previous);
-        workspaces_.erase(previous);
+    QStringList saved;
+    {
+        const QMutexLocker locker(&mutex_);
+        built.lastUsedMs = QDateTime::currentMSecsSinceEpoch();
+        built.lastUsedSequence = ++useSequence_;
+        if (auto previous = workspaces_.find(root); previous != workspaces_.end()) {
+            releaseWorkspace(*previous);
+            workspaces_.erase(previous);
+        }
+        workspaces_.insert(root, std::move(built));
+        enforceBudget(root);
+        saved = savedDuringBuild_.take(root);
     }
-    workspaces_.insert(root, std::move(built));
-    enforceBudget(root);
+    // The build may have read these files before they were saved.
+    for (const QString& relativePath : saved)
+        reindexFile(root, relativePath);
 }
 
 void SymbolIndex::reindexFile(const QString& root, const QString& relativePath) {
+    if (hasBinaryFileSuffix(relativePath)) {
+        return;
+    }
+    const QString key = root + QLatin1Char('\n') + relativePath;
+    quint64 revision = 0;
     {
         const QMutexLocker locker(&mutex_);
         if (!workspaces_.contains(root)) {
+            if (auto saved = savedDuringBuild_.find(root);
+                saved != savedDuringBuild_.end() && !saved->contains(relativePath))
+                saved->append(relativePath);
             return;
         }
-    }
-    if (hasBinaryFileSuffix(relativePath)) {
-        return;
+        // Reads of one file can finish out of order (a replay on the build thread and a save on
+        // the UI thread); only the latest one started may publish.
+        revision = ++readSequence_;
+        latestRead_.insert(key, revision);
     }
     const QString path = QDir(root).absoluteFilePath(relativePath);
     const QString syntax = QString::fromLatin1(syntaxDefinitionForPath(path).name);
@@ -112,6 +134,10 @@ void SymbolIndex::reindexFile(const QString& root, const QString& relativePath) 
     const bool readable = syntax != QStringLiteral("plain") && readSearchableFile(path, &text);
 
     const QMutexLocker locker(&mutex_);
+    if (latestRead_.value(key) != revision) {
+        return;
+    }
+    latestRead_.remove(key);
     auto workspace = workspaces_.find(root);
     if (workspace == workspaces_.end()) {
         return;

@@ -1,0 +1,28 @@
+{
+  "scope": "H5.2 Atlas process readiness admission",
+  "base": "886fbe201ad88e2bbd466c8e0689f3fc7a423223",
+  "environment": "macOS arm64, Qt 6.11.2 Release Pro/offscreen; synthetic Unix CLI fixtures",
+  "baseline_failures": 8,
+  "baseline_control_setup_passes": 6,
+  "final_focused_passes": 14,
+  "final_focused_ms": 6101,
+  "mutation_probe": "Removing only the truncated-line boundary guard fails truncated-prefix (1 fail / 2 setup+cleanup passes)",
+  "affected_targets_passed": 2,
+  "affected_seconds": 12.11,
+  "existing_installed_cli_lifecycle": "KetAtlas 0.6.1 local fixture HTTP 200 check PASS",
+  "verified": [
+    "selected-port complete LF/CRLF/slash/split banners",
+    "wrong/out-of-range/overflow ports refused",
+    "embedded and truncated-prefix log content refused",
+    "stop-time banner cannot publish readiness",
+    "later valid banner and repair/restart recover"
+  ],
+  "not_verified": [
+    "executable or listener identity",
+    "bind-interface and port reservation races",
+    "total QProcess buffering",
+    "descendant cleanup and tunnel authorization",
+    "Windows or native WebView acceptance",
+    "installation or deployment"
+  ]
+}

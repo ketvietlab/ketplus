@@ -14,9 +14,12 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/service/UnixSignals.cpp
     src/runtime/SessionHostWorktrees.cpp
     src/storage/LocalJournalContexts.cpp
+    src/storage/LocalJournalTurnStart.cpp
+    src/runtime/SessionHostTurnStart.cpp
     src/storage/LocalJournalDeletion.cpp
     src/runtime/SessionHostDeletion.cpp
     src/storage/LocalJournalTasks.cpp
+    src/storage/LocalJournalArchive.cpp
     src/cloud/CloudControlCredentials.cpp
     src/cloud/MachineChallenge.cpp
     src/cloud/CloudControlClient.cpp
@@ -48,6 +51,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/protocol/DaemonProtocol.cpp
     src/protocol/DaemonProtocol.h
     src/providers/ProviderAdapter.h
+    src/providers/ProviderResponseEnvelope.h
+    src/providers/ProviderResponseId.h
     src/providers/ClaudeAdapter.cpp
     src/providers/ClaudeAdapter.h
     src/providers/CursorAdapter.cpp
@@ -57,6 +62,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/providers/CodexAdapter.h
     src/providers/ProviderLineReader.cpp
     src/providers/ProviderLineReader.h
+    src/providers/ProviderFrameValidation.h
     src/providers/compat/ProviderCapabilities.cpp
     src/providers/compat/ProviderCapabilities.h
     src/providers/compat/ProviderCompatibility.cpp
@@ -84,6 +90,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/agents/AgentToolLaunch.cpp
     src/agents/AgentToolLaunch.h
     src/runtime/SessionHost.cpp
+    src/runtime/SessionHostCatalog.cpp
     src/runtime/SessionHostAgents.cpp
     src/storage/AgentMessageRecord.h
     src/storage/LocalJournalAgents.cpp
@@ -98,6 +105,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/SessionHostEphemeralReads.cpp
     src/runtime/SessionHostFork.cpp
     src/runtime/SessionHostTasks.cpp
+    src/runtime/SessionHostArchive.cpp
     src/runtime/SessionHostProviderInput.cpp
     src/runtime/SessionHostProviderRuntime.cpp
     src/runtime/SessionHostQuestions.cpp
@@ -109,15 +117,19 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/workspace/WorkspaceExposure.h
     src/service/DaemonService.cpp
     src/service/DaemonService.h
+    src/storage/LocalJournalActivityBackfill.cpp
     src/storage/LocalJournalActivityGroups.cpp
     src/storage/LocalJournal.cpp
     src/storage/LocalJournalAcknowledgements.cpp
     src/storage/LocalJournalGarbageCollection.cpp
+    src/storage/LocalJournalHistoryPurge.cpp
     src/storage/LocalJournalMetadataRetention.cpp
     src/storage/LocalJournalCloudCache.cpp
     src/storage/LocalJournalAttachments.cpp
     src/storage/LocalJournalAttachmentRetention.cpp
     src/storage/LocalJournalFork.cpp
+    src/storage/JournalFormat.cpp
+    src/storage/LocalJournalFormat.cpp
     src/storage/LocalJournalLargeEvents.cpp
     src/storage/LocalJournalOutput.cpp
     src/storage/LocalJournalRemoteAudit.cpp
@@ -130,10 +142,12 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/LocalJournalRetentionPolicy.cpp
     src/storage/LocalJournalSpace.cpp
     src/storage/JournalSpace.cpp
+    src/storage/JournalFormat.h
     src/storage/JournalSpace.h
     src/storage/LocalJournalTranscriptWindow.cpp
     src/storage/LocalJournal.h
     src/storage/McpMediaPreview.cpp
+    src/storage/McpMediaReferences.cpp
     src/storage/McpMediaStore.cpp
     src/storage/McpMediaStore.h
 )

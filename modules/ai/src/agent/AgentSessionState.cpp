@@ -324,6 +324,7 @@ void AgentSessionManager::persistWorkspace(const QString& path) const {
                         {QStringLiteral("title"), session->title},
                         {QStringLiteral("customTitle"), session->customTitle},
                         {QStringLiteral("archived"), session->archived},
+                        {QStringLiteral("archiveUnsent"), session->archiveUnsent},
                         {QStringLiteral("ownsWorktree"), session->ownsWorktree},
                         {QStringLiteral("listed"), session->listed || session->ownsWorktree},
                         {QStringLiteral("model"), session->model},

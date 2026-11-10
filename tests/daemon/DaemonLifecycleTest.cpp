@@ -1,12 +1,14 @@
 #include "CodexLaunchReloader.h"
 #include "ipc/LocalIpcServer.h"
 #include "protocol/DaemonProtocol.h"
+#include "providers/ClaudeAdapter.h"
 #include "providers/CodexAdapter.h"
 #include "providers/ProviderLineReader.h"
 #include "runtime/SessionHost.h"
 
 #include "storage/LocalJournal.h"
 #include <QScopeGuard>
+#include <QSignalBlocker>
 
 #include "FakeCodex.h"
 
@@ -234,6 +236,204 @@ class DaemonLifecycleTest final : public QObject {
         QCOMPARE(aba.value(QStringLiteral("error_code")).toString(),
                  QStringLiteral("lifecycle_revision_conflict"));
         QVERIFY(!journal.upsertSession(idle));
+    }
+
+    void deletionWaitsForBackgroundTasksToStop() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
+        QVERIFY(journal.isOpen());
+        StoredSession session;
+        session.id = QStringLiteral("background");
+        session.worktreePath = directory.path();
+        session.adapter = QStringLiteral("claude");
+        session.state = QStringLiteral("idle");
+        QVERIFY(journal.upsertSession(session));
+        CodexAdapter codex(QStringLiteral("/missing-codex-for-background-delete"));
+        ClaudeAdapter claude(QStringLiteral("/missing-claude-for-background-delete"));
+        SessionHost host(&journal, &codex, &claude);
+        const auto tasks = [&](const QString& status) {
+            emit claude.canonicalEvent(
+                session.id, QStringLiteral("tasks.changed"),
+                {{QStringLiteral("tasks"),
+                  QJsonArray{QJsonObject{{QStringLiteral("task_id"), QStringLiteral("shell-1")},
+                                         {QStringLiteral("kind"), QStringLiteral("shell")},
+                                         {QStringLiteral("status"), status}}}}});
+        };
+        const auto remove = [&](const QString& messageId) {
+            return host.handleCommand(request(QStringLiteral("session.delete"), messageId, {},
+                                              session.id, session.generation),
+                                      QStringLiteral("desktop-test"));
+        };
+
+        // The turn is over but a shell it started still runs in the worktree; deleting the
+        // conversation would orphan the process and its output.
+        for (const QString& status : {QStringLiteral("running"), QStringLiteral("stopping")}) {
+            tasks(status);
+            const QJsonObject refused = remove(QStringLiteral("delete-") + status);
+            QCOMPARE(refused.value(QStringLiteral("error_code")).toString(),
+                     QStringLiteral("session_busy"));
+            QCOMPARE(journal.sessions().size(), 1);
+        }
+
+        tasks(QStringLiteral("stopped"));
+        const QJsonObject deleted = remove(QStringLiteral("delete-stopped"));
+        QVERIFY2(deleted.value(QStringLiteral("ok")).toBool(),
+                 qPrintable(QJsonDocument(deleted).toJson(QJsonDocument::Compact)));
+        QVERIFY(journal.sessions().isEmpty());
+    }
+
+    void archivingRecordsTheFirstTimeAndSurvivesRestart() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath(QStringLiteral("journal.sqlite3"));
+        StoredSession session;
+        session.id = QStringLiteral("archived");
+        session.worktreePath = directory.path();
+        session.adapter = QStringLiteral("codex");
+        session.state = QStringLiteral("ready");
+        const auto listed = [](SessionHost& host) {
+            const auto sessions =
+                host.handleCommand(request(QStringLiteral("session.list"), QStringLiteral("list")),
+                                   QStringLiteral("desktop-test"))
+                    .value(QStringLiteral("sessions"))
+                    .toArray();
+            return sessions.isEmpty() ? QJsonObject{} : sessions.first().toObject();
+        };
+        QString firstArchivedAt;
+        {
+            LocalJournal journal(path);
+            QVERIFY(journal.upsertSession(session));
+            CodexAdapter adapter(QStringLiteral("/missing-codex-for-archive"));
+            SessionHost host(&journal, &adapter);
+            const auto archive = [&](const QString& id, const QJsonValue& archived) {
+                return host.handleCommand(request(QStringLiteral("session.set_archived"), id,
+                                                  {{QStringLiteral("archived"), archived}},
+                                                  session.id, 1),
+                                          QStringLiteral("desktop-test"));
+            };
+            QCOMPARE(archive(QStringLiteral("bad"), QStringLiteral("yes"))
+                         .value(QStringLiteral("error_code"))
+                         .toString(),
+                     QStringLiteral("invalid_payload"));
+            const QJsonObject first = archive(QStringLiteral("archive-1"), true);
+            QVERIFY(first.value(QStringLiteral("archived")).toBool());
+            firstArchivedAt = first.value(QStringLiteral("archived_at")).toString();
+            QVERIFY(QDateTime::fromString(firstArchivedAt, Qt::ISODateWithMs).isValid());
+            // Archiving again keeps the first time; retention counts from it.
+            QTest::qWait(5);
+            QCOMPARE(archive(QStringLiteral("archive-2"), true)
+                         .value(QStringLiteral("archived_at"))
+                         .toString(),
+                     firstArchivedAt);
+            QCOMPARE(listed(host).value(QStringLiteral("archived_at")).toString(), firstArchivedAt);
+            // Other writes of the session row leave it alone.
+            auto stored = journal.sessions().first();
+            stored.title = QStringLiteral("renamed");
+            QVERIFY(journal.upsertSession(stored));
+        }
+        {
+            LocalJournal journal(path);
+            QCOMPARE(journal.sessions().first().archivedAt, firstArchivedAt);
+            CodexAdapter adapter(QStringLiteral("/missing-codex-for-archive"));
+            SessionHost host(&journal, &adapter);
+            QCOMPARE(listed(host).value(QStringLiteral("archived_at")).toString(), firstArchivedAt);
+            const QJsonObject restored = host.handleCommand(
+                request(QStringLiteral("session.set_archived"), QStringLiteral("restore"),
+                        {{QStringLiteral("archived"), false}}, session.id, 1),
+                QStringLiteral("desktop-test"));
+            QVERIFY2(restored.value(QStringLiteral("ok")).toBool(),
+                     QJsonDocument(restored).toJson(QJsonDocument::Compact).constData());
+            QVERIFY(!restored.value(QStringLiteral("archived")).toBool());
+            QVERIFY2(!listed(host).contains(QStringLiteral("archived_at")),
+                     QJsonDocument(listed(host)).toJson(QJsonDocument::Compact).constData());
+            QVERIFY(journal.sessions().first().archivedAt.isEmpty());
+        }
+    }
+
+    void archivedConversationsAreDeletedAfterThirtyDays() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
+        QVERIFY(journal.isOpen());
+        const QDateTime now = QDateTime::currentDateTimeUtc();
+        const auto add = [&](const QString& id, const QDateTime& archivedAt) {
+            StoredSession session;
+            session.id = id;
+            session.worktreePath = directory.path();
+            session.adapter = QStringLiteral("codex");
+            session.state = QStringLiteral("ready");
+            QString error;
+            return journal.upsertSession(session) &&
+                   journal.appendEvent(id, 1, QStringLiteral("assistant.delta"),
+                                       {{QStringLiteral("delta"), id}}, &error) > 0 &&
+                   (!archivedAt.isValid() ||
+                    journal.setSessionArchived(id, 1, archivedAt.toString(Qt::ISODateWithMs)));
+        };
+        QVERIFY(add(QStringLiteral("older"), now.addDays(-45)));
+        QVERIFY(add(QStringLiteral("old"), now.addDays(-31)));
+        QVERIFY(add(QStringLiteral("recent"), now.addDays(-29)));
+        QVERIFY(add(QStringLiteral("visible"), {}));
+        CodexAdapter adapter(QStringLiteral("/missing-codex-for-archive-retention"));
+        SessionHost host(&journal, &adapter);
+        const auto ids = [&] {
+            QStringList result;
+            for (const StoredSession& session : journal.sessions())
+                result.append(session.id);
+            return result;
+        };
+        // One per pass, oldest first, with the history and a tombstone like session.delete.
+        QVERIFY(host.expireArchivedSessions(now));
+        QCOMPARE(ids(), (QStringList{QStringLiteral("old"), QStringLiteral("recent"),
+                                     QStringLiteral("visible")}));
+        QCOMPARE(journal.eventsAfter(QStringLiteral("older"), 1, 0).size(), 0);
+        QVERIFY(!journal.sessionTombstone(QStringLiteral("older"), 1).sessionId.isEmpty());
+        QVERIFY(host.expireArchivedSessions(now));
+        QVERIFY(!host.expireArchivedSessions(now));
+        QCOMPARE(ids(), (QStringList{QStringLiteral("recent"), QStringLiteral("visible")}));
+        // Its thirty days pass; a conversation that was never archived stays.
+        QVERIFY(host.expireArchivedSessions(now.addDays(2)));
+        QVERIFY(!host.expireArchivedSessions(now.addDays(400)));
+        QCOMPARE(ids(), QStringList{QStringLiteral("visible")});
+        QVERIFY(!host.expireArchivedSessions(QDateTime()));
+    }
+
+    void busyArchivedConversationWaitsWithoutBlockingOthers() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
+        const QDateTime now = QDateTime::currentDateTimeUtc();
+        for (const auto& [id, age] :
+             {std::pair{QStringLiteral("busy"), 60}, std::pair{QStringLiteral("idle"), 40}}) {
+            StoredSession session;
+            session.id = id;
+            session.worktreePath = directory.path();
+            session.adapter = QStringLiteral("claude");
+            session.state = QStringLiteral("idle");
+            QVERIFY(journal.upsertSession(session));
+            QVERIFY(
+                journal.setSessionArchived(id, 1, now.addDays(-age).toString(Qt::ISODateWithMs)));
+        }
+        CodexAdapter codex(QStringLiteral("/missing-codex-for-busy-archive"));
+        ClaudeAdapter claude(QStringLiteral("/missing-claude-for-busy-archive"));
+        SessionHost host(&journal, &codex, &claude);
+        const auto task = [&](const QString& status) {
+            emit claude.canonicalEvent(
+                QStringLiteral("busy"), QStringLiteral("tasks.changed"),
+                {{QStringLiteral("tasks"),
+                  QJsonArray{QJsonObject{{QStringLiteral("task_id"), QStringLiteral("shell-1")},
+                                         {QStringLiteral("kind"), QStringLiteral("shell")},
+                                         {QStringLiteral("status"), status}}}}});
+        };
+        task(QStringLiteral("running"));
+        // The oldest is still running a shell: it waits, and the next one is deleted.
+        QVERIFY(host.expireArchivedSessions(now));
+        QCOMPARE(journal.sessions().size(), 1);
+        QCOMPARE(journal.sessions().first().id, QStringLiteral("busy"));
+        QVERIFY(!host.expireArchivedSessions(now));
+        task(QStringLiteral("stopped"));
+        QVERIFY(host.expireArchivedSessions(now));
+        QVERIFY(journal.sessions().isEmpty());
     }
 
     void deletionTombstoneSurvivesRestartAndFencesABA() {
@@ -1461,6 +1661,30 @@ class DaemonLifecycleTest final : public QObject {
         QTRY_VERIFY(!deferred.isEmpty());
         QCOMPARE(answeredOn, QThread::currentThread());
         QCOMPARE(deferred, preview);
+        // A burst beyond the bounded queue is refused at once instead of holding more decodes.
+        QStringList answers;
+        for (int n = 0; n < 24; ++n)
+            host.handleCommandDeferred(
+                request(QStringLiteral("session.media.read"), QStringLiteral("burst-%1").arg(n),
+                        {{QStringLiteral("media_ref"), reference}}, sessionId, 1),
+                QStringLiteral("cloud-control-v2"), [&](const QJsonObject& result) {
+                    answers.append(result.value(QStringLiteral("ok")).toBool()
+                                       ? QStringLiteral("ok")
+                                       : result.value(QStringLiteral("error_code")).toString());
+                });
+        QCOMPARE(answers.count(QStringLiteral("busy")), 8);
+        QTRY_COMPARE(answers.size(), 24);
+        QCOMPARE(answers.count(QStringLiteral("ok")), 16);
+        // Answered reads free their place in the queue.
+        deferred = {};
+        host.handleCommandDeferred(
+            request(QStringLiteral("session.media.read"), QStringLiteral("after-burst"),
+                    {{QStringLiteral("media_ref"), reference}, {QStringLiteral("thumbnail"), true}},
+                    sessionId, 1),
+            QStringLiteral("cloud-control-v2"),
+            [&](const QJsonObject& result) { deferred = result; });
+        QTRY_VERIFY(!deferred.isEmpty());
+        QCOMPARE(deferred, preview);
         adapter.stop();
     }
 
@@ -1861,6 +2085,73 @@ class DaemonLifecycleTest final : public QObject {
         const QByteArray providerResults = log.readAll();
         QVERIFY(providerResults.contains("approval:accept"));
         QVERIFY(providerResults.contains("Current workspace"));
+    }
+
+    void boundsUnreadSocketBytesBeforeFrameDispatch_data() {
+        QTest::addColumn<bool>("authenticated");
+        QTest::newRow("before-hello") << false;
+        QTest::newRow("after-hello") << true;
+    }
+    void boundsUnreadSocketBytesBeforeFrameDispatch() {
+        QFETCH(bool, authenticated);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        LocalJournal journal(directory.filePath("journal.sqlite3"));
+        CodexAdapter adapter("/nonexistent/ketplus-codex");
+        SessionHost host(&journal, &adapter);
+        const QString endpoint = directory.filePath("read-bound.sock");
+        const QByteArray token("local-test-token-with-at-least-32-bytes");
+        LocalIpcServer server(&host, endpoint, token);
+        QVERIFY(server.listen());
+        TestClient client;
+        client.connectTo(endpoint);
+        QTRY_COMPARE_WITH_TIMEOUT(server.connectionCount(), 1, 1000);
+        const auto sockets = server.findChildren<QLocalSocket*>();
+        QCOMPARE(sockets.size(), 1);
+        auto* incoming = sockets.first();
+        if (authenticated) {
+            client.send(request("daemon.hello", "hello", {{"token", QString::fromUtf8(token)}}));
+            QTRY_VERIFY_WITH_TIMEOUT(client.hasResponse("hello"), 1000);
+            QVERIFY(client.takeResponse("hello").value("payload").toObject().value("ok").toBool());
+        }
+        // Hold application dispatch, not the transport event loop. This exposes
+        // Qt's own unread buffer independently of the bounded frame assembler.
+        QSignalBlocker held(incoming);
+        for (int index = 0; index < 3; ++index) {
+            const bool hello = !authenticated && index == 0;
+            auto value =
+                request(hello ? "daemon.hello" : "session.list", QString("bulk-%1").arg(index),
+                        {{"token", QString::fromUtf8(token)}, {"padding", ""}});
+            auto payload = value.value("payload").toObject();
+            const qsizetype overhead = QJsonDocument(value).toJson(QJsonDocument::Compact).size();
+            payload.insert("padding", QString(protocol::maximumFrameBytes - overhead, 'x'));
+            value.insert("payload", payload);
+            const auto frame = protocol::encodeFrame(value);
+            QCOMPARE(frame.size(), protocol::maximumFrameBytes + 4);
+            QCOMPARE(client.socket.write(frame), frame.size());
+        }
+        client.socket.flush();
+        QTRY_VERIFY_WITH_TIMEOUT(incoming->bytesAvailable() >= protocol::maximumFrameBytes, 2000);
+        // Let the remaining loopback flood reach Qt; a full bounded buffer instead
+        // applies socket backpressure while the dispatch callback stays paused.
+        QTest::qWait(100);
+        const auto unread = incoming->bytesAvailable();
+        qInfo() << "Unread transport bytes while dispatch held:" << unread;
+        QVERIFY2(unread <= protocol::maximumFrameBytes + 4,
+                 "Qt's unread transport buffer exceeded one maximum frame plus header.");
+        held.unblock();
+        QVERIFY(QMetaObject::invokeMethod(incoming, "readyRead", Qt::DirectConnection));
+        QTRY_VERIFY_WITH_TIMEOUT(client.hasResponse("bulk-2"), 3000);
+        for (int index = 0; index < 3; ++index) {
+            const auto response = client.takeResponse(QString("bulk-%1").arg(index));
+            QVERIFY(!response.isEmpty());
+            QVERIFY(response.value("payload").toObject().value("ok").toBool());
+        }
+        QCOMPARE(client.socket.state(), QLocalSocket::ConnectedState);
+        client.send(request("session.list", "after-bound"));
+        QTRY_VERIFY_WITH_TIMEOUT(client.hasResponse("after-bound"), 1000);
+        QVERIFY(
+            client.takeResponse("after-bound").value("payload").toObject().value("ok").toBool());
     }
 
     void rejectsFrameSizeBeforeReadingPayload() {

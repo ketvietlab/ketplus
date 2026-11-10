@@ -5,10 +5,15 @@
 #include "providers/compat/ProviderCompatibility.h"
 #include "runtime/SessionHost.h"
 #include "storage/LocalJournal.h"
+#include "storage/McpMediaStore.h"
 
 #include "FakeClaude.h"
 #include "FakeCodex.h"
 
+#include <QCryptographicHash>
+#include <QDateTime>
+#include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -86,6 +91,28 @@ QString text(const QJsonObject& object) {
     return QString::fromUtf8(QJsonDocument(object).toJson(QJsonDocument::Compact));
 }
 
+QSqlDatabase journalConnection(const QString& path) {
+    for (const auto& name : QSqlDatabase::connectionNames())
+        if (name.startsWith("ketplus-daemon-") &&
+            QSqlDatabase::database(name).databaseName() == path)
+            return QSqlDatabase::database(name);
+    return {};
+}
+
+bool seedEvents(QSqlDatabase db, const QString& sessionId, const int from, const int count) {
+    QSqlQuery q(db);
+    return q.exec(QString("WITH RECURSIVE n(i) AS (VALUES(%1) UNION ALL SELECT i+1 FROM n WHERE "
+                          "i<%2) INSERT INTO events(session_id,generation,cursor,event_type,"
+                          "payload,sent_at,turn_sequence) SELECT '%3',1,i,'assistant.delta',"
+                          "'{}',datetime('now'),1 FROM n")
+                      .arg(from)
+                      .arg(from + count - 1)
+                      .arg(sessionId)) &&
+           q.exec(QString("UPDATE sessions SET last_cursor=%1 WHERE id='%2'")
+                      .arg(from + count - 1)
+                      .arg(sessionId));
+}
+
 StoredSession storedSession(LocalJournal& journal, const QString& sessionId) {
     for (const StoredSession& session : journal.sessions())
         if (session.id == sessionId)
@@ -99,6 +126,209 @@ class SessionForkTest final : public QObject {
     Q_OBJECT
 
   private slots:
+    void forkOfAnArchivedConversationIsNotArchived() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto executable = dir.filePath("fake-codex");
+        QVERIFY(writeFakeCodex(executable, dir.filePath("codex.log")));
+        LocalJournal journal(dir.filePath("journal.sqlite"));
+        StoredSession source;
+        source.id = "source";
+        source.worktreePath = dir.path();
+        source.adapter = "codex";
+        source.threadId = "source-thread";
+        source.state = "ready";
+        QVERIFY(journal.upsertSession(source));
+        const auto now = QDateTime::currentDateTimeUtc();
+        QVERIFY(
+            journal.setSessionArchived("source", 1, now.addDays(-40).toString(Qt::ISODateWithMs)));
+        CodexAdapter adapter(executable);
+        SessionHost host(&journal, &adapter);
+        const auto result = fork(host, "fork-archived", "source", {{"fork_session_id", "target"}});
+        QVERIFY2(result.value("ok").toBool(), qPrintable(text(result)));
+        QCOMPARE(storedSession(journal, "target").archivedAt, QString());
+        const auto catalog =
+            host.handleCommand(request("session.list", "list-archived"), "desktop-test");
+        bool listed = false;
+        for (const auto& value : catalog.value("sessions").toArray()) {
+            const auto row = value.toObject();
+            if (row.value("session_id") == "target") {
+                listed = true;
+                QVERIFY(!row.contains("archived_at"));
+            }
+        }
+        QVERIFY(listed);
+        // The source is due; the fork must survive every later pass.
+        QVERIFY(host.expireArchivedSessions(now));
+        QVERIFY(!host.expireArchivedSessions(now));
+        QVERIFY(storedSession(journal, "source").id.isEmpty());
+        QCOMPARE(storedSession(journal, "target").id, QString("target"));
+        adapter.stop();
+    }
+
+    void forkRequiresMediaOwnershipBeforeJournalCommit_data() {
+        QTest::addColumn<QString>("fault");
+        for (const auto* value :
+             {"source-malformed", "source-directory", "source-symlink", "source-unreadable",
+              "source-oversized", "target-directory", "target-symlink", "target-conflict",
+              "root-symlink", "commit-failure", "target-matching", "empty-source"})
+            QTest::newRow(value) << QString(value);
+    }
+
+    void forkRequiresMediaOwnershipBeforeJournalCommit() {
+        QFETCH(QString, fault);
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto executable = dir.filePath("fake-codex");
+        QVERIFY(writeFakeCodex(executable, dir.filePath("codex.log")));
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(journal.upsertSession({"source",
+                                       QFileInfo(dir.path()).canonicalFilePath(),
+                                       "codex",
+                                       "source-thread",
+                                       {},
+                                       "ready",
+                                       1,
+                                       0,
+                                       0,
+                                       {}}));
+        const auto media = McpMediaStore::directoryForJournal(path);
+        const auto refs = media + "/refs";
+        const auto refPath = [&](const QByteArray& id) {
+            return refs + '/' + QCryptographicHash::hash(id, QCryptographicHash::Sha256).toHex() +
+                   ".refs";
+        };
+        const auto sourceRef = refPath("source");
+        const auto targetRef = refPath("target");
+        const auto put = [](const QString& name, const QByteArray& bytes) {
+            QFile file(name);
+            return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
+        };
+        McpMediaStore store(media);
+        const auto png = QByteArray::fromHex("89504e470d0a1a0a0000000d494844520000000800000006");
+        const auto hash = QCryptographicHash::hash(png, QCryptographicHash::Sha256).toHex();
+        const auto original = hash + '\n';
+        if (fault != "empty-source") {
+            const auto image = store.storeImage(png, "image/png", "source");
+            QVERIFY(!image.isEmpty());
+            QVERIFY(journal.appendEvent(
+                        "source", 1, "item.completed",
+                        {{"item",
+                          QJsonObject{{"id", "picture"},
+                                      {"type", "mcpToolCall"},
+                                      {"result", QJsonObject{{"content", QJsonArray{image}}}}}}}) >
+                    0);
+        }
+        CodexAdapter codex(executable);
+        SessionHost host(&journal, &codex);
+        bool ready = false;
+        codex.call("model/list", {},
+                   [&](const QJsonObject&, const QString& error) { ready = error.isEmpty(); });
+        QTRY_VERIFY_WITH_TIMEOUT(ready, 5000);
+        const auto before = journal.eventsAfter("source", 1, 0);
+        const auto foreign = dir.filePath("foreign.refs");
+        QVERIFY(put(foreign, original));
+        const auto backup = dir.filePath("backup-refs");
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == path)
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        QSqlQuery sql(db);
+        QByteArray damaged;
+        if (fault == "source-malformed" || fault == "source-oversized") {
+            damaged = fault == "source-malformed"
+                          ? original + "unsupported\n"
+                          : original.repeated(4 * 1024 * 1024 / original.size() + 1);
+            QVERIFY(put(sourceRef, damaged));
+        } else if (fault == "source-directory" || fault == "source-symlink") {
+            QVERIFY(QFile::remove(sourceRef));
+            if (fault == "source-directory")
+                QVERIFY(QDir().mkpath(sourceRef));
+            else
+                QVERIFY(QFile::link(foreign, sourceRef));
+        } else if (fault == "source-unreadable") {
+            QVERIFY(QFile::setPermissions(sourceRef, QFileDevice::WriteOwner));
+        } else if (fault == "target-directory") {
+            QVERIFY(QDir().mkpath(targetRef));
+        } else if (fault == "target-symlink") {
+            QVERIFY(QFile::link(foreign, targetRef));
+        } else if (fault == "target-conflict" || fault == "target-matching") {
+            damaged = fault == "target-conflict" ? QByteArray(64, 'b') + '\n' : original;
+            QVERIFY(put(targetRef, damaged));
+        } else if (fault == "root-symlink") {
+            QVERIFY(QDir().rename(refs, backup));
+            QVERIFY(QFile::link(backup, refs));
+        } else if (fault == "commit-failure") {
+            QVERIFY(sql.exec("PRAGMA foreign_keys=ON"));
+            QVERIFY(sql.exec("CREATE TABLE fork_media_parent(id INTEGER PRIMARY KEY)"));
+            QVERIFY(sql.exec("CREATE TABLE fork_media_child(id INTEGER REFERENCES "
+                             "fork_media_parent(id) DEFERRABLE INITIALLY DEFERRED)"));
+            QVERIFY(sql.exec("CREATE TRIGGER reject_media_fork AFTER INSERT ON sessions WHEN "
+                             "NEW.id='target' BEGIN INSERT INTO fork_media_child VALUES(1); END"));
+        }
+        const auto result = fork(host, "media-fork", "source", {{"fork_session_id", "target"}});
+        const bool valid = fault == "target-matching" || fault == "empty-source";
+        QCOMPARE(result.value("ok").toBool(), valid);
+        QCOMPARE(journal.eventsAfter("source", 1, 0), before);
+        if (!valid) {
+            QCOMPARE(result.value("error_code").toString(), "journal_error");
+            QVERIFY(storedSession(journal, "target").id.isEmpty());
+            // The abandoned copy is unlisted at once and purged in bounded passes (ADR 0094).
+            QTRY_VERIFY(journal.eventsAfter("target", 1, 0).isEmpty() &&
+                        !journal.hasPendingHistoryPurge());
+            if (fault == "source-malformed" || fault == "source-oversized")
+                QCOMPARE(logText(sourceRef), damaged);
+            if (fault == "target-conflict")
+                QCOMPARE(logText(targetRef), damaged);
+            if (fault == "root-symlink") {
+                QVERIFY(QFile::remove(refs));
+                QVERIFY(QDir().rename(backup, refs));
+            } else if (fault == "source-directory") {
+                QVERIFY(QDir().rmdir(sourceRef));
+            } else if (fault == "source-symlink") {
+                QVERIFY(QFile::remove(sourceRef));
+            } else if (fault == "source-unreadable") {
+                QVERIFY(QFile::setPermissions(sourceRef,
+                                              QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+            } else if (fault == "target-directory") {
+                QVERIFY(QDir().rmdir(targetRef));
+            } else if (fault == "target-symlink" || fault == "target-conflict") {
+                QVERIFY(QFile::remove(targetRef));
+            } else if (fault == "commit-failure") {
+                QCOMPARE(logText(targetRef), original); // prepared ownership survives DB rollback
+                QVERIFY(sql.exec("DROP TRIGGER reject_media_fork"));
+                LocalJournal reopened(path);
+                QVERIFY2(reopened.isOpen(), qPrintable(reopened.errorString()));
+                const auto live = reopened.sessionIds();
+                QVERIFY(live.has_value());
+                QVERIFY(live->contains("source"));
+                QVERIFY(!live->contains("target"));
+                McpMediaStore restartedStore(media);
+                restartedStore.retainSessions(*live);
+                QVERIFY(!QFileInfo::exists(targetRef));
+                QVERIFY(QFileInfo::exists(media + '/' + hash + ".png"));
+                QCOMPARE(logText(sourceRef), original);
+            }
+            QVERIFY(put(sourceRef, original));
+            const auto retry =
+                fork(host, "media-fork-retry", "source", {{"fork_session_id", "target"}});
+            QVERIFY2(retry.value("ok").toBool(), qPrintable(text(retry)));
+        }
+        QCOMPARE(journal.eventsAfter("source", 1, 0), before);
+        QVERIFY(!storedSession(journal, "target").id.isEmpty());
+        QCOMPARE(logText(foreign), original);
+        if (fault != "empty-source") {
+            QCOMPARE(logText(targetRef), original);
+            store.releaseSession("source");
+            QVERIFY(QFileInfo::exists(media + '/' + hash + ".png"));
+            store.releaseSession("target");
+            QVERIFY(!QFileInfo::exists(media + '/' + hash + ".png"));
+        }
+    }
+
     void destinationCreatedWhileProviderForkIsPendingIsPreserved() {
         QTemporaryDir dir;
         const auto executable = dir.filePath("fake-codex");
@@ -225,6 +455,248 @@ class SessionForkTest final : public QObject {
         QCOMPARE(reopened.eventsAfter("target", 1, 0), history);
     }
 
+    void journalForkBacklogCharacterization_data() {
+        QTest::addColumn<int>("rows");
+        QTest::newRow("1000") << 1000;
+        QTest::newRow("100000") << 100000;
+        QTest::newRow("300000") << 300000;
+    }
+    void journalForkBacklogCharacterization() {
+        QFETCH(int, rows);
+        if (rows > 1000 && !qEnvironmentVariableIsSet("KETPLUS_RUN_FORK_BACKLOG_TESTS"))
+            QSKIP("Opt-in synthetic backlog characterization");
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        StoredSession source{"source", dir.path(), "codex", {}, {}, "ready", 1, 0, 0, {}};
+        QVERIFY(journal.upsertSession(source));
+        QSqlDatabase db;
+        for (const auto& name : QSqlDatabase::connectionNames())
+            if (name.startsWith("ketplus-daemon-") &&
+                QSqlDatabase::database(name).databaseName() == path)
+                db = QSqlDatabase::database(name);
+        QVERIFY(db.isOpen());
+        QSqlQuery q(db);
+        QVERIFY(db.transaction());
+        const auto cte = QString("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n "
+                                 "WHERE i<%1) ")
+                             .arg(rows);
+        QVERIFY2(q.exec(cte + "INSERT INTO events(session_id,generation,cursor,event_type,payload,"
+                              "sent_at,turn_sequence) SELECT 'source',1,i,'assistant.delta',"
+                              "'{\"text\":\"bounded fixture\"}',datetime('now'),1 FROM n"),
+                 qPrintable(q.lastError().text()));
+        QVERIFY2(q.exec(cte + "INSERT INTO replay_events(session_id,generation,cursor,event_type,"
+                              "item_id,payload,sent_at,turn_sequence) SELECT 'source',1,i,"
+                              "'assistant.delta','item','{\"text\":\"bounded fixture\"}',"
+                              "datetime('now'),1 FROM n"),
+                 qPrintable(q.lastError().text()));
+        QVERIFY2(q.exec(QString("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n "
+                                "WHERE i<%1) INSERT INTO large_event_payload_chunks "
+                                "SELECT 'source',1,'transfer',i*65536,zeroblob(65536) FROM n")
+                            .arg(qMin(rows, 4096))),
+                 qPrintable(q.lastError().text()));
+        QVERIFY2(q.exec(QString("UPDATE sessions SET last_cursor=%1 WHERE id='source'").arg(rows)),
+                 qPrintable(q.lastError().text()));
+        QVERIFY(db.commit());
+        // Checkpoint the fixture so the timing below measures the fork, not setup pages.
+        QVERIFY2(q.exec("PRAGMA wal_checkpoint(TRUNCATE)"), qPrintable(q.lastError().text()));
+        q.finish();
+        StoredSession copy = source;
+        copy.id = "fork";
+        QString error;
+        QElapsedTimer timer;
+        timer.start();
+        auto staged = journal.beginFork("source", 1, copy, &error);
+        QVERIFY2(staged, qPrintable(error));
+        const auto began = timer.elapsed();
+        qint64 slowestPass = 0;
+        int passes = 0;
+        for (LocalJournal::ForkStep step = LocalJournal::ForkStep::Progress;
+             step != LocalJournal::ForkStep::Copied;) {
+            QElapsedTimer pass;
+            pass.start();
+            step = journal.continueFork(*staged, &error);
+            slowestPass = qMax(slowestPass, pass.elapsed());
+            QVERIFY2(step != LocalJournal::ForkStep::Failed, qPrintable(error));
+            QVERIFY(++passes < 100000);
+        }
+        timer.restart();
+        QVERIFY2(journal.finishFork(*staged, copy, &error), qPrintable(error));
+        const auto finished = timer.elapsed();
+        qInfo() << "fork-characterization rows-per-event-table" << rows << "begin-ms" << began
+                << "passes" << passes << "slowest-pass-ms" << slowestPass << "finish-ms"
+                << finished;
+        // Each event-loop turn stays short however large the source history is.
+        QVERIFY2(began < 250 && slowestPass < 250 && finished < 250,
+                 qPrintable(QString("%1 %2 %3").arg(began).arg(slowestPass).arg(finished)));
+        QCOMPARE(journal.eventsAfter("fork", 1, 0, 1).size(), 1);
+    }
+    void journalForkCopiesOneSnapshot() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        StoredSession source{"source", dir.path(), "codex", {}, {}, "ready", 1, 0, 0, {}};
+        QVERIFY(journal.upsertSession(source));
+        QVERIFY(seedEvents(journalConnection(path), "source", 1, 5000));
+        // Malformed UTF-8 is stored as TEXT; the copy must keep its bytes.
+        QSqlQuery q(journalConnection(path));
+        QVERIFY(q.exec("UPDATE events SET payload=CAST(X'7B22FF22' AS TEXT) WHERE "
+                       "session_id='source' AND cursor=7"));
+        StoredSession copy = source;
+        copy.id = "fork";
+        QString error;
+        auto staged = journal.beginFork("source", 1, copy, &error);
+        QVERIFY2(staged, qPrintable(error));
+        QCOMPARE(journal.continueFork(*staged, &error), LocalJournal::ForkStep::Progress);
+        // The source keeps changing while the copy is staged and unlisted.
+        QVERIFY(journal.appendEvent("source", 1, "user.message", {{"text", "after"}}) > 5000);
+        QVERIFY(q.exec("DELETE FROM events WHERE session_id='source' AND cursor=4000"));
+        QVERIFY(!journal.upsertSession(copy));
+        QCOMPARE(journal.sessions().size(), 1);
+        LocalJournal::ForkStep step = LocalJournal::ForkStep::Progress;
+        while (step == LocalJournal::ForkStep::Progress)
+            step = journal.continueFork(*staged, &error);
+        QCOMPARE(step, LocalJournal::ForkStep::Copied);
+        QVERIFY2(journal.finishFork(*staged, copy, &error), qPrintable(error));
+        QCOMPARE(copy.lastCursor, qint64(5000));
+        QCOMPARE(journal.sessionHead("fork").cursor, qint64(5000));
+        QVERIFY(q.exec("SELECT count(*), sum(cursor) FROM events WHERE session_id='fork'"));
+        QVERIFY(q.next());
+        QCOMPARE(q.value(0).toLongLong(), qint64(5000));
+        QCOMPARE(q.value(1).toLongLong(), qint64(5000) * 5001 / 2);
+        QVERIFY(q.exec("SELECT hex(payload), typeof(payload) FROM events WHERE "
+                       "session_id='fork' AND cursor=7"));
+        QVERIFY(q.next());
+        QCOMPARE(q.value(0).toString(), QString("7B22FF22"));
+        QCOMPARE(q.value(1).toString(), QString("text"));
+    }
+    void forkRefusesAnIdentityWithLeftoverHistory() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        StoredSession source{"source", dir.path(), "codex", {}, {}, "ready", 1, 0, 0, {}};
+        LocalJournal journal(path);
+        QVERIFY(journal.upsertSession(source));
+        QVERIFY(seedEvents(journalConnection(path), "source", 1, 10));
+        // Rows under an identity with no session would otherwise join the copy unnoticed.
+        QVERIFY(seedEvents(journalConnection(path), "fork", 1, 1));
+        StoredSession copy = source;
+        copy.id = "fork";
+        QString error;
+        QVERIFY(!journal.beginFork("source", 1, copy, &error));
+        QCOMPARE(error, QString("The fork destination already has history."));
+        QSqlQuery q(journalConnection(path));
+        QVERIFY(q.exec("SELECT COUNT(*) FROM session_fork_staging") && q.next());
+        QCOMPARE(q.value(0).toInt(), 0);
+    }
+    void interruptedForkBecomesPurgeWork() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        StoredSession source{"source", dir.path(), "codex", {}, {}, "ready", 1, 0, 0, {}};
+        StoredSession copy = source;
+        copy.id = "fork";
+        {
+            LocalJournal journal(path);
+            QVERIFY(journal.upsertSession(source));
+            QVERIFY(seedEvents(journalConnection(path), "source", 1, 3000));
+            QString error;
+            auto staged = journal.beginFork("source", 1, copy, &error);
+            QVERIFY2(staged, qPrintable(error));
+            QCOMPARE(journal.continueFork(*staged, &error), LocalJournal::ForkStep::Progress);
+            // A second fork cannot stage over the same identity.
+            StoredSession again = copy;
+            QVERIFY(!journal.beginFork("source", 1, again, &error));
+            QCOMPARE(error, QString("The fork destination already exists."));
+            // The daemon stops here: the snapshot is released, the staging row remains.
+        }
+        LocalJournal reopened(path);
+        QVERIFY2(reopened.isOpen(), qPrintable(reopened.errorString()));
+        QCOMPARE(reopened.sessions().size(), 1);
+        QVERIFY(reopened.hasPendingHistoryPurge());
+        QVERIFY(!reopened.upsertSession(copy));
+        QCOMPARE(reopened.errorString(),
+                 QString("This session identity is still being cleaned up."));
+        while (reopened.purgeDeletedSessionHistory() == LocalJournal::HistoryPurge::Progress) {
+        }
+        QVERIFY(!reopened.hasPendingHistoryPurge());
+        QVERIFY(reopened.eventsAfter("fork", 1, 0).isEmpty());
+        QSqlQuery q(journalConnection(path));
+        QVERIFY(q.exec("SELECT count(*) FROM events WHERE session_id='source'"));
+        QVERIFY(q.next());
+        QCOMPARE(q.value(0).toInt(), 3000);
+        q.finish();
+        QString error;
+        QVERIFY2(reopened.forkSession("source", 1, copy, &error), qPrintable(error));
+        QCOMPARE(reopened.sessionHead("fork").cursor, qint64(3000));
+    }
+    void abandonedForkKeepsOwnershipWhenCleanupIsIgnored_data() {
+        QTest::addColumn<QString>("trigger");
+        QTest::newRow("ignored-purge-insert")
+            << "CREATE TRIGGER deny BEFORE INSERT ON session_history_purge "
+               "BEGIN SELECT RAISE(IGNORE); END";
+        QTest::newRow("ignored-staging-delete")
+            << "CREATE TRIGGER deny BEFORE DELETE ON session_fork_staging "
+               "BEGIN SELECT RAISE(IGNORE); END";
+    }
+    void abandonedForkKeepsOwnershipWhenCleanupIsIgnored() {
+        QFETCH(QString, trigger);
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        StoredSession source{"source", dir.path(), "codex", {}, {}, "ready", 1, 0, 0, {}};
+        QVERIFY(journal.upsertSession(source));
+        QVERIFY(seedEvents(journalConnection(path), "source", 1, 3000));
+        StoredSession copy = source;
+        copy.id = "fork";
+        QString error;
+        auto staged = journal.beginFork("source", 1, copy, &error);
+        QVERIFY2(staged, qPrintable(error));
+        QCOMPARE(journal.continueFork(*staged, &error), LocalJournal::ForkStep::Progress);
+        QSqlQuery q(journalConnection(path));
+        QVERIFY2(q.exec(trigger), qPrintable(q.lastError().text()));
+        // Neither a lost marker nor a lost release may hand the partial copy to a new session.
+        QVERIFY(!journal.abandonFork(*staged, &error));
+        QVERIFY(!journal.upsertSession(copy));
+        QCOMPARE(journal.sessions().size(), 1);
+        QVERIFY(!journal.hasPendingHistoryPurge());
+        QVERIFY(q.exec("DROP TRIGGER deny"));
+        QVERIFY2(journal.abandonFork(*staged, &error), qPrintable(error));
+        QVERIFY(journal.hasPendingHistoryPurge());
+        QVERIFY(!journal.upsertSession(copy));
+    }
+    void interruptedForkStaysStagedWhenRecoveryIsIgnored() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("journal.sqlite");
+        StoredSession source{"source", dir.path(), "codex", {}, {}, "ready", 1, 0, 0, {}};
+        StoredSession copy = source;
+        copy.id = "fork";
+        {
+            LocalJournal journal(path);
+            QVERIFY(journal.upsertSession(source));
+            QVERIFY(seedEvents(journalConnection(path), "source", 1, 3000));
+            QString error;
+            auto staged = journal.beginFork("source", 1, copy, &error);
+            QVERIFY2(staged, qPrintable(error));
+            QCOMPARE(journal.continueFork(*staged, &error), LocalJournal::ForkStep::Progress);
+            QSqlQuery q(journalConnection(path));
+            QVERIFY(q.exec("CREATE TRIGGER deny BEFORE INSERT ON session_history_purge "
+                           "BEGIN SELECT RAISE(IGNORE); END"));
+        }
+        {
+            LocalJournal reopened(path);
+            QVERIFY2(reopened.isOpen(), qPrintable(reopened.errorString()));
+            QVERIFY(!reopened.hasPendingHistoryPurge());
+            QVERIFY(!reopened.upsertSession(copy));
+            QSqlQuery q(journalConnection(path));
+            QVERIFY(q.exec("SELECT count(*) FROM session_fork_staging"));
+            QVERIFY(q.next());
+            QCOMPARE(q.value(0).toInt(), 1);
+            QVERIFY(q.exec("DROP TRIGGER deny"));
+        }
+        LocalJournal repaired(path);
+        QVERIFY2(repaired.isOpen(), qPrintable(repaired.errorString()));
+        QVERIFY(repaired.hasPendingHistoryPurge());
+        QVERIFY(!repaired.upsertSession(copy));
+    }
     void journalForkCopiesEmptyHistory() {
         QTemporaryDir dir;
         LocalJournal journal(dir.filePath("journal.sqlite"));
@@ -546,6 +1018,56 @@ class SessionForkTest final : public QObject {
         QVERIFY(logText(logPath).contains("turn:fork-of-thread-1"));
     }
 
+    void hostForkCopiesInBoundedPasses() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString codexPath = directory.filePath(QStringLiteral("fake-codex"));
+        const QString logPath = directory.filePath(QStringLiteral("codex.log"));
+        QVERIFY(writeFakeCodex(codexPath, logPath));
+        const QString path = directory.filePath(QStringLiteral("journal.sqlite3"));
+        LocalJournal journal(path);
+        QVERIFY2(journal.isOpen(), qPrintable(journal.errorString()));
+        CodexAdapter codex(codexPath);
+        SessionHost host(&journal, &codex);
+        const QJsonObject started = startTurn(host, QStringLiteral("start"), directory.path(),
+                                              QStringLiteral("codex"), QStringLiteral("hello"));
+        QVERIFY2(started.value(QStringLiteral("ok")).toBool(), qPrintable(text(started)));
+        const QString sourceId = started.value(QStringLiteral("session_id")).toString();
+        QTRY_VERIFY_WITH_TIMEOUT(turnCompleted(journal, sourceId), 5000);
+        const qint64 cursor = journal.sessionHead(sourceId).cursor;
+        QVERIFY(seedEvents(journalConnection(path), sourceId, int(cursor) + 1, 60000));
+        const auto staging = [&] {
+            QSqlQuery q(journalConnection(path));
+            return q.exec("SELECT count(*) FROM session_fork_staging") && q.next()
+                       ? q.value(0).toInt()
+                       : -1;
+        };
+
+        std::optional<QJsonObject> answer;
+        host.forkSession(request(QStringLiteral("session.fork"), QStringLiteral("fork-1"),
+                                 {{QStringLiteral("fork_session_id"), "staged-fork"}}, sourceId, 1),
+                         [&answer](const QJsonObject& result) { answer = result; });
+        QTRY_VERIFY_WITH_TIMEOUT(staging() == 1, 5000);
+        QVERIFY(!answer.has_value());
+        QVERIFY(storedSession(journal, QStringLiteral("staged-fork")).id.isEmpty());
+        // The same destination cannot be requested again while it is being copied.
+        const QJsonObject duplicate = fork(host, QStringLiteral("fork-2"), sourceId,
+                                           {{QStringLiteral("fork_session_id"), "staged-fork"}});
+        QCOMPARE(duplicate.value(QStringLiteral("error_code")).toString(),
+                 QStringLiteral("invalid_session_id"));
+        // Deleting the source while it is copied cancels the fork and purges the copy.
+        const QJsonObject deleted = host.handleCommand(
+            request(QStringLiteral("session.delete"), QStringLiteral("delete"), {}, sourceId, 1),
+            QStringLiteral("desktop-test"));
+        QVERIFY2(deleted.value(QStringLiteral("ok")).toBool(), qPrintable(text(deleted)));
+        QTRY_VERIFY_WITH_TIMEOUT(answer.has_value(), 10000);
+        QCOMPARE(answer->value(QStringLiteral("error_code")).toString(),
+                 QStringLiteral("session_not_found"));
+        QTRY_VERIFY_WITH_TIMEOUT(!journal.hasPendingHistoryPurge(), 10000);
+        QCOMPARE(staging(), 0);
+        QVERIFY(journal.eventsAfter(QStringLiteral("staged-fork"), 1, 0).isEmpty());
+        QVERIFY(storedSession(journal, QStringLiteral("staged-fork")).id.isEmpty());
+    }
     void forksRunningSession_data() {
         QTest::addColumn<QString>("provider");
         QTest::newRow("claude") << QStringLiteral("claude");

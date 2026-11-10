@@ -57,14 +57,11 @@ void SessionHost::mediaReadDeferred(const QJsonObject& request, CommandCallback 
     const auto payload = request.value("payload").toObject();
     if (payload.contains("path")) {
         // Reading and scaling a worktree image is as slow as a stored screenshot.
-        QThreadPool::globalInstance()->start(
-            [guard = QPointer<SessionHost>(this), worktree = session->stored.worktreePath,
-             path = payload.value("path").toString(), done = std::move(done)]() mutable {
-                QJsonObject result = worktreeImagePreview(worktree, path);
-                QMetaObject::invokeMethod(
-                    guard, [done = std::move(done), result = std::move(result)] { done(result); },
-                    Qt::QueuedConnection);
-            });
+        startMediaRead(
+            [worktree = session->stored.worktreePath, path = payload.value("path").toString()] {
+                return worktreeImagePreview(worktree, path);
+            },
+            std::move(done));
         return;
     }
     const QString reference = payload.value("media_ref").toString();
@@ -74,16 +71,31 @@ void SessionHost::mediaReadDeferred(const QJsonObject& request, CommandCallback 
         return;
     }
     // Decoding and scaling a screenshot holds the main thread long enough to stall events and
-    // other commands, and a phone asks for a screen of previews at once. The store only reads
-    // files here, so the preview is made on the pool.
-    const McpMediaStore store = mediaStore_;
-    const QString sessionId = session->stored.id;
-    const int side = payload.value("thumbnail").toBool() ? 160 : 1280;
-    QThreadPool::globalInstance()->start([guard = QPointer<SessionHost>(this), store, sessionId,
-                                          reference, side, done = std::move(done)]() mutable {
-        QJsonObject result = store.preview(sessionId, reference, side);
+    // other commands. The store only reads files here, so the preview is made on the pool.
+    startMediaRead([store = mediaStore_, sessionId = session->stored.id, reference,
+                    side = payload.value("thumbnail").toBool()
+                               ? 160
+                               : 1280] { return store.preview(sessionId, reference, side); },
+                   std::move(done));
+}
+
+void SessionHost::startMediaRead(std::function<QJsonObject()> work, CommandCallback done) {
+    // Beyond the queue the caller gets busy at once; waiting decodes would only hold more
+    // memory.
+    if (mediaReadsInFlight_ >= maximumMediaReads) {
+        done({{"ok", false}, {"error_code", "busy"}});
+        return;
+    }
+    ++mediaReadsInFlight_;
+    mediaReads_.start([guard = QPointer<SessionHost>(this), work = std::move(work),
+                       done = std::move(done)]() mutable {
+        QJsonObject result = work();
         QMetaObject::invokeMethod(
-            guard, [done = std::move(done), result = std::move(result)] { done(result); },
+            guard,
+            [guard, done = std::move(done), result = std::move(result)] {
+                --guard->mediaReadsInFlight_;
+                done(result);
+            },
             Qt::QueuedConnection);
     });
 }

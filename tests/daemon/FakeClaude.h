@@ -99,6 +99,10 @@ for line in sys.stdin:
                                            {'reasoningEffort': 'xhigh'},
                                            {'reasoningEffort': 'max'}]}]}})
     elif method == 'turn/start':
+        if 'fail-start' in params.get('prompt', ''):
+            # The SDK refuses the turn before it starts; nothing is logged for it.
+            emit({'id': message_id, 'error': {'message': 'synthetic SDK unavailable'}})
+            continue
         log('setup:' + json.dumps(params))
         log('browser:' + json.dumps(params.get('mcpServers')))
         log('policy:' + json.dumps({'instructions': params.get('browserInstructions'), 'prompt': params.get('prompt'), 'images': params.get('images')}))

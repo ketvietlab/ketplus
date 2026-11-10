@@ -92,6 +92,11 @@ void EditorSplitPane::showSource(EditorWidget* source) {
                                           ? source->document().displayName()
                                           : source->document().filePath());
         addCloseButton(index, source);
+        // A reload can cross into or out of large-file mode; the split view follows it.
+        connect(source, &EditorWidget::presentationChanged, this, [this, source] {
+            if (source == current_)
+                refreshCurrentSource();
+        });
         switching_ = false;
     }
     if (tabBar_->currentIndex() == index) {
@@ -126,6 +131,7 @@ void EditorSplitPane::removeSource(EditorWidget* source) {
         return;
     }
     viewStates_.remove(source);
+    disconnect(source, &EditorWidget::presentationChanged, this, nullptr);
     const bool wasCurrent = source == current_;
     if (wasCurrent) {
         current_ = nullptr;

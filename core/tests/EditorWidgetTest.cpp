@@ -50,6 +50,7 @@ class EditorWidgetTest final : public QObject {
     void revealsFoldArrowsOnMarginHover();
     void colorsCssInsideHtmlStyleBlocks();
     void splitPaneSwitchesBetweenSources();
+    void splitPaneFollowsAReloadIntoLargeFileMode();
     void colorsYamlRolesDistinctly();
     void usesLargeFileModeAtThreshold();
     void hibernatesAndRestoresCleanFiles();
@@ -467,6 +468,34 @@ void EditorWidgetTest::colorsYamlRolesDistinctly() {
     QCOMPARE(fore(SCE_YAML_TEXT), scintillaColor(palette.textSecondary));
     QVERIFY(fore(SCE_YAML_NUMBER) != fore(SCE_YAML_IDENTIFIER));
     QVERIFY(fore(SCE_YAML_TEXT) != fore(SCE_YAML_NUMBER));
+}
+
+void EditorWidgetTest::splitPaneFollowsAReloadIntoLargeFileMode() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("growing.log.cpp"));
+    const auto write = [&](const QByteArray& content) {
+        QFile file(path);
+        return file.open(QIODevice::WriteOnly) && file.write(content) == content.size();
+    };
+    QVERIFY(write("int small;\n"));
+    ketplus::EditorWidget source;
+    QVERIFY(source.loadFile(path).ok);
+    ketplus::EditorSplitPane pane;
+    pane.showSource(&source);
+    QVERIFY(!pane.editor()->isLargeFileMode());
+
+    // The file grows past the threshold on disk and the tab reloads it.
+    QVERIFY(write(QByteArray(ketplus::EditorWidget::largeFileThresholdBytes, 'x')));
+    QVERIFY(source.reloadFromDisk().ok);
+    QVERIFY(source.isLargeFileMode());
+    QVERIFY(pane.editor()->isLargeFileMode());
+    QCOMPARE(pane.editor()->syntaxName(), QStringLiteral("large-file"));
+
+    QVERIFY(write("int small;\n"));
+    QVERIFY(source.reloadFromDisk().ok);
+    QVERIFY(!pane.editor()->isLargeFileMode());
+    QCOMPARE(pane.editor()->syntaxName(), source.syntaxName());
 }
 
 void EditorWidgetTest::usesLargeFileModeAtThreshold() {

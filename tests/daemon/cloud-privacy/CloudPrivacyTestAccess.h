@@ -63,6 +63,15 @@ class CloudPrivacyTestAccess {
         return client.eventUploadsInFlight_.isEmpty();
     }
     static CloudCrypto& crypto(CloudControlClient& client) { return client.crypto_; }
+    static RelayWakeups& wakeups(CloudControlClient& client) { return client.wakeups_; }
+    static CloudControlClient::AtlasAccessFence atlasFence(const CloudControlClient& client,
+                                                           const QString& device) {
+        return client.atlasAccessFence(device);
+    }
+    static bool atlasAccessCurrent(const CloudControlClient& client, const QString& device,
+                                   const CloudControlClient::AtlasAccessFence& fence) {
+        return client.atlasAccessCurrent(device, fence);
+    }
     static QByteArray aad(CloudControlClient& client, const QJsonObject& event,
                           const QJsonObject& content) {
         return client.eventAssociatedData(event, content);

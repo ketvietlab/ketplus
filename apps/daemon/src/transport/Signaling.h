@@ -19,6 +19,8 @@ class Signaling final : public QObject {
 
   signals:
     void outgoing(const QJsonObject& message);
+    // A paired device lost its access; everything opened for it must close.
+    void deviceRevoked(const QString& deviceId);
 
   private:
     void offer(const QJsonObject& message);

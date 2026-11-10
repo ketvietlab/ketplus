@@ -3,6 +3,8 @@
 #include <QJsonArray>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <QPointer>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTcpServer>
 #include <QTemporaryDir>
@@ -34,6 +36,108 @@ bool listening(quint16 port) {
 class AtlasLiveRuntimeTest final : public QObject {
     Q_OBJECT
   private slots:
+    void syntheticReadiness_data() {
+        QTest::addColumn<QString>("mode");
+        QTest::addColumn<bool>("accepted");
+        for (const auto* mode : {"wrong-port", "longer-port", "embedded", "unterminated",
+                                 "truncated-prefix", "on-stop"})
+            QTest::newRow(mode) << QString::fromLatin1(mode) << false;
+        for (const auto* mode : {"valid-lf", "valid-crlf", "valid-slash", "valid-split",
+                                 "valid-after-log", "valid-exit", "wrong-then-right"})
+            QTest::newRow(mode) << QString::fromLatin1(mode) << true;
+    }
+    void syntheticReadiness() {
+#ifndef Q_OS_UNIX
+        QSKIP("The synthetic executable fixture uses a Unix shebang.");
+#else
+        QFETCH(QString, mode);
+        QFETCH(bool, accepted);
+        const auto previousCli = qgetenv("KETPLUS_KETATLAS_CLI");
+        const auto previousMode = qgetenv("KETPLUS_TEST_ATLAS_READY_MODE");
+        const auto previousMarker = qgetenv("KETPLUS_TEST_ATLAS_READY_MARKER");
+        const auto restore = qScopeGuard([&] {
+            if (previousCli.isNull())
+                qunsetenv("KETPLUS_KETATLAS_CLI");
+            else
+                qputenv("KETPLUS_KETATLAS_CLI", previousCli);
+            if (previousMode.isNull())
+                qunsetenv("KETPLUS_TEST_ATLAS_READY_MODE");
+            else
+                qputenv("KETPLUS_TEST_ATLAS_READY_MODE", previousMode);
+            if (previousMarker.isNull())
+                qunsetenv("KETPLUS_TEST_ATLAS_READY_MARKER");
+            else
+                qputenv("KETPLUS_TEST_ATLAS_READY_MARKER", previousMarker);
+        });
+        const QString cli = QFileInfo(QString::fromUtf8(__FILE__))
+                                .dir()
+                                .filePath("../fixtures/fake-atlas-daemon-readiness.py");
+        QVERIFY(QFileInfo(cli).isExecutable());
+        qputenv("KETPLUS_KETATLAS_CLI", QFile::encodeName(cli));
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        const QString marker = root.filePath("process-ready-to-stop");
+        qputenv("KETPLUS_TEST_ATLAS_READY_MARKER", QFile::encodeName(marker));
+        AtlasDescriptor atlas;
+        atlas.path = root.filePath("atlas.json");
+        atlas.directory = root.path();
+        atlas.workspaceRoot = root.path();
+        QVERIFY(write(atlas.path, "{}"));
+        QWebSocketServer relay("synthetic-runtime", QWebSocketServer::NonSecureMode);
+        QVERIFY(relay.listen(QHostAddress::LocalHost, 0));
+        int relayConnections = 0;
+        connect(&relay, &QWebSocketServer::newConnection, &relay, [&] {
+            ++relayConnections;
+            auto* peer = relay.nextPendingConnection();
+            peer->setParent(&relay);
+            peer->sendTextMessage("{\"type\":\"ready\",\"version\":1}");
+        });
+        // Rejected output can be repaired by starting a fresh owned process.
+        const QStringList attempts = accepted ? QStringList{mode} : QStringList{mode, "valid-lf"};
+        for (const auto& attempt : attempts) {
+            qputenv("KETPLUS_TEST_ATLAS_READY_MODE", attempt.toUtf8());
+            QPointer<AtlasLiveRuntime> runtime = new AtlasLiveRuntime;
+            const auto cleanup = qScopeGuard([&] {
+                if (runtime) {
+                    runtime->stop();
+                    delete runtime.data();
+                }
+            });
+            QList<QJsonObject> callbacks;
+            runtime->start(
+                atlas, QUrl(QString("ws://127.0.0.1:%1/v2/atlas/tunnel").arg(relay.serverPort())),
+                "synthetic-only", 7, [&](const QJsonObject& result) { callbacks.append(result); });
+            if (attempt == "on-stop") {
+                QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(marker), 5000);
+                runtime->stop();
+                QTest::qWait(100);
+                QVERIFY(callbacks.isEmpty());
+                QVERIFY(runtime && !runtime->reusable());
+                QCOMPARE(relayConnections, 0);
+                continue;
+            }
+            QTRY_VERIFY_WITH_TIMEOUT(!callbacks.isEmpty(), 5000);
+            QCOMPARE(callbacks.size(), 1);
+            const bool expected = accepted || attempt == "valid-lf";
+            QCOMPARE(callbacks.front().value("ok").toBool(), expected);
+            if (expected) {
+                if (attempt == "valid-exit") {
+                    QTRY_VERIFY_WITH_TIMEOUT(!runtime, 5000);
+                    QCOMPARE(callbacks.size(), 1);
+                } else {
+                    QVERIFY(runtime && runtime->reusable());
+                }
+                QCOMPARE(callbacks.front().value("context_revision").toInteger(), 7);
+                const auto origins = callbacks.front().value("origins").toArray();
+                QCOMPARE(origins.size(), 1);
+                QVERIFY(origins.at(0).toObject().value("port").toInt() > 0);
+            } else {
+                QCOMPARE(callbacks.front().value("error_code").toString(), "atlas_process_exited");
+                QVERIFY(!runtime || !runtime->reusable());
+            }
+        }
+#endif
+    }
     void realCliOwnsViewerAndRendererAndReattachesWithoutChangingSource() {
         if (qEnvironmentVariable("KETPLUS_KETATLAS_CLI").isEmpty())
             QSKIP("Set an isolated KetAtlas 0.5.2 CLI to run the real-process test.");

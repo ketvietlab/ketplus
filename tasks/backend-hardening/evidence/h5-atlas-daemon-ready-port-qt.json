@@ -1,0 +1,30 @@
+{
+  "scope": "H5.2 daemon AtlasLiveRuntime readiness and one-shot callback; no UI changes",
+  "base": "886fbe201ad88e2bbd466c8e0689f3fc7a423223",
+  "baseline": {
+    "original_matrix": "9 pass / 4 fail including setup/cleanup",
+    "expanded_immediate_exit_matrix": "9 pass / 5 fail, 1593ms"
+  },
+  "fixed": {
+    "focused": "15/15 PASS, including setup/cleanup",
+    "mutations": {
+      "drop_line_boundary_guard": "1 fail / 2 setup+cleanup pass",
+      "drop_stopped_guard": "1 fail / 2 setup+cleanup pass; relay connected after stop",
+      "replace_callback_exchange_with_move": "1 fail / 2 setup+cleanup pass; duplicate result"
+    },
+    "restored_matrix": "15/15 PASS",
+    "full_pro": "96/96 PASS, 307.17s; Release build PASS",
+    "default_runtime_target": "15 pass / 1 real CLI opt-in skip"
+  },
+  "pending": [
+    "independent exact-head review and merge"
+  ],
+  "not_verified": [
+    "real KetAtlas CLI/viewer/renderer acceptance",
+    "Windows synthetic process fixture",
+    "executable/listener authenticity or reserve/release port race",
+    "initial stdout/stderr read allocation bounds",
+    "renderer/descendant cleanup and complete tunnel/grant/lease acceptance",
+    "deploy/install"
+  ]
+}

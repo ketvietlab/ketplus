@@ -9,6 +9,8 @@
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTcpServer>
+#include <QVersionNumber>
+#include <algorithm>
 
 namespace ketplus {
 namespace {
@@ -30,19 +32,37 @@ AtlasProcess::AtlasProcess(QObject* parent) : QObject(parent) {
         stop();
         emit failed(tr("KetAtlas did not become ready within 20 seconds."));
     });
-    connect(&process_, &QProcess::readyReadStandardOutput, this, [this] {
-        output_.append(process_.readAllStandardOutput());
-        if (output_.size() > 32768)
-            output_ = output_.right(32768);
-        static const QRegularExpression address(
-            QStringLiteral("KetAtlas: (http://127\\.0\\.0\\.1:[0-9]+)"));
-        const auto match = address.match(QString::fromUtf8(output_));
-        if (!ready_ && match.hasMatch()) {
-            ready_ = true;
-            timeout_.stop();
-            emit ready(QUrl(match.captured(1)));
-        }
-    });
+    connect(&process_, &QProcess::readyReadStandardOutput, this,
+            [this, outputStartsAtLineBoundary = true]() mutable {
+                // launchAttempt clears the buffer; the next output begins a new attempt.
+                if (output_.isEmpty())
+                    outputStartsAtLineBoundary = true;
+                output_.append(process_.readAllStandardOutput());
+                if (output_.size() > 32768) {
+                    const auto removed = output_.size() - 32768;
+                    outputStartsAtLineBoundary = output_.at(removed - 1) == '\n';
+                    output_ = output_.right(32768);
+                }
+                if (ready_ || stopping_ || port_ == 0)
+                    return;
+                static const QRegularExpression address(
+                    QStringLiteral("^KetAtlas: (http://127\\.0\\.0\\.1:[0-9]+)/?[\\t ]*\\r?\\n"),
+                    QRegularExpression::MultilineOption);
+                auto matches = address.globalMatch(QString::fromUtf8(output_));
+                while (matches.hasNext()) {
+                    const auto match = matches.next();
+                    // Trimming a long log line must not turn its suffix into a banner.
+                    if (match.capturedStart() == 0 && !outputStartsAtLineBoundary)
+                        continue;
+                    const QUrl endpoint(match.captured(1));
+                    if (!endpoint.isValid() || endpoint.port() != port_)
+                        continue;
+                    ready_ = true;
+                    timeout_.stop();
+                    emit ready(endpoint);
+                    return;
+                }
+            });
     connect(&process_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
         if (!stopping_ && error == QProcess::FailedToStart) {
             timeout_.stop();
@@ -73,14 +93,22 @@ QString AtlasProcess::cliPath() {
         qEnvironmentVariable("KETPLUS_KETATLAS_CLI", QSettings().value("atlas/cliPath").toString());
     if (!override.isEmpty())
         return override;
-    auto paths =
-        QProcessEnvironment::systemEnvironment().value("PATH").split(QDir::listSeparator());
+    return QStandardPaths::findExecutable("ketatlas", toolSearchPaths());
+}
+
+QStringList AtlasProcess::toolSearchPaths() {
+    auto paths = QProcessEnvironment::systemEnvironment().value("PATH").split(QDir::listSeparator(),
+                                                                              Qt::SkipEmptyParts);
     paths << "/opt/homebrew/bin" << "/usr/local/bin";
     const QDir nvm(QDir::homePath() + "/.nvm/versions/node");
-    for (const auto& version :
-         nvm.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name | QDir::Reversed))
+    auto versions = nvm.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+    // By number, so v26.12.1 comes before v26.7.0 and v24 before v9.
+    std::stable_sort(versions.begin(), versions.end(), [](const QString& a, const QString& b) {
+        return QVersionNumber::fromString(a.mid(1)) > QVersionNumber::fromString(b.mid(1));
+    });
+    for (const auto& version : versions)
         paths.append(nvm.filePath(version + "/bin"));
-    return QStandardPaths::findExecutable("ketatlas", paths);
+    return paths;
 }
 
 void AtlasProcess::start(const AtlasDescriptor& atlas) {

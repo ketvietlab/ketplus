@@ -52,7 +52,11 @@ Table specification(const QString& name) {
         return {name,
                 bytesFor({"session_id", "operation_id", "deleted_at"},
                          {"generation", "lifecycle_revision"}),
-                expired("deleted_at", LocalJournal::tombstoneRetentionDays)};
+                // The tombstone keeps its generation from being restored while history
+                // still awaits bounded purge (ADR 0093).
+                expired("deleted_at", LocalJournal::tombstoneRetentionDays) +
+                    " AND NOT EXISTS (SELECT 1 FROM session_history_purge p WHERE "
+                    "p.session_id=t.session_id AND p.generation=t.generation)"};
     if (name == "session_deletion_work")
         return {
             name,

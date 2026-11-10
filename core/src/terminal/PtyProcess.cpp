@@ -10,7 +10,12 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <chrono>
+#include <condition_variable>
 #include <cstring>
+#include <mutex>
+#include <thread>
+#include <vector>
 
 #if defined(Q_OS_UNIX)
 #include <fcntl.h>
@@ -43,6 +48,75 @@ QString findShell() {
     }
     return {};
 }
+
+#if defined(Q_OS_UNIX)
+// Shells that have not exited by the time their terminal closes are reaped off the UI thread,
+// and killed if they ignore the hangup for 2 s, so a closed terminal leaves no zombie or stray
+// shell behind. The reaper is joined when the application exits, after its shells are gone.
+class ShellReaper final {
+  public:
+    static ShellReaper& instance() {
+        static ShellReaper reaper;
+        return reaper;
+    }
+
+    void add(const pid_t child) {
+        const std::lock_guard lock(mutex_);
+        pending_.push_back({child, Clock::now() + std::chrono::seconds(2)});
+        if (!thread_.joinable())
+            thread_ = std::thread([this] { run(); });
+        wake_.notify_one();
+    }
+
+    ~ShellReaper() {
+        {
+            const std::lock_guard lock(mutex_);
+            exiting_ = true;
+        }
+        wake_.notify_one();
+        if (thread_.joinable())
+            thread_.join();
+    }
+
+  private:
+    using Clock = std::chrono::steady_clock;
+    struct Pending final {
+        pid_t child;
+        Clock::time_point deadline;
+    };
+
+    void run() {
+        std::unique_lock lock(mutex_);
+        while (true) {
+            for (auto it = pending_.begin(); it != pending_.end();) {
+                if (::waitpid(it->child, nullptr, WNOHANG) != 0) {
+                    it = pending_.erase(it);
+                } else if (Clock::now() >= it->deadline) {
+                    ::kill(it->child, SIGKILL);
+                    while (::waitpid(it->child, nullptr, 0) < 0 && errno == EINTR) {
+                    }
+                    it = pending_.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+            if (pending_.empty()) {
+                if (exiting_)
+                    return;
+                wake_.wait(lock, [this] { return exiting_ || !pending_.empty(); });
+            } else {
+                wake_.wait_for(lock, std::chrono::milliseconds(50));
+            }
+        }
+    }
+
+    std::mutex mutex_;
+    std::condition_variable wake_;
+    std::vector<Pending> pending_;
+    std::thread thread_;
+    bool exiting_{false};
+};
+#endif
 
 QString systemError(const char* operation) {
     return QStringLiteral("%1: %2")
@@ -118,6 +192,8 @@ bool PtyProcess::start(const QString& workingDirectory, const int rows, const in
         _exit(127);
     }
 
+    // Without this, every later shell and child process holds this terminal's master open.
+    ::fcntl(master, F_SETFD, FD_CLOEXEC);
     masterFileDescriptor_ = master;
     childProcessId_ = static_cast<qint64>(child);
     const int flags = ::fcntl(masterFileDescriptor_, F_GETFL, 0);
@@ -172,9 +248,10 @@ void PtyProcess::resizeTerminal(const int rows, const int columns) {
 void PtyProcess::stop() {
 #if defined(Q_OS_UNIX)
     if (childProcessId_ > 0) {
-        ::kill(static_cast<pid_t>(childProcessId_), SIGHUP);
-        int status = 0;
-        ::waitpid(static_cast<pid_t>(childProcessId_), &status, WNOHANG);
+        const auto child = static_cast<pid_t>(childProcessId_);
+        ::kill(child, SIGHUP);
+        if (::waitpid(child, nullptr, WNOHANG) == 0)
+            ShellReaper::instance().add(child);
     }
 #endif
     childTimer_->stop();

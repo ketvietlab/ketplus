@@ -80,8 +80,11 @@ QJsonArray features(const int minor) {
             QStringLiteral("transcript.window/1"),
             QStringLiteral("transcript.activity_groups/1"),
             QStringLiteral("session.tasks/1"),
+            QStringLiteral("session.tombstones/1"),
+            QStringLiteral("session.catalog_live/1"),
             QStringLiteral("session.compact_window/1"),
-            QStringLiteral("agents.messaging/1")};
+            QStringLiteral("agents.messaging/1"),
+            QStringLiteral("session.archive/1")};
 }
 
 QString timestamp() { return QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs); }
