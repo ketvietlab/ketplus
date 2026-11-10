@@ -5,6 +5,7 @@
 #include "app/SettingsRows.h"
 #include <QAbstractButton>
 #include <QComboBox>
+#include <QDoubleSpinBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -42,12 +43,13 @@ SettingsClaudeCredentials::SettingsClaudeCredentials(Requester requester, QWidge
     key_->setMaxLength(512);
     key_->setPlaceholderText(tr("Enter a new key; leave blank to keep the saved key"));
     key_->setInputMethodHints(Qt::ImhHiddenText | Qt::ImhNoPredictiveText | Qt::ImhNoAutoUppercase);
-    // The mock's select of budgets; a saved amount outside the list is added to it.
-    budget_ = new ket::Select(this);
+    // Any amount up to 10,000 USD; the mock's select would limit it to a few presets.
+    budget_ = new QDoubleSpinBox(this);
     budget_->setObjectName("claudeQueryBudget");
-    budget_->addItem(tr("No query limit"), 0.0);
-    for (const double usd : {25.0, 50.0, 100.0, 200.0, 500.0})
-        budget_->addItem(tr("%1 USD").arg(usd, 0, 'f', 2), usd);
+    budget_->setRange(0, 10000);
+    budget_->setDecimals(2);
+    budget_->setSuffix(tr(" USD"));
+    budget_->setSpecialValueText(tr("No query limit"));
     const auto field = [column, this](const QString& text, QWidget* widget) {
         column->addWidget(settings_rows::field(text, {}, widget, this));
     };
@@ -84,7 +86,7 @@ SettingsClaudeCredentials::SettingsClaudeCredentials(Requester requester, QWidge
     connect(save_, &QAbstractButton::clicked, this, [this] {
         const QJsonObject payload{{"enabled", mode_->currentIndex() == 1},
                                   {"key", key_->text()},
-                                  {"budget_usd", budget_->currentData().toDouble()}};
+                                  {"budget_usd", budget_->value()}};
         key_->clear();
         request("save", payload);
     });
@@ -107,18 +109,6 @@ SettingsClaudeCredentials::SettingsClaudeCredentials(Requester requester, QWidge
 void SettingsClaudeCredentials::refresh() {
     if (!busy_)
         request("status");
-}
-
-void SettingsClaudeCredentials::setBudget(const double usd) {
-    const double value = qMax(0.0, usd);
-    int index = budget_->findData(value);
-    if (index < 0) {
-        index = 1;
-        while (index < budget_->count() && budget_->itemData(index).toDouble() < value)
-            ++index;
-        budget_->insertItem(index, tr("%1 USD").arg(value, 0, 'f', 2), value);
-    }
-    budget_->setCurrentIndex(index);
 }
 
 void SettingsClaudeCredentials::updateControls() {
@@ -164,7 +154,7 @@ void SettingsClaudeCredentials::apply(const QJsonObject& status) {
     supported_ = status.value("supported").toBool();
     configured_ = status.value("configured").toBool();
     mode_->setCurrentIndex(status.value("enabled").toBool() ? 1 : 0);
-    setBudget(status.value("budget_usd").toDouble());
+    budget_->setValue(status.value("budget_usd").toDouble());
     status_->setText(
         !supported_ ? tr("Saving API keys requires macOS Keychain in this release.")
         : status.value("enabled").toBool() ? tr("Saved API key selected for new queries. Running "

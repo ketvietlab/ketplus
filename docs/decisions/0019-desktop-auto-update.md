@@ -47,8 +47,10 @@ path that must not trust the download server or the network.
   reminder. Since #166 the page follows the design mock. It has:
   - a version card: "Up to date" with the last check, "Available", or "Ready"
     with Restart now (Sparkle's install prompt) and Later;
-  - one "Download updates automatically" checkbox, which also turns the scheduled
-    check on;
+  - "Check for updates automatically" and "Download updates automatically"
+    checkboxes. Turning checks off also turns downloads off, and turning
+    downloads on also turns checks on. The mock shows only the second one; the
+    first keeps the scheduled check under the user's control;
   - a "Check for updates" button.
 
   The mock's Channel select is left out, because the feed has a single channel.

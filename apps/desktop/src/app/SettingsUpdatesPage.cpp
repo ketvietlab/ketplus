@@ -53,6 +53,10 @@ SettingsUpdatesPage::SettingsUpdatesPage(AppUpdater& updater, QWidget* parent)
     layout->addWidget(card_);
     layout->addSpacing(14);
 
+    automaticChecks_ = new ket::Checkbox(tr("Check for updates automatically"), this);
+    automaticChecks_->setObjectName(QStringLiteral("updatesAutomaticChecks"));
+    layout->addWidget(automaticChecks_);
+    layout->addSpacing(8);
     automaticDownloads_ = new ket::Checkbox(tr("Download updates automatically"), this);
     automaticDownloads_->setObjectName(QStringLiteral("updatesAutomaticDownloads"));
     layout->addWidget(automaticDownloads_);
@@ -72,8 +76,14 @@ SettingsUpdatesPage::SettingsUpdatesPage(AppUpdater& updater, QWidget* parent)
         refresh();
     });
     connect(check_, &QAbstractButton::clicked, this, [this] { updater_.checkForUpdates(); });
-    // Downloading in the background needs the scheduled checks, so turning it on turns them
-    // on too. Turning it off keeps the daily check.
+    // Downloading in the background needs the scheduled checks: turning checks off turns
+    // downloads off, and turning downloads on turns checks on.
+    connect(automaticChecks_, &QAbstractButton::toggled, this, [this](const bool enabled) {
+        if (!enabled)
+            updater_.setAutomaticallyDownloadsUpdates(false);
+        updater_.setAutomaticallyChecksForUpdates(enabled);
+        refresh();
+    });
     connect(automaticDownloads_, &QAbstractButton::toggled, this, [this](const bool enabled) {
         if (enabled)
             updater_.setAutomaticallyChecksForUpdates(true);
@@ -133,8 +143,11 @@ void SettingsUpdatesPage::refresh() {
     check_->setEnabled(configured && updater_.canCheckForUpdates());
     {
         const QSignalBlocker block(automaticDownloads_);
+        const QSignalBlocker blockChecks(automaticChecks_);
+        automaticChecks_->setChecked(checks);
         automaticDownloads_->setChecked(checks && updater_.automaticallyDownloadsUpdates());
     }
+    automaticChecks_->setEnabled(configured);
     automaticDownloads_->setEnabled(configured);
 }
 

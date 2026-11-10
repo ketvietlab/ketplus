@@ -958,8 +958,9 @@ void MainWindowSettingsTest::updatesPageAndReminderDriveTheUpdater() {
     QVERIFY(checkNow != nullptr);
     QVERIFY(automaticDownloads != nullptr);
     QVERIFY(card != nullptr && restart != nullptr && later != nullptr);
-    // The mock's page: one intro line, the version card, one checkbox and the check button.
-    QVERIFY(page->findChild<QAbstractButton*>(QStringLiteral("updatesAutomaticChecks")) == nullptr);
+    auto* automaticChecks =
+        page->findChild<QAbstractButton*>(QStringLiteral("updatesAutomaticChecks"));
+    QVERIFY(automaticChecks != nullptr);
     const auto cardText = [card] {
         QStringList texts;
         for (auto* label : card->findChildren<QLabel*>())
@@ -978,6 +979,7 @@ void MainWindowSettingsTest::updatesPageAndReminderDriveTheUpdater() {
     QVERIFY(checkNow->isEnabled());
     QVERIFY(automaticDownloads->isEnabled());
     QVERIFY(!automaticDownloads->isChecked());
+    QVERIFY(automaticChecks->isChecked());
 
     checkNow->click();
     QCOMPARE(updater.checks_, 4);
@@ -987,12 +989,17 @@ void MainWindowSettingsTest::updatesPageAndReminderDriveTheUpdater() {
     automaticDownloads->click();
     QVERIFY(!updater.automaticallyDownloadsUpdates());
     QVERIFY(updater.automaticallyChecksForUpdates()); // the daily check stays
-    // Turning downloads on also turns the scheduled check back on.
-    updater.setAutomaticallyChecksForUpdates(false);
-    updater.setCanCheck(true);
+    // The scheduled check can be turned off, which also stops background downloads.
+    automaticDownloads->click();
+    automaticChecks->click();
+    QVERIFY(!updater.automaticallyChecksForUpdates());
+    QVERIFY(!updater.automaticallyDownloadsUpdates());
+    QVERIFY(!automaticDownloads->isChecked());
     QVERIFY(status->text().contains(QStringLiteral("when you ask")));
+    // Turning downloads on also turns the scheduled check back on.
     automaticDownloads->click();
     QVERIFY(updater.automaticallyChecksForUpdates());
+    QVERIFY(automaticChecks->isChecked());
     QVERIFY(automaticDownloads->isChecked());
 
     updater.setCanCheck(false);
@@ -1056,6 +1063,8 @@ void MainWindowSettingsTest::unconfiguredBuildExplainsUpdatesInsteadOfChecking()
     QVERIFY(!page->findChild<QAbstractButton*>(QStringLiteral("updatesCheckNow"))->isEnabled());
     QVERIFY(!page->findChild<QAbstractButton*>(QStringLiteral("updatesAutomaticDownloads"))
                  ->isEnabled());
+    QVERIFY(
+        !page->findChild<QAbstractButton*>(QStringLiteral("updatesAutomaticChecks"))->isEnabled());
     QVERIFY(page->findChild<QWidget*>(QStringLiteral("updatesCard"))->isHidden());
     // Opening Settings again must keep the requested section rather than reset to Appearance.
     auto* navigation =
