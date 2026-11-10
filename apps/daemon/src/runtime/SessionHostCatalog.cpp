@@ -119,6 +119,7 @@ QJsonObject SessionHost::listSessions(const QJsonObject& request) const {
             value.insert(QStringLiteral("number"), number);
         if (!stored.archivedAt.isEmpty())
             value.insert(QStringLiteral("archived_at"), stored.archivedAt);
+        value.insert(QStringLiteral("tags"), QJsonArray::fromStringList(stored.tags));
         if (const auto sender = agentTurns.constFind(stored.id); sender != agentTurns.cend())
             value.insert(QStringLiteral("agent_turn"), *sender);
         if (!session.backgroundTasks.isEmpty())

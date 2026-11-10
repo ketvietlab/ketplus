@@ -226,6 +226,7 @@ class SessionHost final : public QObject, private AgentHostPort {
     [[nodiscard]] QJsonObject renameSession(const QJsonObject& request);
     [[nodiscard]] QJsonObject markSessionSeen(const QJsonObject& request);
     [[nodiscard]] QJsonObject setSessionArchived(const QJsonObject& request);
+    [[nodiscard]] QJsonObject setSessionTags(const QJsonObject& request);
     [[nodiscard]] QJsonObject deleteSession(const QJsonObject& request);
     // With `outcome`, returns an empty object and answers through it once the provider has
     // replied; without it, answers "accepted" as soon as the text is handed to the provider.

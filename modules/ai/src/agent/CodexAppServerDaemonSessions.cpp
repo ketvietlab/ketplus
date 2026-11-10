@@ -497,6 +497,22 @@ void CodexAppServer::setDaemonSessionArchived(const QString& sessionId, const bo
                   sessionId, found->generation, std::move(callback));
 }
 
+void CodexAppServer::setDaemonSessionTags(const QString& sessionId, const QStringList& tags,
+                                          ResponseCallback callback) {
+    if (!hasTagSupport() || sessionId.isEmpty()) {
+        callback({}, QStringLiteral("This daemon does not store conversation tags."));
+        return;
+    }
+    const auto found = daemonSessions_.constFind(sessionId);
+    if (found == daemonSessions_.cend()) {
+        callback({}, QStringLiteral("Unknown daemon session."));
+        return;
+    }
+    daemon_->call(QStringLiteral("session.tags.set"),
+                  {{QStringLiteral("tags"), QJsonArray::fromStringList(tags)}}, sessionId,
+                  found->generation, std::move(callback));
+}
+
 void CodexAppServer::applyDaemonTombstones(const QJsonArray& tombstones) {
     for (const auto& value : tombstones) {
         const auto deleted = value.toObject();

@@ -183,7 +183,7 @@ Item {
             readonly property string name: assigned ? "@agent/" + assigned.number : ""
             // As in the mock, the Reviewer label collapses before the title or scope elide. It
             // counts every visible item and the spacing before the trailing filler.
-            readonly property bool full: titleRow.width >= (conversationNumber.visible ? conversationNumber.implicitWidth + titleRow.spacing : 0) + conversationTitle.implicitWidth + conversationStatusBadge.width + (scopeChip.visible ? scopeChip.implicitWidth + titleRow.spacing : 0) + (conversationTags.visible ? conversationTags.implicitWidth + titleRow.spacing : 0) + reviewerProbe.implicitWidth + titleRow.spacing * 3
+            readonly property bool full: titleRow.width >= (conversationNumber.visible ? conversationNumber.implicitWidth + titleRow.spacing : 0) + conversationTitle.implicitWidth + conversationStatusBadge.width + (scopeChip.visible ? scopeChip.implicitWidth + titleRow.spacing : 0) + (conversationTags.visible ? conversationTags.implicitWidth + titleRow.spacing : 0) + (addTagButton.visible ? addTagButton.implicitWidth + titleRow.spacing : 0) + reviewerProbe.implicitWidth + titleRow.spacing * 3
             readonly property string fullText: (name ? "Reviewer · " + name : "Reviewer") + "  ▾"
             readonly property string detail: "An agent reviews each finished turn and replies to this conversation. Reviewers never merge."
             visible: !agentHost.compactWindow && agentHost.reviewerState.available === true
@@ -217,6 +217,16 @@ Item {
                     onClicked: agentHost.requestTagFilter(text)
                 }
             }
+        }
+        Kit.KetIconButton {
+            id: addTagButton
+            objectName: "headerAddTagButton"
+            // The daemon stores a conversation's tags, so there is none to tag before it starts.
+            visible: !agentHost.compactWindow && header.selectedConversation.tagsEditable === true && header.width > KetTheme.px(760, KetTheme.zoom)
+            controlSize: Kit.KetTheme.ControlSize.Small
+            iconName: "plus"
+            text: "Add tag"
+            onClicked: tagMenu.popup(addTagButton, 0, addTagButton.height)
         }
         Item {
             Layout.fillWidth: true
@@ -294,6 +304,33 @@ Item {
     function openReviewerMenu() {
         reviewerMenu.candidates = agentHost.reviewerCandidates();
         reviewerMenu.popup(reviewerButton, 0, reviewerButton.height);
+    }
+
+    Kit.KetMenu {
+        id: tagMenu
+        objectName: "conversationTagMenu"
+        // Checks are set on every open: triggering a checkable item replaces a binding.
+        onAboutToShow: {
+            for (let index = 0; index < count; ++index) {
+                const item = itemAt(index);
+                if (item && item.tagLabel)
+                    item.checked = header.tags.some(tag => tag.label.toLowerCase() === item.tagLabel.toLowerCase());
+            }
+        }
+        Instantiator {
+            model: agentHost.tagCatalog()
+            onObjectAdded: (index, object) => tagMenu.addItem(object)
+            onObjectRemoved: (index, object) => tagMenu.removeItem(object)
+            Kit.KetMenuItem {
+                required property var modelData
+                readonly property string tagLabel: modelData.label
+                objectName: "conversationTagItem_" + tagLabel
+                text: tagLabel
+                iconName: "tag"
+                checkable: true
+                onTriggered: agentHost.requestConversationTag(header.selectedConversation.id, tagLabel, checked)
+            }
+        }
     }
 
     Kit.KetMenu {

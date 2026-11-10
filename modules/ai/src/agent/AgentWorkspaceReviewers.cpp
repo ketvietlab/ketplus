@@ -1,6 +1,10 @@
 #include "agent/AgentWorkspaceView.h"
 
+#include "agent/ConversationTags.h"
+
 namespace ketplus {
+QVariantList AgentWorkspaceView::tagCatalog() const { return conversation_tags::catalog(); }
+
 // ADR 0067: the reviewer of the active conversation, read again whenever another
 // conversation becomes active or the active one starts its first turn.
 void AgentWorkspaceView::setReviewerScope(const QString& scope) {

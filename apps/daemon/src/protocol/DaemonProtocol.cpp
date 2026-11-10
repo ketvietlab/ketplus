@@ -85,6 +85,7 @@ QJsonArray features(const int minor) {
             QStringLiteral("session.compact_window/1"),
             QStringLiteral("agents.messaging/1"),
             QStringLiteral("session.archive/1"),
+            QStringLiteral("session.tags/1"),
             QStringLiteral("session.work_report/1")};
 }
 

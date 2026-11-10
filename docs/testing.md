@@ -91,7 +91,7 @@ obsolete run. See `docs/release-process.md`.
 | Cursor catalog output | `ketplus_cursor_catalog_bounds_tests` | stdout/stderr draining before exit, shared 1-MiB boundary/excess, unsuccessful exit, coalesced callers/cache, timeout after output and failed launch; self-hosted CLI fixture only |
 | Codex protocol contract | `ketplus_codex_contract_tests` (Node) | declared Codex usage exists in every tested schema snapshot; daemon code names only declared methods |
 | Relay browser sign-in | `ketplus_daemon_browser_sign_in_tests` | relay paths appended to a base path, loopback redirect, PKCE S256 challenge, wrong state/path refused, one-time callback |
-| Daemon lifecycle/IPC | `ketplus_daemon_lifecycle_tests` | authentication, protocol minor and features, reconnect replay, isolation, fencing; failed stream ordering, bounded recovery queues, deletion guards (active turn, live background task)/shutdown and SQLite writer-lock retry; `session.set_archived` keeps the first archive time across restarts and row rewrites, and archived conversations are deleted after 30 days one per pass, oldest first, skipping a busy one (ADR 0100) |
+| Daemon lifecycle/IPC | `ketplus_daemon_lifecycle_tests` | authentication, protocol minor and features, reconnect replay, isolation, fencing; failed stream ordering, bounded recovery queues, deletion guards (active turn, live background task)/shutdown and SQLite writer-lock retry; `session.tags.set` validates, deduplicates and keeps tags across restarts and row rewrites (ADR 0107); `session.set_archived` keeps the first archive time across restarts and row rewrites, and archived conversations are deleted after 30 days one per pass, oldest first, skipping a busy one (ADR 0100) |
 | Daemon upgrade | `ketplus_daemon_upgrade_tests` | version advertisement, idle replacement, active-turn deferral |
 | Desktop daemon attach | `ketplus_desktop_daemon_client_tests` | detached UI lifetime, discovery, normalized transcript replay, negotiated features, provider capabilities, fork through the daemon; in-flight writes failed rather than sent again after a disconnect, oversized/zero/malformed daemon frames drop the connection, one replacement request to an older daemon and keeping a daemon that refuses |
 | macOS bundle layout | `ketplus_macos_bundle_layout_tests` | embedded matching daemon, loadable Qt runtime plugins, and absence of bundled Codex |
@@ -362,8 +362,9 @@ python3 benchmarks/run-agent-idle.py build/release /tmp/idle-minimized --visibil
 
 `--visibility minimized` minimizes the window a second after `ready` and expects no
 held clock. For captures, the fixture binary also accepts `--open=mode`, `model` or
-`limits` to open that composer panel first, like the mock's `--open`, or `--open=welcome`
-for an empty conversation like the mock's `workspace/welcome`. `--open=viewer` opens the
+`limits` to open that composer panel first, like the mock's `--open`, `--open=reviewer` or
+`tags` for the header's Reviewer or Add tag menu, `--open=composer` to focus the input, or
+`--open=welcome` for an empty conversation like the mock's `workspace/welcome`. `--open=viewer` opens the
 image viewer on the mock's sidebar capture, and `--open=tasks` shows the mock's three
 background tasks (running, completed and failed) like its `workspace/running` strip. With `--open`, the
 active conversation is the mock's Claude Opus 5.5 conversation with its fixed catalog and

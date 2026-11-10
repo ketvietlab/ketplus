@@ -37,14 +37,15 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 - Pro header/composer now compose kit buttons, model-search field, usage ring,
   meters and composer/attachment recipes. The header stays 44 px, with number,
-  compact title and filterable supplied tags. The input retains IME/draft/steering
+  compact title, filterable tags and an Add tag menu; the daemon stores the tags
+  (`session.tags.set`, ADR 0107). The input retains IME/draft/steering
   behavior and a caret-aligned placeholder. This is implementation work in the
   unreviewed UI stack; automatic reviewer assignment is not provided by this layer.
 
 - Pro sidebar uses kit navigation, repository groups, two-line conversation rows,
   tag filtering and update pills. Storage pressure warnings consume the local
-  daemon's existing size-status contract. Waiting-for-reply and tags render only
-  when metadata supplies them; automatic intent classification/reviewer orchestration
+  daemon's existing size-status contract. Tags come from the daemon catalog (ADR 0107);
+  waiting-for-reply renders only when metadata supplies it; automatic intent classification/reviewer orchestration
   are separate behaviour work. Native acceptance remains deferred.
 
 - Lite shell implementation now connects the Qt mock activity rail to Explorer,

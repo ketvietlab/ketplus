@@ -1237,6 +1237,56 @@ void AgentWorkspaceViewTest::composerPlaceholderTracksCaret() {
     QVERIFY(QMetaObject::invokeMethod(tag, "clicked"));
     QCOMPARE(filtered.count(), 1);
     QCOMPARE(filtered.first().first().toString(), QStringLiteral("UI"));
+    // The daemon stores tags, so Add tag waits for a conversation it knows.
+    auto* addTag = root->findChild<QQuickItem*>("headerAddTagButton");
+    QVERIFY(addTag && !addTag->isVisible());
+    view.setConversations(
+        {QVariantMap{{"id", "ui"},
+                     {"active", true},
+                     {"number", "42"},
+                     {"tagsEditable", true},
+                     {"tags", QVariantList{QVariantMap{{"label", "UI"}, {"color", "#3377cc"}}}}}});
+    QTRY_VERIFY(addTag->isVisible());
+    QSignalSpy tagged(&view, &ketplus::AgentWorkspaceView::conversationTagRequested);
+    QVERIFY(QMetaObject::invokeMethod(addTag, "clicked"));
+    auto* tagMenu = root->findChild<QObject*>("conversationTagMenu");
+    QVERIFY(tagMenu);
+    QTRY_VERIFY(tagMenu->property("visible").toBool());
+    const auto tagItem = [tagMenu](const char* name) {
+        QObject* found = nullptr;
+        for (int index = 0; index < tagMenu->property("count").toInt() && !found; ++index) {
+            QQuickItem* item = nullptr;
+            QMetaObject::invokeMethod(tagMenu, "itemAt", Q_RETURN_ARG(QQuickItem*, item),
+                                      Q_ARG(int, index));
+            if (item && item->objectName() == QLatin1StringView(name))
+                found = item;
+        }
+        return found;
+    };
+    QCOMPARE(tagMenu->property("count").toInt(), view.tagCatalog().size());
+    QVERIFY(tagItem("conversationTagItem_UI")->property("checked").toBool());
+    auto* review = tagItem("conversationTagItem_Review");
+    QVERIFY(review && !review->property("checked").toBool());
+    review->setProperty("checked", true); // a click toggles the check before it triggers
+    QVERIFY(QMetaObject::invokeMethod(review, "triggered"));
+    QCOMPARE(tagged.count(), 1);
+    QCOMPARE(tagged.first().at(0).toString(), QStringLiteral("ui"));
+    QCOMPARE(tagged.first().at(1).toString(), QStringLiteral("Review"));
+    QVERIFY(tagged.first().at(2).toBool());
+    QVERIFY(QMetaObject::invokeMethod(tagMenu, "close"));
+    QTRY_VERIFY(!tagMenu->property("visible").toBool());
+    // Another client may have stored the label in another case; it is the same tag.
+    view.setConversations({QVariantMap{{"id", "ui"},
+                                       {"active", true},
+                                       {"number", "42"},
+                                       {"tagsEditable", true},
+                                       {"tags", QVariantList{QVariantMap{{"label", "review"}}}}}});
+    QVERIFY(QMetaObject::invokeMethod(addTag, "clicked"));
+    QTRY_VERIFY(tagMenu->property("visible").toBool());
+    QVERIFY(tagItem("conversationTagItem_Review")->property("checked").toBool());
+    QVERIFY(!tagItem("conversationTagItem_UI")->property("checked").toBool());
+    QVERIFY(QMetaObject::invokeMethod(tagMenu, "close"));
+    QTRY_VERIFY(!tagMenu->property("visible").toBool());
     QTRY_VERIFY(placeholder->isVisible());
     QTest::qWait(30);
     QRectF caret;

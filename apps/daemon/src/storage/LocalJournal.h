@@ -54,6 +54,9 @@ struct StoredSession final {
     // UTC ISO time the conversation was archived, empty when it is not. Written only by
     // setSessionArchived; upsertSession leaves it as it is.
     QString archivedAt;
+    // The user's labels for this conversation, in the order they were added. Written only by
+    // setSessionTags; upsertSession leaves them as they are.
+    QStringList tags;
 };
 
 // One command a paired device sent this Mac through the relay that could change something
@@ -238,6 +241,8 @@ class LocalJournal final {
     [[nodiscard]] QList<StoredSession> sessions() const;
     // Records or clears (empty archivedAt) the time this generation was archived.
     bool setSessionArchived(const QString& sessionId, qint64 generation, const QString& archivedAt);
+    // Replaces the labels of this generation.
+    bool setSessionTags(const QString& sessionId, qint64 generation, const QStringList& tags);
     // The id of every session, or nullopt when they could not all be read. sessions() returns
     // an empty list on a failed read, which must not pass for every session being deleted.
     [[nodiscard]] std::optional<QSet<QString>> sessionIds() const;

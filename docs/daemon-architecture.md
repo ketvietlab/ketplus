@@ -93,6 +93,10 @@ core target. The local slice includes:
   `session.list`, feature `session.archive/1`). The idle pass deletes one
   conversation archived for more than 30 days per pass, through `session.delete`
   and its guards ([ADR 0100](decisions/0100-archived-conversation-retention.md));
+- conversation tags through `session.tags.set` (`tags` in the journal and in
+  `session.list`, feature `session.tags/1`): at most 8 labels of up to 64 bytes,
+  one per case-insensitive name
+  ([ADR 0107](decisions/0107-conversation-tags-in-the-daemon.md));
 - idle conversation forks through `session.fork` (ADR 0016): the provider forks
   its native thread (Codex `thread/fork`, Claude SDK `forkSession`), then the
   journal copies the source generation's transcript from one read snapshot in

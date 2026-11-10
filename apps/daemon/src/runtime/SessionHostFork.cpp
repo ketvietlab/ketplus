@@ -154,6 +154,8 @@ void SessionHost::storeFork(const QString& sourceId, const qint64 sourceGenerati
     // A fork is a new conversation: it is not archived and does not inherit the source's
     // archive time, which would delete it with the source (ADR 0100).
     fork.stored.archivedAt.clear();
+    // Its row starts without labels; the user tags the fork for what it becomes.
+    fork.stored.tags.clear();
     fork.stored.title = source->stored.title.isEmpty()
                             ? QStringLiteral("Fork")
                             : source->stored.title + QStringLiteral(" (fork)");
