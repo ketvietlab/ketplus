@@ -867,6 +867,7 @@ void AgentWorkspaceViewTest::localImageActivityRendersRetainedMediaAfterSourceCl
             {{"id", "image"},
              {"type", type},
              {key, path},
+             {"revisedPrompt", "A flat  storage gauge,\n2 px <strokes>"},
              {"result", QJsonObject{{"content", QJsonArray{block}}}}},
             true);
         QCOMPARE(entry.value("images").toList(),
@@ -897,6 +898,16 @@ void AgentWorkspaceViewTest::localImageActivityRendersRetainedMediaAfterSourceCl
         QVERIFY(!findVisualItem(row, "transcriptActivityTarget")->isVisible());
         QVERIFY(!findVisualItem(row, "transcriptActivityDetailText")->isVisible());
         QVERIFY(!findVisualItem(row, "copyActivityDetails")->isVisible());
+        // Only a generated image says what it was made from, on one escaped line under it.
+        auto* prompt = findVisualItem(view.quickView()->rootObject(), "imagePromptLine");
+        QVERIFY(prompt);
+        QCOMPARE(prompt->isVisible(), type == "imageGeneration");
+        if (type == "imageGeneration") {
+            QCOMPARE(entry.value("commandDescription").toString(),
+                     QStringLiteral("A flat storage gauge, 2 px <strokes>"));
+            QVERIFY(prompt->property("text").toString().endsWith(
+                QStringLiteral("A flat storage gauge, 2 px &lt;strokes&gt;")));
+        }
     }
     // A generation that returned no image has nothing to open.
     ketplus::AgentWorkspaceView empty;
@@ -910,6 +921,7 @@ void AgentWorkspaceViewTest::localImageActivityRendersRetainedMediaAfterSourceCl
                                             "transcriptActivityRow")) != nullptr);
     QVERIFY(!generated->property("hasDetails").toBool());
     QVERIFY(!generated->property("expanded").toBool());
+    QVERIFY(!findVisualItem(empty.quickView()->rootObject(), "imagePromptLine")->isVisible());
 }
 
 void AgentWorkspaceViewTest::normalizesTypedTranscriptCorpus() {
