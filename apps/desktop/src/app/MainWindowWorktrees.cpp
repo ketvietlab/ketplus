@@ -111,6 +111,8 @@ void MainWindow::setWorktreesWorkspaceVisible(const bool visible) {
         worktreeStateProbe_ = new WorktreeStateProbe(worktreesWorkspace_);
         connect(worktreeStateProbe_, &WorktreeStateProbe::stateKnown, worktreesWorkspace_,
                 &WorktreesWorkspacePage::setWorktreeDirty);
+        connect(worktreeStateProbe_, &WorktreeStateProbe::stateUnknown, worktreesWorkspace_,
+                &WorktreesWorkspacePage::clearWorktreeState);
         connect(worktreesWorkspace_, &WorktreesWorkspacePage::createRequested, this,
                 &MainWindow::createAgentWorktree);
         connect(worktreesWorkspace_, &WorktreesWorkspacePage::pruneRequested, this, [this] {

@@ -154,6 +154,11 @@ class AgentWorkspaceShellTest final : public QObject {
                               QStringLiteral("Uncommitted changes"), QStringLiteral("Clean")}));
         page.setWorktreeDirty(worktrees[1].path, false);
         QCOMPARE(states().at(1), QStringLiteral("Clean"));
+        // A failed read leaves no state rather than the old one.
+        page.clearWorktreeState(worktrees[1].path);
+        QCOMPARE(states(),
+                 (QStringList{QStringLiteral("Uncommitted changes"), QStringLiteral("Clean")}));
+        page.setWorktreeDirty(worktrees[1].path, false);
 
         // The probe reads each worktree with one read-only `git status`.
         QTemporaryDir cleanRepo;
@@ -167,14 +172,38 @@ class AgentWorkspaceShellTest final : public QObject {
         untracked.close();
         ketplus::WorktreeStateProbe probe;
         QSignalSpy known(&probe, &ketplus::WorktreeStateProbe::stateKnown);
-        probe.probe({cleanRepo.path(), dirtyRepo.path(), QStringLiteral("/nonexistent/path")});
-        probe.probe({cleanRepo.path()}); // already running: not started twice
+        QSignalSpy unknown(&probe, &ketplus::WorktreeStateProbe::stateUnknown);
+        QTemporaryDir notARepo;
+        probe.probe({cleanRepo.path(), dirtyRepo.path(), QStringLiteral("/nonexistent/path"),
+                     notARepo.path()});
+        probe.probe({cleanRepo.path()}); // already running: not started twice, read again later
         QTRY_COMPARE_WITH_TIMEOUT(known.count(), 2, 10000);
+        // A read that fails says so, so an earlier answer does not stay on screen.
+        QTRY_COMPARE_WITH_TIMEOUT(unknown.count(), 2, 10000);
+        QStringList unread;
+        for (const auto& arguments : unknown)
+            unread.append(arguments.at(0).toString());
+        QVERIFY(unread.contains(QStringLiteral("/nonexistent/path")));
+        QVERIFY(unread.contains(notARepo.path()));
         QHash<QString, bool> probed;
         for (const auto& arguments : known)
             probed.insert(arguments.at(0).toString(), arguments.at(1).toBool());
         QCOMPARE(probed.value(cleanRepo.path(), true), false);
         QCOMPARE(probed.value(dirtyRepo.path(), false), true);
+        // The request that arrived mid-read is owed one more read: a change made inside the
+        // throttle window shows without another refresh.
+        QFile late(cleanRepo.filePath(QStringLiteral("late.txt")));
+        QVERIFY(late.open(QIODevice::WriteOnly) && late.write("x") == 1);
+        late.close();
+        QTRY_COMPARE_WITH_TIMEOUT(known.count(), 3, 10000);
+        QCOMPARE(known.at(2).at(0).toString(), cleanRepo.path());
+        QCOMPARE(known.at(2).at(1).toBool(), true);
+        // A request inside the window is deferred, not dropped.
+        probe.probe({dirtyRepo.path()});
+        probe.probe({dirtyRepo.path()});
+        QTRY_COMPARE_WITH_TIMEOUT(known.count(), 4, 10000);
+        QTest::qWait(200);
+        QCOMPARE(known.count(), 4);
         if (const auto dir = qEnvironmentVariable("KETPLUS_WORKTREES_CAPTURE"); !dir.isEmpty()) {
             for (const auto mode :
                  {ketplus::ThemeManager::Mode::Light, ketplus::ThemeManager::Mode::Dark}) {

@@ -174,6 +174,11 @@ void WorktreesWorkspacePage::setWorktreeDirty(const QString& path, const bool di
     rebuild();
 }
 
+void WorktreesWorkspacePage::clearWorktreeState(const QString& path) {
+    if (dirtyPaths_.remove(normalizedPath(path)) > 0)
+        rebuild();
+}
+
 void WorktreesWorkspacePage::setPruneAvailable(const bool available) {
     pruneAvailable_ = available;
     if (pruneButton_ == nullptr)

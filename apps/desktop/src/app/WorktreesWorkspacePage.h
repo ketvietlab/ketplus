@@ -25,6 +25,8 @@ class WorktreesWorkspacePage final : public QWidget {
                       const QHash<QString, int>& conversationCounts, bool activeDirty);
     // A linked worktree's own Git state, once it has been read.
     void setWorktreeDirty(const QString& path, bool dirty);
+    // Its Git state could not be read: show none rather than an old answer.
+    void clearWorktreeState(const QString& path);
     void setPruneAvailable(bool available);
     void setPruning(bool pruning);
     void applyPalette(const ThemePalette& palette, int zoomPercent = 100);
