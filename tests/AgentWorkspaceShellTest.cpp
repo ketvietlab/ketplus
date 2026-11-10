@@ -7,6 +7,7 @@
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/CodexAppServer.h"
+#include "agent/ConversationChangesPane.h"
 #include "agent/WorkReportPane.h"
 #include "app/AgentWorktreeCreator.h"
 #include "app/AgentWorktreeDialog.h"
@@ -265,6 +266,51 @@ class AgentWorkspaceShellTest final : public QObject {
         QVERIFY(pane->report().isEmpty());
         emit manager->workReportChanged(agent->activePath(), pane->conversationId(), report, {});
         QCOMPARE(pane->report().value("version").toInt(), 1);
+    }
+    // The mock's header Changes opens the details pane's Changes tab; while the pane is open,
+    // its Open content menu replaces the header's openers, and Hide content pane keeps the tabs.
+    void headerChangesOpensTheDetailsPaneChangesTab() {
+        QTemporaryDir settings;
+        QTemporaryDir workspace;
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(workspace.path());
+        window.resize(1440, 900);
+        window.show();
+        window.findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"))->click();
+        auto* agent = window.findChild<ketplus::AgentWorkspaceView*>();
+        QVERIFY(agent);
+        QVERIFY(!agent->detailsOpen());
+        QVERIFY(QMetaObject::invokeMethod(agent, "requestChanges"));
+        auto* tabs = window.findChild<QTabWidget*>(QStringLiteral("agentDetailTabs"));
+        QVERIFY(tabs);
+        QVERIFY(qobject_cast<ketplus::ConversationChangesPane*>(tabs->currentWidget()));
+        QCOMPARE(tabs->tabText(tabs->currentIndex()), QStringLiteral("Changes"));
+        QTRY_VERIFY(tabs->isVisible());
+        QVERIFY(agent->detailsOpen());
+        // Asked again, the same tab is selected.
+        emit agent->workReportRequested();
+        QVERIFY(QMetaObject::invokeMethod(agent, "requestChanges"));
+        int panes = 0;
+        for (int index = 0; index < tabs->count(); ++index)
+            panes +=
+                qobject_cast<ketplus::ConversationChangesPane*>(tabs->widget(index)) != nullptr;
+        QCOMPARE(panes, 1);
+        QVERIFY(qobject_cast<ketplus::ConversationChangesPane*>(tabs->currentWidget()));
+        QVERIFY(window.findChild<QAbstractButton*>(QStringLiteral("agentDetailOpenContent")));
+        QVERIFY(window.findChild<QAbstractButton*>(QStringLiteral("agentDetailOpenTabs")));
+        auto* hide = window.findChild<QAbstractButton*>(QStringLiteral("agentDetailHidePane"));
+        QVERIFY(hide);
+        const int count = tabs->count();
+        hide->click();
+        QTRY_VERIFY(!tabs->isVisible());
+        QVERIFY(!agent->detailsOpen());
+        QCOMPARE(tabs->count(), count);
+        QVERIFY(QMetaObject::invokeMethod(agent, "requestChanges"));
+        QTRY_VERIFY(tabs->isVisible());
+        QVERIFY(agent->detailsOpen());
     }
     void agentDetailEditorHasFindAndGoToLine() {
         QTemporaryDir settings;

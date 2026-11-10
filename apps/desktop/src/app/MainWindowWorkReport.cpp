@@ -2,6 +2,7 @@
 
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
+#include "agent/ConversationChangesPane.h"
 #include "agent/WorkReportPane.h"
 
 #include <QTabWidget>
@@ -18,11 +19,22 @@ WorkReportPane* workReportPane(QTabWidget* tabs) {
     return nullptr;
 }
 
+ConversationChangesPane* changesPane(QTabWidget* tabs) {
+    if (tabs == nullptr)
+        return nullptr;
+    for (int index = 0; index < tabs->count(); ++index)
+        if (auto* pane = qobject_cast<ConversationChangesPane*>(tabs->widget(index)))
+            return pane;
+    return nullptr;
+}
+
 } // namespace
 
 void MainWindow::connectAgentWorkReport() {
     connect(agentWorkspace_, &AgentWorkspaceView::workReportRequested, this,
             &MainWindow::openAgentWorkReportTab);
+    connect(agentWorkspace_, &AgentWorkspaceView::changesRequested, this,
+            &MainWindow::openAgentChangesTab);
     // The pane takes only its own conversation's reports, read or live.
     connect(agentManager_, &AgentSessionManager::workReportChanged, this,
             [this](const QString&, const QString& conversationId, const QVariantMap& report,
@@ -64,6 +76,39 @@ void MainWindow::refreshAgentWorkReport(const bool force) {
         return;
     pane->showConversation(conversation);
     agentManager_->readWorkReport(path);
+}
+
+// The mock's header Changes opens the details pane's Changes tab, not Source Control.
+void MainWindow::openAgentChangesTab() {
+    if (!agentWorkspaceMode_)
+        return;
+    if (compactConversationWindow_)
+        setCompactConversationWindow(false);
+    auto* tabs = ensureAgentDetailTabs();
+    auto* pane = changesPane(tabs);
+    if (pane == nullptr) {
+        pane = new ConversationChangesPane(tabs);
+        connect(pane, &ConversationChangesPane::fileDiffRequested, this,
+                [this](const QString& path) { openTranscriptFile(path, true); });
+        connect(pane, &ConversationChangesPane::sourceControlRequested, this,
+                [this] { setSourceControlVisible(true); });
+        const int index = tabs->addTab(pane, tr("Changes"));
+        tabs->setTabToolTip(index, tr("Uncommitted changes of the selected worktree"));
+    }
+    refreshAgentChanges();
+    tabs->setCurrentWidget(pane);
+    updateAgentDetailTabs();
+}
+
+void MainWindow::refreshAgentChanges() {
+    auto* pane = changesPane(agentDetailTabs_);
+    if (pane == nullptr)
+        return;
+    QStringList paths;
+    for (const auto& file : gitSnapshot_.files)
+        if (!file.ignored)
+            paths.append(file.path);
+    pane->setChanges(gitSnapshot_.repositoryRoot, gitSnapshot_.branch, paths);
 }
 
 } // namespace ketplus

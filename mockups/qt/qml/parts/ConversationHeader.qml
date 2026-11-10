@@ -320,13 +320,12 @@ Rectangle {
             checked: header.reviewer === text
             onTriggered: header.chooseReviewer(text)
         }
+        // As the app (ADR 0067): Codex cannot be held read only yet, so it cannot review.
         KetMenuItem {
             text: "Codex · GPT-5.6 Sol"
-            description: "Starts a reviewer in this worktree, read only"
+            description: "Cannot review yet: Codex cannot be held read only"
             iconName: "bot"
-            checkable: true
-            checked: header.reviewer === text
-            onTriggered: header.chooseReviewer(text)
+            enabled: false
         }
         KetMenuSection { text: "Existing conversation" }
         // Appended in order after the section: a Repeater inside a Menu misplaces its items.

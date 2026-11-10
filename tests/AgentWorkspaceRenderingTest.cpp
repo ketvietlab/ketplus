@@ -1342,11 +1342,22 @@ void AgentWorkspaceViewTest::composerPlaceholderTracksCaret() {
         QVERIFY2(action->x() > previousX, name);
         previousX = action->x();
     }
+    // As the mock: Changes opens the details pane's Changes tab, not Source Control.
     QSignalSpy navigated(&view, &ketplus::AgentWorkspaceView::productNavigationRequested);
+    QSignalSpy changes(&view, &ketplus::AgentWorkspaceView::changesRequested);
     QVERIFY(
         QMetaObject::invokeMethod(root->findChild<QQuickItem*>("headerChangesButton"), "clicked"));
-    QCOMPARE(navigated.count(), 1);
-    QCOMPARE(navigated.first().first().toString(), QStringLiteral("source-control"));
+    QCOMPARE(changes.count(), 1);
+    QCOMPARE(navigated.count(), 0);
+    // With the details pane open, its Open content menu replaces the three openers.
+    view.setDetailsOpen(true);
+    for (const char* name :
+         {"headerChangesButton", "headerTerminalButton", "headerWorkReportButton"})
+        QTRY_VERIFY2(!root->findChild<QQuickItem*>(name)->isVisible(), name);
+    QVERIFY(root->findChild<QQuickItem*>("headerAtlasButton") == nullptr ||
+            root->findChild<QQuickItem*>("headerAtlasButton")->isVisible());
+    view.setDetailsOpen(false);
+    QTRY_VERIFY(root->findChild<QQuickItem*>("headerChangesButton")->isVisible());
     QTRY_VERIFY(placeholder->isVisible());
     QTest::qWait(30);
     QRectF caret;
