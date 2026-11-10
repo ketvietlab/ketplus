@@ -53,10 +53,12 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   unreviewed UI stack; automatic reviewer assignment is not provided by this layer.
 
 - Pro sidebar uses kit navigation, repository groups, two-line conversation rows,
-  tag filtering and update pills. Storage pressure warnings consume the local
-  daemon's existing size-status contract. Tags come from the daemon catalog (ADR 0107);
-  waiting-for-reply renders only when metadata supplies it; automatic intent classification/reviewer orchestration
-  are separate behaviour work. Native acceptance remains deferred.
+  the mock's field-styled Quick search, a machine header with its chevron, and update
+  pills. A tag chosen in the conversation header filters the sidebar and shows as the
+  mock's "Tagged <label>" chip, which clears it. Storage pressure warnings consume the
+  local daemon's existing size-status contract. Tags come from the daemon catalog
+  (ADR 0107, 0113), and "Waiting for you" comes from the daemon (ADR 0112). It matches
+  `workspace` and `workspace/storage-warning` at zoom 1 and 1.25 (#158).
 
 - Lite shell implementation now connects the Qt mock activity rail to Explorer,
   Search, Source Control and Settings. First use opens a folder welcome surface;
