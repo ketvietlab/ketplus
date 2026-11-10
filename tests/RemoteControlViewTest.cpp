@@ -4,8 +4,11 @@
 #include "remote/RemoteActivitySection.h"
 #include "remote/RemoteConnectionsIntro.h"
 #include "ui/InterfaceZoom.h"
+#include "ui/Theme.h"
 
 #include "KetAppearance.h"
+#include "KetDialog.h"
+#include "KetRecipes.h"
 
 #include <QAccessible>
 #include <QJsonArray>
@@ -16,6 +19,7 @@
 #include <QDateTime>
 #include <QDialog>
 #include <QDir>
+#include <QFontInfo>
 #include <QGridLayout>
 #include <QJsonObject>
 #include <QLabel>
@@ -27,6 +31,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
+#include <QVBoxLayout>
 
 #include <algorithm>
 
@@ -64,6 +69,11 @@ class RemoteControlViewTest final : public QObject {
 
 // The view reads the account, host pins and daemon socket under the daemon's data directory.
 // A temporary one keeps a signed-in Mac's own account and daemon out of these tests.
+namespace {
+// The application's theme, as main() has it: the palette and stylesheet follow ket::Appearance.
+ThemeManager* appTheme = nullptr;
+} // namespace
+
 void RemoteControlViewTest::initTestCase() {
     static QTemporaryDir data;
     QVERIFY(data.isValid());
@@ -71,9 +81,28 @@ void RemoteControlViewTest::initTestCase() {
     qputenv("KETPLUS_DAEMON_SOCKET", data.filePath(QStringLiteral("no-daemon")).toUtf8());
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, data.path());
+    // Before any widget: a view built first keeps the palette it was polished with.
+    appTheme = new ThemeManager(*qApp, qApp);
 }
 
 namespace {
+// KETPLUS_CONNECTIONS_CAPTURE=<dir> also saves each dialog over the window in both themes,
+// for the side by side with `KetPlusMock --screen=connections --open=pair|linux|signin`.
+void captureWindow(QWidget& view, const QString& name) {
+    const auto dir = qEnvironmentVariable("KETPLUS_CONNECTIONS_CAPTURE");
+    if (dir.isEmpty() || appTheme == nullptr)
+        return;
+    for (const auto mode : {ThemeManager::Mode::Light, ThemeManager::Mode::Dark}) {
+        appTheme->previewMode(mode);
+        QTest::qWait(50);
+        view.window()->grab().save(QDir(dir).filePath(name + (mode == ThemeManager::Mode::Light
+                                                                  ? QStringLiteral("-light.png")
+                                                                  : QStringLiteral("-dark.png"))));
+    }
+    appTheme->cancelPreview();
+    QTest::qWait(50);
+}
+
 QJsonObject auditEntry(const QString& id, const QString& kind, const QString& device,
                        const QString& result, const QDateTime& at, const QString& session = {},
                        const bool exists = true, const QString& title = {}) {
@@ -381,12 +410,15 @@ void RemoteControlViewTest::linuxPairingStaysReachableWithoutThePhoneRelay() {
     // A widget added to a shown layout becomes visible on the next event loop pass.
     QTRY_VERIFY(connectButton() && connectButton()->isVisible());
     QTest::mouseClick(connectButton(), Qt::LeftButton);
-    QDialog* pairing = nullptr;
-    for (auto* dialog : linux->findChildren<QDialog*>())
-        if (dialog->windowTitle() == QStringLiteral("Pair a Linux machine"))
-            pairing = dialog;
-    QVERIFY(pairing && pairing->isVisible());
-    pairing->close();
+    // The card covers the window it opened in, as the mock's modal does (#422).
+    auto* pairing = view.findChild<ket::Dialog*>(QStringLiteral("linuxPairingDialog"));
+    QVERIFY(pairing && pairing->isOpen());
+    QCOMPARE(pairing->parentWidget(), view.window());
+    QCOMPARE(pairing->title(), QStringLiteral("Pair a Linux machine"));
+    QCOMPARE(pairing->card()->width(), 470);
+    captureWindow(view, QStringLiteral("linux-pairing"));
+    pairing->reject();
+    QTRY_VERIFY(!view.findChild<ket::Dialog*>(QStringLiteral("linuxPairingDialog")));
 
     // Linked but offline: phones wait for the relay, Linux pairing does not.
     view.applyStatus({{QStringLiteral("configured"), true},
@@ -542,26 +574,59 @@ void RemoteControlViewTest::signedOutIntroFollowsTheMockAtEveryWidth() {
 }
 
 void RemoteControlViewTest::signInFormIsAnExplicitSecondaryFlow() {
-    RemoteControlView view;
-    view.resize(1100, 720);
-    view.show();
+    // Inside a window, as in the app: the dialogs then belong to the window, not the view.
+    QWidget window;
+    auto* windowLayout = new QVBoxLayout(&window);
+    windowLayout->setContentsMargins(0, 0, 0, 0);
+    auto* hosted = new RemoteControlView(&window);
+    windowLayout->addWidget(hosted);
+    RemoteControlView& view = *hosted;
+    window.resize(1100, 720);
+    window.show();
     QTest::qWait(1);
 
     auto* signInPrompt =
         view.findChild<QAbstractButton*>(QStringLiteral("remoteSignInPromptButton"));
-    auto* signIn = view.findChild<QAbstractButton*>(QStringLiteral("remoteSignInButton"));
-    auto* back = view.findChild<QAbstractButton*>(QStringLiteral("remoteSignInBackButton"));
-    auto* dialog = view.findChild<QDialog*>(QStringLiteral("remoteSignInDialog"));
+    auto* signIn = window.findChild<QAbstractButton*>(QStringLiteral("remoteSignInButton"));
+    auto* dialog = window.findChild<ket::Dialog*>(QStringLiteral("remoteSignInDialog"));
     QVERIFY(signInPrompt);
     QVERIFY(signIn);
-    QVERIFY(back);
     QVERIFY(dialog);
+    QCOMPARE(dialog->parentWidget(), &window);
+    // The mock's sign-in is a plain dialog: the card's close, the action in its footer.
+    QAbstractButton* back = nullptr;
+    for (auto* button : dialog->card()->findChildren<QAbstractButton*>())
+        if (button->accessibleName() == QStringLiteral("Close"))
+            back = button;
+    QVERIFY(back && !back->icon().isNull());
+    QVERIFY(!dialog->body()->isAncestorOf(signIn));
     QVERIFY(!signIn->isVisible());
 
     QTest::mouseClick(signInPrompt, Qt::LeftButton);
     QVERIFY(signIn->isVisible());
+    QVERIFY(dialog->isOpen() && !dialog->isChromeless());
     QCOMPARE(dialog->focusWidget(), signIn);
-    QCOMPARE(dialog->width(), 500);
+    QCOMPARE(dialog->card()->width(), 500);
+    // The view's stylesheet reaches the card; the kit's title keeps its own type.
+    QLabel* signInTitle = nullptr;
+    for (auto* candidate : dialog->card()->findChildren<QLabel*>())
+        if (candidate->text() == QStringLiteral("Sign in"))
+            signInTitle = candidate;
+    QVERIFY(signInTitle);
+    const auto recipe = ket::dialogRecipe(ket::Appearance::instance().theme());
+    QCOMPARE(QFontInfo(signInTitle->font()).pixelSize(),
+             qRound(ket::Appearance::instance().scaled(recipe.titlePixels)));
+    QCOMPARE(int(signInTitle->font().weight()), int(recipe.titleWeight));
+    captureWindow(view, QStringLiteral("sign-in"));
+    // The page and its cards change theme together, both ways.
+    appTheme->previewMode(ThemeManager::Mode::Light);
+    const QString lightSheet = view.styleSheet();
+    appTheme->previewMode(ThemeManager::Mode::Dark);
+    QVERIFY(view.styleSheet() != lightSheet);
+    QVERIFY(dialog->body()->styleSheet().startsWith(view.styleSheet()));
+    appTheme->previewMode(ThemeManager::Mode::Light);
+    QCOMPARE(view.styleSheet(), lightSheet);
+    appTheme->cancelPreview();
     QCOMPARE(signIn->text(), QStringLiteral("Continue in browser"));
     // The password is typed only on the tenant's own sign-in page, never into KetPlus.
     QVERIFY(dialog->findChildren<QLineEdit*>().isEmpty());
@@ -582,7 +647,7 @@ void RemoteControlViewTest::demoSignInOpensAddDeviceQr() {
     auto* prompt = view.findChild<QAbstractButton*>(QStringLiteral("remoteSignInPromptButton"));
     auto* signIn = view.findChild<QAbstractButton*>(QStringLiteral("remoteSignInButton"));
     auto* add = view.findChild<QAbstractButton*>(QStringLiteral("remotePairButton"));
-    auto* dialog = view.findChild<QDialog*>(QStringLiteral("remotePairingDialog"));
+    auto* dialog = view.findChild<ket::Dialog*>(QStringLiteral("remotePairingDialog"));
     auto* qr = view.findChild<QLabel*>(QStringLiteral("remotePairingQr"));
     auto* close = view.findChild<QAbstractButton*>(QStringLiteral("remotePairingCloseButton"));
     auto* pairTitle = view.findChild<QLabel*>(QStringLiteral("remotePairingState"));
@@ -594,6 +659,8 @@ void RemoteControlViewTest::demoSignInOpensAddDeviceQr() {
     auto* pairAction = view.findChild<QAbstractButton*>(QStringLiteral("remoteApproveButton"));
     auto* pairCancel =
         view.findChild<QAbstractButton*>(QStringLiteral("remotePairingCancelButton"));
+    // The page's own close draws a glyph (the icon name was wrong, so it was blank).
+    QVERIFY(close && !close->icon().isNull());
     QVERIFY(prompt && signIn && add && dialog && qr && close && pairTitle && pairDialogTitle &&
             pairHelp && pairTimer && pairSteps && pairCode && pairAction && pairCancel);
     QCOMPARE(add->text(), QStringLiteral("Add"));
@@ -637,23 +704,24 @@ void RemoteControlViewTest::demoSignInOpensAddDeviceQr() {
     if (const auto dir = qEnvironmentVariable("KETPLUS_CONNECTIONS_CAPTURE"); !dir.isEmpty()) {
         const QSize size = view.size();
         view.resize(1280 - 248, 820);
-        for (const auto mode : {ket::Appearance::Mode::Light, ket::Appearance::Mode::Dark}) {
-            ket::Appearance::instance().setMode(mode);
+        for (const auto mode : {ThemeManager::Mode::Light, ThemeManager::Mode::Dark}) {
+            appTheme->previewMode(mode);
             QTest::qWait(50);
             // The whole page, not the scrolled viewport.
             auto* page = view.findChild<QScrollArea*>()->widget();
-            page->grab().save(QDir(dir).filePath(mode == ket::Appearance::Mode::Light
+            page->grab().save(QDir(dir).filePath(mode == ThemeManager::Mode::Light
                                                      ? QStringLiteral("connections-light.png")
                                                      : QStringLiteral("connections-dark.png")));
         }
-        ket::Appearance::instance().setMode(ket::Appearance::Mode::Light);
+        appTheme->cancelPreview();
         view.resize(size);
     }
 
     chooseFirstAdd();
     QTest::mouseClick(add, Qt::LeftButton);
-    QVERIFY(dialog->isVisible());
-    QCOMPARE(dialog->width(), 500);
+    QVERIFY(dialog->isOpen() && dialog->isChromeless());
+    QCOMPARE(dialog->card()->width(), 500);
+    captureWindow(view, QStringLiteral("pairing"));
     QVERIFY(!qr->pixmap().isNull());
     QCOMPARE(pairTitle->text(), QStringLiteral("Take your workspace with you."));
     QCOMPARE(pairHelp->text(), QStringLiteral("In KetPlus on your phone, choose Scan QR code."));

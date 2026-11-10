@@ -1,6 +1,7 @@
 #include "remote/LinuxMachinesSection.h"
 #include "KetAppearance.h"
 #include "KetButton.h"
+#include "KetDialog.h"
 #include "KetIcons.h"
 #include "KetTextField.h"
 #include "KetTokens.h"
@@ -10,8 +11,6 @@
 
 #include <QCheckBox>
 #include <QDesktopServices>
-#include <QDialog>
-#include <QDialogButtonBox>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QJsonArray>
@@ -217,43 +216,48 @@ void LinuxMachinesSection::signIn() {
     });
 }
 
+LinuxMachinesSection::~LinuxMachinesSection() { delete pairingDialog_.data(); }
+
 void LinuxMachinesSection::startPairing() {
-    auto* dialog = new QDialog(this);
-    dialog->setAttribute(Qt::WA_DeleteOnClose);
-    dialog->setWindowTitle(tr("Pair a Linux machine"));
-    dialog->setModal(true);
-    dialog->setMinimumWidth(470);
-    auto* layout = new QVBoxLayout(dialog);
+    if (pairingDialog_)
+        return;
+    // An in-window card like the other dialogs (#422); it goes once it finishes.
+    auto* dialog = new ket::Dialog(tr("Pair a Linux machine"), this);
+    dialog->setObjectName(QStringLiteral("linuxPairingDialog"));
+    pairingDialog_ = dialog;
+    dialog->setCardWidth(470);
+    connect(dialog, &ket::Dialog::finished, dialog, &QObject::deleteLater);
+    auto* body = new QWidget;
+    auto* layout = new QVBoxLayout(body);
+    layout->setContentsMargins(QMargins());
     auto* instructions = new QLabel(tr("Run ketplusctl pairing create on the Linux machine, "
                                        "then paste the full ketplus:// pairing link."),
-                                    dialog);
+                                    body);
     instructions->setWordWrap(true);
     layout->addWidget(instructions);
-    auto* input = new ket::TextField(dialog);
+    auto* input = new ket::TextField(body);
     input->setObjectName(QStringLiteral("linuxPairingLink"));
     input->setAccessibleName(tr("One-time Linux pairing link"));
     input->setEchoMode(QLineEdit::Password);
     input->setPlaceholderText(QStringLiteral("ketplus://pair?ticket=…&secret=…"));
     layout->addWidget(input);
-    auto* feedback = new QLabel(dialog);
+    auto* feedback = new QLabel(body);
     feedback->setObjectName(QStringLiteral("linuxPairingFeedback"));
     feedback->setWordWrap(true);
     layout->addWidget(feedback);
-    auto* match = new QCheckBox(tr("I checked the identity on both machines."), dialog);
+    auto* match = new QCheckBox(tr("I checked the identity on both machines."), body);
     match->hide();
     layout->addWidget(match);
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, dialog);
-    auto* check = buttons->addButton(tr("Check link"), QDialogButtonBox::ActionRole);
-    auto* approve = buttons->addButton(tr("Check approval"), QDialogButtonBox::AcceptRole);
+    dialog->setBody(body);
+    auto* cancel = dialog->addButton(tr("Cancel"), ket::ButtonVariant::Ghost);
+    auto* check = dialog->addButton(tr("Check link"));
+    auto* approve = dialog->addButton(tr("Check approval"), ket::ButtonVariant::Primary);
     approve->setEnabled(false);
-    layout->addWidget(buttons);
     auto ticketId = std::make_shared<QString>();
-    const QPointer<QDialog> dialogGuard(dialog);
+    const QPointer<ket::Dialog> dialogGuard(dialog);
     connect(dialog, &QObject::destroyed, this, [this] { client_->cancelPairing(); });
-    connect(buttons, &QDialogButtonBox::rejected, dialog, [this, dialog] {
-        client_->cancelPairing();
-        dialog->reject();
-    });
+    connect(dialog, &ket::Dialog::rejected, this, [this] { client_->cancelPairing(); });
+    connect(cancel, &QAbstractButton::clicked, dialog, &ket::Dialog::reject);
     connect(match, &QCheckBox::toggled, approve, &QAbstractButton::setEnabled);
     connect(
         check, &QAbstractButton::clicked, dialog,
@@ -327,7 +331,7 @@ void LinuxMachinesSection::startPairing() {
                     refreshMachines();
                 });
             });
-    dialog->show();
+    dialog->open();
     input->setFocus();
 }
 

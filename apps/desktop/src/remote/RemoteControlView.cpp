@@ -1,8 +1,10 @@
 #include "remote/RemoteControlView.h"
 #include "KetAppearance.h"
 #include "KetButton.h"
+#include "KetDialog.h"
 #include "KetIcons.h"
 #include "KetProfile.h"
+#include "KetRecipes.h"
 #include "KetTextField.h"
 #include "KetTokens.h"
 #include "ui/ChromeGeometry.h"
@@ -50,7 +52,6 @@ constexpr auto monitorIcon = "monitor";
 constexpr auto phoneIcon = "smartphone";
 constexpr auto shieldIcon = "shield";
 constexpr auto unplugIcon = "unplug";
-constexpr auto logInIcon = "log-in";
 constexpr auto plusIcon = "plus";
 constexpr auto logOutIcon = "log-out";
 
@@ -112,7 +113,7 @@ DialogChoice runDecisionDialog(QWidget* parent, const QString& objectName, const
     chrome_geometry::margins(headerLayout, 22, 14, 14, 14);
     chrome_geometry::spacing(headerLayout, 12);
     headerLayout->addWidget(label(title, "modalTitle"), 1);
-    auto* close = new ket::IconButton(ket::Icons::icon(u"x"), QStringLiteral("Close"), header);
+    auto* close = new ket::IconButton(ket::Icons::icon(u"close"), QStringLiteral("Close"), header);
     close->setProperty("remoteTertiary", true);
     close->setAccessibleName(QStringLiteral("Close"));
     chrome_geometry::fixedSize(close, 30, 30);
@@ -280,7 +281,7 @@ QLabel[remoteRole="accountName"] { color:@text@; font-size:{{body}}px; font-weig
 QLabel[remoteRole="accountMeta"] { color:@muted@; font-size:{{caption}}px; }
 QLabel[remoteRole="trustNote"] { color:@muted@; font-size:{{caption}}px; }
 QLabel[remoteRole="feature"] { color:@secondary@; font-size:{{body}}px; }
-QDialog#remotePairingDialog, QDialog#remoteSignInDialog, QDialog[remoteRole="modal"] { background:@panel@; }
+QDialog[remoteRole="modal"] { background:@panel@; }
 QFrame[remoteRole="modalHeader"] { border:0; border-bottom:1px solid @border@; background:@panel@; }
 QFrame[remoteRole="modalFooter"] { border:0; border-top:1px solid @border@; background:@raised@; }
 QWidget[remoteRole="modalBody"] { background:@panel@; }
@@ -365,15 +366,19 @@ RemoteControlView::RemoteControlView(QWidget* parent)
     root->addWidget(pages_);
     pages_->addWidget(createControlPage());
     pages_->setCurrentIndex(0);
-    signInDialog_ = new QDialog(this);
+    // The mock's sign-in dialog: the card's own header and close, the action in its footer.
+    signInDialog_ = new ket::Dialog(QStringLiteral("Sign in"), this);
     signInDialog_->setObjectName(QStringLiteral("remoteSignInDialog"));
-    signInDialog_->setWindowTitle(QStringLiteral("Sign in"));
-    signInDialog_->setWindowModality(Qt::WindowModal);
-    chrome_geometry::fixedWidth(signInDialog_, 500);
-    auto* signInDialogLayout = new QVBoxLayout(signInDialog_);
-    chrome_geometry::margins(signInDialogLayout, 0, 0, 0, 0);
-    signInDialogLayout->addWidget(createSignInPage());
-    connect(signInDialog_, &QDialog::rejected, this, &RemoteControlView::cancelSignIn);
+    signInDialog_->setCardWidth(500);
+    signInDialog_->setBody(createSignInPage());
+    signInButton_ = signInDialog_->addButton({}, ket::ButtonVariant::Primary);
+    signInButton_->setObjectName(QStringLiteral("remoteSignInButton"));
+    signInButton_->setIcon(ket::Icons::icon(u"log-in"));
+    resetSignInButton();
+    connect(signInButton_, &QAbstractButton::clicked, this, &RemoteControlView::signIn);
+    connect(signInDialog_, &ket::Dialog::rejected, this, &RemoteControlView::cancelSignIn);
+    connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this,
+            &RemoteControlView::applyDesignSystemStyle);
     applyDesignSystemStyle();
 
     refreshTimer_->setInterval(2'000);
@@ -387,14 +392,39 @@ RemoteControlView::RemoteControlView(QWidget* parent)
     refreshTimer_->start();
 }
 
+RemoteControlView::~RemoteControlView() {
+    delete signInDialog_.data();
+    delete pairingDialog_.data();
+}
+
 void RemoteControlView::applyDesignSystemStyle() {
     if (applyingDesignSystemStyle_)
         return;
     applyingDesignSystemStyle_ = true;
     const int zoomPercent = InterfaceZoomMetrics::current();
-    const bool dark = palette().color(QPalette::Window).lightness() < 128;
+    // The kit's theme, as the dialog cards read it: a palette under this view's own sheet
+    // can lag a theme change and leave the page and its cards in different themes.
+    const bool dark = ket::Appearance::instance().dark();
     const KdsPalette colors = kdsPalette(dark);
-    setStyleSheet(remoteStyle(colors, zoomPercent));
+    const QString sheet = remoteStyle(colors, zoomPercent);
+    setStyleSheet(sheet);
+    // The card draws the dialog's background and rounding; the pages' bands sit inside it.
+    const int radius = qRound(ket::Appearance::instance().scaled(
+        ket::dialogRecipe(ket::Appearance::instance().theme()).radius));
+    const QString cardSheet =
+        sheet +
+        QStringLiteral("QWidget[remoteRole=\"dialogPage\"], QFrame[remoteRole=\"modalHeader\"],"
+                       " QWidget[remoteRole=\"modalBody\"] { background: transparent; }"
+                       " QFrame[remoteRole=\"modalFooter\"] { border-bottom-left-radius: %1px;"
+                       " border-bottom-right-radius: %1px; }")
+            .arg(radius);
+    // On the bodies only: a sheet on the dialog would repolish the kit's own header and
+    // drop the title's type.
+    for (ket::Dialog* dialog : {signInDialog_, pairingDialog_})
+        if (dialog != nullptr && dialog->body() != nullptr) {
+            dialog->body()->setStyleSheet(cardSheet);
+            chrome_geometry::apply(dialog, zoomPercent);
+        }
     if (intro_)
         intro_->setSceneColors({QColor(colors.accentSubtle), QColor(colors.page),
                                 QColor(colors.border), QColor(colors.strong), QColor(colors.panel),
@@ -411,55 +441,20 @@ void RemoteControlView::changeEvent(QEvent* event) {
 }
 
 QWidget* RemoteControlView::createSignInPage() {
-    auto* page = new QWidget;
-    page->setProperty("remoteRole", QStringLiteral("dialogPage"));
-    auto* root = new QVBoxLayout(page);
-    chrome_geometry::margins(root, 0, 0, 0, 0);
-    chrome_geometry::spacing(root, 0);
-
-    auto* header = new QFrame(page);
-    header->setProperty("remoteRole", QStringLiteral("modalHeader"));
-    auto* headerLayout = new QHBoxLayout(header);
-    chrome_geometry::margins(headerLayout, 22, 14, 14, 14);
-    chrome_geometry::spacing(headerLayout, 12);
-    headerLayout->addWidget(label(QStringLiteral("Sign in"), "modalTitle"), 1);
-    auto* back = new ket::IconButton(ket::Icons::icon(u"x"), QStringLiteral("Close"), header);
-    back->setObjectName(QStringLiteral("remoteSignInBackButton"));
-    back->setProperty("remoteTertiary", true);
-    back->setAccessibleName(QStringLiteral("Close"));
-    chrome_geometry::fixedSize(back, 30, 30);
-    connect(back, &QAbstractButton::clicked, this, [this] { signInDialog_->reject(); });
-    headerLayout->addWidget(back);
-    root->addWidget(header);
-
-    auto* body = new QWidget(page);
-    body->setProperty("remoteRole", QStringLiteral("modalBody"));
-    auto* bodyLayout = new QVBoxLayout(body);
-    chrome_geometry::margins(bodyLayout, 22, 21, 22, 22);
-    chrome_geometry::spacing(bodyLayout, 0);
-    auto* form = new QVBoxLayout;
+    auto* body = new QWidget;
+    auto* form = new QVBoxLayout(body);
     chrome_geometry::margins(form, 0, 0, 0, 0);
-    chrome_geometry::spacing(form, 6);
-    form->addWidget(label(QStringLiteral("Continue in your browser to sign in with your KetSuite "
-                                         "account. KetPlus never sees your password."),
-                          "description"));
-    chrome_geometry::addSpacing(form, 18);
+    chrome_geometry::spacing(form, 12);
+    auto* description = label(QStringLiteral("Continue in your browser to sign in with your "
+                                             "KetSuite account. KetPlus never sees your password."),
+                              "description");
+    description->setObjectName(QStringLiteral("remoteSignInDescription"));
+    form->addWidget(description);
     signInNotice_ = label({}, "noticeText");
     signInNotice_->setObjectName(QStringLiteral("remoteSignInNotice"));
     signInNotice_->hide();
     form->addWidget(signInNotice_);
-    chrome_geometry::addSpacing(form, 9);
-    signInButton_ = new ket::Button({}, ket::ButtonVariant::Primary);
-    signInButton_->setObjectName(QStringLiteral("remoteSignInButton"));
-    signInButton_->setProperty("remotePrimary", true);
-    signInButton_->setIcon(symbolIcon(logInIcon, symbol_icon::primaryButtonInk()));
-    chrome_geometry::iconSize(signInButton_, QSize(15, 15));
-    resetSignInButton();
-    connect(signInButton_, &QAbstractButton::clicked, this, &RemoteControlView::signIn);
-    form->addWidget(signInButton_);
-    bodyLayout->addLayout(form);
-    root->addWidget(body);
-    return page;
+    return body;
 }
 
 QWidget* RemoteControlView::createControlPage() {
@@ -565,9 +560,8 @@ QWidget* RemoteControlView::createControlPage() {
     signInPromptButton_ = intro_->signInButton();
     connect(intro_, &RemoteConnectionsIntro::signInRequested, this, [this] {
         setSignInNotice({});
-        signInDialog_->show();
-        signInDialog_->raise();
-        signInDialog_->activateWindow();
+        if (!signInDialog_->isOpen())
+            signInDialog_->open();
         signInButton_->setFocus();
     });
     unlinkedLayout->addWidget(intro_);
@@ -701,7 +695,8 @@ QWidget* RemoteControlView::createControlPage() {
     pairingDialogTitle_->setObjectName(QStringLiteral("remotePairingDialogTitle"));
     pairingHeading->addWidget(pairingDialogTitle_);
     pairingHeading->addStretch();
-    auto* closePairing = new ket::IconButton(ket::Icons::icon(u"x"), tr("Close"), pairingHeader);
+    auto* closePairing =
+        new ket::IconButton(ket::Icons::icon(u"close"), tr("Close"), pairingHeader);
     closePairing->setObjectName(QStringLiteral("remotePairingCloseButton"));
     closePairing->setProperty("remoteTertiary", true);
     closePairing->setToolTip(QStringLiteral("Close"));
@@ -831,15 +826,14 @@ QWidget* RemoteControlView::createControlPage() {
     });
     pairingActions->addWidget(approveButton_);
     pairing->addWidget(pairingFooter);
-    pairingDialog_ = new QDialog(this);
+    pairingDialog_ = new ket::Dialog(QStringLiteral("Connect your phone"), this);
     pairingDialog_->setObjectName(QStringLiteral("remotePairingDialog"));
-    pairingDialog_->setWindowTitle(QStringLiteral("Connect your phone"));
-    pairingDialog_->setWindowModality(Qt::WindowModal);
-    chrome_geometry::fixedWidth(pairingDialog_, 500);
-    connect(pairingDialog_, &QDialog::rejected, this, &RemoteControlView::closePairing);
-    auto* dialogLayout = new QVBoxLayout(pairingDialog_);
-    chrome_geometry::margins(dialogLayout, 0, 0, 0, 0);
-    dialogLayout->addWidget(pairingPanel_);
+    pairingDialog_->setChromeless(true);
+    pairingDialog_->setCardWidth(500);
+    // Every way the card closes ends the ticket, including after approval: the card ignores
+    // a reject once it is closed, so nothing else would clear the shown claim.
+    connect(pairingDialog_, &ket::Dialog::finished, this, &RemoteControlView::closePairing);
+    pairingDialog_->setBody(pairingPanel_);
     bodyLayout->addWidget(linkedContent_);
     linuxMachines_ = new LinuxMachinesSection(body);
     // The page's Add menu shows only once this Mac's relay is linked.
@@ -1154,9 +1148,8 @@ void RemoteControlView::createPairing() {
     const quint64 pairingEpoch = ++pairingEpoch_;
     setBusy(true);
     pairingPanel_->show();
-    pairingDialog_->show();
-    pairingDialog_->raise();
-    pairingDialog_->activateWindow();
+    if (!pairingDialog_->isOpen())
+        pairingDialog_->open();
     pairingDialogTitle_->setText(QStringLiteral("Connect your phone"));
     pairingState_->setText(QStringLiteral("Take your workspace with you."));
     pairingHelp_->setText(QStringLiteral("In KetPlus on your phone, choose Scan QR code."));
@@ -1190,7 +1183,6 @@ void RemoteControlView::createPairing() {
         approveButton_->show();
         setBusy(false);
         pairingPanel_->layout()->activate();
-        pairingDialog_->adjustSize();
         return;
     }
     daemon_->call(
@@ -1228,7 +1220,6 @@ void RemoteControlView::createPairing() {
                 approveButton_->show();
                 approveButton_->setEnabled(true);
                 pairingPanel_->layout()->activate();
-                pairingDialog_->adjustSize();
                 return;
             }
             const QJsonObject ticket = result.value(QStringLiteral("ticket")).toObject();
@@ -1357,7 +1348,7 @@ void RemoteControlView::showPairing(const QJsonObject& ticket, const QString& co
         ticketId_.clear();
         devicesLoaded_ = false;
         refreshDevices();
-        QTimer::singleShot(900, pairingDialog_, &QDialog::accept);
+        QTimer::singleShot(900, pairingDialog_, &ket::Dialog::accept);
     } else if (state == QStringLiteral("expired") || state == QStringLiteral("revoked")) {
         const bool revoked = state == QStringLiteral("revoked");
         pairingDialogTitle_->setText(revoked ? QStringLiteral("Pairing cancelled")
@@ -1398,7 +1389,6 @@ void RemoteControlView::showPairing(const QJsonObject& ticket, const QString& co
     approveButton_->setVisible(ready || retry);
     approveButton_->setEnabled((ready || retry) && !requestInFlight_);
     pairingPanel_->layout()->activate();
-    pairingDialog_->adjustSize();
 }
 
 void RemoteControlView::approvePairing() {
@@ -1502,10 +1492,8 @@ void RemoteControlView::closePairing() {
                       approveButton_->setEnabled(true);
                       approveButton_->show();
                       pairingPanel_->layout()->activate();
-                      pairingDialog_->adjustSize();
-                      pairingDialog_->show();
-                      pairingDialog_->raise();
-                      pairingDialog_->activateWindow();
+                      if (!pairingDialog_->isOpen())
+                          pairingDialog_->open();
                   });
 }
 

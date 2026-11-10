@@ -43,6 +43,16 @@ Item {
         signInDialog.open()
     }
 
+    // `--open=pair|linux|signin` opens a dialog for the side by side with the app.
+    function openDialog(name) {
+        if (name === "pair")
+            pairDialog.open()
+        else if (name === "linux")
+            linuxDialog.open()
+        else if (name === "signin")
+            openSignIn()
+    }
+
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
     function activityTitle(kind) {
         return ({ "turn.start": "Sent a message",

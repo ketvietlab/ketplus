@@ -2,6 +2,7 @@
 
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QPointer>
 #include <QWidget>
 
 class QLabel;
@@ -11,7 +12,9 @@ class QStackedWidget;
 class QTimer;
 class QEvent;
 class QVBoxLayout;
-class QDialog;
+namespace ket {
+class Dialog;
+}
 namespace ketplus {
 class LinuxMachinesSection;
 class RemoteActivitySection;
@@ -29,6 +32,7 @@ class RemoteControlView final : public QWidget {
 
   public:
     explicit RemoteControlView(QWidget* parent = nullptr);
+    ~RemoteControlView() override;
     void activate();
     void applyDesignSystemStyle();
 
@@ -83,8 +87,10 @@ class RemoteControlView final : public QWidget {
     QLabel* overviewStatus_{nullptr};
     QAbstractButton* pairButton_{nullptr};
     QAbstractButton* signOutButton_{nullptr};
-    QDialog* pairingDialog_{nullptr};
-    QDialog* signInDialog_{nullptr};
+    // In-window cards (#422) hosting pages built as the mock's modal. They are children of
+    // the window, so the view styles, zooms and deletes them itself.
+    QPointer<ket::Dialog> pairingDialog_;
+    QPointer<ket::Dialog> signInDialog_;
     QWidget* pageHeader_{nullptr};
     QWidget* pairingPanel_{nullptr};
     QWidget* pairingScanSection_{nullptr};
