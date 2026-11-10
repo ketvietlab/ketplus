@@ -282,16 +282,44 @@ QVariantMap guide(const QJsonObject& provider, const QJsonObject& turnError, con
             value.insert(QStringLiteral("secondaryAction"), QStringLiteral("settings/providers"));
         }
         const qint64 since = readiness.value(QStringLiteral("since")).toInteger();
-        value.insert(
-            QStringLiteral("rows"),
-            rows(provider,
-                 {row(tr("Signed in"),
-                      since > 0 ? tr("Expired at %1")
-                                      .arg(QLocale(QLocale::English)
-                                               .toString(QDateTime::fromSecsSinceEpoch(since),
-                                                         QStringLiteral("HH:mm")))
-                                : tr("Expired"))},
-                 false));
+        value.insert(QStringLiteral("rows"),
+                     rows(provider,
+                          {row(tr("Signed in"),
+                               // `since` is when KetPlus first saw it, not when it expired.
+                               since > 0 ? tr("Expired · reported %1").arg(resetText(since))
+                                         : tr("Expired"))},
+                          false));
+    } else if (setupId == QStringLiteral("key-rejected") && id != QStringLiteral("claude")) {
+        // Codex and Cursor take a key from their own sign-in or environment, not from KetPlus.
+        const bool codex = id == QStringLiteral("codex");
+        value.insert(QStringLiteral("blocking"), false);
+        value.insert(QStringLiteral("title"),
+                     tr("%1 rejected your API key").arg(codex ? QStringLiteral("OpenAI") : name));
+        value.insert(QStringLiteral("badge"), tr("Key rejected"));
+        value.insert(QStringLiteral("reason"),
+                     codex ? tr("Codex is signed in with an OpenAI API key, and OpenAI refused "
+                                "it. The key may have been revoked or run out of credit.")
+                           : tr("The Cursor CLI uses the key in CURSOR_API_KEY, and Cursor "
+                                "refused it. The key may have been revoked."));
+        value.insert(QStringLiteral("summary"),
+                     tr("%1 refuses its API key, so %1 turns fail.").arg(name));
+        value.insert(QStringLiteral("error"), message);
+        steps << step(codex ? tr("Sign in with your ChatGPT account instead. A browser window "
+                                 "opens.")
+                            : tr("Sign in with your Cursor account instead. A browser window "
+                                 "opens."),
+                      login);
+        if (codex)
+            steps << step(tr("Or pass a working OpenAI API key on standard input."),
+                          QStringLiteral("printenv OPENAI_API_KEY | codex login --with-api-key"));
+        else
+            steps << step(tr("Or set CURSOR_API_KEY to a working key, then quit and reopen "
+                             "KetPlus."));
+        steps << step(tr("Retry. KetPlus sends your last message again."), {}, true);
+        value.insert(QStringLiteral("primary"), tr("Retry"));
+        value.insert(QStringLiteral("primaryAction"), QStringLiteral("retry"));
+        value.insert(QStringLiteral("rows"),
+                     rows(provider, {row(tr("Signed in"), tr("API key · rejected"))}, false));
     } else if (setupId == QStringLiteral("key-rejected")) {
         value.insert(QStringLiteral("blocking"), false);
         value.insert(QStringLiteral("title"), tr("Anthropic rejected your API key"));

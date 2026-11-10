@@ -37,6 +37,10 @@ class QTimer;
 class QToolButton;
 class QVariant;
 
+namespace ketplus::remote {
+class DaemonClient;
+}
+
 namespace ketplus {
 
 class DocumentFormatControls;
@@ -230,6 +234,9 @@ class MainWindow final : public QMainWindow {
     [[nodiscard]] EditorWidget* openEditorForPath(const QString& path) const;
     void showSettings();
     void setupSidebarStorage();
+    // Names the signed-in account on the sidebar identity button (ADR 0109).
+    void setupSidebarAccount();
+    [[nodiscard]] remote::DaemonClient* accountDaemon();
     void showUpdateSettings();
     // Opens Settings on a section; an empty id keeps the section it shows.
     void showSettingsSection(const QString& id);
@@ -415,6 +422,7 @@ class MainWindow final : public QMainWindow {
     QPointer<AtlasConversationPanel> conversationAtlasPanel_;
     QTabWidget* atlasTabs_{nullptr};
     RemoteControlView* remoteControl_{nullptr};
+    remote::DaemonClient* accountDaemon_{nullptr};
     QStringList remoteMachineIds_;
     QString selectedMachineId_{QStringLiteral("local")};
     WorktreesWorkspacePage* worktreesWorkspace_{nullptr};

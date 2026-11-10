@@ -152,7 +152,10 @@ void SessionHost::readCodexLimitReset(const QString& message) {
     adapter_->call(
         QStringLiteral("account/rateLimits/read"), {},
         [self, message](const QJsonObject& result, const QString& error) {
-            if (self.isNull() || !error.isEmpty())
+            // A turn that worked, or Check again, may have ended the limit meanwhile.
+            if (self.isNull() || !error.isEmpty() ||
+                self->readiness_.reportedState(QStringLiteral("codex")) !=
+                    QStringLiteral("limit_reached"))
                 return;
             // The window that is used up resets last; its reset ends the limit.
             qint64 resetsAt = 0;

@@ -208,6 +208,8 @@ bool DaemonService::start() {
     host_ =
         std::make_unique<SessionHost>(journal_.get(), adapter_.get(), claude_.get(), cursor_.get());
     host_->setClaudeAccountUsage(accountUsage);
+    connect(claudeCredentials_.get(), &ClaudeCredentials::changed, host_.get(),
+            [host = host_.get()] { host->forgetProviderFailure(QStringLiteral("claude")); });
     cloud_ = std::make_unique<CloudControlClient>(journal_.get(), host_.get());
     ipc_ = std::make_unique<LocalIpcServer>(host_.get(), configuration_.socketName, token,
                                             cloud_.get());

@@ -45,6 +45,8 @@ void MainWindow::setRemoteWorkspaceVisible(const bool visible) {
                                                            QStringLiteral("local"));
                     refreshSidebarRepositories();
                 });
+        connect(remoteControl_, &RemoteControlView::accountChanged, activityBar_,
+                &ActivityBar::setAccount); // sign-in and sign-out happen here
         workspaceSplit_->addWidget(remoteControl_);
     }
     if (explorer_ != nullptr)

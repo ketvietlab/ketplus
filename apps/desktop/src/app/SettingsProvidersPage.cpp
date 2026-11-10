@@ -131,6 +131,7 @@ void SettingsProvidersPage::apply(const QJsonArray& providers, const QString& er
         delete item;
     }
     if (!error.isEmpty()) {
+        checking_.clear(); // a later refresh is not this check's answer
         status_->setText(tr("Provider versions could not be checked: %1").arg(error));
         emit refreshed();
         return;

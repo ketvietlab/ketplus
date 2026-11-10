@@ -86,10 +86,18 @@ bool TerminalTab::restart() {
 void TerminalTab::stop() { session_.stop(); }
 
 void TerminalTab::typeText(const QString& text) {
+    // Typed, never run: a line break or another control character would run or edit it, since
+    // a paste is only bracketed when the shell asks for it.
+    QString typed;
+    typed.reserve(text.size());
+    for (const QChar character : text)
+        if (character.unicode() >= 0x20 && character.unicode() != 0x7f &&
+            character.category() != QChar::Other_Control)
+            typed.append(character);
     if (session_.isRunning())
-        session_.sendPaste(text);
+        session_.sendPaste(typed);
     else
-        pendingTypedText_ = text;
+        pendingTypedText_ = typed;
 }
 
 void TerminalTab::applyTheme(const ThemePalette& palette) { terminal_->applyTheme(palette); }

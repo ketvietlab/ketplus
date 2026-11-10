@@ -49,9 +49,11 @@ void ProviderReadiness::observe(const QString& provider, const QString& state,
 void ProviderReadiness::recheck(const qint64 now) {
     bool changed = false;
     for (auto it = observed_.begin(); it != observed_.end();) {
-        const bool waiting = it->state == QStringLiteral("limit_reached") &&
-                             (it->resetsAt == 0 || it->resetsAt > now);
-        if (waiting || it->state == QStringLiteral("ready")) {
+        // Without a reset time nothing would ever end the limit, so Check again does.
+        const bool stale = it->state == QStringLiteral("signed_out") ||
+                           (it->state == QStringLiteral("limit_reached") &&
+                            (it->resetsAt == 0 || it->resetsAt <= now));
+        if (!stale) {
             ++it;
             continue;
         }
@@ -59,6 +61,11 @@ void ProviderReadiness::recheck(const qint64 now) {
         changed = true;
     }
     if (changed)
+        save();
+}
+
+void ProviderReadiness::forget(const QString& provider) {
+    if (observed_.remove(provider) > 0)
         save();
 }
 
