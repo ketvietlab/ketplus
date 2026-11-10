@@ -1004,17 +1004,20 @@ keeps the current buffer and opens a visible error dialog. Refresh happens on an
 explicit reopen; this is not a background filesystem watcher.
 
 
-### Proposed conversation repository picker (mock only)
+### Conversation repository picker
 
-The new Desktop/iPhone Atlas flows propose a repository selector beside the
-worktree selector. Current repository is pinned first; selecting another repo
-changes the existing conversation's scope after acknowledgment, updates the
-header, moves its sidebar row and promotes the new group. Worktree search stays
-scoped to that repository. Transcript, conversation identity, draft and an active
-provider turn survive; the newly selected scope is the next-turn target.
-Failed switches retain the old scope and expose Retry. iPhone uses a Repository
-→ Worktree bottom sheet. See the Atlas README and repository-picker evidence.
-This proposal does not change the currently implemented native picker contract.
+The desktop picker follows the mock (ADR 0105). The current repository is listed
+first. Selecting a repository lists its worktrees, with the current or last-used
+one chosen and the main worktree marked "Main". Worktree search stays scoped to
+that repository. Selecting a worktree only chooses it.
+
+**Use this repository** switches the conversation's execution context after the
+daemon acknowledges. The picker then closes and announces "Next turn:
+<repository> · <branch>". Transcript, conversation identity, draft and an active
+provider turn survive, and the new scope applies from the next turn. A failed switch
+keeps the old scope and shows the error, and Use retries. **Create worktree…** opens
+the Worktrees page. iPhone uses a Repository → Worktree bottom sheet over the
+granted catalog.
 
 
 ### Claude API key

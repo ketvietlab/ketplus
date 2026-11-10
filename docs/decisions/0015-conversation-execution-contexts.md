@@ -152,3 +152,6 @@ original root; next-turn preparation uses the newly selected root. Startup,
 shutdown and pending approvals remain fenced, and unsupported providers remain
 explicitly unavailable. Qt rejects stale context read responses; iOS retains
 verified result metadata until the relay reports an equal/newer context revision.
+
+ADR 0105 (2026-11-10) lets local IPC list another repository's worktrees with
+`repository_path` before switching, as the mock's picker does.
