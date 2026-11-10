@@ -11,6 +11,12 @@ Rectangle {
 
     required property var window
     required property var conversation
+    // The conversation's team and role, when it is a member of one (Main.teamOf).
+    readonly property var membership: {
+        const team = window && window.teamOf ? window.teamOf(conversation.number) : null
+        const who = team ? team.members.find(m => m.number === conversation.number) : null
+        return who ? { team: team, role: who.role } : null
+    }
     property bool detailsOpen: false
     property var planRun: null
     property int status: conversation.status
@@ -207,6 +213,22 @@ Rectangle {
             }
         }
 
+        // A team member's role: the team sets it, so it has no way to remove it here.
+        KetTag {
+            id: roleTag
+            visible: !!header.membership && !header.window.compact
+            anchors.verticalCenter: parent.verticalCenter
+            text: header.membership ? Fixtures.roleTag(header.membership.role).label : ""
+            tagColor: header.membership ? Fixtures.roleTag(header.membership.role).color : "transparent"
+            filterable: true
+            onClicked: header.window.openTeam(header.membership.team.id)
+            KetToolTip {
+                visible: roleTag.hovered
+                text: header.membership ? roleTag.text + " of " + header.membership.team.name
+                      + ". The team sets this tag; change the role from the team's page." : ""
+            }
+        }
+
         Repeater {
             model: header.window.compact || !header.showTags ? [] : header.conversation.tags
             KetTag {
@@ -287,6 +309,15 @@ Rectangle {
 
     KetMenu {
         id: tagMenu
+        KetMenuItem {
+            visible: !!header.membership
+            height: visible ? implicitHeight : 0
+            enabled: false
+            iconName: "lock"
+            text: header.membership ? Fixtures.roleTag(header.membership.role).label : ""
+            description: header.membership ? "Set by " + header.membership.team.name : ""
+        }
+        KetMenuSeparator { visible: !!header.membership; height: visible ? implicitHeight : 0 }
         Repeater {
             model: Object.keys(Fixtures.tagColors)
             KetMenuItem {

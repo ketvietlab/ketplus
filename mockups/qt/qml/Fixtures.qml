@@ -32,10 +32,14 @@ QtObject {
     // Tag colours are user data, so they are literals rather than tokens.
     readonly property var tagColors: ({
         UI: "#4f6bed", Performance: "#c2780a", Review: "#7c5cd6", Atlas: "#3f8f7a",
-        Account: "#2f8f4e", Bug: "#d1453b", Docs: "#5b6b7f",
-        // A member's role in its team (Fixtures.teams), the first tag of its sidebar row.
-        Leader: "#b4436c", Developer: "#5b6b7f", Reviewer: "#7c5cd6"
+        Account: "#2f8f4e", Bug: "#d1453b", Docs: "#5b6b7f"
     })
+    // A member's role in its team (Fixtures.teams): the first tag of its conversation. The team
+    // sets it, so it is not among the tags a user adds or removes.
+    readonly property var roleColors: ({ leader: "#b4436c", developer: "#5b6b7f", reviewer: "#7c5cd6" })
+    function roleTag(role) {
+        return { label: role.charAt(0).toUpperCase() + role.slice(1), color: roleColors[role] || "#5b6b7f" }
+    }
 
     function tag(label) { return { label: label, color: tagColors[label] || "#5b6b7f" } }
 

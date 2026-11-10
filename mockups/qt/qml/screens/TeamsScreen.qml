@@ -105,6 +105,14 @@ Item {
             startRemove(team.id, "8215")
         else if (name === "add-member" && team)
             addMemberDialog.open()
+        else if (name === "member-agent" && team) {
+            addMemberDialog.open()
+            memberAgentDialog.open()
+        }
+        else if (name === "member-agent" && team) {
+            addMemberDialog.open()
+            memberAgentDialog.open()
+        }
         else if (name === "task")
             showTask("T-3")
         else if (name === "handover")
@@ -193,7 +201,8 @@ Item {
         for (const r of Fixtures.repositories) {
             const match = r.conversations.find(c => c.number === number)
             if (match) {
-                screen.window.openConversation(r.name, match)
+                const who = member(number)
+                screen.window.openConversation(r.name, who && who.name ? Object.assign({}, match, { title: who.name }) : match)
                 return
             }
         }
@@ -202,7 +211,9 @@ Item {
         const blank = Fixtures.repositories[0].conversations.find(c => c.transcript === "welcome")
         if (who && blank)
             screen.window.openConversation(team.repository, Object.assign({}, blank, {
-                number: who.number, title: who.title, tags: [], status: KetTheme.ConversationStatus.NotStarted }))
+                number: who.number, title: who.title, tags: [], status: KetTheme.ConversationStatus.NotStarted,
+                provider: who.agent ? who.agent.label : blank.provider, providerId: who.agent ? who.agent.id : blank.providerId,
+                model: who.agent ? who.agent.model : blank.model, effort: who.agent ? who.agent.effort : blank.effort }))
     }
     function addMember(role) {
         addMemberDialog.role = role
@@ -953,7 +964,19 @@ Item {
         // Who takes the role: a conversation started for it, or one of `free` moved in.
         property bool existing: false
         readonly property var chosen: existing && free.length > 0 ? free[Math.max(0, memberChoice.currentIndex)] : null
-        readonly property var agents: ["Claude · Opus 5.5", "Claude · Fable 5.2", "Codex · GPT-5.6 Luna"]
+        // The new conversation's agent, chosen in the app's own Model & context dialog.
+        property string agentProvider: "codex"
+        property string agentModel: Fixtures.providerModels.codex[0].name
+        property string agentEffort: "Medium"
+        readonly property string agentLabel: {
+            const entry = Fixtures.providers.find(p => p.id === agentProvider)
+            return entry ? entry.label : agentProvider
+        }
+        // What the name field suggests: the lane, or the role in this team.
+        readonly property string suggestedName: role === "leader" ? "Lead " + (screen.team ? screen.team.name : "")
+            : role === "developer" ? (laneName.text.trim() || "Onboarding") : "Review " + (screen.team ? screen.team.name : "")
+        function fillName() { memberName.text = chosen ? chosen.title : "" }
+        onChosenChanged: fillName()
         property bool tried: false
         // A conversation the sidebar's Add to team… chose.
         property string preselect
@@ -977,7 +1000,7 @@ Item {
             const index = free.findIndex(c => c.number === preselect)
             existing = index >= 0
             memberChoice.currentIndex = Math.max(0, index)
-            agentChoice.currentIndex = 0
+            fillName()
         }
         onClosed: { role = ""; preselect = "" }
         Column {
@@ -1045,7 +1068,12 @@ Item {
                 width: parent.width
                 label: "Agent"
                 help: addMemberDialog.role === "reviewer" ? "A reviewer from another provider than the developers catches more." : ""
-                KetSelect { id: agentChoice; width: parent.width; model: addMemberDialog.agents }
+                KetButton {
+                    width: parent.width
+                    text: addMemberDialog.agentLabel + " · " + addMemberDialog.agentModel + " · " + addMemberDialog.agentEffort + "  ▾"
+                    Accessible.name: "Choose model and reasoning effort"
+                    onClicked: memberAgentDialog.open()
+                }
             }
             KetChoice {
                 width: parent.width
@@ -1068,6 +1096,18 @@ Item {
                     model: addMemberDialog.free.map(c => "@agent/" + c.number + " · " + c.title)
                 }
             }
+            KetFieldRow {
+                width: parent.width
+                label: "Name"
+                help: "How the conversation shows in the team's folder. Its role is a tag beside it."
+                error: addMemberDialog.tried && memberName.text.trim() === "" ? "Name the conversation." : ""
+                KetTextField {
+                    id: memberName
+                    width: parent.width
+                    placeholderText: addMemberDialog.suggestedName
+                    invalid: addMemberDialog.tried && text.trim() === ""
+                }
+            }
             KetBanner {
                 visible: addMemberDialog.role === "developer" && screen.developers >= 3 && screen.reviewers < 2
                 width: parent.width
@@ -1085,20 +1125,21 @@ Item {
                     const role = addMemberDialog.role
                     const developer = role === "developer"
                     addMemberDialog.tried = true
-                    if (developer && (laneName.text.trim() === "" || lanePaths.text.trim() === ""))
+                    const name = memberName.text.trim()
+                    if (name === "" || (developer && (laneName.text.trim() === "" || lanePaths.text.trim() === "")))
                         return
                     // A new conversation gets the next free number and a name from its role.
                     let number = 6101
                     while (screen.teams.some(t => t.members.some(m => m.number === String(number))))
                         number += 7
-                    const chosen = addMemberDialog.chosen || {
-                        number: String(number),
-                        title: role === "leader" ? "Lead " + screen.team.name
-                             : developer ? laneName.text.trim() : "Review " + screen.team.name }
+                    const moved = addMemberDialog.chosen
+                    const chosen = moved || { number: String(number) }
                     screen.change({ members: screen.members.concat([{
-                        number: chosen.number, title: chosen.title, role: role,
-                        provider: addMemberDialog.chosen ? (chosen.provider || "Claude") + " · " + (chosen.model || "Opus 5.5")
-                                                         : agentChoice.currentText,
+                        number: chosen.number, title: name, name: name, role: role,
+                        provider: moved ? (moved.provider || "Claude") + " · " + (moved.model || "Opus 5.5")
+                                        : addMemberDialog.agentLabel + " · " + addMemberDialog.agentModel,
+                        agent: moved ? null : { id: addMemberDialog.agentProvider, label: addMemberDialog.agentLabel,
+                                                model: addMemberDialog.agentModel, effort: addMemberDialog.agentEffort },
                         lane: developer ? laneName.text.trim() : "",
                         paths: developer ? lanePaths.text.split(",").map(p => p.trim()).filter(p => p) : [],
                         reviews: role === "reviewer" ? addMemberDialog.lanes : [],
@@ -1109,6 +1150,21 @@ Item {
                 }
             }
         ]
+    }
+
+    // The app's own picker, as the composer opens it: provider, model, effort, auto-compact.
+    ModelContextDialog {
+        id: memberAgentDialog
+        parent: Basic.Overlay.overlay
+        window: screen.window
+        provider: addMemberDialog.agentProvider
+        model: addMemberDialog.agentModel
+        effort: addMemberDialog.agentEffort
+        onChosen: (provider, model, effort) => {
+            addMemberDialog.agentProvider = provider
+            addMemberDialog.agentModel = model
+            addMemberDialog.agentEffort = effort
+        }
     }
 
     KetDialog {

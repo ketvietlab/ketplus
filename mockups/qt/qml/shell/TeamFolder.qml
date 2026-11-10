@@ -28,8 +28,8 @@ Column {
     readonly property var shown: ["leader", "developer", "reviewer"]
         .reduce((list, role) => list.concat(team.members.filter(m => m.role === role)), [])
         .filter(m => window.tagFilter === "" || folder.conversation(m.number).tags.some(t => t.label === window.tagFilter))
-    readonly property var roleTags: ({ leader: Fixtures.tag("Leader"), developer: Fixtures.tag("Developer"),
-                                       reviewer: Fixtures.tag("Reviewer") })
+    readonly property var roleTags: ({ leader: Fixtures.roleTag("leader"), developer: Fixtures.roleTag("developer"),
+                                       reviewer: Fixtures.roleTag("reviewer") })
 
     signal contextMenuRequested(var conversation)
     // The folder's own menu, at `anchor` or at the pointer when it is null.
@@ -39,8 +39,11 @@ Column {
     // A member's conversation; one Add a member started is not among the repository's yet.
     function conversation(number) {
         const who = team.members.find(m => m.number === number)
-        return conversations.find(c => c.number === number)
-            || { number: number, title: who ? who.title : "", tags: [], worktree: team.branch,
+        const found = conversations.find(c => c.number === number)
+        // Add a member names the conversation; that name replaces its old title.
+        if (found)
+            return who && who.name ? Object.assign({}, found, { title: who.name }) : found
+        return { number: number, title: who ? who.title : "", tags: [], worktree: team.branch,
                  status: KetTheme.ConversationStatus.NotStarted }
     }
 
