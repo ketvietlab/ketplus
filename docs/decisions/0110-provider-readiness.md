@@ -138,6 +138,28 @@ its guide still names them after the conversation switches.
 - A live coded error, and a completed turn while a guide is shown, read
   `provider.runtime_status` again; replayed history does not.
 
+### Follow-up (2026-11-11)
+
+- Codex `account/updated` (sent after `codex login`, a logout or an account switch)
+  forgets the sign-in, key or limit failure reported for Codex. The next read reports the
+  probe's answer.
+- The desktop reads `provider.runtime_status` again when the app becomes active while a
+  guide is shown. Someone who fixed the provider in a terminal then sees it ready on
+  their return, without a restart or Check again.
+- Commands per system, checked on 2026-11-11 against each provider's documentation:
+  - Claude Code: `curl -fsSL https://claude.ai/install.sh | bash` on macOS and Linux,
+    `irm https://claude.ai/install.ps1 | iex` in Windows PowerShell. Sign-in is `claude`,
+    then `/login`.
+  - Codex: `npm install -g @openai/codex` and `codex login`. The API-key sign-in pipes the
+    key on standard input: `printenv OPENAI_API_KEY | codex login --with-api-key`, or
+    `$env:OPENAI_API_KEY | codex login --with-api-key` on Windows.
+  - Cursor: `curl https://cursor.com/install -fsS | bash`, or
+    `irm 'https://cursor.com/install?win32=true' | iex` on Windows. Then `agent login` and
+    `agent update`.
+- The guide says "this Mac" on macOS and "this computer" elsewhere.
+- The limit title is "You've used your <provider> limit". The daemon does not know
+  whether a weekly or a shorter window ran out, so the mock's "this week's" was dropped.
+
 ## Consequences
 
 - Settings, the composer and the transcript can show the setup guide before a

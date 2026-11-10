@@ -505,7 +505,7 @@ QtObject {
         },
         "limit": {
             provider: "codex", name: "Codex", model: "GPT-5.6 Luna", blocking: false, tone: "warning",
-            badge: "Limit reached", title: "You've used this week's Codex limit",
+            badge: "Limit reached", title: "You've used your Codex limit",
             reason: "Codex stopped here until your weekly limit resets on Nov 13 at 07:00. Nothing is lost; continue this conversation after the reset.",
             summary: "This week's Codex limit is used up. Codex turns fail until it resets on Nov 13 at 07:00.",
             error: "You've hit your weekly limit · resets Nov 13 at 7am",

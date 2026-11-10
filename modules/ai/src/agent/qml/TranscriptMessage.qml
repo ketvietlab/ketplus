@@ -90,7 +90,7 @@ Item {
                 return null;
         }
         const turnModel = errorModel ? shell.modelForId(errorModel) : null;
-        const modelName = turnModel ? turnModel.displayName
+        const modelName = turnModel && turnModel.displayName ? turnModel.displayName
                         : errorModel || shell.modelLabel || shell.selectedModel || "";
         const guide = host.providerTurnGuide(provider || host.conversationProvider || shell.selectedProvider,
                                              errorCode, errorDetail || body, modelName);
