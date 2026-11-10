@@ -12,6 +12,8 @@ Item {
     property bool hasClaudeModels: false
     property bool hasCursorModels: false
     property string cursorInstallCommand
+    // Providers with a setup guide (ADR 0110): their tab opens, so the picker's banner shows.
+    property var setupProviders: []
     signal providerChosen(string provider)
 
     readonly property var recipe: KetTheme.routeTabRecipe(KetTheme.dark, KetTheme.zoom, false, false, false, true, false)
@@ -43,6 +45,7 @@ Item {
                 readonly property bool supported: modelData.id === "codex"
                     || (modelData.id === "claude" && providerTabs.hasClaudeModels)
                     || (modelData.id === "cursor" && providerTabs.hasCursorModels)
+                    || providerTabs.setupProviders.indexOf(modelData.id) >= 0
                 readonly property bool lockedOut: supported && providerTabs.lockedProvider !== "" && providerTabs.lockedProvider !== modelData.id
                 readonly property var recipe: KetTheme.routeTabRecipe(KetTheme.dark, KetTheme.zoom, enabled && providerTabs.selectedProvider === modelData.id, hovered, down, enabled, visualFocus)
                 enabled: supported && !lockedOut

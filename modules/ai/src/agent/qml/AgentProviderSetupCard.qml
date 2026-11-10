@@ -21,6 +21,9 @@ Rectangle {
     property bool canHide: false
     // In the transcript: the failed row, for Retry.
     property string messageKey: ""
+    // Inside the guide dialog (Model & context → Show setup steps), which carries the title and
+    // the frame: no turn steps, and the primary action checks again unless it opens a page.
+    property bool inDialog: false
     signal hideRequested()
 
     readonly property bool danger: setup.tone === "danger"
@@ -67,10 +70,10 @@ Rectangle {
         onTriggered: card.phase = "idle"
     }
 
-    implicitHeight: column.implicitHeight + px(28)
+    implicitHeight: column.implicitHeight + (inDialog ? 0 : px(28))
     radius: px(8)
-    color: KetTheme.t.panelBg
-    border.width: 1
+    color: inDialog ? "transparent" : KetTheme.t.panelBg
+    border.width: inDialog ? 0 : 1
     border.color: phase === "settled" ? KetTheme.t.panelBorder
                 : danger ? KetTheme.t.dangerBorder : KetTheme.t.warningBorder
     Accessible.role: Accessible.Grouping
@@ -78,12 +81,13 @@ Rectangle {
 
     Column {
         id: column
-        x: card.px(16)
-        y: card.px(14)
+        x: card.inDialog ? 0 : card.px(16)
+        y: card.inDialog ? 0 : card.px(14)
         width: parent.width - 2 * x
         spacing: card.px(12)
 
         Row {
+            visible: !card.inDialog
             width: parent.width
             spacing: card.px(10)
             Kit.KetIcon {
@@ -120,7 +124,8 @@ Rectangle {
             width: parent.width
             wrapMode: Text.Wrap
             textFormat: Text.PlainText
-            text: card.phase === "settled" ? "This turn ended with: " + card.setup.title + "." : card.setup.reason || ""
+            text: card.phase === "settled" ? "This turn ended with: " + card.setup.title + "."
+                : card.inDialog && card.setup.summary ? card.setup.summary : card.setup.reason || ""
             color: KetTheme.t.textSecondary
             font.family: KetTheme.fontFamily
             font.pixelSize: card.px(13)
@@ -230,7 +235,12 @@ Rectangle {
             Kit.KetButton {
                 objectName: "agentProviderSetupPrimary"
                 // Retry needs the failed turn; without one the card checks again.
-                readonly property string setupAction: card.setup.primaryAction === "retry" && !card.retryable ? "" : card.setup.primaryAction || ""
+                readonly property string setupAction: {
+                    const action = card.setup.primaryAction || ""
+                    if (card.inDialog)
+                        return action.startsWith("settings/") && action !== "settings/providers" ? action : ""
+                    return action === "retry" && !card.retryable ? "" : action
+                }
                 text: card.phase === "checking" ? (setupAction === "" ? "Checking…" : "Retrying…")
                     : setupAction === "" ? "Check again" : card.setup.primary || "Check again"
                 variant: KetTheme.ButtonVariant.Primary
@@ -243,7 +253,7 @@ Rectangle {
             }
             Kit.KetButton {
                 objectName: "agentProviderSetupSecondary"
-                visible: !!card.setup.secondary && (card.retryable || card.setup.secondaryAction !== "retry")
+                visible: !!card.setup.secondary && !card.inDialog && (card.retryable || card.setup.secondaryAction !== "retry")
                 text: card.setup.secondary || ""
                 variant: KetTheme.ButtonVariant.Ghost
                 enabled: card.phase !== "checking"

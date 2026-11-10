@@ -99,6 +99,12 @@ Basic.Popup {
     signal effortSelected(string effort)
     signal applyRequested(string model, string effort, string provider, var changes)
     signal refreshRequested()
+    // Show setup steps on the provider's banner (ADR 0110).
+    signal setupGuideRequested(string provider)
+    // The browsed provider's setup guide, whether or not the conversation still shows it.
+    readonly property var setups: (agentHost.providerRuntime || {}).setups || {}
+    readonly property var draftSetup: setups[selectedProviderTab] || null
+    function hasSetup(provider) { return !!setups[provider] }
 
     parent: Overlay.overlay
     function revealControl(item) {
@@ -144,8 +150,9 @@ Basic.Popup {
                 }
             }
         }
-        if (tab === "claude" && !hasClaudeModels) tab = "codex"
-        if (tab === "cursor" && !hasCursorModels) tab = "codex"
+        // A provider with a setup guide keeps its tab, so its banner says what to do.
+        if (tab === "claude" && !hasClaudeModels && !hasSetup("claude")) tab = "codex"
+        if (tab === "cursor" && !hasCursorModels && !hasSetup("cursor")) tab = "codex"
         if (lockedProvider) tab = lockedProvider
         selectedProviderTab = tab
         syncCurrentModel()
@@ -265,6 +272,7 @@ Basic.Popup {
             hasClaudeModels: picker.hasClaudeModels
             hasCursorModels: picker.hasCursorModels
             cursorInstallCommand: picker.cursorInstallCommand
+            setupProviders: Object.keys(picker.setups)
             onProviderChosen: (provider) => {
                 picker.selectedProviderTab = provider
                 if (picker.providerModels.length > 0) picker.chooseDraft(picker.providerModels[0])
@@ -272,7 +280,27 @@ Basic.Popup {
             }
         }
 
+        // A provider with a setup guide: what is wrong and the way to the guide, as the mock's
+        // Model & context.
+        Kit.KetBanner {
+            objectName: "modelPickerSetupBanner"
+            visible: !!picker.draftSetup
+            Layout.fillWidth: true
+            Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
+            Layout.topMargin: KetTheme.px(10, KetTheme.zoom)
+            Layout.bottomMargin: KetTheme.px(12, KetTheme.zoom)
+            tone: picker.draftSetup && picker.draftSetup.tone === "danger" ? KetTheme.BannerTone.Danger : KetTheme.BannerTone.Warning
+            title: picker.draftSetup ? picker.draftSetup.title : ""
+            message: !picker.draftSetup ? ""
+                   : picker.draftSetup.blocking ? "You can choose a model now. " + picker.draftSetup.name + " starts turns once it is set up."
+                   : picker.draftSetup.summary || picker.draftSetup.reason || ""
+            actionText: "Show setup steps"
+            onActionTriggered: picker.setupGuideRequested(picker.selectedProviderTab)
+        }
+
         Text {
+            visible: !picker.draftSetup
             Layout.fillWidth: true
             Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
             Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
@@ -447,7 +475,8 @@ Basic.Popup {
                 Text {
                     objectName: "modelPickerEmptyState"
                     Layout.fillWidth: true
-                    text: !picker.available ? "Codex CLI unavailable" : picker.loading ? "Loading models..."
+                    text: picker.draftSetup && picker.providerModels.length === 0 ? "Models appear once " + picker.draftSetup.name + " is set up"
+                          : !picker.available ? "Codex CLI unavailable" : picker.loading ? "Loading models..."
                           : picker.providerModels.length === 0 ? "Models unavailable" : "No models found"
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.Wrap
