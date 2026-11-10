@@ -29,7 +29,7 @@ KetPlusMock --edition=lite --smoke --keys              # also chooses View > Sea
 KetPlusMock --smoke --display=secondary                # on another display, leaving the main one free
 KetPlusMock --edition=lite --chrome=windows --screen=search --screenshot=search.png
 KetPlusMock --screen=workspace --state=running --dark --zoom=1.25 --screenshot=out.png
-KetPlusMock --screen=workspace --open=model --screenshot=model.png  # model, mode, limits, reviewer, composer (focused) images (the image viewer) or mermaid (diagrams instead of their source)
+KetPlusMock --screen=workspace --open=model --screenshot=model.png  # model, mode, limits, reviewer, composer (focused) images (the image viewer), mermaid (diagrams instead of their source) or toast (the app-wide toast, on any screen)
 ```
 
 Screens and states (`--screen` / `--state`):

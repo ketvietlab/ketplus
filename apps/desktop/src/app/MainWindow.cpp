@@ -201,7 +201,9 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     // The status bar shows only with the editor; elsewhere its messages show as the mock's
     // app-wide toasts, so the Agent Workspace, Worktrees and Settings still give feedback.
     connect(statusBar(), &QStatusBar::messageChanged, this, [this](const QString& message) {
-        if (!message.isEmpty() && !statusBar()->isVisible())
+        // "Ready" is the status bar's idle text, not something that happened: opening the
+        // app in the Agent Workspace showed it as a toast.
+        if (!message.isEmpty() && !statusBar()->isVisible() && message != QStringLiteral("Ready"))
             // Neutral: a status message may be a failure, never shown as a success.
             ket::Toast::showMessage(this, message, ket::ToastTone::Neutral);
     });

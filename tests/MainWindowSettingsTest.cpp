@@ -877,9 +877,18 @@ void MainWindowSettingsTest::hiddenStatusMessagesShowAsToasts() {
     // as a toast.
     window.findChild<QAction*>(QStringLiteral("productSettingsAction"))->trigger();
     QTRY_VERIFY(!window.statusBar()->isVisible());
+    // The idle text is not an event.
+    window.statusBar()->showMessage(QStringLiteral("Ready"));
+    QVERIFY(!toasts().contains(QStringLiteral("Ready")));
     window.statusBar()->showMessage(QStringLiteral("Saved the plan"), 2000);
     QVERIFY(toasts().contains(QStringLiteral("Saved the plan")));
     QVERIFY(!toasts().contains(QStringLiteral("not neutral")));
+    // KETPLUS_OVERLAYS_CAPTURE=<dir> saves the toast for the side by side with
+    // `KetPlusMock --open=toast`.
+    if (const auto dir = qEnvironmentVariable("KETPLUS_OVERLAYS_CAPTURE"); !dir.isEmpty()) {
+        QTest::qWait(400); // the toast has faded in
+        QVERIFY(window.grab().save(QDir(dir).filePath(QStringLiteral("toast.png"))));
+    }
 
     // With the status bar on screen, the message stays there.
     window.statusBar()->show();
@@ -932,6 +941,13 @@ void MainWindowSettingsTest::updatesPageAndReminderDriveTheUpdater() {
     // Downloaded, it reads as the mock's "Restart to install".
     updater.remind(QStringLiteral("0.1.18"), true);
     QVERIFY(reminder->accessibleDescription().contains(QStringLiteral("Restart to install")));
+    // And the reminder, with `KetPlusMock --screen=workspace`.
+    if (const auto dir = qEnvironmentVariable("KETPLUS_OVERLAYS_CAPTURE"); !dir.isEmpty()) {
+        updater.remind(QStringLiteral("1.8.0"), true);
+        QTest::qWait(100);
+        QVERIFY(window.grab().save(QDir(dir).filePath(QStringLiteral("update-pill.png"))));
+        updater.remind(QStringLiteral("0.1.18"), true);
+    }
     reminder->click();
     QCOMPARE(updater.checks_, 3);
     updater.remind({});
