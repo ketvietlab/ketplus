@@ -225,6 +225,14 @@ void MainWindow::refreshActivityBar() {
         static_cast<ActivityButton*>(button)->sync();
 }
 
+bool MainWindow::panelStaysLeavingSettings(QAction* action, const bool visible) {
+    if (visible || settingsPage_ == nullptr || chromePages_->currentWidget() != settingsPage_)
+        return visible;
+    const QSignalBlocker blocker(action);
+    action->setChecked(true);
+    return true;
+}
+
 void MainWindow::showEditorSurface() {
     if (chromePages_)
         chromePages_->setCurrentWidget(workspaceSplit_);

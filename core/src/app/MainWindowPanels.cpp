@@ -168,8 +168,9 @@ ExplorerPanel* MainWindow::ensureExplorer() {
     return explorer_;
 }
 
-void MainWindow::setExplorerVisible(const bool visible) {
+void MainWindow::setExplorerVisible(bool visible) {
     const auto activity = qScopeGuard([this] { refreshActivityBar(); });
+    visible = panelStaysLeavingSettings(explorerAction_, visible);
     if (visible)
         showEditorSurface();
     if (visible) {
@@ -233,8 +234,9 @@ GitChangesPanel* MainWindow::ensureGitChanges() {
     return gitChanges_;
 }
 
-void MainWindow::setSourceControlVisible(const bool visible) {
+void MainWindow::setSourceControlVisible(bool visible) {
     const auto activity = qScopeGuard([this] { refreshActivityBar(); });
+    visible = panelStaysLeavingSettings(sourceControlAction_, visible);
     if (visible)
         showEditorSurface();
     if (visible) {

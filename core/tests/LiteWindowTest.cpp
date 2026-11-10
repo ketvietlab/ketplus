@@ -331,9 +331,16 @@ class LiteWindowTest final : public QObject {
     }
 
     void settingsIsAPageOfTheWindow() {
+        // A repository, so Source Control is available too.
+        QTemporaryDir repository;
+        QVERIFY(repository.isValid());
+        QProcess git;
+        git.setWorkingDirectory(repository.path());
+        git.start(QStringLiteral("git"), {QStringLiteral("init"), QStringLiteral("-q")});
+        QVERIFY(git.waitForFinished(10000) && git.exitCode() == 0);
         ketplus::ThemeManager theme(*qApp);
         ketplus::MainWindow window(theme);
-        window.openFolder(workspace_.path());
+        window.openFolder(repository.path());
         window.show();
         QVERIFY(QTest::qWaitForWindowExposed(&window));
         auto* settings = activityButton(window, QStringLiteral("Settings"));
@@ -364,6 +371,31 @@ class LiteWindowTest final : public QObject {
                  window.findChild<QWidget*>(QStringLiteral("editorColumn"))->parentWidget());
         QVERIFY(!marked(settings));
         QVERIFY(window.statusBar()->isVisible());
+
+        // A panel open behind Settings: its button or shortcut returns to the editor with
+        // the panel still open, not closes it while Settings stays.
+        for (const auto* name : {"Explorer", "Search in Files", "Source Control"}) {
+            const QString label = QString::fromLatin1(name);
+            for (const bool shortcut : {false, true}) {
+                QAction* action = window.findChild<QAction*>();
+                for (auto* candidate : window.findChildren<QAction*>())
+                    if (candidate->text().remove('&') == label && candidate->isCheckable())
+                        action = candidate;
+                QTRY_VERIFY_WITH_TIMEOUT(action->isEnabled(), 10000);
+                if (!action->isChecked())
+                    action->trigger();
+                QVERIFY2(action->isChecked(), name);
+                settings->click();
+                QCOMPARE(pages->currentWidget(), page);
+                if (shortcut)
+                    action->trigger();
+                else
+                    activityButton(window, label)->click();
+                QVERIFY2(pages->currentWidget() != page, name);
+                QVERIFY2(action->isChecked(), name);
+                QVERIFY2(activityButton(window, label)->isChecked(), name);
+            }
+        }
     }
 
     void reviewCaptureRunsItsSteps() {

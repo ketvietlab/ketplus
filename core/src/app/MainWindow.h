@@ -75,6 +75,9 @@ class MainWindow final : public QMainWindow {
     void createActions();
     void createChrome();
     void showEditorSurface();
+    // From Settings, a panel's button or shortcut shows the editor with that panel, even when
+    // the panel was open behind Settings and its action just unchecked.
+    bool panelStaysLeavingSettings(QAction* action, bool visible);
     // Side panel actions change under signal blockers, so the activity bar repaints here.
     void refreshActivityBar();
     void createNewDocument();
