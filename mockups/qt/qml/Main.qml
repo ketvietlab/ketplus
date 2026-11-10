@@ -296,6 +296,9 @@ Basic.ApplicationWindow {
             if (Mock.initialPanel === "device-focus")
                 Qt.callLater(() => Qt.callLater(() => connections.focusActivityRow(3)))
         }
+        else if (Mock.initialPanel === "toast")
+            // The app-wide toast, for the side by side with the app.
+            Qt.callLater(() => notify("Saved the plan"))
         else if (["pair", "linux", "signin"].includes(Mock.initialPanel) && screen === "connections")
             Qt.callLater(() => connections.openDialog(Mock.initialPanel))
         else if (Mock.initialPanel && screen === "workspace")
