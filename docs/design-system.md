@@ -285,7 +285,9 @@ Core confirmations, messages and number prompts (Go to Line) use `ui/MessageDial
 synchronous adapter over `ket::Dialog`; the KétPlus Terminal About box uses it too.
 Status-bar messages also show as a `ket::Toast`, inline failures use `ket::Banner`, and
 menus, context menus and tooltips are drawn by `ket::Style`. Core opens no `QMessageBox`
-or `QInputDialog`; file pickers stay native. Settings list delegates are transparent
+or `QInputDialog`; file pickers stay native. In Pro, the Repository & worktree picker
+(`setCardWidth(800)`, as the mock) and Rename conversation are `ket::Dialog` cards too;
+moving the remaining Pro dialogs is tracked in #422. Settings list delegates are transparent
 beneath their kit NavItems, preventing duplicate labels in unselected rows.
 
 Application font and palette defaults are set on QApplication, not a global

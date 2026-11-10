@@ -5,10 +5,14 @@
 #include "app/AgentWorktreeDialog.h"
 #include "app/ConversationMenu.h"
 
+#include "KetButton.h"
+#include "KetDialog.h"
+#include "KetFieldRow.h"
+#include "KetTextField.h"
+
 #include <QClipboard>
 #include <QCursor>
 #include <QGuiApplication>
-#include <QInputDialog>
 #include <QMenu>
 #include <QMessageBox>
 #include <QStatusBar>
@@ -30,12 +34,27 @@ void MainWindow::renameAgentConversation(const QString& worktreePath,
         const QVariantMap conversation = value.toMap();
         if (conversation.value(QStringLiteral("id")).toString() != conversationId)
             continue;
-        bool accepted = false;
-        const QString title = QInputDialog::getText(
-            this, QStringLiteral("Rename Conversation"), QStringLiteral("Name:"), QLineEdit::Normal,
-            conversation.value(QStringLiteral("title")).toString(), &accepted);
-        if (accepted)
-            agentManager_->renameConversation(worktreePath, conversationId, title);
+        // The mock's Rename conversation dialog: a Name field, then Cancel and Rename.
+        auto* dialog = new ket::Dialog(tr("Rename conversation"), this);
+        dialog->setObjectName(QStringLiteral("renameConversationDialog"));
+        connect(dialog, &ket::Dialog::finished, dialog, &QObject::deleteLater);
+        auto* field = new ket::TextField;
+        field->setObjectName(QStringLiteral("renameConversationField"));
+        field->setAccessibleName(tr("Name"));
+        field->setText(conversation.value(QStringLiteral("title")).toString());
+        dialog->setBody(new ket::FieldRow(tr("Name"), field));
+        auto* cancel = dialog->addButton(tr("Cancel"), ket::ButtonVariant::Ghost);
+        auto* rename = dialog->addButton(tr("Rename"), ket::ButtonVariant::Primary);
+        connect(cancel, &QAbstractButton::clicked, dialog, &ket::Dialog::reject);
+        connect(rename, &QAbstractButton::clicked, dialog, &ket::Dialog::accept);
+        connect(field, &QLineEdit::returnPressed, dialog, &ket::Dialog::accept);
+        connect(dialog, &ket::Dialog::accepted, this, [this, worktreePath, conversationId, field] {
+            if (agentManager_ != nullptr)
+                agentManager_->renameConversation(worktreePath, conversationId, field->text());
+        });
+        dialog->open();
+        field->selectAll();
+        field->setFocus(Qt::OtherFocusReason);
         return;
     }
 }

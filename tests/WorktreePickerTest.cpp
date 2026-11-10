@@ -1,3 +1,4 @@
+#include "KetDialog.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/CodexAppServer.h"
@@ -188,7 +189,9 @@ class WorktreePickerTest : public QObject {
     }
 
     void unsupportedAgentKeepsExecutionAndScrollLoadsMore() {
-        QWidget parent;
+        QWidget parent; // the picker is a card inside this window
+        parent.resize(900, 600);
+        parent.show();
         QString selected;
         QStringList methods;
         ketplus::showExecutionWorktreeDialog(
@@ -208,9 +211,10 @@ class WorktreePickerTest : public QObject {
                      {});
             },
             [&](const QString& path) { selected = path; }, "/repo/tree-0");
-        auto* dialog = parent.findChild<QDialog*>("executionWorktreeDialog");
+        auto* dialog = parent.findChild<ket::Dialog*>("executionWorktreeDialog");
         QVERIFY(dialog);
-        QCOMPARE(dialog->layout()->contentsMargins(), QMargins(24, 24, 24, 24));
+        // The card pads its body, as the mock's KetDialog does.
+        QCOMPARE(dialog->body()->layout()->contentsMargins(), QMargins());
         auto* list = dialog->findChild<QListWidget*>("executionWorktreeList");
         QVERIFY(!list->isEnabled());
         QCOMPARE(list->count(), 100);

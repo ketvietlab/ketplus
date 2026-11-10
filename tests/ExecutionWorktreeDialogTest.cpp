@@ -1,14 +1,19 @@
 #include "app/ExecutionWorktreeDialog.h"
+#include "KetDialog.h"
 #include "KetToast.h"
 #include "ui/Theme.h"
 #include <QAbstractButton>
+#include <QGuiApplication>
 #include <QJsonArray>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QPointer>
 #include <QPushButton>
+#include <QQuickView>
+#include <QScreen>
 #include <QScrollBar>
+#include <QVBoxLayout>
 #include <QtTest>
 
 #include <utility>
@@ -16,8 +21,52 @@
 class ExecutionWorktreeDialogTest final : public QObject {
     Q_OBJECT
   private slots:
+    // The Agent Workspace is a QQuickView in a window container, a native child window. A
+    // dialog card drawn into the window's own surface would sit beneath it.
+    void pickerStaysAboveTheAgentWorkspace() {
+        QWidget window;
+        window.resize(900, 600);
+        auto* layout = new QVBoxLayout(&window);
+        layout->setContentsMargins(0, 0, 0, 0);
+        auto* quick = new QQuickView;
+        quick->setColor(QColor(255, 0, 0));
+        auto* container = QWidget::createWindowContainer(quick, &window);
+        layout->addWidget(container);
+        const auto screens = QGuiApplication::screens();
+        for (auto* screen : screens)
+            if (screen != QGuiApplication::primaryScreen())
+                window.move(screen->geometry().topLeft() + QPoint(40, 40));
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        ketplus::showExecutionWorktreeDialog(
+            &window, [](const QString&, const QJsonObject&, auto done) { done({}, {}); },
+            [](const QString&) {}, "/workspace/a", {"/workspace/a"}, "/workspace/a");
+        auto* dialog = window.findChild<ket::Dialog*>("executionWorktreeDialog");
+        QVERIFY(dialog && dialog->isVisible());
+        // Offscreen there is no native stacking to look at: the card is a native child,
+        // raised above the container.
+        QVERIFY(dialog->testAttribute(Qt::WA_NativeWindow));
+        if (QGuiApplication::platformName() == QStringLiteral("cocoa")) {
+            QTest::qWait(300);
+            const QImage shot = window.screen()->grabWindow(window.winId()).toImage();
+            const qreal dpr = shot.devicePixelRatio();
+            const auto at = [&](QPoint point) { return shot.pixelColor(point * dpr); };
+            // The card shows over the view, and the backdrop dims the view rather than
+            // hiding it.
+            const QColor card = at(dialog->card()->geometry().center() + QPoint(0, 120));
+            QVERIFY2(!(card.red() > 200 && card.green() < 80), qPrintable(card.name()));
+            const QColor backdrop = at(QPoint(20, 20));
+            QVERIFY2(backdrop.red() > backdrop.green() + 40, qPrintable(backdrop.name()));
+            QVERIFY2(backdrop.red() < 240, qPrintable(backdrop.name()));
+            if (const auto dir = qEnvironmentVariable("KETPLUS_PICKER_CAPTURE_DIR"); !dir.isEmpty())
+                shot.save(dir + "/picker-over-quick.png");
+        }
+        dialog->reject();
+    }
     void scrollSearchAndSelectionSwitchExecutionAfterAcknowledgement() {
-        QWidget parent;
+        QWidget parent; // the picker is a card inside this window
+        parent.resize(900, 600);
+        parent.show();
         QString selected;
         QJsonObject switched;
         ketplus::showExecutionWorktreeDialog(
@@ -45,7 +94,7 @@ class ExecutionWorktreeDialogTest final : public QObject {
                      {});
             },
             [&](const QString& branch) { selected = branch; });
-        auto* dialog = parent.findChild<QDialog*>();
+        auto* dialog = parent.findChild<ket::Dialog*>();
         QVERIFY(dialog);
         auto* list = dialog->findChild<QListWidget*>("executionWorktreeList");
         QVERIFY(list);
@@ -67,7 +116,7 @@ class ExecutionWorktreeDialogTest final : public QObject {
         list->setCurrentItem(list->item(1));
         QVERIFY(switched.isEmpty());
         QVERIFY(use->isEnabled());
-        const QPointer<QDialog> open(dialog);
+        const QPointer<ket::Dialog> open(dialog);
         use->click();
         QCOMPARE(switched.value("expected_context_revision").toInt(), 7);
         QCOMPARE(switched.value("worktree_path").toString(), "/repo-1");
@@ -75,8 +124,12 @@ class ExecutionWorktreeDialogTest final : public QObject {
         QTRY_VERIFY(open.isNull() || !open->isVisible());
     }
     void repositoryListsItsWorktreesThenUseSwitchesAfterAck() {
-        QWidget parent;
+        // As in the app, the theme manager exists before any dialog, so it restyles the
+        // application before the kit's widgets refresh their recipes.
+        ketplus::ThemeManager theme(*qApp);
+        QWidget parent; // the picker is a card inside this window
         parent.resize(900, 600);
+        parent.show();
         QString selected;
         QJsonObject mutation;
         QList<QJsonObject> listed;
@@ -115,13 +168,19 @@ class ExecutionWorktreeDialogTest final : public QObject {
             },
             [&](const QString& path) { selected = path; }, current,
             {"/workspace/b", "/workspace/a"}, "/workspace/a", [&] { created = true; });
-        auto* dialog = parent.findChild<QDialog*>("executionWorktreeDialog");
+        auto* dialog = parent.findChild<ket::Dialog*>("executionWorktreeDialog");
         QVERIFY(dialog);
-        QCOMPARE(dialog->windowTitle(), QStringLiteral("Repository & worktree"));
+        // An in-window card as the mock's: its title in the header, the actions in its footer.
+        QCOMPARE(dialog->title(), QStringLiteral("Repository & worktree"));
+        QVERIFY(!dialog->isWindow());
+        QCOMPARE(dialog->geometry(), parent.rect());
+        QCOMPARE(dialog->card()->width(), 800);
         auto* repos = dialog->findChild<QListWidget*>("executionRepositoryList");
         auto* list = dialog->findChild<QListWidget*>("executionWorktreeList");
         auto* use = dialog->findChild<QAbstractButton*>("useRepositoryButton");
         QVERIFY(repos && list && use);
+        QVERIFY(dialog->card()->isAncestorOf(use));
+        QVERIFY(!dialog->body()->isAncestorOf(use));
         // The current repository is listed first with its worktrees; the current one is chosen.
         QCOMPARE(repos->item(0)->data(Qt::UserRole).toString(), current);
         QVERIFY(!listed.constFirst().contains("repository_path"));
@@ -161,10 +220,15 @@ class ExecutionWorktreeDialogTest final : public QObject {
         QVERIFY(dialog->isVisible());
         QVERIFY(use->isEnabled());
         QCOMPARE(dialog->findChild<QLabel*>("worktreeStatus")->text(), "Mac offline");
-        ketplus::ThemeManager theme(*qApp);
         for (auto mode : {ketplus::ThemeManager::Mode::Light, ketplus::ThemeManager::Mode::Dark}) {
             theme.setMode(mode);
             QTest::qWait(30);
+            QLabel* title = nullptr;
+            for (auto* label : dialog->card()->findChildren<QLabel*>())
+                if (label->text() == QStringLiteral("Repository & worktree"))
+                    title = label;
+            QVERIFY(title);
+            QCOMPARE(title->palette().color(QPalette::WindowText), dialog->recipe().title);
             QCOMPARE(repos->parentWidget()->width(), 222);
             QVERIFY(list->width() >= 300);
             // A repository is one line and a worktree two, as the mock's rows.
@@ -181,7 +245,7 @@ class ExecutionWorktreeDialogTest final : public QObject {
         acknowledgement = {};
         use->click();
         QVERIFY(acknowledgement);
-        const QPointer<QDialog> open(dialog);
+        const QPointer<ket::Dialog> open(dialog);
         acknowledgement({{"ok", true}, {"worktree_path", "/workspace/b-pilot"}}, {});
         QCOMPARE(selected, "/workspace/b-pilot");
         // The next turn's place is announced, and the picker closes.
@@ -193,7 +257,9 @@ class ExecutionWorktreeDialogTest final : public QObject {
     }
     // #405 review: a failed listing, a pending search, the arrow keys and a stale context.
     void choiceFollowsTheListAndRecoversAStaleContext() {
-        QWidget parent;
+        QWidget parent; // the picker is a card inside this window
+        parent.resize(900, 600);
+        parent.show();
         QList<QJsonObject> switches;
         QList<QJsonObject> listings;
         std::function<void(const QJsonObject&, const QString&)> pendingListing;
@@ -246,7 +312,7 @@ class ExecutionWorktreeDialogTest final : public QObject {
             },
             [](const QString&) {}, "/workspace/a", {"/workspace/a", "/workspace/b"},
             "/workspace/a");
-        auto* dialog = parent.findChild<QDialog*>("executionWorktreeDialog");
+        auto* dialog = parent.findChild<ket::Dialog*>("executionWorktreeDialog");
         auto* repos = dialog->findChild<QListWidget*>("executionRepositoryList");
         auto* list = dialog->findChild<QListWidget*>("executionWorktreeList");
         auto* use = dialog->findChild<QAbstractButton*>("useRepositoryButton");
@@ -315,12 +381,14 @@ class ExecutionWorktreeDialogTest final : public QObject {
         QCOMPARE(switches.constLast().value("worktree_path").toString(), "/workspace/a-2");
     }
     void createWorktreeOpensTheWorktreesPage() {
-        QWidget parent;
+        QWidget parent; // the picker is a card inside this window
+        parent.resize(900, 600);
+        parent.show();
         bool created = false;
         ketplus::showExecutionWorktreeDialog(
             &parent, [](const QString&, const QJsonObject&, auto) {}, [](const QString&) {}, {}, {},
             {}, [&] { created = true; });
-        auto* dialog = parent.findChild<QDialog*>("executionWorktreeDialog");
+        auto* dialog = parent.findChild<ket::Dialog*>("executionWorktreeDialog");
         auto* create = dialog->findChild<QAbstractButton*>("createWorktreeButton");
         QVERIFY(create && create->isVisibleTo(dialog));
         create->click();
