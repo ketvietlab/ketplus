@@ -205,7 +205,10 @@ current-window value.
   the start of the provider's latest reasoning summary, first letter lowercased
   (#385, as Codex CLI shows it). The summary's body and the reasoning content stay
   out of the line, the transcript and its copy; the heading clears when the turn
-  ends. Command activity updates
+  ends. Each conversation keeps its own heading and the line shows the selected
+  one, so another conversation in the same worktree never changes it. The heading
+  appears when a reasoning item completes; streaming it from summary deltas is
+  #397. Command activity updates
   its compact receipt without rendering output. The transcript viewport leaves a
   fixed 20 px gap above the composer in idle and streaming states.
   Streaming preserves reading intent: a viewport following the bottom continues

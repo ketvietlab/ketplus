@@ -234,7 +234,10 @@ void AgentSessionManager::setWorkingDetail(const SessionPtr& session, const QStr
     if (session->workingDetail == detail)
         return;
     session->workingDetail = detail;
-    emit workingDetailChanged(session->path, detail);
+    // A background conversation in the same worktree keeps its own detail; the line shows the
+    // active one, which a conversation switch reads again through workingDetail().
+    if (isActiveSession(session))
+        emit workingDetailChanged(session->path, detail);
 }
 
 QString AgentSessionManager::workingDetail(const QString& worktreePath) const {

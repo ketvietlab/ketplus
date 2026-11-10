@@ -569,6 +569,7 @@ void MainWindow::ensureAgentWorkspace() {
                             ? status
                             : QStringLiteral("Worktree missing"),
                         running);
+                    agentWorkspace_->setWorkingDetail(agentManager_->workingDetail(path));
                 }
             });
     connect(agentManager_, &AgentSessionManager::conversationsChanged, this,

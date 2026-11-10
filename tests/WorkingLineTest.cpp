@@ -4,6 +4,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -105,6 +106,100 @@ for line in sys.stdin:
         QCOMPARE(details.constLast().at(1).toString(), QString());
         for (const auto& emitted : std::as_const(details))
             QVERIFY(!emitted.at(1).toString().contains(QStringLiteral("secret")));
+    }
+
+    // A background conversation in the same worktree ending its turn leaves the active one's line.
+    void keepsTheActiveConversationsLine() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString worktree = directory.filePath("worktree");
+        QVERIFY(QDir().mkpath(worktree));
+        const QString serverPath = directory.filePath("fake-codex");
+        QFile server(serverPath);
+        QVERIFY(server.open(QIODevice::WriteOnly));
+        const QByteArray source = R"PY(#!/usr/bin/python3
+import json
+import sys
+import threading
+import time
+
+lock = threading.Lock()
+threads = 0
+
+def send(value):
+    with lock:
+        print(json.dumps(value, separators=(",", ":")), flush=True)
+
+def run(thread, turn, heading, seconds):
+    send({"method": "turn/started", "params": {"threadId": thread, "turn": {"id": turn, "status": "inProgress", "items": []}}})
+    thought = {"id": turn + "-thought", "type": "reasoning", "summary": ["**" + heading + "**"], "content": []}
+    send({"method": "item/completed", "params": {"threadId": thread, "turnId": turn, "item": thought}})
+    time.sleep(seconds)
+    send({"method": "turn/completed", "params": {"threadId": thread, "turn": {"id": turn, "status": "completed", "items": []}}})
+
+for line in sys.stdin:
+    message = json.loads(line)
+    method = message.get("method")
+    request_id = message.get("id")
+    params = message.get("params", {})
+    if method == "initialize":
+        send({"id": request_id, "result": {"codexHome": "/tmp", "platformFamily": "unix", "platformOs": "macos", "userAgent": "fake"}})
+    elif method == "thread/start":
+        threads += 1
+        send({"id": request_id, "result": {"thread": {"id": "thread-%d" % threads, "turns": []}}})
+    elif method == "turn/start":
+        thread = params.get("threadId")
+        first = thread == "thread-1"
+        turn = "turn-1" if first else "turn-2"
+        send({"id": request_id, "result": {"turn": {"id": turn, "status": "inProgress", "items": []}}})
+        threading.Thread(target=run, args=(thread, turn, "Profiling the first" if first else "Drafting the second", 1.0 if first else 2.5)).start()
+)PY";
+        QCOMPARE(server.write(source), source.size());
+        server.close();
+        QVERIFY(QFile::setPermissions(serverPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                                                      QFileDevice::ExeOwner));
+
+        ketplus::CodexAppServer appServer(serverPath);
+        ketplus::AgentSessionManager manager(&appServer);
+        manager.submitPrompt(worktree, QStringLiteral("First"));
+        QTRY_COMPARE_WITH_TIMEOUT(manager.workingDetail(worktree),
+                                  QStringLiteral("profiling the first"), 3000);
+        const QString first = manager.conversations(worktree)
+                                  .constFirst()
+                                  .toMap()
+                                  .value(QStringLiteral("id"))
+                                  .toString();
+        const auto firstRunning = [&] {
+            for (const auto& value : manager.conversations(worktree)) {
+                const auto conversation = value.toMap();
+                if (conversation.value(QStringLiteral("id")).toString() == first)
+                    return conversation.value(QStringLiteral("running")).toBool();
+            }
+            return false;
+        };
+
+        QSignalSpy details(&manager, &ketplus::AgentSessionManager::workingDetailChanged);
+        manager.newSession(worktree);
+        manager.submitPrompt(worktree, QStringLiteral("Second"));
+        QTRY_COMPARE_WITH_TIMEOUT(manager.workingDetail(worktree),
+                                  QStringLiteral("drafting the second"), 3000);
+        QVERIFY(firstRunning());
+        QTRY_VERIFY_WITH_TIMEOUT(!firstRunning(), 3000);
+        // The first conversation's end did not reach the second's line.
+        QVERIFY(manager.isRunning(worktree));
+        QCOMPARE(manager.workingDetail(worktree), QStringLiteral("drafting the second"));
+        QCOMPARE(details.constLast().at(1).toString(), QStringLiteral("drafting the second"));
+        for (const auto& emitted : std::as_const(details))
+            QVERIFY(emitted.at(1).toString() != QStringLiteral("profiling the first"));
+
+        // Switching back reads the first conversation's own state.
+        QSignalSpy states(&manager, &ketplus::AgentSessionManager::sessionStateChanged);
+        manager.selectConversation(worktree, first);
+        QVERIFY(!states.isEmpty());
+        QVERIFY(manager.workingDetail(worktree).isEmpty());
+        // Let the second turn end before the server stops.
+        QTRY_VERIFY_WITH_TIMEOUT(
+            !manager.runningPaths().contains(QFileInfo(worktree).canonicalFilePath()), 4000);
     }
 };
 
