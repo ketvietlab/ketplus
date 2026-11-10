@@ -6,6 +6,8 @@
 
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QPointer>
+#include <QSet>
 
 #include <array>
 #include <utility>
@@ -49,10 +51,110 @@ QString color(const QString& label) {
 
 QVariantList AgentSessionManager::listedTags(const SessionPtr& session) const {
     QVariantList result;
-    for (const QString& label : session->tags)
-        result.append(QVariantMap{{QStringLiteral("label"), label},
-                                  {QStringLiteral("color"), conversation_tags::color(label)}});
+    for (const QString& label : session->tags) {
+        QString color = conversation_tags::color(label);
+        for (const QVariant& value : tagCatalog_) {
+            const QVariantMap tag = value.toMap();
+            if (tag.value(QStringLiteral("label")).toString().compare(label, Qt::CaseInsensitive) ==
+                0) {
+                color = tag.value(QStringLiteral("color")).toString();
+                break;
+            }
+        }
+        result.append(
+            QVariantMap{{QStringLiteral("label"), label}, {QStringLiteral("color"), color}});
+    }
     return result;
+}
+
+// #429: the daemon keeps the catalog; until it answers (or when it is too old to keep one)
+// the built-in labels are offered. Another window's change arrives as `tags.changed`.
+void AgentSessionManager::installTagCatalog() {
+    tagCatalog_ = conversation_tags::catalog();
+    connect(server_, &CodexAppServer::readyChanged, this, [this](const bool ready) {
+        if (ready)
+            loadTagCatalog();
+    });
+    connect(server_, &CodexAppServer::tagsChanged, this, &AgentSessionManager::applyTagChange);
+    if (server_->isReady())
+        loadTagCatalog();
+}
+
+void AgentSessionManager::loadTagCatalog() {
+    if (!server_->hasTagCatalogSupport())
+        return;
+    server_->readTagCatalog([this, guard = QPointer<AgentSessionManager>(this)](
+                                const QJsonObject& result, const QString& error) {
+        if (guard && error.isEmpty())
+            setTagCatalogFromDaemon(result.value(QStringLiteral("tags")).toArray());
+    });
+}
+
+void AgentSessionManager::setTagCatalogFromDaemon(const QJsonArray& catalog) {
+    QVariantList next;
+    for (const auto& value : catalog) {
+        const QJsonObject tag = value.toObject();
+        next.append(QVariantMap{{QStringLiteral("label"), tag.value(QStringLiteral("label"))},
+                                {QStringLiteral("color"), tag.value(QStringLiteral("color"))}});
+    }
+    if (next == tagCatalog_)
+        return;
+    tagCatalog_ = next;
+    emit tagCatalogChanged(tagCatalog_);
+    // Colours may have changed on every listed tag.
+    for (auto it = conversationsByPath_.cbegin(); it != conversationsByPath_.cend(); ++it)
+        emit conversationsChanged(it.key(), conversations(it.key()));
+}
+
+void AgentSessionManager::applyTagChange(const QJsonObject& change) {
+    if (change.contains(QStringLiteral("catalog")))
+        setTagCatalogFromDaemon(change.value(QStringLiteral("catalog")).toArray());
+    QSet<QString> changedPaths;
+    for (const auto& value : change.value(QStringLiteral("sessions")).toArray()) {
+        const QJsonObject entry = value.toObject();
+        const SessionPtr session =
+            sessionsByThread_.value(entry.value(QStringLiteral("session_id")).toString());
+        if (!session || session->tagSyncPending)
+            continue; // Its own request's answer sets it.
+        const QStringList tags = entry.value(QStringLiteral("tags")).toVariant().toStringList();
+        if (session->tags == tags)
+            continue;
+        session->tags = tags;
+        changedPaths.insert(session->path);
+    }
+    for (const QString& path : std::as_const(changedPaths))
+        emit conversationsChanged(path, conversations(path));
+}
+
+void AgentSessionManager::saveTagCatalog(const QVariantList& tags, const QVariantMap& renames) {
+    QJsonArray catalog;
+    for (const QVariant& value : tags) {
+        const QVariantMap tag = value.toMap();
+        catalog.append(
+            QJsonObject{{QStringLiteral("label"), tag.value(QStringLiteral("label")).toString()},
+                        {QStringLiteral("color"), tag.value(QStringLiteral("color")).toString()}});
+    }
+    server_->setTagCatalog(
+        catalog, QJsonObject::fromVariantMap(renames),
+        [this, guard = QPointer<AgentSessionManager>(this)](const QJsonObject& result,
+                                                            const QString& error) {
+            if (!guard)
+                return;
+            if (!error.isEmpty()) {
+                emit errorOccurred(QStringLiteral("The tags could not be saved: %1").arg(error));
+                return;
+            }
+            applyTagChange(
+                {{QStringLiteral("catalog"), result.value(QStringLiteral("tags"))},
+                 {QStringLiteral("sessions"), result.value(QStringLiteral("sessions"))}});
+        });
+}
+
+void AgentSessionManager::sendStartTags(const SessionPtr& session) {
+    if (!std::exchange(session->tagsAwaitStart, false) || !server_->hasTagSupport())
+        return;
+    session->tagsWanted = session->tags;
+    syncTags(session);
 }
 
 // The daemon owns the labels: the list changes here only once it has stored the new one, so
@@ -69,9 +171,8 @@ void AgentSessionManager::setConversationTag(const QString& worktreePath,
         QStringList tags = session->tagSyncPending ? session->tagsWanted : session->tags;
         if (name.isEmpty() || tags.contains(name, Qt::CaseInsensitive) == tagged)
             return;
-        if (session->threadId.isEmpty() || !server_->hasTagSupport()) {
-            emit errorOccurred(
-                QStringLiteral("Tags can be set once the conversation has started."));
+        if (!server_->hasTagSupport()) {
+            emit errorOccurred(QStringLiteral("This daemon does not store conversation tags."));
             return;
         }
         if (tagged)
@@ -80,6 +181,13 @@ void AgentSessionManager::setConversationTag(const QString& worktreePath,
             tags.removeIf([&name](const QString& existing) {
                 return existing.compare(name, Qt::CaseInsensitive) == 0;
             });
+        if (session->threadId.isEmpty()) {
+            // Not started yet: kept here and sent with the first turn (sendStartTags).
+            session->tags = tags;
+            session->tagsAwaitStart = true;
+            emit conversationsChanged(session->path, conversations(session->path));
+            return;
+        }
         session->tagsWanted = tags;
         syncTags(session);
         return;

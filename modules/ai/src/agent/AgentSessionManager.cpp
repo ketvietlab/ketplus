@@ -229,6 +229,7 @@ AgentSessionManager::AgentSessionManager(CodexAppServer* server, QObject* parent
             emit restoreStateChanged(false);
         }
     });
+    installTagCatalog();
     // A reviewer or work report read sent before the daemon listed its sessions is answered
     // "unknown session".
     connect(server_, &CodexAppServer::restoreStateChanged, this, [this](const bool restoring) {
@@ -295,8 +296,8 @@ QVariantList AgentSessionManager::conversations(const QString& worktreePath) con
             {QStringLiteral("title"), session->title},
             {QStringLiteral("number"), session->number},
             {QStringLiteral("tags"), listedTags(session)},
-            {QStringLiteral("tagsEditable"),
-             !session->threadId.isEmpty() && server_->hasTagSupport()},
+            // Before the first turn the labels wait here (#429); they go out with the start.
+            {QStringLiteral("tagsEditable"), server_->hasTagSupport()},
             {QStringLiteral("agentTurnNumber"), session->agentTurnNumber},
             {QStringLiteral("agentTurnTitle"), session->agentTurnTitle},
             {QStringLiteral("agentTurnReply"), session->agentTurnReply},

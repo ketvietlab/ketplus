@@ -107,6 +107,8 @@ class AgentWorkspaceView final : public QWidget {
     Q_PROPERTY(bool compactMode READ compactMode WRITE setCompactMode NOTIFY compactModeChanged)
     // The details pane is open: its Open content menu replaces the header's openers.
     Q_PROPERTY(bool detailsOpen READ detailsOpen NOTIFY detailsOpenChanged)
+    // #429: the labels the header's Add tag menu offers, each as {label, color}.
+    Q_PROPERTY(QVariantList tagCatalog READ tagCatalog NOTIFY tagCatalogChanged)
     Q_PROPERTY(
         bool compactWindow READ compactWindow WRITE setCompactWindow NOTIFY compactWindowChanged)
     Q_PROPERTY(bool productSidebarVisible READ productSidebarVisible WRITE setProductSidebarVisible
@@ -435,8 +437,18 @@ class AgentWorkspaceView final : public QWidget {
         emit settingsRequested(section);
     }
     Q_INVOKABLE void requestTagFilter(const QString& tag) { emit tagFilterRequested(tag); }
-    // The labels the header's Add tag menu offers, each as {label, color}.
-    Q_INVOKABLE [[nodiscard]] QVariantList tagCatalog() const;
+    [[nodiscard]] QVariantList tagCatalog() const;
+    void setTagCatalog(const QVariantList& catalog) {
+        if (tagCatalogSet_ && catalog == tagCatalog_)
+            return;
+        tagCatalogSet_ = true;
+        tagCatalog_ = catalog;
+        emit tagCatalogChanged();
+    }
+    // Manage tags… saves the whole catalog; renames maps an old label to its new one.
+    Q_INVOKABLE void requestTagCatalogSave(const QVariantList& tags, const QVariantMap& renames) {
+        emit tagCatalogSaveRequested(tags, renames);
+    }
     Q_INVOKABLE void requestConversationTag(const QString& conversationId, const QString& label,
                                             bool tagged) {
         emit conversationTagRequested(conversationId, label, tagged);
@@ -609,6 +621,8 @@ class AgentWorkspaceView final : public QWidget {
     void productSidebarVisibleChanged();
     void compactWindowChanged();
     void detailsOpenChanged();
+    void tagCatalogChanged();
+    void tagCatalogSaveRequested(const QVariantList& tags, const QVariantMap& renames);
     void compactWindowRequested();
     void conversationWidthChanged();
     void conversationConfigurationRequested(const QString& model, const QString& effort,
@@ -774,6 +788,8 @@ class AgentWorkspaceView final : public QWidget {
     bool productSidebarVisible_{true};
     bool compactWindow_{false};
     bool detailsOpen_{false};
+    QVariantList tagCatalog_;
+    bool tagCatalogSet_{false};
     int conversationWidth_{defaultConversationWidth};
     qint64 conversationConfigurationRevision_{0};
     QVariant conversationCompactWindow_;

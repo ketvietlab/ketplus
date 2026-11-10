@@ -364,8 +364,9 @@ Item {
             }
         }
         Instantiator {
-            model: agentHost.tagCatalog()
-            onObjectAdded: (index, object) => tagMenu.addItem(object)
+            model: agentHost.tagCatalog
+            // Above the separator and Manage tags…, which stay last.
+            onObjectAdded: (index, object) => tagMenu.insertItem(index, object)
             onObjectRemoved: (index, object) => tagMenu.removeItem(object)
             Kit.KetMenuItem {
                 required property var modelData
@@ -377,6 +378,21 @@ Item {
                 onTriggered: agentHost.requestConversationTag(header.selectedConversation.id, tagLabel, checked)
             }
         }
+        Kit.KetMenuSeparator {}
+        Kit.KetMenuItem {
+            objectName: "conversationManageTagsItem"
+            text: "Manage tags…"
+            iconName: "settings"
+            onTriggered: manageTagsDialog.open()
+        }
+    }
+
+    ManageTagsDialog {
+        id: manageTagsDialog
+        objectName: "manageTagsDialog"
+        parent: Basic.Overlay.overlay
+        tags: agentHost.tagCatalog
+        onSaved: (tags, renames) => agentHost.requestTagCatalogSave(tags, renames)
     }
 
     Kit.KetMenu {

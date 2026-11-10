@@ -104,6 +104,9 @@ class SessionHost final : public QObject, private AgentHostPort {
 
   signals:
     void eventReady(const QJsonObject& event);
+    // A change every desktop window shows at once that is not a session event (#429):
+    // `tags.changed` with the catalog and/or the sessions whose labels changed.
+    void noticeReady(const QString& type, const QJsonObject& payload);
 
   private:
     ClaudeAccountUsage* claudeAccountUsage_{nullptr};
@@ -239,6 +242,9 @@ class SessionHost final : public QObject, private AgentHostPort {
     [[nodiscard]] QJsonObject markSessionSeen(const QJsonObject& request);
     [[nodiscard]] QJsonObject setSessionArchived(const QJsonObject& request);
     [[nodiscard]] QJsonObject setSessionTags(const QJsonObject& request);
+    // #429, in SessionHostTags.cpp: the labels this Mac offers.
+    [[nodiscard]] QJsonObject tagCatalog();
+    [[nodiscard]] QJsonObject setTagCatalog(const QJsonObject& request);
     // #125 "Waiting for you", in SessionHostAwaiting.cpp: Mark as done, and the turn's
     // events that set or clear it.
     [[nodiscard]] QJsonObject markSessionDone(const QJsonObject& request);

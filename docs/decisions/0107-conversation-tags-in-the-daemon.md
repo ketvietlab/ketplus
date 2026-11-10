@@ -34,6 +34,9 @@ window, a reset of the desktop settings or a later client must show the same tag
 
 ## Consequences
 
+Superseded in part by [ADR 0113](0113-tag-catalog.md): the catalog, Manage tags…,
+tagging before the first turn, live updates and phone tags.
+
 - Phones and the cloud projection do not carry tags yet; the cloud builds its own
   session summary and is unchanged.
 - Another desktop window sees a change at its next catalog refresh, like archive state.

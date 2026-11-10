@@ -8,6 +8,7 @@
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/CodexAppServer.h"
+#include "agent/ConversationTags.h"
 #include "agent/TranscriptTableStyle.h"
 #include "ui/Theme.h"
 #include <QPointer>
@@ -1259,7 +1260,7 @@ void AgentWorkspaceViewTest::composerPlaceholderTracksCaret() {
     QVERIFY(QMetaObject::invokeMethod(tag, "clicked"));
     QCOMPARE(filtered.count(), 1);
     QCOMPARE(filtered.first().first().toString(), QStringLiteral("UI"));
-    // The daemon stores tags, so Add tag waits for a conversation it knows.
+    // Add tag waits for a daemon that stores tags (before the first turn too, #429).
     auto* addTag = root->findChild<QQuickItem*>("headerAddTagButton");
     QVERIFY(addTag && !addTag->isVisible());
     view.setConversations(
@@ -1285,7 +1286,8 @@ void AgentWorkspaceViewTest::composerPlaceholderTracksCaret() {
         }
         return found;
     };
-    QCOMPARE(tagMenu->property("count").toInt(), view.tagCatalog().size());
+    // The catalog, then a separator and Manage tags… (#429).
+    QCOMPARE(tagMenu->property("count").toInt(), view.tagCatalog().size() + 2);
     QVERIFY(tagItem("conversationTagItem_UI")->property("checked").toBool());
     auto* review = tagItem("conversationTagItem_Review");
     QVERIFY(review && !review->property("checked").toBool());
@@ -1297,6 +1299,54 @@ void AgentWorkspaceViewTest::composerPlaceholderTracksCaret() {
     QVERIFY(tagged.first().at(2).toBool());
     QVERIFY(QMetaObject::invokeMethod(tagMenu, "close"));
     QTRY_VERIFY(!tagMenu->property("visible").toBool());
+    // Manage tags… edits a draft of the catalog and saves it whole, with the renames.
+    QSignalSpy catalogSaved(&view, &ketplus::AgentWorkspaceView::tagCatalogSaveRequested);
+    QVERIFY(QMetaObject::invokeMethod(addTag, "clicked"));
+    QTRY_VERIFY(tagMenu->property("visible").toBool());
+    QVERIFY(QMetaObject::invokeMethod(tagItem("conversationManageTagsItem"), "triggered"));
+    auto* manage = root->findChild<QObject*>("manageTagsDialog");
+    QVERIFY(manage);
+    QTRY_VERIFY(manage->property("visible").toBool());
+    QCOMPARE(manage->property("draft").toList().size(), view.tagCatalog().size());
+    // KETPLUS_MANAGE_TAGS_CAPTURE=<file.png> saves it beside KetPlusMock --open=manage-tags.
+    if (const auto capture = qEnvironmentVariable("KETPLUS_MANAGE_TAGS_CAPTURE");
+        !capture.isEmpty()) {
+        QTest::qWait(300);
+        QVERIFY(root->window()->grabWindow().save(capture));
+    }
+    QVERIFY(QMetaObject::invokeMethod(manage, "update", Q_ARG(QVariant, 0),
+                                      Q_ARG(QVariant, QStringLiteral("label")),
+                                      Q_ARG(QVariant, QStringLiteral("Interface"))));
+    // Popups draw in the window's overlay, outside the header's item tree.
+    auto* save = findVisualItem(root->window()->contentItem(), "manageTagsSave");
+    QVERIFY(save && save->property("enabled").toBool());
+    QVERIFY(QMetaObject::invokeMethod(manage, "update", Q_ARG(QVariant, 1),
+                                      Q_ARG(QVariant, QStringLiteral("label")),
+                                      Q_ARG(QVariant, QStringLiteral("interface"))));
+    QTRY_VERIFY(!save->property("enabled").toBool()); // the same name twice
+    QVERIFY(QMetaObject::invokeMethod(manage, "update", Q_ARG(QVariant, 1),
+                                      Q_ARG(QVariant, QStringLiteral("label")),
+                                      Q_ARG(QVariant, QStringLiteral("Speed"))));
+    QTRY_VERIFY(save->property("enabled").toBool());
+    QVERIFY(QMetaObject::invokeMethod(save, "clicked"));
+    QCOMPARE(catalogSaved.count(), 1);
+    const auto savedTags = catalogSaved.first().at(0).toList();
+    QCOMPARE(savedTags.size(), view.tagCatalog().size());
+    QCOMPARE(savedTags.first().toMap().value("label").toString(), QStringLiteral("Interface"));
+    const auto renames = catalogSaved.first().at(1).toMap();
+    QCOMPARE(renames.value(view.tagCatalog().first().toMap().value("label").toString()).toString(),
+             QStringLiteral("Interface"));
+    QCOMPARE(renames.size(), 2);
+    QTRY_VERIFY(!manage->property("visible").toBool());
+    // A catalog from the daemon replaces the menu's labels.
+    view.setTagCatalog({QVariantMap{{"label", "Release"}, {"color", "#d1453b"}}});
+    QVERIFY(QMetaObject::invokeMethod(addTag, "clicked"));
+    QTRY_VERIFY(tagMenu->property("visible").toBool());
+    QTRY_COMPARE(tagMenu->property("count").toInt(), 3);
+    QVERIFY(tagItem("conversationTagItem_Release"));
+    QVERIFY(QMetaObject::invokeMethod(tagMenu, "close"));
+    QTRY_VERIFY(!tagMenu->property("visible").toBool());
+    view.setTagCatalog(ketplus::conversation_tags::catalog());
     // Another client may have stored the label in another case; it is the same tag.
     view.setConversations({QVariantMap{{"id", "ui"},
                                        {"active", true},

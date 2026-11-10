@@ -102,7 +102,10 @@ core target. The local slice includes:
 - conversation tags through `session.tags.set` (`tags` in the journal and in
   `session.list`, feature `session.tags/1`): at most 8 labels of up to 64 bytes,
   one per case-insensitive name
-  ([ADR 0107](decisions/0107-conversation-tags-in-the-daemon.md));
+  ([ADR 0107](decisions/0107-conversation-tags-in-the-daemon.md)); the tag catalog
+  through `tags.catalog` and `tags.catalog.set` (journal table `tag_catalog`, feature
+  `tags.catalog/1`), with the `tags.changed` push to every desktop window
+  ([ADR 0113](decisions/0113-tag-catalog.md));
 - idle conversation forks through `session.fork` (ADR 0016): the provider forks
   its native thread (Codex `thread/fork`, Claude SDK `forkSession`), then the
   journal copies the source generation's transcript from one read snapshot in

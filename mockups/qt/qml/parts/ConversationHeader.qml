@@ -30,6 +30,7 @@ Rectangle {
 
     signal toggleDetails(string tab)
 
+    function openManageTags() { manageTags.open() }
     function openReviewerMenu() { reviewerMenu.popup(reviewerButton, 0, reviewerButton.height) }
     function chooseReviewer(name) {
         const next = Object.assign({}, reviewers)
@@ -299,7 +300,15 @@ Rectangle {
             }
         }
         KetMenuSeparator {}
-        KetMenuItem { text: "Manage tags…"; iconName: "settings"; onTriggered: header.window.notify("Tags are managed from any conversation") }
+        KetMenuItem { text: "Manage tags…"; iconName: "settings"; onTriggered: header.openManageTags() }
+    }
+
+    ManageTagsDialog {
+        id: manageTags
+        parent: Basic.Overlay.overlay
+        // The daemon's default catalog, in its order.
+        tags: ["UI", "Performance", "Review", "Atlas", "Account", "Bug", "Docs"].map(label => Fixtures.tag(label))
+        onSaved: (tags, renames) => header.window.notify("Tags saved")
     }
 
     KetMenu {
