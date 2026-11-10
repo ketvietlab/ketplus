@@ -37,13 +37,24 @@ Item {
         contentSession = contentStore.get(conversation.number)
         planRun = conversation && conversation.hasPlan ? planStore.get(conversation.number) : null
     }
+    // A plan-* preview state replays the plan run in the transcript; opening the Plan tab
+    // from the conversation keeps the conversation's own transcript.
     function openPlan(state) {
         syncPlan()
         if (!planRun) return
-        if (state) planRun.load(state)
-        planRun.presented = true
+        if (state) {
+            planRun.load(state)
+            planRun.presented = true
+        }
         detailsPane.openContent("plan")
         detailsOpen = true
+    }
+    // Header actions toggle: the open document's own action closes the pane.
+    function toggleContent(kind) {
+        if (detailsOpen && detailsTab === kind)
+            detailsOpen = false
+        else
+            openContent(kind)
     }
     function openContent(kind) {
         if (kind === "plan") { openPlan(""); return }
@@ -64,7 +75,8 @@ Item {
     }
     function planStatus(number, fallback) {
         const model = planStore.plans[number]
-        if (!model) return fallback
+        // A plan that was never created leaves the conversation's own status.
+        if (!model || model.status === "ready") return fallback
         if (model.active) return KetTheme.ConversationStatus.Working
         if (model.status === "complete") return KetTheme.ConversationStatus.Completed
         if (model.status === "paused") return KetTheme.ConversationStatus.Stopped
@@ -75,6 +87,9 @@ Item {
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
     function openComposerPanel(name) {
         if (name === "content-tabs") detailsPane.openTabMenu()
+        // The header's Plan ring, and the Atlas action pressed twice (it closes the pane again).
+        else if (name === "plan") toggleContent("plan")
+        else if (name === "atlas-toggle") { toggleContent("atlas"); toggleContent("atlas") }
         else if (name === "reviewer")
             conversationHeader.openReviewerMenu()
         else
@@ -98,7 +113,7 @@ Item {
                 planRun: screen.planRun
                 status: screen.planStatus(screen.conversation.number, screen.conversation.status)
                 detailsOpen: screen.detailsOpen
-                onToggleDetails: tab => screen.openContent(tab)
+                onToggleDetails: tab => screen.toggleContent(tab)
             }
 
             Basic.ScrollView {

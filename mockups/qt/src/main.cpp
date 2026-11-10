@@ -2,7 +2,7 @@
 // KetPlus Qt mock. Options make review evidence repeatable:
 //   --screen=<id> --state=<state> --dark|--light --zoom=1.25   open one screen
 //   --open=model|mode|limits|reviewer|composer|images|mermaid   a composer panel, the image viewer
-//   or diagrams
+//   or diagrams; plan presses the Plan ring, atlas-toggle presses Atlas twice
 //   --scroll=0.5                                   scroll the transcript or the Connections intro
 //   (0 top, 1 end)
 //   --screenshot=<file>                                         save the window and exit
