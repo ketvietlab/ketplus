@@ -491,6 +491,11 @@ void MainWindow::ensureAgentWorkspace() {
                     renameAgentConversation(agentWorkspace_->activePath(), conversationId);
                 });
             });
+    agentWorkspace_->setTagCatalog(agentManager_->tagCatalog());
+    connect(agentManager_, &AgentSessionManager::tagCatalogChanged, agentWorkspace_,
+            &AgentWorkspaceView::setTagCatalog);
+    connect(agentWorkspace_, &AgentWorkspaceView::tagCatalogSaveRequested, agentManager_,
+            &AgentSessionManager::saveTagCatalog);
     connect(agentWorkspace_, &AgentWorkspaceView::conversationTagRequested, this,
             [this](const QString& conversationId, const QString& label, const bool tagged) {
                 agentManager_->setConversationTag(agentWorkspace_->activePath(), conversationId,

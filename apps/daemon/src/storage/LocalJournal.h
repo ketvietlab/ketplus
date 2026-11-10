@@ -247,6 +247,10 @@ class LocalJournal final {
     bool setSessionArchived(const QString& sessionId, qint64 generation, const QString& archivedAt);
     // Replaces the labels of this generation.
     bool setSessionTags(const QString& sessionId, qint64 generation, const QStringList& tags);
+    // #429: the labels this Mac offers, [{label, color}] in order. Until a catalog is stored
+    // (or when it cannot be read) the defaults; an empty array is a catalog with no tags.
+    [[nodiscard]] QJsonArray tagCatalog();
+    bool setTagCatalog(const QJsonArray& catalog);
     bool setSessionAwaitingReply(const QString& sessionId, qint64 generation, bool awaiting);
     // The id of every session, or nullopt when they could not all be read. sessions() returns
     // an empty list on a failed read, which must not pass for every session being deleted.

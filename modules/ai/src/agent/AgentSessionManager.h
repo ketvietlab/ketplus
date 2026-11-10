@@ -94,6 +94,10 @@ class AgentSessionManager final : public QObject {
     // Adds or removes one label; the daemon stores the result (`session.tags.set`).
     void setConversationTag(const QString& worktreePath, const QString& conversationId,
                             const QString& label, bool tagged);
+    // #429: every label this Mac offers, [{label, color}], as the daemon keeps them. Saving
+    // replaces the whole catalog; renames maps an old label to its new one.
+    [[nodiscard]] QVariantList tagCatalog() const { return tagCatalog_; }
+    void saveTagCatalog(const QVariantList& tags, const QVariantMap& renames);
     // #125 "Mark as done": the conversation no longer waits for the user (`session.mark_done`).
     void markConversationDone(const QString& worktreePath, const QString& conversationId);
     bool archiveConversation(const QString& worktreePath, const QString& conversationId);
@@ -172,6 +176,7 @@ class AgentSessionManager final : public QObject {
                              const QString& status, bool running);
     void workingDetailChanged(const QString& worktreePath, const QString& detail);
     void conversationsChanged(const QString& worktreePath, const QVariantList& conversations);
+    void tagCatalogChanged(const QVariantList& catalog);
     void conversationConfigurationChanged(const QString& worktreePath,
                                           const QVariantMap& configuration);
     void conversationConfigurationApplyFinished(const QString& path, const QString& conversationId,
@@ -387,6 +392,14 @@ class AgentSessionManager final : public QObject {
     void syncArchived(const SessionPtr& session);
     [[nodiscard]] QVariantList listedTags(const SessionPtr& session) const;
     void syncTags(const SessionPtr& session);
+    // #429, in AgentSessionTags.cpp.
+    void installTagCatalog();
+    void loadTagCatalog();
+    void setTagCatalogFromDaemon(const QJsonArray& catalog);
+    void applyTagChange(const QJsonObject& change);
+    // Labels chosen before the first turn go to the daemon once it knows the conversation.
+    void sendStartTags(const SessionPtr& session);
+    QVariantList tagCatalog_;
     void applyDaemonArchiveState(const SessionPtr& session, bool archivedByDaemon);
     void selectAwayFromArchived(const SessionPtr& session);
     void persistWorkspace(const QString& path) const;
