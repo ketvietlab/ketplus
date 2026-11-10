@@ -307,7 +307,7 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     };
     showEditorFont();
     if (auto* editorFamily = dialog_->findChild<QComboBox*>(QStringLiteral("editorFontFamily")))
-        connect(editorFamily, &QComboBox::currentTextChanged, previewCode, showEditorFont);
+        connect(editorFamily, &QComboBox::currentIndexChanged, previewCode, showEditorFont);
     previewLayout->addWidget(previewCode);
     previewLayout->addWidget(
         label(QStringLiteral("◆  Ready for your next idea.                         Completed"),
