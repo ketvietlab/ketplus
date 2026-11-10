@@ -8,7 +8,7 @@ This is implementation evidence, not native acceptance or release completion.
 
 The Lite model layer adds recipe-based Explorer/Git rows, Git decorations, inline file/folder creation, stage/unstage and commit-staged actions, and independent embedded terminal tabs. Markdown headings/code use the kit recipe and bundled mono preference; new preview defaults are 15/26 px while saved overrides remain intact. Git action failures stay visible and preserve the commit message. These changes are part of the unreviewed UI stack, not a released acceptance claim.
 
-The UI stack now composes shared pane headers, find controls, Quick Open, Markdown mode switching, Settings controls and core confirmation dialogs from ket-qt. Quick Open retains fuzzy ranking and keyboard paging; Settings retains drafts, live theme preview/cancel and extension pages. Core synchronous document commands use a kit Dialog adapter that returns the existing explicit choices; dismissing it returns Cancel. The broader UI migration and later native acceptance remain open.
+The UI stack now composes shared pane headers, find controls, Quick Open, Markdown mode switching, Settings controls and core confirmation dialogs from ket-qt. Quick Open retains fuzzy ranking and keyboard paging; Settings applies every change as it is made, with Restore defaults and extension pages (ADR 0103). Core synchronous document commands use a kit Dialog adapter that returns the existing explicit choices; dismissing it returns Cancel. The broader UI migration and later native acceptance remain open.
 
 This file distinguishes current code from target architecture. Update it when a
 milestone changes state.

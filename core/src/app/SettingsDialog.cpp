@@ -11,7 +11,6 @@
 #include "app/SettingsFontNames.h"
 #include <QAbstractButton>
 #include <QComboBox>
-#include <QDialogButtonBox>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QKeyEvent>
@@ -20,7 +19,6 @@
 #include <QPersistentModelIndex>
 #include <QPointer>
 #include <QRegularExpression>
-#include <QShortcut>
 #include <QSignalBlocker>
 #include <QStackedWidget>
 #include <QVBoxLayout>
@@ -114,23 +112,12 @@ void SettingsDialog::initialize(const AppearanceSettings& settings) {
     buttons_->setObjectName(QStringLiteral("settingsButtons"));
     auto* actions = new QHBoxLayout(buttons_);
     actions->setContentsMargins(0, 0, 0, 0);
-    resetButton_ = new ket::Button(tr("Reset defaults"), ket::ButtonVariant::Ghost, buttons_);
+    // Every change applies as it is made (Jay, 2026-11-10), so the row holds only the reset.
+    resetButton_ = new ket::Button(tr("Restore defaults"), ket::ButtonVariant::Ghost, buttons_);
     resetButton_->setProperty("kvRole", QStringLiteral("settingsReset"));
     resetButton_->setObjectName(QStringLiteral("settingsResetButton"));
-    auto* cancel = new ket::Button(tr("Cancel"), ket::ButtonVariant::Secondary, buttons_);
-    cancel->setProperty("standardButton", int(QDialogButtonBox::Cancel));
-    cancel->setObjectName(QStringLiteral("settingsCancelButton"));
-    saveButton_ = new ket::Button(tr("Save changes"), ket::ButtonVariant::Primary, buttons_);
-    saveButton_->setProperty("kvRole", QStringLiteral("primaryAction"));
-    saveButton_->setProperty("standardButton", int(QDialogButtonBox::Save));
-    saveButton_->setObjectName(QStringLiteral("settingsSaveButton"));
     actions->addWidget(resetButton_);
     actions->addStretch();
-    actions->addWidget(cancel);
-    actions->addWidget(saveButton_);
-    connect(cancel, &QAbstractButton::clicked, this, &SettingsDialog::reject);
-    auto* saveShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Return), this);
-    connect(saveShortcut, &QShortcut::activated, saveButton_, &QAbstractButton::click);
 
     auto* footer = new QWidget(this);
     footer->setProperty("kvRole", QStringLiteral("settingsFooter"));
@@ -152,29 +139,18 @@ void SettingsDialog::initialize(const AppearanceSettings& settings) {
         for (SettingsPage* page : std::as_const(extensionPages_)) {
             page->resetToDefaults();
         }
-        updateDirtyState();
+        applyChanges();
     });
-    connect(saveButton_, &QAbstractButton::clicked, this, [this] {
-        const auto appearance = appearanceSettings();
-        for (SettingsPage* page : std::as_const(extensionPages_)) {
-            page->apply();
-        }
-        if (theme_ != nullptr) {
-            theme_->setMode(static_cast<ThemeManager::Mode>(selectedThemeMode_));
-        }
-        emit appearanceSettingsSaved(appearance);
-        emit settingsSaved(appearance.editor);
-        accept();
-    });
-
     setAppearanceSettings(initialSettings_);
     navigation_->setCurrentRow(0);
-    updateThemePreview();
-    // The system can switch appearance while the dialog follows it. Only the marks follow:
-    // re-applying the preview here would undo cancelPreview().
+    // What the controls show is applied already; later edits apply as they are made.
+    appliedSettings_ = appearanceSettings();
+    appliedThemeMode_ = selectedThemeMode_;
+    ready_ = true;
+    updateThemeCards();
+    // The system can switch appearance while the dialog follows it; only the marks follow.
     if (theme_ != nullptr)
         connect(theme_, &ThemeManager::themeChanged, this, &SettingsDialog::updateThemeCards);
-    updateDirtyState();
 }
 
 void SettingsDialog::addNavigationPage(const QString& id, const QString& title, QWidget* page) {
@@ -246,7 +222,7 @@ SettingsRegistrationResult SettingsDialog::registerPage(SettingsPageRegistration
     registeredPages_.append(
         RegisteredPage{std::move(registration.descriptor), page, nextRegistrationSequence_++});
     extensionPages_.append(page);
-    connect(page, &SettingsPage::changed, this, &SettingsDialog::updateDirtyState);
+    connect(page, &SettingsPage::changed, this, &SettingsDialog::applyChanges);
     connect(page, &QObject::destroyed, this, [this, page, registeredId] {
         const bool selectedWasDestroyed = selectedPageId() == registeredId;
         extensionPages_.removeAll(page);
@@ -258,10 +234,10 @@ SettingsRegistrationResult SettingsDialog::registerPage(SettingsPageRegistration
         if (selectedWasDestroyed && navigation_->count() > 0) {
             navigation_->setCurrentRow(0);
         }
-        updateDirtyState();
+        applyChanges();
     });
     rebuildExtensionNavigation();
-    updateDirtyState();
+    applyChanges();
     return SettingsRegistrationResult::Registered;
 }
 
@@ -350,23 +326,24 @@ void SettingsDialog::setAppearanceSettings(const AppearanceSettings& settings) {
     updatePreview();
 }
 
-void SettingsDialog::updateDirtyState() {
-    if (saveButton_ == nullptr) {
+void SettingsDialog::applyChanges() {
+    // Applies what changed since the last call: appearance, the theme and extension pages.
+    if (!ready_)
         return;
+    const auto appearance = appearanceSettings();
+    if (appearance != appliedSettings_) {
+        appliedSettings_ = appearance;
+        emit appearanceSettingsSaved(appearance);
+        emit settingsSaved(appearance.editor);
     }
-    bool extensionChanged = false;
-    for (const SettingsPage* page : std::as_const(extensionPages_)) {
-        extensionChanged = extensionChanged || page->hasChanges();
+    if (theme_ != nullptr && selectedThemeMode_ != appliedThemeMode_) {
+        appliedThemeMode_ = selectedThemeMode_;
+        theme_->setMode(static_cast<ThemeManager::Mode>(selectedThemeMode_));
     }
-    const bool changed = appearanceSettings() != initialSettings_ ||
-                         selectedThemeMode_ != initialThemeMode_ || extensionChanged;
-    saveButton_->setEnabled(changed);
-}
-
-void SettingsDialog::updateThemePreview() {
-    if (theme_ != nullptr)
-        theme_->previewMode(static_cast<ThemeManager::Mode>(selectedThemeMode_));
-    updateThemeCards();
+    for (SettingsPage* page : std::as_const(extensionPages_)) {
+        if (page->hasChanges())
+            page->apply();
+    }
 }
 
 void SettingsDialog::updateThemeCards() {
@@ -389,22 +366,18 @@ void SettingsDialog::updateThemeCards() {
 
 void SettingsDialog::selectThemeMode(const int mode) {
     selectedThemeMode_ = mode;
-    updateThemePreview();
-    updateDirtyState();
+    applyChanges();
+    updateThemeCards();
 }
 
 void SettingsDialog::reject() {
-    if (theme_ != nullptr) {
-        theme_->cancelPreview();
-    }
+    // Closing keeps what was applied; there is nothing left to cancel.
     QDialog::reject();
 }
 
 void SettingsDialog::keyPressEvent(QKeyEvent* event) {
     if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
         auto* button = qobject_cast<QAbstractButton*>(focusWidget());
-        if (!button)
-            button = saveButton_;
         if (button && button->isEnabled())
             button->click();
         event->accept();

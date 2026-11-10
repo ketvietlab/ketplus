@@ -42,14 +42,9 @@ void openSettings(MainWindow& window) {
     QVERIFY(action);
     action->trigger();
 }
-void saveSettings(MainWindow& window) {
-    for (auto* button : window.findChildren<QAbstractButton*>()) {
-        if (button->property("kvRole") == QStringLiteral("primaryAction")) {
-            button->click();
-            return;
-        }
-    }
-    QFAIL("No settings save action");
+// Settings changes apply as they are made (ADR 0103); there is no Save to press.
+void expectApplied(MainWindow& window) {
+    QVERIFY(window.findChild<QAbstractButton*>(QStringLiteral("settingsSaveButton")) == nullptr);
 }
 } // namespace
 
@@ -217,7 +212,7 @@ class DesktopZoomTest final : public QObject {
         auto* zoom = first.findChild<ket::StepSlider*>("interfaceZoomSteps");
         QVERIFY(zoom);
         zoom->setCurrentIndex(16 - AppearanceSettings::minimumInterfaceFontSizePixels);
-        saveSettings(first);
+        expectApplied(first);
         const auto readingPixels = [](AgentWorkspaceView* view) {
             return view->quickView()
                 ->rootObject()
@@ -238,17 +233,17 @@ class DesktopZoomTest final : public QObject {
         QVERIFY(family);
         family->addItem(QStringLiteral("Courier New"));
         family->setCurrentText(QStringLiteral("Courier New"));
-        saveSettings(second);
+        expectApplied(second);
         QTRY_COMPARE(one->monoFontFamily(), QStringLiteral("Courier New"));
         QTRY_COMPARE(two->monoFontFamily(), QStringLiteral("Courier New"));
         AgentWorkspaceView later;
         QCOMPARE(later.monoFontFamily(), QStringLiteral("Courier New"));
-        // First window still has a form opened before the font change. Saving a
+        // First window still has a form opened before the font change. Changing a
         // different field must not overwrite the newer font from the other window.
         QTest::qWait(50);
         first.findChild<ketplus::PixelSelect*>("editorFontSize")->setValue(17);
         first.findChild<ketplus::PixelSelect*>("previewFontSize")->setValue(19);
-        saveSettings(first);
+        expectApplied(first);
         QCOMPARE(AppearanceSettings::load().editor.fontFamily, QStringLiteral("Courier New"));
         QCOMPARE(AppearanceSettings::load().preview.fontSizePixels, 19);
         QCOMPARE(AppearanceSettings::load().editor.fontSizePixels, 17);

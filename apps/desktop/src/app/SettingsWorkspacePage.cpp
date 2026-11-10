@@ -500,12 +500,9 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     bodyLayout->addWidget(pages, 1);
     contentLayout->addWidget(body, 1);
 
-    // The public dialog's footer is a kit button row; Cancel has no meaning in a page.
+    // The public dialog's footer holds Restore defaults; every change applies as it is made.
     auto* settingsFooter = dialog_->findChild<QWidget*>(QStringLiteral("settingsButtons"));
     if (settingsFooter) {
-        if (auto* cancel =
-                settingsFooter->findChild<QAbstractButton*>(QStringLiteral("settingsCancelButton")))
-            cancel->hide();
         settingsFooter->setParent(content);
         settingsFooter->setObjectName(QStringLiteral("settingsWorkspaceFooter"));
         contentLayout->addWidget(settingsFooter);
@@ -521,7 +518,7 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
                 }
                 const QString id =
                     row < 0 ? QString() : navigation->item(row)->data(Qt::UserRole).toString();
-                // Storage changes save immediately; global appearance reset/save do not apply.
+                // Storage has its own controls; the global reset does not apply to it.
                 if (settingsFooter)
                     settingsFooter->setVisible(id != QStringLiteral("storage"));
                 if (id == QStringLiteral("appearance")) {
