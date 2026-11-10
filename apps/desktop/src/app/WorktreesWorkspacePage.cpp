@@ -71,7 +71,7 @@ WorktreesWorkspacePage::WorktreesWorkspacePage(QWidget* parent) : QWidget(parent
     auto* scrollBody = new QWidget(scrollArea);
     scrollBody->setObjectName(QStringLiteral("worktreesWorkspaceScrollBody"));
     auto* scrollLayout = new QVBoxLayout(scrollBody);
-    chrome_geometry::margins(scrollLayout, 42, 36, 42, 38);
+    chrome_geometry::margins(scrollLayout, 42, 38, 42, 38);
     chrome_geometry::spacing(scrollLayout, 0);
 
     auto* content = new WorktreesPageContent(scrollBody);
@@ -89,7 +89,7 @@ WorktreesWorkspacePage::WorktreesWorkspacePage(QWidget* parent) : QWidget(parent
     auto* copy = new QWidget(heading);
     auto* copyLayout = new QVBoxLayout(copy);
     chrome_geometry::margins(copyLayout, 0, 0, 0, 0);
-    chrome_geometry::spacing(copyLayout, 5);
+    chrome_geometry::spacing(copyLayout, 8);
     auto* title = new QLabel(tr("Worktrees"), copy);
     title->setObjectName(QStringLiteral("worktreesWorkspaceTitle"));
     auto* subtitle = new QLabel(tr("Independent files, conversations and drafts."), copy);
@@ -99,13 +99,15 @@ WorktreesWorkspacePage::WorktreesWorkspacePage(QWidget* parent) : QWidget(parent
     headingLayout->addWidget(copy, 1);
     auto* actions = new QWidget(heading);
     auto* actionsLayout = new QHBoxLayout(actions);
-    chrome_geometry::margins(actionsLayout, 0, 0, 0, 0);
+    chrome_geometry::margins(actionsLayout, 0, 12, 0, 0); // the mock's heading actions
     chrome_geometry::spacing(actionsLayout, 8);
     pruneButton_ = new ket::Button(tr("Prune worktrees"), ket::ButtonVariant::Secondary, actions);
     pruneButton_->setObjectName(QStringLiteral("worktreesPruneButton"));
     pruneButton_->setAccessibleName(tr("Prune missing worktrees"));
     pruneButton_->setToolTip(tr("Remove Git metadata for worktrees whose folders no longer exist"));
-    chrome_geometry::fixedHeight(pruneButton_, 34);
+    chrome_geometry::fixedHeight(pruneButton_, 32);
+    // Shown only while there is something to prune: the usual page has one action, as the mock.
+    pruneButton_->setVisible(false);
     pruneButton_->setEnabled(false);
     connect(pruneButton_, &QAbstractButton::clicked, this, &WorktreesWorkspacePage::pruneRequested);
     actionsLayout->addWidget(pruneButton_);
@@ -115,12 +117,12 @@ WorktreesWorkspacePage::WorktreesWorkspacePage(QWidget* parent) : QWidget(parent
     create->setObjectName(QStringLiteral("worktreesCreateButton"));
     create->setProperty("kvRole", QStringLiteral("primaryAction"));
     create->setAccessibleName(tr("Create worktree"));
-    chrome_geometry::fixedHeight(create, 34);
+    chrome_geometry::fixedHeight(create, 32);
     connect(create, &QAbstractButton::clicked, this, &WorktreesWorkspacePage::createRequested);
     actionsLayout->addWidget(create);
     headingLayout->addWidget(actions, 0, Qt::AlignTop);
     contentLayout->addWidget(heading);
-    chrome_geometry::addSpacing(contentLayout, 28);
+    chrome_geometry::addSpacing(contentLayout, 24);
 
     auto* list = new QFrame(content);
     list->setObjectName(QStringLiteral("worktreesWorkspaceList"));
@@ -128,7 +130,7 @@ WorktreesWorkspacePage::WorktreesWorkspacePage(QWidget* parent) : QWidget(parent
     chrome_geometry::margins(listLayout_, 0, 0, 0, 0);
     chrome_geometry::spacing(listLayout_, 0);
     contentLayout->addWidget(list);
-    chrome_geometry::addSpacing(contentLayout, 12); // the mock's 24 px, with the button's inset
+    chrome_geometry::addSpacing(contentLayout, 20); // the mock's 24 px under a 32 px button
 
     auto* archived = new ket::Button(tr("Archived worktrees and conversations"),
                                      ket::ButtonVariant::Ghost, content);
@@ -163,9 +165,21 @@ void WorktreesWorkspacePage::setWorktrees(const QVector<GitWorktree>& worktrees,
     rebuild();
 }
 
+void WorktreesWorkspacePage::setWorktreeDirty(const QString& path, const bool dirty) {
+    const QString key = normalizedPath(path);
+    if (const auto known = dirtyPaths_.constFind(key);
+        known != dirtyPaths_.constEnd() && *known == dirty)
+        return;
+    dirtyPaths_.insert(key, dirty);
+    rebuild();
+}
+
 void WorktreesWorkspacePage::setPruneAvailable(const bool available) {
     pruneAvailable_ = available;
-    if (pruneButton_ != nullptr && !pruning_)
+    if (pruneButton_ == nullptr)
+        return;
+    pruneButton_->setVisible(available || pruning_);
+    if (!pruning_)
         pruneButton_->setEnabled(available);
 }
 
@@ -175,6 +189,7 @@ void WorktreesWorkspacePage::setPruning(const bool pruning) {
     pruning_ = pruning;
     pruneButton_->setText(pruning ? tr("Pruning…") : tr("Prune worktrees"));
     pruneButton_->setEnabled(!pruning && pruneAvailable_);
+    pruneButton_->setVisible(pruning || pruneAvailable_);
 }
 
 void WorktreesWorkspacePage::rebuild() {
@@ -248,17 +263,26 @@ void WorktreesWorkspacePage::rebuild() {
             new QLabel(runningPaths_.contains(path) ? tr("1 working") : tr("0 working"), row);
         activity->setObjectName(QStringLiteral("worktreesWorkspaceActivity"));
         activity->setProperty("running", runningPaths_.contains(path));
-        chrome_geometry::minimumWidth(activity, 76);
         rowLayout->addWidget(activity);
+        chrome_geometry::addSpacing(rowLayout, 7); // 20 px to the state, as the mock
 
+        // The worktree's Git state, as the mock. Another worktree's state is read in the
+        // background, and nothing is claimed about it until then.
         const bool current = path == activePath_;
-        auto* state = new ket::Badge(
-            current ? (activeDirty_ ? tr("Uncommitted changes") : tr("Clean"))
-                    : (worktree.locked ? tr("Locked") : tr("Available")),
-            current && activeDirty_ ? ket::BadgeTone::Warning : ket::BadgeTone::Neutral, row);
-        state->setObjectName(QStringLiteral("worktreesWorkspaceState"));
-        state->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
-        rowLayout->addWidget(state, 0, Qt::AlignVCenter);
+        const bool known = current || dirtyPaths_.contains(path);
+        const bool dirty = current ? activeDirty_ : dirtyPaths_.value(path);
+        if (known || worktree.locked) {
+            auto* state =
+                new ket::Badge(!current && worktree.locked ? tr("Locked")
+                               : dirty                     ? tr("Uncommitted changes")
+                                                           : tr("Clean"),
+                               dirty && (current || !worktree.locked) ? ket::BadgeTone::Warning
+                                                                      : ket::BadgeTone::Neutral,
+                               row);
+            state->setObjectName(QStringLiteral("worktreesWorkspaceState"));
+            state->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+            rowLayout->addWidget(state, 0, Qt::AlignVCenter);
+        }
         rowLayout->addStretch(1);
 
         auto* manage = new ket::Button(tr("Manage"), ket::ButtonVariant::Ghost, row);
@@ -267,8 +291,9 @@ void WorktreesWorkspacePage::rebuild() {
         manage->setIcon(ket::Icons::icon(u"more"));
         manage->setAccessibleName(tr("Manage %1").arg(worktreeTitle(worktree)));
         chrome_geometry::fixedHeight(manage, 30);
-        connect(manage, &QAbstractButton::clicked, this,
-                [this, path] { emit manageRequested(path); });
+        connect(manage, &QAbstractButton::clicked, this, [this, path, manage] {
+            emit manageRequested(path, manage->mapToGlobal(QPoint(0, manage->height())));
+        });
         rowLayout->addWidget(manage);
 
         listLayout_->addWidget(row);
@@ -278,9 +303,10 @@ void WorktreesWorkspacePage::rebuild() {
 
     if (!rows.isEmpty())
         rows.constLast()->setProperty("lastRecord", true);
-    // One column for every row: the widest name with its icon, between 150 and 320 px.
+    // One column for every row: the mock's 222 px to the activity, wider for a long name, up to
+    // 320 px.
     const auto& kit = ket::Appearance::instance();
-    const int column = std::clamp(nameColumn + qRound(kit.scaled(8)), qRound(kit.scaled(150)),
+    const int column = std::clamp(nameColumn + qRound(kit.scaled(8)), qRound(kit.scaled(192)),
                                   qRound(kit.scaled(320)));
     for (auto* identity : identities)
         identity->setFixedWidth(column);
