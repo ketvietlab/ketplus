@@ -2554,6 +2554,9 @@ bool SessionHost::journalEvent(Session& session, const QString& type, const QJso
         approvals_->expireAssistantQuestions(sessionId, generation);
     if (!alive.isNull() && agents_ != nullptr)
         agents_->noteEvent(sessionId, generation, type, contextualPayload);
+    // ADR 0112 §7: the leader's digest waits for the end of its turn.
+    if (!alive.isNull() && teams_ && (type == "turn.completed" || type == "runtime.stopped"))
+        teams_->memberTurnEnded(sessionId);
     return true;
 }
 
