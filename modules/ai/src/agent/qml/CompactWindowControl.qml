@@ -26,7 +26,7 @@ ColumnLayout {
         (Number.isInteger(requested) && requested >= 100000 && requested <= maximum)
     Accessible.role: Accessible.Grouping
     Accessible.name: qsTr("Auto-compact")
-    spacing: KetTheme.px(8, KetTheme.zoom)
+    spacing: KetTheme.px(6, KetTheme.zoom)
 
     function moveChoice(index, direction) {
         for (let step = 1; step <= choiceRepeater.count; ++step) {
@@ -48,7 +48,7 @@ ColumnLayout {
             text: qsTr("Auto-compact")
             color: KetTheme.t.textMain
             font.family: KetTheme.fontFamily
-            font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
+            font.pixelSize: KetTheme.px(15, KetTheme.zoom)
             font.weight: Font.DemiBold
         }
         Text {
@@ -60,7 +60,7 @@ ColumnLayout {
             wrapMode: Text.Wrap
             color: KetTheme.t.textMuted
             font.family: KetTheme.fontFamily
-            font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+            font.pixelSize: KetTheme.px(13, KetTheme.zoom)
         }
     }
     Text {
@@ -69,9 +69,10 @@ ColumnLayout {
         wrapMode: Text.Wrap
         color: KetTheme.t.textMuted
         font.family: KetTheme.fontFamily
-        font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+        font.pixelSize: KetTheme.px(13, KetTheme.zoom)
     }
     GridLayout {
+        Layout.topMargin: KetTheme.px(4, KetTheme.zoom)
         Layout.fillWidth: true
         columns: width >= KetTheme.px(400, KetTheme.zoom) ? 5 : 3
         columnSpacing: KetTheme.px(8, KetTheme.zoom)
@@ -91,7 +92,7 @@ ColumnLayout {
                 objectName: "compactWindow_" + modelData.value
                 onActiveFocusChanged: if (activeFocus) control.focusRequested(choice)
                 Layout.fillWidth: true
-                Layout.preferredHeight: KetTheme.px(36, KetTheme.zoom)
+                Layout.preferredHeight: KetTheme.px(34, KetTheme.zoom)
                 readonly property bool selected: modelData.value === -1 ? control.custom
                     : !control.custom && control.preset === modelData.value
                 enabled: !control.blocked && (modelData.value < 0 || modelData.value <= control.maximum)
@@ -104,7 +105,7 @@ ColumnLayout {
                     color: choice.enabled ? KetTheme.t.textMain : KetTheme.t.textDisabled
                     font.family: KetTheme.fontFamily
                     font.pixelSize: KetTheme.buttonRecipe(KetTheme.dark, KetTheme.zoom, KetTheme.ButtonVariant.Secondary, KetTheme.ControlSize.Medium, false, false, true, false).fontPixels
-                    font.weight: choice.selected ? Font.DemiBold : Font.Normal
+                    font.weight: Font.Normal
                 }
                 background: Rectangle {
                     radius: KetTheme.px(5, KetTheme.zoom)
@@ -130,6 +131,7 @@ ColumnLayout {
         }
     }
     Basic.TextField {
+        Layout.topMargin: KetTheme.px(6, KetTheme.zoom)
         id: customInput
         objectName: "compactWindowInput"
         onActiveFocusChanged: if (activeFocus) control.focusRequested(customInput)
@@ -156,6 +158,7 @@ ColumnLayout {
         }
     }
     Text {
+        Layout.topMargin: KetTheme.px(6, KetTheme.zoom)
         objectName: "compactWindowValidation"
         Layout.fillWidth: true
         visible: control.supported && !control.valid
@@ -163,24 +166,26 @@ ColumnLayout {
         wrapMode: Text.Wrap
         color: KetTheme.t.danger
         font.family: KetTheme.fontFamily
-        font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+        font.pixelSize: KetTheme.px(13, KetTheme.zoom)
         Accessible.role: Accessible.AlertMessage
     }
     Text {
+        Layout.topMargin: KetTheme.px(6, KetTheme.zoom)
         Layout.fillWidth: true
         visible: !control.supported
         text: qsTr("Provider default. This runtime does not support a custom compact window.")
         wrapMode: Text.Wrap
         color: KetTheme.t.textMuted
         font.family: KetTheme.fontFamily
-        font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+        font.pixelSize: KetTheme.px(13, KetTheme.zoom)
     }
     Text {
+        Layout.topMargin: KetTheme.px(6, KetTheme.zoom)
         Layout.fillWidth: true
         text: control.blockedReason || qsTr("This conversation · applies from the next turn")
         wrapMode: Text.Wrap
         color: KetTheme.t.textMuted
         font.family: KetTheme.fontFamily
-        font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+        font.pixelSize: KetTheme.px(13, KetTheme.zoom)
     }
 }
