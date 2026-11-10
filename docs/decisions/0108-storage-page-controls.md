@@ -115,4 +115,7 @@ The size target was also opt-in: it did nothing until the user saved it once.
 - The mock's notes about an explicit target save and its design-preview line no longer
   apply, so the page omits them.
 - The size check in `docs/testing.md` compacts a copy of a real journal through the same
-  commands.
+  commands. On 2026-11-10 a 9.03 GB copy shrank to 3.85 GB in 106 s when the daemon
+  started. Compact now then finished in 84 s (3.93 GB to 3.86 GB of pages), and a second
+  run found nothing left in 39 s. Before the 50 ms budget and the per-turn check, one sweep
+  did not finish in 10 minutes.
