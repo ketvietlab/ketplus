@@ -1,6 +1,7 @@
 #pragma once
 
 #include "agent/AgentMessageModel.h"
+#include "agent/ReasoningHeading.h"
 #include "agent/TranscriptFileLinks.h"
 #include "git/GitTypes.h"
 #include "ui/Theme.h"
@@ -52,6 +53,8 @@ class AgentWorkspaceView final : public QWidget {
     Q_PROPERTY(QString monoFontFamily READ monoFontFamily NOTIFY monoFontFamilyChanged)
     Q_PROPERTY(QString sessionTitle READ sessionTitle NOTIFY sessionChanged)
     Q_PROPERTY(QString sessionStatus READ sessionStatus NOTIFY sessionChanged)
+    // The running line: "Working · <latest reasoning heading>" while one is known (#385).
+    Q_PROPERTY(QString runStatus READ runStatus NOTIFY sessionChanged)
     Q_PROPERTY(bool sessionRunning READ sessionRunning NOTIFY sessionChanged)
     Q_PROPERTY(int atlasRunningCount READ atlasRunningCount NOTIFY atlasRunningCountChanged)
     Q_PROPERTY(bool agentAvailable READ agentAvailable NOTIFY agentAvailableChanged)
@@ -355,6 +358,15 @@ class AgentWorkspaceView final : public QWidget {
     [[nodiscard]] QString monoFontFamily() const;
     [[nodiscard]] QString sessionTitle() const;
     [[nodiscard]] QString sessionStatus() const;
+    [[nodiscard]] QString runStatus() const {
+        return agent_message::workingLine(sessionStatus_, workingDetail_);
+    }
+    void setWorkingDetail(const QString& detail) {
+        if (workingDetail_ == detail)
+            return;
+        workingDetail_ = detail;
+        emit sessionChanged();
+    }
     [[nodiscard]] bool sessionRunning() const noexcept;
     [[nodiscard]] int atlasRunningCount() const noexcept { return atlasRunningCount_; }
     void setAtlasRunningCount(int count) {
@@ -708,6 +720,7 @@ class AgentWorkspaceView final : public QWidget {
     QString repositoryName_;
     QString sessionTitle_{QStringLiteral("New conversation")};
     QString sessionStatus_{QStringLiteral("Ready")};
+    QString workingDetail_;
     bool sessionRunning_{false};
     int atlasRunningCount_{0};
     bool findActionsProvided_{false};

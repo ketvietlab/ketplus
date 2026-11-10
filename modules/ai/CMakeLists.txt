@@ -39,6 +39,8 @@ add_library(ketplus_ai STATIC
     src/agent/AgentSessionConfiguration.cpp
     src/agent/AgentSessionManager.h
     src/agent/AgentSessionNotifications.cpp
+    src/agent/ReasoningHeading.cpp
+    src/agent/ReasoningHeading.h
     src/agent/AgentSessionState.cpp
     src/agent/AgentSessionState.h
     src/agent/AgentSessionTurns.cpp

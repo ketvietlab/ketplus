@@ -169,6 +169,7 @@ void MainWindow::ensureAgentWorkspace() {
                                                      ? agentManager_->status(path)
                                                      : QStringLiteral("Worktree missing"),
                                                  agentManager_->isRunning(path));
+                agentWorkspace_->setWorkingDetail(agentManager_->workingDetail(path));
             }
         });
     connect(agentWorkspace_, &AgentWorkspaceView::compactWindowRequested, this,
@@ -551,6 +552,11 @@ void MainWindow::ensureAgentWorkspace() {
                     git_->scheduleRefresh(350);
                 }
             });
+    connect(agentManager_, &AgentSessionManager::workingDetailChanged, this,
+            [this](const QString& path, const QString& detail) {
+                if (normalizedPath(path) == normalizedPath(agentWorkspace_->activePath()))
+                    agentWorkspace_->setWorkingDetail(detail);
+            });
     connect(agentManager_, &AgentSessionManager::sessionStateChanged, this,
             [this](const QString& path, const QString& title, const QString& status,
                    const bool running) {
@@ -864,6 +870,7 @@ void MainWindow::refreshAgentWorktrees() {
                                              ? agentManager_->status(path)
                                              : QStringLiteral("Worktree missing"),
                                          agentManager_->isRunning(path));
+        agentWorkspace_->setWorkingDetail(agentManager_->workingDetail(path));
     }
 }
 

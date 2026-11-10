@@ -45,6 +45,8 @@ class AgentSessionManager final : public QObject {
     [[nodiscard]] QVariantList numberedConversations() const;
     [[nodiscard]] QString title(const QString& worktreePath) const;
     [[nodiscard]] QString status(const QString& worktreePath) const;
+    // The running turn's latest reasoning heading; empty when idle or unknown.
+    [[nodiscard]] QString workingDetail(const QString& worktreePath) const;
     [[nodiscard]] bool isRunning(const QString& worktreePath) const;
     [[nodiscard]] QSet<QString> runningPaths() const;
     // Checkouts a running agent uses: each running session's execution worktree (canonical),
@@ -156,6 +158,7 @@ class AgentSessionManager final : public QObject {
     void messageUpdated(const QString& worktreePath, int index, const QVariantMap& message);
     void sessionStateChanged(const QString& worktreePath, const QString& title,
                              const QString& status, bool running);
+    void workingDetailChanged(const QString& worktreePath, const QString& detail);
     void conversationsChanged(const QString& worktreePath, const QVariantList& conversations);
     void conversationConfigurationChanged(const QString& worktreePath,
                                           const QVariantMap& configuration);
@@ -356,6 +359,7 @@ class AgentSessionManager final : public QObject {
     void publishDeferredFinal(const SessionPtr& session);
     void dismissPendingQuestions(const SessionPtr& session);
     void updateState(const SessionPtr& session, const QString& status, bool running);
+    void setWorkingDetail(const SessionPtr& session, const QString& detail);
     void failSession(const SessionPtr& session, const QString& error);
     void recordSessionError(const SessionPtr& session, const QString& error, bool notify);
     void syncConversationTitle(const SessionPtr& session);
