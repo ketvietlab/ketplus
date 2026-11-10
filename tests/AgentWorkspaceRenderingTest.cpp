@@ -663,7 +663,7 @@ void AgentWorkspaceViewTest::composerPreview() {
     QCOMPARE(productNavigation.constFirst().constFirst().toString(), QStringLiteral("search"));
     view.resize(1200, 900);
     QTRY_COMPARE(brand->height(), 67.0);
-    QTRY_COMPARE(composer->width(), 760.0);
+    QTRY_COMPARE(composer->width(), 760.0 - 2 * ket::Profile::current().composerRingWidth);
     QTRY_VERIFY(identity->mapToItem(sidebar, QPointF(0, identity->height())).y() <=
                 sidebar->height() + 1.0);
     auto* suggestion = findVisualItem(root, QStringLiteral("workspaceSuggestion"));
@@ -1711,10 +1711,12 @@ void AgentWorkspaceViewTest::conversationColumnFollowsConfiguredWidth() {
     const qreal column = ketplus::AgentWorkspaceView::defaultConversationWidth * zoom;
     QVERIFY2(qAbs(defaultWidth - column) <= 1.0,
              qPrintable(QStringLiteral("answer %1, column %2").arg(defaultWidth).arg(column)));
-    QCOMPARE(composer->width(), std::round(column));
+    // The composer's focus ring surrounds its card inside the column, as in ket's KetComposer.
+    const qreal ring = ket::Appearance::scale(ket::Profile::current().composerRingWidth, zoom);
+    QCOMPARE(composer->width() + 2 * ring, std::round(column));
     auto* body = findVisualItem(root, "messageBody");
-    QVERIFY(qAbs(body->mapToItem(root, QPointF()).x() - composer->mapToItem(root, QPointF()).x()) <=
-            1.0);
+    QVERIFY(qAbs(body->mapToItem(root, QPointF()).x() -
+                 (composer->mapToItem(root, QPointF()).x() - ring)) <= 1.0);
 
     view.resetMessages({QVariantMap{{"kind", "assistant"},
                                     {"meta", "Claude"},
@@ -1733,7 +1735,7 @@ void AgentWorkspaceViewTest::conversationColumnFollowsConfiguredWidth() {
                             .arg(codeBody->width())));
     view.setConversationWidth(1200);
     QTRY_VERIFY(bodyWidth() > defaultWidth + 400 * zoom);
-    QCOMPARE(composer->width(), std::round(1200 * zoom));
+    QCOMPARE(composer->width() + 2 * ring, std::round(1200 * zoom));
 
     // Zero fills the pane: wider than any fixed column on this 1500px view.
     view.setConversationWidth(0);
