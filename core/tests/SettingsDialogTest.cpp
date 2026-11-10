@@ -139,22 +139,14 @@ void SettingsDialogTest::editsAndResetsTypography() {
         dialog.findChild<ketplus::PixelSelect*>(QStringLiteral("editorLineHeight"));
     auto* interfaceSizeBox =
         dialog.findChild<ketplus::PixelSelect*>(QStringLiteral("interfaceFontSize"));
-    auto* terminalSizeBox =
-        dialog.findChild<ketplus::PixelSelect*>(QStringLiteral("terminalFontSize"));
-    auto* terminalLineBox =
-        dialog.findChild<ketplus::PixelSelect*>(QStringLiteral("terminalLineHeight"));
-    auto* previewSizeBox =
-        dialog.findChild<ketplus::PixelSelect*>(QStringLiteral("previewFontSize"));
-    auto* previewLineBox =
-        dialog.findChild<ketplus::PixelSelect*>(QStringLiteral("previewLineHeight"));
     QVERIFY(fontBox != nullptr);
     QVERIFY(fontSizeBox != nullptr);
     QVERIFY(lineHeightBox != nullptr);
     QVERIFY(interfaceSizeBox != nullptr);
-    QVERIFY(terminalSizeBox != nullptr);
-    QVERIFY(terminalLineBox != nullptr);
-    QVERIFY(previewSizeBox != nullptr);
-    QVERIFY(previewLineBox != nullptr);
+    // Terminal and Markdown sizes have no controls; they follow the editor and the interface.
+    for (const auto* name :
+         {"terminalFontSize", "terminalLineHeight", "previewFontSize", "previewLineHeight"})
+        QVERIFY(dialog.findChild<ketplus::PixelSelect*>(QString::fromLatin1(name)) == nullptr);
     QCOMPARE(fontBox->property("fontListLoaded").toBool(), false);
     QCOMPARE(fontBox->count(), 1);
     QCOMPARE(fontSizeBox->value(), 15);
@@ -163,15 +155,12 @@ void SettingsDialogTest::editsAndResetsTypography() {
     fontSizeBox->setValue(17);
     lineHeightBox->setValue(31);
     interfaceSizeBox->setValue(16);
-    terminalSizeBox->setValue(14);
-    terminalLineBox->setValue(23);
-    previewSizeBox->setValue(17);
-    previewLineBox->setValue(27);
     QCOMPARE(dialog.settings().fontSizePixels, 17);
     QCOMPARE(dialog.settings().lineHeightPixels, 31);
     QCOMPARE(dialog.appearanceSettings().interfaceFontSizePixels, 16);
-    QCOMPARE(dialog.appearanceSettings().terminal, (ketplus::TextTypographySettings{14, 23}));
-    QCOMPARE(dialog.appearanceSettings().preview, (ketplus::TextTypographySettings{17, 27}));
+    QCOMPARE(dialog.appearanceSettings().terminal, (ketplus::TextTypographySettings{17, 31}));
+    // One pixel over the interface, at the 15/26 rhythm: 17 px on 29 px.
+    QCOMPARE(dialog.appearanceSettings().preview, (ketplus::TextTypographySettings{17, 29}));
 
     fontBox->showPopup();
     QCOMPARE(fontBox->property("fontListLoaded").toBool(), true);
@@ -218,8 +207,17 @@ void SettingsDialogTest::persistsAndNormalizesAppearance() {
              ketplus::AppearanceSettings::maximumInterfaceFontSizePixels);
     QCOMPARE(loaded.editor.fontSizePixels, 18);
     QCOMPARE(loaded.editor.lineHeightPixels, 18);
-    QCOMPARE(loaded.terminal, (ketplus::TextTypographySettings{16, 16}));
-    QCOMPARE(loaded.preview, (ketplus::TextTypographySettings{17, 31}));
+    // Stored terminal and preview sizes are not read: they follow the editor and interface.
+    QCOMPARE(loaded.terminal, (ketplus::TextTypographySettings{18, 18}));
+    QCOMPARE(loaded.preview,
+             (ketplus::TextTypographySettings{
+                 ketplus::AppearanceSettings::maximumInterfaceFontSizePixels + 1,
+                 qRound((ketplus::AppearanceSettings::maximumInterfaceFontSizePixels + 1) * 26.0 /
+                        15.0)}));
+    QCOMPARE(ketplus::AppearanceSettings::defaults().preview,
+             (ketplus::TextTypographySettings{15, 26}));
+    QCOMPARE(ketplus::AppearanceSettings::defaults().terminal,
+             (ketplus::TextTypographySettings{14, 24}));
     QCOMPARE(loaded.terminalFontFamily, QStringLiteral("KET Sans Mono"));
 
     // The dialog has no terminal font picker, so saving it keeps the stored family.

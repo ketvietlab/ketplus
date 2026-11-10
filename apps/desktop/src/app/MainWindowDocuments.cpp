@@ -908,14 +908,7 @@ void MainWindow::setSettingsWorkspaceVisible(const bool visible) {
                     merged.editor.fontSizePixels = requested.editor.fontSizePixels;
                 if (requested.editor.lineHeightPixels != previous.editor.lineHeightPixels)
                     merged.editor.lineHeightPixels = requested.editor.lineHeightPixels;
-                if (requested.terminal.fontSizePixels != previous.terminal.fontSizePixels)
-                    merged.terminal.fontSizePixels = requested.terminal.fontSizePixels;
-                if (requested.terminal.lineHeightPixels != previous.terminal.lineHeightPixels)
-                    merged.terminal.lineHeightPixels = requested.terminal.lineHeightPixels;
-                if (requested.preview.fontSizePixels != previous.preview.fontSizePixels)
-                    merged.preview.fontSizePixels = requested.preview.fontSizePixels;
-                if (requested.preview.lineHeightPixels != previous.preview.lineHeightPixels)
-                    merged.preview.lineHeightPixels = requested.preview.lineHeightPixels;
+                // Terminal and Markdown sizes follow from these when normalized.
                 *lastRequested = requested;
                 applyAppearanceSettings(merged);
             });

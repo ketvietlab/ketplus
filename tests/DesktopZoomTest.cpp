@@ -242,10 +242,8 @@ class DesktopZoomTest final : public QObject {
         // different field must not overwrite the newer font from the other window.
         QTest::qWait(50);
         first.findChild<ketplus::PixelSelect*>("editorFontSize")->setValue(17);
-        first.findChild<ketplus::PixelSelect*>("previewFontSize")->setValue(19);
         expectApplied(first);
         QCOMPARE(AppearanceSettings::load().editor.fontFamily, QStringLiteral("Courier New"));
-        QCOMPARE(AppearanceSettings::load().preview.fontSizePixels, 19);
         QCOMPARE(AppearanceSettings::load().editor.fontSizePixels, 17);
     }
 };

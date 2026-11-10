@@ -25,12 +25,17 @@ struct TextTypographySettings final {
 struct AppearanceSettings final {
     static constexpr int minimumInterfaceFontSizePixels = 8;
     static constexpr int maximumInterfaceFontSizePixels = 24;
+    // Markdown reads one pixel larger than the interface, at the former 15/26 rhythm.
+    static constexpr int markdownOffsetPixels = 1;
+    static constexpr double markdownLineHeightRatio = 26.0 / 15.0;
 
     int interfaceFontSizePixels{14};
     EditorSettings editor{EditorSettings::defaults()};
-    TextTypographySettings terminal{14, 22};
+    // Derived by normalized(): the editor's size and line height.
+    TextTypographySettings terminal{14, 24};
     // Empty uses the KétPlus profile's bundled monospace family.
     QString terminalFontFamily;
+    // Derived by normalized(): the interface size plus markdownOffsetPixels.
     TextTypographySettings preview{15, 26};
 
     [[nodiscard]] static AppearanceSettings defaults();

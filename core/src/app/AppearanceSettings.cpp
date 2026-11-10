@@ -43,7 +43,7 @@ TextTypographySettings TextTypographySettings::normalized() const {
     return value;
 }
 
-AppearanceSettings AppearanceSettings::defaults() { return {}; }
+AppearanceSettings AppearanceSettings::defaults() { return AppearanceSettings{}.normalized(); }
 
 AppearanceSettings AppearanceSettings::load() {
     const QSettings settings;
@@ -89,9 +89,16 @@ AppearanceSettings AppearanceSettings::normalized() const {
         qBound(minimumInterfaceFontSizePixels, value.interfaceFontSizePixels,
                maximumInterfaceFontSizePixels);
     value.editor = value.editor.normalized();
-    value.terminal = value.terminal.normalized();
+    // Terminal text follows the editor and Markdown the interface (Jay, 2026-11-10); there
+    // are no separate controls, so stored terminal and preview sizes are not read.
+    value.terminal =
+        TextTypographySettings{value.editor.fontSizePixels, value.editor.lineHeightPixels}
+            .normalized();
     value.terminalFontFamily = value.terminalFontFamily.trimmed();
-    value.preview = value.preview.normalized();
+    const int markdownPixels = value.interfaceFontSizePixels + markdownOffsetPixels;
+    value.preview =
+        TextTypographySettings{markdownPixels, qRound(markdownPixels * markdownLineHeightRatio)}
+            .normalized();
     return value;
 }
 
