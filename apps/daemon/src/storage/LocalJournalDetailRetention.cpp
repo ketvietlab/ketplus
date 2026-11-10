@@ -444,21 +444,25 @@ std::optional<qint64> LocalJournal::pruneReplayDetails(const QDateTime& olderTha
             }
             auto payload = QJsonDocument::fromJson(bytes).object();
             const auto original = payload.value(QStringLiteral("item")).toObject();
-            const auto pixels = original.value(QStringLiteral("result"));
-            const bool decodesPreview =
-                imagePreview_ && original.value(QStringLiteral("type")) == "imageGeneration" &&
-                !original.contains(QStringLiteral("compacted")) && pixels.isString() &&
-                !pixels.toString().isEmpty();
-            if (decodesPreview && previewDecoded)
-                break; // the next pass takes it
-            previewDecoded = previewDecoded || decodesPreview;
+            // A preview decodes the whole picture, so its cost does not follow the stored size.
+            // Once one item has decoded, a later item that wants a preview waits for the next
+            // pass; an item's own images (at most four) are decoded together.
+            bool decodedHere = false;
+            bool deferred = false;
             const auto item = compactCompletedReplayItem(
                 original, olderThan,
-                imagePreview_
-                    ? ImagePreview([this, session = row.session](const QByteArray& image) {
-                          return imagePreview_(image, session);
-                      })
-                    : ImagePreview());
+                imagePreview_ ? ImagePreview([&, session = row.session](const QByteArray& image) {
+                    if (previewDecoded && !decodedHere) {
+                        deferred = true;
+                        return QJsonObject();
+                    }
+                    decodedHere = true;
+                    return imagePreview_(image, session);
+                })
+                              : ImagePreview());
+            if (deferred)
+                break; // the next pass takes it
+            previewDecoded = previewDecoded || decodedHere;
             if (!item)
                 continue;
             payload.insert(QStringLiteral("item"), *item);

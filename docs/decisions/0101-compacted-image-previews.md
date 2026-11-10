@@ -1,4 +1,4 @@
-# ADR 0101: Previews for compacted generated images
+# ADR 0101: Previews for compacted images
 
 Status: accepted; incremental part of #128.
 
@@ -26,15 +26,24 @@ image (`McpMediaStore::encodePreview`: at most the requested side, at most
     marker policy is `image-preview-v1`. `retained_bytes` is the size of the
     reference kept in the journal; the JPEG itself lives in the media store.
   - Otherwise the item is compacted as before (`image-pixels-v1`, caption only).
+- Tool results (ADR 0099) use the same callback. In `mcpToolCall` and
+  `dynamicToolCall` items, an inline `result.content` image becomes a media
+  reference block in its place, up to four per call (`maximumImagesPerCall`,
+  what clients draw). Further images, and every `contentItems` `inputImage`
+  (which no client draws), stay `history_retention` placeholders. The
+  `inline_images` marker keeps policy `tool-inline-images-v1` and gains
+  `previews` (the count kept), and `retained_bytes` is the size of the kept
+  references.
 - `LocalJournal::setImagePreviewWriter` supplies the callback per session.
   `SessionHost` installs one that encodes a 512 px JPEG and stores it with
   `McpMediaStore::storeImage` under the item's session. It clears the writer in
   its destructor, because the journal outlives the host.
 - Previews are content-addressed, so identical pictures share one file, and
   they are released with their session like any other media.
-- Each detail pass decodes at most one image for a preview, whether it is
-  inline or in the large lane. Decoding costs the same whatever the stored size:
-  a 65 KB PNG can describe 64 megapixels. A second image that needs a preview
+- Each detail pass lets at most one item decode previews (a tool item decodes
+  its own images together, at most four), whether it is inline or in the large
+  lane. Decoding costs the same whatever the stored size:
+  a 65 KB PNG can describe 64 megapixels. A second item that needs a preview
   ends the pass, and the next pass takes it. Caption-only compaction keeps its
   existing limits.
 - Eligibility, the one-image-per-pass large lane and every other rule of
@@ -51,6 +60,3 @@ image (`McpMediaStore::encodePreview`: at most the requested side, at most
   size is in the block's `bytes` and is accounted for by the media store.
 - The "caption only" choice is currently made by leaving the writer unset. The
   user setting belongs to Settings → Storage in the new-UI stream.
-- Not covered yet: previews for the inline images in older `mcpToolCall` and
-  `dynamicToolCall` results (ADR 0099), which still become `history_retention`
-  placeholders.

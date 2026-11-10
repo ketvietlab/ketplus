@@ -389,6 +389,49 @@ class JournalUsageRetentionTest final : public QObject {
         }
     }
 
+    void toolResultImagesKeepAPreview() {
+        QTemporaryDir directory;
+        const auto path = directory.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        CodexAdapter adapter("/nonexistent/codex");
+        SessionHost host(&journal, &adapter);
+        QImage picture(900, 1200, QImage::Format_ARGB32);
+        picture.fill(QColor(20, 120, 200, 128));
+        QByteArray png;
+        QBuffer buffer(&png);
+        QVERIFY(buffer.open(QIODevice::WriteOnly) && picture.save(&buffer, "PNG"));
+        QVERIFY(
+            seed(journal, path, true, 24, QString::fromLatin1(png.toBase64()), false, false, true));
+        Database database(path);
+        const QString previewed = "SELECT count(*) FROM replay_events WHERE json_extract("
+                                  "payload,'$.item.compacted.inline_images.previews')=1";
+        // One decoding item per pass, as for generated images.
+        QVERIFY(journal.pruneReplayDetails(cutoff(), 256).has_value());
+        QCOMPARE(database.scalar(previewed), 1);
+        QVERIFY(sweep(journal) > 0);
+        QCOMPARE(database.scalar(previewed), 4);
+        for (const auto& value : allReplay(journal)) {
+            const auto event = value.toObject();
+            if (event.value("event_type") != "item.completed" ||
+                event.value("turn_sequence").toInteger() > 4)
+                continue;
+            const auto content = event.value("payload")
+                                     .toObject()
+                                     .value("item")
+                                     .toObject()
+                                     .value("result")
+                                     .toObject()
+                                     .value("content")
+                                     .toArray();
+            QCOMPARE(content.size(), 2);
+            QCOMPARE(content.at(0).toObject().value("text").toString(), QString("captured"));
+            const auto block = content.at(1).toObject();
+            QVERIFY(block.value("media_ref").toString().startsWith("sha256:"));
+            QCOMPARE(block.value("height").toInt(), 512);
+            QVERIFY(!block.contains("data"));
+        }
+    }
+
     void toolResultImagesLeaveTheJournal_data() {
         QTest::addColumn<int>("imageBytes");
         QTest::addColumn<bool>("textTrimmed");
