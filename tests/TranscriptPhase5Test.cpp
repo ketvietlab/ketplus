@@ -270,6 +270,10 @@ void AgentWorkspaceViewTest::readerHeldWhenPrependTakesOverGroupLeader() {
     transcript->setProperty("followTail", false);
     QTRY_VERIFY(delegateForKey(transcript, "c0"));
     flushDeferredCalls();
+    // The reader has the first row at the top of the viewport, past the top padding.
+    transcript->setProperty("contentY", transcript->property("headerHeight"));
+    QCOMPARE(transcript->property("contentY").toDouble(),
+             transcript->property("headerHeight").toDouble());
     auto* geometry = model->geometry();
     const auto screenTop = [&](const QString& key) {
         return geometry->top(geometry->rowForKey(key)) -
@@ -561,11 +565,13 @@ void AgentWorkspaceViewTest::copiesMessageSourcesAndCodeBlocks() {
     QVERIFY(QMetaObject::invokeMethod(transcript, "positionViewAtBeginning"));
     QTRY_VERIFY(delegateAt(transcript, 3));
 
-    // Copy chrome is created lazily: nothing until a row is hovered or keyboard-focused,
-    // except the turn's answer, which always offers Copy answer under it, as in the mock.
+    // Message copy chrome is created lazily: nothing until a row is hovered or
+    // keyboard-focused, except the turn's answer, which always offers Copy answer under it,
+    // as in the mock.
     QVERIFY(!childNamed(delegateAt(transcript, 0), "copyMessageButton"));
     QTRY_VERIFY(childNamed(delegateAt(transcript, 3), "copyMessageButton"));
-    QVERIFY(!childNamed(delegateAt(transcript, 1), "copyCodeBlockButton"));
+    // A code frame always carries its Copy button, as the kit's code block does.
+    QTRY_VERIFY(childNamed(delegateAt(transcript, 1), "copyCodeBlockButton"));
     QVERIFY(!childNamed(delegateAt(transcript, 2), "copyActivityButton"));
     view.quickView()->requestActivate();
     QVERIFY(QTest::qWaitForWindowActive(view.quickView()));

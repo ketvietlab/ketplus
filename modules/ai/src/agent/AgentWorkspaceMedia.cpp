@@ -614,6 +614,8 @@ void AgentWorkspaceView::formatMessageDocument(QObject* document, qreal fontPixe
     const auto px = [zoom](qreal value) { return ket::Appearance::scale(value, zoom); };
     const qreal codePadding = px(codeRecipe.padding);
     const qreal codeVerticalPadding = codePadding;
+    // ket's KetCodeBlock keeps this much clear above and below its frame.
+    const qreal codeOuterMargin = px(codeRecipe.margin);
     const qreal mermaidHeaderHeight = px(34);
     const QString monoFamily = monoFontFamily_;
     const QColor linkColor = recipe.link;
@@ -725,8 +727,10 @@ void AgentWorkspaceView::formatMessageDocument(QObject* document, qreal fontPixe
             format.setProperty(codeStyledProperty, codePadding);
             format.setNonBreakableLines(false);
             format.setLineHeight(lineHeight, QTextBlockFormat::FixedHeight);
-            format.setTopMargin(sameCodeBlock(block.previous(), block) ? 0 : codeVerticalPadding);
-            format.setBottomMargin(sameCodeBlock(block, block.next()) ? 0 : codeVerticalPadding);
+            format.setTopMargin(
+                sameCodeBlock(block.previous(), block) ? 0 : codeVerticalPadding + codeOuterMargin);
+            format.setBottomMargin(
+                sameCodeBlock(block, block.next()) ? 0 : codeVerticalPadding + codeOuterMargin);
             QTextCursor cursor(block);
             if (format != block.blockFormat())
                 cursor.setBlockFormat(format);
