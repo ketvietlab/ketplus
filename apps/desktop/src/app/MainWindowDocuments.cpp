@@ -56,10 +56,12 @@
 #include <QTabBar>
 #include <QTabWidget>
 #include <QTimer>
+
 #include <QToolButton>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <memory>
 
 #include <algorithm>
 
@@ -891,21 +893,23 @@ void MainWindow::setSettingsWorkspaceVisible(const bool visible) {
             return id.isEmpty() ? agentManager_->cancelWorktree(path)
                                 : agentManager_->cancelConversation(path, id);
         }));
-    // Another window may save while this form is open. Preserve its newer
-    // values for fields this form did not edit.
-    const auto settingsAtOpen = appearanceSettings_;
+    // Another window may save while this form is open. Each change applies at once, so only
+    // the fields this emission changed overwrite; the rest keep the other window's newer values.
+    auto lastRequested = std::make_shared<AppearanceSettings>(appearanceSettings_);
     connect(settingsDialog_, &SettingsDialog::appearanceSettingsSaved, this,
-            [this, settingsAtOpen](const AppearanceSettings& requested) {
+            [this, lastRequested](const AppearanceSettings& requested) {
+                const AppearanceSettings& previous = *lastRequested;
                 auto merged = appearanceSettings_;
-                if (requested.interfaceFontSizePixels != settingsAtOpen.interfaceFontSizePixels)
+                if (requested.interfaceFontSizePixels != previous.interfaceFontSizePixels)
                     merged.interfaceFontSizePixels = requested.interfaceFontSizePixels;
-                if (requested.editor.fontFamily != settingsAtOpen.editor.fontFamily)
+                if (requested.editor.fontFamily != previous.editor.fontFamily)
                     merged.editor.fontFamily = requested.editor.fontFamily;
-                if (requested.editor.fontSizePixels != settingsAtOpen.editor.fontSizePixels)
+                if (requested.editor.fontSizePixels != previous.editor.fontSizePixels)
                     merged.editor.fontSizePixels = requested.editor.fontSizePixels;
-                if (requested.editor.lineHeightPixels != settingsAtOpen.editor.lineHeightPixels)
+                if (requested.editor.lineHeightPixels != previous.editor.lineHeightPixels)
                     merged.editor.lineHeightPixels = requested.editor.lineHeightPixels;
                 // Terminal and Markdown sizes follow from these when normalized.
+                *lastRequested = requested;
                 applyAppearanceSettings(merged);
             });
 

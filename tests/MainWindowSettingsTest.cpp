@@ -1,3 +1,4 @@
+#include "KetChoice.h"
 #include "KetSegmentedControl.h"
 #include "KetThemeCard.h"
 #include "agent/AgentWorkspaceView.h"
@@ -35,7 +36,6 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
-#include <QRadioButton>
 #include <QSettings>
 #include <QStatusBar>
 #include <QTemporaryDir>
@@ -116,6 +116,7 @@ class MainWindowSettingsTest final : public QObject {
     void browserPageDefaultsOnAndPersistsChoices();
     void providersPageShowsRuntimeStatus();
     void conversationWidthFollowsOnlyTheAgentWorkspace();
+    void returningAFieldToItsOpeningValueSavesIt();
     void updatesPageAndReminderDriveTheUpdater();
     void unconfiguredBuildExplainsUpdatesInsteadOfChecking();
 };
@@ -202,8 +203,8 @@ void MainWindowSettingsTest::browserPageDefaultsOnAndPersistsChoices() {
 
     ketplus::SettingsBrowserPage page(settingsPath, root.path(), probes);
     auto* enabled = page.findChild<QAbstractButton*>(QStringLiteral("browserToolsEnabled"));
-    auto* all = page.findChild<QRadioButton*>(QStringLiteral("browserToolsAllOrigins"));
-    auto* only = page.findChild<QRadioButton*>(QStringLiteral("browserToolsOnlyOrigins"));
+    auto* all = page.findChild<QAbstractButton*>(QStringLiteral("browserToolsAllOrigins"));
+    auto* only = page.findChild<QAbstractButton*>(QStringLiteral("browserToolsOnlyOrigins"));
     auto* origins = page.findChild<QLineEdit*>(QStringLiteral("browserToolsOrigins"));
     auto* status = page.findChild<QLabel*>(QStringLiteral("browserToolsStatus"));
     QVERIFY(enabled && all && only && origins && status);
@@ -214,6 +215,12 @@ void MainWindowSettingsTest::browserPageDefaultsOnAndPersistsChoices() {
     QVERIFY(!origins->isEnabled());
     QTRY_VERIFY(status->text().contains(QStringLiteral("npm ci")));
     QVERIFY(page.runtimeSource().isEmpty());
+    // The mock's layout: choices, 200 px fields, and the one-line status keeps its text in
+    // the tooltip.
+    QVERIFY(qobject_cast<ket::Choice*>(enabled) && qobject_cast<ket::Choice*>(all) &&
+            qobject_cast<ket::Choice*>(only));
+    QCOMPARE(origins->width(), 200);
+    QCOMPARE(status->toolTip(), status->text());
     QVERIFY(enabled->isEnabled()); // never gated on the runtime
 
     QVERIFY(QDir().mkpath(app + QStringLiteral("/node_modules/@modelcontextprotocol/server")));
@@ -309,8 +316,8 @@ void MainWindowSettingsTest::browserPageDefaultsOnAndPersistsChoices() {
     mixed.allowedOrigins = QStringLiteral("loopback, *");
     QVERIFY(ketplus::browser_tools::saveSettings(mixed, settingsPath));
     ketplus::SettingsBrowserPage mixedPage(settingsPath, root.path(), probes);
-    QVERIFY(
-        mixedPage.findChild<QRadioButton*>(QStringLiteral("browserToolsAllOrigins"))->isChecked());
+    QVERIFY(mixedPage.findChild<QAbstractButton*>(QStringLiteral("browserToolsAllOrigins"))
+                ->isChecked());
     QVERIFY(!mixedPage.findChild<QLineEdit*>(QStringLiteral("browserToolsOrigins"))->isEnabled());
 
     // A damaged file loads off, says so, and is not rewritten by a refresh.
@@ -618,6 +625,39 @@ void MainWindowSettingsTest::settingsAndWorktreesUseWorkspacePages() {
         QCoreApplication::processEvents();
         QVERIFY(window.grab().save(capture + ".dark.png"));
     }
+}
+
+// Changes apply one at a time, so a field taken back to the value it had when Settings
+// opened must be saved too, by a direct edit or by Restore defaults.
+void MainWindowSettingsTest::returningAFieldToItsOpeningValueSavesIt() {
+    QTemporaryDir settingsDirectory;
+    QVERIFY(settingsDirectory.isValid());
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsDirectory.path());
+    QSettings().clear();
+
+    ketplus::ThemeManager theme(*qApp);
+    ketplus::MainWindow window(theme);
+    window.resize(1100, 720);
+    window.show();
+    window.findChild<QAction*>(QStringLiteral("productSettingsAction"))->trigger();
+    ketplus::PixelSelect* size = nullptr;
+    QTRY_VERIFY((size = window.findChild<ketplus::PixelSelect*>(
+                     QStringLiteral("editorFontSize"))) != nullptr);
+    const int opening = size->value();
+    size->setValue(opening + 2);
+    QCOMPARE(ketplus::AppearanceSettings::load().editor.fontSizePixels, opening + 2);
+    size->setValue(opening);
+    QCOMPARE(ketplus::AppearanceSettings::load().editor.fontSizePixels, opening);
+
+    size->setValue(opening + 3);
+    QCOMPARE(ketplus::AppearanceSettings::load().editor.fontSizePixels, opening + 3);
+    for (auto* button : window.findChildren<QAbstractButton*>()) {
+        if (button->property("kvRole") == QStringLiteral("settingsReset"))
+            button->click();
+    }
+    QCOMPARE(ketplus::AppearanceSettings::load().editor.fontSizePixels,
+             ketplus::AppearanceSettings::defaults().editor.fontSizePixels);
 }
 
 void MainWindowSettingsTest::conversationWidthFollowsOnlyTheAgentWorkspace() {
