@@ -82,15 +82,15 @@ cmake --build build/remote-demo --target ketplus
 KETPLUS_REMOTE_DEMO=1 open build/remote-demo/KetPlus.app
 ```
 
-In that tree, `KETPLUS_CONNECTIONS_CAPTURE=<dir>` with
-`QT_QPA_PLATFORM=offscreen` makes `ketplus_remote_workspace_tests` save the signed-in
-Connections page (`connections-light.png`, `connections-dark.png`) for the side by
-side with `KetPlusMock --screen=connections`.
-
 Both the compile-time option and environment flag are required. Continue in
 browser then signs in without opening a browser, and Add generates a local
 synthetic QR code. The bypass never stores credentials, enrolls a machine, or calls the
 remote service. CMake does not compile it into Release builds.
+
+In that tree, `KETPLUS_CONNECTIONS_CAPTURE=<dir>` with
+`QT_QPA_PLATFORM=offscreen` makes `ketplus_remote_workspace_tests` save the signed-in
+Connections page (`connections-light.png`, `connections-dark.png`) for the side by
+side with `KetPlusMock --screen=connections`.
 
 ## Developer packages
 
