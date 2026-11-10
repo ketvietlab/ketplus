@@ -52,7 +52,7 @@ void AgentWorkspaceViewTest::reviewerPickerFollowsTheActiveConversation() {
             QVariantMap{{"number", "2044"}, {"title", "Cursor"}, {"provider", "cursor"}},
             QVariantMap{{"number", "3055"}, {"title", "Codex"}, {"provider", "codex"}}};
     });
-    view.resize(1000, 700);
+    view.resize(1200, 700); // room for the full Reviewer label beside the product sidebar
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
     QSignalSpy reads(&view, &ketplus::AgentWorkspaceView::reviewerRequested);
@@ -128,7 +128,7 @@ void AgentWorkspaceViewTest::reviewerPickerFollowsTheActiveConversation() {
     QVERIFY(QMetaObject::invokeMethod(menu, "close"));
 
     // Narrow headers keep only the chevron; the tooltip still names the reviewer.
-    view.resize(900, 700);
+    view.resize(1000, 700);
     QTRY_COMPARE(button->property("text").toString(), QStringLiteral("▾"));
     auto* title = findVisualItem(header, "conversationTitle");
     QVERIFY(title);
@@ -160,7 +160,8 @@ void AgentWorkspaceViewTest::reviewerLabelCollapsesBeforeTagsSqueezeTheTitle_dat
     QTest::newRow("largest") << qreal(1.5);
 }
 
-// The full "Reviewer · @agent/N" label shows only when every visible header item fits.
+// The header gives way in the mock's order: the tags first, then the Reviewer label. The full
+// "Reviewer · @agent/N" label shows only when every visible header item fits.
 void AgentWorkspaceViewTest::reviewerLabelCollapsesBeforeTagsSqueezeTheTitle() {
     QFETCH(qreal, zoom);
     auto& appearance = ket::Appearance::instance();
@@ -181,7 +182,7 @@ void AgentWorkspaceViewTest::reviewerLabelCollapsesBeforeTagsSqueezeTheTitle() {
         {{"available", true},
          {"reviewer",
           QVariantMap{{"number", "1093"}, {"title", "Parser"}, {"provider", "claude"}}}});
-    view.resize(1400, 700);
+    view.resize(1800, 700);
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
     auto* root = view.quickView()->rootObject();
@@ -192,13 +193,14 @@ void AgentWorkspaceViewTest::reviewerLabelCollapsesBeforeTagsSqueezeTheTitle() {
     QVERIFY(title && scope);
     bool sawTags = false;
     bool sawCollapsed = false;
-    for (int width = 1400; width >= 760; width -= 20) {
+    for (int width = 1800; width >= 760; width -= 20) {
         view.resize(width, 700);
         QTest::qWait(20);
         // The title row always ends before the header actions, collapsed or not.
         qreal actionsLeft = width;
-        for (const char* name : {"headerCompactWindowButton", "headerAtlasButton",
-                                 "headerNewConversationButton", "headerTerminalButton"}) {
+        for (const char* name :
+             {"headerCompactWindowButton", "headerAtlasButton", "headerNewConversationButton",
+              "headerChangesButton", "headerTerminalButton", "headerWorkReportButton"}) {
             auto* action = findVisualItem(root, name);
             if (action && action->isVisible())
                 actionsLeft = qMin(actionsLeft, action->mapToItem(root, QPointF()).x());
@@ -215,8 +217,11 @@ void AgentWorkspaceViewTest::reviewerLabelCollapsesBeforeTagsSqueezeTheTitle() {
                                     .arg(width)));
         }
         const bool full = button->property("text").toString() != QStringLiteral("▾");
+        const bool tags = findVisualItem(root, "conversationTag_UI")->isVisible();
         sawCollapsed = sawCollapsed || !full;
-        sawTags = sawTags || findVisualItem(root, "conversationTag_UI")->isVisible();
+        sawTags = sawTags || tags;
+        QVERIFY2(full || !tags,
+                 qPrintable(QStringLiteral("tags outlast the label at %1").arg(width)));
         if (!full)
             continue;
         QVERIFY2(title->width() >= title->implicitWidth() - 1,
