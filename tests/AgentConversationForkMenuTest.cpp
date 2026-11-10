@@ -1,6 +1,8 @@
 #include "AgentWorkspaceViewTest.h"
 #include "agent/AgentWorkspaceView.h"
 
+#include <QClipboard>
+#include <QGuiApplication>
 #include <QQuickView>
 #include <QSignalSpy>
 #include <QtTest>
@@ -10,9 +12,9 @@ using namespace agent_workspace_test;
 namespace {
 
 QVariantMap conversation(const bool forkable) {
-    return {{"id", "source"},  {"title", "Source"},   {"provider", "codex"},
-            {"active", true},  {"running", true},     {"status", "Working"},
-            {"started", true}, {"forkable", forkable}};
+    return {{"id", "source"},  {"title", "Source"},    {"provider", "codex"},
+            {"active", true},  {"running", true},      {"status", "Working"},
+            {"started", true}, {"forkable", forkable}, {"number", "8941"}};
 }
 
 } // namespace
@@ -41,8 +43,14 @@ void AgentWorkspaceViewTest::conversationMenusOfferFork() {
     QVERIFY(sidebarMenu);
     auto* sidebarFork = sidebarMenu->findChild<QObject*>("forkConversationMenuItem");
     QVERIFY(sidebarFork);
-    QCOMPARE(sidebarFork->property("text").toString(), QStringLiteral("Fork this conversation"));
+    QCOMPARE(sidebarFork->property("text").toString(), QStringLiteral("Fork conversation"));
     QVERIFY(sidebarFork->property("enabled").toBool());
+    // As in the mock, the menu copies the reference other conversations message.
+    auto* reference = sidebarMenu->findChild<QObject*>("copyConversationReferenceMenuItem");
+    QVERIFY(reference);
+    QCOMPARE(reference->property("shortcut").toString(), QStringLiteral("@agent/8941"));
+    QVERIFY(QMetaObject::invokeMethod(reference, "triggered"));
+    QTRY_COMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("@agent/8941"));
     QVERIFY(QMetaObject::invokeMethod(sidebarFork, "triggered"));
     QTRY_COMPARE(forks.size(), 1);
     QCOMPARE(forks.constFirst().constFirst().toString(), QStringLiteral("source"));
