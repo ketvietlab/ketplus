@@ -85,10 +85,33 @@ class LiteWindowTest final : public QObject {
         write(workspace_.filePath(QStringLiteral("main.cpp")), "int main() {}\n");
     }
 
+    void sidePanelStartsClosedAndItsButtonTogglesIt() {
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(workspace_.path());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto* tree = window.findChild<QTreeView*>(QStringLiteral("explorerTree"));
+        QVERIFY(!tree->isVisibleTo(&window));
+        auto* explorer = activityButton(window, QStringLiteral("Explorer"));
+        QVERIFY(!marked(explorer));
+        explorer->click();
+        QVERIFY(tree->isVisibleTo(&window));
+        QVERIFY(marked(explorer));
+        explorer->click();
+        QVERIFY(!tree->isVisibleTo(&window));
+        QVERIFY(!marked(explorer));
+        // Opening another folder keeps an open Explorer open.
+        explorer->click();
+        window.openFolder(workspace_.filePath(QStringLiteral("docs")));
+        QVERIFY(tree->isVisibleTo(&window));
+    }
+
     void explorerShowsTheFolderAsItsRootRow() {
         ketplus::ThemeManager theme(*qApp);
         ketplus::MainWindow window(theme);
         window.openFolder(workspace_.path());
+        viewAction(window, QStringLiteral("Explorer"))->trigger();
         auto* root = window.findChild<ket::FileRow*>(QStringLiteral("explorerRoot"));
         QVERIFY(root != nullptr);
         QCOMPARE(root->text(), QFileInfo(workspace_.path()).fileName().toUpper());
@@ -115,6 +138,7 @@ class LiteWindowTest final : public QObject {
         window.openFolder(workspace_.path());
         window.show();
         QVERIFY(QTest::qWaitForWindowExposed(&window));
+        viewAction(window, QStringLiteral("Explorer"))->trigger();
         auto* explorer = activityButton(window, QStringLiteral("Explorer"));
         auto* search = activityButton(window, QStringLiteral("Search in Files"));
         QVERIFY(explorer && search);

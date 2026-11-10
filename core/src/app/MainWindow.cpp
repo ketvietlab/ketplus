@@ -383,7 +383,10 @@ void MainWindow::openFolder(const QString& folderPath) {
     workspaceFilesIndexedAt_ = 0;
     auto* explorer = ensureExplorer();
     explorer->setRootPath(workspaceRoot_);
-    setExplorerVisible(true);
+    // As the Lite mock: the side panel stays as it was, closed in a new window; the
+    // activity bar or Cmd+B opens it.
+    if (!explorerAction_->isChecked())
+        explorer->hide();
     setWindowTitle(QStringLiteral("%1 — KétPlus").arg(folder.fileName()));
     statusBar()->showMessage(QStringLiteral("Opened %1").arg(workspaceRoot_), 2500);
     git_->setWorkspacePath(workspaceRoot_);
