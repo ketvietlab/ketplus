@@ -377,7 +377,8 @@ void PtyProcessTest::echoesTypedTextBeforeEnter() {
     paints.count = 0;
     QTest::keyClicks(&terminal, QStringLiteral("ketplus_live_echo"));
 
-    QTRY_VERIFY_WITH_TIMEOUT(terminal.visibleText().contains("ketplus_live_echo"), 1000);
+    // A slow runner's shell can still be starting after its first output; echo is what is checked.
+    QTRY_VERIFY_WITH_TIMEOUT(terminal.visibleText().contains("ketplus_live_echo"), 5000);
     QTRY_VERIFY_WITH_TIMEOUT(paints.count > 0, 200);
     session.sendBytes(QByteArray(1, '\x03'));
     QTest::qWait(100);
@@ -573,6 +574,9 @@ void PtyProcessTest::emitsMouseProtocolFromCore() {
 }
 
 void PtyProcessTest::embeddedTabsKeepIndependentSessions() {
+#if !defined(Q_OS_UNIX)
+    QSKIP("The first PTY backend targets macOS and Linux.");
+#endif
     TerminalPanel panel;
     panel.resize(800, 400);
     panel.show();

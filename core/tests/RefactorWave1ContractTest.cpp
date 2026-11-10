@@ -326,6 +326,9 @@ void RefactorWave1ContractTest::themeInstallsTheKetStyle() {
     };
     // The label a tooltip shows: the stylesheet's base QWidget size must not reach it.
     const auto shownTooltipPixels = [] {
+        // Windows fades tooltips in, so the label is not visible yet when this reads it.
+        QApplication::setEffectEnabled(Qt::UI_FadeTooltip, false);
+        QApplication::setEffectEnabled(Qt::UI_AnimateTooltip, false);
         QWidget anchor;
         anchor.resize(80, 40);
         anchor.show();
