@@ -123,15 +123,15 @@ SettingsBrowserPage::SettingsBrowserPage(QString settingsPath, QString searchSta
     origins_->setText(isAllOrigins(settings_.allowedOrigins) ? QString()
                                                              : settings_.allowedOrigins);
     origins_->setObjectName(QStringLiteral("browserToolsOrigins"));
-    origins_->setPlaceholderText(QStringLiteral("https://staging.example.com"));
+    origins_->setPlaceholderText(QStringLiteral("loopback, https://staging.example.com"));
     appPath_ = new ket::TextField(this);
     appPath_->setText(settings_.browserAppPath);
     appPath_->setObjectName(QStringLiteral("browserToolsAppPath"));
     const QString detected = browser_tools::detectBrowserAppPath(searchStart_);
     appPath_->setPlaceholderText(detected.isEmpty() ? QStringLiteral("~/dev/ketplus") : detected);
     layout->addWidget(settings_rows::field(
-        tr("Allowed origins"), tr("Separate origins with commas. localhost is always allowed."),
-        origins_, this));
+        tr("Allowed origins"),
+        tr("Separate origins with commas. Include loopback to allow localhost."), origins_, this));
     layout->addSpacing(14);
     layout->addWidget(settings_rows::field(
         tr("Source checkout path"), tr("Only needed for a source checkout"), appPath_, this));
