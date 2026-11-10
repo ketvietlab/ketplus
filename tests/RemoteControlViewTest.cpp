@@ -1,4 +1,6 @@
 #include "remote/RemoteControlView.h"
+#include "control/ControlV2Client.h"
+#include "remote/LinuxMachinesSection.h"
 #include "remote/RemoteActivitySection.h"
 #include "remote/RemoteConnectionsIntro.h"
 #include "ui/InterfaceZoom.h"
@@ -28,6 +30,16 @@
 
 #include <algorithm>
 
+namespace ketplus::remote {
+// Signs a client in for this process only; nothing reaches the keychain.
+class RemoteControlTestAccess {
+  public:
+    static void signIn(ControlV2Client& client) {
+        client.credential_.insert(QStringLiteral("deviceId"), QStringLiteral("test-desktop"));
+    }
+};
+} // namespace ketplus::remote
+
 namespace ketplus {
 
 class RemoteControlViewTest final : public QObject {
@@ -37,6 +49,8 @@ class RemoteControlViewTest final : public QObject {
     void initTestCase();
     void opensOnSignInPrompt();
     void sectionsFollowTheMock();
+    void linuxPairingStaysReachableWithoutThePhoneRelay();
+    void linuxMachineIconsFollowTheTheme();
     void signedOutIntroFollowsTheMockAtEveryWidth();
     void signInFormIsAnExplicitSecondaryFlow();
     void demoSignInOpensAddDeviceQr();
@@ -333,7 +347,7 @@ void RemoteControlViewTest::sectionsFollowTheMock() {
     QVERIFY(titles.contains(QStringLiteral("Linux machines")));
     QVERIFY(!titles.contains(QStringLiteral("Your devices")));
 
-    // Linux machines read "N trusted", and only the page's Add menu starts pairing.
+    // Linux machines read "N trusted", and the page's Add menu starts pairing.
     auto* linux = view.findChild<QWidget*>(QStringLiteral("linuxMachinesSection"));
     QVERIFY(linux);
     QCOMPARE(linux->findChild<QLabel*>(QStringLiteral("linuxMachinesCount"))->text(),
@@ -348,6 +362,91 @@ void RemoteControlViewTest::sectionsFollowTheMock() {
     QCOMPARE(footer->parentWidget(), body);
     QVERIFY(body->layout()->indexOf(footer) > body->layout()->indexOf(linux));
     QVERIFY(footer->isAncestorOf(view.findChild<QWidget*>(QStringLiteral("remoteAccountStrip"))));
+}
+
+void RemoteControlViewTest::linuxPairingStaysReachableWithoutThePhoneRelay() {
+    RemoteControlView view;
+    view.resize(840, 720);
+    view.show();
+    auto* linux = view.linuxMachines_;
+    remote::RemoteControlTestAccess::signIn(*linux->client_);
+    linux->render();
+    const auto connectButton = [linux] {
+        return linux->findChild<QAbstractButton*>(QStringLiteral("linuxMachinesConnect"));
+    };
+
+    // This Mac's relay is not linked: the page has no Add menu, so the section offers its own.
+    view.applyStatus({{QStringLiteral("configured"), false}});
+    QVERIFY(!view.pageHeader_->isVisible());
+    // A widget added to a shown layout becomes visible on the next event loop pass.
+    QTRY_VERIFY(connectButton() && connectButton()->isVisible());
+    QTest::mouseClick(connectButton(), Qt::LeftButton);
+    QDialog* pairing = nullptr;
+    for (auto* dialog : linux->findChildren<QDialog*>())
+        if (dialog->windowTitle() == QStringLiteral("Pair a Linux machine"))
+            pairing = dialog;
+    QVERIFY(pairing && pairing->isVisible());
+    pairing->close();
+
+    // Linked but offline: phones wait for the relay, Linux pairing does not.
+    view.applyStatus({{QStringLiteral("configured"), true},
+                      {QStringLiteral("last_error"), QStringLiteral("Relay unreachable")}});
+    QVERIFY(!connectButton());
+    auto* add = view.pairButton_;
+    QVERIFY(add->isVisible() && add->isEnabled());
+    bool checked = false;
+    QTimer::singleShot(0, add, [add, &checked] {
+        auto* menu = add->findChild<QMenu*>();
+        QVERIFY(menu && menu->isVisible());
+        const auto actions = menu->actions();
+        QCOMPARE(actions.size(), 2);
+        QCOMPARE(actions.at(0)->text(), QStringLiteral("Pair a phone or tablet"));
+        QVERIFY(!actions.at(0)->isEnabled());
+        QCOMPARE(actions.at(1)->text(), QStringLiteral("Connect a Linux machine"));
+        QVERIFY(actions.at(1)->isEnabled());
+        checked = true;
+        menu->close();
+    });
+    QTest::mouseClick(add, Qt::LeftButton);
+    QVERIFY(checked);
+}
+
+void RemoteControlViewTest::linuxMachineIconsFollowTheTheme() {
+    auto& appearance = ket::Appearance::instance();
+    appearance.setMode(ket::Appearance::Mode::Light);
+    LinuxMachinesSection section;
+    section.resize(640, 320);
+    section.show();
+    remote::RemoteControlTestAccess::signIn(*section.client_);
+    section.machineIds_ = {QStringLiteral("build-box")};
+    section.render();
+    // The darkest drawn pixel of the row's terminal icon.
+    const auto iconInk = [&section] {
+        auto* row = section.findChild<QFrame*>(QStringLiteral("linuxMachineRow"));
+        QLabel* icon = nullptr;
+        for (auto* label : row ? row->findChildren<QLabel*>() : QList<QLabel*>{})
+            if (!label->pixmap().isNull())
+                icon = label;
+        if (!icon)
+            return QColor();
+        const QImage image = icon->pixmap().toImage();
+        QColor ink;
+        for (int y = 0; y < image.height(); ++y)
+            for (int x = 0; x < image.width(); ++x) {
+                const QColor pixel = image.pixelColor(x, y);
+                if (pixel.alpha() == 255 && (!ink.isValid() || pixel.lightness() < ink.lightness()))
+                    ink = pixel;
+            }
+        return ink;
+    };
+    const QColor light = iconInk();
+    QVERIFY(light.isValid());
+    QVERIFY2(light.lightness() < 128, qPrintable(light.name()));
+    appearance.setMode(ket::Appearance::Mode::Dark);
+    const QColor dark = iconInk();
+    QVERIFY(dark.isValid());
+    QVERIFY2(dark.lightness() > 128, qPrintable(dark.name()));
+    appearance.setMode(ket::Appearance::Mode::Light);
 }
 
 void RemoteControlViewTest::opensOnSignInPrompt() {

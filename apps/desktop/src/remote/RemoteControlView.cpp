@@ -509,6 +509,8 @@ QWidget* RemoteControlView::createControlPage() {
         // The mock's Add menu.
         auto* phone = menu.addAction(tr("Pair a phone or tablet"));
         phone->setToolTip(tr("Scan a code with the KetPlus App"));
+        // Linux pairing goes through its own account, so only phones wait for this Mac's relay.
+        phone->setEnabled(!offline_ && !requestInFlight_);
         auto* linux = menu.addAction(tr("Connect a Linux machine"));
         linux->setToolTip(tr("Through the KetPlus Relay"));
         const auto* chosen = menu.exec(pairButton_->mapToGlobal(QPoint(0, pairButton_->height())));
@@ -840,6 +842,8 @@ QWidget* RemoteControlView::createControlPage() {
     dialogLayout->addWidget(pairingPanel_);
     bodyLayout->addWidget(linkedContent_);
     linuxMachines_ = new LinuxMachinesSection(body);
+    // The page's Add menu shows only once this Mac's relay is linked.
+    linuxMachines_->setPairingEntryShown(!configured_);
     connect(linuxMachines_, &LinuxMachinesSection::machinesChanged, this,
             &RemoteControlView::machinesChanged);
     bodyLayout->addWidget(linuxMachines_);
@@ -869,7 +873,7 @@ void RemoteControlView::activate() {
 void RemoteControlView::setBusy(const bool busy) {
     requestInFlight_ = busy;
     signInButton_->setEnabled(!busy);
-    pairButton_->setEnabled(!busy && configured_ && !offline_);
+    pairButton_->setEnabled(configured_);
     signOutButton_->setEnabled(!busy && configured_);
     const QString pairAction = approveButton_->property("pairAction").toString();
     const bool actionable = pairingState_->property("claimReady").toBool() ||
@@ -1018,7 +1022,9 @@ void RemoteControlView::applyStatus(const QJsonObject& status) {
     signOutButton_->setVisible(configured_);
     const QString lastError = status.value(QStringLiteral("last_error")).toString();
     offline_ = configured_ && !lastError.isEmpty();
-    pairButton_->setEnabled(configured_ && !offline_ && !requestInFlight_);
+    pairButton_->setEnabled(configured_);
+    if (linuxMachines_)
+        linuxMachines_->setPairingEntryShown(!configured_);
     overviewDescription_->setText(offline_ ? QStringLiteral("Working locally")
                                            : QStringLiteral("Ready for your connected devices"));
     overviewStatus_->setText(offline_ ? QStringLiteral("Offline") : QStringLiteral("Connected"));

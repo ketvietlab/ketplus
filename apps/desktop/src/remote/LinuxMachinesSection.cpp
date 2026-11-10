@@ -75,6 +75,9 @@ LinuxMachinesSection::LinuxMachinesSection(QWidget* parent)
         if (error.isEmpty())
             refreshMachines();
     });
+    // The rows' icons are drawn in the theme's ink.
+    connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this,
+            &LinuxMachinesSection::render);
     render();
 }
 
@@ -84,6 +87,13 @@ void LinuxMachinesSection::activate() {
     render();
     if (client_->signedIn())
         refreshMachines();
+}
+
+void LinuxMachinesSection::setPairingEntryShown(const bool shown) {
+    if (pairingEntryShown_ == shown)
+        return;
+    pairingEntryShown_ = shown;
+    render();
 }
 
 void LinuxMachinesSection::setNotice(const QString& message, const bool error) {
@@ -126,9 +136,22 @@ void LinuxMachinesSection::render() {
         message(tr("Loading trusted machines…"));
         return;
     }
+    const auto addConnectButton = [this](QBoxLayout* layout) {
+        auto* connectButton =
+            new ket::Button(tr("Connect a Linux machine"), ket::ButtonVariant::Secondary, this);
+        connectButton->setObjectName(QStringLiteral("linuxMachinesConnect"));
+        connect(connectButton, &QAbstractButton::clicked, this,
+                &LinuxMachinesSection::beginPairing);
+        layout->addWidget(connectButton, 0, Qt::AlignLeft);
+    };
     if (machineIds_.isEmpty()) {
-        message(tr("No Linux machines yet. Start pairing on the Linux daemon, then choose Add › "
-                   "Connect a Linux machine and paste its one-time pairing link."));
+        if (pairingEntryShown_) {
+            addConnectButton(message(tr("No Linux machines yet. Start pairing on the Linux "
+                                        "daemon, then paste its one-time pairing link here.")));
+        } else {
+            message(tr("No Linux machines yet. Start pairing on the Linux daemon, then choose "
+                       "Add › Connect a Linux machine and paste its one-time pairing link."));
+        }
         return;
     }
     // A device row as the phones above: icon, name, how it connects, and its state.
@@ -167,6 +190,13 @@ void LinuxMachinesSection::render() {
         status->setAccessibleName(tr("Machine %1 is available").arg(id));
         layout->addWidget(status);
         rows_->addWidget(row);
+    }
+    if (pairingEntryShown_) {
+        auto* footer = new QWidget(this);
+        auto* layout = new QHBoxLayout(footer);
+        layout->setContentsMargins(22, 14, 22, 14);
+        addConnectButton(layout);
+        rows_->addWidget(footer);
     }
 }
 
