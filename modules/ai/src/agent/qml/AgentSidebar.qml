@@ -135,7 +135,9 @@ Rectangle {
                     Kit.KetMenuItem {
                         objectName: "copyConversationReferenceMenuItem"
                         readonly property string reference: modelData.number ? "@agent/" + modelData.number : ""
+                        // Hidden and disabled together: menu keys skip disabled items only.
                         visible: reference.length > 0
+                        enabled: visible
                         height: visible ? implicitHeight : 0
                         text: "Copy reference"
                         iconName: "copy"

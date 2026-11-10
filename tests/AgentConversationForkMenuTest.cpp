@@ -11,10 +11,10 @@ using namespace agent_workspace_test;
 
 namespace {
 
-QVariantMap conversation(const bool forkable) {
+QVariantMap conversation(const bool forkable, const QString& number = "8941") {
     return {{"id", "source"},  {"title", "Source"},    {"provider", "codex"},
             {"active", true},  {"running", true},      {"status", "Working"},
-            {"started", true}, {"forkable", forkable}, {"number", "8941"}};
+            {"started", true}, {"forkable", forkable}, {"number", number}};
 }
 
 } // namespace
@@ -87,4 +87,42 @@ void AgentWorkspaceViewTest::conversationMenusOfferFork() {
     sidebarFork = sidebarMenu->findChild<QObject*>("forkConversationMenuItem");
     QVERIFY(sidebarFork);
     QTRY_VERIFY(!sidebarFork->property("enabled").toBool());
+}
+
+void AgentWorkspaceViewTest::hiddenConversationReferenceTakesNoKeyFocus() {
+    // A conversation without a number has no reference; the menu keys step over its item.
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.setConversations({conversation(true, {})});
+    view.resize(1000, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
+    view.quickView()->requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(view.quickView()));
+    QQuickItem* row = nullptr;
+    QTRY_VERIFY((row = findVisualItem(view.quickView()->rootObject(),
+                                      QStringLiteral("conversationRow_source"))));
+    auto* menu = qvariant_cast<QObject*>(row->property("contextMenu"));
+    QVERIFY(menu);
+    auto* reference = menu->findChild<QObject*>("copyConversationReferenceMenuItem");
+    QVERIFY(reference);
+    QVERIFY(!reference->property("enabled").toBool());
+    QVERIFY(QMetaObject::invokeMethod(menu, "open"));
+    QTRY_VERIFY(menu->property("visible").toBool());
+    menu->setProperty("currentIndex", 0);
+    auto* rename =
+        qobject_cast<QQuickItem*>(menu->findChild<QObject*>("renameConversationMenuItem"));
+    QVERIFY(rename);
+    rename->forceActiveFocus();
+    QTRY_VERIFY(rename->hasActiveFocus());
+    for (int step = 0; step < 3; ++step)
+        QTest::keyClick(view.quickView(), Qt::Key_Down);
+    auto* archive = menu->findChild<QObject*>("archiveConversationMenuItem");
+    QTRY_VERIFY(archive->property("highlighted").toBool());
+    QVERIFY(!reference->property("activeFocus").toBool());
+    QTest::keyClick(view.quickView(), Qt::Key_Up);
+    QTRY_VERIFY(menu->findChild<QObject*>("changeConversationWorktreeMenuItem")
+                    ->property("highlighted")
+                    .toBool());
+    QMetaObject::invokeMethod(menu, "close");
 }

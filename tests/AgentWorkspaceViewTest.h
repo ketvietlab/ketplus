@@ -167,6 +167,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void agentQmlUsesBoundedAnimationsAndKitPrimitives();
     void contextMenuFollowsDesignSystem();
     void conversationMenusOfferFork();
+    void hiddenConversationReferenceTakesNoKeyFocus();
     void reviewerPickerFollowsTheActiveConversation();
     void reviewerLabelCollapsesBeforeTagsSqueezeTheTitle_data();
     void reviewerLabelCollapsesBeforeTagsSqueezeTheTitle();
