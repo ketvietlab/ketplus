@@ -3,6 +3,7 @@
 #include "app/ReviewCapture.h"
 #include "terminal/TerminalPanel.h"
 #include "ui/Theme.h"
+#include "workspace/ExplorerPanel.h"
 
 #include "KetAppearance.h"
 #include "KetChrome.h"
@@ -17,6 +18,7 @@
 #include <QMenuBar>
 #include <QProcess>
 #include <QSettings>
+#include <QSplitter>
 #include <QStatusBar>
 #include <QTabWidget>
 #include <QTemporaryDir>
@@ -133,6 +135,50 @@ class LiteWindowTest final : public QObject {
         QTRY_VERIFY(counter.paints > 0);
         QVERIFY(!marked(explorer));
         QVERIFY(marked(search));
+        // Assistive technology reads the panel on screen as the checked button.
+        QVERIFY(search->isCheckable() && search->isChecked() && !explorer->isChecked());
+        search->click();
+        QVERIFY(!search->isChecked());
+        QVERIFY(!viewAction(window, QStringLiteral("Search in Files"))->isChecked());
+    }
+
+    void sidePanelWidthFollowsTheZoom() {
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.resize(1280, 820);
+        window.openFolder(workspace_.path());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto* explorer = window.findChild<ketplus::ExplorerPanel*>();
+        // A width the user dragged scales with the zoom, too.
+        auto* split = qobject_cast<QSplitter*>(explorer->parentWidget());
+        QVERIFY(split != nullptr);
+        auto sizes = split->sizes();
+        const int panel = split->indexOf(explorer);
+        const int editor =
+            split->indexOf(window.findChild<QWidget*>(QStringLiteral("editorColumn")));
+        sizes[editor] += sizes[panel] - 300;
+        sizes[panel] = 300;
+        split->setSizes(sizes);
+        QCOMPARE(explorer->width(), 300);
+        ket::Appearance::instance().setZoom(1.25);
+        QTRY_COMPARE(explorer->width(), 375);
+        ket::Appearance::instance().setZoom(1.0);
+        QTRY_COMPARE(explorer->width(), 300);
+    }
+
+    void revealOpensACollapsedRoot() {
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(workspace_.path());
+        auto* root = window.findChild<ket::FileRow*>(QStringLiteral("explorerRoot"));
+        auto* tree = window.findChild<QTreeView*>(QStringLiteral("explorerTree"));
+        root->click();
+        QVERIFY(!tree->isVisibleTo(&window));
+        auto* explorer = window.findChild<ketplus::ExplorerPanel*>();
+        explorer->revealPath(explorer->rootPath() + QStringLiteral("/docs/guide.md"));
+        QVERIFY(root->isChecked());
+        QVERIFY(tree->isVisibleTo(&window));
     }
 
     void terminalSitsBelowTheEditorOnly() {
