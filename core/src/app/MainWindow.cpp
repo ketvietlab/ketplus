@@ -19,6 +19,7 @@
 #include "ui/FindReplaceBar.h"
 #include "ui/Theme.h"
 #include "workspace/ExplorerPanel.h"
+#include "workspace/SearchPanel.h"
 
 #include "ui/MessageDialog.h"
 #include <QAction>
@@ -382,13 +383,24 @@ void MainWindow::openFolder(const QString& folderPath) {
     }
 
     showEditorSurface();
+    // Search stays open across folders, so drop the previous folder's search: its results
+    // hold that folder's paths, and Replace All would edit them.
+    if (searchPanel_ != nullptr) {
+        cancelWorkspaceSearch();
+        searchPanel_->setSearching(false);
+        searchPanel_->clearResults();
+        searchPanel_->setStatusText({});
+    }
     rememberActiveFileForWorktree();
     workspaceRoot_ = normalizedPath(folder.absoluteFilePath());
     rememberRecentFolder(workspaceRoot_);
     workspaceFilesIndexedAt_ = 0;
     auto* explorer = ensureExplorer();
     explorer->setRootPath(workspaceRoot_);
-    setExplorerVisible(true);
+    // As the Lite mock: the side panel stays as it was, closed in a new window; the
+    // activity bar or Cmd+B opens it.
+    if (!explorerAction_->isChecked())
+        explorer->hide();
     setWindowTitle(QStringLiteral("%1 — KétPlus").arg(folder.fileName()));
     statusBar()->showMessage(QStringLiteral("Opened %1").arg(workspaceRoot_), 2500);
     git_->setWorkspacePath(workspaceRoot_);

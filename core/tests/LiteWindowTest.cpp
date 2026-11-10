@@ -4,6 +4,7 @@
 #include "terminal/TerminalPanel.h"
 #include "ui/Theme.h"
 #include "workspace/ExplorerPanel.h"
+#include "workspace/SearchPanel.h"
 
 #include "KetAppearance.h"
 #include "KetChrome.h"
@@ -88,10 +89,63 @@ class LiteWindowTest final : public QObject {
         write(workspace_.filePath(QStringLiteral("main.cpp")), "int main() {}\n");
     }
 
+    void openingAFolderDropsThePreviousSearch() {
+        QTemporaryDir other;
+        QVERIFY(other.isValid());
+        write(other.filePath(QStringLiteral("notes.md")), "# Guide\n");
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(workspace_.path());
+        viewAction(window, QStringLiteral("Search in Files"))->trigger();
+        auto* search = window.findChild<ketplus::SearchPanel*>();
+        QVERIFY(search != nullptr);
+        ketplus::WorkspaceSearchOptions options;
+        options.query = QStringLiteral("Guide");
+        search->setOptions(options);
+        emit search->searchRequested();
+        QTRY_VERIFY(!search->isSearching());
+        QVERIFY(!search->resultPaths().isEmpty());
+
+        // Finished results: Search stays open, without the old folder's paths.
+        window.openFolder(other.path());
+        QVERIFY(search->isVisibleTo(&window));
+        QVERIFY(search->resultPaths().isEmpty());
+
+        // A search still running: nothing it finds arrives after the folder changed.
+        emit search->searchRequested();
+        window.openFolder(workspace_.path());
+        QVERIFY(!search->isSearching());
+        QTest::qWait(200);
+        QVERIFY(search->resultPaths().isEmpty());
+    }
+
+    void sidePanelStartsClosedAndItsButtonTogglesIt() {
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(workspace_.path());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto* tree = window.findChild<QTreeView*>(QStringLiteral("explorerTree"));
+        QVERIFY(!tree->isVisibleTo(&window));
+        auto* explorer = activityButton(window, QStringLiteral("Explorer"));
+        QVERIFY(!marked(explorer));
+        explorer->click();
+        QVERIFY(tree->isVisibleTo(&window));
+        QVERIFY(marked(explorer));
+        explorer->click();
+        QVERIFY(!tree->isVisibleTo(&window));
+        QVERIFY(!marked(explorer));
+        // Opening another folder keeps an open Explorer open.
+        explorer->click();
+        window.openFolder(workspace_.filePath(QStringLiteral("docs")));
+        QVERIFY(tree->isVisibleTo(&window));
+    }
+
     void explorerShowsTheFolderAsItsRootRow() {
         ketplus::ThemeManager theme(*qApp);
         ketplus::MainWindow window(theme);
         window.openFolder(workspace_.path());
+        viewAction(window, QStringLiteral("Explorer"))->trigger();
         auto* root = window.findChild<ket::FileRow*>(QStringLiteral("explorerRoot"));
         QVERIFY(root != nullptr);
         QCOMPARE(root->text(), QFileInfo(workspace_.path()).fileName().toUpper());
@@ -118,6 +172,7 @@ class LiteWindowTest final : public QObject {
         window.openFolder(workspace_.path());
         window.show();
         QVERIFY(QTest::qWaitForWindowExposed(&window));
+        viewAction(window, QStringLiteral("Explorer"))->trigger();
         auto* explorer = activityButton(window, QStringLiteral("Explorer"));
         auto* search = activityButton(window, QStringLiteral("Search in Files"));
         QVERIFY(explorer && search);
@@ -147,6 +202,7 @@ class LiteWindowTest final : public QObject {
         ketplus::MainWindow window(theme);
         window.resize(1280, 820);
         window.openFolder(workspace_.path());
+        viewAction(window, QStringLiteral("Explorer"))->trigger();
         window.show();
         QVERIFY(QTest::qWaitForWindowExposed(&window));
         auto* explorer = window.findChild<ketplus::ExplorerPanel*>();
@@ -171,6 +227,7 @@ class LiteWindowTest final : public QObject {
         ketplus::ThemeManager theme(*qApp);
         ketplus::MainWindow window(theme);
         window.openFolder(workspace_.path());
+        viewAction(window, QStringLiteral("Explorer"))->trigger();
         auto* root = window.findChild<ket::FileRow*>(QStringLiteral("explorerRoot"));
         auto* tree = window.findChild<QTreeView*>(QStringLiteral("explorerTree"));
         root->click();

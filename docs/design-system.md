@@ -255,8 +255,10 @@ compatibility forwarding call to `KetTheme.px`, not a second metric table. The
 unused local motion-clock wrapper has been removed; running indicators hold the
 kit's gated shared clock directly.
 
-Lite's window follows the Lite mock (`KetPlusMock --edition=lite`): the activity
-bar marks the panel on screen with the selected nav fill and an accent rule; the
+Lite's window follows the Lite mock (`KetPlusMock --edition=lite`): the side panel
+starts closed, also after opening a folder, and its activity-bar button or shortcut
+toggles it (an open panel stays open when another folder opens); the activity bar
+marks the panel on screen with the selected nav fill and an accent rule; the
 Explorer pane header is EXPLORER with Refresh, the open folder is the tree's
 expanded root row, and rows follow `KetFileRow` (indent, chevron, open-folder icon,
 Git status). New File, New Folder and Collapse Folders are in the Explorer context
