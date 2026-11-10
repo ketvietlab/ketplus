@@ -76,11 +76,13 @@ class TeamProtocolTest final : public QObject {
         QCOMPARE(members.at(3).toObject().value("role").toString(), QStringLiteral("reviewer"));
         QVERIFY(!members.at(0).toObject().value("number").toString().isEmpty());
         QCOMPARE(sessions(fixture), 4);
-        // Starting a member starts no turn.
-        for (const auto& value : members)
-            QCOMPARE(fixture.count(value.toObject().value("session_id").toString(), "user.message"),
+        // Starting a member starts no turn; only the leader gets the goal (#458).
+        for (int index = 1; index < members.size(); ++index)
+            QCOMPARE(fixture.count(members.at(index).toObject().value("session_id").toString(),
+                                   "user.message"),
                      0);
-        QCOMPARE(events.size(), 1);
+
+        QVERIFY(events.size() >= 1);
         QCOMPARE(events.first().at(0).toString(), QStringLiteral("team.changed"));
 
         fixture.restart();

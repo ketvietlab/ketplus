@@ -29,6 +29,68 @@ QString toolInstructions(const QString& ownNumber) {
         .arg(ownNumber);
 }
 
+// ADR 0112. The daemon refuses what a role may not do; this text only explains it.
+QString teamInstructions(const TeamRoleContext& context) {
+    QStringList lines{
+        QStringLiteral("[KetPlus team]"),
+        QStringLiteral("You are the %1 of team \"%2\". Goal: %3")
+            .arg(context.role, context.team,
+                 context.goal.isEmpty() ? QStringLiteral("(not set yet)") : context.goal)};
+    if (context.role == QStringLiteral("leader")) {
+        lines << QStringLiteral(
+                     "Break the goal into tasks with team_task_create, each with acceptance "
+                     "criteria%1, a lane and its dependencies, and assign them by lane with "
+                     "team_task_assign. Do not write code and do not review: developers do the "
+                     "work and the team's reviewer reviews each task.")
+                     .arg(context.leaderWritesRequirements
+                              ? QString{}
+                              : QStringLiteral(" (written by the user: you may not change their "
+                                               "text)"))
+              << QStringLiteral(
+                     "Task changes arrive as one digest; read it and act once instead of "
+                     "asking for status. Change a lane with team_lane_set and give the reason; "
+                     "raise a decision with team_decision_raise only for what changes the "
+                     "product. You are the only member that speaks to the user.")
+              << (context.mergePolicy == QStringLiteral("user")
+                      ? QStringLiteral("The user merges reviewed tasks into %1; do not merge "
+                                       "unless the user allowed that one task.")
+                            .arg(context.integrationBranch)
+                      : QStringLiteral("You merge each Ready task into %1, in the order the "
+                                       "tasks depend on each other, and hand a conflict back to "
+                                       "its owner. Merge into no other branch.")
+                            .arg(context.integrationBranch))
+              << QStringLiteral("Merging %1 onward is the user's. Never approve a permission "
+                                "request or answer for the user.")
+                     .arg(context.integrationBranch);
+    } else if (context.role == QStringLiteral("developer")) {
+        lines << QStringLiteral("Your lane is \"%1\": %2. Shared paths: %3.")
+                     .arg(context.lane,
+                          context.paths.isEmpty() ? QStringLiteral("no paths yet")
+                                                  : context.paths.join(QStringLiteral(", ")),
+                          context.sharedPaths.isEmpty()
+                              ? QStringLiteral("none")
+                              : context.sharedPaths.join(QStringLiteral(", ")))
+              << QStringLiteral(
+                     "Work only on the task assigned to you, in its worktree. Stay inside your "
+                     "lane, or say on the task why you could not. Report through the task with "
+                     "team_task_update (state, note, met marks, pull request), not through "
+                     "messages. If you need an answer, block the task with your question; the "
+                     "leader answers it. Hand the task to review (state in_review) once its "
+                     "criteria are met and your work is committed. Do not merge.");
+    } else {
+        lines << QStringLiteral(
+            "When a task enters review you receive its criteria and its diff. Review it "
+            "read-only against the criteria: you cannot edit, push, merge or approve. For each "
+            "finding give the file, line, severity and a one-line summary. End with exactly "
+            "one line: \"Verdict: findings\" or \"Verdict: no findings\".");
+    }
+    lines << QStringLiteral("Address the team's leader or reviewer as \"leader\" or "
+                            "\"reviewer\" in agents_send; use team_get and team_tasks to read "
+                            "the team.")
+          << QStringLiteral("[/KetPlus team]");
+    return lines.join(QLatin1Char('\n'));
+}
+
 QString deliveryText(const QList<AgentMessageRecord>& messages) {
     QStringList blocks;
     for (const AgentMessageRecord& message : messages) {
