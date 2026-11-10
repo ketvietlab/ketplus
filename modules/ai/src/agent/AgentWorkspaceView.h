@@ -419,6 +419,8 @@ class AgentWorkspaceView final : public QWidget {
     Q_INVOKABLE void requestTerminal();
     // ADR 0106: opens the details pane's Report tab for the active conversation.
     Q_INVOKABLE void requestWorkReport() { emit workReportRequested(); }
+    // The header's Changes: the details pane's Changes tab for the active worktree.
+    Q_INVOKABLE void requestChanges() { emit changesRequested(); }
     // A section such as "storage" opens on it; none opens Settings where it was.
     Q_INVOKABLE void requestSettings(const QString& section = {}) {
         emit settingsRequested(section);
@@ -607,6 +609,7 @@ class AgentWorkspaceView final : public QWidget {
     void fileDiffRequested(const QString& relativePath);
     void terminalRequested();
     void workReportRequested();
+    void changesRequested();
     void settingsRequested(const QString& section);
     void providerRecheckRequested();
     void typeInTerminalRequested(const QString& command);

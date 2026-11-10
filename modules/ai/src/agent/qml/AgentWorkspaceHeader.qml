@@ -303,7 +303,7 @@ Item {
             visible: !agentHost.compactMode && !agentHost.compactWindow
             iconName: "compare"
             text: "Changes"
-            onClicked: agentHost.requestProductNavigation("source-control")
+            onClicked: agentHost.requestChanges()
         }
         Kit.KetIconButton {
             objectName: "headerTerminalButton"
