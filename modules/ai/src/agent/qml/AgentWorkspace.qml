@@ -546,6 +546,38 @@ Item {
             agentHost.applyModelConfiguration(model, effort, provider, changes)
         }
         onRefreshRequested: root.refreshModels()
+        onSetupGuideRequested: function(provider) {
+            modelPopup.close()
+            setupGuideDialog.provider = provider
+            setupGuideDialog.open()
+        }
+    }
+
+    // A provider's setup guide from Model & context (Show setup steps). It closes once the
+    // provider is fixed.
+    Kit.KetDialog {
+        id: setupGuideDialog
+        objectName: "providerSetupDialog"
+        property string provider: ""
+        readonly property var setup: ((agentHost.providerRuntime || {}).setups || {})[provider] || null
+        onSetupChanged: if (!setup && visible) close()
+        title: setup ? setup.title : ""
+        Loader {
+            Layout.fillWidth: true
+            active: !!setupGuideDialog.setup
+            sourceComponent: AgentProviderSetupCard {
+                shell: root
+                setup: setupGuideDialog.setup
+                inDialog: true
+            }
+        }
+        actions: [
+            Kit.KetButton {
+                text: "Close"
+                variant: KetTheme.ButtonVariant.Ghost
+                onClicked: setupGuideDialog.reject()
+            }
+        ]
     }
 
     UsageLimitsPopover {

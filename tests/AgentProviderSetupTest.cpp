@@ -252,3 +252,66 @@ void AgentWorkspaceViewTest::claudeSignOutGuidesWithoutHoldingTheMessage() {
     QVERIFY(QMetaObject::invokeMethod(root, "submitCurrentPrompt"));
     QCOMPARE(sent.count(), 1);
 }
+
+// Model & context names the provider's problem; Show setup steps opens its guide in a dialog,
+// which closes once the provider works.
+void AgentWorkspaceViewTest::modelPickerOpensTheProviderSetupGuide() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.setAgentAvailable(true);
+    view.resize(1200, 900);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
+    // A Codex model is chosen; Cursor has none until its CLI is installed.
+    view.setModels({QVariantMap{{"provider", "codex"},
+                                {"model", "astra"},
+                                {"displayName", "GPT-6-Astra"},
+                                {"defaultReasoningEffort", "medium"}}});
+    view.setConversationConfiguration({{"model", "astra"}, {"effort", "medium"}});
+    auto* root = view.quickView()->rootObject();
+    selectProvider(root, "cursor");
+    view.setProviderRuntime(ketplus::ProviderRuntimeStatus::stateFrom(cursorMissing()));
+    QVERIFY(QMetaObject::invokeMethod(root, "openModelPicker"));
+    auto* picker = root->property("modelPicker").value<QObject*>();
+    QTRY_VERIFY(picker->property("opened").toBool());
+    // No Cursor models without the CLI, yet its tab stays open so the banner can guide.
+    QCOMPARE(picker->property("selectedProviderTab").toString(), QStringLiteral("cursor"));
+    auto* cursorTab = findVisualItem(qvariant_cast<QQuickItem*>(picker->property("contentItem")),
+                                     QStringLiteral("providerTab_cursor"));
+    QVERIFY(cursorTab);
+    QVERIFY(cursorTab->isEnabled());
+    QQuickItem* banner = nullptr;
+    QTRY_VERIFY((banner = picker->findChild<QQuickItem*>("modelPickerSetupBanner")) &&
+                banner->isVisible());
+    QCOMPARE(banner->property("title").toString(), QStringLiteral("Cursor CLI isn't installed"));
+    QCOMPARE(banner->property("message").toString(),
+             QStringLiteral("Cursor's models appear once it is set up."));
+    // The draft still holds the previous provider's model: Apply must not send it as Cursor's.
+    auto* apply = findVisualItem(qvariant_cast<QQuickItem*>(picker->property("contentItem")),
+                                 QStringLiteral("applyModelButton"));
+    QVERIFY(apply);
+    picker->setProperty("draftModel", QStringLiteral("astra")); // as opening from Codex leaves it
+    QVERIFY(!apply->isEnabled());
+    auto* empty = picker->findChild<QQuickItem*>("modelPickerEmptyState");
+    QVERIFY(empty);
+    QCOMPARE(empty->property("text").toString(),
+             QStringLiteral("Models appear once Cursor is set up"));
+    if (const auto capture = qEnvironmentVariable("KETPLUS_SETUP_CAPTURE_DIR");
+        !capture.isEmpty()) {
+        QTest::qWait(100);
+        QVERIFY(view.quickView()->grabWindow().save(capture + "/model-cli-missing.png"));
+    }
+    QVERIFY(QMetaObject::invokeMethod(banner, "actionTriggered"));
+    auto* dialog = root->findChild<QObject*>("providerSetupDialog");
+    QVERIFY(dialog);
+    QTRY_VERIFY(dialog->property("opened").toBool());
+    QTRY_VERIFY(!picker->property("opened").toBool());
+    QCOMPARE(dialog->property("title").toString(), QStringLiteral("Cursor CLI isn't installed"));
+    if (const auto capture = qEnvironmentVariable("KETPLUS_SETUP_CAPTURE_DIR");
+        !capture.isEmpty()) {
+        QTest::qWait(100);
+        QVERIFY(view.quickView()->grabWindow().save(capture + "/setup-dialog-cli-missing.png"));
+    }
+    view.setProviderRuntime(ketplus::ProviderRuntimeStatus::stateFrom(cursorReady()));
+    QTRY_VERIFY(!dialog->property("visible").toBool());
+}

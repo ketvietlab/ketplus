@@ -48,6 +48,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void aHeldMessageGoesWithItsDraft();
     void providerSetupClosesTheTurnTheProviderEnded();
     void claudeSignOutGuidesWithoutHoldingTheMessage();
+    void modelPickerOpensTheProviderSetupGuide();
     void trimmedTurnOpensStorageSettings();
     void compactionReadsAsAnEventLine();
     void activityOperationSemantics();

@@ -113,6 +113,13 @@ its guide still names them after the conversation switches.
   old, signed out, or Claude's runtime missing: the guide's `composer`) shows its
   guide above the composer, and the model button warns. The user can hide the
   guide; the model button shows it again.
+- In Model & context, a provider with a guide keeps its tab even without models.
+  A banner names the problem. Without models it says they appear once the
+  provider is set up, and Apply stays off, since the draft still holds another
+  provider's model. When the guide blocks and models are listed, it adds that a
+  model can be chosen now and turns start once the provider is set up. Show setup steps
+  closes the picker and opens the guide in a dialog with Check again; the dialog
+  closes once the provider has no guide.
 - A blocking guide holds the message in the composer. The message sends once a
   fresh read lists the same provider without a guide, and only if the same
   conversation's draft is unchanged. A stopped daemon or a guide that merely
