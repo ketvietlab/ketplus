@@ -457,9 +457,18 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   ACP has no system prompt, so it still arrives with each turn in the host block.
   The guidance asks for Vietnamese self-address "tui", light playful
   tone, accurate 🟢/🟡/🔴 progress and concrete next actions. The longer flirt-comedy
-  prompt is removed. Each turn ends with a localized task/status/evidence/next-action
-  matrix that carries unfinished requests forward and distinguishes implementation,
-  verification and delivery. Steered questions or added tasks resume the prior
+  prompt is removed. With the ketplus_agents tools (ADR 0106), each user-started
+  turn records its work with the `work_report` tool instead of a markdown matrix:
+  - the daemon merges items by key into the conversation's ledger, so unfinished work
+    carries forward and implementation, verification and delivery stay separate checks;
+  - the turn closes with the mock's report card, which counts the items itself;
+  - Copy conversation exports the report as a table.
+
+  Without the tools, or when the call fails, the turn still ends with the localized
+  task/status/evidence/next-action matrix. The header's Work report button and the
+  card's footer open one Report tab in the right pane. It shows the selected
+  conversation's whole ledger (`session.work_report.read`), with Open and All filters,
+  and follows its live `work_report.updated` events. Steered questions or added tasks resume the prior
   unfinished objective afterward unless the user cancels, pauses or replaces it.
   After compaction, agents are instructed to verify and announce repository,
   absolute worktree path, branch and next task before resuming mutations.

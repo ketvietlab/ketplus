@@ -200,6 +200,11 @@ QVariantMap AgentMessageModel::turnFiles(const int row) const {
     const QVariantList files = agent_message::turnChangedFiles(items_, visible_.at(row), &complete);
     return {{QStringLiteral("files"), files}, {QStringLiteral("complete"), complete}};
 }
+QVariantMap AgentMessageModel::turnReport(const int row) const {
+    if (row < 0 || row >= count())
+        return {};
+    return items_.at(visible_.at(row)).value(QStringLiteral("workReport")).toMap();
+}
 QStringList AgentMessageModel::activityGroupKeys() const {
     QStringList keys;
     for (const QVariantMap& item : items_)

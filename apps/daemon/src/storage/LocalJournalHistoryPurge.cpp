@@ -27,6 +27,7 @@ constexpr HistoryTable historyTables[] = {
     // One row per generation; deletion removes them first, an abandoned fork copy here.
     {"activity_heads", 1},
     {"replay_projection_state", 1},
+    {"work_reports", 1},
 };
 
 bool isBusy(const QSqlError& error) {

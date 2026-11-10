@@ -319,6 +319,15 @@ Item {
                     onClicked: host.requestProductNavigation("source-control")
                 }
             }
+            // ADR 0106: the work report the turn ended with, below its changed files.
+            TranscriptWorkReport {
+                readonly property var turnReport: messageDelegate.subtype === "turnEnd" && view.messageModel ? (view.messageModel.sourceRevision, view.messageModel.turnReport(messageDelegate.index)) : null
+                width: parent.width
+                visible: !!turnReport && !!turnReport.items && turnReport.items.length > 0
+                height: visible ? implicitHeight : 0
+                report: visible ? turnReport : ({})
+                onOpenRequested: agentHost.requestWorkReport()
+            }
             TranscriptAgentNote {
                 width: parent.width
                 visible: messageDelegate.subtype === "agentNote"

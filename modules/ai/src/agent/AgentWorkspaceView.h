@@ -402,6 +402,8 @@ class AgentWorkspaceView final : public QWidget {
     Q_INVOKABLE void selectWorktree(const QString& path);
     Q_INVOKABLE void openRelativeFile(const QString& path);
     Q_INVOKABLE void requestTerminal();
+    // ADR 0106: opens the details pane's Report tab for the active conversation.
+    Q_INVOKABLE void requestWorkReport() { emit workReportRequested(); }
     // A section such as "storage" opens on it; none opens Settings where it was.
     Q_INVOKABLE void requestSettings(const QString& section = {}) {
         emit settingsRequested(section);
@@ -582,6 +584,7 @@ class AgentWorkspaceView final : public QWidget {
     void fileOpenRequested(const QString& relativePath);
     void fileDiffRequested(const QString& relativePath);
     void terminalRequested();
+    void workReportRequested();
     void settingsRequested(const QString& section);
     void productNavigationRequested(const QString& destination);
     void atlasRunningCountChanged();

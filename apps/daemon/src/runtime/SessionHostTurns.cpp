@@ -447,6 +447,12 @@ QJsonObject SessionHost::turnCompletion(Session& session, const QString& status)
     if (std::exchange(session.stopRequested, false) &&
         (status == QStringLiteral("interrupted") || status == QStringLiteral("stopped")))
         completed.insert(QStringLiteral("reason"), QStringLiteral("user"));
+    // The end row shows the turn's report even when a history page splits it from the turn's
+    // work_report.updated event.
+    const QJsonObject report = journal_->workReport(session.stored.id, session.stored.generation);
+    if (!report.isEmpty() &&
+        report.value(QStringLiteral("turn")).toInteger() == session.stored.currentTurnSequence)
+        completed.insert(QStringLiteral("work_report"), report);
     return completed;
 }
 

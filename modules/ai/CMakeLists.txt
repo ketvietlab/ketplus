@@ -4,6 +4,10 @@ add_library(ketplus_ai STATIC
     src/agent/TranscriptStepItems.cpp
     src/agent/TranscriptTurnFiles.cpp
     src/agent/TranscriptTurnFiles.h
+    src/agent/WorkReportPane.cpp
+    src/agent/WorkReportPane.h
+    src/agent/WorkReportText.cpp
+    src/agent/WorkReportText.h
     src/agent/TranscriptStepItems.h
     src/agent/AgentMessageModel.cpp
     src/agent/AgentMessageModel.h
@@ -36,6 +40,7 @@ add_library(ketplus_ai STATIC
     src/agent/AgentSessionManager.cpp
     src/agent/AgentSessionArchive.cpp
     src/agent/AgentSessionReviewers.cpp
+    src/agent/AgentSessionWorkReports.cpp
     src/agent/AgentSessionConfiguration.cpp
     src/agent/AgentSessionManager.h
     src/agent/AgentSessionNotifications.cpp
@@ -184,6 +189,8 @@ set_source_files_properties(src/agent/qml/TranscriptFileStep.qml PROPERTIES QT_R
 set_source_files_properties(src/agent/qml/TranscriptFileDiff.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptFileDiff.qml")
 set_source_files_properties(src/agent/qml/TranscriptFileMenu.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptFileMenu.qml")
 set_source_files_properties(src/agent/qml/TranscriptAgentNote.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptAgentNote.qml")
+set_source_files_properties(src/agent/qml/TranscriptWorkReport.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptWorkReport.qml")
+set_source_files_properties(src/agent/qml/WorkReportPane.qml PROPERTIES QT_RESOURCE_ALIAS "WorkReportPane.qml")
 set_source_files_properties(src/agent/qml/TranscriptTrimmedDetail.qml PROPERTIES QT_RESOURCE_ALIAS "TranscriptTrimmedDetail.qml")
 set_source_files_properties(
     src/agent/qml/TranscriptActivityRow.qml
@@ -294,6 +301,8 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
         src/agent/qml/TranscriptFileMenu.qml
         src/agent/qml/TranscriptFileStep.qml
         src/agent/qml/TranscriptAgentNote.qml
+        src/agent/qml/TranscriptWorkReport.qml
+        src/agent/qml/WorkReportPane.qml
         src/agent/qml/TranscriptTrimmedDetail.qml
         src/agent/qml/TranscriptCopyButton.qml
         src/agent/qml/TranscriptMermaidSwitch.qml

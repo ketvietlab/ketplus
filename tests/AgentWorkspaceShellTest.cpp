@@ -3,6 +3,7 @@
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/CodexAppServer.h"
+#include "agent/WorkReportPane.h"
 #include "app/AgentWorktreeCreator.h"
 #include "app/AgentWorktreeDialog.h"
 #include "app/MainWindow.h"
@@ -182,6 +183,45 @@ class AgentWorkspaceShellTest final : public QObject {
         QVERIFY(disk.open(QIODevice::ReadOnly));
         QCOMPARE(disk.readAll(), QByteArray("VERSION 3\n"));
         editor->undoEdit();
+    }
+    // ADR 0106: one Report tab, for the selected conversation only.
+    void workReportOpensOneTabForTheActiveConversation() {
+        QTemporaryDir settings;
+        QTemporaryDir workspace;
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(workspace.path());
+        window.resize(1440, 900);
+        window.show();
+        window.findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"))->click();
+        auto* agent = window.findChild<ketplus::AgentWorkspaceView*>();
+        auto* manager = window.findChild<ketplus::AgentSessionManager*>();
+        QVERIFY(agent && manager);
+        emit agent->workReportRequested();
+        auto* tabs = window.findChild<QTabWidget*>(QStringLiteral("agentDetailTabs"));
+        QVERIFY(tabs);
+        auto* pane = qobject_cast<ketplus::WorkReportPane*>(tabs->currentWidget());
+        QVERIFY(pane);
+        QTRY_VERIFY(pane->isVisible());
+        QCOMPARE(tabs->tabText(tabs->currentIndex()), QStringLiteral("Report"));
+        QCOMPARE(pane->conversationId(), manager->activeConversationId(agent->activePath()));
+        // A conversation that has not started reads as an empty report.
+        QTRY_VERIFY(!pane->loading());
+        QVERIFY(pane->report().isEmpty());
+        emit agent->workReportRequested();
+        int panes = 0;
+        for (int index = 0; index < tabs->count(); ++index)
+            panes += qobject_cast<ketplus::WorkReportPane*>(tabs->widget(index)) != nullptr;
+        QCOMPARE(panes, 1);
+
+        const QVariantMap report{{"version", 1}, {"turn", 1}, {"items", QVariantList{}}};
+        emit manager->workReportChanged(agent->activePath(), "another-conversation",
+                                        QVariantMap{{"version", 4}}, {});
+        QVERIFY(pane->report().isEmpty());
+        emit manager->workReportChanged(agent->activePath(), pane->conversationId(), report, {});
+        QCOMPARE(pane->report().value("version").toInt(), 1);
     }
     void agentDetailEditorHasFindAndGoToLine() {
         QTemporaryDir settings;

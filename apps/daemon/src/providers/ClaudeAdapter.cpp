@@ -403,7 +403,7 @@ void ClaudeAdapter::sendCall(const QString& method, const QJsonObject& params, C
         }
         providerParams.insert(QStringLiteral("mcpServers"), servers);
         providerParams.insert(QStringLiteral("browserInstructions"),
-                              withResponseGuidance(instructions));
+                              withResponseGuidance(instructions, !agentServer.isEmpty()));
     }
     sendObject({{QStringLiteral("id"), static_cast<qint64>(id)},
                 {QStringLiteral("method"), method},

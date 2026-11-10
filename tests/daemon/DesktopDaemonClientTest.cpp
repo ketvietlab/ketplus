@@ -23,15 +23,18 @@
 #include <QLocalSocket>
 #include <QPointer>
 #include <QProcess>
+#include <QRegularExpression>
 #include <QScopeGuard>
 
 #include <QDir>
 #include <QFile>
 #include <QSettings>
+#include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QStandardPaths>
 #include <QTemporaryDir>
+#include <QUuid>
 #include <QtTest>
 
 #include <functional>
@@ -41,6 +44,38 @@ using namespace ketplus;
 using namespace ketplus::daemon;
 
 namespace {
+
+QByteArray readFile(const QString& path) {
+    QFile file(path);
+    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
+}
+
+// One request on an agent connection, as the ketplus_agents MCP server makes it.
+QJsonObject agentRoundTrip(QLocalSocket& socket, const QString& type, const QJsonObject& payload) {
+    const QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    socket.write(protocol::encodeFrame({{"protocol_version", protocol::currentVersion},
+                                        {"message_id", id},
+                                        {"message_type", type},
+                                        {"sent_at", protocol::timestamp()},
+                                        {"payload", payload}}));
+    QByteArray buffer;
+    const auto frameSize = [&buffer] {
+        return (static_cast<uchar>(buffer[0]) << 24) | (static_cast<uchar>(buffer[1]) << 16) |
+               (static_cast<uchar>(buffer[2]) << 8) | static_cast<uchar>(buffer[3]);
+    };
+    while (true) {
+        while (buffer.size() < 4 || buffer.size() < 4 + frameSize()) {
+            if (!QTest::qWaitFor([&socket] { return socket.bytesAvailable() > 0; }, 5000))
+                return {};
+            buffer.append(socket.readAll());
+        }
+        const int size = frameSize();
+        const QJsonObject frame = QJsonDocument::fromJson(buffer.mid(4, size)).object();
+        buffer.remove(0, 4 + size);
+        if (frame.value("correlation_id").toString() == id)
+            return frame.value("payload").toObject();
+    }
+}
 
 int errorRows(const QVariantList& messages) {
     int rows = 0;
@@ -1306,6 +1341,113 @@ class DesktopDaemonClientTest final : public QObject {
                 QStringLiteral("approvals-%1=session.pending_approvals").arg(index)));
         }
         QVERIFY(!answered.contains(QStringLiteral("seen-1=session.mark_seen")));
+    }
+
+    // ADR 0106: a report the agent sends during a live turn arrives with that turn's end, as
+    // the journal's projection shows it after a reload.
+    void liveTurnEndCarriesTheWorkReport() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString worktree = directory.filePath(QStringLiteral("worktree"));
+        QVERIFY(QDir().mkpath(worktree));
+        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString providerLog = directory.filePath(QStringLiteral("provider.log"));
+        QVERIFY(writeFakeCodex(executable, providerLog));
+        const QString socket = directory.filePath(QStringLiteral("daemon.sock"));
+        const QString state = directory.filePath(QStringLiteral("journal.sqlite3"));
+        const QString token = directory.filePath(QStringLiteral("local.token"));
+        qputenv("KETPLUS_DAEMON_SOCKET", socket.toUtf8());
+        qputenv("KETPLUS_DAEMON_STATE", state.toUtf8());
+        qputenv("KETPLUS_DAEMON_TOKEN_FILE", token.toUtf8());
+        const auto cleanup = qScopeGuard([&worktree] {
+            qunsetenv("KETPLUS_DAEMON_SOCKET");
+            qunsetenv("KETPLUS_DAEMON_STATE");
+            qunsetenv("KETPLUS_DAEMON_TOKEN_FILE");
+            QSettings().remove(ketplus::agent_message::persistedKey(worktree));
+            QSettings().remove(
+                ketplus::agent_message::persistedKey(QFileInfo(worktree).canonicalFilePath()));
+        });
+        DaemonService service({state, token, socket, executable});
+        QVERIFY2(service.start(), qPrintable(service.errorString()));
+
+        AgentSessionManager desktop;
+        desktop.activate(worktree);
+        // The fake provider waits for the question's answer, so the turn is open meanwhile.
+        desktop.submitPrompt(worktree, QStringLiteral("ask"));
+        QVariantMap question;
+        const auto findQuestion = [&] {
+            for (const QVariant& value : desktop.messages(worktree))
+                if (value.toMap().value(QStringLiteral("subtype")) == QStringLiteral("question"))
+                    question = value.toMap();
+            return !question.isEmpty();
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(findQuestion(), 5000);
+
+        QByteArray log;
+        QTRY_VERIFY_WITH_TIMEOUT((log = readFile(providerLog)).contains("KETPLUS_AGENT_TOKEN"),
+                                 5000);
+        const QRegularExpression tokenPattern("\"KETPLUS_AGENT_TOKEN\": \"([0-9a-f]{64})\"");
+        const QString agentToken = tokenPattern.match(QString::fromUtf8(log)).captured(1);
+        QVERIFY(!agentToken.isEmpty());
+        QLocalSocket agent;
+        agent.connectToServer(socket);
+        QVERIFY(agent.waitForConnected(3000));
+        QVERIFY(agentRoundTrip(agent, "daemon.hello", {{"agent_token", agentToken}})
+                    .value("agent")
+                    .toBool());
+        // The Report tab follows the conversation live.
+        QSignalSpy reports(&desktop, &AgentSessionManager::workReportChanged);
+        const QString conversation = desktop.activeConversationId(worktree);
+        const QJsonObject reported =
+            agentRoundTrip(agent, "agents.work_report",
+                           {{"title", "Live"},
+                            {"items", QJsonArray{QJsonObject{{"key", "live"},
+                                                             {"group", "Work"},
+                                                             {"title", "Answer the question"},
+                                                             {"status", "active"}}}}});
+        QVERIFY2(reported.value("ok").toBool(),
+                 QJsonDocument(reported).toJson(QJsonDocument::Compact).constData());
+
+        const QString optionId = question.value(QStringLiteral("questions"))
+                                     .toList()
+                                     .first()
+                                     .toMap()
+                                     .value(QStringLiteral("options"))
+                                     .toList()
+                                     .first()
+                                     .toMap()
+                                     .value(QStringLiteral("id"))
+                                     .toString();
+        desktop.answerQuestion(worktree, question.value(QStringLiteral("messageKey")).toString(),
+                               {{QStringLiteral("scope"),
+                                 QVariantMap{{QStringLiteral("option_ids"), QStringList{optionId}},
+                                             {QStringLiteral("custom_answer"), QString{}}}}});
+        QTRY_VERIFY_WITH_TIMEOUT(!desktop.isRunning(worktree), 5000);
+        const auto reportedEnd = [&] {
+            for (const QVariant& value : desktop.messages(worktree)) {
+                const QVariantMap row = value.toMap();
+                if (row.value(QStringLiteral("subtype")) == QStringLiteral("turnEnd"))
+                    return row.value(QStringLiteral("workReport")).toMap();
+            }
+            return QVariantMap{};
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(!reportedEnd().isEmpty(), 5000);
+        const QVariantMap report = reportedEnd();
+        QCOMPARE(report.value(QStringLiteral("title")).toString(), QStringLiteral("Live"));
+        QCOMPARE(report.value(QStringLiteral("items")).toList().size(), 1);
+        QVERIFY(!reports.isEmpty());
+        QCOMPARE(reports.first().at(1).toString(), conversation);
+        QCOMPARE(reports.first().at(2).toMap().value(QStringLiteral("title")).toString(),
+                 QStringLiteral("Live"));
+
+        // Opening the tab reads the stored ledger.
+        reports.clear();
+        desktop.readWorkReport(worktree);
+        QTRY_VERIFY_WITH_TIMEOUT(!reports.isEmpty(), 5000);
+        QCOMPARE(reports.last().at(1).toString(), conversation);
+        QVERIFY2(reports.last().at(3).toString().isEmpty(),
+                 qPrintable(reports.last().at(3).toString()));
+        QCOMPARE(reports.last().at(2).toMap().value(QStringLiteral("version")).toInt(), 1);
     }
 
     void forksConversationThroughDaemon() {

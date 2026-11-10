@@ -917,6 +917,20 @@ an automatic turn runs, the broker keeps its sender in memory: `session.list`
 adds it as `agent_turn` (`number`, `title`, `kind`) and the heartbeat seals it
 into the phone's session metadata as `agentTurn`, beside `number`.
 
+The work report (ADR 0106) travels the same authenticated path:
+- the ketplus_agents server's `work_report` tool calls `agents.work_report`;
+- `WorkReport.cpp` validates, redacts and caps the items and merges them by key into
+  the conversation's ledger;
+- `SessionHostWorkReports.cpp` stores the ledger in `work_reports` (one row per
+  generation, forked and deleted with it) and journals the merged ledger as
+  `work_report.updated`, answering with an error when that event cannot be journaled;
+- `turnCompletion` repeats the ledger on `turn.completed` as `work_report` when the
+  turn changed it, so a history page that splits the two still shows the report;
+- the cloud projection redacts that text again on both events.
+
+With the ketplus_agents server, `responseGuidance(true)` asks for the report in place
+of the markdown matrix.
+
 `AgentBrokerReviews.cpp` adds automatic turn review (ADR 0067). A conversation's
 `conversation_reviewers` row names its reviewer. After each completed turn, the
 broker diffs two snapshot trees of the worktree (written through a copy of its

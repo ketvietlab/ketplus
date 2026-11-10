@@ -20,6 +20,7 @@
 #include <QUuid>
 
 #include <algorithm>
+#include <utility>
 
 #include "agent/AgentMessageFormatter.h"
 #include "agent/AgentSessionState.h"
@@ -228,10 +229,14 @@ AgentSessionManager::AgentSessionManager(CodexAppServer* server, QObject* parent
             emit restoreStateChanged(false);
         }
     });
-    // A reviewer read sent before the daemon listed its sessions is answered "unknown session".
+    // A reviewer or work report read sent before the daemon listed its sessions is answered
+    // "unknown session".
     connect(server_, &CodexAppServer::restoreStateChanged, this, [this](const bool restoring) {
-        if (!restoring)
-            retryReviewerReads();
+        if (restoring)
+            return;
+        retryReviewerReads();
+        for (const QString& path : std::exchange(workReportReadsToRetry_, {}))
+            readWorkReport(path);
     });
     connect(server_, &CodexAppServer::readyChanged, this, [this](const bool ready) {
         if (ready)

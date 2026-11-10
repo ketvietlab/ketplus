@@ -219,6 +219,8 @@ class CodexAppServer final : public QObject {
         qint64 turnSequence{-1};
         QDateTime turnStartedAt;
         qint64 turnContextTokens{-1};
+        // ADR 0106: the running turn's latest work report, shown with its end.
+        QJsonObject turnReport;
         bool turnStartInFlight{false};
         bool interruptRequested{false};
     };

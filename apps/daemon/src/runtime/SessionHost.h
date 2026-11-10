@@ -233,8 +233,9 @@ class SessionHost final : public QObject, private AgentHostPort {
     [[nodiscard]] QJsonObject steer(const QJsonObject& request, CommandCallback outcome = {},
                                     bool localClient = true, const QJsonObject& agentOrigin = {});
     [[nodiscard]] QJsonObject interrupt(const QJsonObject& request);
-    // A turn.completed payload; it takes the session's pending Stop.
-    [[nodiscard]] static QJsonObject turnCompletion(Session& session, const QString& status);
+    // A turn.completed payload; it takes the session's pending Stop and carries the work report
+    // the turn ended with (ADR 0106).
+    [[nodiscard]] QJsonObject turnCompletion(Session& session, const QString& status);
     [[nodiscard]] QJsonObject resolveApproval(const QJsonObject& request);
     [[nodiscard]] QJsonObject applyConfiguration(const QJsonObject& request, bool localClient);
     [[nodiscard]] QJsonObject applyExecutionPolicy(const QJsonObject& request);
@@ -358,6 +359,10 @@ class SessionHost final : public QObject, private AgentHostPort {
     [[nodiscard]] qint64 agentTurnSequence(const QString& sessionId) const override;
     void appendAgentNotice(const QString& sessionId, qint64 generation,
                            const QJsonObject& payload) override;
+    // ADR 0106, in SessionHostWorkReports.cpp.
+    QJsonObject recordWorkReport(const QString& sessionId, qint64 generation,
+                                 const QJsonObject& payload) override;
+    [[nodiscard]] QJsonObject readWorkReport(const QJsonObject& request);
     [[nodiscard]] AgentConversation agentConversationOf(const Session& session) const;
     // The ketplus_agents launch for a conversation generation, when an endpoint is set.
     [[nodiscard]] std::optional<agent_tools::Launch> agentLaunch(const QString& sessionId,
