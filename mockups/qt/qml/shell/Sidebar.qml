@@ -283,8 +283,9 @@ Rectangle {
 
                             TeamFolder {
                                 required property var modelData
-                                x: sidebar.inset
-                                width: repo.width - 2 * sidebar.inset
+                                // A child of its repository: one step in from the repository's name.
+                                x: sidebar.inset + sidebar.px(12)
+                                width: repo.width - sidebar.inset - x
                                 window: sidebar.window
                                 team: modelData
                                 conversations: repo.modelData.conversations
