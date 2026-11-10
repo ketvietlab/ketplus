@@ -244,6 +244,19 @@ void AgentWorkspaceViewTest::workReportPaneFollowsItsConversation() {
     QCOMPARE(pane.report().value("version").toInt(), 2);
     QVERIFY(pane.message().isEmpty());
 
+    // What the user opened or closed stays with that conversation.
+    const QVariantList firstGroups = card->property("groups").toList();
+    QVERIFY(QMetaObject::invokeMethod(card, "toggleGroup", Q_ARG(QVariant, firstGroups.at(0))));
+    card->setProperty("openItem", "a");
+    pane.showConversation("other");
+    pane.acceptReport("other", ledger(1, "active"), {});
+    QTRY_VERIFY((card = findVisibleItem(root, "workReportLedger")) != nullptr);
+    QCOMPARE(card->property("openItem").toString(), QString());
+    QVariant open;
+    QVERIFY(QMetaObject::invokeMethod(card, "groupOpen", Q_RETURN_ARG(QVariant, open),
+                                      Q_ARG(QVariant, card->property("groups").toList().at(0))));
+    QVERIFY(open.toBool());
+
     pane.showConversation("second");
     QVERIFY(pane.report().isEmpty());
     pane.acceptReport("second", {}, {});

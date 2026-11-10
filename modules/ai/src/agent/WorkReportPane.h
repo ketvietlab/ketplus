@@ -12,6 +12,7 @@ namespace ketplus {
 // the transcript's card in ledger mode, and follows that conversation's later reports.
 class WorkReportPane final : public QWidget {
     Q_OBJECT
+    Q_PROPERTY(QString conversationId READ conversationId NOTIFY reportChanged)
     Q_PROPERTY(QVariantMap report READ report NOTIFY reportChanged)
     Q_PROPERTY(QString message READ message NOTIFY reportChanged)
     Q_PROPERTY(bool loading READ loading NOTIFY reportChanged)

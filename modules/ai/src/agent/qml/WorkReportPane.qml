@@ -9,6 +9,13 @@ Rectangle {
 
     readonly property var report: reportHost.report
     readonly property bool hasItems: !!report && !!report.items && report.items.length > 0
+    // Open groups and the open item belong to one conversation; another starts from the
+    // defaults, even when its groups and keys have the same names.
+    readonly property string conversationId: reportHost.conversationId
+    onConversationIdChanged: {
+        ledgerCard.closedGroups = Object.create(null)
+        ledgerCard.openItem = ""
+    }
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
 
@@ -27,6 +34,7 @@ Rectangle {
             bottomPadding: pane.px(16)
 
             TranscriptWorkReport {
+                id: ledgerCard
                 objectName: "workReportLedger"
                 visible: pane.hasItems
                 width: parent.width
