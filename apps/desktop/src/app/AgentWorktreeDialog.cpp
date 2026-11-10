@@ -1,5 +1,8 @@
 #include "app/AgentWorktreeDialog.h"
 #include "KetAppearance.h"
+#include "KetButton.h"
+#include "KetDialog.h"
+#include "KetFieldRow.h"
 #include "KetRecipes.h"
 #include "KetSelect.h"
 #include "KetTextField.h"
@@ -10,7 +13,6 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QCompleter>
-#include <QDialogButtonBox>
 #include <QDir>
 #include <QFileInfo>
 #include <QFontMetrics>
@@ -22,8 +24,8 @@
 #include <QPainter>
 #include <QProcess>
 #include <QProcessEnvironment>
-#include <QPushButton>
 #include <QRadioButton>
+#include <QShortcut>
 #include <QSignalBlocker>
 #include <QSizePolicy>
 #include <QStyleOptionButton>
@@ -115,10 +117,16 @@ QString canonicalPath(const QString& path) {
 
 } // namespace
 
+bool agentDialogOpen(const QWidget* window, const QString& cardName) {
+    const auto cards = window->findChildren<ket::Dialog*>(cardName, Qt::FindDirectChildrenOnly);
+    return std::any_of(cards.cbegin(), cards.cend(),
+                       [](const ket::Dialog* card) { return card->isOpen(); });
+}
+
 AgentWorktreeDialog::AgentWorktreeDialog(const QString& repositoryPath, QWidget* parent,
                                          const Purpose purpose, QString primaryWorktreePath,
                                          QVector<GitWorktree> worktrees)
-    : QDialog(parent), purpose_(purpose),
+    : QWidget(parent), purpose_(purpose),
       primaryWorktreePath_(primaryWorktreePath.isEmpty() ? repositoryPath
                                                          : std::move(primaryWorktreePath)),
       branch_(new ket::TextField(this)), base_(new ket::Select(this)), error_(new QLabel(this)),
@@ -126,8 +134,6 @@ AgentWorktreeDialog::AgentWorktreeDialog(const QString& repositoryPath, QWidget*
     const bool conversation = purpose_ == Purpose::Conversation;
     setObjectName(conversation ? QStringLiteral("agentConversationDialog")
                                : QStringLiteral("agentWorktreeDialog"));
-    setWindowTitle(conversation ? tr("New conversation") : tr("Create Worktree"));
-    setMinimumWidth(conversation ? 560 : 420);
     branch_->setObjectName("worktreeBranchName");
     error_->setObjectName(QStringLiteral("worktreeDialogError"));
     error_->setWordWrap(true);
@@ -146,26 +152,12 @@ AgentWorktreeDialog::AgentWorktreeDialog(const QString& repositoryPath, QWidget*
     base_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     base_->setMinimumContentsLength(40);
     base_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-    buttons->setObjectName(QStringLiteral("worktreeDialogButtons"));
-    buttons->button(QDialogButtonBox::Ok)->setText(tr("Create"));
-    buttons->button(QDialogButtonBox::Ok)->setEnabled(false);
-    if (conversation) {
-        // The label follows the chosen section, so the button is sized for the
-        // wider of the two up front and never reflows under the pointer.
-        auto* ok = buttons->button(QDialogButtonBox::Ok);
-        const QFontMetrics metrics(ok->font());
-        ok->setMinimumWidth(
-            std::max(ok->sizeHint().width(), std::max(metrics.horizontalAdvance(tr("Create")),
-                                                      metrics.horizontalAdvance(tr("Start"))) +
-                                                 32));
-    }
-
     if (conversation) {
         // Two separate jobs, so two separate sections: running the conversation in
         // a checkout that already exists, and cutting a new branch to run it in.
         // A worktree is a checkout of a branch, so only the second names a branch.
         auto* layout = new QVBoxLayout(this);
+        layout->setContentsMargins(0, 0, 0, 0);
         existingWorktree_ = new WorktreeRadioButton(tr("Work in an existing worktree"), this);
         existingWorktree_->setObjectName(QStringLiteral("useExistingWorktreeRadio"));
         newWorktree_ = new WorktreeRadioButton(tr("Create a new worktree"), this);
@@ -228,7 +220,6 @@ AgentWorktreeDialog::AgentWorktreeDialog(const QString& repositoryPath, QWidget*
         layout->addWidget(newBox);
 
         layout->addWidget(error_);
-        layout->addWidget(buttons);
         connect(section, &QButtonGroup::buttonToggled, this, [this] { updateSections(); });
         connect(base_, &QComboBox::currentIndexChanged, this, [this] {
             error_->hide();
@@ -239,21 +230,35 @@ AgentWorktreeDialog::AgentWorktreeDialog(const QString& repositoryPath, QWidget*
         });
         updateSections();
     } else {
-        auto* layout = new QFormLayout(this);
-        layout->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+        // The mock's Create worktree: the branch name with where its folder goes, then the
+        // branch it starts from.
+        auto* layout = new QVBoxLayout(this);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(12);
         base_->setObjectName(QStringLiteral("worktreeBaseBranch"));
         makeSearchable(base_);
         base_->addItem(tr("Loading branches…"));
         base_->setEnabled(false);
+        branch_->setPlaceholderText(QStringLiteral("feature/settings-search"));
+        branch_->setAccessibleName(tr("Branch name"));
+        base_->setAccessibleName(tr("Start from"));
+        layout->addWidget(new ket::FieldRow(tr("Branch name"), branch_,
+                                            tr("A new folder next to the repository: %1-<name>.")
+                                                .arg(QFileInfo(primaryWorktreePath_).fileName())));
+        layout->addWidget(new ket::FieldRow(tr("Start from"), base_));
         status_->setText(tr("Local and remote-tracking branches; no automatic fetch."));
-        layout->addRow(tr("Base branch:"), base_);
-        layout->addRow(tr("Branch name:"), branch_);
-        layout->addRow(status_);
-        layout->addRow(error_);
-        layout->addRow(buttons);
+        layout->addWidget(status_);
+        layout->addWidget(error_);
     }
-    connect(buttons, &QDialogButtonBox::accepted, this, &AgentWorktreeDialog::tryAccept);
-    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    // Return confirms from any field, as the dialog's default button did.
+    for (const auto key : {Qt::Key_Return, Qt::Key_Enter}) {
+        auto* confirm = new QShortcut(QKeySequence(key), this);
+        confirm->setContext(Qt::WidgetWithChildrenShortcut);
+        connect(confirm, &QShortcut::activated, this, [this] {
+            if (confirm_ != nullptr && confirm_->isEnabled())
+                tryAccept();
+        });
+    }
     connect(branch_, &QLineEdit::textChanged, this, [this] {
         error_->hide();
         updateActions();
@@ -262,10 +267,37 @@ AgentWorktreeDialog::AgentWorktreeDialog(const QString& repositoryPath, QWidget*
 
     loadLocalBranches(conversation ? selectedWorktreePath() : repositoryPath);
     updateActions();
-    if (conversation)
-        base_->setFocus();
-    else
-        branch_->setFocus();
+}
+
+ket::Dialog* AgentWorktreeDialog::present(QWidget* anchor) {
+    const bool conversation = purpose_ == Purpose::Conversation;
+    auto* card =
+        new ket::Dialog(conversation ? tr("New conversation") : tr("Create worktree"), anchor);
+    card->setObjectName(objectName() + QStringLiteral("Card"));
+    card->setCardWidth(conversation ? 560 : 440);
+    connect(card, &ket::Dialog::finished, card, &QObject::deleteLater);
+    card->setBody(this);
+    auto* cancel = card->addButton(tr("Cancel"), ket::ButtonVariant::Ghost);
+    cancel->setObjectName(QStringLiteral("worktreeDialogCancel"));
+    confirm_ = card->addButton(tr("Create"), ket::ButtonVariant::Primary);
+    confirm_->setObjectName(QStringLiteral("worktreeDialogConfirm"));
+    if (conversation) {
+        // The label follows the chosen section, so the button is sized for the
+        // wider of the two up front and never reflows under the pointer.
+        int width = 0;
+        for (const QString& text : {tr("Create"), tr("Start")}) {
+            confirm_->setText(text);
+            width = std::max(width, confirm_->sizeHint().width());
+        }
+        confirm_->setMinimumWidth(width);
+    }
+    connect(cancel, &QAbstractButton::clicked, card, &ket::Dialog::reject);
+    connect(confirm_, &QAbstractButton::clicked, this, &AgentWorktreeDialog::tryAccept);
+    card_ = card;
+    updateActions();
+    card->open();
+    (conversation ? static_cast<QWidget*>(base_) : static_cast<QWidget*>(branch_))->setFocus();
+    return card;
 }
 
 QComboBox* AgentWorktreeDialog::branchCombo() const {
@@ -421,20 +453,19 @@ void AgentWorktreeDialog::loadLocalBranches(const QString& root) {
 bool AgentWorktreeDialog::branchesReady() const { return branchesReady_; }
 
 void AgentWorktreeDialog::updateActions() {
-    auto* buttons = findChild<QDialogButtonBox*>(QStringLiteral("worktreeDialogButtons"));
-    if (buttons == nullptr)
-        return;
-    auto* ok = buttons->button(QDialogButtonBox::Ok);
     if (purpose_ == Purpose::Conversation) {
-        ok->setText(creatingWorktree() ? tr("Create") : tr("Start"));
-        ok->setEnabled(creatingWorktree()
-                           ? branchesReady_ && !branchName().isEmpty() && !baseBranch().isEmpty()
-                           : !selectedWorktreePath().isEmpty());
+        if (confirm_ == nullptr)
+            return;
+        confirm_->setText(creatingWorktree() ? tr("Create") : tr("Start"));
+        confirm_->setEnabled(creatingWorktree() ? branchesReady_ && !branchName().isEmpty() &&
+                                                      !baseBranch().isEmpty()
+                                                : !selectedWorktreePath().isEmpty());
         return;
     }
     const bool branchesReady = base_->findData(QStringLiteral("HEAD")) >= 0;
     base_->setEnabled(branchesReady);
-    ok->setEnabled(branchesReady && !branchName().isEmpty());
+    if (confirm_ != nullptr)
+        confirm_->setEnabled(branchesReady && !branchName().isEmpty());
 }
 
 void AgentWorktreeDialog::tryAccept() {
@@ -445,7 +476,8 @@ void AgentWorktreeDialog::tryAccept() {
             error_->show();
             return;
         }
-        accept();
+        if (card_ != nullptr)
+            card_->accept();
         return;
     }
     const QString name = branchName();
@@ -474,7 +506,8 @@ void AgentWorktreeDialog::tryAccept() {
         error_->show();
         return;
     }
-    accept();
+    if (card_ != nullptr)
+        card_->accept();
 }
 
 QString AgentWorktreeDialog::branchName() const { return branch_->text().trimmed(); }
@@ -529,7 +562,7 @@ bool AgentWorktreeDialog::createWorktree() const {
 
 AgentConversationDeleteDialog::AgentConversationDeleteDialog(const QStringList& linkedWorktreePaths,
                                                              QWidget* parent)
-    : QDialog(parent),
+    : QWidget(parent),
       deleteLinked_(new QCheckBox(static_cast<int>(linkedWorktreePaths.size()) > 1
                                       ? tr("Do you want to delete the %n worktrees linked to this "
                                            "conversation?",
@@ -541,9 +574,8 @@ AgentConversationDeleteDialog::AgentConversationDeleteDialog(const QStringList& 
           new QCheckBox(tr("Force delete, discarding uncommitted and untracked changes"), this)) {
     const int linkedWorktreeCount = static_cast<int>(linkedWorktreePaths.size());
     setObjectName(QStringLiteral("conversationDeleteDialog"));
-    setWindowTitle(tr("Delete conversation"));
-    setMinimumWidth(460);
     auto* layout = new QVBoxLayout(this);
+    layout->setContentsMargins(0, 0, 0, 0);
     auto* message = new QLabel(
         tr("Permanently remove KetPlus' local transcript?\n\nProvider history is not deleted, "
            "and any encrypted relay suffix remains until its retention expires."),
@@ -579,21 +611,46 @@ AgentConversationDeleteDialog::AgentConversationDeleteDialog(const QStringList& 
     forceWarning->setContentsMargins(22, 0, 0, 0);
     forceWarning->setVisible(false);
     layout->addWidget(forceWarning);
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-    auto* deleteButton = buttons->button(QDialogButtonBox::Ok);
-    deleteButton->setText(tr("Delete"));
-    layout->addWidget(buttons);
+    // Return confirms, as the dialog's default button did.
+    for (const auto key : {Qt::Key_Return, Qt::Key_Enter}) {
+        auto* confirm = new QShortcut(QKeySequence(key), this);
+        confirm->setContext(Qt::WidgetWithChildrenShortcut);
+        connect(confirm, &QShortcut::activated, this, [this] {
+            if (confirm_ != nullptr)
+                confirm_->click();
+        });
+    }
     connect(deleteLinked_, &QCheckBox::toggled, this, [this](const bool checked) {
         force_->setEnabled(checked);
         if (!checked)
             force_->setChecked(false);
     });
-    connect(force_, &QCheckBox::toggled, this, [forceWarning, deleteButton](const bool checked) {
+    connect(force_, &QCheckBox::toggled, this, [this, forceWarning](const bool checked) {
         forceWarning->setVisible(checked);
-        deleteButton->setText(checked ? tr("Delete and Discard Changes") : tr("Delete"));
+        updateConfirm();
     });
-    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+}
+
+void AgentConversationDeleteDialog::updateConfirm() {
+    if (confirm_ != nullptr)
+        confirm_->setText(force_->isChecked() ? tr("Delete and Discard Changes") : tr("Delete"));
+}
+
+ket::Dialog* AgentConversationDeleteDialog::present(QWidget* anchor) {
+    auto* card = new ket::Dialog(tr("Delete conversation"), anchor);
+    card->setObjectName(QStringLiteral("conversationDeleteDialogCard"));
+    card->setCardWidth(480);
+    connect(card, &ket::Dialog::finished, card, &QObject::deleteLater);
+    card->setBody(this);
+    auto* cancel = card->addButton(tr("Cancel"), ket::ButtonVariant::Ghost);
+    cancel->setObjectName(QStringLiteral("conversationDeleteCancel"));
+    confirm_ = card->addButton(tr("Delete"), ket::ButtonVariant::Danger);
+    confirm_->setObjectName(QStringLiteral("conversationDeleteConfirm"));
+    updateConfirm();
+    connect(cancel, &QAbstractButton::clicked, card, &ket::Dialog::reject);
+    connect(confirm_, &QAbstractButton::clicked, card, &ket::Dialog::accept);
+    card->open();
+    return card;
 }
 
 bool AgentConversationDeleteDialog::deleteLinkedWorktree() const {
