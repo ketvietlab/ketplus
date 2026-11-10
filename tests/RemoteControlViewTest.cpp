@@ -403,6 +403,14 @@ void RemoteControlViewTest::sectionsFollowTheMock() {
     QCOMPARE(text("remoteAccountName"), QStringLiteral("Minh Tran"));
     QCOMPARE(text("remoteAccountMeta"), QStringLiteral("minh · KétPlus Pro"));
     QCOMPARE(text("remoteAccountAvatar"), QStringLiteral("MT"));
+    // A name that looks like markup is shown as typed.
+    view.applyStatus({{QStringLiteral("configured"), true},
+                      {QStringLiteral("account"),
+                       QJsonObject{{QStringLiteral("display_name"), QStringLiteral("<b>Lan</b>")},
+                                   {QStringLiteral("username"), QStringLiteral("<i>lan</i>")}}}});
+    for (const char* name : {"remoteAccountName", "remoteAccountMeta"})
+        QCOMPARE(view.findChild<QLabel*>(QLatin1String(name))->textFormat(), Qt::PlainText);
+    QCOMPARE(text("remoteAccountName"), QStringLiteral("<b>Lan</b>"));
     // An enrollment from before the daemon kept the name.
     view.applyStatus({{QStringLiteral("configured"), true}});
     QCOMPARE(text("remoteAccountName"), QStringLiteral("Signed in"));

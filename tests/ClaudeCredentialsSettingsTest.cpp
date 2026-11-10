@@ -290,6 +290,8 @@ class ClaudeCredentialsSettingsTest : public QObject {
         QCOMPARE(account->findChild<ket::Avatar*>()->initials(), QStringLiteral("MT"));
         QVERIFY(signOut->isVisible());
         QCOMPARE(manage->text(), QStringLiteral("Manage connections"));
+        QCOMPARE(role("name")->textFormat(), Qt::PlainText);
+        QCOMPARE(role("meta")->textFormat(), Qt::PlainText);
         // The mock's relay meter is left out: the relay reports no usage.
         for (auto* label : account->findChildren<QLabel*>())
             QVERIFY2(!label->text().contains(QStringLiteral("Relay")), qPrintable(label->text()));

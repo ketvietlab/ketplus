@@ -648,9 +648,11 @@ QWidget* RemoteControlView::createControlPage() {
     auto* accountCopy = new QVBoxLayout;
     chrome_geometry::spacing(accountCopy, 2);
     accountName_ = label({}, "accountName");
+    accountName_->setTextFormat(Qt::PlainText); // names come from the relay
     accountName_->setObjectName(QStringLiteral("remoteAccountName"));
     accountCopy->addWidget(accountName_);
     accountMeta_ = label({}, "accountMeta");
+    accountMeta_->setTextFormat(Qt::PlainText);
     accountMeta_->setObjectName(QStringLiteral("remoteAccountMeta"));
     accountMeta_->setWordWrap(false); // one line, as the mock
     accountCopy->addWidget(accountMeta_);
