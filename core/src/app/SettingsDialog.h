@@ -83,6 +83,8 @@ class SettingsDialog final : public QDialog, public SettingsHost {
 
     [[nodiscard]] AppearanceSettings appearanceSettings() const;
     [[nodiscard]] EditorSettings settings() const;
+    // The theme the Appearance settings drive; null for the editor-only dialog.
+    [[nodiscard]] ThemeManager* theme() const noexcept { return theme_; }
     void addPage(SettingsPage* page);
     SettingsRegistrationResult registerPage(SettingsPageRegistration registration) override;
     bool selectPage(const QString& id) override;

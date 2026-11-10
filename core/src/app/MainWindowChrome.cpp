@@ -7,15 +7,19 @@
 #include "KetRecipes.h"
 #include "KetToast.h"
 #include "KetTokens.h"
+#include "app/SettingsDialog.h"
+#include "app/SettingsWorkspace.h"
 #include <QStatusBar>
 
 #include <QAbstractButton>
 #include <QAction>
 #include <QHBoxLayout>
 #include <QPainter>
+
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QVBoxLayout>
+#include <functional>
 
 namespace ketplus {
 namespace {
@@ -24,29 +28,31 @@ namespace {
 // the middle, filled like a selected nav item and marked by an accent rule at the left edge.
 class ActivityButton final : public QAbstractButton {
   public:
-    ActivityButton(QStringView icon, const QString& label, QAction* action, QWidget* parent)
-        : QAbstractButton(parent), icon_(ket::Icons::codeForLucide(icon)), action_(action) {
+    // `selected` says whether this entry is on screen; it is read at each paint.
+    ActivityButton(QStringView icon, const QString& label, std::function<bool()> selected,
+                   QWidget* parent)
+        : QAbstractButton(parent), icon_(ket::Icons::codeForLucide(icon)),
+          selected_(std::move(selected)) {
         setAccessibleName(label);
         setToolTip(label);
         setCursor(Qt::PointingHandCursor);
         setAttribute(Qt::WA_Hover);
-        // Checkable, so assistive technology reads the panel on screen as selected.
-        setCheckable(action != nullptr);
+        // Checkable, so assistive technology reads the entry on screen as selected.
+        setCheckable(true);
         sync();
     }
     QSize sizeHint() const override {
         auto& kit = ket::Appearance::instance();
         return {qRound(kit.scaled(48)), qRound(kit.scaled(40))};
     }
-    // The action is set under signal blockers, so its owner calls this after each change.
+    // The actions are set under signal blockers, so the owner calls this after each change.
     void sync() {
-        if (action_ != nullptr)
-            setChecked(action_->isChecked());
+        setChecked(selected_());
         update();
     }
 
   protected:
-    // The action decides; a click only triggers it.
+    // `selected` decides; a click only triggers the entry.
     void nextCheckState() override {}
     void paintEvent(QPaintEvent*) override {
         auto& kit = ket::Appearance::instance();
@@ -79,7 +85,7 @@ class ActivityButton final : public QAbstractButton {
 
   private:
     QString icon_;
-    QAction* action_;
+    std::function<bool()> selected_;
 };
 
 // The tab strip's end, as the mock: the strip's fill and rules around the terminal toggle.
@@ -117,14 +123,17 @@ void MainWindow::createChrome() {
     rail->setObjectName(QStringLiteral("liteActivityBar"));
     auto* navigation = new QVBoxLayout(rail);
     const auto add = [rail, navigation](QStringView name, const QString& label,
-                                        QAction* action = nullptr) {
-        auto* button = new ActivityButton(name, label, action, rail);
+                                        std::function<bool()> selected) {
+        auto* button = new ActivityButton(name, label, std::move(selected), rail);
         button->setFocusPolicy(Qt::TabFocus);
         navigation->addWidget(button);
         return button;
     };
-    const auto linkAction = [&add](QStringView name, QAction* action) {
-        auto* button = add(name, action->text().remove(QLatin1Char('&')), action);
+    const auto linkAction = [this, &add](QStringView name, QAction* action) {
+        // A side panel is on screen only with the editor surface, not over Settings.
+        auto* button = add(name, action->text().remove(QLatin1Char('&')), [this, action] {
+            return action->isChecked() && chromePages_->currentWidget() == workspaceSplit_;
+        });
         const auto update = [button, action] {
             button->sync();
             button->setEnabled(action->isEnabled());
@@ -139,7 +148,9 @@ void MainWindow::createChrome() {
     linkAction(u"search", searchPanelAction_);
     linkAction(u"git-branch", sourceControlAction_);
     navigation->addStretch();
-    auto* settings = add(u"settings", tr("Settings"));
+    auto* settings = add(u"settings", tr("Settings"), [this] {
+        return settingsPage_ != nullptr && chromePages_->currentWidget() == settingsPage_;
+    });
     connect(settings, &QAbstractButton::clicked, this, &MainWindow::showSettings);
     const auto appearance = [rail, navigation] {
         auto& kit = ket::Appearance::instance();
@@ -214,9 +225,42 @@ void MainWindow::refreshActivityBar() {
         static_cast<ActivityButton*>(button)->sync();
 }
 
+bool MainWindow::panelStaysLeavingSettings(QAction* action, const bool visible) {
+    if (visible || settingsPage_ == nullptr || chromePages_->currentWidget() != settingsPage_)
+        return visible;
+    const QSignalBlocker blocker(action);
+    action->setChecked(true);
+    return true;
+}
+
 void MainWindow::showEditorSurface() {
     if (chromePages_)
         chromePages_->setCurrentWidget(workspaceSplit_);
+    // The status bar belongs to the editor surface, as in the mock.
+    statusBar()->setVisible(!distractionFree_);
+    refreshActivityBar();
+}
+
+// Settings as a page of the window, as the Lite mock; changes apply as they are made.
+void MainWindow::showSettings() {
+    if (settingsPage_ == nullptr) {
+        auto* dialog = new SettingsDialog(appearanceSettings_, theme_, this);
+        connect(dialog, &SettingsDialog::appearanceSettingsSaved, this,
+                &MainWindow::applyAppearanceSettings);
+#ifdef Q_OS_MACOS
+        const QString shortcut = QStringLiteral("⌘ ,");
+#else
+        const QString shortcut = QStringLiteral("Ctrl ,");
+#endif
+        auto* page =
+            new SettingsWorkspace(dialog, shortcut, QStringLiteral("KÉT Sans"), chromePages_);
+        connect(page, &SettingsWorkspace::dismissed, this, &MainWindow::showEditorSurface);
+        chromePages_->addWidget(page);
+        settingsPage_ = page;
+    }
+    chromePages_->setCurrentWidget(settingsPage_);
+    statusBar()->hide();
+    refreshActivityBar();
 }
 
 } // namespace ketplus

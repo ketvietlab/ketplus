@@ -258,7 +258,7 @@ void InterfaceFontTest::rejectsRawFontSizeLiteralsOutsideTypeScale() {
     // tests/InterfaceFontTest.cpp → repo root.
     const QDir testDir = QFileInfo(QStringLiteral(__FILE__)).absoluteDir();
     const QString repoRoot = QDir(testDir.absoluteFilePath(QStringLiteral(".."))).absolutePath();
-    QVERIFY(QFileInfo(repoRoot + QStringLiteral("/apps/desktop/src/ui/TypeScale.h")).exists());
+    QVERIFY(QFileInfo(repoRoot + QStringLiteral("/core/src/ui/TypeScale.h")).exists());
 
     // Fixtures that intentionally embed SVG/CSS font-size samples or assert scaled
     // vendor/browser sheets. Keep this list short and commented.
@@ -288,7 +288,7 @@ void InterfaceFontTest::rejectsRawFontSizeLiteralsOutsideTypeScale() {
         while (it.hasNext()) {
             const QString absolute = it.next();
             const QString relative = QDir(repoRoot).relativeFilePath(absolute);
-            if (relative == QStringLiteral("apps/desktop/src/ui/TypeScale.h"))
+            if (relative == QStringLiteral("core/src/ui/TypeScale.h"))
                 continue;
             if (relative.contains(QStringLiteral("/vendor/")) ||
                 relative.contains(QStringLiteral("/build")) ||

@@ -229,8 +229,12 @@ restart, fork snapshot) stay neutral. Retryable errors show reconnecting without
 Older retained-output/diff/text markers stay visible. Unsupported queue actions
 are not shown; queued status follows the daemon state.
 
-Pro Settings keeps its workspace presentation and uses kit navigation, theme
-cards, accent swatch, segmented choices and form controls. The workspace reuses
+Settings is a page of the window in both editions (#155): `core/src/app/SettingsWorkspace`
+draws the heading with its `ket::Kbd` shortcut, kit navigation, theme cards, accent
+swatch, segmented choices and form controls, and KétPlus shows it in place of the
+editor, with its activity-bar button selected and the status bar hidden. Pro's
+`SettingsWorkspacePage` adds conversation width, Browser, Computer use, Providers,
+Archived, Storage and Updates. The workspace reuses
 the core dialog's Restore defaults footer and Follow system control; every change
 applies at once (ADR 0103). Appearance has the mock's Interface zoom
 (90/100/110/125%) and Typography the Interface font size (13–16 px); the zoom

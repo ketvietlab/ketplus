@@ -65,8 +65,9 @@ void MainWindow::applySearchPanelColors() {
                                   palette.textSecondary, palette.warning);
 }
 
-void MainWindow::setSearchPanelVisible(const bool visible) {
+void MainWindow::setSearchPanelVisible(bool visible) {
     const auto activity = qScopeGuard([this] { refreshActivityBar(); });
+    visible = panelStaysLeavingSettings(searchPanelAction_, visible);
     if (visible)
         showEditorSurface();
     if (visible) {

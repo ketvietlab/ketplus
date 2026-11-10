@@ -9,6 +9,7 @@
 #include "KetAppearance.h"
 #include "KetChrome.h"
 #include "KetFileRow.h"
+#include "KetNavItem.h"
 #include "KetTokens.h"
 
 #include <QAbstractButton>
@@ -20,6 +21,7 @@
 #include <QProcess>
 #include <QSettings>
 #include <QSplitter>
+#include <QStackedWidget>
 #include <QStatusBar>
 #include <QTabWidget>
 #include <QTemporaryDir>
@@ -326,6 +328,74 @@ class LiteWindowTest final : public QObject {
         window.openFile(repository.filePath(QStringLiteral("clean.txt")));
         QVERIFY(viewDiff() != nullptr);
         QTRY_VERIFY(!viewDiff()->isVisibleTo(tabs));
+    }
+
+    void settingsIsAPageOfTheWindow() {
+        // A repository, so Source Control is available too.
+        QTemporaryDir repository;
+        QVERIFY(repository.isValid());
+        QProcess git;
+        git.setWorkingDirectory(repository.path());
+        git.start(QStringLiteral("git"), {QStringLiteral("init"), QStringLiteral("-q")});
+        QVERIFY(git.waitForFinished(10000) && git.exitCode() == 0);
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(repository.path());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto* settings = activityButton(window, QStringLiteral("Settings"));
+        QVERIFY(!marked(settings));
+        settings->click();
+        auto* pages = window.findChild<QStackedWidget*>(QStringLiteral("liteWorkspacePages"));
+        auto* page = window.findChild<QWidget*>(QStringLiteral("settingsWorkspacePage"));
+        QVERIFY(page != nullptr);
+        QCOMPARE(pages->currentWidget(), page);
+        QVERIFY(marked(settings));
+        QVERIFY(settings->isChecked());
+        QVERIFY(!window.statusBar()->isVisible());
+        QVERIFY(page->findChild<ket::Kbd*>(QStringLiteral("settingsWorkspaceShortcut")) != nullptr);
+
+        // Lite's sections, and Typography without Pro's Conversation width.
+        QStringList sections;
+        for (auto* item : page->findChildren<ket::NavItem*>())
+            if (item->isVisibleTo(page))
+                sections.append(item->text());
+        QCOMPARE(sections,
+                 (QStringList{QStringLiteral("Appearance"), QStringLiteral("Typography")}));
+        QVERIFY(page->findChild<QWidget*>(QStringLiteral("agentConversationWidth")) == nullptr);
+        QVERIFY(page->findChild<QWidget*>(QStringLiteral("interfaceZoom"))->isVisibleTo(page));
+
+        // The Explorer's button returns to the editor.
+        activityButton(window, QStringLiteral("Explorer"))->click();
+        QCOMPARE(pages->currentWidget(),
+                 window.findChild<QWidget*>(QStringLiteral("editorColumn"))->parentWidget());
+        QVERIFY(!marked(settings));
+        QVERIFY(window.statusBar()->isVisible());
+
+        // A panel open behind Settings: its button or shortcut returns to the editor with
+        // the panel still open, not closes it while Settings stays.
+        for (const auto* name : {"Explorer", "Search in Files", "Source Control"}) {
+            const QString label = QString::fromLatin1(name);
+            for (const bool shortcut : {false, true}) {
+                QAction* action = window.findChild<QAction*>();
+                for (auto* candidate : window.findChildren<QAction*>())
+                    if (candidate->text().remove('&') == label && candidate->isCheckable())
+                        action = candidate;
+                QTRY_VERIFY_WITH_TIMEOUT(action->isEnabled(), 10000);
+                if (!action->isChecked())
+                    action->trigger();
+                QVERIFY2(action->isChecked(), name);
+                settings->click();
+                QCOMPARE(pages->currentWidget(), page);
+                if (shortcut)
+                    action->trigger();
+                else
+                    activityButton(window, label)->click();
+                QVERIFY2(pages->currentWidget() != page, name);
+                QVERIFY2(action->isChecked(), name);
+                QVERIFY2(activityButton(window, label)->isChecked(), name);
+            }
+        }
     }
 
     void reviewCaptureRunsItsSteps() {

@@ -930,13 +930,6 @@ void MainWindow::syncEditorZoom(EditorWidget* editor) {
     });
 }
 
-void MainWindow::showSettings() {
-    SettingsDialog dialog(appearanceSettings_, theme_, this);
-    connect(&dialog, &SettingsDialog::appearanceSettingsSaved, this,
-            &MainWindow::applyAppearanceSettings);
-    dialog.exec();
-}
-
 void MainWindow::applyAppearanceSettings(const AppearanceSettings& settings) {
     appearanceSettings_ = settings.normalized();
     appearanceSettings_.save();

@@ -2,17 +2,16 @@
 
 #include "app/SettingsProvidersPage.h"
 #include "app/SettingsStoragePage.h"
-#include "ui/Theme.h"
-
-#include <QWidget>
-
-class QListWidget;
+#include "app/SettingsWorkspace.h"
 
 namespace ketplus {
 
 class SettingsDialog;
 
-class SettingsWorkspacePage final : public QWidget {
+// Pro's Settings: the shared page (core SettingsWorkspace) with Conversation width on
+// Typography and Pro's sections: Account & devices, Agent models, Browser, Computer use,
+// Providers, Archived, Storage and Updates.
+class SettingsWorkspacePage final : public SettingsWorkspace {
     Q_OBJECT
 
   public:
@@ -22,22 +21,12 @@ class SettingsWorkspacePage final : public QWidget {
                                    SettingsClaudeCredentials::Requester credentials = {},
                                    SettingsStoragePage::Requester storage = {});
 
-    [[nodiscard]] SettingsDialog* dialog() const noexcept;
-    void applyPalette(const ThemePalette& palette, int zoomPercent = 100);
-    // Selects a settings section by its navigation id, such as "updates".
-    void showSection(const QString& id);
-
   signals:
-    void saved();
-    void dismissed();
     void accountDevicesRequested();
     void agentModelsRequested();
 
   private:
-    SettingsDialog* dialog_{nullptr};
-    QListWidget* navigation_{nullptr};
-    ThemePalette palette_{};
-    int zoomPercent_{100};
+    void addConversationWidth();
 };
 
 } // namespace ketplus
