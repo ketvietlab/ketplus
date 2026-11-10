@@ -84,6 +84,16 @@ Basic.ApplicationWindow {
             if (!closed || !sidebarOpen || screen !== id)
                 console.warn("QML sidebar check: " + id + " did not toggle")
         }
+        // Closing every terminal tab hides the terminal; showing it again opens a new tab.
+        showScreen("editor")
+        editorTerminal = true
+        while (editor.terminal.tabs.length > 0 && editorTerminal)
+            editor.terminal.tabButtons.itemAt(0).closeRequested()
+        const hidden = !editorTerminal
+        editorTerminal = true
+        if (!hidden || editor.terminal.tabs.length !== 1)
+            console.warn("QML terminal check: closing every tab left the terminal open")
+        editorTerminal = false
         // Every search result opens its file at a line that holds the match.
         showScreen("search")
         for (const group of search.results) {

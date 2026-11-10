@@ -18,6 +18,7 @@ Item {
     property string productName: "KétPlus Pro"
     // KétPlus has one status bar: the branch, then the document's position and format.
     property bool singleStatusBar: false
+    property alias terminal: terminalPanel
     property string quickOpenKey: "⌘ K"
     property var openFolders: Fixtures.explorer.filter(f => f.folder && f.open).map(f => f.name)
     property var tabs: ["NavigationRail.qml", "design-system.md"]
@@ -322,6 +323,7 @@ Item {
                 }
 
                 TerminalPanel {
+                    id: terminalPanel
                     Layout.fillWidth: true
                     Layout.preferredHeight: screen.px(280)
                     visible: screen.window.editorTerminal

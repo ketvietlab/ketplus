@@ -17,7 +17,20 @@ Rectangle {
     property bool searching: false
     property string query: "Passed"
     property bool cleared: false
+    property alias tabButtons: tabRepeater
     signal hideRequested()
+
+    // Here, not in the tab: replacing `tabs` destroys the tab whose handler is running, and the
+    // rest of that handler never runs. Closing the last tab hides the terminal.
+    function closeTab(index) {
+        tabs = tabs.filter((t, i) => i !== index)
+        current = Math.max(0, Math.min(current, tabs.length - 1))
+        if (tabs.length === 0)
+            hideRequested()
+    }
+
+    // Shown again after its last tab closed, it starts a new shell, as the app does.
+    onVisibleChanged: if (visible && tabs.length === 0) tabs = ["~"]
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
 
@@ -76,6 +89,7 @@ Rectangle {
                 Layout.fillWidth: true
                 currentIndex: panel.current
                 Repeater {
+                    id: tabRepeater
                     model: panel.tabs
                     KetTabButton {
                         required property string modelData
@@ -85,12 +99,7 @@ Rectangle {
                         closable: true
                         width: implicitWidth
                         onClicked: panel.current = index
-                        onCloseRequested: {
-                            panel.tabs = panel.tabs.filter((t, i) => i !== index)
-                            panel.current = Math.min(panel.current, panel.tabs.length - 1)
-                            if (panel.tabs.length === 0)
-                                panel.hideRequested()
-                        }
+                        onCloseRequested: panel.closeTab(index)
                     }
                 }
             }

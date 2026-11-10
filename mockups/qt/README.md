@@ -70,7 +70,8 @@ Enter, Space or Down opens one. `--keys` activates the window to check this, so
 it takes the keyboard focus for a moment; without an active window it reports
 "skipped". Search reads the editor's own file sources, so each result opens its
 file at a line that holds the match (Markdown in Source); the Lite smoke checks
-every result.
+every result. Closing the terminal's last tab hides the terminal, as in the app;
+showing it again opens a new tab. The Lite smoke checks this too.
 
 | Screen (`--edition=lite`) | States | Covers |
 |---|---|---|
