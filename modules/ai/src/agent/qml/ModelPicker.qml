@@ -113,7 +113,7 @@ Basic.Popup {
         flick.contentY = Math.max(0, Math.min(offset, Math.max(0, flick.contentHeight - flick.height)))
     }
     width: Math.min(KetTheme.px(500, KetTheme.zoom), viewport.width - KetTheme.px(32, KetTheme.zoom))
-    height: Math.min(settingsBody.implicitHeight + KetTheme.px(116, KetTheme.zoom) + 2, viewport.height - KetTheme.px(32, KetTheme.zoom))
+    height: Math.min(settingsBody.implicitHeight + KetTheme.px(126, KetTheme.zoom) + 2, viewport.height - KetTheme.px(32, KetTheme.zoom))
     x: (viewport.width - width) / 2
     y: (viewport.height - height) / 2
     padding: 0
@@ -197,7 +197,7 @@ Basic.Popup {
 
         RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: KetTheme.px(58, KetTheme.zoom)
+            Layout.preferredHeight: KetTheme.px(65, KetTheme.zoom)
             Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
             Layout.rightMargin: KetTheme.px(14, KetTheme.zoom)
             spacing: KetTheme.px(8, KetTheme.zoom)
@@ -301,8 +301,8 @@ Basic.Popup {
             Layout.fillWidth: true
             Layout.leftMargin: picker.look.paddingInline
             Layout.rightMargin: picker.look.paddingInline
-            Layout.topMargin: KetTheme.px(14, KetTheme.zoom)
-            Layout.bottomMargin: KetTheme.px(12, KetTheme.zoom)
+            Layout.topMargin: KetTheme.px(10, KetTheme.zoom)
+            Layout.bottomMargin: KetTheme.px(6, KetTheme.zoom)
             Kit.KetTextField {
                 id: modelSearch
                 objectName: "modelSearch"
@@ -501,9 +501,9 @@ Basic.Popup {
             Layout.fillWidth: true
             Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
             Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
-            Layout.topMargin: KetTheme.px(14, KetTheme.zoom)
-            Layout.bottomMargin: KetTheme.px(14, KetTheme.zoom)
-            spacing: KetTheme.px(7, KetTheme.zoom)
+            Layout.topMargin: KetTheme.px(16, KetTheme.zoom)
+            Layout.bottomMargin: KetTheme.px(12, KetTheme.zoom)
+            spacing: KetTheme.px(6, KetTheme.zoom)
 
             RowLayout {
                 Layout.fillWidth: true
@@ -528,7 +528,7 @@ Basic.Popup {
                 id: effortSlider
                 objectName: "effortSlider"
                 Layout.fillWidth: true
-                Layout.preferredHeight: KetTheme.px(24, KetTheme.zoom)
+                Layout.preferredHeight: KetTheme.px(21, KetTheme.zoom)
                 from: 0
                 to: Math.max(1, picker.displayedEfforts.length - 1)
                 stepSize: 1
@@ -623,7 +623,7 @@ Basic.Popup {
             Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
             Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
             Layout.topMargin: KetTheme.px(16, KetTheme.zoom)
-            Layout.bottomMargin: KetTheme.px(16, KetTheme.zoom)
+            Layout.bottomMargin: KetTheme.px(21, KetTheme.zoom)
 
             onFocusRequested: (item) => picker.revealControl(item)
             supported: picker.canCustomizeCompact
@@ -652,7 +652,7 @@ Basic.Popup {
 
         RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: KetTheme.px(58, KetTheme.zoom)
+            Layout.preferredHeight: KetTheme.px(61, KetTheme.zoom)
             Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
             Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
             spacing: KetTheme.px(8, KetTheme.zoom)
