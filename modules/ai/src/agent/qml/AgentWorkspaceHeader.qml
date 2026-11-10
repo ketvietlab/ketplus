@@ -49,7 +49,7 @@ Item {
     readonly property bool tagsEditable: !agentHost.compactWindow && selectedConversation.tagsEditable === true
     readonly property real tagGroupWidth: (tags.length > 0 ? conversationTags.implicitWidth + gap : 0) + (tagsEditable ? addTagButton.implicitWidth + gap : 0)
     readonly property bool showTags: (!reviewerButton.visible || fullReviewer) && titleRow.width >= fixedWidth + (reviewerButton.visible ? reviewerProbe.implicitWidth + gap : 0) + tagGroupWidth + slack
-    readonly property int actionCount: (agentHost.compactMode ? 0 : 1) + (agentHost.compactWindow ? 0 : 1) + (agentHost.compactMode || agentHost.compactWindow ? 0 : 4)
+    readonly property int actionCount: (agentHost.compactMode ? 0 : 1) + (agentHost.compactWindow ? 0 : 1) + (agentHost.compactMode || agentHost.compactWindow ? 0 : agentHost.detailsOpen ? 1 : 4)
     readonly property real fullActionsWidth: actionCount * atlasButton.implicitWidth + Math.max(0, actionCount - 1) * headerActions.spacing
     readonly property bool globalActions: agentHost.compactWindow || width - titleRow.anchors.leftMargin - fullActionsWidth - headerActions.anchors.rightMargin - titleRow.anchors.rightMargin >= statusWidth + (scopeChip.visible ? scopeChip.iconWidth + gap : 0) + minimumTitle + (reviewerButton.visible ? collapsedReviewerProbe.implicitWidth + gap : 0) + 2 * gap
     readonly property string scopeLabel: (agentHost.repositoryName || "Repository") + " · " + scopeBranch
@@ -300,21 +300,21 @@ Item {
         }
         Kit.KetIconButton {
             objectName: "headerChangesButton"
-            visible: !agentHost.compactMode && !agentHost.compactWindow
+            visible: !agentHost.compactMode && !agentHost.compactWindow && !agentHost.detailsOpen
             iconName: "compare"
             text: "Changes"
             onClicked: agentHost.requestChanges()
         }
         Kit.KetIconButton {
             objectName: "headerTerminalButton"
-            visible: !agentHost.compactMode && !agentHost.compactWindow
+            visible: !agentHost.compactMode && !agentHost.compactWindow && !agentHost.detailsOpen
             iconName: "terminal"
             text: "Open terminal"
             onClicked: agentHost.requestTerminal()
         }
         Kit.KetIconButton {
             objectName: "headerWorkReportButton"
-            visible: !agentHost.compactMode && !agentHost.compactWindow
+            visible: !agentHost.compactMode && !agentHost.compactWindow && !agentHost.detailsOpen
             iconName: "view-list"
             text: "Work report"
             onClicked: agentHost.requestWorkReport()

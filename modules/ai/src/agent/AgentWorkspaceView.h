@@ -105,6 +105,8 @@ class AgentWorkspaceView final : public QWidget {
     Q_PROPERTY(int fileMentionRevision READ fileMentionRevision NOTIFY fileMentionsChanged)
     Q_PROPERTY(QVariantList attachments READ attachments NOTIFY attachmentsChanged)
     Q_PROPERTY(bool compactMode READ compactMode WRITE setCompactMode NOTIFY compactModeChanged)
+    // The details pane is open: its Open content menu replaces the header's openers.
+    Q_PROPERTY(bool detailsOpen READ detailsOpen NOTIFY detailsOpenChanged)
     Q_PROPERTY(
         bool compactWindow READ compactWindow WRITE setCompactWindow NOTIFY compactWindowChanged)
     Q_PROPERTY(bool productSidebarVisible READ productSidebarVisible WRITE setProductSidebarVisible
@@ -358,6 +360,13 @@ class AgentWorkspaceView final : public QWidget {
     void setProductSidebarVisible(bool visible);
     void setCompactWindow(bool compact);
     [[nodiscard]] bool compactWindow() const { return compactWindow_; }
+    [[nodiscard]] bool detailsOpen() const { return detailsOpen_; }
+    void setDetailsOpen(bool open) {
+        if (open == detailsOpen_)
+            return;
+        detailsOpen_ = open;
+        emit detailsOpenChanged();
+    }
     Q_INVOKABLE void requestCompactWindow() { emit compactWindowRequested(); }
     void setConversationWidth(int pixels);
     void setConversations(const QVariantList& conversations);
@@ -599,6 +608,7 @@ class AgentWorkspaceView final : public QWidget {
     void compactModeChanged();
     void productSidebarVisibleChanged();
     void compactWindowChanged();
+    void detailsOpenChanged();
     void compactWindowRequested();
     void conversationWidthChanged();
     void conversationConfigurationRequested(const QString& model, const QString& effort,
@@ -763,6 +773,7 @@ class AgentWorkspaceView final : public QWidget {
     bool compactMode_{false};
     bool productSidebarVisible_{true};
     bool compactWindow_{false};
+    bool detailsOpen_{false};
     int conversationWidth_{defaultConversationWidth};
     qint64 conversationConfigurationRevision_{0};
     QVariant conversationCompactWindow_;

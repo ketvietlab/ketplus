@@ -253,6 +253,8 @@ class MainWindow final : public QMainWindow {
     void connectAgentWorkReport();
     void openAgentWorkReportTab();
     void openAgentChangesTab();
+    void installAgentDetailActions();
+    void hideAgentDetailPane();
     void refreshAgentChanges();
     void refreshAgentWorkReport(bool force);
     void closeAgentDetailTab(int index);
@@ -420,6 +422,8 @@ class MainWindow final : public QMainWindow {
     // Holds agentDetailTabs_ and, while one of its editors is searched, the find bar.
     QWidget* agentDetailPane_{nullptr};
     QTabWidget* agentDetailTabs_{nullptr};
+    // Hide content pane keeps its tabs; the next opener shows it again.
+    bool agentDetailPaneHidden_{false};
     QPointer<AtlasConversationPanel> conversationAtlasPanel_;
     QTabWidget* atlasTabs_{nullptr};
     RemoteControlView* remoteControl_{nullptr};

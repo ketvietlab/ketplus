@@ -138,6 +138,8 @@ void MainWindow::placeFindBar() {
 }
 
 QTabWidget* MainWindow::ensureAgentDetailTabs() {
+    // Every opener comes here, so opening content shows a hidden pane again.
+    agentDetailPaneHidden_ = false;
     if (agentDetailTabs_ != nullptr) {
         return agentDetailTabs_;
     }
@@ -165,6 +167,7 @@ QTabWidget* MainWindow::ensureAgentDetailTabs() {
             &MainWindow::showAgentDetailTabContextMenu);
     connect(agentDetailTabs_, &QTabWidget::currentChanged, this,
             [this] { updateAgentDetailTabs(); });
+    installAgentDetailActions();
     return agentDetailTabs_;
 }
 
@@ -286,8 +289,11 @@ void MainWindow::updateAgentDetailTabs() {
     if (agentDetailTabs_ == nullptr) {
         return;
     }
-    const bool hasTabs = agentDetailTabs_->count() > 0 && !compactConversationWindow_;
+    const bool hasTabs =
+        agentDetailTabs_->count() > 0 && !compactConversationWindow_ && !agentDetailPaneHidden_;
     agentDetailPane_->setVisible(agentWorkspaceMode_ && hasTabs);
+    if (agentWorkspace_ != nullptr)
+        agentWorkspace_->setDetailsOpen(agentWorkspaceMode_ && hasTabs);
     if (agentWorkspaceMode_ && agentWorkspace_ != nullptr) {
         QList<int> sizes(workspaceSplit_->count(), 0);
         const int width = qMax(800, workspaceSplit_->width());
