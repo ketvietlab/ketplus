@@ -99,14 +99,18 @@ class TypographyPreview final : public QWidget {
 
     void setAppearanceSettings(const AppearanceSettings& settings) {
         settings_ = settings.normalized();
-        setMinimumHeight(
-            100 + settings_.interfaceFontSizePixels + 2 * settings_.editor.lineHeightPixels +
-            2 * settings_.terminal.lineHeightPixels + 2 * settings_.preview.lineHeightPixels);
+        setMinimumHeight(2 * inset + labelPixels + 4 * gap + settings_.interfaceFontSizePixels +
+                         2 * settings_.editor.lineHeightPixels +
+                         settings_.terminal.lineHeightPixels +
+                         2 * settings_.preview.lineHeightPixels);
         updateGeometry();
         update();
     }
 
   protected:
+    // The mock's sample: a sentence in the interface font, code in the editor font and a shell
+    // prompt in the terminal font, each at its chosen size. The Markdown lines follow while
+    // their size is still a setting.
     void paintEvent(QPaintEvent* event) override {
         Q_UNUSED(event)
         QPainter painter(this);
@@ -115,56 +119,60 @@ class TypographyPreview final : public QWidget {
         QPainterPath frame;
         frame.addRoundedRect(QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5), 7, 7);
         const bool dark = currentThemePalette().dark;
+        const QColor main(themeTokenColor(QStringLiteral("text-main"), dark));
+        const QColor muted(themeTokenColor(QStringLiteral("text-muted"), dark));
         painter.fillPath(frame, QColor(themeTokenColor(QStringLiteral("panel-bg-subtle"), dark)));
-        painter.setPen(QColor(themeTokenColor(QStringLiteral("border-default"), dark)));
+        painter.setPen(QColor(themeTokenColor(QStringLiteral("panel-border"), dark)));
         painter.drawPath(frame);
         painter.setClipPath(frame);
 
-        int top = 18;
-        painter.setPen(palette().color(QPalette::PlaceholderText));
+        int top = inset;
         QFont labelFont = font();
-        labelFont.setPixelSize(qRound(ket::Appearance::instance().scaled(11)));
-        labelFont.setWeight(QFont::DemiBold);
-        painter.setFont(labelFont);
-        painter.drawText(14, top, QStringLiteral("LIVE PREVIEW"));
-        top += 27;
+        labelFont.setPixelSize(labelPixels);
+        labelFont.setLetterSpacing(QFont::AbsoluteSpacing, 1);
+        top = drawLines(painter, top, labelFont, labelPixels, muted, QStringLiteral("PREVIEW"));
 
         QFont interfaceFont = font();
         interfaceFont.setPixelSize(settings_.interfaceFontSizePixels);
-        painter.setFont(interfaceFont);
-        painter.setPen(palette().color(QPalette::Text));
-        painter.drawText(14, top, QStringLiteral("Appearance settings"));
-        top += settings_.interfaceFontSizePixels + 20;
+        top = drawLines(painter, top + gap, interfaceFont, settings_.interfaceFontSizePixels, main,
+                        QStringLiteral("A space for what you are creating."));
 
-        drawSample(painter, top, settings_.editor.font(), settings_.editor.lineHeightPixels,
-                   QStringLiteral("const scale = 1.0;\nrender(settings);"));
-        top += settings_.editor.lineHeightPixels * 2 + 17;
+        top = drawLines(
+            painter, top + gap, settings_.editor.font(), settings_.editor.lineHeightPixels, main,
+            QStringLiteral("const workspace = \"develop\";\nagent.continue(workspace);"));
 
         QFont terminalFont(settings_.terminalFontFamily.isEmpty()
                                ? ket::Profile::current().monoFamily()
                                : settings_.terminalFontFamily);
         terminalFont.setPixelSize(settings_.terminal.fontSizePixels);
-        drawSample(painter, top, terminalFont, settings_.terminal.lineHeightPixels,
-                   QStringLiteral("$ ketplus .\nWorkspace ready"));
-        top += settings_.terminal.lineHeightPixels * 2 + 17;
+        top = drawLines(painter, top + gap, terminalFont, settings_.terminal.lineHeightPixels,
+                        muted, QStringLiteral("\u279C ketplus-desktop git:(develop)"));
 
         QFont previewFont = font();
         previewFont.setPixelSize(settings_.preview.fontSizePixels);
-        drawSample(painter, top, previewFont, settings_.preview.lineHeightPixels,
-                   QStringLiteral("Preview\nDocumentation stays legible."));
+        drawLines(painter, top + gap, previewFont, settings_.preview.lineHeightPixels, main,
+                  QStringLiteral("Markdown preview\nDocumentation stays legible."));
     }
 
   private:
-    void drawSample(QPainter& painter, const int top, const QFont& sampleFont, const int lineHeight,
-                    const QString& text) {
+    static constexpr int inset = 16;
+    static constexpr int gap = 8;
+    static constexpr int labelPixels = 11;
+
+    // Draws `text` line by line from `top` and returns the bottom of its last line.
+    int drawLines(QPainter& painter, const int top, const QFont& sampleFont, const int lineHeight,
+                  const QColor& color, const QString& text) {
         painter.setFont(sampleFont);
-        painter.setPen(palette().color(QPalette::Text));
+        painter.setPen(color);
         const QFontMetrics metrics(sampleFont);
-        int baseline = top + metrics.ascent();
+        int lineTop = top;
         for (const QString& line : text.split(QLatin1Char('\n'))) {
-            painter.drawText(14, baseline, line);
-            baseline += lineHeight;
+            const QRect area(inset, lineTop, width() - 2 * inset,
+                             qMax(lineHeight, metrics.height()));
+            painter.drawText(area, Qt::AlignLeft | Qt::AlignVCenter, line);
+            lineTop += lineHeight;
         }
+        return lineTop;
     }
 
     AppearanceSettings settings_{AppearanceSettings::defaults()};
