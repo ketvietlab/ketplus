@@ -132,6 +132,8 @@ add_library(ketplus_desktop_shell STATIC
     src/app/SettingsUpdatesPage.h
     src/app/AgentConversationWidth.cpp
     src/app/AgentConversationWidth.h
+    src/app/SettingsAppearancePreview.cpp
+    src/app/SettingsAppearancePreview.h
     src/app/SettingsWorkspacePage.cpp
     src/app/SettingsWorkspacePage.h
     src/app/WorktreesWorkspacePage.cpp

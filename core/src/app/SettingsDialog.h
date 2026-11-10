@@ -106,6 +106,7 @@ class SettingsDialog final : public QDialog, public SettingsHost {
     void updatePreview();
     void updateDirtyState();
     void updateThemePreview();
+    void updateThemeCards();
     void selectThemeMode(int mode);
     void rebuildExtensionNavigation();
 

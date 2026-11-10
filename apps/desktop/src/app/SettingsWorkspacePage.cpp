@@ -10,6 +10,7 @@
 
 #include "agent/AgentWorkspaceView.h"
 #include "app/AgentConversationWidth.h"
+#include "app/SettingsAppearancePreview.h"
 #include "app/SettingsBrowserPage.h"
 #include "app/SettingsComputerPage.h"
 #include "app/SettingsDialog.h"
@@ -244,6 +245,7 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     auto* darkCard = dialog_->findChild<ket::ThemeCard*>(QStringLiteral("darkThemeCard"));
     for (auto* card : {lightCard, darkCard}) {
         card->setParent(themes);
+        chrome_geometry::fixedWidth(card, 264);
         card->show();
     }
     themesLayout->addWidget(lightCard);
@@ -288,30 +290,14 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     appearanceLayout->addWidget(
         label(tr("Workspace preview"), QStringLiteral("settingsWorkspaceSubheading"), appearance));
     chrome_geometry::addSpacing(appearanceLayout, 10);
-    auto* preview = new QFrame(appearance);
-    preview->setObjectName(QStringLiteral("settingsWorkspacePreview"));
-    auto* previewLayout = new QVBoxLayout(preview);
-    chrome_geometry::margins(previewLayout, 0, 0, 0, 0);
-    chrome_geometry::spacing(previewLayout, 0);
-    previewLayout->addWidget(label(QStringLiteral("  ◇  NavigationRail.qml     README.md"),
-                                   QStringLiteral("settingsPreviewTabs"), preview));
-    auto* previewCode = label(QStringLiteral("// Focus on what you are creating.\n"
-                                             "property string workspace:  \"develop\"\n"
-                                             "color: theme.accentSubtle"),
-                              QStringLiteral("settingsPreviewCode"), preview);
+    auto* preview = new WorkspacePreview(appearance);
     // The code reads in the editor font, KÉT Sans Mono by default, as it will in the editor.
-    const auto showEditorFont = [previewCode, dialog = dialog_] {
-        QFont font = previewCode->font();
-        font.setFamily(dialog->settings().fontFamily);
-        previewCode->setFont(font);
+    const auto showEditorFont = [preview, dialog = dialog_] {
+        preview->setCodeFamily(dialog->settings().fontFamily);
     };
     showEditorFont();
     if (auto* editorFamily = dialog_->findChild<QComboBox*>(QStringLiteral("editorFontFamily")))
-        connect(editorFamily, &QComboBox::currentIndexChanged, previewCode, showEditorFont);
-    previewLayout->addWidget(previewCode);
-    previewLayout->addWidget(
-        label(QStringLiteral("◆  Ready for your next idea.                         Completed"),
-              QStringLiteral("settingsPreviewMessage"), preview));
+        connect(editorFamily, &QComboBox::currentIndexChanged, preview, showEditorFont);
     appearanceLayout->addWidget(preview);
     chrome_geometry::addSpacing(appearanceLayout, 8);
     appearanceLayout->addWidget(
@@ -588,7 +574,7 @@ QWidget#settingsWorkspaceHeading, QWidget#settingsWorkspaceBody,
 QWidget#settingsWorkspaceAppearance, QWidget#settingsWorkspaceTypography,
 QStackedWidget#settingsWorkspacePages, QScrollArea#settingsWorkspaceScroll,
 QScrollArea#settingsWorkspaceScroll > QWidget > QWidget { background:%1; color:%2; }
-QLabel#settingsWorkspaceEyebrow { color:%7; font-size:{{caption}}px; font-weight:600; letter-spacing:1px; }
+QLabel#settingsWorkspaceEyebrow { color:%5; font-size:{{caption}}px; font-weight:600; letter-spacing:1px; }
 QLabel#settingsWorkspaceTitle { color:%2; font-size:{{px:30}}px; font-weight:600; }
 QLabel#settingsWorkspaceSubtitle, QLabel#settingsWorkspaceIntro { color:%3; font-size:{{reading}}px; }
 QLabel#settingsWorkspaceShortcut { color:%3; font-size:{{caption}}px; }
@@ -596,30 +582,22 @@ QLabel#settingsWorkspaceHelp { color:%3; font-size:{{body}}px; }
 QLabel#settingsWorkspaceSectionTitle { color:%2; font-size:{{px:22}}px; font-weight:500; }
 QLabel#settingsWorkspaceSubheading { color:%2; font-size:{{reading}}px; font-weight:600; }
 QListWidget#settingsWorkspaceNavigation { padding:0 20px 0 0; border:0;
- border-right:1px solid %5; background:transparent; outline:0; }
+ border-right:1px solid %4; background:transparent; outline:0; }
 QListWidget#settingsWorkspaceNavigation::item { padding:0; border:0; background:transparent; color:transparent; }
-QFrame#settingsWorkspaceDivider { border:0; background:%5; }
+QFrame#settingsWorkspaceDivider { border:0; background:%4; }
 QFrame#settingsWorkspaceAccent { border:0; background:transparent; }
-QFrame#settingsWorkspacePreview {
- border:1px solid %5; border-radius:7px; background:%6; }
-QLabel#settingsAccentCheck { color:%7; font-size:{{reading}}px; }
+QLabel#settingsAccentCheck { color:%5; font-size:{{reading}}px; }
 QLabel#settingsAccentTitle { color:%2; font-size:{{body}}px; font-weight:600; }
-QLabel#settingsPreviewTabs { min-height:32px; padding:0 12px; border-bottom:2px solid %4;
- color:%2; background:%6; font-size:{{micro}}px; }
-QLabel#settingsPreviewCode { padding:14px 17px; color:%3; font-size:{{body}}px; }
-QLabel#settingsPreviewMessage { min-height:34px; padding:0 17px; border-top:1px solid %5;
- color:%2; background:%6; font-size:{{body}}px; }
 QLabel#storageUsage,
 QLabel#storageStatus, QComboBox#storageDetailDays, QLabel#settingsWorkspaceFieldLabel,
 QComboBox#computerWorkDisplay { color:%2; font-size:{{reading}}px; }
-QWidget#settingsWorkspaceFooter { padding-top:18px; border-top:1px solid %5;
+QWidget#settingsWorkspaceFooter { padding-top:18px; border-top:1px solid %4;
  background:transparent; }
 QDialog[kvRole="settingsDialog"] { border:0; background:transparent; }
 )QSS"),
                                            interfaceFontSizePixels_);
     setStyleSheet(sheet.arg(palette.pageBackground, palette.textMain, palette.textMuted,
-                            palette.accent, palette.border, palette.panelBackground,
-                            palette.accentText));
+                            palette.border, palette.accentText));
     chrome_geometry::apply(this, interfaceFontSizePixels);
 }
 

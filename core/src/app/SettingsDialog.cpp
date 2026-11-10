@@ -170,6 +170,10 @@ void SettingsDialog::initialize(const AppearanceSettings& settings) {
     setAppearanceSettings(initialSettings_);
     navigation_->setCurrentRow(0);
     updateThemePreview();
+    // The system can switch appearance while the dialog follows it. Only the marks follow:
+    // re-applying the preview here would undo cancelPreview().
+    if (theme_ != nullptr)
+        connect(theme_, &ThemeManager::themeChanged, this, &SettingsDialog::updateThemeCards);
     updateDirtyState();
 }
 
@@ -360,18 +364,27 @@ void SettingsDialog::updateDirtyState() {
 }
 
 void SettingsDialog::updateThemePreview() {
+    if (theme_ != nullptr)
+        theme_->previewMode(static_cast<ThemeManager::Mode>(selectedThemeMode_));
+    updateThemeCards();
+}
+
+void SettingsDialog::updateThemeCards() {
     const bool followsSystem = selectedThemeMode_ == static_cast<int>(ThemeManager::Mode::System);
     {
         const QSignalBlocker blocker(followSystem_);
         followSystem_->setChecked(followsSystem);
     }
     followSystem_->setEnabled(theme_ != nullptr);
+    // While following the system, the card of the theme in use stays marked.
+    const int shownMode =
+        followsSystem ? static_cast<int>(currentThemePalette().dark ? ThemeManager::Mode::Dark
+                                                                    : ThemeManager::Mode::Light)
+                      : selectedThemeMode_;
     for (auto* card : themeCards_) {
         card->setEnabled(theme_ != nullptr);
-        card->setChecked(card->property("themeMode").toInt() == selectedThemeMode_);
+        card->setChecked(card->property("themeMode").toInt() == shownMode);
     }
-    if (theme_ != nullptr)
-        theme_->previewMode(static_cast<ThemeManager::Mode>(selectedThemeMode_));
 }
 
 void SettingsDialog::selectThemeMode(const int mode) {

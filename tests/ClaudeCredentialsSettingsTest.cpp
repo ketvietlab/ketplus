@@ -1,8 +1,13 @@
+#include "app/SettingsAppearancePreview.h"
 #include "app/SettingsClaudeAnalytics.h"
 #include "app/SettingsClaudeCredentials.h"
 #include "app/SettingsDialog.h"
 #include "app/SettingsWorkspacePage.h"
 #include "ui/Theme.h"
+
+#include "KetAppearance.h"
+#include "KetBadge.h"
+#include "KetThemeCard.h"
 #include <QAbstractButton>
 #include <QComboBox>
 #include <QDir>
@@ -10,6 +15,7 @@
 #include <QFontInfo>
 #include <QLabel>
 #include <QLineEdit>
+#include <QScopeGuard>
 #include <QSet>
 #include <QSignalSpy>
 #include <QStackedWidget>
@@ -24,6 +30,48 @@ class ClaudeCredentialsSettingsTest : public QObject {
         QStandardPaths::setTestModeEnabled(true);
         QCoreApplication::setOrganizationName("KetPlusTests");
         QCoreApplication::setApplicationName("ClaudeCredentialsSettingsTest");
+    }
+    // Cancel and Escape put the saved theme back after a card previewed another one.
+    void cancellingRestoresTheSavedTheme() {
+        for (const bool escape : {false, true}) {
+            ketplus::ThemeManager theme(*qApp);
+            theme.setMode(ketplus::ThemeManager::Mode::Light);
+            QVERIFY(!theme.palette().dark);
+            ketplus::SettingsDialog dialog(ketplus::AppearanceSettings{}, theme);
+            auto* dark = dialog.findChild<ket::ThemeCard*>("darkThemeCard");
+            QVERIFY(dark);
+            dark->click();
+            QVERIFY(theme.palette().dark);
+            if (escape) {
+                dialog.show();
+                QTest::keyClick(&dialog, Qt::Key_Escape);
+            } else {
+                dialog.findChild<QAbstractButton*>("settingsCancelButton")->click();
+            }
+            QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Light);
+            QVERIFY2(!theme.palette().dark, escape ? "Escape" : "Cancel");
+        }
+    }
+    // The workspace preview is drawn at the interface zoom, its badge included.
+    void workspacePreviewFollowsTheZoom() {
+        auto& appearance = ket::Appearance::instance();
+        const qreal zoom = appearance.zoom();
+        const auto restore = qScopeGuard([&] { appearance.setZoom(zoom); });
+        appearance.setZoom(1.0);
+        ketplus::WorkspacePreview preview;
+        preview.resize(preview.sizeHint());
+        preview.show();
+        const int codePixels = preview.codeFont().pixelSize();
+        const int height = preview.sizeHint().height();
+        appearance.setZoom(16.0 / 14.0);
+        QVERIFY(preview.codeFont().pixelSize() > codePixels);
+        QVERIFY(preview.sizeHint().height() > height);
+        // The badge takes its zoomed size at once, before any resize of the preview.
+        auto* badge = preview.findChild<ket::Badge*>();
+        QVERIFY(badge);
+        QTRY_COMPARE(badge->size(), badge->sizeHint());
+        preview.resize(preview.sizeHint());
+        QVERIFY(preview.rect().contains(badge->geometry()));
     }
     void composedSettingsFitAndRenderInBothThemes() {
         ketplus::ThemeManager theme(*qApp);
@@ -187,10 +235,10 @@ class ClaudeCredentialsSettingsTest : public QObject {
         QCOMPARE(family->currentData().toString(), QStringLiteral("KET Sans Mono"));
         QCOMPARE(family->currentText(), QString::fromUtf8("KÉT Sans Mono"));
         QCOMPARE(dialog->settings().fontFamily, QStringLiteral("KET Sans Mono"));
-        auto* code = page.findChild<QLabel*>("settingsPreviewCode");
+        auto* code = page.findChild<ketplus::WorkspacePreview*>("settingsWorkspacePreview");
         QVERIFY(code);
-        QCOMPARE(code->font().family(), QStringLiteral("KET Sans Mono"));
-        QCOMPARE(QFontInfo(code->font()).family(), QStringLiteral("KET Sans Mono"));
+        QCOMPARE(code->codeFamily(), QStringLiteral("KET Sans Mono"));
+        QCOMPARE(QFontInfo(code->codeFont()).family(), QStringLiteral("KET Sans Mono"));
         // The mock's rows: a 200 px select at the end, and the font named in the help line.
         page.resize(1440, 900);
         page.showSection("typography");
