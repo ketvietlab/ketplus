@@ -61,6 +61,10 @@ The size target was also opt-in: it did nothing until the user saved it once.
     attachments, retention, 128 MB of free pages and archive expiry, then batches of 256
     replay rows for up to 50 ms. A real journal has about a million replay rows, and one
     batch per pass made a sweep take several minutes.
+  - The detail sweep checks each turn's eligibility (running, latest 20, acknowledged, old,
+    completed, no question or approval) once per turn in a batch instead of once per row
+    and lane. The rows it may change never alter a turn's eligibility within the
+    transaction, so the result is the same.
   - It waits, in `waiting_for_idle`, while a session is active.
   - It ends `done` once a whole detail sweep after the last change found nothing to trim or
     return. A run also ends `stopped` after 30 minutes, or `failed` after 50 writes in a
