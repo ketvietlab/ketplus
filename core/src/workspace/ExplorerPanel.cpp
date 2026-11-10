@@ -160,6 +160,8 @@ void ExplorerPanel::revealPath(const QString& path) {
         // A file outside the open folder has nothing to select here.
         return;
     }
+    // A collapsed root hides the tree; open it so the revealed file is on screen.
+    rootRow_->setChecked(true);
     if (!tryRevealPath(target)) {
         // The folders on the way are still loading; directoryLoaded finishes the job.
         pendingReveal_ = target;

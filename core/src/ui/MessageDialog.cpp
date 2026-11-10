@@ -102,7 +102,13 @@ std::optional<int> number(QWidget* parent, const QString& title, const QString& 
             dialog->accept();
     };
     QObject::connect(accept, &QAbstractButton::clicked, &loop, submit);
-    QObject::connect(field, &QLineEdit::returnPressed, &loop, submit);
+    // Return presses the focused button, as in a QDialog, and submits from the field.
+    for (const auto key : {Qt::Key_Return, Qt::Key_Enter}) {
+        auto* enter = new QShortcut(QKeySequence(key), dialog);
+        enter->setContext(Qt::WidgetWithChildrenShortcut);
+        QObject::connect(enter, &QShortcut::activated, &loop,
+                         [cancel, accept] { (cancel->hasFocus() ? cancel : accept)->click(); });
+    }
     QObject::connect(cancel, &QAbstractButton::clicked, dialog, &ket::Dialog::reject);
     QObject::connect(dialog, &ket::Dialog::finished, &loop, &QEventLoop::quit);
     QObject::connect(dialog, &QObject::destroyed, &loop, &QEventLoop::quit);
