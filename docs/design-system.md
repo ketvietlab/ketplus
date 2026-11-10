@@ -264,12 +264,14 @@ expanded root row, and rows follow `KetFileRow` (indent, chevron, open-folder ic
 Git status). New File, New Folder and Collapse Folders are in the Explorer context
 menu. Editor tabs carry file icons, the tab strip ends with the terminal toggle, and
 the breadcrumb offers View diff while the open file has Git changes. The editor
-column holds the terminal below the editor and the document's status row (state,
-Ln/Col, encoding, line endings, language); the window's status bar below everything
-keeps messages, Git and the product name. The window status bar composes
+column holds the terminal below the editor. One status bar spans the window: messages
+and the Git branch on the left, then the document's state, Ln/Col, language,
+encoding and line endings. It composes
 `ket::StatusBar` and `StatusItem` inside a small QStatusBar host, so existing message
 timeouts, format menus and visibility APIs stay intact while the kit paints/scales the
-bar. `ketplus_lite_window_tests` builds the Lite window and checks this layout.
+bar. The host keeps the bar's height, and the menu buttons opt out of the app's
+`QToolButton` minimum height, so every entry is centred in the bar.
+`ketplus_lite_window_tests` builds the Lite window and checks this layout.
 
 Core confirmations, messages and number prompts (Go to Line) use `ui/MessageDialog`, a
 synchronous adapter over `ket::Dialog`; the KétPlus Terminal About box uses it too.
