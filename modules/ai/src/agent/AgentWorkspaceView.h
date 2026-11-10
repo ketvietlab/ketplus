@@ -409,6 +409,12 @@ class AgentWorkspaceView final : public QWidget {
         emit settingsRequested(section);
     }
     Q_INVOKABLE void requestTagFilter(const QString& tag) { emit tagFilterRequested(tag); }
+    // The labels the header's Add tag menu offers, each as {label, color}.
+    Q_INVOKABLE [[nodiscard]] QVariantList tagCatalog() const;
+    Q_INVOKABLE void requestConversationTag(const QString& conversationId, const QString& label,
+                                            bool tagged) {
+        emit conversationTagRequested(conversationId, label, tagged);
+    }
     Q_INVOKABLE void requestProductNavigation(const QString& destination) {
         if (!destination.isEmpty())
             emit productNavigationRequested(destination);
@@ -504,6 +510,7 @@ class AgentWorkspaceView final : public QWidget {
 
   signals:
     void tagFilterRequested(const QString& tag);
+    void conversationTagRequested(const QString& conversationId, const QString& label, bool tagged);
     void activityGroupRequested(const QString& scope, const QString& key, bool expanded);
     void historyStateChanged();
     void findActionsProvidedChanged();

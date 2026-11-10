@@ -103,7 +103,8 @@ int main(int argc, char** argv) {
          {"theme", "system, light or dark", "theme", "system"},
          {"zoom", "Interface zoom (1–1.5)", "zoom", "1"},
          {"open",
-          "mode, model or limits (a composer panel), welcome, viewer or tasks, for captures",
+          "mode, model, limits, reviewer or tags (a panel), composer (focused), welcome, viewer or "
+          "tasks, for captures",
           "panel"},
          {"transcript", "claude, codex, cursor or error: the mock's workspace/<state> messages",
           "provider"},
@@ -134,13 +135,17 @@ int main(int argc, char** argv) {
         return 2;
     }
     // The composer button that opens each panel, as in the mock's --open.
-    const QHash<QString, QString> panelButtons{
-        {"mode", "permissionButton"}, {"model", "modelButton"}, {"limits", "usageLimitsButton"}};
+    const QHash<QString, QString> panelButtons{{"mode", "permissionButton"},
+                                               {"model", "modelButton"},
+                                               {"limits", "usageLimitsButton"},
+                                               {"reviewer", "headerReviewerButton"},
+                                               {"tags", "headerAddTagButton"}};
     const auto panel = parser.value("open");
     // `welcome` opens no panel: the conversation has no messages, like the mock's welcome state.
     const bool welcome = panel == "welcome";
+    // `composer` focuses the input, like the mock's.
     if (!panel.isEmpty() && !welcome && panel != "viewer" && panel != "tasks" &&
-        !panelButtons.contains(panel)) {
+        panel != "composer" && !panelButtons.contains(panel)) {
         report({{"event", "error"}, {"reason", "Invalid panel"}});
         return 2;
     }
@@ -180,7 +185,12 @@ int main(int argc, char** argv) {
     if (capture) {
         auto active = conversations.first().toMap();
         active.insert("provider", captureProvider);
+        // The mock's header: one tag, and a reviewer picker with nobody assigned.
+        active.insert("tags", QVariantList{QVariantMap{{"label", "Review"}, {"color", "#7c5cd6"}}});
+        active.insert("tagsEditable", true);
         conversations[0] = active;
+        QObject::connect(&view, &ketplus::AgentWorkspaceView::reviewerRequested, &view,
+                         [&view] { view.acceptReviewerState({{"available", true}}); });
         const auto resetsAt = [](int day, int hour, int minute) {
             return QDateTime(QDate(2026, 11, day), QTime(hour, minute)).toSecsSinceEpoch();
         };
@@ -379,6 +389,12 @@ int main(int argc, char** argv) {
                 !QMetaObject::invokeMethod(viewer, "showImages",
                                            Q_ARG(QVariant, QVariantList{shot}), Q_ARG(QVariant, 0)))
                 report({{"event", "error"}, {"reason", "Image viewer not found"}});
+        });
+    else if (panel == "composer")
+        QTimer::singleShot(1000, &view, [&view] {
+            auto* prompt = findItem(view.quickView()->rootObject(), "agentPrompt");
+            if (!prompt || !QMetaObject::invokeMethod(prompt, "forceActiveFocus"))
+                report({{"event", "error"}, {"reason", "Composer input not found"}});
         });
     else if (!panel.isEmpty() && !welcome && panel != "tasks")
         QTimer::singleShot(1000, &view, [&] {

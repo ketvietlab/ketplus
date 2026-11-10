@@ -91,6 +91,9 @@ class AgentSessionManager final : public QObject {
     void markConversationSeen(const QString& worktreePath, const QString& conversationId);
     void renameConversation(const QString& worktreePath, const QString& conversationId,
                             const QString& title);
+    // Adds or removes one label; the daemon stores the result (`session.tags.set`).
+    void setConversationTag(const QString& worktreePath, const QString& conversationId,
+                            const QString& label, bool tagged);
     bool archiveConversation(const QString& worktreePath, const QString& conversationId);
     bool restoreConversation(const QString& worktreePath, const QString& conversationId);
     bool cancelConversation(const QString& worktreePath, const QString& conversationId);
@@ -371,6 +374,7 @@ class AgentSessionManager final : public QObject {
     void recordSessionError(const SessionPtr& session, const QString& error, bool notify);
     void syncConversationTitle(const SessionPtr& session);
     void syncArchived(const SessionPtr& session);
+    [[nodiscard]] QVariantList listedTags(const SessionPtr& session) const;
     void applyDaemonArchiveState(const SessionPtr& session, bool archivedByDaemon);
     void selectAwayFromArchived(const SessionPtr& session);
     void persistWorkspace(const QString& path) const;

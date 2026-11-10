@@ -294,6 +294,9 @@ QVariantList AgentSessionManager::conversations(const QString& worktreePath) con
             {QStringLiteral("provider"), listedProvider(session->options)},
             {QStringLiteral("title"), session->title},
             {QStringLiteral("number"), session->number},
+            {QStringLiteral("tags"), listedTags(session)},
+            {QStringLiteral("tagsEditable"),
+             !session->threadId.isEmpty() && server_->hasTagSupport()},
             {QStringLiteral("agentTurnNumber"), session->agentTurnNumber},
             {QStringLiteral("agentTurnTitle"), session->agentTurnTitle},
             {QStringLiteral("agentTurnReply"), session->agentTurnReply},
@@ -1570,6 +1573,8 @@ void AgentSessionManager::handleDaemonSession(const QJsonObject& stored) {
                                         {"adapter", stored.value("adapter")}});
     if (const QString number = stored.value(QStringLiteral("number")).toString(); !number.isEmpty())
         session->number = number;
+    if (stored.contains(QStringLiteral("tags")))
+        session->tags = stored.value(QStringLiteral("tags")).toVariant().toStringList();
     const QJsonObject agentTurn = stored.value(QStringLiteral("agent_turn")).toObject();
     session->agentTurnNumber = agentTurn.value(QStringLiteral("number")).toString();
     session->agentTurnTitle = agentTurn.value(QStringLiteral("title")).toString();

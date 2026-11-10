@@ -49,6 +49,7 @@ class CodexAppServer final : public QObject {
     [[nodiscard]] bool usesDaemon() const noexcept { return daemon_ != nullptr; }
     [[nodiscard]] bool hasCompactWindowSupport() const noexcept;
     [[nodiscard]] bool hasArchiveSupport() const noexcept;
+    [[nodiscard]] bool hasTagSupport() const noexcept;
     [[nodiscard]] bool isRestoring() const noexcept { return restoring_; }
     [[nodiscard]] bool hasDaemonTranscriptWindow() const noexcept {
         return daemonHasTranscriptWindow_;
@@ -88,6 +89,9 @@ class CodexAppServer final : public QObject {
     void markDaemonSessionSeen(const QString& sessionId, qint64 cursor, ResponseCallback callback);
     void setDaemonSessionArchived(const QString& sessionId, bool archived,
                                   ResponseCallback callback);
+    // Replaces the conversation's labels in the daemon journal (`session.tags.set`).
+    void setDaemonSessionTags(const QString& sessionId, const QStringList& tags,
+                              ResponseCallback callback);
     [[nodiscard]] bool isDaemonSessionRestoring(const QString& sessionId) const;
     // Whether the session's installed transcript window still receives its live events:
     // nothing invalidated it and no window read or catch-up is replacing it.

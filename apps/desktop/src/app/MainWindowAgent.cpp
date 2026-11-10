@@ -468,6 +468,11 @@ void MainWindow::ensureAgentWorkspace() {
                     renameAgentConversation(agentWorkspace_->activePath(), conversationId);
                 });
             });
+    connect(agentWorkspace_, &AgentWorkspaceView::conversationTagRequested, this,
+            [this](const QString& conversationId, const QString& label, const bool tagged) {
+                agentManager_->setConversationTag(agentWorkspace_->activePath(), conversationId,
+                                                  label, tagged);
+            });
     connect(agentWorkspace_, &AgentWorkspaceView::conversationArchiveRequested, this,
             [this](const QString& conversationId) {
                 archiveAgentConversation(agentWorkspace_->activePath(), conversationId);

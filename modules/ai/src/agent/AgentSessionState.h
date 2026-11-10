@@ -29,6 +29,8 @@ struct AgentSessionManager::Session final {
     QString agentTurnTitle;
     bool agentTurnReply{false};
     bool customTitle{false};
+    // The user's labels, as the daemon stores them (`session.tags/1`).
+    QStringList tags;
     bool archived{false};
     // An archive or restore made here that the daemon has not confirmed (ADR 0100).
     bool archiveUnsent{false};
