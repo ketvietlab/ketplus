@@ -340,11 +340,6 @@ QLabel[kvRole="sidebarHeading"] {
     font-weight: 700;
 }
 
-QLabel[kvRole="sidebarFolder"] {
-    color: {{textMuted}};
-    font-size: 11px;
-}
-
 QLabel[kvRole="sourceControlHeading"] {
     color: {{textMain}};
     font-size: 11px;

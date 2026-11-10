@@ -49,8 +49,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 - Lite shell implementation now connects the Qt mock activity rail to Explorer,
   Search, Source Control and Settings. First use opens a folder welcome surface;
-  file tabs show a kit breadcrumb outside the Scintilla document viewport.
-  Native visual acceptance remains in the later UI review phase.
+  file tabs show a kit breadcrumb outside the Scintilla document viewport. The
+  Explorer, activity bar, tab strip, breadcrumb View diff, terminal placement and
+  the single status bar follow the Lite mock (#149); `KETPLUS_CAPTURE_STEPS` drives
+  offscreen review captures (`docs/design-system.md`).
 
 - Két UI stack: Lite and Pro use KÉT Sans as the primary interface face, with
   Inter/platform fallback; fresh editor settings use KÉT Sans Mono Medium at

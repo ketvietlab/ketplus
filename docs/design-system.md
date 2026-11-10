@@ -148,8 +148,21 @@ captures in addition to model assertions. The standalone mock has its own build
 and smoke suite in `mockups/qt/README.md`; passing it does not test the product.
 
 For an offscreen Lite review capture, set `KETPLUS_CAPTURE=<file>` and optionally
-`KETPLUS_CAPTURE_THEME=light|dark`. Such captures verify rendering, not installed
-bundle signing, deployment or device behavior.
+`KETPLUS_CAPTURE_THEME=light|dark`, `KETPLUS_CAPTURE_ZOOM=90|100|110|125` and
+`KETPLUS_CAPTURE_STEPS`. The steps, separated by `;`, run 300 ms apart: a menu path
+such as `View/Terminal` or `Edit/Settings…` triggers that action, `click:<label>`
+presses the button with that text or accessible name in the top-most window, and
+`type:<text>` enters text in the focused field and presses Return. The capture saves
+the top-most window, so an open dialog is captured instead of the main window, and
+fails when a step finds nothing. For example, Typography at 125%:
+
+```sh
+QT_QPA_PLATFORM=offscreen KETPLUS_CAPTURE=typography.png KETPLUS_CAPTURE_ZOOM=125 \
+  KETPLUS_CAPTURE_STEPS='Edit/Settings…;click:Typography' "KetPlus CM.app/Contents/MacOS/KetPlus CM" <folder>
+```
+
+Such captures verify rendering, not installed bundle signing, deployment or device
+behavior.
 
 ## Conversation composer composition
 
@@ -242,9 +255,21 @@ compatibility forwarding call to `KetTheme.px`, not a second metric table. The
 unused local motion-clock wrapper has been removed; running indicators hold the
 kit's gated shared clock directly.
 
-Lite's status bar composes `ket::StatusBar` and `StatusItem` inside a small
-QStatusBar host. Existing message timeouts, format menus and visibility APIs stay
-intact while the kit paints/scales the bar. Settings list delegates are transparent
+Lite's window follows the Lite mock (`KetPlusMock --edition=lite`): the activity
+bar marks the panel on screen with the selected nav fill and an accent rule; the
+Explorer pane header is EXPLORER with Refresh, the open folder is the tree's
+expanded root row, and rows follow `KetFileRow` (indent, chevron, open-folder icon,
+Git status). New File, New Folder and Collapse Folders are in the Explorer context
+menu. Editor tabs carry file icons, the tab strip ends with the terminal toggle, and
+the breadcrumb offers View diff while the open file has Git changes. The editor
+column holds the terminal below the editor. One status bar spans the window: messages
+and the Git branch on the left, then the document's state, Ln/Col, language,
+encoding and line endings. It composes
+`ket::StatusBar` and `StatusItem` inside a small QStatusBar host, so existing message
+timeouts, format menus and visibility APIs stay intact while the kit paints/scales the
+bar. The host keeps the bar's height, and the menu buttons opt out of the app's
+`QToolButton` minimum height, so every entry is centred in the bar.
+`ketplus_lite_window_tests` builds the Lite window and checks this layout. Settings list delegates are transparent
 beneath their kit NavItems, preventing duplicate labels in unselected rows.
 
 Application font and palette defaults are set on QApplication, not a global

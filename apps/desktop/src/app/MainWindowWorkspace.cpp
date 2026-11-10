@@ -99,7 +99,6 @@ ExplorerPanel* MainWindow::ensureExplorer() {
     connect(explorer_, &ExplorerPanel::gitDiffRequested, this,
             [this](const QString& path) { requestFileDiff(path); });
     connect(explorer_, &ExplorerPanel::openFolderRequested, this, &MainWindow::chooseFolder);
-    connect(explorer_, &ExplorerPanel::hideRequested, this, [this] { setExplorerVisible(false); });
     connect(explorer_, &ExplorerPanel::pathRenamed, this,
             [this](const QString& from, const QString& to) {
                 for (EditorWidget* editor : tab_paths::retarget(tabs_, from, to)) {

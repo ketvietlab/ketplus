@@ -70,9 +70,10 @@ void DocumentFormatControls::addMenus(QMenu* menu) {
 
 void DocumentFormatControls::addStatusButtons(
     const std::function<QToolButton*(QMenu*, const QString&)>& makeButton) {
+    // The mock's order: language, encoding, line endings.
+    languageButton_ = makeButton(languageMenu_, QStringLiteral("Language"));
     encodingButton_ = makeButton(encodingMenu_, QStringLiteral("File encoding"));
     lineEndingButton_ = makeButton(lineEndingMenu_, QStringLiteral("Line endings"));
-    languageButton_ = makeButton(languageMenu_, QStringLiteral("Language"));
 }
 
 void DocumentFormatControls::syncMenus() {

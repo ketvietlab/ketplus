@@ -4,6 +4,7 @@
 #include "KetChrome.h"
 
 #include <QDir>
+#include <QHBoxLayout>
 #include <QResizeEvent>
 
 namespace ketplus {
@@ -19,6 +20,12 @@ void EditorWidget::setBreadcrumbPath(const QString& path) {
     breadcrumb_->setToolTip(path);
     breadcrumb_->setVisible(!path.isEmpty());
     updateBreadcrumbGeometry();
+}
+
+void EditorWidget::addBreadcrumbAction(QWidget* action) {
+    if (!breadcrumb_)
+        setBreadcrumbPath({});
+    breadcrumb_->actions()->addWidget(action);
 }
 
 void EditorWidget::updateBreadcrumbGeometry() {

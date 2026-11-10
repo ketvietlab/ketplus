@@ -48,7 +48,6 @@ class SearchPanel final : public QWidget {
     void cancelRequested();
     void replaceAllRequested();
     void matchActivated(const QString& path, int line, int column, int length);
-    void hideRequested();
 
   private:
     void activateItem(QTreeWidgetItem* item);

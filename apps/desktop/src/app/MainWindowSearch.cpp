@@ -51,8 +51,6 @@ SearchPanel* MainWindow::ensureSearchPanel() {
     connect(searchPanel_, &SearchPanel::replaceAllRequested, this, &MainWindow::replaceInWorkspace);
     connect(searchPanel_, &SearchPanel::matchActivated, this, &MainWindow::openSearchMatch);
     applySearchPanelColors();
-    connect(searchPanel_, &SearchPanel::hideRequested, this,
-            [this] { setSearchPanelVisible(false); });
     return searchPanel_;
 }
 
