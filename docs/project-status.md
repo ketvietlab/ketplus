@@ -31,6 +31,9 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   The `teams/1` protocol (#456) lists, reads, creates, changes and deletes teams for
   local clients; `team.create` starts every member as a named conversation (no turn),
   all or nothing, and `team.changed` / `team.removed` reach every local client.
+  Tasks (`teams.tasks/1`, #457): `T-n` ids, one owner, the state table of ADR 0112 §6,
+  criteria only the leader or the user writes, an append-only history, dependencies,
+  and a handover that moves the task's own worktree and branch to the new owner.
 
 - The unreviewed workspaces UI layer consumes kit worktree actions/badges,
   searchable picker rows and Connections controls. Repository/worktree switching

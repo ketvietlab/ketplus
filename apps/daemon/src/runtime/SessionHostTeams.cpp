@@ -1,8 +1,12 @@
 // ADR 0112: the session runtime's side of agent teams.
 #include "runtime/SessionHost.h"
 
+#include "protocol/DaemonProtocol.h"
+
+#include <QDir>
 #include <QFileInfo>
 #include <QProcess>
+#include <QUuid>
 
 namespace ketplus::daemon {
 
@@ -70,15 +74,6 @@ void SessionHost::startTeams() {
                                {{QStringLiteral("team_id"), teamId},
                                 {QStringLiteral("repository"), repository}});
             });
-}
-
-// teams.tasks/1 arrives with the tasks of #457.
-QJsonObject SessionHost::teamTaskCommand(const QString& type, const QJsonObject& request) {
-    (void)request;
-    return {
-        {QStringLiteral("ok"), false},
-        {QStringLiteral("error_code"), QStringLiteral("unknown_operation")},
-        {QStringLiteral("error_message"), QStringLiteral("Unknown team request %1.").arg(type)}};
 }
 
 } // namespace ketplus::daemon

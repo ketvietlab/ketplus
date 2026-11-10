@@ -112,6 +112,11 @@ class AgentBroker final : public QObject {
     // Conversations whose running turn a message started, by session id: the first sender's
     // `number`, `title` and `kind`. Clients show the sender on the conversation's row.
     [[nodiscard]] QHash<QString, QJsonObject> automaticTurnSenders() const;
+    // ADR 0112: a message of the team (assignment, digest, review, decision) to a member. It
+    // starts its own chain at hop 1, so the loop guard still applies. Returns an error.
+    QString postTeamMessage(const QString& fromSession, const QString& fromTitle,
+                            const QString& toSession, const QString& kind, const QString& body,
+                            bool expectReply, QString* messageId = nullptr);
     // ADR 0067: a reviewer was assigned; the next finished turn is compared with this moment.
     void noteReviewerAssigned(const QString& sessionId);
     // ADR 0067: only Claude enforces the read-only review guard on every tool call. Codex keeps
