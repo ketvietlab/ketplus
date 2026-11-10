@@ -42,7 +42,11 @@ namespace {
 // banner draws itself and lets the clicks through to this button.
 class StorageNoticeButton final : public QAbstractButton {
   public:
-    using QAbstractButton::QAbstractButton;
+    explicit StorageNoticeButton(QWidget* parent) : QAbstractButton(parent) {
+        // A button's Button role would make the banner's labels draw in ButtonText rather
+        // than in the banner's tone.
+        setBackgroundRole(QPalette::Window);
+    }
 
   protected:
     void paintEvent(QPaintEvent*) override {}

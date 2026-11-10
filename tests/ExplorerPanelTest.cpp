@@ -552,6 +552,10 @@ void ExplorerPanelTest::filtersTagsAndUsesAuthoritativeStorageWarning() {
     auto* banner = warning->findChild<ket::Banner*>();
     QCOMPARE(banner->title(), QString("Journal is 9.0 GB"));
     QCOMPARE(banner->message(), QString("Over its 5 GB limit"));
+    // The banner's text keeps its tone inside the clickable wrapper, as in the mock.
+    for (auto* label : banner->findChildren<QLabel*>())
+        QCOMPARE(label->palette().color(label->foregroundRole()),
+                 label->palette().color(QPalette::WindowText));
     QSignalSpy opened(&bar, &ketplus::ActivityBar::settingsSectionRequested);
     QTest::mouseClick(warning->findChild<QAbstractButton*>("sidebarStorageSettings"),
                       Qt::LeftButton);
