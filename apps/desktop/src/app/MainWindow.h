@@ -267,6 +267,10 @@ class MainWindow final : public QMainWindow {
     void ensureAgentWorkspace();
     void syncAgentWorkspaceContext(bool loadTranscript);
     void createAgentWorktree();
+    // Create worktree… in a conversation's picker: creates in `repository` and moves that
+    // conversation to it, checked against the picker's context `revision`.
+    void createConversationWorktree(const QString& repository, qint64 revision);
+    void moveConversationToCreatedWorktree(const QString& worktreePath, const QString& branch);
     void startNewAgentConversation();
     [[nodiscard]] QString primaryWorktreePath() const;
     void showAgentWorktreeContextMenu(const QString& path);
@@ -439,6 +443,10 @@ class MainWindow final : public QMainWindow {
     QString repositoryDisplayRoot_;
     QString promotedWorktreePath_;
     bool pendingConversationWorktree_{false};
+    // The conversation whose picker asked for the worktree being created.
+    QString pickerWorktreeAgentPath_;
+    QString pickerWorktreeConversation_;
+    qint64 pickerWorktreeRevision_{0};
     QString pendingDeleteConversationPath_;
     QStringList pendingDeleteWorktreePaths_;
     QString pendingDeleteWorktreeRepository_;

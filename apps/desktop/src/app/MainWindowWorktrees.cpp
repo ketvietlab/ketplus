@@ -1,6 +1,8 @@
+#include "KetDialog.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "app/AgentWorktreeCreator.h"
+#include "app/AgentWorktreeDialog.h"
 #include "app/MainWindow.h"
 #include "app/SettingsWorkspacePage.h"
 #include "editor/EditorWidget.h"
@@ -17,6 +19,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonObject>
 #include <QLayout>
 #include <QMenu>
 #include <QMessageBox>
@@ -28,6 +31,7 @@
 #include <QUrl>
 
 #include <algorithm>
+#include <utility>
 
 namespace ketplus {
 void MainWindow::hideUtilityWorkspaces() {
@@ -254,4 +258,73 @@ QVariantList MainWindow::archivedWorktrees() const {
     }
     return result;
 }
+void MainWindow::createConversationWorktree(const QString& repository, const qint64 revision) {
+    if (agentManager_ == nullptr || agentWorkspace_ == nullptr || repository.isEmpty())
+        return;
+    if (agentDialogOpen(this, QStringLiteral("agentWorktreeDialogCard")))
+        return;
+    const QString agentPath = agentWorkspace_->activePath();
+    const QString conversation = agentManager_->activeConversationId(agentPath);
+    // The open folder's repository knows its main checkout; another repository from the
+    // picker is listed by its main checkout already.
+    const QString primary =
+        QFileInfo(sidebarRepositoryForPath(workspaceRoot_)).canonicalFilePath() ==
+                QFileInfo(repository).canonicalFilePath()
+            ? primaryWorktreePath()
+            : repository;
+    auto* form = new AgentWorktreeDialog(repository, nullptr,
+                                         AgentWorktreeDialog::Purpose::Worktree, primary);
+    form->useForThisConversation();
+    connect(form->present(this), &ket::Dialog::accepted, this,
+            [this, form, agentPath, conversation, revision, primary] {
+                // The reader can open another conversation while the card is open.
+                if (agentWorkspace_->activePath() != agentPath ||
+                    agentManager_->activeConversationId(agentPath) != conversation)
+                    return;
+                pickerWorktreeAgentPath_ = agentPath;
+                pickerWorktreeConversation_ = conversation;
+                pickerWorktreeRevision_ = revision;
+                agentWorktreeCreator_->create(primary, primary, form->branchName(),
+                                              form->baseBranch());
+            });
+}
+
+void MainWindow::moveConversationToCreatedWorktree(const QString& worktreePath,
+                                                   const QString& branch) {
+    const QString agentPath = std::exchange(pickerWorktreeAgentPath_, {});
+    const QString conversation = std::exchange(pickerWorktreeConversation_, {});
+    if (agentManager_ == nullptr)
+        return;
+    // The worktree is this conversation's even if it moved on meanwhile.
+    agentManager_->claimConversationWorktree(agentPath, conversation, worktreePath);
+    if (agentWorkspace_ == nullptr || agentWorkspace_->activePath() != agentPath ||
+        agentManager_->activeConversationId(agentPath) != conversation) {
+        statusBar()->showMessage(tr("Created worktree %1.").arg(branch), 5000);
+        return;
+    }
+    agentManager_->executionWorktreeCommand(
+        agentPath, QStringLiteral("session.worktree.switch"),
+        {{QStringLiteral("worktree_path"), worktreePath},
+         {QStringLiteral("expected_context_revision"), pickerWorktreeRevision_}},
+        [this, worktreePath, branch](const QJsonObject& result, const QString& error) {
+            if (!error.isEmpty() || !result.value(QStringLiteral("ok")).toBool()) {
+                const QString reason =
+                    !error.isEmpty() ? error
+                                     : result.value(QStringLiteral("error_message"))
+                                           .toString(tr("Choose it in Repository & worktree."));
+                statusBar()->showMessage(
+                    tr("Created worktree %1, but this conversation stayed where it was. %2")
+                        .arg(branch, reason),
+                    8000);
+                return;
+            }
+            const QString moved =
+                result.value(QStringLiteral("worktree_path")).toString(worktreePath);
+            setFileContextWorktree(moved);
+            promotedSidebarRepository_ = sidebarRepositoryForPath(moved);
+            scheduleSidebarRefresh(true);
+            statusBar()->showMessage(tr("Next turn: %1").arg(branch), 5000);
+        });
+}
+
 } // namespace ketplus

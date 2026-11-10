@@ -167,7 +167,8 @@ class ExecutionWorktreeDialogTest final : public QObject {
                      {});
             },
             [&](const QString& path) { selected = path; }, current,
-            {"/workspace/b", "/workspace/a"}, "/workspace/a", [&] { created = true; });
+            {"/workspace/b", "/workspace/a"}, "/workspace/a",
+            [&](const QString&, qint64) { created = true; });
         auto* dialog = parent.findChild<ket::Dialog*>("executionWorktreeDialog");
         QVERIFY(dialog);
         // An in-window card as the mock's: its title in the header, the actions in its footer.
@@ -380,19 +381,35 @@ class ExecutionWorktreeDialogTest final : public QObject {
         QCOMPARE(switches.constLast().value("expected_context_revision").toInt(), 5);
         QCOMPARE(switches.constLast().value("worktree_path").toString(), "/workspace/a-2");
     }
-    void createWorktreeOpensTheWorktreesPage() {
+    // Create worktree… creates for this conversation: the caller gets the repository the
+    // picker lists and the revision it read, so it can switch this conversation afterwards.
+    void createWorktreeIsForThisConversation() {
         QWidget parent; // the picker is a card inside this window
         parent.resize(900, 600);
         parent.show();
-        bool created = false;
+        QString repository;
+        qint64 revision = 0;
         ketplus::showExecutionWorktreeDialog(
-            &parent, [](const QString&, const QJsonObject&, auto) {}, [](const QString&) {}, {}, {},
-            {}, [&] { created = true; });
+            &parent,
+            [](const QString&, const QJsonObject&, auto done) {
+                done({{"worktrees", QJsonArray{}},
+                      {"total", 0},
+                      {"worktree_path", "/workspace/current"},
+                      {"context_revision", 6},
+                      {"switch_supported", true}},
+                     {});
+            },
+            [](const QString&) {}, {}, {"/workspace/a", "/workspace/b"}, "/workspace/b",
+            [&](const QString& listed, qint64 read) {
+                repository = listed;
+                revision = read;
+            });
         auto* dialog = parent.findChild<ket::Dialog*>("executionWorktreeDialog");
         auto* create = dialog->findChild<QAbstractButton*>("createWorktreeButton");
         QVERIFY(create && create->isVisibleTo(dialog));
         create->click();
-        QVERIFY(created);
+        QCOMPARE(repository, QStringLiteral("/workspace/b"));
+        QCOMPARE(revision, 6);
     }
 };
 QTEST_MAIN(ExecutionWorktreeDialogTest)

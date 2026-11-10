@@ -30,8 +30,8 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   through authenticated outbound Relay; this layer does not add SSH setup.
   There is no Worktrees page (ADR 0111): worktrees are created for a
   conversation, from New conversation or the repository picker's Create
-  worktree… card ("Start a conversation in it"), and switched from inside the
-  conversation.
+  worktree… card, which moves that conversation to the new worktree, and
+  switched from inside the conversation.
   Connections follows the mock's signed-in page: a page up to 1000 px wide, one
   card per phone and per Linux machine, kit badge metrics, inset activity
   separators and the kit empty state and avatar. Linux machines still connect

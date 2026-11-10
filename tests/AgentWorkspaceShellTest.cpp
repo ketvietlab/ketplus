@@ -1194,6 +1194,88 @@ class AgentWorkspaceShellTest final : public QObject {
         QVERIFY(conversationButton(QStringLiteral("New conversation"))->isChecked());
     }
 
+    // Repository & worktree → Create worktree… makes a worktree for the conversation that
+    // opened the picker: the open folder stays, and deleting the conversation offers it.
+    void pickerCreatesTheWorktreeForThisConversation() {
+        QTemporaryDir settings;
+        QTemporaryDir directory;
+        QVERIFY(settings.isValid());
+        QVERIFY(directory.isValid());
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
+
+        const QString repository = directory.filePath(QStringLiteral("ketviet"));
+        QVERIFY(QDir().mkpath(repository));
+        const auto git = [&repository](const QStringList& arguments) {
+            QProcess process;
+            process.start(QStringLiteral("git"),
+                          QStringList{QStringLiteral("-C"), repository} + arguments);
+            return process.waitForFinished(5000) && process.exitStatus() == QProcess::NormalExit &&
+                   process.exitCode() == 0;
+        };
+        QVERIFY(git({QStringLiteral("init"), QStringLiteral("-q"), QStringLiteral("-b"),
+                     QStringLiteral("main")}));
+        QVERIFY(git({QStringLiteral("config"), QStringLiteral("user.email"),
+                     QStringLiteral("picker-worktree-test@example.invalid")}));
+        QVERIFY(git({QStringLiteral("config"), QStringLiteral("user.name"),
+                     QStringLiteral("Picker Worktree Test")}));
+        QFile readme(QDir(repository).filePath(QStringLiteral("README.md")));
+        QVERIFY(readme.open(QIODevice::WriteOnly | QIODevice::Text));
+        QVERIFY(readme.write("test\n") > 0);
+        readme.close();
+        QVERIFY(git({QStringLiteral("add"), QStringLiteral("README.md")}));
+        QVERIFY(git({QStringLiteral("commit"), QStringLiteral("-qm"), QStringLiteral("initial")}));
+
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(repository);
+        window.resize(1200, 800);
+        window.show();
+        window.findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"))->click();
+        auto* view = window.findChild<ketplus::AgentWorkspaceView*>();
+        auto* manager = window.findChild<ketplus::AgentSessionManager*>();
+        QVERIFY(view && manager);
+        QTRY_VERIFY(!manager->activeConversationId(view->activePath()).isEmpty());
+        const QString agentPath = view->activePath();
+        const QString conversation = manager->activeConversationId(agentPath);
+
+        view->requestExecutionWorktree();
+        ket::Dialog* picker = nullptr;
+        QTRY_VERIFY((picker = window.findChild<ket::Dialog*>(
+                         QStringLiteral("executionWorktreeDialog"))) != nullptr);
+        auto* createButton =
+            picker->findChild<QAbstractButton*>(QStringLiteral("createWorktreeButton"));
+        QVERIFY(createButton);
+        createButton->click();
+        {
+            auto* card = openCard(window, QStringLiteral("agentWorktreeDialogCard"));
+            QVERIFY(card);
+            auto* start = card->findChild<QWidget*>(QStringLiteral("worktreeStartConversation"));
+            auto* note = card->findChild<QWidget*>(QStringLiteral("worktreeConversationNote"));
+            QVERIFY(start && note);
+            QVERIFY(!start->isVisibleTo(card));
+            QVERIFY(note->isVisibleTo(card));
+            auto* name = card->findChild<QLineEdit*>(QStringLiteral("worktreeBranchName"));
+            auto* confirm =
+                card->findChild<QAbstractButton*>(QStringLiteral("worktreeDialogConfirm"));
+            QVERIFY(name && confirm);
+            name->setText(QStringLiteral("feature/from-picker"));
+            QTRY_VERIFY(confirm->isEnabled());
+            confirm->click();
+        }
+        const QString createdPath =
+            directory.filePath(QStringLiteral("ketviet-feature-from-picker"));
+        QTRY_VERIFY_WITH_TIMEOUT(
+            manager->conversationOwnedWorktreePaths(agentPath, conversation).size() == 1, 5000);
+        QCOMPARE(
+            QFileInfo(manager->conversationOwnedWorktreePaths(agentPath, conversation).constFirst())
+                .canonicalFilePath(),
+            QFileInfo(createdPath).canonicalFilePath());
+        // The folder the window opened stays open; only the conversation moves.
+        QCOMPARE(view->activePath(), agentPath);
+        QCOMPARE(manager->activeConversationId(agentPath), conversation);
+    }
+
     void listsLinkedWorktreeConversationInSidebarBeforeFirstTurn() {
         QTemporaryDir settings;
         QTemporaryDir directory;

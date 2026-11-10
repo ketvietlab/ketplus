@@ -424,7 +424,16 @@ Basic.ApplicationWindow {
             label: "Start from"
             KetSelect { width: parent.width; model: ["develop", "integration", "main"] }
         }
-        KetChoice { width: parent.width; text: "Start a conversation in it"; description: "Opens Agent Workspace on the new worktree"; checked: true }
+        // The picker belongs to a conversation, so the new worktree is that conversation's.
+        Text {
+            width: parent.width
+            wrapMode: Text.Wrap
+            text: "This conversation moves to the new worktree from its next turn."
+            color: KetTheme.t.textSecondary
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.px(KetTheme.t.textMd, KetTheme.zoom)
+            lineHeight: 1.4
+        }
         actions: [
             KetButton { text: "Cancel"; variant: KetTheme.ButtonVariant.Ghost; onClicked: createWorktreeDialog.reject() },
             KetButton {
@@ -432,7 +441,7 @@ Basic.ApplicationWindow {
                 variant: KetTheme.ButtonVariant.Primary
                 onClicked: {
                     createWorktreeDialog.accept()
-                    app.notify("Created worktree " + (createWorktreeName.text || "feature/settings-search"))
+                    app.notify("Next turn: " + (createWorktreeName.text || "feature/settings-search"))
                 }
             }
         ]

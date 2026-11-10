@@ -203,7 +203,9 @@ void MainWindow::ensureAgentWorkspace() {
             },
             agentWorkspace_->executionPath(), roots, currentRepository,
             // Worktrees are made here, for the conversation; there is no Worktrees screen.
-            [this] { createAgentWorktree(); });
+            [this](const QString& repository, qint64 revision) {
+                createConversationWorktree(repository, revision);
+            });
     });
     connect(agentWorkspace_, &AgentWorkspaceView::activePathChanged, this,
             [this] { agentWorkspace_->setExecutionBranch({}); });
@@ -418,6 +420,11 @@ void MainWindow::ensureAgentWorkspace() {
                 statusBar()->showMessage(QStringLiteral("Created worktree for %1").arg(branchName),
                                          3000);
                 promotedWorktreePath_ = normalizedPath(path);
+                if (!pickerWorktreeAgentPath_.isEmpty()) {
+                    moveConversationToCreatedWorktree(path, branchName);
+                    git_->scheduleRefresh(0);
+                    return;
+                }
                 const bool forConversation = pendingConversationWorktree_;
                 pendingConversationWorktree_ = false;
                 switchToWorktree(path);
@@ -434,6 +441,8 @@ void MainWindow::ensureAgentWorkspace() {
             [this](const QString& error) {
                 pendingConversationWorktree_ = false;
                 openCreatedWorktree_ = false;
+                pickerWorktreeAgentPath_.clear();
+                pickerWorktreeConversation_.clear();
                 if (!pendingDeleteConversationPath_.isEmpty() ||
                     !pendingDeleteWorktreePaths_.isEmpty()) {
                     clearPendingWorktreeDeletion();

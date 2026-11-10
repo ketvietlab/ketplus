@@ -296,6 +296,12 @@ AgentWorktreeDialog::AgentWorktreeDialog(const QString& repositoryPath, QWidget*
         startConversation_->setCheckable(true);
         startConversation_->setChecked(true);
         layout->addWidget(startConversation_);
+        conversationNote_ =
+            new QLabel(tr("This conversation moves to the new worktree from its next turn."), this);
+        conversationNote_->setObjectName(QStringLiteral("worktreeConversationNote"));
+        conversationNote_->setWordWrap(true);
+        conversationNote_->hide();
+        layout->addWidget(conversationNote_);
         status_->setText(tr("Local and remote-tracking branches; no automatic fetch."));
         layout->addWidget(status_);
         layout->addWidget(error_);
@@ -561,6 +567,14 @@ void AgentWorktreeDialog::tryAccept() {
     }
     if (card_ != nullptr)
         card_->accept();
+}
+
+void AgentWorktreeDialog::useForThisConversation() {
+    if (startConversation_ == nullptr)
+        return;
+    startConversation_->setChecked(false);
+    startConversation_->hide();
+    conversationNote_->show();
 }
 
 bool AgentWorktreeDialog::startConversation() const {
