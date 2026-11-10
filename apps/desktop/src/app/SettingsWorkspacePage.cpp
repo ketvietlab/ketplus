@@ -123,7 +123,13 @@ void addField(QGridLayout* grid, const int row, const QString& title, QWidget* c
               QWidget* parent) {
     auto* titleLabel = label(title, QStringLiteral("settingsWorkspaceFieldLabel"), parent);
     grid->addWidget(titleLabel, row, 0, Qt::AlignVCenter);
-    grid->addWidget(control, row, 1);
+    grid->addWidget(control, row, 1, Qt::AlignRight | Qt::AlignVCenter);
+}
+
+// The mock's 200 px select at the end of its row.
+void fitSelect(QWidget* control) {
+    control->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    chrome_geometry::fixedWidth(control, 200);
 }
 
 } // namespace
@@ -351,8 +357,7 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     for (QWidget* control : publicControls) {
         if (control != nullptr) {
             control->setParent(fields);
-            control->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-            control->setMaximumWidth(QWIDGETSIZE_MAX);
+            fitSelect(control);
         }
     }
     if (editorLine != nullptr)
@@ -366,7 +371,7 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     auto* interfaceFont = new ket::Select(fields);
     interfaceFont->setObjectName(QStringLiteral("settingsInterfaceFont"));
     interfaceFont->addItem(InterfaceUiFont::settingsLabel());
-    interfaceFont->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    fitSelect(interfaceFont);
     auto* interfaceZoom =
         new ket::SegmentedControl({tr("Small"), tr("Medium"), tr("Large")}, fields);
     interfaceZoom->setObjectName(QStringLiteral("interfaceZoom"));
@@ -412,24 +417,37 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     interfaceSizeCopyLayout->addWidget(
         label(tr("Makes chrome, sidebar, and dialogs larger or smaller."),
               QStringLiteral("settingsWorkspaceHelp"), interfaceSizeCopy));
-    addField(fieldsLayout, 0, tr("Interface font"), interfaceFont, fields);
+    auto* interfaceFontCopy = new QWidget(fields);
+    auto* interfaceFontCopyLayout = new QVBoxLayout(interfaceFontCopy);
+    chrome_geometry::margins(interfaceFontCopyLayout, 0, 0, 0, 0);
+    chrome_geometry::spacing(interfaceFontCopyLayout, 2);
+    interfaceFontCopyLayout->addWidget(label(
+        tr("Interface font"), QStringLiteral("settingsWorkspaceFieldLabel"), interfaceFontCopy));
+    interfaceFontCopyLayout->addWidget(
+        label(tr("KetPlus uses %1 throughout the interface.").arg(InterfaceUiFont::settingsLabel()),
+              QStringLiteral("settingsWorkspaceHelp"), interfaceFontCopy));
+    fieldsLayout->addWidget(interfaceFontCopy, 0, 0, Qt::AlignTop);
+    fieldsLayout->addWidget(interfaceFont, 0, 1, Qt::AlignRight | Qt::AlignTop);
     fieldsLayout->addWidget(interfaceSizeCopy, 1, 0, Qt::AlignTop);
     fieldsLayout->addWidget(interfaceZoom, 1, 1);
     addField(fieldsLayout, 2, tr("Editor font"), editorFont, fields);
     addField(fieldsLayout, 3, tr("Editor font size"), editorSize, fields);
     addField(fieldsLayout, 4, tr("Terminal font size"), terminalSize, fields);
     addField(fieldsLayout, 5, tr("Markdown font size"), previewSize, fields);
-    // A segmented group like Interface size, one button per width. The choice is
-    // staged until Save, like the fields above.
+    // A select like the mock's, "Default · 760 px". The choice is staged until Save, like the
+    // fields above.
     auto* widthState = new ConversationWidthState;
     dialog_->addPage(widthState);
-    QStringList widthLabels;
+    auto* conversationWidth = new ket::Select(fields);
     for (const auto& choice : AgentConversationWidth::choices())
-        widthLabels.append(choice.label);
-    auto* conversationWidth = new ket::SegmentedControl(widthLabels, fields);
+        conversationWidth->addItem(choice.pixels > 0
+                                       ? tr("%1 · %2 px").arg(choice.label).arg(choice.pixels)
+                                       : choice.label,
+                                   choice.pixels);
     conversationWidth->setObjectName(QStringLiteral("agentConversationWidth"));
-    conversationWidth->setExpanding(true);
-    connect(conversationWidth, &ket::SegmentedControl::currentChanged, widthState,
+    conversationWidth->setAccessibleName(tr("Conversation width"));
+    fitSelect(conversationWidth);
+    connect(conversationWidth, &QComboBox::currentIndexChanged, widthState,
             [widthState](int index) {
                 const auto choices = AgentConversationWidth::choices();
                 if (index >= 0 && index < choices.size())
@@ -452,10 +470,10 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
                                                  QStringLiteral("settingsWorkspaceFieldLabel"),
                                                  conversationWidthCopy));
     conversationWidthCopyLayout->addWidget(
-        label(tr("How wide AI workspace conversations can grow. Atlas keeps its own layout."),
+        label(tr("Applies to Agent Workspace. Atlas keeps its compact reading column."),
               QStringLiteral("settingsWorkspaceHelp"), conversationWidthCopy));
     fieldsLayout->addWidget(conversationWidthCopy, 6, 0, Qt::AlignTop);
-    fieldsLayout->addWidget(conversationWidth, 6, 1);
+    fieldsLayout->addWidget(conversationWidth, 6, 1, Qt::AlignRight | Qt::AlignTop);
     typographyLayout->addWidget(fields);
     chrome_geometry::addSpacing(typographyLayout, 24);
     auto* sample = dialog_->findChild<QWidget*>(QStringLiteral("typographyPreview"));

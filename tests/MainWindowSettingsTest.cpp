@@ -644,8 +644,7 @@ void MainWindowSettingsTest::conversationWidthFollowsOnlyTheAgentWorkspace() {
             ->setCurrentRow(1);
     };
     const auto widthControl = [&settingsPage] {
-        return settingsPage->findChild<ket::SegmentedControl*>(
-            QStringLiteral("agentConversationWidth"));
+        return settingsPage->findChild<QComboBox*>(QStringLiteral("agentConversationWidth"));
     };
     const auto widthIndex = [](int pixels) {
         const auto choices = ketplus::AgentConversationWidth::choices();
@@ -655,9 +654,7 @@ void MainWindowSettingsTest::conversationWidthFollowsOnlyTheAgentWorkspace() {
         return -1;
     };
     const auto selectWidth = [&](int pixels) {
-        auto* control = widthControl();
-        QTest::mouseClick(control, Qt::LeftButton, Qt::NoModifier,
-                          control->segmentRect(widthIndex(pixels)).center());
+        widthControl()->setCurrentIndex(widthIndex(pixels));
     };
     const auto saveButton = [&settingsPage]() -> QAbstractButton* {
         for (auto* button : settingsPage->findChildren<QAbstractButton*>()) {
@@ -678,7 +675,8 @@ void MainWindowSettingsTest::conversationWidthFollowsOnlyTheAgentWorkspace() {
     openTypography();
     const int defaultIndex = widthIndex(ketplus::AgentWorkspaceView::defaultConversationWidth);
     QVERIFY(widthControl() != nullptr);
-    QCOMPARE(widthControl()->options().size(), ketplus::AgentConversationWidth::choices().size());
+    QCOMPARE(widthControl()->count(), ketplus::AgentConversationWidth::choices().size());
+    QCOMPARE(widthControl()->itemText(0), QString::fromUtf8("Default · 760 px"));
     QTRY_VERIFY(widthControl()->isVisible());
     QCOMPARE(widthControl()->currentIndex(), defaultIndex);
     QVERIFY(saveButton() != nullptr);
