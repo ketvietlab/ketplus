@@ -89,9 +89,8 @@ class WorkReportTest final : public QObject {
         QCOMPARE(picker.value("status").toString(), QStringLiteral("done"));
         QCOMPARE(picker.value("created_turn").toInteger(), 3);
         QCOMPARE(picker.value("updated_turn").toInteger(), 4);
-        // A field the call leaves out keeps its value.
-        QCOMPARE(picker.value("next").toObject().value("action").toString(),
-                 QStringLiteral("Run its tests"));
+        // Closing the item drops the next step the call did not repeat.
+        QVERIFY(!picker.contains("next"));
 
         // Repeating an item unchanged is not an update.
         const auto same = work_report::merge(
@@ -210,6 +209,141 @@ class WorkReportTest final : public QObject {
         const auto full = work_report::merge(open, call({item("one-more", "active")}), turn);
         QVERIFY(full.ledger.isEmpty());
         QVERIFY2(full.error.contains("open items"), qPrintable(full.error));
+    }
+
+    // Closing an item drops a next step the call does not repeat; it would read as work left.
+    void closingAnItemClearsItsStaleNextStep() {
+        const auto first = work_report::merge(
+            {},
+            call({item("a", "active",
+                       {{"remaining", "Review"},
+                        {"next", QJsonObject{{"action", "Ask #7542"}, {"owner", "agent"}}}}),
+                  item("b", "active",
+                       {{"next", QJsonObject{{"action", "Choose"}, {"owner", "user"}}}})}),
+            1);
+        QVERIFY2(first.error.isEmpty(), qPrintable(first.error));
+        const auto closed = work_report::merge(
+            first.ledger,
+            call({QJsonObject{{"key", "a"}, {"status", "done"}, {"evidence", "Merged"}},
+                  QJsonObject{
+                      {"key", "b"}, {"status", "cancelled"}, {"remaining", "Replaced by c"}}}),
+            2);
+        QVERIFY2(closed.error.isEmpty(), qPrintable(closed.error));
+        QVERIFY(!found(closed.ledger, "a").contains("next"));
+        QVERIFY(!found(closed.ledger, "a").contains("remaining"));
+        QVERIFY(!found(closed.ledger, "b").contains("next"));
+        QCOMPARE(found(closed.ledger, "b").value("remaining").toString(),
+                 QStringLiteral("Replaced by c"));
+        // A status the item already had changes nothing else.
+        const auto open = work_report::merge(
+            first.ledger, call({QJsonObject{{"key", "a"}, {"status", "active"}}}), 2);
+        QCOMPARE(found(open.ledger, "a"), found(first.ledger, "a"));
+    }
+
+    // A full ledger must still fit one journal event, with its turn.completed copy.
+    void ledgerStaysUnderTheEventLimit() {
+        const auto large = [](const QString& prefix, const QString& status) {
+            QJsonArray items;
+            for (int index = 0; index < 50; ++index)
+                items.append(item(QStringLiteral("%1-%2").arg(prefix).arg(index), status,
+                                  {{"evidence", QString(1000, QChar(0x1EC7))},
+                                   {"remaining", QString(600, QChar(0x1EC7))}}));
+            return items;
+        };
+        QJsonObject ledger;
+        qint64 turn = 1;
+        const auto encoded = [](const QJsonObject& value) {
+            return QJsonDocument(value).toJson(QJsonDocument::Compact).size();
+        };
+        // Closed work leaves to make room.
+        for (int batch = 0; batch < 4; ++batch) {
+            const auto merged =
+                work_report::merge(ledger, call(large(QString::number(batch), "done")), turn++);
+            QVERIFY2(merged.error.isEmpty(), qPrintable(merged.error));
+            QVERIFY(encoded(merged.ledger) <= work_report::maximumLedgerBytes);
+            ledger = merged.ledger;
+        }
+        QVERIFY(found(ledger, "0-0").isEmpty());
+        QVERIFY(!found(ledger, "3-49").isEmpty());
+        QVERIFY(work_report::maximumLedgerBytes + 4096 < protocol::maximumEventPayloadBytes);
+        // Open work never leaves, so a call that needs it is rejected whole.
+        ledger = {};
+        bool rejected = false;
+        for (int batch = 0; batch < 4 && !rejected; ++batch) {
+            const auto merged =
+                work_report::merge(ledger, call(large(QString::number(batch), "active")), turn++);
+            if (!merged.error.isEmpty()) {
+                QVERIFY(merged.ledger.isEmpty());
+                QVERIFY2(merged.error.contains("too large"), qPrintable(merged.error));
+                rejected = true;
+            } else {
+                QVERIFY(encoded(merged.ledger) <= work_report::maximumLedgerBytes);
+                ledger = merged.ledger;
+            }
+        }
+        QVERIFY(rejected);
+    }
+
+    // The turn's end repeats its report, so a history page split between the two keeps the
+    // card; the cloud gets that copy redacted too.
+    void turnEndCarriesTheReportItEndedWith() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const QString id = fixture.start("codex", "ask");
+        QVERIFY(!id.isEmpty());
+        QJsonObject question;
+        QTRY_VERIFY_WITH_TIMEOUT(
+            [&] {
+                const auto asked = fixture.payloads(id, "approval.requested");
+                if (!asked.isEmpty())
+                    question = asked.first();
+                return !question.isEmpty();
+            }(),
+            5000);
+        const QJsonObject reported =
+            fixture.agents(id, "agents.work_report",
+                           call({item("live", "active", {{"evidence", "token=s3cret"}})}));
+        QVERIFY2(reported.value("ok").toBool(), qPrintable(text(reported)));
+        const QJsonObject asked = question.value("questions").toArray().first().toObject();
+        const QJsonObject resolution{
+            {"request_id", question.value("request_id")},
+            {"revision", question.value("revision")},
+            {"action", "answer"},
+            {"answers",
+             QJsonArray{QJsonObject{
+                 {"question_id", asked.value("id")},
+                 {"question_revision", asked.value("revision")},
+                 {"option_ids",
+                  QJsonArray{asked.value("options").toArray().first().toObject().value("id")}},
+                 {"custom_answer", ""}}}}};
+        const QJsonObject answered = fixture.host->handleCommand(
+            request("question.answer",
+                    {{"request_id", question.value("request_id")}, {"resolution", resolution}}, id,
+                    1),
+            "desktop-test");
+        QVERIFY2(answered.value("ok").toBool(), qPrintable(text(answered)));
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(id, "turn.completed"), 1, 5000);
+        const QJsonObject end = fixture.payloads(id, "turn.completed").first();
+        QCOMPARE(end.value("work_report").toObject(), fixture.journal->workReport(id, 1));
+        QVERIFY(!text(end).contains("s3cret"));
+        // A copy written by an older daemon is redacted again on its way to the cloud.
+        QJsonObject legacy = end;
+        QJsonObject report = legacy.value("work_report").toObject();
+        QJsonArray items = report.value("items").toArray();
+        QJsonObject raw = items.first().toObject();
+        raw.insert("evidence", "token=leaked");
+        items[0] = raw;
+        report.insert("items", items);
+        legacy.insert("work_report", report);
+        const QString relayed = QString::fromUtf8(
+            QJsonDocument(projectEventPayloadForCloud("turn.completed", legacy)).toJson());
+        QVERIFY(relayed.contains("\"live\""));
+        QVERIFY2(!relayed.contains("leaked"), qPrintable(relayed));
+
+        // A later turn that reports nothing does not repeat an earlier turn's report.
+        QVERIFY(!fixture.start("codex", "Thanks", id).isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(id, "turn.completed"), 2, 5000);
+        QVERIFY(!fixture.payloads(id, "turn.completed").last().contains("work_report"));
     }
 
     void guidanceUsesTheToolWhenItIsAvailable() {

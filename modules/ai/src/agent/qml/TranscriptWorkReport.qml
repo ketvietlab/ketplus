@@ -19,7 +19,9 @@ Rectangle {
     readonly property int turn: report && report.turn ? report.turn : 0
     readonly property var groups: {
         const order = []
-        const byTitle = {}
+        // Group names are free text; a plain {} would find "constructor" or "toString" on
+        // its prototype.
+        const byTitle = Object.create(null)
         for (const item of items) {
             const title = item.group || "Work"
             if (!byTitle[title]) {
@@ -31,7 +33,7 @@ Rectangle {
         return order
     }
     // Groups with new, changed, active or blocked items open; finished groups stay closed.
-    property var closedGroups: ({})
+    property var closedGroups: Object.create(null)
     readonly property int total: counted(items).length
     readonly property int finished: done(items)
     readonly property bool needsYou: items.some(item => !closed(item) && item.next && item.next.owner === "user")
@@ -81,7 +83,7 @@ Rectangle {
         return choice === undefined ? opensByDefault(group.items) : !choice
     }
     function toggleGroup(group) {
-        const next = Object.assign({}, closedGroups)
+        const next = Object.assign(Object.create(null), closedGroups)
         next[group.title] = groupOpen(group)
         closedGroups = next
     }

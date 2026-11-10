@@ -67,7 +67,9 @@ QJsonObject workReportTool() {
           property(QStringLiteral("string"),
                    QStringLiteral("What shows the result: a commit, test totals, a PR."))},
          {QStringLiteral("remaining"),
-          property(QStringLiteral("string"), QStringLiteral("What is left, or the blocker."))},
+          property(QStringLiteral("string"),
+                   QStringLiteral("What is left, or the blocker. Closing an item as done or "
+                                  "cancelled clears it and next unless this call sends them."))},
          {QStringLiteral("next"), next},
          {QStringLiteral("verified"),
           QJsonObject{{QStringLiteral("type"), QStringLiteral("array")},

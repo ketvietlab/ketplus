@@ -14,6 +14,9 @@ inline constexpr qsizetype maximumGroup = 80;
 inline constexpr qsizetype maximumEvidence = 1000;
 inline constexpr qsizetype maximumRemaining = 600;
 inline constexpr qsizetype maximumAction = 300;
+// The encoded ledger. Its event, and the turn.completed that repeats it, stay well under the
+// journal's event limit (protocol::maximumEventPayloadBytes).
+inline constexpr qsizetype maximumLedgerBytes = 160 * 1024;
 
 struct Merge final {
     // The merged ledger, or empty with `error` set when the call is rejected as a whole.
@@ -27,10 +30,11 @@ struct Merge final {
 // turn `turn`:
 // - an item upserts by key;
 // - items the call does not mention stay as they were;
-// - an item leaves the open set only as done or cancelled.
+// - an item leaves the open set only as done or cancelled, and closing it drops its next step
+//   and remaining work unless the same call reports them.
 // Text is redacted and capped before it is stored. A done item needs evidence or a verified
-// check. Over `maximumItems`, the oldest closed items leave the ledger first (the journal's
-// earlier snapshots keep them).
+// check. Over `maximumItems` or `maximumLedgerBytes`, the oldest closed items leave the ledger
+// first (the journal's earlier snapshots keep them); a ledger still over is rejected.
 [[nodiscard]] Merge merge(const QJsonObject& current, const QJsonObject& call, qint64 turn);
 
 // The ledger for the cloud: every text field redacted again and capped.

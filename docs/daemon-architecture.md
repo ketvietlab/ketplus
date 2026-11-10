@@ -923,8 +923,10 @@ The work report (ADR 0106) travels the same authenticated path:
   the conversation's ledger;
 - `SessionHostWorkReports.cpp` stores the ledger in `work_reports` (one row per
   generation, forked and deleted with it) and journals the merged ledger as
-  `work_report.updated`;
-- the cloud projection redacts that event's text again.
+  `work_report.updated`, answering with an error when that event cannot be journaled;
+- `turnCompletion` repeats the ledger on `turn.completed` as `work_report` when the
+  turn changed it, so a history page that splits the two still shows the report;
+- the cloud projection redacts that text again on both events.
 
 With the ketplus_agents server, `responseGuidance(true)` asks for the report in place
 of the markdown matrix.

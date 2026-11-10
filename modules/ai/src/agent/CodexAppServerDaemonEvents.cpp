@@ -145,9 +145,14 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
             notice.insert(QStringLiteral("contextTokens"), turn.contextTokens);
         if (notice.isEmpty())
             return;
-        if (type == QStringLiteral("turn.completed") && sequence == found->turnSequence &&
-            !found->turnReport.isEmpty())
-            notice.insert(QStringLiteral("workReport"), found->turnReport.toVariantMap());
+        if (type == QStringLiteral("turn.completed")) {
+            const QJsonObject report =
+                data.contains(QStringLiteral("work_report"))
+                    ? data.value(QStringLiteral("work_report")).toObject()
+                    : (sequence == found->turnSequence ? found->turnReport : QJsonObject{});
+            if (!report.isEmpty())
+                notice.insert(QStringLiteral("workReport"), report.toVariantMap());
+        }
         if (daemonHasTranscriptWindow_ &&
             (!found->windowReady || sessionId != daemonRestorePrioritySession_)) {
             if (found->windowReady) {

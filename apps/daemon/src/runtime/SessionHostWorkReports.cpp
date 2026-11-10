@@ -28,12 +28,17 @@ QJsonObject SessionHost::recordWorkReport(const QString& sessionId, const qint64
         return failure(QStringLiteral("invalid_report"), merged.error);
     if (QString error; !journal_->storeWorkReport(sessionId, generation, merged.ledger, &error))
         return failure(QStringLiteral("journal_error"), error);
+    // The turn's end row repeats the stored ledger, but until then the transcript shows only
+    // what the event carries; the agent must not drop its table on a report nobody sees.
+    if (!appendEvent(*it, QStringLiteral("work_report.updated"), merged.ledger)) {
+        QJsonObject answer =
+            failure(QStringLiteral("journal_error"),
+                    QStringLiteral("The report is saved, but the transcript could not show it; "
+                                   "end this turn with the progress table instead."));
+        answer.insert(QStringLiteral("saved"), true);
+        return answer;
+    }
     QJsonObject answer = work_report::summary(merged);
-    // A retained event reaches the transcript when the journal recovers; the ledger is stored.
-    if (!appendEvent(*it, QStringLiteral("work_report.updated"), merged.ledger))
-        answer.insert(QStringLiteral("note"),
-                      QStringLiteral("The report is saved; it appears in the transcript once "
-                                     "the journal recovers."));
     answer.insert(QStringLiteral("ok"), true);
     return answer;
 }

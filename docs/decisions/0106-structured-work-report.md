@@ -32,7 +32,9 @@ cannot count it, filter it or show it anywhere else.
 - **Merge.** The daemon merges a call into the conversation's ledger (`WorkReport.cpp`):
   - an item upserts by key;
   - items the call does not mention stay as they were;
-  - an item leaves the open set only as `done` or `cancelled`;
+  - an item leaves the open set only as `done` or `cancelled`. Closing it removes
+    its `next` and `remaining` unless the same call reports them, so a finished item
+    never shows a stale next step;
   - each item records `created_turn` and `updated_turn`, from which the app derives
     New and Updated.
 
@@ -52,8 +54,10 @@ cannot count it, filter it or show it anywhere else.
   | Remaining | 600 |
   | Next action | 300 |
 
-  A ledger holds at most 200 items. Beyond that, the oldest closed items leave first;
-  open work never leaves silently, and a call that would need it is rejected. The tool
+  A ledger holds at most 200 items and 160 KiB of JSON, so its event, and the
+  `turn.completed` that repeats it, stay under the journal's 256 KiB event limit.
+  Beyond either bound, the oldest closed items leave first; open work never leaves
+  silently, and a call that would need it is rejected. The tool
   description tells the agent never to include secrets, credentials or file contents.
 - **Storage.** `work_reports` holds one row per conversation generation, with the
   current ledger and its version. Retention may drop old events, so the ledger is not
@@ -68,8 +72,12 @@ cannot count it, filter it or show it anywhere else.
   their own snapshot while later turns change the ledger.
   - **Cloud:** the event's text is redacted and capped again on its way to the cloud
     (`projectEventPayloadForCloud`), and it is relayed only where the transcript is.
-  - **Retention:** a retained event that is not yet committed reaches the transcript
-    when the journal recovers; the stored ledger is already current.
+  - **Turn end:** `turn.completed` carries the stored ledger as `work_report` when the
+    ledger was last changed in that turn. The end row is then complete on its own,
+    even when a history page boundary falls between the report and the turn's end.
+  - **Failure:** when the event cannot be journaled, the tool answers with an error
+    (the ledger is saved) and the agent ends the turn with the matrix, so a report
+    is never hidden behind a success.
 - **Guidance.**
   - When a session has the ketplus_agents server (Claude, Codex and Cursor), the
     response guidance replaces the matrix: the agent records the turn's work with

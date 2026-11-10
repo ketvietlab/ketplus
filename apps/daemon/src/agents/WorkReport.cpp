@@ -4,6 +4,7 @@
 
 #include <QHash>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QRegularExpression>
 #include <QSet>
 #include <QStringList>
@@ -75,6 +76,13 @@ QString apply(const QJsonObject& input, QJsonObject& item) {
                                   "waiting, blocked or cancelled.")
                 .arg(key, status);
         item.insert(QStringLiteral("status"), status);
+        // A finished item has no next step left; a stale one would read as work still to do.
+        if (closed(item)) {
+            if (!input.contains(QStringLiteral("next")))
+                item.remove(QStringLiteral("next"));
+            if (!input.contains(QStringLiteral("remaining")))
+                item.remove(QStringLiteral("remaining"));
+        }
     }
     if (input.contains(QStringLiteral("next"))) {
         const QJsonObject next = input.value(QStringLiteral("next")).toObject();
@@ -191,8 +199,20 @@ Merge merge(const QJsonObject& current, const QJsonObject& call, const qint64 tu
             ++result.added;
         }
     }
-    // The oldest closed items leave first; open work never leaves silently.
-    while (items.size() > maximumItems) {
+    result.ledger = current;
+    result.ledger.remove(QStringLiteral("items"));
+    if (call.contains(QStringLiteral("title")))
+        result.ledger.insert(QStringLiteral("title"),
+                             clean(call.value(QStringLiteral("title")), maximumTitle));
+    // The oldest closed items leave first; open work never leaves silently. An item counts its
+    // encoding and the comma after it.
+    const auto encodedSize = [](const QJsonValue& value) {
+        return QJsonDocument(QJsonArray{value}).toJson(QJsonDocument::Compact).size() - 1;
+    };
+    qsizetype bytes = encodedSize(result.ledger) + 64; // turn, version and the items array
+    for (const QJsonValue& value : items)
+        bytes += encodedSize(value);
+    while (items.size() > maximumItems || bytes > maximumLedgerBytes) {
         qsizetype oldest = -1;
         for (qsizetype index = 0; index < items.size(); ++index) {
             const QJsonObject item = items.at(index).toObject();
@@ -203,17 +223,19 @@ Merge merge(const QJsonObject& current, const QJsonObject& call, const qint64 tu
                 oldest = index;
         }
         if (oldest < 0) {
-            result.error = QStringLiteral("The report holds %1 open items, the most it can; "
-                                          "finish or cancel some first.")
-                               .arg(maximumItems);
+            result.ledger = {};
+            result.error =
+                items.size() > maximumItems
+                    ? QStringLiteral("The report holds %1 open items, the most it can; finish or "
+                                     "cancel some first.")
+                          .arg(maximumItems)
+                    : QStringLiteral("The report is too large; shorten the evidence and remaining "
+                                     "text, or finish or cancel some items first.");
             return result;
         }
+        bytes -= encodedSize(items.at(oldest));
         items.removeAt(oldest);
     }
-    result.ledger = current;
-    if (call.contains(QStringLiteral("title")))
-        result.ledger.insert(QStringLiteral("title"),
-                             clean(call.value(QStringLiteral("title")), maximumTitle));
     result.ledger.insert(QStringLiteral("items"), items);
     result.ledger.insert(QStringLiteral("turn"), turn);
     result.ledger.insert(QStringLiteral("version"),

@@ -233,8 +233,9 @@ class SessionHost final : public QObject, private AgentHostPort {
     [[nodiscard]] QJsonObject steer(const QJsonObject& request, CommandCallback outcome = {},
                                     bool localClient = true, const QJsonObject& agentOrigin = {});
     [[nodiscard]] QJsonObject interrupt(const QJsonObject& request);
-    // A turn.completed payload; it takes the session's pending Stop.
-    [[nodiscard]] static QJsonObject turnCompletion(Session& session, const QString& status);
+    // A turn.completed payload; it takes the session's pending Stop and carries the work report
+    // the turn ended with (ADR 0106).
+    [[nodiscard]] QJsonObject turnCompletion(Session& session, const QString& status);
     [[nodiscard]] QJsonObject resolveApproval(const QJsonObject& request);
     [[nodiscard]] QJsonObject applyConfiguration(const QJsonObject& request, bool localClient);
     [[nodiscard]] QJsonObject applyExecutionPolicy(const QJsonObject& request);

@@ -126,3 +126,64 @@ void AgentWorkspaceViewTest::turnEndShowsTheTurnsWorkReport() {
         QVERIFY(view.quickView()->grabWindow().save(capture));
     }
 }
+
+// ADR 0106: turn.completed repeats the report, so a page that begins after the turn's
+// work_report.updated events still shows the card and copies the table.
+void AgentWorkspaceViewTest::turnEndReportSurvivesAHistoryPageSplit() {
+    const QJsonObject report{
+        {"title", "Picker"},
+        {"turn", 4},
+        {"version", 3},
+        {"items", QJsonArray{reportItem("a", "PRs", "done", 4, 4, {{"evidence", "Merged"}})}}};
+    const auto rows = ketplus::agent_message::daemonWindowMessages(
+        {{"events", QJsonArray{journalEvent(40, 4, "agent.message", {{"text", "Done"}}),
+                               journalEvent(41, 4, "turn.completed",
+                                            {{"status", "completed"}, {"work_report", report}})}}});
+    QVariantMap end;
+    for (const QVariant& value : rows)
+        if (value.toMap().value("subtype") == QStringLiteral("turnEnd"))
+            end = value.toMap();
+    QCOMPARE(end.value("workReport").toMap().value("version").toInt(), 3);
+    const QString copied = ketplus::agent_message::transcriptText(rows);
+    QVERIFY2(copied.contains("| Item a | Done | Merged |  |"), qPrintable(copied));
+}
+
+// Group names are the agent's free text, including names an object's prototype already has.
+void AgentWorkspaceViewTest::workReportGroupsAcceptAnyName() {
+    QJsonArray items;
+    const QStringList names{"constructor", "toString", "__proto__", "hasOwnProperty"};
+    for (const QString& name : names)
+        items.append(reportItem(name.toLower(), name, "active", 1, 1));
+    items.append(reportItem("again", "constructor", "done", 1, 1, {{"evidence", "ok"}}));
+    const QJsonObject report{{"title", "Odd"}, {"turn", 1}, {"version", 1}, {"items", items}};
+    const auto rows = ketplus::agent_message::daemonWindowMessages(
+        {{"events", QJsonArray{journalEvent(1, 1, "user.message", {{"text", "Go"}}),
+                               journalEvent(2, 1, "turn.completed",
+                                            {{"status", "completed"}, {"work_report", report}})}}});
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 900);
+    view.show();
+    view.resetMessages(rows, "work-report-groups");
+    QQuickItem* card = nullptr;
+    QTRY_VERIFY((card = findVisibleItem(view.quickView()->rootObject(), "transcriptWorkReport")) !=
+                nullptr);
+    const QVariantList groups = card->property("groups").toList();
+    QCOMPARE(groups.size(), names.size());
+    for (qsizetype index = 0; index < names.size(); ++index)
+        QCOMPARE(groups.at(index).toMap().value("title").toString(), names.at(index));
+    QCOMPARE(groups.at(0).toMap().value("items").toList().size(), 2);
+    QCOMPARE(card->property("total").toInt(), 5);
+    // Collapsing a group named like a prototype member keeps its own state.
+    QVariant open;
+    QVERIFY(QMetaObject::invokeMethod(card, "groupOpen", Q_RETURN_ARG(QVariant, open),
+                                      Q_ARG(QVariant, groups.at(0))));
+    QVERIFY(open.toBool());
+    QVERIFY(QMetaObject::invokeMethod(card, "toggleGroup", Q_ARG(QVariant, groups.at(0))));
+    QVERIFY(QMetaObject::invokeMethod(card, "groupOpen", Q_RETURN_ARG(QVariant, open),
+                                      Q_ARG(QVariant, groups.at(0))));
+    QVERIFY(!open.toBool());
+    QVERIFY(QMetaObject::invokeMethod(card, "groupOpen", Q_RETURN_ARG(QVariant, open),
+                                      Q_ARG(QVariant, groups.at(1))));
+    QVERIFY(open.toBool());
+}
