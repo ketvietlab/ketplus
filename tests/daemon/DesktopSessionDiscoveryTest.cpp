@@ -280,6 +280,13 @@ class DesktopSessionDiscoveryTest final : public QObject {
         QTRY_COMPARE_WITH_TIMEOUT(storedTags("tagged-elsewhere"), QStringList{"Mine"}, 5000);
         QTRY_COMPARE_WITH_TIMEOUT(labels("tagged-elsewhere"), QStringList{"Mine"}, 5000);
         QCOMPARE(storedTags("plain"), QStringList{"UI"});
+        // Changes made before the daemon answers add up; none undoes an earlier one.
+        desktop.setConversationTag(path, "plain", "Docs", true);
+        desktop.setConversationTag(path, "plain", "Bug", true);
+        desktop.setConversationTag(path, "plain", "ui", false);
+        desktop.setConversationTag(path, "plain", "Docs", true); // already wanted
+        QTRY_COMPARE_WITH_TIMEOUT(storedTags("plain"), (QStringList{"Docs", "Bug"}), 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(labels("plain"), (QStringList{"Docs", "Bug"}), 5000);
     }
 
     void anotherDesktopsArchiveIsNotUndone_data() {

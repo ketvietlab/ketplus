@@ -1573,7 +1573,8 @@ void AgentSessionManager::handleDaemonSession(const QJsonObject& stored) {
                                         {"adapter", stored.value("adapter")}});
     if (const QString number = stored.value(QStringLiteral("number")).toString(); !number.isEmpty())
         session->number = number;
-    if (stored.contains(QStringLiteral("tags")))
+    // A change of this desktop's own is on its way; its answer carries the newer list.
+    if (stored.contains(QStringLiteral("tags")) && !session->tagSyncPending)
         session->tags = stored.value(QStringLiteral("tags")).toVariant().toStringList();
     const QJsonObject agentTurn = stored.value(QStringLiteral("agent_turn")).toObject();
     session->agentTurnNumber = agentTurn.value(QStringLiteral("number")).toString();
