@@ -100,7 +100,8 @@ AtlasBuilderTab::AtlasBuilderTab(AtlasIndex* index, const QString& workspaceRoot
                               tr("Hide AI Chat"), chatFrame_)),
       workspaceRoot_(workspaceRoot) {
     setObjectName(QStringLiteral("atlasBuilderTab"));
-    applyPalette(QApplication::palette());
+    // A tab opened after the zoom changed starts at that zoom.
+    applyPalette(QApplication::palette(), InterfaceZoomMetrics::current());
     setMinimumSize(680, 420);
     toolbar_ = new QWidget(this);
     toolbar_->setObjectName(QStringLiteral("atlasBuilderToolbar"));

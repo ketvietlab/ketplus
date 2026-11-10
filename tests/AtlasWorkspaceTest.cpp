@@ -576,6 +576,20 @@ class AtlasWorkspaceTest final : public QObject {
             !path.isEmpty())
             QVERIFY(builder.screen()->grabWindow(builder.winId()).save(path));
     }
+
+    // #155 follow-up: an Atlas opened after choosing a zoom starts at it, not at 100%.
+    void atlasTabsOpenAtTheCurrentZoom() {
+        ketplus::ThemeManager theme(*qApp);
+        const auto restore = qScopeGuard([&theme] { theme.setInterfaceScale(14, 100); });
+        theme.setInterfaceScale(14, 125);
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        ketplus::AtlasIndex index;
+        ketplus::AtlasTab atlas(&index);
+        QCOMPARE(atlas.property("_ketChromeZoom").toInt(), 125);
+        ketplus::AtlasBuilderTab builder(&index, root.path());
+        QCOMPARE(builder.property("_ketChromeZoom").toInt(), 125);
+    }
 };
 
 QTEST_MAIN(AtlasWorkspaceTest)
