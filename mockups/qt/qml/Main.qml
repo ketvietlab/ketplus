@@ -287,6 +287,8 @@ Basic.ApplicationWindow {
         showScreen(Mock.initialScreen + (Mock.initialState ? "/" + Mock.initialState : ""))
         if (Mock.initialPanel === "images")
             Qt.callLater(() => openImages(Fixtures.captures, 1))
+        else if (Mock.initialPanel === "picker")
+            Qt.callLater(() => picker.open())
         else if (Mock.initialPanel === "setup")
             Qt.callLater(() => openSetupGuide(conversation.providerId || "claude"))
         else if (["activity", "device", "device-focus"].includes(Mock.initialPanel) && screen === "connections") {

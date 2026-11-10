@@ -167,6 +167,12 @@ class ExecutionWorktreeDialogTest final : public QObject {
             QTest::qWait(30);
             QCOMPARE(repos->parentWidget()->width(), 222);
             QVERIFY(list->width() >= 300);
+            // A repository is one line and a worktree two, as the mock's rows.
+            QVERIFY(repos->count() > 0 && list->count() > 0);
+            const int repoRow = repos->visualItemRect(repos->item(0)).height();
+            const int treeRow = list->visualItemRect(list->item(0)).height();
+            QVERIFY2(repoRow >= 32 && repoRow <= 40, qPrintable(QString::number(repoRow)));
+            QVERIFY2(treeRow > repoRow + 10, qPrintable(QString::number(treeRow)));
             if (const auto dir = qEnvironmentVariable("KETPLUS_PICKER_CAPTURE_DIR"); !dir.isEmpty())
                 dialog->grab().save(dir + (mode == ketplus::ThemeManager::Mode::Light
                                                ? "/picker-light.png"

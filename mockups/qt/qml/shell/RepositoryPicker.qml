@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 import QtQuick
 import QtQuick.Controls.Basic as Basic
+import QtQuick.Layouts
 import Ket
 import KetPlusMock
 
@@ -23,8 +24,10 @@ KetDialog {
     title: "Repository & worktree"
     width: px(800)
 
+    // The dialog's body is a layout: sized from the dialog, never from this row's own width, which
+    // would grow it on every pass.
     Row {
-        width: parent.width
+        Layout.fillWidth: true
         height: px(320)
         spacing: px(12)
 
@@ -52,7 +55,7 @@ KetDialog {
         Rectangle { width: 1; height: parent.height; color: KetTheme.t.panelBorder }
 
         Column {
-            width: parent.width - picker.px(235)
+            width: picker.availableWidth - picker.px(222) - 1 - 2 * picker.px(12)
             spacing: picker.px(8)
             KetTextField { width: parent.width; leadingIcon: "search"; placeholderText: "Search branch or folder…"; onTextChanged: picker.branchQuery = text }
             Repeater {

@@ -24,6 +24,7 @@
 #include <QStyledItemDelegate>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <QtMath>
 #include <memory>
 #include <utility>
 
@@ -38,8 +39,24 @@ class PickerDelegate final : public QStyledItemDelegate {
   public:
     PickerDelegate(bool repository, QObject* parent)
         : QStyledItemDelegate(parent), repository_(repository) {}
-    QSize sizeHint(const QStyleOptionViewItem&, const QModelIndex&) const override {
-        return {0, qRound(ket::Appearance::scale(52, ket::Appearance::instance().zoom()))};
+    // As tall as paint() draws: the title line, and the detail line only when there is one, so
+    // a repository row is one line as the mock's.
+    QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override {
+        const auto& appearance = ket::Appearance::instance();
+        const auto px = [&](qreal value) {
+            return ket::Appearance::scale(value, appearance.zoom());
+        };
+        const auto recipe = ket::treeItemRecipe(false, {}, appearance.theme());
+        QFont font = option.font;
+        font.setPixelSize(qRound(px(recipe.titlePixels)));
+        font.setWeight(QFont::Weight(recipe.titleWeight));
+        qreal height = qMax(QFontMetricsF(font).height(), px(recipe.iconSize));
+        if (index.data().toString().contains('\n')) {
+            font.setPixelSize(qRound(px(recipe.detailPixels)));
+            height += px(2) + QFontMetricsF(font).height();
+        }
+        // paint() insets the row 2 px on each side.
+        return {0, qCeil(height + 2 * px(recipe.paddingBlock) + 4)};
     }
     void paint(QPainter* painter, const QStyleOptionViewItem& option,
                const QModelIndex& index) const override {
