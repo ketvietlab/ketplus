@@ -307,6 +307,7 @@ QVariantList AgentSessionManager::conversations(const QString& worktreePath) con
              session->running && (!session->pendingQuestionRequests.isEmpty() ||
                                   !session->pendingInputIds.isEmpty())},
             {QStringLiteral("completed"), session->completed},
+            {QStringLiteral("awaitingReply"), session->awaitingReply && !session->running},
             {QStringLiteral("seen"), session->lastSeenCursor >= session->lastEventCursor},
             {QStringLiteral("lastTurnStartedAt"), session->lastTurnStartedAt},
             {QStringLiteral("ownsWorktree"), session->ownsWorktree},
@@ -1578,6 +1579,7 @@ void AgentSessionManager::handleDaemonSession(const QJsonObject& stored) {
     if (const QString number = stored.value(QStringLiteral("number")).toString(); !number.isEmpty())
         session->number = number;
     // A change of this desktop's own is on its way; its answer carries the newer list.
+    session->awaitingReply = stored.value(QStringLiteral("awaiting_reply")).toBool();
     if (stored.contains(QStringLiteral("tags")) && !session->tagSyncPending)
         session->tags = stored.value(QStringLiteral("tags")).toVariant().toStringList();
     const QJsonObject agentTurn = stored.value(QStringLiteral("agent_turn")).toObject();

@@ -110,7 +110,9 @@ Item {
             id: conversationStatusBadge
             objectName: "conversationStatusBadge"
             // ket::badgeRecipe, as KetBadge draws the mock's status; long statuses still elide.
-            readonly property var recipe: KetTheme.badgeRecipe(KetTheme.dark, KetTheme.zoom, agentHost.sessionRunning ? KetTheme.BadgeTone.Accent : KetTheme.BadgeTone.Neutral)
+            // #125: a finished turn that asks the user to decide reads "Waiting for you" (Info tone).
+            readonly property bool awaiting: !agentHost.sessionRunning && header.selectedConversation.awaitingReply === true
+            readonly property var recipe: KetTheme.badgeRecipe(KetTheme.dark, KetTheme.zoom, agentHost.sessionRunning ? KetTheme.BadgeTone.Accent : awaiting ? KetTheme.BadgeTone.Info : KetTheme.BadgeTone.Neutral)
             Layout.preferredHeight: recipe.height
             Layout.preferredWidth: statusText.implicitWidth + 2 * recipe.paddingInline
             Layout.maximumWidth: KetTheme.px(120, KetTheme.zoom)
@@ -122,7 +124,7 @@ Item {
                 id: statusText
                 anchors.centerIn: parent
                 width: Math.min(implicitWidth, parent.width - 2 * conversationStatusBadge.recipe.paddingInline)
-                text: agentHost.sessionRunning ? "Working" : agentHost.sessionStatus
+                text: agentHost.sessionRunning ? "Working" : conversationStatusBadge.awaiting ? "Waiting for you" : agentHost.sessionStatus
                 color: conversationStatusBadge.recipe.text
                 font.family: KetTheme.fontFamily
                 font.pixelSize: conversationStatusBadge.recipe.fontPixels

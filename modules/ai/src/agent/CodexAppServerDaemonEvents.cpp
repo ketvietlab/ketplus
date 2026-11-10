@@ -422,7 +422,10 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
             {{QStringLiteral("threadId"), sessionId},
              {QStringLiteral("turn"),
               QJsonObject{{QStringLiteral("id"), found->turnId},
-                          {QStringLiteral("status"), data.value(QStringLiteral("status"))}}}});
+                          {QStringLiteral("status"), data.value(QStringLiteral("status"))},
+                          // #125: the answer asks the user to decide.
+                          {QStringLiteral("awaitingReply"),
+                           data.value(QStringLiteral("awaiting_reply")).toBool()}}}});
         emitNotice();
         found->turnId.clear();
         return;

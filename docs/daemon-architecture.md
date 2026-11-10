@@ -89,6 +89,10 @@ core target. The local slice includes:
 - durable sidebar read markers through `session.mark_seen` (`last_seen_cursor` in
   the journal; `session.list` exposes both `last_event_cursor` and
   `last_seen_cursor` so Desktop can restore unread completed conversations);
+- the "Waiting for you" flag (`awaiting_reply` in the journal, `session.list`
+  and `turn.completed`, cleared by a new message, a new turn or
+  `session.mark_done`; set by the `request_user_decision` MCP tool or a final
+  answer ending with a question; feature `session.awaiting_reply/1`, ADR 0112);
 - archiving through `session.set_archived` (`archived_at` in the journal and in
   `session.list`, feature `session.archive/1`). The idle pass deletes one
   conversation archived for longer than the Storage option (30 days, 90 by default,

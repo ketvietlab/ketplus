@@ -90,6 +90,8 @@ class CodexAppServer final : public QObject {
     void setDaemonSessionArchived(const QString& sessionId, bool archived,
                                   ResponseCallback callback);
     // Replaces the conversation's labels in the daemon journal (`session.tags.set`).
+    // #125: clears "Waiting for you" (`session.mark_done`).
+    void markDaemonSessionDone(const QString& sessionId, ResponseCallback callback);
     void setDaemonSessionTags(const QString& sessionId, const QStringList& tags,
                               ResponseCallback callback);
     [[nodiscard]] bool isDaemonSessionRestoring(const QString& sessionId) const;

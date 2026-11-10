@@ -53,6 +53,10 @@ class AgentHostPort {
     // Returns the tool's answer, ok or failure.
     virtual QJsonObject recordWorkReport(const QString& sessionId, qint64 generation,
                                          const QJsonObject& payload) = 0;
+    // #125: the turn's answer asks the user to approve or decide, so it ends as
+    // "Waiting for you". Returns the tool's answer.
+    virtual QJsonObject recordUserDecision(const QString& sessionId, qint64 generation,
+                                           const QJsonObject& payload) = 0;
 };
 
 // Brokers messages between conversations on this host: capability tokens for the injected

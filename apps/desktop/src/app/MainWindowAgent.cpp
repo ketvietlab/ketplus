@@ -6,6 +6,7 @@
 #include "app/MainWindow.h"
 #include "app/RepositoryRouter.h"
 #include "app/SpotlightDialog.h"
+#include "app/WaitingBadge.h"
 #include "atlas/AtlasTab.h"
 #include "atlas/ManagedAtlasViewers.h"
 #include "workspace/AtlasIndex.h"
@@ -146,6 +147,8 @@ void MainWindow::ensureAgentWorkspace() {
     updateRepositoryName();
     agentWorktreeCreator_ = new AgentWorktreeCreator(this);
     agentManager_ = new AgentSessionManager(this);
+    connect(this, &QObject::destroyed,
+            [owner = static_cast<QObject*>(this)] { WaitingBadge::instance().forget(owner); });
     setupSidebarStorage();
     setupSidebarAccount();
     connect(
@@ -604,6 +607,8 @@ void MainWindow::ensureAgentWorkspace() {
             [this](const QString& path, const QVariantList& conversations) {
                 if (normalizedPath(path) == normalizedPath(agentWorkspace_->activePath()))
                     agentWorkspace_->setConversations(conversations);
+                WaitingBadge::instance().report(this, normalizedPath(path),
+                                                WaitingBadge::countWaiting(conversations));
                 // The sidebar lists every repository's conversations, not only this worktree's.
                 scheduleSidebarRefresh();
             });

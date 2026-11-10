@@ -519,6 +519,17 @@ void CodexAppServer::setDaemonSessionTags(const QString& sessionId, const QStrin
                   found->generation, std::move(callback));
 }
 
+void CodexAppServer::markDaemonSessionDone(const QString& sessionId, ResponseCallback callback) {
+    const auto found = daemonSessions_.constFind(sessionId);
+    if (!daemon_ || !daemon_->hasFeature(QStringLiteral("session.awaiting_reply/1")) ||
+        found == daemonSessions_.cend()) {
+        callback({}, QStringLiteral("This daemon does not track conversations waiting for you."));
+        return;
+    }
+    daemon_->call(QStringLiteral("session.mark_done"), {}, sessionId, found->generation,
+                  std::move(callback));
+}
+
 void CodexAppServer::applyDaemonTombstones(const QJsonArray& tombstones) {
     for (const auto& value : tombstones) {
         const auto deleted = value.toObject();
