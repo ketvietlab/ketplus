@@ -5,6 +5,7 @@
 #include "providers/CursorAdapter.h"
 #include "providers/compat/ProviderCapabilities.h"
 #include "providers/compat/ProviderCompatibility.h"
+#include "runtime/ProviderErrorCode.h"
 
 #include <QDateTime>
 #include <QDir>
@@ -113,6 +114,61 @@ void SessionHost::codexReadiness(const compat::Runtime& runtime,
                        (*shared)(compose(error.isEmpty() ? ProviderReadiness::codexProbe(result)
                                                          : ProviderReadiness::Probe{}));
                    });
+}
+
+QJsonObject SessionHost::noteProviderOutcome(const Session& session, const QString& type,
+                                             const QJsonObject& payload) {
+    const QString adapter =
+        session.stored.adapter.isEmpty() ? QStringLiteral("codex") : session.stored.adapter;
+    if (type == QStringLiteral("turn.completed")) {
+        if (payload.value(QStringLiteral("status")).toString() == QStringLiteral("completed"))
+            readiness_.observe(adapter, QStringLiteral("ready"));
+        return payload;
+    }
+    if (type != QStringLiteral("runtime.error"))
+        return payload;
+    QJsonObject classified = payload;
+    const QString message = payload.value(QStringLiteral("message")).toString();
+    // Only the daemon sets `code`; anything a provider put there is reclassified.
+    const QString code =
+        providerErrorCode(adapter, payload.value(QStringLiteral("provider_info")), message);
+    if (code.isEmpty()) {
+        classified.remove(QStringLiteral("code"));
+        return classified;
+    }
+    classified.insert(QStringLiteral("code"), code);
+    const qint64 resetsAt = payload.value(QStringLiteral("resets_at")).toInteger();
+    const QString state = readinessForErrorCode(code);
+    if (!state.isEmpty())
+        readiness_.observe(adapter, state, message, resetsAt);
+    if (code == QStringLiteral("limit_reached") && resetsAt == 0 &&
+        adapter == QStringLiteral("codex"))
+        readCodexLimitReset(message);
+    return classified;
+}
+
+void SessionHost::readCodexLimitReset(const QString& message) {
+    const QPointer<SessionHost> self(this);
+    adapter_->call(
+        QStringLiteral("account/rateLimits/read"), {},
+        [self, message](const QJsonObject& result, const QString& error) {
+            // A turn that worked, or Check again, may have ended the limit meanwhile.
+            if (self.isNull() || !error.isEmpty() ||
+                self->readiness_.reportedState(QStringLiteral("codex")) !=
+                    QStringLiteral("limit_reached"))
+                return;
+            // The window that is used up resets last; its reset ends the limit.
+            qint64 resetsAt = 0;
+            const QJsonObject limits = result.value(QStringLiteral("rateLimits")).toObject();
+            for (const char* window : {"primary", "secondary"}) {
+                const QJsonObject value = limits.value(QLatin1String(window)).toObject();
+                if (value.value(QStringLiteral("usedPercent")).toDouble() >= 100)
+                    resetsAt = qMax(resetsAt, value.value(QStringLiteral("resetsAt")).toInteger());
+            }
+            if (resetsAt > 0)
+                self->readiness_.observe(QStringLiteral("codex"), QStringLiteral("limit_reached"),
+                                         message, resetsAt);
+        });
 }
 
 ProviderAdapter* SessionHost::provider(const QString& adapter) const {

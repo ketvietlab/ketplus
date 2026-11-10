@@ -81,6 +81,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/CodexItems.cpp
     src/runtime/CodexItems.h
     src/runtime/ProviderCatalogCache.cpp
+    src/runtime/ProviderErrorCode.cpp
     src/runtime/ProviderReadiness.cpp
     src/runtime/ProviderCatalogCache.h
     src/agents/AgentBroker.cpp

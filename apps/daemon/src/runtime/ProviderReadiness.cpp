@@ -46,6 +46,29 @@ void ProviderReadiness::observe(const QString& provider, const QString& state,
     save();
 }
 
+void ProviderReadiness::recheck(const qint64 now) {
+    bool changed = false;
+    for (auto it = observed_.begin(); it != observed_.end();) {
+        // Without a reset time nothing would ever end the limit, so Check again does.
+        const bool stale = it->state == QStringLiteral("signed_out") ||
+                           (it->state == QStringLiteral("limit_reached") &&
+                            (it->resetsAt == 0 || it->resetsAt <= now));
+        if (!stale) {
+            ++it;
+            continue;
+        }
+        it = observed_.erase(it);
+        changed = true;
+    }
+    if (changed)
+        save();
+}
+
+void ProviderReadiness::forget(const QString& provider) {
+    if (observed_.remove(provider) > 0)
+        save();
+}
+
 void ProviderReadiness::observeClaudeSource(const QString& source) {
     // "none": the sidecar found no credential. Any other source answers a query, but an earlier
     // failure (an expired sign-in, a rejected key) stays until a turn works or the user checks.
@@ -79,10 +102,17 @@ QJsonObject ProviderReadiness::compose(const compat::Runtime& runtime, const Pro
             save();
             observed = observed_.cend();
         }
+        // A reported sign-out ends when the probe finds an account: the user signed in since.
+        if (observed != observed_.cend() && observed->state == QStringLiteral("signed_out") &&
+            probe.state == QStringLiteral("ready")) {
+            observed_.remove(provider);
+            save();
+            observed = observed_.cend();
+        }
         const bool failure =
             observed != observed_.cend() && observed->state != QStringLiteral("ready");
-        // A provider's own report of a failure outranks a probe that still finds an account: an
-        // expired token is still an account.
+        // Any other reported failure outranks a probe that still finds an account: an expired
+        // token or a used-up limit is still an account.
         if (failure)
             state = *observed;
         else if (!probe.state.isEmpty())

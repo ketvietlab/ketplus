@@ -44,6 +44,8 @@ class SessionHost final : public QObject, private AgentHostPort {
     ~SessionHost() override;
 
     void setClaudeAccountUsage(ClaudeAccountUsage* usage) { claudeAccountUsage_ = usage; }
+    // ADR 0110: the provider's credential changed, so its reported failures no longer apply.
+    void forgetProviderFailure(const QString& provider) { readiness_.forget(provider); }
 
     using CommandCallback = std::function<void(const QJsonObject&)>;
 
@@ -278,6 +280,12 @@ class SessionHost final : public QObject, private AgentHostPort {
     void codexReadiness(const compat::Runtime& runtime,
                         std::function<void(const QJsonObject&)> callback);
     static constexpr int codexAccountReadTimeoutMs = 5000;
+    // runtime.error gains `code` (and Codex limits their reset) and updates readiness; a
+    // completed turn clears an earlier failure. Other events pass through unchanged.
+    [[nodiscard]] QJsonObject noteProviderOutcome(const Session& session, const QString& type,
+                                                  const QJsonObject& payload);
+    // Codex limits carry no reset in their error; account/rateLimits/read has it.
+    void readCodexLimitReset(const QString& message);
     // Journals `provider.runtime` once when a session's CLI is untested or unreadable.
     void noteProviderRuntime(const QString& sessionId, qint64 generation);
     void beginTurn(const QString& sessionId, qint64 generation, const QJsonArray& input,

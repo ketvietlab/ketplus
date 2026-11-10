@@ -27,6 +27,10 @@ class ClaudeCredentials final : public QObject {
     void setAccountUsage(ClaudeAccountUsage* usage) { accountUsage_ = usage; }
     void observe(const QJsonObject& payload);
 
+  signals:
+    // A key was saved or removed (ADR 0110: earlier Claude failures no longer apply).
+    void changed();
+
   private:
     QJsonObject load(QString* error) const;
     QJsonObject status(const QJsonObject& config) const;

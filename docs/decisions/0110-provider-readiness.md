@@ -51,12 +51,48 @@ The sign-in probes:
   A source never clears an earlier `expired` or `key_rejected`. Only a turn that
   works clears them.
 
+A reported `signed_out` ends as soon as a probe finds an account, since the user
+signed in after it. Claude has no probe, so its `signed_out` lasts until the next
+query reports a source; the UI therefore never blocks sending on it.
+
 Reported states persist in `provider-readiness.json` beside the journal. The file
 is owner-only and keeps them across daemon restarts. A limit is dropped once
 `resets_at` passes.
 
-Turn errors gain a `code` in a following change. That change also fills the
-reported states and notifies clients.
+### Turn error codes
+
+`runtime.error` carries a `code` when the error is about the provider rather
+than the work:
+- `auth_required` and `auth_expired`;
+- `key_rejected`;
+- `limit_reached`;
+- `model_capacity` and `plan_blocked`;
+- `provider_unavailable`.
+
+`message` stays verbatim.
+
+- **Classification.** Structured fields decide first: Codex `codexErrorInfo`
+  (`usageLimitExceeded`, `unauthorized`, `serverOverloaded`), kept as
+  `provider_info`. The provider's text is the fallback.
+- **Readiness.**
+  - `auth_required`, `auth_expired`, `key_rejected` and `limit_reached` set the
+    reported state.
+  - A capacity or plan error concerns one model, so the provider stays ready.
+  - A turn that completes clears any reported failure.
+  - For a Codex limit, the reset comes from `account/rateLimits/read`: it is the
+    reset of the window that is used up.
+- **Notification.** Clients learn of the change from the coded `runtime.error`
+  itself and read `provider.runtime_status` again.
+- **Check again.** It sends `provider.runtime_status {recheck: true}`. That forgets
+  what can be told again: a sign-out, which the probe checks, and a limit with no
+  known reset, which nothing else would end. It then runs every probe again. An
+  expired sign-in, a rejected key and a pending limit stay until a turn works or
+  the credential changes. Saving or removing a Claude API key forgets Claude's
+  failures.
+- **Classification.** Text is read only when Codex gave no other
+  `codexErrorInfo`, and only for the provider's own sentence at the start of the
+  message. "MCP server github: authentication required" is about the work, not
+  the account.
 
 ## Consequences
 
