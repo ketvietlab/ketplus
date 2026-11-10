@@ -21,7 +21,7 @@ Item {
     property alias usageRingButton: usageRingButton
     Layout.fillWidth: true
     // As ket's KetComposer: the focus ring surrounds the card, inside the composer's own box.
-    Layout.preferredHeight: composer.height + 2 * composer.recipe.ringWidth + composerFooter.height + KetTheme.px(18, KetTheme.zoom)
+    Layout.preferredHeight: composer.height + 2 * composer.recipe.ringWidth + composerFooter.height + KetTheme.px(16, KetTheme.zoom)
 
     Rectangle {
         id: composer
@@ -407,6 +407,9 @@ Item {
             variant: Kit.KetTheme.ButtonVariant.Ghost
             controlSize: Kit.KetTheme.ControlSize.Small
             objectName: "permissionButton"
+            // The mock's footer buttons: 7 px beside the label.
+            leftPadding: KetTheme.px(7, KetTheme.zoom)
+            rightPadding: KetTheme.px(7, KetTheme.zoom)
             // Keeps the hover fill while its menu is open, as the mock's footer buttons do.
             previewState: permissionMenu.visible ? {hovered: true, focused: visualFocus} : null
             Layout.minimumHeight: KetTheme.px(28, KetTheme.zoom)
@@ -508,6 +511,8 @@ Item {
             variant: Kit.KetTheme.ButtonVariant.Ghost
             controlSize: Kit.KetTheme.ControlSize.Small
             objectName: "modelButton"
+            leftPadding: KetTheme.px(7, KetTheme.zoom)
+            rightPadding: KetTheme.px(7, KetTheme.zoom)
             Layout.minimumWidth: KetTheme.px(40, KetTheme.zoom)
             Layout.minimumHeight: KetTheme.px(28, KetTheme.zoom)
             Layout.maximumWidth: Math.max(KetTheme.px(40, KetTheme.zoom), composer.width - (composer.compactControls ? KetTheme.px(120, KetTheme.zoom) : KetTheme.px(240, KetTheme.zoom)))

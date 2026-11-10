@@ -539,10 +539,14 @@ void AgentWorkspaceViewTest::sidebarDividerRemainsResizable() {
     QVERIFY(handle);
     QVERIFY(divider);
     QVERIFY(sidebar);
-    QTRY_COMPARE(handle->width(), 6.0);
+    // The divider takes one pixel of layout, as the mock; the grab area stays 6 px.
+    QTRY_COMPARE(handle->width(), 1.0);
     QCOMPARE(divider->width(), 1.0);
     QTRY_VERIFY(handle->height() > 0);
     QCOMPARE(divider->height(), handle->height());
+    QTRY_VERIFY(handle->contains(QPointF(3, 100)));
+    QVERIFY(handle->contains(QPointF(-2, 100)));
+    QVERIFY(!handle->contains(QPointF(5, 100)));
     const auto start = handle->mapToScene(QPointF(3, 100)).toPoint();
     const auto originalWidth = sidebar->width();
     QTest::mousePress(view.quickView(), Qt::LeftButton, Qt::NoModifier, start);
