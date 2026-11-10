@@ -50,8 +50,10 @@ path that must not trust the download server or the network.
   never asks for permission on the second launch. Background downloads are off
   until the user turns them on. KetPlus always asks before relaunching.
 - Scheduled checks use Sparkle's gentle reminders: if KetPlus is not in focus,
-  Sparkle does not raise a modal alert. The sidebar shows "Update available"
-  until the user opens it or Sparkle ends the update session.
+  Sparkle does not raise a modal alert. The sidebar shows "Update ready" until
+  the user opens it or Sparkle ends the update session. Its detail reads
+  "Restart to install" once Sparkle has downloaded the update, and "Review and
+  install" before that (2026-11-10, #164).
 - Installing an update relaunches only the Desktop. The running daemon keeps
   serving its turns. The new Desktop then performs the ADR 0003
   `prepare_upgrade` handshake: an idle daemon is replaced, and a busy daemon

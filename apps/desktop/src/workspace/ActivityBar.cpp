@@ -329,8 +329,10 @@ void ActivityBar::setStorageStatus(const QVariantMap& result) {
             : tr("Review the size limit and detail retention in Settings."));
 }
 
-void ActivityBar::setPendingUpdate(const QString& version) {
-    updateReadyButton_->setDetail(tr("KétPlus Pro %1 · Review and install").arg(version));
+void ActivityBar::setPendingUpdate(const QString& version, const bool downloaded) {
+    updateReadyButton_->setDetail(downloaded
+                                      ? tr("KétPlus Pro %1 · Restart to install").arg(version)
+                                      : tr("KétPlus Pro %1 · Review and install").arg(version));
     updateReadyButton_->setVisible(!version.isEmpty());
 }
 
