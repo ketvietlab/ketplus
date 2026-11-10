@@ -127,6 +127,8 @@ void MainWindow::ensureAgentWorkspace() {
     connect(agentWorkspace_, &AgentWorkspaceView::repositoryPickerRequested, this,
             &MainWindow::chooseFolder);
     connect(agentWorkspace_, &AgentWorkspaceView::teamRequested, this, &MainWindow::openTeam);
+    connect(agentWorkspace_, &AgentWorkspaceView::teamTaskRequested, this,
+            &MainWindow::openTeamTask);
     auto updateRepositoryName = [this, lastPath = QString()]() mutable {
         const auto path = agentWorkspace_->executionPath();
         if (lastPath == path)

@@ -3,6 +3,7 @@
 #include "agent/DaemonAgentNotes.h"
 #include "agent/DaemonTranscriptNotices.h"
 #include "agent/McpToolResultMedia.h"
+#include "agent/TeamTranscriptBlocks.h"
 #include "agent/TranscriptActivityGroups.h"
 #include "agent/TranscriptNormalizer.h"
 
@@ -672,6 +673,13 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
             }
             if (data.value("origin").toString() == QStringLiteral("agent")) {
                 markAgentOrigin(entry, data.value("agent_messages").toArray());
+                // #468: a team's own message is drawn as its block; the text stays the body.
+                if (const QVariantMap block =
+                        team_blocks::fromAgentMessages(data.value("agent_messages").toArray());
+                    !block.isEmpty()) {
+                    entry.insert(QStringLiteral("subtype"), QStringLiteral("teamMessage"));
+                    entry.insert(QStringLiteral("teamBlock"), block);
+                }
                 // The reply answers a note above it, which now reads Replied; a note in
                 // another page is marked when the pages merge.
                 const auto answered = agentRepliesTo(data.value("agent_messages").toArray());

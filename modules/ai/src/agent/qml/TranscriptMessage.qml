@@ -75,6 +75,10 @@ Item {
     // The provider's own words and the model of the turn that failed.
     required property string errorDetail
     required property string errorModel
+    required property var teamBlockData
+    // #468: a team's own message (assignment, digest, review, decision) is its block, not a bubble.
+    readonly property bool teamBlock: kind === "user" && subtype === "teamMessage" && !!teamBlockData && !!teamBlockData.kind
+    readonly property bool userBubble: kind === "user" && !teamBlock
     // Only the failure that ended the latest turn shows the full guide; once the user writes
     // again, the row reads as the notice it was.
     readonly property var providerSetup: {
@@ -324,23 +328,23 @@ Item {
         id: messageSurface
         objectName: "messageSurface"
         // Banners and turn ends span the reading column, as the mock's KetBanner does.
-        readonly property int horizontalPadding: messageDelegate.activityRow || kind === "assistant" || messageDelegate.noticeRow ? 0 : (kind === "user" ? userRecipe.paddingInline : KetTheme.px(18, KetTheme.zoom))
+        readonly property int horizontalPadding: messageDelegate.activityRow || kind === "assistant" || messageDelegate.noticeRow || messageDelegate.teamBlock ? 0 : (kind === "user" ? userRecipe.paddingInline : KetTheme.px(18, KetTheme.zoom))
         readonly property bool userMessage: kind === "user"
         // ADR 0027: another conversation's agent wrote this turn's opening message.
         readonly property bool agentMessage: kind === "user" && subtype === "agentMessage"
         readonly property real userMaximumWidth: Math.max(KetTheme.px(160, KetTheme.zoom), Math.min(messageDelegate.contentColumnWidth * userRecipe.maxWidth, messageDelegate.contentColumnWidth - KetTheme.px(63, KetTheme.zoom)))
-        x: kind === "user" ? messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - KetTheme.px(20, KetTheme.zoom) : messageDelegate.contentColumnX + KetTheme.px(20, KetTheme.zoom)
+        x: messageDelegate.userBubble ? messageDelegate.contentColumnX + messageDelegate.contentColumnWidth - width - KetTheme.px(20, KetTheme.zoom) : messageDelegate.contentColumnX + KetTheme.px(20, KetTheme.zoom)
         y: messageDelegate.surfaceInset + messageDelegate.dayLead + userLead.height + (imagesOnly ? 0 : userLead.gap) - messageDelegate.firstRowLift
-        width: kind === "user" ? Math.min(userMaximumWidth, Math.ceil(bodyMetrics.advanceWidth) + KetTheme.px(10, KetTheme.zoom) + horizontalPadding * 2) : messageDelegate.contentColumnWidth - KetTheme.px(40, KetTheme.zoom)
+        width: messageDelegate.userBubble ? Math.min(userMaximumWidth, Math.ceil(bodyMetrics.advanceWidth) + KetTheme.px(10, KetTheme.zoom) + horizontalPadding * 2) : messageDelegate.contentColumnWidth - KetTheme.px(40, KetTheme.zoom)
         // An images-only prompt keeps no empty bubble under its thumbnails.
         readonly property bool imagesOnly: userMessage && userLead.visible && messageDelegate.displayBody.trim().length === 0
         visible: !imagesOnly
-        height: imagesOnly ? 0 : messageColumn.implicitHeight + (messageDelegate.activityRow ? 0 : kind === "user" ? 2 * userRecipe.paddingBlock : KetTheme.px(messageDelegate.tightNotice ? 8 : 16, KetTheme.zoom))
+        height: imagesOnly ? 0 : messageColumn.implicitHeight + (messageDelegate.activityRow || messageDelegate.teamBlock ? 0 : kind === "user" ? 2 * userRecipe.paddingBlock : KetTheme.px(messageDelegate.tightNotice ? 8 : 16, KetTheme.zoom))
         // A file edit read as an activity step is a line like any other step, as in the mock;
         // only a standalone file message keeps its raised card.
         readonly property bool fileCard: kind === "file" && !messageDelegate.activityRow
-        radius: kind === "user" ? userRecipe.radius : fileCard ? KetTheme.px(7, KetTheme.zoom) : 0
-        color: kind === "user" ? userRecipe.background : fileCard ? KetTheme.t.surfaceRaised : "transparent"
+        radius: messageDelegate.userBubble ? userRecipe.radius : fileCard ? KetTheme.px(7, KetTheme.zoom) : 0
+        color: messageDelegate.userBubble ? userRecipe.background : fileCard ? KetTheme.t.surfaceRaised : "transparent"
         border.color: fileCard ? KetTheme.t.panelBorder : "transparent"
 
         Column {
@@ -404,6 +408,18 @@ Item {
                 details: messageDelegate.meta
                 message: messageDelegate.displayBody
                 state: messageDelegate.status
+            }
+            Loader {
+                objectName: "transcriptTeamBlockLoader"
+                width: parent.width
+                active: messageDelegate.teamBlock
+                visible: active
+                height: active && item ? item.implicitHeight : 0
+                sourceComponent: TranscriptTeamBlock {
+                    width: parent ? parent.width : 0
+                    block: messageDelegate.teamBlockData
+                    onTaskRequested: taskId => agentHost.requestTeamTask(String(messageDelegate.teamBlockData.team || ""), taskId)
+                }
             }
             TranscriptNotice {
                 objectName: "transcriptNotice"
@@ -913,7 +929,7 @@ Item {
                             bodyText.refreshRenderedSource();
                     }
                 }
-                visible: !messageDelegate.noticeRow && !messageDelegate.activityRow && subtype !== "question" && subtype !== "approval" && kind !== "file"
+                visible: !messageDelegate.noticeRow && !messageDelegate.activityRow && !messageDelegate.teamBlock && subtype !== "question" && subtype !== "approval" && kind !== "file"
                 readOnly: true
                 selectByMouse: true
                 persistentSelection: true

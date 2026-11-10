@@ -182,3 +182,9 @@ set_tests_properties(ketplus_daemon_peer_transport_tests PROPERTIES TIMEOUT 45)
 ketplus_add_daemon_test(ketplus_async_question_lifetime_tests AsyncQuestionLifetimeTest.cpp)
 
 ketplus_tests_offscreen()
+# #468: the daemon's team texts, read by the desktop's transcript blocks.
+ketplus_add_daemon_test(ketplus_team_transcript_contract_tests TeamTranscriptContractTest.cpp)
+target_sources(ketplus_team_transcript_contract_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/ai/src/agent/TeamTranscriptBlocks.cpp)
+target_include_directories(ketplus_team_transcript_contract_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/ai/src)

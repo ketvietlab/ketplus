@@ -435,6 +435,9 @@ class AgentWorkspaceView final : public QWidget {
         }
     }
     Q_INVOKABLE void requestTeam(const QString& teamId) { emit teamRequested(teamId); }
+    // #468: a team block's Open T-n. The task is of the open conversation's team, or else of
+    // the member team named in the block.
+    Q_INVOKABLE void requestTeamTask(const QString& teamName, const QString& taskId);
     // The labels the header's Add tag menu offers, each as {label, color}.
     Q_INVOKABLE [[nodiscard]] QVariantList tagCatalog() const;
     Q_INVOKABLE void requestConversationTag(const QString& conversationId, const QString& label,
@@ -538,6 +541,7 @@ class AgentWorkspaceView final : public QWidget {
     void tagFilterRequested(const QString& tag);
     void teamRolesChanged();
     void teamRequested(const QString& teamId);
+    void teamTaskRequested(const QString& teamId, const QString& taskId);
     void conversationTagRequested(const QString& conversationId, const QString& label, bool tagged);
     void activityGroupRequested(const QString& scope, const QString& key, bool expanded);
     void historyStateChanged();

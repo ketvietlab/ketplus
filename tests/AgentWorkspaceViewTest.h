@@ -42,6 +42,9 @@ class AgentWorkspaceViewTest final : public QObject {
     void fileStepsOpenTheirDiffInline();
     void claudeEditOpensItsDiffInline();
     void sentAgentMessageReadsAsTheMockNote();
+    void teamMessagesReadAsTheirBlocks();
+    void teamBlockOpensItsTask();
+    void unknownTeamMessageStaysText();
     void settledApprovalsReadAsTheirOutcome();
     void capacityErrorOffersAnotherModel();
     void providerSetupHoldsTheMessageUntilTheProviderWorks();
