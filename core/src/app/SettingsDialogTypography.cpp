@@ -99,18 +99,16 @@ class TypographyPreview final : public QWidget {
 
     void setAppearanceSettings(const AppearanceSettings& settings) {
         settings_ = settings.normalized();
-        setMinimumHeight(2 * inset + labelPixels + 4 * gap + settings_.interfaceFontSizePixels +
+        setMinimumHeight(2 * inset + labelPixels + 3 * gap + settings_.interfaceFontSizePixels +
                          2 * settings_.editor.lineHeightPixels +
-                         settings_.terminal.lineHeightPixels +
-                         2 * settings_.preview.lineHeightPixels);
+                         settings_.terminal.lineHeightPixels);
         updateGeometry();
         update();
     }
 
   protected:
     // The mock's sample: a sentence in the interface font, code in the editor font and a shell
-    // prompt in the terminal font, each at its chosen size. The Markdown lines follow while
-    // their size is still a setting.
+    // prompt in the terminal font, each at its size.
     void paintEvent(QPaintEvent* event) override {
         Q_UNUSED(event)
         QPainter painter(this);
@@ -145,13 +143,8 @@ class TypographyPreview final : public QWidget {
                                ? ket::Profile::current().monoFamily()
                                : settings_.terminalFontFamily);
         terminalFont.setPixelSize(settings_.terminal.fontSizePixels);
-        top = drawLines(painter, top + gap, terminalFont, settings_.terminal.lineHeightPixels,
-                        muted, QStringLiteral("\u279C ketplus-desktop git:(develop)"));
-
-        QFont previewFont = font();
-        previewFont.setPixelSize(settings_.preview.fontSizePixels);
-        drawLines(painter, top + gap, previewFont, settings_.preview.lineHeightPixels, main,
-                  QStringLiteral("Markdown preview\nDocumentation stays legible."));
+        drawLines(painter, top + gap, terminalFont, settings_.terminal.lineHeightPixels, muted,
+                  QStringLiteral("\u279C ketplus-desktop git:(develop)"));
     }
 
   private:
@@ -208,26 +201,10 @@ QWidget* SettingsDialog::createTypographyCard() {
     editorLineHeightBox_ =
         pixelSelect(QStringLiteral("editorLineHeight"), EditorSettings::minimumLineHeightPixels,
                     EditorSettings::maximumLineHeightPixels, content);
-    terminalFontSizeBox_ = pixelSelect(QStringLiteral("terminalFontSize"),
-                                       TextTypographySettings::minimumFontSizePixels,
-                                       TextTypographySettings::maximumFontSizePixels, content);
-    terminalLineHeightBox_ = pixelSelect(QStringLiteral("terminalLineHeight"),
-                                         TextTypographySettings::minimumLineHeightPixels,
-                                         TextTypographySettings::maximumLineHeightPixels, content);
-    previewFontSizeBox_ = pixelSelect(QStringLiteral("previewFontSize"),
-                                      TextTypographySettings::minimumFontSizePixels,
-                                      TextTypographySettings::maximumFontSizePixels, content);
-    previewLineHeightBox_ = pixelSelect(QStringLiteral("previewLineHeight"),
-                                        TextTypographySettings::minimumLineHeightPixels,
-                                        TextTypographySettings::maximumLineHeightPixels, content);
 
     for (const auto& [label, control] :
          {std::pair{tr("Editor font size"), editorFontSizeBox_},
-          std::pair{tr("Editor line height"), editorLineHeightBox_},
-          std::pair{tr("Terminal font size"), terminalFontSizeBox_},
-          std::pair{tr("Terminal line height"), terminalLineHeightBox_},
-          std::pair{tr("Preview font size"), previewFontSizeBox_},
-          std::pair{tr("Preview line height"), previewLineHeightBox_}}) {
+          std::pair{tr("Editor line height"), editorLineHeightBox_}}) {
         control->setAccessibleName(label);
         control->findChild<ket::Select*>()->setAccessibleName(label);
         layout->addWidget(new ket::FieldRow(label, control, {}, content));
@@ -250,31 +227,21 @@ QWidget* SettingsDialog::createTypographyCard() {
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
     scroll->setWidget(content);
-    const QList<ketplus::PixelSelect*> sizeBoxes = {interfaceFontSizeBox_, editorFontSizeBox_,
-                                                    terminalFontSizeBox_, previewFontSizeBox_};
+    const QList<ketplus::PixelSelect*> sizeBoxes = {interfaceFontSizeBox_, editorFontSizeBox_};
     for (ketplus::PixelSelect* box : sizeBoxes) {
         connect(box, &ketplus::PixelSelect::valueChanged, this, [this, box] {
             if (box == editorFontSizeBox_) {
                 editorLineHeightBox_->setMinimum(
                     qMax(EditorSettings::minimumLineHeightPixels, box->value()));
-            } else if (box == terminalFontSizeBox_) {
-                terminalLineHeightBox_->setMinimum(
-                    qMax(TextTypographySettings::minimumLineHeightPixels, box->value()));
-            } else if (box == previewFontSizeBox_) {
-                previewLineHeightBox_->setMinimum(
-                    qMax(TextTypographySettings::minimumLineHeightPixels, box->value()));
             }
             updatePreview();
             applyChanges();
         });
     }
-    for (ketplus::PixelSelect* box :
-         {editorLineHeightBox_, terminalLineHeightBox_, previewLineHeightBox_}) {
-        connect(box, &ketplus::PixelSelect::valueChanged, this, [this] {
-            updatePreview();
-            applyChanges();
-        });
-    }
+    connect(editorLineHeightBox_, &ketplus::PixelSelect::valueChanged, this, [this] {
+        updatePreview();
+        applyChanges();
+    });
     connect(editorFontBox_, &QComboBox::currentIndexChanged, this, [this] {
         editorFontFamily_ = settings_fonts::selectedFamily(editorFontBox_);
         updatePreview();

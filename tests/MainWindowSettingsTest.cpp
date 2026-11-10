@@ -430,10 +430,6 @@ void MainWindowSettingsTest::appliesSavedAppearanceToPublicAndPrivateSurfaces() 
             ->setCurrentIndex(2);
         window.findChild<ketplus::PixelSelect*>(QStringLiteral("editorFontSize"))->setValue(17);
         window.findChild<ketplus::PixelSelect*>(QStringLiteral("editorLineHeight"))->setValue(29);
-        window.findChild<ketplus::PixelSelect*>(QStringLiteral("terminalFontSize"))->setValue(18);
-        window.findChild<ketplus::PixelSelect*>(QStringLiteral("terminalLineHeight"))->setValue(30);
-        window.findChild<ketplus::PixelSelect*>(QStringLiteral("previewFontSize"))->setValue(19);
-        window.findChild<ketplus::PixelSelect*>(QStringLiteral("previewLineHeight"))->setValue(31);
         window.findChild<QAbstractButton*>(QStringLiteral("followSystemTheme"))->setChecked(false);
         window.findChild<QAbstractButton*>(QStringLiteral("darkThemeCard"))->click();
         // Every change applied as it was made; there is no Save button.
@@ -453,8 +449,9 @@ void MainWindowSettingsTest::appliesSavedAppearanceToPublicAndPrivateSurfaces() 
     QCOMPARE(appearance.interfaceFontSizePixels, 16);
     QCOMPARE(appearance.editor.fontSizePixels, 17);
     QCOMPARE(appearance.editor.lineHeightPixels, 29);
-    QCOMPARE(appearance.terminal, (ketplus::TextTypographySettings{18, 30}));
-    QCOMPARE(appearance.preview, (ketplus::TextTypographySettings{19, 31}));
+    // Terminal text follows the editor, and Markdown reads a pixel over the interface.
+    QCOMPARE(appearance.terminal, (ketplus::TextTypographySettings{17, 29}));
+    QCOMPARE(appearance.preview, (ketplus::TextTypographySettings{17, 29}));
     QCOMPARE(theme.interfaceFontSizePixels(), 16);
     QCOMPARE(theme.mode(), ketplus::ThemeManager::Mode::Dark);
     QVERIFY(actionWithText(window, QStringLiteral("Dark"))->isChecked());
@@ -466,7 +463,7 @@ void MainWindowSettingsTest::appliesSavedAppearanceToPublicAndPrivateSurfaces() 
         QCOMPARE(editor->editorSettings(), appearance.editor);
     }
     for (const auto* terminal : window.findChildren<ketplus::TerminalView*>()) {
-        QCOMPARE(terminal->font().pixelSize(), 18);
+        QCOMPARE(terminal->font().pixelSize(), 17);
     }
 
     auto* preview = window.findChild<ketplus::MarkdownPreviewPane*>();
@@ -474,7 +471,7 @@ void MainWindowSettingsTest::appliesSavedAppearanceToPublicAndPrivateSurfaces() 
     auto* browser = preview->findChild<QTextBrowser*>(QStringLiteral("markdownPreviewBrowser"));
     QVERIFY(browser != nullptr);
     QTRY_VERIFY(
-        browser->document()->defaultStyleSheet().contains(QStringLiteral("font-size: 19px")));
+        browser->document()->defaultStyleSheet().contains(QStringLiteral("font-size: 17px")));
 }
 
 void MainWindowSettingsTest::settingsAndWorktreesUseWorkspacePages() {

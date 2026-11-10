@@ -134,10 +134,6 @@ class SettingsDialog final : public QDialog, public SettingsHost {
     PixelSelect* interfaceFontSizeBox_{nullptr};
     PixelSelect* editorFontSizeBox_{nullptr};
     PixelSelect* editorLineHeightBox_{nullptr};
-    PixelSelect* terminalFontSizeBox_{nullptr};
-    PixelSelect* terminalLineHeightBox_{nullptr};
-    PixelSelect* previewFontSizeBox_{nullptr};
-    PixelSelect* previewLineHeightBox_{nullptr};
     TypographyPreview* preview_{nullptr};
     QWidget* buttons_{nullptr};
     ket::StepSlider* zoomStep_{nullptr};

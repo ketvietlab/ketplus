@@ -19,3 +19,13 @@ Escape keeps what was applied, so `reject()` no longer cancels a theme preview.
 The desktop's merge with a newer snapshot from another window is unchanged: fields
 the open dialog did not edit keep the newer values. `RefactorWave1ContractTest` and
 `SettingsDialogTest` record the new contract.
+
+## Terminal and Markdown sizes follow the editor and the interface
+
+Jay decided on 2026-11-10 to remove the Terminal and Markdown font size rows, as the
+mock does. `AppearanceSettings::normalized()` now derives both sizes: terminal text
+uses the editor's size and line height, and Markdown is one pixel over the interface
+size, with the former 15/26 line rhythm. Stored `terminal/*` and `preview/*` values
+are still written but no longer read, so an older release that reads them still opens.
+The Typography preview drops its Markdown lines, and the Pro page follows the mock's
+order: Interface font, Interface size, Conversation width, Editor font, Editor font size.

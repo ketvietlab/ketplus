@@ -294,11 +294,7 @@ AppearanceSettings SettingsDialog::appearanceSettings() const {
                 .fontSizePixels = editorFontSizeBox_->value(),
                 .lineHeightPixels = editorLineHeightBox_->value(),
             },
-        .terminal =
-            TextTypographySettings{terminalFontSizeBox_->value(), terminalLineHeightBox_->value()},
         .terminalFontFamily = terminalFontFamily_,
-        .preview =
-            TextTypographySettings{previewFontSizeBox_->value(), previewLineHeightBox_->value()},
     }
         .normalized();
 }
@@ -315,14 +311,6 @@ void SettingsDialog::setAppearanceSettings(const AppearanceSettings& settings) {
     editorLineHeightBox_->setMinimum(
         qMax(EditorSettings::minimumLineHeightPixels, value.editor.fontSizePixels));
     editorLineHeightBox_->setValue(value.editor.lineHeightPixels);
-    terminalFontSizeBox_->setValue(value.terminal.fontSizePixels);
-    terminalLineHeightBox_->setMinimum(
-        qMax(TextTypographySettings::minimumLineHeightPixels, value.terminal.fontSizePixels));
-    terminalLineHeightBox_->setValue(value.terminal.lineHeightPixels);
-    previewFontSizeBox_->setValue(value.preview.fontSizePixels);
-    previewLineHeightBox_->setMinimum(
-        qMax(TextTypographySettings::minimumLineHeightPixels, value.preview.fontSizePixels));
-    previewLineHeightBox_->setValue(value.preview.lineHeightPixels);
     updatePreview();
 }
 

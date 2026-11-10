@@ -330,16 +330,7 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     auto* editorSize = dialog_->findChild<ketplus::PixelSelect*>(QStringLiteral("editorFontSize"));
     auto* editorLine =
         dialog_->findChild<ketplus::PixelSelect*>(QStringLiteral("editorLineHeight"));
-    auto* terminalSize =
-        dialog_->findChild<ketplus::PixelSelect*>(QStringLiteral("terminalFontSize"));
-    auto* terminalLine =
-        dialog_->findChild<ketplus::PixelSelect*>(QStringLiteral("terminalLineHeight"));
-    auto* previewSize =
-        dialog_->findChild<ketplus::PixelSelect*>(QStringLiteral("previewFontSize"));
-    auto* previewLine =
-        dialog_->findChild<ketplus::PixelSelect*>(QStringLiteral("previewLineHeight"));
-    const QList<QWidget*> publicControls = {editorFont,   interfaceSize, editorSize,  editorLine,
-                                            terminalSize, terminalLine,  previewSize, previewLine};
+    const QList<QWidget*> publicControls = {editorFont, interfaceSize, editorSize, editorLine};
     for (QWidget* control : publicControls) {
         if (control != nullptr) {
             control->setParent(fields);
@@ -348,10 +339,6 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     }
     if (editorLine != nullptr)
         editorLine->hide();
-    if (terminalLine != nullptr)
-        terminalLine->hide();
-    if (previewLine != nullptr)
-        previewLine->hide();
     if (interfaceSize != nullptr)
         interfaceSize->hide();
     auto* interfaceFont = new ket::Select(fields);
@@ -416,12 +403,12 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     fieldsLayout->addWidget(interfaceFont, 0, 1, Qt::AlignRight | Qt::AlignTop);
     fieldsLayout->addWidget(interfaceSizeCopy, 1, 0, Qt::AlignTop);
     fieldsLayout->addWidget(interfaceZoom, 1, 1);
-    addField(fieldsLayout, 2, tr("Editor font"), editorFont, fields);
-    addField(fieldsLayout, 3, tr("Editor font size"), editorSize, fields);
-    addField(fieldsLayout, 4, tr("Terminal font size"), terminalSize, fields);
-    addField(fieldsLayout, 5, tr("Markdown font size"), previewSize, fields);
-    // A select like the mock's, "Default · 760 px". The choice is staged until Save, like the
-    // fields above.
+    // The mock's order: the interface rows, Conversation width, then the editor. Terminal text
+    // follows the editor and Markdown the interface, so neither has a row (Jay, 2026-11-10).
+    addField(fieldsLayout, 3, tr("Editor font"), editorFont, fields);
+    addField(fieldsLayout, 4, tr("Editor font size"), editorSize, fields);
+    // A select like the mock's, "Default · 760 px". It applies as it is chosen, like the
+    // fields around it.
     auto* widthState = new ConversationWidthState;
     dialog_->addPage(widthState);
     auto* conversationWidth = new ket::Select(fields);
@@ -458,8 +445,8 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     conversationWidthCopyLayout->addWidget(
         label(tr("Applies to Agent Workspace. Atlas keeps its compact reading column."),
               QStringLiteral("settingsWorkspaceHelp"), conversationWidthCopy));
-    fieldsLayout->addWidget(conversationWidthCopy, 6, 0, Qt::AlignTop);
-    fieldsLayout->addWidget(conversationWidth, 6, 1, Qt::AlignRight | Qt::AlignTop);
+    fieldsLayout->addWidget(conversationWidthCopy, 2, 0, Qt::AlignTop);
+    fieldsLayout->addWidget(conversationWidth, 2, 1, Qt::AlignRight | Qt::AlignTop);
     typographyLayout->addWidget(fields);
     chrome_geometry::addSpacing(typographyLayout, 24);
     auto* sample = dialog_->findChild<QWidget*>(QStringLiteral("typographyPreview"));
