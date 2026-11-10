@@ -1264,7 +1264,7 @@ Item {
             return (entry ? entry.label : plan[role].provider) + " · " + plan[role].model + " · " + plan[role].effort
         }
         title: "New team in " + repository
-        onOpened: { tried = false; teamName.text = ""; teamGoal.text = ""; plan = defaults; merges = "leader" }
+        onOpened: { tried = false; teamName.text = ""; teamGoal.text = ""; plan = defaults; merges = "leader"; leaderMerges.checked = true }
         DialogBody {
             KetFieldRow {
                 width: parent.width
@@ -1287,13 +1287,25 @@ Item {
             KetFieldRow {
                 width: parent.width
                 label: "Merges tasks"
-                help: newTeamDialog.merges === "leader"
-                    ? "The leader merges a task once the reviewer passes it, in the order the tasks depend on."
-                    : "The leader proposes the order; each merge waits for you."
-                KetSegmentedControl {
-                    options: ["Leader", "Me"]
-                    currentIndex: newTeamDialog.merges === "leader" ? 0 : 1
-                    onActivated: index => newTeamDialog.merges = index === 0 ? "leader" : "user"
+                Column {
+                    width: parent.width
+                    spacing: screen.px(6)
+                    KetChoice {
+                        id: leaderMerges
+                        width: parent.width
+                        kind: KetTheme.ToggleKind.Radio
+                        checked: true
+                        text: "The leader"
+                        description: "Once the reviewer passes a task, in the order the tasks depend on"
+                        onToggled: if (checked) newTeamDialog.merges = "leader"
+                    }
+                    KetChoice {
+                        width: parent.width
+                        kind: KetTheme.ToggleKind.Radio
+                        text: "Me"
+                        description: "The leader proposes the order; each merge waits for you"
+                        onToggled: if (checked) newTeamDialog.merges = "user"
+                    }
                 }
             }
             // Scaffold: the team's conversations, started with it instead of one by one.
