@@ -7,6 +7,7 @@
 #include "runtime/ProviderReadiness.h"
 #include "storage/LocalJournal.h"
 #include "storage/McpMediaStore.h"
+#include "teams/TeamCoordinator.h"
 
 #include <QDeadlineTimer>
 #include <QHash>
@@ -32,7 +33,7 @@ class CodexAdapter;
 class CursorAdapter;
 class ProviderAdapter;
 
-class SessionHost final : public QObject, private AgentHostPort {
+class SessionHost final : public QObject, private AgentHostPort, private teams::TeamHostPort {
     Q_OBJECT
 
   public:
@@ -261,6 +262,12 @@ class SessionHost final : public QObject, private AgentHostPort {
     [[nodiscard]] QJsonObject reviewerJson(const QString& sessionId) const;
     QString startReviewerConversation(const Session& working, const QString& provider,
                                       QString* error);
+    // ADR 0112, in SessionHostTeams.cpp.
+    [[nodiscard]] std::optional<teams::TeamConversation>
+    teamConversation(const QString& sessionId) const override;
+    [[nodiscard]] bool onTeam(const QString& sessionId) const override;
+    [[nodiscard]] QString repositoryOf(const QString& worktreePath) const;
+    void startTeams();
     // Copies the source history in bounded event-loop passes (ADR 0094), then answers.
     struct PendingFork;
     void storeFork(const QString& sourceId, qint64 sourceGeneration, const QString& forkId,
@@ -416,6 +423,9 @@ class SessionHost final : public QObject, private AgentHostPort {
     // Whether each provider can start a turn (#170); observed failures persist next to the journal.
     ProviderReadiness readiness_;
     AgentBroker* agents_{nullptr};
+    teams::TeamCoordinator* teams_{nullptr};
+    // Worktree path → the repository's main worktree, for team membership.
+    mutable QHash<QString, QString> repositoryByWorktree_;
     QString agentSocket_;
     QString agentExecutable_;
     // Previews decode on their own small pool and queue: one decode may hold a 64-megapixel

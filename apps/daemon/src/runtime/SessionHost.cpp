@@ -409,6 +409,7 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAda
     mediaStore_.retainSessions(liveSessions);
     // ADR 0027: every conversation has a number; older journals are backfilled once.
     agents_ = new AgentBroker(journal_, static_cast<AgentHostPort*>(this), this);
+    startTeams();
     for (const Session& session : std::as_const(sessions_)) {
         QString numberError;
         if (journal_
@@ -1576,6 +1577,7 @@ QJsonObject SessionHost::deleteSession(const QJsonObject& request) {
     deferredJournalCount_ -= session->deferredJournal.size();
     sessions_.remove(sessionId);
     agents_->forget(sessionId);
+    teams_->conversationDeleted(sessionId);
     mediaStore_.releaseSession(sessionId);
     emit eventReady(
         QJsonObject{{"session_id", sessionId},
