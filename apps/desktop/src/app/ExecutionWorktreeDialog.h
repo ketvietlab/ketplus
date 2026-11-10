@@ -1,7 +1,7 @@
 #pragma once
-#include <QDialog>
 #include <QJsonObject>
 #include <QStringList>
+#include <QWidget>
 #include <functional>
 
 namespace ketplus {

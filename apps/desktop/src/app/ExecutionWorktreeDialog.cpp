@@ -2,6 +2,7 @@
 #include "KetAppearance.h"
 #include "KetButton.h"
 #include "KetControlRecipes.h"
+#include "KetDialog.h"
 #include "KetIcons.h"
 #include "KetTextField.h"
 #include "KetToast.h"
@@ -146,13 +147,16 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
                                  std::function<void()> createWorktree) {
     // The mock's Repository & worktree picker: choose a repository, then one of its worktrees,
     // and "Use this repository" moves the conversation's next turn there (ADR 0105).
-    auto* dialog = new QDialog(parent);
-    dialog->setAttribute(Qt::WA_DeleteOnClose);
-    dialog->setWindowTitle("Repository & worktree");
+    // An in-window card as the mock's KetDialog (`width: px(800)`): title and close button in
+    // its header, the two columns in its body, the actions in its footer.
+    auto* dialog = new ket::Dialog("Repository & worktree", parent);
     dialog->setObjectName("executionWorktreeDialog");
-    dialog->resize(800, 440);
-    auto* layout = new QVBoxLayout(dialog);
-    layout->setContentsMargins(24, 24, 24, 24);
+    dialog->setCardWidth(800);
+    QObject::connect(dialog, &ket::Dialog::finished, dialog, &QObject::deleteLater);
+    auto* body = new QWidget;
+    body->setMinimumHeight(320);
+    auto* layout = new QVBoxLayout(body);
+    layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(12);
     auto* columns = new QHBoxLayout;
     columns->setSpacing(12);
@@ -160,35 +164,35 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
     repoColumn->setSpacing(8);
     auto* treeColumn = new QVBoxLayout;
     treeColumn->setSpacing(8);
-    auto* repoPane = new QWidget(dialog);
+    auto* repoPane = new QWidget(body);
     repoPane->setFixedWidth(222);
     repoPane->setLayout(repoColumn);
     repoColumn->setContentsMargins(0, 0, 0, 0);
     columns->addWidget(repoPane);
-    auto* divider = new ColumnRule(dialog);
+    auto* divider = new ColumnRule(body);
     columns->addWidget(divider);
     columns->addLayout(treeColumn, 1);
     layout->addLayout(columns, 1);
-    auto* repoSearch = new ket::TextField(dialog);
+    auto* repoSearch = new ket::TextField(body);
     repoSearch->setLeadingIcon(ket::Icons::codeForLucide(u"search"));
     repoSearch->setPlaceholderText("Search repositories…");
     repoSearch->setAccessibleName("Search repositories");
     repoSearch->setObjectName("repositorySearch");
     repoColumn->addWidget(repoSearch);
-    auto* repos = new QListWidget(dialog);
+    auto* repos = new QListWidget(body);
     repos->setObjectName("executionRepositoryList");
     repos->setAccessibleName("Conversation repositories");
     repos->setFrameShape(QFrame::NoFrame);
     repos->setStyleSheet(QStringLiteral("QListWidget { background: transparent; }"));
     repos->setItemDelegate(new PickerDelegate(true, repos));
     repoColumn->addWidget(repos, 1);
-    auto* search = new ket::TextField(dialog);
+    auto* search = new ket::TextField(body);
     search->setLeadingIcon(ket::Icons::codeForLucide(u"search"));
     search->setPlaceholderText("Search branch or folder…");
     search->setAccessibleName("Search worktrees");
     search->setObjectName("worktreeSearch");
     treeColumn->addWidget(search);
-    auto* list = new QListWidget(dialog);
+    auto* list = new QListWidget(body);
     list->setObjectName("executionWorktreeList");
     list->setAccessibleName("Execution worktrees");
     list->setFrameShape(QFrame::NoFrame);
@@ -197,21 +201,17 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
     list->setSpacing(4);
     list->setItemDelegate(new PickerDelegate(false, list));
     treeColumn->addWidget(list, 1);
-    auto* status = new QLabel(dialog);
+    auto* status = new QLabel(body);
     status->setObjectName("worktreeStatus");
     status->setWordWrap(true);
     layout->addWidget(status);
-    auto* footer = new QHBoxLayout;
-    auto* create = new ket::Button("Create worktree…", ket::ButtonVariant::Ghost, dialog);
+    dialog->setBody(body);
+    auto* create = dialog->addButton("Create worktree…", ket::ButtonVariant::Ghost);
     create->setObjectName("createWorktreeButton");
     create->setIcon(ket::Icons::icon(u"plus"));
-    auto* use = new ket::Button("Use this repository", ket::ButtonVariant::Primary, dialog);
+    auto* use = dialog->addButton("Use this repository", ket::ButtonVariant::Primary);
     use->setObjectName("useRepositoryButton");
     use->setEnabled(false);
-    footer->addStretch(1);
-    footer->addWidget(create);
-    footer->addWidget(use);
-    layout->addLayout(footer);
     create->setVisible(static_cast<bool>(createWorktree));
     struct State {
         int offset{0}, total{0}, epoch{0};
@@ -258,7 +258,7 @@ void showExecutionWorktreeDialog(QWidget* parent, ExecutionWorktreeRequest reque
         use->setEnabled(state->available && !state->switching && !state->loading &&
                         !state->pending && !state->chosen.isEmpty());
     };
-    QPointer<QDialog> guard(dialog);
+    QPointer<ket::Dialog> guard(dialog);
     auto load = [=] {
         if (state->loading || state->switching)
             return;

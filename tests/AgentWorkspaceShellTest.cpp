@@ -1,4 +1,5 @@
 #include "KetAppearance.h"
+#include "KetDialog.h"
 #include "KetRecipes.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
@@ -36,6 +37,7 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QMessageBox>
+#include <QPointer>
 #include <QProcess>
 #include <QPushButton>
 #include <QQuickItem>
@@ -974,6 +976,74 @@ class AgentWorkspaceShellTest final : public QObject {
         // Only the requested conversation reaches the transcript: the worktree's current one is
         // never published first.
         QCOMPARE(published, QStringList{earlier});
+    }
+
+    void renameOpensTheMocksDialogInTheWindow() {
+        QTemporaryDir settings;
+        QTemporaryDir workspace;
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(workspace.path());
+        window.resize(1200, 800);
+        window.show();
+        auto* agentButton =
+            window.findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"));
+        QVERIFY(agentButton);
+        agentButton->click();
+        auto* manager = window.findChild<ketplus::AgentSessionManager*>();
+        auto* sidebar = window.findChild<ketplus::ActivityBar*>(QStringLiteral("activityBar"));
+        QVERIFY(manager && sidebar);
+        const QString path = QFileInfo(workspace.path()).canonicalFilePath();
+        manager->activate(path);
+        const QString id = manager->activeConversationId(path);
+        QVERIFY(!id.isEmpty());
+        manager->renameConversation(path, id, QStringLiteral("Old name"));
+        const auto title = [&] {
+            for (const QVariant& value : manager->conversations(path))
+                if (value.toMap().value(QStringLiteral("id")).toString() == id)
+                    return value.toMap().value(QStringLiteral("title")).toString();
+            return QString();
+        };
+        const auto openRename = [&]() -> ket::Dialog* {
+            emit sidebar->conversationRenameRequested(path, id);
+            ket::Dialog* dialog = nullptr;
+            QTest::qWaitFor(
+                [&] {
+                    dialog =
+                        window.findChild<ket::Dialog*>(QStringLiteral("renameConversationDialog"));
+                    return dialog != nullptr && dialog->isVisible();
+                },
+                2000);
+            return dialog;
+        };
+
+        // A card inside the window, as the mock's: title, a Name field, Cancel and Rename.
+        QPointer<ket::Dialog> dialog = openRename();
+        QVERIFY(dialog);
+        QVERIFY(!dialog->isWindow());
+        QCOMPARE(dialog->title(), QStringLiteral("Rename conversation"));
+        auto* field = dialog->findChild<QLineEdit*>(QStringLiteral("renameConversationField"));
+        QVERIFY(field);
+        QCOMPARE(field->text(), QStringLiteral("Old name"));
+        QStringList actions;
+        for (auto* button : dialog->card()->findChildren<QAbstractButton*>())
+            if (!dialog->body()->isAncestorOf(button) && !button->text().isEmpty())
+                actions.append(button->text());
+        QCOMPARE(actions, (QStringList{QStringLiteral("Cancel"), QStringLiteral("Rename")}));
+
+        // Escape keeps the name; Return renames.
+        QTest::keyClick(field, Qt::Key_Escape);
+        QTRY_VERIFY(dialog.isNull());
+        QCOMPARE(title(), QStringLiteral("Old name"));
+        dialog = openRename();
+        QVERIFY(dialog);
+        field = dialog->findChild<QLineEdit*>(QStringLiteral("renameConversationField"));
+        field->setText(QStringLiteral("New name"));
+        QTest::keyClick(field, Qt::Key_Return);
+        QTRY_VERIFY(dialog.isNull());
+        QTRY_COMPARE(title(), QStringLiteral("New name"));
     }
 
     void sidebarConversationOpensItsWorktree() {
