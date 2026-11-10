@@ -6,6 +6,8 @@
 #include <QSqlQuery>
 #include <QVariant>
 
+#include <limits>
+
 namespace ketplus::daemon {
 namespace {
 // Replay rows indexed per background pass; each row costs a few indexed statements.
@@ -125,13 +127,16 @@ bool LocalJournal::listActivityFiles(const QString& session, const qint64 genera
     const qint64 afterCursor = position.value(1).toLongLong();
     position.finish();
     // Keys first, in index order: a pass reads at most passRows items whatever their family.
+    // The row value seeks activity_items_group to the marker, so a late pass does not walk the
+    // items before it. Ungrouped items have group 0; the first pass starts after all of them.
     QSqlQuery keys(database_);
     keys.prepare(QStringLiteral(
         "SELECT group_cursor,first_cursor,item_id,family,last_cursor FROM activity_items "
-        "WHERE session_id=? AND generation=? AND group_cursor>0 AND (group_cursor>? OR "
-        "(group_cursor=? AND first_cursor>?)) ORDER BY group_cursor,first_cursor LIMIT ?"));
+        "WHERE session_id=? AND generation=? AND (group_cursor,first_cursor)>(?,?) ORDER BY "
+        "group_cursor,first_cursor LIMIT ?"));
+    const qint64 seekCursor = afterGroup > 0 ? afterCursor : std::numeric_limits<qint64>::max();
     for (const QVariant& value :
-         QVariantList{session, generation, afterGroup, afterGroup, afterCursor, passRows})
+         QVariantList{session, generation, afterGroup, seekCursor, passRows})
         keys.addBindValue(value);
     if (!keys.exec()) {
         *error = keys.lastError();

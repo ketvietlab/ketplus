@@ -275,9 +275,10 @@ the corresponding Atlas mock first.
   `ketplus_daemon_protocol_tests` gives a viewed-image path that is a FIFO and
   fails if reading it blocks for 2 s.
 - Journal query audit: `ketplus_daemon_journal_query_audit_tests` traces every
-  statement of 25 journal operations (append, transcript reads, activity pages,
+  statement of 26 journal operations (append, transcript reads, activity pages,
   large-event fragments, fork including its snapshot reader, delete and purge,
-  backfill, retention and garbage passes) on a conversation with 100k events of its
+  backfill, a late changed-files pass over 100k items in five groups, retention and
+  garbage passes) on a conversation with 100k events of its
   own, next to 2,000 other sessions with 200k events and a conversation whose large
   tool results include three orphans. It fails a statement with more than 5,000
   full-scan steps, an automatic index or 200k VM steps. It reads SQLite's counters
