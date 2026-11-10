@@ -202,7 +202,8 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     // app-wide toasts, so the Agent Workspace, Worktrees and Settings still give feedback.
     connect(statusBar(), &QStatusBar::messageChanged, this, [this](const QString& message) {
         if (!message.isEmpty() && !statusBar()->isVisible())
-            ket::Toast::showMessage(this, message);
+            // Neutral: a status message may be a failure, never shown as a success.
+            ket::Toast::showMessage(this, message, ket::ToastTone::Neutral);
     });
     connect(activityBar_, &ActivityBar::settingsSectionRequested, this,
             &MainWindow::showSettingsSection);

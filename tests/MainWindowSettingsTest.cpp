@@ -822,8 +822,12 @@ void MainWindowSettingsTest::hiddenStatusMessagesShowAsToasts() {
     QVERIFY(QTest::qWaitForWindowExposed(&window));
     const auto toasts = [&window] {
         QStringList texts;
-        for (auto* toast : window.findChildren<ket::Toast*>())
+        for (auto* toast : window.findChildren<ket::Toast*>()) {
             texts.append(toast->text());
+            // Status messages include failures, so none reads as a success.
+            if (toast->tone() != ket::ToastTone::Neutral)
+                texts.append(QStringLiteral("not neutral"));
+        }
         return texts;
     };
 
@@ -833,6 +837,7 @@ void MainWindowSettingsTest::hiddenStatusMessagesShowAsToasts() {
     QTRY_VERIFY(!window.statusBar()->isVisible());
     window.statusBar()->showMessage(QStringLiteral("Saved the plan"), 2000);
     QVERIFY(toasts().contains(QStringLiteral("Saved the plan")));
+    QVERIFY(!toasts().contains(QStringLiteral("not neutral")));
 
     // With the status bar on screen, the message stays there.
     window.statusBar()->show();
