@@ -272,7 +272,8 @@ bool plainData(const QJsonValue& value, int depth = 0) {
 // the full-detail period they become omitted blocks that keep their place, so the
 // transcript shows where an image was. Text, arguments and other blocks are untouched.
 static std::optional<QJsonObject> withoutInlineImages(const QJsonObject& original,
-                                                      const QDateTime& cutoff) {
+                                                      const QDateTime& cutoff,
+                                                      const ImagePreview& preview) {
     const auto type = original.value("type").toString();
     const auto status = original.value("status").toString();
     auto info = original.value("compacted").toObject();
@@ -284,8 +285,33 @@ static std::optional<QJsonObject> withoutInlineImages(const QJsonObject& origina
          policy != "tool-arguments-v1" && policy != "tool-structured-result-v1"))
         return std::nullopt;
     qint64 removed = 0;
-    const auto strip = [&removed](const QJsonArray& blocks, const QString& imageType,
-                                  const QString& field, bool dataUrlOnly) {
+    qint64 retained = 0;
+    int previews = 0;
+    // Failed decodes or media writes cost as much as successful ones, so attempts are capped.
+    int attempts = 0;
+    // A result image may keep a bounded preview as a media reference, the form the media store
+    // gives current results; at most four per call, as clients draw. Input images have no
+    // rendering, so they always become placeholders.
+    const auto previewOf = [&](const QString& data) -> QJsonObject {
+        if (!preview || attempts >= 4)
+            return {};
+        auto encoded = data.toLatin1();
+        if (encoded.startsWith("data:")) {
+            const auto comma = encoded.indexOf(',');
+            encoded = comma < 0 ? QByteArray() : encoded.mid(comma + 1);
+        }
+        const auto decoded =
+            QByteArray::fromBase64Encoding(encoded, QByteArray::AbortOnBase64DecodingErrors);
+        if (!decoded || decoded.decoded.isEmpty())
+            return {};
+        ++attempts;
+        auto block = preview(decoded.decoded);
+        if (!block.isEmpty())
+            ++previews;
+        return block;
+    };
+    const auto strip = [&](const QJsonArray& blocks, const QString& imageType, const QString& field,
+                           bool dataUrlOnly) {
         QJsonArray result;
         for (const auto& value : blocks) {
             const auto block = value.toObject();
@@ -298,6 +324,13 @@ static std::optional<QJsonObject> withoutInlineImages(const QJsonObject& origina
                 continue;
             }
             removed += data.toString().toUtf8().size();
+            if (imageType == QStringLiteral("image")) {
+                if (const auto reference = previewOf(data.toString()); !reference.isEmpty()) {
+                    retained += QJsonDocument(reference).toJson(QJsonDocument::Compact).size();
+                    result.append(reference);
+                    continue;
+                }
+            }
             QJsonObject omitted{{"type", imageType},
                                 {"omitted", true},
                                 {"reason", "history_retention"},
@@ -320,7 +353,9 @@ static std::optional<QJsonObject> withoutInlineImages(const QJsonObject& origina
                           QStringLiteral("imageUrl"), true));
     if (removed == 0)
         return std::nullopt;
-    const auto details = marker(cutoff, "tool-inline-images-v1", removed, 0);
+    auto details = marker(cutoff, "tool-inline-images-v1", removed, retained);
+    if (previews > 0)
+        details.insert("previews", previews);
     if (info.isEmpty())
         info = details;
     info.insert("inline_images", details);
@@ -415,7 +450,7 @@ std::optional<QJsonObject> compactCompletedReplayItem(const QJsonObject& origina
     if (original.value("type") == "imageGeneration")
         return compactGeneratedImage(original, cutoff, preview);
     const auto detail = compactToolDetail(original, cutoff);
-    if (const auto images = withoutInlineImages(detail.value_or(original), cutoff))
+    if (const auto images = withoutInlineImages(detail.value_or(original), cutoff, preview))
         return images;
     return detail;
 }

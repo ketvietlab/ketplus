@@ -186,8 +186,9 @@ stores a 512 px JPEG preview of those pixels in the media store, and `result` be
 media reference (policy `image-preview-v1`, [ADR 0101](decisions/0101-compacted-image-previews.md)).
 Without a preview the item keeps its caption only. Inline base64
 images in older tool results become `omitted` blocks with reason `history_retention`
-that keep their position (policy `tool-inline-images-v1`). Desktop shows them as
-unavailable placeholders ([ADR 0099](decisions/0099-tool-result-inline-image-retention.md)).
+that keep their position (policy `tool-inline-images-v1`). With the host's preview
+writer, up to four result images per call instead keep a 512 px JPEG media reference in
+their place (ADR 0101). Desktop shows the others as unavailable placeholders ([ADR 0099](decisions/0099-tool-result-inline-image-retention.md)).
 Redundant tool starts are removed only when the immediately following retained
 event is their same-turn completion and preserves start data (except lifecycle
 status and empty known progress placeholders); interleaved/partial/large cases

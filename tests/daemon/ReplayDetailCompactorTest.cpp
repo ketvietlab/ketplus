@@ -656,6 +656,72 @@ class ReplayDetailCompactorTest final : public QObject {
         }));
         QVERIFY(!called);
     }
+    void toolResultImagesKeepUpToFourPreviews() {
+        QJsonArray content{QJsonObject{{"type", "text"}, {"text", "captured"}}};
+        for (int index = 0; index < 6; ++index)
+            content.append(QJsonObject{
+                {"type", "image"},
+                {"mimeType", "image/png"},
+                {"data",
+                 QString::fromLatin1(QByteArray("png-").append(char('0' + index)).toBase64())}});
+        const QJsonObject call{
+            {"type", "mcpToolCall"},
+            {"status", "completed"},
+            {"result", QJsonObject{{"content", content}}},
+            {"contentItems",
+             QJsonArray{
+                 QJsonObject{{"type", "inputImage"},
+                             {"imageUrl", "data:image/png;base64," +
+                                              QString::fromLatin1(QByteArray("in").toBase64())}}}}};
+        QList<QByteArray> seen;
+        const auto item = compactCompletedReplayItem(call, cutoff(), [&](const QByteArray& image) {
+            seen.append(image);
+            return QJsonObject{{"type", "image"},
+                               {"media_ref", "sha256:" + QString::fromLatin1(image)}};
+        });
+        QVERIFY(item);
+        QCOMPARE(seen, (QList<QByteArray>{"png-0", "png-1", "png-2", "png-3"}));
+        const auto blocks = item->value("result").toObject().value("content").toArray();
+        QCOMPARE(blocks.size(), 7);
+        QCOMPARE(blocks.at(0).toObject().value("text").toString(), QString("captured"));
+        for (int index = 1; index <= 4; ++index)
+            QCOMPARE(blocks.at(index).toObject().value("media_ref").toString(),
+                     QString("sha256:png-%1").arg(index - 1));
+        for (int index = 5; index <= 6; ++index)
+            QCOMPARE(blocks.at(index).toObject().value("reason").toString(),
+                     QString("history_retention"));
+        // Input images are never drawn, so they stay placeholders.
+        QVERIFY(item->value("contentItems").toArray().at(0).toObject().value("omitted").toBool());
+        const auto marker = item->value("compacted").toObject().value("inline_images").toObject();
+        QCOMPARE(marker.value("policy").toString(), QString("tool-inline-images-v1"));
+        QCOMPARE(marker.value("previews").toInt(), 4);
+        QVERIFY(marker.value("retained_bytes").toInteger() > 0);
+        QVERIFY(!compactCompletedReplayItem(*item, cutoff(), [](const QByteArray&) {
+            return QJsonObject{{"media_ref", "again"}};
+        }));
+        // Without a preview every image becomes a placeholder, as before, and a preview that
+        // keeps failing is tried no more than four times.
+        int attempts = 0;
+        const auto plain = compactCompletedReplayItem(call, cutoff(), [&](const QByteArray&) {
+            ++attempts;
+            return QJsonObject();
+        });
+        QCOMPARE(attempts, 4);
+        QVERIFY(plain);
+        QVERIFY(!plain->value("compacted")
+                     .toObject()
+                     .value("inline_images")
+                     .toObject()
+                     .contains("previews"));
+        QVERIFY(plain->value("result")
+                    .toObject()
+                    .value("content")
+                    .toArray()
+                    .at(1)
+                    .toObject()
+                    .value("omitted")
+                    .toBool());
+    }
 };
 QTEST_GUILESS_MAIN(ReplayDetailCompactorTest)
 #include "ReplayDetailCompactorTest.moc"
