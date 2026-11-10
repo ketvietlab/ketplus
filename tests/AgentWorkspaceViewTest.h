@@ -179,6 +179,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void conversationMenusOfferFork();
     void hiddenConversationReferenceTakesNoKeyFocus();
     void reviewerPickerFollowsTheActiveConversation();
+    void teamMemberHeaderShowsItsRoleInsteadOfReviewer();
     void reviewerLabelCollapsesBeforeTagsSqueezeTheTitle_data();
     void reviewerLabelCollapsesBeforeTagsSqueezeTheTitle();
     void selectsModelsInUnifiedPicker();

@@ -196,6 +196,7 @@ void MainWindow::refreshSidebarRepositories() {
                              conversations, root == promotedSidebarRepository_, teams});
     }
     activityBar_->setRepositories(repositories);
+    updateTeamRoles();
 }
 
 void MainWindow::openSidebarConversation(const QString& worktreePath,

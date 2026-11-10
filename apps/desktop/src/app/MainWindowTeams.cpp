@@ -104,6 +104,28 @@ QVector<SidebarTeam> MainWindow::takeSidebarTeams(const QString& repository,
     return folders;
 }
 
+void MainWindow::updateTeamRoles() {
+    if (agentWorkspace_ == nullptr)
+        return;
+    QVariantMap roles;
+    if (teams_ != nullptr && teams_->isAvailable())
+        for (const QJsonObject& team : teams_->teams())
+            for (const auto& value : team.value(QStringLiteral("members")).toArray()) {
+                const QJsonObject member = value.toObject();
+                const QString role = member.value(QStringLiteral("role")).toString();
+                roles.insert(
+                    member.value(QStringLiteral("session_id")).toString(),
+                    QVariantMap{
+                        {QStringLiteral("team_id"), team.value(QStringLiteral("id")).toString()},
+                        {QStringLiteral("team_name"),
+                         team.value(QStringLiteral("name")).toString()},
+                        {QStringLiteral("role"), role},
+                        {QStringLiteral("label"), team_roles::label(role)},
+                        {QStringLiteral("color"), team_roles::color(role).name()}});
+            }
+    agentWorkspace_->setTeamRoles(roles);
+}
+
 QString MainWindow::conversationSessionId(const QString& worktreePath,
                                           const QString& conversationId) const {
     if (agentManager_ == nullptr)

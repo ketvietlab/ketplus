@@ -16,10 +16,19 @@ Item {
                 return conversation;
         return ({});
     }
-    readonly property var tags: (selectedConversation.tags || []).map(tag => typeof tag === "string" ? {
+    readonly property var userTags: (selectedConversation.tags || []).map(tag => typeof tag === "string" ? {
             label: tag,
             color: KetTheme.t.accent
         } : tag)
+    // ADR 0112 (#467): a member's role, set by its team, leads its tags and cannot be edited.
+    readonly property var teamRole: (agentHost.teamRoles || {})[selectedConversation.sessionId || ""] || null
+    readonly property var tags: (teamRole ? [{
+                label: teamRole.label,
+                color: teamRole.color,
+                locked: true,
+                teamId: teamRole.team_id,
+                teamName: teamRole.team_name
+            }] : []).concat(userTags)
     readonly property var selectedWorktree: {
         for (let candidate of agentHost.worktrees) {
             if (candidate.selected)
@@ -212,7 +221,8 @@ Item {
             readonly property bool full: header.fullReviewer
             readonly property string fullText: (name ? "Reviewer · " + name : "Reviewer") + "  ▾"
             readonly property string detail: "An agent reviews each finished turn and replies to this conversation. Reviewers never merge."
-            visible: !agentHost.compactWindow && agentHost.reviewerState.available === true
+            // The team's reviewer reviews a member's tasks (#460); its room goes to the title.
+            visible: !agentHost.compactWindow && agentHost.reviewerState.available === true && !header.teamRole
             enabled: agentHost.reviewerState.pending !== true
             controlSize: Kit.KetTheme.ControlSize.Small
             variant: assigned ? Kit.KetTheme.ButtonVariant.Secondary : Kit.KetTheme.ButtonVariant.Ghost
@@ -235,13 +245,33 @@ Item {
                 // Every tag, as the mock: they show together when they fit and leave together.
                 model: header.tags
                 Kit.KetTag {
+                    id: chip
                     required property var modelData
-                    objectName: "conversationTag_" + modelData.label
+                    objectName: locked ? "conversationRoleTag" : "conversationTag_" + modelData.label
                     text: modelData.label
                     tagColor: modelData.color || KetTheme.t.accent
                     maxWidth: KetTheme.px(100, KetTheme.zoom)
-                    filterable: true
+                    locked: modelData.locked === true
+                    filterable: !locked
                     onClicked: agentHost.requestTagFilter(text)
+                    // The role opens its team's page; the kit never clicks a locked tag itself.
+                    Accessible.role: locked ? Accessible.Button : Accessible.StaticText
+                    Accessible.description: locked ? modelData.label + " of " + modelData.teamName + ". Opens the team." : ""
+                    Accessible.onPressAction: if (locked) agentHost.requestTeam(modelData.teamId)
+                    MouseArea {
+                        id: roleMouse
+                        objectName: "conversationRoleTagArea"
+                        anchors.fill: parent
+                        visible: chip.locked
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: agentHost.requestTeam(chip.modelData.teamId)
+                    }
+                    KetToolTip {
+                        objectName: "roleTagToolTip"
+                        visible: roleMouse.containsMouse
+                        text: chip.locked ? chip.modelData.label + " of " + chip.modelData.teamName : ""
+                    }
                 }
             }
         }
@@ -351,7 +381,20 @@ Item {
             for (let index = 0; index < count; ++index) {
                 const item = itemAt(index);
                 if (item && item.tagLabel)
-                    item.checked = header.tags.some(tag => tag.label.toLowerCase() === item.tagLabel.toLowerCase());
+                    item.checked = header.userTags.some(tag => tag.label.toLowerCase() === item.tagLabel.toLowerCase());
+            }
+        }
+        // A member's role is listed first, disabled: the team sets it (#467).
+        Instantiator {
+            model: header.teamRole ? [header.teamRole] : []
+            onObjectAdded: (index, object) => tagMenu.insertItem(0, object)
+            onObjectRemoved: (index, object) => tagMenu.removeItem(object)
+            Kit.KetMenuItem {
+                required property var modelData
+                objectName: "conversationRoleTagItem"
+                enabled: false
+                iconName: "lock"
+                text: modelData.label + " · Set by " + modelData.team_name
             }
         }
         Instantiator {
