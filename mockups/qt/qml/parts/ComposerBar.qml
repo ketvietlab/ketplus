@@ -14,6 +14,7 @@ Item {
 
     required property var window
     property bool busy: false
+    signal stopRequested()
     // The provider cannot start a turn yet: Send keeps the draft and says why.
     property bool blocked: false
     // The provider's setup state (Fixtures.providerSetup), shown on the model button.
@@ -73,7 +74,7 @@ Item {
             bar.window.notify("Sent to " + bar.providerLabel)
             composer.text = ""
         }
-        onStopRequested: bar.window.notify("Stopped the turn")
+        onStopRequested: { bar.stopRequested(); bar.window.notify("Stopped the turn") }
     }
 
     RowLayout {
