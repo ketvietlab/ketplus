@@ -65,11 +65,18 @@ Basic.ApplicationWindow {
     }
 
     // An activity-bar entry or its shortcut: opens that panel, or closes it when it is open.
+    // Only the panel changes: the editor's file and the terminal stay as they are.
     function toggleScreen(id) {
-        if (screen === id && sidebarOpen && !welcome)
-            showScreen("editor")
-        else
+        const beside = screen === "explorer" || screen === "search"
+        if (screen === id && sidebarOpen && !welcome) {
+            sidebarOpen = false
+            screen = "explorer"
+        } else if ((id === "explorer" || id === "search") && beside && !welcome) {
+            sidebarOpen = true
+            screen = id
+        } else {
             showScreen(id)
+        }
     }
 
     function openEveryOverlay() {
@@ -84,6 +91,12 @@ Basic.ApplicationWindow {
             if (!closed || !sidebarOpen || screen !== id)
                 console.warn("QML sidebar check: " + id + " did not toggle")
         }
+        // Closing or switching the editor's side panel keeps the terminal open.
+        showScreen("explorer/terminal")
+        for (const id of ["explorer", "search", "explorer", "search"])
+            toggleScreen(id)
+        if (!editorTerminal)
+            console.warn("QML sidebar check: toggling the side panel closed the terminal")
         // Closing every terminal tab hides the terminal; showing it again opens a new tab.
         showScreen("editor")
         editorTerminal = true
@@ -318,7 +331,8 @@ Basic.ApplicationWindow {
         }
         placeholderText: "Go to file"
         onActivated: item => {
-            // The file opens in the editor; an open Explorer or Search stays open.
+            // The file opens in the editor; an open Explorer or Search stays open. Source
+            // Control is a surface of its own, with its diff, so the editor replaces it.
             if (app.screen !== "explorer" && app.screen !== "search")
                 app.showScreen("editor")
             editor.openFile(item.id.slice(5))
