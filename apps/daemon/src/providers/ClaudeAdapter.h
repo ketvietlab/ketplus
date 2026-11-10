@@ -48,6 +48,10 @@ class ClaudeAdapter final : public ProviderAdapter {
     [[nodiscard]] static QJsonArray permissionProfiles();
     [[nodiscard]] static QString permissionMode(const QString& profile);
 
+  signals:
+    // The sidecar's provider.authentication source, when a query starts (#170).
+    void authenticationObserved(const QString& source);
+
   private:
     struct QueuedCall final {
         QString method;

@@ -311,7 +311,8 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAda
                          CursorAdapter* cursor, QObject* parent)
     : QObject(parent), catalogCache_(this), journal_(journal), adapter_(adapter),
       approvals_(new ApprovalBroker(this)),
-      mediaStore_(McpMediaStore::directoryForJournal(journal->databasePath())) {
+      mediaStore_(McpMediaStore::directoryForJournal(journal->databasePath())),
+      readiness_(ProviderReadiness::pathForJournal(journal->databasePath())) {
     mediaReads_.setMaxThreadCount(mediaReadThreads);
     // A generated image whose inline pixels history retention drops keeps a 512 px preview.
     journal_->setImagePreviewWriter([this](const QByteArray& image, const QString& sessionId) {
@@ -345,6 +346,9 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAda
                     catalogCache_.invalidate("codex");
             });
     connect(adapter_, &CodexAdapter::reloaded, this, [this] { catalogCache_.invalidate("codex"); });
+    if (claude != nullptr)
+        connect(claude, &ClaudeAdapter::authenticationObserved, this,
+                [this](const QString& source) { readiness_.observeClaudeSource(source); });
     for (const StoredSession& stored : journal_->sessions()) {
         liveSessions.insert(stored.id);
         Session session;
