@@ -1023,3 +1023,18 @@ to version-1 fragmented payloads within the shared 1 MiB pass budget. It require
 a fully acknowledged session generation, verifies identity and SHA-256, and
 atomically replaces the replay manifest, cleans unreferenced chunks and advances
 projection revision. Images, legacy blobs and larger payloads remain retained.
+
+## Agent teams (ADR 0112)
+
+`apps/daemon/src/teams/` owns teams. `LocalJournalTeams.cpp` stores three tables:
+`teams` (one JSON document per team under a revision; `AUTOINCREMENT` ids are never
+reused), `team_members` (session id → team, the primary key enforces one team per
+conversation) and `team_updates` (the append-only log with its digest mark).
+`TeamRules` checks membership and task moves without side effects and returns the
+error code of ADR 0112; `TeamCoordinator` applies them, journals every change, emits
+`team.changed` / `team.removed` to local clients, and decides which change starts a turn
+through its narrow `TeamHostPort` (conversation lookup, member scaffold, worktree
+switch, git queries, message posting through `AgentBroker`). `SessionHostTeams.cpp`
+dispatches the `team.*` requests of the `teams/1` and `teams.tasks/1` features and
+implements the port. Member agents reach the same coordinator through the `team_*`
+tools of the ketplus_agents server, with the caller's role checked by the daemon.
