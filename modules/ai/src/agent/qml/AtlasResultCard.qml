@@ -11,7 +11,9 @@ Rectangle {
     property var result: ({})
     // "onboarding.ketatlas", the bundle the manifest belongs to.
     readonly property string bundle: String(result.relativePath || "").replace(/\/atlas\.json$/, "").split("/").pop()
-    readonly property var recipe: Kit.KetTheme.updateCardRecipe(KetTheme.dark, KetTheme.zoom, false)
+    // The mock's Card in its transcript (parts/Transcript.qml): 15 px in, 7 px corners, the
+    // panel surface, a 15 px semibold title and a 13 px caption.
+    readonly property real padding: Kit.KetTheme.px(15, KetTheme.zoom)
     function refresh() { result = host.inspectAtlasResult(link); }
     Component.onCompleted: refresh()
     onLinkChanged: refresh()
@@ -21,17 +23,17 @@ Rectangle {
         function onExecutionBranchChanged() { card.refresh(); }
         function onAtlasResultsChanged() { card.refresh(); }
     }
-    implicitHeight: content.implicitHeight + 2 * recipe.paddingBlock
-    radius: recipe.radius
-    color: recipe.background
-    border.color: recipe.border
+    implicitHeight: content.implicitHeight + 2 * padding
+    radius: Kit.KetTheme.px(7, KetTheme.zoom)
+    color: KetTheme.t.panelBg
+    border.color: KetTheme.t.panelBorder
     border.width: 1
     Accessible.role: Accessible.Grouping
     Accessible.name: result.title ? "Atlas result · " + result.title : "Atlas result"
     Column {
         id: content
-        x: card.recipe.paddingInline
-        y: card.recipe.paddingBlock
+        x: card.padding
+        y: card.padding
         width: parent.width - 2 * x
         spacing: Kit.KetTheme.px(8, KetTheme.zoom)
         Text {
@@ -40,10 +42,10 @@ Rectangle {
             text: card.result.available ? "Validated preview available" : "Atlas result"
             textFormat: Text.PlainText
             elide: Text.ElideRight
-            color: card.recipe.title
+            color: KetTheme.t.textMain
             font.family: KetTheme.fontFamily
-            font.pixelSize: card.recipe.titlePixels
-            font.weight: card.recipe.titleWeight
+            font.pixelSize: Kit.KetTheme.px(15, KetTheme.zoom)
+            font.weight: Font.DemiBold
         }
         Text {
             width: parent.width
@@ -55,7 +57,7 @@ Rectangle {
             wrapMode: Text.Wrap
             color: KetTheme.t.textSecondary
             font.family: KetTheme.fontFamily
-            font.pixelSize: card.recipe.detailPixels
+            font.pixelSize: Kit.KetTheme.px(13, KetTheme.zoom)
         }
         Text {
             width: parent.width

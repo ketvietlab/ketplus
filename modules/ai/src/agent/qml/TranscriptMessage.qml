@@ -127,6 +127,14 @@ Item {
         const rows = view.messageModel.count;
         return index + 1 < rows && view.messageModel.get(index + 1).subtype === "turnEnd";
     }
+    // A failed turn whose error banner sits just above it: the banner already says so, and the
+    // mock's workspace/error shows no "Failed" line under it.
+    readonly property bool failureShownAbove: {
+        if (subtype !== "turnEnd" || status !== "failed" || index < 1 || !view.messageModel)
+            return false;
+        view.messageModel.sourceRevision;
+        return view.messageModel.get(index - 1).kind === "error";
+    }
     // An event line that opens the transcript ("Switched from…", "Forked from…") starts where a
     // day divider would, right under the top padding.
     readonly property real firstRowLift: index === 0 && tightNotice && kind !== "error" ? KetTheme.px(8, KetTheme.zoom) : 0
@@ -408,7 +416,7 @@ Item {
             TranscriptNotice {
                 objectName: "transcriptNotice"
                 width: parent.width
-                visible: messageDelegate.noticeRow && messageDelegate.subtype !== "agentNote" && !messageDelegate.providerSetup
+                visible: messageDelegate.noticeRow && messageDelegate.subtype !== "agentNote" && !messageDelegate.providerSetup && !messageDelegate.failureShownAbove
                 height: visible ? implicitHeight : 0
 
                 title: messageDelegate.title || (kind === "error" ? "Agent error" : meta || "Conversation update")

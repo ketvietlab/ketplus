@@ -44,6 +44,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void sentAgentMessageReadsAsTheMockNote();
     void settledApprovalsReadAsTheirOutcome();
     void capacityErrorOffersAnotherModel();
+    void silentProviderReadsAsTheMocksError();
     void providerSetupHoldsTheMessageUntilTheProviderWorks();
     void aHeldMessageGoesWithItsDraft();
     void providerSetupClosesTheTurnTheProviderEnded();
