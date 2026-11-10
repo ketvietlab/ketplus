@@ -79,9 +79,11 @@ class ActivityBar final : public QWidget {
 
   protected:
     void resizeEvent(QResizeEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
   private:
     void syncShownWidth();
+    void refreshIdentityText();
     ket::NavItem* addModeButton(const QByteArray& svgBody, const QString& label, Mode mode);
     void refreshIcons();
 
@@ -102,6 +104,7 @@ class ActivityBar final : public QWidget {
     ket::UpdatePill* updateReadyButton_{nullptr};
     QToolButton* identityButton_{nullptr};
     QLabel* identityAvatar_{nullptr};
+    QString accountName_;
     QMenu* userMenu_{nullptr};
     QWidget* resizeHandle_{nullptr};
     int sidebarWidth_{kWidth};

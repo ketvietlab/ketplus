@@ -143,6 +143,17 @@ void ExplorerPanelTest::identityNamesTheSignedInAccount() {
     bar.setAccount(QStringLiteral("Minh Tran"));
     QCOMPARE(avatar->text(), QStringLiteral("MT"));
     QCOMPARE(identity->toolTip(), QStringLiteral("Minh Tran"));
+    // A long name ends in "…" inside the button and never widens the sidebar.
+    bar.resize(ketplus::ActivityBar::kWidth, 600);
+    bar.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&bar));
+    const QString longName(60, QLatin1Char('W'));
+    bar.setAccount(longName);
+    const QString firstLine = identity->text().section(QLatin1Char('\n'), 0, 0);
+    QVERIFY2(firstLine.endsWith(QChar(0x2026)), qPrintable(firstLine));
+    QVERIFY(identity->fontMetrics().horizontalAdvance(firstLine) < identity->width());
+    QCOMPARE(identity->toolTip(), longName);
+    QCOMPARE(bar.width(), ketplus::ActivityBar::kWidth);
     // Signing out returns to the product name.
     bar.setAccount({});
     QCOMPARE(identity->text(), QStringLiteral("KetPlus\nPersonal workspace"));
