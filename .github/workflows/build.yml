@@ -9,6 +9,7 @@ on:
   pull_request:
     paths-ignore:
       - "**/*.md"
+  workflow_dispatch:
 
 # A newer commit on the same branch or PR makes the running build obsolete.
 concurrency:
