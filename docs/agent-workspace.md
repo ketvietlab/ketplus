@@ -379,11 +379,21 @@ current-window value.
   shown as text: `chat_markdown::escapeRawHtml` escapes any `<` that could open a
   tag outside code before Qt imports the Markdown, because an unclosed tag such
   as a `<title>` placeholder hid the rest of the answer except its code spans.
-  The row measurer applies the same escaping. Code keeps the body colour. Inline code
-  sits on a rounded chip (the kit's main text colour at 11% alpha), drawn behind
-  the text by `messageInlineCode()` with one chip per wrapped line; the character
-  before the run and the run's last character are tracked by 4 px so the chip does
-  not cover neighbouring text. Code blocks keep their frames and get no chips.
+  The row measurer applies the same escaping. The bare-URL autolinker stops at a
+  backslash, so a URL just before an escaped tag still closes its autolink. Code keeps
+  the body colour. Inline code is plain monospace text, as in the kit and the mock,
+  with no chip or extra tracking. Code blocks keep their frames.
+  Nothing a model writes reaches the network. `installLocalOnlyNetwork` gives the
+  transcript's QML engine a network manager that serves only `file:`, `qrc:` and
+  `data:` URLs and fails every other request before any lookup. An inline
+  `![alt](https://…)` is shown as a link to the image (`chat_markdown::prepareForDisplay`).
+  A reference-style remote image stays a broken image that is never fetched. An inline
+  local photo is drawn as an 88 px thumbnail, and the document keeps it at that size
+  for the screen's density instead of the full decode. Links take the kit's link
+  colour on every format pass, so they follow a theme change. Qt's Markdown importer
+  had kept the colour from the theme in use when the answer was parsed.
+  The layout trace (`KETPLUS_CHAT_LAYOUT_TRACE`) is off unless that variable names a
+  file. It records geometry and keys, never message text.
   Their fill and border come directly from `KetTheme.codeBlockRecipe`, using the
   kit's panel-subtle surface in each theme. Appearance-driven rich-text formatting
   waits until QML font and width bindings settle before measuring overlay frames.
