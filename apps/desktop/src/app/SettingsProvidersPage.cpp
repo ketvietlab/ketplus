@@ -1,9 +1,12 @@
 #include "app/SettingsProvidersPage.h"
+#include "KetBadge.h"
 #include "KetButton.h"
 #include "app/SettingsClaudeAnalytics.h"
+#include "app/SettingsRows.h"
 
 #include <QAbstractButton>
 #include <QGridLayout>
+#include <QHBoxLayout>
 #include <QJsonObject>
 #include <QLabel>
 #include <QPointer>
@@ -38,6 +41,14 @@ QString versionText(const QJsonObject& provider) {
     return version.isEmpty() ? SettingsProvidersPage::tr("Unknown") : version;
 }
 
+ket::BadgeTone statusTone(const QString& status) {
+    if (status == QStringLiteral("supported") || status == QStringLiteral("bundled"))
+        return ket::BadgeTone::Success;
+    if (status == QStringLiteral("outdated") || status == QStringLiteral("missing"))
+        return ket::BadgeTone::Danger;
+    return ket::BadgeTone::Warning;
+}
+
 } // namespace
 
 SettingsProvidersPage::SettingsProvidersPage(Fetcher fetcher, QWidget* parent,
@@ -55,20 +66,27 @@ SettingsProvidersPage::SettingsProvidersPage(Fetcher fetcher, QWidget* parent,
                                    "KetPlus. KetPlus supports CLI releases from about the last "
                                    "three months."),
                                 QStringLiteral("settingsWorkspaceIntro"), this));
-    layout->addSpacing(24);
+    layout->addSpacing(20);
+    // The mock's status row: the summary, then Check again beside it.
+    auto* statusRow = new QHBoxLayout;
+    statusRow->setSpacing(12);
     status_ = textLabel(tr("Checking provider versions…"), QStringLiteral("providersStatus"), this);
-    layout->addWidget(status_);
-    layout->addSpacing(8);
+    statusRow->addWidget(status_);
     auto* recheck = new ket::Button(tr("Check again"), ket::ButtonVariant::Secondary, this);
+    recheck->setControlSize(ket::ControlSize::Small);
     recheck->setObjectName(QStringLiteral("providersRecheck"));
-    layout->addWidget(recheck, 0, Qt::AlignLeft);
+    statusRow->addWidget(recheck);
+    statusRow->addStretch(1);
+    layout->addLayout(statusRow);
     layout->addSpacing(20);
     list_ = new QWidget(this);
     listLayout_ = new QVBoxLayout(list_);
     listLayout_->setContentsMargins(0, 0, 0, 0);
-    listLayout_->setSpacing(24);
+    listLayout_->setSpacing(20);
     layout->addWidget(list_);
-    layout->addSpacing(24);
+    layout->addSpacing(20);
+    layout->addWidget(settings_rows::divider(this));
+    layout->addSpacing(20);
     layout->addWidget(new SettingsClaudeCredentials(credentials, this));
     layout->addWidget(new SettingsClaudeAnalytics(std::move(credentials), this));
     layout->addStretch(1);
@@ -78,16 +96,14 @@ SettingsProvidersPage::SettingsProvidersPage(Fetcher fetcher, QWidget* parent,
 }
 
 QString SettingsProvidersPage::statusText(const QString& status) {
-    if (status == QStringLiteral("supported"))
-        return tr("Supported");
+    if (status == QStringLiteral("supported") || status == QStringLiteral("bundled"))
+        return tr("Ready");
     if (status == QStringLiteral("newer"))
         return tr("Newer than tested");
     if (status == QStringLiteral("outdated"))
         return tr("Update required");
     if (status == QStringLiteral("missing"))
         return tr("Not installed");
-    if (status == QStringLiteral("bundled"))
-        return tr("Bundled with KetPlus");
     return tr("Version unknown");
 }
 
@@ -130,13 +146,21 @@ void SettingsProvidersPage::apply(const QJsonArray& providers, const QString& er
                                 .arg(provider.value(QStringLiteral("provider")).toString()));
         auto* grid = new QGridLayout(card);
         grid->setContentsMargins(0, 0, 0, 0);
-        grid->setHorizontalSpacing(20);
+        grid->setHorizontalSpacing(0);
         grid->setVerticalSpacing(8);
-        grid->setColumnMinimumWidth(0, 145);
+        grid->setColumnMinimumWidth(0, 180); // the mock's InfoRow label column
         grid->setColumnStretch(1, 1);
-        grid->addWidget(textLabel(provider.value(QStringLiteral("name")).toString(),
-                                  QStringLiteral("settingsWorkspaceSubheading"), card),
-                        0, 0, 1, 2);
+        // The name with its status badge, as the mock's provider heading.
+        auto* heading = new QHBoxLayout;
+        heading->setSpacing(10);
+        heading->addWidget(textLabel(provider.value(QStringLiteral("name")).toString(),
+                                     QStringLiteral("settingsWorkspaceSubheading"), card));
+        auto* badge = new ket::Badge(statusText(status), statusTone(status), card);
+        badge->setObjectName(QStringLiteral("providerRuntimeStatus"));
+        badge->setProperty("providerStatus", status);
+        heading->addWidget(badge);
+        heading->addStretch(1);
+        grid->addLayout(heading, 0, 0, 1, 2);
         int row = 1;
         const auto addRow = [card, grid, &row](const QString& label, QLabel* field) {
             grid->addWidget(textLabel(label, QStringLiteral("settingsWorkspaceFieldLabel"), card),
@@ -144,10 +168,6 @@ void SettingsProvidersPage::apply(const QJsonArray& providers, const QString& er
             grid->addWidget(field, row, 1);
             ++row;
         };
-        auto* statusLabel =
-            textLabel(statusText(status), QStringLiteral("providerRuntimeStatus"), card);
-        statusLabel->setProperty("providerStatus", status);
-        addRow(tr("Status"), statusLabel);
         if (status != QStringLiteral("missing"))
             addRow(tr("Version"), selectableLabel(versionText(provider),
                                                   QStringLiteral("providerRuntimeVersion"), card));
@@ -171,8 +191,13 @@ void SettingsProvidersPage::apply(const QJsonArray& providers, const QString& er
                             0, 1, 2);
         listLayout_->addWidget(card);
     }
-    status_->setText(attention == 0 ? tr("All installed providers are supported.")
-                                    : tr("%n provider(s) need attention.", nullptr, attention));
+    int missing = 0;
+    for (const QJsonValue& value : providers)
+        missing += value.toObject().value(QStringLiteral("status")).toString() ==
+                   QStringLiteral("missing");
+    status_->setText(attention > 0  ? tr("%n provider(s) need attention.", nullptr, attention)
+                     : missing == 0 ? tr("All providers are ready.")
+                                    : tr("All installed providers are ready."));
     emit refreshed();
 }
 

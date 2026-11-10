@@ -173,17 +173,23 @@ class ClaudeCredentialsSettingsTest : public QObject {
         QVERIFY(!check->isEnabled());
         mode->setCurrentIndex(1);
         key->setText("sk-ant-ui-fixture");
-        budget->setValue(2.5);
+        QCOMPARE(budget->text(), QString("No query limit"));
+        // Any amount can be typed, not only presets.
+        budget->selectAll();
+        QTest::keyClicks(budget, "5");
+        budget->interpretText();
+        QCOMPARE(budget->value(), 5.0);
         QTest::mouseClick(save, Qt::LeftButton);
         QCOMPARE(operation, "save");
         QCOMPARE(last["key"].toString(), "sk-ant-ui-fixture");
-        QCOMPARE(last["budget_usd"].toDouble(), 2.5);
+        QCOMPARE(last["budget_usd"].toDouble(), 5.0);
         QVERIFY(key->text().isEmpty());
         QVERIFY(!save->isEnabled());
         state["configured"] = true;
         state["enabled"] = true;
         state["budget_usd"] = 2.5;
         pending(state, {});
+        QCOMPARE(budget->value(), 2.5);
         QVERIFY(check->isEnabled());
         QTest::mouseClick(check, Qt::LeftButton);
         QCOMPARE(operation, "check");

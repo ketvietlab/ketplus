@@ -26,7 +26,7 @@ class SettingsClaudeCredentials final : public QWidget {
     Requester requester_;
     QComboBox* mode_;
     QLineEdit* key_;
-    QDoubleSpinBox* budget_;
+    QDoubleSpinBox* budget_; // USD; 0 is no limit
     QLabel* status_;
     QLabel* observation_;
     QAbstractButton* save_;

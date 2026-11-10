@@ -1,9 +1,11 @@
 #include "KetAppearance.h"
+#include "KetBadge.h"
 #include "KetChoice.h"
 #include "KetSegmentedControl.h"
 #include "KetThemeCard.h"
 #include "KetToast.h"
 #include "KetTokens.h"
+#include "KetUpdateCard.h"
 #include "agent/AgentWorkspaceView.h"
 #include "app/AgentConversationWidth.h"
 #include "app/AppearanceSettings.h"
@@ -46,6 +48,7 @@
 #include <QStatusBar>
 #include <QTemporaryDir>
 #include <QTextBrowser>
+#include <QTimeZone>
 #include <QTimer>
 #include <QToolButton>
 #include <QtTest>
@@ -159,8 +162,9 @@ void MainWindowSettingsTest::providersPageShowsRuntimeStatus() {
     QCOMPARE(page.providers().size(), 3);
     auto* codex = page.findChild<QWidget*>(QStringLiteral("providerRuntime-codex"));
     QVERIFY(codex != nullptr);
-    QCOMPARE(codex->findChild<QLabel*>(QStringLiteral("providerRuntimeStatus"))->text(),
-             QStringLiteral("Update required"));
+    auto* codexBadge = codex->findChild<ket::Badge*>(QStringLiteral("providerRuntimeStatus"));
+    QCOMPARE(codexBadge->text(), QStringLiteral("Update required"));
+    QCOMPARE(codexBadge->tone(), ket::BadgeTone::Danger);
     QCOMPARE(codex->findChild<QLabel*>(QStringLiteral("providerRuntimeUpdate"))->text(),
              QStringLiteral("npm install -g @openai/codex@latest"));
     auto* claude = page.findChild<QWidget*>(QStringLiteral("providerRuntime-claude"));
@@ -169,6 +173,8 @@ void MainWindowSettingsTest::providersPageShowsRuntimeStatus() {
                 ->text()
                 .contains(QStringLiteral("Claude Code 2.1.1")));
     QVERIFY(claude->findChild<QLabel*>(QStringLiteral("providerRuntimeUpdate")) == nullptr);
+    QCOMPARE(claude->findChild<ket::Badge*>(QStringLiteral("providerRuntimeStatus"))->text(),
+             QStringLiteral("Ready")); // the mock's badge for the bundled runtime
     auto* cursor = page.findChild<QWidget*>(QStringLiteral("providerRuntime-cursor"));
     QVERIFY(cursor != nullptr);
     QVERIFY(cursor->findChild<QLabel*>(QStringLiteral("providerRuntimeVersion")) == nullptr);
@@ -366,8 +372,16 @@ void MainWindowSettingsTest::archivedPageStopsRunningTurnAndRestoresInPlace() {
                     {QStringLiteral("title"), QStringLiteral("tree")},
                     {QStringLiteral("kind"), QStringLiteral("worktree")}},
     };
+    archived[0] = [&] {
+        auto first = archived.at(0).toMap();
+        first.insert(QStringLiteral("number"), QStringLiteral("1022"));
+        first.insert(QStringLiteral("archived_at"),
+                     QDateTime(QDate(2026, 10, 28), QTime(9, 0), QTimeZone::UTC));
+        return QVariant(first);
+    }();
     QString stopped;
     QString restored;
+    QString deleted;
     ketplus::ArchivedSettingsPage page(
         archived,
         [&restored](const QString&, const QString& id) {
@@ -377,24 +391,52 @@ void MainWindowSettingsTest::archivedPageStopsRunningTurnAndRestoresInPlace() {
         [&stopped](const QString&, const QString& id) {
             stopped = id;
             return true;
-        });
-    auto* list = page.findChild<QListWidget*>(QStringLiteral("archivedConversationList"));
-    auto* stop = page.findChild<QAbstractButton*>(QStringLiteral("stopArchivedTurnButton"));
-    auto* restore = page.findChild<QAbstractButton*>(QStringLiteral("restoreArchivedItemButton"));
-    QVERIFY(list != nullptr);
+        },
+        [&deleted](const QString&, const QString& id) { deleted = id; });
+    page.resize(760, 400);
+    page.show();
+    const auto cards = [&page] {
+        QList<QWidget*> visible;
+        for (auto* card : page.findChildren<QWidget*>(QStringLiteral("archivedItem")))
+            if (card->parent() != nullptr && !card->isHidden())
+                visible.append(card);
+        return visible;
+    };
+    // The mock's card: the title, then the number, folder and archive date.
+    QTRY_COMPARE(cards().size(), 2);
+    auto* first = cards().first();
+    const auto details = first->findChild<QLabel*>(QStringLiteral("settingsWorkspaceHelp"));
+    QVERIFY(details->text().startsWith(QStringLiteral("@agent/1022 · workspace · archived ")));
+    QVERIFY(details->text().endsWith(QStringLiteral(" · Running")));
+    auto* stop = first->findChild<QAbstractButton*>(QStringLiteral("stopArchivedTurnButton"));
     QVERIFY(stop != nullptr);
-    QVERIFY(restore != nullptr);
-    QCOMPARE(list->count(), 2);
+    // A worktree has Restore only, and no Stop while nothing runs.
+    QVERIFY(cards().last()->findChild<QAbstractButton*>(
+                QStringLiteral("deleteArchivedItemButton")) == nullptr);
+    QVERIFY(cards().last()->findChild<QAbstractButton*>(QStringLiteral("stopArchivedTurnButton")) ==
+            nullptr);
 
-    list->setCurrentRow(0);
-    QVERIFY(stop->isEnabled());
+    if (const auto capture = qEnvironmentVariable("KETPLUS_ARCHIVED_CAPTURE"); !capture.isEmpty())
+        QVERIFY(page.grab().save(capture));
     stop->click();
     QCOMPARE(stopped, QStringLiteral("conversation-1"));
-    QVERIFY(!stop->isEnabled());
-
-    restore->click();
+    QTRY_COMPARE(cards().size(), 2); // rebuilt; a new card shows once the event loop runs
+    QVERIFY(cards().first()->findChild<QAbstractButton*>(
+                QStringLiteral("stopArchivedTurnButton")) == nullptr);
+    cards()
+        .first()
+        ->findChild<QAbstractButton*>(QStringLiteral("deleteArchivedItemButton"))
+        ->click();
+    QCOMPARE(deleted, QStringLiteral("conversation-1"));
+    cards()
+        .first()
+        ->findChild<QAbstractButton*>(QStringLiteral("restoreArchivedItemButton"))
+        ->click();
     QCOMPARE(restored, QStringLiteral("conversation-1"));
-    QCOMPARE(list->count(), 1);
+    QTRY_COMPARE(cards().size(), 1);
+    page.setConversations({});
+    QTRY_COMPARE(cards().size(), 0);
+    QVERIFY(page.findChild<QWidget*>(QStringLiteral("archivedEmptyState"))->isVisible());
 }
 
 void MainWindowSettingsTest::appliesSavedAppearanceToPublicAndPrivateSurfaces() {
@@ -907,38 +949,86 @@ void MainWindowSettingsTest::updatesPageAndReminderDriveTheUpdater() {
                 page->isVisible());
     auto* status = page->findChild<QLabel*>(QStringLiteral("updatesStatus"));
     auto* checkNow = page->findChild<QAbstractButton*>(QStringLiteral("updatesCheckNow"));
-    auto* automaticChecks =
-        page->findChild<QAbstractButton*>(QStringLiteral("updatesAutomaticChecks"));
     auto* automaticDownloads =
         page->findChild<QAbstractButton*>(QStringLiteral("updatesAutomaticDownloads"));
+    auto* card = page->findChild<ket::UpdateCard*>(QStringLiteral("updatesCard"));
+    auto* restart = page->findChild<QAbstractButton*>(QStringLiteral("updatesRestart"));
+    auto* later = page->findChild<QAbstractButton*>(QStringLiteral("updatesLater"));
     QVERIFY(status != nullptr);
     QVERIFY(checkNow != nullptr);
-    QVERIFY(automaticChecks != nullptr);
     QVERIFY(automaticDownloads != nullptr);
-    QCOMPARE(status->text(), QStringLiteral("KetPlus has not checked for updates yet."));
+    QVERIFY(card != nullptr && restart != nullptr && later != nullptr);
+    auto* automaticChecks =
+        page->findChild<QAbstractButton*>(QStringLiteral("updatesAutomaticChecks"));
+    QVERIFY(automaticChecks != nullptr);
+    const auto cardText = [card] {
+        QStringList texts;
+        for (auto* label : card->findChildren<QLabel*>())
+            if (!label->isHidden())
+                texts.append(label->text());
+        return texts.join(QLatin1Char('\n'));
+    };
+    const auto badge = [card] { return card->findChild<ket::Badge*>()->text(); };
+    QCOMPARE(status->text(), QStringLiteral("KetPlus checks for updates every day and installs "
+                                            "them when you restart."));
+    QVERIFY(card->isVisible());
+    QVERIFY(cardText().contains(QStringLiteral("KetPlus has not checked for updates yet.")));
+    QCOMPARE(badge(), QStringLiteral("Installed"));
+    QVERIFY(!restart->isVisible());
+    QCOMPARE(checkNow->text(), QStringLiteral("Check for updates"));
     QVERIFY(checkNow->isEnabled());
-    QVERIFY(automaticChecks->isChecked());
     QVERIFY(automaticDownloads->isEnabled());
     QVERIFY(!automaticDownloads->isChecked());
+    QVERIFY(automaticChecks->isChecked());
 
     checkNow->click();
     QCOMPARE(updater.checks_, 4);
     automaticDownloads->click();
     QVERIFY(updater.automaticallyDownloadsUpdates());
+    QVERIFY(updater.automaticallyChecksForUpdates());
+    automaticDownloads->click();
+    QVERIFY(!updater.automaticallyDownloadsUpdates());
+    QVERIFY(updater.automaticallyChecksForUpdates()); // the daily check stays
+    // The scheduled check can be turned off, which also stops background downloads.
+    automaticDownloads->click();
     automaticChecks->click();
     QVERIFY(!updater.automaticallyChecksForUpdates());
-    QVERIFY(!automaticDownloads->isEnabled());
+    QVERIFY(!updater.automaticallyDownloadsUpdates());
+    QVERIFY(!automaticDownloads->isChecked());
+    QVERIFY(status->text().contains(QStringLiteral("when you ask")));
+    // Turning downloads on also turns the scheduled check back on.
+    automaticDownloads->click();
+    QVERIFY(updater.automaticallyChecksForUpdates());
+    QVERIFY(automaticChecks->isChecked());
+    QVERIFY(automaticDownloads->isChecked());
 
     updater.setCanCheck(false);
     QVERIFY(!checkNow->isEnabled());
     updater.remind(QStringLiteral("0.1.18"));
-    QVERIFY(status->text().contains(QStringLiteral("KetPlus 0.1.18 is available")));
+    QCOMPARE(badge(), QStringLiteral("Available"));
+    QVERIFY(cardText().contains(QStringLiteral("KétPlus Pro 0.1.18")));
+    QVERIFY(!restart->isVisible());
+    updater.setCanCheck(true);
     updater.remind(QStringLiteral("0.1.18"), true);
-    QVERIFY(status->text().contains(QStringLiteral("KetPlus 0.1.18 is downloaded")));
+    QCOMPARE(badge(), QStringLiteral("Ready"));
+    QVERIFY(card->isReady());
+    QVERIFY(restart->isVisible() && later->isVisible());
+    restart->click();
+    QCOMPARE(updater.checks_, 5); // Sparkle's prompt installs and relaunches
+    later->click();
+    QVERIFY(!restart->isVisible());
+    QVERIFY(cardText().contains(QStringLiteral("installs the next time KetPlus restarts")));
     updater.remind({});
     updater.lastCheck_ = QDateTime::currentDateTime();
     updater.setCanCheck(true);
-    QVERIFY(status->text().startsWith(QStringLiteral("Last checked ")));
+    QCOMPARE(badge(), QStringLiteral("Up to date"));
+    QVERIFY(cardText().contains(QStringLiteral("Checked ")));
+    const QString capture = qEnvironmentVariable("KETPLUS_UPDATES_CAPTURE");
+    if (!capture.isEmpty()) {
+        updater.remind(QStringLiteral("0.1.19"), true); // a newer download shows its actions
+        QVERIFY(restart->isVisible());
+        QVERIFY(window.grab().save(capture));
+    }
 }
 
 void MainWindowSettingsTest::unconfiguredBuildExplainsUpdatesInsteadOfChecking() {
@@ -971,10 +1061,11 @@ void MainWindowSettingsTest::unconfiguredBuildExplainsUpdatesInsteadOfChecking()
                 ->text()
                 .startsWith(QStringLiteral("Updates are not configured for this build.")));
     QVERIFY(!page->findChild<QAbstractButton*>(QStringLiteral("updatesCheckNow"))->isEnabled());
-    QVERIFY(
-        !page->findChild<QAbstractButton*>(QStringLiteral("updatesAutomaticChecks"))->isEnabled());
     QVERIFY(!page->findChild<QAbstractButton*>(QStringLiteral("updatesAutomaticDownloads"))
                  ->isEnabled());
+    QVERIFY(
+        !page->findChild<QAbstractButton*>(QStringLiteral("updatesAutomaticChecks"))->isEnabled());
+    QVERIFY(page->findChild<QWidget*>(QStringLiteral("updatesCard"))->isHidden());
     // Opening Settings again must keep the requested section rather than reset to Appearance.
     auto* navigation =
         window.findChild<QListWidget*>(QStringLiteral("settingsWorkspaceNavigation"));
