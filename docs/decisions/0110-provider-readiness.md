@@ -69,6 +69,9 @@ than the work:
 - `model_capacity` and `plan_blocked`;
 - `provider_unavailable`.
 
+A coded error also names the turn's `provider` and, when known, its `model`, so
+its guide still names them after the conversation switches.
+
 `message` stays verbatim.
 
 - **Classification.** Structured fields decide first: Codex `codexErrorInfo`
@@ -115,16 +118,23 @@ than the work:
   chosen now and turns start once the provider is set up. Show setup steps
   closes the picker and opens the guide in a dialog with Check again; the dialog
   closes once the provider has no guide.
-- A blocking guide holds the message in the composer. The message sends once the
-  same provider is set up. Claude's sign-out does not block, since only a Claude
-  query reports a new sign-in.
-- A coded `runtime.error` row keeps the provider's own words and the code. The
+- A blocking guide holds the message in the composer. The message sends once a
+  fresh read lists the same provider without a guide, and only if the same
+  conversation's draft is unchanged. A stopped daemon or a guide that merely
+  stops blocking does not send it, and editing the draft or opening another
+  conversation lets it go. Claude's sign-out does not block, since only a Claude
+  query reports a new sign-in. Cursor's sign-out does not block either: it is
+  read from the CLI's config file, and an API key may live only in the user's
+  shell.
+- A coded `runtime.error` row keeps the provider's own words, the code and the
+  failed turn's model, beside its own text. The
   failure that ended the latest turn shows the guide (`ProviderRuntimeStatus::
   turnGuide`, with the commands the daemon last reported) in place of the danger
-  notice. It offers Retry when the turn can be resent. Once the user writes
-  again, the row reads as a notice.
-- A coded error, and a completed turn while a guide is shown, read
-  `provider.runtime_status` again.
+  notice. It offers Retry when the turn can be resent. Once a later turn starts
+  (the user's or an agent's) or a newer coded failure follows, the row reads as
+  a notice.
+- A live coded error, and a completed turn while a guide is shown, read
+  `provider.runtime_status` again; replayed history does not.
 
 ## Consequences
 

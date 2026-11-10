@@ -106,12 +106,65 @@ void AgentWorkspaceViewTest::providerSetupHoldsTheMessageUntilTheProviderWorks()
     view.setProviderRuntime(again);
     QTRY_VERIFY(shownItem(root, "agentProviderSetupStill"));
 
-    // Once Cursor works, the guide goes and the kept message is sent.
+    // A stopped daemon lists no provider: the guide goes, but nothing says Cursor works.
+    view.setProviderRuntime(QVariantMap{{"gated", true}});
+    QTRY_VERIFY(!shownItem(root, "agentProviderSetupCard"));
+    QTest::qWait(50);
+    QCOMPARE(sent.count(), 0);
+
+    // Once Cursor works, the kept message is sent.
     view.setProviderRuntime(ketplus::ProviderRuntimeStatus::stateFrom(cursorReady()));
     QTRY_VERIFY(!shownItem(root, "agentProviderSetupCard"));
     QTRY_COMPARE(sent.count(), 1);
     QCOMPARE(sent.first().first().toString(), QStringLiteral("Fix the flaky test"));
     QCOMPARE(sent.first().at(1).toMap().value("provider").toString(), QStringLiteral("cursor"));
+}
+
+void AgentWorkspaceViewTest::aHeldMessageGoesWithItsDraft() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.setAgentAvailable(true);
+    view.resize(1200, 900);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
+    auto* root = view.quickView()->rootObject();
+    selectProvider(root, "cursor");
+    QSignalSpy sent(&view, &ketplus::AgentWorkspaceView::configuredPromptSubmitted);
+    auto* prompt = root->findChild<QQuickItem*>("agentPrompt");
+    const auto hold = [&] {
+        view.setProviderRuntime(ketplus::ProviderRuntimeStatus::stateFrom(cursorMissing()));
+        prompt->setProperty("text", QStringLiteral("Fix the flaky test"));
+        QVERIFY(QMetaObject::invokeMethod(root, "submitCurrentPrompt"));
+        QVERIFY(root->property("heldMessage").isValid() && !root->property("heldMessage").isNull());
+    };
+
+    // Editing the draft lets the held message go.
+    hold();
+    prompt->setProperty("text", QStringLiteral("Fix the flaky test, then"));
+    view.setProviderRuntime(ketplus::ProviderRuntimeStatus::stateFrom(cursorReady()));
+    QTest::qWait(50);
+    QCOMPARE(sent.count(), 0);
+
+    // So does opening another conversation with the same provider.
+    hold();
+    view.setConversations({QVariantMap{{"id", "other"}, {"provider", "cursor"}, {"active", true}}});
+    prompt->setProperty("text", QStringLiteral("Fix the flaky test"));
+    view.setProviderRuntime(ketplus::ProviderRuntimeStatus::stateFrom(cursorReady()));
+    QTest::qWait(50);
+    QCOMPARE(sent.count(), 0);
+
+    // A guide that stops blocking is not a provider that works.
+    hold();
+    QJsonArray signedOut{QJsonObject{{"provider", "cursor"},
+                                     {"name", "Cursor CLI"},
+                                     {"status", "supported"},
+                                     {"readiness", QJsonObject{{"state", "signed_out"}}}}};
+    view.setProviderRuntime(ketplus::ProviderRuntimeStatus::stateFrom(signedOut));
+    QVERIFY(!root->property("providerBlocked").toBool()); // Cursor's sign-out never blocks
+    QTest::qWait(50);
+    QCOMPARE(sent.count(), 0);
+    view.setProviderRuntime(ketplus::ProviderRuntimeStatus::stateFrom(cursorReady()));
+    QTRY_COMPARE(sent.count(), 1);
 }
 
 void AgentWorkspaceViewTest::providerSetupClosesTheTurnTheProviderEnded() {

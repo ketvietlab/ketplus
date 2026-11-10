@@ -218,6 +218,10 @@ QVariantMap guide(const QJsonObject& provider, const QJsonObject& turnError, con
             value.insert(QStringLiteral("error"), message);
             value.insert(QStringLiteral("blocking"), !fromTurn);
         }
+        // Cursor's sign-in is read from the CLI's config file, and an API key may live only in
+        // the user's shell; a wrong guess must not keep the user from sending.
+        if (id == QStringLiteral("cursor"))
+            value.insert(QStringLiteral("blocking"), false);
         switchTo();
     } else if (setupId == QStringLiteral("claude-signed-out")) {
         value.insert(QStringLiteral("title"), tr("Claude needs a sign-in"));

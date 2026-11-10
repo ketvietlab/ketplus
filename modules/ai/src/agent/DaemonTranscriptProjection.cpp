@@ -626,7 +626,9 @@ QVariantList daemonWindowMessages(const QJsonObject& page) {
             if (const QString code = data.value("code").toString(); !code.isEmpty()) {
                 // The provider's setup guide (ADR 0110), which quotes the provider's own words.
                 entry.insert("errorCode", code);
-                entry.insert("body", data.value("message").toString());
+                entry.insert("errorDetail", data.value("message").toString());
+                entry.insert("errorModel", data.value("model").toString());
+                entry.insert("provider", data.value("provider").toString());
             }
             entry.insert("category", "system");
             entry.insert("status", "failed");
