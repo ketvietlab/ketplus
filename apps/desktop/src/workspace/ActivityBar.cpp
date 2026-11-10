@@ -4,6 +4,7 @@
 #include "ui/SymbolIcon.h"
 #include <QApplication>
 
+#include "KetAvatar.h"
 #include "KetBanner.h"
 #include "KetButton.h"
 #include "KetIcons.h"
@@ -291,15 +292,15 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     identityButton_ = new QToolButton(this);
     identityButton_->setObjectName(QStringLiteral("productIdentityButton"));
     identityButton_->setProperty("kvRole", QStringLiteral("productIdentity"));
-    identityButton_->setText(tr("KetPlus\nPersonal workspace"));
+    identityButton_->setText(tr("KetPlus\nPersonal workspace")); // until setAccount names someone
     identityButton_->setToolButtonStyle(Qt::ToolButtonTextOnly);
     chrome_geometry::fixedHeight(identityButton_, 52);
     identityButton_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* identityAvatar = new QLabel(QStringLiteral("KP"), identityButton_);
-    identityAvatar->setObjectName(QStringLiteral("productIdentityAvatar"));
-    identityAvatar->setAlignment(Qt::AlignCenter);
-    identityAvatar->setGeometry(7, 11, 29, 29);
-    identityAvatar->setAttribute(Qt::WA_TransparentForMouseEvents);
+    identityAvatar_ = new QLabel(QStringLiteral("KP"), identityButton_);
+    identityAvatar_->setObjectName(QStringLiteral("productIdentityAvatar"));
+    identityAvatar_->setAlignment(Qt::AlignCenter);
+    identityAvatar_->setGeometry(7, 11, 29, 29);
+    identityAvatar_->setAttribute(Qt::WA_TransparentForMouseEvents);
     auto* identityChevron = new QLabel(identityButton_);
     identityChevron->setObjectName(QStringLiteral("productIdentityChevron"));
     identityChevron->setProperty("symbolName", QByteArray(symbols::chevronDown));
@@ -375,6 +376,19 @@ void ActivityBar::setPendingUpdate(const QString& version, const bool downloaded
                                       ? tr("KétPlus Pro %1 · Restart to install").arg(version)
                                       : tr("KétPlus Pro %1 · Review and install").arg(version));
     updateReadyButton_->setVisible(!version.isEmpty());
+}
+
+void ActivityBar::setAccount(const QString& name) {
+    // The name comes from the relay and the button shows plain text; signed out keeps the
+    // product name, as before sign-in.
+    const QString shown = name.trimmed();
+    QString label = shown;
+    label.replace(QLatin1Char('&'), QStringLiteral("&&")); // not a mnemonic
+    identityButton_->setText((shown.isEmpty() ? tr("KetPlus") : label) + QLatin1Char('\n') +
+                             tr("Personal workspace"));
+    identityButton_->setToolTip(shown);
+    const QString initials = ket::Avatar::initialsOf(shown);
+    identityAvatar_->setText(initials.isEmpty() ? QStringLiteral("KP") : initials);
 }
 
 void ActivityBar::setSidebarWidth(const int unscaledWidth) {

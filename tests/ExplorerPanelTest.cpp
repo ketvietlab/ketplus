@@ -1,4 +1,5 @@
 #include "workspace/ExplorerPanel.h"
+#include "KetAvatar.h"
 #include "KetBanner.h"
 #include "KetConversationRow.h"
 #include "KetProfile.h"
@@ -37,6 +38,7 @@ class ExplorerPanelTest final : public QObject {
     void opensFilesFromTheTree();
     void togglesFoldersFromTheTree();
     void switchesActivityModes();
+    void identityNamesTheSignedInAccount();
     void collapsesAndPreviewsRepositoryConversations();
     void conversationStatusMarksUnreadCompletionAndRotatesWorkingIcon();
     void runningAgentTurnNamesItsSender();
@@ -125,6 +127,26 @@ void ExplorerPanelTest::togglesFoldersFromTheTree() {
                                       Q_ARG(QModelIndex, index)));
     QVERIFY(!tree->isExpanded(index));
     QCOMPARE(opened.count(), 0);
+}
+
+void ExplorerPanelTest::identityNamesTheSignedInAccount() {
+    ketplus::ActivityBar bar;
+    auto* identity = bar.findChild<QToolButton*>(QStringLiteral("productIdentityButton"));
+    auto* avatar = bar.findChild<QLabel*>(QStringLiteral("productIdentityAvatar"));
+    QVERIFY(identity && avatar);
+    QCOMPARE(identity->text(), QStringLiteral("KetPlus\nPersonal workspace"));
+    QCOMPARE(avatar->text(), QStringLiteral("KP"));
+    // remote.status names the account (ADR 0109); an ampersand is not a mnemonic.
+    bar.setAccount(QStringLiteral("Minh & Lan"));
+    QCOMPARE(identity->text(), QStringLiteral("Minh && Lan\nPersonal workspace"));
+    QCOMPARE(avatar->text(), ket::Avatar::initialsOf(QStringLiteral("Minh & Lan")));
+    bar.setAccount(QStringLiteral("Minh Tran"));
+    QCOMPARE(avatar->text(), QStringLiteral("MT"));
+    QCOMPARE(identity->toolTip(), QStringLiteral("Minh Tran"));
+    // Signing out returns to the product name.
+    bar.setAccount({});
+    QCOMPARE(identity->text(), QStringLiteral("KetPlus\nPersonal workspace"));
+    QCOMPARE(avatar->text(), QStringLiteral("KP"));
 }
 
 void ExplorerPanelTest::switchesActivityModes() {

@@ -54,6 +54,8 @@ class ActivityBar final : public QWidget {
     void setStorageStatus(const QVariantMap& result);
     // `downloaded` reads "Restart to install"; otherwise the update still needs a review.
     void setPendingUpdate(const QString& version, bool downloaded = false);
+    // The signed-in account from remote.status (ADR 0109); empty shows the product name.
+    void setAccount(const QString& name);
     void applyPalette(const ThemePalette& palette, int zoomPercent = 100);
     [[nodiscard]] Mode mode() const noexcept;
 
@@ -99,6 +101,7 @@ class ActivityBar final : public QWidget {
     QLabel* machineNotice_{nullptr};
     ket::UpdatePill* updateReadyButton_{nullptr};
     QToolButton* identityButton_{nullptr};
+    QLabel* identityAvatar_{nullptr};
     QMenu* userMenu_{nullptr};
     QWidget* resizeHandle_{nullptr};
     int sidebarWidth_{kWidth};

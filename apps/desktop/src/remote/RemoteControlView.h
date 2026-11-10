@@ -43,6 +43,8 @@ class RemoteControlView final : public QWidget {
 
   signals:
     void machinesChanged(const QStringList& ids, const QStringList& names);
+    // The signed-in account name from remote.status; empty when this Mac is signed out.
+    void accountChanged(const QString& name);
 
   private:
     friend class RemoteControlViewTest;
