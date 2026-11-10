@@ -26,10 +26,12 @@ class WorkspacePreview final : public QWidget {
     [[nodiscard]] QSize minimumSizeHint() const override;
 
   protected:
+    bool event(QEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
 
   private:
+    void layoutBadge();
     [[nodiscard]] int codeLineHeight() const;
     [[nodiscard]] int codeBlockHeight() const;
 
