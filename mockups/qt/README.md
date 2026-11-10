@@ -128,8 +128,8 @@ A concept, not built in the app: several conversations that share one goal. Agen
 
 - **In the sidebar** a team is a folder inside its repository (`qml/shell/TeamFolder.qml`), beside
   the conversations that belong to no team. The folder lists its members' conversations (leader,
-  developers, reviewers), each with its role as its first tag. The icon folds it, the name opens the team's page, and the count
-  is the decisions that wait for the user. A conversation belongs to one team at a time.
+  developers, reviewer), each with its role as its first tag. The icon folds it, the name opens
+  the team's page, and the count is the decisions that wait for the user. A conversation belongs to one team at a time.
 - **Creating and changing a team** starts in the sidebar. A repository's `+` (or a right click)
   offers New conversation and New team…. A team has one leader and one reviewer, always; New team
   asks for a name, a goal, an integration branch, the number of developers (one to five) and the
@@ -142,9 +142,10 @@ A concept, not built in the app: several conversations that share one goal. Agen
   lists it locked and cannot remove it. A member's header has no Reviewer choice: its
   team's reviewer reviews it. A team folder shows Add member and its menu (Open team,
   Add member…, Delete team…) while hovered or focused, and on a right click; a conversation's menu
-  has Add to a team… or Remove from *team*…. The page repeats them: Add member, a member's Remove
+  has Add to *team* or Remove from *team*…. The page repeats them: Add member, a member's Remove
   from team… and the team menu's Delete team…. Deleting a team or removing a member keeps the
-  conversations; a removed member's open tasks become unassigned. A team keeps its leader.
+  conversations; a removed member's open tasks become unassigned. A team keeps its leader and its
+  reviewer: only a developer can be removed.
 - **The page** (`qml/screens/TeamsScreen.qml`) answers three questions in order: what waits for
   the user, where every task stands, and who holds what.
 - **Leader**: one conversation that assigns tasks, orders the merges into the team's integration
@@ -152,8 +153,9 @@ A concept, not built in the app: several conversations that share one goal. Agen
   acceptance criteria of each task) unless New team turns that off. It neither codes nor reviews.
 - **Developer**: owns a lane, a named set of path prefixes. An edit outside the lane is flagged on
   the task ("Outside its lane"); the leader decides who makes that change.
-- **Reviewer**: checks the lanes it is given against the acceptance criteria and never merges. One
-  reviewer keeps up with two or three developers; the page says so at four (`teams/large`).
+- **Reviewer**: one conversation that checks every lane against the acceptance criteria and never
+  merges. It keeps up with two or three developers; at four the page says reviews will queue and
+  suggests a second team (`teams/large`).
 - **Task**: one owner, who also holds its worktree; To do, In progress, In review, Blocked or Done;
   its branch, worktree, pull request and what it depends on. Only the leader changes the
   acceptance criteria, and a change is recorded in the task's history. Hand over changes the owner,
@@ -162,8 +164,8 @@ A concept, not built in the app: several conversations that share one goal. Agen
   in one conversation. The answer goes to the leader and to the owner of the task it blocks.
 - **Updates**: task changes wake nobody; the leader reads them as one digest when its turn ends.
 
-Not drawn yet: the leader's digest and a task assignment in a transcript, a member's role in the
-conversation header, and a team on the phone. Before the app builds this, ket-qt needs a group
+Not drawn yet: the leader's digest and a task assignment in a transcript, and a team on the
+phone. Before the app builds this, ket-qt needs a group
 header whose name activates instead of folding, and Két Symbol a team icon (the mock uses `bot`).
 
 ## Provider setup
