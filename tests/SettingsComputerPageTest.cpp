@@ -1,5 +1,6 @@
 #include "app/SettingsComputerPage.h"
 #include "ComputerToolLaunch.h"
+#include "KetChoice.h"
 
 #include <QAbstractButton>
 #include <QComboBox>
@@ -58,6 +59,10 @@ class SettingsComputerPageTest final : public QObject {
 
         auto* display = page.findChild<QComboBox*>(QStringLiteral("computerWorkDisplay"));
         QVERIFY(display);
+        // The mock's layout: the switch is a choice, each setting a 200 px control.
+        QVERIFY(qobject_cast<ket::Choice*>(enabled));
+        QCOMPARE(display->width(), 200);
+        QCOMPARE(denied->width(), 200);
         QCOMPARE(display->currentData().toString(), QStringLiteral("secondary"));
         display->setCurrentIndex(display->findData(QStringLiteral("main")));
         QCOMPARE(computer::loadSettings(config).display, QStringLiteral("main"));
