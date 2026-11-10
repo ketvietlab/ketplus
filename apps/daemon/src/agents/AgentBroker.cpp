@@ -129,7 +129,8 @@ std::optional<std::pair<QString, qint64>> AgentBroker::sessionForToken(const QSt
 bool AgentBroker::isOperation(const QString& type) {
     return type == QStringLiteral("agents.whoami") || type == QStringLiteral("agents.list") ||
            type == QStringLiteral("agents.send") || type == QStringLiteral("agents.inbox") ||
-           type == QStringLiteral("agents.work_report");
+           type == QStringLiteral("agents.work_report") ||
+           type == QStringLiteral("agents.request_user_decision");
 }
 
 QJsonObject AgentBroker::handle(const QString& token, const QString& operation,
@@ -152,6 +153,8 @@ QJsonObject AgentBroker::handle(const QString& token, const QString& operation,
         return inbox(*caller, payload);
     if (operation == QStringLiteral("agents.work_report"))
         return host_->recordWorkReport(caller->sessionId, caller->generation, payload);
+    if (operation == QStringLiteral("agents.request_user_decision"))
+        return host_->recordUserDecision(caller->sessionId, caller->generation, payload);
     return failure(QStringLiteral("unsupported_operation"),
                    QStringLiteral("Unknown agent operation."));
 }

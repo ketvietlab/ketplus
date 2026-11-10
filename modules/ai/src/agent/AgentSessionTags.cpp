@@ -86,6 +86,29 @@ void AgentSessionManager::setConversationTag(const QString& worktreePath,
     }
 }
 
+// #125: the daemon clears it first, so another client or the next start does not show it again.
+void AgentSessionManager::markConversationDone(const QString& worktreePath,
+                                               const QString& conversationId) {
+    for (const SessionPtr& session : conversationsByPath_.value(normalizedPath(worktreePath))) {
+        if (session->id != conversationId || !session->awaitingReply)
+            continue;
+        server_->markDaemonSessionDone(
+            session->threadId, [this, weak = std::weak_ptr<Session>(session)](
+                                   const QJsonObject&, const QString& error) {
+                const SessionPtr current = weak.lock();
+                if (!current)
+                    return;
+                if (!error.isEmpty()) {
+                    emit errorOccurred(QStringLiteral("Could not mark it as done: %1").arg(error));
+                    return;
+                }
+                current->awaitingReply = false;
+                emit conversationsChanged(current->path, conversations(current->path));
+            });
+        return;
+    }
+}
+
 void AgentSessionManager::syncTags(const SessionPtr& session) {
     if (session->tagSyncPending)
         return;

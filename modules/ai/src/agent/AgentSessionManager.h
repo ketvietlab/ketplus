@@ -94,6 +94,8 @@ class AgentSessionManager final : public QObject {
     // Adds or removes one label; the daemon stores the result (`session.tags.set`).
     void setConversationTag(const QString& worktreePath, const QString& conversationId,
                             const QString& label, bool tagged);
+    // #125 "Mark as done": the conversation no longer waits for the user (`session.mark_done`).
+    void markConversationDone(const QString& worktreePath, const QString& conversationId);
     bool archiveConversation(const QString& worktreePath, const QString& conversationId);
     bool restoreConversation(const QString& worktreePath, const QString& conversationId);
     bool cancelConversation(const QString& worktreePath, const QString& conversationId);

@@ -122,6 +122,9 @@ class SessionHost final : public QObject, private AgentHostPort {
         bool interruptPending{false};
         // A client's Stop is ending this turn, so its interrupted end says so.
         bool stopRequested{false};
+        // #125: this turn's last answer, and whether the agent asked the user to decide.
+        QString lastAnswerText;
+        bool decisionRequested{false};
         // The provider turn that last completed in the current provider process. A repeated
         // completion for it, or a late turn/started, must not end or restart the turn that runs
         // now. Cleared when the process stops or reloads, since the next one may reuse ids.
@@ -236,6 +239,12 @@ class SessionHost final : public QObject, private AgentHostPort {
     [[nodiscard]] QJsonObject markSessionSeen(const QJsonObject& request);
     [[nodiscard]] QJsonObject setSessionArchived(const QJsonObject& request);
     [[nodiscard]] QJsonObject setSessionTags(const QJsonObject& request);
+    // #125 "Waiting for you", in SessionHostAwaiting.cpp: Mark as done, and the turn's
+    // events that set or clear it.
+    [[nodiscard]] QJsonObject markSessionDone(const QJsonObject& request);
+    void noteAwaitingReply(Session& session, const QString& type, const QJsonObject& payload);
+    void setAwaitingReply(Session& session, bool awaiting);
+    [[nodiscard]] static bool endsWaitingForUser(const Session& session);
     [[nodiscard]] QJsonObject deleteSession(const QJsonObject& request);
     // With `outcome`, returns an empty object and answers through it once the provider has
     // replied; without it, answers "accepted" as soon as the text is handed to the provider.
@@ -380,6 +389,8 @@ class SessionHost final : public QObject, private AgentHostPort {
     void appendAgentNotice(const QString& sessionId, qint64 generation,
                            const QJsonObject& payload) override;
     // ADR 0106, in SessionHostWorkReports.cpp.
+    QJsonObject recordUserDecision(const QString& sessionId, qint64 generation,
+                                   const QJsonObject& payload) override;
     QJsonObject recordWorkReport(const QString& sessionId, qint64 generation,
                                  const QJsonObject& payload) override;
     [[nodiscard]] QJsonObject readWorkReport(const QJsonObject& request);

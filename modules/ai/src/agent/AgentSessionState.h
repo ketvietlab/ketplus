@@ -34,6 +34,8 @@ struct AgentSessionManager::Session final {
     // The list the user's changes add up to while the daemon is still storing an earlier one.
     QStringList tagsWanted;
     bool tagSyncPending{false};
+    // #125: the last turn ended asking the user to approve or decide ("Waiting for you").
+    bool awaitingReply{false};
     bool archived{false};
     // When the daemon recorded the archive (`archived_at`); invalid until the catalog says.
     QDateTime archivedAt;

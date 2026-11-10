@@ -120,6 +120,8 @@ QJsonObject SessionHost::listSessions(const QJsonObject& request) const {
         if (!stored.archivedAt.isEmpty())
             value.insert(QStringLiteral("archived_at"), stored.archivedAt);
         value.insert(QStringLiteral("tags"), QJsonArray::fromStringList(stored.tags));
+        if (stored.awaitingReply)
+            value.insert(QStringLiteral("awaiting_reply"), true);
         if (const auto sender = agentTurns.constFind(stored.id); sender != agentTurns.cend())
             value.insert(QStringLiteral("agent_turn"), *sender);
         if (!session.backgroundTasks.isEmpty())
