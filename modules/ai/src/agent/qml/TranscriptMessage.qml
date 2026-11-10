@@ -45,6 +45,13 @@ Item {
     // An activity row inside an expanded group is drawn compact, with tighter vertical padding,
     // and hangs under a rail indented by groupRailInset.
     readonly property bool groupNested: activityRow && groupRole.length > 0 && groupExpanded
+    // The last step of an open group: the mock's steps end with room under them, inside the rail.
+    readonly property bool groupEnd: {
+        if (!groupNested || !view.messageModel)
+            return false;
+        const rows = view.messageModel.count;
+        return index + 1 >= rows || view.messageModel.get(index + 1).groupKey !== groupKey;
+    }
     readonly property real groupRailInset: groupRecipe.childrenIndent + groupRecipe.childrenPadding + 1
     // A day divider is a block of its own in the mock: the request under it keeps its distance.
     readonly property real dayLead: dayDivider.visible ? dayDivider.height + KetTheme.px(12, KetTheme.zoom) : 0
@@ -81,6 +88,15 @@ Item {
     readonly property var messageImages: imageSources || []
     readonly property var messageQuestions: questionData || []
     readonly property var messageQuestionAnswers: questionAnswerData || ({})
+    // Error banners and event lines sit a block apart in the mock, closer than other notices.
+    readonly property bool tightNotice: noticeRow && (kind === "error" || subtype === "event" || subtype === "compaction")
+    // A failure and the end of its turn read as one block in the mock: the banner, then the line.
+    readonly property bool errorBeforeTurnEnd: {
+        if (kind !== "error" || !view.messageModel)
+            return false;
+        const rows = view.messageModel.count;
+        return index + 1 < rows && view.messageModel.get(index + 1).subtype === "turnEnd";
+    }
     readonly property bool activityRow: category === "activity" && !noticeRow
     readonly property bool noticeRow: subtype !== "question" && subtype !== "approval" && (category === "system" || subtype === "notice" || subtype === "compaction" || kind === "error")
     readonly property bool commandRow: activityRow && subtype === "command"
@@ -109,6 +125,20 @@ Item {
     // steer or queued message may land under it while its text keeps growing.
     readonly property bool codeCopyShown: chromeActive || !(host.sessionRunning && kind === "assistant" && meta.endsWith(" · streaming"))
     readonly property bool chromeActive: (rowHover.hovered || chromeFocusHold || (view.activeFocus && view.keyboardIndex === index))
+    // The mock's line under an answer whose turn was stopped.
+    readonly property bool answerStopped: answerEnd > 0 && view.answerStopped(index, view.messageModel ? view.messageModel.count : 0)
+    Text {
+        id: stoppedNote
+        objectName: "answerStoppedNote"
+        visible: messageDelegate.answerStopped
+        x: messageSurface.x
+        y: messageSurface.y + messageSurface.height + KetTheme.px(4, KetTheme.zoom)
+        height: visible ? implicitHeight + KetTheme.px(4, KetTheme.zoom) : 0
+        text: "Stopped before the answer finished"
+        color: KetTheme.t.textMuted
+        font.family: KetTheme.fontFamily
+        font.pixelSize: KetTheme.px(12, KetTheme.zoom)
+    }
     // As in the mock, the turn's answer always offers Copy answer under it; a prompt's copy
     // comes with the hover or focus.
     Loader {
@@ -117,7 +147,7 @@ Item {
         width: KetTheme.px(28, KetTheme.zoom)
         height: KetTheme.px(28, KetTheme.zoom)
         x: kind === "user" ? messageSurface.x - width - 4 : messageSurface.x
-        y: kind === "user" ? messageSurface.y + 2 : messageSurface.y + messageSurface.height + KetTheme.px(8, KetTheme.zoom)
+        y: kind === "user" ? messageSurface.y + 2 : messageSurface.y + messageSurface.height + stoppedNote.height + KetTheme.px(8, KetTheme.zoom)
         sourceComponent: TranscriptCopyButton {
             objectName: "copyMessageButton"
 
@@ -174,7 +204,7 @@ Item {
         }
     }
     width: view.width
-    height: messageSurface.y + messageSurface.height + steerNotice.height + surfaceInset + (activityRow ? KetTheme.px(3, KetTheme.zoom) : kind === "user" ? KetTheme.px(29, KetTheme.zoom) : copyableMessage ? KetTheme.px(44, KetTheme.zoom) : view.rowSpacing)
+    height: messageSurface.y + messageSurface.height + steerNotice.height + surfaceInset - (errorBeforeTurnEnd ? KetTheme.px(14, KetTheme.zoom) : 0) + (activityRow ? KetTheme.px(groupEnd ? 20 : 3, KetTheme.zoom) : kind === "user" ? KetTheme.px(29, KetTheme.zoom) : copyableMessage ? stoppedNote.height + KetTheme.px(44, KetTheme.zoom) : view.rowSpacing)
     // Publish what this row actually is. The geometry model only ever learns a
     // height from the row that laid itself out, so a row it has not seen keeps
     // one fixed constant instead of borrowing another row's size.
@@ -272,7 +302,7 @@ Item {
         // An images-only prompt keeps no empty bubble under its thumbnails.
         readonly property bool imagesOnly: userMessage && userLead.visible && messageDelegate.displayBody.trim().length === 0
         visible: !imagesOnly
-        height: imagesOnly ? 0 : messageColumn.implicitHeight + (messageDelegate.activityRow ? 0 : kind === "user" ? 2 * userRecipe.paddingBlock : KetTheme.px(16, KetTheme.zoom))
+        height: imagesOnly ? 0 : messageColumn.implicitHeight + (messageDelegate.activityRow ? 0 : kind === "user" ? 2 * userRecipe.paddingBlock : KetTheme.px(messageDelegate.tightNotice ? 8 : 16, KetTheme.zoom))
         // A file edit read as an activity step is a line like any other step, as in the mock;
         // only a standalone file message keeps its raised card.
         readonly property bool fileCard: kind === "file" && !messageDelegate.activityRow
@@ -514,7 +544,36 @@ Item {
                 visible: active
                 width: parent.width
                 height: item ? item.implicitHeight : 0
-                sourceComponent: subtype === "approval" ? approvalCardComponent : questionCardComponent
+                sourceComponent: subtype === "approval" ? approvalCardComponent : messageDelegate.running ? questionCardComponent : closedQuestionComponent
+            }
+
+            // A question that is no longer open folds into the mock's note: what was asked
+            // and, when it was answered, the answer.
+            Component {
+                id: closedQuestionComponent
+                // The note keeps the mock's block spacing from the activity around it.
+                Item {
+                    implicitHeight: closedNote.implicitHeight + KetTheme.px(26, KetTheme.zoom)
+                    TranscriptAgentNote {
+                        id: closedNote
+                        y: KetTheme.px(12, KetTheme.zoom)
+                        width: parent.width
+                        height: implicitHeight
+                        objectName: "closedQuestionNote"
+                        readonly property bool answered: Object.keys(messageDelegate.messageQuestionAnswers).length > 0
+                        iconName: answered ? "check" : "clock"
+                        iconColor: answered ? KetTheme.t.success : KetTheme.t.textMuted
+                        label: answered ? "Answered" : messageDelegate.status === "deferred" ? "Deferred" : messageDelegate.status === "expired" ? "Question expired" : "Question closed"
+                        details: messageDelegate.messageQuestions.map(question => {
+                            const asked = question.question || question.header || "";
+                            const answer = messageDelegate.messageQuestionAnswers[question.id];
+                            const said = answer === undefined || answer === null ? "" : Array.isArray(answer) ? answer.join(", ") : typeof answer === "object" ? (answer.custom_answer || (answer.option_ids || []).join(", ")) : String(answer);
+                            return said.length > 0 ? asked + "  ·  " + said : asked;
+                        }).filter(line => line.length > 0).join("\n")
+                        message: ""
+                        state: messageDelegate.status
+                    }
+                }
             }
 
             Component {

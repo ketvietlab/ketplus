@@ -743,12 +743,30 @@ QVariantMap activityMessage(const QJsonObject& item, const bool completed) {
                 title += QStringLiteral(": ") + url;
             if (read) {
                 int offset = 0;
-                for (const auto* key : {"arguments", "input"})
-                    offset = std::max(offset, item.value(QLatin1String(key))
-                                                  .toObject()
-                                                  .value(QStringLiteral("offset"))
-                                                  .toInt());
+                int limit = 0;
+                for (const auto* key : {"arguments", "input"}) {
+                    const auto arguments = item.value(QLatin1String(key)).toObject();
+                    offset = std::max(offset, arguments.value(QStringLiteral("offset")).toInt());
+                    limit = std::max(limit, arguments.value(QStringLiteral("limit")).toInt());
+                }
                 readLocation = fileLocation(url, offset, {}, {});
+                // The lines that were read, written as a command's read is: "… L540–600".
+                if (!url.isEmpty() && offset > 0 && limit > 0)
+                    title += QStringLiteral(" L%1–%2").arg(offset).arg(offset + limit - 1);
+            } else if (!files && !url.isEmpty()) {
+                // Where the pattern was looked for, written as a command's search is:
+                // "Searched code: “pattern” in modules/ai".
+                QString where;
+                for (const auto* key : {"arguments", "input"})
+                    if (where.isEmpty())
+                        where = sanitizedText(item.value(QLatin1String(key))
+                                                  .toObject()
+                                                  .value(QStringLiteral("path"))
+                                                  .toString());
+                if (!where.isEmpty())
+                    title = (completed ? QStringLiteral("Searched code: “%1” in %2")
+                                       : QStringLiteral("Searching code: “%1” in %2"))
+                                .arg(url, where);
             }
         } else if (subtype == QStringLiteral("imageView")) {
             eventType = QStringLiteral("image.view");

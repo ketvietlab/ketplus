@@ -596,12 +596,29 @@ Flickable {
             return 0;
         for (let row = index + 1; row < messageModel.count; ++row) {
             const entry = messageModel.get(row);
+            // A steer joins the running turn; the answer goes on under it.
+            if (entry.kind === "user" && entry.eventType === "turn.steered")
+                continue;
             if (entry.kind === "user")
                 return 1;
             if (answerRow(entry))
                 return 0;
         }
         return 2;
+    }
+    // Whether the turn of the answer at `index` was stopped before it finished: its end row
+    // is neither completed nor failed. `count` only makes bindings re-evaluate.
+    function answerStopped(index, count) {
+        if (!messageModel)
+            return false;
+        for (let row = index + 1; row < messageModel.count; ++row) {
+            const entry = messageModel.get(row);
+            if (entry.subtype === "turnEnd")
+                return entry.status !== "completed" && entry.status !== "failed";
+            if (entry.kind === "user" && entry.eventType !== "turn.steered")
+                return false;
+        }
+        return false;
     }
     // Everything the agent wrote in the turn ending at `index`, without its commands,
     // files or tool steps.

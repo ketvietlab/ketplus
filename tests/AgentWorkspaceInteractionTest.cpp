@@ -415,8 +415,15 @@ for line in sys.stdin:
     QCOMPARE(question.value("questionAnswers").toMap().value("behavior").toString(),
              QStringLiteral("Keep the compact receipt"));
     QCOMPARE(messages.last().toMap().value("body").toString(), QStringLiteral("Answers received"));
-    QTRY_VERIFY(card->property("answered").toBool());
-    QVERIFY(findVisualItem(card, QStringLiteral("questionReceipt"))->isVisible());
+    // Answered, the card folds into the mock's note: what was asked and what was chosen.
+    QQuickItem* answeredNote = nullptr;
+    QTRY_VERIFY((answeredNote = findVisualItem(root, QStringLiteral("closedQuestionNote"))));
+    QVERIFY(!findVisualItem(root, QStringLiteral("messageQuestionCard")));
+    QCOMPARE(answeredNote->property("label").toString(), QStringLiteral("Answered"));
+    QVERIFY2(answeredNote->property("details").toString().contains(QStringLiteral("In timeline")),
+             qPrintable(answeredNote->property("details").toString()));
+    QVERIFY(answeredNote->property("details").toString().contains(
+        QStringLiteral("Keep the compact receipt")));
     if (!capturePath.isEmpty()) {
         QTest::qWait(100);
         QVERIFY(view.quickView()->grabWindow().save(capturePath + ".answered.png"));

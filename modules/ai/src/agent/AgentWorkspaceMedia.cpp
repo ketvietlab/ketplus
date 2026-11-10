@@ -826,9 +826,12 @@ QVariantList AgentWorkspaceView::messageCodeBlocks(QObject* document) const {
             // blockBoundingRect starts at the paragraph's edge but is only as wide as the lines
             // inside its margins; the frame adds both so it spans the column like the mock's.
             const auto margins = block.blockFormat();
-            const auto padded =
-                bounds.adjusted(0, -codeVerticalPadding,
-                                margins.leftMargin() + margins.rightMargin(), codeVerticalPadding);
+            // A fixed line height sets the glyphs low in their line, so the last line would
+            // sit closer to the frame than the first; the frame makes up the difference.
+            const qreal lowGlyphs = recipePixels(6);
+            const auto padded = bounds.adjusted(0, -codeVerticalPadding,
+                                                margins.leftMargin() + margins.rightMargin(),
+                                                codeVerticalPadding + lowGlyphs);
             frames.append(QVariantMap{{"x", padded.x()},
                                       {"y", padded.y()},
                                       {"width", padded.width()},

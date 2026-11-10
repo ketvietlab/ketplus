@@ -589,6 +589,40 @@ void AgentWorkspaceViewTest::streamingCodeWaitsForCopyChromeBehindASteer() {
     QTRY_VERIFY(childNamed(delegateAt(transcript, 1), "copyCodeBlockButton"));
 }
 
+// A steer joins the running turn, so the text above it is not the turn's answer; and an
+// answer whose turn was stopped says so above its Copy button.
+void AgentWorkspaceViewTest::steerDoesNotEndTheAnswerAndAStoppedAnswerSaysSo() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 640);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
+    auto* root = view.quickView()->rootObject();
+    QVERIFY(root);
+    auto* transcript = root->findChild<QQuickItem*>("agentTranscript");
+    QVERIFY(transcript);
+
+    QVariantMap steer = textRow("s", "user", "Also check dark mode");
+    steer.insert("eventType", "turn.steered");
+    QVariantMap end{{"kind", "system"},        {"category", "system"},     {"subtype", "turnEnd"},
+                    {"status", "interrupted"}, {"body", "stopped by you"}, {"messageKey", "end"},
+                    {"meta", "Turn"},          {"filePath", QString()}};
+    view.resetMessages({textRow("u", "user", "Fix the spinner"),
+                        textRow("a1", "assistant", "I will read the sidebar first."), steer,
+                        textRow("a2", "assistant", "The spinner now steps on one clock."), end},
+                       "workspace:steered-answer");
+    QTRY_COMPARE(transcript->opacity(), 1.0);
+    QTRY_VERIFY(delegateAt(transcript, 3));
+    QTRY_VERIFY(childNamed(delegateAt(transcript, 3), "copyMessageButton"));
+    QVERIFY(!childNamed(delegateAt(transcript, 1), "copyMessageButton"));
+    auto* stopped = childNamed(delegateAt(transcript, 3), "answerStoppedNote");
+    QVERIFY(stopped);
+    QTRY_VERIFY(stopped->isVisible());
+    auto* earlier = childNamed(delegateAt(transcript, 1), "answerStoppedNote");
+    QVERIFY(earlier);
+    QVERIFY(!earlier->isVisible());
+}
+
 void AgentWorkspaceViewTest::copiesMessageSourcesAndCodeBlocks() {
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());
