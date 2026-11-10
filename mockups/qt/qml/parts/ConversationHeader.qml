@@ -221,6 +221,11 @@ Rectangle {
             text: "Terminal"
             onClicked: header.toggleDetails("terminal")
         }
+        KetIconButton {
+            iconName: "check-all"
+            text: "Report"
+            onClicked: header.toggleDetails("report")
+        }
     }
 
     KetMenu {

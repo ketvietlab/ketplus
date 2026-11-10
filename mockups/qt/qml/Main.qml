@@ -14,7 +14,8 @@ Basic.ApplicationWindow {
     // Screens, in sidebar order. A state follows a slash: "workspace/welcome".
     readonly property var screenIds: [
         "workspace", "workspace/welcome", "workspace/running", "workspace/question",
-        "workspace/error", "workspace/atlas", "workspace/details", "workspace/claude",
+        "workspace/error", "workspace/atlas", "workspace/details", "workspace/report",
+        "workspace/report-running", "workspace/report-details", "workspace/claude",
         "workspace/codex", "workspace/cursor", "editor", "editor/terminal",
         "editor/markdown", "editor/markdown-source", "editor/samples",
         "changes", "worktrees", "connections", "connections/no-activity", "connections/signed-out",
@@ -186,7 +187,7 @@ Basic.ApplicationWindow {
         if (state === "storage-warning" || id === "settings/storage")
             storageWarning = true
         if (name === "workspace") {
-            const kind = state === "details" ? "activity" : state
+            const kind = state === "details" ? "activity" : state === "report-details" ? "report" : state
             if (kind) {
                 for (const r of Fixtures.repositories) {
                     const match = r.conversations.find(c => c.transcript === kind)
@@ -196,7 +197,8 @@ Basic.ApplicationWindow {
                     }
                 }
             }
-            workspace.detailsOpen = state === "details"
+            workspace.detailsOpen = state === "details" || state === "report-details"
+            workspace.detailsTab = state === "report-details" ? "report" : "changes"
         }
         if (name === "settings")
             settingsTab = state || "appearance"

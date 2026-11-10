@@ -43,6 +43,11 @@ QtObject {
             conversations: [
                 { number: "2035", title: "Refine navigation", status: KetTheme.ConversationStatus.Completed,
                   tags: [tag("UI")], worktree: "develop", transcript: "activity" },
+                // A finished turn and a running one, both closed by the work report (Fixtures.turnReport).
+                { number: "8213", title: "Finish the repository picker", status: KetTheme.ConversationStatus.Completed,
+                  tags: [tag("UI")], worktree: "develop", transcript: "report" },
+                { number: "8215", title: "Follow up on the new UI", status: KetTheme.ConversationStatus.Working,
+                  tags: [tag("UI")], worktree: "develop", transcript: "report-running" },
                 { number: "9410", title: "Review the startup flow", status: KetTheme.ConversationStatus.Working,
                   tags: [tag("Performance"), tag("Review")], worktree: "develop", transcript: "running" },
                 { number: "3372", title: "Atlas: Onboarding experience", status: KetTheme.ConversationStatus.Completed,
@@ -95,6 +100,44 @@ QtObject {
             ]
         }
     ]
+
+    // The conversation's work report: what the agent reported through the `report` tool,
+    // merged by key over four turns. The app counts it; cancelled items are not counted.
+    readonly property var turnReport: ({
+        title: "Repository picker and new UI follow-ups",
+        turn: 4,
+        activity: "Editing ExecutionWorktreeDialog.cpp",
+        groups: [
+            { title: "Pull requests", items: [
+                { key: "pr-399", title: "#399 Interface zoom separate from font size", status: "done", change: "",
+                  owner: "Agent", evidence: "Merged into feat/new-ui · review by @agent/7542 passed",
+                  verified: ["Tests", "Build"] },
+                { key: "pr-401", title: "#401 Mermaid labels meet AA contrast", status: "done", change: "",
+                  owner: "Agent", evidence: "The 4.45:1 label now reaches 4.6:1 · sweep regression added · merged",
+                  verified: ["Tests", "Capture"] }
+            ] },
+            { title: "Repository picker · #164", items: [
+                { key: "picker-daemon", title: "The daemon lists another repository's worktrees", status: "done",
+                  change: "new", owner: "Agent",
+                  evidence: "Lists them without switching or enrolling the repository · daemon_worktree_context 2/2 passed",
+                  verified: ["Code", "Tests"] },
+                { key: "picker-dialog", title: "The dialog follows the mock flow", status: "active", change: "updated",
+                  owner: "Agent", evidence: "Choose a repository, then one of its worktrees, or use the repository or create a worktree",
+                  remaining: "Worktree counts, the window's call site and the dialog tests",
+                  next: "Finish the dialog and run its tests", verified: ["Code"] },
+                { key: "picker-adr", title: "ADR 0105 and the daemon version", status: "waiting", change: "",
+                  owner: "Agent", next: "Write them once the dialog lands" }
+            ] },
+            { title: "Decisions", items: [
+                { key: "issue-402", title: "#402 Retire the compatibility stylesheet", status: "waiting", change: "new",
+                  owner: "You", remaining: "Now, or folded into #137–#139", next: "Choose when to do it" },
+                { key: "update-notice", title: "Toasts and the update notice", status: "blocked", change: "",
+                  owner: "You", remaining: "The notice needs approved wording", next: "Approve the notice wording" },
+                { key: "legacy-picker", title: "Keep the old picker behind a setting", status: "cancelled", change: "",
+                  owner: "Agent", evidence: "Replaced by the mock flow in turn 3" }
+            ] }
+        ]
+    })
 
     readonly property var machines: ["This Mac", "Linux · build-node-01"]
 
