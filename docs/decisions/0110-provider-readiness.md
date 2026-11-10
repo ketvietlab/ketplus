@@ -84,8 +84,15 @@ than the work:
 - **Notification.** Clients learn of the change from the coded `runtime.error`
   itself and read `provider.runtime_status` again.
 - **Check again.** It sends `provider.runtime_status {recheck: true}`. That forgets
-  reported failures, except a limit that has not reset, and then runs every probe
-  again.
+  what can be told again: a sign-out, which the probe checks, and a limit with no
+  known reset, which nothing else would end. It then runs every probe again. An
+  expired sign-in, a rejected key and a pending limit stay until a turn works or
+  the credential changes. Saving or removing a Claude API key forgets Claude's
+  failures.
+- **Classification.** Text is read only when Codex gave no other
+  `codexErrorInfo`, and only for the provider's own sentence at the start of the
+  message. "MCP server github: authentication required" is about the work, not
+  the account.
 
 ## Consequences
 

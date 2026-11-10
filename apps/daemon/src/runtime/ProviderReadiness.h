@@ -31,8 +31,16 @@ class ProviderReadiness final {
     // `message` is the provider's own text, kept verbatim.
     void observe(const QString& provider, const QString& state, const QString& message = {},
                  qint64 resetsAt = 0);
-    // Check again: forgets reported failures, except a limit that has not reset yet.
+    // Check again: forgets what a probe can tell again (a sign-out) and a limit without a known
+    // reset. An expired sign-in, a rejected key and a pending limit stay until a turn works or
+    // the credential changes (forget).
     void recheck(qint64 now);
+    // The credential changed (a new Claude API key): earlier failures no longer apply.
+    void forget(const QString& provider);
+    // The failure reported for `provider`, or empty.
+    [[nodiscard]] QString reportedState(const QString& provider) const {
+        return observed_.value(provider).state;
+    }
     // Claude's sidecar reports where its credential came from when a query starts.
     void observeClaudeSource(const QString& source);
     // The `readiness` object for `runtime` (provider.runtime_status). `now` is seconds since the

@@ -44,6 +44,8 @@ class SessionHost final : public QObject, private AgentHostPort {
     ~SessionHost() override;
 
     void setClaudeAccountUsage(ClaudeAccountUsage* usage) { claudeAccountUsage_ = usage; }
+    // ADR 0110: the provider's credential changed, so its reported failures no longer apply.
+    void forgetProviderFailure(const QString& provider) { readiness_.forget(provider); }
 
     using CommandCallback = std::function<void(const QJsonObject&)>;
 

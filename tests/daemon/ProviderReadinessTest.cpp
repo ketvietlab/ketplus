@@ -166,19 +166,34 @@ class ProviderReadinessTest final : public QObject {
                  QStringLiteral("Anthropic rejected this API key."));
     }
 
+    // Check again forgets only what can be told again (#448/#449 review): a sign-out the probe
+    // checks, and a limit with no known reset. An expired sign-in or a rejected key stays until
+    // a turn works or the credential changes.
     void checkAgainForgetsFailuresButNotAPendingLimit() {
         ProviderReadiness readiness;
         const auto claude = runtime("claude", compat::SupportStatus::Bundled);
         const auto codex = runtime("codex", compat::SupportStatus::Supported);
-        readiness.observe(QStringLiteral("claude"), QStringLiteral("expired"));
+        const auto cursor = runtime("cursor", compat::SupportStatus::Supported);
+        readiness.observe(QStringLiteral("claude"), QStringLiteral("key_rejected"));
         readiness.observe(QStringLiteral("codex"), QStringLiteral("limit_reached"), {}, 500);
+        readiness.observe(QStringLiteral("cursor"), QStringLiteral("signed_out"));
         readiness.recheck(100);
-        QCOMPARE(state(readiness.compose(claude, {}, 100)), QStringLiteral("unknown"));
+        QCOMPARE(state(readiness.compose(claude, {}, 100)), QStringLiteral("key_rejected"));
         QCOMPARE(state(readiness.compose(codex, {QStringLiteral("ready"), {}}, 100)),
                  QStringLiteral("limit_reached"));
+        QCOMPARE(state(readiness.compose(cursor, {QStringLiteral("signed_out"), {}}, 100)),
+                 QStringLiteral("signed_out")); // the probe's own answer
+        QVERIFY(readiness.reportedState(QStringLiteral("cursor")).isEmpty());
         readiness.recheck(500);
         QCOMPARE(state(readiness.compose(codex, {QStringLiteral("ready"), {}}, 500)),
                  QStringLiteral("ready"));
+        // A limit without a reset time ends with Check again instead of never.
+        readiness.observe(QStringLiteral("cursor"), QStringLiteral("limit_reached"));
+        readiness.recheck(600);
+        QVERIFY(readiness.reportedState(QStringLiteral("cursor")).isEmpty());
+        // A new key: the rejected one no longer applies.
+        readiness.forget(QStringLiteral("claude"));
+        QCOMPARE(state(readiness.compose(claude, {}, 700)), QStringLiteral("unknown"));
     }
 
     void classifiesTurnErrors() {
@@ -221,6 +236,25 @@ class ProviderReadinessTest final : public QObject {
         QCOMPARE(providerErrorCode(QStringLiteral("claude"), none,
                                    QStringLiteral("Claude Agent SDK sidecar was not found.")),
                  QStringLiteral("provider_unavailable"));
+        // Errors about the work itself never change the provider's readiness (#448 review).
+        for (const auto* work :
+             {"MCP server github: authentication required",
+              "Tool failed: session expired while fetching the page",
+              "The deploy script says: usage limit for builds reached", "npm ERR! not logged in"})
+            QVERIFY2(providerErrorCode(QStringLiteral("claude"), none, QString::fromLatin1(work))
+                         .isEmpty(),
+                     work);
+        // Codex named another failure: its text is not read for the account.
+        QVERIFY(providerErrorCode(QStringLiteral("codex"), QStringLiteral("other"),
+                                  QStringLiteral("You've hit your usage limit"))
+                    .isEmpty());
+        QCOMPARE(providerErrorCode(QStringLiteral("claude"), none,
+                                   QStringLiteral("Invalid API key · Please run /login")),
+                 QStringLiteral("auth_required"));
+        QCOMPARE(
+            providerErrorCode(QStringLiteral("claude"), none,
+                              QStringLiteral("API Error: 529 {\"type\":\"overloaded_error\"}")),
+            QStringLiteral("model_capacity"));
         // An error about the work itself has no code.
         QVERIFY(providerErrorCode(QStringLiteral("codex"), none, QStringLiteral("stream failed"))
                     .isEmpty());
