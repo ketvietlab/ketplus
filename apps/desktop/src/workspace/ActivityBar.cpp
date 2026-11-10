@@ -4,6 +4,7 @@
 #include "ui/SymbolIcon.h"
 #include <QApplication>
 
+#include "KetAvatar.h"
 #include "KetBanner.h"
 #include "KetButton.h"
 #include "KetIcons.h"
@@ -18,6 +19,7 @@
 #include <QAction>
 #include <QButtonGroup>
 #include <QComboBox>
+#include <QEvent>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QKeySequence>
@@ -291,15 +293,17 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     identityButton_ = new QToolButton(this);
     identityButton_->setObjectName(QStringLiteral("productIdentityButton"));
     identityButton_->setProperty("kvRole", QStringLiteral("productIdentity"));
-    identityButton_->setText(tr("KetPlus\nPersonal workspace"));
+    identityButton_->setText(tr("KetPlus\nPersonal workspace")); // until setAccount names someone
     identityButton_->setToolButtonStyle(Qt::ToolButtonTextOnly);
     chrome_geometry::fixedHeight(identityButton_, 52);
-    identityButton_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* identityAvatar = new QLabel(QStringLiteral("KP"), identityButton_);
-    identityAvatar->setObjectName(QStringLiteral("productIdentityAvatar"));
-    identityAvatar->setAlignment(Qt::AlignCenter);
-    identityAvatar->setGeometry(7, 11, 29, 29);
-    identityAvatar->setAttribute(Qt::WA_TransparentForMouseEvents);
+    // The sidebar sets the width; a long account name is elided, never widens it.
+    identityButton_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    identityButton_->installEventFilter(this);
+    identityAvatar_ = new QLabel(QStringLiteral("KP"), identityButton_);
+    identityAvatar_->setObjectName(QStringLiteral("productIdentityAvatar"));
+    identityAvatar_->setAlignment(Qt::AlignCenter);
+    identityAvatar_->setGeometry(7, 11, 29, 29);
+    identityAvatar_->setAttribute(Qt::WA_TransparentForMouseEvents);
     auto* identityChevron = new QLabel(identityButton_);
     identityChevron->setObjectName(QStringLiteral("productIdentityChevron"));
     identityChevron->setProperty("symbolName", QByteArray(symbols::chevronDown));
@@ -375,6 +379,40 @@ void ActivityBar::setPendingUpdate(const QString& version, const bool downloaded
                                       ? tr("KétPlus Pro %1 · Restart to install").arg(version)
                                       : tr("KétPlus Pro %1 · Review and install").arg(version));
     updateReadyButton_->setVisible(!version.isEmpty());
+}
+
+void ActivityBar::setAccount(const QString& name) {
+    // The name comes from the relay and the button shows plain text; signed out keeps the
+    // product name, as before sign-in.
+    const QString shown = name.trimmed();
+    accountName_ = shown;
+    identityButton_->setToolTip(shown);
+    refreshIdentityText();
+    const QString initials = ket::Avatar::initialsOf(shown);
+    identityAvatar_->setText(initials.isEmpty() ? QStringLiteral("KP") : initials);
+}
+
+void ActivityBar::refreshIdentityText() {
+    // A long name ends in "…" before the chevron; the tooltip keeps all of it.
+    QString name = accountName_.isEmpty() ? tr("KetPlus") : accountName_;
+    const auto* chevron =
+        identityButton_->findChild<QLabel*>(QStringLiteral("productIdentityChevron"));
+    const int gap = 8;
+    const int available = identityButton_->width() - identityAvatar_->geometry().right() - gap -
+                          (chevron != nullptr ? chevron->width() + 10 + gap : 0);
+    // Before it is laid out the button has no width yet; its first resize elides.
+    if (identityButton_->isVisible() && available > 0)
+        name = identityButton_->fontMetrics().elidedText(name, Qt::ElideRight, available);
+    name.replace(QLatin1Char('&'), QStringLiteral("&&")); // not a mnemonic
+    identityButton_->setText(name + QLatin1Char('\n') + tr("Personal workspace"));
+}
+
+bool ActivityBar::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == identityButton_ &&
+        (event->type() == QEvent::Resize || event->type() == QEvent::FontChange ||
+         event->type() == QEvent::StyleChange))
+        refreshIdentityText();
+    return QWidget::eventFilter(watched, event);
 }
 
 void ActivityBar::setSidebarWidth(const int unscaledWidth) {

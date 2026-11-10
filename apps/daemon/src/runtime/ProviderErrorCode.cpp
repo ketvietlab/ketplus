@@ -3,6 +3,7 @@
 #include "providers/CursorAdapter.h"
 
 #include <QJsonObject>
+#include <QRegularExpression>
 
 namespace ketplus::daemon {
 namespace {
@@ -16,11 +17,14 @@ QString variant(const QJsonValue& info) {
     return {};
 }
 
-bool containsAny(const QString& text, std::initializer_list<const char*> needles) {
-    for (const char* needle : needles)
-        if (text.contains(QLatin1String(needle)))
-            return true;
-    return false;
+// A provider's own sentence, at the start of the message (after an "API Error: 401" prefix).
+// Anchored so that an error about the work, such as "MCP server github: authentication
+// required", never changes the provider's readiness.
+bool opens(const QString& message, const char* pattern) {
+    const QRegularExpression expression(
+        QStringLiteral("^(?:api error: \\d{3}\\s*)?(?:%1)").arg(QString::fromUtf8(pattern)),
+        QRegularExpression::CaseInsensitiveOption);
+    return expression.match(message.trimmed()).hasMatch();
 }
 } // namespace
 
@@ -34,28 +38,30 @@ QString providerErrorCode(const QString& provider, const QJsonValue& providerInf
     if (info == QStringLiteral("serverOverloaded"))
         return QStringLiteral("model_capacity");
 
-    const QString text = message.toLower();
-    if (containsAny(text, {"sidecar was not found", "cli was not found"}))
+    if (opens(message, "[\\w .-]+ (?:sidecar|cli) was not found"))
         return QStringLiteral("provider_unavailable");
-    if (containsAny(text, {"rejected this api key", "invalid x-api-key", "invalid api key"}))
-        return QStringLiteral("key_rejected");
-    if (containsAny(text, {"oauth session expired", "could not be refreshed", "token has expired",
-                           "token expired", "session expired"}))
-        return QStringLiteral("auth_expired");
-    if (provider == QStringLiteral("cursor") && CursorAdapter::looksLikePlanLimit(message))
-        return QStringLiteral("plan_blocked");
-    if (text.startsWith(QStringLiteral("cursor blocked this model")))
-        return QStringLiteral("plan_blocked");
-    // CursorAdapter already rewrites its auth errors as "Cursor CLI is not signed in".
-    if (containsAny(text, {"not signed in", "not logged in", "authentication required",
-                           "not authenticated", "please run /login", "login required"}))
-        return QStringLiteral("auth_required");
-    if (containsAny(text, {"hit your weekly limit", "hit your usage limit", "usage limit reached",
-                           "you've hit your", "you have hit your", "limit reached · resets",
-                           "usage limit"}))
-        return QStringLiteral("limit_reached");
-    if (containsAny(text, {"at capacity", "overloaded"}))
+    if (opens(message, "selected model is at capacity|overloaded\\b|\\{.*overloaded_error"))
         return QStringLiteral("model_capacity");
+    if (provider == QStringLiteral("cursor") &&
+        (CursorAdapter::looksLikePlanLimit(message) || opens(message, "cursor blocked this model")))
+        return QStringLiteral("plan_blocked");
+    // Codex named another kind of failure: its words are not about the account.
+    if (!info.isEmpty())
+        return {};
+    if (opens(message, "anthropic rejected this api key|invalid x-api-key|"
+                       "invalid api key(?! · please run /login)"))
+        return QStringLiteral("key_rejected");
+    if (opens(message, "(?:failed to authenticate: )?(?:oauth session expired|oauth token has "
+                       "expired|your access token could not be refreshed|your refresh token "
+                       "has expired)"))
+        return QStringLiteral("auth_expired");
+    // CursorAdapter already rewrites its auth errors as "Cursor CLI is not signed in".
+    if (opens(message, "cursor cli is not signed in|authentication required|not logged in|"
+                       "invalid api key · please run /login|please run /login"))
+        return QStringLiteral("auth_required");
+    if (opens(message, "you've hit your|you have hit your|claude ai usage limit reached|"
+                       "you've reached your usage limit"))
+        return QStringLiteral("limit_reached");
     return {};
 }
 
