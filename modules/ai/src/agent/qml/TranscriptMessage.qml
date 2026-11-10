@@ -49,6 +49,8 @@ Item {
     readonly property bool groupEnd: {
         if (!groupNested || !view.messageModel)
             return false;
+        // The next row may change in place, without the row count changing.
+        view.messageModel.sourceRevision;
         const rows = view.messageModel.count;
         return index + 1 >= rows || view.messageModel.get(index + 1).groupKey !== groupKey;
     }
@@ -94,6 +96,8 @@ Item {
     readonly property bool errorBeforeTurnEnd: {
         if (kind !== "error" || !view.messageModel)
             return false;
+        // The next row may change in place, without the row count changing.
+        view.messageModel.sourceRevision;
         const rows = view.messageModel.count;
         return index + 1 < rows && view.messageModel.get(index + 1).subtype === "turnEnd";
     }

@@ -628,6 +628,9 @@ Flickable {
         const parts = [];
         for (let row = index; row >= 0; --row) {
             const entry = messageModel.get(row);
+            // A steer joined the turn: what the agent wrote before it is the same answer.
+            if (entry.kind === "user" && entry.eventType === "turn.steered")
+                continue;
             if (entry.kind === "user")
                 break;
             if (answerRow(entry) && !entry.chunkContinuation)
