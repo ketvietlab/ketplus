@@ -48,6 +48,16 @@ class Reader final {
     QString error_;
 };
 
+// Sets owner-only permissions and confirms they took, so a file system that ignores them
+// fails the export rather than leaving transcripts readable by others.
+bool ownerOnly(const QString& path, const QFileDevice::Permissions permissions) {
+    constexpr auto others = QFileDevice::ReadGroup | QFileDevice::WriteGroup |
+                            QFileDevice::ExeGroup | QFileDevice::ReadOther |
+                            QFileDevice::WriteOther | QFileDevice::ExeOther;
+    return QFile::setPermissions(path, permissions) &&
+           (QFile::permissions(path) & others) == QFileDevice::Permissions{};
+}
+
 bool scalar(QSqlDatabase database, const QString& sql, qint64* value, QString* error) {
     QSqlQuery query(database);
     if (!query.exec(sql) || !query.next()) {
@@ -297,6 +307,12 @@ std::optional<QJsonObject> exportConversations(const QString& databasePath,
         return std::nullopt;
     }
     auto database = reader.database();
+    // One read transaction for the whole export: every conversation listed below is read from
+    // the same snapshot, even if it is deleted or expires while the export runs.
+    if (!database.transaction()) {
+        *error = database.lastError().text();
+        return std::nullopt;
+    }
     struct Row final {
         QString id, title, adapter, worktree, archivedAt, number;
         qint64 generation{0};
@@ -329,8 +345,12 @@ std::optional<QJsonObject> exportConversations(const QString& databasePath,
         return std::nullopt;
     }
     // Transcripts may hold secrets the agents saw: owner-only, like the journal.
-    QFile::setPermissions(folder,
-                          QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    if (!ownerOnly(folder,
+                   QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner)) {
+        QDir().rmdir(folder);
+        *error = QStringLiteral("Could not make %1 private to you.").arg(folder);
+        return std::nullopt;
+    }
     QSqlQuery events(database);
     events.setForwardOnly(true);
     events.prepare(QStringLiteral(
@@ -394,13 +414,25 @@ std::optional<QJsonObject> exportConversations(const QString& databasePath,
         }
         events.finish();
         file.write("]}\n");
-        file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+        if (!file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner)) {
+            file.cancelWriting();
+            *error = QStringLiteral("Could not make %1 private to you.").arg(path);
+            return std::nullopt;
+        }
         if (!file.commit()) {
             *error = file.errorString();
             return std::nullopt;
         }
+        if (!ownerOnly(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner)) {
+            QFile::remove(path);
+            *error = QStringLiteral("Could not make %1 private to you.").arg(path);
+            return std::nullopt;
+        }
         ++exported;
     }
+    events.finish();
+    chunks.finish();
+    database.rollback(); // read-only: ends the snapshot
     progress(exported, int(rows.size()));
     return QJsonObject{{"directory", folder}, {"exported", exported}};
 }

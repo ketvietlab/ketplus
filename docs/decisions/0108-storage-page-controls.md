@@ -89,6 +89,10 @@ The size target was also opt-in: it did nothing until the user saved it once.
     `KetPlus conversations <time>` folder inside an existing absolute directory. It
     writes one owner-only JSON file per conversation (`ketplus.conversation-export/1`):
     the conversation's metadata and its replay events, with large items put back together.
+  - It reads every conversation from one read transaction, so a conversation deleted or
+    expired during the export is still written whole.
+  - It fails, removing what it cannot protect, if the folder or a file cannot be made
+    owner-only.
   - It runs on a worker thread, and `storage.export.read` reports `exported`/`total`.
 - **Access.** Every `storage.*` command stays local-owner only. Cloud control is refused,
   as before. Starting a job and saving the options are mutating, deduplicated commands.

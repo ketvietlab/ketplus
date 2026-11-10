@@ -2,6 +2,7 @@
 #include "providers/CodexAdapter.h"
 #include "runtime/SessionHost.h"
 #include "storage/JournalSpace.h"
+#include "storage/JournalStorageReader.h"
 #include "storage/LocalJournal.h"
 #include <QDir>
 #include <QElapsedTimer>
@@ -286,6 +287,52 @@ class JournalStorageJobsTest final : public QObject {
             }
         }
         QVERIFY(image);
+    }
+
+    void exportReadsOneSnapshot() {
+        QTemporaryDir directory;
+        QTemporaryDir target;
+        const auto path = directory.filePath("journal.sqlite");
+        LocalJournal journal(path);
+        QVERIFY(seed(journal));
+        // Deleting the conversation after the list is read must not leave an empty export.
+        bool deleted = false;
+        QString error;
+        const auto deleteEvents = [&path] {
+            auto writer = QSqlDatabase::addDatabase("QSQLITE", "export-snapshot-writer");
+            writer.setDatabaseName(path);
+            if (!writer.open())
+                return false;
+            QSqlQuery remove(writer);
+            const bool ok = remove.exec("DELETE FROM large_event_payload_chunks") &&
+                            remove.exec("DELETE FROM replay_events") &&
+                            remove.numRowsAffected() > 0;
+            remove.finish();
+            writer.close();
+            return ok;
+        };
+        const auto result = journal_reader::exportConversations(
+            path, target.path(),
+            [&](int exported, int) {
+                if (exported == 0 && !deleted)
+                    deleted = deleteEvents();
+                return true;
+            },
+            &error);
+        QSqlDatabase::removeDatabase("export-snapshot-writer");
+        QVERIFY2(result.has_value(), qPrintable(error));
+        QVERIFY(deleted);
+        const QDir folder(result->value("directory").toString());
+        QCOMPARE(QFileInfo(folder.path()).permissions() &
+                     (QFileDevice::ReadGroup | QFileDevice::ReadOther | QFileDevice::ExeGroup |
+                      QFileDevice::ExeOther),
+                 QFileDevice::Permissions{});
+        const auto files = folder.entryList({"*.json"}, QDir::Files);
+        QCOMPARE(files.size(), 1);
+        QFile file(folder.filePath(files.first()));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const auto events = QJsonDocument::fromJson(file.readAll()).object().value("events");
+        QVERIFY(!events.toArray().isEmpty());
     }
 
     // The journal size check in docs/testing.md. It runs only when KETPLUS_JOURNAL_SIZE_CHECK
