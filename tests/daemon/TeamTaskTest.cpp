@@ -66,6 +66,7 @@ Team standard(const bool leaderWrites = true) {
     team.name = QStringLiteral("Checkout");
     team.integrationBranch = QStringLiteral("integration");
     team.leaderWritesRequirements = leaderWrites;
+    team.planApproved = true;
     team.members = {{.sessionId = "lead", .role = role::leader, .name = "Lead"},
                     {.sessionId = "dev1",
                      .role = role::developer,

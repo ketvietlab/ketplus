@@ -140,6 +140,7 @@ struct Team final {
     [[nodiscard]] const Task* task(const QString& id) const;
     [[nodiscard]] Task* task(const QString& id);
     [[nodiscard]] Decision* decision(const QString& id);
+    [[nodiscard]] const Decision* decision(const QString& id) const;
     [[nodiscard]] int openDecisions() const;
     [[nodiscard]] QStringList memberSessions() const;
 };

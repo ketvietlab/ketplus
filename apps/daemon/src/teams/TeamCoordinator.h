@@ -187,6 +187,15 @@ class TeamCoordinator : public QObject {
 
     // A member's turn ended (ADR 0112 §7): after the leader's turn the waiting digest is sent.
     void memberTurnEnded(const QString& sessionId);
+    // ADR 0112 §3 (TeamCoordinatorDecisions.cpp). Only the leader raises a decision; only the
+    // user answers one, with one of its choices or free text.
+    TeamResult raiseQuestion(qint64 teamId, const QJsonObject& draft, const QString& actor,
+                             QString* decisionId = nullptr);
+    TeamResult answerDecision(qint64 teamId, const QString& decisionId, const QString& answer,
+                              const QString& actor);
+    TeamResult withdrawDecision(qint64 teamId, const QString& decisionId, const QString& reason,
+                                const QString& actor);
+
     // ADR 0112 §2: the team's reviewer answered the review it was sent, or its turn failed
     // (`failure` set). `noFindings` is the verdict line of ADR 0067.
     void reviewFinished(const QString& reviewerSession, const QString& text, bool noFindings,
@@ -257,6 +266,9 @@ class TeamCoordinator : public QObject {
     void scheduleDigest(qint64 teamId);
     // One digest of every update since the last one, when one of them is actionable.
     void sendDigest(qint64 teamId);
+    // ADR 0112, open point 5: holds an assignment the leader makes before the first plan is
+    // approved, behind one "Start these N tasks?" decision. True when it was held.
+    bool holdForFirstPlan(qint64 teamId, const QString& taskId, const QString& actor);
     // Points the owner at the task's worktree and sends the assignment.
     void deliverAssignment(const Team& team, const Task& task, const QString& from, bool handover,
                            const QString& reason = {});

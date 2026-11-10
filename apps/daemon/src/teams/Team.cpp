@@ -138,6 +138,13 @@ Decision* Team::decision(const QString& wanted) {
     return nullptr;
 }
 
+const Decision* Team::decision(const QString& wanted) const {
+    for (const Decision& entry : decisions)
+        if (entry.id == wanted)
+            return &entry;
+    return nullptr;
+}
+
 int Team::openDecisions() const {
     int total = 0;
     for (const Decision& entry : decisions)

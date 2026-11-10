@@ -52,6 +52,11 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   changed (committed or not) with its prefixes and the shared paths; outside paths are
   flagged on the task, actionable in the digest, and cleared when reverted or covered
   by a lane change.
+  Decisions (#462): the leader raises a question with two to four choices
+  (`team_decision_raise`, `team_decision_withdraw`); only the user answers through
+  `team.decision.answer`, which reaches the leader and the blocked owner once and
+  unblocks the task. The leader's first plan waits as "Start these N tasks?", and the
+  budget's decision continues or stops the team.
 
 - The unreviewed workspaces UI layer consumes kit worktree actions/badges,
   searchable picker rows and Connections controls. Repository/worktree switching

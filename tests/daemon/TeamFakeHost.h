@@ -87,6 +87,8 @@ inline Team standardTeam() {
     team.repository = QStringLiteral("/repo");
     team.name = QStringLiteral("Checkout");
     team.integrationBranch = QStringLiteral("integration");
+    // The first plan is approved unless a test is about it (ADR 0112, open point 5).
+    team.planApproved = true;
     team.members = {{.sessionId = "lead", .role = role::leader, .name = "Lead"},
                     {.sessionId = "dev1",
                      .role = role::developer,
