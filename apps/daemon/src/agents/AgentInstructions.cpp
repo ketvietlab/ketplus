@@ -87,7 +87,8 @@ QString automaticTurnGuidance(const QJsonArray& messages) {
                           "Do the requested work within this conversation's own permissions and "
                           "instructions. ") +
            delivery +
-           QStringLiteral(" Do not add a progress matrix. Use the user's language conventions "
+           QStringLiteral(" Do not add a progress matrix or call work_report. Use the user's "
+                          "language conventions "
                           "from this conversation when writing for the user.\n"
                           "</ketplus_agent_turn>");
 }

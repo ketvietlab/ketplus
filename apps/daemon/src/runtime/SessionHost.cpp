@@ -495,6 +495,8 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& request, const QString
         return error("forbidden", "Held-message authorization requires the local Desktop UI.");
     if (type.startsWith("session.reviewer.") && !localClient(clientId))
         return error("forbidden", "Choosing a reviewer requires the local Desktop UI.");
+    if (type == "session.work_report.read" && !localClient(clientId))
+        return error("forbidden", "The work report is read by the local Desktop UI.");
     if (type.startsWith("storage.") && clientId == "cloud-control-v2")
         return error("forbidden", "Storage settings require local administration.");
     if (type.startsWith("session.agent_messages.")) {
@@ -579,6 +581,8 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& request, const QString
     } else if (type == QStringLiteral("session.reviewer.get") ||
                type == QStringLiteral("session.reviewer.set")) {
         result = conversationReviewer(request, type.endsWith(".set"));
+    } else if (type == QStringLiteral("session.work_report.read")) {
+        result = readWorkReport(request);
     } else if (type == QStringLiteral("session.start_turn")) {
         result = startTurn(request, localClient(clientId));
     } else if (type == QStringLiteral("session.rename")) {

@@ -4,6 +4,7 @@
 #include "agent/TranscriptFileLocation.h"
 #include "agent/TranscriptNormalizer.h"
 #include "agent/TranscriptStepItems.h"
+#include "agent/WorkReportText.h"
 #include <cmath>
 
 #include "CodexBrowserTools.h"
@@ -1141,6 +1142,10 @@ QString transcriptText(const QVariantList& entries) {
             }
             continue;
         }
+        // ADR 0106: the turn's work report travels as the matrix it replaced.
+        if (const auto report = workReportText(entry.value(QStringLiteral("workReport")).toMap());
+            !report.isEmpty())
+            parts.append(report);
         if (body.isEmpty())
             continue;
         parts.append(entry.value("meta", entry.value("kind")).toString() + ":\n" + body);

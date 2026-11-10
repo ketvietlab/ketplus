@@ -44,6 +44,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/cloud/WorktreeRepositories.h
     src/cloud/CloudEventProjection.cpp
     src/cloud/CloudEventProjection.h
+    src/agents/WorkReport.cpp
+    src/agents/WorkReport.h
     src/cloud/RelayWakeups.cpp
     src/cloud/RelayWakeups.h
     src/ipc/LocalIpcServer.cpp
@@ -92,9 +94,11 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/SessionHost.cpp
     src/runtime/SessionHostCatalog.cpp
     src/runtime/SessionHostAgents.cpp
+    src/runtime/SessionHostWorkReports.cpp
     src/storage/AgentMessageRecord.h
     src/storage/LocalJournalAgents.cpp
     src/storage/LocalJournalReviewers.cpp
+    src/storage/LocalJournalWorkReports.cpp
     src/runtime/SessionHostReviewers.cpp
     src/storage/LocalJournalAgentRelease.cpp
     src/runtime/SessionHostUsage.cpp

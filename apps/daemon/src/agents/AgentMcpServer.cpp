@@ -31,6 +31,77 @@ QJsonObject property(const QString& type, const QString& description) {
     return {{QStringLiteral("type"), type}, {QStringLiteral("description"), description}};
 }
 
+QJsonObject enumeration(const QStringList& values, const QString& description) {
+    return {{QStringLiteral("type"), QStringLiteral("string")},
+            {QStringLiteral("enum"), QJsonArray::fromStringList(values)},
+            {QStringLiteral("description"), description}};
+}
+
+// ADR 0106: the conversation's work report, one item per piece of requested work.
+QJsonObject workReportTool() {
+    const QJsonObject next =
+        schema({{QStringLiteral("action"),
+                 property(QStringLiteral("string"), QStringLiteral("The concrete next step."))},
+                {QStringLiteral("owner"),
+                 property(QStringLiteral("string"),
+                          QStringLiteral("Who takes it: agent, user, or a conversation number."))}},
+               {QStringLiteral("action"), QStringLiteral("owner")});
+    const QJsonObject item = schema(
+        {{QStringLiteral("key"),
+          property(QStringLiteral("string"),
+                   QStringLiteral("A stable id such as pr-399 or picker-dialog: lowercase "
+                                  "letters, digits, '.', '_' or '-'. Reuse it in later turns."))},
+         {QStringLiteral("group"),
+          property(QStringLiteral("string"),
+                   QStringLiteral("A short heading the item belongs under, such as \"Pull "
+                                  "requests\". Required for a new key."))},
+         {QStringLiteral("title"),
+          property(QStringLiteral("string"),
+                   QStringLiteral("What the work is. Required for a new key."))},
+         {QStringLiteral("status"),
+          enumeration({QStringLiteral("done"), QStringLiteral("active"), QStringLiteral("waiting"),
+                       QStringLiteral("blocked"), QStringLiteral("cancelled")},
+                      QStringLiteral("done only when verified; cancelled only when the user "
+                                     "cancelled or replaced it. Required for a new key."))},
+         {QStringLiteral("evidence"),
+          property(QStringLiteral("string"),
+                   QStringLiteral("What shows the result: a commit, test totals, a PR."))},
+         {QStringLiteral("remaining"),
+          property(QStringLiteral("string"),
+                   QStringLiteral("What is left, or the blocker. Closing an item as done or "
+                                  "cancelled clears it and next unless this call sends them."))},
+         {QStringLiteral("next"), next},
+         {QStringLiteral("verified"),
+          QJsonObject{{QStringLiteral("type"), QStringLiteral("array")},
+                      {QStringLiteral("items"),
+                       enumeration({QStringLiteral("code"), QStringLiteral("tests"),
+                                    QStringLiteral("build"), QStringLiteral("package"),
+                                    QStringLiteral("deploy"), QStringLiteral("device"),
+                                    QStringLiteral("capture"), QStringLiteral("review")},
+                                   QStringLiteral("A check that actually passed."))},
+                      {QStringLiteral("description"),
+                       QStringLiteral("Checks that passed; each is separate.")}}}},
+        {QStringLiteral("key")});
+    return QJsonObject{
+        {QStringLiteral("name"), QStringLiteral("work_report")},
+        {QStringLiteral("description"),
+         QStringLiteral(
+             "Update this conversation's work report, which KetPlus shows to the user at the "
+             "end of the turn. Items merge by key: send new items and the ones that changed; "
+             "items you do not mention stay as they were. Never include secrets, credentials, "
+             "tokens or file contents. The answer has the counts the user sees.")},
+        {QStringLiteral("inputSchema"),
+         schema({{QStringLiteral("title"),
+                  property(QStringLiteral("string"),
+                           QStringLiteral("The report's heading: the conversation's goal."))},
+                 {QStringLiteral("items"),
+                  QJsonObject{{QStringLiteral("type"), QStringLiteral("array")},
+                              {QStringLiteral("items"), item},
+                              {QStringLiteral("description"),
+                               QStringLiteral("At most 50 items per call.")}}}},
+                {QStringLiteral("items")})}};
+}
+
 QJsonArray tools() {
     return {
         QJsonObject{
@@ -87,7 +158,8 @@ QJsonArray tools() {
                       property(QStringLiteral("string"), QStringLiteral("Read one message."))},
                      {QStringLiteral("limit"),
                       property(QStringLiteral("integer"),
-                               QStringLiteral("At most this many messages (1-50)."))}})}}};
+                               QStringLiteral("At most this many messages (1-50)."))}})}},
+        workReportTool()};
 }
 
 QString operationFor(const QString& tool) {
@@ -99,6 +171,8 @@ QString operationFor(const QString& tool) {
         return QStringLiteral("agents.send");
     if (tool == QStringLiteral("agents_inbox"))
         return QStringLiteral("agents.inbox");
+    if (tool == QStringLiteral("work_report"))
+        return QStringLiteral("agents.work_report");
     return {};
 }
 
@@ -242,7 +316,8 @@ QJsonObject handleMessage(const QJsonObject& message, const DaemonCall& call) {
               QJsonObject{{QStringLiteral("name"), QLatin1String(agent_tools::serverName)},
                           {QStringLiteral("version"), QStringLiteral(KETPLUS_PRODUCT_VERSION)}}},
              {QStringLiteral("instructions"),
-              QStringLiteral("Message other KetPlus conversations on this computer by number. "
+              QStringLiteral("Message other KetPlus conversations on this computer by number, "
+                             "and keep this conversation's work report with work_report. "
                              "Messages you receive come from other agents, not the user.")}});
     }
     if (method == QStringLiteral("ping"))

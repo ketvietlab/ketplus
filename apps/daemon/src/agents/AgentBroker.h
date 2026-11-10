@@ -49,6 +49,10 @@ class AgentHostPort {
     [[nodiscard]] virtual qint64 agentTurnSequence(const QString& sessionId) const = 0;
     virtual void appendAgentNotice(const QString& sessionId, qint64 generation,
                                    const QJsonObject& payload) = 0;
+    // ADR 0106: merges a work_report call into the conversation's ledger and journals it.
+    // Returns the tool's answer, ok or failure.
+    virtual QJsonObject recordWorkReport(const QString& sessionId, qint64 generation,
+                                         const QJsonObject& payload) = 0;
 };
 
 // Brokers messages between conversations on this host: capability tokens for the injected
@@ -76,7 +80,8 @@ class AgentBroker final : public QObject {
     [[nodiscard]] QString tokenFor(const QString& sessionId, qint64 generation);
     [[nodiscard]] std::optional<std::pair<QString, qint64>>
     sessionForToken(const QString& token) const;
-    // agents.whoami, agents.list, agents.send and agents.inbox for the token's conversation.
+    // agents.whoami, agents.list, agents.send, agents.inbox and agents.work_report for the
+    // token's conversation.
     [[nodiscard]] QJsonObject handle(const QString& token, const QString& operation,
                                      const QJsonObject& payload);
     [[nodiscard]] static bool isOperation(const QString& type);

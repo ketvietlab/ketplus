@@ -344,7 +344,7 @@ bool LocalJournal::migrateTranscriptSchema() {
         setError(turnStarts.lastError().text());
         return false;
     }
-    if (!initializeContexts())
+    if (!initializeContexts() || !initializeWorkReports())
         return false;
     QSqlQuery index(database_);
     // Retention probes a specific turn, not the whole session's raw backlog.
@@ -871,7 +871,8 @@ bool LocalJournal::deleteSession(const QString& sessionId, const qint64 generati
          {QStringLiteral("background_tasks"), QStringLiteral("activity_heads"),
           QStringLiteral("activity_backfill"), QStringLiteral("activity_files_backfill"),
           QStringLiteral("replay_projection_state"), QStringLiteral("client_cursors"),
-          QStringLiteral("staged_attachments"), QStringLiteral("session_contexts")}) {
+          QStringLiteral("staged_attachments"), QStringLiteral("session_contexts"),
+          QStringLiteral("work_reports")}) {
         QSqlQuery query(database_);
         query.prepare(
             QStringLiteral("DELETE FROM %1 WHERE session_id = ? AND generation = ?").arg(table));
