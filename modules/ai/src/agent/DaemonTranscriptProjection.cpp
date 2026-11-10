@@ -167,9 +167,13 @@ void presentAgentError(QVariantMap& entry, const QString& message) {
     if (capacity.match(message).hasMatch()) {
         entry.insert(QStringLiteral("title"), QStringLiteral("Selected model is at capacity"));
         entry.insert(QStringLiteral("subtype"), QStringLiteral("modelCapacity"));
-        const QString text = QStringLiteral(
-            "The model could not finish the turn. Try again, or pick another model for this "
-            "conversation.");
+        // As the mock words it, naming the provider; each pattern belongs to one of them.
+        const QString provider = message.startsWith(QStringLiteral("Selected model is at capacity"))
+                                     ? QStringLiteral("Codex")
+                                     : QStringLiteral("Claude");
+        const QString text = QStringLiteral("%1 could not finish the turn. Try again, or pick "
+                                            "another model for this conversation.")
+                                 .arg(provider);
         entry.insert(QStringLiteral("body"), text);
         entry.insert(QStringLiteral("summary"), text);
     }
