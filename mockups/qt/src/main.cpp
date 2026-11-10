@@ -126,7 +126,7 @@ int main(int argc, char* argv[]) {
         platform == QLatin1String("windows") || platform == QLatin1String("linux"))
         controller.chrome = platform;
     if (controller.edition == QLatin1String("lite"))
-        controller.initialScreen = QStringLiteral("explorer");
+        controller.initialScreen = QStringLiteral("editor");
     if (parser.isSet(screen))
         controller.initialScreen = parser.value(screen);
     controller.initialState = parser.value(state);

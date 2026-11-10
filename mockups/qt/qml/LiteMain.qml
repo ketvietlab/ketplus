@@ -15,11 +15,14 @@ Basic.ApplicationWindow {
 
     // Screens, in the order of the activity bar. A state follows a slash: "explorer/terminal".
     readonly property var screenIds: [
-        "explorer", "explorer/terminal", "explorer/markdown", "explorer/welcome",
+        "editor", "explorer", "explorer/terminal", "explorer/markdown", "explorer/welcome",
         "explorer/windows", "explorer/linux", "search", "search/no-results", "changes",
         "settings", "settings/typography"
     ]
     property string screen: "explorer"
+    // The side panel (Explorer, Search or Source Control). Closed when the window opens; its
+    // activity-bar button or shortcut opens it, and the same again closes it.
+    property bool sidebarOpen: false
     // The platform the window chrome follows; --chrome sets it, "/windows" and "/linux" too.
     property string platform: Mock.chrome
     property bool welcome: false
@@ -42,8 +45,11 @@ Basic.ApplicationWindow {
 
     function showScreen(id) {
         const parts = String(id).split("/")
-        const name = parts[0]
+        // "editor" is the Explorer screen with the side panel closed.
+        const name = parts[0] === "editor" ? "explorer" : parts[0]
         const state = parts[1] || ""
+        if (name !== "settings")
+            sidebarOpen = parts[0] !== "editor"
         platform = state === "windows" || state === "linux" ? state : Mock.chrome
         welcome = state === "welcome"
         if (name === "explorer") {
@@ -58,9 +64,26 @@ Basic.ApplicationWindow {
         screen = name
     }
 
+    // An activity-bar entry or its shortcut: opens that panel, or closes it when it is open.
+    function toggleScreen(id) {
+        if (screen === id && sidebarOpen && !welcome)
+            showScreen("editor")
+        else
+            showScreen(id)
+    }
+
     function openEveryOverlay() {
         spotlight.open()
         spotlight.close()
+        // The open panel's button closes it; pressing it again opens the panel.
+        for (const id of ["explorer", "search", "changes"]) {
+            showScreen(id)
+            toggleScreen(id)
+            const closed = !sidebarOpen && screen === "explorer"
+            toggleScreen(id)
+            if (!closed || !sidebarOpen || screen !== id)
+                console.warn("QML sidebar check: " + id + " did not toggle")
+        }
         // Every search result opens its file at a line that holds the match.
         showScreen("search")
         for (const group of search.results) {
@@ -100,15 +123,15 @@ Basic.ApplicationWindow {
     }
     Shortcut {
         sequence: "Ctrl+B"
-        onActivated: app.showScreen("explorer")
+        onActivated: app.toggleScreen("explorer")
     }
     Shortcut {
         sequence: "Ctrl+Shift+F"
-        onActivated: app.showScreen("search")
+        onActivated: app.toggleScreen("search")
     }
     Shortcut {
         sequence: "Ctrl+Shift+G"
-        onActivated: app.showScreen("changes")
+        onActivated: app.toggleScreen("changes")
     }
 
     ColumnLayout {
@@ -161,7 +184,7 @@ Basic.ApplicationWindow {
                 id: search
                 Layout.fillHeight: true
                 Layout.preferredWidth: app.px(280)
-                visible: app.screen === "search" && !app.welcome
+                visible: app.screen === "search" && app.sidebarOpen && !app.welcome
                 window: app
                 sources: editor.sources
                 paths: ({ "NavigationRail.qml": "modules/ai/src/agent/qml",
@@ -178,7 +201,7 @@ Basic.ApplicationWindow {
                 EditorScreen {
                     id: editor
                     window: app
-                    explorerVisible: app.screen === "explorer"
+                    explorerVisible: app.screen === "explorer" && app.sidebarOpen
                     productName: "KétPlus"
                     quickOpenKey: app.modKey + "P"
                 }
@@ -241,6 +264,7 @@ Basic.ApplicationWindow {
         id: button
         required property var entry
         readonly property bool selected: app.screen === entry.id && !app.welcome
+                                         && (entry.id === "settings" || app.sidebarOpen)
         width: app.px(48)
         height: app.px(40)
 
@@ -255,7 +279,8 @@ Basic.ApplicationWindow {
             anchors.centerIn: parent
             iconName: button.entry.icon
             text: button.entry.text
-            onClicked: app.showScreen(button.entry.id)
+            onClicked: button.entry.id === "settings" ? app.showScreen("settings")
+                                                      : app.toggleScreen(button.entry.id)
             background: Rectangle {
                 radius: app.px(KetTheme.t.radiusMd)
                 color: button.selected ? KetTheme.t.navSelected
@@ -270,7 +295,7 @@ Basic.ApplicationWindow {
             const query = spotlight.query.toLowerCase()
             // The files the editor has a source for, so each one opens with its text.
             const files = Object.keys(editor.sources).map(name => ({
-                id: "file:" + name, title: name, detail: search.paths[name] || "", screen: "explorer"
+                id: "file:" + name, title: name, detail: search.paths[name] || ""
             }))
             const all = [{ title: "Files", items: files }]
             if (!query)
@@ -282,7 +307,9 @@ Basic.ApplicationWindow {
         }
         placeholderText: "Go to file"
         onActivated: item => {
-            app.showScreen(item.screen)
+            // The file opens in the editor; an open Explorer or Search stays open.
+            if (app.screen !== "explorer" && app.screen !== "search")
+                app.showScreen("editor")
             editor.openFile(item.id.slice(5))
         }
     }

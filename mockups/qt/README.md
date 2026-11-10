@@ -59,7 +59,9 @@ Screens and states (`--screen` / `--state`):
 
 KétPlus (Lite) runs with `--edition=lite` (`qml/LiteMain.qml`): the editor of
 `core/src/app` with one side panel at a time, the terminal and the two Settings
-pages Lite has. `--chrome=windows` or `--chrome=linux` draws the title bar and
+pages Lite has. The window opens on the editor with the side panel closed; an
+activity-bar button or its shortcut (⌘B, ⇧⌘F, ⇧⌘G) opens that panel, and the same
+button or shortcut again closes it. `--chrome=windows` or `--chrome=linux` draws the title bar and
 the in-window menu bar (File, Edit, Go, Git, View, with the labels and
 shortcuts of `core/src/app/MainWindowActions.cpp`); macOS keeps the system's.
 The menu bar works without a pointer: F10 focuses File, Alt with the app's
@@ -72,6 +74,7 @@ every result.
 
 | Screen (`--edition=lite`) | States | Covers |
 |---|---|---|
+| `editor` | | The default: the editor with the side panel closed |
 | `explorer` | `terminal`, `markdown` | Activity bar, explorer, tabs, editor, the terminal below it, `docs/licensing.md` in Preview |
 | `explorer` | `welcome` | No folder open: Open Folder and recent folders |
 | `explorer` | `windows`, `linux` | The same window with that platform's chrome, whatever `--chrome` says |
