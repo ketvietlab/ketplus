@@ -248,6 +248,13 @@ run and journal one `provider.runtime` notice per session. The
 `provider.runtime_status` query also reports Claude's bundled SDK and Claude
 Code versions, and Settings > Providers shows the result. The supported window is
 releases from the last three months, reviewed monthly.
+Each provider entry also carries `readiness` (ADR 0110). It says whether the
+provider can start a turn (`ready`, `missing`, `outdated`, `signed_out`, `expired`,
+`key_rejected`, `limit_reached`, `runtime_missing` or `unknown`) and gives the
+install, sign-in and update commands, which KetPlus shows but never runs.
+Readiness comes from the version check, quota-free sign-in probes (Codex
+`account/read`, Cursor `cli-config.json`) and the states providers reported. Those
+are kept in the owner-only `provider-readiness.json` beside the journal.
 
 Features are gated on capability names, never version numbers. The manifest
 maps each version range to a dialect with a baseline capability list; adapters
