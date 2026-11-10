@@ -49,19 +49,43 @@ Item {
     // turn shows it at the end of that turn, and the model button carries the warning.
     readonly property bool providerSetupShown: !!providerSetup && providerSetup.composer === true && !hiddenSetups[selectedProvider]
     property var hiddenSetups: ({})
-    // The provider a held message waits for; switching provider keeps the draft unsent.
-    property string setupHoldsMessage: ""
+    // A held message: the provider it waits for, the conversation's draft scope and the text
+    // sent. Switching conversation or editing the draft lets it go; switching provider keeps
+    // the draft unsent.
+    property var heldMessage: null
     function showProviderSetup() {
         const hidden = Object.assign({}, hiddenSetups)
         delete hidden[selectedProvider]
         hiddenSetups = hidden
     }
-    onProviderBlockedChanged: {
-        if (!providerBlocked && setupHoldsMessage !== "") {
-            const waited = setupHoldsMessage === selectedProvider
-            setupHoldsMessage = ""
-            if (waited && prompt.text.trim().length > 0)
-                submitCurrentPrompt()
+    // The daemon answered and listed the provider without a guide: not a stopped daemon and
+    // not a guide that merely stopped blocking.
+    function providerReady(provider) {
+        const runtime = agentHost.providerRuntime || {}
+        return runtime.gated === true && Object.prototype.hasOwnProperty.call(runtime.providers || {}, provider)
+            && !(runtime.setups || {})[provider]
+    }
+    function sendHeldMessage() {
+        const held = heldMessage
+        if (!held || !providerReady(held.provider))
+            return
+        heldMessage = null
+        if (held.provider === selectedProvider && held.scope === draftScope && prompt.text === held.text
+                && prompt.text.trim().length > 0)
+            submitCurrentPrompt()
+    }
+    Connections {
+        target: agentHost
+        enabled: root.heldMessage !== null
+        function onProviderRuntimeChanged() { root.sendHeldMessage() }
+        function onComposerScopeChanged() { root.heldMessage = null }
+    }
+    Connections {
+        target: prompt
+        enabled: root.heldMessage !== null
+        function onTextChanged() {
+            if (root.heldMessage && prompt.text !== root.heldMessage.text)
+                root.heldMessage = null
         }
     }
     readonly property string usageProvider: (agentHost.statusProvider || selectedProvider || "codex").toLowerCase()
@@ -1255,7 +1279,7 @@ Item {
         }
         if (root.providerBlocked) {
             // The draft stays in the composer and sends once the provider is set up.
-            root.setupHoldsMessage = root.selectedProvider
+            root.heldMessage = {provider: root.selectedProvider, scope: root.draftScope, text: prompt.text}
             root.showProviderSetup()
             imageToast.show("Set up " + root.providerTitle(root.selectedProvider) + " first. Your message is kept.")
             return

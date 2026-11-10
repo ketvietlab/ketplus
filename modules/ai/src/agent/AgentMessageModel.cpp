@@ -86,7 +86,9 @@ AgentMessageModel::AgentMessageModel(QObject* parent) : QAbstractListModel(paren
                              "bodyPrefixCharacters",
                              "chunkContinuation",
                              "estimatedBodyLines",
-                             "errorCode"})
+                             "errorCode",
+                             "errorDetail",
+                             "errorModel"})
         roles_.insert(++role, name);
     for (const QString& name : agent_message::activityGroupRoleNames()) {
         roles_.insert(++role, name.toUtf8());
@@ -333,7 +335,9 @@ QVariantMap AgentMessageModel::normalized(QVariantMap item) {
                             "commandDescription",
                             "fileLocation",
                             "trimmedDetail",
-                            "errorCode"})
+                            "errorCode",
+                            "errorDetail",
+                            "errorModel"})
         if (!item.contains(key))
             item.insert(key, QString{});
     if (item.value("category").toString().isEmpty()) {

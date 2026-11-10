@@ -703,14 +703,15 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
         const QJsonObject error = params.value(QStringLiteral("error")).toObject();
         const QString detail = errorMessage(error);
         const QString code = error.value(QStringLiteral("code")).toString();
+        const QString model = error.value(QStringLiteral("model")).toString();
         const bool replayed = params.value(QStringLiteral("replayed")).toBool();
         if (replayed || params.value(QStringLiteral("nonFatal")).toBool()) {
             // History replay already restored the session state, and non-fatal failures leave
             // the turn running: keep the transcript row without ending the turn.
-            recordSessionError(session, detail, !replayed, code);
+            recordSessionError(session, detail, !replayed, code, model, !replayed);
             return;
         }
-        failSession(session, detail, code);
+        failSession(session, detail, code, model);
     }
 }
 

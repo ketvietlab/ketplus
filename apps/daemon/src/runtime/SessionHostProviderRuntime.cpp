@@ -137,6 +137,11 @@ QJsonObject SessionHost::noteProviderOutcome(const Session& session, const QStri
         return classified;
     }
     classified.insert(QStringLiteral("code"), code);
+    // The guide names the provider and model of the turn that failed, not the ones the
+    // conversation has switched to since.
+    classified.insert(QStringLiteral("provider"), adapter);
+    if (!session.stored.model.isEmpty())
+        classified.insert(QStringLiteral("model"), session.stored.model);
     const qint64 resetsAt = payload.value(QStringLiteral("resets_at")).toInteger();
     const QString state = readinessForErrorCode(code);
     if (!state.isEmpty())

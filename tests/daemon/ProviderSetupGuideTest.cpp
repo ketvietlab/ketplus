@@ -124,6 +124,10 @@ class ProviderSetupGuideTest final : public QObject {
         QVERIFY(provider_setup::guide(provider("codex", {{"state", "signed_out"}}))
                     .value("blocking")
                     .toBool());
+        // Cursor's sign-in is read from its config file and may be wrong: it guides, never holds.
+        QVERIFY(!provider_setup::guide(provider("cursor", {{"state", "signed_out"}}))
+                     .value("blocking")
+                     .toBool());
     }
 
     void keepsTheProvidersOwnWords() {

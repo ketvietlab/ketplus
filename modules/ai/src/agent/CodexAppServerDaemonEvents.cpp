@@ -480,7 +480,8 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
              {QStringLiteral("replayed"), found->replaying},
              {QStringLiteral("error"),
               QJsonObject{{QStringLiteral("code"), data.value(QStringLiteral("code"))},
-                          {QStringLiteral("message"), data.value(QStringLiteral("message"))}}}});
+                          {QStringLiteral("message"), data.value(QStringLiteral("message"))},
+                          {QStringLiteral("model"), data.value(QStringLiteral("model"))}}}});
         return;
     }
     if (type == QStringLiteral("approval.requested")) {

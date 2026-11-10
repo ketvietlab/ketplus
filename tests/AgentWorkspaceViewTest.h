@@ -45,6 +45,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void settledApprovalsReadAsTheirOutcome();
     void capacityErrorOffersAnotherModel();
     void providerSetupHoldsTheMessageUntilTheProviderWorks();
+    void aHeldMessageGoesWithItsDraft();
     void providerSetupClosesTheTurnTheProviderEnded();
     void claudeSignOutGuidesWithoutHoldingTheMessage();
     void trimmedTurnOpensStorageSettings();
