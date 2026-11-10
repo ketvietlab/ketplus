@@ -6,6 +6,7 @@
 #include "ui/Theme.h"
 
 #include "KetAppearance.h"
+#include "KetAvatar.h"
 #include "KetBadge.h"
 #include "KetThemeCard.h"
 #include <QAbstractButton>
@@ -253,6 +254,65 @@ class ClaudeCredentialsSettingsTest : public QObject {
                                QString::fromUtf8("KetPlus uses KÉT Sans throughout the interface.");
         QVERIFY(help);
     }
+    // Account & devices names the account the daemon reports (ADR 0109) and leaves signing
+    // in and out to Connections.
+    void accountPageShowsTheSignedInAccount() {
+        ketplus::ThemeManager theme(*qApp);
+        theme.previewMode(ketplus::ThemeManager::Mode::Light);
+        auto* dialog = new ketplus::SettingsDialog(ketplus::AppearanceSettings{}, theme);
+        ketplus::SettingsWorkspacePage page(dialog, [](auto reply) { reply({}, {}); });
+        QJsonObject status;
+        std::function<void(const QJsonObject&)> pending;
+        page.setAccountStatusReader(
+            [&pending](std::function<void(const QJsonObject&)> reply) { pending = reply; });
+        page.resize(1440, 900);
+        page.show();
+        page.showSection(QStringLiteral("account-devices"));
+        auto* account = page.findChild<ketplus::SettingsAccountPage*>();
+        QVERIFY(account && account->isVisible());
+        const auto role = [account](const char* name) {
+            for (auto* label : account->findChildren<QLabel*>())
+                if (label->property("accountRole").toString() == QLatin1String(name))
+                    return label;
+            return static_cast<QLabel*>(nullptr);
+        };
+        auto* signOut = account->findChild<QAbstractButton*>("accountSignOut");
+        auto* manage = account->findChild<QAbstractButton*>("accountManageConnections");
+        QVERIFY(signOut && manage);
+        // Nothing is claimed until the daemon answers.
+        QCOMPARE(role("name")->text(), QStringLiteral("Checking your account…"));
+        QVERIFY(!signOut->isVisible());
+        QVERIFY(pending);
+        pending({{"configured", true},
+                 {"account", QJsonObject{{"display_name", "Minh Tran"}, {"username", "minh"}}}});
+        QCOMPARE(role("name")->text(), QStringLiteral("Minh Tran"));
+        QCOMPARE(role("meta")->text(), QStringLiteral("minh · KétPlus Pro"));
+        QCOMPARE(account->findChild<ket::Avatar*>()->initials(), QStringLiteral("MT"));
+        QVERIFY(signOut->isVisible());
+        QCOMPARE(manage->text(), QStringLiteral("Manage connections"));
+        QCOMPARE(role("name")->textFormat(), Qt::PlainText);
+        QCOMPARE(role("meta")->textFormat(), Qt::PlainText);
+        // The mock's relay meter is left out: the relay reports no usage.
+        for (auto* label : account->findChildren<QLabel*>())
+            QVERIFY2(!label->text().contains(QStringLiteral("Relay")), qPrintable(label->text()));
+        if (const auto directory = qEnvironmentVariable("KETPLUS_SETTINGS_CAPTURE_DIR");
+            !directory.isEmpty())
+            QVERIFY(page.grab().save(QDir(directory).filePath("account-signed-in.png")));
+
+        QSignalSpy manageSpy(&page, &ketplus::SettingsWorkspacePage::accountDevicesRequested);
+        QSignalSpy signOutSpy(&page, &ketplus::SettingsWorkspacePage::accountSignOutRequested);
+        signOut->click();
+        QCOMPARE(signOutSpy.size(), 1);
+
+        pending({{"configured", false}});
+        QCOMPARE(role("name")->text(), QStringLiteral("Not signed in"));
+        QVERIFY(!signOut->isVisible());
+        QVERIFY(!account->findChild<ket::Avatar*>()->isVisible());
+        QCOMPARE(manage->text(), QStringLiteral("Sign in…"));
+        manage->click();
+        QCOMPARE(manageSpy.size(), 1);
+    }
+
     // Every section opens a page; with KETPLUS_SETTINGS_CAPTURE_DIR set, each is saved for the
     // side-by-side with the mock's settings/<state> captures.
     void everySectionOpensItsPage() {
@@ -267,8 +327,8 @@ class ClaudeCredentialsSettingsTest : public QObject {
         QVERIFY(pages);
         const auto directory = qEnvironmentVariable("KETPLUS_SETTINGS_CAPTURE_DIR");
         QSet<QWidget*> seen;
-        for (const auto* id : {"appearance", "typography", "browser", "computer", "providers",
-                               "archived", "storage", "updates"}) {
+        for (const auto* id : {"appearance", "typography", "account-devices", "browser", "computer",
+                               "providers", "archived", "storage", "updates"}) {
             page.showSection(QString::fromLatin1(id));
             QCoreApplication::processEvents();
             QVERIFY2(pages->currentWidget(), id);

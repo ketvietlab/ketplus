@@ -55,7 +55,13 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
                                              SettingsStoragePage::Requester storageRequester)
     : SettingsWorkspace(dialog, QStringLiteral("⌘ ,"), InterfaceUiFont::settingsLabel(), parent) {
     addConversationWidth();
-    addLink(tr("Account & devices"), QStringLiteral("account-devices"));
+    account_ = new SettingsAccountPage({}, this);
+    connect(account_, &SettingsAccountPage::manageRequested, this,
+            &SettingsWorkspacePage::accountDevicesRequested);
+    connect(account_, &SettingsAccountPage::signOutRequested, this,
+            &SettingsWorkspacePage::accountSignOutRequested);
+    // Account has no settings of its own; Restore defaults does not apply to it.
+    addSection(tr("Account & devices"), QStringLiteral("account-devices"), account_, false);
     addLink(tr("Agent models"), QStringLiteral("agent-models"));
     addSection(tr("Browser"), QStringLiteral("browser"),
                new SettingsBrowserPage({}, {}, browser_tools::systemProbes(), this));
@@ -87,9 +93,7 @@ QLabel#storageUsage, QLabel#storageStatus, QComboBox#storageDetailDays,
 QComboBox#computerWorkDisplay { color:%2; font-size:{{reading}}px; }
 )QSS"));
     connect(this, &SettingsWorkspace::linkActivated, this, [this](const QString& id) {
-        if (id == QStringLiteral("account-devices"))
-            emit accountDevicesRequested();
-        else if (id == QStringLiteral("agent-models"))
+        if (id == QStringLiteral("agent-models"))
             emit agentModelsRequested();
     });
 }

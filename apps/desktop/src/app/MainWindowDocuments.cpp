@@ -10,6 +10,7 @@
 #include "editor/DocumentFormatControls.h"
 #include "workspace/AtlasIndex.h"
 
+#include "DaemonClient.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/CodexAppServer.h"
@@ -23,6 +24,7 @@
 #include "git/GitService.h"
 #include "index/SymbolIndex.h"
 #include "preview/MarkdownPreviewPane.h"
+#include "remote/RemoteControlView.h"
 #include "terminal/TerminalPanel.h"
 #include "ui/FindReplaceBar.h"
 #include "ui/InterfaceZoom.h"
@@ -993,6 +995,31 @@ void MainWindow::setSettingsWorkspaceVisible(const bool visible) {
     connect(settingsWorkspace_, &SettingsWorkspacePage::accountDevicesRequested, this, [this] {
         setSettingsWorkspaceVisible(false);
         setRemoteWorkspaceVisible(true);
+    });
+    // Account & devices reads the remote.status Connections reads, through its own client;
+    // signing out happens in Connections, which asks first.
+    auto* accountDaemon = new remote::DaemonClient(settingsWorkspace_);
+    settingsWorkspace_->setAccountStatusReader(
+        [accountDaemon](std::function<void(const QJsonObject&)> reply) {
+            if (!accountDaemon->isReady())
+                return; // readyChanged reads it
+            accountDaemon->call(
+                QStringLiteral("remote.status"), {}, {}, -1,
+                [reply = std::move(reply)](const QJsonObject& status, const QString& error) {
+                    if (error.isEmpty())
+                        reply(status);
+                });
+        });
+    connect(accountDaemon, &remote::DaemonClient::readyChanged, settingsWorkspace_,
+            [page = settingsWorkspace_](const bool ready) {
+                if (ready)
+                    page->refreshAccount();
+            });
+    connect(settingsWorkspace_, &SettingsWorkspacePage::accountSignOutRequested, this, [this] {
+        setSettingsWorkspaceVisible(false);
+        setRemoteWorkspaceVisible(true);
+        if (remoteControl_ != nullptr)
+            remoteControl_->requestSignOut();
     });
     connect(settingsWorkspace_, &SettingsWorkspacePage::agentModelsRequested, this, [this] {
         setSettingsWorkspaceVisible(false);

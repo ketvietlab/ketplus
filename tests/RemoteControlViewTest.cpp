@@ -7,6 +7,7 @@
 #include "ui/Theme.h"
 
 #include "KetAppearance.h"
+#include "KetAvatar.h"
 #include "KetButton.h"
 #include "KetDialog.h"
 #include "KetEmptyState.h"
@@ -394,6 +395,34 @@ void RemoteControlViewTest::sectionsFollowTheMock() {
     QCOMPARE(footer->parentWidget(), body);
     QVERIFY(body->layout()->indexOf(footer) > body->layout()->indexOf(linux));
     QVERIFY(footer->isAncestorOf(view.findChild<QWidget*>(QStringLiteral("remoteAccountStrip"))));
+
+    // The strip names the account the daemon reports, never a fixture (ADR 0109).
+    const auto text = [&view](const char* name) {
+        return view.findChild<QLabel*>(QLatin1String(name))->text();
+    };
+    view.applyStatus({{QStringLiteral("configured"), true},
+                      {QStringLiteral("account"),
+                       QJsonObject{{QStringLiteral("display_name"), QStringLiteral("Minh Tran")},
+                                   {QStringLiteral("username"), QStringLiteral("minh")}}}});
+    QCOMPARE(text("remoteAccountName"), QStringLiteral("Minh Tran"));
+    QCOMPARE(text("remoteAccountMeta"), QStringLiteral("minh · KétPlus Pro"));
+    QCOMPARE(view.findChild<ket::Avatar*>(QStringLiteral("remoteAccountAvatar"))->initials(),
+             QStringLiteral("MT"));
+    // A name that looks like markup is shown as typed.
+    view.applyStatus({{QStringLiteral("configured"), true},
+                      {QStringLiteral("account"),
+                       QJsonObject{{QStringLiteral("display_name"), QStringLiteral("<b>Lan</b>")},
+                                   {QStringLiteral("username"), QStringLiteral("<i>lan</i>")}}}});
+    for (const char* name : {"remoteAccountName", "remoteAccountMeta"})
+        QCOMPARE(view.findChild<QLabel*>(QLatin1String(name))->textFormat(), Qt::PlainText);
+    QCOMPARE(text("remoteAccountName"), QStringLiteral("<b>Lan</b>"));
+    // An enrollment from before the daemon kept the name.
+    view.applyStatus({{QStringLiteral("configured"), true}});
+    QCOMPARE(text("remoteAccountName"), QStringLiteral("Signed in"));
+    QVERIFY(view.findChild<ket::Avatar*>(QStringLiteral("remoteAccountAvatar"))->isHidden());
+    for (auto* label : view.findChildren<QLabel*>())
+        QVERIFY2(!label->text().contains(QStringLiteral("example.test")),
+                 qPrintable(label->text()));
 }
 
 void RemoteControlViewTest::linuxPairingStaysReachableWithoutThePhoneRelay() {

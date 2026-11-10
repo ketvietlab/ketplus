@@ -320,10 +320,10 @@ Item {
                 Column {
                     anchors.verticalCenter: parent.verticalCenter
                     Text { text: "An Nguyen"; color: KetTheme.t.textMain; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(15); font.weight: Font.Medium }
-                    Text { text: "Personal workspace · KétPlus Pro"; color: KetTheme.t.textSecondary; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13) }
+                    Text { text: "an · KétPlus Pro"; color: KetTheme.t.textSecondary; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13) }
                 }
             }
-            KetMeter { width: parent.width; label: "KetPlus Relay this month"; valueText: "3.1 GB of 20 GB"; fraction: 0.155; caption: "Pro includes the relay for phones and Linux machines" }
+            // No relay usage meter: the relay reports no usage (ADR 0109).
             Row {
                 spacing: screen.px(8)
                 KetButton { text: "Manage connections"; iconName: "network"; onClicked: screen.window.showScreen("connections") }

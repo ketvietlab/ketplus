@@ -707,10 +707,15 @@ KetPlus never asks for a password. Signing a Mac in is a browser handoff
    ends the sign-in at once with a fixed message, "Sign-in was declined." for
    `access_denied`; `error_description` is never shown (#84).
 4. The daemon redeems the code at `/v2/auth/token` with the verifier and uses
-   that user session once, to enroll the Mac. The session is not stored.
+   that user session once, to enroll the Mac. The session is not stored. Its
+   subject's `displayName` and `username` are stored with the enrollment and
+   removed on sign-out (ADR 0109).
 
 `remote.status` reports `sign_in_pending` while it waits (ten minutes at most)
 and `sign_in_error` when it failed; `remote.sign_in.cancel` and sign-out stop it.
+Once enrolled, it reports `account {display_name, username}`. Settings → Account
+& devices and the Connections account strip show it. An enrollment made before
+ADR 0109 has no `account` until the next sign-in.
 
 ## Lifecycle
 

@@ -114,7 +114,8 @@ void CloudControlClient::pollDeviceSignIn(quint64 epoch) {
                                             : reason);
                     return;
                 }
-                enrollMachine(epoch, access, deviceInstallationId_, deviceKeys_,
+                enrollMachine(epoch, access, value.value("subject").toObject(),
+                              deviceInstallationId_, deviceKeys_,
                               [this, epoch](const QJsonObject&, const QString& failure) {
                                   finishSignIn(epoch, failure);
                               });

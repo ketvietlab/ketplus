@@ -147,16 +147,17 @@ void CloudControlClient::redeemSignIn(const quint64 signInEpoch, const QString& 
                                               : transportError);
                 return;
             }
-            enrollMachine(signInEpoch, access, installationId, keys,
-                          [this, signInEpoch](const QJsonObject&, const QString& error) {
+            enrollMachine(signInEpoch, access,
+                          object(value).value(QStringLiteral("subject")).toObject(), installationId,
+                          keys, [this, signInEpoch](const QJsonObject&, const QString& error) {
                               finishSignIn(signInEpoch, error);
                           });
         });
 }
 
 void CloudControlClient::enrollMachine(const quint64 signInEpoch, const QString& access,
-                                       const QString& installationId, const QJsonObject& keys,
-                                       LocalCallback callback) {
+                                       const QJsonObject& subject, const QString& installationId,
+                                       const QJsonObject& keys, LocalCallback callback) {
     const QJsonObject enrollment{
         {QStringLiteral("installationId"), installationId},
         {QStringLiteral("displayName"), QHostInfo::localHostName().left(128)},
@@ -164,7 +165,7 @@ void CloudControlClient::enrollMachine(const quint64 signInEpoch, const QString&
         {QStringLiteral("keys"), keys}};
     request(
         "POST", QStringLiteral("/v2/machines:enroll"), enrollment, access, {},
-        [this, signInEpoch, callback = std::move(callback)](
+        [this, signInEpoch, subject, callback = std::move(callback)](
             const int enrollStatus, const QJsonValue& enrollValue, const QString& enrollError) {
             if (signInEpoch != accountEpoch_) {
                 callback({}, canceled);
@@ -189,6 +190,11 @@ void CloudControlClient::enrollMachine(const quint64 signInEpoch, const QString&
             const QString machineId = machine.value(QStringLiteral("id")).toString();
             const QString workspaceId = machine.value(QStringLiteral("workspaceId")).toString();
             const int machineKeyVersion = machine.value(QStringLiteral("keyVersion")).toInt(1);
+            // Shown in Settings and Connections; the relay's user session is not kept.
+            const QString accountName =
+                subject.value(QStringLiteral("displayName")).toString().left(128);
+            const QString accountUsername =
+                subject.value(QStringLiteral("username")).toString().left(128);
             // A new enrollment trusts no device yet: only an existing enrollment adopts the
             // devices it already served when pins were introduced (ADR 0034). The empty pin set
             // is written before the machine id, and the enrollment takes effect in memory only
@@ -203,6 +209,8 @@ void CloudControlClient::enrollMachine(const quint64 signInEpoch, const QString&
                 storeString(QStringLiteral("workspace-id"), workspaceId, &storageError) &&
                 storeString(QStringLiteral("machine-key-version"),
                             QString::number(machineKeyVersion), &storageError) &&
+                storeString(QStringLiteral("account-name"), accountName, &storageError) &&
+                storeString(QStringLiteral("account-username"), accountUsername, &storageError) &&
                 sessionCredentials_.adoptWorkspace(workspaceId, &storageError);
             if (!stored) {
                 callback({}, storageError);
@@ -210,6 +218,8 @@ void CloudControlClient::enrollMachine(const quint64 signInEpoch, const QString&
             }
             machineId_ = machineId;
             workspaceId_ = workspaceId;
+            accountName_ = accountName;
+            accountUsername_ = accountUsername;
             machineKeyVersion_ = machineKeyVersion;
             if (!registerCloudCursors()) {
                 callback({}, lastError_);
