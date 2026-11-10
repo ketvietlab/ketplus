@@ -30,12 +30,19 @@ Item {
     readonly property real maximumTitleWidth: Math.max(KetTheme.px(160, KetTheme.zoom), Math.min(KetTheme.px(420, KetTheme.zoom), width * 0.45))
     readonly property string scopeBranch: agentHost.executionBranch || selectedWorktree.branch || "workspace"
     // The header gives way from the right as it narrows, in the mock's order: the tags and Add
-    // tag first, then the Reviewer label, then the title and the worktree elide, then Compact
-    // window and New conversation leave (the sidebar and the menus have both). Each step is
-    // measured from implicit widths, so hiding an item cannot feed back into its own test.
+    // tag first, then the Reviewer label, then the title and the worktree elide, then the
+    // worktree keeps only its icon, then the number leaves (the sidebar shows it), then Compact
+    // window and New conversation (the sidebar and the menus have both). Each step is measured
+    // from implicit widths, so hiding an item cannot feed back into its own test.
     readonly property real gap: titleRow.spacing
     readonly property real statusWidth: Math.min(conversationStatusBadge.Layout.preferredWidth, conversationStatusBadge.Layout.maximumWidth)
-    readonly property real fixedWidth: (conversationNumber.visible ? conversationNumber.implicitWidth + gap : 0) + Math.min(conversationTitle.implicitWidth, maximumTitleWidth) + gap + statusWidth + gap + (scopeChip.visible ? scopeChip.implicitWidth + gap : 0)
+    readonly property real numberWidth: conversationNumber.number.length > 0 ? conversationNumber.implicitWidth + gap : 0
+    readonly property real fixedWidth: numberWidth + Math.min(conversationTitle.implicitWidth, maximumTitleWidth) + gap + statusWidth + gap + (scopeChip.visible ? scopeChip.fullWidth + gap : 0)
+    readonly property real minimumTitle: KetTheme.px(80, KetTheme.zoom)
+    // What the row needs besides the worktree with the title at its minimum.
+    readonly property real narrowWidth: numberWidth + minimumTitle + gap + statusWidth + gap + (reviewerButton.visible ? collapsedReviewerProbe.implicitWidth + gap : 0) + slack
+    readonly property bool fullWorktree: titleRow.width >= narrowWidth + Math.min(scopeChip.fullWidth, minimumTitle) + gap
+    readonly property bool showNumber: titleRow.width >= narrowWidth + scopeChip.iconWidth + gap
     // The row layout rounds every item to whole pixels, so a fit needs that much to spare.
     readonly property real slack: KetTheme.px(8, KetTheme.zoom)
     readonly property bool fullReviewer: titleRow.width >= fixedWidth + reviewerProbe.implicitWidth + gap + slack
@@ -44,7 +51,7 @@ Item {
     readonly property bool showTags: (!reviewerButton.visible || fullReviewer) && titleRow.width >= fixedWidth + (reviewerButton.visible ? reviewerProbe.implicitWidth + gap : 0) + tagGroupWidth + slack
     readonly property int actionCount: (agentHost.compactMode ? 0 : 1) + (agentHost.compactWindow ? 0 : 1) + (agentHost.compactMode || agentHost.compactWindow ? 0 : 4)
     readonly property real fullActionsWidth: actionCount * atlasButton.implicitWidth + Math.max(0, actionCount - 1) * headerActions.spacing
-    readonly property bool globalActions: agentHost.compactWindow || width - titleRow.anchors.leftMargin - fullActionsWidth - headerActions.anchors.rightMargin - titleRow.anchors.rightMargin >= statusWidth + (scopeChip.visible ? scopeChip.Layout.minimumWidth + gap : 0) + KetTheme.px(80, KetTheme.zoom) + (reviewerButton.visible ? collapsedReviewerProbe.implicitWidth + gap : 0) + 2 * gap
+    readonly property bool globalActions: agentHost.compactWindow || width - titleRow.anchors.leftMargin - fullActionsWidth - headerActions.anchors.rightMargin - titleRow.anchors.rightMargin >= statusWidth + (scopeChip.visible ? scopeChip.iconWidth + gap : 0) + minimumTitle + (reviewerButton.visible ? collapsedReviewerProbe.implicitWidth + gap : 0) + 2 * gap
     readonly property string scopeLabel: (agentHost.repositoryName || "Repository") + " · " + scopeBranch
 
     // One compact row: title, status and a muted scope chip on the left, icon actions right.
@@ -69,7 +76,7 @@ Item {
                 }
                 return "";
             }
-            visible: number.length > 0
+            visible: number.length > 0 && (agentHost.compactWindow || header.showNumber)
             // Jay's choice for agent references, as in the mock's header and the sidebar.
             text: "@agent/" + number
             color: KetTheme.t.textMuted
@@ -126,13 +133,17 @@ Item {
             readonly property real chrome: 2 * recipe.paddingInline + recipe.iconSize + 2 * recipe.spacing + scopeChevron.implicitWidth
             visible: !agentHost.compactWindow
             // Measure the unelided text independently of the allocated chip width.
-            implicitWidth: scopeText.implicitWidth + chrome
+            readonly property real fullWidth: scopeText.implicitWidth + chrome
+            // The mock's narrow step: the icon and the chevron, the branch in the tooltip.
+            readonly property real iconWidth: chrome - recipe.spacing
+            readonly property bool iconOnly: !header.fullWorktree
+            implicitWidth: iconOnly ? iconWidth : fullWidth
             Layout.preferredHeight: recipe.height
             Layout.preferredWidth: implicitWidth
             // Shrinks (its label elides) before the title and Reviewer button run out of room.
             Layout.fillWidth: true
             Layout.maximumWidth: implicitWidth
-            Layout.minimumWidth: Math.min(implicitWidth, KetTheme.px(80, KetTheme.zoom))
+            Layout.minimumWidth: Math.min(implicitWidth, header.minimumTitle)
             radius: recipe.radius
             color: recipe.background
             border.width: 1
@@ -156,6 +167,7 @@ Item {
                 Text {
                     id: scopeText
                     objectName: "workspaceScopeLabel"
+                    visible: !scopeChip.iconOnly
                     anchors.verticalCenter: parent.verticalCenter
                     width: Math.min(implicitWidth, Math.max(0, scopeChip.width - scopeChip.chrome))
                     text: header.scopeBranch
