@@ -83,9 +83,10 @@ still takes colours or metrics from that stylesheet or from `ThemePalette`:
 3. Keep light, dark, follow system, and every zoom step switching live, and run
    the tests listed in #402 that cover the surface.
 4. Update #402 when the pull request merges: comment with the surface, the
-   selectors and fields removed, and what still depends on them there; tick
-   the surface in the issue's progress list and any acceptance item that now
-   holds.
+   selectors and fields removed, and what still depends on them there. Tick a
+   progress-list entry only when every consumer it names is migrated; until
+   then the comment records the partial progress. Tick any acceptance item
+   that now holds.
 
 ## Source structure
 
