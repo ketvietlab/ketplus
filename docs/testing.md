@@ -646,6 +646,13 @@ in-tree test targets, including `ketplus_atlas_tunnel_fixture`.
 `r03_characterization` needs `R03_FIXTURES` to name a materialized v3 workload
 directory. Without it, `initTestCase` fails.
 
+`ketplus_agent_shell_tests` checks the Delete conversation card against the mock
+(`deleteCardOffersArchiveInstead`): its title, the mock's copy, no worktree choices
+when there is nothing to remove, and Archive instead, which archives and never
+deletes. `KETPLUS_DIALOG_CAPTURE_DIR=<dir>` saves `<dialog>-{light,dark}.png` for
+the Delete, Rename and worktree cards (#422), to compare with
+`KetPlusMock --open=rename` and `--open=delete`.
+
 `ketplus_context_harness_tests` checks active/attaching turns retain submitted
 settings. Model-picker and iOS model-apply tests check that future defaults remain
 writable. No provider-account or quota-consuming test is required for these fixes.

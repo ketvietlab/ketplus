@@ -296,6 +296,10 @@ Basic.ApplicationWindow {
             if (Mock.initialPanel === "device-focus")
                 Qt.callLater(() => Qt.callLater(() => connections.focusActivityRow(3)))
         }
+        else if (Mock.initialPanel === "rename")
+            Qt.callLater(() => renameDialog.open())
+        else if (Mock.initialPanel === "delete")
+            Qt.callLater(() => deleteDialog.open())
         else if (Mock.initialPanel === "toast")
             // The app-wide toast, for the side by side with the app.
             Qt.callLater(() => notify("Saved the plan"))

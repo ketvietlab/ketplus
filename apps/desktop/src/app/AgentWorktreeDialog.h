@@ -97,12 +97,18 @@ class AgentConversationDeleteDialog final : public QWidget {
   public:
     // `linkedWorktreePaths` are exactly the checkouts deletion would remove; they are listed so
     // the user sees what goes before opting in.
+    // `reference` is the conversation's @agent/NNNN, when it has one.
     explicit AgentConversationDeleteDialog(const QStringList& linkedWorktreePaths,
+                                           const QString& reference = {},
                                            QWidget* parent = nullptr);
     [[nodiscard]] bool deleteLinkedWorktree() const;
     [[nodiscard]] bool forceDeleteWorktree() const;
     // As AgentWorktreeDialog::present.
     ket::Dialog* present(QWidget* anchor);
+
+  signals:
+    // Archive instead: the card closes and the conversation is archived, not deleted.
+    void archiveRequested();
 
   private:
     void updateConfirm();

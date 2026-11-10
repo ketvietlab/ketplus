@@ -3,6 +3,7 @@
 #include "KetDialog.h"
 #include "KetRecipes.h"
 #include "KetSelect.h"
+#include "KetTokens.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/CodexAppServer.h"
@@ -77,6 +78,37 @@ QQuickItem* visualItemNamed(QQuickItem* item, const QString& name) {
         if (auto* match = visualItemNamed(child, name))
             return match;
     return nullptr;
+}
+
+// KETPLUS_DIALOG_CAPTURE_DIR=<dir> saves `<name>-light.png` and `<name>-dark.png` of a dialog
+// card over `target`, for the side by side with the mock (#422).
+void captureDialog(QWidget& target, const QString& name, ketplus::ThemeManager* theme = nullptr) {
+    const QString directory = qEnvironmentVariable("KETPLUS_DIALOG_CAPTURE_DIR");
+    if (directory.isEmpty())
+        return;
+    for (const bool dark : {false, true}) {
+        ket::Appearance::instance().setMode(dark ? ket::Appearance::Mode::Dark
+                                                 : ket::Appearance::Mode::Light);
+        if (theme != nullptr) {
+            theme->previewMode(dark ? ketplus::ThemeManager::Mode::Dark
+                                    : ketplus::ThemeManager::Mode::Light);
+        } else {
+            // A bare host has no app palette: give it the window's colours, as MainWindow does.
+            const auto tone = ket::Appearance::instance().theme();
+            QPalette palette = target.palette();
+            palette.setColor(QPalette::Window, ket::Tokens::color(u"page-bg", tone));
+            palette.setColor(QPalette::WindowText, ket::Tokens::color(u"text-main", tone));
+            target.setPalette(palette);
+            target.setAutoFillBackground(true);
+        }
+        QTest::qWait(50);
+        target.grab().save(QDir(directory).filePath(
+            QStringLiteral("%1-%2.png")
+                .arg(name, dark ? QStringLiteral("dark") : QStringLiteral("light"))));
+    }
+    ket::Appearance::instance().setMode(ket::Appearance::Mode::Light);
+    if (theme != nullptr)
+        theme->previewMode(ketplus::ThemeManager::Mode::Light);
 }
 
 } // namespace
@@ -443,6 +475,31 @@ class AgentWorkspaceShellTest final : public QObject {
         QVERIFY(copyAction->isEnabled());
         QVERIFY(!undoAction->isEnabled());
     }
+    void deleteCardOffersArchiveInstead() {
+        QWidget host;
+        host.resize(900, 600);
+        host.show();
+        auto* form = new ketplus::AgentConversationDeleteDialog({}, QStringLiteral("@agent/4821"));
+        QSignalSpy archived(form, &ketplus::AgentConversationDeleteDialog::archiveRequested);
+        QPointer<ket::Dialog> card = form->present(&host);
+        QVERIFY(card);
+        QSignalSpy accepted(card.data(), &ket::Dialog::accepted);
+        auto* message = form->findChild<QLabel*>(QStringLiteral("conversationDeleteMessage"));
+        QVERIFY(message);
+        QVERIFY(message->text().startsWith(QStringLiteral("@agent/4821 and its transcript")));
+        QStringList actions;
+        for (auto* button : card->card()->findChildren<QAbstractButton*>())
+            if (!card->body()->isAncestorOf(button) && !button->text().isEmpty())
+                actions.append(button->text());
+        QCOMPARE(actions, (QStringList{QStringLiteral("Cancel"), QStringLiteral("Archive instead"),
+                                       QStringLiteral("Delete")}));
+        captureDialog(host, QStringLiteral("delete-card"));
+        card->findChild<QAbstractButton*>(QStringLiteral("conversationDeleteArchive"))->click();
+        QCOMPARE(archived.count(), 1);
+        QCOMPARE(accepted.count(), 0); // archiving never deletes
+        QTRY_VERIFY(card.isNull() || !card->isOpen());
+    }
+
     void deleteConfirmationReportsFailureWithHiddenStatusBar() {
         QTemporaryDir settings;
         QTemporaryDir workspace;
@@ -475,6 +532,14 @@ class AgentWorkspaceShellTest final : public QObject {
             QVERIFY(linked && force);
             QVERIFY(!linked->isEnabled());
             QVERIFY(!force->isEnabled());
+            // The mock's card: nothing to remove, so no worktree choices, and Archive instead.
+            QCOMPARE(card->title(), QStringLiteral("Delete conversation?"));
+            QVERIFY(linked->isHidden() && force->isHidden());
+            auto* message = dialog->findChild<QLabel*>(QStringLiteral("conversationDeleteMessage"));
+            QVERIFY(message);
+            QVERIFY(message->text().contains(QStringLiteral("Its worktree and files stay.")));
+            QVERIFY(card->findChild<QAbstractButton*>(QStringLiteral("conversationDeleteArchive")));
+            captureDialog(window, QStringLiteral("delete-conversation"), &theme);
             confirm->click();
         }
         QCOMPARE(result.size(), 1);
@@ -545,7 +610,7 @@ class AgentWorkspaceShellTest final : public QObject {
         QVERIFY(sidebar->findChild<QComboBox*>(QStringLiteral("productMachineSelect")));
         QVERIFY(settingsAction->text().startsWith(QStringLiteral("Settings")));
         QVERIFY(window.findChild<QToolButton*>(QStringLiteral("productSettingsButton")) == nullptr);
-        QVERIFY(identity->text().contains(QStringLiteral("Personal workspace")));
+        QVERIFY(identity->accessibleName().contains(QStringLiteral("Personal workspace")));
         QVERIFY(sidebar->isVisible());
 
         search->click();
@@ -960,6 +1025,7 @@ class AgentWorkspaceShellTest final : public QObject {
             if (!dialog->body()->isAncestorOf(button) && !button->text().isEmpty())
                 actions.append(button->text());
         QCOMPARE(actions, (QStringList{QStringLiteral("Cancel"), QStringLiteral("Rename")}));
+        captureDialog(window, QStringLiteral("rename-conversation"), &theme);
 
         // Escape keeps the name; Return renames.
         QTest::keyClick(field, Qt::Key_Escape);
@@ -1603,6 +1669,7 @@ class AgentWorkspaceShellTest final : public QObject {
         if (const auto screenshot = qEnvironmentVariable("KETPLUS_WORKTREE_DIALOG_SCREENSHOT");
             !screenshot.isEmpty())
             QVERIFY(host.grab().save(screenshot));
+        captureDialog(host, QStringLiteral("create-worktree"));
         const QString createdBranch = dialog.branchName();
         const QString createdBase = dialog.baseBranch();
         // Closing the card deletes it and its form.
@@ -1709,6 +1776,7 @@ class AgentWorkspaceShellTest final : public QObject {
         if (const auto screenshot = qEnvironmentVariable("KETPLUS_CONVERSATION_DIALOG_SCREENSHOT");
             !screenshot.isEmpty())
             QVERIFY(host.grab().save(screenshot));
+        captureDialog(host, QStringLiteral("new-conversation"));
         conversationConfirm->click();
         // An invalid form keeps its card open.
         QVERIFY(conversationCard->isOpen());
