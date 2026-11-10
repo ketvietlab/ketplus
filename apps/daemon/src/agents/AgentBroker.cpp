@@ -679,10 +679,19 @@ void AgentBroker::finishTurn(const QString& sessionId, const qint64 generation,
             const QString reason =
                 completed ? QStringLiteral("no_reply") : QStringLiteral("turn_") + status;
             markState(*request, QStringLiteral("failed"), reason);
+            if (request->fromSession.isEmpty()) {
+                host_->teamRequestFinished(sessionId, *request, {}, reason);
+                continue;
+            }
             notice(*request, QStringLiteral("failed"), reason);
             continue;
         }
         markState(*request, QStringLiteral("answered"));
+        if (request->fromSession.isEmpty()) {
+            // ADR 0112: the team sent it; the team reads the answer.
+            host_->teamRequestFinished(sessionId, *request, text, {});
+            continue;
+        }
         const auto sender = host_->agentConversation(request->fromSession);
         if (!sender || sender->generation != request->fromGeneration)
             continue;

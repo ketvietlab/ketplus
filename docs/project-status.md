@@ -44,6 +44,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   digest, sent once when its turn ends or after 20 s of quiet while it is idle. Pause
   holds every team message in order until Resume, and 40 automatic turns pause the team
   with one decision.
+  Per-task review (#460): a task entering In review is queued for the team's reviewer,
+  first in first out, as an ADR 0067 `review` message with its criteria and the diff of
+  its branch against the integration branch; `no findings` makes it Ready, findings go
+  back to the owner with round + 1, and past `max_rounds` the task is Blocked.
 
 - The unreviewed workspaces UI layer consumes kit worktree actions/badges,
   searchable picker rows and Connections controls. Repository/worktree switching

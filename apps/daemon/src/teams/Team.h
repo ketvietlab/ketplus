@@ -124,6 +124,9 @@ struct Team final {
     // Automatic turns held while the team is paused, oldest first (ADR 0112, open point 2):
     // {to, from, kind, task_id, body, expect_reply}.
     QJsonArray held;
+    // ADR 0112 §2: tasks waiting for the reviewer, first in first out, and the one it reviews.
+    QStringList reviewQueue;
+    QString reviewing;
     int nextTask{1};
     int nextDecision{1};
     qint64 revision{0};

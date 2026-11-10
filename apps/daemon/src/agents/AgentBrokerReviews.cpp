@@ -193,6 +193,8 @@ QString reviewBody(const AgentConversation& working, const QString& base, const 
 
 // A snapshot is the tree of every tracked and untracked (not ignored) file, written through
 // a copy of the worktree's index so neither the worktree nor its index changes.
+bool AgentBroker::verdictHasNoFindings(const QString& text) { return reportsNoFindings(text); }
+
 void AgentBroker::snapshotWorktree(const QString& worktree,
                                    std::function<void(std::optional<QString>)> done) {
     QPointer<AgentBroker> self(this);
