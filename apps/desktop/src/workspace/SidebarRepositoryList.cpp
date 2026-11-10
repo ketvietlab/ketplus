@@ -369,8 +369,8 @@ void SidebarRepositoryList::markConversationSeen(const QString& conversationId) 
     emit iconPresentationChanged();
 }
 
-void SidebarRepositoryList::applyZoom(const int basePixels) {
-    chrome_geometry::apply(this, basePixels);
+void SidebarRepositoryList::applyZoom(const int zoomPercent) {
+    chrome_geometry::apply(this, zoomPercent);
     applyPresentation();
 }
 
@@ -381,7 +381,7 @@ void SidebarRepositoryList::setTagFilter(const QString& tag) {
 
 void SidebarRepositoryList::applyPresentation() {
     const auto px = [this](int n) {
-        return InterfaceZoomMetrics::geometry(n, chrome_geometry::basePixels(this));
+        return InterfaceZoomMetrics::geometry(n, chrome_geometry::zoomPercent(this));
     };
     int height = 0;
     for (qsizetype index = 0; index < groups_.size() && index < repositories_.size(); ++index) {

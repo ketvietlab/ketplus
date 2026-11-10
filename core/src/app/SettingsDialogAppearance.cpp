@@ -1,9 +1,10 @@
 #include "app/SettingsDialog.h"
 
+#include "ui/InterfaceZoom.h"
 #include "ui/Theme.h"
 
 #include "KetFieldRow.h"
-#include "KetStepSlider.h"
+#include "KetSegmentedControl.h"
 #include "KetThemeCard.h"
 #include "KetToggle.h"
 #include <QFrame>
@@ -94,14 +95,19 @@ QWidget* SettingsDialog::createThemeCard() {
     accentRow->addWidget(new QLabel(tr("Indigo"), accent));
     accentRow->addStretch();
     layout->addWidget(new ket::FieldRow(tr("Accent"), accent, {}, card));
-    zoomStep_ = new ket::StepSlider(tr("Interface zoom"), card);
-    zoomStep_->setObjectName(QStringLiteral("interfaceZoomSteps"));
-    QStringList steps;
-    for (int px = AppearanceSettings::minimumInterfaceFontSizePixels;
-         px <= AppearanceSettings::maximumInterfaceFontSizePixels; ++px)
-        steps.append(QString::number(qRound(px * 100.0 / 14.0)) + '%');
-    zoomStep_->setSteps(steps);
-    layout->addWidget(zoomStep_);
+    QStringList zoomSteps;
+    for (const int percent : InterfaceZoomMetrics::steps())
+        zoomSteps.append(QString::number(percent) + u'%');
+    zoomControl_ = new ket::SegmentedControl(zoomSteps, card);
+    zoomControl_->setObjectName(QStringLiteral("interfaceZoom"));
+    zoomControl_->setAccessibleName(tr("Interface zoom"));
+    zoomControl_->setCurrentIndex(
+        int(InterfaceZoomMetrics::steps().indexOf(InterfaceZoomMetrics::defaultPercent)));
+    layout->addWidget(new ket::FieldRow(tr("Interface zoom"), zoomControl_, {}, card));
+    connect(zoomControl_, &ket::SegmentedControl::currentChanged, this, [this] {
+        updatePreview();
+        applyChanges();
+    });
 
     connect(followSystem_, &QAbstractButton::toggled, this, [this](bool checked) {
         selectThemeMode(

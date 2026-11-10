@@ -11,7 +11,7 @@ class QDialogButtonBox;
 class QComboBox;
 class QListWidget;
 namespace ket {
-class StepSlider;
+class SegmentedControl;
 class ThemeCard;
 } // namespace ket
 class QStackedWidget;
@@ -135,7 +135,7 @@ class SettingsDialog final : public QDialog, public SettingsHost {
     PixelSelect* editorLineHeightBox_{nullptr};
     TypographyPreview* preview_{nullptr};
     QWidget* buttons_{nullptr};
-    ket::StepSlider* zoomStep_{nullptr};
+    ket::SegmentedControl* zoomControl_{nullptr};
     QAbstractButton* resetButton_{nullptr};
     QList<SettingsPage*> extensionPages_;
     QList<RegisteredPage> registeredPages_;

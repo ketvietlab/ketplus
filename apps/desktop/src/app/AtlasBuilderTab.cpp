@@ -30,7 +30,7 @@ namespace ketplus {
 namespace {
 constexpr int placeholderMaximumWidth = 440;
 
-QString builderStyle(const QPalette& palette, const int basePixels) {
+QString builderStyle(const QPalette& palette, const int zoomPercent) {
     const bool dark = palette.color(QPalette::Window).lightness() < 128;
     const auto theme = dark ? ket::Theme::Dark : ket::Theme::Light;
     const auto color = [theme](QStringView name) {
@@ -62,7 +62,7 @@ QLabel#atlasBuilderExplanation { color:%5; font-size:{{body}}px; }
 QLabel#atlasBuilderGuidance { color:%5; font-size:{{body}}px; }
 QLabel#atlasBuilderSamplePrompt { color:%5; font-size:{{caption}}px; padding:13px; border:1px solid %6; border-radius:7px; background:%3; }
 )QSS"),
-                                  basePixels);
+                                  zoomPercent);
     const QStringList colors{page,   panel,  raised, text,        muted,
                              border, strong, accent, accentSubtle};
     for (int i = 0; i < colors.size(); ++i)
@@ -335,14 +335,14 @@ void AtlasBuilderTab::openExistingAtlas(const AtlasDescriptor& descriptor) {
     emit titleChanged(descriptor.title);
 }
 
-void AtlasBuilderTab::applyPalette(const QPalette& palette, const int interfaceFontSizePixels) {
+void AtlasBuilderTab::applyPalette(const QPalette& palette, const int zoomPercent) {
     if (applyingStyle_)
         return;
     applyingStyle_ = true;
-    interfaceFontSizePixels_ = interfaceFontSizePixels;
-    setStyleSheet(builderStyle(palette, interfaceFontSizePixels));
-    chrome_geometry::apply(this, interfaceFontSizePixels);
-    atlas_->applyPalette(palette, interfaceFontSizePixels);
+    zoomPercent_ = zoomPercent;
+    setStyleSheet(builderStyle(palette, zoomPercent));
+    chrome_geometry::apply(this, zoomPercent);
+    atlas_->applyPalette(palette, zoomPercent);
     if (placeholderIcon_)
         placeholderIcon_->setPixmap(networkPixmap(palette.color(QPalette::Highlight)));
     applyingStyle_ = false;
@@ -378,10 +378,8 @@ void AtlasBuilderTab::changeEvent(QEvent* event) {
     if (event->type() == QEvent::PaletteChange ||
         event->type() == QEvent::ApplicationPaletteChange ||
         event->type() == QEvent::ApplicationFontChange || event->type() == QEvent::FontChange) {
-        const int basePixels = QApplication::font().pixelSize() > 0
-                                   ? QApplication::font().pixelSize()
-                                   : InterfaceZoomMetrics::mediumPixels;
-        applyPalette(QApplication::palette(), basePixels);
+        const int zoomPercent = InterfaceZoomMetrics::current();
+        applyPalette(QApplication::palette(), zoomPercent);
     }
     QWidget::changeEvent(event);
 }
@@ -415,7 +413,9 @@ void AtlasBuilderTab::updateGeometry() {
     const int toolbarHeight = qMax(40, toolbar_->sizeHint().height());
     toolbar_->setGeometry(0, 0, width, toolbarHeight);
     const int height = qMax(0, this->height() - toolbarHeight);
-    const auto px = [this](int value) { return qRound(value * interfaceFontSizePixels_ / 14.0); };
+    const auto px = [this](int value) {
+        return InterfaceZoomMetrics::geometry(value, zoomPercent_);
+    };
     const int chatWidth = chatCollapsed_ ? 0 : qMin(px(410), qMax(px(300), width / 3));
     const int inset = 0;
     if (!chatCollapsed_)

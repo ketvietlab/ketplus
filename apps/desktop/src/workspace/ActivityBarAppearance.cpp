@@ -10,10 +10,10 @@
 #include <QStyle>
 #include <QToolButton>
 namespace ketplus {
-void ActivityBar::applyPalette(const ThemePalette& palette, const int interfaceFontSizePixels) {
+void ActivityBar::applyPalette(const ThemePalette& palette, const int zoomPercent) {
     if (auto* avatar = findChild<QLabel*>(QStringLiteral("productIdentityAvatar"))) {
-        const auto px = [interfaceFontSizePixels](int n) {
-            return InterfaceZoomMetrics::geometry(n, interfaceFontSizePixels);
+        const auto px = [zoomPercent](int n) {
+            return InterfaceZoomMetrics::geometry(n, zoomPercent);
         };
         avatar->setGeometry(px(7), px(11), px(29), px(29));
     }
@@ -76,15 +76,15 @@ void ActivityBar::applyPalette(const ThemePalette& palette, const int interfaceF
         QLabel#quickSearchShortcut { color: %5; font-size: {{micro}}px; }
         QLabel#sourceControlCountBadge { border: 1px solid %11; border-radius: 4px; color: %6; font-size: {{micro}}px; }
     )"),
-                                           interfaceFontSizePixels);
+                                           zoomPercent);
     setStyleSheet(sheet.arg(
         palette.border, palette.sidebarBackground, palette.textMain, palette.panelBackground,
         palette.textMuted, palette.textSecondary, palette.surfaceHover, palette.accentSubtle,
         navSelectedText, palette.textDisabled, controlBorder, sidebarAccent, palette.borderStrong));
-    chrome_geometry::apply(this, interfaceFontSizePixels);
+    chrome_geometry::apply(this, zoomPercent);
     // Interface zoom rescales the bound width without a drag.
     syncShownWidth();
-    repositoryList_->applyZoom(interfaceFontSizePixels);
+    repositoryList_->applyZoom(zoomPercent);
     iconMainColor_ = palette.textMain;
     iconMutedColor_ = palette.textMuted;
     iconDisabledColor_ = palette.textDisabled;

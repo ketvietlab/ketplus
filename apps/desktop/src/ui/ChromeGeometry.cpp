@@ -15,9 +15,9 @@ namespace ketplus::chrome_geometry {
 namespace {
 constexpr auto metricsKey = "_ketChromeMetrics";
 constexpr auto zoomKey = "_ketChromeZoom";
-void applyObject(QObject* object, int base) {
+void applyObject(QObject* object, int zoom) {
     const auto values = object->property(metricsKey).toMap();
-    const auto px = [base](int value) { return InterfaceZoomMetrics::geometry(value, base); };
+    const auto px = [zoom](int value) { return InterfaceZoomMetrics::geometry(value, zoom); };
     const auto size = [&px](QSize value) { return QSize(px(value.width()), px(value.height())); };
     if (auto* widget = qobject_cast<QWidget*>(object)) {
         widget->ensurePolished();
@@ -79,15 +79,14 @@ void bind(QObject* object, const char* name, const QVariant& value) {
     auto values = object->property(metricsKey).toMap();
     values.insert(QLatin1String(name), value);
     object->setProperty(metricsKey, values);
-    applyObject(object, basePixels(object));
+    applyObject(object, zoomPercent(object));
 }
 } // namespace
-int basePixels(const QObject* object) {
+int zoomPercent(const QObject* object) {
     for (auto* current = object; current; current = current->parent())
         if (current->property(zoomKey).isValid())
             return current->property(zoomKey).toInt();
-    const int pixels = QApplication::font().pixelSize();
-    return pixels > 0 ? InterfaceZoomMetrics::snap(pixels) : InterfaceZoomMetrics::mediumPixels;
+    return InterfaceZoomMetrics::current();
 }
 void fixedHeight(QWidget* w, int n) { bind(w, "fixedHeight", n); }
 void fixedWidth(QWidget* w, int n) { bind(w, "fixedWidth", n); }
@@ -119,11 +118,11 @@ void addSpacing(QBoxLayout* layout, int n) {
     spacers.insert(QString::number(reinterpret_cast<quintptr>(item)), item->sizeHint());
     bind(layout, "spacers", spacers);
 }
-void apply(QWidget* surface, int base) {
-    surface->setProperty(zoomKey, InterfaceZoomMetrics::snap(base));
-    applyObject(surface, base);
+void apply(QWidget* surface, int zoom) {
+    surface->setProperty(zoomKey, InterfaceZoomMetrics::snap(zoom));
+    applyObject(surface, zoom);
     for (auto* child : surface->findChildren<QObject*>())
         if (child->property(metricsKey).isValid())
-            applyObject(child, base);
+            applyObject(child, zoom);
 }
 } // namespace ketplus::chrome_geometry

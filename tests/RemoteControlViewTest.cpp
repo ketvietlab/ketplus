@@ -327,9 +327,8 @@ void RemoteControlViewTest::opensOnSignInPrompt() {
     QVERIFY(text->text().startsWith(QStringLiteral("Continue a conversation from your phone")));
     auto* headline = view.findChild<QLabel*>(QStringLiteral("remoteWelcomeHeadline"));
     QVERIFY(headline);
-    const int basePixels = qApp->font().pixelSize() > 0 ? qApp->font().pixelSize()
-                                                        : InterfaceZoomMetrics::mediumPixels;
-    QCOMPARE(headline->font().pixelSize(), InterfaceZoomMetrics::geometry(40, basePixels));
+    QCOMPARE(headline->font().pixelSize(),
+             InterfaceZoomMetrics::geometry(40, InterfaceZoomMetrics::current()));
     QCOMPARE(signInPrompt->text(), QStringLiteral("Sign in"));
     QVERIFY(!view.findChild<QWidget*>(QStringLiteral("remotePageTitle"))->isVisible());
 }

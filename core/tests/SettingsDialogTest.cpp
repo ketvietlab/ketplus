@@ -2,6 +2,7 @@
 #include "KetAppearance.h"
 #include "KetEmptyState.h"
 #include "KetRecipes.h"
+#include "KetSegmentedControl.h"
 #include "KetSelect.h"
 #include "ui/KetFonts.h"
 #include "ui/Theme.h"
@@ -52,10 +53,12 @@ class SettingsDialogTest final : public QObject {
     void defaultFontResolvesWithoutPlatformFallback();
     void kitLabelsKeepRecipeFontsAcrossThemeChanges();
     void persistsAndNormalizesAppearance();
+    void migratesTheLegacyInterfaceSize();
     void appliesThemeSelectionAtOnce();
     void reselectsAThemeAnotherWindowChanged();
     void extensionPagesApplyAtOnce();
     void appearanceChangesApplyAtOnce();
+    void zoomAndInterfaceSizeApplyApart();
     void validatesPageRegistrationWithoutTransferringFailedOwnership();
     void ordersAndSelectsRegisteredPagesByStableIdentity();
     void removesDestroyedPageAndFallsBackToGeneral();
@@ -78,11 +81,11 @@ void SettingsDialogTest::kitLabelsKeepRecipeFontsAcrossThemeChanges() {
         theme.setMode(mode);
         theme.previewMode(mode);
         theme.cancelPreview();
-        for (int pixels : {14, 21, 14}) {
-            theme.setInterfaceFontSizePixels(pixels);
+        for (int zoom : {100, 150, 100}) {
+            theme.setInterfaceScale(14, zoom);
             QCoreApplication::processEvents();
             const auto recipe = ket::emptyStateRecipe(ket::Appearance::instance().theme());
-            QCOMPARE(title->font().pixelSize(), qRound(recipe.titlePixels * pixels / 14.0));
+            QCOMPARE(title->font().pixelSize(), qRound(recipe.titlePixels * zoom / 100.0));
             QCOMPARE(int(title->font().weight()), recipe.titleWeight);
         }
     }
@@ -194,6 +197,7 @@ void SettingsDialogTest::persistsAndNormalizesAppearance() {
     QCOMPARE(settings.editor.fontFamily, QStringLiteral("KET Sans Mono"));
     QCOMPARE(settings.editor.fontSizePixels, 14);
     settings.interfaceFontSizePixels = 99;
+    settings.interfaceZoomPercent = 113;
     settings.editor.fontSizePixels = 18;
     settings.editor.lineHeightPixels = 17;
     settings.terminal = {16, 12};
@@ -205,15 +209,13 @@ void SettingsDialogTest::persistsAndNormalizesAppearance() {
     const auto loaded = ketplus::AppearanceSettings::load(storage);
     QCOMPARE(loaded.interfaceFontSizePixels,
              ketplus::AppearanceSettings::maximumInterfaceFontSizePixels);
+    QCOMPARE(loaded.interfaceZoomPercent, 110);
     QCOMPARE(loaded.editor.fontSizePixels, 18);
     QCOMPARE(loaded.editor.lineHeightPixels, 18);
     // Stored terminal and preview sizes are not read: they follow the editor and interface.
     QCOMPARE(loaded.terminal, (ketplus::TextTypographySettings{18, 18}));
-    QCOMPARE(loaded.preview,
-             (ketplus::TextTypographySettings{
-                 ketplus::AppearanceSettings::maximumInterfaceFontSizePixels + 1,
-                 qRound((ketplus::AppearanceSettings::maximumInterfaceFontSizePixels + 1) * 26.0 /
-                        15.0)}));
+    // 17 px at the 110% zoom.
+    QCOMPARE(loaded.preview, (ketplus::TextTypographySettings{19, qRound(19 * 26.0 / 15.0)}));
     QCOMPARE(ketplus::AppearanceSettings::defaults().preview,
              (ketplus::TextTypographySettings{15, 26}));
     QCOMPARE(ketplus::AppearanceSettings::defaults().terminal,
@@ -296,6 +298,66 @@ void SettingsDialogTest::appearanceChangesApplyAtOnce() {
     // The same value again applies nothing.
     size->setValue(size->value());
     QCOMPARE(saved.size(), 1);
+}
+
+void SettingsDialogTest::migratesTheLegacyInterfaceSize() {
+    // Before ADR 0104 the interface pixels were the zoom: Small 12, Medium 14, Large 16, and
+    // Lite's numeric values between. Each maps to the nearest zoom step at 14 px.
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QList<std::pair<int, int>> cases{{12, 90},  {13, 90},  {14, 100}, {15, 110},
+                                           {16, 110}, {18, 125}, {24, 125}, {8, 90}};
+    for (const auto& [pixels, zoom] : cases) {
+        QSettings storage(directory.filePath(QStringLiteral("legacy-%1.ini").arg(pixels)),
+                          QSettings::IniFormat);
+        storage.setValue(QStringLiteral("appearance/interfaceFontSizePixels"), pixels);
+        const auto loaded = ketplus::AppearanceSettings::load(storage);
+        QCOMPARE(loaded.interfaceZoomPercent, zoom);
+        QCOMPARE(loaded.interfaceFontSizePixels, 14);
+        // Saved once, the zoom is read as it is and the size is no longer a zoom.
+        loaded.save(storage);
+        storage.setValue(QStringLiteral("appearance/interfaceFontSizePixels"), 16);
+        const auto again = ketplus::AppearanceSettings::load(storage);
+        QCOMPARE(again.interfaceZoomPercent, zoom);
+        QCOMPARE(again.interfaceFontSizePixels, 16);
+    }
+    QSettings fresh(directory.filePath(QStringLiteral("fresh.ini")), QSettings::IniFormat);
+    QCOMPARE(ketplus::AppearanceSettings::load(fresh), ketplus::AppearanceSettings::defaults());
+    QCOMPARE(ketplus::AppearanceSettings::defaults().interfaceZoomPercent, 100);
+}
+
+void SettingsDialogTest::zoomAndInterfaceSizeApplyApart() {
+    ketplus::SettingsDialog dialog(ketplus::EditorSettings::defaults());
+    QList<ketplus::AppearanceSettings> saved;
+    connect(&dialog, &ketplus::SettingsDialog::appearanceSettingsSaved, &dialog,
+            [&saved](const ketplus::AppearanceSettings& settings) { saved.append(settings); });
+    auto* zoom = dialog.findChild<ket::SegmentedControl*>(QStringLiteral("interfaceZoom"));
+    auto* size = dialog.findChild<ketplus::PixelSelect*>(QStringLiteral("interfaceFontSize"));
+    QVERIFY(zoom != nullptr);
+    QVERIFY(size != nullptr);
+    QCOMPARE(zoom->options(), (QStringList{"90%", "100%", "110%", "125%"}));
+    QCOMPARE(zoom->currentIndex(), 1);
+    QVERIFY(!size->isHidden());
+    QCOMPARE(size->minimum(), 13);
+    QCOMPARE(size->maximum(), 16);
+
+    zoom->setCurrentIndex(3);
+    QCOMPARE(saved.size(), 1);
+    QCOMPARE(saved.constLast().interfaceZoomPercent, 125);
+    QCOMPARE(saved.constLast().interfaceFontSizePixels, 14);
+    // Markdown follows the interface size at the zoom: 15 px at 125%.
+    QCOMPARE(saved.constLast().preview.fontSizePixels, 19);
+    size->setValue(16);
+    QCOMPARE(saved.size(), 2);
+    QCOMPARE(saved.constLast().interfaceZoomPercent, 125);
+    QCOMPARE(saved.constLast().interfaceFontSizePixels, 16);
+
+    // A dialog opens on the saved zoom.
+    ketplus::ThemeManager theme(*qApp);
+    ketplus::SettingsDialog opened(ketplus::AppearanceSettings{.interfaceZoomPercent = 90}, theme);
+    QCOMPARE(
+        opened.findChild<ket::SegmentedControl*>(QStringLiteral("interfaceZoom"))->currentIndex(),
+        0);
 }
 
 void SettingsDialogTest::validatesPageRegistrationWithoutTransferringFailedOwnership() {
@@ -386,15 +448,15 @@ void SettingsDialogTest::zoomDuringExtensionRebuildKeepsNavigationAlive() {
         auto* page = new TestSettingsPage(QStringLiteral("page-%1").arg(i));
         dialog.addPage(page);
         // Deliberately do not drain DeferredDelete before changing the global zoom.
-        theme.setInterfaceFontSizePixels(i % 2 == 0 ? 18 : 14);
+        theme.setInterfaceScale(14, i % 2 == 0 ? 125 : 100);
         QVERIFY(dialog.selectPage(page->id()));
         QCOMPARE(dialog.selectedPageId(), page->id());
     }
-    theme.setInterfaceFontSizePixels(14);
+    theme.setInterfaceScale(14, 100);
     auto* navigation = dialog.findChild<QListWidget*>("settingsNavigation");
     QCOMPARE(navigation->count(), 14);
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-    theme.setInterfaceFontSizePixels(16);
+    theme.setInterfaceScale(14, 110);
     QVERIFY(dialog.selectPage("page-0"));
     QCOMPARE(dialog.selectedPageId(), QStringLiteral("page-0"));
 }

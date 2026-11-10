@@ -34,7 +34,7 @@ class AtlasBuilderTab final : public QWidget {
 
     void setConversationId(const QString& conversationId);
     void openExistingAtlas(const AtlasDescriptor& atlas);
-    void applyPalette(const QPalette& palette, int interfaceFontSizePixels = 14);
+    void applyPalette(const QPalette& palette, int zoomPercent = 100);
     void setActive(bool active);
 
   signals:
@@ -75,7 +75,7 @@ class AtlasBuilderTab final : public QWidget {
     QAbstractButton* aiButton_{nullptr};
     QTimer activityPulse_;
     bool pulseBright_{true};
-    int interfaceFontSizePixels_{14};
+    int zoomPercent_{100};
     QMetaObject::Connection messageChanged_;
     QMetaObject::Connection messageCountChanged_;
     QSet<QString> initialAtlasPaths_;

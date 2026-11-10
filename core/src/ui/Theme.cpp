@@ -20,6 +20,10 @@
 
 namespace ketplus {
 namespace {
+int appliedZoomPercent = InterfaceZoomMetrics::defaultPercent;
+}
+
+namespace {
 
 // One Két DS token in a theme, opaque: a translucent token (dark borders) is composited
 // over the panel, so stylesheets, HTML and QML read the same #RRGGBB everywhere.
@@ -125,7 +129,8 @@ int tooltipFontPixels() {
 
 namespace {
 
-QString styleSheetFor(const ThemePalette& palette, const int interfaceFontSizePixels) {
+QString styleSheetFor(const ThemePalette& palette, const int interfaceTextPixels,
+                      const int zoomPercent) {
     const QString terminalFontFamily = QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
     QString style = QStringLiteral(R"QSS(
 QToolTip {
@@ -791,16 +796,16 @@ QToolButton[kvRole="sidebarAction"]:hover {
     while (matches.hasNext())
         sizes.append(matches.next());
     for (auto it = sizes.crbegin(); it != sizes.crend(); ++it)
-        style.replace(it->capturedStart(2), it->capturedLength(2),
-                      QString::number(InterfaceZoomMetrics::scale(it->captured(2).toInt(),
-                                                                  interfaceFontSizePixels)));
+        style.replace(
+            it->capturedStart(2), it->capturedLength(2),
+            QString::number(InterfaceZoomMetrics::scale(it->captured(2).toInt(), zoomPercent)));
 
     const std::pair<const char*, QString> replacements[] = {
         {"{{terminalFontFamily}}", terminalFontFamily},
-        {"{{interfaceFontSize}}", QString::number(interfaceFontSizePixels)},
+        {"{{interfaceFontSize}}", QString::number(interfaceTextPixels)},
         {"{{tooltipFontSize}}",
          QString::number(qRound(ket::tooltipRecipe(ket::Appearance::instance().theme()).fontPixels *
-                                interfaceFontSizePixels / InterfaceZoomMetrics::designedAtPixels))},
+                                InterfaceZoomMetrics::factor(zoomPercent)))},
         {"{{pageBackground}}", palette.pageBackground},
         {"{{panelBackground}}", palette.panelBackground},
         {"{{panelSubtle}}", palette.panelSubtle},
@@ -853,8 +858,7 @@ ThemeManager::ThemeManager(QApplication& application, QObject* parent)
     profile.conversationMetaWeight = 500;
     profile.navItemActiveWeight = 500;
     ket::Profile::setCurrent(profile);
-    ket::Appearance::instance().setZoom(qreal(interfaceFontSizePixels_) /
-                                        InterfaceZoomMetrics::designedAtPixels);
+    ket::Appearance::instance().setZoom(InterfaceZoomMetrics::factor(interfaceZoomPercent_));
     ket::Style::install(application_);
     loadInterfaceFont();
 
@@ -874,6 +878,14 @@ ThemeManager::Mode ThemeManager::mode() const noexcept { return mode_; }
 const ThemePalette& ThemeManager::palette() const noexcept { return palette_; }
 
 int ThemeManager::interfaceFontSizePixels() const noexcept { return interfaceFontSizePixels_; }
+
+int ThemeManager::interfaceZoomPercent() const noexcept { return interfaceZoomPercent_; }
+
+int InterfaceZoomMetrics::current() { return appliedZoomPercent; }
+
+int ThemeManager::interfaceTextPixels() const noexcept {
+    return InterfaceZoomMetrics::scale(interfaceFontSizePixels_, interfaceZoomPercent_);
+}
 
 void ThemeManager::setMode(const Mode mode) {
     const bool needsApply = mode_ != mode || previewMode_.has_value();
@@ -902,19 +914,22 @@ void ThemeManager::cancelPreview() {
     syncAppearance();
 }
 
-void ThemeManager::setInterfaceFontSizePixels(const int fontSizePixels) {
-    const int normalized = qBound(8, fontSizePixels, 24);
-    if (interfaceFontSizePixels_ == normalized) {
+void ThemeManager::setInterfaceScale(const int fontSizePixels, const int zoomPercent) {
+    const int size = qBound(8, fontSizePixels, 24);
+    const int zoom = InterfaceZoomMetrics::snap(zoomPercent);
+    if (interfaceFontSizePixels_ == size && interfaceZoomPercent_ == zoom) {
         return;
     }
-    interfaceFontSizePixels_ = normalized;
+    interfaceFontSizePixels_ = size;
+    interfaceZoomPercent_ = zoom;
+    appliedZoomPercent = zoom;
     // Finish QApplication/QSS propagation before notifying kit widgets. Qt's
     // stylesheet repolish resets child fonts, including explicit recipe fonts.
     QFont font = application_.font();
-    font.setPixelSize(interfaceFontSizePixels_);
+    font.setPixelSize(interfaceTextPixels());
     setApplicationFont(font);
     apply(false);
-    ket::Appearance::instance().setZoom(qreal(normalized) / InterfaceZoomMetrics::designedAtPixels);
+    ket::Appearance::instance().setZoom(InterfaceZoomMetrics::factor(zoom));
     // apply() sized the tooltip font from the previous zoom.
     restoreTooltipFont();
     emit themeChanged();
@@ -935,7 +950,7 @@ void ThemeManager::syncAppearance() {
 void ThemeManager::apply(const bool notify) {
     palette_ = paletteFor(ket::Appearance::instance().theme());
 
-    const auto sheet = styleSheetFor(palette_, interfaceFontSizePixels_);
+    const auto sheet = styleSheetFor(palette_, interfaceTextPixels(), interfaceZoomPercent_);
     if (application_.styleSheet() != sheet)
         application_.setStyleSheet(sheet);
     restoreTooltipFont();
@@ -954,7 +969,7 @@ void ThemeManager::loadInterfaceFont() {
                         : QFontDatabase::systemFont(QFontDatabase::GeneralFont).family();
 
     QFont font(uiFontFamily_);
-    font.setPixelSize(interfaceFontSizePixels_);
+    font.setPixelSize(interfaceTextPixels());
     font.setWeight(QFont::Normal);
     setApplicationFont(font);
 }

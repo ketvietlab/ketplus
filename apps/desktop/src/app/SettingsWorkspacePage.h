@@ -23,7 +23,7 @@ class SettingsWorkspacePage final : public QWidget {
                                    SettingsStoragePage::Requester storage = {});
 
     [[nodiscard]] SettingsDialog* dialog() const noexcept;
-    void applyPalette(const ThemePalette& palette, int interfaceFontSizePixels = 14);
+    void applyPalette(const ThemePalette& palette, int zoomPercent = 100);
     // Selects a settings section by its navigation id, such as "updates".
     void showSection(const QString& id);
 
@@ -37,7 +37,7 @@ class SettingsWorkspacePage final : public QWidget {
     SettingsDialog* dialog_{nullptr};
     QListWidget* navigation_{nullptr};
     ThemePalette palette_{};
-    int interfaceFontSizePixels_{14};
+    int zoomPercent_{100};
 };
 
 } // namespace ketplus

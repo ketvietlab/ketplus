@@ -65,7 +65,7 @@ class SymbolLabel final : public QLabel {
     QPalette::ColorRole role_;
 };
 
-QString atlasStyle(const QPalette& palette, const int basePixels) {
+QString atlasStyle(const QPalette& palette, const int zoomPercent) {
     const bool dark = palette.color(QPalette::Window).lightness() < 128;
     const auto theme = dark ? ket::Theme::Dark : ket::Theme::Light;
     const auto color = [theme](QStringView name) {
@@ -101,7 +101,7 @@ QLabel#atlasEmptyState { color:@muted@; font-size:{{reading}}px; }
 QLabel#atlasStatus { color:@secondary@; font-size:{{reading}}px; }
 QLabel#atlasLastValidNotice { color:@secondary@; background:@raised@; border-bottom:1px solid @border@; }
 )QSS"),
-                                   basePixels);
+                                   zoomPercent);
     const QList<QPair<QString, QString>> replacements = {
         {"@page@", page},           {"@panel@", panel},
         {"@raised@", raised},       {"@text@", text},
@@ -606,12 +606,12 @@ void AtlasTab::resizeEvent(QResizeEvent* event) {
     ensureVisibleThumbnails();
 }
 
-void AtlasTab::applyPalette(const QPalette& palette, const int interfaceFontSizePixels) {
+void AtlasTab::applyPalette(const QPalette& palette, const int zoomPercent) {
     if (applyingStyle_)
         return;
     applyingStyle_ = true;
-    setStyleSheet(atlasStyle(palette, interfaceFontSizePixels));
-    chrome_geometry::apply(this, interfaceFontSizePixels);
+    setStyleSheet(atlasStyle(palette, zoomPercent));
+    chrome_geometry::apply(this, zoomPercent);
     grid_->viewport()->update();
     resizeEvent(nullptr);
     applyingStyle_ = false;
@@ -621,10 +621,8 @@ void AtlasTab::changeEvent(QEvent* event) {
     if (event->type() == QEvent::PaletteChange ||
         event->type() == QEvent::ApplicationPaletteChange ||
         event->type() == QEvent::ApplicationFontChange || event->type() == QEvent::FontChange) {
-        const int basePixels = QApplication::font().pixelSize() > 0
-                                   ? QApplication::font().pixelSize()
-                                   : InterfaceZoomMetrics::mediumPixels;
-        applyPalette(QApplication::palette(), basePixels);
+        const int zoomPercent = InterfaceZoomMetrics::current();
+        applyPalette(QApplication::palette(), zoomPercent);
     }
     QWidget::changeEvent(event);
 }

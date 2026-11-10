@@ -252,7 +252,7 @@ void ExplorerPanelTest::switchesActivityModes() {
     ketplus::ThemeManager theme(*qApp);
     bar.setSidebarWidth(ketplus::ActivityBar::kWidth);
     widthChanged.clear();
-    const int large = 18;
+    const int large = 125;
     bar.applyPalette(theme.palette(), large);
     const int scaled = ketplus::InterfaceZoomMetrics::geometry(ketplus::ActivityBar::kWidth, large);
     QVERIFY(scaled > ketplus::ActivityBar::kWidth);
@@ -260,7 +260,7 @@ void ExplorerPanelTest::switchesActivityModes() {
     QCOMPARE(bar.sidebarWidth(), ketplus::ActivityBar::kWidth);
     QCOMPARE(widthChanged.count(), 1);
     QCOMPARE(widthChanged.last().first().toInt(), scaled);
-    bar.applyPalette(theme.palette(), ketplus::InterfaceZoomMetrics::mediumPixels);
+    bar.applyPalette(theme.palette(), ketplus::InterfaceZoomMetrics::defaultPercent);
     QCOMPARE(bar.width(), ketplus::ActivityBar::kWidth);
 }
 
@@ -574,24 +574,24 @@ void ExplorerPanelTest::scalesSidebarTypeWithInterfaceZoom() {
     palette.dark = true;
 
     const auto& profile = ket::Profile::current();
-    QCOMPARE(ketplus::TypeScale::pixels(ketplus::TypeStep::Body, 14),
+    QCOMPARE(ketplus::TypeScale::pixels(ketplus::TypeStep::Body, 100),
              qRound(profile.buttonFontPixels));
-    QCOMPARE(ketplus::TypeScale::pixels(ketplus::TypeStep::Body, 16),
-             ketplus::InterfaceZoomMetrics::scale(qRound(profile.buttonFontPixels), 16));
-    QCOMPARE(ketplus::TypeScale::pixels(ketplus::TypeStep::Reading, 16),
-             ketplus::InterfaceZoomMetrics::scale(qRound(profile.readingPixels), 16));
+    QCOMPARE(ketplus::TypeScale::pixels(ketplus::TypeStep::Body, 125),
+             ketplus::InterfaceZoomMetrics::scale(qRound(profile.buttonFontPixels), 125));
+    QCOMPARE(ketplus::TypeScale::pixels(ketplus::TypeStep::Reading, 125),
+             ketplus::InterfaceZoomMetrics::scale(qRound(profile.readingPixels), 125));
 
     ketplus::ActivityBar bar;
-    bar.applyPalette(palette, ketplus::InterfaceZoomMetrics::mediumPixels);
+    bar.applyPalette(palette, ketplus::InterfaceZoomMetrics::defaultPercent);
     const QString medium = bar.styleSheet();
     QVERIFY(
         medium.contains(QStringLiteral("font-size: %1px").arg(qRound(profile.buttonFontPixels))));
     QVERIFY(!medium.contains(QStringLiteral("{{")));
-    bar.applyPalette(palette, 16);
+    bar.applyPalette(palette, 125);
     const QString large = bar.styleSheet();
     QVERIFY(large.contains(QStringLiteral("font-size: %1px")
-                               .arg(ketplus::TypeScale::pixels(ketplus::TypeStep::Body, 16))));
-    bar.applyPalette(palette, 14);
+                               .arg(ketplus::TypeScale::pixels(ketplus::TypeStep::Body, 125))));
+    bar.applyPalette(palette, 100);
     QCOMPARE(bar.styleSheet(), medium);
 }
 

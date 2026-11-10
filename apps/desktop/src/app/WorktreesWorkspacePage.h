@@ -25,7 +25,7 @@ class WorktreesWorkspacePage final : public QWidget {
                       const QHash<QString, int>& conversationCounts, bool activeDirty);
     void setPruneAvailable(bool available);
     void setPruning(bool pruning);
-    void applyPalette(const ThemePalette& palette, int interfaceFontSizePixels = 14);
+    void applyPalette(const ThemePalette& palette, int zoomPercent = 100);
 
   signals:
     void createRequested();

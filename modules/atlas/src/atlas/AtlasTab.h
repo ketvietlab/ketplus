@@ -26,7 +26,7 @@ class AtlasTab final : public QWidget {
     bool isDeferred() const { return deferred_; }
     void openAtlas(const AtlasDescriptor& atlas);
     void refreshPreview();
-    void applyPalette(const QPalette& palette, int interfaceFontSizePixels = 14);
+    void applyPalette(const QPalette& palette, int zoomPercent = 100);
     void setActive(bool active);
     void defer();
     void setDeferInterval(int milliseconds) { idle_.setInterval(milliseconds); }

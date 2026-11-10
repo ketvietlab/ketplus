@@ -53,8 +53,9 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 - Két UI stack: Lite and Pro use KÉT Sans as the primary interface face, with
   Inter/platform fallback; fresh editor settings use KÉT Sans Mono Medium at
-  14 px without rewriting saved choices. Interface zoom is published to the
-  kit's Appearance, terminal initial colours resolve tokens, and Mermaid theme
+  14 px without rewriting saved choices. Interface zoom (90–125%) is a setting
+  apart from the interface font size (13–16 px) and is published to the
+  kit's Appearance (ADR 0104), terminal initial colours resolve tokens, and Mermaid theme
   resources resolve token placeholders at rendering time. Overall UI acceptance
   and rollout remain deferred; see `tasks/ui-implementation-stack.md`.
 

@@ -75,9 +75,7 @@ void AtlasConversationPanel::applyPalette(const QPalette& colors) {
     const auto text = colors.color(QPalette::WindowText).name();
     const auto muted = colors.color(QPalette::PlaceholderText).name();
     const auto border = colors.color(QPalette::Mid).name();
-    const int basePixels = QApplication::font().pixelSize() > 0
-                               ? QApplication::font().pixelSize()
-                               : InterfaceZoomMetrics::mediumPixels;
+    const int zoomPercent = InterfaceZoomMetrics::current();
     setStyleSheet(TypeScale::apply(QStringLiteral(R"QSS(
 QWidget#conversationAtlasPanel, QWidget#conversationAtlasScroll { background:%1; color:%3; }
 QLabel#conversationAtlasTitle { font-weight:600; font-size:{{px:18}}px; }
@@ -86,7 +84,7 @@ QWidget[atlasRow="true"] { background:%2; border:1px solid %5; border-radius:7px
 
 )QSS")
                                        .arg(page, surface, text, muted, border),
-                                   basePixels));
+                                   zoomPercent));
 }
 
 void AtlasConversationPanel::render() {

@@ -6,6 +6,7 @@
 #include "KetTokens.h"
 #include "app/SettingsDialog.h"
 #include "git/GitParser.h"
+#include "ui/InterfaceZoom.h"
 #include "ui/Theme.h"
 
 #include <QAbstractButton>
@@ -105,7 +106,7 @@ class RefactorWave1ContractTest final : public QObject {
     void currentNativePaletteBaseline();
     void themeFollowsKetAppearance();
     void themeInstallsTheKetStyle();
-    void interfaceSizeUpdatesKitZoom();
+    void interfaceZoomUpdatesKitZoom();
     void parserReadsObservedWorktreeFlags();
 };
 
@@ -249,25 +250,53 @@ void RefactorWave1ContractTest::themeFollowsKetAppearance() {
     QVERIFY(theme.palette().dark);
 }
 
-void RefactorWave1ContractTest::interfaceSizeUpdatesKitZoom() {
+void RefactorWave1ContractTest::interfaceZoomUpdatesKitZoom() {
     ketplus::ThemeManager theme(*qApp);
     auto& appearance = ket::Appearance::instance();
     QSignalSpy changes(&appearance, &ket::Appearance::zoomChanged);
-    // Include Lite's numeric sizes as well as the Pro shell's named steps. Repeat to
-    // catch compounded scaling, and preserve the current zoom across theme changes.
-    for (int pixels : {12, 16, 18, 14, 12, 16, 14}) {
-        theme.setInterfaceFontSizePixels(pixels);
-        QCOMPARE(appearance.zoom(), qreal(pixels) / 14);
+    // Every zoom step. Repeat to catch compounded scaling, and preserve the current zoom
+    // across theme changes (ADR 0104).
+    for (int zoom : {90, 110, 125, 100, 90, 110, 100}) {
+        theme.setInterfaceScale(14, zoom);
+        QCOMPARE(appearance.zoom(), zoom / 100.0);
         QCOMPARE(changes.size(), 1);
-        QCOMPARE(QToolTip::font().pixelSize(), qRound(13.0 * pixels / 14));
+        QCOMPARE(QToolTip::font().pixelSize(), qRound(13.0 * zoom / 100));
+        QCOMPARE(qApp->font().pixelSize(), qRound(14.0 * zoom / 100));
         theme.setMode(ketplus::ThemeManager::Mode::Dark);
-        QCOMPARE(appearance.zoom(), qreal(pixels) / 14);
+        QCOMPARE(appearance.zoom(), zoom / 100.0);
         theme.setMode(ketplus::ThemeManager::Mode::Light);
-        QCOMPARE(appearance.zoom(), qreal(pixels) / 14);
-        theme.setInterfaceFontSizePixels(pixels);
+        QCOMPARE(appearance.zoom(), zoom / 100.0);
+        theme.setInterfaceScale(14, zoom);
         QCOMPARE(changes.size(), 1);
         changes.clear();
     }
+    // A surface restyling on the application font change already reads the new zoom; the
+    // kit's zoomChanged comes after it.
+    struct FontChangeProbe final : QWidget {
+        int seen = 0;
+        bool event(QEvent* event) override {
+            if (event->type() == QEvent::ApplicationFontChange ||
+                event->type() == QEvent::FontChange)
+                seen = ketplus::InterfaceZoomMetrics::current();
+            return QWidget::event(event);
+        }
+    } probe;
+    probe.show();
+    theme.setInterfaceScale(14, 125);
+    QCOMPARE(probe.seen, 125);
+    QCOMPARE(ketplus::InterfaceZoomMetrics::current(), 125);
+    theme.setInterfaceScale(14, 90);
+    QCOMPARE(probe.seen, 90);
+
+    // The interface size sets the application text at the zoom and leaves the chrome.
+    theme.setInterfaceScale(16, 125);
+    changes.clear();
+    theme.setInterfaceScale(13, 125);
+    QVERIFY(changes.isEmpty());
+    QCOMPARE(appearance.zoom(), 1.25);
+    QCOMPARE(theme.interfaceTextPixels(), 16);
+    QCOMPARE(qApp->font().pixelSize(), 16);
+    theme.setInterfaceScale(14, 100);
 }
 
 void RefactorWave1ContractTest::themeInstallsTheKetStyle() {
@@ -317,7 +346,7 @@ void RefactorWave1ContractTest::themeInstallsTheKetStyle() {
         ketplus::ThemeManager fresh(*qApp);
         QCOMPARE(QToolTip::font().pixelSize(), tooltipPixels());
         QCOMPARE(shownTooltipPixels(), tooltipPixels());
-        fresh.setInterfaceFontSizePixels(fresh.interfaceFontSizePixels() + 4);
+        fresh.setInterfaceScale(fresh.interfaceFontSizePixels(), 125);
         QCOMPARE(QToolTip::font().pixelSize(), tooltipPixels());
         QCOMPARE(shownTooltipPixels(), tooltipPixels());
         QCOMPARE(ketplus::tooltipFontPixels(), tooltipPixels());

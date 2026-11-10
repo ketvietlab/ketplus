@@ -46,15 +46,15 @@ struct TypeScale final {
         case TypeStep::GlyphLarge:
             return qRound(p.emptyIconSize);
         }
-        return InterfaceZoomMetrics::mediumPixels;
+        return InterfaceZoomMetrics::designedAtPixels;
     }
 
-    [[nodiscard]] static int pixels(const TypeStep step, const int basePixels) {
-        return InterfaceZoomMetrics::scale(designed(step), basePixels);
+    [[nodiscard]] static int pixels(const TypeStep step, const int zoomPercent) {
+        return InterfaceZoomMetrics::scale(designed(step), zoomPercent);
     }
 
     // Scales literal QSS geometry and expands {{micro}}, {{caption}}, … font steps.
-    [[nodiscard]] static QString apply(QString sheet, const int basePixels,
+    [[nodiscard]] static QString apply(QString sheet, const int zoomPercent,
                                        const int /*legacyBiasPixels*/ = 0) {
         // Explicit product-composition values (for example a 30 px page title)
         // are still scaled here, rather than introducing another type ladder.
@@ -68,10 +68,10 @@ struct TypeScale final {
             replacements.append(matches.next());
         for (auto it = replacements.crbegin(); it != replacements.crend(); ++it)
             sheet.replace(it->capturedStart(1), it->capturedLength(1),
-                          QString::number(
-                              InterfaceZoomMetrics::geometry(it->captured(1).toInt(), basePixels)));
+                          QString::number(InterfaceZoomMetrics::geometry(it->captured(1).toInt(),
+                                                                         zoomPercent)));
         const auto put = [&](const char* key, const TypeStep step) {
-            sheet.replace(QLatin1String(key), QString::number(pixels(step, basePixels)));
+            sheet.replace(QLatin1String(key), QString::number(pixels(step, zoomPercent)));
         };
         put("{{micro}}", TypeStep::Micro);
         put("{{caption}}", TypeStep::Caption);
@@ -89,7 +89,7 @@ struct TypeScale final {
     // pixel value. At Medium this is a no-op (same numbers). Used to scale the
     // shared Theme.cpp compatibility sheet. Does not snap literals onto
     // the type ladder — pure zoom of whatever number is present.
-    [[nodiscard]] static QString scaleLiteralFontSizes(QString sheet, const int basePixels) {
+    [[nodiscard]] static QString scaleLiteralFontSizes(QString sheet, const int zoomPercent) {
         static const QRegularExpression re(QStringLiteral(R"(font-size:\s*(\d+)px)"));
         QString out;
         out.reserve(sheet.size() + 32);
@@ -99,7 +99,7 @@ struct TypeScale final {
             const auto match = it.next();
             out.append(sheet.mid(pos, match.capturedStart(1) - pos));
             const int designed = match.captured(1).toInt();
-            out.append(QString::number(InterfaceZoomMetrics::scale(designed, basePixels)));
+            out.append(QString::number(InterfaceZoomMetrics::scale(designed, zoomPercent)));
             pos = match.capturedEnd(1);
         }
         out.append(sheet.mid(pos));

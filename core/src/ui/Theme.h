@@ -81,13 +81,17 @@ class ThemeManager final : public QObject {
 
     [[nodiscard]] Mode mode() const noexcept;
     [[nodiscard]] const ThemePalette& palette() const noexcept;
+    // The chosen interface size, before the zoom.
     [[nodiscard]] int interfaceFontSizePixels() const noexcept;
+    [[nodiscard]] int interfaceZoomPercent() const noexcept;
+    // The application font's size: the interface size at the zoom.
+    [[nodiscard]] int interfaceTextPixels() const noexcept;
 
   public slots:
     void setMode(Mode mode);
     void previewMode(Mode mode);
     void cancelPreview();
-    void setInterfaceFontSizePixels(int fontSizePixels);
+    void setInterfaceScale(int fontSizePixels, int zoomPercent);
 
   signals:
     void themeChanged();
@@ -106,6 +110,7 @@ class ThemeManager final : public QObject {
     ThemePalette palette_;
     QString uiFontFamily_;
     int interfaceFontSizePixels_{14};
+    int interfaceZoomPercent_{100};
 };
 
 } // namespace ketplus

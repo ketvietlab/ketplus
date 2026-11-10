@@ -1,6 +1,6 @@
 # 0012: Product chrome zoom and appearance propagation
 
-Status: accepted
+Status: accepted; the single interface-size control is superseded by ADR 0104
 Date: 2026-09-19
 
 ## Context
