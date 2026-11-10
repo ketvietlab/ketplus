@@ -1891,7 +1891,7 @@ void AgentWorkspaceViewTest::markdownHeadingsAndInlineCodeStayNearBodySize() {
         if (format.fontFixedPitch()) {
             code += fragment.text();
             QCOMPARE(format.intProperty(QTextFormat::FontPixelSize), qRound(recipe.codePixels));
-            // Code keeps the body colour; a rounded chip drawn behind it sets it apart.
+            // Code keeps the body colour and has no chip, as the kit and the mock draw it.
             QVERIFY(!format.hasProperty(QTextFormat::ForegroundBrush));
             QVERIFY(!format.hasProperty(QTextFormat::BackgroundBrush));
             QVERIFY(format.fontFixedPitch());
@@ -1902,48 +1902,15 @@ void AgentWorkspaceViewTest::markdownHeadingsAndInlineCodeStayNearBodySize() {
     }
     QCOMPARE(code, QStringLiteral("inline_code"));
     QVERIFY(sawStrong);
-    // The space before the code and the code's last character are tracked by the
-    // chip padding, so the chip leaves the neighbouring text uncovered.
+    // No chip and no tracking around it: the text lays out as written.
     const int codeStart = document->toPlainText().indexOf("inline_code");
     QVERIFY(codeStart > 0);
-    for (const int position : {codeStart - 1, codeStart + 10}) {
+    for (const int position : {codeStart - 1, codeStart + 5, codeStart + 10}) {
         QTextCursor cursor(document);
         cursor.setPosition(position + 1);
-        QCOMPARE(cursor.charFormat().fontLetterSpacingType(), QFont::AbsoluteSpacing);
-        QCOMPARE(cursor.charFormat().fontLetterSpacing(), 4.0);
+        QCOMPARE(cursor.charFormat().fontLetterSpacing(), 0.0);
     }
-    QTextCursor inside(document);
-    inside.setPosition(codeStart + 5);
-    QVERIFY(inside.charFormat().fontLetterSpacing() == 0.0);
-
-    // One chip, hugging the code's glyphs with a little room on each side.
-    const auto chips = view.messageInlineCode(quickDocument);
-    QCOMPARE(chips.size(), 1);
-    const auto chip = chips.first().toMap();
-    QRectF before;
-    QVERIFY(QMetaObject::invokeMethod(body, "positionToRectangle", Q_RETURN_ARG(QRectF, before),
-                                      Q_ARG(int, codeStart - 1)));
-    QRectF first;
-    QRectF last;
-    QVERIFY(QMetaObject::invokeMethod(body, "positionToRectangle", Q_RETURN_ARG(QRectF, first),
-                                      Q_ARG(int, codeStart)));
-    QVERIFY(QMetaObject::invokeMethod(body, "positionToRectangle", Q_RETURN_ARG(QRectF, last),
-                                      Q_ARG(int, codeStart + 11)));
-    QCOMPARE(chip.value("x").toDouble(), first.x() - 4);
-    // The right edge already includes the last character's tracking.
-    QCOMPARE(chip.value("width").toDouble(), last.x() - first.x() + 4);
-    QVERIFY(chip.value("x").toDouble() > before.x());
-    const double top = chip.value("y").toDouble() + body->property("topPadding").toDouble();
-    const double bottom = top + chip.value("height").toDouble();
-    // The chip wraps the smaller code glyphs plus padding, so it stays within a
-    // couple of pixels of the body text's own line box.
-    QVERIFY2(top >= first.y() - 2 && bottom <= first.y() + first.height() + 2,
-             qPrintable(QStringLiteral("chip %1..%2 outside line %3..%4")
-                            .arg(top)
-                            .arg(bottom)
-                            .arg(first.y())
-                            .arg(first.y() + first.height())));
-    QTRY_VERIFY(findVisualItem(body, "messageInlineCodeChip") != nullptr);
+    QVERIFY(findVisualItem(body, "messageInlineCodeChip") == nullptr);
     if (const auto capturePath = qEnvironmentVariable("KETPLUS_INLINE_CODE_CAPTURE");
         !capturePath.isEmpty()) {
         QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
@@ -2051,8 +2018,6 @@ void AgentWorkspaceViewTest::compactCodeBlocks() {
     QTRY_VERIFY(!code.layout()->formats().isEmpty());
     QCOMPARE(code.layout()->formats().first().format.foreground().color(),
              ket::syntaxRecipe(dark ? ket::Theme::Dark : ket::Theme::Light).comment);
-    // Code blocks already sit in a frame; they get no inline chips.
-    QVERIFY(view.messageInlineCode(quickDocument).isEmpty());
     QCOMPARE(document->firstBlock().blockFormat().lineHeight(),
              bodyPixels * ket::Profile::current().readingLineHeight);
     QCOMPARE(code.blockFormat().lineHeight(),

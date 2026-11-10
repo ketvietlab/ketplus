@@ -494,8 +494,6 @@ class AgentWorkspaceView final : public QWidget {
     Q_INVOKABLE void formatMessageDocument(QObject* document, qreal fontPixelSize,
                                            qreal availableWidth);
     Q_INVOKABLE QVariantList messageCodeBlocks(QObject* document) const;
-    // Rects for the rounded chips behind inline code, one per wrapped line.
-    Q_INVOKABLE QVariantList messageInlineCode(QObject* document) const;
     QUrl messageBaseUrl() const;
     Q_INVOKABLE QUrl messageImageAt(QObject* document, int position) const;
     Q_INVOKABLE QString messageLinkAt(QObject* document, int position) const;
