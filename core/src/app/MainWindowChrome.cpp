@@ -4,17 +4,98 @@
 #include "KetButton.h"
 #include "KetEmptyState.h"
 #include "KetIcons.h"
+#include "KetRecipes.h"
 #include "KetToast.h"
 #include "KetTokens.h"
 #include <QStatusBar>
 
+#include <QAbstractButton>
 #include <QAction>
 #include <QHBoxLayout>
+#include <QPainter>
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QVBoxLayout>
 
 namespace ketplus {
+namespace {
+
+// An activity bar entry as the mock's ActivityButton: a 48 × 40 cell with an icon button in
+// the middle, filled like a selected nav item and marked by an accent rule at the left edge.
+class ActivityButton final : public QAbstractButton {
+  public:
+    ActivityButton(QStringView icon, const QString& label, QAction* action, QWidget* parent)
+        : QAbstractButton(parent), icon_(ket::Icons::codeForLucide(icon)), action_(action) {
+        setAccessibleName(label);
+        setToolTip(label);
+        setCursor(Qt::PointingHandCursor);
+        setAttribute(Qt::WA_Hover);
+    }
+    QSize sizeHint() const override {
+        auto& kit = ket::Appearance::instance();
+        return {qRound(kit.scaled(48)), qRound(kit.scaled(40))};
+    }
+
+  protected:
+    void paintEvent(QPaintEvent*) override {
+        auto& kit = ket::Appearance::instance();
+        const auto theme = kit.theme();
+        // Tab focus only, so the ring marks keyboard focus.
+        const ket::InteractionState state{underMouse(), isDown(), isEnabled(), hasFocus()};
+        const bool selected = action_ != nullptr && action_->isChecked();
+        const auto nav = ket::navItemRecipe(selected, state, theme);
+        const auto button = ket::iconButtonRecipe(ket::ControlSize::Medium, state, theme);
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setOpacity(nav.opacity);
+        if (selected)
+            painter.fillRect(QRect(0, 0, 2, height()), ket::Tokens::color(u"accent", theme));
+        const int side = qRound(kit.scaled(button.height));
+        const QRectF face((width() - side) / 2.0, (height() - side) / 2.0, side, side);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(nav.background);
+        painter.drawRoundedRect(face, kit.scaled(nav.radius), kit.scaled(nav.radius));
+        if (nav.focusRing.alpha()) {
+            painter.setPen(QPen(nav.focusRing, 2));
+            painter.setBrush(Qt::NoBrush);
+            painter.drawRoundedRect(face.adjusted(1, 1, -1, -1), kit.scaled(nav.radius),
+                                    kit.scaled(nav.radius));
+        }
+        const int icon = qRound(kit.scaled(nav.iconSize));
+        painter.drawPixmap(QPointF(face.center().x() - icon / 2.0, face.center().y() - icon / 2.0),
+                           ket::Icons::pixmap(icon_, icon, devicePixelRatioF(), nav.text));
+    }
+
+  private:
+    QString icon_;
+    QAction* action_;
+};
+
+// The tab strip's end, as the mock: the strip's fill and rules around the terminal toggle.
+class TabStripCorner final : public QWidget {
+  public:
+    explicit TabStripCorner(QWidget* button, QWidget* parent) : QWidget(parent) {
+        auto* layout = new QHBoxLayout(this);
+        layout->setContentsMargins(4, 0, 4, 0);
+        layout->addWidget(button, 0, Qt::AlignCenter);
+    }
+    QSize sizeHint() const override {
+        auto& kit = ket::Appearance::instance();
+        return {QWidget::sizeHint().width(),
+                qRound(kit.scaled(ket::tabBarRecipe(kit.theme()).height))};
+    }
+
+  protected:
+    void paintEvent(QPaintEvent*) override {
+        const auto strip = ket::tabBarRecipe(ket::Appearance::instance().theme());
+        QPainter painter(this);
+        painter.fillRect(rect(), strip.background);
+        painter.fillRect(QRect(0, 0, 1, height() - 1), strip.border);
+        painter.fillRect(QRect(0, height() - 1, width(), 1), strip.border);
+    }
+};
+
+} // namespace
 
 void MainWindow::createChrome() {
     auto* shell = new QWidget(this);
@@ -24,19 +105,17 @@ void MainWindow::createChrome() {
     auto* rail = new QWidget(shell);
     rail->setObjectName(QStringLiteral("liteActivityBar"));
     auto* navigation = new QVBoxLayout(rail);
-    navigation->setSpacing(4);
-    navigation->setContentsMargins(4, 8, 4, 8);
-    const auto add = [rail, navigation](QStringView name, const QString& label) {
-        auto* button =
-            new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(name)), label, rail);
-        navigation->addWidget(button, 0, Qt::AlignHCenter);
+    const auto add = [rail, navigation](QStringView name, const QString& label,
+                                        QAction* action = nullptr) {
+        auto* button = new ActivityButton(name, label, action, rail);
+        button->setFocusPolicy(Qt::TabFocus);
+        navigation->addWidget(button);
         return button;
     };
-    const auto linkAction = [this, &add](QStringView name, QAction* action) {
-        auto* button = add(name, action->text().remove(QLatin1Char('&')));
-        button->setCheckable(true);
+    const auto linkAction = [&add](QStringView name, QAction* action) {
+        auto* button = add(name, action->text().remove(QLatin1Char('&')), action);
         const auto update = [button, action] {
-            button->setChecked(action->isChecked());
+            button->update();
             button->setEnabled(action->isEnabled());
             button->setToolTip(action->text().remove(QLatin1Char('&')) + QStringLiteral(" (") +
                                action->shortcut().toString(QKeySequence::NativeText) + ')');
@@ -55,8 +134,12 @@ void MainWindow::createChrome() {
         auto& kit = ket::Appearance::instance();
         const auto px = [&kit](int n) { return qRound(kit.scaled(n)); };
         rail->setFixedWidth(px(48));
-        navigation->setContentsMargins(px(4), px(8), px(4), px(8));
+        navigation->setContentsMargins(0, px(8), 0, px(8));
         navigation->setSpacing(px(4));
+        for (auto* button : rail->findChildren<QAbstractButton*>()) {
+            button->updateGeometry();
+            button->update();
+        }
         rail->setStyleSheet(
             QStringLiteral(
                 "QWidget#liteActivityBar { background: %1; border-right: 1px solid %2; }")
@@ -67,9 +150,10 @@ void MainWindow::createChrome() {
     connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, rail, appearance);
     appearance();
     row->addWidget(rail);
+    activityBar_ = rail;
     chromePages_ = new QStackedWidget(shell);
     chromePages_->setObjectName(QStringLiteral("liteWorkspacePages"));
-    chromePages_->addWidget(mainSplit_);
+    chromePages_->addWidget(workspaceSplit_);
     auto* welcome = new ket::EmptyState(
         ket::Icons::codeForLucide(u"folder"), tr("Welcome to KétPlus"),
         tr("Open a folder to start working, or create a new file."), chromePages_);
@@ -80,6 +164,13 @@ void MainWindow::createChrome() {
     chromePages_->addWidget(welcome);
     chromePages_->setCurrentWidget(welcome);
     row->addWidget(chromePages_, 1);
+    // The mock's terminal toggle at the end of the tab strip.
+    auto* terminalToggle = new ket::IconButton(
+        ket::Icons::icon(ket::Icons::codeForLucide(u"terminal")), tr("Toggle terminal"), tabs_);
+    connect(terminalToggle, &QAbstractButton::clicked, terminalAction_, &QAction::trigger);
+    auto* corner = new TabStripCorner(terminalToggle, tabs_);
+    corner->setObjectName(QStringLiteral("tabStripCorner"));
+    tabs_->setCornerWidget(corner, Qt::TopRightCorner);
     setCentralWidget(shell);
     connect(statusBar(), &QStatusBar::messageChanged, this, [this](const QString& message) {
         if (!message.isEmpty())
@@ -87,9 +178,16 @@ void MainWindow::createChrome() {
     });
 }
 
+void MainWindow::refreshActivityBar() {
+    if (activityBar_ == nullptr)
+        return;
+    for (auto* button : activityBar_->findChildren<QAbstractButton*>())
+        button->update();
+}
+
 void MainWindow::showEditorSurface() {
     if (chromePages_)
-        chromePages_->setCurrentWidget(mainSplit_);
+        chromePages_->setCurrentWidget(workspaceSplit_);
 }
 
 } // namespace ketplus

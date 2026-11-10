@@ -82,6 +82,8 @@ class EditorWidget final : public ScintillaEditBase {
     void markSaved();
     void configureLexerForPath(const QString& filePath);
     void setBreadcrumbPath(const QString& path);
+    // An action at the end of the breadcrumb, such as View diff.
+    void addBreadcrumbAction(QWidget* action);
     // Forces a language by syntax name; an empty name returns to detection by file name.
     void setSyntaxOverride(const QString& syntaxName);
     [[nodiscard]] QString syntaxOverride() const;

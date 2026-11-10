@@ -1,5 +1,7 @@
 #include "app/MainWindow.h"
 
+#include "KetButton.h"
+#include "KetIcons.h"
 #include "app/SettingsDialog.h"
 #include "editor/EditorWidget.h"
 #include "git/GitChangesPanel.h"
@@ -189,6 +191,18 @@ void MainWindow::updateGitActions() {
     gitMenu_->setEnabled(repositoryOpen);
     sourceControlAction_->setEnabled(repositoryOpen);
     viewDiffAction_->setEnabled(repositoryOpen && !currentWorkspaceRelativeFile().isEmpty());
+    // The breadcrumb offers View diff while the open file has changes, as the mock.
+    if (auto* editor = currentEditor()) {
+        bool changed = false;
+        if (repositoryOpen && !editor->document().isUntitled()) {
+            const QString path =
+                QDir(gitSnapshot_.repositoryRoot).relativeFilePath(editor->document().filePath());
+            changed = std::any_of(gitSnapshot_.files.cbegin(), gitSnapshot_.files.cend(),
+                                  [&path](const auto& file) { return file.path == path; });
+        }
+        if (auto* button = editor->findChild<QWidget*>(QStringLiteral("viewDiffButton")))
+            button->setVisible(changed);
+    }
     worktreeMenu_->setEnabled(repositoryOpen && worktrees_.size() > 1);
 }
 
@@ -220,6 +234,16 @@ void MainWindow::rememberActiveFileForWorktree() {
     if (!relativePath.isEmpty() && !workspaceRoot_.isEmpty()) {
         activeFileByWorktree_.insert(normalizedPath(workspaceRoot_), relativePath);
     }
+}
+
+void MainWindow::addViewDiffButton(EditorWidget* editor) {
+    auto* button = new ket::Button(tr("View diff"), ket::ButtonVariant::Ghost, editor);
+    button->setControlSize(ket::ControlSize::Small);
+    button->setObjectName(QStringLiteral("viewDiffButton"));
+    button->setIcon(ket::Icons::icon(ket::Icons::codeForLucide(u"git-compare-arrows")));
+    button->hide();
+    connect(button, &QAbstractButton::clicked, viewDiffAction_, &QAction::trigger);
+    editor->addBreadcrumbAction(button);
 }
 
 QString MainWindow::currentWorkspaceRelativeFile() const {

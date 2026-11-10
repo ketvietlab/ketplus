@@ -1,4 +1,5 @@
 #include "app/MainWindow.h"
+#include "app/ReviewCapture.h"
 #include "ui/KetFonts.h"
 #include "ui/Theme.h"
 #include <QSettings>
@@ -40,6 +41,7 @@ int main(int argc, char* argv[]) {
             return 1;
         QSettings::setDefaultFormat(QSettings::IniFormat);
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, captureSettings->path());
+        ketplus::prepareReviewCapture();
     }
 
     ketplus::registerKetFonts();
@@ -58,22 +60,9 @@ int main(int argc, char* argv[]) {
     }
 
     // Review evidence without a screen: with QT_QPA_PLATFORM=offscreen, KETPLUS_CAPTURE=<file>
-    // saves the window once it has laid out, then quits. KETPLUS_CAPTURE_THEME=light|dark
-    // previews that theme without saving it.
-    if (const QString capture = qEnvironmentVariable("KETPLUS_CAPTURE"); !capture.isEmpty()) {
-        const QString captureTheme = qEnvironmentVariable("KETPLUS_CAPTURE_THEME");
-        if (captureTheme == QLatin1String("light")) {
-            theme.previewMode(ketplus::ThemeManager::Mode::Light);
-        } else if (captureTheme == QLatin1String("dark")) {
-            theme.previewMode(ketplus::ThemeManager::Mode::Dark);
-        }
-        QTimer::singleShot(700, &app, [&app, &window, capture] {
-            const bool saved = window.grab().save(capture);
-            std::fprintf(stderr, "KETPLUS_CAPTURE %s: %s\n", saved ? "saved" : "failed",
-                         qPrintable(capture));
-            app.exit(saved ? 0 : 1);
-        });
-    }
+    // saves the window once it has laid out, then quits (docs/design-system.md).
+    if (const QString capture = qEnvironmentVariable("KETPLUS_CAPTURE"); !capture.isEmpty())
+        ketplus::runReviewCapture(theme, window, capture);
 
     if (qEnvironmentVariableIsSet("KETPLUS_BENCHMARK_STARTUP")) {
         QTimer::singleShot(0, &app, [&app, &startupTimer] {

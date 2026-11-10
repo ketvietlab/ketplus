@@ -138,8 +138,7 @@ GitChangesPanel::GitChangesPanel(QWidget* parent)
     branchLabel_->setProperty("kvRole", QStringLiteral("gitRepositoryBranch"));
     branchLabel_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 
-    auto* header =
-        new ket::PaneHeader(tr("Source Control"), ket::Icons::codeForLucide(u"git-branch"), this);
+    auto* header = new ket::PaneHeader(tr("SOURCE CONTROL"), {}, this);
     header->setObjectName(QStringLiteral("sourceControlHeader"));
     auto* refreshButton =
         new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"refresh-cw")),

@@ -3,6 +3,7 @@
 
 #include "editor/DiskChangePrompt.h"
 #include "editor/DocumentFormatControls.h"
+#include "editor/DocumentTab.h"
 
 #include "app/SettingsDialog.h"
 #include "editor/EditorSplitPane.h"
@@ -75,7 +76,7 @@ void rememberRecentPath(const QString& key, const QString& path, const int maxim
 void MainWindow::createNewDocument() {
     showEditorSurface();
     auto* editor = createEditor();
-    const int index = tabs_->addTab(editor, editor->document().displayName());
+    const int index = tabs_->addTab(editor, documentTabIcon(editor), documentTabTitle(editor));
     configureTabCloseButton(index, editor);
     tabs_->setCurrentIndex(index);
     editor->setFocus();
@@ -406,6 +407,7 @@ void MainWindow::configureTabCloseButton(const int index, QWidget* tab,
 EditorWidget* MainWindow::createEditor() {
     auto* editor = new EditorWidget(this);
     editor->setBreadcrumbPath(editor->document().displayName());
+    addViewDiffButton(editor);
     editor->setPreviewTypography(appearanceSettings_.preview.fontSizePixels,
                                  appearanceSettings_.preview.lineHeightPixels);
     connect(editor, &EditorWidget::previewFileOpenRequested, this, &MainWindow::openFile);
@@ -472,11 +474,8 @@ void MainWindow::updateTabTitle(EditorWidget* editor) {
         return;
     }
 
-    auto title = editor->document().displayName();
-    if (editor->document().isModified()) {
-        title.append(QStringLiteral(" •"));
-    }
-    tabs_->setTabText(index, title);
+    tabs_->setTabText(index, documentTabTitle(editor));
+    tabs_->setTabIcon(index, documentTabIcon(editor));
     if (auto* button =
             qobject_cast<QToolButton*>(tabs_->tabBar()->tabButton(index, QTabBar::RightSide))) {
         button->setAccessibleName(QStringLiteral("Close %1").arg(editor->document().displayName()));

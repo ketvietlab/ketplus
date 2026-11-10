@@ -285,4 +285,5 @@ No provider account or quota is needed for `ketplus_daemon_peer_transport_tests`
 `KETPLUS_CAPTURE` and `KETPLUS_BENCHMARK_STARTUP` runs of Lite use a temporary
 INI preference store. They neither restore nor overwrite the installed app's
 session/window settings. Captures therefore start from a clean profile; use
-`KETPLUS_CAPTURE_THEME=light|dark` to choose the preview theme.
+`KETPLUS_CAPTURE_THEME=light|dark` to choose the preview theme, and see
+`docs/design-system.md` for zoom and capture steps.

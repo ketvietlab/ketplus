@@ -1,5 +1,6 @@
 #include "editor/EditorSplitPane.h"
 
+#include "editor/DocumentTab.h"
 #include "editor/EditorWidget.h"
 
 #include <ScintillaMessages.h>
@@ -13,14 +14,6 @@ namespace {
 
 constexpr unsigned int message(const Scintilla::Message value) {
     return static_cast<unsigned int>(value);
-}
-
-QString titleFor(const EditorWidget* source) {
-    auto title = source->document().displayName();
-    if (source->document().isModified()) {
-        title.append(QStringLiteral(" •"));
-    }
-    return title;
 }
 
 } // namespace
@@ -86,7 +79,7 @@ void EditorSplitPane::showSource(EditorWidget* source) {
     int index = indexOfSource(source);
     if (index < 0) {
         switching_ = true;
-        index = tabBar_->addTab(titleFor(source));
+        index = tabBar_->addTab(documentTabIcon(source), documentTabTitle(source));
         tabBar_->setTabData(index, QVariant::fromValue(QPointer<EditorWidget>(source)));
         tabBar_->setTabToolTip(index, source->document().isUntitled()
                                           ? source->document().displayName()
@@ -159,7 +152,8 @@ void EditorSplitPane::refreshCurrentSource() {
 void EditorSplitPane::updateSourceTitle(EditorWidget* source) {
     const int index = indexOfSource(source);
     if (index >= 0) {
-        tabBar_->setTabText(index, titleFor(source));
+        tabBar_->setTabText(index, documentTabTitle(source));
+        tabBar_->setTabIcon(index, documentTabIcon(source));
         tabBar_->setTabToolTip(index, source->document().isUntitled()
                                           ? source->document().displayName()
                                           : source->document().filePath());
@@ -184,20 +178,20 @@ void EditorSplitPane::saveViewState() {
     if (current_ == nullptr) {
         return;
     }
-    viewStates_.insert(current_.data(),
-                       {.caret = editor_->send(message(Scintilla::Message::GetCurrentPos)),
-                        .anchor = editor_->send(message(Scintilla::Message::GetAnchor)),
-                        .firstVisibleLine =
-                            editor_->send(message(Scintilla::Message::GetFirstVisibleLine))});
+    viewStates_.insert(
+        current_.data(),
+        {.caret = editor_->send(message(Scintilla::Message::GetCurrentPos)),
+         .anchor = editor_->send(message(Scintilla::Message::GetAnchor)),
+         .firstVisibleLine = editor_->send(message(Scintilla::Message::GetFirstVisibleLine))});
 }
 
 void EditorSplitPane::restoreViewState(EditorWidget* source) {
     // A new tab starts where the source view is, like opening the same file twice.
     const ViewState state = viewStates_.value(
-        source, {.caret = source->send(message(Scintilla::Message::GetCurrentPos)),
-                 .anchor = source->send(message(Scintilla::Message::GetAnchor)),
-                 .firstVisibleLine =
-                     source->send(message(Scintilla::Message::GetFirstVisibleLine))});
+        source,
+        {.caret = source->send(message(Scintilla::Message::GetCurrentPos)),
+         .anchor = source->send(message(Scintilla::Message::GetAnchor)),
+         .firstVisibleLine = source->send(message(Scintilla::Message::GetFirstVisibleLine))});
     editor_->send(message(Scintilla::Message::SetSel), static_cast<uptr_t>(state.anchor),
                   static_cast<sptr_t>(state.caret));
     editor_->send(message(Scintilla::Message::SetFirstVisibleLine),

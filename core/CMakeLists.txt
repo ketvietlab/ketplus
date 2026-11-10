@@ -173,6 +173,8 @@ add_library(ketplus_editor STATIC
     src/editor/DefinitionPattern.h
     src/editor/EditorSettings.cpp
     src/editor/EditorSettings.h
+    src/editor/DocumentTab.cpp
+    src/editor/DocumentTab.h
     src/editor/EditorSplitPane.cpp
     src/editor/EditorSplitPane.h
     src/editor/EditorViewOptions.cpp
@@ -266,7 +268,8 @@ if(KETPLUS_CM_BUILD_APP)
         list(APPEND ketplus_platform_sources assets/icons/KetPlus.rc)
     endif()
 
-    qt_add_executable(ketplus_cm WIN32 MACOSX_BUNDLE
+    # The Lite window, shared by the app and ketplus_lite_window_tests.
+    set(ketplus_lite_window_sources
         src/app/MainWindowChrome.cpp
         src/app/MainWindow.cpp
         src/app/MainWindowActions.cpp
@@ -276,23 +279,28 @@ if(KETPLUS_CM_BUILD_APP)
         src/app/MainWindowNavigation.cpp
         src/app/MainWindowPanels.cpp
         src/app/MainWindowSearch.cpp
+        src/app/ReviewCapture.cpp
+        src/app/ReviewCapture.h
+    )
+    set(ketplus_lite_window_libraries
+        Qt6::Widgets
+        KetPlusCM::core
+        KetPlusCM::editor
+        KetPlusCM::git
+        KetPlusCM::git_ui
+        KetPlusCM::index
+        KetPlusCM::preview
+        KetPlusCM::settings_ui
+        KetPlusCM::terminal
+        KetPlusCM::ui
+        KetPlusCM::workspace
+    )
+    qt_add_executable(ketplus_cm WIN32 MACOSX_BUNDLE
+        ${ketplus_lite_window_sources}
         src/main.cpp
         ${ketplus_platform_sources}
     )
-    target_link_libraries(ketplus_cm
-        PRIVATE
-            Qt6::Widgets
-            KetPlusCM::core
-            KetPlusCM::editor
-            KetPlusCM::git
-            KetPlusCM::git_ui
-            KetPlusCM::index
-            KetPlusCM::preview
-            KetPlusCM::settings_ui
-            KetPlusCM::terminal
-            KetPlusCM::ui
-            KetPlusCM::workspace
-    )
+    target_link_libraries(ketplus_cm PRIVATE ${ketplus_lite_window_libraries})
     target_compile_definitions(ketplus_cm PRIVATE
         KETPLUS_CM_VERSION="${PROJECT_VERSION}"
     )
@@ -626,4 +634,20 @@ if(KETPLUS_CM_BUILD_TESTS)
 
     ketplus_cm_add_test(ketplus_preview_tests ketplus_preview_tests)
     set_tests_properties(ketplus_preview_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    if(KETPLUS_CM_BUILD_APP)
+        add_executable(ketplus_lite_window_tests
+            tests/LiteWindowTest.cpp
+            ${ketplus_lite_window_sources}
+        )
+        target_include_directories(ketplus_lite_window_tests PRIVATE src)
+        target_link_libraries(ketplus_lite_window_tests
+            PRIVATE Qt6::Test ${ketplus_lite_window_libraries}
+        )
+        ketplus_enable_warnings(ketplus_lite_window_tests)
+        ketplus_cm_add_test(ketplus_lite_window_tests ketplus_lite_window_tests)
+        set_tests_properties(ketplus_lite_window_tests PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+        )
+    endif()
 endif()

@@ -3,6 +3,7 @@
 #include "KetButton.h"
 #include "KetChrome.h"
 #include "KetEmptyState.h"
+#include "KetFileRow.h"
 #include "KetIcons.h"
 #include "ui/MessageDialog.h"
 #include <QAbstractItemModel>
@@ -47,7 +48,7 @@ QDir::Filters explorerFilters(const bool showHiddenFiles) {
 ExplorerPanel::ExplorerPanel(QWidget* parent)
     : QWidget(parent), model_(new QFileSystemModel(this)), tree_(new QTreeView(this)),
       pages_(new QStackedWidget(this)), emptyPage_(new QWidget(this)),
-      folderLabel_(new QLabel(this)) {
+      rootRow_(new ket::FileRow({}, ket::FileRow::Kind::Folder, 0, this)) {
     setProperty("kvRole", QStringLiteral("explorer"));
     setAttribute(Qt::WA_StyledBackground, true);
     setMinimumWidth(190);
@@ -68,7 +69,9 @@ ExplorerPanel::ExplorerPanel(QWidget* parent)
     tree_->setHeaderHidden(true);
     tree_->setAnimated(false);
     tree_->setExpandsOnDoubleClick(false);
-    tree_->setIndentation(14);
+    // The delegate draws the kit's indent and chevrons (ExplorerPanelRows.cpp).
+    tree_->setIndentation(0);
+    tree_->setRootIsDecorated(false);
     tree_->setUniformRowHeights(true);
     tree_->setSortingEnabled(true);
     tree_->sortByColumn(0, Qt::AscendingOrder);
@@ -79,23 +82,17 @@ ExplorerPanel::ExplorerPanel(QWidget* parent)
         tree_->hideColumn(column);
     }
 
-    auto* header = new ket::PaneHeader(tr("Explorer"), ket::Icons::codeForLucide(u"folder"), this);
-    folderLabel_->setProperty("kvRole", QStringLiteral("sidebarFolder"));
-    folderLabel_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-    folderLabel_->setContentsMargins(12, 4, 12, 4);
-    auto* collapseButton = new ket::IconButton(
-        ket::Icons::icon(ket::Icons::codeForLucide(u"chevron-up")), tr("Collapse folders"), header);
+    // As the mock's EXPLORER pane: refresh in the header; New File, New Folder and Collapse
+    // Folders are in the context menu, and the activity bar hides the pane.
+    auto* header = new ket::PaneHeader(tr("EXPLORER"), {}, this);
     auto* refreshButton = new ket::IconButton(
         ket::Icons::icon(ket::Icons::codeForLucide(u"refresh-cw")), tr("Refresh Explorer"), header);
-    auto* closeButton = new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"x")),
-                                            tr("Hide Explorer"), header);
-    auto* newFile = new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"plus")),
-                                        tr("New File"), header);
-    connect(newFile, &QAbstractButton::clicked, this, [this] { createEntry(false); });
-    header->actions()->addWidget(newFile);
-    header->actions()->addWidget(collapseButton);
     header->actions()->addWidget(refreshButton);
-    header->actions()->addWidget(closeButton);
+    // The open folder is the tree's expanded root row; unchecking it folds the tree away.
+    rootRow_->setObjectName(QStringLiteral("explorerRoot"));
+    rootRow_->setChecked(true);
+    rootRow_->setContextMenuPolicy(Qt::CustomContextMenu);
+    rootRow_->hide();
     auto* emptyState =
         new ket::EmptyState(ket::Icons::codeForLucide(u"folder"), tr("No folder open"),
                             tr("Open a folder to browse files."), emptyPage_);
@@ -112,15 +109,19 @@ ExplorerPanel::ExplorerPanel(QWidget* parent)
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
     layout->addWidget(header);
-    layout->addWidget(folderLabel_);
+    layout->addWidget(rootRow_);
     layout->addWidget(pages_, 1);
 
     connect(tree_, &QTreeView::clicked, this, &ExplorerPanel::activateIndex);
     connect(tree_, &QTreeView::customContextMenuRequested, this, &ExplorerPanel::showContextMenu);
     connect(openButton, &QAbstractButton::clicked, this, &ExplorerPanel::openFolderRequested);
-    connect(collapseButton, &QAbstractButton::clicked, tree_, &QTreeView::collapseAll);
     connect(refreshButton, &QAbstractButton::clicked, this, &ExplorerPanel::refresh);
-    connect(closeButton, &QAbstractButton::clicked, this, &ExplorerPanel::hideRequested);
+    connect(rootRow_, &QAbstractButton::toggled, tree_, &QWidget::setVisible);
+    connect(rootRow_, &QWidget::customContextMenuRequested, this, [this](const QPoint& position) {
+        // The folder itself: no row of the tree is the target.
+        tree_->setCurrentIndex({});
+        showContextMenu(tree_->viewport()->mapFrom(rootRow_, position));
+    });
     connect(model_, &QFileSystemModel::directoryLoaded, this, [this](const QString&) {
         if (!pendingReveal_.isEmpty() && tryRevealPath(pendingReveal_)) {
             pendingReveal_.clear();
@@ -140,8 +141,11 @@ void ExplorerPanel::setRootPath(const QString& path) {
         entryRow_->hide();
     rootPath_ = root.absoluteFilePath();
     pendingReveal_.clear();
-    folderLabel_->setText(root.fileName().isEmpty() ? rootPath_ : root.fileName());
-    folderLabel_->setToolTip(rootPath_);
+    rootRow_->setText((root.fileName().isEmpty() ? rootPath_ : root.fileName()).toUpper());
+    rootRow_->setAccessibleName(root.fileName().isEmpty() ? rootPath_ : root.fileName());
+    rootRow_->setToolTip(rootPath_);
+    rootRow_->setChecked(true);
+    rootRow_->show();
     tree_->setRootIndex(model_->setRootPath(rootPath_));
     pages_->setCurrentWidget(tree_);
 }
@@ -246,6 +250,8 @@ void ExplorerPanel::showContextMenu(const QPoint& position) {
     hiddenAction->setCheckable(true);
     hiddenAction->setChecked(showHiddenFiles_);
     connect(hiddenAction, &QAction::toggled, this, &ExplorerPanel::setShowHiddenFiles);
+    auto* collapseAction = menu.addAction(QStringLiteral("Collapse Folders"));
+    connect(collapseAction, &QAction::triggered, tree_, &QTreeView::collapseAll);
     auto* refreshAction = menu.addAction(QStringLiteral("Refresh"));
     connect(refreshAction, &QAction::triggered, this, &ExplorerPanel::refresh);
 

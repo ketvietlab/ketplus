@@ -75,6 +75,8 @@ class MainWindow final : public QMainWindow {
     void createActions();
     void createChrome();
     void showEditorSurface();
+    // Side panel actions change under signal blockers, so the activity bar repaints here.
+    void refreshActivityBar();
     void createNewDocument();
     void openDocument();
     void chooseFolder();
@@ -183,6 +185,7 @@ class MainWindow final : public QMainWindow {
     void updateWorktrees(const QVector<GitWorktree>& worktrees);
     void rebuildWorktreeMenu();
     void updateGitActions();
+    void addViewDiffButton(EditorWidget* editor);
     void switchToWorktree(const QString& path);
     void rememberActiveFileForWorktree();
     [[nodiscard]] QString currentWorkspaceRelativeFile() const;
@@ -209,6 +212,8 @@ class MainWindow final : public QMainWindow {
     AppearanceSettings appearanceSettings_;
     EditorViewOptions viewOptions_;
     QStackedWidget* chromePages_{nullptr};
+    QWidget* activityBar_{nullptr};
+    QWidget* editorColumn_{nullptr};
     QSplitter* mainSplit_{nullptr};
     QSplitter* workspaceSplit_{nullptr};
     QSplitter* editorSplit_{nullptr};

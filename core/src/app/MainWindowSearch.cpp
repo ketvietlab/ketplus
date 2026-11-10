@@ -1,5 +1,7 @@
 #include "app/MainWindow.h"
 
+#include "KetAppearance.h"
+
 #include "editor/EditorWidget.h"
 #include "git/GitChangesPanel.h"
 #include "git/GitService.h"
@@ -12,6 +14,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QHash>
+#include <QScopeGuard>
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QStatusBar>
@@ -20,8 +23,6 @@
 
 namespace ketplus {
 namespace {
-
-constexpr int searchPanelWidth = 320;
 
 QString comparablePath(const QString& path) {
     const QFileInfo file(path);
@@ -39,7 +40,7 @@ SearchPanel* MainWindow::ensureSearchPanel() {
     searchPanel_ = new SearchPanel(workspaceSplit_);
     workspaceSplit_->insertWidget(0, searchPanel_);
     workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(searchPanel_), 0);
-    workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(editorSplit_), 1);
+    workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(editorColumn_), 1);
     connect(searchPanel_, &SearchPanel::searchRequested, this,
             qOverload<>(&MainWindow::startWorkspaceSearch));
     connect(searchPanel_, &SearchPanel::cancelRequested, this, [this] {
@@ -49,8 +50,6 @@ SearchPanel* MainWindow::ensureSearchPanel() {
     });
     connect(searchPanel_, &SearchPanel::replaceAllRequested, this, &MainWindow::replaceInWorkspace);
     connect(searchPanel_, &SearchPanel::matchActivated, this, &MainWindow::openSearchMatch);
-    connect(searchPanel_, &SearchPanel::hideRequested, this,
-            [this] { setSearchPanelVisible(false); });
     applySearchPanelColors();
     return searchPanel_;
 }
@@ -67,6 +66,7 @@ void MainWindow::applySearchPanelColors() {
 }
 
 void MainWindow::setSearchPanelVisible(const bool visible) {
+    const auto activity = qScopeGuard([this] { refreshActivityBar(); });
     if (visible)
         showEditorSurface();
     if (visible) {
@@ -86,8 +86,10 @@ void MainWindow::setSearchPanelVisible(const bool visible) {
         }
         panel->show();
         QList<int> sizes(workspaceSplit_->count(), 0);
+        // The mock's 280 px column, at the interface zoom.
+        const int searchPanelWidth = qRound(ket::Appearance::instance().scaled(280));
         sizes[workspaceSplit_->indexOf(panel)] = searchPanelWidth;
-        sizes[workspaceSplit_->indexOf(editorSplit_)] =
+        sizes[workspaceSplit_->indexOf(editorColumn_)] =
             qMax(420, workspaceSplit_->width() - searchPanelWidth);
         workspaceSplit_->setSizes(sizes);
         {

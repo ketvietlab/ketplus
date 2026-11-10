@@ -11,7 +11,8 @@ class QLabel;
 class QLineEdit;
 namespace ket {
 class Banner;
-}
+class FileRow;
+} // namespace ket
 class QStackedWidget;
 class QTreeView;
 
@@ -44,7 +45,6 @@ class ExplorerPanel final : public QWidget {
     void pathTrashed(const QString& path);
     void gitDiffRequested(const QString& path);
     void openFolderRequested();
-    void hideRequested();
 
   protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -75,7 +75,7 @@ class ExplorerPanel final : public QWidget {
     QTreeView* tree_{nullptr};
     QStackedWidget* pages_{nullptr};
     QWidget* emptyPage_{nullptr};
-    QLabel* folderLabel_{nullptr};
+    ket::FileRow* rootRow_{nullptr};
     QString rootPath_;
     QString pendingReveal_;
     bool showHiddenFiles_{false};

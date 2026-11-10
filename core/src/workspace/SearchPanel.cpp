@@ -114,10 +114,11 @@ SearchPanel::SearchPanel(QWidget* parent)
     setProperty("kvRole", QStringLiteral("explorer"));
     setAttribute(Qt::WA_StyledBackground, true);
 
-    auto* header = new ket::PaneHeader(tr("Search"), ket::Icons::codeForLucide(u"search"), this);
-    auto* closeButton = new ket::IconButton(ket::Icons::icon(ket::Icons::codeForLucide(u"x")),
-                                            tr("Hide search"), header);
-    header->actions()->addWidget(closeButton);
+    // As the mock's SEARCH pane; the activity bar hides it.
+    auto* header = new ket::PaneHeader(tr("SEARCH"), {}, this);
+    auto* refreshButton = new ket::IconButton(
+        ket::Icons::icon(ket::Icons::codeForLucide(u"refresh-cw")), tr("Refresh results"), header);
+    header->actions()->addWidget(refreshButton);
 
     queryEdit_->setPlaceholderText(QStringLiteral("Search in files"));
     queryEdit_->setClearButtonEnabled(true);
@@ -178,7 +179,7 @@ SearchPanel::SearchPanel(QWidget* parent)
         }
     });
     connect(replaceAllButton_, &QAbstractButton::clicked, this, &SearchPanel::replaceAllRequested);
-    connect(closeButton, &QAbstractButton::clicked, this, &SearchPanel::hideRequested);
+    connect(refreshButton, &QAbstractButton::clicked, this, &SearchPanel::searchRequested);
     connect(results_, &QTreeWidget::itemActivated, this,
             [this](QTreeWidgetItem* item) { activateItem(item); });
     connect(results_, &QTreeWidget::itemClicked, this,
